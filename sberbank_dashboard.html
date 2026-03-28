@@ -149,6 +149,19 @@ tbody td { padding:12px 14px; vertical-align:top; }
 .badge-act       { display:inline-block; padding:1px 6px; border-radius:3px; background:var(--blue-100); color:var(--blue-800); font-size:10px; margin-top:4px; font-weight:600; }
 .event-text { font-size:12px; line-height:1.4; }
 .event-date { font-size:11px; color:var(--slate-400); margin-top:2px; }
+
+/* New cases highlight */
+@keyframes newPulse { 0%{box-shadow:inset 3px 0 0 var(--amber-500);} 50%{box-shadow:inset 3px 0 0 var(--gold-500);} 100%{box-shadow:inset 3px 0 0 var(--amber-500);} }
+tbody tr.row-new { background:rgba(245,158,11,.04); animation:newPulse 2s ease infinite; }
+tbody tr.row-new:hover { background:rgba(245,158,11,.08); }
+.badge-new { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:9px; padding:2px 7px; border-radius:8px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-left:6px; white-space:nowrap; }
+.badge-archived { background:var(--slate-200); color:var(--slate-500); font-size:9px; padding:2px 7px; border-radius:8px; font-weight:600; text-transform:uppercase; margin-left:6px; }
+.new-cases-banner { background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #fcd34d; border-radius:var(--radius); padding:12px 18px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:13px; color:#92400e; animation:fadeUp .4s ease; }
+.new-cases-banner svg { width:18px; height:18px; flex-shrink:0; }
+.new-cases-banner strong { font-weight:700; }
+.new-cases-banner .dismiss { margin-left:auto; background:none; border:none; color:#92400e; cursor:pointer; font-size:16px; opacity:.6; transition:opacity .15s; }
+.new-cases-banner .dismiss:hover { opacity:1; }
+
 .empty-state { text-align:center; padding:60px 20px; color:var(--slate-400); }
 .empty-state svg { width:40px; height:40px; margin-bottom:12px; opacity:.4; }
 .empty-state p { font-size:14px; }
@@ -229,6 +242,11 @@ tbody td { padding:12px 14px; vertical-align:top; }
   </header>
 
   <main class="app-main">
+    <div id="new-cases-banner" class="new-cases-banner" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span id="new-cases-text"></span>
+      <button class="dismiss" onclick="dismissNewBanner()" title="Скрыть">&times;</button>
+    </div>
     <div id="error-banner" class="error-banner" style="display:none;"></div>
     <div class="stats-row" id="stats-row"></div>
     <div class="toolbar">
@@ -239,8 +257,10 @@ tbody td { padding:12px 14px; vertical-align:top; }
         </div>
         <select class="filter-select" id="filter-status" onchange="applyFilters()">
           <option value="all">Все статусы</option>
+          <option value="new">Только новые</option>
           <option value="active">В производстве</option>
           <option value="decided">Решено</option>
+          <option value="archived">Архив (60+ дней)</option>
         </select>
         <select class="filter-select" id="filter-role" onchange="applyFilters()">
           <option value="all">Все роли</option>
@@ -264,6 +284,9 @@ tbody td { padding:12px 14px; vertical-align:top; }
 <script>
 const STORAGE_KEY='sber-court-sheet-url';
 const DEFAULT_SHEET_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vRnB7ZtkF_4aFaHm4GEO7_qcry4AfOBtgRdZeaFvlLE5JYzQ8nJARiJL3aeQ4lI_VojArA-KY6jxHpt/pub?output=csv';
+const LAST_VISIT_KEY='sber-court-last-visit';
+const KNOWN_CASES_KEY='sber-court-known-cases';
+const ARCHIVE_DAYS=60;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Третье лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
@@ -272,6 +295,8 @@ const RESULT_MAP={'оставлено без изменения':'upheld','от�
 const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',pending:'Ожидается'};
 
 let allCases=[],filteredCases=[],sortField='dateReceived',sortDir='desc';
+let newCaseNumbers=new Set();
+let archivedCount=0;
 
 function parseCSV(t){const r=[[]];let cur='',inQ=false;for(let i=0;i<t.length;i++){const c=t[i];if(c==='"'){if(inQ&&t[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){r[r.length-1].push(cur);cur='';}else if((c==='\n'||c==='\r')&&!inQ){if(c==='\r'&&t[i+1]==='\n')i++;r[r.length-1].push(cur);cur='';r.push([]);}else cur+=c;}r[r.length-1].push(cur);return r.filter(x=>x.length>1||(x.length===1&&x[0].trim()!==''));}
 
@@ -321,35 +346,113 @@ function refreshData(){const u=localStorage.getItem(STORAGE_KEY)||DEFAULT_SHEET_
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.innerHTML='<strong>Ошибка:</strong> '+m;}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
-function renderAll(){renderStats();applyFilters();renderMeta();}
+function renderAll(){
+  // Detect new cases
+  const knownRaw=localStorage.getItem(KNOWN_CASES_KEY);
+  const knownSet=knownRaw?new Set(JSON.parse(knownRaw)):new Set();
+  const currentNumbers=allCases.map(c=>c.caseNumber);
+  
+  if(knownSet.size>0){
+    newCaseNumbers=new Set(currentNumbers.filter(n=>!knownSet.has(n)));
+  }else{
+    newCaseNumbers=new Set(); // First visit — nothing is "new"
+  }
+  
+  // Save current cases as known
+  localStorage.setItem(KNOWN_CASES_KEY,JSON.stringify(currentNumbers));
+  
+  // Count archived
+  archivedCount=allCases.filter(c=>isArchived(c)).length;
+  
+  // Show banner if there are new cases
+  if(newCaseNumbers.size>0){
+    const banner=document.getElementById('new-cases-banner');
+    banner.style.display='';
+    const n=newCaseNumbers.size;
+    const word=n===1?'новое дело':n<5?'новых дела':'новых дел';
+    document.getElementById('new-cases-text').innerHTML=`<strong>${n} ${word}</strong> с момента последнего просмотра`;
+  }else{
+    document.getElementById('new-cases-banner').style.display='none';
+  }
+  
+  renderStats();applyFilters();renderMeta();
+  
+  // Save visit timestamp (once per page load, after new case detection)
+  localStorage.setItem(LAST_VISIT_KEY,new Date().toISOString());
+}
+
+function isArchived(c){
+  if(c.status!=='decided')return false;
+  // Для решённых дел: берём дату последнего события (= дата решения/вступления в силу)
+  // Если нет — дату поступления как fallback
+  const decisionDate=c.lastEventDate||c.dateReceived;
+  if(!decisionDate)return false;
+  const d=new Date(decisionDate);
+  if(isNaN(d))return false;
+  const diffDays=(Date.now()-d.getTime())/(1000*60*60*24);
+  return diffDays>ARCHIVE_DAYS;
+}
+
+function isNewCase(c){
+  return newCaseNumbers.has(c.caseNumber);
+}
+
+function dismissNewBanner(){
+  document.getElementById('new-cases-banner').style.display='none';
+}
 
 function renderStats(){
-  const t=allCases.length,a=allCases.filter(c=>c.status==='active').length,d=allCases.filter(c=>c.status==='decided').length;
+  const active=allCases.filter(c=>c.status==='active').length;
+  const decided=allCases.filter(c=>c.status==='decided'&&!isArchived(c)).length;
   const p=allCases.filter(c=>c.sberbankRole==='plaintiff').length,def=allCases.filter(c=>c.sberbankRole==='defendant').length;
   const w=allCases.filter(c=>(c.result==='upheld'&&c.sberbankRole==='plaintiff')||(c.result==='reversed'&&c.sberbankRole==='defendant')).length;
+  const newCount=newCaseNumbers.size;
   document.getElementById('stats-row').innerHTML=`
-    <div class="stat-card" data-accent="blue"><div class="stat-value">${t}</div><div class="stat-label">Всего дел</div></div>
-    <div class="stat-card" data-accent="amber"><div class="stat-value">${a}</div><div class="stat-label">В производстве</div></div>
-    <div class="stat-card" data-accent="green"><div class="stat-value">${d}</div><div class="stat-label">Решено</div></div>
+    <div class="stat-card" data-accent="blue"><div class="stat-value">${allCases.length}</div><div class="stat-label">Всего дел</div></div>
+    ${newCount>0?`<div class="stat-card" data-accent="amber" style="border-left-color:#f59e0b;background:rgba(245,158,11,.05);"><div class="stat-value" style="color:#d97706;">${newCount}</div><div class="stat-label" style="color:#92400e;">Новых</div></div>`:''}
+    <div class="stat-card" data-accent="amber"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
+    <div class="stat-card" data-accent="green"><div class="stat-value">${decided}</div><div class="stat-label">Решено</div></div>
     <div class="stat-card" data-accent="gold"><div class="stat-value">${p} / ${def}</div><div class="stat-label">Истец / Ответчик</div></div>
     <div class="stat-card" data-accent="navy"><div class="stat-value">${w}</div><div class="stat-label">В пользу банка</div></div>
-    <div class="stat-card" data-accent="red"><div class="stat-value">${allCases.filter(c=>c.hasPublishedActs).length}</div><div class="stat-label">Акты опубл.</div></div>`;
+    <div class="stat-card" data-accent="red"><div class="stat-value">${allCases.filter(c=>c.hasPublishedActs).length}</div><div class="stat-label">Акты опубл.</div></div>
+    ${archivedCount>0?`<div class="stat-card"><div class="stat-value" style="color:var(--slate-400);">${archivedCount}</div><div class="stat-label">В архиве</div></div>`:''}`;
 }
 
 function renderMeta(){
-  document.getElementById('meta-info').innerHTML='Обновлено: '+new Date().toLocaleString('ru-RU');
-  document.getElementById('app-footer').textContent='Показано '+filteredCases.length+' из '+allCases.length+' дел · Данные из Google Sheets (автозагрузка)';
+  const lastVisit=localStorage.getItem(LAST_VISIT_KEY);
+  let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
+  if(lastVisit){
+    const lv=new Date(lastVisit);
+    if(!isNaN(lv)) metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';
+  }
+  document.getElementById('meta-info').innerHTML=metaHtml;
+  const archText=archivedCount>0?' · '+archivedCount+' в архиве':'';
+  const newText=newCaseNumbers.size>0?' · '+newCaseNumbers.size+' новых':'';
+  document.getElementById('app-footer').textContent='Показано '+filteredCases.length+' из '+allCases.length+' дел'+newText+archText+' · Данные из Google Sheets (автозагрузка)';
 }
 
 function applyFilters(){
   const q=document.getElementById('search-input').value.toLowerCase(),st=document.getElementById('filter-status').value,rl=document.getElementById('filter-role').value;
   filteredCases=allCases.filter(c=>{
-    if(st!=='all'&&c.status!==st)return false;
+    const archived=isArchived(c);
+    if(st==='archived'){if(!archived)return false;}
+    else if(st==='new'){if(!isNewCase(c))return false;}
+    else if(st==='all'){if(archived)return false;}
+    else if(st==='active'){if(c.status!=='active')return false;}
+    else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(q){const h=[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
-  filteredCases.sort((a,b)=>{let va=a[sortField]||'',vb=b[sortField]||'';if(sortField.includes('date')||sortField==='dateReceived'){va=new Date(va||'1970-01-01').getTime();vb=new Date(vb||'1970-01-01').getTime();}if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase();}if(va<vb)return sortDir==='asc'?-1:1;if(va>vb)return sortDir==='asc'?1:-1;return 0;});
+  // New cases first, then sort by selected field
+  filteredCases.sort((a,b)=>{
+    const aNew=isNewCase(a)?0:1, bNew=isNewCase(b)?0:1;
+    if(aNew!==bNew) return aNew-bNew;
+    let va=a[sortField]||'',vb=b[sortField]||'';
+    if(sortField.includes('date')||sortField==='dateReceived'){va=new Date(va||'1970-01-01').getTime();vb=new Date(vb||'1970-01-01').getTime();}
+    if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase();}
+    if(va<vb)return sortDir==='asc'?-1:1;if(va>vb)return sortDir==='asc'?1:-1;return 0;
+  });
   renderTable();renderMeta();
 }
 
@@ -368,9 +471,13 @@ function renderTable(){
   document.getElementById('table-body').innerHTML=filteredCases.map(c=>{
     const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
     const sc=c.status==='active'?'active':'decided';
+    const isNew=isNewCase(c);
+    const archived=isArchived(c);
     const lk=c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" title="Открыть на сайте суда"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:'';
-    return`<tr>
-      <td><div class="case-number">${escHtml(c.caseNumber)} ${lk}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
+    const newBadge=isNew?'<span class="badge-new">Новое</span>':'';
+    const archBadge=archived?'<span class="badge-archived">Архив</span>':'';
+    return`<tr class="${isNew?'row-new':''}">
+      <td><div class="case-number">${escHtml(c.caseNumber)} ${lk} ${newBadge} ${archBadge}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${escHtml(c.plaintiff)}</span><span><span class="party-tag">О:</span>${escHtml(c.defendant)}</span></div></td>
       <td><span class="badge badge-cat">${escHtml(c.category)}</span></td>
