@@ -123,7 +123,9 @@ thead th:hover { color:var(--navy-700); }
 thead th.sorted { color:var(--navy-800); }
 .sort-icon { display:inline-block; margin-left:4px; font-size:10px; }
 tbody tr { border-bottom:1px solid var(--slate-100); transition:background .1s; }
+tbody tr.row-clickable { cursor:pointer; }
 tbody tr:hover { background:var(--slate-50); }
+tbody tr.row-clickable:hover { background:#f0f4ff; }
 tbody td { padding:12px 14px; vertical-align:top; }
 .case-number { font-family:var(--font-mono); font-weight:600; font-size:13px; color:var(--navy-800); display:flex; align-items:center; gap:6px; }
 .case-link { color:var(--navy-500); display:flex; transition:color .15s; }
@@ -154,6 +156,7 @@ tbody td { padding:12px 14px; vertical-align:top; }
 @keyframes newPulse { 0%{box-shadow:inset 3px 0 0 var(--amber-500);} 50%{box-shadow:inset 3px 0 0 var(--gold-500);} 100%{box-shadow:inset 3px 0 0 var(--amber-500);} }
 tbody tr.row-new { background:rgba(245,158,11,.04); animation:newPulse 2s ease infinite; }
 tbody tr.row-new:hover { background:rgba(245,158,11,.08); }
+tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
 .badge-new { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:9px; padding:2px 7px; border-radius:8px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-left:6px; white-space:nowrap; }
 .badge-archived { background:var(--slate-200); color:var(--slate-500); font-size:9px; padding:2px 7px; border-radius:8px; font-weight:600; text-transform:uppercase; margin-left:6px; }
 .new-cases-banner { background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #fcd34d; border-radius:var(--radius); padding:12px 18px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:13px; color:#92400e; animation:fadeUp .4s ease; }
@@ -260,7 +263,7 @@ tbody tr.row-new:hover { background:rgba(245,158,11,.08); }
           <option value="new">Только новые</option>
           <option value="active">В производстве</option>
           <option value="decided">Решено</option>
-          <option value="archived">Архив (60+ дней)</option>
+          <option value="archived">Архив (30+ дней)</option>
         </select>
         <select class="filter-select" id="filter-role" onchange="applyFilters()">
           <option value="all">Все роли</option>
@@ -286,7 +289,7 @@ const STORAGE_KEY='sber-court-sheet-url';
 const DEFAULT_SHEET_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vRnB7ZtkF_4aFaHm4GEO7_qcry4AfOBtgRdZeaFvlLE5JYzQ8nJARiJL3aeQ4lI_VojArA-KY6jxHpt/pub?output=csv';
 const LAST_VISIT_KEY='sber-court-last-visit';
 const KNOWN_CASES_KEY='sber-court-known-cases';
-const ARCHIVE_DAYS=60;
+const ARCHIVE_DAYS=30;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Третье лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
@@ -303,7 +306,10 @@ function parseCSV(t){const r=[[]];let cur='',inQ=false;for(let i=0;i<t.length;i+
 function rowToCase(h,row){
   const g=(ns)=>{for(const n of ns){const i=h.findIndex(x=>x.toLowerCase().includes(n.toLowerCase()));if(i>=0&&row[i])return row[i].trim();}return '';};
   const rl=g(['роль банка','роль']).toLowerCase(),sl=g(['статус']).toLowerCase(),rs=g(['результат']).toLowerCase(),ac=g(['акт опубликован','акт']).toLowerCase();
-  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:g(['категория']),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:g(['последнее событие','событие']),lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',result:RESULT_MAP[rs]||rs||'pending',link:g(['ссылка','url','link']),notes:g(['заметки','примечан'])};
+  let link=g(['ссылка','url','link']);
+  // Нормализация: если ссылка — просто case_id (число), строим полный URL
+  if(link&&/^\d+$/.test(link)){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5';}
+  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:g(['категория']),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:g(['последнее событие','событие']),lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',result:RESULT_MAP[rs]||rs||'pending',link:link,notes:g(['заметки','примечан'])};
 }
 
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
@@ -473,11 +479,13 @@ function renderTable(){
     const sc=c.status==='active'?'active':'decided';
     const isNew=isNewCase(c);
     const archived=isArchived(c);
-    const lk=c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" title="Открыть на сайте суда"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:'';
+    const hasLink=!!c.link;
+    const rowClass=[isNew?'row-new':'',hasLink?'row-clickable':''].filter(Boolean).join(' ');
     const newBadge=isNew?'<span class="badge-new">Новое</span>':'';
     const archBadge=archived?'<span class="badge-archived">Архив</span>':'';
-    return`<tr class="${isNew?'row-new':''}">
-      <td><div class="case-number">${escHtml(c.caseNumber)} ${lk} ${newBadge} ${archBadge}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
+    const linkIcon=hasLink?'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--slate-400)" stroke-width="2" stroke-linecap="round" style="margin-left:4px;vertical-align:middle;flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>':'';
+    return`<tr class="${rowClass}" ${hasLink?'data-href="'+escHtml(c.link)+'"':''} ${hasLink?'title="Нажмите чтобы открыть карточку дела на сайте суда"':''}>
+      <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archBadge}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${escHtml(c.plaintiff)}</span><span><span class="party-tag">О:</span>${escHtml(c.defendant)}</span></div></td>
       <td><span class="badge badge-cat">${escHtml(c.category)}</span></td>
@@ -496,7 +504,14 @@ function exportCSV(){
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sberbank_cases_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
-window.addEventListener('DOMContentLoaded',init);
+window.addEventListener('DOMContentLoaded',()=>{
+  init();
+  // Delegated click handler for table rows with links
+  document.getElementById('table-body').addEventListener('click',function(e){
+    const tr=e.target.closest('tr[data-href]');
+    if(tr){window.open(tr.dataset.href,'_blank');}
+  });
+});
 </script>
 </body>
 </html>
