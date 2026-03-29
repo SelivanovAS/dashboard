@@ -10,10 +10,11 @@
   --navy-900: #0c1829; --navy-800: #132238; --navy-700: #1a3050;
   --navy-600: #234068; --navy-500: #2d5480;
   --gold-500: #d4a853; --gold-400: #e4be6a; --gold-300: #f0d590;
-  --amber-500: #f59e0b;
+  --amber-500: #f59e0b; --amber-600: #d97706; --amber-100: #fef3c7;
   --green-500: #10b981; --green-100: #d1fae5; --green-800: #065f46;
   --red-500: #ef4444; --red-100: #fee2e2; --red-800: #991b1b;
-  --blue-100: #dbeafe; --blue-800: #1e40af;
+  --blue-100: #dbeafe; --blue-500: #3b82f6; --blue-800: #1e40af;
+  --purple-100: #f3e8ff; --purple-800: #6b21a8;
   --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
   --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
   --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
@@ -26,158 +27,223 @@
   --shadow-lg: 0 12px 40px rgba(12,24,41,0.12);
   --radius: 8px; --radius-lg: 12px;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: var(--font-body); background: var(--slate-50);
-  color: var(--slate-800); min-height: 100vh; -webkit-font-smoothing: antialiased;
-}
-@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-@keyframes spin { to { transform:rotate(360deg); } }
-@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.6;} }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-800);min-height:100vh;-webkit-font-smoothing:antialiased;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+@keyframes newHighlight{0%{background:rgba(245,158,11,.08);}50%{background:rgba(245,158,11,.14);}100%{background:rgba(245,158,11,.08);}}
 
-.loading-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:20px; }
-.loading-spinner { width:40px; height:40px; border:3px solid var(--slate-200); border-top-color:var(--navy-700); border-radius:50%; animation:spin .8s linear infinite; }
-.loading-text { font-size:14px; color:var(--slate-500); animation:pulse 1.5s ease infinite; }
+/* Loading */
+.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:20px;}
+.loading-spinner{width:40px;height:40px;border:3px solid var(--slate-200);border-top-color:var(--navy-700);border-radius:50%;animation:spin .8s linear infinite;}
+.loading-text{font-size:14px;color:var(--slate-500);animation:pulse 1.5s ease infinite;}
 
 /* Setup */
-.setup-screen { max-width:680px; margin:80px auto; padding:0 24px; animation:fadeUp .5s ease; }
-.setup-card { background:var(--white); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); overflow:hidden; }
-.setup-header { background:linear-gradient(135deg,var(--navy-900),var(--navy-700)); padding:32px; color:var(--white); }
-.setup-header h1 { font-family:var(--font-display); font-size:22px; font-weight:700; }
-.setup-header p { color:var(--gold-300); font-size:14px; margin-top:6px; }
-.setup-body { padding:28px 32px; }
-.setup-body ol { list-style:none; counter-reset:steps; }
-.setup-body ol li {
-  counter-increment:steps; padding:14px 0; border-bottom:1px solid var(--slate-100);
-  font-size:14px; line-height:1.7; display:flex; gap:14px; align-items:flex-start;
-}
-.setup-body ol li:last-child { border-bottom:none; }
-.setup-body ol li::before {
-  content:counter(steps); display:flex; align-items:center; justify-content:center;
-  min-width:28px; height:28px; border-radius:50%; background:var(--navy-800);
-  color:var(--gold-400); font-weight:700; font-size:13px; flex-shrink:0; margin-top:1px;
-}
-.setup-body code { font-family:var(--font-mono); font-size:12px; background:var(--slate-100); padding:2px 7px; border-radius:4px; color:var(--navy-700); }
-.setup-input-group { margin-top:20px; }
-.setup-input-group label { font-weight:600; font-size:13px; color:var(--slate-600); display:block; margin-bottom:6px; }
-.setup-input { width:100%; padding:10px 14px; border:2px solid var(--slate-200); border-radius:var(--radius); font-size:14px; font-family:var(--font-mono); transition:border-color .2s; }
-.setup-input:focus { outline:none; border-color:var(--navy-600); }
-.setup-btn { margin-top:16px; padding:11px 28px; background:var(--navy-800); color:var(--gold-400); border:none; border-radius:var(--radius); font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; }
-.setup-btn:hover { background:var(--navy-700); transform:translateY(-1px); }
-.setup-footer { padding:16px 32px; background:var(--slate-50); border-top:1px solid var(--slate-100); }
-.setup-footer p { font-size:12px; color:var(--slate-500); line-height:1.6; }
+.setup-screen{max-width:680px;margin:80px auto;padding:0 24px;animation:fadeUp .5s ease;}
+.setup-card{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;}
+.setup-header{background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:32px;color:var(--white);}
+.setup-header h1{font-family:var(--font-display);font-size:22px;font-weight:700;}
+.setup-header p{color:var(--gold-300);font-size:14px;margin-top:6px;}
+.setup-body{padding:28px 32px;}
+.setup-body ol{list-style:none;counter-reset:steps;}
+.setup-body ol li{counter-increment:steps;padding:14px 0;border-bottom:1px solid var(--slate-100);font-size:14px;line-height:1.7;display:flex;gap:14px;align-items:flex-start;}
+.setup-body ol li:last-child{border-bottom:none;}
+.setup-body ol li::before{content:counter(steps);display:flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:50%;background:var(--navy-800);color:var(--gold-400);font-weight:700;font-size:13px;flex-shrink:0;margin-top:1px;}
+.setup-body code{font-family:var(--font-mono);font-size:12px;background:var(--slate-100);padding:2px 7px;border-radius:4px;color:var(--navy-700);}
+.setup-input-group{margin-top:20px;}
+.setup-input-group label{font-weight:600;font-size:13px;color:var(--slate-600);display:block;margin-bottom:6px;}
+.setup-input{width:100%;padding:10px 14px;border:2px solid var(--slate-200);border-radius:var(--radius);font-size:14px;font-family:var(--font-mono);transition:border-color .2s;}
+.setup-input:focus{outline:none;border-color:var(--navy-600);}
+.setup-btn{margin-top:16px;padding:11px 28px;background:var(--navy-800);color:var(--gold-400);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;}
+.setup-btn:hover{background:var(--navy-700);transform:translateY(-1px);}
+.setup-footer{padding:16px 32px;background:var(--slate-50);border-top:1px solid var(--slate-100);}
+.setup-footer p{font-size:12px;color:var(--slate-500);line-height:1.6;}
 
 /* Header */
-.app-header { background:linear-gradient(135deg,var(--navy-900),var(--navy-700)); padding:0 32px; position:sticky; top:0; z-index:100; box-shadow:0 2px 20px rgba(12,24,41,.3); }
-.header-inner { max-width:1400px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; padding:16px 0; }
-.header-brand { display:flex; align-items:center; gap:14px; }
-.header-logo { width:38px; height:38px; border-radius:8px; background:linear-gradient(135deg,var(--gold-500),var(--gold-300)); display:flex; align-items:center; justify-content:center; color:var(--navy-900); font-weight:700; font-size:18px; font-family:var(--font-display); }
-.header-title { font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--white); letter-spacing:-.01em; }
-.header-sub { font-size:12px; color:var(--gold-300); margin-top:1px; font-weight:300; letter-spacing:.03em; }
-.header-actions { display:flex; align-items:center; gap:12px; }
-.header-meta { font-size:11px; color:var(--slate-400); text-align:right; }
-.btn-refresh { display:flex; align-items:center; gap:6px; padding:8px 16px; background:rgba(212,168,83,.15); color:var(--gold-400); border:1px solid rgba(212,168,83,.3); border-radius:var(--radius); font-size:12px; font-weight:600; cursor:pointer; transition:all .2s; }
-.btn-refresh:hover { background:rgba(212,168,83,.25); }
-.btn-refresh svg { width:14px; height:14px; }
+.app-header{background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:0 32px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(12,24,41,.3);}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;padding:16px 0;}
+.header-brand{display:flex;align-items:center;gap:14px;}
+.header-logo{width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,var(--gold-500),var(--gold-300));display:flex;align-items:center;justify-content:center;color:var(--navy-900);font-weight:700;font-size:18px;font-family:var(--font-display);}
+.header-title{font-family:var(--font-display);font-size:17px;font-weight:700;color:var(--white);letter-spacing:-.01em;}
+.header-sub{font-size:12px;color:var(--gold-300);margin-top:1px;font-weight:300;letter-spacing:.03em;}
+.header-actions{display:flex;align-items:center;gap:12px;}
+.header-meta{font-size:11px;color:var(--slate-400);text-align:right;}
+.btn-refresh{display:flex;align-items:center;gap:6px;padding:8px 16px;background:rgba(212,168,83,.15);color:var(--gold-400);border:1px solid rgba(212,168,83,.3);border-radius:var(--radius);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-refresh:hover{background:rgba(212,168,83,.25);}
+.btn-refresh svg{width:14px;height:14px;}
+.btn-refresh.is-loading svg{animation:spin .8s linear infinite;}
 
 /* Main */
-.app-main { max-width:1400px; margin:0 auto; padding:24px 32px 40px; }
+.app-main{max-width:1400px;margin:0 auto;padding:24px 32px 40px;}
 
-/* Stats */
-.stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; margin-bottom:24px; animation:fadeUp .4s ease; }
-.stat-card { background:var(--white); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow-sm); border-left:3px solid var(--slate-300); transition:transform .15s,box-shadow .15s; }
-.stat-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
-.stat-card[data-accent="blue"]  { border-left-color:var(--navy-600); }
-.stat-card[data-accent="amber"] { border-left-color:var(--amber-500); }
-.stat-card[data-accent="green"] { border-left-color:var(--green-500); }
-.stat-card[data-accent="gold"]  { border-left-color:var(--gold-500); }
-.stat-card[data-accent="red"]   { border-left-color:var(--red-500); }
-.stat-card[data-accent="navy"]  { border-left-color:var(--navy-800); }
-.stat-value { font-family:var(--font-display); font-size:26px; font-weight:700; letter-spacing:-.02em; }
-.stat-label { font-size:11px; color:var(--slate-500); margin-top:2px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+/* ========== Stats — primary row ========== */
+.stats-primary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:12px;animation:fadeUp .4s ease;}
+.stat-card{background:var(--white);border-radius:var(--radius-lg);padding:18px 20px;box-shadow:var(--shadow-sm);border-left:3px solid var(--slate-300);transition:transform .15s,box-shadow .15s;}
+.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
+.stat-card[data-accent="blue"]{border-left-color:var(--navy-600);}
+.stat-card[data-accent="green"]{border-left-color:var(--green-500);}
+.stat-card[data-accent="gold"]{border-left-color:var(--gold-500);}
+.stat-card[data-accent="red"]{border-left-color:var(--red-500);}
+.stat-value{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:-.02em;}
+.stat-label{font-size:11px;color:var(--slate-500);margin-top:2px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+/* Win-rate progress bar */
+.stat-progress{margin-top:8px;height:5px;border-radius:3px;background:var(--slate-100);overflow:hidden;}
+.stat-progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green-500),var(--gold-500));transition:width .6s ease;}
 
-/* Toolbar */
-.toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; animation:fadeUp .5s ease; }
-.toolbar-left { display:flex; gap:10px; align-items:center; flex:1; flex-wrap:wrap; }
-.toolbar-right { display:flex; gap:8px; }
-.search-box { display:flex; align-items:center; gap:8px; background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius); padding:7px 12px; min-width:220px; flex:0 1 300px; transition:border-color .2s; }
-.search-box:focus-within { border-color:var(--navy-500); }
-.search-box svg { width:15px; height:15px; color:var(--slate-400); flex-shrink:0; }
-.search-input { border:none; outline:none; background:transparent; font-size:13px; color:var(--slate-800); flex:1; font-family:var(--font-body); }
-.search-input::placeholder { color:var(--slate-400); }
-.filter-select { padding:7px 10px; border:1px solid var(--slate-200); border-radius:var(--radius); font-size:12px; background:var(--white); color:var(--slate-700); cursor:pointer; font-family:var(--font-body); transition:border-color .2s; }
-.filter-select:focus { outline:none; border-color:var(--navy-500); }
-.btn-outline { display:flex; align-items:center; gap:5px; padding:7px 14px; background:var(--white); border:1px solid var(--slate-200); border-radius:var(--radius); font-size:12px; cursor:pointer; color:var(--slate-600); font-weight:600; transition:all .15s; }
-.btn-outline:hover { border-color:var(--slate-400); background:var(--slate-50); }
-.btn-outline svg { width:14px; height:14px; }
+/* Stats secondary — compact row */
+.stats-secondary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding:0 2px;animation:fadeUp .45s ease;}
+.stat-chip{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate-600);}
+.stat-chip .chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.stat-chip strong{font-weight:700;color:var(--slate-800);}
 
-/* Error */
-.error-banner { background:var(--red-100); border:1px solid #fecaca; border-radius:var(--radius); padding:14px 18px; margin-bottom:16px; font-size:13px; color:var(--red-800); }
+/* ========== Category mini-chart ========== */
+.analytics-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;animation:fadeUp .5s ease;}
+.analytics-card{background:var(--white);border-radius:var(--radius-lg);padding:18px 22px;box-shadow:var(--shadow-sm);}
+.analytics-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--slate-500);margin-bottom:14px;}
+.cat-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;}
+.cat-bar-row:last-child{margin-bottom:0;}
+.cat-bar-label{width:180px;flex-shrink:0;color:var(--slate-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cat-bar-track{flex:1;height:8px;background:var(--slate-100);border-radius:4px;overflow:hidden;}
+.cat-bar-fill{height:100%;border-radius:4px;transition:width .5s ease;}
+.cat-bar-count{width:24px;text-align:right;font-weight:600;color:var(--slate-600);font-family:var(--font-mono);font-size:11px;}
 
-/* Table */
-.table-wrap { background:var(--white); border-radius:var(--radius-lg); box-shadow:var(--shadow-md); overflow:hidden; animation:fadeUp .6s ease; }
-.table-scroll { overflow-x:auto; }
-table { width:100%; border-collapse:collapse; font-size:13px; }
-thead th { text-align:left; padding:12px 14px; background:var(--slate-50); border-bottom:2px solid var(--slate-200); font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--slate-500); font-weight:700; white-space:nowrap; cursor:pointer; user-select:none; transition:color .15s; }
-thead th:hover { color:var(--navy-700); }
-thead th.sorted { color:var(--navy-800); }
-.sort-icon { display:inline-block; margin-left:4px; font-size:10px; }
-tbody tr { border-bottom:1px solid var(--slate-100); transition:background .1s; }
-tbody tr.row-clickable { cursor:pointer; }
-tbody tr:hover { background:var(--slate-50); }
-tbody tr.row-clickable:hover { background:#f0f4ff; }
-tbody td { padding:12px 14px; vertical-align:top; }
-.case-number { font-family:var(--font-mono); font-weight:600; font-size:13px; color:var(--navy-800); display:flex; align-items:center; gap:6px; }
-.case-link { color:var(--navy-500); display:flex; transition:color .15s; }
-.case-link:hover { color:var(--gold-500); }
-.case-link svg { width:13px; height:13px; }
-.court-label { font-size:11px; color:var(--slate-400); margin-top:3px; }
-.parties-col { display:flex; flex-direction:column; gap:2px; }
-.party-tag { font-size:10px; font-weight:700; color:var(--slate-400); margin-right:4px; }
+/* Upcoming hearings */
+.upcoming-list{display:flex;flex-direction:column;gap:10px;}
+.upcoming-item{display:flex;align-items:flex-start;gap:12px;font-size:13px;}
+.upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
+.upcoming-info{color:var(--slate-700);line-height:1.4;}
+.upcoming-case{font-weight:600;color:var(--navy-800);}
+.upcoming-empty{font-size:13px;color:var(--slate-400);text-align:center;padding:20px 0;}
 
-.badge { display:inline-block; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap; }
-.badge-active    { background:#fef3c7; color:#92400e; }
-.badge-decided   { background:var(--green-100); color:var(--green-800); }
-.badge-plaintiff { background:var(--blue-100); color:var(--blue-800); }
-.badge-defendant { background:#fce7f3; color:#9d174d; }
-.badge-third     { background:var(--slate-100); color:var(--slate-600); }
-.badge-upheld    { background:var(--green-100); color:var(--green-800); }
-.badge-reversed  { background:var(--red-100); color:var(--red-800); }
-.badge-partial   { background:#fef3c7; color:#92400e; }
-.badge-returned  { background:#e0e7ff; color:#3730a3; }
-.badge-dismissed { background:var(--slate-100); color:var(--slate-600); }
-.badge-pending   { background:var(--slate-100); color:var(--slate-500); }
-.badge-cat       { background:var(--slate-100); color:var(--slate-700); font-weight:400; border-radius:4px; }
-.badge-act       { display:inline-block; padding:1px 6px; border-radius:3px; background:var(--blue-100); color:var(--blue-800); font-size:10px; margin-top:4px; font-weight:600; }
-.event-text { font-size:12px; line-height:1.4; }
-.event-date { font-size:11px; color:var(--slate-400); margin-top:2px; }
+/* ========== Toolbar ========== */
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;animation:fadeUp .5s ease;}
+.toolbar-left{display:flex;gap:8px;align-items:center;flex:1;flex-wrap:wrap;}
+.toolbar-right{display:flex;gap:8px;align-items:center;}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--white);border:1px solid var(--slate-200);border-radius:var(--radius);padding:7px 12px;min-width:220px;flex:0 1 280px;transition:border-color .2s;position:relative;}
+.search-box:focus-within{border-color:var(--navy-500);}
+.search-box svg{width:15px;height:15px;color:var(--slate-400);flex-shrink:0;}
+.search-input{border:none;outline:none;background:transparent;font-size:13px;color:var(--slate-800);flex:1;font-family:var(--font-body);}
+.search-input::placeholder{color:var(--slate-400);}
+.search-clear{display:none;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:none;background:var(--slate-200);color:var(--slate-600);font-size:12px;cursor:pointer;line-height:1;padding:0;transition:background .15s;}
+.search-clear:hover{background:var(--slate-300);}
+.search-clear.visible{display:flex;}
+.filter-select{padding:7px 10px;border:1px solid var(--slate-200);border-radius:var(--radius);font-size:12px;background:var(--white);color:var(--slate-700);cursor:pointer;font-family:var(--font-body);transition:border-color .2s;}
+.filter-select:focus{outline:none;border-color:var(--navy-500);}
+.btn-outline{display:flex;align-items:center;gap:5px;padding:7px 14px;background:var(--white);border:1px solid var(--slate-200);border-radius:var(--radius);font-size:12px;cursor:pointer;color:var(--slate-600);font-weight:600;transition:all .15s;}
+.btn-outline:hover{border-color:var(--slate-400);background:var(--slate-50);}
+.btn-outline svg{width:14px;height:14px;}
 
-/* New cases highlight */
-@keyframes newPulse { 0%{box-shadow:inset 3px 0 0 var(--amber-500);} 50%{box-shadow:inset 3px 0 0 var(--gold-500);} 100%{box-shadow:inset 3px 0 0 var(--amber-500);} }
-tbody tr.row-new { background:rgba(245,158,11,.04); animation:newPulse 2s ease infinite; }
-tbody tr.row-new:hover { background:rgba(245,158,11,.08); }
-tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
-.badge-new { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:9px; padding:2px 7px; border-radius:8px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; margin-left:6px; white-space:nowrap; }
-.badge-archived { background:var(--slate-200); color:var(--slate-500); font-size:9px; padding:2px 7px; border-radius:8px; font-weight:600; text-transform:uppercase; margin-left:6px; }
-.new-cases-banner { background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #fcd34d; border-radius:var(--radius); padding:12px 18px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:13px; color:#92400e; animation:fadeUp .4s ease; }
-.new-cases-banner svg { width:18px; height:18px; flex-shrink:0; }
-.new-cases-banner strong { font-weight:700; }
-.new-cases-banner .dismiss { margin-left:auto; background:none; border:none; color:#92400e; cursor:pointer; font-size:16px; opacity:.6; transition:opacity .15s; }
-.new-cases-banner .dismiss:hover { opacity:1; }
+/* Table counter (above table) */
+.table-counter{font-size:12px;color:var(--slate-500);margin-bottom:8px;animation:fadeUp .55s ease;}
+.table-counter strong{color:var(--slate-700);}
 
-.empty-state { text-align:center; padding:60px 20px; color:var(--slate-400); }
-.empty-state svg { width:40px; height:40px; margin-bottom:12px; opacity:.4; }
-.empty-state p { font-size:14px; }
-.app-footer { max-width:1400px; margin:0 auto; padding:16px 32px; text-align:center; font-size:11px; color:var(--slate-400); border-top:1px solid var(--slate-200); }
+/* ========== Error / Banners ========== */
+.error-banner{background:var(--red-100);border:1px solid #fecaca;border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--red-800);}
+.new-cases-banner{background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #fcd34d;border-radius:var(--radius);padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#92400e;animation:fadeUp .4s ease;cursor:pointer;transition:box-shadow .2s;}
+.new-cases-banner:hover{box-shadow:0 2px 8px rgba(245,158,11,.2);}
+.new-cases-banner svg{width:18px;height:18px;flex-shrink:0;}
+.new-cases-banner strong{font-weight:700;}
+.new-cases-banner .banner-hint{font-size:11px;opacity:.7;margin-left:4px;}
+.new-cases-banner .dismiss{margin-left:auto;background:none;border:none;color:#92400e;cursor:pointer;font-size:16px;opacity:.6;transition:opacity .15s;padding:4px;}
+.new-cases-banner .dismiss:hover{opacity:1;}
 
+/* ========== Table ========== */
+.table-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden;animation:fadeUp .6s ease;}
+.table-scroll{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{text-align:left;padding:12px 14px;background:var(--slate-50);border-bottom:2px solid var(--slate-200);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);font-weight:700;white-space:nowrap;user-select:none;transition:color .15s;}
+thead th.sortable{cursor:pointer;}
+thead th.sortable:hover{color:var(--navy-700);}
+thead th.sorted{color:var(--navy-800);}
+.sort-icon{display:inline-block;margin-left:4px;font-size:10px;}
+tbody tr{border-bottom:1px solid var(--slate-100);transition:background .1s;}
+tbody tr.row-clickable{cursor:pointer;}
+tbody tr:hover{background:var(--slate-50);}
+tbody tr.row-clickable:hover{background:#f0f4ff;}
+tbody td{padding:12px 14px;vertical-align:top;}
+.case-number{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.court-label{font-size:11px;color:var(--slate-400);margin-top:3px;}
+.parties-col{display:flex;flex-direction:column;gap:2px;font-size:12.5px;}
+.party-tag{font-size:10px;font-weight:700;color:var(--slate-400);margin-right:3px;}
+.party-sberbank{color:var(--gold-500);font-weight:600;}
+.event-cell{max-width:220px;}
+.event-text{font-size:12px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;}
+.event-text[title]{cursor:help;}
+.event-date{font-size:11px;color:var(--slate-400);margin-top:2px;}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge-active{background:#fef3c7;color:#92400e;}
+.badge-decided{background:var(--green-100);color:var(--green-800);}
+.badge-plaintiff{background:var(--blue-100);color:var(--blue-800);}
+.badge-defendant{background:#fce7f3;color:#9d174d;}
+.badge-third{background:var(--slate-100);color:var(--slate-600);}
+.badge-upheld{background:var(--green-100);color:var(--green-800);}
+.badge-reversed{background:var(--red-100);color:var(--red-800);}
+.badge-partial{background:#fef3c7;color:#92400e;}
+.badge-returned{background:#e0e7ff;color:#3730a3;}
+.badge-dismissed{background:var(--slate-100);color:var(--slate-600);}
+.badge-pending{background:var(--slate-100);color:var(--slate-500);}
+.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;}
+.badge-act{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:10px;margin-top:4px;font-weight:600;}
+.badge-icon{font-size:11px;line-height:1;}
+.badge-new{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;padding:2px 7px;border-radius:8px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;}
+.badge-archived{background:var(--slate-200);color:var(--slate-500);font-size:9px;padding:2px 7px;border-radius:8px;font-weight:600;text-transform:uppercase;}
+
+/* Row new — animate for 5s then static */
+tbody tr.row-new{animation:newHighlight 2s ease 3;background:rgba(245,158,11,.06);}
+tbody tr.row-new:hover{background:rgba(245,158,11,.12);}
+
+/* ========== Expandable row ========== */
+.expand-btn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--slate-200);border-radius:4px;background:var(--white);cursor:pointer;color:var(--slate-500);font-size:12px;transition:all .15s;flex-shrink:0;margin-right:6px;}
+.expand-btn:hover{background:var(--slate-50);border-color:var(--slate-300);}
+.expand-btn.open{background:var(--navy-800);color:var(--gold-400);border-color:var(--navy-800);}
+tr.detail-row{display:none;}
+tr.detail-row.open{display:table-row;}
+tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bottom:1px solid var(--slate-200);}
+.detail-content{display:flex;flex-wrap:wrap;gap:20px;font-size:12.5px;color:var(--slate-700);line-height:1.6;padding-top:4px;}
+.detail-block{flex:1;min-width:200px;}
+.detail-block-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--slate-400);margin-bottom:4px;}
+.detail-link{display:inline-flex;align-items:center;gap:4px;color:var(--navy-600);text-decoration:none;font-weight:600;font-size:12px;margin-top:6px;transition:color .15s;}
+.detail-link:hover{color:var(--gold-500);}
+.detail-link svg{width:12px;height:12px;}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--slate-400);}
+.empty-state svg{width:40px;height:40px;margin-bottom:12px;opacity:.4;}
+.empty-state p{font-size:14px;}
+
+.app-footer{max-width:1400px;margin:0 auto;padding:16px 32px;text-align:center;font-size:11px;color:var(--slate-400);border-top:1px solid var(--slate-200);}
+
+/* ========== Mobile cards ========== */
+.mobile-cards{display:none;}
+.mobile-card{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:16px;margin-bottom:10px;border-left:3px solid var(--slate-200);transition:box-shadow .15s;}
+.mobile-card:active{box-shadow:var(--shadow-md);}
+.mobile-card[data-role="plaintiff"]{border-left-color:var(--blue-500);}
+.mobile-card[data-role="defendant"]{border-left-color:#ec4899;}
+.mobile-card.card-new{border-left-color:var(--amber-500);background:rgba(245,158,11,.03);}
+.mc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;}
+.mc-case{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-800);}
+.mc-parties{font-size:12px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
+.mc-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+.mc-meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--slate-400);margin-top:6px;padding-top:8px;border-top:1px solid var(--slate-100);}
+.mc-event{font-size:11.5px;color:var(--slate-600);line-height:1.4;}
+.mc-link{display:flex;align-items:center;gap:4px;color:var(--navy-600);text-decoration:none;font-size:11px;font-weight:600;}
+
+/* ========== Responsive ========== */
+@media(max-width:1024px){
+  .stats-primary{grid-template-columns:repeat(2,1fr);}
+  .analytics-row{grid-template-columns:1fr;}
+}
 @media(max-width:768px){
-  .app-header{padding:0 16px;} .app-main{padding:16px;}
+  .app-header{padding:0 16px;}.app-main{padding:16px;}
   .header-inner{flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0;}
   .header-actions{width:100%;justify-content:space-between;}
-  .stats-row{grid-template-columns:repeat(3,1fr);}
+  .stats-primary{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .analytics-row{grid-template-columns:1fr;gap:8px;}
   .toolbar{flex-direction:column;align-items:stretch;}
-  .toolbar-left{flex-direction:column;} .search-box{flex:1;min-width:auto;}
+  .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
   .toolbar-right{justify-content:flex-end;}
+  .table-wrap{display:none;}
+  .mobile-cards{display:block;animation:fadeUp .6s ease;}
 }
 </style>
 </head>
@@ -211,7 +277,7 @@ tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
       </p>
     </div>
     <div class="setup-footer">
-      <p>Эта страница загружает данные напрямую из вашей Google-таблицы. Данные не передаются третьим лицам. Разместите этот HTML-файл на GitHub Pages или любом хостинге.</p>
+      <p>Эта страница загружает данные напрямую из вашей Google-таблицы. Данные не передаются третьим лицам.</p>
     </div>
   </div>
 </div>
@@ -233,7 +299,7 @@ tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
       </div>
       <div class="header-actions">
         <div class="header-meta" id="meta-info"></div>
-        <button class="btn-refresh" onclick="refreshData()">
+        <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           Обновить
         </button>
@@ -245,18 +311,29 @@ tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
   </header>
 
   <main class="app-main">
-    <div id="new-cases-banner" class="new-cases-banner" style="display:none;">
+    <div id="new-cases-banner" class="new-cases-banner" style="display:none;" onclick="filterNewCases(event)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       <span id="new-cases-text"></span>
-      <button class="dismiss" onclick="dismissNewBanner()" title="Скрыть">&times;</button>
+      <span class="banner-hint">Нажмите, чтобы отфильтровать</span>
+      <button class="dismiss" onclick="dismissNewBanner(event)" title="Скрыть">&times;</button>
     </div>
     <div id="error-banner" class="error-banner" style="display:none;"></div>
-    <div class="stats-row" id="stats-row"></div>
+
+    <!-- Primary stats -->
+    <div class="stats-primary" id="stats-primary"></div>
+    <!-- Secondary stats -->
+    <div class="stats-secondary" id="stats-secondary"></div>
+
+    <!-- Analytics row -->
+    <div class="analytics-row" id="analytics-row"></div>
+
+    <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-left">
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="applyFilters()">
+          <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
+          <button class="search-clear" id="search-clear" onclick="clearSearch()" title="Очистить">&times;</button>
         </div>
         <select class="filter-select" id="filter-status" onchange="applyFilters()">
           <option value="all">Все статусы</option>
@@ -271,15 +348,29 @@ tbody tr.row-new.row-clickable:hover { background:rgba(245,158,11,.12); }
           <option value="defendant">Ответчик</option>
           <option value="third_party">Третье лицо</option>
         </select>
+        <select class="filter-select" id="filter-category" onchange="applyFilters()">
+          <option value="all">Все категории</option>
+        </select>
+        <select class="filter-select" id="filter-court" onchange="applyFilters()">
+          <option value="all">Все суды</option>
+        </select>
       </div>
       <div class="toolbar-right">
         <button class="btn-outline" onclick="exportCSV()">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Экспорт CSV
+          CSV
         </button>
       </div>
     </div>
+
+    <!-- Table counter -->
+    <div class="table-counter" id="table-counter"></div>
+
+    <!-- Desktop table -->
     <div class="table-wrap"><div class="table-scroll"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div></div>
+
+    <!-- Mobile cards -->
+    <div class="mobile-cards" id="mobile-cards"></div>
   </main>
   <footer class="app-footer" id="app-footer"></footer>
 </div>
@@ -294,38 +385,36 @@ const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','тре�
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Третье лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
 const STATUS_LABELS={active:'В производстве',decided:'Решено'};
-const RESULT_MAP={'оставлено без изменения':'upheld','отменено':'reversed','изменено частично':'partial','возвращено':'returned','прекращено':'dismissed','ожидается':'pending'};
+const RESULT_MAP={'оставлено без изменения':'upheld','решение оставлено без изменения':'upheld','отменено':'reversed','изменено частично':'partial','возвращено':'returned','прекращено':'dismissed','ожидается':'pending'};
 const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',pending:'Ожидается'};
+const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',pending:'…'};
+const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
 let allCases=[],filteredCases=[],sortField='dateReceived',sortDir='desc';
 let newCaseNumbers=new Set();
 let archivedCount=0;
+let expandedRows=new Set();
 
+/* ========== CSV Parsing ========== */
 function parseCSV(t){const r=[[]];let cur='',inQ=false;for(let i=0;i<t.length;i++){const c=t[i];if(c==='"'){if(inQ&&t[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){r[r.length-1].push(cur);cur='';}else if((c==='\n'||c==='\r')&&!inQ){if(c==='\r'&&t[i+1]==='\n')i++;r[r.length-1].push(cur);cur='';r.push([]);}else cur+=c;}r[r.length-1].push(cur);return r.filter(x=>x.length>1||(x.length===1&&x[0].trim()!==''));}
 
 function rowToCase(h,row){
   const g=(ns)=>{for(const n of ns){const i=h.findIndex(x=>x.toLowerCase().includes(n.toLowerCase()));if(i>=0&&row[i])return row[i].trim();}return '';};
   const rl=g(['роль банка','роль']).toLowerCase(),sl=g(['статус']).toLowerCase(),rs=g(['результат']).toLowerCase(),ac=g(['акт опубликован','акт']).toLowerCase();
   let link=g(['ссылка','url','link']);
-  // Нормализация ссылок:
-  // Формат "case_id|case_uid" → полный URL с обоими параметрами
-  // Формат "case_id" (просто число) → полный URL (без uid, может не работать)
-  // Полный URL → оставить как есть
   if(link){
     const pipeMatch=link.match(/^(\d+)\|([a-f0-9-]+)$/);
-    if(pipeMatch){
-      link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+pipeMatch[1]+'&case_uid='+pipeMatch[2]+'&delo_id=5&new=5';
-    }else if(/^\d+$/.test(link)){
-      link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5&new=5';
-    }
+    if(pipeMatch){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+pipeMatch[1]+'&case_uid='+pipeMatch[2]+'&delo_id=5&new=5';}
+    else if(/^\d+$/.test(link)){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5&new=5';}
   }
   return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:g(['категория']),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:g(['последнее событие','событие']),lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',result:RESULT_MAP[rs]||rs||'pending',link:link,notes:g(['заметки','примечан'])};
 }
-
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
 function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function isSberbank(s){return/сбербанк|ПАО Сбер/i.test(s);}
 
+/* ========== Init ========== */
 const DEMO_CSV=`Номер дела,Дата поступления,Истец,Ответчик,Категория,Суд 1 инстанции,Роль банка,Статус,Последнее событие,Дата события,Акт опубликован,Результат,Ссылка,Заметки
 33-2847/2026,15.03.2026,Иванов И.И.,ПАО Сбербанк,Кредитный договор,Сургутский городской суд,Ответчик,В производстве,Назначено судебное заседание на 02.04.2026,20.03.2026,Нет,Ожидается,,
 33-1923/2026,28.02.2026,ПАО Сбербанк,Петрова А.С.,Ипотека,Нижневартовский городской суд,Истец,В производстве,Рассмотрение отложено,18.03.2026,Нет,Ожидается,,Ответчик заявил ходатайство
@@ -345,6 +434,8 @@ function loadDemo(){const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>
 
 async function loadFromSheet(url){
   showLoading();
+  const btn=document.getElementById('btn-refresh');
+  if(btn)btn.classList.add('is-loading');
   try{
     const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
     const t=await r.text();const rows=parseCSV(t);
@@ -352,103 +443,177 @@ async function loadFromSheet(url){
     allCases=rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
     showApp();hideError();renderAll();
   }catch(e){
-    console.warn('Ошибка загрузки из Google Sheets, загружаем демо-данные:',e.message);
+    console.warn('Ошибка загрузки:',e.message);
     const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);
-    showApp();showError('Не удалось загрузить данные из Google Sheets ('+e.message+'). Показаны встроенные данные. Нажмите «Обновить» для повторной попытки.');renderAll();
+    showApp();showError('Не удалось загрузить данные из Google Sheets ('+e.message+'). Показаны встроенные данные.');renderAll();
+  }finally{
+    if(btn)btn.classList.remove('is-loading');
   }
 }
-
 function refreshData(){const u=localStorage.getItem(STORAGE_KEY)||DEFAULT_SHEET_URL;loadFromSheet(u);}
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.innerHTML='<strong>Ошибка:</strong> '+m;}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
+/* ========== Render All ========== */
 function renderAll(){
-  // Detect new cases
   const knownRaw=localStorage.getItem(KNOWN_CASES_KEY);
   const knownSet=knownRaw?new Set(JSON.parse(knownRaw)):new Set();
   const currentNumbers=allCases.map(c=>c.caseNumber);
-  
-  if(knownSet.size>0){
-    newCaseNumbers=new Set(currentNumbers.filter(n=>!knownSet.has(n)));
-  }else{
-    newCaseNumbers=new Set(); // First visit — nothing is "new"
-  }
-  
-  // Save current cases as known
+  if(knownSet.size>0){newCaseNumbers=new Set(currentNumbers.filter(n=>!knownSet.has(n)));}
+  else{newCaseNumbers=new Set();}
   localStorage.setItem(KNOWN_CASES_KEY,JSON.stringify(currentNumbers));
-  
-  // Count archived
   archivedCount=allCases.filter(c=>isArchived(c)).length;
-  
-  // Show banner if there are new cases
+
   if(newCaseNumbers.size>0){
     const banner=document.getElementById('new-cases-banner');
     banner.style.display='';
     const n=newCaseNumbers.size;
     const word=n===1?'новое дело':n<5?'новых дела':'новых дел';
-    document.getElementById('new-cases-text').innerHTML=`<strong>${n} ${word}</strong> с момента последнего просмотра`;
+    document.getElementById('new-cases-text').innerHTML=`<strong>${n} ${word}</strong> с последнего визита`;
   }else{
     document.getElementById('new-cases-banner').style.display='none';
   }
-  
-  renderStats();applyFilters();renderMeta();
-  
-  // Save visit timestamp (once per page load, after new case detection)
+
+  populateFilterOptions();
+  renderStats();applyFilters();renderMeta();renderAnalytics();
   localStorage.setItem(LAST_VISIT_KEY,new Date().toISOString());
 }
 
 function isArchived(c){
   if(c.status!=='decided')return false;
-  // Для решённых дел: берём дату последнего события (= дата решения/вступления в силу)
-  // Если нет — дату поступления как fallback
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
-  const d=new Date(decisionDate);
-  if(isNaN(d))return false;
-  const diffDays=(Date.now()-d.getTime())/(1000*60*60*24);
-  return diffDays>ARCHIVE_DAYS;
+  const d=new Date(decisionDate);if(isNaN(d))return false;
+  return(Date.now()-d.getTime())/(1000*60*60*24)>ARCHIVE_DAYS;
+}
+function isNewCase(c){return newCaseNumbers.has(c.caseNumber);}
+
+/* ========== Populate dynamic filter options ========== */
+function populateFilterOptions(){
+  const cats=new Set(),courts=new Set();
+  allCases.forEach(c=>{if(c.category)cats.add(c.category);if(c.firstInstanceCourt)courts.add(c.firstInstanceCourt);});
+  const catSel=document.getElementById('filter-category');
+  const courtSel=document.getElementById('filter-court');
+  const catVal=catSel.value,courtVal=courtSel.value;
+  catSel.innerHTML='<option value="all">Все категории</option>'+[...cats].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  courtSel.innerHTML='<option value="all">Все суды</option>'+[...courts].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  catSel.value=catVal;courtSel.value=courtVal;
 }
 
-function isNewCase(c){
-  return newCaseNumbers.has(c.caseNumber);
-}
-
-function dismissNewBanner(){
-  document.getElementById('new-cases-banner').style.display='none';
-}
-
+/* ========== Stats ========== */
 function renderStats(){
   const active=allCases.filter(c=>c.status==='active').length;
   const decided=allCases.filter(c=>c.status==='decided'&&!isArchived(c)).length;
-  const p=allCases.filter(c=>c.sberbankRole==='plaintiff').length,def=allCases.filter(c=>c.sberbankRole==='defendant').length;
   const w=allCases.filter(c=>(c.result==='upheld'&&c.sberbankRole==='plaintiff')||(c.result==='reversed'&&c.sberbankRole==='defendant')).length;
-  const newCount=newCaseNumbers.size;
-  document.getElementById('stats-row').innerHTML=`
+  const decidedTotal=allCases.filter(c=>c.status==='decided').length;
+  const winRate=decidedTotal>0?Math.round(w/decidedTotal*100):0;
+  const actsCount=allCases.filter(c=>c.hasPublishedActs).length;
+
+  document.getElementById('stats-primary').innerHTML=`
     <div class="stat-card" data-accent="blue"><div class="stat-value">${allCases.length}</div><div class="stat-label">Всего дел</div></div>
-    ${newCount>0?`<div class="stat-card" data-accent="amber" style="border-left-color:#f59e0b;background:rgba(245,158,11,.05);"><div class="stat-value" style="color:#d97706;">${newCount}</div><div class="stat-label" style="color:#92400e;">Новых</div></div>`:''}
-    <div class="stat-card" data-accent="amber"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
-    <div class="stat-card" data-accent="green"><div class="stat-value">${decided}</div><div class="stat-label">Решено</div></div>
-    <div class="stat-card" data-accent="gold"><div class="stat-value">${p} / ${def}</div><div class="stat-label">Истец / Ответчик</div></div>
-    <div class="stat-card" data-accent="navy"><div class="stat-value">${w}</div><div class="stat-label">В пользу банка</div></div>
-    <div class="stat-card" data-accent="red"><div class="stat-value">${allCases.filter(c=>c.hasPublishedActs).length}</div><div class="stat-label">Акты опубл.</div></div>
-    ${archivedCount>0?`<div class="stat-card"><div class="stat-value" style="color:var(--slate-400);">${archivedCount}</div><div class="stat-label">В архиве</div></div>`:''}`;
+    <div class="stat-card" data-accent="gold"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
+    <div class="stat-card" data-accent="green">
+      <div class="stat-value">${w} <span style="font-size:14px;color:var(--slate-400);font-weight:400;">из ${decidedTotal}</span></div>
+      <div class="stat-label">В пользу банка</div>
+      <div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>
+    </div>
+    <div class="stat-card" data-accent="red"><div class="stat-value">${actsCount}</div><div class="stat-label">Акты опубликованы</div></div>`;
+
+  // Secondary chips
+  const p=allCases.filter(c=>c.sberbankRole==='plaintiff').length;
+  const def=allCases.filter(c=>c.sberbankRole==='defendant').length;
+  const tp=allCases.filter(c=>c.sberbankRole==='third_party').length;
+  const newCount=newCaseNumbers.size;
+  let chips=`
+    <div class="stat-chip"><div class="chip-dot" style="background:var(--blue-500);"></div>Истец: <strong>${p}</strong></div>
+    <div class="stat-chip"><div class="chip-dot" style="background:#ec4899;"></div>Ответчик: <strong>${def}</strong></div>`;
+  if(tp>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Третье лицо: <strong>${tp}</strong></div>`;
+  if(newCount>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Новых: <strong>${newCount}</strong></div>`;
+  if(archivedCount>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-300);"></div>В архиве: <strong>${archivedCount}</strong></div>`;
+  chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Решено: <strong>${decided}</strong></div>`;
+  document.getElementById('stats-secondary').innerHTML=chips;
 }
 
+/* ========== Analytics ========== */
+function renderAnalytics(){
+  // Category chart
+  const catCounts={};
+  allCases.forEach(c=>{const cat=c.category||'Иное';catCounts[cat]=(catCounts[cat]||0)+1;});
+  const catEntries=Object.entries(catCounts).sort((a,b)=>b[1]-a[1]);
+  const maxCat=catEntries.length?catEntries[0][1]:1;
+  let catHtml='<div class="analytics-card"><div class="analytics-title">Категории дел</div>';
+  catEntries.forEach(([cat,count],i)=>{
+    const pct=Math.round(count/maxCat*100);
+    const color=CAT_COLORS[i%CAT_COLORS.length];
+    catHtml+=`<div class="cat-bar-row"><span class="cat-bar-label">${escHtml(cat)}</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${color};"></div></div><span class="cat-bar-count">${count}</span></div>`;
+  });
+  catHtml+='</div>';
+
+  // Upcoming hearings
+  const today=new Date();today.setHours(0,0,0,0);
+  const upcoming=allCases
+    .filter(c=>{
+      if(c.status!=='active')return false;
+      const evText=(c.lastEvent||'').toLowerCase();
+      return evText.includes('назначен')||evText.includes('заседан')||evText.includes('рассмотрен');
+    })
+    .map(c=>{
+      // Try to extract date from event text
+      const m=(c.lastEvent||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      let hearingDate=null;
+      if(m)hearingDate=new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1]));
+      return{...c,hearingDate};
+    })
+    .filter(c=>c.hearingDate&&c.hearingDate>=today)
+    .sort((a,b)=>a.hearingDate-b.hearingDate)
+    .slice(0,5);
+
+  let upHtml='<div class="analytics-card"><div class="analytics-title">Ближайшие заседания</div>';
+  if(upcoming.length===0){
+    upHtml+='<div class="upcoming-empty">Нет предстоящих заседаний</div>';
+  }else{
+    upHtml+='<div class="upcoming-list">';
+    upcoming.forEach(c=>{
+      const dateStr=c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+      upHtml+=`<div class="upcoming-item"><span class="upcoming-date">${dateStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span><br>${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</div></div>`;
+    });
+    upHtml+='</div>';
+  }
+  upHtml+='</div>';
+
+  document.getElementById('analytics-row').innerHTML=catHtml+upHtml;
+}
+
+/* ========== Meta / Footer ========== */
 function renderMeta(){
   const lastVisit=localStorage.getItem(LAST_VISIT_KEY);
   let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
-  if(lastVisit){
-    const lv=new Date(lastVisit);
-    if(!isNaN(lv)) metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';
-  }
+  if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
-  const archText=archivedCount>0?' · '+archivedCount+' в архиве':'';
-  const newText=newCaseNumbers.size>0?' · '+newCaseNumbers.size+' новых':'';
-  document.getElementById('app-footer').textContent='Показано '+filteredCases.length+' из '+allCases.length+' дел'+newText+archText+' · Данные из Google Sheets (автозагрузка)';
+  document.getElementById('app-footer').textContent='Данные из Google Sheets (автозагрузка)';
 }
 
+/* ========== Filters ========== */
+function onSearchInput(){
+  const v=document.getElementById('search-input').value;
+  document.getElementById('search-clear').classList.toggle('visible',v.length>0);
+  applyFilters();
+}
+function clearSearch(){document.getElementById('search-input').value='';document.getElementById('search-clear').classList.remove('visible');applyFilters();}
+function filterNewCases(e){
+  if(e.target.closest('.dismiss'))return;
+  document.getElementById('filter-status').value='new';
+  applyFilters();
+}
+function dismissNewBanner(e){e.stopPropagation();document.getElementById('new-cases-banner').style.display='none';}
+
 function applyFilters(){
-  const q=document.getElementById('search-input').value.toLowerCase(),st=document.getElementById('filter-status').value,rl=document.getElementById('filter-role').value;
+  const q=document.getElementById('search-input').value.toLowerCase();
+  const st=document.getElementById('filter-status').value;
+  const rl=document.getElementById('filter-role').value;
+  const cat=document.getElementById('filter-category').value;
+  const court=document.getElementById('filter-court').value;
+
   filteredCases=allCases.filter(c=>{
     const archived=isArchived(c);
     if(st==='archived'){if(!archived)return false;}
@@ -457,55 +622,148 @@ function applyFilters(){
     else if(st==='active'){if(c.status!=='active')return false;}
     else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
+    if(cat!=='all'&&c.category!==cat)return false;
+    if(court!=='all'&&c.firstInstanceCourt!==court)return false;
     if(q){const h=[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
-  // New cases first, then sort by selected field
+
   filteredCases.sort((a,b)=>{
-    const aNew=isNewCase(a)?0:1, bNew=isNewCase(b)?0:1;
-    if(aNew!==bNew) return aNew-bNew;
+    const aNew=isNewCase(a)?0:1,bNew=isNewCase(b)?0:1;
+    if(aNew!==bNew)return aNew-bNew;
     let va=a[sortField]||'',vb=b[sortField]||'';
     if(sortField.includes('date')||sortField==='dateReceived'){va=new Date(va||'1970-01-01').getTime();vb=new Date(vb||'1970-01-01').getTime();}
     if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase();}
     if(va<vb)return sortDir==='asc'?-1:1;if(va>vb)return sortDir==='asc'?1:-1;return 0;
   });
-  renderTable();renderMeta();
+
+  renderTable();renderMobileCards();renderCounter();
 }
 
 function toggleSort(f){if(sortField===f)sortDir=sortDir==='asc'?'desc':'asc';else{sortField=f;sortDir='desc';}applyFilters();}
 
-const COLS=[{k:'caseNumber',l:'Номер дела',s:1},{k:'dateReceived',l:'Поступило',s:1},{k:'parties',l:'Стороны',s:0},{k:'category',l:'Категория',s:1},{k:'sberbankRole',l:'Роль банка',s:1},{k:'status',l:'Статус',s:1},{k:'lastEvent',l:'Последнее событие',s:0},{k:'result',l:'Результат',s:1}];
+/* ========== Counter ========== */
+function renderCounter(){
+  const archText=archivedCount>0?` · ${archivedCount} в архиве`:'';
+  const newText=newCaseNumbers.size>0?` · ${newCaseNumbers.size} новых`:'';
+  document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${allCases.length}</strong> дел${newText}${archText}`;
+}
+
+/* ========== Table ========== */
+const COLS=[
+  {k:'_expand',l:'',s:0,w:'36px'},
+  {k:'caseNumber',l:'Номер дела',s:1},
+  {k:'dateReceived',l:'Поступило',s:1},
+  {k:'parties',l:'Стороны',s:0},
+  {k:'category',l:'Категория',s:1},
+  {k:'sberbankRole',l:'Роль банка',s:1},
+  {k:'status',l:'Статус',s:1},
+  {k:'lastEvent',l:'Последнее событие',s:0},
+  {k:'result',l:'Результат',s:1}
+];
 
 function renderTable(){
   document.getElementById('table-head').innerHTML='<tr>'+COLS.map(c=>{
-    const sorted=sortField===c.k,arrow=sorted?(sortDir==='asc'?'▲':'▼'):'',cls=sorted?'sorted':'',oc=c.s?`onclick="toggleSort('${c.k}')"`:''
+    if(c.k==='_expand')return`<th style="width:${c.w};"></th>`;
+    const sorted=sortField===c.k,arrow=sorted?(sortDir==='asc'?'▲':'▼'):'';
+    const cls=[sorted?'sorted':'',c.s?'sortable':''].filter(Boolean).join(' ');
+    const oc=c.s?`onclick="toggleSort('${c.k}')"`:'';
     return`<th class="${cls}" ${oc}>${c.l}${arrow?`<span class="sort-icon">${arrow}</span>`:''}</th>`;
   }).join('')+'</tr>';
 
-  if(!filteredCases.length){document.getElementById('table-body').innerHTML=`<tr><td colspan="${COLS.length}" class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><p>Нет дел, соответствующих фильтрам</p></td></tr>`;return;}
+  if(!filteredCases.length){
+    document.getElementById('table-body').innerHTML=`<tr><td colspan="${COLS.length}" class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><p>Нет дел, соответствующих фильтрам</p></td></tr>`;
+    return;
+  }
 
-  document.getElementById('table-body').innerHTML=filteredCases.map(c=>{
+  let html='';
+  filteredCases.forEach((c,idx)=>{
     const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
     const sc=c.status==='active'?'active':'decided';
     const isNew=isNewCase(c);
-    const archived=isArchived(c);
-    const hasLink=!!c.link;
-    const rowClass=[isNew?'row-new':'',hasLink?'row-clickable':''].filter(Boolean).join(' ');
+    const expanded=expandedRows.has(c.caseNumber);
+    const rowClass=[isNew?'row-new':''].filter(Boolean).join(' ');
+
+    // Highlight Sberbank in parties
+    const plaintiffHtml=isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(c.plaintiff)}</span>`:escHtml(c.plaintiff);
+    const defendantHtml=isSberbank(c.defendant)?`<span class="party-sberbank">${escHtml(c.defendant)}</span>`:escHtml(c.defendant);
+
+    const resultIcon=RESULT_ICONS[c.result]||'';
+    const linkIcon=c.link?'<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="var(--slate-400)" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>':'';
     const newBadge=isNew?'<span class="badge-new">Новое</span>':'';
-    const archBadge=archived?'<span class="badge-archived">Архив</span>':'';
-    const linkIcon=hasLink?'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--slate-400)" stroke-width="2" stroke-linecap="round" style="margin-left:4px;vertical-align:middle;flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>':'';
-    return`<tr class="${rowClass}" ${hasLink?'data-href="'+escHtml(c.link)+'"':''} ${hasLink?'title="Нажмите чтобы открыть карточку дела на сайте суда"':''}>
-      <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archBadge}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
+    const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
+    const eventText=c.lastEvent||'';
+    const eventTitle=eventText.length>60?`title="${escHtml(eventText)}"`:'';
+
+    html+=`<tr class="${rowClass}" data-idx="${idx}">
+      <td><button class="expand-btn ${expanded?'open':''}" onclick="toggleExpand('${escHtml(c.caseNumber)}',event)">${expanded?'−':'+'}</button></td>
+      <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div><div class="court-label">${escHtml(c.firstInstanceCourt)}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
-      <td><div class="parties-col"><span><span class="party-tag">И:</span>${escHtml(c.plaintiff)}</span><span><span class="party-tag">О:</span>${escHtml(c.defendant)}</span></div></td>
+      <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
       <td><span class="badge badge-cat">${escHtml(c.category)}</span></td>
       <td><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span></td>
       <td><span class="badge badge-${sc}">${STATUS_LABELS[c.status]||c.status}</span></td>
-      <td><div class="event-text">${escHtml(c.lastEvent)||'—'}</div><div class="event-date">${formatDate(c.lastEventDate)}</div>${c.hasPublishedActs?'<span class="badge-act">Акт опубликован</span>':''}</td>
-      <td><span class="badge badge-${c.result||'pending'}">${RESULT_LABELS[c.result]||c.result||'—'}</span></td>
-    </tr>`}).join('');
+      <td class="event-cell"><div class="event-text" ${eventTitle}>${escHtml(eventText)||'—'}</div><div class="event-date">${formatDate(c.lastEventDate)}</div>${c.hasPublishedActs?'<span class="badge-act">Акт опубликован</span>':''}</td>
+      <td><span class="badge badge-${c.result||'pending'}"><span class="badge-icon">${resultIcon}</span> ${RESULT_LABELS[c.result]||c.result||'—'}</span></td>
+    </tr>`;
+
+    // Detail row
+    html+=`<tr class="detail-row ${expanded?'open':''}" id="detail-${escHtml(c.caseNumber)}">
+      <td colspan="${COLS.length}">
+        <div class="detail-content">
+          <div class="detail-block"><div class="detail-block-title">Полное событие</div>${escHtml(eventText)||'—'}</div>
+          ${c.notes?`<div class="detail-block"><div class="detail-block-title">Заметки</div>${escHtml(c.notes)}</div>`:''}
+          <div class="detail-block">
+            <div class="detail-block-title">Суд первой инстанции</div>${escHtml(c.firstInstanceCourt)}
+            ${c.link?`<br><a class="detail-link" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть на сайте суда</a>`:''}
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('table-body').innerHTML=html;
 }
 
+function toggleExpand(caseNumber,e){
+  e.stopPropagation();
+  if(expandedRows.has(caseNumber))expandedRows.delete(caseNumber);
+  else expandedRows.add(caseNumber);
+  renderTable();
+}
+
+/* ========== Mobile Cards ========== */
+function renderMobileCards(){
+  if(!filteredCases.length){
+    document.getElementById('mobile-cards').innerHTML='<div class="empty-state"><p>Нет дел, соответствующих фильтрам</p></div>';
+    return;
+  }
+  document.getElementById('mobile-cards').innerHTML=filteredCases.map(c=>{
+    const isNew=isNewCase(c);
+    const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
+    const resultIcon=RESULT_ICONS[c.result]||'';
+    return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}">
+      <div class="mc-header">
+        <div><span class="mc-case">${escHtml(c.caseNumber)}</span>${isNew?' <span class="badge-new">Новое</span>':''}</div>
+        <span class="badge badge-${c.status==='active'?'active':'decided'}">${STATUS_LABELS[c.status]||c.status}</span>
+      </div>
+      <div class="mc-parties">
+        <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(c.plaintiff)+'</strong>':escHtml(c.plaintiff)}<br>
+        <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(c.defendant)+'</strong>':escHtml(c.defendant)}
+      </div>
+      <div class="mc-row">
+        <span class="badge badge-cat">${escHtml(c.category)}</span>
+        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>
+        <span class="badge badge-${c.result||'pending'}">${resultIcon} ${RESULT_LABELS[c.result]||'—'}</span>
+      </div>
+      ${c.lastEvent?`<div class="mc-event">${escHtml(c.lastEvent)}</div>`:''}
+      <div class="mc-meta">
+        <span>${formatDate(c.dateReceived)} · ${escHtml(c.firstInstanceCourt)}</span>
+        ${c.link?`<a class="mc-link" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Сайт суда</a>`:''}
+      </div>
+    </div>`}).join('');
+}
+
+/* ========== Export ========== */
 function exportCSV(){
   const hd=['Номер дела','Дата поступления','Истец','Ответчик','Категория','Суд 1 инстанции','Роль банка','Статус','Последнее событие','Дата события','Акт опубликован','Результат','Ссылка','Заметки'];
   const rs=filteredCases.map(c=>[c.caseNumber,formatDate(c.dateReceived),c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,ROLE_LABELS[c.sberbankRole]||'',STATUS_LABELS[c.status]||'',c.lastEvent,formatDate(c.lastEventDate),c.hasPublishedActs?'Да':'Нет',RESULT_LABELS[c.result]||'',c.link,c.notes]);
@@ -514,14 +772,8 @@ function exportCSV(){
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sberbank_cases_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
-window.addEventListener('DOMContentLoaded',()=>{
-  init();
-  // Delegated click handler for table rows with links
-  document.getElementById('table-body').addEventListener('click',function(e){
-    const tr=e.target.closest('tr[data-href]');
-    if(tr){window.open(tr.dataset.href,'_blank');}
-  });
-});
+/* ========== Boot ========== */
+window.addEventListener('DOMContentLoaded',()=>{init();});
 </script>
 </body>
 </html>
