@@ -307,8 +307,18 @@ function rowToCase(h,row){
   const g=(ns)=>{for(const n of ns){const i=h.findIndex(x=>x.toLowerCase().includes(n.toLowerCase()));if(i>=0&&row[i])return row[i].trim();}return '';};
   const rl=g(['роль банка','роль']).toLowerCase(),sl=g(['статус']).toLowerCase(),rs=g(['результат']).toLowerCase(),ac=g(['акт опубликован','акт']).toLowerCase();
   let link=g(['ссылка','url','link']);
-  // Нормализация: если ссылка — просто case_id (число), строим полный URL
-  if(link&&/^\d+$/.test(link)){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5';}
+  // Нормализация ссылок:
+  // Формат "case_id|case_uid" → полный URL с обоими параметрами
+  // Формат "case_id" (просто число) → полный URL (без uid, может не работать)
+  // Полный URL → оставить как есть
+  if(link){
+    const pipeMatch=link.match(/^(\d+)\|([a-f0-9-]+)$/);
+    if(pipeMatch){
+      link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+pipeMatch[1]+'&case_uid='+pipeMatch[2]+'&delo_id=5&new=5';
+    }else if(/^\d+$/.test(link)){
+      link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5&new=5';
+    }
+  }
   return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:g(['категория']),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:g(['последнее событие','событие']),lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',result:RESULT_MAP[rs]||rs||'pending',link:link,notes:g(['заметки','примечан'])};
 }
 
