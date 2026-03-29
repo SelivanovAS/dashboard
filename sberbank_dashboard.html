@@ -40,25 +40,7 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 .loading-text{font-size:14px;color:var(--slate-500);animation:pulse 1.5s ease infinite;}
 
 /* Setup */
-.setup-screen{max-width:680px;margin:80px auto;padding:0 24px;animation:fadeUp .5s ease;}
-.setup-card{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;}
-.setup-header{background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:32px;color:var(--white);}
-.setup-header h1{font-family:var(--font-display);font-size:22px;font-weight:700;}
-.setup-header p{color:var(--gold-300);font-size:14px;margin-top:6px;}
-.setup-body{padding:28px 32px;}
-.setup-body ol{list-style:none;counter-reset:steps;}
-.setup-body ol li{counter-increment:steps;padding:14px 0;border-bottom:1px solid var(--slate-100);font-size:14px;line-height:1.7;display:flex;gap:14px;align-items:flex-start;}
-.setup-body ol li:last-child{border-bottom:none;}
-.setup-body ol li::before{content:counter(steps);display:flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:50%;background:var(--navy-800);color:var(--gold-400);font-weight:700;font-size:13px;flex-shrink:0;margin-top:1px;}
-.setup-body code{font-family:var(--font-mono);font-size:12px;background:var(--slate-100);padding:2px 7px;border-radius:4px;color:var(--navy-700);}
-.setup-input-group{margin-top:20px;}
-.setup-input-group label{font-weight:600;font-size:13px;color:var(--slate-600);display:block;margin-bottom:6px;}
-.setup-input{width:100%;padding:10px 14px;border:2px solid var(--slate-200);border-radius:var(--radius);font-size:14px;font-family:var(--font-mono);transition:border-color .2s;}
-.setup-input:focus{outline:none;border-color:var(--navy-600);}
-.setup-btn{margin-top:16px;padding:11px 28px;background:var(--navy-800);color:var(--gold-400);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;}
-.setup-btn:hover{background:var(--navy-700);transform:translateY(-1px);}
-.setup-footer{padding:16px 32px;background:var(--slate-50);border-top:1px solid var(--slate-100);}
-.setup-footer p{font-size:12px;color:var(--slate-500);line-height:1.6;}
+/* setup styles removed — data loads from GitHub */
 
 /* Header */
 .app-header{background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:0 32px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(12,24,41,.3);}
@@ -265,40 +247,6 @@ tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bott
 </head>
 <body>
 
-<div id="setup-screen" class="setup-screen" style="display:none;">
-  <div class="setup-card">
-    <div class="setup-header">
-      <h1>&#9878; Настройка дашборда</h1>
-      <p>Подключите Google-таблицу с данными дел</p>
-    </div>
-    <div class="setup-body">
-      <ol>
-        <li><div>Создайте Google-таблицу со столбцами:<br>
-          <code>Номер дела</code> <code>Дата поступления</code> <code>Истец</code> <code>Ответчик</code>
-          <code>Категория</code> <code>Суд 1 инстанции</code> <code>Роль банка</code> <code>Статус</code>
-          <code>Последнее событие</code> <code>Дата события</code> <code>Акт опубликован</code>
-          <code>Результат</code> <code>Ссылка</code> <code>Заметки</code>
-          <code>Апеллянт</code> <code>Дата публикации акта</code></div>
-        </li>
-        <li><div>Откройте <strong>Файл → Поделиться → Опубликовать в интернете</strong></div></li>
-        <li><div>Выберите нужный лист, формат <strong>CSV</strong>, нажмите «Опубликовать»</div></li>
-        <li><div>Скопируйте полученную ссылку и вставьте ниже</div></li>
-      </ol>
-      <div class="setup-input-group">
-        <label>Ссылка на опубликованную CSV-таблицу</label>
-        <input type="text" id="sheet-url-input" class="setup-input" placeholder="https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv">
-      </div>
-      <button class="setup-btn" onclick="saveSheetUrl()">Подключить таблицу</button>
-      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
-        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">загрузите демо-данные</a> чтобы посмотреть дашборд
-      </p>
-    </div>
-    <div class="setup-footer">
-      <p>Эта страница загружает данные напрямую из вашей Google-таблицы. Данные не передаются третьим лицам.</p>
-    </div>
-  </div>
-</div>
-
 <div id="loading-screen" class="loading-screen" style="display:none;">
   <div class="loading-spinner"></div>
   <div class="loading-text">Загрузка данных из таблицы...</div>
@@ -355,7 +303,7 @@ tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bott
           <option value="new">Только новые</option>
           <option value="active">В производстве</option>
           <option value="decided">Решено</option>
-          <option value="archived">Архив (60+ дней)</option>
+          <option value="archived">Архив (30+ дней)</option>
         </select>
         <select class="filter-select" id="filter-role" onchange="applyFilters()">
           <option value="all">Все роли</option>
@@ -391,11 +339,10 @@ tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bott
 </div>
 
 <script>
-const STORAGE_KEY='sber-court-sheet-url';
-const DEFAULT_SHEET_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vRnB7ZtkF_4aFaHm4GEO7_qcry4AfOBtgRdZeaFvlLE5JYzQ8nJARiJL3aeQ4lI_VojArA-KY6jxHpt/pub?output=csv';
+const DATA_URL='https://raw.githubusercontent.com/SelivanovAS/dashboard/main/data/sberbank_cases.csv';
 const LAST_VISIT_KEY='sber-court-last-visit';
 const KNOWN_CASES_KEY='sber-court-known-cases';
-const ARCHIVE_DAYS=60;
+const ARCHIVE_DAYS=30;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Третье лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
@@ -514,12 +461,9 @@ const DEMO_CSV=`Номер дела,Дата поступления,Истец,�
 33-890/2026,05.01.2026,Фёдорова Е.П.,ПАО Сбербанк,Трудовой спор,Ханты-Мансийский районный суд,Ответчик,Решено,Апелляционное определение вступило в силу,15.02.2026,Да,Изменено частично,,,Иное лицо,20.02.2026
 33-750/2026,28.12.2025,ОАО Газпром,ПАО Сбербанк,Банковская гарантия,Сургутский городской суд,Ответчик,Решено,Вынесено определение 10.01.2026,10.01.2026,Нет,Отменено,,,Банк,`;
 
-function init(){const u=localStorage.getItem(STORAGE_KEY)||DEFAULT_SHEET_URL;loadFromSheet(u);}
-function showSetup(){document.getElementById('setup-screen').style.display='';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='none';}
-function showLoading(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='';document.getElementById('app').style.display='none';}
-function showApp(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='';}
-function saveSheetUrl(){const u=document.getElementById('sheet-url-input').value.trim();if(!u)return;localStorage.setItem(STORAGE_KEY,u);loadFromSheet(u);}
-function resetConfig(){if(confirm('Сменить подключённую таблицу?')){localStorage.removeItem(STORAGE_KEY);showSetup();}}
+function init(){loadFromSheet(DATA_URL);}
+function showLoading(){document.getElementById('loading-screen').style.display='';document.getElementById('app').style.display='none';}
+function showApp(){document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='';}
 function loadDemo(){const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);showApp();renderAll();}
 
 async function loadFromSheet(url){
@@ -535,12 +479,12 @@ async function loadFromSheet(url){
   }catch(e){
     console.warn('Ошибка загрузки:',e.message);
     const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);
-    showApp();showError('Не удалось загрузить данные из Google Sheets ('+e.message+'). Показаны встроенные данные.');renderAll();
+    showApp();showError('Не удалось загрузить данные из GitHub ('+e.message+'). Показаны встроенные данные.');renderAll();
   }finally{
     if(btn)btn.classList.remove('is-loading');
   }
 }
-function refreshData(){const u=localStorage.getItem(STORAGE_KEY)||DEFAULT_SHEET_URL;loadFromSheet(u);}
+function refreshData(){loadFromSheet(DATA_URL+'?t='+Date.now());}
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.innerHTML='<strong>Ошибка:</strong> '+m;}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
@@ -690,7 +634,7 @@ function renderMeta(){
   let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
   if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
-  document.getElementById('app-footer').textContent='Данные из Google Sheets (автозагрузка)';
+  document.getElementById('app-footer').textContent='Данные из GitHub (автообновление ежедневно в 10:00)';
 }
 
 /* ========== Filters ========== */
