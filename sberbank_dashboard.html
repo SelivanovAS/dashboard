@@ -339,7 +339,7 @@ tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bott
 </div>
 
 <script>
-const DATA_URL='https://raw.githubusercontent.com/SelivanovAS/dashboard/main/data/sberbank_cases.csv';
+const DATA_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vRnB7ZtkF_4aFaHm4GEO7_qcry4AfOBtgRdZeaFvlLE5JYzQ8nJARiJL3aeQ4lI_VojArA-KY6jxHpt/pub?output=csv';
 const LAST_VISIT_KEY='sber-court-last-visit';
 const KNOWN_CASES_KEY='sber-court-known-cases';
 const ARCHIVE_DAYS=30;
@@ -479,7 +479,7 @@ async function loadFromSheet(url){
   }catch(e){
     console.warn('Ошибка загрузки:',e.message);
     const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);
-    showApp();showError('Не удалось загрузить данные из GitHub ('+e.message+'). Показаны встроенные данные.');renderAll();
+    showApp();showError('Не удалось загрузить данные из Google Sheets ('+e.message+'). Показаны встроенные данные.');renderAll();
   }finally{
     if(btn)btn.classList.remove('is-loading');
   }
@@ -634,7 +634,7 @@ function renderMeta(){
   let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
   if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
-  document.getElementById('app-footer').textContent='Данные из GitHub (автообновление ежедневно в 10:00)';
+  document.getElementById('app-footer').textContent='Данные из Google Sheets (автообновление ежедневно в 10:00)';
 }
 
 /* ========== Filters ========== */
