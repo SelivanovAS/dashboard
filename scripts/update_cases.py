@@ -40,8 +40,9 @@ CARD_URL_TPL = (
 )
 
 CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
-ARCHIVE_DAYS = 60  # Дела решённые 60+ дней назад не обновляем
+ARCHIVE_DAYS = 30  # Дела решённые 30+ дней назад не обновляем
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
+DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -423,6 +424,72 @@ def fetch_act_text(act_url: str) -> str:
     return text[:5000]  # Ограничиваем для Claude API
 
 
+def case_card_url(case: dict) -> str:
+    """Построить полный URL карточки дела для вставки в дайджест."""
+    cid, cuid = case_id_uid(case.get("Ссылка", ""))
+    if cid and cuid:
+        return CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
+    return ""
+
+
+def get_upcoming_hearings(cases: list[dict], days_ahead: int = 14) -> list[dict]:
+    """
+    Найти дела с назначенными заседаниями в ближайшие N дней.
+    Ищем по полям 'Последнее событие' (содержит слово 'заседание' / 'назначено')
+    и 'Дата события' (будущая дата).
+    """
+    today = datetime.now()
+    cutoff = today + timedelta(days=days_ahead)
+    upcoming = []
+
+    hearing_keywords = ["заседание", "назначено", "слушание", "рассмотрение"]
+
+    for case in cases:
+        if is_archived(case):
+            continue
+        if case.get("Статус", "").strip() == "Решено":
+            continue
+
+        event = case.get("Последнее событие", "").lower()
+        date_str = case.get("Дата события", "").strip()
+
+        if not date_str:
+            continue
+
+        d = parse_date(date_str)
+        if not d:
+            continue
+
+        # Заседание назначено на будущую дату
+        if d >= today and d <= cutoff:
+            if any(kw in event for kw in hearing_keywords):
+                upcoming.append(case)
+
+    # Сортируем по дате
+    upcoming.sort(key=lambda c: parse_date(c.get("Дата события", "")) or today)
+    return upcoming
+
+
+def build_summary_line(new_cases: list[dict], changes: list[dict]) -> str:
+    """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
+    parts = []
+    if new_cases:
+        parts.append(f"+{len(new_cases)} нов.")
+    events = sum(1 for ch in changes if "new_event" in ch["type"])
+    results = sum(1 for ch in changes if "new_result" in ch["type"])
+    acts = sum(1 for ch in changes if "new_act" in ch["type"])
+    statuses = sum(1 for ch in changes if "status_change" in ch["type"])
+    if events:
+        parts.append(f"{events} событ.")
+    if results:
+        parts.append(f"{results} решен.")
+    if acts:
+        parts.append(f"{acts} акт.")
+    if statuses:
+        parts.append(f"{statuses} смена статуса")
+    return " | ".join(parts) if parts else "без изменений"
+
+
 # ── Основная логика обновления ───────────────────────────────────────────────
 
 def load_csv(path: str) -> list[dict]:
@@ -547,20 +614,42 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def generate_digest(new_cases: list[dict], changes: list[dict],
-                    total_active: int) -> str:
+                    total_active: int, cases: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API."""
+
+    if cases is None:
+        cases = []
 
     if not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
-        return generate_template_digest(new_cases, changes, total_active)
+        return generate_template_digest(new_cases, changes, total_active, cases)
 
     today = datetime.now().strftime("%d.%m.%Y")
+    summary = build_summary_line(new_cases, changes)
+    upcoming = get_upcoming_hearings(cases)
 
-    # Формируем контекст для Claude
-    context_parts = []
+    # ── Короткое сообщение если изменений нет ──
+    if not new_cases and not changes:
+        msg = (
+            f"✅ *Мониторинг дел Сбербанка — {today}*\n\n"
+            f"Всё спокойно, изменений нет.\n"
+            f"Активных дел: {total_active}"
+        )
+        if upcoming:
+            msg += f"\n\n📅 *Ближайшие заседания ({len(upcoming)}):*"
+            for c in upcoming[:5]:
+                msg += (
+                    f"\n  • {c['Дата события']} — "
+                    f"{c['Номер дела']}"
+                )
+        msg += f"\n\n[Дашборд]({DASHBOARD_URL})"
+        return msg
+
+    # ── Формируем контекст для Claude ──
+    context_parts = [f"СВОДКА: {summary}"]
 
     if new_cases:
-        context_parts.append("НОВЫЕ ДЕЛА:")
+        context_parts.append("\nНОВЫЕ ДЕЛА:")
         for c in new_cases:
             context_parts.append(
                 f"- {c['Номер дела']}: {c['Истец']} → {c['Ответчик']}, "
@@ -594,11 +683,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
             context_parts.append(line)
 
-    if not context_parts:
-        return (
-            f"📊 *Мониторинг дел Сбербанка — {today}*\n\n"
-            f"Изменений нет. Активных дел: {total_active}."
-        )
+    if upcoming:
+        context_parts.append("\nБЛИЖАЙШИЕ ЗАСЕДАНИЯ (14 дней):")
+        for c in upcoming[:7]:
+            context_parts.append(
+                f"- {c['Дата события']}: {c['Номер дела']} "
+                f"({c.get('Истец', '')} → {c.get('Ответчик', '')})"
+            )
 
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений 
 по судебным делам в апелляционной инстанции Суда ХМАО-Югры за сегодня ({today}).
@@ -606,11 +697,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 Формат: сообщение для Telegram с эмодзи и Markdown-разметкой (*жирный*, _курсив_).
 Структура:
 1. Заголовок с датой
-2. Новые дела (📥) — кто подал иск к кому, о чём, суд 1 инстанции
-3. Назначенные заседания (📅) — номер дела, стороны, дата/время
-4. Вынесенные решения (⚖️) — номер дела, суть решения
-5. Опубликованные акты (📄) — номер дела, 2-3 предложения почему суд пришёл к такому решению (из текста акта если дан)
-6. Итоговая строка: всего активных дел
+2. Сводка одной строкой (📋): краткий итог что изменилось
+3. Новые дела (📥) — кто подал иск к кому, о чём, суд 1 инстанции
+4. Назначенные заседания (📅) — номер дела, стороны, дата/время
+5. Вынесенные решения (⚖️) — номер дела, суть решения, в чью пользу
+6. Опубликованные акты (📄) — номер дела, 2-3 предложения почему суд пришёл к такому решению (из текста акта если дан)
+7. Ближайшие заседания (🗓) — только если есть данные, номер дела и дата
+8. Итоговая строка: всего активных дел
+9. В самом конце строка: [Дашборд]({DASHBOARD_URL})
 
 Пиши кратко, по-деловому, на русском. Без длинных вступлений.
 
@@ -629,7 +723,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             },
             json={
                 "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1500,
+                "max_tokens": 2000,
                 "messages": [{"role": "user", "content": prompt}],
             },
             timeout=60,
@@ -641,18 +735,44 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             if block.get("type") == "text"
         )
         return text.strip() or generate_template_digest(
-            new_cases, changes, total_active
+            new_cases, changes, total_active, cases
         )
     except Exception as e:
         log.error(f"Ошибка Claude API: {e}")
-        return generate_template_digest(new_cases, changes, total_active)
+        return generate_template_digest(new_cases, changes, total_active, cases)
 
 
 def generate_template_digest(new_cases: list[dict], changes: list[dict],
-                             total_active: int) -> str:
+                             total_active: int,
+                             cases: list[dict] | None = None) -> str:
     """Шаблонный дайджест (fallback без Claude API)."""
     today = datetime.now().strftime("%d.%m.%Y")
-    lines = [f"📊 *Мониторинг дел Сбербанка — {today}*\n"]
+    if cases is None:
+        cases = []
+
+    upcoming = get_upcoming_hearings(cases)
+
+    # ── Короткое сообщение если изменений нет ──
+    if not new_cases and not changes:
+        msg = (
+            f"✅ *Мониторинг дел Сбербанка — {today}*\n\n"
+            f"Всё спокойно, изменений нет.\n"
+            f"Активных дел: {total_active}"
+        )
+        if upcoming:
+            msg += f"\n\n📅 *Ближайшие заседания ({len(upcoming)}):*"
+            for c in upcoming[:5]:
+                msg += (
+                    f"\n  • {c['Дата события']} — "
+                    f"{c['Номер дела']}"
+                )
+        msg += f"\n\n[Дашборд]({DASHBOARD_URL})"
+        return msg
+
+    # ── Полный дайджест ──
+    summary = build_summary_line(new_cases, changes)
+    lines = [f"📊 *Мониторинг дел Сбербанка — {today}*"]
+    lines.append(f"📋 {summary}\n")
 
     if new_cases:
         lines.append(f"📥 *Новые дела ({len(new_cases)}):*")
@@ -687,10 +807,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         for ch in acts:
             lines.append(f"  • {ch['case']}")
 
-    if not new_cases and not changes:
-        lines.append("Изменений нет.")
+    if upcoming:
+        lines.append(f"\n🗓 *Ближайшие заседания ({len(upcoming)}):*")
+        for c in upcoming[:5]:
+            lines.append(
+                f"  • {c['Дата события']} — {c['Номер дела']}"
+            )
 
     lines.append(f"\nАктивных дел: {total_active}")
+    lines.append(f"[Дашборд]({DASHBOARD_URL})")
     return "\n".join(lines)
 
 
@@ -814,7 +939,7 @@ def main():
 
     # 7. Генерируем дайджест
     log.info("Генерирую дайджест...")
-    digest = generate_digest(new_cases, changes, total_active)
+    digest = generate_digest(new_cases, changes, total_active, cases)
 
     # 8. Отправляем в Telegram
     send_telegram(digest)
