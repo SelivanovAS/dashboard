@@ -22,6 +22,7 @@ import sys
 import time
 import random
 from datetime import datetime, timedelta
+from html import escape as html_escape
 from html.parser import HTMLParser
 
 import requests
@@ -48,11 +49,14 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# Лимит Telegram на одно сообщение
+TELEGRAM_MSG_LIMIT = 4096
+
 CSV_COLUMNS = [
     "Номер дела", "Дата поступления", "Истец", "Ответчик", "Категория",
     "Суд 1 инстанции", "Роль банка", "Статус", "Последнее событие",
-    "Дата события", "Акт опубликован", "Результат", "Ссылка", "Заметки",
-    "Апеллянт", "Дата публикации акта"
+    "Дата события", "Время заседания", "Акт опубликован", "Результат",
+    "Ссылка", "Заметки", "Апеллянт", "Дата публикации акта"
 ]
 
 logging.basicConfig(
@@ -122,6 +126,61 @@ def case_id_uid(link_str: str) -> tuple[str, str]:
     if len(parts) == 2:
         return parts[0], parts[1]
     return "", ""
+
+
+def escape_html(text: str) -> str:
+    """Экранировать спецсимволы HTML для Telegram."""
+    return html_escape(str(text), quote=False)
+
+
+def case_card_url(case: dict) -> str:
+    """Построить полный URL карточки дела."""
+    cid, cuid = case_id_uid(case.get("Ссылка", ""))
+    if cid and cuid:
+        return CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
+    return ""
+
+
+def case_link_html(case: dict) -> str:
+    """Номер дела как кликабельная HTML-ссылка (или просто текст, если нет URL)."""
+    url = case_card_url(case)
+    num = escape_html(case.get("Номер дела", "???"))
+    if url:
+        return f'<a href="{url}">{num}</a>'
+    return num
+
+
+def parties_short(case: dict) -> str:
+    """Стороны в формате 'Истец (истец) vs Ответчик (ответчик)'."""
+    plaintiff = escape_html(case.get("Истец", ""))
+    defendant = escape_html(case.get("Ответчик", ""))
+    return f"{plaintiff} (истец) vs {defendant} (ответчик)"
+
+
+def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
+    """
+    Извлечь мотивировочную часть из текста судебного акта.
+    Ищем от 'установил:' до 'руководствуясь' — это суть решения.
+    Если не нашли — берём последние max_len символов (ближе к резолюции).
+    """
+    if not act_text:
+        return ""
+
+    text = act_text.strip()
+
+    # Пробуем вырезать мотивировочную часть
+    start_match = re.search(r'(?:установил|УСТАНОВИЛ)\s*:', text)
+    end_match = re.search(r'(?:руководствуясь|РУКОВОДСТВУЯСЬ)', text)
+
+    if start_match and end_match and end_match.start() > start_match.end():
+        motive = text[start_match.end():end_match.start()].strip()
+        if len(motive) > 100:  # Достаточно содержательный кусок
+            return motive[:max_len]
+
+    # Fallback: берём последнюю часть текста (ближе к решению)
+    if len(text) > max_len:
+        return "..." + text[-(max_len - 3):]
+    return text
 
 
 # ── Простой HTML-парсер для извлечения таблиц ────────────────────────────────
@@ -264,6 +323,7 @@ def parse_search_page(html: str) -> list[dict]:
             "Статус": "В производстве",
             "Последнее событие": "",
             "Дата события": "",
+            "Время заседания": "",
             "Акт опубликован": "Нет",
             "Результат": "",
             "Ссылка": link,
@@ -288,6 +348,7 @@ def parse_case_card(html: str) -> dict:
     info = {
         "Последнее событие": "",
         "Дата события": "",
+        "Время заседания": "",
         "Статус": "В производстве",
         "Результат": "",
         "Акт опубликован": "Нет",
@@ -334,27 +395,33 @@ def parse_case_card(html: str) -> dict:
 
     if movement_table and len(movement_table) > 1:
         # Последняя строка данных = последнее событие
-        last_row = movement_table[-1]
         events_data = []
         for row in movement_table[1:]:  # Пропускаем заголовок
             if len(row) >= 2:
                 event_text_parts = []
                 date_val = ""
+                time_val = ""
                 for c in row:
                     ct = cell_text(c)
                     d = parse_date(ct)
                     if d and not date_val:
                         date_val = ct
-                    elif ct:
-                        event_text_parts.append(ct)
+                    else:
+                        # Ищем время в ячейке (формат HH:MM или H:MM)
+                        time_match = re.search(r'\b(\d{1,2}:\d{2})\b', ct)
+                        if time_match and not time_val:
+                            time_val = time_match.group(1)
+                        if ct:
+                            event_text_parts.append(ct)
                 event_desc = ". ".join(event_text_parts).strip(". ")
                 if event_desc:
-                    events_data.append((date_val, event_desc))
+                    events_data.append((date_val, time_val, event_desc))
 
         if events_data:
-            last_date, last_event = events_data[-1]
+            last_date, last_time, last_event = events_data[-1]
             info["Последнее событие"] = last_event
             info["Дата события"] = last_date
+            info["Время заседания"] = last_time
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -396,7 +463,7 @@ def parse_case_card(html: str) -> dict:
         act_text = re.sub(r'\s+', ' ', act_text).strip()
         if len(act_text) > 50:
             info["Акт опубликован"] = "Да"
-            info["act_text"] = act_text[:5000]  # Ограничиваем размер
+            info["act_text"] = act_text[:5000]  # Сырой текст, обрезается позже
 
     # Также ищем по паттерну "Опубликовано" + дата
     pub_match = re.search(
@@ -421,25 +488,29 @@ def fetch_act_text(act_url: str) -> str:
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
-    return text[:5000]  # Ограничиваем для Claude API
+    return text[:5000]  # Сырой текст, обрезается позже
 
 
-def case_card_url(case: dict) -> str:
-    """Построить полный URL карточки дела для вставки в дайджест."""
-    cid, cuid = case_id_uid(case.get("Ссылка", ""))
-    if cid and cuid:
-        return CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
-    return ""
+def next_tuesday(from_date: datetime | None = None) -> datetime:
+    """Вычислить дату ближайшего вторника (включая сегодня, если сегодня вторник)."""
+    d = from_date or datetime.now()
+    # weekday(): 0=пн, 1=вт, 2=ср, ...
+    days_until_tuesday = (1 - d.weekday()) % 7
+    if days_until_tuesday == 0 and d.hour >= 18:
+        # Если сегодня вторник, но уже вечер — берём следующий
+        days_until_tuesday = 7
+    return (d + timedelta(days=days_until_tuesday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
 
-def get_upcoming_hearings(cases: list[dict], days_ahead: int = 14) -> list[dict]:
+def get_upcoming_hearings(cases: list[dict]) -> list[dict]:
     """
-    Найти дела с назначенными заседаниями в ближайшие N дней.
-    Ищем по полям 'Последнее событие' (содержит слово 'заседание' / 'назначено')
-    и 'Дата события' (будущая дата).
+    Найти дела с назначенными заседаниями на ближайший вторник.
+    Заседания в суде назначаются только по вторникам.
+    Возвращает список дел, отсортированный по времени заседания.
     """
-    today = datetime.now()
-    cutoff = today + timedelta(days=days_ahead)
+    target = next_tuesday()
     upcoming = []
 
     hearing_keywords = ["заседание", "назначено", "слушание", "рассмотрение"]
@@ -460,13 +531,23 @@ def get_upcoming_hearings(cases: list[dict], days_ahead: int = 14) -> list[dict]
         if not d:
             continue
 
-        # Заседание назначено на будущую дату
-        if d >= today and d <= cutoff:
+        # Совпадает с ближайшим вторником
+        if d.date() == target.date():
             if any(kw in event for kw in hearing_keywords):
                 upcoming.append(case)
 
-    # Сортируем по дате
-    upcoming.sort(key=lambda c: parse_date(c.get("Дата события", "")) or today)
+    # Сортируем по времени заседания (дела без времени — в конец)
+    def sort_key(c):
+        t = c.get("Время заседания", "").strip()
+        if t:
+            try:
+                parts = t.split(":")
+                return int(parts[0]) * 60 + int(parts[1])
+            except (ValueError, IndexError):
+                pass
+        return 9999  # Без времени — в конец
+
+    upcoming.sort(key=sort_key)
     return upcoming
 
 
@@ -488,6 +569,27 @@ def build_summary_line(new_cases: list[dict], changes: list[dict]) -> str:
     if statuses:
         parts.append(f"{statuses} смена статуса")
     return " | ".join(parts) if parts else "без изменений"
+
+
+def category_short(cat: str) -> str:
+    """Сокращённое название категории для компактного вывода."""
+    cat_lower = cat.lower().strip()
+    mapping = {
+        "кредитные правоотношения": "кредит",
+        "о взыскании": "взыскание",
+        "трудовые споры": "труд. спор",
+        "о защите прав потребителей": "защ. потребителей",
+        "жилищные споры": "жилищн. спор",
+        "страховые правоотношения": "страхование",
+        "наследственные дела": "наследство",
+    }
+    for key, short in mapping.items():
+        if key in cat_lower:
+            return short
+    # Если не нашли — обрезаем до 20 символов
+    if len(cat) > 22:
+        return cat[:20] + "…"
+    return cat
 
 
 # ── Основная логика обновления ───────────────────────────────────────────────
@@ -578,7 +680,8 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             act_text = card_info.get("act_text", "")
             if not act_text and card_info.get("_act_url"):
                 act_text = fetch_act_text(card_info["_act_url"])
-            change["details"]["act_text"] = act_text
+            # Извлекаем мотивировочную часть
+            change["details"]["act_text"] = extract_motive_part(act_text, 1000)
 
         # Новый результат
         if new_result and new_result != old_result:
@@ -590,6 +693,8 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             case["Последнее событие"] = new_event
         if card_info.get("Дата события"):
             case["Дата события"] = card_info["Дата события"]
+        # Обновляем время заседания (может быть пустым если событие — не заседание)
+        case["Время заседания"] = card_info.get("Время заседания", "")
         if new_status:
             case["Статус"] = new_status
         if new_result:
@@ -604,6 +709,8 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             change["details"]["defendant"] = case.get("Ответчик", "")
             change["details"]["role"] = case.get("Роль банка", "")
             change["details"]["category"] = case.get("Категория", "")
+            change["details"]["appellant"] = case.get("Апеллянт", "")
+            change["details"]["case_url"] = case_card_url(case)
             changes.append(change)
 
         log.info(f"  {case['Номер дела']}: {'→ '.join(change['type']) or 'без изменений'}")
@@ -612,6 +719,31 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
+
+def hearing_line_html(case: dict) -> str:
+    """Форматировать строку заседания: время — ссылка (категория, стороны)."""
+    link = case_link_html(case)
+    cat = category_short(case.get("Категория", ""))
+    time_str = case.get("Время заседания", "").strip()
+    plaintiff = escape_html(case.get("Истец", ""))
+    defendant = escape_html(case.get("Ответчик", ""))
+
+    parts = []
+    if time_str:
+        parts.append(f"<b>{escape_html(time_str)}</b>")
+    parts.append(link)
+    parts.append(f"{plaintiff} vs {defendant}, {cat}")
+
+    return " — ".join(parts) if time_str else f"{link} — {plaintiff} vs {defendant}, {cat}"
+
+
+def upcoming_header_html(upcoming: list[dict]) -> str:
+    """Заголовок секции ближайших заседаний с датой вторника."""
+    if not upcoming:
+        return ""
+    # Берём дату из первого дела (все на один вторник)
+    date_str = upcoming[0].get("Дата события", "")
+    return f"📅 <b>Заседания во вторник {escape_html(date_str)} ({len(upcoming)}):</b>"
 
 def generate_digest(new_cases: list[dict], changes: list[dict],
                     total_active: int, cases: list[dict] | None = None) -> str:
@@ -631,18 +763,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
         msg = (
-            f"✅ *Мониторинг дел Сбербанка — {today}*\n\n"
+            f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
             f"Активных дел: {total_active}"
         )
         if upcoming:
-            msg += f"\n\n📅 *Ближайшие заседания ({len(upcoming)}):*"
-            for c in upcoming[:5]:
-                msg += (
-                    f"\n  • {c['Дата события']} — "
-                    f"{c['Номер дела']}"
-                )
-        msg += f"\n\n[Дашборд]({DASHBOARD_URL})"
+            msg += f"\n\n{upcoming_header_html(upcoming)}"
+            for c in upcoming:
+                msg += f"\n  • {hearing_line_html(c)}"
+        msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
     # ── Формируем контекст для Claude ──
@@ -651,8 +780,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
     if new_cases:
         context_parts.append("\nНОВЫЕ ДЕЛА:")
         for c in new_cases:
+            url = case_card_url(c)
             context_parts.append(
-                f"- {c['Номер дела']}: {c['Истец']} → {c['Ответчик']}, "
+                f"- {c['Номер дела']} (URL: {url}): "
+                f"{c['Истец']} (истец) vs {c['Ответчик']} (ответчик), "
                 f"категория: {c['Категория']}, роль банка: {c['Роль банка']}, "
                 f"суд 1 инст.: {c['Суд 1 инстанции']}, "
                 f"поступило: {c['Дата поступления']}"
@@ -661,10 +792,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
     if changes:
         context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ:")
         for ch in changes:
-            line = f"- Дело {ch['case']}"
             d = ch["details"]
-            line += f" ({d.get('plaintiff', '')} → {d.get('defendant', '')})"
+            url = d.get("case_url", "")
+            line = f"- Дело {ch['case']} (URL: {url})"
+            line += f"\n  Стороны: {d.get('plaintiff', '')} (истец) vs {d.get('defendant', '')} (ответчик)"
             line += f", роль банка: {d.get('role', '')}"
+            if d.get("appellant"):
+                line += f", апеллянт: {d['appellant']}"
 
             for t in ch["type"]:
                 if t == "new_event":
@@ -676,7 +810,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                 if t == "new_act":
                     line += "\n  Опубликован судебный акт"
                     if d.get("act_text"):
-                        line += f"\n  ТЕКСТ АКТА (фрагмент): {d['act_text'][:2000]}"
+                        line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА: {d['act_text']}"
                 if t == "status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
@@ -684,29 +818,41 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             context_parts.append(line)
 
     if upcoming:
-        context_parts.append("\nБЛИЖАЙШИЕ ЗАСЕДАНИЯ (14 дней):")
-        for c in upcoming[:7]:
+        tue_date = upcoming[0].get("Дата события", "")
+        context_parts.append(f"\nЗАСЕДАНИЯ ВО ВТОРНИК {tue_date}:")
+        for c in upcoming:
+            url = case_card_url(c)
+            cat = category_short(c.get("Категория", ""))
+            time_str = c.get("Время заседания", "").strip()
+            time_part = f" в {time_str}" if time_str else ""
             context_parts.append(
-                f"- {c['Дата события']}: {c['Номер дела']} "
-                f"({c.get('Истец', '')} → {c.get('Ответчик', '')})"
+                f"- {c['Номер дела']}{time_part} (URL: {url}) — "
+                f"{c.get('Истец', '')} vs {c.get('Ответчик', '')}, {cat}"
             )
 
-    prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений 
+    prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений \
 по судебным делам в апелляционной инстанции Суда ХМАО-Югры за сегодня ({today}).
 
-Формат: сообщение для Telegram с эмодзи и Markdown-разметкой (*жирный*, _курсив_).
-Структура:
-1. Заголовок с датой
-2. Сводка одной строкой (📋): краткий итог что изменилось
-3. Новые дела (📥) — кто подал иск к кому, о чём, суд 1 инстанции
-4. Назначенные заседания (📅) — номер дела, стороны, дата/время
-5. Вынесенные решения (⚖️) — номер дела, суть решения, в чью пользу
-6. Опубликованные акты (📄) — номер дела, 2-3 предложения почему суд пришёл к такому решению (из текста акта если дан)
-7. Ближайшие заседания (🗓) — только если есть данные, номер дела и дата
-8. Итоговая строка: всего активных дел
-9. В самом конце строка: [Дашборд]({DASHBOARD_URL})
+ФОРМАТ: сообщение для Telegram с HTML-разметкой.
+Доступные теги: <b>жирный</b>, <i>курсив</i>, <a href="URL">текст ссылки</a>.
+НЕЛЬЗЯ использовать Markdown (* _ ` [ ] и т.п.) — только HTML-теги.
 
-Пиши кратко, по-деловому, на русском. Без длинных вступлений.
+ВАЖНО: спецсимволы в именах и названиях (<, >, &) экранируй как &lt; &gt; &amp;
+
+СТРУКТУРА — включай ТОЛЬКО секции, по которым есть данные. Пустых секций не пиши:
+1. Заголовок с датой и эмодзи 📊
+2. Сводка одной строкой (📋): краткий итог
+3. Новые дела (📥) — номер дела как <a href="URL">номер</a>, кто подал к кому, о чём, суд 1 инст., роль банка
+4. Назначенные заседания (📅) — номер дела (ссылка), стороны, дата
+5. Вынесенные решения (⚖️) — номер дела (ссылка), суть решения. \
+Если известен апеллянт или роль банка — укажи, в чью пользу решение для банка
+6. Опубликованные акты (📄) — номер дела (ссылка), 2-3 предложения сути из мотивировочной части
+7. Заседания во вторник (📅) — заголовок с датой вторника, далее список: время (жирным), номер дела (ссылка), стороны, категория. Сортируй по времени
+8. Итоговая строка: всего активных дел
+9. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a>
+
+СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не повторяй одну информацию в разных секциях.
+ЛИМИТ: уложись в 3500 символов (лимит Telegram — 4096, нужен запас).
 
 Данные:
 {chr(10).join(context_parts)}
@@ -734,18 +880,60 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             block["text"] for block in data.get("content", [])
             if block.get("type") == "text"
         )
-        return text.strip() or generate_template_digest(
-            new_cases, changes, total_active, cases
-        )
+        text = text.strip()
+        if not text:
+            return generate_template_digest(
+                new_cases, changes, total_active, cases
+            )
+        # Обрезаем до лимита Telegram с запасом
+        return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
     except Exception as e:
         log.error(f"Ошибка Claude API: {e}")
         return generate_template_digest(new_cases, changes, total_active, cases)
 
 
+def truncate_html_message(text: str, limit: int = 4096) -> str:
+    """
+    Обрезать HTML-сообщение до лимита Telegram, не ломая теги.
+    Добавляет '…' в конце если обрезано.
+    """
+    if len(text) <= limit:
+        return text
+
+    # Обрезаем с запасом для закрытия тегов и '…'
+    cut = text[:limit - 50]
+
+    # Убираем незакрытые теги в конце
+    # Ищем последний полный тег
+    last_close = cut.rfind(">")
+    last_open = cut.rfind("<")
+    if last_open > last_close:
+        # Есть незакрытый тег — обрезаем до него
+        cut = cut[:last_open]
+
+    # Обрезаем до последнего перевода строки для чистоты
+    last_nl = cut.rfind("\n")
+    if last_nl > len(cut) - 200:
+        cut = cut[:last_nl]
+
+    cut += "\n\n…<i>сообщение обрезано</i>"
+
+    # Закрываем открытые теги
+    open_tags = re.findall(r'<(b|i|a)[^>]*>', cut)
+    close_tags = re.findall(r'</(b|i|a)>', cut)
+    for tag in reversed(open_tags):
+        tag_name = tag.split()[0] if " " in tag else tag
+        if close_tags.count(tag_name) < open_tags.count(tag_name):
+            cut += f"</{tag_name}>"
+            break  # Обычно достаточно одного
+
+    return cut
+
+
 def generate_template_digest(new_cases: list[dict], changes: list[dict],
                              total_active: int,
                              cases: list[dict] | None = None) -> str:
-    """Шаблонный дайджест (fallback без Claude API)."""
+    """Шаблонный дайджест (fallback без Claude API). Формат: HTML."""
     today = datetime.now().strftime("%d.%m.%Y")
     if cases is None:
         cases = []
@@ -755,33 +943,34 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
         msg = (
-            f"✅ *Мониторинг дел Сбербанка — {today}*\n\n"
+            f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
             f"Активных дел: {total_active}"
         )
         if upcoming:
-            msg += f"\n\n📅 *Ближайшие заседания ({len(upcoming)}):*"
-            for c in upcoming[:5]:
-                msg += (
-                    f"\n  • {c['Дата события']} — "
-                    f"{c['Номер дела']}"
-                )
-        msg += f"\n\n[Дашборд]({DASHBOARD_URL})"
+            msg += f"\n\n{upcoming_header_html(upcoming)}"
+            for c in upcoming:
+                msg += f"\n  • {hearing_line_html(c)}"
+        msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
     # ── Полный дайджест ──
     summary = build_summary_line(new_cases, changes)
-    lines = [f"📊 *Мониторинг дел Сбербанка — {today}*"]
-    lines.append(f"📋 {summary}\n")
+    lines = [f"📊 <b>Мониторинг дел Сбербанка — {today}</b>"]
+    lines.append(f"📋 {escape_html(summary)}\n")
 
     if new_cases:
-        lines.append(f"📥 *Новые дела ({len(new_cases)}):*")
+        lines.append(f"📥 <b>Новые дела ({len(new_cases)}):</b>")
         for c in new_cases:
+            link = case_link_html(c)
+            role = c.get("Роль банка", "")
             role_icon = {"Истец": "🏦→", "Ответчик": "→🏦", "Третье лицо": "👁"
-                         }.get(c["Роль банка"], "")
+                         }.get(role, "")
+            cat = category_short(c.get("Категория", ""))
             lines.append(
-                f"  • {c['Номер дела']} {role_icon} "
-                f"{c['Истец']} → {c['Ответчик']}"
+                f"  • {link} {role_icon} "
+                f"{escape_html(c['Истец'])} vs {escape_html(c['Ответчик'])} "
+                f"({cat})"
             )
 
     events = [ch for ch in changes if "new_event" in ch["type"]]
@@ -789,76 +978,127 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     acts = [ch for ch in changes if "new_act" in ch["type"]]
 
     if events:
-        lines.append(f"\n📅 *Новые события ({len(events)}):*")
+        lines.append(f"\n📅 <b>Новые события ({len(events)}):</b>")
         for ch in events:
+            d = ch["details"]
+            url = d.get("case_url", "")
+            case_num = escape_html(ch["case"])
+            link = f'<a href="{url}">{case_num}</a>' if url else case_num
             lines.append(
-                f"  • {ch['case']}: {ch['details'].get('event', '')}"
+                f"  • {link}: {escape_html(d.get('event', ''))}"
             )
 
     if results:
-        lines.append(f"\n⚖️ *Решения ({len(results)}):*")
+        lines.append(f"\n⚖️ <b>Решения ({len(results)}):</b>")
         for ch in results:
+            d = ch["details"]
+            url = d.get("case_url", "")
+            case_num = escape_html(ch["case"])
+            link = f'<a href="{url}">{case_num}</a>' if url else case_num
+            result_text = escape_html(d.get("result", ""))
+            role = d.get("role", "")
+            role_note = f" (банк — {escape_html(role.lower())})" if role else ""
             lines.append(
-                f"  • {ch['case']}: {ch['details'].get('result', '')}"
+                f"  • {link}: {result_text}{role_note}"
             )
 
     if acts:
-        lines.append(f"\n📄 *Опубликованы акты ({len(acts)}):*")
+        lines.append(f"\n📄 <b>Опубликованы акты ({len(acts)}):</b>")
         for ch in acts:
-            lines.append(f"  • {ch['case']}")
+            d = ch["details"]
+            url = d.get("case_url", "")
+            case_num = escape_html(ch["case"])
+            link = f'<a href="{url}">{case_num}</a>' if url else case_num
+            lines.append(f"  • {link}")
 
     if upcoming:
-        lines.append(f"\n🗓 *Ближайшие заседания ({len(upcoming)}):*")
-        for c in upcoming[:5]:
-            lines.append(
-                f"  • {c['Дата события']} — {c['Номер дела']}"
-            )
+        lines.append(f"\n{upcoming_header_html(upcoming)}")
+        for c in upcoming:
+            lines.append(f"  • {hearing_line_html(c)}")
 
     lines.append(f"\nАктивных дел: {total_active}")
-    lines.append(f"[Дашборд]({DASHBOARD_URL})")
-    return "\n".join(lines)
+    lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
+
+    text = "\n".join(lines)
+    return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
 
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
 def send_telegram(text: str):
-    """Отправить сообщение в Telegram."""
+    """Отправить сообщение в Telegram (HTML-формат)."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         log.warning("Telegram не настроен, сообщение не отправлено")
         log.info(f"Дайджест:\n{text}")
         return
 
-    try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": text,
-                "parse_mode": "Markdown",
-                "disable_web_page_preview": True,
-            },
-            timeout=30,
-        )
-        if r.ok:
-            log.info("Telegram: сообщение отправлено")
-        else:
-            log.error(f"Telegram ошибка: {r.status_code} {r.text}")
-            # Пробуем без Markdown если не прошло
-            r2 = requests.post(
+    # Разбиваем на части если превышен лимит
+    parts = split_message(text, TELEGRAM_MSG_LIMIT)
+
+    for i, part in enumerate(parts):
+        try:
+            r = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={
                     "chat_id": TELEGRAM_CHAT_ID,
-                    "text": text.replace("*", "").replace("_", ""),
+                    "text": part,
+                    "parse_mode": "HTML",
                     "disable_web_page_preview": True,
                 },
                 timeout=30,
             )
-            if r2.ok:
-                log.info("Telegram: отправлено без разметки")
+            if r.ok:
+                log.info(f"Telegram: сообщение {i + 1}/{len(parts)} отправлено")
             else:
-                log.error(f"Telegram повторная ошибка: {r2.text}")
-    except Exception as e:
-        log.error(f"Telegram исключение: {e}")
+                log.error(f"Telegram ошибка: {r.status_code} {r.text}")
+                # Пробуем без разметки если не прошло
+                plain = re.sub(r'<[^>]+>', '', part)
+                r2 = requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": TELEGRAM_CHAT_ID,
+                        "text": plain,
+                        "disable_web_page_preview": True,
+                    },
+                    timeout=30,
+                )
+                if r2.ok:
+                    log.info("Telegram: отправлено без разметки")
+                else:
+                    log.error(f"Telegram повторная ошибка: {r2.text}")
+
+            # Пауза между частями
+            if i < len(parts) - 1:
+                time.sleep(1)
+
+        except Exception as e:
+            log.error(f"Telegram исключение: {e}")
+
+
+def split_message(text: str, limit: int = 4096) -> list[str]:
+    """Разбить сообщение на части по лимиту, не разрывая строки."""
+    if len(text) <= limit:
+        return [text]
+
+    parts = []
+    while text:
+        if len(text) <= limit:
+            parts.append(text)
+            break
+
+        # Ищем точку разреза — двойной перенос (между секциями)
+        cut = text[:limit]
+        split_pos = cut.rfind("\n\n")
+        if split_pos < limit // 2:
+            # Если нет хорошей точки — режем по одинарному переносу
+            split_pos = cut.rfind("\n")
+        if split_pos < limit // 3:
+            split_pos = limit - 10
+
+        parts.append(text[:split_pos].rstrip())
+        text = text[split_pos:].lstrip("\n")
+
+    return parts
 
 
 # ── Проверка доступности сайта суда ──────────────────────────────────────────
@@ -918,6 +1158,7 @@ def main():
                     card_info = parse_case_card(card_html)
                     nc["Последнее событие"] = card_info.get("Последнее событие", "")
                     nc["Дата события"] = card_info.get("Дата события", "")
+                    nc["Время заседания"] = card_info.get("Время заседания", "")
                     nc["Статус"] = card_info.get("Статус", "В производстве")
                     nc["Результат"] = card_info.get("Результат", "")
                     nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
