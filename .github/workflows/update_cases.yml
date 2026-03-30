@@ -1,10 +1,9 @@
-name: Обновление дел Сбербанка
+name: Update Court Cases
 
 on:
   schedule:
-    # 07:00 UTC = 10:00 МСК (зимнее время) / 12:00 МСК+5 (ХМАО)
-    - cron: '0 7 * * *'
-  workflow_dispatch:  # Ручной запуск через GitHub UI
+    - cron: '50 3 * * *'  # 6:50 МСК (UTC+3)
+  workflow_dispatch:  # Ручной запуск
 
 permissions:
   contents: write
@@ -12,33 +11,30 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    
     steps:
-      - name: Checkout репозитория
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Настройка Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Установка зависимостей
-        run: pip install -r scripts/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Запуск скрипта обновления
+      - name: Run court monitor
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CSV_PATH: data/sberbank_cases.csv
         run: python scripts/update_cases.py
 
-      - name: Коммит обновлённого CSV
+      - name: Commit updated CSV
         run: |
           git config user.name "Court Monitor Bot"
-          git config user.email "bot@github-actions"
+          git config user.email "bot@court-monitor.local"
           git add data/sberbank_cases.csv
-          # Коммитим только если есть изменения
-          git diff --staged --quiet || git commit -m "🔄 Обновление дел $(date +'%d.%m.%Y %H:%M')"
+          git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
