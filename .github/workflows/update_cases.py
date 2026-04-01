@@ -718,6 +718,51 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
     return cases, changes
 
 
+# ── Сокращение наименований сторон ────────────────────────────────────────────
+
+_OPF_RE = re.compile(
+    r'\b(?:ПАО|ООО|АО|ОАО|ЗАО|НАО|НПО|'
+    r'Публичное акционерное общество|'
+    r'Общество с ограниченной ответственностью|'
+    r'Акционерное общество|'
+    r'Открытое акционерное общество|'
+    r'Закрытое акционерное общество|'
+    r'Непубличное акционерное общество|'
+    r'Научно-производственное объединение)\s*',
+    re.IGNORECASE,
+)
+_CITY_RE = re.compile(r'\bгорода\b', re.IGNORECASE)
+_MTU_RE = re.compile(r'^Межрегиональное территориальное управление\b.*', re.IGNORECASE)
+_FIO_RE = re.compile(
+    r'^([А-ЯЁа-яё-]+)\s+([А-ЯЁа-яё])[а-яё]+\s+([А-ЯЁа-яё])[а-яё]+$'
+)
+
+
+def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
+    """Сокращение наименования стороны по правилам дайджеста.
+
+    keep_fio_full=True — не сокращать ФИО физлиц (для секции «Новые дела»).
+    """
+    name = name.strip()
+    if not name:
+        return name
+    # МТУ Росимущество
+    if _MTU_RE.match(name):
+        return "МТУ Росимущество"
+    # Убрать ОПФ
+    name = _OPF_RE.sub('', name).strip()
+    # Убрать кавычки-ёлочки, оставшиеся после удаления ОПФ
+    name = re.sub(r'^[«»"]+|[«»"]+$', '', name).strip()
+    # «города» → «г.»
+    name = _CITY_RE.sub('г.', name)
+    # ФИО → Фамилия И.О.
+    if not keep_fio_full:
+        m = _FIO_RE.match(name)
+        if m:
+            name = f"{m.group(1)} {m.group(2).upper()}.{m.group(3).upper()}."
+    return name
+
+
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def hearing_line_html(case: dict) -> str:
@@ -725,8 +770,8 @@ def hearing_line_html(case: dict) -> str:
     link = case_link_html(case)
     cat = category_short(case.get("Категория", ""))
     time_str = case.get("Время заседания", "").strip()
-    plaintiff = escape_html(case.get("Истец", ""))
-    defendant = escape_html(case.get("Ответчик", ""))
+    plaintiff = escape_html(shorten_party_name(case.get("Истец", "")))
+    defendant = escape_html(shorten_party_name(case.get("Ответчик", "")))
 
     parts = []
     if time_str:
@@ -781,9 +826,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         context_parts.append("\nНОВЫЕ ДЕЛА:")
         for c in new_cases:
             url = case_card_url(c)
+            pl = shorten_party_name(c['Истец'], keep_fio_full=True)
+            df = shorten_party_name(c['Ответчик'], keep_fio_full=True)
             context_parts.append(
                 f"- {c['Номер дела']} (URL: {url}): "
-                f"{c['Истец']} (истец) vs {c['Ответчик']} (ответчик), "
+                f"{pl} (истец) vs {df} (ответчик), "
                 f"категория: {c['Категория']}, роль банка: {c['Роль банка']}, "
                 f"суд 1 инст.: {c['Суд 1 инстанции']}, "
                 f"поступило: {c['Дата поступления']}"
@@ -795,10 +842,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             d = ch["details"]
             url = d.get("case_url", "")
             line = f"- Дело {ch['case']} (URL: {url})"
-            line += f"\n  Стороны: {d.get('plaintiff', '')} (истец) vs {d.get('defendant', '')} (ответчик)"
+            pl = shorten_party_name(d.get('plaintiff', ''))
+            df = shorten_party_name(d.get('defendant', ''))
+            line += f"\n  Стороны: {pl} (истец) vs {df} (ответчик)"
             line += f", роль банка: {d.get('role', '')}"
             if d.get("appellant"):
-                line += f", апеллянт: {d['appellant']}"
+                line += f", апеллянт: {shorten_party_name(d['appellant'])}"
 
             for t in ch["type"]:
                 if t == "new_event":
@@ -827,7 +876,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             time_part = f" в {time_str}" if time_str else ""
             context_parts.append(
                 f"- {c['Номер дела']}{time_part} (URL: {url}) — "
-                f"{c.get('Истец', '')} vs {c.get('Ответчик', '')}, {cat}"
+                f"{shorten_party_name(c.get('Истец', ''))} vs "
+                f"{shorten_party_name(c.get('Ответчик', ''))}, {cat}"
             )
 
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений \
@@ -983,9 +1033,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             role_icon = {"Истец": "🏦→", "Ответчик": "→🏦", "Третье лицо": "👁"
                          }.get(role, "")
             cat = category_short(c.get("Категория", ""))
+            pl = escape_html(shorten_party_name(c['Истец'], keep_fio_full=True))
+            df = escape_html(shorten_party_name(c['Ответчик'], keep_fio_full=True))
             lines.append(
                 f"  • {link} {role_icon} "
-                f"{escape_html(c['Истец'])} vs {escape_html(c['Ответчик'])} "
+                f"{pl} vs {df} "
                 f"({cat})"
             )
 
