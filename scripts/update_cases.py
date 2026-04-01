@@ -777,51 +777,34 @@ def upcoming_header_html(upcoming: list[dict]) -> str:
     date_str = upcoming[0].get("Дата события", "")
     return f"📅 <b>Заседания во вторник {escape_html(date_str)} ({len(upcoming)}):</b>"
 
-def _shorten_fio(match: re.Match) -> str:
-    """Заменить ФИО на Фамилия И.О."""
-    return f"{match.group(1)} {match.group(2)[0]}.{match.group(3)[0]}."
-
-# Regex для ФИО: Фамилия Имя Отчество (каждое слово с заглавной кириллической)
-_FIO_RE = re.compile(r'([А-ЯЁ][а-яё]+-?[А-ЯЁ]?[а-яё]*)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)')
-
-_OPF_FULL_RE = re.compile(
-    r'(Публичное акционерное общество|Общество с ограниченной ответственностью'
-    r'|Акционерное общество|Открытое акционерное общество'
-    r'|Закрытое акционерное общество|Непубличное акционерное общество'
-    r'|Научно-производственное объединение)\s*',
-    re.IGNORECASE,
-)
-_OPF_SHORT_RE = re.compile(r'\b(ПАО|ООО|АО|ОАО|ЗАО|НАО|НПО)\s+')
-_MTU_RE = re.compile(r'Межрегиональное территориальное управление[^,]*', re.IGNORECASE)
-
-
 def shorten_party_name(name: str) -> str:
     """Сократить наименование стороны: ФИО → инициалы, убрать ОПФ, г. и т.д."""
     if not name or not name.strip():
         return name
 
-    # Если несколько сторон через запятую — обработать каждую
-    if ', ' in name:
-        parts = name.split(', ')
-        shortened = [shorten_party_name(p) for p in parts]
-        return ', '.join(shortened)
-
     name = name.strip()
 
     # МТУ Росимущество
-    if _MTU_RE.search(name):
-        return _MTU_RE.sub('МТУ Росимущество', name).strip()
+    if re.search(r'Межрегиональное территориальное управление', name, re.IGNORECASE):
+        return "МТУ Росимущество"
 
-    # ФИО внутри строки: заменить все вхождения Фамилия Имя Отчество → Фамилия И.О.
-    name = _FIO_RE.sub(_shorten_fio, name)
+    # ФИО: 3 слова, каждое с заглавной, без цифр и кавычек → Фамилия И.О.
+    fio = re.match(r'^([А-ЯЁа-яё-]+)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)$', name)
+    if fio:
+        return f"{fio.group(1)} {fio.group(2)[0]}.{fio.group(3)[0]}."
 
-    # Убрать полные ОПФ
-    name = _OPF_FULL_RE.sub('', name)
-    # Убрать короткие ОПФ (ПАО, ООО и т.д.)
-    name = _OPF_SHORT_RE.sub('', name)
+    # Убрать ОПФ
+    name = re.sub(
+        r'^(Публичное акционерное общество|Общество с ограниченной ответственностью'
+        r'|Акционерное общество|Открытое акционерное общество'
+        r'|Закрытое акционерное общество|Непубличное акционерное общество'
+        r'|Научно-производственное объединение)\s*',
+        '', name, flags=re.IGNORECASE
+    )
+    name = re.sub(r'^(ПАО|ООО|АО|ОАО|ЗАО|НАО|НПО)\s+', '', name)
 
     # Убрать кавычки «»
-    name = name.replace('«', '').replace('»', '').replace('\u201c', '').replace('\u201d', '')
+    name = name.replace('«', '').replace('»', '').replace('"', '').replace('"', '')
 
     # "города" → "г."
     name = re.sub(r'\bгорода\b', 'г.', name)
