@@ -158,9 +158,7 @@ thead th.sortable:hover{color:var(--navy-700);}
 thead th.sorted{color:var(--navy-800);}
 .sort-icon{display:inline-block;margin-left:4px;font-size:10px;}
 tbody tr{border-bottom:1px solid var(--slate-100);transition:background .1s;}
-tbody tr.row-clickable{cursor:pointer;}
 tbody tr:hover{background:var(--slate-50);}
-tbody tr.row-clickable:hover{background:#f0f4ff;}
 tbody td{padding:12px 14px;vertical-align:top;}
 .case-number{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
 .court-label{font-size:11px;color:var(--slate-400);margin-top:3px;}
@@ -210,12 +208,13 @@ tbody tr.row-new{animation:newHighlight 2s ease 3;background:rgba(245,158,11,.06
 tbody tr.row-new:hover{background:rgba(245,158,11,.12);}
 
 /* ========== Expandable row ========== */
-.expand-btn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--slate-200);border-radius:4px;background:var(--white);cursor:pointer;color:var(--slate-500);font-size:12px;transition:all .15s;flex-shrink:0;margin-right:6px;}
-.expand-btn:hover{background:var(--slate-50);border-color:var(--slate-300);}
-.expand-btn.open{background:var(--navy-800);color:var(--gold-400);border-color:var(--navy-800);}
+tbody tr.row-clickable{cursor:pointer;transition:background .15s;}
+tbody tr.row-clickable:hover{background:#f0f4ff;}
+tbody tr.row-expanded{background:var(--slate-50);}
+tbody tr.row-expanded:hover{background:var(--slate-50);}
 tr.detail-row{display:none;}
 tr.detail-row.open{display:table-row;}
-tr.detail-row td{padding:0 14px 14px 52px;background:var(--slate-50);border-bottom:1px solid var(--slate-200);}
+tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bottom:1px solid var(--slate-200);}
 .detail-content{display:flex;flex-wrap:wrap;gap:20px;font-size:12.5px;color:var(--slate-700);line-height:1.6;padding-top:4px;}
 .detail-block{flex:1;min-width:200px;}
 .detail-block-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--slate-400);margin-bottom:4px;}
@@ -751,10 +750,8 @@ function renderCounter(){
 
 /* ========== Table ========== */
 const COLS=[
-  {k:'_expand',l:'',s:0,w:'36px'},
   {k:'caseNumber',l:'Дело',s:1,w:'120px'},
   {k:'dateReceived',l:'Поступ.',s:1,w:'72px'},
-  {k:'firstInstanceCourt',l:'Суд 1 инст.',s:1,w:'150px'},
   {k:'parties',l:'Стороны',s:0},
   {k:'category',l:'Кат. / Роль',s:1,w:'140px'},
   {k:'nextDate',l:'Ближ. дата',s:1,w:'110px'},
@@ -764,7 +761,6 @@ const COLS=[
 
 function renderTable(){
   document.getElementById('table-head').innerHTML='<tr>'+COLS.map(c=>{
-    if(c.k==='_expand')return`<th style="width:${c.w};"></th>`;
     const sorted=sortField===c.k,arrow=sorted?(sortDir==='asc'?'▲':'▼'):'';
     const cls=[sorted?'sorted':'',c.s?'sortable':''].filter(Boolean).join(' ');
     const oc=c.s?`onclick="toggleSort('${c.k}')"`:'';
@@ -783,7 +779,7 @@ function renderTable(){
     const sc=c.status==='active'?'active':'decided';
     const isNew=isNewCase(c);
     const expanded=expandedRows.has(c.caseNumber);
-    const rowClass=[isNew?'row-new':''].filter(Boolean).join(' ');
+    const rowClass=['row-clickable',isNew?'row-new':'',expanded?'row-expanded':''].filter(Boolean).join(' ');
 
     // Highlight Sberbank in parties
     const plaintiffHtml=isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(c.plaintiff)}</span>`:escHtml(c.plaintiff);
@@ -824,11 +820,9 @@ function renderTable(){
       nextDateHtml=`<div class="next-date-val" style="color:var(--slate-400);font-size:11px;">${formatDate(c.lastEventDate)}</div><div class="next-date-label">Рассмотрено</div>`;
     }
 
-    html+=`<tr class="${rowClass}" data-idx="${idx}">
-      <td><button class="expand-btn ${expanded?'open':''}" onclick="toggleExpand('${escHtml(c.caseNumber)}',event)">${expanded?'−':'+'}</button></td>
+    html+=`<tr class="${rowClass}" data-idx="${idx}" onclick="toggleExpand('${escHtml(c.caseNumber)}')">
       <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
-      <td><div class="court-cell">${escHtml(c.firstInstanceCourt)}</div></td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
       <td><div class="cat-role-cell"><span class="badge badge-cat">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span></div></td>
       <td>${nextDateHtml}</td>
@@ -840,12 +834,13 @@ function renderTable(){
     html+=`<tr class="detail-row ${expanded?'open':''}" id="detail-${escHtml(c.caseNumber)}">
       <td colspan="${COLS.length}">
         <div class="detail-content">
+          ${c.firstInstanceCourt?`<div class="detail-block"><div class="detail-block-title">Суд первой инстанции</div>${escHtml(c.firstInstanceCourt)}</div>`:''}
           <div class="detail-block"><div class="detail-block-title">Последнее событие</div>${escHtml(eventText)||'—'}${c.lastEventDate?'<br><span style="color:var(--slate-400);font-size:11px;">'+formatDate(c.lastEventDate)+'</span>':''}</div>
           ${c.resultRaw&&c.result!=='pending'?`<div class="detail-block"><div class="detail-block-title">Решение суда (полный текст)</div>${escHtml(c.resultRaw)}</div>`:''}
           ${c.appellant?`<div class="detail-block"><div class="detail-block-title">Апеллянт</div>${c.appellant==='bank'?'Банк (Сбербанк)':'Другая сторона'}</div>`:''}
           ${c.notes?`<div class="detail-block"><div class="detail-block-title">Заметки</div>${escHtml(c.notes)}</div>`:''}
           <div class="detail-block">
-            ${c.link?`<a class="detail-link" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть на сайте суда</a>`:''}
+            ${c.link?`<a class="detail-link" href="${escHtml(c.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть на сайте суда</a>`:''}
           </div>
         </div>
       </td>
@@ -854,10 +849,9 @@ function renderTable(){
   document.getElementById('table-body').innerHTML=html;
 }
 
-function toggleExpand(caseNumber,e){
-  e.stopPropagation();
-  if(expandedRows.has(caseNumber))expandedRows.delete(caseNumber);
-  else expandedRows.add(caseNumber);
+function toggleExpand(caseNumber){
+  if(expandedRows.has(caseNumber)){expandedRows.clear();}
+  else{expandedRows.clear();expandedRows.add(caseNumber);}
   renderTable();
 }
 
