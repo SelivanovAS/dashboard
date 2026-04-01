@@ -257,12 +257,38 @@ def cell_href(cell: str) -> str:
 
 # ── Парсинг страницы поиска ──────────────────────────────────────────────────
 
+def _parse_combined_cell(text: str) -> dict:
+    """
+    Разбирает объединённую ячейку с категорией, сторонами и судом.
+    Формат: 'КАТЕГОРИЯ: ...ИСТЕЦ(ЗАЯВИТЕЛЬ): ...ОТВЕТЧИК: ...Суд ... первой инстанции: ...'
+    """
+    result = {"category": "", "plaintiff": "", "defendant": "", "court": ""}
+
+    m = re.search(r"КАТЕГОРИЯ:\s*(.+?)(?=ИСТЕЦ|ЗАЯВИТЕЛЬ|ОТВЕТЧИК|Суд\s|$)", text)
+    if m:
+        result["category"] = m.group(1).strip().rstrip("→ \xa0")
+
+    m = re.search(r"(?:ИСТЕЦ|ЗАЯВИТЕЛЬ)\(?[^)]*\)?:\s*(.+?)(?=ОТВЕТЧИК|Суд\s|Номер дела|$)", text)
+    if m:
+        result["plaintiff"] = m.group(1).strip()
+
+    m = re.search(r"ОТВЕТЧИК:\s*(.+?)(?=Суд\s|Номер дела|$)", text)
+    if m:
+        result["defendant"] = m.group(1).strip()
+
+    m = re.search(r"Суд\s*\([^)]*\)\s*первой инстанции:\s*(.+?)(?=Номер дела|$)", text)
+    if m:
+        result["court"] = m.group(1).strip()
+
+    return result
+
+
 def parse_search_page(html: str) -> list[dict]:
     """
     Парсит страницу результатов поиска.
     Таблица результатов — 6-я на странице (индекс 5).
-    Столбцы: №пп | Номер дела (ссылка) | Дата поступления | Категория |
-              Истец | Ответчик | Суд 1 инстанции | Результат
+    Столбцы: Номер дела (ссылка) | Дата поступления |
+             Категория/Стороны/Суд (объединённая) | Судья | ...
     """
     tables = extract_tables(html)
     if len(tables) < 6:
@@ -273,15 +299,17 @@ def parse_search_page(html: str) -> list[dict]:
     cases = []
 
     for row in results_table:
-        # Пропускаем заголовок и пустые строки
-        if len(row) < 7:
-            continue
-        # Первый столбец — номер п/п, проверяем что это число
-        if not row[0].strip().replace("\x00", "").split("HREF:")[0].isdigit():
+        if len(row) < 3:
             continue
 
-        case_number_cell = row[1] if len(row) > 1 else ""
+        # Первый столбец — номер дела со ссылкой
+        case_number_cell = row[0]
         case_number = cell_text(case_number_cell)
+
+        # Пропускаем заголовок и строки без номера дела
+        if not re.match(r"\d+-\d+/\d{4}", case_number):
+            continue
+
         href = cell_href(case_number_cell)
 
         # Извлекаем case_id и case_uid из href
@@ -294,11 +322,15 @@ def parse_search_page(html: str) -> list[dict]:
             if m_uid:
                 cuid = m_uid.group(1)
 
-        date_received = cell_text(row[2]) if len(row) > 2 else ""
-        category = cell_text(row[3]) if len(row) > 3 else ""
-        plaintiff = cell_text(row[4]) if len(row) > 4 else ""
-        defendant = cell_text(row[5]) if len(row) > 5 else ""
-        court = cell_text(row[6]) if len(row) > 6 else ""
+        date_received = cell_text(row[1]) if len(row) > 1 else ""
+
+        # Третий столбец — объединённая ячейка с категорией, сторонами и судом
+        combined = cell_text(row[2]) if len(row) > 2 else ""
+        parsed = _parse_combined_cell(combined)
+        category = parsed["category"]
+        plaintiff = parsed["plaintiff"]
+        defendant = parsed["defendant"]
+        court = parsed["court"]
 
         # Определяем роль банка
         role = "Третье лицо"
