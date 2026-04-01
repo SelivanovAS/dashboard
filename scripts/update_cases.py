@@ -56,7 +56,7 @@ CSV_COLUMNS = [
     "Номер дела", "Дата поступления", "Истец", "Ответчик", "Категория",
     "Суд 1 инстанции", "Роль банка", "Статус", "Последнее событие",
     "Дата события", "Время заседания", "Акт опубликован", "Результат",
-    "Ссылка", "Заметки", "Апеллянт", "Дата публикации акта"
+    "Ссылка", "Заметки", "Апеллянт", "Дата публикации акта", "Дата заседания"
 ]
 
 logging.basicConfig(
@@ -454,6 +454,11 @@ def parse_case_card(html: str) -> dict:
             info["Последнее событие"] = last_event
             info["Дата события"] = last_date
             info["Время заседания"] = last_time
+            # Дата последнего заседания (для даты вынесения определения)
+            for ev_date, ev_time, ev_desc in reversed(events_data):
+                if "заседани" in ev_desc.lower() and ev_date:
+                    info["Дата заседания"] = ev_date
+                    break
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -704,6 +709,7 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             change["type"].append("new_event")
             change["details"]["event"] = new_event
             change["details"]["event_date"] = card_info.get("Дата события", "")
+            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
 
         # Новый акт
         if new_act == "Да" and old_act != "Да":
@@ -735,6 +741,8 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             case["Акт опубликован"] = "Да"
         if card_info.get("Дата публикации акта"):
             case["Дата публикации акта"] = card_info["Дата публикации акта"]
+        if card_info.get("Дата заседания"):
+            case["Дата заседания"] = card_info["Дата заседания"]
 
         if change["type"]:
             change["details"]["plaintiff"] = case.get("Истец", "")
@@ -897,7 +905,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                     if d.get("event_date"):
                         line += f" ({d['event_date']})"
                 if t == "new_result":
+                    hearing_dt = d.get("hearing_date", "")
                     line += f"\n  Результат: {d.get('result', '')}"
+                    if hearing_dt:
+                        line += f"\n  Дата вынесения определения: {hearing_dt}"
                 if t == "new_act":
                     line += "\n  Опубликован судебный акт"
                     if d.get("act_text"):
@@ -953,6 +964,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 3. Новые дела (📥) — номер дела как <a href="URL">номер</a>, кто подал к кому, о чём, суд 1 инст., роль банка
 4. Назначенные заседания (📅) — номер дела (ссылка), стороны, роль банка, дата и время
 5. Вынесенные решения (⚖️) — номер дела (ссылка), суть решения. \
+Дату указывай как «Апелляционное определение от ДД.ММ.ГГГГ» — используй ТОЛЬКО «Дата вынесения определения» \
+(= дата заседания), а НЕ дату публикации акта. \
 Если известен апеллянт или роль банка — укажи, в чью пользу решение для банка
 6. Опубликованные акты (📄) — номер дела (ссылка), 2-3 предложения сути из мотивировочной части
 7. Заседания во вторник (📅) — заголовок с датой вторника, далее список: \
@@ -1156,8 +1169,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             result_text = escape_html(d.get("result", ""))
             role = d.get("role", "")
             role_note = f" (банк — {escape_html(role.lower())})" if role else ""
+            hearing_dt = d.get("hearing_date", "")
+            date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
             lines.append(
-                f"  • {link}: {result_text}{role_note}"
+                f"  • {link}: {result_text}{role_note}{date_note}"
             )
 
     if acts:
