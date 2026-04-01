@@ -984,9 +984,46 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
             link = f'<a href="{url}">{case_num}</a>' if url else case_num
-            lines.append(
-                f"  • {link}: {escape_html(d.get('event', ''))}"
-            )
+            # Участники и категория
+            plaintiff = escape_html(d.get("plaintiff", ""))
+            defendant = escape_html(d.get("defendant", ""))
+            parties = f"{plaintiff} vs {defendant}" if plaintiff and defendant else ""
+            # Очищаем текст события от дат и времён
+            event_raw = d.get("event", "")
+            event_date = d.get("event_date", "")
+            is_hearing = "заседани" in event_raw.lower()
+            parts = event_raw.split(". ")
+            clean_parts = []
+            hearing_date = ""
+            hearing_time = ""
+            for p in parts:
+                ps = p.strip()
+                if parse_date(ps):
+                    if is_hearing:
+                        hearing_date = ps  # дата заседания
+                    elif not event_date:
+                        event_date = ps
+                    continue
+                if re.match(r'^\d{1,2}:\d{2}$', ps):
+                    if is_hearing:
+                        hearing_time = ps
+                    continue  # убираем время публикации
+                if ps:
+                    clean_parts.append(ps)
+            event_clean = escape_html(". ".join(clean_parts))
+            # Формируем строку
+            if is_hearing:
+                sched_parts = [x for x in [hearing_date, hearing_time] if x]
+                if sched_parts:
+                    event_clean += f" — {escape_html(', '.join(sched_parts))}"
+            else:
+                if event_date:
+                    event_clean += f". {escape_html(event_date)}"
+            line = f"  • {link}"
+            if parties:
+                line += f" — {parties}"
+            line += f": {event_clean}"
+            lines.append(line)
 
     if results:
         lines.append(f"\n⚖️ <b>Решения ({len(results)}):</b>")
