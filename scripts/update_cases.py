@@ -1272,5 +1272,27 @@ def main():
     log.info(f"Всего дел: {len(cases)} (активных: {total_active})")
 
 
+def main_digest_only():
+    """Сформировать и отправить дайджест по текущим данным CSV (без обращения к сайту суда)."""
+    log.info("=" * 60)
+    log.info("Режим digest-only: дайджест по текущим данным")
+    log.info("=" * 60)
+
+    cases = load_csv(CSV_PATH)
+    log.info(f"Загружено {len(cases)} дел из CSV")
+
+    total_active = sum(1 for c in cases if not is_archived(c))
+    log.info(f"Активных: {total_active}")
+
+    log.info("Генерирую дайджест...")
+    digest = generate_digest([], [], total_active, cases)
+
+    send_telegram(digest)
+    log.info("Готово!")
+
+
 if __name__ == "__main__":
-    main()
+    if "--digest-only" in sys.argv:
+        main_digest_only()
+    else:
+        main()
