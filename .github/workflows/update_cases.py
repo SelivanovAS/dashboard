@@ -738,11 +738,8 @@ _FIO_RE = re.compile(
 )
 
 
-def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
-    """Сокращение наименования стороны по правилам дайджеста.
-
-    keep_fio_full=True — не сокращать ФИО физлиц (для секции «Новые дела»).
-    """
+def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
+    """Сокращение одного наименования (без запятых)."""
     name = name.strip()
     if not name:
         return name
@@ -752,7 +749,7 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
     # Убрать ОПФ
     name = _OPF_RE.sub('', name).strip()
     # Убрать кавычки-ёлочки, оставшиеся после удаления ОПФ
-    name = re.sub(r'^[«»"]+|[«»"]+$', '', name).strip()
+    name = re.sub(r'[«»"]+', '', name).strip()
     # «города» → «г.»
     name = _CITY_RE.sub('г.', name)
     # ФИО → Фамилия И.О.
@@ -761,6 +758,19 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
         if m:
             name = f"{m.group(1)} {m.group(2).upper()}.{m.group(3).upper()}."
     return name
+
+
+def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
+    """Сокращение наименования стороны по правилам дайджеста.
+
+    Если в поле несколько сторон через запятую — сокращает каждую отдельно.
+    keep_fio_full=True — не сокращать ФИО физлиц (для секции «Новые дела»).
+    """
+    if not name or not name.strip():
+        return name
+    parts = name.split(",")
+    shortened = [_shorten_single(p, keep_fio_full=keep_fio_full) for p in parts]
+    return ", ".join(shortened)
 
 
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
