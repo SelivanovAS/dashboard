@@ -110,11 +110,14 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 
 /* Upcoming hearings */
 .upcoming-list{display:flex;flex-direction:column;gap:10px;}
-.upcoming-item{display:flex;align-items:flex-start;gap:12px;font-size:13px;}
+.upcoming-item{display:flex;align-items:flex-start;gap:12px;font-size:13px;padding:6px 8px;border-radius:6px;transition:background .15s;}.upcoming-item[onclick]:hover{background:var(--slate-50);}
 .upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
 .upcoming-info{color:var(--slate-700);line-height:1.4;}
 .upcoming-case{font-weight:600;color:var(--navy-800);}
 .upcoming-empty{font-size:13px;color:var(--slate-400);text-align:center;padding:20px 0;}
+.upcoming-chevron{display:none;font-size:12px;color:var(--slate-400);transition:transform .2s;}
+.upcoming-list.collapsed,.upcoming-empty.collapsed{max-height:0;overflow:hidden;opacity:0;margin:0;padding:0;transition:max-height .25s ease,opacity .2s ease;}
+.upcoming-list:not(.collapsed),.upcoming-empty:not(.collapsed){max-height:2000px;opacity:1;transition:max-height .35s ease,opacity .2s ease;}
 
 /* ========== Toolbar ========== */
 .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;animation:fadeUp .5s ease;}
@@ -259,12 +262,16 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 @media(max-width:768px){
   .app-header{padding:0 16px;}.app-main{padding:16px;}
   .header-inner{flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0;}
+  .header-inner .header-brand{transition:max-height .25s ease,opacity .2s ease,margin .25s ease;max-height:60px;opacity:1;overflow:hidden;}
+  .app-header.scrolled .header-inner .header-brand{max-height:0;opacity:0;margin:0;}
+  .app-header.scrolled .header-inner{gap:0;padding:8px 0;}
   .header-actions{width:100%;justify-content:space-between;}
   .stats-mobile-summary{display:block;}
   .stats-primary{display:none;grid-template-columns:repeat(2,1fr);gap:8px;}
   .stats-primary.mobile-visible{display:grid;}
   .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
+  .upcoming-chevron{display:inline;}
   .toolbar{flex-direction:column;align-items:stretch;}
   .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
   #filter-status,#filter-role,#filter-category{display:none;}
@@ -451,9 +458,16 @@ function rowToCase(h,row){
     if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
     else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';
   }
-  // Extract next important date from event text
+  // Extract next important date: prefer explicit "Дата заседания" column, fallback to event text
   let nextDate='',nextDateLabel='';
-  if(evText){
+  const hearingDateRaw=g(['дата заседания']);
+  if(hearingDateRaw){
+    nextDate=parseDate(hearingDateRaw);
+    const evLow=(evText||'').toLowerCase();
+    if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
+    else if(evLow.includes('без движения')||evLow.includes('оставлен'))nextDateLabel='Без движения до';
+    else nextDateLabel='Заседание';
+  }else if(evText){
     const evLow=evText.toLowerCase();
     const dateMatch=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
     if(dateMatch){
@@ -470,7 +484,7 @@ function rowToCase(h,row){
         {nextDate=extractedDate;nextDateLabel='Событие';}
     }
   }
-  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel};
+  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:g(['время заседания'])};
 }
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
 function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
@@ -644,37 +658,42 @@ function toggleMobileStats(){
   el.classList.toggle('expanded');
   sp.classList.toggle('mobile-visible');
 }
+function toggleUpcoming(){
+  const list=document.querySelector('.upcoming-list')||document.querySelector('.upcoming-empty');
+  const chevron=document.getElementById('upcoming-chevron');
+  if(!list)return;
+  list.classList.toggle('collapsed');
+  chevron.textContent=list.classList.contains('collapsed')?'▼':'▲';
+}
 
 /* ========== Analytics ========== */
 function renderAnalytics(){
 
-  // Upcoming hearings
+  // Upcoming hearings — use nextDate field (from "Дата заседания" column or event text)
   const today=new Date();today.setHours(0,0,0,0);
   const upcoming=allCases
-    .filter(c=>{
-      if(c.status!=='active')return false;
-      const evText=(c.lastEvent||'').toLowerCase();
-      return evText.includes('назначен')||evText.includes('заседан')||evText.includes('рассмотрен');
-    })
+    .filter(c=>c.status==='active'&&c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Рассмотрение'))
     .map(c=>{
-      const m=(c.lastEvent||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-      let hearingDate=null;
-      if(m)hearingDate=new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1]));
+      const t=c.hearingTime||'';
+      const hm=t.match(/^(\d{1,2}):(\d{2})$/);
+      const hearingDate=hm?new Date(c.nextDate+'T'+hm[1].padStart(2,'0')+':'+hm[2]+':00'):new Date(c.nextDate+'T00:00:00');
       return{...c,hearingDate};
     })
-    .filter(c=>c.hearingDate&&c.hearingDate>=today)
+    .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate)
     .slice(0,7);
 
-  let upHtml='<div class="analytics-card"><div class="analytics-title">Ближайшие заседания</div>';
+  let upHtml='<div class="analytics-card"><div class="analytics-title" onclick="toggleUpcoming()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">Ближайшие заседания<span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>';
   if(upcoming.length===0){
     upHtml+='<div class="upcoming-empty">Нет предстоящих заседаний</div>';
   }else{
     upHtml+='<div class="upcoming-list">';
     upcoming.forEach(c=>{
       const dateStr=c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+      const timeStr=c.hearingTime?`<br><span style="font-size:10px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
       const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
-      upHtml+=`<div class="upcoming-item"><span class="upcoming-date">${dateStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:9px;padding:1px 5px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span style="font-size:11px;color:var(--slate-500);">${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</span></div></div>`;
+      const linkAttr=c.link?` onclick="window.open('${c.link}','_blank')" style="cursor:pointer;"`:'';
+      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:9px;padding:1px 5px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span style="font-size:11px;color:var(--slate-500);">${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</span></div></div>`;
     });
     upHtml+='</div>';
   }
@@ -907,6 +926,10 @@ function exportCSV(){
 
 /* ========== Boot ========== */
 window.addEventListener('DOMContentLoaded',()=>{init();});
+window.addEventListener('scroll',()=>{
+  const h=document.querySelector('.app-header');
+  if(h)h.classList.toggle('scrolled',window.scrollY>30);
+},{passive:true});
 </script>
 </body>
 </html>
