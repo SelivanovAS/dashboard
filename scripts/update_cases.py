@@ -1024,23 +1024,61 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         return generate_template_digest(new_cases, changes, total_active, cases)
 
 
+def _close_open_tags(html: str) -> str:
+    """Закрыть все незакрытые HTML-теги (b, i, a) в конце строки."""
+    stack: list[str] = []
+    for m in re.finditer(r'<(/?)([bia])\b[^>]*>', html):
+        is_close, tag_name = m.group(1), m.group(2)
+        if is_close:
+            if stack and stack[-1] == tag_name:
+                stack.pop()
+        else:
+            stack.append(tag_name)
+    # Закрываем оставшиеся теги в обратном порядке
+    for tag in reversed(stack):
+        html += f"</{tag}>"
+    return html
+
+
+def _strip_orphan_close_tags(html: str) -> str:
+    """Убрать закрывающие теги без соответствующих открывающих."""
+    stack: list[str] = []
+    result_parts: list[str] = []
+    last_end = 0
+    for m in re.finditer(r'<(/?)([bia])\b[^>]*>', html):
+        is_close, tag_name = m.group(1), m.group(2)
+        if is_close:
+            if stack and stack[-1] == tag_name:
+                stack.pop()
+                result_parts.append(html[last_end:m.end()])
+                last_end = m.end()
+            else:
+                # Сиротский закрывающий тег — пропускаем
+                result_parts.append(html[last_end:m.start()])
+                last_end = m.end()
+        else:
+            stack.append(tag_name)
+            result_parts.append(html[last_end:m.end()])
+            last_end = m.end()
+    result_parts.append(html[last_end:])
+    return "".join(result_parts)
+
+
 def truncate_html_message(text: str, limit: int = 4096) -> str:
     """
     Обрезать HTML-сообщение до лимита Telegram, не ломая теги.
     Добавляет '…' в конце если обрезано.
     """
     if len(text) <= limit:
-        return text
+        return _close_open_tags(text)
 
     # Обрезаем с запасом для закрытия тегов и '…'
-    cut = text[:limit - 50]
+    cut = text[:limit - 100]
 
     # Убираем незакрытые теги в конце
-    # Ищем последний полный тег
     last_close = cut.rfind(">")
     last_open = cut.rfind("<")
     if last_open > last_close:
-        # Есть незакрытый тег — обрезаем до него
         cut = cut[:last_open]
 
     # Обрезаем до последнего перевода строки для чистоты
@@ -1049,15 +1087,7 @@ def truncate_html_message(text: str, limit: int = 4096) -> str:
         cut = cut[:last_nl]
 
     cut += "\n\n…<i>сообщение обрезано</i>"
-
-    # Закрываем открытые теги
-    open_tags = re.findall(r'<(b|i|a)[^>]*>', cut)
-    close_tags = re.findall(r'</(b|i|a)>', cut)
-    for tag in reversed(open_tags):
-        tag_name = tag.split()[0] if " " in tag else tag
-        if close_tags.count(tag_name) < open_tags.count(tag_name):
-            cut += f"</{tag_name}>"
-            break  # Обычно достаточно одного
+    cut = _close_open_tags(cut)
 
     return cut
 
@@ -1210,6 +1240,8 @@ def send_telegram(text: str):
 
     for i, part in enumerate(parts):
         try:
+            # Финальная проверка: закрыть незакрытые теги
+            part = _close_open_tags(part)
             r = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={
@@ -1249,27 +1281,30 @@ def send_telegram(text: str):
 
 
 def split_message(text: str, limit: int = 4096) -> list[str]:
-    """Разбить сообщение на части по лимиту, не разрывая строки."""
+    """Разбить сообщение на части по лимиту, не разрывая строки и HTML-теги."""
     if len(text) <= limit:
         return [text]
 
     parts = []
     while text:
         if len(text) <= limit:
-            parts.append(text)
+            parts.append(_close_open_tags(text))
             break
 
         # Ищем точку разреза — двойной перенос (между секциями)
-        cut = text[:limit]
+        cut = text[:limit - 50]  # запас для закрытия тегов
         split_pos = cut.rfind("\n\n")
         if split_pos < limit // 2:
-            # Если нет хорошей точки — режем по одинарному переносу
             split_pos = cut.rfind("\n")
         if split_pos < limit // 3:
-            split_pos = limit - 10
+            split_pos = limit - 60
 
-        parts.append(text[:split_pos].rstrip())
+        part = text[:split_pos].rstrip()
+        part = _close_open_tags(part)
+        parts.append(part)
+
         text = text[split_pos:].lstrip("\n")
+        text = _strip_orphan_close_tags(text)
 
     return parts
 
