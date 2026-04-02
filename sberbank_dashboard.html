@@ -93,7 +93,9 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 
 /* Stats secondary — compact row */
 .stats-secondary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding:0 2px;animation:fadeUp .45s ease;}
-.stat-chip{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate-600);}
+.chip-group{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding-right:16px;border-right:1px solid var(--slate-200);}
+.chip-group:last-child{border-right:none;padding-right:0;}
+.stat-chip{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--slate-600);}
 .stat-chip .chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .stat-chip strong{font-weight:700;color:var(--slate-800);}
 
@@ -153,9 +155,9 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 
 /* ========== Table ========== */
 .table-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden;animation:fadeUp .6s ease;}
-.table-scroll{overflow-x:auto;}
+.table-scroll{overflow-x:auto;max-height:calc(100vh - 160px);overflow-y:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
-thead th{text-align:left;padding:12px 14px;background:var(--slate-50);border-bottom:2px solid var(--slate-200);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);font-weight:700;white-space:nowrap;user-select:none;transition:color .15s;}
+thead th{text-align:left;padding:12px 14px;background:var(--slate-50);border-bottom:2px solid var(--slate-200);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);font-weight:700;white-space:nowrap;user-select:none;transition:color .15s;position:sticky;top:0;z-index:10;}
 thead th.sortable{cursor:pointer;}
 thead th.sortable:hover{color:var(--navy-700);}
 thead th.sorted{color:var(--navy-800);}
@@ -165,14 +167,14 @@ tbody tr:hover{background:var(--slate-50);}
 tbody td{padding:12px 14px;vertical-align:top;}
 .case-number{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
 .court-label{font-size:11px;color:var(--slate-400);margin-top:3px;}
-.parties-col{display:flex;flex-direction:column;gap:2px;font-size:12.5px;min-width:200px;}
+.parties-col{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:200px;}
 .party-tag{font-size:10px;font-weight:700;color:var(--slate-400);margin-right:3px;}
 .party-sberbank{color:var(--gold-500);font-weight:600;}
 .event-cell{max-width:260px;}
 .event-text{font-size:12px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;}
 .event-text[title]{cursor:help;}
 .event-date{font-size:11px;color:var(--slate-400);margin-top:2px;}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap;}
 .badge-active{background:#fef3c7;color:#92400e;}
 .badge-decided{background:var(--green-100);color:var(--green-800);}
 .badge-scheduled{background:var(--blue-100);color:var(--blue-800);}
@@ -181,7 +183,7 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-paused{background:#fce7f3;color:#9d174d;}
 .badge-awaiting{background:var(--slate-100);color:var(--slate-600);}
 .status-cell{display:flex;flex-direction:column;gap:2px;align-items:flex-start;}
-.status-date{font-family:var(--font-mono);font-size:11px;color:var(--slate-500);font-weight:500;margin-top:1px;}
+.status-date{font-family:var(--font-mono);font-size:12px;color:var(--slate-700);font-weight:600;margin-top:2px;}
 .badge-plaintiff{background:var(--blue-100);color:var(--blue-800);}
 .badge-defendant{background:#fce7f3;color:#9d174d;}
 .badge-third{background:var(--slate-100);color:var(--slate-600);}
@@ -195,19 +197,19 @@ tbody td{padding:12px 14px;vertical-align:top;}
 /* Dynamic result colors based on favorability for bank */
 .badge-favorable{background:var(--green-100);color:var(--green-800);}
 .badge-unfavorable{background:var(--red-100);color:var(--red-800);}
-.badge-neutral-result{background:var(--slate-100);color:var(--slate-600);}
-.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
+.badge-neutral-result{background:var(--blue-100);color:var(--blue-800);}
+.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
 .badge-act{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:10px;margin-top:4px;font-weight:600;}
 .badge-act-no{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--slate-100);color:var(--slate-500);font-size:10px;margin-top:4px;}
 /* Cat+Role merged column */
-.cat-role-cell{display:flex;flex-direction:column;gap:3px;}
-.cat-role-cell .badge{font-size:10px;padding:2px 7px;}
+.cat-role-cell{display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
+.cat-role-cell .badge{font-size:11px;padding:2px 7px;}
 /* Next date column */
 .next-date-val{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--navy-800);}
 .next-date-label{font-size:10px;color:var(--slate-400);margin-top:1px;}
 .next-date-warn{color:var(--amber-600);font-style:italic;font-size:11px;}
 /* Court column */
-.court-cell{font-size:11.5px;color:var(--slate-700);line-height:1.35;}
+.court-cell{font-size:12px;color:var(--slate-700);line-height:1.35;}
 /* Result cell with act info */
 .result-cell{display:flex;flex-direction:column;gap:2px;}
 .badge-icon{font-size:11px;line-height:1;}
@@ -226,7 +228,7 @@ tbody tr.row-expanded:hover{background:var(--slate-50);}
 tr.detail-row{display:none;}
 tr.detail-row.open{display:table-row;}
 tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bottom:1px solid var(--slate-200);}
-.detail-content{display:flex;flex-wrap:wrap;gap:20px;font-size:12.5px;color:var(--slate-700);line-height:1.6;padding-top:4px;}
+.detail-content{display:flex;flex-wrap:wrap;gap:20px;font-size:13px;color:var(--slate-700);line-height:1.6;padding-top:4px;}
 .detail-block{flex:1;min-width:200px;}
 .detail-block-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--slate-400);margin-bottom:4px;}
 .detail-link{display:inline-flex;align-items:center;gap:4px;color:var(--navy-600);text-decoration:none;font-weight:600;font-size:12px;margin-top:6px;transition:color .15s;}
@@ -423,7 +425,14 @@ const ARCHIVE_DAYS=30;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Третье лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
-const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Ожидает назначения'};
+const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено'};
+const CAT_SHORT={
+  'Иски о взыскании сумм по договору займа, кредитному договору':'Кредитный договор',
+  'об ответственности наследников по долгам наследодателя':'Долги наследодателя',
+  'Защита прав потребителей':'Защита потребителей',
+  'Исполнительное производство':'Исполн. производство',
+};
+function shortCat(c){return CAT_SHORT[c]||c;}
 function normalizeResult(raw){
   if(!raw)return 'pending';
   const s=raw.toLowerCase().trim();
@@ -679,32 +688,36 @@ function renderStats(){
     <div class="stat-card" data-accent="green">
       <div class="stat-value">${w} <span style="font-size:14px;color:var(--slate-400);font-weight:400;">из ${decidedTotal}</span></div>
       <div class="stat-label">В пользу банка</div>
-      <div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>
+      ${decidedTotal>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div style="font-size:11px;color:var(--slate-400);margin-top:6px;">Нет данных об апеллянте</div>`}
     </div>
     <div class="stat-card" data-accent="red"><div class="stat-value">${actsCount}</div><div class="stat-label">Акты опубликованы</div></div>`;
 
-  // Secondary chips
+  // Secondary chips — two groups
   const p=allCases.filter(c=>c.sberbankRole==='plaintiff').length;
   const def=allCases.filter(c=>c.sberbankRole==='defendant').length;
   const tp=allCases.filter(c=>c.sberbankRole==='third_party').length;
   const newCount=newCaseNumbers.size;
-  let chips=`
-    <div class="stat-chip"><div class="chip-dot" style="background:var(--blue-500);"></div>Истец: <strong>${p}</strong></div>
-    <div class="stat-chip"><div class="chip-dot" style="background:#ec4899;"></div>Ответчик: <strong>${def}</strong></div>`;
-  if(tp>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Третье лицо: <strong>${tp}</strong></div>`;
-  if(newCount>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Новых: <strong>${newCount}</strong></div>`;
-  if(archivedCount>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-300);"></div>В архиве: <strong>${archivedCount}</strong></div>`;
-  chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Рассмотрено: <strong>${decidedTotal}</strong></div>`;
-  // Result breakdown
   const upheld=allCases.filter(c=>c.result==='upheld').length;
   const reversed=allCases.filter(c=>c.result==='reversed').length;
   const partial=allCases.filter(c=>c.result==='partial').length;
   const dismissed=allCases.filter(c=>c.result==='dismissed'||c.result==='returned'||c.result==='withdrawn').length;
-  if(upheld>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Без изменения: <strong>${upheld}</strong></div>`;
-  if(reversed>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--red-500);"></div>Отменено: <strong>${reversed}</strong></div>`;
-  if(partial>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Изменено: <strong>${partial}</strong></div>`;
-  if(dismissed>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Снято/Возвращено: <strong>${dismissed}</strong></div>`;
-  document.getElementById('stats-secondary').innerHTML=chips;
+
+  let rolesGroup=`
+    <div class="stat-chip"><div class="chip-dot" style="background:var(--blue-500);"></div>Истец: <strong>${p}</strong></div>
+    <div class="stat-chip"><div class="chip-dot" style="background:#ec4899;"></div>Ответчик: <strong>${def}</strong></div>`;
+  if(tp>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Третье лицо: <strong>${tp}</strong></div>`;
+  if(newCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Новых: <strong>${newCount}</strong></div>`;
+  if(archivedCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-300);"></div>В архиве: <strong>${archivedCount}</strong></div>`;
+
+  let resultsGroup=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Рассмотрено: <strong>${decidedTotal}</strong></div>`;
+  if(upheld>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Без изменения: <strong>${upheld}</strong></div>`;
+  if(reversed>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--red-500);"></div>Отменено: <strong>${reversed}</strong></div>`;
+  if(partial>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Изменено: <strong>${partial}</strong></div>`;
+  if(dismissed>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Снято/Возвращено: <strong>${dismissed}</strong></div>`;
+
+  document.getElementById('stats-secondary').innerHTML=`
+    <div class="chip-group">${rolesGroup}</div>
+    <div class="chip-group">${resultsGroup}</div>`;
 
   // Mobile summary
   document.getElementById('stats-mobile-summary').innerHTML=`<div class="sms-row"><div class="sms-items"><span class="sms-item"><strong>${allCases.length}</strong> дел</span><span class="sms-item"><strong>${active}</strong> в произв.</span><span class="sms-item"><strong>${w}</strong>/${decidedTotal} в пользу</span></div><span class="sms-chevron">▼</span></div>`;
@@ -750,7 +763,7 @@ function renderAnalytics(){
       const timeStr=c.hearingTime?`<br><span style="font-size:10px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
       const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
       const linkAttr=c.link?` onclick="window.open('${c.link}','_blank')" style="cursor:pointer;"`:'';
-      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:9px;padding:1px 5px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span style="font-size:11px;color:var(--slate-500);">${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</span></div></div>`;
+      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:10px;padding:2px 6px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span style="font-size:12px;color:var(--slate-500);">${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</span></div></div>`;
     });
     upHtml+='</div>';
   }
@@ -826,12 +839,11 @@ function renderCounter(){
 
 /* ========== Table ========== */
 const COLS=[
-  {k:'caseNumber',l:'Дело',s:1,w:'120px'},
+  {k:'caseNumber',l:'Дело',s:1,w:'135px'},
   {k:'dateReceived',l:'Поступ.',s:1,w:'72px'},
   {k:'parties',l:'Стороны',s:0},
   {k:'category',l:'Кат. / Роль',s:1,w:'140px'},
-  {k:'detailedStatus',l:'Статус',s:1,w:'155px'},
-  {k:'result',l:'Результат',s:1,w:'130px'}
+  {k:'detailedStatus',l:'Статус / Результат',s:1,w:'185px'}
 ];
 
 function renderTable(){
@@ -877,12 +889,12 @@ function renderTable(){
     let validActDate=c.actDate;
     if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)validActDate='';}
     let actHtml='';
-    if(c.status==='decided'||c.result!=='pending'){
+    if(c.result&&c.result!=='pending'){
       if(c.hasPublishedActs){
         const actDateStr=validActDate?formatDate(validActDate):'';
-        actHtml=`<span class="badge-act">Акт${actDateStr?' '+actDateStr:' опубл.'}</span>`;
+        actHtml=`<span class="badge-act">Акт${actDateStr?' '+actDateStr:' опубликован'}</span>`;
       }else if(c.result&&c.result!=='pending'){
-        actHtml='<span class="badge-act-no">Акт не опубл.</span>';
+        actHtml='<span class="badge-act-no">Акт не опубликован</span>';
       }
     }
 
@@ -899,19 +911,28 @@ function renderTable(){
       const pauseDate=c.lastEventDate||c.nextDate;
       if(pauseDate)statusExtra=`<div class="status-date">${formatDate(pauseDate)}</div>`;
     }else if(ds==='decided'){
-      // Дата решения: из Дата заседания (nextDate), но НЕ из даты последнего адм. события
       const decidedDate=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
       if(decidedDate)statusExtra=`<div class="status-date">${formatDate(decidedDate)}</div>`;
     }
-    const statusHtml=`<div class="status-cell"><span class="badge badge-${ds}">${STATUS_LABELS[ds]||ds}</span>${statusExtra}</div>`;
+    // Merged status/result cell
+    let statusLabel=STATUS_LABELS[ds]||ds;
+    if(ds==='awaiting'&&/передача дела судье/i.test(c.lastEvent||'')){
+      statusLabel='Передано судье';
+      if(c.lastEventDate)statusExtra=`<div class="status-date">${formatDate(c.lastEventDate)}</div>`;
+    }
+    let mergedHtml;
+    if(c.result&&c.result!=='pending'){
+      mergedHtml=`<div class="status-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${statusExtra}${actHtml}</div>`;
+    }else{
+      mergedHtml=`<div class="status-cell"><span class="badge badge-${ds}">${statusLabel}</span>${statusExtra}</div>`;
+    }
 
     html+=`<tr class="${rowClass}" data-idx="${idx}" onclick="toggleExpand('${escHtml(c.caseNumber)}')">
       <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
-      <td><div class="cat-role-cell"><span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}</div></td>
-      <td>${statusHtml}</td>
-      <td><div class="result-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result||'—'}</span>${actHtml}</div></td>
+      <td><div class="cat-role-cell"><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}<span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(shortCat(c.category))}</span></div></td>
+      <td>${mergedHtml}</td>
     </tr>`;
 
     // Detail row
@@ -956,15 +977,20 @@ function renderMobileCards(){
     let mValidActDate=c.actDate;
     if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)mValidActDate='';}
     let actInfo='';
-    if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубл.'}</span>`;}
-    else if(c.result&&c.result!=='pending'){actInfo='<span class="badge-act-no">Акт не опубл.</span>';}
+    if(c.result&&c.result!=='pending'){
+      if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
+      else{actInfo='<span class="badge-act-no">Акт не опубликован</span>';}
+    }
     const mds=c.detailedStatus||'awaiting';
     const _mToday=new Date();_mToday.setHours(0,0,0,0);
     const mIsFuture=c.nextDate&&new Date(c.nextDate+'T00:00:00')>=_mToday;
+    let mStatusLabel=STATUS_LABELS[mds]||mds;
     let mStatusExtra='';
-    if(mds==='scheduled'&&mIsFuture){
-      const mTimeStr=c.hearingTime?' · '+escHtml(c.hearingTime):'';
-      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-500);">${formatDate(c.nextDate)}${mTimeStr}</span>`;
+    if(mds==='awaiting'&&/передача дела судье/i.test(c.lastEvent||'')){
+      mStatusLabel='Передано судье';
+      if(c.lastEventDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-500);">${formatDate(c.lastEventDate)}</span>`;
+    }else if(mds==='scheduled'&&mIsFuture){
+      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-500);">${formatDate(c.nextDate)}</span>`;
     }else if((mds==='postponed'||mds==='suspended')&&c.nextDate){
       mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-400);">до ${formatDate(c.nextDate)}</span>`;
     }else if(mds==='paused'){
@@ -974,22 +1000,27 @@ function renderMobileCards(){
       const mDecidedDate=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
       if(mDecidedDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-400);">${formatDate(mDecidedDate)}</span>`;
     }
+    // Mobile header: show result badge instead of status when result exists
+    let mHeaderStatus;
+    if(c.result&&c.result!=='pending'){
+      mHeaderStatus=`<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${mStatusExtra}`;
+    }else{
+      mHeaderStatus=`<span class="badge badge-${mds}">${mStatusLabel}</span>${mStatusExtra}`;
+    }
     return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}">
       <div class="mc-header">
         <div><span class="mc-case">${escHtml(c.caseNumber)}</span>${isNew?' <span class="badge-new">Новое</span>':''}</div>
-        <div><span class="badge badge-${mds}">${STATUS_LABELS[mds]||mds}</span>${mStatusExtra}</div>
+        <div>${mHeaderStatus}</div>
       </div>
-      <div style="font-size:11px;color:var(--slate-500);margin-bottom:6px;">${escHtml(c.firstInstanceCourt)}</div>
       <div class="mc-parties">
         <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(c.plaintiff)+'</strong>':escHtml(c.plaintiff)}<br>
         <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(c.defendant)+'</strong>':escHtml(c.defendant)}
       </div>
       <div class="mc-row">
-        <span class="badge badge-cat">${escHtml(c.category)}</span>
         <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}
-        <span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||'—'}</span>
+        <span class="badge badge-cat">${escHtml(shortCat(c.category))}</span>
       </div>
-      ${c.lastEvent?`<div class="mc-event">${escHtml(c.lastEvent)}</div>`:''}
+      ${c.lastEvent&&mds!=='scheduled'&&!/передача дела судье/i.test(c.lastEvent)?`<div class="mc-event">${escHtml(c.lastEvent)}</div>`:''}
       ${actInfo?`<div style="margin-top:4px;">${actInfo}</div>`:''}
       <div class="mc-meta">
         <span>Поступ. ${formatDate(c.dateReceived)}</span>
