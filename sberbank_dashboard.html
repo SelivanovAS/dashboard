@@ -185,6 +185,7 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-plaintiff{background:var(--blue-100);color:var(--blue-800);}
 .badge-defendant{background:#fce7f3;color:#9d174d;}
 .badge-third{background:var(--slate-100);color:var(--slate-600);}
+.badge-appellant{background:#ede9fe;color:#6d28d9;font-weight:600;}
 .badge-upheld{background:var(--slate-100);color:var(--slate-600);}
 .badge-reversed{background:var(--slate-100);color:var(--slate-600);}
 .badge-partial{background:#fef3c7;color:#92400e;}
@@ -908,7 +909,7 @@ function renderTable(){
       <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
-      <td><div class="cat-role-cell"><span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span></div></td>
+      <td><div class="cat-role-cell"><span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}</div></td>
       <td>${statusHtml}</td>
       <td><div class="result-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result||'—'}</span>${actHtml}</div></td>
     </tr>`;
@@ -985,7 +986,7 @@ function renderMobileCards(){
       </div>
       <div class="mc-row">
         <span class="badge badge-cat">${escHtml(c.category)}</span>
-        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>
+        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}
         <span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||'—'}</span>
       </div>
       ${c.lastEvent?`<div class="mc-event">${escHtml(c.lastEvent)}</div>`:''}

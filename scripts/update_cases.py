@@ -420,6 +420,7 @@ def parse_case_card(html: str) -> dict:
         "Акт опубликован": "Нет",
         "Дата публикации акта": "",
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
+        "_appellant_raw": "",  # Сырой текст об апеллянте (для определения в update_active_cases)
     }
 
     tables = extract_tables(html)
@@ -507,6 +508,70 @@ def parse_case_card(html: str) -> dict:
                     if ev_date and any(kw in ev_low for kw in decision_kw):
                         info["Дата заседания"] = ev_date
                         break
+
+    # ── Определяем апеллянта ──
+    # 1. Ищем в таблицах карточки: поле "Заявитель жалобы" / "Податель жалобы"
+    appellant_raw = ""
+    for tbl_idx in range(min(len(tables), 8)):
+        tbl = tables[tbl_idx]
+        for row in tbl:
+            row_text = " ".join(cell_text(c) for c in row).lower()
+            if any(kw in row_text for kw in [
+                "заявитель жалобы", "податель жалобы", "апеллянт",
+                "лицо, подавшее жалобу", "кто подал жалобу",
+            ]) and len(row) >= 2:
+                val = cell_text(row[-1]).strip()
+                if val and val.lower() not in (
+                    "заявитель жалобы", "податель жалобы", "апеллянт",
+                    "лицо, подавшее жалобу", "кто подал жалобу", "",
+                ):
+                    appellant_raw = val
+                    break
+        if appellant_raw:
+            break
+
+    # 2. Ищем в событиях движения дела: "поступила жалоба от ..."
+    if not appellant_raw and movement_table and len(movement_table) > 1:
+        for row in movement_table[1:]:
+            ev = " ".join(cell_text(c) for c in row)
+            m = re.search(
+                r'(?:поступи\w+|подан\w+|принят\w+)\s+'
+                r'(?:апелляционн\w+\s+)?жалоб\w+\s+'
+                r'(?:от\s+)?(.{3,80}?)(?:\.|,|$)',
+                ev, re.IGNORECASE,
+            )
+            if m:
+                appellant_raw = m.group(1).strip()
+                break
+            # Альтернативный паттерн: "жалоба ФИО / наименование"
+            m2 = re.search(
+                r'жалоб\w+\s+(.{3,80}?)'
+                r'(?:\s+на\s+решение|\s+на\s+определение|\.|,|$)',
+                ev, re.IGNORECASE,
+            )
+            if m2:
+                candidate = m2.group(1).strip()
+                # Исключаем служебные слова
+                if not re.match(
+                    r'^(без движения|оставлен|возвращен|на решение|'
+                    r'на определение|рассмотрен)',
+                    candidate, re.IGNORECASE,
+                ):
+                    appellant_raw = candidate
+                    break
+
+    # 3. Ищем в полном HTML: паттерн "апелляционная жалоба ... (имя)"
+    if not appellant_raw:
+        m = re.search(
+            r'(?:апелляционн\w+\s+)?жалоб\w+\s+(?:от\s+)?'
+            r'([А-ЯЁа-яё][А-ЯЁа-яё\s.\-]{2,60}?)'
+            r'(?:\s+на\s+решение|\s+на\s+определение|<|,)',
+            html, re.IGNORECASE,
+        )
+        if m:
+            appellant_raw = m.group(1).strip()
+
+    info["_appellant_raw"] = appellant_raw
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -835,6 +900,16 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             case["Дата публикации акта"] = card_info["Дата публикации акта"]
         if card_info.get("Дата заседания"):
             case["Дата заседания"] = card_info["Дата заседания"]
+
+        # ── Определяем апеллянта ──
+        appellant_raw = card_info.get("_appellant_raw", "")
+        if appellant_raw and not case.get("Апеллянт"):
+            sber_patterns = ["сбербанк", "сбербанк россии", "пао сбербанк", "пао сбер"]
+            raw_lower = appellant_raw.lower()
+            if any(p in raw_lower for p in sber_patterns):
+                case["Апеллянт"] = "Банк"
+            else:
+                case["Апеллянт"] = "Иное лицо"
 
         if change["type"]:
             change["details"]["plaintiff"] = case.get("Истец", "")
