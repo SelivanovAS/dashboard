@@ -116,6 +116,7 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 .upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
 .upcoming-info{color:var(--slate-700);line-height:1.4;}
 .upcoming-case{font-weight:600;color:var(--navy-800);}
+.upcoming-parties{font-size:12px;color:var(--slate-500);}
 .upcoming-empty{font-size:13px;color:var(--slate-400);text-align:center;padding:20px 0;}
 .upcoming-chevron{display:none;font-size:12px;color:var(--slate-400);transition:transform .2s;}
 .upcoming-list.collapsed,.upcoming-empty.collapsed{max-height:0;overflow:hidden;opacity:0;margin:0;padding:0;transition:max-height .25s ease,opacity .2s ease;}
@@ -166,6 +167,7 @@ tbody tr{border-bottom:1px solid var(--slate-100);transition:background .1s;}
 tbody tr:hover{background:var(--slate-50);}
 tbody td{padding:12px 14px;vertical-align:top;}
 .case-number{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.case-link{color:var(--navy-800);text-decoration:none;display:inline-flex;align-items:center;gap:4px;}.case-link:hover{color:var(--navy-600);text-decoration:underline;}
 .court-label{font-size:11px;color:var(--slate-400);margin-top:3px;}
 .parties-col{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:200px;}
 .party-tag{font-size:10px;font-weight:700;color:var(--slate-400);margin-right:3px;}
@@ -249,12 +251,19 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 .mobile-card[data-role="defendant"]{border-left-color:#ec4899;}
 .mobile-card.card-new{border-left-color:var(--amber-500);background:rgba(245,158,11,.03);}
 .mc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;}
-.mc-case{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-800);}
-.mc-parties{font-size:12px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
+.mc-header-status{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;}
+.mc-case{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-800);white-space:nowrap;text-decoration:none;}
+.mc-parties{font-size:13px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
 .mc-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
-.mc-meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--slate-400);margin-top:6px;padding-top:8px;border-top:1px solid var(--slate-100);}
-.mc-event{font-size:11.5px;color:var(--slate-600);line-height:1.4;}
-.mc-link{display:flex;align-items:center;gap:4px;color:var(--navy-600);text-decoration:none;font-size:11px;font-weight:600;}
+.mc-details{max-height:0;overflow:hidden;transition:max-height .25s ease,opacity .2s ease;opacity:0;}
+.mobile-card.mc-open .mc-details{max-height:500px;opacity:1;transition:max-height .35s ease,opacity .2s ease;}
+.mc-toggle{display:flex;align-items:center;justify-content:center;padding:6px 0 0;color:var(--slate-400);font-size:11px;gap:4px;}
+.mc-toggle svg{transition:transform .2s;}
+.mobile-card.mc-open .mc-toggle svg{transform:rotate(180deg);}
+.mobile-card{cursor:pointer;}
+.mc-detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:4px 0;font-size:12px;line-height:1.4;}
+.mc-detail-label{color:var(--slate-400);flex-shrink:0;min-width:100px;}
+.mc-detail-value{color:var(--slate-600);text-align:right;}
 
 /* ========== Responsive ========== */
 @media(max-width:1024px){
@@ -282,6 +291,9 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .upcoming-chevron{display:inline;}
+  .upcoming-item{font-size:14px;}
+  .upcoming-parties{font-size:13px;}
+  .upcoming-date{font-size:13px;}
   .toolbar{flex-direction:column;align-items:stretch;}
   .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
   #filter-status,#filter-role,#filter-category{display:none;}
@@ -433,6 +445,50 @@ const CAT_SHORT={
   'Исполнительное производство':'Исполн. производство',
 };
 function shortCat(c){return CAT_SHORT[c]||c;}
+function cleanEvent(s){
+  if(!s)return '';
+  // Remove time patterns: "15:00." or "09:41."
+  s=s.replace(/\.\s*\d{1,2}:\d{2}/g,'');
+  // Remove "Зал NNN." patterns
+  s=s.replace(/\.\s*Зал\s+\d+/gi,'');
+  // Remove date patterns: "01.04.2026" or "27.03.2026"
+  s=s.replace(/\.?\s*\d{2}\.\d{2}\.\d{4}/g,'');
+  // Clean up trailing/leading dots and spaces
+  s=s.replace(/\.\s*$/,'').replace(/^\.\s*/,'').trim();
+  return s;
+}
+function shortName(s){
+  if(!s)return '';
+  const W='[а-яёА-ЯЁa-zA-Z]'; // word char including cyrillic
+  const Wp=W+'+';const Ws=W+'*';
+  // МТУ Росимущества — full agency name with region (region contains commas, ends with last "округе")
+  s=s.replace(new RegExp('Межрегиональн'+Ws+'\\s+территориальн'+Ws+'\\s+управлен'+Ws+'\\s+Федеральн'+Ws+'\\s+агентств'+Ws+'[\\s\\S]*округе','gi'),'МТУ Росимущества');
+  s=s.replace(new RegExp('Межрегиональн'+Ws+'\\s+территориальн'+Ws+'\\s+управлен'+Ws,'gi'),'МТУ');
+  // Финансовый уполномоченный по правам потребителей финансовых услуг
+  s=s.replace(new RegExp('Финансов'+Ws+'\\s+уполномоченн'+Ws+'\\s+по\\s+правам\\s+потребителей\\s+финансовых\\s+услуг','gi'),'Фин. уполномоченный');
+  // "в лице филиала ..." remove subsidiary details up to "vs" or comma+name
+  s=s.replace(/\s*в\s+лице\s+[^,]*(?:,\s*(?=[а-яёА-ЯЁ]))?/gi,'');
+  // Remove org forms: ПАО, ООО, ОАО, АО, ЗАО, НКО, ИП (with optional quotes)
+  s=s.replace(/(ПАО|ООО|ОАО|АО|ЗАО|НКО|ИП)\s*[«""]?\s*/gi,'');
+  // Clean leftover closing quotes
+  s=s.replace(/[»""]\s*/g,' ');
+  // город/города -> г.
+  s=s.replace(/города?\s+/gi,'г. ');
+  // Наследственное имущество -> Насл. имущество (any case)
+  s=s.replace(new RegExp('Наследственн'+Ws+'\\s+имуществ'+Ws,'gi'),'Насл. имущество');
+  // Администрация -> Адм.
+  s=s.replace(/Администрация/gi,'Адм.');
+  // Физлицо: "Фамилия Имя Отчество" -> "Фамилия И.О." (mixed case)
+  s=s.replace(/([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])[а-яё]+\s+([А-ЯЁ])[а-яё]+/g,'$1 $2.$3.');
+  // ALL CAPS names: "ФАМИЛИЯИМЯ ОТЧЕСТВО" or "ФАМИЛИЯ ИМЕНИ ОТЧЕСТВА"
+  s=s.replace(/([А-ЯЁ]{2,})\s+([А-ЯЁ])[А-ЯЁ]+\s+([А-ЯЁ])[А-ЯЁ]+/g,(m,f,i,o)=>{
+    const fl=f.charAt(0)+f.slice(1).toLowerCase();
+    return fl+' '+i+'.'+o+'.';
+  });
+  // Collapse multiple spaces
+  s=s.replace(/\s{2,}/g,' ');
+  return s.trim();
+}
 function normalizeResult(raw){
   if(!raw)return 'pending';
   const s=raw.toLowerCase().trim();
@@ -763,7 +819,10 @@ function renderAnalytics(){
       const timeStr=c.hearingTime?`<br><span style="font-size:10px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
       const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
       const linkAttr=c.link?` onclick="window.open('${c.link}','_blank')" style="cursor:pointer;"`:'';
-      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:10px;padding:2px 6px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span style="font-size:12px;color:var(--slate-500);">${escHtml(c.plaintiff)} vs ${escHtml(c.defendant)}</span></div></div>`;
+      const isMob=window.innerWidth<=768;
+      const pl=isMob?shortName(c.plaintiff):c.plaintiff;
+      const df=isMob?shortName(c.defendant):c.defendant;
+      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:10px;padding:2px 6px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</span></div></div>`;
     });
     upHtml+='</div>';
   }
@@ -928,7 +987,7 @@ function renderTable(){
     }
 
     html+=`<tr class="${rowClass}" data-idx="${idx}" onclick="toggleExpand('${escHtml(c.caseNumber)}')">
-      <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div></td>
+      <td><div class="case-number">${c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" onclick="event.stopPropagation()">${escHtml(c.caseNumber)} ${linkIcon}</a>`:escHtml(c.caseNumber)} ${newBadge} ${archived}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
       <td><div class="cat-role-cell"><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}<span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(shortCat(c.category))}</span></div></td>
@@ -988,44 +1047,62 @@ function renderMobileCards(){
     let mStatusExtra='';
     if(mds==='awaiting'&&/передача дела судье/i.test(c.lastEvent||'')){
       mStatusLabel='Передано судье';
-      if(c.lastEventDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-500);">${formatDate(c.lastEventDate)}</span>`;
+      if(c.lastEventDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-500);">${formatDate(c.lastEventDate)}</span>`;
     }else if(mds==='scheduled'&&mIsFuture){
-      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-500);">${formatDate(c.nextDate)}</span>`;
+      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-500);">${formatDate(c.nextDate)}</span>`;
     }else if((mds==='postponed'||mds==='suspended')&&c.nextDate){
-      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-400);">до ${formatDate(c.nextDate)}</span>`;
+      mStatusExtra=` <span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-400);">до ${formatDate(c.nextDate)}</span>`;
     }else if(mds==='paused'){
       const mPauseDate=c.lastEventDate||c.nextDate;
-      if(mPauseDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-400);">${formatDate(mPauseDate)}</span>`;
+      if(mPauseDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-400);">${formatDate(mPauseDate)}</span>`;
     }else if(mds==='decided'){
       const mDecidedDate=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
-      if(mDecidedDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:10px;color:var(--slate-400);">${formatDate(mDecidedDate)}</span>`;
+      if(mDecidedDate)mStatusExtra=` <span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-400);">${formatDate(mDecidedDate)}</span>`;
     }
     // Mobile header: show result badge instead of status when result exists
     let mHeaderStatus;
     if(c.result&&c.result!=='pending'){
-      mHeaderStatus=`<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${mStatusExtra}`;
+      mHeaderStatus=`<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':''}`;
     }else{
-      mHeaderStatus=`<span class="badge badge-${mds}">${mStatusLabel}</span>${mStatusExtra}`;
+      mHeaderStatus=`<span class="badge badge-${mds}">${mStatusLabel}</span>${mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':''}`;
     }
-    return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}">
+    const caseLabel=c.link
+      ?`<a class="mc-case" href="${escHtml(c.link)}" target="_blank" rel="noopener">${escHtml(c.caseNumber)} <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`
+      :`<span class="mc-case">${escHtml(c.caseNumber)}</span>`;
+    return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}" onclick="if(!event.target.closest('a'))this.classList.toggle('mc-open')">
       <div class="mc-header">
-        <div><span class="mc-case">${escHtml(c.caseNumber)}</span>${isNew?' <span class="badge-new">Новое</span>':''}</div>
-        <div>${mHeaderStatus}</div>
+        <div>${caseLabel}${isNew?' <span class="badge-new">Новое</span>':''}</div>
+        <div class="mc-header-status">${mHeaderStatus}</div>
+      </div>
+      <div class="mc-row" style="margin-bottom:8px;">
+        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}
+        <span class="badge badge-cat">${escHtml(shortCat(c.category))}</span>
       </div>
       <div class="mc-parties">
         <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(c.plaintiff)+'</strong>':escHtml(c.plaintiff)}<br>
         <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(c.defendant)+'</strong>':escHtml(c.defendant)}
       </div>
-      <div class="mc-row">
-        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}
-        <span class="badge badge-cat">${escHtml(shortCat(c.category))}</span>
-      </div>
-      ${c.lastEvent&&mds!=='scheduled'&&!/передача дела судье/i.test(c.lastEvent)?`<div class="mc-event">${escHtml(c.lastEvent)}</div>`:''}
       ${actInfo?`<div style="margin-top:4px;">${actInfo}</div>`:''}
-      <div class="mc-meta">
-        <span>Поступ. ${formatDate(c.dateReceived)}</span>
-        ${c.link?`<a class="mc-link" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Сайт суда</a>`:''}
+      <div class="mc-details">
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100);">
+          ${(()=>{
+            // 1. Hearing time only (date already in header)
+            const hasHearing=c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Рассмотрение'||c.nextDateLabel==='Отложено до');
+            const hearingRow=hasHearing&&c.hearingTime?`<div class="mc-detail-row"><span class="mc-detail-label">Время заседания</span><span class="mc-detail-value">${escHtml(c.hearingTime)}</span></div>`:'';
+            // 2. Last event — skip if it duplicates the status
+            const cleaned=cleanEvent(c.lastEvent||'');
+            const isDuplicate=/^(судебное заседание|передача дела судье|назначено)$/i.test(cleaned);
+            const eventRow=c.lastEvent&&!isDuplicate?`<div class="mc-detail-row"><span class="mc-detail-label">Последнее событие</span><span class="mc-detail-value">${escHtml(cleaned)}${c.lastEventDate?' · '+formatDate(c.lastEventDate):''}</span></div>`:'';
+            // 3. Court, received, notes
+            const courtRow=c.firstInstanceCourt?`<div class="mc-detail-row"><span class="mc-detail-label">Суд 1 инстанции</span><span class="mc-detail-value">${escHtml(c.firstInstanceCourt)}</span></div>`:'';
+            const recRow=`<div class="mc-detail-row"><span class="mc-detail-label">Поступило</span><span class="mc-detail-value">${formatDate(c.dateReceived)}</span></div>`;
+            const notesRow=c.notes?`<div class="mc-detail-row"><span class="mc-detail-label">Заметки</span><span class="mc-detail-value">${escHtml(c.notes)}</span></div>`:'';
+            // Order: event → hearing time → court → received → notes
+            return hearingRow+eventRow+courtRow+recRow+notesRow;
+          })()}
+        </div>
       </div>
+      <div class="mc-toggle"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
     </div>`}).join('');
 }
 
