@@ -41,6 +41,10 @@ CARD_URL_TPL = (
 )
 
 CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
+DIGESTED_ACTS_PATH = os.environ.get(
+    "DIGESTED_ACTS_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
+)
 ARCHIVE_DAYS = 30  # Дела решённые 30+ дней назад не обновляем
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
 DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
@@ -107,6 +111,21 @@ def parse_date(s: str) -> datetime | None:
     return None
 
 
+def load_digested_acts() -> set:
+    """Загрузить множество номеров дел, чьи акты уже попали в дайджест."""
+    if not os.path.exists(DIGESTED_ACTS_PATH):
+        return set()
+    with open(DIGESTED_ACTS_PATH, "r", encoding="utf-8") as f:
+        return {line.strip() for line in f if line.strip()}
+
+
+def save_digested_acts(acts: set):
+    """Сохранить множество номеров дел, чьи акты уже попали в дайджест."""
+    os.makedirs(os.path.dirname(DIGESTED_ACTS_PATH) or ".", exist_ok=True)
+    with open(DIGESTED_ACTS_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(sorted(acts)) + "\n")
+
+
 def is_archived(case: dict) -> bool:
     """Дело архивное = решено более ARCHIVE_DAYS дней назад."""
     if case.get("Статус", "").strip() != "Решено":
@@ -160,7 +179,7 @@ def parties_short(case: dict) -> str:
 def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
     """
     Извлечь мотивировочную часть из текста судебного акта.
-    Ищем от 'установил:' до 'руководствуясь' — это суть решения.
+    Ищем от 'установил(а):' до 'руководствуясь' / 'определила' — это суть решения.
     Если не нашли — берём последние max_len символов (ближе к резолюции).
     """
     if not act_text:
@@ -169,15 +188,30 @@ def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
     text = act_text.strip()
 
     # Пробуем вырезать мотивировочную часть
-    start_match = re.search(r'(?:установил|УСТАНОВИЛ)\s*:', text)
-    end_match = re.search(r'(?:руководствуясь|РУКОВОДСТВУЯСЬ)', text)
+    # Коллегия пишет "установила:", судья — "установил:"
+    start_match = re.search(
+        r'(?:у\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?\s*:|УСТАНОВИЛ[АИ]?\s*:)',
+        text, re.IGNORECASE
+    )
+    end_match = re.search(
+        r'(?:руководствуясь|РУКОВОДСТВУЯСЬ|на\s+основании\s+изложенного|'
+        r'судебная\s+коллегия\s+(?:определила|приходит)|'
+        r'о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?\s*:)',
+        text, re.IGNORECASE
+    )
 
     if start_match and end_match and end_match.start() > start_match.end():
         motive = text[start_match.end():end_match.start()].strip()
         if len(motive) > 100:  # Достаточно содержательный кусок
             return motive[:max_len]
 
-    # Fallback: берём последнюю часть текста (ближе к решению)
+    # Fallback 2: ищем хотя бы начало (установил(а):) и берём max_len символов после
+    if start_match:
+        after = text[start_match.end():].strip()
+        if len(after) > 100:
+            return after[:max_len]
+
+    # Fallback 3: берём последнюю часть текста (ближе к решению)
     if len(text) > max_len:
         return "..." + text[-(max_len - 3):]
     return text
@@ -453,12 +487,26 @@ def parse_case_card(html: str) -> dict:
             last_date, last_time, last_event = events_data[-1]
             info["Последнее событие"] = last_event
             info["Дата события"] = last_date
-            info["Время заседания"] = last_time
-            # Дата последнего заседания (для даты вынесения определения)
+            # Время заседания — только из событий-заседаний, не из "сдано в отдел"
+            for ev_date, ev_time, ev_desc in reversed(events_data):
+                if "заседани" in ev_desc.lower() and ev_time:
+                    info["Время заседания"] = ev_time
+                    break
+            # Дата заседания — ищем последнее заседание
             for ev_date, ev_time, ev_desc in reversed(events_data):
                 if "заседани" in ev_desc.lower() and ev_date:
                     info["Дата заседания"] = ev_date
                     break
+            # Если заседания не было — ищем дату определения/решения
+            # (для дел снятых с рассмотрения, прекращённых, возвращённых)
+            if not info["Дата заседания"]:
+                decision_kw = ["определени", "снято", "прекращен", "возвращен",
+                               "без изменени", "отменен", "изменен"]
+                for ev_date, ev_time, ev_desc in reversed(events_data):
+                    ev_low = ev_desc.lower()
+                    if ev_date and any(kw in ev_low for kw in decision_kw):
+                        info["Дата заседания"] = ev_date
+                        break
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -474,33 +522,54 @@ def parse_case_card(html: str) -> dict:
         info["Статус"] = "Решено"
 
     # ── Судебный акт ──
-    # Ищем ссылку на текст акта или блок с текстом акта
     html_lower = html.lower()
-    if "судебный акт" in html_lower or "текст акта" in html_lower:
-        # Ищем ссылку на акт
+
+    # Способ 1: Текст акта встроен в страницу (вкладка «Судебные акты», div#cont5)
+    # Это основной способ для сайта oblsud--hmao.sudrf.ru
+    # Ищем div с id=cont_doc1 (текст первого судебного акта)
+    doc_match = re.search(
+        r"""id\s*=\s*['"]?cont_doc1['"]?[^>]*>(.+?)"""
+        r"""(?=<div[^>]*id\s*=\s*['"]?cont_doc\d|<div[^>]*id\s*=\s*['"]?cont[^_]|$)""",
+        html, re.DOTALL
+    )
+    if doc_match:
+        act_raw = doc_match.group(1)
+        act_text = re.sub(r'<[^>]+>', ' ', act_raw)
+        act_text = re.sub(r'&nbsp;', ' ', act_text)
+        act_text = re.sub(r'\s+', ' ', act_text).strip()
+        if len(act_text) > 200:
+            info["Акт опубликован"] = "Да"
+            info["act_text"] = act_text[:8000]
+
+    # Способ 2: Ссылка на отдельную страницу с текстом акта
+    if not info["act_text"] and ("судебный акт" in html_lower or "текст акта" in html_lower):
         act_match = re.search(
             r'href="([^"]*(?:act_text|print_page|case_doc)[^"]*)"',
             html, re.IGNORECASE
         )
         if act_match:
             info["Акт опубликован"] = "Да"
-            # URL акта — попробуем скачать
             act_url = act_match.group(1)
             if not act_url.startswith("http"):
                 act_url = BASE_URL + "/" + act_url.lstrip("/")
             info["_act_url"] = act_url
 
-    # Альтернативный поиск: блок <div> с текстом акта прямо на странице
-    act_div_match = re.search(
-        r'<div[^>]*class="[^"]*act[^"]*"[^>]*>(.*?)</div>',
-        html, re.DOTALL | re.IGNORECASE
-    )
-    if act_div_match:
-        act_text = re.sub(r'<[^>]+>', ' ', act_div_match.group(1))
-        act_text = re.sub(r'\s+', ' ', act_text).strip()
-        if len(act_text) > 50:
-            info["Акт опубликован"] = "Да"
-            info["act_text"] = act_text[:5000]  # Сырой текст, обрезается позже
+    # Способ 3: Блок <div> с текстом акта (class содержит "act")
+    if not info["act_text"]:
+        act_div_match = re.search(
+            r'<div[^>]*class="[^"]*act[^"]*"[^>]*>(.*?)</div>',
+            html, re.DOTALL | re.IGNORECASE
+        )
+        if act_div_match:
+            act_text = re.sub(r'<[^>]+>', ' ', act_div_match.group(1))
+            act_text = re.sub(r'\s+', ' ', act_text).strip()
+            if len(act_text) > 50:
+                info["Акт опубликован"] = "Да"
+                info["act_text"] = act_text[:8000]
+
+    # Определяем наличие вкладки «Судебные акты» даже без текста
+    if not info.get("act_text") and "СУДЕБНЫЕ АКТЫ" in html:
+        info["Акт опубликован"] = "Да"
 
     # Также ищем по паттерну "Опубликовано" + дата
     pub_match = re.search(
@@ -508,8 +577,19 @@ def parse_case_card(html: str) -> dict:
         html, re.IGNORECASE
     )
     if pub_match:
-        info["Акт опубликован"] = "Да"
-        info["Дата публикации акта"] = pub_match.group(1)
+        pub_date_str = pub_match.group(1)
+        pub_date = parse_date(pub_date_str)
+        recv_date = parse_date(info.get("Дата поступления", ""))
+        # Валидация: дата публикации акта должна быть минимум через 7 дней
+        # после поступления дела. Если раньше — это акт первой инстанции.
+        if pub_date and recv_date and (pub_date - recv_date).days >= 7:
+            info["Акт опубликован"] = "Да"
+            info["Дата публикации акта"] = pub_date_str
+        elif not recv_date:
+            # Нет даты поступления — принимаем как есть
+            info["Акт опубликован"] = "Да"
+            info["Дата публикации акта"] = pub_date_str
+        # Иначе (pub_date < recv_date) — это акт первой инстанции, пропускаем
 
     return info
 
@@ -557,8 +637,12 @@ def get_upcoming_hearings(cases: list[dict]) -> list[dict]:
             continue
         if case.get("Статус", "").strip() == "Решено":
             continue
+        # Пропускаем приостановленные дела
+        event_low = case.get("Последнее событие", "").lower()
+        if "приостановлен" in event_low:
+            continue
 
-        event = case.get("Последнее событие", "").lower()
+        event = event_low
         date_str = case.get("Дата события", "").strip()
 
         if not date_str:
@@ -666,6 +750,7 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
     Обновить карточки активных (не архивных) дел.
     Возвращает (обновлённые_дела, список_изменений).
     """
+    _digested_acts = load_digested_acts()
     changes = []
 
     for case in cases:
@@ -712,14 +797,21 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
 
         # Новый акт
+        act_text = card_info.get("act_text", "")
+        if not act_text and card_info.get("_act_url"):
+            act_text = fetch_act_text(card_info["_act_url"])
         if new_act == "Да" and old_act != "Да":
             change["type"].append("new_act")
-            # Пробуем скачать текст акта
-            act_text = card_info.get("act_text", "")
-            if not act_text and card_info.get("_act_url"):
-                act_text = fetch_act_text(card_info["_act_url"])
-            # Извлекаем мотивировочную часть
             change["details"]["act_text"] = extract_motive_part(act_text, 1000)
+        elif (new_act == "Да" and old_act == "Да"
+              and act_text
+              and case["Номер дела"] not in _digested_acts):
+            # Акт уже был помечен ранее, но текст не извлекался.
+            # Добавляем в дайджест один раз.
+            motive = extract_motive_part(act_text, 1000)
+            if motive and len(motive) > 100:
+                change["type"].append("new_act")
+                change["details"]["act_text"] = motive
 
         # Новый результат
         if new_result and new_result != old_result:
@@ -753,8 +845,13 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             change["details"]["case_url"] = case_card_url(case)
             changes.append(change)
 
+        # Запоминаем дела, чьи акты вошли в дайджест
+        if "new_act" in change["type"]:
+            _digested_acts.add(case["Номер дела"])
+
         log.info(f"  {case['Номер дела']}: {'→ '.join(change['type']) or 'без изменений'}")
 
+    save_digested_acts(_digested_acts)
     return cases, changes
 
 
