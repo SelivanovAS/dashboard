@@ -185,7 +185,7 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-favorable{background:var(--green-100);color:var(--green-800);}
 .badge-unfavorable{background:var(--red-100);color:var(--red-800);}
 .badge-neutral-result{background:var(--slate-100);color:var(--slate-600);}
-.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:10px;}
+.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
 .badge-act{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:10px;margin-top:4px;font-weight:600;}
 .badge-act-no{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--slate-100);color:var(--slate-500);font-size:10px;margin-top:4px;}
 /* Cat+Role merged column */
@@ -248,14 +248,26 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .stats-primary{grid-template-columns:repeat(2,1fr);}
   .analytics-row{grid-template-columns:1fr;}
 }
+/* Mobile stats summary */
+.stats-mobile-summary{display:none;background:var(--white);border-radius:var(--radius-lg);padding:12px 16px;box-shadow:var(--shadow-sm);margin-bottom:12px;cursor:pointer;user-select:none;animation:fadeUp .4s ease;}
+.stats-mobile-summary .sms-row{display:flex;justify-content:space-between;align-items:center;}
+.stats-mobile-summary .sms-items{display:flex;gap:14px;flex-wrap:wrap;}
+.stats-mobile-summary .sms-item{font-size:13px;color:var(--slate-600);}
+.stats-mobile-summary .sms-item strong{color:var(--navy-800);font-size:16px;}
+.stats-mobile-summary .sms-chevron{color:var(--slate-400);font-size:18px;transition:transform .2s;}
+.stats-mobile-summary.expanded .sms-chevron{transform:rotate(180deg);}
 @media(max-width:768px){
   .app-header{padding:0 16px;}.app-main{padding:16px;}
   .header-inner{flex-direction:column;align-items:flex-start;gap:10px;padding:14px 0;}
   .header-actions{width:100%;justify-content:space-between;}
-  .stats-primary{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stats-mobile-summary{display:block;}
+  .stats-primary{display:none;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stats-primary.mobile-visible{display:grid;}
+  .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .toolbar{flex-direction:column;align-items:stretch;}
   .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
+  #filter-status,#filter-role,#filter-category{display:none;}
   .toolbar-right{justify-content:flex-end;}
   .table-wrap{display:none;}
   .mobile-cards{display:block;animation:fadeUp .6s ease;}
@@ -333,6 +345,8 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
     </div>
     <div id="error-banner" class="error-banner" style="display:none;"></div>
 
+    <!-- Mobile stats summary -->
+    <div class="stats-mobile-summary" id="stats-mobile-summary" onclick="toggleMobileStats()"></div>
     <!-- Primary stats -->
     <div class="stats-primary" id="stats-primary"></div>
     <!-- Secondary stats -->
@@ -365,15 +379,6 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
         <select class="filter-select" id="filter-category" onchange="applyFilters()">
           <option value="all">Все категории</option>
         </select>
-        <select class="filter-select" id="filter-court" onchange="applyFilters()">
-          <option value="all">Все суды</option>
-        </select>
-      </div>
-      <div class="toolbar-right">
-        <button class="btn-outline" onclick="exportCSV()">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          CSV
-        </button>
       </div>
     </div>
 
@@ -465,7 +470,7 @@ function rowToCase(h,row){
         {nextDate=extractedDate;nextDateLabel='Событие';}
     }
   }
-  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:g(['категория']),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel};
+  return{caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:STATUS_MAP[sl]||sl||'active',lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel};
 }
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
 function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
@@ -579,14 +584,12 @@ function isNewCase(c){return newCaseNumbers.has(c.caseNumber);}
 
 /* ========== Populate dynamic filter options ========== */
 function populateFilterOptions(){
-  const cats=new Set(),courts=new Set();
-  allCases.forEach(c=>{if(c.category)cats.add(c.category);if(c.firstInstanceCourt)courts.add(c.firstInstanceCourt);});
+  const cats=new Set();
+  allCases.forEach(c=>{if(c.category)cats.add(c.category);});
   const catSel=document.getElementById('filter-category');
-  const courtSel=document.getElementById('filter-court');
-  const catVal=catSel.value,courtVal=courtSel.value;
+  const catVal=catSel.value;
   catSel.innerHTML='<option value="all">Все категории</option>'+[...cats].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
-  courtSel.innerHTML='<option value="all">Все суды</option>'+[...courts].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
-  catSel.value=catVal;courtSel.value=courtVal;
+  catSel.value=catVal;
 }
 
 /* ========== Stats ========== */
@@ -631,22 +634,19 @@ function renderStats(){
   if(partial>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Изменено: <strong>${partial}</strong></div>`;
   if(dismissed>0)chips+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Снято/Возвращено: <strong>${dismissed}</strong></div>`;
   document.getElementById('stats-secondary').innerHTML=chips;
+
+  // Mobile summary
+  document.getElementById('stats-mobile-summary').innerHTML=`<div class="sms-row"><div class="sms-items"><span class="sms-item"><strong>${allCases.length}</strong> дел</span><span class="sms-item"><strong>${active}</strong> в произв.</span><span class="sms-item"><strong>${w}</strong>/${decidedTotal} в пользу</span></div><span class="sms-chevron">▼</span></div>`;
+}
+function toggleMobileStats(){
+  const el=document.getElementById('stats-mobile-summary');
+  const sp=document.getElementById('stats-primary');
+  el.classList.toggle('expanded');
+  sp.classList.toggle('mobile-visible');
 }
 
 /* ========== Analytics ========== */
 function renderAnalytics(){
-  // Category bar chart
-  const catCounts={};
-  allCases.forEach(c=>{if(c.category)catCounts[c.category]=(catCounts[c.category]||0)+1;});
-  const catSorted=Object.entries(catCounts).sort((a,b)=>b[1]-a[1]);
-  const catMax=catSorted.length>0?catSorted[0][1]:1;
-  let catHtml='<div class="analytics-card"><div class="analytics-title">Распределение по категориям</div>';
-  catSorted.forEach(([cat,cnt],i)=>{
-    const pct=Math.round(cnt/catMax*100);
-    const clr=CAT_COLORS[i%CAT_COLORS.length];
-    catHtml+=`<div class="cat-bar-row"><span class="cat-bar-label">${escHtml(cat)}</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${clr};"></div></div><span class="cat-bar-count">${cnt}</span></div>`;
-  });
-  catHtml+='</div>';
 
   // Upcoming hearings
   const today=new Date();today.setHours(0,0,0,0);
@@ -680,7 +680,7 @@ function renderAnalytics(){
   }
   upHtml+='</div>';
 
-  document.getElementById('analytics-row').innerHTML=catHtml+upHtml;
+  document.getElementById('analytics-row').innerHTML=upHtml;
 }
 
 /* ========== Meta / Footer ========== */
@@ -711,7 +711,6 @@ function applyFilters(){
   const st=document.getElementById('filter-status').value;
   const rl=document.getElementById('filter-role').value;
   const cat=document.getElementById('filter-category').value;
-  const court=document.getElementById('filter-court').value;
 
   filteredCases=allCases.filter(c=>{
     const archived=isArchived(c);
@@ -722,7 +721,6 @@ function applyFilters(){
     else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
-    if(court!=='all'&&c.firstInstanceCourt!==court)return false;
     if(q){const h=[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
@@ -824,7 +822,7 @@ function renderTable(){
       <td><div class="case-number">${escHtml(c.caseNumber)} ${linkIcon} ${newBadge} ${archived}</div></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
-      <td><div class="cat-role-cell"><span class="badge badge-cat">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span></div></td>
+      <td><div class="cat-role-cell"><span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(c.category)}</span><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span></div></td>
       <td>${nextDateHtml}</td>
       <td><span class="badge badge-${sc}">${STATUS_LABELS[c.status]||c.status}</span></td>
       <td><div class="result-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result||'—'}</span>${actHtml}</div></td>
