@@ -165,8 +165,8 @@ def case_link_html(case: dict) -> str:
     url = case_card_url(case)
     num = escape_html(case.get("Номер дела", "???"))
     if url:
-        return f'<a href="{url}">{num}</a>'
-    return num
+        return f'<a href="{url}"><b>{num}</b></a>'
+    return f'<b>{num}</b>'
 
 
 def parties_short(case: dict) -> str:
@@ -1149,6 +1149,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 - Между секциями вставляй разделительную линию: ——————————————
 - НЕ используй маркеры списка («• », «- » и т.п.) — каждый пункт просто с новой строки
 - Названия секций выделяй <b>жирным</b>
+- Номера дел выделяй <b>жирным</b> (внутри ссылки: <a href="URL"><b>номер</b></a>)
 - В секции «Заседания во вторник» формат: <b>время</b> ссылка — стороны | категория
 - Отступы и пустые строки для читаемости
 
@@ -1173,7 +1174,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                 "anthropic-version": "2023-06-01",
             },
             json={
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-sonnet-4-6",
                 "max_tokens": 2000,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -1320,7 +1321,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             d = ch["details"]
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
-            link = f'<a href="{url}">{case_num}</a>' if url else case_num
+            link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             # Участники и категория
             plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
             defendant = escape_html(shorten_party_name(d.get("defendant", "")))
@@ -1368,7 +1369,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             d = ch["details"]
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
-            link = f'<a href="{url}">{case_num}</a>' if url else case_num
+            link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             result_text = escape_html(d.get("result", ""))
             role = d.get("role", "")
             role_note = f" (банк — {escape_html(role.lower())})" if role else ""
@@ -1384,7 +1385,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             d = ch["details"]
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
-            link = f'<a href="{url}">{case_num}</a>' if url else case_num
+            link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             lines.append(f"  {link}")
 
     if upcoming:
