@@ -1175,7 +1175,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             },
             json={
                 "model": "claude-sonnet-4-6",
-                "max_tokens": 2000,
+                "max_tokens": 4096,
                 "messages": [{"role": "user", "content": prompt}],
             },
             timeout=60,
