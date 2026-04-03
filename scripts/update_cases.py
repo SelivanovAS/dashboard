@@ -1037,7 +1037,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
             for c in upcoming:
-                msg += f"\n  • {hearing_line_html(c)}"
+                msg += f"\n  {hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1147,12 +1147,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
 ОФОРМЛЕНИЕ:
 - Между секциями вставляй разделительную линию: ——————————————
-- Каждый пункт внутри секции — с новой строки, начинается с «• »
-- В секции «Заседания во вторник» формат без «• »: <b>время</b> ссылка — стороны | категория
+- НЕ используй маркеры списка («• », «- » и т.п.) — каждый пункт просто с новой строки
+- Названия секций выделяй <b>жирным</b>
+- В секции «Заседания во вторник» формат: <b>время</b> ссылка — стороны | категория
 - Отступы и пустые строки для читаемости
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не повторяй одну информацию в разных секциях.
-ЛИМИТ: уложись в 3500 символов (лимит Telegram — 4096, нужен запас).
+ЛИМИТ: уложись в 3800 символов. Если не помещается — можно разбить на два сообщения, каждое до 3800 символов.
 
 Данные:
 {chr(10).join(context_parts)}
@@ -1189,8 +1190,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             return generate_template_digest(
                 new_cases, changes, total_active, cases
             )
-        # Обрезаем до лимита Telegram с запасом
-        return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
+        # Допускаем до двух сообщений; split_message в send_telegram разобьёт
+        return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
     except Exception as e:
         log.error(f"Ошибка Claude API: {e}")
         return generate_template_digest(new_cases, changes, total_active, cases)
@@ -1284,7 +1285,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
             for c in upcoming:
-                msg += f"\n  • {hearing_line_html(c)}"
+                msg += f"\n  {hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1304,7 +1305,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             pl = escape_html(shorten_party_name(c['Истец'], keep_fio_full=True))
             df = escape_html(shorten_party_name(c['Ответчик'], keep_fio_full=True))
             lines.append(
-                f"  • {link} {role_icon} "
+                f"  {link} {role_icon}"
                 f"{pl} vs {df} "
                 f"({cat})"
             )
@@ -1355,7 +1356,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             else:
                 if event_date:
                     event_clean += f". {escape_html(event_date)}"
-            line = f"  • {link}"
+            line = f"  {link}"
             if parties:
                 line += f" — {parties}"
             line += f": {event_clean}"
@@ -1374,7 +1375,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             hearing_dt = d.get("hearing_date", "")
             date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
             lines.append(
-                f"  • {link}: {result_text}{role_note}{date_note}"
+                f"  {link}: {result_text}{role_note}{date_note}"
             )
 
     if acts:
@@ -1384,18 +1385,19 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
             link = f'<a href="{url}">{case_num}</a>' if url else case_num
-            lines.append(f"  • {link}")
+            lines.append(f"  {link}")
 
     if upcoming:
         lines.append(f"\n{upcoming_header_html(upcoming)}")
         for c in upcoming:
-            lines.append(f"  • {hearing_line_html(c)}")
+            lines.append(f"  {hearing_line_html(c)}")
 
     lines.append(f"\nАктивных дел: {total_active}")
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
 
     text = "\n".join(lines)
-    return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
+    # Допускаем до двух сообщений; split_message в send_telegram разобьёт
+    return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
 
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
