@@ -962,6 +962,10 @@ def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
     name = _OPF_RE.sub('', name).strip()
     # Убрать кавычки-ёлочки, оставшиеся после удаления ОПФ
     name = re.sub(r'[«»"]+', '', name).strip()
+    # Сбербанк: убрать «в лице филиала ...», «в лице ... банка ...» и т.п.
+    name = re.sub(r'\s+в лице\s+.*', '', name, flags=re.IGNORECASE).strip()
+    # Сбербанк России → Сбербанк
+    name = re.sub(r'^Сбербанк\s+России$', 'Сбербанк', name, flags=re.IGNORECASE)
     # «города» → «г.»
     name = _CITY_RE.sub('г.', name)
     # ФИО → Фамилия И.О.
@@ -988,20 +992,17 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def hearing_line_html(case: dict) -> str:
-    """Форматировать строку заседания: время — ссылка (категория, стороны)."""
+    """Форматировать строку заседания: время + номер дела (строка 1), стороны | категория (строка 2)."""
     link = case_link_html(case)
     cat = category_short(case.get("Категория", ""))
     time_str = case.get("Время заседания", "").strip()
     plaintiff = escape_html(shorten_party_name(case.get("Истец", "")))
     defendant = escape_html(shorten_party_name(case.get("Ответчик", "")))
 
-    parts = []
-    if time_str:
-        parts.append(f"<b>{escape_html(time_str)}</b>")
-    parts.append(link)
-    parts.append(f"{plaintiff} vs {defendant}, {cat}")
+    line1 = f"<b>{escape_html(time_str)}</b> {link}" if time_str else link
+    line2 = f"{plaintiff} vs {defendant} | {cat}"
 
-    return " — ".join(parts) if time_str else f"{link} — {plaintiff} vs {defendant}, {cat}"
+    return f"{line1}\n{line2}"
 
 
 def upcoming_header_html(upcoming: list[dict]) -> str:
@@ -1037,7 +1038,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
             for c in upcoming:
-                msg += f"\n  {hearing_line_html(c)}"
+                msg += f"\n\n{hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1138,7 +1139,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 1. Заголовок: 📊 Дайджест апелляционных дел | Суд ХМАО-Югры | дата
 2. Сводка одной строкой (📋): краткий итог (N событий, N решений и т.д.)
 3. Новые дела (📥) — номер дела как <a href="URL">номер</a>, кто подал к кому, о чём, суд 1 инст., роль банка
-4. Назначенные заседания (📅) — номер дела (ссылка), стороны, роль банка, дата и время
+4. Назначенные заседания (📅) — каждое дело в две строки с пустой строкой между делами: \
+первая строка: <b>время</b> номер дела (ссылка жирным), \
+вторая строка: стороны | категория. Роль банка если известна
 5. Вынесенные решения (⚖️) — номер дела (ссылка), суть решения. \
 Дату указывай как «Апелляционное определение от ДД.ММ.ГГГГ» — используй ТОЛЬКО «Дата вынесения определения» \
 (= дата заседания), а НЕ дату публикации акта. \
@@ -1148,8 +1151,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 б) 1-2 предложения ПОЧЕМУ суд так решил (ключевые аргументы из мотивировочной части). \
 Данные есть в поле «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА». \
 НЕ ПИШИ просто номера дел без содержания — это бесполезно
-7. Заседания во вторник (📅) — заголовок с датой вторника, далее список: \
-<b>время</b> номер дела (ссылка) — стороны | категория. Сортируй по времени. \
+7. Заседания во вторник (📅) — заголовок с датой вторника, далее список. Каждое дело — два строки с пустой строкой между делами: \
+первая строка: <b>время</b> номер дела (ссылка жирным), \
+вторая строка: стороны | категория. Сортируй по времени. \
 ПРИОРИТЕТ: если не хватает места — эту секцию можно опустить целиком
 8. 📌 Итоговая строка: всего активных дел
 9. В конце ОБЯЗАТЕЛЬНО: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — ссылка на дашборд должна быть всегда
@@ -1159,7 +1163,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 - НЕ используй маркеры списка («• », «- » и т.п.) — каждый пункт просто с новой строки
 - Названия секций выделяй <b>жирным</b>
 - Номера дел выделяй <b>жирным</b> (внутри ссылки: <a href="URL"><b>номер</b></a>)
-- В секции «Заседания во вторник» формат: <b>время</b> ссылка — стороны | категория
+- В секции «Заседания во вторник» формат двухстрочный: первая строка <b>время</b> ссылка, вторая строка стороны | категория. Между делами пустая строка
 - Отступы и пустые строки для читаемости
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не повторяй одну информацию в разных секциях.
@@ -1300,7 +1304,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
             for c in upcoming:
-                msg += f"\n  {hearing_line_html(c)}"
+                msg += f"\n\n{hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1405,7 +1409,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     if upcoming:
         lines.append(f"\n{upcoming_header_html(upcoming)}")
         for c in upcoming:
-            lines.append(f"  {hearing_line_html(c)}")
+            lines.append(f"\n{hearing_line_html(c)}")
 
     lines.append(f"\nАктивных дел: {total_active}")
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
