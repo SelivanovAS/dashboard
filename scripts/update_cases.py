@@ -1163,9 +1163,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 - Отступы и пустые строки для читаемости
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не повторяй одну информацию в разных секциях.
-ЛИМИТ: уложись в 3800 символов. Если не помещается — сначала убери секцию «Заседания во вторник». \
-Если всё равно не помещается — можно разбить на два сообщения, каждое до 3800 символов. \
-Ссылка на дашборд должна быть в конце ВСЕГДА.
+ЛИМИТ: уложись в 3800 символов. Если не помещается — сначала убери секцию «Заседания во вторник», \
+затем сокращай описания актов. Ссылка на дашборд должна быть в конце ВСЕГДА.
 
 Данные:
 {chr(10).join(context_parts)}
@@ -1177,7 +1176,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 - «в лице филиала ...» — убирать, просто «Сбербанк».
 - ФИО физлиц: сокращать до инициалов ВЕЗДЕ, кроме секции «Новые дела» (📥) — там полностью.
 - Акты: НЕ ПРОСТО номера — обязательно итог (удовлетворена/отказано) и ПОЧЕМУ суд так решил.
-- ПРИОРИТЕТ при нехватке места: сначала убери «Заседания во вторник», потом сокращай акты. Ссылка на дашборд — ВСЕГДА."""
+- ПРИОРИТЕТ при нехватке места: сначала убери «Заседания во вторник», потом сокращай акты. Ссылка на дашборд — ВСЕГДА.
+- Всё должно уместиться в ОДНО сообщение до 3800 символов."""
 
     try:
         r = requests.post(
@@ -1206,7 +1206,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                 new_cases, changes, total_active, cases
             )
         # Допускаем до двух сообщений; split_message в send_telegram разобьёт
-        return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
+        return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
     except Exception as e:
         log.error(f"Ошибка Claude API: {e}")
         return generate_template_digest(new_cases, changes, total_active, cases)
@@ -1412,7 +1412,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
 
     text = "\n".join(lines)
     # Допускаем до двух сообщений; split_message в send_telegram разобьёт
-    return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
+    return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
 
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
