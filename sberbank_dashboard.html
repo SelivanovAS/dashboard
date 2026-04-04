@@ -253,8 +253,12 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 .mc-header{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;}
 .mc-cat{font-size:12px;color:var(--slate-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;margin-left:auto;}
 .mc-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px;}
-.mc-case{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-800);white-space:nowrap;text-decoration:none;}
+.mc-footer .badge{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 12px;}
+.mc-badge-date{font-family:var(--font-mono);font-size:12px;opacity:.7;display:block;}
+.mc-case{font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--blue-500);white-space:nowrap;text-decoration:underline;text-underline-offset:2px;}
+.mc-case-sub{font-family:var(--font-mono);font-size:11px;color:var(--slate-400);margin-top:-4px;margin-bottom:4px;}
 .mc-parties{font-size:13px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
+.mc-party{display:flex;align-items:baseline;gap:3px;}.mc-party-tag{font-weight:700;color:var(--slate-400);flex-shrink:0;}.mc-party-name{flex:1;}
 .mc-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
 .mc-details{max-height:0;overflow:hidden;transition:max-height .25s ease,opacity .2s ease;opacity:0;}
 .mobile-card.mc-open .mc-details{max-height:500px;opacity:1;transition:max-height .35s ease,opacity .2s ease;}
@@ -318,6 +322,7 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .badge{font-size:13px;}
   .badge-cat{font-size:13px;}
   .mc-case{font-size:15px;white-space:normal;word-break:break-word;}
+  .mc-case-sub{font-size:12px;}
   .mc-cat{font-size:13px;}
   .mc-parties{font-size:15px;}
   .mc-detail-row{font-size:14px;}
@@ -1113,24 +1118,27 @@ function renderMobileCards(){
     }
     // Mobile header: show result badge instead of status when result exists
     let mHeaderStatus;
-    const mDateHtml=mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':'';
+    const mDateStr=mStatusExtra?mStatusExtra.replace(/<[^>]*>/g,'').trim():'';
     if(c.result&&c.result!=='pending'){
-      mHeaderStatus=`${mDateHtml}<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>`;
+      mHeaderStatus=`<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}${mDateStr?'<span class="mc-badge-date">'+mDateStr+'</span>':''}</span>`;
     }else{
-      mHeaderStatus=`${mDateHtml}<span class="badge badge-${mds}">${mStatusLabel}</span>`;
+      mHeaderStatus=`<span class="badge badge-${mds}">${mStatusLabel}${mDateStr?'<span class="mc-badge-date">'+mDateStr+'</span>':''}</span>`;
     }
+    const caseMain=c.caseNumber.replace(/\s*\(.*\)\s*/,'').trim();
+    const caseSub=(c.caseNumber.match(/\(([^)]+)\)/)||[])[1]||'';
     const caseLabel=c.link
-      ?`<a class="mc-case" href="${escHtml(c.link)}" target="_blank" rel="noopener">${escHtml(c.caseNumber)}</a>`
-      :`<span class="mc-case">${escHtml(c.caseNumber)}</span>`;
+      ?`<a class="mc-case" href="${escHtml(c.link)}" target="_blank" rel="noopener">${escHtml(caseMain)}</a>`
+      :`<span class="mc-case">${escHtml(caseMain)}</span>`;
+    const caseSubHtml=caseSub?`<div class="mc-case-sub">(${escHtml(caseSub)})</div>`:'';
     return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}" onclick="if(!event.target.closest('a'))this.classList.toggle('mc-open')">
       <div class="mc-header">
         <div>${caseLabel}${isNew?' <span class="badge-new">Новое</span>':''}</div>
         <span class="mc-cat">${escHtml(shortCat(c.category))}</span>
-      </div>${rc==='third'?`
+      </div>${caseSubHtml}${rc==='third'?`
       <div style="margin-bottom:6px;"><span class="badge badge-third">Третье лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}</div>`:''}
       <div class="mc-parties">
-        <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.plaintiff))}<br>
-        <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.defendant))}
+        <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.plaintiff))}</span></div>
+        <div class="mc-party"><span class="mc-party-tag">о:</span><span class="mc-party-name">${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.defendant))}</span></div>
       </div>
       <div class="mc-footer">${mHeaderStatus}</div>
       <div class="mc-details">
