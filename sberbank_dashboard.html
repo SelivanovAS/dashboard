@@ -1006,11 +1006,10 @@ function renderTable(){
     // Validate: act date must be after case received date (otherwise it's the first instance act)
     // Act date validation: must be at least 7 days after case received (otherwise it's first instance act)
     let validActDate=c.actDate;
-    let actInvalidated=false;
-    if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7){validActDate='';actInvalidated=true;}}
+    if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)validActDate='';}
     let actHtml='';
     if(c.result&&c.result!=='pending'){
-      if(c.hasPublishedActs&&!actInvalidated){
+      if(c.hasPublishedActs){
         const actDateStr=validActDate?formatDate(validActDate):'';
         actHtml=`<span class="badge-act">Акт${actDateStr?' '+actDateStr:' опубликован'}</span>`;
       }else if(c.result&&c.result!=='pending'){
@@ -1095,11 +1094,10 @@ function renderMobileCards(){
     const favor=getResultFavor(c);
     const favorIcon=favor==='favorable'?'✓':favor==='unfavorable'?'✕':resultIcon;
     let mValidActDate=c.actDate;
-    let mActInvalidated=false;
-    if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7){mValidActDate='';mActInvalidated=true;}}
+    if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)mValidActDate='';}
     let actInfo='';
     if(c.result&&c.result!=='pending'){
-      if(c.hasPublishedActs&&!mActInvalidated){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
+      if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
       else{actInfo='<span class="badge-act-no">Акт не опубликован</span>';}
     }
     const mds=c.detailedStatus||'awaiting';
