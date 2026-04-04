@@ -113,10 +113,10 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 /* Upcoming hearings */
 .upcoming-list{display:flex;flex-direction:column;gap:10px;}
 .upcoming-item{display:flex;align-items:flex-start;gap:12px;font-size:13px;padding:6px 8px;border-radius:6px;transition:background .15s;}.upcoming-item[onclick]:hover{background:var(--slate-50);}
-.upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
+.upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
 .upcoming-info{color:var(--slate-700);line-height:1.4;}
-.upcoming-case{font-weight:600;color:var(--navy-800);}
-.upcoming-parties{font-size:12px;color:var(--slate-500);}
+.upcoming-case{font-family:var(--font-mono);font-weight:700;color:var(--blue-500);}
+.upcoming-parties{font-size:13px;color:var(--slate-600);}
 .upcoming-empty{font-size:13px;color:var(--slate-400);text-align:center;padding:20px 0;}
 .upcoming-chevron{display:none;font-size:12px;color:var(--slate-400);transition:transform .2s;}
 .upcoming-list.collapsed,.upcoming-empty.collapsed{max-height:0;overflow:hidden;opacity:0;margin:0;padding:0;transition:max-height .25s ease,opacity .2s ease;}
@@ -298,7 +298,7 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .upcoming-chevron{display:inline;}
   .upcoming-item{font-size:15px;}
-  .upcoming-parties{font-size:14px;}
+  .upcoming-parties{font-size:15px;}
   .upcoming-date{font-size:14px;}
   .toolbar{flex-direction:column;align-items:stretch;}
   .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
@@ -866,7 +866,7 @@ function renderAnalytics(){
     })
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate)
-    .slice(0,7);
+    .slice(0,10);
 
   let upHtml='<div class="analytics-card"><div class="analytics-title" onclick="toggleUpcoming()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">Ближайшие заседания<span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>';
   if(upcoming.length===0){
@@ -875,13 +875,13 @@ function renderAnalytics(){
     upHtml+='<div class="upcoming-list">';
     upcoming.forEach(c=>{
       const dateStr=c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
-      const timeStr=c.hearingTime?`<br><span style="font-size:10px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
+      const timeStr=c.hearingTime?`<br><span style="font-size:12px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
       const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
       const linkAttr=c.link?` onclick="window.open('${c.link}','_blank')" style="cursor:pointer;"`:'';
       const isMob=window.innerWidth<=768;
-      const pl=isMob?shortName(c.plaintiff):c.plaintiff;
-      const df=isMob?shortName(c.defendant):c.defendant;
-      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:10px;padding:2px 6px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</span></div></div>`;
+      const pl=isMob?shortName(shortParty(c.plaintiff)):shortParty(c.plaintiff);
+      const df=isMob?shortName(shortParty(c.defendant)):shortParty(c.defendant);
+      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:11px;padding:2px 6px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</span></div></div>`;
     });
     upHtml+='</div>';
   }
