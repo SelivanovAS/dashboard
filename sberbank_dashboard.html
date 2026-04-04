@@ -250,8 +250,9 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 .mobile-card[data-role="plaintiff"]{border-left-color:var(--blue-500);}
 .mobile-card[data-role="defendant"]{border-left-color:#ec4899;}
 .mobile-card.card-new{border-left-color:var(--amber-500);background:rgba(245,158,11,.03);}
-.mc-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;}
-.mc-header-status{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;}
+.mc-header{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;}
+.mc-cat{font-size:12px;color:var(--slate-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;margin-left:auto;}
+.mc-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px;}
 .mc-case{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-800);white-space:nowrap;text-decoration:none;}
 .mc-parties{font-size:13px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
 .mc-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
@@ -291,15 +292,39 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .upcoming-chevron{display:inline;}
-  .upcoming-item{font-size:14px;}
-  .upcoming-parties{font-size:13px;}
-  .upcoming-date{font-size:13px;}
+  .upcoming-item{font-size:15px;}
+  .upcoming-parties{font-size:14px;}
+  .upcoming-date{font-size:14px;}
   .toolbar{flex-direction:column;align-items:stretch;}
   .toolbar-left{flex-direction:column;}.search-box{flex:1;min-width:auto;}
   #filter-status,#filter-role,#filter-category{display:none;}
   .toolbar-right{justify-content:flex-end;}
   .table-wrap{display:none;}
   .mobile-cards{display:block;animation:fadeUp .6s ease;}
+  /* Mobile font size boost */
+  .header-title{font-size:19px;}
+  .header-sub{font-size:13px;}
+  .header-meta{font-size:13px;}
+  .btn-refresh{font-size:14px;}
+  .stats-mobile-summary .sms-item{font-size:15px;}
+  .stats-mobile-summary .sms-item strong{font-size:20px;}
+  .analytics-title{font-size:13px;}
+  .cat-bar-row{font-size:14px;}
+  .cat-bar-label{font-size:14px;}
+  .cat-bar-count{font-size:13px;}
+  .search-input{font-size:15px;}
+  .filter-select{font-size:14px;}
+  .table-counter{font-size:14px;}
+  .badge{font-size:13px;}
+  .badge-cat{font-size:13px;}
+  .mc-case{font-size:15px;white-space:normal;word-break:break-word;}
+  .mc-cat{font-size:13px;}
+  .mc-parties{font-size:15px;}
+  .mc-detail-row{font-size:14px;}
+  .mc-toggle{font-size:13px;}
+  .error-banner{font-size:15px;}
+  .new-cases-banner{font-size:15px;}
+  .app-footer{font-size:13px;}
 }
 </style>
 </head>
@@ -594,6 +619,33 @@ function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d
 function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function isSberbank(s){return/сбербанк|ПАО Сбер/i.test(s);}
+function shortParty(s){
+  if(!s)return'';
+  const W='[а-яА-ЯёЁa-zA-Z0-9]+';
+  // МТУ — all long variants → МТУ Росимущества
+  s=s.replace(new RegExp('(?:Российская Федерация в лице )?[Мм]ежрегиональн'+W+'\\s+территориальн'+W+'\\s+управлени'+W+'\\s+[Фф]едеральн'+W+'\\s+агентств'+W+'\\s+по\\s+управлени'+W+'\\s+[Гг]осударственн'+W+'\\s+имуществ'+W+'\\s+в\\s+Тюменской области','gi'),'МТУ Росимущества');
+  s=s.replace(new RegExp('[Мм]ежрегиональн'+W+'\\s+территориальн'+W+'\\s+управлени'+W+'\\s+[Фф]едеральн'+W+'\\s+агентств'+W+'\\s+по\\s+Тюменской области','gi'),'МТУ Росимущества');
+  s=s.replace(new RegExp('[Мм]ежрегиональн'+W+'\\s+территориальн'+W+'\\s+управлени'+W+'\\s+Росимущества в Тюменской области','gi'),'МТУ Росимущества');
+  s=s.replace(/МТУ Росимуществ[оа]?\s*(в|по)\s+Тюменской области[^,]*/gi,'МТУ Росимущества');
+  // Remove regional suffixes after МТУ Росимущества
+  s=s.replace(/МТУ Росимущества,?\s*Ханты-Мансийск[^,]*округе[^,]*(,\s*Ямало-Ненецк[^,]*округе[^,]*)?/gi,'МТУ Росимущества');
+  s=s.replace(/МТУ Росимущества,?\s*ХМАО-Югре,?\s*ЯНАО/gi,'МТУ Росимущества');
+  // Сбербанк — all long variants → ПАО Сбербанк
+  s=s.replace(/Публичное акционерное общество\s*[«"]?Сбербанк[^»"]*[»"]?/gi,'ПАО Сбербанк');
+  s=s.replace(/ПАО\s*[«"]?Сбербанк[^»"]*[»"]?\s*в лице[^,]*/gi,'ПАО Сбербанк');
+  s=s.replace(/ПАО Сбербанк\s*-\s*Югорское[^,]*/gi,'ПАО Сбербанк');
+  s=s.replace(/ПАО Сбербанк,\s*в лице[^,]*/gi,'ПАО Сбербанк');
+  s=s.replace(/Сбербанк России ПАО/gi,'ПАО Сбербанк');
+  s=s.replace(/ПАО Сбербанк России/gi,'ПАО Сбербанк');
+  s=s.replace(/ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО СБЕРБАНК РОССИИ/g,'ПАО Сбербанк');
+  // город/города → г.
+  s=s.replace(/\bгорода\s+/gi,'г. ').replace(/\bгород\s+/gi,'г. ');
+  // Deduplicate "ПАО Сбербанк, ПАО Сбербанк" → "ПАО Сбербанк"
+  s=s.replace(/(ПАО Сбербанк)(?:,\s*ПАО Сбербанк)+/gi,'$1');
+  // Clean up: double commas, leading/trailing commas
+  s=s.replace(/,\s*,/g,',').replace(/^\s*,\s*/,'').replace(/\s*,\s*$/,'').trim();
+  return s;
+}
 function extractPauseReason(ev){
   if(!ev)return 'Не указана';
   const m=ev.match(/приостановлен[^.]*\.\s*(.*)/i);
@@ -1061,43 +1113,38 @@ function renderMobileCards(){
     }
     // Mobile header: show result badge instead of status when result exists
     let mHeaderStatus;
+    const mDateHtml=mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':'';
     if(c.result&&c.result!=='pending'){
-      mHeaderStatus=`<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':''}`;
+      mHeaderStatus=`${mDateHtml}<span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>`;
     }else{
-      mHeaderStatus=`<span class="badge badge-${mds}">${mStatusLabel}</span>${mStatusExtra?'<span class="mc-header-date">'+mStatusExtra.trim()+'</span>':''}`;
+      mHeaderStatus=`${mDateHtml}<span class="badge badge-${mds}">${mStatusLabel}</span>`;
     }
     const caseLabel=c.link
-      ?`<a class="mc-case" href="${escHtml(c.link)}" target="_blank" rel="noopener">${escHtml(c.caseNumber)} <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`
+      ?`<a class="mc-case" href="${escHtml(c.link)}" target="_blank" rel="noopener">${escHtml(c.caseNumber)}</a>`
       :`<span class="mc-case">${escHtml(c.caseNumber)}</span>`;
     return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}" onclick="if(!event.target.closest('a'))this.classList.toggle('mc-open')">
       <div class="mc-header">
         <div>${caseLabel}${isNew?' <span class="badge-new">Новое</span>':''}</div>
-        <div class="mc-header-status">${mHeaderStatus}</div>
-      </div>
-      <div class="mc-row" style="margin-bottom:8px;">
-        <span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||''}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}
-        <span class="badge badge-cat">${escHtml(shortCat(c.category))}</span>
-      </div>
+        <span class="mc-cat">${escHtml(shortCat(c.category))}</span>
+      </div>${rc==='third'?`
+      <div style="margin-bottom:6px;"><span class="badge badge-third">Третье лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}</div>`:''}
       <div class="mc-parties">
-        <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(c.plaintiff)+'</strong>':escHtml(c.plaintiff)}<br>
-        <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(c.defendant)+'</strong>':escHtml(c.defendant)}
+        <span class="party-tag">И:</span>${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.plaintiff))}<br>
+        <span class="party-tag">О:</span>${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.defendant))}
       </div>
-      ${actInfo?`<div style="margin-top:4px;">${actInfo}</div>`:''}
+      <div class="mc-footer">${mHeaderStatus}</div>
       <div class="mc-details">
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100);">
+          ${actInfo?`<div style="margin-bottom:6px;">${actInfo}</div>`:''}
           ${(()=>{
-            // 1. Hearing time only (date already in header)
             const hasHearing=c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Рассмотрение'||c.nextDateLabel==='Отложено до');
             const hearingRow=hasHearing&&c.hearingTime?`<div class="mc-detail-row"><span class="mc-detail-label">Время заседания</span><span class="mc-detail-value">${escHtml(c.hearingTime)}</span></div>`:'';
-            // 2. Last event — skip if it duplicates the status
             const cleaned=cleanEvent(c.lastEvent||'');
             const isDuplicate=/^(судебное заседание|передача дела судье|назначено)$/i.test(cleaned);
             const eventRow=c.lastEvent&&!isDuplicate?`<div class="mc-detail-row"><span class="mc-detail-label">Последнее событие</span><span class="mc-detail-value">${escHtml(cleaned)}${c.lastEventDate?' · '+formatDate(c.lastEventDate):''}</span></div>`:'';
-            // 3. Court, received, notes
             const courtRow=c.firstInstanceCourt?`<div class="mc-detail-row"><span class="mc-detail-label">Суд 1 инстанции</span><span class="mc-detail-value">${escHtml(c.firstInstanceCourt)}</span></div>`:'';
             const recRow=`<div class="mc-detail-row"><span class="mc-detail-label">Поступило</span><span class="mc-detail-value">${formatDate(c.dateReceived)}</span></div>`;
             const notesRow=c.notes?`<div class="mc-detail-row"><span class="mc-detail-label">Заметки</span><span class="mc-detail-value">${escHtml(c.notes)}</span></div>`:'';
-            // Order: event → hearing time → court → received → notes
             return hearingRow+eventRow+courtRow+recRow+notesRow;
           })()}
         </div>
