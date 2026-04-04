@@ -201,8 +201,8 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-unfavorable{background:var(--red-100);color:var(--red-800);}
 .badge-neutral-result{background:var(--blue-100);color:var(--blue-800);}
 .badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
-.badge-act{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:10px;margin-top:4px;font-weight:600;}
-.badge-act-no{display:inline-block;padding:1px 6px;border-radius:3px;background:var(--slate-100);color:var(--slate-500);font-size:10px;margin-top:4px;}
+.badge-act{display:inline-block;padding:3px 8px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:12px;margin-top:4px;font-weight:600;}
+.badge-act-no{display:inline-block;padding:3px 8px;border-radius:3px;background:var(--slate-100);color:var(--slate-500);font-size:12px;margin-top:4px;}
 /* Cat+Role merged column */
 .cat-role-cell{display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
 .cat-role-cell .badge{font-size:11px;padding:2px 7px;}
@@ -252,7 +252,8 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 .mobile-card.card-new{border-left-color:var(--amber-500);background:rgba(245,158,11,.03);}
 .mc-header{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;}
 .mc-cat{font-size:12px;color:var(--slate-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;margin-left:auto;}
-.mc-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.mc-footer{display:flex;align-items:flex-end;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.mc-act-row{margin-top:6px;}
 .mc-footer .badge-act,.mc-footer .badge-act-no{margin-right:auto;}
 .mc-footer .badge{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 12px;font-size:13px;}
 .mc-badge-date{font-family:var(--font-mono);font-size:12px;opacity:.7;display:block;}
@@ -1005,10 +1006,11 @@ function renderTable(){
     // Validate: act date must be after case received date (otherwise it's the first instance act)
     // Act date validation: must be at least 7 days after case received (otherwise it's first instance act)
     let validActDate=c.actDate;
-    if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)validActDate='';}
+    let actInvalidated=false;
+    if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7){validActDate='';actInvalidated=true;}}
     let actHtml='';
     if(c.result&&c.result!=='pending'){
-      if(c.hasPublishedActs){
+      if(c.hasPublishedActs&&!actInvalidated){
         const actDateStr=validActDate?formatDate(validActDate):'';
         actHtml=`<span class="badge-act">Акт${actDateStr?' '+actDateStr:' опубликован'}</span>`;
       }else if(c.result&&c.result!=='pending'){
@@ -1093,10 +1095,11 @@ function renderMobileCards(){
     const favor=getResultFavor(c);
     const favorIcon=favor==='favorable'?'✓':favor==='unfavorable'?'✕':resultIcon;
     let mValidActDate=c.actDate;
-    if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)mValidActDate='';}
+    let mActInvalidated=false;
+    if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7){mValidActDate='';mActInvalidated=true;}}
     let actInfo='';
     if(c.result&&c.result!=='pending'){
-      if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
+      if(c.hasPublishedActs&&!mActInvalidated){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
       else{actInfo='<span class="badge-act-no">Акт не опубликован</span>';}
     }
     const mds=c.detailedStatus||'awaiting';
