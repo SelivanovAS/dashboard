@@ -317,6 +317,27 @@ def _parse_combined_cell(text: str) -> dict:
     return result
 
 
+# Паттерны страховых дочерних компаний Сбербанка
+_SBER_INSURANCE_RE = re.compile(
+    r'(ооо\s+)?с[кc]\s+[«""\"]?сбербанк\s+страхован\w*(\s+жизн\w*)?[»""\"]?'
+    r'|[«""\"]?сбербанк\s+страхован\w*(\s+жизн\w*)?[»""\"]?\s*(с[кc]\s+)?ооо',
+    re.IGNORECASE,
+)
+
+
+def is_insurance_only_case(plaintiff: str, defendant: str) -> bool:
+    """Вернуть True, если «сбербанк» упоминается только в названии страховой компании.
+
+    Если «сбербанк» вообще не встречается в сторонах — возвращаем False
+    (дело найдено по поиску, значит банк упомянут где-то ещё, например как третье лицо).
+    """
+    combined = (plaintiff + " " + defendant).lower()
+    if "сбербанк" not in combined:
+        return False
+    cleaned = _SBER_INSURANCE_RE.sub("", combined)
+    return "сбербанк" not in cleaned
+
+
 def parse_search_page(html: str) -> list[dict]:
     """
     Парсит страницу результатов поиска.
@@ -365,6 +386,11 @@ def parse_search_page(html: str) -> list[dict]:
         plaintiff = parsed["plaintiff"]
         defendant = parsed["defendant"]
         court = parsed["court"]
+
+        # Пропускаем дела, где «Сбербанк» — только страховая компания
+        if is_insurance_only_case(plaintiff, defendant):
+            log.info(f"Пропуск дела {case_number}: только Сбербанк Страхование")
+            continue
 
         # Определяем роль банка
         role = "Третье лицо"
