@@ -111,7 +111,7 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 .cat-bar-count{width:24px;text-align:right;font-weight:600;color:var(--slate-600);font-family:var(--font-mono);font-size:11px;}
 
 /* Upcoming hearings */
-.upcoming-list{display:flex;flex-direction:column;gap:10px;}
+.upcoming-list{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:8px 24px;}
 .upcoming-item{display:flex;align-items:flex-start;gap:12px;font-size:13px;padding:6px 8px;border-radius:6px;transition:background .15s;}.upcoming-item[onclick]:hover{background:var(--slate-50);}
 .upcoming-date{min-width:80px;font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--navy-700);padding:3px 8px;background:var(--slate-50);border-radius:4px;text-align:center;flex-shrink:0;}
 .upcoming-info{color:var(--slate-700);line-height:1.4;}
@@ -299,6 +299,7 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
   .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .upcoming-chevron{display:inline;}
+  .upcoming-list{grid-template-columns:1fr;}
   .upcoming-item{font-size:15px;}
   .upcoming-parties{font-size:15px;}
   .upcoming-date{font-size:14px;}

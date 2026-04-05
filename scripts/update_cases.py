@@ -1054,7 +1054,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
-            f"Активных дел: {total_active}"
+            f"В производстве: {total_active}"
         )
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
@@ -1176,7 +1176,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 первая строка: <b>время</b> номер дела (ссылка жирным), \
 вторая строка: стороны | категория. Сортируй по времени. \
 ПРИОРИТЕТ: если не хватает места — эту секцию можно опустить целиком
-8. 📌 Итоговая строка: всего активных дел
+8. 📌 Итоговая строка: всего дел в производстве
 9. В конце ОБЯЗАТЕЛЬНО: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — ссылка на дашборд должна быть всегда
 
 ОФОРМЛЕНИЕ:
@@ -1194,7 +1194,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 Данные:
 {chr(10).join(context_parts)}
 
-Всего активных дел: {total_active}
+Всего дел в производстве: {total_active}
 
 НАПОМИНАНИЕ — ОБЯЗАТЕЛЬНО СОБЛЮДАЙ:
 - Юрлица: везде без ОПФ (ПАО, ООО и т.д.), госорганы: «города» → «г.», «Межрегиональное территориальное управление...» → «МТУ Росимущество».
@@ -1320,7 +1320,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
-            f"Активных дел: {total_active}"
+            f"В производстве: {total_active}"
         )
         if upcoming:
             msg += f"\n\n{upcoming_header_html(upcoming)}"
@@ -1432,7 +1432,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         for c in upcoming:
             lines.append(f"\n{hearing_line_html(c)}")
 
-    lines.append(f"\nАктивных дел: {total_active}")
+    lines.append(f"\nВ производстве: {total_active}")
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
 
     text = "\n".join(lines)
@@ -1598,7 +1598,7 @@ def main():
         log.info(f"Добавлено {len(new_cases)} новых дел")
 
     # 6. Считаем итоги
-    total_active = sum(1 for c in cases if not is_archived(c))
+    total_active = sum(1 for c in cases if c.get("Статус", "").strip() != "Решено")
 
     # 7. Генерируем дайджест
     log.info("Генерирую дайджест...")
@@ -1625,8 +1625,8 @@ def main_digest_only():
     cases = load_csv(CSV_PATH)
     log.info(f"Загружено {len(cases)} дел из CSV")
 
-    total_active = sum(1 for c in cases if not is_archived(c))
-    log.info(f"Активных: {total_active}")
+    total_active = sum(1 for c in cases if c.get("Статус", "").strip() != "Решено")
+    log.info(f"В производстве: {total_active}")
 
     log.info("Генерирую дайджест...")
     digest = generate_digest([], [], total_active, cases)
