@@ -157,7 +157,7 @@ body{font-family:var(--font-body);background:var(--slate-50);color:var(--slate-8
 /* ========== Table ========== */
 .table-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden;animation:fadeUp .6s ease;}
 .table-scroll{overflow-x:auto;max-height:calc(100vh - 160px);overflow-y:auto;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
+table{width:100%;border-collapse:collapse;font-size:15px;}
 thead th{text-align:left;padding:12px 14px;background:var(--slate-50);border-bottom:2px solid var(--slate-200);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate-500);font-weight:700;white-space:nowrap;user-select:none;transition:color .15s;position:sticky;top:0;z-index:10;}
 thead th.sortable{cursor:pointer;}
 thead th.sortable:hover{color:var(--navy-700);}
@@ -166,17 +166,17 @@ thead th.sorted{color:var(--navy-800);}
 tbody tr{border-bottom:1px solid var(--slate-100);transition:background .1s;}
 tbody tr:hover{background:var(--slate-50);}
 tbody td{padding:12px 14px;vertical-align:top;}
-.case-number{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-.case-link{color:var(--navy-800);text-decoration:none;display:inline-flex;align-items:center;gap:4px;}.case-link:hover{color:var(--navy-600);text-decoration:underline;}
+.case-number{font-family:var(--font-mono);font-weight:600;font-size:15px;color:var(--navy-800);display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.case-link{color:var(--blue-500);text-decoration:underline;text-underline-offset:2px;display:inline-flex;align-items:center;gap:4px;}.case-link:hover{color:var(--blue-700);}
 .court-label{font-size:11px;color:var(--slate-400);margin-top:3px;}
-.parties-col{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:200px;}
-.party-tag{font-size:10px;font-weight:700;color:var(--slate-400);margin-right:3px;}
+.parties-col{display:flex;flex-direction:column;gap:2px;font-size:15px;min-width:200px;}
+.party-tag{font-size:12px;font-weight:700;color:var(--slate-400);margin-right:3px;}
 .party-sberbank{color:var(--gold-500);font-weight:600;}
 .event-cell{max-width:260px;}
 .event-text{font-size:12px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;}
 .event-text[title]{cursor:help;}
 .event-date{font-size:11px;color:var(--slate-400);margin-top:2px;}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap;}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:10px;font-size:13px;font-weight:600;white-space:nowrap;}
 .badge-active{background:#fef3c7;color:#92400e;}
 .badge-decided{background:var(--green-100);color:var(--green-800);}
 .badge-scheduled{background:var(--blue-100);color:var(--blue-800);}
@@ -185,7 +185,8 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-paused{background:#fce7f3;color:#9d174d;}
 .badge-awaiting{background:var(--slate-100);color:var(--slate-600);}
 .status-cell{display:flex;flex-direction:column;gap:2px;align-items:flex-start;}
-.status-date{font-family:var(--font-mono);font-size:12px;color:var(--slate-700);font-weight:600;margin-top:2px;}
+.status-date{font-family:var(--font-mono);font-size:13px;color:var(--slate-700);font-weight:600;margin-top:2px;}
+.status-date-prominent{font-size:15px;font-weight:700;color:var(--navy-800);}
 .badge-plaintiff{background:var(--blue-100);color:var(--blue-800);}
 .badge-defendant{background:#fce7f3;color:#9d174d;}
 .badge-third{background:var(--slate-100);color:var(--slate-600);}
@@ -200,7 +201,7 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-favorable{background:var(--green-100);color:var(--green-800);}
 .badge-unfavorable{background:var(--red-100);color:var(--red-800);}
 .badge-neutral-result{background:var(--blue-100);color:var(--blue-800);}
-.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
+.badge-cat{background:var(--slate-100);color:var(--slate-700);font-weight:400;border-radius:4px;font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;}
 .badge-act{display:inline-block;padding:3px 8px;border-radius:3px;background:var(--blue-100);color:var(--blue-800);font-size:12px;margin-top:4px;font-weight:600;}
 .badge-act-no{display:inline-block;padding:3px 8px;border-radius:3px;background:var(--slate-100);color:var(--slate-500);font-size:12px;margin-top:4px;}
 /* Cat+Role merged column */
@@ -256,7 +257,7 @@ tr.detail-row td{padding:0 14px 14px 14px;background:var(--slate-50);border-bott
 .mc-act-row{margin-top:6px;}
 .mc-footer .badge-act,.mc-footer .badge-act-no{margin-right:auto;}
 .mc-footer .badge{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 12px;font-size:13px;}
-.mc-badge-date{font-family:var(--font-mono);font-size:12px;opacity:.7;display:block;}
+.mc-badge-date{font-family:var(--font-mono);font-size:12px;opacity:.7;margin-left:6px;}
 .mc-case{font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--blue-500);white-space:nowrap;text-decoration:underline;text-underline-offset:2px;}
 .mc-case-sub{font-family:var(--font-mono);font-size:11px;color:var(--slate-400);margin-top:-4px;margin-bottom:4px;}
 .mc-parties{font-size:14px;color:var(--slate-600);margin-bottom:8px;line-height:1.5;}
@@ -958,10 +959,9 @@ function renderCounter(){
 
 /* ========== Table ========== */
 const COLS=[
-  {k:'caseNumber',l:'Дело',s:1,w:'135px'},
+  {k:'caseNumber',l:'Дело',s:1,w:'160px'},
   {k:'dateReceived',l:'Поступ.',s:1,w:'72px'},
   {k:'parties',l:'Стороны',s:0},
-  {k:'category',l:'Кат. / Роль',s:1,w:'140px'},
   {k:'detailedStatus',l:'Статус / Результат',s:1,w:'185px'}
 ];
 
@@ -987,9 +987,12 @@ function renderTable(){
     const expanded=expandedRows.has(c.caseNumber);
     const rowClass=['row-clickable',isNew?'row-new':'',expanded?'row-expanded':''].filter(Boolean).join(' ');
 
-    // Highlight Sberbank in parties
-    const plaintiffHtml=isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(c.plaintiff)}</span>`:escHtml(c.plaintiff);
-    const defendantHtml=isSberbank(c.defendant)?`<span class="party-sberbank">${escHtml(c.defendant)}</span>`:escHtml(c.defendant);
+    // Highlight Sberbank in parties + appellant badge inline
+    const appBadge=' <span class="badge badge-appellant" style="font-size:12px;vertical-align:middle;">Апеллянт</span>';
+    const pIsApp=rc!=='third'&&((c.appellant==='bank'&&isSberbank(c.plaintiff))||(c.appellant==='other'&&!isSberbank(c.plaintiff)));
+    const dIsApp=rc!=='third'&&((c.appellant==='bank'&&isSberbank(c.defendant))||(c.appellant==='other'&&!isSberbank(c.defendant)));
+    const plaintiffHtml=(isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(c.plaintiff)}</span>`:escHtml(c.plaintiff))+(pIsApp?appBadge:'');
+    const defendantHtml=(isSberbank(c.defendant)?`<span class="party-sberbank">${escHtml(c.defendant)}</span>`:escHtml(c.defendant))+(dIsApp?appBadge:'');
 
     const resultIcon=RESULT_ICONS[c.result]||'';
     const linkIcon=c.link?'<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="var(--slate-400)" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>':'';
@@ -1016,37 +1019,37 @@ function renderTable(){
     // Combined status + date cell
     const _today=new Date();_today.setHours(0,0,0,0);
     const isFutureDate=c.nextDate&&new Date(c.nextDate+'T00:00:00')>=_today;
-    let statusExtra='';
+    let statusDateInline='';
+    let statusDateBelow='';
     if(ds==='scheduled'&&isFutureDate){
       const timeStr=c.hearingTime?` · ${escHtml(c.hearingTime)}`:'';
-      statusExtra=`<div class="status-date">${formatDate(c.nextDate)}${timeStr}</div>`;
+      statusDateBelow=`<div class="status-date status-date-prominent">${formatDate(c.nextDate)}${timeStr}</div>`;
     }else if((ds==='postponed'||ds==='suspended')&&c.nextDate){
-      statusExtra=`<div class="status-date">до ${formatDate(c.nextDate)}</div>`;
+      statusDateBelow=`<div class="status-date status-date-prominent">до ${formatDate(c.nextDate)}</div>`;
     }else if(ds==='paused'){
       const pauseDate=c.lastEventDate||c.nextDate;
-      if(pauseDate)statusExtra=`<div class="status-date">${formatDate(pauseDate)}</div>`;
+      if(pauseDate)statusDateInline=`<span class="mc-badge-date">${formatDate(pauseDate)}</span>`;
     }else if(ds==='decided'){
       const decidedDate=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
-      if(decidedDate)statusExtra=`<div class="status-date">${formatDate(decidedDate)}</div>`;
+      if(decidedDate)statusDateInline=`<span class="mc-badge-date">${formatDate(decidedDate)}</span>`;
     }
     // Merged status/result cell
     let statusLabel=STATUS_LABELS[ds]||ds;
     if(ds==='awaiting'&&/передача дела судье/i.test(c.lastEvent||'')){
       statusLabel='Передано судье';
-      if(c.lastEventDate)statusExtra=`<div class="status-date">${formatDate(c.lastEventDate)}</div>`;
+      if(c.lastEventDate)statusDateInline=`<span class="mc-badge-date">${formatDate(c.lastEventDate)}</span>`;
     }
     let mergedHtml;
     if(c.result&&c.result!=='pending'){
-      mergedHtml=`<div class="status-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}</span>${statusExtra}${actHtml}</div>`;
+      mergedHtml=`<div class="status-cell"><span class="badge ${resultBadgeCls}">${favorIcon} ${RESULT_LABELS[c.result]||c.result}${statusDateInline}</span>${statusDateBelow}${actHtml}</div>`;
     }else{
-      mergedHtml=`<div class="status-cell"><span class="badge badge-${ds}">${statusLabel}</span>${statusExtra}</div>`;
+      mergedHtml=`<div class="status-cell"><span class="badge badge-${ds}">${statusLabel}${statusDateInline}</span>${statusDateBelow}</div>`;
     }
 
     html+=`<tr class="${rowClass}" data-idx="${idx}" onclick="toggleExpand('${escHtml(c.caseNumber)}')">
-      <td><div class="case-number">${c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" onclick="event.stopPropagation()">${escHtml(c.caseNumber)} ${linkIcon}</a>`:escHtml(c.caseNumber)} ${newBadge} ${archived}</div></td>
+      <td><div class="case-number">${c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" onclick="event.stopPropagation()">${escHtml(c.caseNumber)} ${linkIcon}</a>`:escHtml(c.caseNumber)} ${newBadge} ${archived}</div><span class="badge badge-cat" title="${escHtml(c.category)}" style="margin-top:3px;">${escHtml(shortCat(c.category))}</span></td>
       <td>${formatDate(c.dateReceived)}</td>
-      <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span></div></td>
-      <td><div class="cat-role-cell"><span class="badge badge-${rc}">${ROLE_LABELS[c.sberbankRole]||c.sberbankRole}</span>${c.appellant==='bank'?'<span class="badge badge-appellant">Апеллянт</span>':''}<span class="badge badge-cat" title="${escHtml(c.category)}">${escHtml(shortCat(c.category))}</span></div></td>
+      <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span>${rc==='third'?'<span><span class="badge badge-third" style="font-size:12px;">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
       <td>${mergedHtml}</td>
     </tr>`;
 
@@ -1134,8 +1137,8 @@ function renderMobileCards(){
       </div>${caseSubHtml}${rc==='third'?`
       <div style="margin-bottom:6px;"><span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}</div>`:''}
       <div class="mc-parties">
-        <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.plaintiff))}</span></div>
-        <div class="mc-party"><span class="mc-party-tag">о:</span><span class="mc-party-name">${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.defendant))}</span></div>
+        <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:12px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.plaintiff))}</span></div>
+        <div class="mc-party"><span class="mc-party-tag">о:</span><span class="mc-party-name">${isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>'+(rc!=='third'&&c.appellant==='bank'?' <span class="badge badge-appellant" style="font-size:12px;vertical-align:middle;">Апеллянт</span>':''):escHtml(shortParty(c.defendant))}</span></div>
       </div>
       <div class="mc-footer">${actInfo||''}${mHeaderStatus}</div>
       <div class="mc-details">
