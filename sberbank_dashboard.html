@@ -796,7 +796,7 @@ function renderStats(){
   const l=allCases.filter(c=>getResultFavor(c)==='unfavorable').length;
   const decidedTotal=allCases.filter(c=>c.status==='decided').length;
   const winRate=decidedTotal>0?Math.round(w/decidedTotal*100):0;
-  const actsCount=allCases.filter(c=>{if(!c.hasPublishedActs)return false;if(c.actDate&&c.dateReceived){const diff=(new Date(c.actDate)-new Date(c.dateReceived))/(86400000);if(diff<7)return false;}return true;}).length;
+  const actsCount=allCases.filter(c=>c.hasPublishedActs).length;
 
   document.getElementById('stats-primary').innerHTML=`
     <div class="stat-card" data-accent="blue"><div class="stat-value">${allCases.length}</div><div class="stat-label">Всего дел</div></div>
@@ -1003,14 +1003,10 @@ function renderTable(){
     const favorIcon=favor==='favorable'?'<span style="color:var(--green-500);">✓</span>':favor==='unfavorable'?'<span style="color:var(--red-500);">✕</span>':`<span class="badge-icon">${resultIcon}</span>`;
 
     // Act publication info
-    // Validate: act date must be after case received date (otherwise it's the first instance act)
-    // Act date validation: must be at least 7 days after case received (otherwise it's first instance act)
-    let validActDate=c.actDate;
-    if(validActDate&&c.dateReceived){const diff=(new Date(validActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)validActDate='';}
     let actHtml='';
     if(c.result&&c.result!=='pending'){
       if(c.hasPublishedActs){
-        const actDateStr=validActDate?formatDate(validActDate):'';
+        const actDateStr=c.actDate?formatDate(c.actDate):'';
         actHtml=`<span class="badge-act">Акт${actDateStr?' '+actDateStr:' опубликован'}</span>`;
       }else if(c.result&&c.result!=='pending'){
         actHtml='<span class="badge-act-no">Акт не опубликован</span>';
@@ -1093,11 +1089,9 @@ function renderMobileCards(){
     const resultBadgeCls=getResultBadgeClass(c);
     const favor=getResultFavor(c);
     const favorIcon=favor==='favorable'?'✓':favor==='unfavorable'?'✕':resultIcon;
-    let mValidActDate=c.actDate;
-    if(mValidActDate&&c.dateReceived){const diff=(new Date(mValidActDate)-new Date(c.dateReceived))/(86400000);if(diff<7)mValidActDate='';}
     let actInfo='';
     if(c.result&&c.result!=='pending'){
-      if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${mValidActDate?' '+formatDate(mValidActDate):' опубликован'}</span>`;}
+      if(c.hasPublishedActs){actInfo=`<span class="badge-act">Акт${c.actDate?' '+formatDate(c.actDate):' опубликован'}</span>`;}
       else{actInfo='<span class="badge-act-no">Акт не опубликован</span>';}
     }
     const mds=c.detailedStatus||'awaiting';

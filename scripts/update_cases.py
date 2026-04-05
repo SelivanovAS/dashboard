@@ -663,29 +663,19 @@ def parse_case_card(html: str) -> dict:
         info["Акт опубликован"] = "Да"
 
     # Также ищем по паттерну "Опубликовано" + дата
+    # Исключаем блок publishInfo (метаинформация страницы, не акт)
+    html_no_pubinfo = re.sub(
+        r'<div[^>]*class="[^"]*publishInfo[^"]*"[^>]*>.*?</div>',
+        '', html, flags=re.DOTALL | re.IGNORECASE
+    )
     pub_match = re.search(
         r'(?:опубликован|дата публикации)[^<]*?(\d{2}\.\d{2}\.\d{4})',
-        html, re.IGNORECASE
+        html_no_pubinfo, re.IGNORECASE
     )
     if pub_match:
         pub_date_str = pub_match.group(1)
-        pub_date = parse_date(pub_date_str)
-        recv_date = parse_date(info.get("Дата поступления", ""))
-        # Валидация: дата публикации акта должна быть минимум через 7 дней
-        # после поступления дела. Если раньше — это акт первой инстанции.
-        if pub_date and recv_date and (pub_date - recv_date).days >= 7:
-            info["Акт опубликован"] = "Да"
-            info["Дата публикации акта"] = pub_date_str
-        elif not recv_date:
-            # Нет даты поступления — принимаем как есть
-            info["Акт опубликован"] = "Да"
-            info["Дата публикации акта"] = pub_date_str
-        elif pub_date and recv_date and (pub_date - recv_date).days < 7:
-            # Дата публикации слишком ранняя — это акт первой инстанции.
-            # Сбрасываем флаг, даже если методы 1-4 уже установили "Да".
-            info["Акт опубликован"] = "Нет"
-            info["Дата публикации акта"] = ""
-            info["act_text"] = ""
+        info["Акт опубликован"] = "Да"
+        info["Дата публикации акта"] = pub_date_str
 
     return info
 
