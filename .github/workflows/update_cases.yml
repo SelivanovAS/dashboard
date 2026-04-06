@@ -1,9 +1,7 @@
 name: Update Court Cases
 
 on:
-  schedule:
-    - cron: '50 3 * * *'  # 6:50 МСК (UTC+3)
-  workflow_dispatch:  # Ручной запуск
+  workflow_dispatch:  # Запуск через cron-job.org или вручную
 
 permissions:
   contents: write
