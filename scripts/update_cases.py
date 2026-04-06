@@ -47,6 +47,7 @@ DIGESTED_ACTS_PATH = os.environ.get(
 )
 ARCHIVE_DAYS = 30  # Дела решённые 30+ дней назад не обновляем
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
+FETCH_MAX_RETRIES = 3   # Кол-во попыток загрузки страницы
 DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -90,14 +91,20 @@ def polite_delay():
 
 
 def fetch_page(url: str) -> str:
-    """Скачать страницу с сайта суда (win-1251)."""
-    try:
-        r = session.get(url, timeout=30)
-        r.raise_for_status()
-        return r.content.decode("windows-1251", errors="replace")
-    except requests.RequestException as e:
-        log.error(f"Ошибка загрузки {url}: {e}")
-        return ""
+    """Скачать страницу с сайта суда (win-1251) с повторными попытками."""
+    for attempt in range(1, FETCH_MAX_RETRIES + 1):
+        try:
+            r = session.get(url, timeout=30)
+            r.raise_for_status()
+            return r.content.decode("windows-1251", errors="replace")
+        except requests.RequestException as e:
+            if attempt < FETCH_MAX_RETRIES:
+                wait = attempt * 5
+                log.warning(f"Попытка {attempt}/{FETCH_MAX_RETRIES} не удалась для {url}: {e}. Повтор через {wait}с...")
+                time.sleep(wait)
+            else:
+                log.error(f"Ошибка загрузки {url} после {FETCH_MAX_RETRIES} попыток: {e}")
+    return ""
 
 
 def parse_date(s: str) -> datetime | None:
