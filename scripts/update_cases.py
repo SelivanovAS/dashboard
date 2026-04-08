@@ -714,20 +714,20 @@ def next_tuesday(from_date: datetime | None = None) -> datetime:
     )
 
 
-def is_tuesday() -> bool:
-    """Сегодня вторник?"""
-    return datetime.now().weekday() == 1
+def is_wednesday() -> bool:
+    """Сегодня среда?"""
+    return datetime.now().weekday() == 2
 
 
 def get_upcoming_hearings(cases: list[dict]) -> list[dict]:
     """
-    Найти дела с назначенными заседаниями со среды по следующий вторник.
-    Вызывать только по вторникам (проверка is_tuesday() — на стороне вызывающего кода).
+    Найти дела с назначенными заседаниями с четверга по следующую среду.
+    Вызывать только по средам (проверка is_wednesday() — на стороне вызывающего кода).
     Возвращает список дел, отсортированный по времени заседания.
     """
     today = datetime.now().date()
-    range_start = today + timedelta(days=1)   # среда
-    range_end = today + timedelta(days=7)     # следующий вторник
+    range_start = today + timedelta(days=1)   # четверг
+    range_end = today + timedelta(days=7)     # следующая среда
     upcoming = []
 
     hearing_keywords = ["заседание", "назначено", "слушание", "рассмотрение"]
@@ -920,6 +920,12 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
         if new_result and new_result != old_result:
             change["type"].append("new_result")
             change["details"]["result"] = new_result
+            # Обогащаем контекст: дата заседания, последнее событие
+            # (содержит причину возврата/прекращения), фрагмент мотивировки
+            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
+            change["details"]["last_event"] = new_event
+            if act_text:
+                change["details"]["act_excerpt"] = extract_motive_part(act_text, 600)
 
         # Обновляем поля дела
         if new_event:
@@ -1030,14 +1036,22 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def hearing_line_html(case: dict) -> str:
-    """Форматировать строку заседания: время + номер дела (строка 1), стороны | категория (строка 2)."""
+    """Форматировать строку заседания: дата+время + номер дела (строка 1), стороны | категория (строка 2)."""
     link = case_link_html(case)
     cat = category_short(case.get("Категория", ""))
     time_str = case.get("Время заседания", "").strip()
+    date_str = (case.get("Дата заседания") or case.get("Дата события") or "").strip()
+    # Короткая форма ДД.ММ из ДД.ММ.ГГГГ
+    short_date = ""
+    if date_str:
+        m = re.match(r"^(\d{1,2}\.\d{1,2})\.\d{2,4}$", date_str)
+        short_date = m.group(1) if m else date_str
     plaintiff = escape_html(shorten_party_name(case.get("Истец", "")))
     defendant = escape_html(shorten_party_name(case.get("Ответчик", "")))
 
-    line1 = f"<b>{escape_html(time_str)}</b> {link}" if time_str else link
+    when_parts = [p for p in [short_date, time_str] if p]
+    when = " ".join(when_parts)
+    line1 = f"<b>{escape_html(when)}</b> {link}" if when else link
     line2 = f"{plaintiff} vs {defendant} | {cat}"
 
     return f"{line1}\n{line2}"
@@ -1065,7 +1079,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
     today = datetime.now().strftime("%d.%m.%Y")
     summary = build_summary_line(new_cases, changes)
-    upcoming = get_upcoming_hearings(cases) if is_tuesday() else []
+    upcoming = get_upcoming_hearings(cases) if is_wednesday() else []
 
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
@@ -1116,9 +1130,17 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                     line += f"\n  Новое событие: {d.get('event', '')}"
                     if d.get("event_date"):
                         line += f" ({d['event_date']})"
+                    if d.get("hearing_date"):
+                        line += f"\n  Дата заседания: {d['hearing_date']}"
                 if t == "new_result":
                     hearing_dt = d.get("hearing_date", "")
                     line += f"\n  Результат: {d.get('result', '')}"
+                    if d.get("category"):
+                        line += f"\n  Категория дела: {d['category']}"
+                    if d.get("last_event"):
+                        line += f"\n  Последнее событие: {d['last_event']}"
+                    if d.get("act_excerpt"):
+                        line += f"\n  Цитата из мотивировки: {d['act_excerpt']}"
                     if hearing_dt:
                         line += f"\n  Дата вынесения определения: {hearing_dt}"
                 if t == "new_act":
@@ -1179,9 +1201,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 2. Сводка одной строкой (📋): краткий итог (N событий, N решений и т.д.)
 3. Новые дела (📥) — номер дела как <a href="URL">номер</a>, кто подал к кому, о чём, суд 1 инст., роль банка
 4. Назначенные заседания (📅) — каждое дело в две строки с пустой строкой между делами: \
-первая строка: <b>время</b> номер дела (ссылка жирным), \
-вторая строка: стороны | категория. Роль банка если известна
-5. Вынесенные судебные акты (⚖️) — номер дела (ссылка), суть результата (например: «решение изменено», «решение отменено»). \
+первая строка: <b>ДД.ММ HH:MM</b> номер дела (ссылка жирным), \
+вторая строка: стороны | категория. Роль банка если известна. \
+ВАЖНО: ДД.ММ — это короткая дата заседания (бери из поля «Дата заседания» или из текста события «назначено на ...»), а HH:MM — время заседания. ОБА компонента обязательны
+5. Вынесенные судебные акты (⚖️) — для каждого дела одной строкой: номер дела (ссылка), затем: \
+а) ИТОГ обязательно (например: «жалоба возвращена», «жалоба удовлетворена», «жалоба отклонена», «решение оставлено без изменения», «решение отменено», «решение изменено»); \
+б) краткая СУТЬ — что было предметом спора (1 фраза, опираясь на категорию дела и стороны, например «взыскание задолженности по кредитному договору в пределах наследственного имущества»); \
+в) если итог — «возвращена / без рассмотрения / прекращено» — обязательно укажи ПРИЧИНУ из поля «Последнее событие» (например: «не устранены недостатки», «не уплачена госпошлина»); \
+г) если итог — «удовлетворена / отказано / изменено / отменено» и есть «Цитата из мотивировки» — в 1 фразе ключевой довод суда. \
 Дату указывай как «Апелляционное определение от ДД.ММ.ГГГГ» — используй ТОЛЬКО дату заседания, а НЕ дату публикации акта. \
 НЕ упоминай «составлено мотивированное определение/решение» — это промежуточный шаг, не интересный читателю. \
 Если известен апеллянт или роль банка — укажи, в чью пользу решение для банка
@@ -1190,7 +1217,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 б) 1-2 предложения ПОЧЕМУ суд так решил (ключевые аргументы из мотивировочной части). \
 Данные есть в поле «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА». \
 НЕ ПИШИ просто номера дел без содержания — это бесполезно
-7. Предстоящие заседания (📅) — секция включается ТОЛЬКО по вторникам (дела со среды по следующий вторник). \
+7. Предстоящие заседания (📅) — секция включается ТОЛЬКО по средам (дела с четверга по следующую среду). \
 Каждое дело — две строки с пустой строкой между делами: \
 первая строка: <b>время</b> номер дела (ссылка жирным), \
 вторая строка: стороны | категория. Сортируй по времени. \
@@ -1243,6 +1270,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             block["text"] for block in data.get("content", [])
             if block.get("type") == "text"
         )
+        text = text.strip()
+        # Страховка: модель иногда оборачивает HTML в Markdown-кодовый блок
+        # (```html ... ```), несмотря на инструкцию в промпте. Срезаем.
+        if text.startswith("```"):
+            first_nl = text.find("\n")
+            if first_nl != -1:
+                text = text[first_nl + 1:]
+        if text.endswith("```"):
+            text = text[:-3]
         text = text.strip()
         if not text:
             return generate_template_digest(
@@ -1331,7 +1367,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     if cases is None:
         cases = []
 
-    upcoming = get_upcoming_hearings(cases) if is_tuesday() else []
+    upcoming = get_upcoming_hearings(cases) if is_wednesday() else []
 
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
@@ -1432,8 +1468,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             role_note = f" (банк — {escape_html(role.lower())})" if role else ""
             hearing_dt = d.get("hearing_date", "")
             date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
+            cat = category_short(d.get("category", ""))
+            cat_note = f" | {escape_html(cat)}" if cat else ""
+            last_ev = d.get("last_event", "")
+            ev_note = f"\n    Причина: {escape_html(last_ev)}" if last_ev else ""
             lines.append(
-                f"  {link}: {result_text}{role_note}{date_note}"
+                f"  {link}: {result_text}{cat_note}{role_note}{date_note}{ev_note}"
             )
 
     if acts:
