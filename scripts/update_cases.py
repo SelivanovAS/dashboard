@@ -781,8 +781,11 @@ def build_summary_line(new_cases: list[dict], changes: list[dict]) -> str:
     results = sum(1 for ch in changes if "new_result" in ch["type"])
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
     statuses = sum(1 for ch in changes if "status_change" in ch["type"])
+    postponed = sum(1 for ch in changes if "hearing_postponed" in ch["type"])
     if events:
         parts.append(f"{events} событ.")
+    if postponed:
+        parts.append(f"{postponed} отлож.")
     if results:
         parts.append(f"{results} суд. акт.")
     if acts:
@@ -926,6 +929,25 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             change["details"]["last_event"] = new_event
             if act_text:
                 change["details"]["act_excerpt"] = extract_motive_part(act_text, 600)
+
+        # Отложение заседания: было назначено заседание на дату X,
+        # теперь — на другую дату Y, при этом дело по-прежнему в производстве
+        # (нет new_result). Для апелляции это редкое и важное событие.
+        old_hearing = case.get("Дата заседания", "").strip()
+        new_hearing = card_info.get("Дата заседания", "").strip()
+        old_hearing_time = case.get("Время заседания", "").strip()
+        new_hearing_time = card_info.get("Время заседания", "").strip()
+        old_h_dt = parse_date(old_hearing)
+        new_h_dt = parse_date(new_hearing)
+        if (old_h_dt and new_h_dt
+                and new_h_dt.date() != old_h_dt.date()
+                and new_status != "Решено"
+                and not new_result):
+            change["type"].append("hearing_postponed")
+            change["details"]["old_hearing_date"] = old_hearing
+            change["details"]["old_hearing_time"] = old_hearing_time
+            change["details"]["new_hearing_date"] = new_hearing
+            change["details"]["new_hearing_time"] = new_hearing_time
 
         # Обновляем поля дела
         if new_event:
@@ -1150,6 +1172,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                 if t == "status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
+                if t == "hearing_postponed":
+                    old_dt = d.get("old_hearing_date", "")
+                    old_tm = d.get("old_hearing_time", "")
+                    new_dt = d.get("new_hearing_date", "")
+                    new_tm = d.get("new_hearing_time", "")
+                    old_part = f"{old_dt}" + (f" {old_tm}" if old_tm else "")
+                    new_part = f"{new_dt}" + (f" {new_tm}" if new_tm else "")
+                    line += (f"\n  ОТЛОЖЕНО: заседание перенесено "
+                             f"с {old_part} на {new_part}")
 
             context_parts.append(line)
 
@@ -1203,7 +1234,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 4. Назначенные заседания (📅) — каждое дело в две строки с пустой строкой между делами: \
 первая строка: <b>ДД.ММ HH:MM</b> номер дела (ссылка жирным), \
 вторая строка: стороны | категория. Роль банка если известна. \
-ВАЖНО: ДД.ММ — это короткая дата заседания (бери из поля «Дата заседания» или из текста события «назначено на ...»), а HH:MM — время заседания. ОБА компонента обязательны
+ВАЖНО: ДД.ММ — это короткая дата заседания (бери из поля «Дата заседания» или из текста события «назначено на ...»), а HH:MM — время заседания. ОБА компонента обязательны. \
+В эту секцию НЕ помещай дела, у которых в данных есть пометка «ОТЛОЖЕНО» — для них есть отдельная секция 🔁
+4а. 🔁 <b>Отложенные заседания</b> (🔁) — секция включается, если в данных по делу есть пометка «ОТЛОЖЕНО: заседание перенесено с ... на ...». \
+Это РЕДКОЕ и ВАЖНОЕ событие для апелляционной инстанции — ОБЯЗАТЕЛЬНО выделяй и НЕ выкидывай при нехватке места. \
+Каждое дело — две строки с пустой строкой между делами: \
+первая строка: 🔁 <b>номер дела</b> (ссылка жирным): ⏪ старая дата (ДД.ММ.ГГГГ HH:MM) → ⏩ новая дата (ДД.ММ.ГГГГ HH:MM), \
+вторая строка: стороны | категория. Роль банка если известна. \
+Бери даты строго из строки «ОТЛОЖЕНО:» в данных, не выдумывай.
 5. Вынесенные судебные акты (⚖️) — для каждого дела одной строкой: номер дела (ссылка), затем: \
 а) ИТОГ обязательно (например: «жалоба возвращена», «жалоба удовлетворена», «жалоба отклонена», «решение оставлено без изменения», «решение отменено», «решение изменено»); \
 б) краткая СУТЬ — что было предметом спора (1 фраза, опираясь на категорию дела и стороны, например «взыскание задолженности по кредитному договору в пределах наследственного имущества»); \
@@ -1234,7 +1272,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не повторяй одну информацию в разных секциях.
 ЛИМИТ: уложись в 3800 символов. Если не помещается — сначала убери секцию «Предстоящие заседания», \
-затем сокращай описания актов. Ссылка на дашборд должна быть в конце ВСЕГДА.
+затем сокращай описания актов. Секцию 🔁 «Отложенные заседания» НИКОГДА не выкидывай. \
+Ссылка на дашборд должна быть в конце ВСЕГДА.
 
 Данные:
 {chr(10).join(context_parts)}
@@ -1246,7 +1285,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 - «в лице филиала ...» — убирать, просто «Сбербанк».
 - ФИО физлиц: сокращать до инициалов ВЕЗДЕ, кроме секции «Новые дела» (📥) — там полностью.
 - Акты: НЕ ПРОСТО номера — обязательно итог (удовлетворена/отказано) и ПОЧЕМУ суд так решил.
-- ПРИОРИТЕТ при нехватке места: сначала убери «Предстоящие заседания», потом сокращай акты. Ссылка на дашборд — ВСЕГДА.
+- ПРИОРИТЕТ при нехватке места: сначала убери «Предстоящие заседания», потом сокращай акты. Секцию 🔁 «Отложенные заседания» НИКОГДА не выкидывай. Ссылка на дашборд — ВСЕГДА.
 - Всё должно уместиться в ОДНО сообщение до 3800 символов."""
 
     try:
@@ -1404,9 +1443,37 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
                 f"({cat})"
             )
 
-    events = [ch for ch in changes if "new_event" in ch["type"]]
+    postponed = [ch for ch in changes if "hearing_postponed" in ch["type"]]
+    postponed_nums = {ch["case"] for ch in postponed}
+    # Не дублируем дело в "Новые события", если оно уже в "Отложенные"
+    events = [ch for ch in changes
+              if "new_event" in ch["type"] and ch["case"] not in postponed_nums]
     results = [ch for ch in changes if "new_result" in ch["type"]]
     acts = [ch for ch in changes if "new_act" in ch["type"]]
+
+    if postponed:
+        lines.append(f"\n🔁 <b>Отложенные заседания ({len(postponed)}):</b>")
+        for ch in postponed:
+            d = ch["details"]
+            url = d.get("case_url", "")
+            case_num = escape_html(ch["case"])
+            link = (f'<a href="{url}"><b>{case_num}</b></a>'
+                    if url else f'<b>{case_num}</b>')
+            old_dt = escape_html(d.get("old_hearing_date", ""))
+            old_tm = escape_html(d.get("old_hearing_time", ""))
+            new_dt = escape_html(d.get("new_hearing_date", ""))
+            new_tm = escape_html(d.get("new_hearing_time", ""))
+            old_part = old_dt + (f" {old_tm}" if old_tm else "")
+            new_part = new_dt + (f" {new_tm}" if new_tm else "")
+            plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
+            defendant = escape_html(shorten_party_name(d.get("defendant", "")))
+            cat = category_short(d.get("category", ""))
+            lines.append(f"  🔁 {link}: ⏪ {old_part} → ⏩ {new_part}")
+            if plaintiff and defendant:
+                tail = f"     {plaintiff} vs {defendant}"
+                if cat:
+                    tail += f" | {escape_html(cat)}"
+                lines.append(tail)
 
     if events:
         lines.append(f"\n📅 <b>Новые события ({len(events)}):</b>")
@@ -1674,6 +1741,79 @@ def main():
     log.info(f"Всего дел: {len(cases)} (активных: {total_active})")
 
 
+def main_force_postponement_digest(case_number: str,
+                                    old_date: str,
+                                    old_time: str = "") -> None:
+    """
+    Одноразовый «нагон»: отправить дайджест с отложением заседания
+    по уже обновлённому в CSV делу. Используется, когда CSV был обновлён
+    более ранним прогоном (или вручную) и стандартное сравнение
+    `old_event != new_event` уже не сработает.
+
+    Параметры:
+      case_number — номер дела (например, "33-1052/2026")
+      old_date    — старая дата заседания (ДД.ММ.ГГГГ)
+      old_time    — старое время заседания (HH:MM), опционально
+    """
+    log.info("=" * 60)
+    log.info(f"Force-digest-for: {case_number} (отложение)")
+    log.info("=" * 60)
+
+    cases = load_csv(CSV_PATH)
+    log.info(f"Загружено {len(cases)} дел из CSV")
+
+    target = None
+    for c in cases:
+        if c.get("Номер дела", "").strip() == case_number.strip():
+            target = c
+            break
+
+    if not target:
+        log.error(f"Дело {case_number} не найдено в CSV")
+        sys.exit(1)
+
+    new_date = target.get("Дата заседания", "").strip()
+    new_time = target.get("Время заседания", "").strip()
+
+    if not parse_date(old_date):
+        log.error(f"Старая дата '{old_date}' не парсится как ДД.ММ.ГГГГ")
+        sys.exit(1)
+    if not parse_date(new_date):
+        log.error(
+            f"Новая дата заседания в CSV '{new_date}' пуста или не парсится"
+        )
+        sys.exit(1)
+
+    change = {
+        "case": case_number,
+        "type": ["hearing_postponed"],
+        "details": {
+            "plaintiff": target.get("Истец", ""),
+            "defendant": target.get("Ответчик", ""),
+            "role": target.get("Роль банка", ""),
+            "category": target.get("Категория", ""),
+            "appellant": target.get("Апеллянт", ""),
+            "case_url": case_card_url(target),
+            "old_hearing_date": old_date,
+            "old_hearing_time": old_time,
+            "new_hearing_date": new_date,
+            "new_hearing_time": new_time,
+        },
+    }
+
+    total_active = sum(
+        1 for c in cases if c.get("Статус", "").strip() != "Решено"
+    )
+
+    log.info(
+        f"Синтетический change: {old_date} {old_time} → {new_date} {new_time}"
+    )
+    log.info("Генерирую дайджест...")
+    digest = generate_digest([], [change], total_active, cases)
+    send_telegram(digest)
+    log.info("Готово!")
+
+
 def main_digest_only():
     """Сформировать и отправить дайджест по текущим данным CSV (без обращения к сайту суда)."""
     log.info("=" * 60)
@@ -1696,5 +1836,21 @@ def main_digest_only():
 if __name__ == "__main__":
     if "--digest-only" in sys.argv:
         main_digest_only()
+    elif "--force-digest-for" in sys.argv:
+        # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
+        def _arg(name: str, required: bool = True) -> str:
+            if name in sys.argv:
+                idx = sys.argv.index(name)
+                if idx + 1 < len(sys.argv):
+                    return sys.argv[idx + 1]
+            if required:
+                log.error(f"Не задан аргумент {name}")
+                sys.exit(2)
+            return ""
+
+        case_num = _arg("--force-digest-for")
+        old_d = _arg("--old-date")
+        old_t = _arg("--old-time", required=False)
+        main_force_postponement_digest(case_num, old_d, old_t)
     else:
         main()

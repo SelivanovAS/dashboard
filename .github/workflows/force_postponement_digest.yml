@@ -1,0 +1,45 @@
+name: Force Postponement Digest
+
+on:
+  workflow_dispatch:
+    inputs:
+      case_number:
+        description: 'Номер дела (например, 33-1052/2026)'
+        required: true
+        type: string
+      old_date:
+        description: 'Старая дата заседания (ДД.ММ.ГГГГ)'
+        required: true
+        type: string
+      old_time:
+        description: 'Старое время заседания (HH:MM), опционально'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  force-digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Send postponement digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scripts/update_cases.py \
+            --force-digest-for "${{ inputs.case_number }}" \
+            --old-date "${{ inputs.old_date }}" \
+            --old-time "${{ inputs.old_time }}"
