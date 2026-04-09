@@ -862,64 +862,6 @@ def next_tuesday(from_date: datetime | None = None) -> datetime:
     )
 
 
-def is_wednesday() -> bool:
-    """Сегодня среда?"""
-    return datetime.now().weekday() == 2
-
-
-def get_upcoming_hearings(cases: list[dict]) -> list[dict]:
-    """
-    Найти дела с назначенными заседаниями с четверга по следующую среду.
-    Вызывать только по средам (проверка is_wednesday() — на стороне вызывающего кода).
-    Возвращает список дел, отсортированный по времени заседания.
-    """
-    today = datetime.now().date()
-    range_start = today + timedelta(days=1)   # четверг
-    range_end = today + timedelta(days=7)     # следующая среда
-    upcoming = []
-
-    hearing_keywords = ["заседание", "назначено", "слушание", "рассмотрение"]
-
-    for case in cases:
-        if is_archived(case):
-            continue
-        if case.get("Статус", "").strip() == "Решено":
-            continue
-        # Пропускаем приостановленные дела
-        event_low = case.get("Последнее событие", "").lower()
-        if "приостановлен" in event_low:
-            continue
-
-        event = event_low
-        date_str = case.get("Дата события", "").strip()
-
-        if not date_str:
-            continue
-
-        d = parse_date(date_str)
-        if not d:
-            continue
-
-        # Попадает в диапазон среда — следующий вторник
-        if range_start <= d.date() <= range_end:
-            if any(kw in event for kw in hearing_keywords):
-                upcoming.append(case)
-
-    # Сортируем по времени заседания (дела без времени — в конец)
-    def sort_key(c):
-        t = c.get("Время заседания", "").strip()
-        if t:
-            try:
-                parts = t.split(":")
-                return int(parts[0]) * 60 + int(parts[1])
-            except (ValueError, IndexError):
-                pass
-        return 9999  # Без времени — в конец
-
-    upcoming.sort(key=sort_key)
-    return upcoming
-
-
 def build_summary_line(new_cases: list[dict], changes: list[dict]) -> str:
     """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
     parts = []
@@ -1264,37 +1206,6 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
-def hearing_line_html(case: dict) -> str:
-    """Форматировать строку заседания: дата+время + номер дела (строка 1), стороны | категория (строка 2)."""
-    link = case_link_html(case)
-    cat = category_short(case.get("Категория", ""))
-    time_str = case.get("Время заседания", "").strip()
-    date_str = (case.get("Дата заседания") or case.get("Дата события") or "").strip()
-    # Короткая форма ДД.ММ из ДД.ММ.ГГГГ
-    short_date = ""
-    if date_str:
-        m = re.match(r"^(\d{1,2}\.\d{1,2})\.\d{2,4}$", date_str)
-        short_date = m.group(1) if m else date_str
-    plaintiff = escape_html(shorten_party_name(case.get("Истец", "")))
-    defendant = escape_html(shorten_party_name(case.get("Ответчик", "")))
-
-    when_parts = [p for p in [short_date, time_str] if p]
-    when = " ".join(when_parts)
-    line1 = f"<b>{escape_html(when)}</b> {link}" if when else link
-    line2 = f"{plaintiff} vs {defendant} | {cat}"
-
-    return f"{line1}\n{line2}"
-
-
-def upcoming_header_html(upcoming: list[dict]) -> str:
-    """Заголовок секции ближайших заседаний на следующую неделю."""
-    if not upcoming:
-        return ""
-    # Собираем уникальные даты из дел
-    dates = sorted({c.get("Дата события", "") for c in upcoming if c.get("Дата события", "")})
-    date_part = ", ".join(escape_html(d) for d in dates) if dates else ""
-    return f"📅 <b>Предстоящие заседания ({date_part}, {len(upcoming)} дел):</b>"
-
 def generate_digest(new_cases: list[dict], changes: list[dict],
                     total_active: int, cases: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API."""
@@ -1308,7 +1219,6 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
     today = datetime.now().strftime("%d.%m.%Y")
     summary = build_summary_line(new_cases, changes)
-    upcoming = get_upcoming_hearings(cases) if is_wednesday() else []
 
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
@@ -1317,10 +1227,6 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             f"Всё спокойно, изменений нет.\n"
             f"В производстве: {total_active}"
         )
-        if upcoming:
-            msg += f"\n\n{upcoming_header_html(upcoming)}"
-            for c in upcoming:
-                msg += f"\n\n{hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1397,20 +1303,6 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
             context_parts.append(line)
 
-    if upcoming:
-        dates = sorted({c.get("Дата события", "") for c in upcoming if c.get("Дата события", "")})
-        context_parts.append(f"\nПРЕДСТОЯЩИЕ ЗАСЕДАНИЯ ({', '.join(dates)}):")
-        for c in upcoming:
-            url = case_card_url(c)
-            cat = category_short(c.get("Категория", ""))
-            time_str = c.get("Время заседания", "").strip()
-            time_part = f" в {time_str}" if time_str else ""
-            context_parts.append(
-                f"- {c['Номер дела']}{time_part} (URL: {url}) — "
-                f"{shorten_party_name(c.get('Истец', ''))} vs "
-                f"{shorten_party_name(c.get('Ответчик', ''))}, {cat}"
-            )
-
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам в апелляционной инстанции Суда ХМАО-Югры за {today}.
 
 ИМЕНА: все наименования сторон в данных уже сокращены по правилам (ОПФ убрана, ФИО → инициалы, «в лице филиала…» удалено и т.п.). НЕ переписывай их и НЕ возвращай ОПФ обратно. В секции 📥 «Новые дела» имена физлиц приходят полными — там оставляй как есть.
@@ -1440,16 +1332,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 Три типа секций по этому шаблону:
 6. 📅 Назначенные заседания — <b>ДД.ММ HH:MM</b>. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
 7. 🔁 Отложенные заседания — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных). Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
-8. 📅 Предстоящие заседания — только по средам (дела с четверга по следующую среду), <b>HH:MM</b>, сортировать по времени. При нехватке места — выкидывать целиком.
 
-9. 📌 Итоговая строка: всего дел в производстве: {total_active}
-10. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
+8. 📌 Итоговая строка: всего дел в производстве: {total_active}
+9. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок; пустые строки для читаемости.
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не дублируй информацию между секциями.
 
-ЛИМИТ: {DIGEST_CHAR_LIMIT} символов. При нехватке места: сначала убрать «Предстоящие заседания», затем сокращать описания актов. Секцию 🔁 «Отложенные заседания» — НЕ выкидывать никогда. Ссылка на дашборд — ВСЕГДА в конце.
+ЛИМИТ: {DIGEST_CHAR_LIMIT} символов. При нехватке места сокращать описания актов. Секцию 🔁 «Отложенные заседания» — НЕ выкидывать никогда. Ссылка на дашборд — ВСЕГДА в конце.
 
 Данные:
 {chr(10).join(context_parts)}"""
@@ -1584,8 +1475,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     if cases is None:
         cases = []
 
-    upcoming = get_upcoming_hearings(cases) if is_wednesday() else []
-
     # ── Короткое сообщение если изменений нет ──
     if not new_cases and not changes:
         msg = (
@@ -1593,10 +1482,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             f"Всё спокойно, изменений нет.\n"
             f"В производстве: {total_active}"
         )
-        if upcoming:
-            msg += f"\n\n{upcoming_header_html(upcoming)}"
-            for c in upcoming:
-                msg += f"\n\n{hearing_line_html(c)}"
         msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
         return msg
 
@@ -1729,11 +1614,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
             case_num = escape_html(ch["case"])
             link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             lines.append(f"  {link}")
-
-    if upcoming:
-        lines.append(f"\n{upcoming_header_html(upcoming)}")
-        for c in upcoming:
-            lines.append(f"\n{hearing_line_html(c)}")
 
     lines.append(f"\nВ производстве: {total_active}")
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
