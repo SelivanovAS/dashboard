@@ -725,15 +725,41 @@ function saveSheetUrl(){const u=document.getElementById('sheet-url-input').value
 function resetConfig(){if(confirm('Сменить подключённую таблицу?')){localStorage.removeItem(STORAGE_KEY);showSetup();}}
 function loadDemo(){const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);showApp();renderAll();}
 
+function deriveArchiveUrl(url){
+  // Архивный файл лежит рядом с основным:
+  // .../sberbank_cases.csv -> .../sberbank_cases_archive.csv
+  if(url.includes('sberbank_cases.csv')){
+    return url.replace('sberbank_cases.csv','sberbank_cases_archive.csv');
+  }
+  return null;
+}
+async function fetchCsvCases(url){
+  const r=await fetch(url);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const t=await r.text();
+  const rows=parseCSV(t);
+  if(rows.length<2)return [];
+  return rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
+}
 async function loadFromSheet(url){
   showLoading();
   const btn=document.getElementById('btn-refresh');
   if(btn)btn.classList.add('is-loading');
   try{
-    const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
-    const t=await r.text();const rows=parseCSV(t);
-    if(rows.length<2)throw new Error('Таблица пуста');
-    allCases=rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
+    // Основной CSV — обязательный
+    const main=await fetchCsvCases(url);
+    // Архивный CSV — опциональный, отсутствие = норма
+    let archive=[];
+    const archUrl=deriveArchiveUrl(url);
+    if(archUrl){
+      try{archive=await fetchCsvCases(archUrl);}
+      catch(e){console.info('Архивный CSV не загружен:',e.message);}
+    }
+    // Дедупликация по номеру дела (основной приоритетнее архивного)
+    const seen=new Set(main.map(c=>c.caseNumber));
+    const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+    allCases=main.concat(archiveOnly);
+    if(allCases.length===0)throw new Error('Таблица пуста');
     showApp();hideError();renderAll();
   }catch(e){
     console.warn('Ошибка загрузки:',e.message);
