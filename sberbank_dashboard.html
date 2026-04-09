@@ -621,7 +621,7 @@ function rowToCase(h,row){
   }
   const baseStatus=STATUS_MAP[sl]||sl||'active';
   const hearingTime=g(['время заседания']);
-  const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
+  const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),firstInstanceJudge:g(['судья 1 инстанции','судья первой','судья 1']),appellateJudge:g(['судья-докладчик','судья докладчик','докладчик']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
   // Compute detailed status for active cases
   caseObj.detailedStatus=computeDetailedStatus(caseObj);
   return caseObj;
@@ -1060,6 +1060,9 @@ function renderTable(){
       <td colspan="${COLS.length}">
         <div class="detail-content">
           ${c.firstInstanceCourt?`<div class="detail-block"><div class="detail-block-title">Суд первой инстанции</div>${escHtml(c.firstInstanceCourt)}</div>`:''}
+          ${c.firstInstanceJudge?`<div class="detail-block"><div class="detail-block-title">Судья первой инстанции</div>${escHtml(c.firstInstanceJudge)}</div>`:''}
+          <div class="detail-block"><div class="detail-block-title">Поступило в апелляцию</div>${formatDate(c.dateReceived)}</div>
+          ${c.appellateJudge?`<div class="detail-block"><div class="detail-block-title">Судья-докладчик</div>${escHtml(c.appellateJudge)}</div>`:''}
           ${ds==='paused'?`<div class="detail-block"><div class="detail-block-title" style="color:#9d174d;">⏸ Причина приостановления</div>${escHtml(extractPauseReason(c.lastEvent))}</div>`:''}
           <div class="detail-block"><div class="detail-block-title">Последнее событие</div>${escHtml(eventText)||'—'}${c.lastEventDate?'<br><span style="color:var(--slate-400);font-size:11px;">'+formatDate(c.lastEventDate)+'</span>':''}</div>
           ${c.resultRaw&&c.result!=='pending'?`<div class="detail-block"><div class="detail-block-title">Решение суда (полный текст)</div>${escHtml(c.resultRaw)}</div>`:''}
@@ -1149,10 +1152,12 @@ function renderMobileCards(){
             const cleaned=cleanEvent(c.lastEvent||'');
             const isDuplicate=/^(судебное заседание|передача дела судье|назначено)$/i.test(cleaned);
             const courtRow=c.firstInstanceCourt?`<div class="mc-detail-row"><span class="mc-detail-label">Суд 1 инстанции</span><span class="mc-detail-value">${escHtml(c.firstInstanceCourt)}</span></div>`:'';
+            const firstJudgeRow=c.firstInstanceJudge?`<div class="mc-detail-row"><span class="mc-detail-label">Судья 1 инстанции</span><span class="mc-detail-value">${escHtml(c.firstInstanceJudge)}</span></div>`:'';
             const recRow=`<div class="mc-detail-row"><span class="mc-detail-label">Поступило в апелляцию</span><span class="mc-detail-value">${formatDate(c.dateReceived)}</span></div>`;
+            const appJudgeRow=c.appellateJudge?`<div class="mc-detail-row"><span class="mc-detail-label">Судья-докладчик</span><span class="mc-detail-value">${escHtml(c.appellateJudge)}</span></div>`:'';
             const eventRow=c.lastEvent&&!isDuplicate?`<div class="mc-detail-row">${escHtml(cleaned)}${c.lastEventDate?' · '+formatDate(c.lastEventDate):''}</div>`:'';
             const notesRow=c.notes?`<div class="mc-detail-row"><span class="mc-detail-label">Заметки</span><span class="mc-detail-value">${escHtml(c.notes)}</span></div>`:'';
-            return courtRow+recRow+eventRow+notesRow;
+            return courtRow+firstJudgeRow+recRow+appJudgeRow+eventRow+notesRow;
           })()}
         </div>
       </div>
@@ -1162,8 +1167,8 @@ function renderMobileCards(){
 
 /* ========== Export ========== */
 function exportCSV(){
-  const hd=['Номер дела','Дата поступления','Истец','Ответчик','Категория','Суд 1 инстанции','Роль банка','Статус','Детальный статус','Последнее событие','Дата события','Акт опубликован','Дата публикации акта','Результат','Результат (полный)','Апеллянт','Дата заседания','Время заседания','Ссылка','Заметки'];
-  const rs=filteredCases.map(c=>[c.caseNumber,formatDate(c.dateReceived),c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,ROLE_LABELS[c.sberbankRole]||'',STATUS_LABELS[c.status]||'',STATUS_LABELS[c.detailedStatus]||'',c.lastEvent,formatDate(c.lastEventDate),c.hasPublishedActs?'Да':'Нет',c.actDate?formatDate(c.actDate):'',RESULT_LABELS[c.result]||'',c.resultRaw||'',c.appellant==='bank'?'Банк':c.appellant==='other'?'Другая сторона':'',formatDate(c.nextDate),c.hearingTime||'',c.link,c.notes]);
+  const hd=['Номер дела','Дата поступления','Истец','Ответчик','Категория','Суд 1 инстанции','Судья 1 инстанции','Роль банка','Статус','Детальный статус','Последнее событие','Дата события','Акт опубликован','Дата публикации акта','Результат','Результат (полный)','Апеллянт','Судья-докладчик','Дата заседания','Время заседания','Ссылка','Заметки'];
+  const rs=filteredCases.map(c=>[c.caseNumber,formatDate(c.dateReceived),c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.firstInstanceJudge||'',ROLE_LABELS[c.sberbankRole]||'',STATUS_LABELS[c.status]||'',STATUS_LABELS[c.detailedStatus]||'',c.lastEvent,formatDate(c.lastEventDate),c.hasPublishedActs?'Да':'Нет',c.actDate?formatDate(c.actDate):'',RESULT_LABELS[c.result]||'',c.resultRaw||'',c.appellant==='bank'?'Банк':c.appellant==='other'?'Другая сторона':'',c.appellateJudge||'',formatDate(c.nextDate),c.hearingTime||'',c.link,c.notes]);
   const csv=[hd,...rs].map(r=>r.map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sberbank_cases_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
