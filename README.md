@@ -188,9 +188,9 @@ dashboard/
 pip install -r scripts/requirements.txt
 
 # Задать переменные окружения
-export ANTHROPIC_API_KEY="sk-ant-..."
-export TELEGRAM_BOT_TOKEN="123456:ABC..."
-export TELEGRAM_CHAT_ID="-100..."
+export ANTHROPIC_API_KEY="..."
+export TELEGRAM_BOT_TOKEN="..."
+export TELEGRAM_CHAT_ID="..."
 
 # Полный цикл: парсинг + дайджест
 python scripts/update_cases.py
