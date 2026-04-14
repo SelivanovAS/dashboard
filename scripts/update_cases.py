@@ -12,6 +12,8 @@
 6. Сохраняет обновлённый CSV
 """
 
+from __future__ import annotations  # type-hints как строки — импорт на Python 3.9
+
 import csv
 import io
 import json
@@ -20,6 +22,7 @@ import os
 import re
 import sys
 import time
+import traceback
 import random
 from datetime import datetime, timedelta
 from html import escape as html_escape
@@ -97,6 +100,24 @@ session.headers.update({
 })
 
 
+# ── Метрики прогона ──────────────────────────────────────────────────────────
+
+# Глобальные счётчики прогона — собираются по ходу выполнения,
+# сбрасываются в начале каждого main()/main_digest_only().
+METRICS: dict[str, int] = {
+    "requests_ok": 0,
+    "requests_failed": 0,
+    "requests_retried": 0,   # попытки fetch_page после неудачи
+    "telegram_sent": 0,      # успешно отправленных сообщений (после split)
+    "telegram_failed": 0,    # полностью не отправленных частей
+}
+
+
+def _metrics_reset() -> None:
+    for k in METRICS:
+        METRICS[k] = 0
+
+
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 
 def polite_delay():
@@ -110,6 +131,9 @@ def fetch_page(url: str) -> str:
         try:
             r = session.get(url, timeout=30)
             r.raise_for_status()
+            METRICS["requests_ok"] += 1
+            if attempt > 1:
+                METRICS["requests_retried"] += 1
             return r.content.decode("windows-1251", errors="replace")
         except requests.RequestException as e:
             if attempt < FETCH_MAX_RETRIES:
@@ -117,6 +141,7 @@ def fetch_page(url: str) -> str:
                 log.warning(f"Попытка {attempt}/{FETCH_MAX_RETRIES} не удалась для {url}: {e}. Повтор через {wait}с...")
                 time.sleep(wait)
             else:
+                METRICS["requests_failed"] += 1
                 log.error(f"Ошибка загрузки {url} после {FETCH_MAX_RETRIES} попыток: {e}")
     return ""
 
@@ -1652,6 +1677,7 @@ def send_telegram(text: str):
                 timeout=30,
             )
             if r.ok:
+                METRICS["telegram_sent"] += 1
                 log.info(f"Telegram: сообщение {i + 1}/{len(parts)} отправлено")
             else:
                 log.error(f"Telegram ошибка: {r.status_code} {r.text}")
@@ -1667,8 +1693,10 @@ def send_telegram(text: str):
                     timeout=30,
                 )
                 if r2.ok:
+                    METRICS["telegram_sent"] += 1
                     log.info("Telegram: отправлено без разметки")
                 else:
+                    METRICS["telegram_failed"] += 1
                     log.error(f"Telegram повторная ошибка: {r2.text}")
 
             # Пауза между частями
@@ -1708,6 +1736,126 @@ def split_message(text: str, limit: int = 4096) -> list[str]:
     return parts
 
 
+# ── Run summary ──────────────────────────────────────────────────────────────
+
+def _format_timings(timings: dict[str, float]) -> str:
+    """Форматирует словарь этап→секунды в короткую строку."""
+    order = ["load_csv", "search", "cards_update", "digest", "telegram", "save", "total"]
+    seen = set(order)
+    known = [(k, timings[k]) for k in order if k in timings]
+    extra = [(k, v) for k, v in timings.items() if k not in seen]
+    return " | ".join(f"{k} {v:.1f}s" for k, v in known + extra)
+
+
+def log_run_summary(
+    mode: str,
+    timings: dict[str, float],
+    extras: dict[str, object] | None = None,
+) -> None:
+    """
+    Печатает итоговый блок метрик в лог и (если переменная установлена)
+    в $GITHUB_STEP_SUMMARY — так он виден прямо в UI GitHub Actions.
+    """
+    extras = extras or {}
+    req_line = (
+        f"Requests: {METRICS['requests_ok']} ok / "
+        f"{METRICS['requests_failed']} failed"
+    )
+    if METRICS["requests_retried"]:
+        req_line += f" ({METRICS['requests_retried']} retried)"
+    tg_line = (
+        f"Telegram: {METRICS['telegram_sent']} sent"
+        + (f", {METRICS['telegram_failed']} failed" if METRICS['telegram_failed'] else "")
+    )
+    lines = [
+        "=" * 60,
+        f"Run summary ({mode})",
+        "=" * 60,
+    ]
+    if extras:
+        # Превращаем extras в "k=v | k=v" в том порядке, в котором их передали
+        lines.append(" | ".join(f"{k}: {v}" for k, v in extras.items()))
+    lines.append(req_line)
+    lines.append(tg_line)
+    if timings:
+        lines.append(f"Timing: {_format_timings(timings)}")
+    lines.append("=" * 60)
+
+    for line in lines:
+        log.info(line)
+
+    # GitHub Actions: при наличии $GITHUB_STEP_SUMMARY дописываем markdown-блок,
+    # который появится в UI раздела Summary у запуска workflow.
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        try:
+            md_lines = [
+                f"### Run summary ({mode})",
+                "",
+            ]
+            if extras:
+                md_lines.append("| Метрика | Значение |")
+                md_lines.append("| --- | --- |")
+                for k, v in extras.items():
+                    md_lines.append(f"| {k} | {v} |")
+                md_lines.append("")
+            md_lines.append(f"- {req_line}")
+            md_lines.append(f"- {tg_line}")
+            if timings:
+                md_lines.append(f"- Timing: `{_format_timings(timings)}`")
+            md_lines.append("")
+            with open(summary_path, "a", encoding="utf-8") as f:
+                f.write("\n".join(md_lines))
+        except Exception as e:
+            log.warning(f"Не удалось записать GITHUB_STEP_SUMMARY: {e}")
+
+
+# ── Аварийный алерт ──────────────────────────────────────────────────────────
+
+def send_crash_alert(mode: str, exc: BaseException) -> None:
+    """
+    Попытаться сообщить в Telegram, что прогон упал.
+    Не должен сам кидать исключение, иначе перекроет исходное.
+    """
+    try:
+        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        tb_tail = tb[-1500:]  # хвост трейсбека, чтобы не упереться в лимит Telegram
+        text = (
+            "⚠️ <b>Прогон упал</b>\n"
+            f"Режим: <code>{html_escape(mode)}</code>\n"
+            f"Ошибка: <code>{html_escape(type(exc).__name__)}: {html_escape(str(exc))}</code>\n\n"
+            f"<pre>{html_escape(tb_tail)}</pre>"
+        )
+        send_telegram(text)
+    except Exception as alert_err:
+        log.error(f"Не удалось отправить crash-алерт в Telegram: {alert_err}")
+
+
+# ── Проверка окружения ───────────────────────────────────────────────────────
+
+def validate_environment(require_anthropic: bool = True) -> None:
+    """
+    Проверить, что нужные переменные окружения заданы.
+    Падает сразу с понятным сообщением, не через 3 минуты парсинга.
+
+    require_anthropic: False для режимов без дайджеста (например, dry-run).
+    """
+    missing: list[str] = []
+    if require_anthropic and not ANTHROPIC_API_KEY:
+        missing.append("ANTHROPIC_API_KEY")
+    if not TELEGRAM_BOT_TOKEN:
+        missing.append("TELEGRAM_BOT_TOKEN")
+    if not TELEGRAM_CHAT_ID:
+        missing.append("TELEGRAM_CHAT_ID")
+
+    if missing:
+        log.error(
+            "Не заданы обязательные переменные окружения: %s",
+            ", ".join(missing),
+        )
+        sys.exit(2)
+
+
 # ── Проверка доступности сайта суда ──────────────────────────────────────────
 
 def check_court_available() -> bool:
@@ -1726,6 +1874,13 @@ def main():
     log.info("Запуск мониторинга дел Сбербанка")
     log.info("=" * 60)
 
+    _metrics_reset()
+    validate_environment()
+
+    # Таймеры этапов: ключ = название этапа, значение = секунды.
+    timings: dict[str, float] = {}
+    t_total_start = time.perf_counter()
+
     # 1. Проверяем доступность суда
     if not check_court_available():
         msg = "⚠️ Сайт суда oblsud--hmao.sudrf.ru недоступен. Обновление отложено."
@@ -1736,7 +1891,9 @@ def main():
     log.info("Сайт суда доступен")
 
     # 2. Загружаем текущие данные
+    t0 = time.perf_counter()
     cases = load_csv(CSV_PATH)
+    timings["load_csv"] = time.perf_counter() - t0
     existing_numbers = {c["Номер дела"].strip() for c in cases if c.get("Номер дела")}
     log.info(f"Загружено {len(cases)} дел из CSV")
 
@@ -1745,12 +1902,26 @@ def main():
     log.info(f"Активных: {active_count}, архивных: {archived_count}")
 
     # 3. Поиск новых дел (первая страница)
+    t0 = time.perf_counter()
     log.info("Загружаю первую страницу поиска...")
     search_html = fetch_page(SEARCH_URL)
     new_cases = []
     if search_html:
         search_cases = parse_search_page(search_html)
         log.info(f"На первой странице найдено {len(search_cases)} дел")
+
+        # Alert, если парсер вернул 0 дел, хотя CSV знает активные дела.
+        # Обычно это признак изменения структуры страницы суда — важно
+        # узнать об этом сразу, а не после того как CSV молча затёрт.
+        if not search_cases and active_count > 0:
+            warn = (
+                "⚠️ Парсинг первой страницы поиска вернул 0 дел, "
+                f"но в CSV {active_count} активных. "
+                "Возможно, изменилась структура сайта суда — проверьте parse_search_page."
+            )
+            log.warning(warn)
+            send_telegram(warn)
+
         new_cases = find_new_cases(search_cases, existing_numbers)
         log.info(f"Из них новых: {len(new_cases)}")
 
@@ -1776,10 +1947,13 @@ def main():
                     log.info(f"  Карточка {nc['Номер дела']}: OK")
     else:
         log.warning("Не удалось загрузить страницу поиска")
+    timings["search"] = time.perf_counter() - t0
 
     # 4. Обновляем активные дела
+    t0 = time.perf_counter()
     log.info(f"Обновляю {active_count} активных дел...")
     cases, changes = update_active_cases(cases)
+    timings["cards_update"] = time.perf_counter() - t0
 
     # 5. Добавляем новые дела в начало списка
     if new_cases:
@@ -1790,13 +1964,18 @@ def main():
     total_active = sum(1 for c in cases if c.get("Статус", "").strip() != "Решено")
 
     # 7. Генерируем дайджест
+    t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
     digest = generate_digest(new_cases, changes, total_active, cases)
+    timings["digest"] = time.perf_counter() - t0
 
     # 8. Отправляем в Telegram
+    t0 = time.perf_counter()
     send_telegram(digest)
+    timings["telegram"] = time.perf_counter() - t0
 
     # 9. Разделяем на активные и архивные (Решено + 30+ дней)
+    t0 = time.perf_counter()
     active, newly_archived = split_archived(cases)
     if newly_archived:
         existing_archive = load_csv(CSV_ARCHIVE_PATH)
@@ -1816,11 +1995,21 @@ def main():
 
     # 10. Сохраняем активные дела (главный CSV)
     save_csv(active, CSV_PATH)
+    timings["save"] = time.perf_counter() - t0
 
-    log.info("Готово!")
-    log.info(f"Новых дел: {len(new_cases)}")
-    log.info(f"Изменений: {len(changes)}")
-    log.info(f"Активных дел: {len(active)} (в архиве: {len(newly_archived)})")
+    timings["total"] = time.perf_counter() - t_total_start
+
+    log_run_summary(
+        mode="main",
+        timings=timings,
+        extras={
+            "Cases checked": active_count,
+            "New": len(new_cases),
+            "Changes": len(changes),
+            "Active after": len(active),
+            "Archived moved": len(newly_archived),
+        },
+    )
 
 
 def main_force_postponement_digest(case_number: str,
@@ -1840,6 +2029,8 @@ def main_force_postponement_digest(case_number: str,
     log.info("=" * 60)
     log.info(f"Force-digest-for: {case_number} (отложение)")
     log.info("=" * 60)
+
+    validate_environment()
 
     cases = load_csv(CSV_PATH)
     log.info(f"Загружено {len(cases)} дел из CSV")
@@ -1902,6 +2093,8 @@ def main_digest_only():
     log.info("Режим digest-only: дайджест по текущим данным")
     log.info("=" * 60)
 
+    validate_environment()
+
     cases = load_csv(CSV_PATH)
     log.info(f"Загружено {len(cases)} дел из CSV")
 
@@ -1916,8 +2109,11 @@ def main_digest_only():
 
 
 if __name__ == "__main__":
+    # Выбор режима
     if "--digest-only" in sys.argv:
-        main_digest_only()
+        mode_name = "digest-only"
+        entry = main_digest_only
+        entry_args: tuple = ()
     elif "--force-digest-for" in sys.argv:
         # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
         def _arg(name: str, required: bool = True) -> str:
@@ -1933,6 +2129,22 @@ if __name__ == "__main__":
         case_num = _arg("--force-digest-for")
         old_d = _arg("--old-date")
         old_t = _arg("--old-time", required=False)
-        main_force_postponement_digest(case_num, old_d, old_t)
+        mode_name = f"force-digest-for {case_num}"
+        entry = main_force_postponement_digest
+        entry_args = (case_num, old_d, old_t)
     else:
-        main()
+        mode_name = "main"
+        entry = main
+        entry_args = ()
+
+    # Оборачиваем прогон в try/except: любое необработанное исключение уходит
+    # в Telegram, чтобы не потерять падение в логах Actions.
+    try:
+        entry(*entry_args)
+    except SystemExit:
+        # sys.exit(N) — штатный выход, алерт не нужен
+        raise
+    except BaseException as exc:
+        log.exception("Необработанное исключение в прогоне")
+        send_crash_alert(mode_name, exc)
+        sys.exit(1)

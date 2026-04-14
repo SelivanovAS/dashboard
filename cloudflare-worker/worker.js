@@ -33,7 +33,7 @@ export default {
       return;
     }
 
-    await fetch(
+    const response = await fetch(
       "https://api.github.com/repos/SelivanovAS/dashboard/actions/workflows/update_cases.yml/dispatches",
       {
         method: "POST",
@@ -45,5 +45,16 @@ export default {
         body: JSON.stringify({ ref: "main" }),
       }
     );
+
+    if (response.ok) {
+      // GitHub отвечает 204 No Content при успешном workflow_dispatch
+      console.log(`dispatch ok: ${response.status}`);
+    } else {
+      const body = await response.text();
+      const bodyPreview = body.length > 500 ? body.slice(0, 500) + "..." : body;
+      console.error(
+        `dispatch failed: ${response.status} ${response.statusText} | body: ${bodyPreview}`
+      );
+    }
   },
 };

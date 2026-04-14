@@ -59,7 +59,9 @@
 
 ```
 dashboard/
-├── sberbank_dashboard.html        # Веб-дашборд (единый HTML-файл)
+├── sberbank_dashboard.html        # Веб-дашборд: тонкий HTML-shell
+├── styles.css                     # Стили дашборда
+├── app.js                         # Логика дашборда (рендер, фильтры, CSV)
 ├── data/
 │   ├── sberbank_cases.csv         # Активные дела (источник истины)
 │   ├── sberbank_cases_archive.csv # Архив дел, решённых более 30 дней назад

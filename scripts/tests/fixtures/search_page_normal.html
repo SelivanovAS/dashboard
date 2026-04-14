@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head><title>Поиск дел</title></head>
+<body>
+<!-- Таблицы 0..4: шапка, меню, фильтры и т.п. Минимальные заглушки. -->
+<table><tr><td>header</td></tr></table>
+<table><tr><td>menu</td></tr></table>
+<table><tr><td>filters</td></tr></table>
+<table><tr><td>search form</td></tr></table>
+<table><tr><td>params</td></tr></table>
+
+<!-- Таблица 5: результаты поиска.
+     Парсер _parse_combined_cell использует re.search без re.DOTALL, поэтому
+     комбинированная ячейка должна быть на одной строке (как на реальном сайте). -->
+<table class="resultTable">
+  <tr>
+    <th>Номер дела</th>
+    <th>Дата поступления</th>
+    <th>Стороны и суд</th>
+    <th>Судья</th>
+    <th>Дата рассмотрения</th>
+  </tr>
+  <tr>
+    <td><a href="/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12345&amp;case_uid=aaaaaaaa-bbbb-cccc-dddd-111111111111&amp;delo_id=5&amp;new=5">33-1001/2026</a></td>
+    <td>01.03.2026</td>
+    <td>КАТЕГОРИЯ: Иски о взыскании сумм по договору займа → ИСТЕЦ(ЗАЯВИТЕЛЬ): ПАО Сбербанк ОТВЕТЧИК: Иванов Иван Иванович Суд (мировой судья) первой инстанции: Ханты-Мансийский районный суд</td>
+    <td>Петрова А.Б.</td>
+    <td>15.04.2026</td>
+  </tr>
+  <tr>
+    <td><a href="/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12346&amp;case_uid=aaaaaaaa-bbbb-cccc-dddd-222222222222&amp;delo_id=5&amp;new=5">33-1002/2026</a></td>
+    <td>02.03.2026</td>
+    <td>КАТЕГОРИЯ: Споры, связанные с правом собственности → ИСТЕЦ(ЗАЯВИТЕЛЬ): Петров Пётр Петрович ОТВЕТЧИК: ПАО Сбербанк Суд (мировой судья) первой инстанции: Сургутский городской суд</td>
+    <td>Сидоров В.Г.</td>
+    <td>16.04.2026</td>
+  </tr>
+  <tr>
+    <td><a href="/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12347&amp;case_uid=aaaaaaaa-bbbb-cccc-dddd-333333333333&amp;delo_id=5&amp;new=5">33-1003/2026</a></td>
+    <td>03.03.2026</td>
+    <td>КАТЕГОРИЯ: Иски о защите прав потребителей → ИСТЕЦ(ЗАЯВИТЕЛЬ): Кузнецов Сергей Викторович ОТВЕТЧИК: ООО СК «Сбербанк Страхование» Суд (мировой судья) первой инстанции: Нижневартовский городской суд</td>
+    <td>Николаева М.И.</td>
+    <td>17.04.2026</td>
+  </tr>
+  <tr>
+    <td><a href="/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12348&amp;case_uid=aaaaaaaa-bbbb-cccc-dddd-444444444444&amp;delo_id=5&amp;new=5">33-1004/2026</a></td>
+    <td>04.03.2026</td>
+    <td>КАТЕГОРИЯ: Споры, связанные с наследованием → ИСТЕЦ(ЗАЯВИТЕЛЬ): Смирнова Ольга Викторовна ОТВЕТЧИК: Смирнов Дмитрий Викторович Суд (мировой судья) первой инстанции: Нефтеюганский районный суд</td>
+    <td>Орлова Т.С.</td>
+    <td>18.04.2026</td>
+  </tr>
+</table>
+</body>
+</html>

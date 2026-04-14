@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Environment
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+
+# Node / Cloudflare Worker
+node_modules/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code (local session data)
+.claude/

@@ -20,7 +20,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r scripts/requirements.txt
 
       - name: Run court monitor
         env:
@@ -33,6 +33,6 @@ jobs:
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
-          git add data/sberbank_cases.csv data/.digested_acts
+          git add data/sberbank_cases.csv data/sberbank_cases_archive.csv data/.digested_acts
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
