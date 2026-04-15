@@ -12,10 +12,10 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -33,6 +33,9 @@ jobs:
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
-          git add data/sberbank_cases.csv data/sberbank_cases_archive.csv data/.digested_acts
+          git add data/sberbank_cases.csv data/.digested_acts
+          if [ -f data/sberbank_cases_archive.csv ]; then
+            git add data/sberbank_cases_archive.csv
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
