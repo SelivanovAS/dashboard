@@ -38,8 +38,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INPUT_CASE_NUMBER: ${{ inputs.case_number }}
+          INPUT_OLD_DATE: ${{ inputs.old_date }}
+          INPUT_OLD_TIME: ${{ inputs.old_time }}
         run: |
           python scripts/update_cases.py \
-            --force-digest-for "${{ inputs.case_number }}" \
-            --old-date "${{ inputs.old_date }}" \
-            --old-time "${{ inputs.old_time }}"
+            --force-digest-for "$INPUT_CASE_NUMBER" \
+            --old-date "$INPUT_OLD_DATE" \
+            --old-time "$INPUT_OLD_TIME"

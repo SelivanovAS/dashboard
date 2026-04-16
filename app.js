@@ -331,7 +331,7 @@ async function loadFromSheet(url){
   }
 }
 function refreshData(){const u=localStorage.getItem(STORAGE_KEY)||DEFAULT_SHEET_URL;loadFromSheet(u);}
-function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.innerHTML='<strong>Ошибка:</strong> '+m;}
+function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.textContent='';const s=document.createElement('strong');s.textContent='Ошибка: ';e.appendChild(s);e.appendChild(document.createTextNode(m));}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
 /* ========== Render All ========== */
@@ -470,7 +470,7 @@ function renderAnalytics(){
       const dateStr=c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
       const timeStr=c.hearingTime?`<br><span style="font-size:12px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
       const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
-      const linkAttr=c.link?` onclick="window.open('${c.link}','_blank')" style="cursor:pointer;"`:'';
+      const linkAttr=c.link?` onclick="window.open('${escHtml(c.link).replace(/'/g,'&#39;')}','_blank')" style="cursor:pointer;"`:'';
       const isMob=window.innerWidth<=768;
       const pl=isMob?shortName(shortParty(c.plaintiff)):shortParty(c.plaintiff);
       const df=isMob?shortName(shortParty(c.defendant)):shortParty(c.defendant);
