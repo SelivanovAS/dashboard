@@ -24,6 +24,7 @@ import sys
 import time
 import traceback
 import random
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import escape as html_escape
 from html.parser import HTMLParser
@@ -32,12 +33,99 @@ import requests
 
 # ── Настройки ────────────────────────────────────────────────────────────────
 
-BASE_URL = "https://oblsud--hmao.sudrf.ru"
-SEARCH_URL = (
-    f"{BASE_URL}/modules.php?name=sud_delo&srv_num=1&name_op=r&delo_id=5"
-    "&case_type=0&new=5&G2_PARTS__NAMESS=%D1%E1%E5%F0%E1%E0%ED%EA"
-    "&delo_table=g2_case&Submit=%CD%E0%E9%F2%E8"
+# ── Конфигурация судов ───────────────────────────────────────────────────────
+
+# Параметры URL для разных типов судопроизводства на sudrf.ru:
+#   delo_id=5, delo_table=g2_case — апелляция (гражданские дела)
+#   delo_id=1, delo_table=g_case  — первая инстанция (гражданские дела)
+# Поле поиска по имени стороны также различается:
+#   G2_PARTS__NAMESS — апелляция, G1_PARTS__NAMESS — первая инстанция
+
+SBER_NAME_WIN1251 = "%D1%E1%E5%F0%E1%E0%ED%EA"  # «Сбербанк» в Windows-1251 URL-encoded
+
+
+@dataclass
+class CourtConfig:
+    name: str          # «Суд ХМАО-Югры» / «Сургутский городской суд»
+    domain: str        # oblsud--hmao.sudrf.ru
+    delo_id: int       # 5 = апелляция, 1540005 = первая инстанция (гражданские)
+    court_type: str    # "appeal" | "first_instance"
+    enabled: bool = True
+    srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
+
+    @property
+    def base_url(self) -> str:
+        return f"https://{self.domain}"
+
+    @property
+    def _delo_table(self) -> str:
+        if self.delo_id == 5:
+            return "g2_case"
+        return "g_case"
+
+    @property
+    def _name_field(self) -> str:
+        """Имя поля для фильтрации по стороне (зависит от типа суда)."""
+        if self.delo_id == 5:
+            return "G2_PARTS__NAMESS"
+        return "G1_PARTS__NAMESS"
+
+    @property
+    def _new_param(self) -> int:
+        """Параметр &new= : 5 для апелляции, 0 для 1 инстанции."""
+        return 5 if self.delo_id == 5 else 0
+
+    def search_url(self, party_name_encoded: str = SBER_NAME_WIN1251) -> str:
+        return (
+            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
+            f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
+            f"&{self._name_field}={party_name_encoded}"
+            f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def card_url(self, case_id: str, case_uid: str) -> str:
+        return (
+            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
+            f"&case_id={case_id}&case_uid={case_uid}"
+            f"&delo_id={self.delo_id}&new=5"
+        )
+
+
+# Апелляционный суд (текущий — единственный источник данных)
+APPEAL_COURT = CourtConfig(
+    name="Суд ХМАО-Югры",
+    domain="oblsud--hmao.sudrf.ru",
+    delo_id=5,
+    court_type="appeal",
 )
+
+# Реестр судов первой инстанции ХМАО-Югры (delo_id=1540005 — гражданские дела 1 инст.)
+FIRST_INSTANCE_COURTS: list[CourtConfig] = [
+    CourtConfig("Сургутский городской суд",       "surggor--hmao.sudrf.ru",   1540005, "first_instance"),
+    CourtConfig("Сургутский районный суд",         "surgray--hmao.sudrf.ru",   1540005, "first_instance"),
+    CourtConfig("Нижневартовский городской суд",   "vartovgor--hmao.sudrf.ru", 1540005, "first_instance"),
+    CourtConfig("Нижневартовский районный суд",    "vartovray--hmao.sudrf.ru", 1540005, "first_instance"),
+    CourtConfig("Нижневартовский районный суд (г. Покачи)", "vartovray--hmao.sudrf.ru", 1540005, "first_instance", srv_num=2),
+    CourtConfig("Ханты-Мансийский районный суд",   "hmray--hmao.sudrf.ru",     1540005, "first_instance"),
+    CourtConfig("Урайский городской суд",          "uray--hmao.sudrf.ru",      1540005, "first_instance"),
+    CourtConfig("Няганский городской суд",         "nyagan--hmao.sudrf.ru",    1540005, "first_instance"),
+    CourtConfig("Нефтеюганский районный суд",      "uganskray--hmao.sudrf.ru", 1540005, "first_instance"),
+    CourtConfig("Когалымский городской суд",       "kogalym--hmao.sudrf.ru",   1540005, "first_instance"),
+    CourtConfig("Кондинский районный суд",         "kondinsk--hmao.sudrf.ru",  1540005, "first_instance"),
+    CourtConfig("Лангепасский городской суд",      "langepas--hmao.sudrf.ru",  1540005, "first_instance"),
+    CourtConfig("Мегионский городской суд",        "megion--hmao.sudrf.ru",    1540005, "first_instance"),
+    CourtConfig("Советский районный суд",          "sovetsk--hmao.sudrf.ru",   1540005, "first_instance"),
+    CourtConfig("Югорский районный суд",           "ugorsk--hmao.sudrf.ru",    1540005, "first_instance"),
+    CourtConfig("Белоярский городской суд",        "bel--hmao.sudrf.ru",       1540005, "first_instance"),
+    CourtConfig("Пыть-Яхский городской суд",      "pth--hmao.sudrf.ru",       1540005, "first_instance"),
+    CourtConfig("Берёзовский районный суд",        "berezovo--hmao.sudrf.ru",  1540005, "first_instance"),
+    CourtConfig("Радужнинский городской суд",      "rdj--hmao.sudrf.ru",       1540005, "first_instance"),
+    CourtConfig("Октябрьский районный суд",        "oktb--hmao.sudrf.ru",      1540005, "first_instance"),
+]
+
+# Совместимость: глобальные константы на переходный период
+BASE_URL = APPEAL_COURT.base_url
+SEARCH_URL = APPEAL_COURT.search_url()
 CARD_URL_TPL = (
     f"{BASE_URL}/modules.php?name=sud_delo&srv_num=1&name_op=case"
     "&case_id={case_id}&case_uid={case_uid}&delo_id=5&new=5"
@@ -47,6 +135,11 @@ CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
 CSV_ARCHIVE_PATH = os.environ.get(
     "CSV_ARCHIVE_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "sberbank_cases_archive.csv")
+)
+JSON_PATH = os.environ.get("JSON_PATH", "data/cases.json")
+JSON_ARCHIVE_PATH = os.environ.get(
+    "JSON_ARCHIVE_PATH",
+    os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_archive.json")
 )
 DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
@@ -220,10 +313,12 @@ def escape_html(text: str) -> str:
     return html_escape(str(text), quote=False)
 
 
-def case_card_url(case: dict) -> str:
+def case_card_url(case: dict, court: CourtConfig | None = None) -> str:
     """Построить полный URL карточки дела."""
     cid, cuid = case_id_uid(case.get("Ссылка", ""))
     if cid and cuid:
+        if court:
+            return court.card_url(cid, cuid)
         return CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
     return ""
 
@@ -562,9 +657,125 @@ def parse_search_page(html: str) -> list[dict]:
     return cases
 
 
+def _find_results_table(tables: list) -> list | None:
+    """Найти таблицу результатов поиска по заголовку (\"№ дела\").
+
+    Для апелляции это обычно индекс 5, для 1 инстанции — индекс 8+.
+    Надёжнее искать по содержимому заголовка.
+    """
+    for tbl in tables:
+        if len(tbl) < 2:
+            continue
+        header_text = " ".join(cell_text(c) for c in tbl[0]).lower()
+        if "дела" in header_text and ("дата" in header_text or "поступлен" in header_text):
+            return tbl
+    return None
+
+
+def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
+    """Парсит страницу поиска суда первой инстанции.
+
+    Отличия от parse_search_page (апелляция):
+    - Таблица результатов ищется по заголовку, а не по индексу
+    - 8 столбцов: № дела | Дата | Категория/Стороны | Судья | Дата решения | Решение | ...
+    - Фильтр: только дела, где Сбербанк — ответчик
+    - Номер дела может содержать '~' (материал) — берём первую часть
+    """
+    tables = extract_tables(html)
+    results_table = _find_results_table(tables)
+    if not results_table:
+        log.warning(f"{court.name}: таблица результатов не найдена")
+        return []
+
+    cases = []
+    for row in results_table:
+        if len(row) < 3:
+            continue
+
+        case_number_cell = row[0]
+        case_number_raw = cell_text(case_number_cell).strip()
+
+        # Пропускаем заголовок и строки без номера дела
+        if not _CASE_NUM_RE.match(case_number_raw):
+            continue
+
+        # Номер может быть «2-5628/2026 ~ М-3298/2026» — берём первый
+        case_number = case_number_raw.split("~")[0].strip()
+
+        # Пропускаем материалы (М-XXXX/YYYY)
+        if case_number.startswith("М-") or case_number.startswith("м-"):
+            continue
+
+        href = cell_href(case_number_cell)
+        cid, cuid = "", ""
+        if href:
+            m_id = _CASE_ID_RE.search(href)
+            m_uid = _CASE_UID_RE.search(href)
+            if m_id:
+                cid = m_id.group(1)
+            if m_uid:
+                cuid = m_uid.group(1)
+
+        date_received = cell_text(row[1]).strip() if len(row) > 1 else ""
+
+        # Третий столбец — объединённая ячейка с категорией и сторонами
+        combined = cell_text(row[2]) if len(row) > 2 else ""
+        parsed = _parse_combined_cell(combined)
+        plaintiff = parsed["plaintiff"]
+        defendant = parsed["defendant"]
+        category = parsed["category"]
+
+        # Судья — 4й столбец
+        judge = cell_text(row[3]).strip() if len(row) > 3 else ""
+
+        # Дата решения и результат (столбцы 4-5, могут быть пустые)
+        result_date = cell_text(row[4]).strip() if len(row) > 4 else ""
+        result = cell_text(row[5]).strip() if len(row) > 5 else ""
+
+        # Пропускаем дела, где «Сбербанк» — только страховая компания
+        if is_insurance_only_case(plaintiff, defendant):
+            continue
+
+        # Определяем роль банка
+        role = "Третье лицо"
+        plaintiff_lower = plaintiff.lower()
+        defendant_lower = defendant.lower()
+        if any(p in plaintiff_lower for p in SBER_PATTERNS):
+            role = "Истец"
+        elif any(p in defendant_lower for p in SBER_PATTERNS):
+            role = "Ответчик"
+
+        # Фильтр: только банк-ответчик
+        if role != "Ответчик":
+            continue
+
+        link = f"{cid}|{cuid}" if cid and cuid else ""
+
+        # Статус: если есть результат — решено
+        status = "Решено" if result else "В производстве"
+
+        cases.append({
+            "case_number": case_number,
+            "filing_date": date_received,
+            "plaintiff": plaintiff,
+            "defendant": defendant,
+            "category": category,
+            "court": court.name,
+            "court_domain": court.domain,
+            "judge": judge,
+            "bank_role": role,
+            "status": status,
+            "result": result,
+            "result_date": result_date,
+            "link": link,
+        })
+
+    return cases
+
+
 # ── Парсинг карточки дела ────────────────────────────────────────────────────
 
-def _extract_act_text(html: str) -> tuple[str, str]:
+def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
     """Извлечь текст судебного акта из HTML карточки дела.
 
     Возвращает кортеж (act_text, act_url):
@@ -576,6 +787,8 @@ def _extract_act_text(html: str) -> tuple[str, str]:
     2. <a href="...act_text|print_page|case_doc...">
     3. <div class="...act...">
     """
+    if not court_base_url:
+        court_base_url = BASE_URL
     # Способ 1: Текст акта встроен в страницу (div#cont_doc1)
     doc_match = re.search(
         r"""id\s*=\s*['"]?cont_doc1['"]?[^>]*>(.+?)"""
@@ -597,7 +810,7 @@ def _extract_act_text(html: str) -> tuple[str, str]:
         if act_match:
             act_url = act_match.group(1)
             if not act_url.startswith("http"):
-                act_url = BASE_URL + "/" + act_url.lstrip("/")
+                act_url = court_base_url + "/" + act_url.lstrip("/")
             return "", act_url
 
     # Способ 3: Блок <div> с текстом акта (class содержит "act")
@@ -613,7 +826,7 @@ def _extract_act_text(html: str) -> tuple[str, str]:
     return "", ""
 
 
-def parse_case_card(html: str) -> dict:
+def parse_case_card(html: str, court_base_url: str = "") -> dict:
     """
     Парсит карточку дела. Извлекает:
     - Последнее событие и дату из таблицы ДВИЖЕНИЕ ДЕЛА (table 6, индекс 5-6)
@@ -631,6 +844,7 @@ def parse_case_card(html: str) -> dict:
         "Дата публикации акта": "",
         "Судья 1 инстанции": "",
         "Судья-докладчик": "",
+        "Номер дела 1 инстанции": "",  # Извлекается из таблицы «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
         "_appellant_raw": "",  # Сырой текст об апеллянте (для определения в update_active_cases)
     }
@@ -655,6 +869,15 @@ def parse_case_card(html: str) -> dict:
             if "результат" in row_text:
                 if value and value.lower() not in ("результат", ""):
                     info["Результат"] = value
+            # Номер дела в первой инстанции — лейбл вида:
+            # «Номер дела в первой инстанции»
+            # Значение: «2-498/2026 (2-9238/2025;)» — берём первый номер
+            if "номер" in label_l and "первой инстанции" in label_l:
+                if value:
+                    # Извлечь первый номер дела (формат N-NNNN/YYYY)
+                    fi_num_m = re.search(r'\d+-\d+/\d{4}', value)
+                    if fi_num_m:
+                        info["Номер дела 1 инстанции"] = fi_num_m.group(0)
             # Судья первой инстанции — приоритетнее, т.к. ключ длиннее
             # и содержит подстроку «судья». Лейбл вида:
             # «Судья (мировой судья) первой инстанции»
@@ -667,22 +890,25 @@ def parse_case_card(html: str) -> dict:
                 if value and value.lower() != "судья":
                     info["Судья-докладчик"] = value
 
-    # Судья 1 инстанции лежит в отдельной таблице («Производство в первой
-    # инстанции»), которая может быть за пределами первых пяти таблиц.
-    # Если в основном цикле не нашли — пройдём по всем таблицам.
-    if not info["Судья 1 инстанции"]:
+    # Судья и номер дела 1 инстанции лежат в отдельной таблице
+    # («РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»), которая может быть за пределами
+    # первых пяти таблиц. Если в основном цикле не нашли — пройдём по всем.
+    if not info["Судья 1 инстанции"] or not info["Номер дела 1 инстанции"]:
         for tbl in tables:
             for row in tbl:
                 if len(row) < 2:
                     continue
                 label_l = cell_text(row[0]).strip().lower()
-                if "первой инстанции" in label_l and "судья" in label_l:
-                    value = cell_text(row[-1]).strip()
-                    if value and value.lower() != label_l:
-                        info["Судья 1 инстанции"] = value
-                        break
-            if info["Судья 1 инстанции"]:
-                break
+                value = cell_text(row[-1]).strip()
+                if not info["Судья 1 инстанции"]:
+                    if "первой инстанции" in label_l and "судья" in label_l:
+                        if value and value.lower() != label_l:
+                            info["Судья 1 инстанции"] = value
+                if not info["Номер дела 1 инстанции"]:
+                    if "номер" in label_l and "первой инстанции" in label_l:
+                        fi_num_m = re.search(r'\d+-\d+/\d{4}', value)
+                        if fi_num_m:
+                            info["Номер дела 1 инстанции"] = fi_num_m.group(0)
 
     # ── Таблица ДВИЖЕНИЕ ДЕЛА (обычно индекс 5 или 6) ──
     # Ищем таблицу с событиями: содержит столбцы "Событие" / "Дата"
@@ -832,7 +1058,7 @@ def parse_case_card(html: str) -> dict:
         info["Статус"] = "Решено"
 
     # ── Судебный акт ──
-    act_text, act_url = _extract_act_text(html)
+    act_text, act_url = _extract_act_text(html, court_base_url)
     if act_text:
         info["Акт опубликован"] = "Да"
         info["act_text"] = act_text
@@ -955,6 +1181,32 @@ def save_csv(cases: list[dict], path: str):
     log.info(f"CSV сохранён: {path} ({len(cases)} дел)")
 
 
+def load_json(path: str) -> dict:
+    """Загрузить JSON-базу дел. Возвращает корневой объект {version, updated_at, cases}."""
+    if not os.path.exists(path):
+        log.warning(f"JSON не найден: {path}")
+        return {"version": 1, "updated_at": "", "cases": []}
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, list):
+        # Поддержка старого формата (голый список)
+        return {"version": 1, "updated_at": "", "cases": data}
+    return data
+
+
+def save_json(data: dict, path: str):
+    """Сохранить JSON-базу дел атомарно (temp + os.replace)."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+    count = len(data.get("cases", []))
+    log.info(f"JSON сохранён: {path} ({count} дел)")
+
+
 def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict]:
     """Найти дела из поиска, которых нет в текущей базе."""
     new = []
@@ -963,6 +1215,101 @@ def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict
         if num and num not in existing_numbers:
             new.append(c)
     return new
+
+
+# ── Связка дел первой инстанции ↔ апелляция ────────────────────────────────
+
+def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dict]:
+    """Связать дела первой инстанции с апелляцией.
+
+    Args:
+        cases: список JSON-объектов дел (формат cases.json)
+        appeal_fi_numbers: маппинг {номер_апелляции: номер_дела_1_инстанции},
+            полученный из parse_case_card → info["Номер дела 1 инстанции"]
+
+    Логика:
+    - Для каждого апелляционного дела с известным номером 1 инстанции:
+      1. Если дело 1 инстанции уже есть в cases → мержим appeal данные в него
+      2. Если нет → обновляем id на номер 1 инстанции (для будущей привязки)
+    - Возвращает обновлённый список cases (дедуплицированный).
+    """
+    if not appeal_fi_numbers:
+        return cases
+
+    # Индексы для быстрого поиска
+    fi_index: dict[str, int] = {}   # номер_1_инст → индекс в cases
+    appeal_index: dict[str, int] = {}  # номер_апелляции → индекс в cases
+    for i, c in enumerate(cases):
+        cid = c.get("id", "")
+        stage = c.get("current_stage", "")
+        # Индекс по номеру 1 инстанции (если дело начато с 1 инстанции)
+        fi = c.get("first_instance")
+        if fi and fi.get("case_number"):
+            fi_index[fi["case_number"]] = i
+        # Также индексируем по id (который может быть номером 1 инст. или апелляции)
+        if cid and cid not in fi_index:
+            fi_index.setdefault(cid, i)
+        # Индекс по номеру апелляции
+        appeal = c.get("appeal")
+        if appeal and appeal.get("case_number"):
+            appeal_index[appeal["case_number"]] = i
+
+    linked_count = 0
+    to_remove: set[int] = set()
+
+    for appeal_num, fi_num in appeal_fi_numbers.items():
+        if not fi_num:
+            continue
+
+        appeal_idx = appeal_index.get(appeal_num)
+        fi_idx = fi_index.get(fi_num)
+
+        if appeal_idx is None:
+            continue  # апелляционное дело не в нашей базе — пропускаем
+
+        appeal_case = cases[appeal_idx]
+
+        if fi_idx is not None and fi_idx != appeal_idx:
+            # Есть оба дела — мержим апелляцию в карточку 1 инстанции
+            fi_case = cases[fi_idx]
+            fi_case["appeal"] = appeal_case.get("appeal")
+            fi_case["current_stage"] = "appeal"
+            # Обновляем общие поля из апелляции если пусты в 1 инст.
+            for field in ("plaintiff", "defendant", "category", "bank_role"):
+                if not fi_case.get(field) and appeal_case.get(field):
+                    fi_case[field] = appeal_case[field]
+            to_remove.add(appeal_idx)
+            linked_count += 1
+            log.info(f"  Связка: {fi_num} (1 инст.) ← {appeal_num} (апелляция)")
+        else:
+            # Дела 1 инстанции нет в базе — обновляем id апелляционного дела
+            # на номер 1 инстанции для будущей привязки
+            if appeal_case.get("id") != fi_num:
+                appeal_case["id"] = fi_num
+                # Заполняем first_instance.case_number если пусто
+                fi = appeal_case.get("first_instance")
+                if fi and not fi.get("case_number"):
+                    fi["case_number"] = fi_num
+                elif fi is None:
+                    appeal_case["first_instance"] = {
+                        "case_number": fi_num,
+                        "court": "", "court_domain": "", "judge": "",
+                        "filing_date": "", "status": "", "result": "",
+                        "last_event": "", "event_date": "",
+                        "hearing_date": "", "hearing_time": "",
+                        "link": "", "act_published": False, "act_date": "",
+                    }
+                linked_count += 1
+
+    # Удаляем дубликаты (апелляционные дела, которые смержены в карточку 1 инст.)
+    if to_remove:
+        cases = [c for i, c in enumerate(cases) if i not in to_remove]
+        log.info(f"  Удалено {len(to_remove)} дубликатов после связки")
+
+    if linked_count:
+        log.info(f"Связано дел: {linked_count}")
+
+    return cases
 
 
 def split_archived(cases: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -1858,10 +2205,11 @@ def validate_environment(require_anthropic: bool = True) -> None:
 
 # ── Проверка доступности сайта суда ──────────────────────────────────────────
 
-def check_court_available() -> bool:
+def check_court_available(court: CourtConfig | None = None) -> bool:
     """Проверить что сайт суда отвечает."""
+    url = court.base_url if court else BASE_URL
     try:
-        r = session.get(BASE_URL, timeout=15)
+        r = session.get(url, timeout=15)
         return r.status_code == 200
     except Exception:
         return False
@@ -2087,6 +2435,243 @@ def main_force_postponement_digest(case_number: str,
     log.info("Готово!")
 
 
+def _fi_search_to_json_case(fi: dict) -> dict:
+    """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
+    return {
+        "id": fi["case_number"],
+        "current_stage": "first_instance",
+        "plaintiff": fi.get("plaintiff", ""),
+        "defendant": fi.get("defendant", ""),
+        "category": fi.get("category", ""),
+        "bank_role": fi.get("bank_role", "Ответчик"),
+        "notes": "",
+        "first_instance": {
+            "case_number": fi["case_number"],
+            "court": fi.get("court", ""),
+            "court_domain": fi.get("court_domain", ""),
+            "judge": fi.get("judge", ""),
+            "filing_date": fi.get("filing_date", ""),
+            "status": fi.get("status", "В производстве"),
+            "result": fi.get("result", ""),
+            "last_event": "",
+            "event_date": "",
+            "hearing_date": "",
+            "hearing_time": "",
+            "link": fi.get("link", ""),
+            "act_published": False,
+            "act_date": "",
+        },
+        "appeal": None,
+    }
+
+
+def main_json():
+    """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
+    log.info("=" * 60)
+    log.info("Запуск мониторинга дел Сбербанка (JSON-режим)")
+    log.info("=" * 60)
+
+    _metrics_reset()
+    validate_environment()
+
+    timings: dict[str, float] = {}
+    t_total_start = time.perf_counter()
+
+    # 1. Проверяем доступность апелляционного суда
+    if not check_court_available(APPEAL_COURT):
+        msg = f"⚠️ Сайт суда {APPEAL_COURT.domain} недоступен. Обновление отложено."
+        log.error(msg)
+        send_telegram(msg)
+        sys.exit(1)
+    log.info("Апелляционный суд доступен")
+
+    # 2. Загружаем текущие данные JSON
+    t0 = time.perf_counter()
+    data = load_json(JSON_PATH)
+    cases = data.get("cases", [])
+    timings["load_json"] = time.perf_counter() - t0
+
+    # Индексы для быстрого поиска по всем номерам дел
+    existing_ids = set()
+    for c in cases:
+        existing_ids.add(c.get("id", ""))
+        fi = c.get("first_instance")
+        if fi and fi.get("case_number"):
+            existing_ids.add(fi["case_number"])
+        ap = c.get("appeal")
+        if ap and ap.get("case_number"):
+            existing_ids.add(ap["case_number"])
+
+    log.info(f"Загружено {len(cases)} дел из JSON")
+
+    # ── 3. Парсинг судов первой инстанции ──
+    t0 = time.perf_counter()
+    fi_new_cases: list[dict] = []
+    enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
+    log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
+
+    for court in enabled_courts:
+        if not check_court_available(court):
+            log.warning(f"  {court.name}: недоступен, пропускаю")
+            continue
+
+        polite_delay()
+        search_html = fetch_page(court.search_url())
+        if not search_html:
+            log.warning(f"  {court.name}: не удалось загрузить поиск")
+            continue
+
+        fi_results = parse_first_instance_search(search_html, court)
+        # Фильтр: только новые дела
+        new_fi = [
+            r for r in fi_results
+            if r["case_number"] not in existing_ids
+        ]
+        if new_fi:
+            log.info(f"  {court.name}: {len(fi_results)} дел, {len(new_fi)} новых")
+            for fi in new_fi:
+                json_case = _fi_search_to_json_case(fi)
+                fi_new_cases.append(json_case)
+                existing_ids.add(fi["case_number"])
+        else:
+            log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
+
+    timings["first_instance"] = time.perf_counter() - t0
+    log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
+
+    # ── 4. Парсинг апелляции (существующая логика, конвертируем CSV → JSON) ──
+    t0 = time.perf_counter()
+    # Загружаем CSV для апелляции (пока основной пайплайн работает с CSV)
+    csv_cases = load_csv(CSV_PATH)
+    csv_existing = {c["Номер дела"].strip() for c in csv_cases if c.get("Номер дела")}
+    csv_active_count = sum(1 for c in csv_cases if not is_archived(c))
+
+    log.info("Загружаю страницу поиска апелляции...")
+    search_html = fetch_page(APPEAL_COURT.search_url())
+    appeal_new_cases: list[dict] = []
+    appeal_fi_numbers: dict[str, str] = {}
+
+    if search_html:
+        search_cases = parse_search_page(search_html)
+        log.info(f"Апелляция: {len(search_cases)} дел на странице")
+
+        if not search_cases and csv_active_count > 0:
+            warn = (
+                "⚠️ Парсинг апелляции вернул 0 дел, "
+                f"но в CSV {csv_active_count} активных."
+            )
+            log.warning(warn)
+            send_telegram(warn)
+
+        appeal_new_cases_csv = find_new_cases(search_cases, csv_existing)
+        log.info(f"Апелляция: {len(appeal_new_cases_csv)} новых")
+
+        # Для новых дел загружаем карточки и извлекаем номер 1 инстанции
+        for nc in appeal_new_cases_csv:
+            cid, cuid = case_id_uid(nc.get("Ссылка", ""))
+            if cid and cuid:
+                polite_delay()
+                url = APPEAL_COURT.card_url(cid, cuid)
+                card_html = fetch_page(url)
+                if card_html:
+                    card_info = parse_case_card(card_html, APPEAL_COURT.base_url)
+                    nc["Последнее событие"] = card_info.get("Последнее событие", "")
+                    nc["Дата события"] = card_info.get("Дата события", "")
+                    nc["Время заседания"] = card_info.get("Время заседания", "")
+                    nc["Статус"] = card_info.get("Статус", "В производстве")
+                    nc["Результат"] = card_info.get("Результат", "")
+                    nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
+                    if card_info.get("Судья 1 инстанции"):
+                        nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
+                    if card_info.get("Судья-докладчик"):
+                        nc["Судья-докладчик"] = card_info["Судья-докладчик"]
+                    # Извлекаем номер дела 1 инстанции для связки
+                    fi_num = card_info.get("Номер дела 1 инстанции", "")
+                    if fi_num:
+                        appeal_fi_numbers[nc["Номер дела"]] = fi_num
+                    log.info(f"  Карточка {nc['Номер дела']}: OK (1 инст: {fi_num or '?'})")
+
+    # Также извлекаем номер 1 инстанции из карточек активных апелляционных дел
+    log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
+    csv_cases, changes = update_active_cases(csv_cases)
+
+    # Для активных дел тоже пытаемся извлечь номер 1 инстанции
+    for case in csv_cases:
+        if is_archived(case):
+            continue
+        cid, cuid = case_id_uid(case.get("Ссылка", ""))
+        if cid and cuid and case["Номер дела"] not in appeal_fi_numbers:
+            # Перезагружать карточку не нужно — она уже загружена в update_active_cases.
+            # Но update_active_cases не извлекает номер 1 инст. Добавим позже.
+            # Пока пропускаем — link_cases сработает для новых дел.
+            pass
+
+    # Добавляем новые дела
+    if appeal_new_cases_csv:
+        csv_cases = appeal_new_cases_csv + csv_cases
+
+    timings["appeal"] = time.perf_counter() - t0
+
+    # ── 5. Сохраняем CSV (обратная совместимость) ──
+    t0 = time.perf_counter()
+    active_csv, newly_archived_csv = split_archived(csv_cases)
+    if newly_archived_csv:
+        existing_archive = load_csv(CSV_ARCHIVE_PATH)
+        existing_nums = {
+            c.get("Номер дела", "").strip()
+            for c in existing_archive if c.get("Номер дела")
+        }
+        to_add = [
+            c for c in newly_archived_csv
+            if c.get("Номер дела", "").strip() not in existing_nums
+        ]
+        if to_add:
+            save_csv(existing_archive + to_add, CSV_ARCHIVE_PATH)
+    save_csv(active_csv, CSV_PATH)
+
+    # ── 6. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
+    if fi_new_cases:
+        cases = fi_new_cases + cases
+        log.info(f"Добавлено {len(fi_new_cases)} дел 1 инстанции в JSON")
+
+    # ── 7. Связка дел ──
+    if appeal_fi_numbers:
+        log.info(f"Связка дел: {len(appeal_fi_numbers)} апелляций с номерами 1 инстанции")
+        cases = link_cases(cases, appeal_fi_numbers)
+
+    # ── 8. Сохраняем JSON ──
+    data["cases"] = cases
+    save_json(data, JSON_PATH)
+    timings["save"] = time.perf_counter() - t0
+
+    # ── 9. Дайджест и Telegram ──
+    total_active = sum(
+        1 for c in csv_cases if c.get("Статус", "").strip() != "Решено"
+    )
+    t0 = time.perf_counter()
+    log.info("Генерирую дайджест...")
+    digest = generate_digest(appeal_new_cases_csv, changes, total_active, csv_cases)
+    timings["digest"] = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    send_telegram(digest)
+    timings["telegram"] = time.perf_counter() - t0
+
+    timings["total"] = time.perf_counter() - t_total_start
+
+    log_run_summary(
+        mode="main-json",
+        timings=timings,
+        extras={
+            "FI courts": len(enabled_courts),
+            "FI new": len(fi_new_cases),
+            "Appeal new": len(appeal_new_cases_csv),
+            "Appeal changes": len(changes),
+            "JSON total": len(cases),
+        },
+    )
+
+
 def main_digest_only():
     """Сформировать и отправить дайджест по текущим данным CSV (без обращения к сайту суда)."""
     log.info("=" * 60)
@@ -2132,6 +2717,10 @@ if __name__ == "__main__":
         mode_name = f"force-digest-for {case_num}"
         entry = main_force_postponement_digest
         entry_args = (case_num, old_d, old_t)
+    elif "--json" in sys.argv:
+        mode_name = "main-json"
+        entry = main_json
+        entry_args = ()
     else:
         mode_name = "main"
         entry = main
