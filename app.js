@@ -1,5 +1,6 @@
 const STORAGE_KEY='sber-court-sheet-url';
-const DEFAULT_SHEET_URL='https://raw.githubusercontent.com/SelivanovAS/dashboard/main/data/sberbank_cases.csv';
+const DEFAULT_SHEET_URL='https://raw.githubusercontent.com/SelivanovAS/dashboard/main/data/cases.json';
+const DEFAULT_CSV_URL='https://raw.githubusercontent.com/SelivanovAS/dashboard/main/data/sberbank_cases.csv';
 const LAST_VISIT_KEY='sber-court-last-visit';
 const KNOWN_CASES_KEY='sber-court-known-cases';
 const ARCHIVE_DAYS=30;
@@ -166,7 +167,7 @@ function computeDerived(c){
   // searchBlob — склеенная в нижний регистр строка для поиска;
   // архивность — по «возрасту» даты решения;
   // timestamps — для сортировки без повторного new Date().
-  const searchBlob=[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
+  const searchBlob=[c.caseNumber,c.fiCaseNumber||'',c.appealCaseNumber||'',c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
   let archived=false;
   if(c.status==='decided'){
     const decisionDate=c.lastEventDate||c.dateReceived;
@@ -187,6 +188,110 @@ function computeDerived(c){
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
 function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ========== JSON Case Conversion ========== */
+function buildCourtLink(linkRaw,domain,deloId){
+  if(!linkRaw)return '';
+  // Pipe format: "case_id|case_uid"
+  const pm=linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
+  if(pm){
+    const d=domain||'oblsud--hmao.sudrf.ru';
+    const did=deloId||5;
+    return`https://${d}/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${did}`;
+  }
+  if(/^https?:\/\//.test(linkRaw))return linkRaw;
+  return '';
+}
+function jsonToCase(j){
+  const fi=j.first_instance||{};
+  const ap=j.appeal||{};
+  const stage=j.current_stage||'appeal';
+  // Primary data comes from the active stage
+  const isAppeal=stage==='appeal'&&ap.case_number;
+  const primary=isAppeal?ap:fi;
+  const caseNumber=isAppeal?ap.case_number:j.id;
+  // Link — appeal uses oblsud domain, first instance uses its own domain
+  let link='';
+  if(isAppeal){
+    link=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
+  }else{
+    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id);
+  }
+  const evText=primary.last_event||'';
+  const sl=(primary.status||'').toLowerCase();
+  const baseStatus=/решен|рассмотрен/i.test(sl)?'decided':'active';
+  const rs=primary.result||'';
+  // Appellant
+  const apellRaw=(ap.appellant||'').toLowerCase();
+  let appellant=APPELLANT_MAP[apellRaw]||'';
+  if(!appellant&&evText){
+    if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
+    else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';
+  }
+  // Next date extraction (same logic as rowToCase)
+  let nextDate='',nextDateLabel='';
+  const hearingDateRaw=primary.hearing_date||'';
+  const hearingTime=primary.hearing_time||'';
+  if(hearingDateRaw){
+    nextDate=parseDate(hearingDateRaw);
+    const evLow=evText.toLowerCase();
+    if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
+    else if(evLow.includes('без движения')||evLow.includes('оставлен'))nextDateLabel='Без движения до';
+    else nextDateLabel='Заседание';
+  }else if(evText){
+    const evLow=evText.toLowerCase();
+    const isAdmin=/сдано в отдел|передано в экспедиц/i.test(evText);
+    if(!isAdmin){
+      const dateMatch=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if(dateMatch){
+        const extractedDate=`${dateMatch[3]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[1].padStart(2,'0')}`;
+        if(evLow.includes('назначен')||evLow.includes('заседан'))
+          {nextDate=extractedDate;nextDateLabel='Заседание';}
+        else if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))
+          {nextDate=extractedDate;nextDateLabel='Отложено до';}
+        else if(evLow.includes('без движения')||evLow.includes('оставлен'))
+          {nextDate=extractedDate;nextDateLabel='Без движения до';}
+        else if(evLow.includes('рассмотрен'))
+          {nextDate=extractedDate;nextDateLabel='Рассмотрение';}
+        else{nextDate=extractedDate;nextDateLabel='Событие';}
+      }
+    }
+  }
+  const roleLow=(j.bank_role||'Ответчик').toLowerCase();
+  const caseObj={
+    caseNumber:caseNumber,
+    stage:stage,
+    fiCaseNumber:fi.case_number||'',
+    appealCaseNumber:ap.case_number||'',
+    dateReceived:parseDate(isAppeal?(ap.filing_date||fi.filing_date||''):(fi.filing_date||'')),
+    plaintiff:j.plaintiff||'',
+    defendant:j.defendant||'',
+    category:(j.category||'').split('→').pop().trim(),
+    firstInstanceCourt:fi.court||'',
+    firstInstanceJudge:fi.judge||'',
+    appellateJudge:ap.judge_reporter||'',
+    sberbankRole:ROLE_MAP[roleLow]||roleLow||'defendant',
+    status:baseStatus,
+    lastEvent:evText,
+    lastEventDate:parseDate(primary.event_date||''),
+    hasPublishedActs:!!(primary.act_published),
+    actDate:parseDate(primary.act_date||''),
+    result:normalizeResult(rs),
+    resultRaw:rs,
+    link:link,
+    notes:j.notes||'',
+    appellant:appellant,
+    nextDate:nextDate,
+    nextDateLabel:nextDateLabel,
+    hearingTime:hearingTime,
+    // JSON-specific: full stage data for detail view
+    _fi:fi,
+    _ap:ap.case_number?ap:null,
+  };
+  caseObj.detailedStatus=computeDetailedStatus(caseObj);
+  caseObj.computed=computeDerived(caseObj);
+  return caseObj;
+}
 function isSberbank(s){return/сбербанк|ПАО Сбер/i.test(s);}
 function shortParty(s){
   if(!s)return'';
@@ -299,27 +404,50 @@ async function fetchCsvCases(url){
   if(rows.length<2)return [];
   return rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
 }
+async function fetchJsonCases(url){
+  const r=await fetch(url);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const data=await r.json();
+  const cases=data.cases||[];
+  return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
+}
+function isJsonUrl(url){return/\.json(\?|$)/i.test(url);}
 async function loadFromSheet(url){
   showLoading();
   const btn=document.getElementById('btn-refresh');
   if(btn)btn.classList.add('is-loading');
   try{
-    // Основной + архивный CSV грузим параллельно. Основной обязателен,
-    // архивный опционален (отсутствие = норма — например, чистый запуск).
-    const archUrl=deriveArchiveUrl(url);
-    const [mainRes,archiveRes]=await Promise.all([
-      fetchCsvCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
-      archUrl?fetchCsvCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})):Promise.resolve({ok:true,v:[]}),
-    ]);
-    if(!mainRes.ok)throw mainRes.e;
-    const main=mainRes.v;
-    let archive=[];
-    if(archiveRes.ok)archive=archiveRes.v;
-    else console.info('Архивный CSV не загружен:',archiveRes.e.message);
-    // Дедупликация по номеру дела (основной приоритетнее архивного)
-    const seen=new Set(main.map(c=>c.caseNumber));
-    const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
-    allCases=main.concat(archiveOnly);
+    if(isJsonUrl(url)){
+      // JSON mode: cases.json + optional archive
+      const archUrl=url.replace('cases.json','cases_archive.json');
+      const [mainRes,archiveRes]=await Promise.all([
+        fetchJsonCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
+        fetchJsonCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
+      ]);
+      if(!mainRes.ok)throw mainRes.e;
+      const main=mainRes.v;
+      let archive=[];
+      if(archiveRes.ok)archive=archiveRes.v;
+      else console.info('Архивный JSON не загружен:',archiveRes.e.message);
+      const seen=new Set(main.map(c=>c.caseNumber));
+      const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+      allCases=main.concat(archiveOnly);
+    }else{
+      // CSV mode (legacy)
+      const archUrl=deriveArchiveUrl(url);
+      const [mainRes,archiveRes]=await Promise.all([
+        fetchCsvCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
+        archUrl?fetchCsvCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})):Promise.resolve({ok:true,v:[]}),
+      ]);
+      if(!mainRes.ok)throw mainRes.e;
+      const main=mainRes.v;
+      let archive=[];
+      if(archiveRes.ok)archive=archiveRes.v;
+      else console.info('Архивный CSV не загружен:',archiveRes.e.message);
+      const seen=new Set(main.map(c=>c.caseNumber));
+      const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+      allCases=main.concat(archiveOnly);
+    }
     if(allCases.length===0)throw new Error('Таблица пуста');
     showApp();hideError();renderAll();
   }catch(e){
@@ -410,10 +538,15 @@ function renderStats(){
   const partial=allCases.filter(c=>c.result==='partial').length;
   const dismissed=allCases.filter(c=>c.result==='dismissed'||c.result==='returned'||c.result==='withdrawn').length;
 
+  const fiCount=allCases.filter(c=>(c.stage||'appeal')==='first_instance').length;
+  const apCount=allCases.filter(c=>(c.stage||'appeal')==='appeal').length;
+
   let rolesGroup=`
     <div class="stat-chip"><div class="chip-dot" style="background:var(--blue-500);"></div>Истец: <strong>${p}</strong></div>
     <div class="stat-chip"><div class="chip-dot" style="background:#ec4899;"></div>Ответчик: <strong>${def}</strong></div>`;
   if(tp>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Сбер 3-е лицо: <strong>${tp}</strong></div>`;
+  if(fiCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:#8b5cf6;"></div>1 инст.: <strong>${fiCount}</strong></div>`;
+  if(apCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:#14b8a6;"></div>Апелляция: <strong>${apCount}</strong></div>`;
   if(newCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Новых: <strong>${newCount}</strong></div>`;
   if(archivedCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-300);"></div>В архиве: <strong>${archivedCount}</strong></div>`;
 
@@ -522,6 +655,8 @@ function applyFilters(){
   const st=document.getElementById('filter-status').value;
   const rl=document.getElementById('filter-role').value;
   const cat=document.getElementById('filter-category').value;
+  const stageEl=document.getElementById('filter-stage');
+  const stg=stageEl?stageEl.value:'all';
 
   filteredCases=allCases.filter(c=>{
     const archived=c.computed?c.computed.archived:isArchived(c);
@@ -533,6 +668,7 @@ function applyFilters(){
     else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
+    if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;
     if(q){const blob=c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!blob.includes(q))return false;}
     return true;
   });
@@ -651,6 +787,7 @@ function renderTable(){
     const linkIcon=c.link?'<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="var(--slate-400)" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>':'';
     const newBadge=isNew?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
+    const stageBadge=c.stage==='first_instance'?'<span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?'<span class="badge badge-appeal">Апелляция</span>':'';
     const eventText=c.lastEvent||'';
 
     // Favor icon — на десктопе с цветом, резервный — просто иконка результата.
@@ -676,16 +813,48 @@ function renderTable(){
     const ds=vm.ds;
 
     html+=`<tr class="${rowClass}" data-idx="${idx}" onclick="toggleExpand('${escHtml(c.caseNumber)}')">
-      <td><div class="case-number">${c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" onclick="event.stopPropagation()">${escHtml(c.caseNumber)} ${linkIcon}</a>`:escHtml(c.caseNumber)} ${newBadge} ${archived}</div><span class="badge badge-cat" title="${escHtml(c.category)}" style="margin-top:3px;">${escHtml(shortCat(c.category))}</span></td>
+      <td><div class="case-number">${c.link?`<a href="${escHtml(c.link)}" target="_blank" rel="noopener" class="case-link" onclick="event.stopPropagation()">${escHtml(c.caseNumber)} ${linkIcon}</a>`:escHtml(c.caseNumber)} ${newBadge} ${archived} ${stageBadge}</div><span class="badge badge-cat" title="${escHtml(c.category)}" style="margin-top:3px;">${escHtml(shortCat(c.category))}</span></td>
       <td>${formatDate(c.dateReceived)}</td>
       <td><div class="parties-col"><span><span class="party-tag">И:</span>${plaintiffHtml}</span><span><span class="party-tag">О:</span>${defendantHtml}</span>${rc==='third'?'<span><span class="badge badge-third" style="font-size:12px;">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
       <td>${mergedHtml}</td>
     </tr>`;
 
-    // Detail row
-    html+=`<tr class="detail-row ${expanded?'open':''}" id="detail-${escHtml(c.caseNumber)}">
-      <td colspan="${COLS.length}">
-        <div class="detail-content">
+    // Detail row — two-stage layout if both instances exist
+    const hasFi=!!(c._fi&&c._fi.case_number);
+    const hasAp=!!(c._ap&&c._ap.case_number);
+    let detailInner='';
+    if(hasFi||hasAp){
+      // Two-stage detail view
+      if(hasFi){
+        const fii=c._fi;
+        const fiLink=buildCourtLink(fii.link,fii.court_domain,fii.delo_id);
+        detailInner+=`<div class="detail-stage"><div class="detail-stage-title">🏛 Первая инстанция${fii.case_number?' — '+escHtml(fii.case_number):''}</div>`;
+        if(fii.court)detailInner+=`<div class="detail-block"><div class="detail-block-title">Суд</div>${escHtml(fii.court)}</div>`;
+        if(fii.judge)detailInner+=`<div class="detail-block"><div class="detail-block-title">Судья</div>${escHtml(fii.judge)}</div>`;
+        if(fii.filing_date)detailInner+=`<div class="detail-block"><div class="detail-block-title">Дата подачи</div>${formatDate(parseDate(fii.filing_date))}</div>`;
+        if(fii.status)detailInner+=`<div class="detail-block"><div class="detail-block-title">Статус</div>${escHtml(fii.status)}</div>`;
+        if(fii.result)detailInner+=`<div class="detail-block"><div class="detail-block-title">Результат</div>${escHtml(fii.result)}</div>`;
+        if(fii.last_event)detailInner+=`<div class="detail-block"><div class="detail-block-title">Событие</div>${escHtml(fii.last_event)}${fii.event_date?' <span style="color:var(--slate-400);font-size:11px;">'+formatDate(parseDate(fii.event_date))+'</span>':''}</div>`;
+        if(fiLink)detailInner+=`<div class="detail-block"><a class="detail-link" href="${escHtml(fiLink)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка 1 инстанции</a></div>`;
+        detailInner+=`</div>`;
+      }
+      if(hasAp){
+        const api=c._ap;
+        const apLink=buildCourtLink(api.link,'oblsud--hmao.sudrf.ru',5);
+        detailInner+=`<div class="detail-stage"><div class="detail-stage-title">⚖️ Апелляция${api.case_number?' — '+escHtml(api.case_number):''}</div>`;
+        if(api.judge_reporter)detailInner+=`<div class="detail-block"><div class="detail-block-title">Судья-докладчик</div>${escHtml(api.judge_reporter)}</div>`;
+        if(api.filing_date)detailInner+=`<div class="detail-block"><div class="detail-block-title">Поступило</div>${formatDate(parseDate(api.filing_date))}</div>`;
+        if(api.status)detailInner+=`<div class="detail-block"><div class="detail-block-title">Статус</div>${escHtml(api.status)}</div>`;
+        if(api.result)detailInner+=`<div class="detail-block"><div class="detail-block-title">Результат</div>${escHtml(api.result)}</div>`;
+        if(api.last_event)detailInner+=`<div class="detail-block"><div class="detail-block-title">Событие</div>${escHtml(api.last_event)}${api.event_date?' <span style="color:var(--slate-400);font-size:11px;">'+formatDate(parseDate(api.event_date))+'</span>':''}</div>`;
+        if(api.appellant)detailInner+=`<div class="detail-block"><div class="detail-block-title">Апеллянт</div>${api.appellant==='bank'||/сбербанк|пао сбер/i.test(api.appellant)?'Банк (Сбербанк)':escHtml(api.appellant)}</div>`;
+        if(apLink)detailInner+=`<div class="detail-block"><a class="detail-link" href="${escHtml(apLink)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка апелляции</a></div>`;
+        detailInner+=`</div>`;
+      }
+      if(c.notes)detailInner+=`<div class="detail-block"><div class="detail-block-title">Заметки</div>${escHtml(c.notes)}</div>`;
+    }else{
+      // Legacy single-stage detail (CSV cases)
+      detailInner+=`
           ${c.firstInstanceCourt?`<div class="detail-block"><div class="detail-block-title">Суд первой инстанции</div>${escHtml(c.firstInstanceCourt)}</div>`:''}
           ${c.firstInstanceJudge?`<div class="detail-block"><div class="detail-block-title">Судья первой инстанции</div>${escHtml(c.firstInstanceJudge)}</div>`:''}
           <div class="detail-block"><div class="detail-block-title">Поступило в апелляцию</div>${formatDate(c.dateReceived)}</div>
@@ -697,8 +866,11 @@ function renderTable(){
           ${c.notes?`<div class="detail-block"><div class="detail-block-title">Заметки</div>${escHtml(c.notes)}</div>`:''}
           <div class="detail-block">
             ${c.link?`<a class="detail-link" href="${escHtml(c.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть на сайте суда</a>`:''}
-          </div>
-        </div>
+          </div>`;
+    }
+    html+=`<tr class="detail-row ${expanded?'open':''}" id="detail-${escHtml(c.caseNumber)}">
+      <td colspan="${COLS.length}">
+        <div class="detail-content">${detailInner}</div>
       </td>
     </tr>`;
   });
@@ -738,7 +910,7 @@ function renderMobileCards(){
     const caseSubHtml=caseSub?`<div class="mc-case-sub">(${escHtml(caseSub)})</div>`:'';
     return`<div class="mobile-card ${isNew?'card-new':''}" data-role="${c.sberbankRole}" onclick="if(!event.target.closest('a'))this.classList.toggle('mc-open')">
       <div class="mc-header">
-        <div>${caseLabel}${isNew?' <span class="badge-new">Новое</span>':''}</div>
+        <div>${caseLabel}${isNew?' <span class="badge-new">Новое</span>':''}${c.stage==='first_instance'?' <span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?' <span class="badge badge-appeal">Апелляция</span>':''}</div>
         <span class="mc-cat">${escHtml(shortCat(c.category))}</span>
       </div>${caseSubHtml}${rc==='third'?`
       <div style="margin-bottom:6px;"><span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}</div>`:''}

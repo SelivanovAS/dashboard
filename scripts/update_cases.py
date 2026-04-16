@@ -1113,11 +1113,17 @@ def next_tuesday(from_date: datetime | None = None) -> datetime:
     )
 
 
-def build_summary_line(new_cases: list[dict], changes: list[dict]) -> str:
+def build_summary_line(new_cases: list[dict], changes: list[dict],
+                       fi_new_cases: list[dict] | None = None,
+                       stage_transitions: list[dict] | None = None) -> str:
     """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
     parts = []
+    if fi_new_cases:
+        parts.append(f"+{len(fi_new_cases)} нов. 1 инст.")
     if new_cases:
-        parts.append(f"+{len(new_cases)} нов.")
+        parts.append(f"+{len(new_cases)} нов. апелл.")
+    if stage_transitions:
+        parts.append(f"{len(stage_transitions)} в апелляцию")
     events = sum(1 for ch in changes if "new_event" in ch["type"])
     results = sum(1 for ch in changes if "new_result" in ch["type"])
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
@@ -1579,21 +1585,28 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def generate_digest(new_cases: list[dict], changes: list[dict],
-                    total_active: int, cases: list[dict] | None = None) -> str:
+                    total_active: int, cases: list[dict] | None = None,
+                    fi_new_cases: list[dict] | None = None,
+                    stage_transitions: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API."""
 
     if cases is None:
         cases = []
+    if fi_new_cases is None:
+        fi_new_cases = []
+    if stage_transitions is None:
+        stage_transitions = []
 
     if not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
-        return generate_template_digest(new_cases, changes, total_active, cases)
+        return generate_template_digest(new_cases, changes, total_active, cases,
+                                        fi_new_cases, stage_transitions)
 
     today = datetime.now().strftime("%d.%m.%Y")
-    summary = build_summary_line(new_cases, changes)
+    summary = build_summary_line(new_cases, changes, fi_new_cases, stage_transitions)
 
     # ── Короткое сообщение если изменений нет ──
-    if not new_cases and not changes:
+    if not new_cases and not changes and not fi_new_cases and not stage_transitions:
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
@@ -1675,7 +1688,34 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
             context_parts.append(line)
 
-    prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам в апелляционной инстанции Суда ХМАО-Югры за {today}.
+    if fi_new_cases:
+        context_parts.append("\nНОВЫЕ ДЕЛА ПЕРВОЙ ИНСТАНЦИИ:")
+        for c in fi_new_cases:
+            fi = c.get("first_instance", {})
+            court = fi.get("court", "")
+            link = fi.get("link", "")
+            pl = shorten_party_name(c.get("plaintiff", ""), keep_fio_full=True)
+            df = shorten_party_name(c.get("defendant", ""), keep_fio_full=True)
+            context_parts.append(
+                f"- {c['id']} (суд: {court}): "
+                f"{pl} (истец) vs {df} (ответчик), "
+                f"категория: {c.get('category', '')}, роль банка: {c.get('bank_role', '')}, "
+                f"подано: {fi.get('filing_date', '')}"
+            )
+
+    if stage_transitions:
+        context_parts.append("\nПЕРЕШЛИ В АПЕЛЛЯЦИЮ:")
+        for t in stage_transitions:
+            fi_num = t["fi_case_number"]
+            ap_num = t["appeal_case_number"]
+            pl = shorten_party_name(t.get("plaintiff", ""))
+            df = shorten_party_name(t.get("defendant", ""))
+            context_parts.append(
+                f"- {fi_num} (1 инст.) → {ap_num} (апелляция): "
+                f"{pl} vs {df}"
+            )
+
+    prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам Суда ХМАО-Югры за {today}.
 
 ИМЕНА: все наименования сторон в данных уже сокращены по правилам (ОПФ убрана, ФИО → инициалы, «в лице филиала…» удалено и т.п.). НЕ переписывай их и НЕ возвращай ОПФ обратно. В секции 📥 «Новые дела» имена физлиц приходят полными — там оставляй как есть.
 
@@ -1685,28 +1725,30 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 
 СТРУКТУРА — включай только секции, по которым есть данные:
 
-1. Заголовок: 📊 Дайджест апелляционных дел | Суд ХМАО-Югры | {today}
+1. Заголовок: 📊 Дайджест судебных дел | Суд ХМАО-Югры | {today}
 2. 📋 Сводка одной строкой (краткий итог: N событий, N решений и т.д.)
-3. 📥 Новые дела — номер как <a href="URL"><b>номер</b></a>, кто подал к кому, о чём, суд 1 инстанции, роль банка
-4. ⚖️ Вынесенные судебные акты — одна строка на дело:
+3. 🏛 Первая инстанция: новые иски — номер дела, суд, кто подал к кому, категория, роль банка, дата подачи. Имена физлиц приходят полными — оставляй как есть.
+4. 🔀 Перешли в апелляцию — номер дела 1 инст. → номер апелляции, стороны (кратко). Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ».
+5. 📥 Новые дела апелляции — номер как <a href="URL"><b>номер</b></a>, кто подал к кому, о чём, суд 1 инстанции, роль банка
+6. ⚖️ Вынесенные судебные акты — одна строка на дело:
    <a href="URL"><b>номер</b></a> — Апелляционное определение от <дата>. ИТОГ: <дословно поле ИТОГ>. Категория: <дословно>. Стороны: <истец> vs <ответчик>, банк — <роль>. Для банка: <дословно «В чью пользу для банка»>.
    • если ИТОГ = «возвращена / без рассмотрения / прекращено / снято» — добавь причину из «Последнее событие»
    • если ИТОГ = «отменено / изменено» и есть «Цитата из мотивировки» — добавь 1 фразу с ключевым доводом суда
    • НЕ переформулируй ИТОГ своими словами и не подменяй его шаблоном
    • НЕ включай дела, у которых в данных НЕТ блока «ИТОГ»
    • НЕ упоминай «составлено мотивированное определение» — это служебный шаг
-5. 📄 Опубликованные акты — номер (ссылка), стороны, итог (удовлетворена / отказано / частично) и 1-2 предложения ПОЧЕМУ суд так решил (по полю «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА»). Не пиши просто номера без содержания.
+7. 📄 Опубликованные акты — номер (ссылка), стороны, итог (удовлетворена / отказано / частично) и 1-2 предложения ПОЧЕМУ суд так решил (по полю «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА»). Не пиши просто номера без содержания.
 
 ШАБЛОН ЗАСЕДАНИЙ — две строки на дело, между делами пустая строка:
    строка 1: <b>дата/время</b> + <a href="URL"><b>номер</b></a>
    строка 2: стороны | категория. Роль банка если известна.
 
 Три типа секций по этому шаблону:
-6. 📅 Назначенные заседания — <b>ДД.ММ HH:MM</b>. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
-7. 🔁 Отложенные заседания — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных). Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
+8. 📅 Назначенные заседания — <b>ДД.ММ HH:MM</b>. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
+9. 🔁 Отложенные заседания — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных). Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
 
-8. 📌 Итоговая строка: всего дел в производстве: {total_active}
-9. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
+10. 📌 Итоговая строка: всего дел в производстве: {total_active} (из них 1 инст.: показать число если >0)
+11. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок; пустые строки для читаемости.
 
@@ -1843,14 +1885,20 @@ def truncate_html_message(text: str, limit: int = 4096) -> str:
 
 def generate_template_digest(new_cases: list[dict], changes: list[dict],
                              total_active: int,
-                             cases: list[dict] | None = None) -> str:
+                             cases: list[dict] | None = None,
+                             fi_new_cases: list[dict] | None = None,
+                             stage_transitions: list[dict] | None = None) -> str:
     """Шаблонный дайджест (fallback без Claude API). Формат: HTML."""
     today = datetime.now().strftime("%d.%m.%Y")
     if cases is None:
         cases = []
+    if fi_new_cases is None:
+        fi_new_cases = []
+    if stage_transitions is None:
+        stage_transitions = []
 
     # ── Короткое сообщение если изменений нет ──
-    if not new_cases and not changes:
+    if not new_cases and not changes and not fi_new_cases and not stage_transitions:
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
@@ -1860,12 +1908,43 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         return msg
 
     # ── Полный дайджест ──
-    summary = build_summary_line(new_cases, changes)
+    summary = build_summary_line(new_cases, changes, fi_new_cases, stage_transitions)
     lines = [f"📊 <b>Мониторинг дел Сбербанка — {today}</b>"]
     lines.append(f"📋 {escape_html(summary)}\n")
 
+    if fi_new_cases:
+        lines.append(f"🏛 <b>Первая инстанция: новые иски ({len(fi_new_cases)}):</b>")
+        for c in fi_new_cases:
+            fi = c.get("first_instance", {})
+            court = escape_html(fi.get("court", ""))
+            role = c.get("bank_role", "")
+            role_icon = {"Истец": "🏦→", "Ответчик": "→🏦", "Третье лицо": "👁"
+                         }.get(role, "")
+            cat = category_short(c.get("category", ""))
+            pl = escape_html(shorten_party_name(c.get("plaintiff", ""), keep_fio_full=True))
+            df = escape_html(shorten_party_name(c.get("defendant", ""), keep_fio_full=True))
+            num = escape_html(c.get("id", ""))
+            filing = escape_html(fi.get("filing_date", ""))
+            lines.append(
+                f"  <b>{num}</b> {role_icon}"
+                f"{pl} vs {df} "
+                f"({cat}) | {court}"
+                + (f" | подано {filing}" if filing else "")
+            )
+
+    if stage_transitions:
+        lines.append(f"\n🔀 <b>Перешли в апелляцию ({len(stage_transitions)}):</b>")
+        for t in stage_transitions:
+            fi_num = escape_html(t["fi_case_number"])
+            ap_num = escape_html(t["appeal_case_number"])
+            pl = escape_html(shorten_party_name(t.get("plaintiff", "")))
+            df = escape_html(shorten_party_name(t.get("defendant", "")))
+            lines.append(
+                f"  <b>{fi_num}</b> → <b>{ap_num}</b>: {pl} vs {df}"
+            )
+
     if new_cases:
-        lines.append(f"📥 <b>Новые дела ({len(new_cases)}):</b>")
+        lines.append(f"\n📥 <b>Новые дела апелляции ({len(new_cases)}):</b>")
         for c in new_cases:
             link = case_link_html(c)
             role = c.get("Роль банка", "")
@@ -2504,51 +2583,15 @@ def main_json():
 
     log.info(f"Загружено {len(cases)} дел из JSON")
 
-    # ── 3. Парсинг судов первой инстанции ──
+    # ── 3. Парсинг апелляции: новые дела ──
     t0 = time.perf_counter()
-    fi_new_cases: list[dict] = []
-    enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
-    log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
-
-    for court in enabled_courts:
-        if not check_court_available(court):
-            log.warning(f"  {court.name}: недоступен, пропускаю")
-            continue
-
-        polite_delay()
-        search_html = fetch_page(court.search_url())
-        if not search_html:
-            log.warning(f"  {court.name}: не удалось загрузить поиск")
-            continue
-
-        fi_results = parse_first_instance_search(search_html, court)
-        # Фильтр: только новые дела
-        new_fi = [
-            r for r in fi_results
-            if r["case_number"] not in existing_ids
-        ]
-        if new_fi:
-            log.info(f"  {court.name}: {len(fi_results)} дел, {len(new_fi)} новых")
-            for fi in new_fi:
-                json_case = _fi_search_to_json_case(fi)
-                fi_new_cases.append(json_case)
-                existing_ids.add(fi["case_number"])
-        else:
-            log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
-
-    timings["first_instance"] = time.perf_counter() - t0
-    log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
-
-    # ── 4. Парсинг апелляции (существующая логика, конвертируем CSV → JSON) ──
-    t0 = time.perf_counter()
-    # Загружаем CSV для апелляции (пока основной пайплайн работает с CSV)
     csv_cases = load_csv(CSV_PATH)
     csv_existing = {c["Номер дела"].strip() for c in csv_cases if c.get("Номер дела")}
     csv_active_count = sum(1 for c in csv_cases if not is_archived(c))
 
     log.info("Загружаю страницу поиска апелляции...")
     search_html = fetch_page(APPEAL_COURT.search_url())
-    appeal_new_cases: list[dict] = []
+    appeal_new_cases_csv: list[dict] = []
     appeal_fi_numbers: dict[str, str] = {}
 
     if search_html:
@@ -2585,34 +2628,126 @@ def main_json():
                         nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
                     if card_info.get("Судья-докладчик"):
                         nc["Судья-докладчик"] = card_info["Судья-докладчик"]
-                    # Извлекаем номер дела 1 инстанции для связки
                     fi_num = card_info.get("Номер дела 1 инстанции", "")
                     if fi_num:
                         appeal_fi_numbers[nc["Номер дела"]] = fi_num
                     log.info(f"  Карточка {nc['Номер дела']}: OK (1 инст: {fi_num or '?'})")
 
-    # Также извлекаем номер 1 инстанции из карточек активных апелляционных дел
+    timings["appeal_new"] = time.perf_counter() - t0
+
+    # ── 4. Парсинг судов первой инстанции: новые дела ──
+    t0 = time.perf_counter()
+    fi_new_cases: list[dict] = []
+    enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
+    log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
+
+    for court in enabled_courts:
+        if not check_court_available(court):
+            log.warning(f"  {court.name}: недоступен, пропускаю")
+            continue
+
+        polite_delay()
+        search_html = fetch_page(court.search_url())
+        if not search_html:
+            log.warning(f"  {court.name}: не удалось загрузить поиск")
+            continue
+
+        fi_results = parse_first_instance_search(search_html, court)
+        # Фильтр: только новые дела (первая страница поиска)
+        new_fi = [
+            r for r in fi_results
+            if r["case_number"] not in existing_ids
+        ]
+        if new_fi:
+            log.info(f"  {court.name}: {len(fi_results)} дел, {len(new_fi)} новых")
+            for fi in new_fi:
+                json_case = _fi_search_to_json_case(fi)
+                fi_new_cases.append(json_case)
+                existing_ids.add(fi["case_number"])
+        else:
+            log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
+
+    timings["first_instance"] = time.perf_counter() - t0
+    log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
+
+    # ── 5. Обновление существующих дел ──
+    # 5a. Апелляция: обновляем активные дела из CSV
+    t0 = time.perf_counter()
     log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
     csv_cases, changes = update_active_cases(csv_cases)
 
-    # Для активных дел тоже пытаемся извлечь номер 1 инстанции
-    for case in csv_cases:
-        if is_archived(case):
-            continue
-        cid, cuid = case_id_uid(case.get("Ссылка", ""))
-        if cid and cuid and case["Номер дела"] not in appeal_fi_numbers:
-            # Перезагружать карточку не нужно — она уже загружена в update_active_cases.
-            # Но update_active_cases не извлекает номер 1 инст. Добавим позже.
-            # Пока пропускаем — link_cases сработает для новых дел.
-            pass
-
-    # Добавляем новые дела
     if appeal_new_cases_csv:
         csv_cases = appeal_new_cases_csv + csv_cases
 
-    timings["appeal"] = time.perf_counter() - t0
+    timings["appeal_update"] = time.perf_counter() - t0
 
-    # ── 5. Сохраняем CSV (обратная совместимость) ──
+    # 5b. Первая инстанция: обновляем активные дела из JSON
+    t0 = time.perf_counter()
+    fi_active = [
+        c for c in cases
+        if c.get("current_stage") == "first_instance"
+        and c.get("first_instance", {}).get("case_number")
+    ]
+    log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
+    fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
+    fi_update_count = 0
+
+    for case_j in fi_active:
+        fi = case_j.get("first_instance", {})
+        court_domain = fi.get("court_domain", "")
+        court_cfg = fi_court_map.get(court_domain)
+        if not court_cfg:
+            continue
+        link_raw = fi.get("link", "")
+        if not link_raw:
+            continue
+        # Извлекаем case_id и case_uid из ссылки
+        pm = re.match(r'^(\d+)\|([a-f0-9-]+)$', link_raw)
+        if not pm:
+            continue
+        cid, cuid = pm.group(1), pm.group(2)
+        polite_delay()
+        url = court_cfg.card_url(cid, cuid)
+        html = fetch_page(url)
+        if not html:
+            log.warning(f"  {fi['case_number']}: не удалось загрузить карточку")
+            continue
+        card_info = parse_case_card(html, court_cfg.base_url)
+        # Обновляем поля первой инстанции
+        changed = False
+        new_ev = card_info.get("Последнее событие", "")
+        if new_ev and new_ev != fi.get("last_event", ""):
+            fi["last_event"] = new_ev
+            fi["event_date"] = card_info.get("Дата события", "")
+            changed = True
+        new_status = card_info.get("Статус", "")
+        if new_status and new_status != fi.get("status", ""):
+            fi["status"] = new_status
+            changed = True
+        new_result = card_info.get("Результат", "")
+        if new_result and new_result != fi.get("result", ""):
+            fi["result"] = new_result
+            changed = True
+        new_hearing = card_info.get("Дата заседания", "")
+        if new_hearing:
+            fi["hearing_date"] = new_hearing
+        new_time = card_info.get("Время заседания", "")
+        if new_time:
+            fi["hearing_time"] = new_time
+        if card_info.get("Судья"):
+            fi["judge"] = card_info["Судья"]
+        if card_info.get("Акт опубликован", "") == "Да":
+            fi["act_published"] = True
+            if card_info.get("Дата публикации акта"):
+                fi["act_date"] = card_info["Дата публикации акта"]
+        if changed:
+            fi_update_count += 1
+        log.info(f"  {fi['case_number']}: {'обновлено' if changed else 'без изменений'}")
+
+    timings["fi_update"] = time.perf_counter() - t0
+    log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
+
+    # ── 6. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
     active_csv, newly_archived_csv = split_archived(csv_cases)
     if newly_archived_csv:
@@ -2629,28 +2764,63 @@ def main_json():
             save_csv(existing_archive + to_add, CSV_ARCHIVE_PATH)
     save_csv(active_csv, CSV_PATH)
 
-    # ── 6. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
+    # ── 7. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
     if fi_new_cases:
         cases = fi_new_cases + cases
         log.info(f"Добавлено {len(fi_new_cases)} дел 1 инстанции в JSON")
 
-    # ── 7. Связка дел ──
+    # ── 8. Связка дел ──
+    # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
+    stage_before: dict[str, str] = {}
+    if appeal_fi_numbers:
+        fi_nums_set = set(appeal_fi_numbers.values())
+        for c in cases:
+            cid = c.get("id", "")
+            fi = c.get("first_instance")
+            fi_num = fi.get("case_number", "") if fi else ""
+            if cid in fi_nums_set or fi_num in fi_nums_set:
+                stage_before[cid] = c.get("current_stage", "")
+
+    stage_transitions: list[dict] = []
     if appeal_fi_numbers:
         log.info(f"Связка дел: {len(appeal_fi_numbers)} апелляций с номерами 1 инстанции")
         cases = link_cases(cases, appeal_fi_numbers)
 
-    # ── 8. Сохраняем JSON ──
+        # Обнаруживаем переходы: current_stage был first_instance → стал appeal
+        for c in cases:
+            cid = c.get("id", "")
+            if cid in stage_before and stage_before[cid] == "first_instance":
+                if c.get("current_stage") == "appeal":
+                    ap = c.get("appeal", {}) or {}
+                    stage_transitions.append({
+                        "fi_case_number": cid,
+                        "appeal_case_number": ap.get("case_number", ""),
+                        "plaintiff": c.get("plaintiff", ""),
+                        "defendant": c.get("defendant", ""),
+                    })
+        if stage_transitions:
+            log.info(f"Переходов в апелляцию: {len(stage_transitions)}")
+
+    # ── 9. Сохраняем JSON ──
     data["cases"] = cases
     save_json(data, JSON_PATH)
     timings["save"] = time.perf_counter() - t0
 
-    # ── 9. Дайджест и Telegram ──
-    total_active = sum(
+    # ── 10. Дайджест и Telegram ──
+    # total_active: апелляция (CSV) + 1 инстанция (JSON, ещё не в апелляции)
+    total_active_appeal = sum(
         1 for c in csv_cases if c.get("Статус", "").strip() != "Решено"
     )
+    total_active_fi = sum(
+        1 for c in cases if c.get("current_stage") == "first_instance"
+    )
+    total_active = total_active_appeal + total_active_fi
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
-    digest = generate_digest(appeal_new_cases_csv, changes, total_active, csv_cases)
+    digest = generate_digest(
+        appeal_new_cases_csv, changes, total_active, csv_cases,
+        fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+    )
     timings["digest"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()
@@ -2665,6 +2835,8 @@ def main_json():
         extras={
             "FI courts": len(enabled_courts),
             "FI new": len(fi_new_cases),
+            "FI updated": fi_update_count,
+            "Stage transitions": len(stage_transitions),
             "Appeal new": len(appeal_new_cases_csv),
             "Appeal changes": len(changes),
             "JSON total": len(cases),

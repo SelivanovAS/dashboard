@@ -210,6 +210,12 @@ tbody td{padding:12px 14px;vertical-align:top;}
 .badge-icon{font-size:11px;line-height:1;}
 .badge-new{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;padding:2px 7px;border-radius:8px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;}
 .badge-archived{background:var(--slate-200);color:var(--slate-500);font-size:9px;padding:2px 7px;border-radius:8px;font-weight:600;text-transform:uppercase;}
+.badge-fi{background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;font-size:9px;padding:2px 7px;border-radius:8px;font-weight:700;letter-spacing:.03em;white-space:nowrap;}
+.badge-appeal{background:linear-gradient(135deg,#14b8a6,#0d9488);color:#fff;font-size:9px;padding:2px 7px;border-radius:8px;font-weight:700;letter-spacing:.03em;white-space:nowrap;}
+
+/* Detail stage sections */
+.detail-stage{margin-bottom:12px;padding:8px 12px;background:var(--slate-50);border-radius:8px;border-left:3px solid var(--blue-400);}
+.detail-stage-title{font-weight:700;font-size:13px;margin-bottom:6px;color:var(--slate-700);}
 
 /* Row new — animate for 5s then static */
 tbody tr.row-new{animation:newHighlight 2s ease 3;background:rgba(245,158,11,.06);}

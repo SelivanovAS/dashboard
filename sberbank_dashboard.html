@@ -114,6 +114,11 @@
           <option value="defendant">Ответчик</option>
           <option value="third_party">Сбер 3-е лицо</option>
         </select>
+        <select class="filter-select" id="filter-stage" onchange="applyFilters()">
+          <option value="all">Все инстанции</option>
+          <option value="first_instance">1 инстанция</option>
+          <option value="appeal">Апелляция</option>
+        </select>
         <select class="filter-select" id="filter-category" onchange="applyFilters()">
           <option value="all">Все категории</option>
         </select>
