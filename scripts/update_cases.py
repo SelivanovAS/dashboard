@@ -61,7 +61,7 @@ class CourtConfig:
     def _delo_table(self) -> str:
         if self.delo_id == 5:
             return "g2_case"
-        return "g_case"
+        return "g1_case"
 
     @property
     def _name_field(self) -> str:
