@@ -77,6 +77,46 @@ class TestParseSearchPage:
         numbers = [c["Номер дела"] for c in cases]
         assert "33-1003/2026" not in numbers
 
+    def test_is_subsidiary_only_case_insurance_spelled_out(self):
+        """«Страховая компания» полностью, а не только «СК»."""
+        assert uc.is_subsidiary_only_case(
+            "",
+            'ООО Страховая компания «Сбербанк страхование жизни»',
+        )
+
+    def test_is_subsidiary_only_case_insurance_mixed_parties(self):
+        """Среди прочих сторон — только страховая, ПАО Сбербанка нет."""
+        assert uc.is_subsidiary_only_case(
+            "",
+            'Нурматова М.Ю., ООО Страховая компания «Сбербанк страхование жизни», Хайдаров П.Т.',
+        )
+
+    def test_is_subsidiary_only_case_npf(self):
+        """АО «НПФ Сбербанк» — негосударственный пенсионный фонд, не банк."""
+        assert uc.is_subsidiary_only_case("", 'АО «НПФ Сбербанк»')
+
+    def test_is_subsidiary_only_case_npf_full_name(self):
+        """Полное название НПФ."""
+        assert uc.is_subsidiary_only_case(
+            "",
+            'Негосударственный пенсионный фонд Сбербанк',
+        )
+
+    def test_is_subsidiary_only_case_bank_present_mixed(self):
+        """Если одновременно есть ПАО Сбербанк и дочка — дело НЕ фильтруется."""
+        assert not uc.is_subsidiary_only_case(
+            "ПАО Сбербанк",
+            'ООО СК «Сбербанк страхование жизни»',
+        )
+
+    def test_is_subsidiary_only_case_plain_bank(self):
+        """Чистый ПАО Сбербанк — не фильтруется."""
+        assert not uc.is_subsidiary_only_case("", "ПАО Сбербанк")
+
+    def test_is_subsidiary_only_case_no_sberbank(self):
+        """Сбербанк вообще не упомянут — функция возвращает False."""
+        assert not uc.is_subsidiary_only_case("Иванов И.И.", "Петров П.П.")
+
     def test_few_tables_returns_empty(self):
         """Если таблиц меньше 6 — возвращается пустой список, не падает."""
         html = "<html><body><table><tr><td>x</td></tr></table></body></html>"
@@ -118,6 +158,17 @@ class TestParseCaseCard:
         # Апеллянт ищется из события «Поступила жалоба от ...»
         assert "Иванов" in info["_appellant_raw"]
 
+    def test_card_with_act_events_list(self):
+        """Полный список событий движения дела должен попадать в _events."""
+        html = _read_fixture("case_card_with_act.html")
+        info = uc.parse_case_card(html)
+        events = info.get("_events", [])
+        assert isinstance(events, list)
+        assert len(events) >= 1
+        first = events[0]
+        assert "date" in first and "text" in first and "time" in first
+        assert first["text"]  # non-empty
+
     def test_card_minimal_no_act(self):
         html = _read_fixture("case_card_minimal.html")
         info = uc.parse_case_card(html)
@@ -138,6 +189,33 @@ class TestParseCaseCard:
         # Должно быть последнее событие из таблицы движения
         assert info["Последнее событие"] == "Передача дела судье"
         assert info["Дата события"] == "10.03.2026"
+
+    def test_first_instance_result_not_garbage(self):
+        """Карточка 1 инстанции: дисклеймер sudrf («…поля Результат
+        рассмотрения…») не должен перетирать реальное поле «Результат»."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert "Информация о размещении" not in info["Результат"]
+        assert "ОТКАЗАНО" in info["Результат"]
+
+    def test_first_instance_status_resolved(self):
+        """Карточка 1 инстанции с результатом «ОТКАЗАНО…» + «Дело передано
+        в архив» в последнем событии → статус «Решено»."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["Статус"] == "Решено"
+
+    def test_first_instance_last_event(self):
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert "архив" in info["Последнее событие"].lower()
+        assert info["Дата события"] == "20.03.2026"
+
+    def test_first_instance_hearing_date_and_time(self):
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["Дата заседания"] == "12.02.2026"
+        assert info["Время заседания"] == "10:30"
 
     def test_few_tables_returns_defaults(self):
         """Если таблиц меньше 6 — возвращаются дефолтные значения, не падает."""

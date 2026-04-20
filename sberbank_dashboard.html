@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Мониторинг судебных дел — ПАО Сбербанк — Апелляция ХМАО</title>
 <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -96,9 +96,19 @@
           <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
           <button class="search-clear" id="search-clear" onclick="clearSearch()" title="Очистить">&times;</button>
         </div>
-        <select class="filter-select" id="filter-status" onchange="applyFilters()">
+        <button class="filters-btn" id="filters-btn" onclick="openFiltersSheet()" aria-label="Фильтры">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+          <span>Фильтры</span>
+          <span class="filters-btn-count" id="filters-btn-count" style="display:none;"></span>
+        </button>
+        <!-- Chip-bar быстрых фильтров (динамически рендерится JS) -->
+        <div class="chip-bar" id="chip-bar"></div>
+        <!-- Hidden selects — используются JS как source of truth -->
+        <select class="filter-select" id="filter-status" style="display:none;" onchange="applyFilters()">
           <option value="all">Все статусы</option>
           <option value="new">Только новые</option>
+          <option value="today">Заседание сегодня</option>
+          <option value="week">Заседание на неделе</option>
           <option value="active">Все в производстве</option>
           <option value="scheduled">Назначено</option>
           <option value="postponed">Отложено</option>
@@ -108,13 +118,18 @@
           <option value="decided">Рассмотрено</option>
           <option value="archived">Архив (30+ дней)</option>
         </select>
-        <select class="filter-select" id="filter-role" onchange="applyFilters()">
+        <select class="filter-select" id="filter-role" style="display:none;" onchange="applyFilters()">
           <option value="all">Все роли</option>
           <option value="plaintiff">Истец</option>
           <option value="defendant">Ответчик</option>
           <option value="third_party">Сбер 3-е лицо</option>
         </select>
-        <select class="filter-select" id="filter-category" onchange="applyFilters()">
+        <select class="filter-select" id="filter-stage" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все инстанции</option>
+          <option value="first_instance">1 инстанция</option>
+          <option value="appeal">Апелляция</option>
+        </select>
+        <select class="filter-select" id="filter-category" style="display:none;" onchange="applyFilters()">
           <option value="all">Все категории</option>
         </select>
       </div>
@@ -130,8 +145,27 @@
     <div class="mobile-cards" id="mobile-cards"></div>
   </main>
   <footer class="app-footer" id="app-footer"></footer>
+
+  <!-- Drawer (боковая панель с деталями дела) -->
+  <div class="drawer-scrim" id="drawer-scrim" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-hidden="true"></aside>
+
+  <!-- Bottom-sheet «Фильтры» (мобилка) -->
+  <div class="sheet-scrim" id="filters-scrim" onclick="closeFiltersSheet()"></div>
+  <aside class="filters-sheet" id="filters-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Фильтры</span>
+      <button class="sheet-close" onclick="closeFiltersSheet()" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="sheet-body" id="filters-sheet-body"></div>
+    <div class="sheet-footer">
+      <button class="sheet-btn-reset" onclick="resetFilters()">Сбросить</button>
+      <button class="sheet-btn-done" onclick="closeFiltersSheet()">Готово</button>
+    </div>
+  </aside>
 </div>
 
-<script src="app.js" defer></script>
+<script src="app.js?v=10" defer></script>
 </body>
 </html>

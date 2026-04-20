@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-16T10:48:22",
+  "cases": [
+    {
+      "id": "33-1706/2026",
+      "current_stage": "appeal",
+      "plaintiff": "ПАО Сбербанк в лице филиала-Уральсикй банк ПАО Сбербанк",
+      "defendant": "Забродина Нина Ивановна",
+      "category": "Наследственные споры",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "",
+        "court": "Кондинский районный суд",
+        "court_domain": "",
+        "judge": "Назарук Роман Викторович",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": ""
+      },
+      "appeal": {
+        "case_number": "33-1706/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Латынцев Антон Валерьевич",
+        "filing_date": "13.02.2026",
+        "status": "Решено",
+        "result": "снято с рассмотрения - прочие основания",
+        "last_event": "Передано в экспедицию. 16:12. 16.03.2026",
+        "event_date": "16.03.2026",
+        "hearing_date": "05.03.2026",
+        "hearing_time": "",
+        "link": "24467252|8bdd7709-db0d-48ed-8e42-23d97dec67c1",
+        "act_published": false,
+        "act_date": "",
+        "appellant": ""
+      }
+    },
+    {
+      "id": "33-1524/2026",
+      "current_stage": "appeal",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "ИП Амбарцумян Гарик Манвелович, Торосян Ареват Драстаматовна",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Чурсинова Вера Георгиевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": ""
+      },
+      "appeal": {
+        "case_number": "33-1524/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Кармацкая Яна Владимировна",
+        "filing_date": "10.02.2026",
+        "status": "Решено",
+        "result": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 16:15. 16.03.2026",
+        "event_date": "16.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "14:50",
+        "link": "24453568|3b644ecf-e58a-4009-b4a0-451fd2caeb24",
+        "act_published": false,
+        "act_date": "",
+        "appellant": ""
+      }
+    }
+  ]
+}

@@ -27,15 +27,18 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/update_cases.py
+        run: python scripts/update_cases.py --json
 
-      - name: Commit updated CSV
+      - name: Commit updated data
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
-          git add data/sberbank_cases.csv data/.digested_acts
+          git add data/sberbank_cases.csv data/.digested_acts data/cases.json
           if [ -f data/sberbank_cases_archive.csv ]; then
             git add data/sberbank_cases_archive.csv
+          fi
+          if [ -f data/cases_archive.json ]; then
+            git add data/cases_archive.json
           fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
