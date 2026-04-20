@@ -139,6 +139,33 @@ class TestParseCaseCard:
         assert info["Последнее событие"] == "Передача дела судье"
         assert info["Дата события"] == "10.03.2026"
 
+    def test_first_instance_result_not_garbage(self):
+        """Карточка 1 инстанции: дисклеймер sudrf («…поля Результат
+        рассмотрения…») не должен перетирать реальное поле «Результат»."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert "Информация о размещении" not in info["Результат"]
+        assert "ОТКАЗАНО" in info["Результат"]
+
+    def test_first_instance_status_resolved(self):
+        """Карточка 1 инстанции с результатом «ОТКАЗАНО…» + «Дело передано
+        в архив» в последнем событии → статус «Решено»."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["Статус"] == "Решено"
+
+    def test_first_instance_last_event(self):
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert "архив" in info["Последнее событие"].lower()
+        assert info["Дата события"] == "20.03.2026"
+
+    def test_first_instance_hearing_date_and_time(self):
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["Дата заседания"] == "12.02.2026"
+        assert info["Время заседания"] == "10:30"
+
     def test_few_tables_returns_defaults(self):
         """Если таблиц меньше 6 — возвращаются дефолтные значения, не падает."""
         html = "<html><body><table><tr><td>x</td></tr></table></body></html>"
