@@ -158,7 +158,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 TELEGRAM_MSG_LIMIT = 4096
 # Целевой лимит длины дайджеста (передаётся в промпт). Меньше TELEGRAM_MSG_LIMIT,
 # чтобы оставить запас на случай если модель чуть превысит.
-DIGEST_CHAR_LIMIT = 3800
+DIGEST_CHAR_LIMIT = 7600
 
 # Паттерны для опознания «Сбербанка» среди сторон дела (lowercase substring match).
 # Используется и при первичном парсинге поисковой выдачи, и при определении
@@ -1800,8 +1800,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
             return generate_template_digest(
                 new_cases, changes, total_active, cases
             )
-        # Допускаем до двух сообщений; split_message в send_telegram разобьёт
-        return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
+        # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
+        return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
@@ -2072,8 +2072,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
 
     text = "\n".join(lines)
-    # Допускаем до двух сообщений; split_message в send_telegram разобьёт
-    return truncate_html_message(text, TELEGRAM_MSG_LIMIT)
+    # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
+    return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
 
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
