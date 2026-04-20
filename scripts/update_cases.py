@@ -2556,15 +2556,7 @@ def main_json():
     timings: dict[str, float] = {}
     t_total_start = time.perf_counter()
 
-    # 1. Проверяем доступность апелляционного суда
-    if not check_court_available(APPEAL_COURT):
-        msg = f"⚠️ Сайт суда {APPEAL_COURT.domain} недоступен. Обновление отложено."
-        log.error(msg)
-        send_telegram(msg)
-        sys.exit(1)
-    log.info("Апелляционный суд доступен")
-
-    # 2. Загружаем текущие данные JSON
+    # 1. Загружаем текущие данные JSON
     t0 = time.perf_counter()
     data = load_json(JSON_PATH)
     cases = data.get("cases", [])
@@ -2583,7 +2575,7 @@ def main_json():
 
     log.info(f"Загружено {len(cases)} дел из JSON")
 
-    # ── 3. Парсинг апелляции: новые дела ──
+    # ── 2. Парсинг апелляции: новые дела ──
     t0 = time.perf_counter()
     csv_cases = load_csv(CSV_PATH)
     csv_existing = {c["Номер дела"].strip() for c in csv_cases if c.get("Номер дела")}
@@ -2635,17 +2627,13 @@ def main_json():
 
     timings["appeal_new"] = time.perf_counter() - t0
 
-    # ── 4. Парсинг судов первой инстанции: новые дела ──
+    # ── 3. Парсинг судов первой инстанции: новые дела ──
     t0 = time.perf_counter()
     fi_new_cases: list[dict] = []
     enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
     log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
 
     for court in enabled_courts:
-        if not check_court_available(court):
-            log.warning(f"  {court.name}: недоступен, пропускаю")
-            continue
-
         polite_delay()
         search_html = fetch_page(court.search_url())
         if not search_html:
@@ -2670,8 +2658,8 @@ def main_json():
     timings["first_instance"] = time.perf_counter() - t0
     log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
 
-    # ── 5. Обновление существующих дел ──
-    # 5a. Апелляция: обновляем активные дела из CSV
+    # ── 4. Обновление существующих дел ──
+    # 4a. Апелляция: обновляем активные дела из CSV
     t0 = time.perf_counter()
     log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
     csv_cases, changes = update_active_cases(csv_cases)
@@ -2681,7 +2669,7 @@ def main_json():
 
     timings["appeal_update"] = time.perf_counter() - t0
 
-    # 5b. Первая инстанция: обновляем активные дела из JSON
+    # 4b. Первая инстанция: обновляем активные дела из JSON
     t0 = time.perf_counter()
     fi_active = [
         c for c in cases
@@ -2747,7 +2735,7 @@ def main_json():
     timings["fi_update"] = time.perf_counter() - t0
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
-    # ── 6. Сохраняем CSV (обратная совместимость) ──
+    # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
     active_csv, newly_archived_csv = split_archived(csv_cases)
     if newly_archived_csv:
@@ -2764,12 +2752,12 @@ def main_json():
             save_csv(existing_archive + to_add, CSV_ARCHIVE_PATH)
     save_csv(active_csv, CSV_PATH)
 
-    # ── 7. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
+    # ── 6. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
     if fi_new_cases:
         cases = fi_new_cases + cases
         log.info(f"Добавлено {len(fi_new_cases)} дел 1 инстанции в JSON")
 
-    # ── 8. Связка дел ──
+    # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
     stage_before: dict[str, str] = {}
     if appeal_fi_numbers:
@@ -2801,12 +2789,12 @@ def main_json():
         if stage_transitions:
             log.info(f"Переходов в апелляцию: {len(stage_transitions)}")
 
-    # ── 9. Сохраняем JSON ──
+    # ── 8. Сохраняем JSON ──
     data["cases"] = cases
     save_json(data, JSON_PATH)
     timings["save"] = time.perf_counter() - t0
 
-    # ── 10. Дайджест и Telegram ──
+    # ── 9. Дайджест и Telegram ──
     # total_active: апелляция (CSV) + 1 инстанция (JSON, ещё не в апелляции)
     total_active_appeal = sum(
         1 for c in csv_cases if c.get("Статус", "").strip() != "Решено"
