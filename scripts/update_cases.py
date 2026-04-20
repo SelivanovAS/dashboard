@@ -546,16 +546,26 @@ def _parse_combined_cell(text: str) -> dict:
     return result
 
 
-# Паттерны страховых дочерних компаний Сбербанка
-_SBER_INSURANCE_RE = re.compile(
-    r'(ооо\s+)?с[кc]\s+[«""\"]?сбербанк\s+страхован\w*(\s+жизн\w*)?[»""\"]?'
-    r'|[«""\"]?сбербанк\s+страхован\w*(\s+жизн\w*)?[»""\"]?\s*(с[кc]\s+)?ооо',
-    re.IGNORECASE,
-)
+# Паттерны дочерних структур Сбербанка, которые НЕ являются ПАО Сбербанк
+# (страхование, НПФ, УК и т.п.). Порядок не важен — все применяются последовательно.
+_SBER_SUBSIDIARY_PATTERNS = [
+    # Сбербанк страхование [жизни] — СК ООО/АО «Сбербанк страхование жизни» и варианты
+    re.compile(r'сбербанк\s+страхован\w*(?:\s+жизн\w*)?', re.IGNORECASE),
+    # НПФ Сбербанк — АО «НПФ Сбербанк», «Негосударственный пенсионный фонд Сбербанк»
+    re.compile(r'нпф\s+сбербанк', re.IGNORECASE),
+    re.compile(r'негосударственн\w*\s+пенсионн\w*\s+фонд\w*\s+сбербанк', re.IGNORECASE),
+    # Сбербанк Управление Активами — УК
+    re.compile(r'сбербанк\s+управлен\w*\s+актив\w*', re.IGNORECASE),
+    # Сбербанк Лизинг
+    re.compile(r'сбербанк\s+лизинг\w*', re.IGNORECASE),
+    # Сбербанк Факторинг
+    re.compile(r'сбербанк\s+факторинг\w*', re.IGNORECASE),
+]
 
 
-def is_insurance_only_case(plaintiff: str, defendant: str) -> bool:
-    """Вернуть True, если «сбербанк» упоминается только в названии страховой компании.
+def is_subsidiary_only_case(plaintiff: str, defendant: str) -> bool:
+    """Вернуть True, если «сбербанк» упоминается только в названии дочерней структуры
+    (страхование, НПФ, лизинг и т.п.), а не самого ПАО Сбербанк.
 
     Если «сбербанк» вообще не встречается в сторонах — возвращаем False
     (дело найдено по поиску, значит банк упомянут где-то ещё, например как третье лицо).
@@ -563,8 +573,14 @@ def is_insurance_only_case(plaintiff: str, defendant: str) -> bool:
     combined = (plaintiff + " " + defendant).lower()
     if "сбербанк" not in combined:
         return False
-    cleaned = _SBER_INSURANCE_RE.sub("", combined)
+    cleaned = combined
+    for pat in _SBER_SUBSIDIARY_PATTERNS:
+        cleaned = pat.sub("", cleaned)
     return "сбербанк" not in cleaned
+
+
+# Backward-compat alias
+is_insurance_only_case = is_subsidiary_only_case
 
 
 def parse_search_page(html: str) -> list[dict]:
@@ -616,8 +632,8 @@ def parse_search_page(html: str) -> list[dict]:
         defendant = parsed["defendant"]
         court = parsed["court"]
 
-        # Пропускаем дела, где «Сбербанк» — только страховая компания
-        if is_insurance_only_case(plaintiff, defendant):
+        # Пропускаем дела, где «Сбербанк» — только дочерняя структура (страхование, НПФ и т.п.)
+        if is_subsidiary_only_case(plaintiff, defendant):
             log.info(f"Пропуск дела {case_number}: только Сбербанк Страхование")
             continue
 
@@ -732,8 +748,8 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
         result_date = cell_text(row[4]).strip() if len(row) > 4 else ""
         result = cell_text(row[5]).strip() if len(row) > 5 else ""
 
-        # Пропускаем дела, где «Сбербанк» — только страховая компания
-        if is_insurance_only_case(plaintiff, defendant):
+        # Пропускаем дела, где «Сбербанк» — только дочерняя структура (страхование, НПФ и т.п.)
+        if is_subsidiary_only_case(plaintiff, defendant):
             continue
 
         # Определяем роль банка
@@ -962,6 +978,11 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     events_data.append((date_val, time_val, event_desc))
 
         if events_data:
+            # Полный список событий для timeline (сохраняется в JSON как events[])
+            info["_events"] = [
+                {"date": d, "time": t, "text": desc}
+                for d, t, desc in events_data
+            ]
             last_date, last_time, last_event = events_data[-1]
             info["Последнее событие"] = last_event
             info["Дата события"] = last_date
@@ -1335,6 +1356,7 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
                         "last_event": "", "event_date": "",
                         "hearing_date": "", "hearing_time": "",
                         "link": "", "act_published": False, "act_date": "",
+                        "events": [],
                     }
                 linked_count += 1
 
@@ -1364,9 +1386,17 @@ def split_archived(cases: list[dict]) -> tuple[list[dict], list[dict]]:
     return active, archive
 
 
-def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
+def update_active_cases(
+    cases: list[dict],
+    json_appeal_by_num: dict | None = None,
+) -> tuple[list[dict], list[dict]]:
     """
     Обновить карточки активных (не архивных) дел.
+
+    json_appeal_by_num — опциональный словарь {номер_дела: appeal_dict} для
+    параллельного обновления полей `events` / `last_event` / `event_date` в
+    JSON-хранилище (иначе эти поля в `appeal` dict устаревают).
+
     Возвращает (обновлённые_дела, список_изменений).
     """
     _digested_acts = load_digested_acts()
@@ -1388,6 +1418,33 @@ def update_active_cases(cases: list[dict]) -> tuple[list[dict], list[dict]]:
             continue
 
         card_info = parse_case_card(html)
+
+        # Параллельно обновляем JSON-представление appeal-дела (если передано)
+        if json_appeal_by_num is not None:
+            ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
+            if ap is not None:
+                if card_info.get("_events"):
+                    ap["events"] = card_info["_events"]
+                new_ev_j = card_info.get("Последнее событие", "")
+                if new_ev_j and new_ev_j != ap.get("last_event", ""):
+                    ap["last_event"] = new_ev_j
+                    ap["event_date"] = card_info.get("Дата события", "")
+                new_st_j = card_info.get("Статус", "")
+                if new_st_j and new_st_j != ap.get("status", ""):
+                    ap["status"] = new_st_j
+                new_res_j = card_info.get("Результат", "")
+                if new_res_j and new_res_j != ap.get("result", ""):
+                    ap["result"] = new_res_j
+                new_hd_j = card_info.get("Дата заседания", "")
+                if new_hd_j:
+                    ap["hearing_date"] = new_hd_j
+                new_ht_j = card_info.get("Время заседания", "")
+                if new_ht_j:
+                    ap["hearing_time"] = new_ht_j
+                if card_info.get("Акт опубликован", "") == "Да" and not ap.get("act_published"):
+                    ap["act_published"] = True
+                    if card_info.get("Дата публикации акта"):
+                        ap["act_date"] = card_info["Дата публикации акта"]
 
         # Сравниваем и фиксируем изменения
         old_status = case.get("Статус", "")
@@ -2669,6 +2726,7 @@ def _fi_search_to_json_case(fi: dict) -> dict:
             "link": fi.get("link", ""),
             "act_published": False,
             "act_date": "",
+            "events": [],
         },
         "appeal": None,
     }
@@ -2790,9 +2848,15 @@ def main_json():
 
     # ── 4. Обновление существующих дел ──
     # 4a. Апелляция: обновляем активные дела из CSV
+    # Параллельно обновляем соответствующие appeal dicts в JSON (events, last_event, и т.п.)
     t0 = time.perf_counter()
     log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
-    csv_cases, changes = update_active_cases(csv_cases)
+    json_appeal_by_num: dict = {}
+    for c in cases:
+        ap = c.get("appeal")
+        if ap and ap.get("case_number"):
+            json_appeal_by_num[ap["case_number"].strip()] = ap
+    csv_cases, changes = update_active_cases(csv_cases, json_appeal_by_num)
 
     if appeal_new_cases_csv:
         csv_cases = appeal_new_cases_csv + csv_cases
@@ -2895,6 +2959,9 @@ def main_json():
             fi["act_published"] = True
             if card_info.get("Дата публикации акта"):
                 fi["act_date"] = card_info["Дата публикации акта"]
+        # Полный список событий — обновляем всегда, если парсер его вернул
+        if card_info.get("_events"):
+            fi["events"] = card_info["_events"]
         if changed:
             fi_update_count += 1
 

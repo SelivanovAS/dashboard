@@ -56,6 +56,7 @@ def csv_to_cases(csv_path: str) -> list[dict]:
                 "link": "",
                 "act_published": False,
                 "act_date": "",
+                "events": [],
             }
 
         # Данные апелляции
@@ -74,6 +75,7 @@ def csv_to_cases(csv_path: str) -> list[dict]:
             "act_published": row.get("Акт опубликован", "").strip() == "Да",
             "act_date": row.get("Дата публикации акта", "").strip(),
             "appellant": row.get("Апеллянт", "").strip(),
+            "events": [],
         }
 
         case = {
