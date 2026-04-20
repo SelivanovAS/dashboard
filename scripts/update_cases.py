@@ -1129,7 +1129,8 @@ def next_tuesday(from_date: datetime | None = None) -> datetime:
 
 def build_summary_line(new_cases: list[dict], changes: list[dict],
                        fi_new_cases: list[dict] | None = None,
-                       stage_transitions: list[dict] | None = None) -> str:
+                       stage_transitions: list[dict] | None = None,
+                       fi_changes: list[dict] | None = None) -> str:
     """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
     parts = []
     if fi_new_cases:
@@ -1153,6 +1154,22 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         parts.append(f"{acts} акт.")
     if statuses:
         parts.append(f"{statuses} смена статуса")
+    if fi_changes:
+        fi_hearings = sum(
+            1 for ch in fi_changes
+            if "fi_hearing_new" in ch["type"] or "fi_hearing_postponed" in ch["type"]
+        )
+        fi_status = sum(1 for ch in fi_changes if "fi_status_change" in ch["type"])
+        fi_acts = sum(1 for ch in fi_changes if "fi_act_published" in ch["type"])
+        fi_finals = sum(1 for ch in fi_changes if "fi_final_event" in ch["type"])
+        if fi_hearings:
+            parts.append(f"{fi_hearings} засед. 1 инст.")
+        if fi_finals:
+            parts.append(f"{fi_finals} финал 1 инст.")
+        if fi_acts:
+            parts.append(f"{fi_acts} акт 1 инст.")
+        if fi_status:
+            parts.append(f"{fi_status} статус 1 инст.")
     return " | ".join(parts) if parts else "без изменений"
 
 
@@ -1601,7 +1618,8 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 def generate_digest(new_cases: list[dict], changes: list[dict],
                     total_active: int, cases: list[dict] | None = None,
                     fi_new_cases: list[dict] | None = None,
-                    stage_transitions: list[dict] | None = None) -> str:
+                    stage_transitions: list[dict] | None = None,
+                    fi_changes: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API."""
 
     if cases is None:
@@ -1610,17 +1628,22 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         fi_new_cases = []
     if stage_transitions is None:
         stage_transitions = []
+    if fi_changes is None:
+        fi_changes = []
 
     if not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
         return generate_template_digest(new_cases, changes, total_active, cases,
-                                        fi_new_cases, stage_transitions)
+                                        fi_new_cases, stage_transitions, fi_changes)
 
     today = datetime.now().strftime("%d.%m.%Y")
-    summary = build_summary_line(new_cases, changes, fi_new_cases, stage_transitions)
+    summary = build_summary_line(
+        new_cases, changes, fi_new_cases, stage_transitions, fi_changes
+    )
 
     # ── Короткое сообщение если изменений нет ──
-    if not new_cases and not changes and not fi_new_cases and not stage_transitions:
+    if (not new_cases and not changes and not fi_new_cases
+            and not stage_transitions and not fi_changes):
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
@@ -1729,6 +1752,43 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
                 f"{pl} vs {df}"
             )
 
+    if fi_changes:
+        context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ:")
+        for ch in fi_changes:
+            d = ch["details"]
+            pl = shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True)
+            df = shorten_party_name(ch.get("defendant", ""), keep_fio_full=True)
+            line = (
+                f"- {ch['case']} ({ch.get('court', '')}): "
+                f"{pl} (истец) vs {df} (ответчик), "
+                f"роль банка: {ch.get('bank_role', '')}"
+            )
+            for t in ch["type"]:
+                if t == "fi_hearing_new":
+                    hd = d.get("hearing_date", "")
+                    ht = d.get("hearing_time", "")
+                    line += (f"\n  Назначено заседание: {hd}"
+                             + (f" {ht}" if ht else ""))
+                elif t == "fi_hearing_postponed":
+                    old_d = d.get("old_hearing_date", "")
+                    old_t = d.get("old_hearing_time", "")
+                    new_d = d.get("hearing_date", "")
+                    new_t = d.get("hearing_time", "")
+                    old_p = f"{old_d}" + (f" {old_t}" if old_t else "")
+                    new_p = f"{new_d}" + (f" {new_t}" if new_t else "")
+                    line += f"\n  Заседание перенесено: {old_p} → {new_p}"
+                elif t == "fi_status_change":
+                    line += (f"\n  Статус: {d.get('old_status', '')} "
+                             f"→ {d.get('new_status', '')}")
+                elif t == "fi_act_published":
+                    ad = d.get("act_date", "")
+                    line += f"\n  Опубликован акт" + (f" ({ad})" if ad else "")
+                elif t == "fi_final_event":
+                    line += f"\n  Событие: {d.get('event', '')}"
+                    if d.get("event_date"):
+                        line += f" ({d['event_date']})"
+            context_parts.append(line)
+
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам Суда ХМАО-Югры за {today}.
 
 ИМЕНА: все наименования сторон в данных уже сокращены по правилам (ОПФ убрана, ФИО → инициалы, «в лице филиала…» удалено и т.п.). НЕ переписывай их и НЕ возвращай ОПФ обратно. В секции 📥 «Новые дела» имена физлиц приходят полными — там оставляй как есть.
@@ -1742,27 +1802,28 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
 1. Заголовок: 📊 Дайджест судебных дел | Суд ХМАО-Югры | {today}
 2. 📋 Сводка одной строкой (краткий итог: N событий, N решений и т.д.)
 3. 🏛 Первая инстанция: новые иски — номер дела, суд, кто подал к кому, категория, роль банка, дата подачи. Имена физлиц приходят полными — оставляй как есть.
-4. 🔀 Перешли в апелляцию — номер дела 1 инст. → номер апелляции, стороны (кратко). Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ».
-5. 📥 Новые дела апелляции — номер как <a href="URL"><b>номер</b></a>, кто подал к кому, о чём, суд 1 инстанции, роль банка
-6. ⚖️ Вынесенные судебные акты — одна строка на дело:
+4. 🏛 Первая инстанция: изменения — только если есть данные в секции «ИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ». Одна строка на дело: <b>номер</b> ({{суд}}) — {{стороны кратко}} | событие (назначено заседание ДД.ММ ЧЧ:ММ / перенесено ДД.ММ→ДД.ММ / статус X→Y / опубликован акт / мотивированное решение / возвращение иска / в архив). НЕ смешивай с секцией апелляционных актов.
+5. 🔀 Перешли в апелляцию — номер дела 1 инст. → номер апелляции, стороны (кратко). Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ».
+6. 📥 Новые дела апелляции — номер как <a href="URL"><b>номер</b></a>, кто подал к кому, о чём, суд 1 инстанции, роль банка
+7. ⚖️ Вынесенные судебные акты — одна строка на дело:
    <a href="URL"><b>номер</b></a> — Апелляционное определение от <дата>. ИТОГ: <дословно поле ИТОГ>. Категория: <дословно>. Стороны: <истец> vs <ответчик>, банк — <роль>. Для банка: <дословно «В чью пользу для банка»>.
    • если ИТОГ = «возвращена / без рассмотрения / прекращено / снято» — добавь причину из «Последнее событие»
    • если ИТОГ = «отменено / изменено» и есть «Цитата из мотивировки» — добавь 1 фразу с ключевым доводом суда
    • НЕ переформулируй ИТОГ своими словами и не подменяй его шаблоном
    • НЕ включай дела, у которых в данных НЕТ блока «ИТОГ»
    • НЕ упоминай «составлено мотивированное определение» — это служебный шаг
-7. 📄 Опубликованные акты — номер (ссылка), стороны, итог (удовлетворена / отказано / частично) и 1-2 предложения ПОЧЕМУ суд так решил (по полю «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА»). Не пиши просто номера без содержания.
+8. 📄 Опубликованные акты — номер (ссылка), стороны, итог (удовлетворена / отказано / частично) и 1-2 предложения ПОЧЕМУ суд так решил (по полю «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА»). Не пиши просто номера без содержания.
 
 ШАБЛОН ЗАСЕДАНИЙ — две строки на дело, между делами пустая строка:
    строка 1: <b>дата/время</b> + <a href="URL"><b>номер</b></a>
    строка 2: стороны | категория. Роль банка если известна.
 
 Три типа секций по этому шаблону:
-8. 📅 Назначенные заседания — <b>ДД.ММ HH:MM</b>. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
-9. 🔁 Отложенные заседания — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных). Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
+9. 📅 Назначенные заседания — <b>ДД.ММ HH:MM</b>. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
+10. 🔁 Отложенные заседания — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных). Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
 
-10. 📌 Итоговая строка: всего дел в производстве: {total_active} (из них 1 инст.: показать число если >0)
-11. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
+11. 📌 Итоговая строка: всего дел в производстве: {total_active} (из них 1 инст.: показать число если >0)
+12. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок; пустые строки для читаемости.
 
@@ -1812,7 +1873,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         text = text.strip()
         if not text:
             return generate_template_digest(
-                new_cases, changes, total_active, cases
+                new_cases, changes, total_active, cases,
+                fi_new_cases, stage_transitions, fi_changes,
             )
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
@@ -1820,13 +1882,22 @@ def generate_digest(new_cases: list[dict], changes: list[dict],
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
         log.error(f"Claude API HTTP {status}: {body}")
-        return generate_template_digest(new_cases, changes, total_active, cases)
+        return generate_template_digest(
+            new_cases, changes, total_active, cases,
+            fi_new_cases, stage_transitions, fi_changes,
+        )
     except requests.RequestException as e:
         log.error(f"Claude API сетевая ошибка: {e}")
-        return generate_template_digest(new_cases, changes, total_active, cases)
+        return generate_template_digest(
+            new_cases, changes, total_active, cases,
+            fi_new_cases, stage_transitions, fi_changes,
+        )
     except (KeyError, ValueError, json.JSONDecodeError) as e:
         log.error(f"Claude API неожиданный ответ: {e}")
-        return generate_template_digest(new_cases, changes, total_active, cases)
+        return generate_template_digest(
+            new_cases, changes, total_active, cases,
+            fi_new_cases, stage_transitions, fi_changes,
+        )
 
 
 def _close_open_tags(html: str) -> str:
@@ -1901,7 +1972,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
                              total_active: int,
                              cases: list[dict] | None = None,
                              fi_new_cases: list[dict] | None = None,
-                             stage_transitions: list[dict] | None = None) -> str:
+                             stage_transitions: list[dict] | None = None,
+                             fi_changes: list[dict] | None = None) -> str:
     """Шаблонный дайджест (fallback без Claude API). Формат: HTML."""
     today = datetime.now().strftime("%d.%m.%Y")
     if cases is None:
@@ -1910,9 +1982,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         fi_new_cases = []
     if stage_transitions is None:
         stage_transitions = []
+    if fi_changes is None:
+        fi_changes = []
 
     # ── Короткое сообщение если изменений нет ──
-    if not new_cases and not changes and not fi_new_cases and not stage_transitions:
+    if (not new_cases and not changes and not fi_new_cases
+            and not stage_transitions and not fi_changes):
         msg = (
             f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
             f"Всё спокойно, изменений нет.\n"
@@ -1922,7 +1997,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
         return msg
 
     # ── Полный дайджест ──
-    summary = build_summary_line(new_cases, changes, fi_new_cases, stage_transitions)
+    summary = build_summary_line(
+        new_cases, changes, fi_new_cases, stage_transitions, fi_changes
+    )
     lines = [f"📊 <b>Мониторинг дел Сбербанка — {today}</b>"]
     lines.append(f"📋 {escape_html(summary)}\n")
 
@@ -1944,6 +2021,45 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict],
                 f"{pl} vs {df} "
                 f"({cat}) | {court}"
                 + (f" | подано {filing}" if filing else "")
+            )
+
+    if fi_changes:
+        lines.append(f"\n🏛 <b>Первая инстанция — изменения ({len(fi_changes)}):</b>")
+        for ch in fi_changes:
+            num = escape_html(ch.get("case", ""))
+            court = escape_html(ch.get("court", ""))
+            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
+            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+            d = ch["details"]
+            events: list[str] = []
+            for t in ch["type"]:
+                if t == "fi_hearing_new":
+                    hd = escape_html(d.get("hearing_date", ""))
+                    ht = escape_html(d.get("hearing_time", ""))
+                    events.append(f"📅 заседание {hd}" + (f" {ht}" if ht else ""))
+                elif t == "fi_hearing_postponed":
+                    old_p = escape_html(
+                        d.get("old_hearing_date", "")
+                        + (f" {d['old_hearing_time']}" if d.get("old_hearing_time") else "")
+                    )
+                    new_p = escape_html(
+                        d.get("hearing_date", "")
+                        + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
+                    )
+                    events.append(f"🔁 {old_p} → {new_p}")
+                elif t == "fi_status_change":
+                    events.append(
+                        f"статус: {escape_html(d.get('old_status', ''))} → "
+                        f"{escape_html(d.get('new_status', ''))}"
+                    )
+                elif t == "fi_act_published":
+                    ad = escape_html(d.get("act_date", ""))
+                    events.append("📄 опубликован акт" + (f" ({ad})" if ad else ""))
+                elif t == "fi_final_event":
+                    events.append(f"⚖️ {escape_html(d.get('event', ''))}")
+            ev_str = "; ".join(events) if events else ""
+            lines.append(
+                f"  <b>{num}</b> ({court}) — {pl} vs {df} | {ev_str}"
             )
 
     if stage_transitions:
@@ -2693,6 +2809,13 @@ def main_json():
     log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
     fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
     fi_update_count = 0
+    fi_changes: list[dict] = []
+
+    # Маркеры мусорного значения «Результат» из карточек 1 инстанции:
+    # иногда парсер цепляет стандартную подсказку сайта вместо реального
+    # результата. Игнорируем такие значения, чтобы не переписывать
+    # осмысленные данные и не поднимать ложные события в дайджесте.
+    _garbage_result_markers = ("Дата размещения", "Информация о размещении")
 
     for case_j in fi_active:
         fi = case_j.get("first_instance", {})
@@ -2715,35 +2838,117 @@ def main_json():
             log.warning(f"  {fi['case_number']}: не удалось загрузить карточку")
             continue
         card_info = parse_case_card(html, court_cfg.base_url)
-        # Обновляем поля первой инстанции
-        changed = False
+
+        # Снимок до обновления — нужен для diff и дайджеста
+        old_event = fi.get("last_event", "")
+        old_status = fi.get("status", "")
+        old_result = fi.get("result", "")
+        old_hearing_date = fi.get("hearing_date", "")
+        old_hearing_time = fi.get("hearing_time", "")
+        old_act = bool(fi.get("act_published", False))
+
         new_ev = card_info.get("Последнее событие", "")
-        if new_ev and new_ev != fi.get("last_event", ""):
+        new_status = card_info.get("Статус", "")
+        new_result = card_info.get("Результат", "")
+        new_hearing_date = card_info.get("Дата заседания", "")
+        new_hearing_time = card_info.get("Время заседания", "")
+        new_act = card_info.get("Акт опубликован", "") == "Да"
+
+        # Гард 1: мусорный «Результат» — не пишем в JSON и игнорируем.
+        if new_result and any(m in new_result for m in _garbage_result_markers):
+            new_result = ""
+        # Чистим уже сохранённый мусор: если old_result содержит маркер
+        # дисклеймера (попал туда до фикса парсера), обнуляем поле —
+        # даже если карточка вернула пустой new_result.
+        old_has_garbage = bool(old_result) and any(
+            m in old_result for m in _garbage_result_markers
+        )
+        if old_has_garbage and not new_result:
+            fi["result"] = ""
+            changed = True
+            old_result = ""
+        # Гард 2: регрессия статуса Решено → В производстве обычно означает,
+        # что карточка не вернула статус корректно (мусор в поле result или
+        # отсутствие нужного last_event). Не понижаем статус.
+        if old_status == "Решено" and new_status == "В производстве":
+            new_status = old_status
+
+        # ── Обновляем поля первой инстанции ──
+        changed = False
+        if new_ev and new_ev != old_event:
             fi["last_event"] = new_ev
             fi["event_date"] = card_info.get("Дата события", "")
             changed = True
-        new_status = card_info.get("Статус", "")
-        if new_status and new_status != fi.get("status", ""):
+        if new_status and new_status != old_status:
             fi["status"] = new_status
             changed = True
-        new_result = card_info.get("Результат", "")
-        if new_result and new_result != fi.get("result", ""):
+        if new_result and new_result != old_result:
             fi["result"] = new_result
             changed = True
-        new_hearing = card_info.get("Дата заседания", "")
-        if new_hearing:
-            fi["hearing_date"] = new_hearing
-        new_time = card_info.get("Время заседания", "")
-        if new_time:
-            fi["hearing_time"] = new_time
+        if new_hearing_date:
+            fi["hearing_date"] = new_hearing_date
+        if new_hearing_time:
+            fi["hearing_time"] = new_hearing_time
         if card_info.get("Судья"):
             fi["judge"] = card_info["Судья"]
-        if card_info.get("Акт опубликован", "") == "Да":
+        if new_act:
             fi["act_published"] = True
             if card_info.get("Дата публикации акта"):
                 fi["act_date"] = card_info["Дата публикации акта"]
         if changed:
             fi_update_count += 1
+
+        # ── Собираем события для дайджеста ──
+        change = {
+            "case": fi.get("case_number", ""),
+            "court": fi.get("court", ""),
+            "plaintiff": case_j.get("plaintiff", ""),
+            "defendant": case_j.get("defendant", ""),
+            "bank_role": case_j.get("bank_role", ""),
+            "category": case_j.get("category", ""),
+            "type": [],
+            "details": {},
+        }
+
+        # Новое/перенесённое заседание
+        if new_hearing_date and new_hearing_date != old_hearing_date:
+            if not old_hearing_date:
+                change["type"].append("fi_hearing_new")
+            else:
+                change["type"].append("fi_hearing_postponed")
+                change["details"]["old_hearing_date"] = old_hearing_date
+                change["details"]["old_hearing_time"] = old_hearing_time
+            change["details"]["hearing_date"] = new_hearing_date
+            change["details"]["hearing_time"] = new_hearing_time
+
+        # Смена статуса (регрессии отфильтрованы выше)
+        if new_status and new_status != old_status:
+            change["type"].append("fi_status_change")
+            change["details"]["old_status"] = old_status
+            change["details"]["new_status"] = new_status
+
+        # Публикация акта
+        if new_act and not old_act:
+            change["type"].append("fi_act_published")
+            change["details"]["act_date"] = card_info.get("Дата публикации акта", "")
+
+        # Финальные события в движении дела — значимые для юриста
+        if new_ev and new_ev != old_event:
+            ev_l = new_ev.lower()
+            final_markers = (
+                "в архив",
+                "возвращение иска",
+                "мотивированное решение",
+                "мотивированного решения",
+            )
+            if any(m in ev_l for m in final_markers):
+                change["type"].append("fi_final_event")
+                change["details"]["event"] = new_ev
+                change["details"]["event_date"] = card_info.get("Дата события", "")
+
+        if change["type"]:
+            fi_changes.append(change)
+
         log.info(f"  {fi['case_number']}: {'обновлено' if changed else 'без изменений'}")
 
     timings["fi_update"] = time.perf_counter() - t0
@@ -2822,6 +3027,7 @@ def main_json():
     digest = generate_digest(
         appeal_new_cases_csv, changes, total_active, csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+        fi_changes=fi_changes,
     )
     timings["digest"] = time.perf_counter() - t0
 
@@ -2838,6 +3044,7 @@ def main_json():
             "FI courts": len(enabled_courts),
             "FI new": len(fi_new_cases),
             "FI updated": fi_update_count,
+            "FI changes": len(fi_changes),
             "Stage transitions": len(stage_transitions),
             "Appeal new": len(appeal_new_cases_csv),
             "Appeal changes": len(changes),
