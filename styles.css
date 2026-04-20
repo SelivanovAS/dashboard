@@ -336,6 +336,8 @@ tr.detail-row{display:none;}
 .drawer-hero .hero-parties .party-row{display:flex;gap:8px;align-items:baseline;margin-bottom:3px;}
 .drawer-hero .hero-parties .party-row .p-tag{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--slate-400);min-width:22px;}
 .drawer-hero .hero-badges{display:flex;gap:6px;flex-wrap:wrap;}
+.drawer-hero .hero-category{font-size:13px;color:var(--slate-700);margin:0 0 10px;line-height:1.4;}
+.drawer-hero .hero-category .hc-label{color:var(--slate-400);font-weight:600;margin-right:4px;}
 .drawer-section{margin-bottom:18px;}
 .drawer-section-title{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--slate-500);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
 .drawer-section-title::after{content:'';flex:1;height:1px;background:var(--slate-100);}

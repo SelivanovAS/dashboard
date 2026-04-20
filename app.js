@@ -12,7 +12,7 @@ const ARCHIVE_DAYS=30;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
-const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'⏸ Без движения',paused:'⏸ Приостановлено',awaiting:'Не назначено'};
+const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено'};
 const CAT_SHORT={
   'Иски о взыскании сумм по договору займа, кредитному договору':'Кредитный договор',
   'об ответственности наследников по долгам наследодателя':'Долги наследодателя',
@@ -210,12 +210,22 @@ function rowToCase(h,row){
     nextDate=parseDate(hearingDateRaw);
     const evLow=(evText||'').toLowerCase();
     if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
-    else if(evLow.includes('без движения')||/(?:^|[^а-яё])оставлен/i.test(evLow))nextDateLabel='Без движения до';
+    else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))nextDateLabel='Без движения до';
     else nextDateLabel='Заседание';
+    if(nextDateLabel==='Заседание'&&evText){
+      const m=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if(m){
+        const evIso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        const todayIso=new Date().toISOString().slice(0,10);
+        const isPrelim=/предварительн|подготовк|собеседовани/i.test(evText);
+        if(evIso<todayIso && nextDate>todayIso && !isPrelim && /судебное\s+заседани/i.test(evText))
+          nextDateLabel='Отложено до';
+      }
+    }
   }else if(evText){
     const evLow=evText.toLowerCase();
-    // Не извлекать даты из административных событий (сдано в отдел, передано в экспедицию)
-    const isAdmin=/сдано в отдел|передано в экспедиц/i.test(evText);
+    // Не извлекать даты из административных событий (сдано в отдел, передано в экспедицию и пр.)
+    const isAdmin=/сдано в отдел|передано в экспедиц|передача дела судь|вынесено решение|составлено мотивированн|передан[оа] в архив|сдан[оа] в архив|регистрация дела|поступил[оа] в суд/i.test(evText);
     if(!isAdmin){
       const dateMatch=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
       if(dateMatch){
@@ -224,7 +234,7 @@ function rowToCase(h,row){
           {nextDate=extractedDate;nextDateLabel='Заседание';}
         else if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))
           {nextDate=extractedDate;nextDateLabel='Отложено до';}
-        else if(evLow.includes('без движения')||/(?:^|[^а-яё])оставлен/i.test(evLow))
+        else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))
           {nextDate=extractedDate;nextDateLabel='Без движения до';}
         else if(evLow.includes('рассмотрен'))
           {nextDate=extractedDate;nextDateLabel='Рассмотрение';}
@@ -299,8 +309,13 @@ function jsonToCase(j){
   }
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
-  const baseStatus=/решен|рассмотрен/i.test(sl)?'decided':'active';
   const rs=primary.result||'';
+  const baseStatus=(
+    /решен|рассмотрен/i.test(sl) ||
+    /вынесено\s+решение/i.test(evText) ||
+    /передан[оа]\s+в\s+архив|сдан[оа]\s+в\s+архив/i.test(evText) ||
+    (isAppeal && rs && rs.trim().length>0)
+  )?'decided':'active';
   // Appellant
   const apellRaw=(ap.appellant||'').toLowerCase();
   let appellant=APPELLANT_MAP[apellRaw]||'';
@@ -316,11 +331,23 @@ function jsonToCase(j){
     nextDate=parseDate(hearingDateRaw);
     const evLow=evText.toLowerCase();
     if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
-    else if(evLow.includes('без движения')||/(?:^|[^а-яё])оставлен/i.test(evLow))nextDateLabel='Без движения до';
+    else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))nextDateLabel='Без движения до';
     else nextDateLabel='Заседание';
+    // Если последнее событие — прошедшее заседание, а hearing_date в будущем,
+    // значит заседание было отложено до новой даты.
+    if(nextDateLabel==='Заседание'){
+      const m=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if(m){
+        const evIso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        const todayIso=new Date().toISOString().slice(0,10);
+        const isPrelim=/предварительн|подготовк|собеседовани/i.test(evText);
+        if(evIso<todayIso && nextDate>todayIso && !isPrelim && /судебное\s+заседани/i.test(evText))
+          nextDateLabel='Отложено до';
+      }
+    }
   }else if(evText){
     const evLow=evText.toLowerCase();
-    const isAdmin=/сдано в отдел|передано в экспедиц/i.test(evText);
+    const isAdmin=/сдано в отдел|передано в экспедиц|передача дела судь|вынесено решение|составлено мотивированн|передан[оа] в архив|сдан[оа] в архив|регистрация дела|поступил[оа] в суд/i.test(evText);
     if(!isAdmin){
       const dateMatch=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
       if(dateMatch){
@@ -329,7 +356,7 @@ function jsonToCase(j){
           {nextDate=extractedDate;nextDateLabel='Заседание';}
         else if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))
           {nextDate=extractedDate;nextDateLabel='Отложено до';}
-        else if(evLow.includes('без движения')||/(?:^|[^а-яё])оставлен/i.test(evLow))
+        else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))
           {nextDate=extractedDate;nextDateLabel='Без движения до';}
         else if(evLow.includes('рассмотрен'))
           {nextDate=extractedDate;nextDateLabel='Рассмотрение';}
@@ -532,6 +559,9 @@ async function loadFromSheet(url){
       else console.info('Архивный JSON не загружен:',archiveRes.e.message);
       const seen=new Set(main.map(c=>c.caseNumber));
       const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+      // Дела из архивного файла всегда считаем архивными, даже если парсер
+      // не успел проставить status=decided (например, ручной перенос).
+      archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
       allCases=main.concat(archiveOnly);
     }else{
       // CSV mode (legacy)
@@ -547,6 +577,7 @@ async function loadFromSheet(url){
       else console.info('Архивный CSV не загружен:',archiveRes.e.message);
       const seen=new Set(main.map(c=>c.caseNumber));
       const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+      archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
       allCases=main.concat(archiveOnly);
     }
     if(allCases.length===0)throw new Error('Таблица пуста');
@@ -1165,6 +1196,11 @@ function buildTimeline(c){
   const cleanTimelineText=(s)=>{
     if(!s)return s;
     let out=String(s).trim();
+    // Сначала срезаем метаданные внутри строки: время, «Зал N», дата.
+    out=out.replace(/\s*\d{1,2}:\d{2}(?::\d{2})?\s*\.\s*/g,'. ');
+    out=out.replace(/\s*Зал(?:\s+судебного\s+заседания)?\s+\S+?\s*\.\s*/gi,'. ');
+    out=out.replace(/\s*\d{1,2}\.\d{1,2}\.\d{4}\s*\.\s*/g,'. ');
+    out=out.replace(/\.{2,}/g,'.').replace(/\s{2,}/g,' ');
     const patterns=[
       /\s*[.,]\s*\d{1,2}\.\d{1,2}\.\d{4}\s*\.?$/,              // trailing DD.MM.YYYY
       /\s*[.,]\s*\d{1,2}:\d{2}(?::\d{2})?\s*\.?$/,              // trailing HH:MM
@@ -1243,7 +1279,7 @@ function renderDrawer(c){
   // Key dates
   const hearD=c.nextDate?dayDiff(c.nextDate):null;
   const hearCls=hearD===0||hearD===1?'kv-today':(hearD!==null&&hearD<=7&&hearD>0?'kv-soon':'');
-  const hearPrefix=c.nextDateLabel==='Отложено до'?'отл. до ':c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
+  const hearPrefix=vm.resultPresent?'':c.nextDateLabel==='Отложено до'?'отл. до ':c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
   const rel=c.nextDate?relativeDateText(c.nextDate):'';
   const hearValue=c.nextDate
     ?`${hearPrefix}${formatDate(c.nextDate)}${c.hearingTime?' · '+escHtml(c.hearingTime):''}${rel?` <span style="color:var(--slate-500);font-weight:500;">(${rel})</span>`:''}`
@@ -1256,7 +1292,10 @@ function renderDrawer(c){
     <div class="kv-k">${hearLabel}</div><div class="kv-v kv-mono ${hearCls}">${hearValue}</div>`;
   if(vm.resultPresent){
     const rd=c.lastEventDate||c.nextDate;
-    if(rd)keyDates+=`<div class="kv-k">Решение</div><div class="kv-v kv-mono">${formatDate(rd)}</div>`;
+    if(rd){
+      const resolvedLabel=(c.stage==='appeal')?'Рассмотрено':'Решение';
+      keyDates+=`<div class="kv-k">${resolvedLabel}</div><div class="kv-v kv-mono">${formatDate(rd)}</div>`;
+    }
   }
   if(c.actDate)keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(c.actDate)}</div>`;
   keyDates+=`</div>`;
@@ -1265,7 +1304,6 @@ function renderDrawer(c){
   let courtSection='';
   if(drawerStage==='fi'&&stageData){
     const fi=stageData;
-    const fiLink=buildCourtLink(fi.link,fi.court_domain,fi.delo_id);
     let grid=`<div class="kv-grid">`;
     if(fi.case_number)grid+=`<div class="kv-k">Номер дела</div><div class="kv-v kv-mono">${escHtml(fi.case_number)}</div>`;
     if(fi.court)grid+=`<div class="kv-k">Суд</div><div class="kv-v">${escHtml(fi.court)}</div>`;
@@ -1273,11 +1311,9 @@ function renderDrawer(c){
     if(fi.status)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(fi.status)}</div>`;
     if(fi.result)grid+=`<div class="kv-k">Результат</div><div class="kv-v">${escHtml(fi.result)}</div>`;
     grid+=`</div>`;
-    if(fiLink)grid+=`<div style="margin-top:10px;"><a class="detail-link" href="${escHtml(fiLink)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка 1 инстанции</a></div>`;
     courtSection=grid;
   }else if(drawerStage==='ap'&&stageData){
     const ap=stageData;
-    const apLink=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
     let grid=`<div class="kv-grid">`;
     if(ap.case_number)grid+=`<div class="kv-k">Номер дела</div><div class="kv-v kv-mono">${escHtml(ap.case_number)}</div>`;
     if(ap.judge_reporter)grid+=`<div class="kv-k">Судья-докл.</div><div class="kv-v">${escHtml(ap.judge_reporter)}</div>`;
@@ -1295,7 +1331,6 @@ function renderDrawer(c){
       grid+=`<div class="kv-k">Из</div><div class="kv-v" style="color:var(--slate-600);font-size:13px;">${parts.join(' · ')}</div>`;
     }
     grid+=`</div>`;
-    if(apLink)grid+=`<div style="margin-top:10px;"><a class="detail-link" href="${escHtml(apLink)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка апелляции</a></div>`;
     courtSection=grid;
   }else{
     // Legacy (CSV case без _fi/_ap)
@@ -1349,6 +1384,7 @@ function renderDrawer(c){
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant" style="font-size:11px;">Апеллянт</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant" style="font-size:11px;">Апеллянт</span>':''}</span></div>
         </div>
+        ${c.category?`<div class="hero-category"><span class="hc-label">Категория:</span> ${escHtml(c.category)}</div>`:''}
         <div class="hero-badges">${statusBadge}${actBadge}</div>
       </div>
 

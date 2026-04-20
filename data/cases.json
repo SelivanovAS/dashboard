@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-04-20T06:26:37",
+  "updated_at": "2026-04-20T18:29:39",
   "cases": [
     {
       "id": "2-5607/2026",
@@ -179,32 +179,6 @@
         "hearing_date": "31.10.2025",
         "hearing_time": "",
         "link": "260029710|1922fd7f-f0c0-4414-8fa7-ad21717dbf94",
-        "act_published": false,
-        "act_date": ""
-      },
-      "appeal": null
-    },
-    {
-      "id": "2-767/2025",
-      "current_stage": "first_instance",
-      "plaintiff": "Кусыгина Наталья Викторовна",
-      "defendant": "ПАО \"Сбербанк\" Сбербанк России Югорское отделение № 5940 ПАО Сбербанк",
-      "category": "Споры, возникающие из трудовых отношений → Трудовые споры (независимо от форм собственности работодателя): → Другие, возникающие из трудовых отношений → Иные, возникающие из трудовых правоотношений",
-      "bank_role": "Ответчик",
-      "notes": "",
-      "first_instance": {
-        "case_number": "2-767/2025",
-        "court": "Урайский городской суд",
-        "court_domain": "uray--hmao.sudrf.ru",
-        "judge": "Бегинина Ольга Александровна",
-        "filing_date": "08.10.2025",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Дело передано в архив. 09:46. 24.02.2026",
-        "event_date": "24.02.2026",
-        "hearing_date": "16.12.2025",
-        "hearing_time": "14:00",
-        "link": "260028545|1d61c3c8-72e1-4d2a-a809-70d2b310139c",
         "act_published": false,
         "act_date": ""
       },
@@ -413,32 +387,6 @@
         "hearing_date": "20.05.2026",
         "hearing_time": "11:30",
         "link": "264228172|e335be3d-72ac-4437-84f5-e5cb17787acb",
-        "act_published": false,
-        "act_date": ""
-      },
-      "appeal": null
-    },
-    {
-      "id": "2-122/2026 (2-535/2025;)",
-      "current_stage": "first_instance",
-      "plaintiff": "Зименкова Светлана Николаевна",
-      "defendant": "Брылянт Евгений Александрович, ПАО Сбербанк",
-      "category": "Споры, связанные с имущественными правами → О взыскании неосновательного обогащения",
-      "bank_role": "Ответчик",
-      "notes": "",
-      "first_instance": {
-        "case_number": "2-122/2026 (2-535/2025;)",
-        "court": "Октябрьский районный суд",
-        "court_domain": "oktb--hmao.sudrf.ru",
-        "judge": "Наранова Т.Б.",
-        "filing_date": "24.12.2025",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "",
-        "event_date": "",
-        "hearing_date": "",
-        "hearing_time": "",
-        "link": "257420443|ed22dc93-2dd2-49cf-8ade-10feba1cf7ff",
         "act_published": false,
         "act_date": ""
       },
