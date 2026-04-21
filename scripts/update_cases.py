@@ -259,6 +259,24 @@ def parse_date(s: str) -> datetime | None:
     return None
 
 
+def _has_held_prior_hearing(events: list, new_hearing_dt: datetime | None) -> bool:
+    """Есть ли в истории движения дела реально прошедшее заседание,
+    отличное от нового назначения. Нужен чтобы отличить первое заседание
+    (после передачи дела судье) от настоящего переноса."""
+    if not events or not new_hearing_dt:
+        return False
+    today = datetime.now().date()
+    new_d = new_hearing_dt.date()
+    for e in events:
+        txt = (e.get("text") or "").lower()
+        if "судебное заседани" not in txt:
+            continue
+        ed = parse_date(e.get("date") or "")
+        if ed and ed.date() < today and ed.date() != new_d:
+            return True
+    return False
+
+
 # ── Регулярные выражения, используемые в hot loops ───────────────────────────
 # Скомпилированы один раз на уровне модуля.
 _HTML_TAG_RE = re.compile(r'<[^>]+>')
@@ -1222,7 +1240,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         parts.append(f"+{len(new_cases)} нов. апелл.")
     if stage_transitions:
         parts.append(f"{len(stage_transitions)} в апелляцию")
-    events = sum(1 for ch in changes if "new_event" in ch["type"])
+    events = sum(1 for ch in changes
+                 if "new_event" in ch["type"] or "hearing_new" in ch["type"])
     results = sum(1 for ch in changes if "new_result" in ch["type"])
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
     statuses = sum(1 for ch in changes if "status_change" in ch["type"])
@@ -1622,11 +1641,20 @@ def update_active_cases(
                 and new_h_dt.date() != old_h_dt.date()
                 and new_status != "Решено"
                 and not new_result):
-            change["type"].append("hearing_postponed")
-            change["details"]["old_hearing_date"] = old_hearing
-            change["details"]["old_hearing_time"] = old_hearing_time
-            change["details"]["new_hearing_date"] = new_hearing
-            change["details"]["new_hearing_time"] = new_hearing_time
+            # Настоящий перенос — только если в истории есть реально прошедшее
+            # заседание. Иначе это первое назначение после передачи дела судье
+            # (старое значение «Даты заседания» могло остаться от парсинга
+            # даты публикации уведомления, а не от проведённого слушания).
+            if _has_held_prior_hearing(card_info.get("_events") or [], new_h_dt):
+                change["type"].append("hearing_postponed")
+                change["details"]["old_hearing_date"] = old_hearing
+                change["details"]["old_hearing_time"] = old_hearing_time
+                change["details"]["new_hearing_date"] = new_hearing
+                change["details"]["new_hearing_time"] = new_hearing_time
+            else:
+                change["type"].append("hearing_new")
+                change["details"]["new_hearing_date"] = new_hearing
+                change["details"]["new_hearing_time"] = new_hearing_time
 
         # Обновляем поля дела
         if new_event:
@@ -1942,6 +1970,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     new_part = f"{new_dt}" + (f" {new_tm}" if new_tm else "")
                     line += (f"\n  ОТЛОЖЕНО: заседание перенесено "
                              f"с {old_part} на {new_part}")
+                if t == "hearing_new":
+                    new_dt = d.get("new_hearing_date", "")
+                    new_tm = d.get("new_hearing_time", "")
+                    new_part = f"{new_dt}" + (f" {new_tm}" if new_tm else "")
+                    line += f"\n  НАЗНАЧЕНО: первое заседание {new_part}"
 
             context_parts.append(line)
 
@@ -2245,9 +2278,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
     postponed = [ch for ch in changes if "hearing_postponed" in ch["type"]]
     postponed_nums = {ch["case"] for ch in postponed}
-    # Не дублируем дело в "Назначенные", если оно уже в "Отложенные"
+    # Не дублируем дело в "Назначенные", если оно уже в "Отложенные".
+    # hearing_new — первое заседание апелляции; семантически то же самое, что и
+    # «назначенное заседание», поэтому показываем тут же.
     events = [ch for ch in changes
-              if "new_event" in ch["type"] and ch["case"] not in postponed_nums]
+              if ("new_event" in ch["type"] or "hearing_new" in ch["type"])
+              and ch["case"] not in postponed_nums]
     # 5.4 и 5.5 — РАЗНЫЕ события (резолютивка и полный текст), разведённые
     # во времени. Дело может попасть в обе секции — это корректно.
     results = [ch for ch in changes if "new_result" in ch["type"]]
@@ -2393,6 +2429,14 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             parties = f"{plaintiff} vs {defendant}" if plaintiff and defendant else ""
             event_raw = d.get("event", "")
             event_date = d.get("event_date", "")
+            # Для чистого hearing_new (без new_event) синтезируем строку
+            # «Судебное заседание. HH:MM. DD.MM.YYYY» — дальнейший парсинг
+            # отделит дату и время, рендер пройдёт по ветке is_hearing.
+            if not event_raw and "hearing_new" in ch["type"]:
+                hd = d.get("new_hearing_date", "")
+                ht = d.get("new_hearing_time", "")
+                event_raw = "Судебное заседание" + (
+                    f". {ht}" if ht else "") + (f". {hd}" if hd else "")
             is_hearing = "заседани" in event_raw.lower()
             parts = event_raw.split(". ")
             clean_parts = []
@@ -3270,7 +3314,14 @@ def main_json():
 
         # Новое/перенесённое заседание
         if new_hearing_date and new_hearing_date != old_hearing_date:
-            if not old_hearing_date:
+            new_h_dt_fi = parse_date(new_hearing_date)
+            has_held_fi = _has_held_prior_hearing(
+                card_info.get("_events") or [], new_h_dt_fi
+            )
+            # Перенос — только если есть прошедшее заседание в истории движения.
+            # Пустое old_hearing_date — однозначно первое; непустое без
+            # прошедшего заседания — скорее всего артефакт прошлого парсинга.
+            if not old_hearing_date or not has_held_fi:
                 change["type"].append("fi_hearing_new")
             else:
                 change["type"].append("fi_hearing_postponed")
