@@ -660,9 +660,9 @@ function renderStats(){
     <div class="stat-card" data-accent="blue"><div class="stat-value">${allCases.length}</div><div class="stat-label">Всего дел</div></div>
     <div class="stat-card" data-accent="gold"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
     <div class="stat-card" data-accent="green">
-      <div class="stat-value">${w} <span style="font-size:14px;color:var(--slate-400);font-weight:400;">из ${decidedTotal}</span></div>
+      <div class="stat-value">${w} <span class="stat-of-total">из ${decidedTotal}</span></div>
       <div class="stat-label">В пользу банка</div>
-      ${decidedTotal>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div style="font-size:11px;color:var(--slate-400);margin-top:6px;">Нет данных об апеллянте</div>`}
+      ${decidedTotal>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div class="stat-no-appeal-data">Нет данных об апеллянте</div>`}
     </div>
     <div class="stat-card" data-accent="red"><div class="stat-value">${actsCount}</div><div class="stat-label">Акты опубликованы</div></div>`;
 
@@ -718,9 +718,13 @@ function toggleUpcoming(){
 /* ========== Analytics ========== */
 function renderAnalytics(){
 
-  // Upcoming hearings — use nextDate field (from "Дата заседания" column or event text)
+  // Upcoming hearings — group by date (Сегодня/Завтра/На неделе/Позже),
+  // balance first-instance and appellate cases so neither gets drowned.
   const today=new Date();today.setHours(0,0,0,0);
-  const upcoming=allCases
+  const tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
+  const weekEnd=new Date(today);weekEnd.setDate(today.getDate()+7);
+
+  const allUpcoming=allCases
     .filter(c=>c.status==='active'&&c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Рассмотрение'))
     .map(c=>{
       const t=c.hearingTime||'';
@@ -729,23 +733,66 @@ function renderAnalytics(){
       return{...c,hearingDate};
     })
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
-    .sort((a,b)=>a.hearingDate-b.hearingDate)
-    .slice(0,10);
+    .sort((a,b)=>a.hearingDate-b.hearingDate);
 
-  let upHtml='<div class="analytics-card"><div class="analytics-title" onclick="toggleUpcoming()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">Ближайшие заседания<span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>';
-  if(upcoming.length===0){
+  // Take up to 10 of each stage, then merge by date — cap at 15 total.
+  const fiSlice=allUpcoming.filter(c=>c.stage==='fi').slice(0,10);
+  const apSlice=allUpcoming.filter(c=>c.stage==='appeal').slice(0,10);
+  const shownCases=[...fiSlice,...apSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,15);
+  const totalCount=allUpcoming.length;
+
+  const groups={today:[],tomorrow:[],week:[],later:[]};
+  shownCases.forEach(c=>{
+    const d=new Date(c.hearingDate);d.setHours(0,0,0,0);
+    if(d.getTime()===today.getTime())groups.today.push(c);
+    else if(d.getTime()===tomorrow.getTime())groups.tomorrow.push(c);
+    else if(d<weekEnd)groups.week.push(c);
+    else groups.later.push(c);
+  });
+  const groupMeta=[
+    {key:'today',label:'Сегодня',cls:'up-group-today'},
+    {key:'tomorrow',label:'Завтра',cls:'up-group-tomorrow'},
+    {key:'week',label:'На неделе',cls:'up-group-week'},
+    {key:'later',label:'Позже',cls:'up-group-later'}
+  ];
+
+  const counterTxt=totalCount>shownCases.length?`${shownCases.length} из ${totalCount}`:`${shownCases.length}`;
+  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span>Ближайшие заседания <span class="up-counter">${counterTxt}</span></span><span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>`;
+
+  if(shownCases.length===0){
     upHtml+='<div class="upcoming-empty">Нет предстоящих заседаний</div>';
   }else{
     upHtml+='<div class="upcoming-list">';
-    upcoming.forEach(c=>{
-      const dateStr=c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
-      const timeStr=c.hearingTime?`<br><span style="font-size:12px;color:var(--slate-500);">${escHtml(c.hearingTime)}</span>`:'';
-      const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
-      const linkAttr=c.link?` onclick="window.open('${escHtml(c.link).replace(/'/g,'&#39;')}','_blank')" style="cursor:pointer;"`:'';
-      const isMob=window.innerWidth<=768;
-      const pl=isMob?shortName(shortParty(c.plaintiff)):shortParty(c.plaintiff);
-      const df=isMob?shortName(shortParty(c.defendant)):shortParty(c.defendant);
-      upHtml+=`<div class="upcoming-item"${linkAttr}><span class="upcoming-date">${dateStr}${timeStr}</span><div class="upcoming-info"><span class="upcoming-case">${escHtml(c.caseNumber)}</span> <span class="badge badge-${rc}" style="font-size:13px;padding:3px 8px;">${ROLE_LABELS[c.sberbankRole]||''}</span><br><span class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</span></div></div>`;
+    const isMob=window.innerWidth<=768;
+    groupMeta.forEach(g=>{
+      const items=groups[g.key];
+      if(!items.length)return;
+      upHtml+=`<div class="up-group ${g.cls}"><div class="up-group-head">${g.label}<span class="up-group-count">${items.length}</span></div><div class="up-group-body">`;
+      items.forEach(c=>{
+        const pl=isMob?shortName(shortParty(c.plaintiff)):shortParty(c.plaintiff);
+        const df=isMob?shortName(shortParty(c.defendant)):shortParty(c.defendant);
+        const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
+        const timeTxt=c.hearingTime||'—';
+        const showDate=(g.key==='week'||g.key==='later');
+        const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'}))}</span>`:'';
+        const stageBadge=c.stage==='appeal'
+          ?'<span class="badge badge-appeal badge-compact">Апелл.</span>'
+          :'<span class="badge badge-fi badge-compact">1 инст.</span>';
+        const postponedBadge=c.nextDateLabel==='Отложено до'?'<span class="badge badge-postponed badge-compact">Отложено</span>':'';
+        // Для апелляции суд всегда один — не выводим. Для 1 инст. — суд + судья.
+        const isFi=c.stage!=='appeal';
+        const court=isFi?courtLabel(c):'';
+        const judge=isFi&&c.firstInstanceJudge?' · '+shortName(c.firstInstanceJudge):'';
+        const courtHtml=court?`<div class="up-court">${escHtml(court)}${escHtml(judge)}</div>`:'';
+        const extLink=c.link?`<a class="up-ext" href="${escHtml(c.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="Открыть на сайте суда"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:'';
+        const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
+        upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" onclick="openDrawer('${caseEsc}')">`+
+          `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${postponedBadge}</div>${courtHtml}<div class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</div></div>`+
+          extLink+
+          `</div>`;
+      });
+      upHtml+='</div></div>';
     });
     upHtml+='</div>';
   }
@@ -758,7 +805,7 @@ function renderAnalytics(){
 function renderMeta(){
   const lastVisit=localStorage.getItem(LAST_VISIT_KEY);
   let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
-  if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span style="font-size:10px;color:var(--slate-400);">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
+  if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
   document.getElementById('app-footer').textContent='Данные обновляются автоматически (GitHub Actions)';
 }
@@ -1096,7 +1143,7 @@ function renderTable(){
     }
 
     // Highlight Sberbank in parties + appellant badge inline
-    const appBadge=' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>';
+    const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
     const plaintiffHtml=(isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(shortParty(c.plaintiff))}</span>`:escHtml(shortParty(c.plaintiff)))+(vm.plaintiffIsAppellant?appBadge:'');
     const defendantHtml=(isSberbank(c.defendant)?`<span class="party-sberbank">${escHtml(shortParty(c.defendant))}</span>`:escHtml(shortParty(c.defendant)))+(vm.defendantIsAppellant?appBadge:'');
 
@@ -1118,7 +1165,7 @@ function renderTable(){
     html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${caseNumEsc}" onclick="openDrawer('${caseNumEsc.replace(/'/g,'&#39;')}')">
       <td><div class="case-number"><span class="case-main">${caseNumEsc}</span>${newBadge}${archived}${stageBadge}${actions}</div></td>
       <td class="col-court"><div class="cell-court" title="${escHtml(courtTitle(c))}">${escHtml(courtLabel(c))||'<span class="cell-empty">—</span>'}</div></td>
-      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third" style="font-size:11px;">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
+      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
       <td>${hearingHtml}</td>
       <td>${stateHtml}</td>
     </tr>`;
@@ -1328,7 +1375,7 @@ function renderDrawer(c){
       const parts=[];
       if(c._fi.court)parts.push(escHtml(c._fi.court));
       if(c._fi.judge)parts.push('судья '+escHtml(c._fi.judge));
-      grid+=`<div class="kv-k">Из</div><div class="kv-v" style="color:var(--slate-600);font-size:13px;">${parts.join(' · ')}</div>`;
+      grid+=`<div class="kv-k">Из</div><div class="kv-v kv-v-muted">${parts.join(' · ')}</div>`;
     }
     grid+=`</div>`;
     courtSection=grid;
@@ -1349,7 +1396,7 @@ function renderDrawer(c){
   if(tl.length){
     timelineHtml='<div class="timeline">'+tl.map((it,i)=>`<div class="tl-item tl-${it.kind} ${i===0?'tl-recent':''}"><div class="tl-date">${formatDate(it.date)}</div><div class="tl-text">${escHtml(it.text)}</div></div>`).join('')+'</div>';
   }else{
-    timelineHtml='<div style="font-size:12px;color:var(--slate-400);">Нет событий</div>';
+    timelineHtml='<div class="tl-empty">Нет событий</div>';
   }
 
   // Notes (локальные + исходные)
@@ -1381,8 +1428,8 @@ function renderDrawer(c){
       <div class="drawer-hero">
         <div class="hero-meta">${stageBadge}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
-          <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant" style="font-size:11px;">Апеллянт</span>':''}</span></div>
-          <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant" style="font-size:11px;">Апеллянт</span>':''}</span></div>
+          <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
+          <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
         </div>
         ${c.category?`<div class="hero-category"><span class="hc-label">Категория:</span> ${escHtml(c.category)}</div>`:''}
         <div class="hero-badges">${statusBadge}${actBadge}</div>
@@ -1405,7 +1452,7 @@ function renderDrawer(c){
         ${timelineHtml}
       </div>
 
-      ${originalNote?`<div class="drawer-section"><div class="drawer-section-title">Заметки из таблицы</div><div style="font-size:13px;color:var(--slate-700);line-height:1.5;">${escHtml(originalNote)}</div></div>`:''}
+      ${originalNote?`<div class="drawer-section"><div class="drawer-section-title">Заметки из таблицы</div><div class="drawer-notes-orig">${escHtml(originalNote)}</div></div>`:''}
 
       <div class="drawer-section">
         <div class="drawer-section-title">Локальная заметка</div>
@@ -1443,7 +1490,7 @@ function renderMobileCards(){
     const stageBadge=c.stage==='first_instance'?'<span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?'<span class="badge badge-appeal">Апелляция</span>':'';
     const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}`:'';
 
-    const appBadge=' <span class="badge badge-appellant" style="font-size:11px;vertical-align:middle;">Апеллянт</span>';
+    const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
     const plHtml=(isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>':escHtml(shortParty(c.plaintiff)))+(vm.plaintiffIsAppellant?appBadge:'');
     const dfHtml=(isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>':escHtml(shortParty(c.defendant)))+(vm.defendantIsAppellant?appBadge:'');
 
