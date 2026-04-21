@@ -1688,6 +1688,12 @@ def update_active_cases(
                 case["Апеллянт"] = "Банк"
             else:
                 case["Апеллянт"] = "Иное лицо"
+        # Роль апеллянта (Истец/Ответчик/Иное лицо) + сокращённое имя —
+        # параллельный канал только для промпта, бинарный ярлык
+        # case["Апеллянт"] сохраняем ради bank_side_outcome и CSV-схемы.
+        appellant_role, appellant_name = classify_appellant_role(
+            appellant_raw, case.get("Истец", ""), case.get("Ответчик", ""),
+        )
 
         if change["type"]:
             change["details"]["plaintiff"] = case.get("Истец", "")
@@ -1695,6 +1701,9 @@ def update_active_cases(
             change["details"]["role"] = case.get("Роль банка", "")
             change["details"]["category"] = case.get("Категория", "")
             change["details"]["appellant"] = case.get("Апеллянт", "")
+            change["details"]["appellant_name"] = appellant_name
+            change["details"]["appellant_role"] = appellant_role
+            change["details"]["_appellant_raw"] = appellant_raw
             change["details"]["case_url"] = case_card_url(case)
             # bank_outcome считаем только когда есть нормализованный verdict_label —
             # т.е. в этом change есть new_result. Зависит от роли + апеллянта.
@@ -1804,6 +1813,62 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
     return ", ".join(s for s in shortened if s)
 
 
+def _norm_party_tokens(name: str) -> list[str]:
+    """Разбить строку стороны на нормализованные токены для матчинга.
+
+    Склеиваем филиальный запятый-вариант Сбербанка, сплитим по запятым,
+    каждый токен прогоняем через _shorten_single и приводим к нижнему
+    регистру со схлопнутыми пробелами. Пустые отбрасываем.
+    """
+    if not name or not name.strip():
+        return []
+    collapsed = _BRANCH_COMMA_RE.sub(r'\1', name)
+    out = []
+    for part in collapsed.split(","):
+        short = _shorten_single(part, keep_fio_full=False)
+        norm = re.sub(r'\s+', ' ', short).strip().lower()
+        if norm:
+            out.append(norm)
+    return out
+
+
+def classify_appellant_role(
+    appellant_raw: str,
+    plaintiff: str,
+    defendant: str,
+) -> tuple[str, str]:
+    """Определить роль апеллянта и его сокращённое имя.
+
+    Возвращает (role, short_name):
+      role ∈ {"Истец", "Ответчик", "Иное лицо", ""}
+      short_name — shorten_party_name(appellant_raw) или "" если пусто.
+
+    Логика: сравниваем нормализованные токены apellant_raw с токенами
+    истца и ответчика. Матч — равенство токенов или подстрока (в любом
+    направлении) при длине содержащего ≥ 4 символов. Если нет матча —
+    возвращаем «Иное лицо» (но имя всё равно сохраняем).
+    """
+    if not appellant_raw or not appellant_raw.strip():
+        return ("", "")
+    short_name = shorten_party_name(appellant_raw)
+    app_tokens = _norm_party_tokens(appellant_raw)
+    if not app_tokens:
+        return ("Иное лицо", short_name)
+    for role, party in (("Истец", plaintiff), ("Ответчик", defendant)):
+        party_tokens = _norm_party_tokens(party)
+        if not party_tokens:
+            continue
+        for a in app_tokens:
+            for p in party_tokens:
+                if a == p:
+                    return (role, short_name)
+                if len(p) >= 4 and a in p:
+                    return (role, short_name)
+                if len(a) >= 4 and p in a:
+                    return (role, short_name)
+    return ("Иное лицо", short_name)
+
+
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def save_digest_context(
@@ -1910,6 +1975,31 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 f"поступило: {c['Дата поступления']}"
             )
 
+    def _appellant_fmt(d: dict) -> str:
+        """Строка «роль + имя» для промпта. Если новых полей нет —
+        откат к старому бинарному ярлыку (легаси-пэйлоад, --force-postpone).
+        Если есть _appellant_raw но ролей нет (старый replay-last пэйлоад
+        после правки) — переклассифицируем на лету из plaintiff/defendant.
+        """
+        role = d.get("appellant_role", "")
+        name = d.get("appellant_name", "")
+        if not role and not name and d.get("_appellant_raw"):
+            role, name = classify_appellant_role(
+                d["_appellant_raw"],
+                d.get("plaintiff", ""),
+                d.get("defendant", ""),
+            )
+        if role and name:
+            return f"{role} {name}"
+        if role:
+            return role
+        if name:
+            return name
+        binary = d.get("appellant", "")
+        if binary:
+            return shorten_party_name(binary)
+        return ""
+
     if changes:
         context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ:")
         for ch in changes:
@@ -1920,8 +2010,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             df = shorten_party_name(d.get('defendant', ''))
             line += f"\n  Стороны: {pl} (истец) vs {df} (ответчик)"
             line += f", роль банка: {d.get('role', '')}"
-            if d.get("appellant"):
-                line += f", апеллянт: {shorten_party_name(d['appellant'])}"
+            app_str = _appellant_fmt(d)
+            if app_str:
+                line += f", апеллянт: {app_str}"
 
             for t in ch["type"]:
                 if t == "new_event":
@@ -1936,8 +2027,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += f"\n  В чью пользу для банка: {d.get('bank_outcome', '')}"
                     line += f"\n  Категория спора: {d.get('category', '')}"
                     line += f"\n  Роль банка: {d.get('role', '')}"
-                    if d.get("appellant"):
-                        line += f"\n  Апеллянт: {shorten_party_name(d['appellant'])}"
+                    app_str = _appellant_fmt(d)
+                    if app_str:
+                        line += f"\n  Апеллянт: {app_str}"
                     if hearing_dt:
                         line += f"\n  Дата апелляционного определения: {hearing_dt}"
                     if d.get("hearing_long_ago"):
@@ -1953,9 +2045,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                         line += f"\n  ИТОГ (из карточки): {d['act_verdict_label']}"
                     if d.get("act_verdict_raw"):
                         line += f"\n  Сырое поле «Результат»: {d['act_verdict_raw']}"
-                    if d.get("appellant"):
-                        line += (f"\n  Апеллянт: "
-                                 f"{shorten_party_name(d['appellant'])}")
+                    app_str = _appellant_fmt(d)
+                    if app_str:
+                        line += f"\n  Апеллянт: {app_str}"
                     if d.get("act_text"):
                         line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА: {d['act_text']}"
                 if t == "status_change":
@@ -2079,12 +2171,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • НЕ упоминай «составлено мотивированное определение» — это служебный шаг
    5.5. 📄 <b>Опубликованные тексты актов (N):</b> — полный текст акта (выходит через 14+ дней после заседания, иногда вовсе не публикуется). Только дела с полем «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА». Формат — ТРИ строки на дело, между делами пустая строка:
         • строка 1: <a href="URL"><b>номер</b></a>: {{стороны кратко}}
-        • строка 2: <b>Апеллянт:</b> {{кто подал жалобу}}. <b>Итог:</b> {{удовлетворено / отказано / отменено полностью / отменено в части / изменено / без изменения — дословно из «ИТОГ (из карточки)» если он есть, иначе извлеки из мотивировки}}.
-        • строка 3: <b>Почему:</b> 3-4 коротких предложения с КОНКРЕТНЫМ обоснованием из мотивировки — какую норму применил суд, что не доказала сторона, какие факты учёл. Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя. Доводы о неправильном применении норм отклонены.»
+        • строка 2: <b>Апеллянт:</b> {{РОЛЬ}} {{имя}} — РОЛЬ и имя берёшь ДОСЛОВНО из поля «Апеллянт» в данных (формат «Истец <имя>» / «Ответчик <имя>» / «Иное лицо <имя>»). Примеры: «<b>Апеллянт:</b> Ответчик Буклей А.Л.», «<b>Апеллянт:</b> Истец Сбербанк», «<b>Апеллянт:</b> Иное лицо Фин. уполномоченный». Если поле «Апеллянт» пустое — «<b>Апеллянт:</b> не указано». НЕ пиши просто «Иное лицо» без имени, если имя в данных есть. <b>Итог:</b> {{удовлетворено / отказано / отменено полностью / отменено в части / изменено / без изменения — дословно из «ИТОГ (из карточки)» если он есть, иначе извлеки из мотивировки}}.
+        • строка 3: <b>Почему:</b> 3-4 коротких предложения с КОНКРЕТНЫМ обоснованием из мотивировки — какую норму применил суд, что не доказала сторона, какие факты учёл. Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя. Доводы о неправильном применении норм отклонены.» Если из одних сторон неочевидно, кто оспаривал решение и чего добивался (напр., «Сбербанк vs Фин. уполномоченный» — обе стороны институциональные), начни «Почему» с короткой фразы «<Роль апеллянта> <имя> оспаривал <что>…», чтобы читатель сразу понял направление жалобы.
         ЗАПРЕЩЕНО:
         - писать общие заглушки («суд рассмотрел доводы», «суд проверил законность», «суд исследовал материалы дела», «суд согласился с выводами») без конкретики;
         - пересказывать ФАКТУРУ спора вместо МОТИВИРОВКИ итога (что было предметом спора — это строка 1, а не 3);
-        - выдумывать апеллянта или итог — если в данных нет ни «Апеллянт», ни ИТОГа, пиши «не указано».
+        - выдумывать апеллянта или итог — если в данных нет ни «Апеллянт», ни ИТОГа, пиши «не указано»;
+        - упоминать процедуру заседания: явку/неявку представителей, ходатайства о рассмотрении в отсутствие стороны, отложения, извещения, вручение корреспонденции, полномочия представителей, аудиопротоколирование — это служебные детали, не мотивировка;
+        - писать «замечаний на протокол не поступало», «судебные извещения вручены», «дело рассмотрено в отсутствие надлежаще извещённого» и подобные штампы;
+        - копировать «доводы апелляционной жалобы не влекут отмены решения» без указания, КАКУЮ норму суд применил и КАКОЙ довод отклонил.
 
 ВАЖНО про 5.4 и 5.5: это РАЗНЫЕ события, разведённые во времени. Если у одного дела есть И ИТОГ, И МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА — оно появится В ОБЕИХ секциях, это корректно. Не объединяй и не дедублицируй.
 
