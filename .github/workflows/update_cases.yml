@@ -1,7 +1,13 @@
 name: Update Court Cases
 
 on:
-  workflow_dispatch:  # Запуск через cron-job.org или вручную
+  workflow_dispatch:  # Запуск через Cloudflare Worker (cron) или вручную из UI
+    inputs:
+      test_mode:
+        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -9,7 +15,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -26,10 +32,21 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/update_cases.py --json
+          # При test_mode=true (галка в UI «Run workflow») шлём в личный чат.
+          # Cloudflare Worker дёргает workflow_dispatch без inputs → default=false → группа.
+          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "🧪 TEST MODE: digest will go to personal chat"
+          else
+            echo "📢 PROD MODE: digest will go to group chat"
+          fi
+          python scripts/update_cases.py --json
 
       - name: Commit updated data
+        # В тест-режиме не коммитим: иначе тестовый прогон может «съесть»
+        # изменения, которые prod-крон должен был обработать сам.
+        if: ${{ !inputs.test_mode }}
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"

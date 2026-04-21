@@ -2,6 +2,12 @@ name: Digest Only
 
 on:
   workflow_dispatch:  # Только ручной запуск
+    inputs:
+      test_mode:
+        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+        required: false
+        type: boolean
+        default: true  # digest_only обычно дёргают для проверки — по умолчанию в личку
 
 jobs:
   digest:
@@ -23,5 +29,11 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/update_cases.py --digest-only
+          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "🧪 TEST MODE: digest will go to personal chat"
+          else
+            echo "📢 PROD MODE: digest will go to group chat"
+          fi
+          python scripts/update_cases.py --digest-only

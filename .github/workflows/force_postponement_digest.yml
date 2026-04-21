@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ''
+      test_mode:
+        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+        required: false
+        type: boolean
+        default: true  # обычно дёргают для проверки — по умолчанию в личку
 
 jobs:
   force-digest:
@@ -37,11 +42,16 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
           INPUT_CASE_NUMBER: ${{ inputs.case_number }}
           INPUT_OLD_DATE: ${{ inputs.old_date }}
           INPUT_OLD_TIME: ${{ inputs.old_time }}
         run: |
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "🧪 TEST MODE: digest will go to personal chat"
+          else
+            echo "📢 PROD MODE: digest will go to group chat"
+          fi
           python scripts/update_cases.py \
             --force-digest-for "$INPUT_CASE_NUMBER" \
             --old-date "$INPUT_OLD_DATE" \
