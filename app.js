@@ -735,10 +735,10 @@ function renderAnalytics(){
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate);
 
-  // Take up to 10 of each stage, then merge by date — cap at 15 total.
-  const fiSlice=allUpcoming.filter(c=>c.stage==='fi').slice(0,10);
+  // Take up to 10 of each stage, then merge by date — cap at 12 total.
+  const fiSlice=allUpcoming.filter(c=>c.stage==='first_instance').slice(0,10);
   const apSlice=allUpcoming.filter(c=>c.stage==='appeal').slice(0,10);
-  const shownCases=[...fiSlice,...apSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,15);
+  const shownCases=[...fiSlice,...apSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,12);
   const totalCount=allUpcoming.length;
 
   const groups={today:[],tomorrow:[],week:[],later:[]};
