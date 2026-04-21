@@ -57,5 +57,10 @@ jobs:
           if [ -f data/cases_archive.json ]; then
             git add data/cases_archive.json
           fi
+          # Контекст дайджеста нужен workflow `Digest Only` (--replay-last).
+          # Без коммита каждый следующий запуск видит пустой checkout и падает.
+          if [ -f data/last_digest_context.json ]; then
+            git add data/last_digest_context.json
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
