@@ -1588,7 +1588,54 @@ function onGlobalKeydown(e){
 }
 
 /* ========== Boot ========== */
-window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);});
+window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();});
+
+/* ========== Mobile swipe-to-close drawer ========== */
+function setupDrawerSwipe(){
+  const dr=document.getElementById('drawer');
+  const scrim=document.getElementById('drawer-scrim');
+  if(!dr)return;
+  let startX=0,startY=0,startT=0,dx=0,dragging=false,decided=false,horizontal=false,width=0;
+  dr.addEventListener('touchstart',(e)=>{
+    if(window.innerWidth>768)return;
+    if(!dr.classList.contains('open'))return;
+    const t=e.touches[0];
+    startX=t.clientX;startY=t.clientY;startT=Date.now();
+    dx=0;dragging=true;decided=false;horizontal=false;
+    width=dr.offsetWidth||window.innerWidth;
+  },{passive:true});
+  dr.addEventListener('touchmove',(e)=>{
+    if(!dragging)return;
+    const t=e.touches[0];
+    const ddx=t.clientX-startX, ddy=t.clientY-startY;
+    if(!decided){
+      if(Math.abs(ddx)<8&&Math.abs(ddy)<8)return;
+      horizontal=Math.abs(ddx)>Math.abs(ddy);
+      decided=true;
+      if(horizontal){dr.style.transition='none';}
+      else{dragging=false;return;}
+    }
+    if(!horizontal)return;
+    dx=Math.max(0,ddx);
+    dr.style.transform=`translateX(${dx}px)`;
+    if(scrim)scrim.style.opacity=String(Math.max(0,1-dx/width));
+    e.preventDefault();
+  },{passive:false});
+  const end=()=>{
+    if(!dragging)return;
+    dragging=false;
+    if(!horizontal){return;}
+    dr.style.transition='';
+    const dt=Date.now()-startT;
+    const velocity=dx/Math.max(1,dt);
+    const shouldClose=dx>width*0.33||velocity>0.5;
+    dr.style.transform='';
+    if(scrim)scrim.style.opacity='';
+    if(shouldClose)closeDrawer();
+  };
+  dr.addEventListener('touchend',end);
+  dr.addEventListener('touchcancel',end);
+}
 window.addEventListener('scroll',()=>{
   const h=document.querySelector('.app-header');
   if(h)h.classList.toggle('scrolled',window.scrollY>30);
