@@ -145,6 +145,13 @@ DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
 )
+# Снимок контекста последнего дайджеста — сохраняется перед отправкой
+# в Telegram и используется режимом --replay-last для повторной генерации
+# (например, чтобы переиграть с другой версией промпта).
+LAST_DIGEST_CONTEXT_PATH = os.environ.get(
+    "LAST_DIGEST_CONTEXT_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest_context.json")
+)
 ARCHIVE_DAYS = 30  # Апелляция: дела решённые 30+ дней назад уезжают в архив
 ARCHIVE_DAYS_FI = 45  # Первая инстанция: окно больше — мотивированное решение
                       # и движение в кассацию могут появиться позже.
@@ -1554,18 +1561,31 @@ def update_active_cases(
         act_text = card_info.get("act_text", "")
         if not act_text and card_info.get("_act_url"):
             act_text = fetch_act_text(card_info["_act_url"])
+        # Снимок итога на момент публикации акта: результат обычно уже давно
+        # стоит в карточке (акт публикуется через 14+ дней после заседания).
+        # verdict_label в JSON не сохраняется — переклассифицируем из сырого
+        # поля «Результат» (new_result приоритетнее — это значение из карточки).
+        act_verdict_raw = new_result or old_result
+        act_verdict_label = (classify_verdict(act_verdict_raw, new_event)
+                             if act_verdict_raw else "")
         if new_act == "Да" and old_act != "Да":
             change["type"].append("new_act")
-            change["details"]["act_text"] = extract_motive_part(act_text, 1000)
+            change["details"]["act_text"] = extract_motive_part(act_text, 1800)
+            if act_verdict_label:
+                change["details"]["act_verdict_label"] = act_verdict_label
+                change["details"]["act_verdict_raw"] = act_verdict_raw
         elif (new_act == "Да" and old_act == "Да"
               and act_text
               and case["Номер дела"] not in _digested_acts):
             # Акт уже был помечен ранее, но текст не извлекался.
             # Добавляем в дайджест один раз.
-            motive = extract_motive_part(act_text, 1000)
+            motive = extract_motive_part(act_text, 1800)
             if motive and len(motive) > 100:
                 change["type"].append("new_act")
                 change["details"]["act_text"] = motive
+                if act_verdict_label:
+                    change["details"]["act_verdict_label"] = act_verdict_label
+                    change["details"]["act_verdict_raw"] = act_verdict_raw
 
         # Новый результат
         if new_result and new_result != old_result:
@@ -1694,6 +1714,16 @@ _HERITAGE_RE = re.compile(
 )
 _QUOTES_RE = re.compile(r'[«»"]+')
 _V_LICE_RE = re.compile(r'\s+в лице\s+.*', re.IGNORECASE)
+# «Сбербанк — Югорское отделение № 5940», «Сбербанк - отделение ...» — дефисный вариант филиала (без запятой, на уровне _shorten_single)
+_BRANCH_DASH_RE = re.compile(
+    r'\s*[-–—]\s*(?:[А-ЯЁ][а-яё]+\s+)?отделение\b.*',
+    re.IGNORECASE,
+)
+# «Сбербанк, Югорское отделение № 5940» — вариант через запятую (на уровне всей строки, до split по запятым)
+_BRANCH_COMMA_RE = re.compile(
+    r'(Сбербанк)\s*,\s*(?:[А-ЯЁ][а-яё]+\s+)?отделение\b[^,]*',
+    re.IGNORECASE,
+)
 _SBER_RU_RE = re.compile(r'^Сбербанк\s+России$', re.IGNORECASE)
 
 
@@ -1714,6 +1744,8 @@ def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
     name = _QUOTES_RE.sub('', name).strip()
     # Сбербанк: убрать «в лице филиала ...», «в лице ... банка ...» и т.п.
     name = _V_LICE_RE.sub('', name).strip()
+    # Сбербанк — Югорское отделение № 5940 — дефисный вариант филиала
+    name = _BRANCH_DASH_RE.sub('', name).strip()
     # Сбербанк России → Сбербанк
     name = _SBER_RU_RE.sub('Сбербанк', name)
     # «города» → «г.»
@@ -1736,12 +1768,52 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
     """
     if not name or not name.strip():
         return name
+    # Сначала склеиваем «Сбербанк, Югорское отделение № 5940» до split,
+    # иначе отдельная часть «отделение № 5940» проскочит в результат.
+    name = _BRANCH_COMMA_RE.sub(r'\1', name)
     parts = name.split(",")
     shortened = [_shorten_single(p, keep_fio_full=keep_fio_full) for p in parts]
-    return ", ".join(shortened)
+    return ", ".join(s for s in shortened if s)
 
 
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
+
+def save_digest_context(
+    new_cases: list[dict],
+    changes: list[dict],
+    *,
+    cases: list[dict] | None = None,
+    fi_new_cases: list[dict] | None = None,
+    stage_transitions: list[dict] | None = None,
+    fi_changes: list[dict] | None = None,
+    total_active_appeal: int = 0,
+    total_active_fi: int = 0,
+) -> None:
+    """Сохранить входные данные дайджеста в LAST_DIGEST_CONTEXT_PATH.
+
+    Файл перезаписывается на каждом прогоне и нужен для режима --replay-last,
+    чтобы прогнать дайджест заново на тех же данных (например, после правки
+    промпта) без повторного парсинга сайтов суда.
+    """
+    payload = {
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "new_cases": new_cases or [],
+        "changes": changes or [],
+        "cases": cases or [],
+        "fi_new_cases": fi_new_cases or [],
+        "stage_transitions": stage_transitions or [],
+        "fi_changes": fi_changes or [],
+        "total_active_appeal": total_active_appeal,
+        "total_active_fi": total_active_fi,
+    }
+    try:
+        save_json(payload, LAST_DIGEST_CONTEXT_PATH)
+        log.info(f"Контекст дайджеста сохранён: {LAST_DIGEST_CONTEXT_PATH}")
+    except Exception as exc:
+        # Сохранение контекста — вспомогательная операция, не должна ронять
+        # основной прогон. Ошибку залогируем и поедем дальше.
+        log.warning(f"Не удалось сохранить контекст дайджеста: {exc}")
+
 
 def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     cases: list[dict] | None = None,
@@ -1849,6 +1921,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += f"\n  Сырое поле «Результат»: {d.get('result', '')}"
                 if t == "new_act":
                     line += "\n  Опубликован судебный акт"
+                    if d.get("act_verdict_label"):
+                        line += f"\n  ИТОГ (из карточки): {d['act_verdict_label']}"
+                    if d.get("act_verdict_raw"):
+                        line += f"\n  Сырое поле «Результат»: {d['act_verdict_raw']}"
+                    if d.get("appellant"):
+                        line += (f"\n  Апеллянт: "
+                                 f"{shorten_party_name(d['appellant'])}")
                     if d.get("act_text"):
                         line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА: {d['act_text']}"
                 if t == "status_change":
@@ -1946,7 +2025,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 3. 🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>
    3.1. 📥 <b>Новые иски (N):</b> — одна строка на дело: <a href="URL"><b>номер</b></a> (URL ТОЛЬКО из поля URL этого дела в данных, ничего не выдумывай), стороны (имена физлиц полными), категория, суд, дата подачи, роль банка.
-   3.2. 📅 <b>Изменения (N):</b> — одна строка на дело: <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | событие (назначено заседание ДД.ММ ЧЧ:ММ / перенесено ДД.ММ→ДД.ММ / подготовка дела / беседа / предварительное заседание / отложение / статус X→Y / опубликован акт / мотивированное решение / возвращение иска / в архив).
+   3.2. 📅 <b>Изменения (N):</b> — ДВЕ строки на дело, между делами пустая строка:
+        • строка 1: 📅 <b>ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}})
+          — если это назначенное/перенесённое заседание, дата жирным СПЕРЕДИ.
+          Для переноса: <b>⏪ ДД.ММ.ГГГГ ЧЧ:ММ → ⏩ ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}}).
+          Для событий без даты (смена статуса, публикация акта и т.п.) — строка 1 без даты впереди: <a href="URL"><b>номер</b></a> ({{суд}}).
+        • строка 2: {{стороны кратко}} | событие (подготовка дела / беседа / предварительное заседание / заседание / отложение / статус X→Y / опубликован акт / мотивированное решение / возвращение иска / в архив).
 
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
@@ -1960,7 +2044,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • НЕ переформулируй ИТОГ своими словами и не подменяй его шаблоном
         • НЕ включай дела, у которых в данных НЕТ блока «ИТОГ»
         • НЕ упоминай «составлено мотивированное определение» — это служебный шаг
-   5.5. 📄 <b>Опубликованные тексты актов (N):</b> — полный текст акта (выходит через 14+ дней после заседания, иногда вовсе не публикуется). Только дела с полем «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА». Одна строка на дело: <a href="URL"><b>номер</b></a>: стороны, итог (удовлетворена / отказано / частично) и 1-2 предложения ПОЧЕМУ суд так решил. Не пиши просто номера без содержания.
+   5.5. 📄 <b>Опубликованные тексты актов (N):</b> — полный текст акта (выходит через 14+ дней после заседания, иногда вовсе не публикуется). Только дела с полем «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА». Формат — ТРИ строки на дело, между делами пустая строка:
+        • строка 1: <a href="URL"><b>номер</b></a>: {{стороны кратко}}
+        • строка 2: <b>Апеллянт:</b> {{кто подал жалобу}}. <b>Итог:</b> {{удовлетворено / отказано / отменено полностью / отменено в части / изменено / без изменения — дословно из «ИТОГ (из карточки)» если он есть, иначе извлеки из мотивировки}}.
+        • строка 3: <b>Почему:</b> 3-4 коротких предложения с КОНКРЕТНЫМ обоснованием из мотивировки — какую норму применил суд, что не доказала сторона, какие факты учёл. Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя. Доводы о неправильном применении норм отклонены.»
+        ЗАПРЕЩЕНО:
+        - писать общие заглушки («суд рассмотрел доводы», «суд проверил законность», «суд исследовал материалы дела», «суд согласился с выводами») без конкретики;
+        - пересказывать ФАКТУРУ спора вместо МОТИВИРОВКИ итога (что было предметом спора — это строка 1, а не 3);
+        - выдумывать апеллянта или итог — если в данных нет ни «Апеллянт», ни ИТОГа, пиши «не указано».
 
 ВАЖНО про 5.4 и 5.5: это РАЗНЫЕ события, разведённые во времени. Если у одного дела есть И ИТОГ, И МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА — оно появится В ОБЕИХ секциях, это корректно. Не объединяй и не дедублицируй.
 
@@ -2740,6 +2831,11 @@ def main():
     # 7. Генерируем дайджест
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
+    save_digest_context(
+        new_cases, changes, cases=cases,
+        total_active_appeal=total_active_appeal,
+        total_active_fi=0,
+    )
     digest = generate_digest(
         new_cases, changes, cases=cases,
         total_active_appeal=total_active_appeal,
@@ -2860,6 +2956,11 @@ def main_force_postponement_digest(case_number: str,
         f"Синтетический change: {old_date} {old_time} → {new_date} {new_time}"
     )
     log.info("Генерирую дайджест...")
+    save_digest_context(
+        [], [change], cases=cases,
+        total_active_appeal=total_active_appeal,
+        total_active_fi=0,
+    )
     digest = generate_digest(
         [], [change], cases=cases,
         total_active_appeal=total_active_appeal,
@@ -3321,6 +3422,13 @@ def main_json():
     )
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
+    save_digest_context(
+        appeal_new_cases_csv, changes, cases=csv_cases,
+        fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+        fi_changes=fi_changes,
+        total_active_appeal=total_active_appeal,
+        total_active_fi=total_active_fi,
+    )
     digest = generate_digest(
         appeal_new_cases_csv, changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
@@ -3350,6 +3458,56 @@ def main_json():
             "JSON total": len(cases),
         },
     )
+
+
+def main_replay_last():
+    """Прогнать дайджест заново из LAST_DIGEST_CONTEXT_PATH.
+
+    Используется для экспериментов с промптом/форматом: после любого
+    продового прогона контекст лежит в `data/last_digest_context.json`,
+    и этот режим пересоздаёт дайджест на тех же данных без повторного
+    парсинга судов. Полезно, когда хочется проверить, как отработает
+    изменённый промпт на реальных изменениях последнего дня.
+    """
+    log.info("=" * 60)
+    log.info("Режим replay-last: дайджест из сохранённого контекста")
+    log.info("=" * 60)
+
+    validate_environment()
+
+    if not os.path.exists(LAST_DIGEST_CONTEXT_PATH):
+        log.error(
+            f"Контекст не найден: {LAST_DIGEST_CONTEXT_PATH}. "
+            "Сначала выполните полный прогон (--json или без флагов), "
+            "чтобы сохранить контекст."
+        )
+        sys.exit(2)
+
+    with open(LAST_DIGEST_CONTEXT_PATH, "r", encoding="utf-8") as f:
+        ctx = json.load(f)
+
+    saved_at = ctx.get("saved_at", "?")
+    log.info(f"Контекст от {saved_at}: "
+             f"changes={len(ctx.get('changes', []))}, "
+             f"fi_changes={len(ctx.get('fi_changes', []))}, "
+             f"new_cases={len(ctx.get('new_cases', []))}, "
+             f"fi_new={len(ctx.get('fi_new_cases', []))}, "
+             f"transitions={len(ctx.get('stage_transitions', []))}")
+
+    log.info("Генерирую дайджест...")
+    digest = generate_digest(
+        ctx.get("new_cases", []),
+        ctx.get("changes", []),
+        cases=ctx.get("cases", []),
+        fi_new_cases=ctx.get("fi_new_cases", []),
+        stage_transitions=ctx.get("stage_transitions", []),
+        fi_changes=ctx.get("fi_changes", []),
+        total_active_appeal=ctx.get("total_active_appeal", 0),
+        total_active_fi=ctx.get("total_active_fi", 0),
+    )
+
+    send_telegram(digest)
+    log.info("Готово!")
 
 
 def main_digest_only():
@@ -3392,10 +3550,14 @@ def main_digest_only():
 
 if __name__ == "__main__":
     # Выбор режима
-    if "--digest-only" in sys.argv:
+    if "--replay-last" in sys.argv:
+        mode_name = "replay-last"
+        entry = main_replay_last
+        entry_args: tuple = ()
+    elif "--digest-only" in sys.argv:
         mode_name = "digest-only"
         entry = main_digest_only
-        entry_args: tuple = ()
+        entry_args = ()
     elif "--force-digest-for" in sys.argv:
         # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
         def _arg(name: str, required: bool = True) -> str:
