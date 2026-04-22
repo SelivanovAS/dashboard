@@ -174,6 +174,17 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# Переключатель провайдера LLM: "claude" (по умолчанию) или "gigachat".
+# Задаётся в workflow digest_only_gigachat.yml для отдельного прогона
+# дайджеста через GigaChat. Основной мониторинг (update_cases.yml) остаётся
+# на Claude и ничего не знает про этот флаг.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
+GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
+GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")
+GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096
 # Целевой лимит длины дайджеста (передаётся в промпт). Меньше TELEGRAM_MSG_LIMIT,
@@ -1977,6 +1988,104 @@ def classify_appellant_role(
     return ("Иное лицо", short_name)
 
 
+# ── GigaChat API — альтернативный провайдер для digest_only ───────────────────
+
+def _gigachat_access_token() -> str | None:
+    """Получить OAuth access token GigaChat. Живёт 30 минут.
+
+    Токен не кешируем: дайджест-раны короткие и одноразовые, а держать
+    кеш между запусками workflow негде. Verify=False — на ubuntu-latest нет
+    корневого сертификата Минцифры РФ, которым подписан ngw.devices.sberbank.ru.
+    """
+    if not GIGACHAT_AUTH_KEY:
+        log.warning("GIGACHAT_AUTH_KEY не задан")
+        return None
+    try:
+        import uuid
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = requests.post(
+            GIGACHAT_OAUTH_URL,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "RqUID": str(uuid.uuid4()),
+                "Authorization": f"Basic {GIGACHAT_AUTH_KEY}",
+            },
+            data={"scope": GIGACHAT_SCOPE},
+            timeout=30,
+            verify=False,
+        )
+        r.raise_for_status()
+        return r.json().get("access_token")
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = (e.response.text or "")[:500] if e.response is not None else ""
+        log.error(f"GigaChat OAuth HTTP {status}: {body}")
+        return None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.error(f"GigaChat OAuth ошибка: {e}")
+        return None
+
+
+def _call_gigachat(prompt: str) -> str | None:
+    """Отправить prompt в GigaChat, вернуть HTML-текст дайджеста.
+
+    Возвращает None при любой ошибке — вызывающая сторона откатится
+    на generate_template_digest (как и для Claude).
+    """
+    token = _gigachat_access_token()
+    if not token:
+        return None
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = requests.post(
+            GIGACHAT_API_URL,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "model": GIGACHAT_MODEL,
+                "temperature": 0.2,
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+            verify=False,
+        )
+        r.raise_for_status()
+        data = r.json()
+        choices = data.get("choices", [])
+        if not choices:
+            return None
+        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
+        if not text:
+            return None
+        # Страховка: модель иногда оборачивает HTML в Markdown-блок (```html …```)
+        if text.startswith("```"):
+            first_nl = text.find("\n")
+            if first_nl != -1:
+                text = text[first_nl + 1:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip() or None
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = (e.response.text or "")[:500] if e.response is not None else ""
+        log.error(f"GigaChat API HTTP {status}: {body}")
+        return None
+    except requests.RequestException as e:
+        log.error(f"GigaChat API сетевая ошибка: {e}")
+        return None
+    except (KeyError, ValueError, json.JSONDecodeError) as e:
+        log.error(f"GigaChat API неожиданный ответ: {e}")
+        return None
+
+
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def save_digest_context(
@@ -2040,7 +2149,17 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
     total_active = total_active_appeal + total_active_fi
 
-    if not ANTHROPIC_API_KEY:
+    if LLM_PROVIDER == "gigachat":
+        if not GIGACHAT_AUTH_KEY:
+            log.warning("GIGACHAT_AUTH_KEY не задан, дайджест будет шаблонным")
+            return generate_template_digest(
+                new_cases, changes, cases=cases,
+                fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+                fi_changes=fi_changes,
+                total_active_appeal=total_active_appeal,
+                total_active_fi=total_active_fi,
+            )
+    elif not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
         return generate_template_digest(
             new_cases, changes, cases=cases,
@@ -2340,6 +2459,19 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 Данные:
 {chr(10).join(context_parts)}"""
+
+    if LLM_PROVIDER == "gigachat":
+        log.info(f"LLM: GigaChat (model={GIGACHAT_MODEL}, scope={GIGACHAT_SCOPE})")
+        text = _call_gigachat(prompt)
+        if not text:
+            return generate_template_digest(
+                new_cases, changes, cases=cases,
+                fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+                fi_changes=fi_changes,
+                total_active_appeal=total_active_appeal,
+                total_active_fi=total_active_fi,
+            )
+        return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
 
     try:
         r = requests.post(
@@ -3020,8 +3152,12 @@ def validate_environment(require_anthropic: bool = True) -> None:
     require_anthropic: False для режимов без дайджеста (например, dry-run).
     """
     missing: list[str] = []
-    if require_anthropic and not ANTHROPIC_API_KEY:
-        missing.append("ANTHROPIC_API_KEY")
+    if require_anthropic:
+        if LLM_PROVIDER == "gigachat":
+            if not GIGACHAT_AUTH_KEY:
+                missing.append("GIGACHAT_AUTH_KEY")
+        elif not ANTHROPIC_API_KEY:
+            missing.append("ANTHROPIC_API_KEY")
     if not TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
     if not TELEGRAM_CHAT_ID:

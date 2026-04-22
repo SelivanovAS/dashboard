@@ -1,0 +1,53 @@
+name: Digest Only (GigaChat)
+
+on:
+  workflow_dispatch:  # Только ручной запуск
+    inputs:
+      replay_last:
+        description: 'Переиграть последний сохранённый дайджест (data/last_digest_context.json). Снять галку — прогнать по текущему CSV без изменений (обычно «всё спокойно»).'
+        required: false
+        type: boolean
+        default: true
+      test_mode:
+        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+        required: false
+        type: boolean
+        default: true  # digest_only обычно дёргают для проверки — по умолчанию в личку
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Generate and send digest (GigaChat)
+        env:
+          LLM_PROVIDER: gigachat
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: GIGACHAT_API_PERS
+          GIGACHAT_MODEL: GigaChat
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.test_mode }}" = "true" ]; then
+            echo "🧪 TEST MODE: digest will go to personal chat"
+          else
+            echo "📢 PROD MODE: digest will go to group chat"
+          fi
+          if [ "${{ inputs.replay_last }}" = "true" ]; then
+            echo "🔁 REPLAY: using data/last_digest_context.json"
+            python scripts/update_cases.py --replay-last
+          else
+            echo "📭 DIGEST-ONLY: current CSV, no changes"
+            python scripts/update_cases.py --digest-only
+          fi
