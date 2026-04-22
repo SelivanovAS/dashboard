@@ -19,14 +19,14 @@
   --shadow-lg: 0 12px 40px rgba(12,24,41,0.12);
   --radius: 8px; --radius-lg: 12px;
   /* Typography scale */
-  --fs-2xs: 11px; /* бейджи инстанций, вспомогательные метки */
-  --fs-xs:  12px; /* даты timeline, kv-keys, tab-badge, badge-status */
-  --fs-sm:  13px; /* второстепенный текст, hearing-primary */
-  --fs-md:  14px; /* базовый текст таблицы и карточек */
-  --fs-lg:  15px; /* case number, parties, status-date-prominent */
-  --fs-xl:  17px; /* header title */
-  --fs-2xl: 22px; /* section h1, setup-header */
-  --fs-3xl: 28px; /* stat-value */
+  --fs-2xs: 12px; /* бейджи инстанций, вспомогательные метки */
+  --fs-xs:  13px; /* даты timeline, kv-keys, tab-badge, badge-status */
+  --fs-sm:  14px; /* второстепенный текст, hearing-primary */
+  --fs-md:  15px; /* базовый текст таблицы и карточек */
+  --fs-lg:  16px; /* case number, parties, status-date-prominent */
+  --fs-xl:  18px; /* header title */
+  --fs-2xl: 24px; /* section h1, setup-header */
+  --fs-3xl: 30px; /* stat-value */
   /* Semantic tokens — единый источник цветов для бейджей, полосок, иконок */
   --success: var(--green-500); --success-bg: var(--green-100); --success-fg: var(--green-800);
   --warning: var(--amber-500); --warning-bg: var(--amber-100); --warning-fg: #92400e;
@@ -482,7 +482,7 @@ tr.detail-row{display:none;}
 .stats-mobile-summary .sms-row{display:flex;justify-content:space-between;align-items:center;}
 .stats-mobile-summary .sms-items{display:flex;gap:14px;flex-wrap:wrap;}
 .stats-mobile-summary .sms-item{font-size:var(--fs-sm);color:var(--slate-600);}
-.stats-mobile-summary .sms-item strong{color:var(--navy-800);font-size:16px;}
+.stats-mobile-summary .sms-item strong{color:var(--navy-800);font-size:17px;}
 .stats-mobile-summary .sms-chevron{color:var(--slate-400);font-size:18px;transition:transform .2s;}
 .stats-mobile-summary.expanded .sms-chevron{transform:rotate(180deg);}
 @media(max-width:768px){
@@ -520,12 +520,12 @@ tr.detail-row{display:none;}
   .table-wrap{display:none;}
   .mobile-cards{display:block;animation:fadeUp .6s ease;}
   /* Mobile font size boost */
-  .header-title{font-size:19px;}
+  .header-title{font-size:20px;}
   .header-sub{font-size:var(--fs-sm);}
   .header-meta{font-size:var(--fs-sm);}
   .btn-refresh{font-size:var(--fs-md);}
   .stats-mobile-summary .sms-item{font-size:var(--fs-lg);}
-  .stats-mobile-summary .sms-item strong{font-size:20px;}
+  .stats-mobile-summary .sms-item strong{font-size:22px;}
   .analytics-title{font-size:var(--fs-sm);}
   .cat-bar-row{font-size:var(--fs-md);}
   .cat-bar-label{font-size:var(--fs-md);}
@@ -535,7 +535,7 @@ tr.detail-row{display:none;}
   .table-counter{font-size:var(--fs-md);}
   .badge{font-size:var(--fs-sm);}
   .badge-cat{font-size:var(--fs-sm);}
-  .mc-case{font-size:16px;}
+  .mc-case{font-size:17px;}
   .mc-court-label{font-size:var(--fs-sm);}
   .mc-parties{font-size:var(--fs-lg);}
   .mc-bottom .badge{font-size:var(--fs-md);}
@@ -547,7 +547,7 @@ tr.detail-row{display:none;}
   /* Drawer: mobile typography */
   .drawer-body{padding:16px;}
   .drawer-title .dt-sub{font-size:var(--fs-xs);}
-  .drawer-hero .hero-parties{font-size:16px;}
+  .drawer-hero .hero-parties{font-size:17px;}
   .drawer-hero .hero-category{font-size:var(--fs-md);}
   .kv-grid{font-size:var(--fs-md);}
   .kv-grid .kv-k{font-size:var(--fs-sm);}
