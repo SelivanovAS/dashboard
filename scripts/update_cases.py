@@ -2029,6 +2029,88 @@ def _gigachat_access_token() -> str | None:
         return None
 
 
+# System-инструкция для GigaChat. Claude-промпт в generate_digest описывает
+# HTML-формат, но GigaChat (в т.ч. Max) охотно скатывается в Markdown (##, **, - )
+# даже при явном запрете. Выносим жёсткие требования в role=system + даём
+# микро-пример: так модель держит формат заметно стабильнее.
+GIGACHAT_SYSTEM_PROMPT = (
+    "Ты пишешь дайджест для отправки в Telegram с parse_mode=HTML. "
+    "СТРОГИЕ ПРАВИЛА ФОРМАТА — нарушение = сломанная вёрстка:\n"
+    "1. Разрешены ТОЛЬКО HTML-теги Telegram: <b>, <i>, <a href=\"URL\">текст</a>. "
+    "Никакие <h1>, <h2>, <p>, <ul>, <li> не поддерживаются — не используй их.\n"
+    "2. ЗАПРЕЩЕНО использовать Markdown: никаких ##, ###, **, *, ---, ``` "
+    "и маркеров списков «- », «* », «• » в начале строк. "
+    "Заголовки секций выделяй <b>…</b>, не решётками.\n"
+    "3. Номера дел оформляй как ссылку: "
+    "<a href=\"URL_из_данных\"><b>A40-123/2025</b></a>. "
+    "Если URL есть в данных — обязательно вставь; не выдумывай URL.\n"
+    "4. Итоговую строку пиши ДОСЛОВНО в формате из инструкции пользователя "
+    "(«1 инст.», не «1 инстанция»).\n"
+    "5. В конце обязательно ссылка на дашборд "
+    "<a href=\"URL\">📊 Дашборд</a> — одной строкой, без «###».\n"
+    "Пример корректной строки:\n"
+    "<b>📅 Изменения:</b>\n"
+    "<a href=\"https://example.ru/case\"><b>А40-123/2025</b></a> — "
+    "Сбер vs Иванов. Новое событие: заседание назначено на 15.05.2026.\n"
+    "Отвечай ТОЛЬКО готовым HTML-текстом, без пояснений «вот ваш дайджест»."
+)
+
+
+def _normalize_markdown_to_telegram_html(text: str) -> str:
+    """Конвертировать Markdown-артефакты в Telegram-HTML.
+
+    Страховка поверх system-промпта: даже с жёсткой инструкцией GigaChat
+    регулярно возвращает Markdown. Чистим, чтобы Telegram не порвал
+    parse_mode=HTML на знаках «*» и не показал читателю «##».
+    """
+    # Markdown code-fence вокруг всего ответа (```html … ```)
+    if text.startswith("```"):
+        first_nl = text.find("\n")
+        if first_nl != -1:
+            text = text[first_nl + 1:]
+    if text.endswith("```"):
+        text = text[:-3]
+
+    lines = text.split("\n")
+    out: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        # Горизонтальные разделители Markdown: строка из --- / *** / ___
+        if re.fullmatch(r"[-*_]{3,}", stripped):
+            continue
+        # Заголовки: «## Заголовок» → «<b>Заголовок</b>».
+        # Внутри заголовка убираем **…** и одиночные «*», чтобы не получить
+        # вложенные <b><b>…</b></b> на следующем проходе (Telegram их не любит).
+        m = re.match(r"^\s*#{1,6}\s+(.+?)\s*$", line)
+        if m:
+            content = m.group(1)
+            content = re.sub(r"\*\*([^*\n]+?)\*\*", r"\1", content)
+            content = re.sub(r"(?<![*\w])\*([^*\n]+?)\*(?!\w)", r"\1", content)
+            line = f"<b>{content}</b>"
+        else:
+            # Маркеры списка в начале строки: «- x», «* x», «• x» → снимаем маркер
+            line = re.sub(r"^(\s*)[-*•]\s+", r"\1", line)
+        out.append(line)
+    text = "\n".join(out)
+
+    # Markdown-ссылки [text](url) → <a href="url">text</a>.
+    # Делаем ДО конвертации **…**, иначе «**» внутри скобок ссылки перепутаются.
+    text = re.sub(
+        r"\[([^\]]+)\]\((https?://[^\s)]+)\)",
+        r'<a href="\2">\1</a>',
+        text,
+    )
+    # Жирный Markdown **x** → <b>x</b> (non-greedy, без переносов строк).
+    text = re.sub(r"\*\*([^*\n]+?)\*\*", r"<b>\1</b>", text)
+    # Одиночный «*x*» курсив — у GigaChat встречается редко, но на всякий случай.
+    # Только если вокруг «*» точно слова, иначе пробьём звёздочки внутри текста.
+    text = re.sub(r"(?<![*\w])\*([^*\n]+?)\*(?!\w)", r"<i>\1</i>", text)
+
+    # Сдвоенные пустые строки после чистки разделителей — к одной пустой.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _call_gigachat(prompt: str) -> str | None:
     """Отправить prompt в GigaChat, вернуть HTML-текст дайджеста.
 
@@ -2052,7 +2134,10 @@ def _call_gigachat(prompt: str) -> str | None:
                 "model": GIGACHAT_MODEL,
                 "temperature": 0.2,
                 "max_tokens": 4096,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": GIGACHAT_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
             },
             timeout=60,
             verify=False,
@@ -2065,14 +2150,8 @@ def _call_gigachat(prompt: str) -> str | None:
         text = (choices[0].get("message", {}) or {}).get("content", "").strip()
         if not text:
             return None
-        # Страховка: модель иногда оборачивает HTML в Markdown-блок (```html …```)
-        if text.startswith("```"):
-            first_nl = text.find("\n")
-            if first_nl != -1:
-                text = text[first_nl + 1:]
-        if text.endswith("```"):
-            text = text[:-3]
-        return text.strip() or None
+        text = _normalize_markdown_to_telegram_html(text)
+        return text or None
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
