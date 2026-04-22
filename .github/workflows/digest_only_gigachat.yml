@@ -13,6 +13,16 @@ on:
         required: false
         type: boolean
         default: true  # digest_only обычно дёргают для проверки — по умолчанию в личку
+      model:
+        description: 'Модель GigaChat'
+        required: false
+        type: choice
+        default: GigaChat-2-Max
+        options:
+          - GigaChat-2-Max
+          - GigaChat-2-Pro
+          - GigaChat-2
+          - GigaChat
 
 jobs:
   digest:
@@ -35,7 +45,7 @@ jobs:
           LLM_PROVIDER: gigachat
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
-          GIGACHAT_MODEL: GigaChat-2-Max
+          GIGACHAT_MODEL: ${{ inputs.model }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
         run: |
