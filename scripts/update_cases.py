@@ -90,6 +90,17 @@ class CourtConfig:
             f"&delo_id={self.delo_id}&new=5"
         )
 
+    def card_url_alt(self, case_id: str, case_uid: str) -> str:
+        # Фолбэк с new=0: при появлении вкладки «обжалование решений,
+        # определений (пост.)» карточка 1 инст. при new=5 отдаёт обрезанный
+        # набор таблиц (только вкладка обжалования). new=0 возвращает
+        # основную вкладку «Дело» с полным движением.
+        return (
+            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
+            f"&case_id={case_id}&case_uid={case_uid}"
+            f"&delo_id={self.delo_id}&new=0"
+        )
+
 
 # Апелляционный суд (текущий — единственный источник данных)
 APPEAL_COURT = CourtConfig(
@@ -943,9 +954,19 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "Номер дела 1 инстанции": "",  # Извлекается из таблицы «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
         "_appellant_raw": "",  # Сырой текст об апеллянте (для определения в update_active_cases)
+        "_table_count": 0,      # len(tables) — нужно вызывающему коду для фолбэка card_url_alt
+        "_fi_appeal_filed": False,  # В карточке 1 инст. подана апелляц. жалоба
+        "_fi_appeal_filed_date": "",
     }
 
     tables = extract_tables(html)
+    info["_table_count"] = len(tables)
+    # Маркер вкладки «обжалование решений, определений (пост.)» работает даже
+    # на обрезанной карточке (<6 таблиц) — важно для 1 инст., когда sudrf при
+    # new=5 возвращает только вкладку обжалования без движения. Если фолбэк
+    # на card_url_alt(new=0) не дотянется, сигнал всё равно поймаем.
+    if re.search(r'обжалован\w*\s+решен\w*', html, re.IGNORECASE):
+        info["_fi_appeal_filed"] = True
     if len(tables) < 6:
         log.warning(f"Карточка: ожидалось ≥6 таблиц, найдено {len(tables)}")
         return info
@@ -1138,18 +1159,34 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     appellant_raw = candidate
                     break
 
-    # 3. Ищем в полном HTML: паттерн "апелляционная жалоба ... (имя)"
-    if not appellant_raw:
-        m = re.search(
-            r'(?:апелляционн\w+\s+)?жалоб\w+\s+(?:от\s+)?'
-            r'([А-ЯЁа-яё][А-ЯЁа-яё\s.\-]{2,60}?)'
-            r'(?:\s+на\s+решение|\s+на\s+определение|<|,)',
-            html, re.IGNORECASE,
-        )
-        if m:
-            appellant_raw = m.group(1).strip()
+    # Pattern 3 (fuzzy-поиск «жалоба + ФИО» по всему HTML) раньше жил здесь —
+    # удалён после кейса 33-1161/2026, где карточка прошла «по правилам 1-й
+    # инстанции» без апеллянта, но регекс вытащил имя одного из ответчиков
+    # из не связанного контекста карточки. Лучше «не указано» в дайджесте,
+    # чем неверный апеллянт — полагаемся только на структурные источники
+    # (поле «Заявитель жалобы» в таблицах + событие движения).
 
     info["_appellant_raw"] = appellant_raw
+
+    # ── Дата подачи апелляц. жалобы (если есть в движении) ──
+    # Сам факт подачи жалобы детектится выше по HTML-маркеру «обжалование
+    # решений…» — чтобы сигнал работал и на обрезанных карточках (<6 таблиц).
+    # Здесь достаём точную дату события из таблицы движения (доступна только
+    # при полном парсинге ≥6 таблиц).
+    if movement_table and len(movement_table) > 1:
+        for row in movement_table[1:]:
+            ev_text = " ".join(cell_text(c) for c in row)
+            if re.search(
+                r'поступ\w+.{0,40}(?:апелляционн\w+\s+)?жалоб\w+',
+                ev_text, re.IGNORECASE,
+            ):
+                info["_fi_appeal_filed"] = True
+                for c in row:
+                    ct = cell_text(c)
+                    if parse_date(ct):
+                        info["_fi_appeal_filed_date"] = ct
+                        break
+                break
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -1264,8 +1301,13 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_status = sum(1 for ch in fi_changes if "fi_status_change" in ch["type"])
         fi_acts = sum(1 for ch in fi_changes if "fi_act_published" in ch["type"])
         fi_finals = sum(1 for ch in fi_changes if "fi_final_event" in ch["type"])
+        fi_appeals_filed = sum(
+            1 for ch in fi_changes if "fi_appeal_filed" in ch["type"]
+        )
         if fi_hearings:
             parts.append(f"{fi_hearings} засед. 1 инст.")
+        if fi_appeals_filed:
+            parts.append(f"{fi_appeals_filed} подано жалоб")
         if fi_finals:
             parts.append(f"{fi_finals} финал 1 инст.")
         if fi_acts:
@@ -2133,6 +2175,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += f"\n  Событие: {d.get('event', '')}"
                     if d.get("event_date"):
                         line += f" ({d['event_date']})"
+                elif t == "fi_appeal_filed":
+                    role = d.get("appellant_role", "")
+                    name = d.get("appellant_name", "")
+                    dt = d.get("appeal_filed_date", "")
+                    app_str = f"{role} {name}".strip() or "не указано"
+                    line += "\n  Подана апелляционная жалоба"
+                    if dt:
+                        line += f" ({dt})"
+                    line += f", апеллянт: {app_str}"
             context_parts.append(line)
 
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам судов ХМАО-Югры за {today}.
@@ -2156,6 +2207,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
           Для переноса: <b>⏪ ДД.ММ.ГГГГ ЧЧ:ММ → ⏩ ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}}).
           Для событий без даты (смена статуса, публикация акта и т.п.) — строка 1 без даты впереди: <a href="URL"><b>номер</b></a> ({{суд}}).
         • строка 2: {{стороны кратко}} | событие (подготовка дела / беседа / предварительное заседание / заседание / отложение / статус X→Y / опубликован акт / мотивированное решение / возвращение иска / в архив).
+   3.3. 📨 <b>Поданы апелляционные жалобы (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0):
+        <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | <b>апеллянт:</b> {{Роль Имя}} (дата подачи в скобках, если есть).
+        Берётся из событий «fi_appeal_filed» в данных. НЕ дублируй это дело в 3.2 даже если у него есть ещё и смена статуса — событие подачи жалобы приоритетнее и идёт в свою подсекцию.
 
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
@@ -2446,6 +2500,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     ev_list.append("📄 опубликован акт" + (f" ({ad})" if ad else ""))
                 elif t == "fi_final_event":
                     ev_list.append(f"⚖️ {escape_html(d.get('event', ''))}")
+                elif t == "fi_appeal_filed":
+                    role = escape_html(d.get("appellant_role", ""))
+                    name = escape_html(d.get("appellant_name", ""))
+                    dt = escape_html(d.get("appeal_filed_date", ""))
+                    app_str = f"{role} {name}".strip() or "не указано"
+                    ev_list.append(
+                        "📨 подана апелляц. жалоба"
+                        + (f" ({dt})" if dt else "")
+                        + f", апеллянт: {app_str}"
+                    )
             ev_str = "; ".join(ev_list) if ev_list else ""
             fi_block.append(
                 f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
@@ -3328,6 +3392,25 @@ def main_json():
             continue
         card_info = parse_case_card(html, court_cfg.base_url)
 
+        # Фолбэк: при малом числе таблиц повторяем с new=0 — sudrf при наличии
+        # вкладки «обжалование решений, определений (пост.)» по умолчанию
+        # открывает её (≤4 таблиц) вместо основной «Дело» (≥6 таблиц с
+        # движением). new=0 форсит основную вкладку.
+        if card_info.get("_table_count", 0) < 6:
+            polite_delay()
+            alt_html = fetch_page(court_cfg.card_url_alt(cid, cuid))
+            if alt_html:
+                alt_info = parse_case_card(alt_html, court_cfg.base_url)
+                if alt_info.get("_table_count", 0) > card_info.get("_table_count", 0):
+                    # Флаг «подана жалоба» мог быть выставлен только на
+                    # короткой вкладке (где и есть маркер «обжалование»).
+                    # Переносим его в alt_info, чтобы событие не потерялось.
+                    if card_info.get("_fi_appeal_filed") and not alt_info.get("_fi_appeal_filed"):
+                        alt_info["_fi_appeal_filed"] = True
+                        if card_info.get("_fi_appeal_filed_date") and not alt_info.get("_fi_appeal_filed_date"):
+                            alt_info["_fi_appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+                    card_info = alt_info
+
         # Снимок до обновления — нужен для diff и дайджеста
         old_event = fi.get("last_event", "")
         old_status = fi.get("status", "")
@@ -3461,6 +3544,29 @@ def main_json():
                 change["type"].append("fi_final_event")
                 change["details"]["event"] = new_ev
                 change["details"]["event_date"] = card_info.get("Дата события", "")
+
+        # Подана апелляционная жалоба — идемпотентно: стреляет один раз,
+        # флаг fi["appeal_filed"] сохраняется в JSON и проверяется на след.
+        # прогонах.
+        new_appeal_filed = bool(card_info.get("_fi_appeal_filed"))
+        old_appeal_filed = bool(fi.get("appeal_filed", False))
+        if new_appeal_filed and not old_appeal_filed:
+            appellant_raw = card_info.get("_appellant_raw", "")
+            role, short = classify_appellant_role(
+                appellant_raw,
+                case_j.get("plaintiff", ""),
+                case_j.get("defendant", ""),
+            )
+            change["type"].append("fi_appeal_filed")
+            change["details"]["appellant_role"] = role
+            change["details"]["appellant_name"] = short
+            change["details"]["appeal_filed_date"] = (
+                card_info.get("_fi_appeal_filed_date") or ""
+            )
+            fi["appeal_filed"] = True
+            if card_info.get("_fi_appeal_filed_date"):
+                fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+            changed = True
 
         if change["type"]:
             fi_changes.append(change)

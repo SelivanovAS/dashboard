@@ -90,9 +90,12 @@ function normalizeResult(raw){
   if(/снято\s+с\s+рассмотрен/i.test(s))return 'withdrawn';
   if(/прекращен/i.test(s))return 'dismissed';
   if(/возвращен|жалоб\S+.*возвращен/i.test(s))return 'returned';
+  // «отказано» проверяем ДО «удовлетворен»: «ОТКАЗАНО в удовлетворении иска»
+  // иначе матчится по подстроке «удовлетворении» → 'reversed' и favor
+  // показывает противоположное направление (✕ вместо ✓).
+  if(/отказано/i.test(s))return 'upheld';
   if(/удовлетворен\S?\s+частично/i.test(s))return 'partial';
   if(/удовлетворен/i.test(s))return 'reversed';
-  if(/отказано/i.test(s))return 'upheld';
   if(/отменен/i.test(s))return 'reversed';
   return 'pending';
 }
@@ -1033,7 +1036,14 @@ function prepareCaseViewModel(c){
   const isFutureHearing=!!(c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today);
   const resultPresent=!!(c.result&&c.result!=='pending');
   const resultIcon=RESULT_ICONS[c.result]||'';
-  const resultLabel=RESULT_LABELS[c.result]||c.result||'';
+  // Апелляционные лейблы вердикта («Отменено», «Оставлено без изменения»)
+  // не подходят делам 1 инстанции: «Иск УДОВЛЕТВОРЕН» нормализуется в код
+  // 'reversed' ради корректной окраски favorable/unfavorable, но лейбл
+  // «Отменено» на карточке 1 инст. читается неправильно. Для 1 инст. —
+  // «Решено»; цвет и иконка благосклонности остаются.
+  const resultLabel=(c.stage==='first_instance'&&resultPresent)
+    ?'Решено'
+    :(RESULT_LABELS[c.result]||c.result||'');
   const resultBadgeCls=getResultBadgeClass(c);
   const favor=getResultFavor(c);
   // "Передача дела судье" — показываем как отдельный статус с датой события.

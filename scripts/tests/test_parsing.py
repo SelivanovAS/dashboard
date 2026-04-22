@@ -224,6 +224,53 @@ class TestParseCaseCard:
         assert info["Статус"] == "В производстве"
         assert info["Результат"] == ""
 
+    def test_table_count_exposed(self):
+        """_table_count прокидывается вызывающему коду для фолбэка
+        на card_url_alt (new=0)."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["_table_count"] >= 6
+
+    def test_short_card_with_appeal_tab_sets_flag(self):
+        """Короткая карточка (<6 таблиц) с маркером «обжалование решений…»
+        всё равно выставляет _fi_appeal_filed — чтобы сигнал не терялся,
+        даже если фолбэк на new=0 не дотянется до сервера."""
+        html = _read_fixture("case_card_fi_with_appeal.html")
+        info = uc.parse_case_card(html)
+        assert info["_table_count"] < 6
+        assert info["_fi_appeal_filed"] is True
+
+    def test_full_card_after_fallback_detects_appeal(self):
+        """Полная карточка (≥6 таблиц) с событием «Поступила апелляционная
+        жалоба от …» в движении: детектится и событие, и апеллянт, и дата."""
+        html = _read_fixture("case_card_fi_full_after_fallback.html")
+        info = uc.parse_case_card(html)
+        assert info["_table_count"] >= 6
+        assert info["_fi_appeal_filed"] is True
+        assert info["_fi_appeal_filed_date"] == "15.04.2026"
+        assert "Иванов" in info["_appellant_raw"]
+
+    def test_normal_fi_card_no_appeal_flag(self):
+        """Обычная карточка 1 инст. без жалоб — флаг остаётся False."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is False
+        assert info["_fi_appeal_filed_date"] == ""
+
+
+# ── card_url_alt ─────────────────────────────────────────────────────────────
+
+class TestCardUrlAlt:
+    def test_alt_url_uses_new_zero(self):
+        """card_url_alt() для 1 инст. суда возвращает URL с new=0 — это нужно
+        как фолбэк, когда карточка при new=5 отдаёт обрезанную вкладку."""
+        court = uc.FIRST_INSTANCE_COURTS[0]  # любой суд 1 инст.
+        primary = court.card_url("12345", "aaaa-bbbb")
+        alt = court.card_url_alt("12345", "aaaa-bbbb")
+        assert "new=5" in primary
+        assert "new=0" in alt
+        assert "new=5" not in alt
+
 
 # ── extract_motive_part ──────────────────────────────────────────────────────
 
