@@ -1447,13 +1447,8 @@ function renderDrawer(c){
   // Выбор stage-data для отображения двух-стадийных блоков
   const stageData=drawerStage==='fi'?c._fi:drawerStage==='ap'?c._ap:null;
 
-  // Hero
-  const favorIcon=vm.favor==='favorable'?'<span style="color:var(--success);font-weight:700;">✓</span>':vm.favor==='unfavorable'?'<span style="color:var(--danger);font-weight:700;">✕</span>':'';
-  const drawerChips=buildStageChips(c);
-  const statusBadge=(vm.resultPresent
-    ?`<span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>`
-    :buildStatusBadge(c,vm))+drawerChips;
-  const actBadge=vm.actLabel?`<span class="${vm.actNegative?'badge-act-no':'badge-act'}">${vm.actLabel}</span>`:'';
+  // Hero — статус и публикация акта дублируются в подзаголовке и «Ключевых
+  // датах», поэтому отдельный блок hero-badges не выводим.
   const roleBadge=c.sberbankRole==='plaintiff'?'<span class="badge badge-plaintiff">Сбер — истец</span>':c.sberbankRole==='defendant'?'<span class="badge badge-defendant">Сбер — ответчик</span>':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
 
   const plHtml=isSberbank(c.plaintiff)?`<strong class="party-sberbank">${escHtml(shortParty(c.plaintiff))}</strong>`:escHtml(shortParty(c.plaintiff));
@@ -1568,7 +1563,6 @@ function renderDrawer(c){
           <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
         </div>
         ${c.category?`<div class="hero-category"><span class="hc-label">Категория:</span> ${escHtml(c.category)}</div>`:''}
-        <div class="hero-badges">${statusBadge}${actBadge}</div>
       </div>
 
       ${tabsHtml}
