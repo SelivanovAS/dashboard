@@ -461,6 +461,19 @@ function extractPauseReason(ev){
 function getResultFavor(c){
   if(!c.result||c.result==='pending'||c.result==='returned'||c.result==='dismissed'||c.result==='withdrawn')return 'neutral';
   if(c.sberbankRole==='third_party')return 'neutral';
+  // 1 инстанция: favor определяется напрямую ролью банка и исходом иска —
+  // апеллянта ещё нет. Банк-истец: иск удовлетворён (reversed/partial) =
+  // favorable, отказано (upheld) = unfavorable; для ответчика — наоборот.
+  if(c.stage==='first_instance'){
+    if(c.sberbankRole==='plaintiff'){
+      if(c.result==='reversed'||c.result==='partial')return 'favorable';
+      if(c.result==='upheld')return 'unfavorable';
+    }else if(c.sberbankRole==='defendant'){
+      if(c.result==='upheld')return 'favorable';
+      if(c.result==='reversed'||c.result==='partial')return 'unfavorable';
+    }
+    return 'neutral';
+  }
   const app=c.appellant;
   if(!app)return 'neutral';
   if(app==='bank'){
