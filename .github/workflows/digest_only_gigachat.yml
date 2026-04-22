@@ -35,7 +35,7 @@ jobs:
           LLM_PROVIDER: gigachat
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
-          GIGACHAT_MODEL: GigaChat
+          GIGACHAT_MODEL: GigaChat-2-Max
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
         run: |
