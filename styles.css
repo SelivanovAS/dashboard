@@ -258,7 +258,14 @@ tbody tr.accent-archive td:first-child::before{background:var(--slate-300);}
 .badge-active{background:var(--warning-bg);color:var(--warning-fg);}
 .badge-decided{background:var(--success-bg);color:var(--success-fg);}
 .badge-scheduled{background:var(--info-bg);color:var(--info-fg);}
+/* Типы заседаний: беседа (prep), предв. СЗ (prelim), осн. СЗ (main).
+ * Разный оттенок, чтобы при скане списка тип считывался сразу. */
+.badge-prep{background:#e0e7ff;color:#3730a3;}
+.badge-prelim{background:var(--info-bg);color:var(--info-fg);}
+.badge-main{background:#dbeafe;color:#1d4ed8;}
 .badge-postponed{background:var(--warning-bg);color:var(--warning-fg);}
+/* Чип-маркер перехода апелляции к правилам 1-й инст. — рядом со статус-бейджем */
+.badge-to-fi{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;font-weight:700;}
 .badge-suspended{background:#ffedd5;color:#c2410c;}
 .badge-paused{background:#fce7f3;color:#9d174d;}
 .badge-awaiting{background:var(--pending-bg);color:var(--pending-fg);}
@@ -490,7 +497,12 @@ tr.detail-row{display:none;}
   .stats-secondary{display:none;}
   .analytics-row{grid-template-columns:1fr;gap:8px;}
   .upcoming-chevron{display:inline;}
-  .up-group-body{grid-template-columns:1fr;}
+  /* На мобилке уплотняем «Ближайшие заседания» умеренно — уменьшаем боковые
+   * отступы и ширину time-столбика, но между карточками оставляем воздух. */
+  .analytics-card{padding:14px 14px;}
+  .up-group-body{grid-template-columns:1fr;gap:6px;}
+  .upcoming-item{padding:8px 8px;}
+  .up-time{min-width:64px;}
   .upcoming-case{font-size:var(--fs-lg);}
   .upcoming-parties{font-size:var(--fs-md);}
   .up-court{font-size:var(--fs-sm);}

@@ -273,19 +273,63 @@ def parse_date(s: str) -> datetime | None:
 def _has_held_prior_hearing(events: list, new_hearing_dt: datetime | None) -> bool:
     """Есть ли в истории движения дела реально прошедшее заседание,
     отличное от нового назначения. Нужен чтобы отличить первое заседание
-    (после передачи дела судье) от настоящего переноса."""
+    (после передачи дела судье) от настоящего переноса.
+
+    Если в истории был маркер «рассмотрение с начала», цикл считается
+    сброшенным — заседания до последнего такого события не учитываем."""
     if not events or not new_hearing_dt:
         return False
     today = datetime.now().date()
     new_d = new_hearing_dt.date()
+    reset_d = None
+    for e in events:
+        if not _RESTART_RE.search(e.get("text") or ""):
+            continue
+        ed = parse_date(e.get("date") or "")
+        if ed and (reset_d is None or ed.date() > reset_d):
+            reset_d = ed.date()
     for e in events:
         txt = (e.get("text") or "").lower()
         if "судебное заседани" not in txt:
             continue
         ed = parse_date(e.get("date") or "")
-        if ed and ed.date() < today and ed.date() != new_d:
+        if not ed:
+            continue
+        ed_d = ed.date()
+        if reset_d and ed_d <= reset_d:
+            continue
+        if ed_d < today and ed_d != new_d:
             return True
     return False
+
+
+_RESTART_RE = re.compile(r"рассмотрени\S*\s+дела\s+начато\s+с\s+начала", re.I)
+_TO_FI_RULES_RE = re.compile(
+    r"по\s+правилам\s+производства\s+в\s+суде\s+первой\s+инстанции"
+    r"|перейти\s+к\s+рассмотрени\S*\s+по\s+правилам",
+    re.I,
+)
+
+
+def _events_newly_match(
+    old_events: list, new_events: list, pattern: re.Pattern
+) -> dict | None:
+    """Появилось ли в новом списке событий совпадение с паттерном, которого
+    не было в старом. Возвращает dict события-триггера (date/text) или None.
+    Сравнение — по (date, text), так как порядок не гарантирован."""
+    if not new_events:
+        return None
+    old_keys = {
+        ((e.get("date") or ""), (e.get("text") or ""))
+        for e in (old_events or [])
+    }
+    for e in new_events:
+        key = ((e.get("date") or ""), (e.get("text") or ""))
+        if key in old_keys:
+            continue
+        if pattern.search(e.get("text") or ""):
+            return {"date": e.get("date") or "", "text": e.get("text") or ""}
+    return None
 
 
 # ── Регулярные выражения, используемые в hot loops ───────────────────────────
@@ -1283,10 +1327,13 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
     statuses = sum(1 for ch in changes if "status_change" in ch["type"])
     postponed = sum(1 for ch in changes if "hearing_postponed" in ch["type"])
+    to_fi_rules = sum(1 for ch in changes if "appeal_to_fi_rules" in ch["type"])
     if events:
         parts.append(f"{events} событ.")
     if postponed:
         parts.append(f"{postponed} отлож.")
+    if to_fi_rules:
+        parts.append(f"{to_fi_rules} перех. к 1-й инст.")
     if results:
         parts.append(f"{results} суд. акт.")
     if acts:
@@ -1304,8 +1351,13 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_appeals_filed = sum(
             1 for ch in fi_changes if "fi_appeal_filed" in ch["type"]
         )
+        fi_restarts = sum(
+            1 for ch in fi_changes if "fi_hearing_restart" in ch["type"]
+        )
         if fi_hearings:
             parts.append(f"{fi_hearings} засед. 1 инст.")
+        if fi_restarts:
+            parts.append(f"{fi_restarts} с начала")
         if fi_appeals_filed:
             parts.append(f"{fi_appeals_filed} подано жалоб")
         if fi_finals:
@@ -1558,10 +1610,13 @@ def update_active_cases(
 
         card_info = parse_case_card(html)
 
-        # Параллельно обновляем JSON-представление appeal-дела (если передано)
+        # Параллельно обновляем JSON-представление appeal-дела (если передано).
+        # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
+        old_events_ap: list = []
         if json_appeal_by_num is not None:
             ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
             if ap is not None:
+                old_events_ap = list(ap.get("events") or [])
                 if card_info.get("_events"):
                     ap["events"] = card_info["_events"]
                 new_ev_j = card_info.get("Последнее событие", "")
@@ -1697,6 +1752,17 @@ def update_active_cases(
                 change["type"].append("hearing_new")
                 change["details"]["new_hearing_date"] = new_hearing
                 change["details"]["new_hearing_time"] = new_hearing_time
+
+        # Переход апелляции к рассмотрению по правилам производства в суде
+        # первой инстанции (ч.5 ст.330 ГПК). Событие редкое и критичное —
+        # выводим отдельной секцией в дайджесте.
+        to_fi_rules_ev = _events_newly_match(
+            old_events_ap, card_info.get("_events") or [], _TO_FI_RULES_RE
+        )
+        if to_fi_rules_ev:
+            change["type"].append("appeal_to_fi_rules")
+            change["details"]["transition_event"] = to_fi_rules_ev.get("text", "")
+            change["details"]["transition_date"] = to_fi_rules_ev.get("date", "")
 
         # Обновляем поля дела
         if new_event:
@@ -2109,6 +2175,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     new_tm = d.get("new_hearing_time", "")
                     new_part = f"{new_dt}" + (f" {new_tm}" if new_tm else "")
                     line += f"\n  НАЗНАЧЕНО: первое заседание {new_part}"
+                if t == "appeal_to_fi_rules":
+                    tr_dt = d.get("transition_date", "")
+                    tr_ev = d.get("transition_event", "")
+                    line += (
+                        "\n  ПЕРЕХОД К ПРАВИЛАМ 1-Й ИНСТ.: апелляция перешла "
+                        "к рассмотрению дела по правилам производства в суде первой инстанции"
+                        + (f" ({tr_dt})" if tr_dt else "")
+                    )
+                    if tr_ev:
+                        line += f"\n  Исходное событие: {tr_ev}"
 
             context_parts.append(line)
 
@@ -2184,6 +2260,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     if dt:
                         line += f" ({dt})"
                     line += f", апеллянт: {app_str}"
+                elif t == "fi_hearing_restart":
+                    rd = d.get("restart_date", "")
+                    rev = d.get("restart_event", "")
+                    line += (
+                        "\n  РАССМОТРЕНИЕ С НАЧАЛА"
+                        + (f" ({rd})" if rd else "")
+                    )
+                    if rev:
+                        line += f"\n  Событие: {rev}"
             context_parts.append(line)
 
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам судов ХМАО-Югры за {today}.
@@ -2210,11 +2295,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
    3.3. 📨 <b>Поданы апелляционные жалобы (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0):
         <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | <b>апеллянт:</b> {{Роль Имя}} (дата подачи в скобках, если есть).
         Берётся из событий «fi_appeal_filed» в данных. НЕ дублируй это дело в 3.2 даже если у него есть ещё и смена статуса — событие подачи жалобы приоритетнее и идёт в свою подсекцию.
+   3.4. 🔄 <b>Рассмотрение с начала (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0):
+        <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | <b>причина:</b> {{короткое объяснение из события: «привлечение соответчика», «вступление 3-го лица», «изменение предмета иска» и т.п.}} ({{дата события}}).
+        Берётся из событий «fi_hearing_restart» в данных. Часто сопровождается новым заседанием — в этом случае дело может присутствовать и в 3.2, это корректно.
 
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
 5. ⚖️ <b>АПЕЛЛЯЦИЯ</b>
    5.1. 📥 <b>Новые дела (N):</b> — номер как <a href="URL"><b>номер</b></a>, кто подал к кому, категория, суд 1 инстанции, роль банка.
+   5.1a. ⚠ <b>Переход к правилам 1-й инстанции (N):</b> — РЕДКОЕ и КРИТИЧНОЕ событие (ч.5 ст.330 ГПК). ОДНА строка на дело (подсекция показывается только если N&gt;0):
+        ⚠ <a href="URL"><b>номер</b></a> — апелляция перешла к рассмотрению дела по правилам производства в суде первой инстанции ({{дата, если есть}}). {{стороны кратко}} | роль банка. НИКОГДА не выкидывать при нехватке места. Берётся из событий «appeal_to_fi_rules» в данных.
    5.2. 🔁 <b>Отложенные заседания (N):</b> — формат строки 1: 🔁 <a href="URL"><b>номер</b></a>: ⏪ ДД.ММ.ГГГГ HH:MM → ⏩ ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных), строка 2: стороны | категория. Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
    5.3. 📅 <b>Назначенные заседания (N):</b> — формат: строка 1 «<b>дата/время</b> + <a href="URL"><b>номер</b></a>», строка 2 «стороны | категория. Роль банка если известна», между делами пустая строка. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
    5.4. ⚖️ <b>Вынесенные акты (N):</b> — резолютивная часть (выходит через 1-3 дня после заседания). Только дела с блоком ИТОГ. Одна строка на дело:
@@ -2427,6 +2517,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
     postponed = [ch for ch in changes if "hearing_postponed" in ch["type"]]
     postponed_nums = {ch["case"] for ch in postponed}
+    to_fi_rules = [ch for ch in changes if "appeal_to_fi_rules" in ch["type"]]
     # Не дублируем дело в "Назначенные", если оно уже в "Отложенные".
     # hearing_new — первое заседание апелляции; семантически то же самое, что и
     # «назначенное заседание», поэтому показываем тут же.
@@ -2510,6 +2601,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         + (f" ({dt})" if dt else "")
                         + f", апеллянт: {app_str}"
                     )
+                elif t == "fi_hearing_restart":
+                    rd = escape_html(d.get("restart_date", ""))
+                    ev_list.append(
+                        "🔄 рассмотрение с начала"
+                        + (f" ({rd})" if rd else "")
+                    )
             ev_str = "; ".join(ev_list) if ev_list else ""
             fi_block.append(
                 f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
@@ -2547,6 +2644,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 f"{pl} vs {df} "
                 f"({cat})"
             )
+
+    if to_fi_rules:
+        if appeal_block:
+            appeal_block.append("")
+        appeal_block.append(
+            f"⚠ <b>Переход к правилам 1-й инст. ({len(to_fi_rules)}):</b>"
+        )
+        for ch in to_fi_rules:
+            d = ch["details"]
+            url = d.get("case_url", "")
+            case_num = escape_html(ch["case"])
+            link = (f'<a href="{url}"><b>{case_num}</b></a>'
+                    if url else f'<b>{case_num}</b>')
+            plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
+            defendant = escape_html(shorten_party_name(d.get("defendant", "")))
+            tr_dt = escape_html(d.get("transition_date", ""))
+            role = d.get("role", "")
+            role_note = f" | банк — {escape_html(role.lower())}" if role else ""
+            line = f"  ⚠ {link}"
+            if tr_dt:
+                line += f" ({tr_dt})"
+            line += " — по правилам производства в суде первой инстанции"
+            if plaintiff and defendant:
+                line += f"\n     {plaintiff} vs {defendant}{role_note}"
+            appeal_block.append(line)
 
     if postponed:
         if appeal_block:
@@ -3467,7 +3589,9 @@ def main_json():
             fi["act_published"] = True
             if card_info.get("Дата публикации акта"):
                 fi["act_date"] = card_info["Дата публикации акта"]
-        # Полный список событий — обновляем всегда, если парсер его вернул
+        # Полный список событий — обновляем всегда, если парсер его вернул.
+        # Старый список фиксируем для детекторов «с начала» / «по правилам 1-й инст.»
+        old_events_fi = list(fi.get("events") or [])
         if card_info.get("_events"):
             fi["events"] = card_info["_events"]
         if changed:
@@ -3544,6 +3668,16 @@ def main_json():
                 change["type"].append("fi_final_event")
                 change["details"]["event"] = new_ev
                 change["details"]["event_date"] = card_info.get("Дата события", "")
+
+        # «Рассмотрение дела начато с начала» — фиксируется, когда
+        # соответствующее событие впервые появилось в истории.
+        restart_ev = _events_newly_match(
+            old_events_fi, card_info.get("_events") or [], _RESTART_RE
+        )
+        if restart_ev:
+            change["type"].append("fi_hearing_restart")
+            change["details"]["restart_event"] = restart_ev.get("text", "")
+            change["details"]["restart_date"] = restart_ev.get("date", "")
 
         # Подана апелляционная жалоба — идемпотентно: стреляет один раз,
         # флаг fi["appeal_filed"] сохраняется в JSON и проверяется на след.

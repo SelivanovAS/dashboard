@@ -12,7 +12,7 @@ const ARCHIVE_DAYS=30;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided'};
-const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено'};
+const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено',prep:'Беседа',prelim:'Предв-ое СЗ',main:'Основное СЗ'};
 const CAT_SHORT={
   'Иски о взыскании сумм по договору займа, кредитному договору':'Кредитный договор',
   'об ответственности наследников по долгам наследодателя':'Долги наследодателя',
@@ -80,6 +80,43 @@ function shortName(s){
   s=s.replace(/\s{2,}/g,' ');
   return s.trim();
 }
+/* Тип события движения дела: беседа / предв. СЗ / осн. СЗ / null.
+ * Используется и для определения ближайшего заседания, и для «с начала»,
+ * и для перехода апелляции к правилам 1-й инстанции. */
+function classifyEvent(txt){
+  const s=(txt||'').toLowerCase();
+  if(!s)return null;
+  if(/подготовк\S*\s+дела|собеседован/.test(s))return 'prep';
+  if(/предварительн\S*\s+судебн\S*\s+заседан/.test(s))return 'prelim';
+  if(/судебн\S*\s+заседан/.test(s))return 'main';
+  return null;
+}
+/* Есть ли в истории движения дела реально прошедшее осн. СЗ,
+ * отличное от нового назначения. Нужно, чтобы отличить первое заседание
+ * (после передачи дела судье) от настоящего переноса.
+ * Если в истории было «рассмотрение с начала», цикл считается сброшенным —
+ * заседания ДО последнего такого маркера игнорируем. */
+function hasHeldPriorMainHearing(events,newHearingIso){
+  if(!Array.isArray(events)||!events.length)return false;
+  const today=new Date();today.setHours(0,0,0,0);
+  const todayIso=today.toISOString().slice(0,10);
+  // Находим самую позднюю дату маркера «рассмотрение с начала» — раньше неё
+  // прошлые заседания не считаем «настоящими прошедшими».
+  let resetIso='';
+  for(const e of events){
+    if(!/рассмотрени\S*\s+дела\s+начато\s+с\s+начала/i.test(e.text||''))continue;
+    const ed=parseDate(e.date||'');
+    if(ed&&ed>resetIso)resetIso=ed;
+  }
+  for(const e of events){
+    if(classifyEvent(e.text)!=='main')continue;
+    const ed=parseDate(e.date||'');
+    if(!ed)continue;
+    if(resetIso&&ed<=resetIso)continue;
+    if(ed<todayIso&&ed!==newHearingIso)return true;
+  }
+  return false;
+}
 function normalizeResult(raw){
   if(!raw)return 'pending';
   const s=raw.toLowerCase().trim();
@@ -108,10 +145,18 @@ function computeDetailedStatus(c){
   if(evLow.includes('приостановлен'))return 'paused';
   // "Без движения" / "Оставлено без движения"
   if(c.nextDateLabel==='Без движения до'||evLow.includes('без движения'))return 'suspended';
-  // "Отложено"
-  if(c.nextDateLabel==='Отложено до'||(evLow.includes('отложен')&&!evLow.includes('без изменения')))return 'postponed';
-  // Есть будущая дата заседания → назначено
-  if(isFuture&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Рассмотрение'))return 'scheduled';
+  // "Отложено" — только если героистикой явно зафиксировано (см. nextDateLabel).
+  // Старый фолбэк на «отложен» в тексте последнего события отключён:
+  // в событиях часто встречается маркер «Определение судьи об отказе в отложении…»
+  // и т.п., а дата размещения даёт ложные срабатывания.
+  if(c.nextDateLabel==='Отложено до')return 'postponed';
+  // Есть будущая дата заседания → тип из nextHearingType
+  if(isFuture&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Рассмотрение')){
+    if(c.nextHearingType==='prep')return 'prep';
+    if(c.nextHearingType==='prelim')return 'prelim';
+    if(c.nextHearingType==='main')return 'main';
+    return 'scheduled';
+  }
   // Активное дело без будущей даты
   return 'awaiting';
 }
@@ -330,23 +375,19 @@ function jsonToCase(j){
   let nextDate='',nextDateLabel='';
   const hearingDateRaw=primary.hearing_date||'';
   const hearingTime=primary.hearing_time||'';
+  const primaryEvents=Array.isArray(primary.events)?primary.events:[];
   if(hearingDateRaw){
     nextDate=parseDate(hearingDateRaw);
     const evLow=evText.toLowerCase();
     if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
     else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))nextDateLabel='Без движения до';
     else nextDateLabel='Заседание';
-    // Если последнее событие — прошедшее заседание, а hearing_date в будущем,
-    // значит заседание было отложено до новой даты.
-    if(nextDateLabel==='Заседание'){
-      const m=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-      if(m){
-        const evIso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-        const todayIso=new Date().toISOString().slice(0,10);
-        const isPrelim=/предварительн|подготовк|собеседовани/i.test(evText);
-        if(evIso<todayIso && nextDate>todayIso && !isPrelim && /судебное\s+заседани/i.test(evText))
-          nextDateLabel='Отложено до';
-      }
+    // Настоящий «перенос» — если в истории есть реально прошедшее осн. СЗ,
+    // отличное от нового назначения. Строгая проверка по events[] вместо
+    // регекс-матча даты из текста last_event: дата в тексте — это дата
+    // размещения, а не проведения, и часто стоит в прошлом.
+    if(nextDateLabel==='Заседание'&&hasHeldPriorMainHearing(primaryEvents,nextDate)){
+      nextDateLabel='Отложено до';
     }
   }else if(evText){
     const evLow=evText.toLowerCase();
@@ -367,6 +408,44 @@ function jsonToCase(j){
       }
     }
   }
+  // Тип ближайшего будущего заседания — из events[] активной стадии
+  // (беседа/предв./осн.). Если события не найдены — остаётся null.
+  let nextHearingType=null;
+  if(nextDate&&primaryEvents.length){
+    // Ищем событие, чья дата совпадает с nextDate; если таких несколько —
+    // берём последнее (по порядку в массиве, в парсере обычно хронологический).
+    let match=null;
+    for(const e of primaryEvents){
+      if(!e||!e.date)continue;
+      const d=parseDate(e.date);
+      if(d===nextDate){
+        const k=classifyEvent(e.text);
+        if(k)match=k;
+      }
+    }
+    nextHearingType=match;
+  }
+  // «Рассмотрение начато с начала» — маркер в первой инстанции (чаще всего),
+  // но по ГПК может встречаться и на стадии апелляции с правилами 1-й инст.
+  // Параллельно фиксируем последнюю дату такого события — для тултипа.
+  const fiEvents=Array.isArray(fi.events)?fi.events:[];
+  const apEvents=Array.isArray(ap.events)?ap.events:[];
+  let restartFromScratch=false,restartDate='';
+  for(const e of [...fiEvents,...apEvents]){
+    const t=(e&&e.text)||'';
+    if(!/рассмотрени\S*\s+дела\s+начато\s+с\s+начала/i.test(t))continue;
+    restartFromScratch=true;
+    const ed=parseDate((e&&e.date)||'');
+    if(ed&&ed>restartDate)restartDate=ed;
+  }
+  // Переход апелляции к правилам производства в суде первой инстанции (ч.5 ст.330 ГПК).
+  // Стандартные формулировки включают «о переходе к рассмотрению дела по правилам
+  // производства в суде первой инстанции» и «перейти к рассмотрению… по правилам…».
+  const appealToFirstInstanceRules=apEvents.some(e=>{
+    const t=((e&&e.text)||'').toLowerCase();
+    return /по\s+правилам\s+производства\s+в\s+суде\s+первой\s+инстанции/.test(t)||
+           /перейти\s+к\s+рассмотрени\S*\s+по\s+правилам/.test(t);
+  });
   const roleLow=(j.bank_role||'Ответчик').toLowerCase();
   const caseObj={
     caseNumber:caseNumber,
@@ -393,6 +472,10 @@ function jsonToCase(j){
     appellant:appellant,
     nextDate:nextDate,
     nextDateLabel:nextDateLabel,
+    nextHearingType:nextHearingType,
+    restartFromScratch:restartFromScratch,
+    restartDate:restartDate,
+    appealToFirstInstanceRules:appealToFirstInstanceRules,
     hearingTime:hearingTime,
     // JSON-specific: full stage data for detail view
     _fi:fi,
@@ -449,22 +532,17 @@ function extractPauseReason(ev){
   return 'Не указана';
 }
 
-/* Determine if result is favorable for the bank */
-/* Logic:
-   - If bank filed the appeal (appellant='bank'):
-     - reversed/partial = favorable (green), upheld = unfavorable (red)
-   - If other party filed (appellant='other'):
-     - upheld = favorable (green), reversed = unfavorable (red)
-   - If bank is third party or appellant unknown: neutral
-   - pending/returned/dismissed: always neutral
+/* Determine if result is favorable for the bank.
+   В апелляции favor ведёт АПЕЛЛЯНТ (не номинальная роль банка): даже если
+   Сбер — третье лицо, его успешная жалоба = favorable. Жалоба, не достигшая
+   цели (возвращено/прекращено/снято), — unfavorable для апеллянта и
+   favorable для противоположной стороны (предыдущее решение устояло).
+   В 1-й инстанции апеллянта ещё нет — favor решается ролью банка и исходом.
 */
 function getResultFavor(c){
-  if(!c.result||c.result==='pending'||c.result==='returned'||c.result==='dismissed'||c.result==='withdrawn')return 'neutral';
-  if(c.sberbankRole==='third_party')return 'neutral';
-  // 1 инстанция: favor определяется напрямую ролью банка и исходом иска —
-  // апеллянта ещё нет. Банк-истец: иск удовлетворён (reversed/partial) =
-  // favorable, отказано (upheld) = unfavorable; для ответчика — наоборот.
+  if(!c.result||c.result==='pending')return 'neutral';
   if(c.stage==='first_instance'){
+    if(c.sberbankRole==='third_party')return 'neutral';
     if(c.sberbankRole==='plaintiff'){
       if(c.result==='reversed'||c.result==='partial')return 'favorable';
       if(c.result==='upheld')return 'unfavorable';
@@ -476,6 +554,11 @@ function getResultFavor(c){
   }
   const app=c.appellant;
   if(!app)return 'neutral';
+  // Жалоба не достигла цели — первоначальное решение устояло.
+  // Для апеллянта это плохо, для противоположной стороны — хорошо.
+  if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed'){
+    return app==='bank'?'unfavorable':'favorable';
+  }
   if(app==='bank'){
     if(c.result==='reversed'||c.result==='partial')return 'favorable';
     if(c.result==='upheld')return 'unfavorable';
@@ -794,7 +877,12 @@ function renderAnalytics(){
         const stageBadge=c.stage==='appeal'
           ?'<span class="badge badge-appeal badge-compact">Апелл.</span>'
           :'<span class="badge badge-fi badge-compact">1 инст.</span>';
-        const postponedBadge=c.nextDateLabel==='Отложено до'?'<span class="badge badge-postponed badge-compact">Отложено</span>':'';
+        // В панели «Ближайшие» не выводим ни тип заседания, ни 🔄 «с начала»:
+        // всё это видно в таблице/drawer. Оставляем только редкий заметный
+        // маркер перехода апелляции к правилам 1-й инстанции.
+        const upChips=c.appealToFirstInstanceRules
+          ?'<span class="badge badge-to-fi badge-compact">⚠</span>'
+          :'';
         // Для апелляции суд всегда один — не выводим. Для 1 инст. — суд + судья.
         const isFi=c.stage!=='appeal';
         const court=isFi?courtLabel(c):'';
@@ -804,7 +892,7 @@ function renderAnalytics(){
         const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
         upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
-          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${postponedBadge}</div>${courtHtml}<div class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</div></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</div></div>`+
           extLink+
           `</div>`;
       });
@@ -1035,6 +1123,12 @@ const STATUS_ICONS={
   paused:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>',
   awaiting:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7l8 6 8-6M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M4 7l2-3h12l2 3"/></svg>',
   decided:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8l7-5 7 5M3 14l4-6 4 6M13 14l4-6 4 6M3 14a4 4 0 008 0M13 14a4 4 0 008 0"/></svg>',
+  // Беседа — две реплики (диалог)
+  prep:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
+  // Предв. СЗ — календарь с галочкой
+  prelim:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4"/></svg>',
+  // Осн. СЗ — весы правосудия
+  main:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8l7-5 7 5M3 14l4-6 4 6M13 14l4-6 4 6M3 14a4 4 0 008 0M13 14a4 4 0 008 0"/></svg>',
 };
 function statusIcon(ds){return STATUS_ICONS[ds]||STATUS_ICONS.awaiting;}
 
@@ -1065,7 +1159,7 @@ function prepareCaseViewModel(c){
   // Дата возле статуса. Для scheduled/postponed/suspended — «под» бейджем,
   // для paused/decided/transfer — «внутри» бейджа. Возвращаем plain text.
   let statusInlineDate='',statusBelowDate='';
-  if(ds==='scheduled'&&isFutureHearing){
+  if((ds==='scheduled'||ds==='prep'||ds==='prelim'||ds==='main')&&isFutureHearing){
     statusBelowDate=formatDate(c.nextDate);
   }else if((ds==='postponed'||ds==='suspended')&&c.nextDate){
     statusBelowDate='до '+formatDate(c.nextDate);
@@ -1102,13 +1196,31 @@ function buildFavorIcon(vm){
 function buildActHtml(vm){
   return vm.actLabel?`<span class="${vm.actNegative?'badge-act-no':'badge-act'}">${vm.actLabel}</span>`:'';
 }
+function buildStageChips(c){
+  // «Рассмотрение с начала» больше не чип — 🔄 встраивается в статус-бейдж
+  // через buildStatusBadge(). Остаётся только заметный чип перехода апелляции.
+  if(c.appealToFirstInstanceRules)
+    return '<span class="badge badge-to-fi badge-compact" title="Апелляция перешла к рассмотрению дела по правилам производства в суде первой инстанции (ч.5 ст.330 ГПК)">⚠ по правилам 1-й инст.</span>';
+  return '';
+}
+/* Бейдж статуса с учётом «рассмотрение с начала»: если флаг поднят,
+ * перед текстом ставим 🔄, SVG-иконку убираем (иначе строка перегружена),
+ * в title кладём дату сброса. Для decided/result не применяется. */
+function buildStatusBadge(c,vm){
+  const title=c.restartFromScratch
+    ?` title="${c.restartDate?formatDate(c.restartDate)+' — ':''}рассмотрение дела начато с начала"`
+    :'';
+  const prefix=c.restartFromScratch?'🔄 ':statusIcon(vm.ds);
+  return `<span class="badge badge-${vm.ds}"${title}>${prefix}${vm.statusLabel}</span>`;
+}
 function buildStateHtml(c,vm){
   const actHtml=buildActHtml(vm);
+  const chips=buildStageChips(c);
   if(vm.resultPresent){
     const favorIcon=buildFavorIcon(vm);
-    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>${actHtml?`<span class="state-sub">${actHtml}</span>`:''}</div>`;
+    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>${chips?`<span class="state-sub">${chips}</span>`:''}${actHtml?`<span class="state-sub">${actHtml}</span>`:''}</div>`;
   }
-  return `<div class="cell-state"><span class="badge badge-${vm.ds}">${statusIcon(vm.ds)}${vm.statusLabel}</span></div>`;
+  return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}</div>`;
 }
 function buildHearingHtml(c,vm){
   if(!(c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Без движения до'||c.nextDateLabel==='Рассмотрение'))){
@@ -1120,7 +1232,7 @@ function buildHearingHtml(c,vm){
   else if(d!==null&&d>1&&d<=7)pCls='hearing-soon';
   else if(d!==null&&d<0)pCls='hearing-past';
   const dateStr=formatDate(c.nextDate);
-  const timeStr=(vm.ds==='scheduled'&&c.hearingTime)?' · '+escHtml(c.hearingTime):'';
+  const timeStr=((vm.ds==='scheduled'||vm.ds==='prep'||vm.ds==='prelim'||vm.ds==='main')&&c.hearingTime)?' · '+escHtml(c.hearingTime):'';
   const rel=relativeDateText(c.nextDate);
   let rCls='';
   if(d===0)rCls='today';
@@ -1337,9 +1449,10 @@ function renderDrawer(c){
 
   // Hero
   const favorIcon=vm.favor==='favorable'?'<span style="color:var(--success);font-weight:700;">✓</span>':vm.favor==='unfavorable'?'<span style="color:var(--danger);font-weight:700;">✕</span>':'';
-  const statusBadge=vm.resultPresent
+  const drawerChips=buildStageChips(c);
+  const statusBadge=(vm.resultPresent
     ?`<span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>`
-    :`<span class="badge badge-${vm.ds}">${statusIcon(vm.ds)}${vm.statusLabel}</span>`;
+    :buildStatusBadge(c,vm))+drawerChips;
   const actBadge=vm.actLabel?`<span class="${vm.actNegative?'badge-act-no':'badge-act'}">${vm.actLabel}</span>`:'';
   const roleBadge=c.sberbankRole==='plaintiff'?'<span class="badge badge-plaintiff">Сбер — истец</span>':c.sberbankRole==='defendant'?'<span class="badge badge-defendant">Сбер — ответчик</span>':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
 
