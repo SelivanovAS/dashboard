@@ -403,10 +403,19 @@ class TestBankSideOutcome:
         )
         assert result == "нейтрально (банк — третье лицо)"
 
-    def test_unknown_appellant_returns_undetermined(self):
-        """При пустом апеллянте исход не угадывается."""
+    def test_unknown_appellant_returns_empty(self):
+        """При пустом апеллянте исход не угадывается — пусто, не «не определено»."""
         result = uc.bank_side_outcome("Истец", "", "решение отменено полностью")
-        assert result == "не определено"
+        assert result == ""
+
+    def test_unknown_verdict_returns_empty(self):
+        """Неизвестный вердикт при известном апеллянте — тоже пусто."""
+        result = uc.bank_side_outcome("Истец", "банк", "какой-то редкий вердикт")
+        assert result == ""
+
+    def test_all_empty_returns_empty(self):
+        """Все поля пустые — возвращается пустая строка."""
+        assert uc.bank_side_outcome("", "", "") == ""
 
     def test_bank_appealed_and_upheld_is_against_bank(self):
         """Банк жаловался, решение осталось в силе — против банка."""
@@ -448,3 +457,80 @@ class TestBankSideOutcome:
             "Ответчик", "иное лицо", "жалоба возвращена",
         )
         assert result_other == "в пользу банка"
+
+
+# ── build_summary_line ───────────────────────────────────────────────────────
+
+class TestBuildSummaryLine:
+    def test_empty_input(self):
+        """Пустые данные — фраза «без изменений»."""
+        assert uc.build_summary_line([], [], [], [], []) == "без изменений"
+
+    def test_status_change_counter_removed(self):
+        """Апелляционные status_change не должны появляться в сводке —
+        раздел в дайджесте для них не рендерится, счётчик вводил в заблуждение."""
+        changes = [
+            {"type": ["status_change"], "case": "33-1/2026", "details": {}},
+            {"type": ["status_change"], "case": "33-2/2026", "details": {}},
+        ]
+        line = uc.build_summary_line([], changes, [], [], [])
+        assert "смена статуса" not in line
+        assert "смен статуса" not in line
+
+    def test_event_counter_still_works(self):
+        """Другие счётчики не затронуты правкой."""
+        changes = [
+            {"type": ["new_event"], "case": "33-1/2026", "details": {}},
+            {"type": ["hearing_postponed"], "case": "33-2/2026", "details": {}},
+        ]
+        line = uc.build_summary_line([], changes, [], [], [])
+        assert "1 событ." in line
+        assert "1 отлож." in line
+
+
+# ── generate_template_digest — дефолты убраны ────────────────────────────────
+
+class TestTemplateDigestDefaults:
+    def test_empty_appellant_does_not_say_not_specified(self):
+        """При пустых appellant_role и appellant_name шаблон НЕ должен писать
+        «апеллянт: не указано» — строка должна просто не содержать слова «апеллянт»."""
+        fi_changes = [{
+            "case": "2-208/2026",
+            "type": ["fi_appeal_filed"],
+            "court": "Советский районный суд",
+            "plaintiff": "Шамов Д.С.",
+            "defendant": "ПАО Сбербанк",
+            "details": {
+                "appellant_role": "",
+                "appellant_name": "",
+                "appeal_filed_date": "17.04.2026",
+            },
+        }]
+        out = uc.generate_template_digest(
+            [], [], cases=[], fi_new_cases=[], stage_transitions=[],
+            fi_changes=fi_changes,
+            total_active_appeal=0, total_active_fi=1,
+        )
+        assert "не указано" not in out
+        assert "апеллянт:" not in out
+
+    def test_filled_appellant_is_rendered(self):
+        """Если роль и имя заполнены — они попадают в строку."""
+        fi_changes = [{
+            "case": "2-208/2026",
+            "type": ["fi_appeal_filed"],
+            "court": "Советский районный суд",
+            "plaintiff": "Шамов Д.С.",
+            "defendant": "ПАО Сбербанк",
+            "details": {
+                "appellant_role": "Истец",
+                "appellant_name": "Шамов Д.С.",
+                "appeal_filed_date": "17.04.2026",
+            },
+        }]
+        out = uc.generate_template_digest(
+            [], [], cases=[], fi_new_cases=[], stage_transitions=[],
+            fi_changes=fi_changes,
+            total_active_appeal=0, total_active_fi=1,
+        )
+        assert "апеллянт: Истец Шамов Д.С." in out

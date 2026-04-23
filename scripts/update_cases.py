@@ -570,14 +570,15 @@ def classify_verdict(result: str, last_event: str = "") -> str:
 
 def bank_side_outcome(role: str, appellant: str, verdict_label: str) -> str:
     """«в пользу банка» / «против банка» / «нейтрально (банк — третье лицо)» /
-    «не определено»."""
+    «» (пустая строка при нехватке данных — чтобы downstream не писал
+    «не определено»)."""
     role_l = (role or "").lower()
     if "третье" in role_l:
         return "нейтрально (банк — третье лицо)"
     app = (appellant or "").strip().lower()
     if app not in ("банк", "иное лицо"):
         # При пустом/неизвестном апеллянте НЕ угадываем.
-        return "не определено"
+        return ""
     appellant_is_bank = (app == "банк")
     upheld = "оставлено без изменения" in verdict_label
     overturned = ("отменено" in verdict_label) or ("изменено" in verdict_label)
@@ -589,7 +590,7 @@ def bank_side_outcome(role: str, appellant: str, verdict_label: str) -> str:
         return "против банка" if appellant_is_bank else "в пользу банка"
     if overturned:
         return "в пользу банка" if appellant_is_bank else "против банка"
-    return "не определено"
+    return ""
 
 
 
@@ -1350,7 +1351,6 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                  if "new_event" in ch["type"] or "hearing_new" in ch["type"])
     results = sum(1 for ch in changes if "new_result" in ch["type"])
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
-    statuses = sum(1 for ch in changes if "status_change" in ch["type"])
     postponed = sum(1 for ch in changes if "hearing_postponed" in ch["type"])
     to_fi_rules = sum(1 for ch in changes if "appeal_to_fi_rules" in ch["type"])
     if events:
@@ -1363,8 +1363,6 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         parts.append(f"{results} суд. акт.")
     if acts:
         parts.append(f"{acts} акт.")
-    if statuses:
-        parts.append(f"{statuses} смена статуса")
     if fi_changes:
         fi_hearings = sum(
             1 for ch in fi_changes
@@ -2455,7 +2453,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 if t == "new_result":
                     hearing_dt = d.get("hearing_date", "")
                     line += f"\n  ИТОГ: {d.get('verdict_label', '')}"
-                    line += f"\n  В чью пользу для банка: {d.get('bank_outcome', '')}"
+                    if d.get("bank_outcome"):
+                        line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
                     line += f"\n  Категория спора: {d.get('category', '')}"
                     line += f"\n  Роль банка: {d.get('role', '')}"
                     app_str = _appellant_fmt(d)
@@ -2578,11 +2577,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     role = d.get("appellant_role", "")
                     name = d.get("appellant_name", "")
                     dt = d.get("appeal_filed_date", "")
-                    app_str = f"{role} {name}".strip() or "не указано"
+                    app_str = f"{role} {name}".strip()
                     line += "\n  Подана апелляционная жалоба"
                     if dt:
                         line += f" ({dt})"
-                    line += f", апеллянт: {app_str}"
+                    if app_str:
+                        line += f", апеллянт: {app_str}"
                 elif t == "fi_hearing_restart":
                     rd = d.get("restart_date", "")
                     rev = d.get("restart_event", "")
@@ -2931,11 +2931,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     role = escape_html(d.get("appellant_role", ""))
                     name = escape_html(d.get("appellant_name", ""))
                     dt = escape_html(d.get("appeal_filed_date", ""))
-                    app_str = f"{role} {name}".strip() or "не указано"
+                    app_str = f"{role} {name}".strip()
                     ev_list.append(
                         "📨 подана апелляц. жалоба"
                         + (f" ({dt})" if dt else "")
-                        + f", апеллянт: {app_str}"
+                        + (f", апеллянт: {app_str}" if app_str else "")
                     )
                 elif t == "fi_hearing_restart":
                     rd = escape_html(d.get("restart_date", ""))
