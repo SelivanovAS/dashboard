@@ -74,6 +74,7 @@ CASES_TO_ADD: list[tuple[str, str]] = [
     ("sovetsk--hmao.sudrf.ru",   "2-208/2026"),
     ("surgray--hmao.sudrf.ru",   "2-310/2026"),
     ("hmray--hmao.sudrf.ru",     "2-76/2026"),
+    ("hmray--hmao.sudrf.ru",     "2-135/2026"),
     ("uganskray--hmao.sudrf.ru", "2-1050/2026"),
 ]
 
