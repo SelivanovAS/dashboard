@@ -231,6 +231,20 @@ class TestParseCaseCard:
         info = uc.parse_case_card(html)
         assert info["_table_count"] >= 6
 
+    def test_short_template_still_extracts_movement(self):
+        """Укороченный шаблон карточки (4 таблицы, без маркера «обжалование»)
+        должен парситься: движение видно в t[2], данные не теряются. Раньше
+        парсер делал ранний return при <6 таблиц и выкидывал события."""
+        html = _read_fixture("case_card_truncated.html")
+        info = uc.parse_case_card(html)
+        assert info["_table_count"] == 4
+        assert info["_fi_appeal_filed"] is False
+        assert info["Последнее событие"]
+        events = info.get("_events") or []
+        assert len(events) >= 1
+        assert events[-1]["date"] == "25.05.2026"
+        assert events[-1]["time"] == "10:00"
+
     def test_short_card_with_appeal_tab_sets_flag(self):
         """Короткая карточка (<6 таблиц) с маркером «обжалование решений…»
         всё равно выставляет _fi_appeal_filed — чтобы сигнал не терялся,

@@ -988,6 +988,20 @@ def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
     return "", ""
 
 
+def _warn_if_card_degraded(card_info: dict, case_number: str) -> None:
+    """Логируем обрезанную карточку только если из неё не удалось
+    выдернуть ни одного события (иначе компактный шаблон — это норма)."""
+    if card_info.get("_table_count", 0) >= 6:
+        return
+    if card_info.get("_events"):
+        return
+    log.warning(
+        f"  {case_number}: карточка обрезана "
+        f"({card_info.get('_table_count', 0)} таблиц), "
+        f"движение не распозналось"
+    )
+
+
 def parse_case_card(html: str, court_base_url: str = "") -> dict:
     """
     Парсит карточку дела. Извлекает:
@@ -1016,15 +1030,15 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
 
     tables = extract_tables(html)
     info["_table_count"] = len(tables)
-    # Маркер вкладки «обжалование решений, определений (пост.)» работает даже
-    # на обрезанной карточке (<6 таблиц) — важно для 1 инст., когда sudrf при
-    # new=5 возвращает только вкладку обжалования без движения. Если фолбэк
-    # на card_url_alt(new=0) не дотянется, сигнал всё равно поймаем.
+    # Маркер «обжалование решений» нужен вызывающему коду для решения о фолбэке
+    # на card_url_alt(new=0) — некоторые суды открывают вкладку обжалования
+    # поверх основной «Дело», и основную надо запросить отдельным URL.
     if re.search(r'обжалован\w*\s+решен\w*', html, re.IGNORECASE):
         info["_fi_appeal_filed"] = True
-    if len(tables) < 6:
-        log.warning(f"Карточка: ожидалось ≥6 таблиц, найдено {len(tables)}")
-        return info
+    # Раньше здесь был ранний return при <6 таблиц — он отбрасывал живые
+    # карточки с укороченным шаблоном (напр. Сургутский районный суд
+    # отдаёт 4 таблицы, но с полным «ДВИЖЕНИЕ ДЕЛА»). Циклы ниже защищены
+    # от малого числа таблиц, поэтому безопасно парсить всё, что есть.
 
     # ── Таблица ДЕЛО (обычно индекс 3) ──
     # Ищем таблицу с результатом рассмотрения, судьёй-докладчиком апелляции
@@ -1620,6 +1634,7 @@ def update_active_cases(
             continue
 
         card_info = parse_case_card(html)
+        _warn_if_card_degraded(card_info, case["Номер дела"])
 
         # Параллельно обновляем JSON-представление appeal-дела (если передано).
         # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
@@ -3446,6 +3461,7 @@ def main():
                 card_html = fetch_page(url)
                 if card_html:
                     card_info = parse_case_card(card_html)
+                    _warn_if_card_degraded(card_info, nc["Номер дела"])
                     nc["Последнее событие"] = card_info.get("Последнее событие", "")
                     nc["Дата события"] = card_info.get("Дата события", "")
                     nc["Время заседания"] = card_info.get("Время заседания", "")
@@ -3734,6 +3750,7 @@ def main_json():
                 card_html = fetch_page(url)
                 if card_html:
                     card_info = parse_case_card(card_html, APPEAL_COURT.base_url)
+                    _warn_if_card_degraded(card_info, nc["Номер дела"])
                     nc["Последнее событие"] = card_info.get("Последнее событие", "")
                     nc["Дата события"] = card_info.get("Дата события", "")
                     nc["Время заседания"] = card_info.get("Время заседания", "")
@@ -3857,6 +3874,7 @@ def main_json():
                         if card_info.get("_fi_appeal_filed_date") and not alt_info.get("_fi_appeal_filed_date"):
                             alt_info["_fi_appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
                     card_info = alt_info
+        _warn_if_card_degraded(card_info, fi["case_number"])
 
         # Снимок до обновления — нужен для diff и дайджеста
         old_event = fi.get("last_event", "")
