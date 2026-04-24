@@ -541,8 +541,15 @@ function extractPauseReason(ev){
 */
 function getResultFavor(c){
   if(!c.result||c.result==='pending')return 'neutral';
+  // Банк — 3-е лицо: исход по существу ему безразличен, кроме случая, когда он сам апеллировал.
+  if(c.sberbankRole==='third_party'){
+    if(c.appellant!=='bank')return 'neutral';
+    if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed')return 'unfavorable';
+    if(c.result==='reversed'||c.result==='partial')return 'favorable';
+    if(c.result==='upheld')return 'unfavorable';
+    return 'neutral';
+  }
   if(c.stage==='first_instance'){
-    if(c.sberbankRole==='third_party')return 'neutral';
     if(c.sberbankRole==='plaintiff'){
       if(c.result==='reversed'||c.result==='partial')return 'favorable';
       if(c.result==='upheld')return 'unfavorable';
@@ -748,57 +755,30 @@ function populateFilterOptions(){
 /* ========== Stats ========== */
 function renderStats(){
   const active=allCases.filter(c=>c.status==='active').length;
-  const decided=allCases.filter(c=>c.status==='decided'&&!isArchived(c)).length;
   const w=allCases.filter(c=>getResultFavor(c)==='favorable').length;
-  const l=allCases.filter(c=>getResultFavor(c)==='unfavorable').length;
-  const decidedTotal=allCases.filter(c=>c.status==='decided').length;
-  const winRate=decidedTotal>0?Math.round(w/decidedTotal*100):0;
-  const actsCount=allCases.filter(c=>c.hasPublishedActs).length;
+  const lost=allCases.filter(c=>getResultFavor(c)==='unfavorable').length;
+  const meaningful=w+lost;
+  const winRate=meaningful>0?Math.round(w/meaningful*100):0;
+  const weekAgoIso=new Date(Date.now()-7*24*60*60*1000).toISOString().slice(0,10);
+  const freshActs=allCases.filter(c=>c.hasPublishedActs&&(c.actDate&&c.actDate>=weekAgoIso||c.lastEventDate&&c.lastEventDate>=weekAgoIso)).length;
 
   document.getElementById('stats-primary').innerHTML=`
-    <div class="stat-card" data-accent="blue"><div class="stat-value">${allCases.length}</div><div class="stat-label">Всего дел</div></div>
-    <div class="stat-card" data-accent="gold"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
+    <div class="stat-card clickable" data-accent="gold" onclick="setStatusFilter('active')"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
     <div class="stat-card" data-accent="green">
-      <div class="stat-value">${w} <span class="stat-of-total">из ${decidedTotal}</span></div>
-      <div class="stat-label">В пользу банка</div>
-      ${decidedTotal>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div class="stat-no-appeal-data">Нет данных об апеллянте</div>`}
+      <div class="stat-value">${w} <span class="stat-of-total">из ${meaningful}</span></div>
+      <div class="stat-label">В пользу банка${meaningful>0?` · ${winRate}%`:''}</div>
+      ${meaningful>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div class="stat-no-appeal-data">Нет данных</div>`}
     </div>
-    <div class="stat-card" data-accent="red"><div class="stat-value">${actsCount}</div><div class="stat-label">Акты опубликованы</div></div>`;
+    <div class="stat-card clickable" data-accent="red" onclick="setStatusFilter('lost')">
+      <div class="stat-value">${lost}</div>
+      <div class="stat-label">Проиграно по существу</div>
+    </div>
+    <div class="stat-card" data-accent="blue"><div class="stat-value">${freshActs}</div><div class="stat-label">Новые акты · 7 дней</div></div>`;
 
-  // Secondary chips — two groups
-  const p=allCases.filter(c=>c.sberbankRole==='plaintiff').length;
-  const def=allCases.filter(c=>c.sberbankRole==='defendant').length;
-  const tp=allCases.filter(c=>c.sberbankRole==='third_party').length;
-  const newCount=newCaseNumbers.size;
-  const upheld=allCases.filter(c=>c.result==='upheld').length;
-  const reversed=allCases.filter(c=>c.result==='reversed').length;
-  const partial=allCases.filter(c=>c.result==='partial').length;
-  const dismissed=allCases.filter(c=>c.result==='dismissed'||c.result==='returned'||c.result==='withdrawn').length;
-
-  const fiCount=allCases.filter(c=>(c.stage||'appeal')==='first_instance').length;
-  const apCount=allCases.filter(c=>(c.stage||'appeal')==='appeal').length;
-
-  let rolesGroup=`
-    <div class="stat-chip"><div class="chip-dot" style="background:var(--blue-500);"></div>Истец: <strong>${p}</strong></div>
-    <div class="stat-chip"><div class="chip-dot" style="background:#ec4899;"></div>Ответчик: <strong>${def}</strong></div>`;
-  if(tp>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Сбер 3-е лицо: <strong>${tp}</strong></div>`;
-  if(fiCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:#8b5cf6;"></div>1 инст.: <strong>${fiCount}</strong></div>`;
-  if(apCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:#14b8a6;"></div>Апелляция: <strong>${apCount}</strong></div>`;
-  if(newCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Новых: <strong>${newCount}</strong></div>`;
-  if(archivedCount>0)rolesGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-300);"></div>В архиве: <strong>${archivedCount}</strong></div>`;
-
-  let resultsGroup=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Рассмотрено: <strong>${decidedTotal}</strong></div>`;
-  if(upheld>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--green-500);"></div>Без изменения: <strong>${upheld}</strong></div>`;
-  if(reversed>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--red-500);"></div>Отменено: <strong>${reversed}</strong></div>`;
-  if(partial>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--amber-500);"></div>Изменено: <strong>${partial}</strong></div>`;
-  if(dismissed>0)resultsGroup+=`<div class="stat-chip"><div class="chip-dot" style="background:var(--slate-400);"></div>Снято/Возвращено: <strong>${dismissed}</strong></div>`;
-
-  document.getElementById('stats-secondary').innerHTML=`
-    <div class="chip-group">${rolesGroup}</div>
-    <div class="chip-group">${resultsGroup}</div>`;
+  document.getElementById('stats-secondary').innerHTML='';
 
   // Mobile summary
-  document.getElementById('stats-mobile-summary').innerHTML=`<div class="sms-row"><div class="sms-items"><span class="sms-item"><strong>${allCases.length}</strong> дел</span><span class="sms-item"><strong>${active}</strong> в произв.</span><span class="sms-item"><strong>${w}</strong>/${decidedTotal} в пользу</span></div><span class="sms-chevron">▼</span></div>`;
+  document.getElementById('stats-mobile-summary').innerHTML=`<div class="sms-row"><div class="sms-items"><span class="sms-item"><strong>${active}</strong> в произв.</span><span class="sms-item"><strong>${w}</strong>/${meaningful} ✓</span><span class="sms-item"><strong>${lost}</strong> проигр.</span><span class="sms-item"><strong>${freshActs}</strong> акт. 7д</span></div><span class="sms-chevron">▼</span></div>`;
 }
 function toggleMobileStats(){
   const el=document.getElementById('stats-mobile-summary');
@@ -957,6 +937,7 @@ function applyFilters(){
     else if(st==='active'){if(c.status!=='active'||archived)return false;}
     else if(st==='scheduled'||st==='postponed'||st==='suspended'||st==='paused'||st==='awaiting'){if(c.detailedStatus!==st||archived)return false;}
     else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
+    else if(st==='lost'){if(getResultFavor(c)!=='unfavorable')return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;

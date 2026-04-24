@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Мониторинг судебных дел — ПАО Сбербанк — Апелляция ХМАО</title>
 <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
@@ -116,6 +116,7 @@
           <option value="paused">Приостановлено</option>
           <option value="awaiting">Ожидает назначения</option>
           <option value="decided">Рассмотрено</option>
+          <option value="lost">Проиграно (отм./изм.)</option>
           <option value="archived">Архив (30+ дней)</option>
         </select>
         <select class="filter-select" id="filter-role" style="display:none;" onchange="applyFilters()">
@@ -166,6 +167,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=12" defer></script>
+<script src="app.js?v=16" defer></script>
 </body>
 </html>
