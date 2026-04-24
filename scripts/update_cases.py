@@ -568,6 +568,70 @@ def classify_verdict(result: str, last_event: str = "") -> str:
     return (result or "").strip() or "итог не распознан"
 
 
+def classify_verdict_fi(result: str) -> str:
+    """Нормализованный ярлык итога по делу 1-й инстанции.
+
+    Принимает СЫРОЕ поле «Результат» из карточки суда. В отличие от
+    апелляции, здесь только исходы первой инстанции (без «отменено/изменено»):
+    удовлетворено [частично], отказано, прекращено, оставлено без рассмотрения,
+    возвращено.
+    """
+    r = (result or "").lower()
+    # Частичное удовлетворение — до общего «удовлетворено», иначе затмится.
+    if ("удовлетворено частично" in r
+            or "удовлетворено в части" in r
+            or ("частично" in r and "удовлетв" in r)):
+        return "удовлетворено частично"
+    # «ОТКАЗАНО в удовлетворении иска» — до «удовлетворен», т.к. содержит оба.
+    if "отказано" in r:
+        return "отказано"
+    if "удовлетворен" in r:
+        return "удовлетворено"
+    if "прекращено" in r:
+        return "прекращено"
+    if "без рассмотрения" in r:
+        return "оставлено без рассмотрения"
+    if "возвращен" in r:
+        return "возвращено"
+    return (result or "").strip() or "итог не распознан"
+
+
+def bank_side_outcome_fi(role: str, verdict_label: str) -> str:
+    """Знак исхода для банка в 1-й инстанции — по роли + нормализованному ярлыку.
+
+    Возвращает одну из: «в пользу банка», «против банка», «частично в пользу
+    банка», «частично против банка», «нейтрально (банк — третье лицо)»,
+    или пустую строку, если данных недостаточно.
+
+    Для процессуальных завершений без решения по существу (прекращено,
+    без рассмотрения, возвращено) знак определяется по роли: истец теряет
+    возможность добиться удовлетворения → «против банка», к ответчику
+    требования не рассмотрены → «в пользу банка». Точная причина
+    (мировое соглашение, отказ от иска и т.п.) остаётся в last_event —
+    юрист увидит её в строке события.
+    """
+    role_l = (role or "").lower()
+    if "третье" in role_l:
+        return "нейтрально (банк — третье лицо)"
+    bank_is_plaintiff = "истец" in role_l
+    bank_is_defendant = "ответчик" in role_l
+    if not (bank_is_plaintiff or bank_is_defendant):
+        return ""
+    v = (verdict_label or "").lower()
+    # Процессуальные завершения — по роли.
+    if ("прекращено" in v or "без рассмотрения" in v or "возвращено" in v):
+        return "против банка" if bank_is_plaintiff else "в пользу банка"
+    # Решения по существу (частично — до общего «удовлетворено»).
+    if "удовлетворено частично" in v:
+        return ("частично в пользу банка" if bank_is_plaintiff
+                else "частично против банка")
+    if "удовлетворено" in v:
+        return "в пользу банка" if bank_is_plaintiff else "против банка"
+    if "отказано" in v:
+        return "против банка" if bank_is_plaintiff else "в пользу банка"
+    return ""
+
+
 def bank_side_outcome(role: str, appellant: str, verdict_label: str) -> str:
     """«в пользу банка» / «против банка» / «нейтрально (банк — третье лицо)» /
     «» (пустая строка при нехватке данных — чтобы downstream не писал
@@ -1371,6 +1435,9 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_status = sum(1 for ch in fi_changes if "fi_status_change" in ch["type"])
         fi_acts = sum(1 for ch in fi_changes if "fi_act_published" in ch["type"])
         fi_finals = sum(1 for ch in fi_changes if "fi_final_event" in ch["type"])
+        fi_resolved_n = sum(
+            1 for ch in fi_changes if "fi_resolved" in ch["type"]
+        )
         fi_appeals_filed = sum(
             1 for ch in fi_changes if "fi_appeal_filed" in ch["type"]
         )
@@ -1381,6 +1448,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             parts.append(f"{fi_hearings} засед. 1 инст.")
         if fi_restarts:
             parts.append(f"{fi_restarts} с начала")
+        if fi_resolved_n:
+            parts.append(f"{fi_resolved_n} реш. 1 инст.")
         if fi_appeals_filed:
             parts.append(f"{fi_appeals_filed} подано жалоб")
         if fi_finals:
@@ -2538,18 +2607,31 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             )
 
     if fi_changes:
-        context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ:")
+        # Буфер — чтобы не печатать заголовок «ИЗМЕНЕНИЯ» над пустотой, когда
+        # все события дела ушли в секцию 3.5 «Вынесены решения».
+        fi_changes_buf: list[str] = []
         for ch in fi_changes:
             d = ch["details"]
             url = fi_card_url(d)
             pl = shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True)
             df = shorten_party_name(ch.get("defendant", ""), keep_fio_full=True)
+            # Дедуп: если дело «Решено», и fi_resolved, и fi_status_change
+            # информационно тождественны — первый уходит в 3.5, второй
+            # в 3.2 не нужен. Оставляем в 3.2 только побочные события
+            # (заседание, отложение, final_event и т.п.).
+            has_resolved = "fi_resolved" in ch["type"]
+            effective_types = [
+                t for t in ch["type"]
+                if not (has_resolved and t in ("fi_resolved", "fi_status_change"))
+            ]
+            if not effective_types:
+                continue
             line = (
                 f"- {ch['case']} (URL: {url}) ({ch.get('court', '')}): "
                 f"{pl} (истец) vs {df} (ответчик), "
                 f"роль банка: {ch.get('bank_role', '')}"
             )
-            for t in ch["type"]:
+            for t in effective_types:
                 if t == "fi_hearing_new":
                     hd = d.get("hearing_date", "")
                     ht = d.get("hearing_time", "")
@@ -2595,6 +2677,39 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     )
                     if rev:
                         line += f"\n  Событие: {rev}"
+            fi_changes_buf.append(line)
+        if fi_changes_buf:
+            context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ:")
+            context_parts.extend(fi_changes_buf)
+
+    # Отдельный блок «Вынесены решения 1 инст.» — источник для раздела 3.5
+    # промпта. Дела с fi_resolved приходят из fi_changes и физически
+    # остаются в нём, но их статус+итог рендерятся именно здесь.
+    fi_resolved_changes = [
+        ch for ch in fi_changes if "fi_resolved" in ch["type"]
+    ]
+    if fi_resolved_changes:
+        context_parts.append("\nВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.:")
+        for ch in fi_resolved_changes:
+            d = ch["details"]
+            url = fi_card_url(d)
+            pl = shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True)
+            df = shorten_party_name(ch.get("defendant", ""), keep_fio_full=True)
+            line = (
+                f"- {ch['case']} (URL: {url}) ({ch.get('court', '')}): "
+                f"{pl} (истец) vs {df} (ответчик), "
+                f"роль банка: {ch.get('bank_role', '')}"
+                f"\n  ИТОГ: {d.get('verdict_label', '')}"
+                f"\n  Сырое поле «Результат»: {d.get('raw_result', '')}"
+            )
+            if d.get("decision_date"):
+                line += f"\n  Дата решения: {d['decision_date']}"
+            if d.get("category"):
+                line += f"\n  Категория спора: {d['category']}"
+            if d.get("bank_outcome"):
+                line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
+            if d.get("last_event"):
+                line += f"\n  Последнее событие: {d['last_event']}"
             context_parts.append(line)
 
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам судов ХМАО-Югры за {today}.
@@ -2614,7 +2729,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 3. 🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>
    3.1. 📥 <b>Новые иски (N):</b> — одна строка на дело: <a href="URL"><b>номер</b></a> (URL ТОЛЬКО из поля URL этого дела в данных, ничего не выдумывай), стороны (имена физлиц полными), категория, суд, дата подачи, роль банка.
-   3.2. 📅 <b>Изменения (N):</b> — ДВЕ строки на дело, между делами пустая строка. `N` в заголовке = количество дел, ФАКТИЧЕСКИ выведенных ниже в этой подсекции (не общее число изменений в данных). Если дело вынесено в 3.3 или 3.4 — в 3.2 его НЕ повторяй, кроме случая, когда у него в этом же дайджесте есть отдельное событие типа заседание/отложение/смена статуса.
+   3.2. 📅 <b>Изменения (N):</b> — ДВЕ строки на дело, между делами пустая строка. `N` в заголовке = количество дел, ФАКТИЧЕСКИ выведенных ниже в этой подсекции (не общее число изменений в данных). Если дело вынесено в 3.3, 3.4 или 3.5 — в 3.2 его НЕ повторяй, кроме случая, когда у него в этом же дайджесте есть отдельное побочное событие типа заседание/отложение. Смену статуса «В производстве → Решено» в 3.2 НЕ выводить — она целиком заменяется строкой в 3.5.
         • строка 1: 📅 <b>ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}})
           — если это назначенное/перенесённое заседание, дата жирным СПЕРЕДИ.
           Для переноса: <b>⏪ ДД.ММ.ГГГГ ЧЧ:ММ → ⏩ ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}}).
@@ -2626,6 +2741,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
    3.4. 🔄 <b>Рассмотрение с начала (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0). `N` = число строк ниже.
         <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | <b>причина:</b> {{короткое объяснение из события: «привлечение соответчика», «вступление 3-го лица», «изменение предмета иска» и т.п.}} ({{дата события}}).
         Берётся из событий «fi_hearing_restart» в данных. Если у дела есть отдельное новое заседание или отложение — оно может появиться ещё и в 3.2, это корректно. Если у дела только «рассмотрение с начала» без отдельного заседания — оно НЕ повторяется в 3.2.
+   3.5. ⚖️ <b>Вынесенные решения (N):</b> — решение суда первой инстанции по существу дела (или процессуальное завершение: прекращение, без рассмотрения, возвращение). ОДНА строка на дело (подсекция показывается только если N&gt;0). `N` = число строк ниже.
+        <a href="URL"><b>номер</b></a> ({{суд}}) — Решение от {{дата решения}}. <b>ИТОГ:</b> {{дословно поле ИТОГ}}. Категория: {{дословно}}. Стороны: {{истец}} vs {{ответчик}}, банк — {{роль}}. <b>Для банка:</b> {{дословно «В чью пользу для банка»}}.
+        • если поле «В чью пользу для банка» отсутствует или пустое — блок «<b>Для банка:</b> …» НЕ пиши вообще, не подставляй «не определено», «—», «0». Строка тогда заканчивается на «банк — {{роль}}» без хвоста.
+        • если ИТОГ = «прекращено / оставлено без рассмотрения / возвращено» — добавь в конце строки короткую причину из «Последнее событие» (мировое соглашение, отказ от иска, неявка и т.п.), если она есть.
+        • НЕ переформулируй ИТОГ своими словами и не подменяй его шаблоном. Имя судьи НЕ указывай.
+        • НЕ включай дела, у которых нет блока «ИТОГ» в данных.
+        Берётся из событий «fi_resolved» в данных (секция «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.»). Дело, попавшее в 3.5, в 3.2 НЕ дублируется — кроме случая, когда у того же дела есть ещё отдельное побочное событие (заседание/отложение).
 
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
@@ -3031,20 +3153,28 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 + (f" | подано {filing}" if filing else "")
             )
 
-    if fi_changes:
-        if fi_block:
-            fi_block.append("")
-        fi_block.append(f"📅 <b>Изменения ({len(fi_changes)}):</b>")
-        for ch in fi_changes:
-            num = escape_html(ch.get("case", ""))
-            court = escape_html(ch.get("court", ""))
-            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
-            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
-            d = ch["details"]
-            url = fi_card_url(d)
-            link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
-            ev_list: list[str] = []
-            for t in ch["type"]:
+    # Отделяем дела, у которых есть вынесенное решение — они поедут в 3.5.
+    # В 3.2 «Изменения» их статус/резолюция не повторяются; оставляем
+    # только побочные события того же дела (заседание/отложение и т.п.).
+    fi_resolved_chs = [ch for ch in fi_changes if "fi_resolved" in ch["type"]]
+    fi_changes_rendered: list[str] = []
+    for ch in fi_changes:
+        has_resolved = "fi_resolved" in ch["type"]
+        types_for_line = [
+            t for t in ch["type"]
+            if not (has_resolved and t in ("fi_resolved", "fi_status_change"))
+        ]
+        if not types_for_line:
+            continue
+        num = escape_html(ch.get("case", ""))
+        court = escape_html(ch.get("court", ""))
+        pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
+        df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+        d = ch["details"]
+        url = fi_card_url(d)
+        link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
+        ev_list: list[str] = []
+        for t in types_for_line:
                 if t == "fi_hearing_new":
                     hd = escape_html(d.get("hearing_date", ""))
                     ht = escape_html(d.get("hearing_time", ""))
@@ -3085,9 +3215,56 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         "🔄 рассмотрение с начала"
                         + (f" ({rd})" if rd else "")
                     )
-            ev_str = "; ".join(ev_list) if ev_list else ""
+        ev_str = "; ".join(ev_list) if ev_list else ""
+        fi_changes_rendered.append(
+            f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
+        )
+
+    if fi_changes_rendered:
+        if fi_block:
+            fi_block.append("")
+        fi_block.append(
+            f"📅 <b>Изменения ({len(fi_changes_rendered)}):</b>"
+        )
+        fi_block.extend(fi_changes_rendered)
+
+    # ── 3.5: Вынесенные решения 1 инстанции ──
+    if fi_resolved_chs:
+        if fi_block:
+            fi_block.append("")
+        fi_block.append(
+            f"⚖️ <b>Вынесенные решения ({len(fi_resolved_chs)}):</b>"
+        )
+        for ch in fi_resolved_chs:
+            num = escape_html(ch.get("case", ""))
+            court = escape_html(ch.get("court", ""))
+            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
+            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+            d = ch["details"]
+            url = fi_card_url(d)
+            link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
+            verdict = escape_html(d.get("verdict_label", ""))
+            dec_date = escape_html(d.get("decision_date", ""))
+            cat = escape_html(category_short(d.get("category", "")))
+            bank_role = escape_html(ch.get("bank_role", ""))
+            bank_out = escape_html(d.get("bank_outcome", ""))
+            # В template держим компактно: одна строка. Формат симметричен
+            # тому, что просит LLM в 3.5, но без лишних отступов.
+            tail = (
+                f" — Решение"
+                + (f" от {dec_date}" if dec_date else "")
+                + (f". <b>ИТОГ:</b> {verdict}" if verdict else "")
+            )
+            extras: list[str] = []
+            if cat:
+                extras.append(f"категория: {cat}")
+            if bank_role:
+                extras.append(f"банк — {bank_role.lower()}")
+            if bank_out:
+                extras.append(f"<b>для банка:</b> {bank_out}")
+            extras_str = (" | " + "; ".join(extras)) if extras else ""
             fi_block.append(
-                f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
+                f"  {link} ({court}) — {pl} vs {df}{tail}{extras_str}"
             )
 
     # ── Мостик: переходы в апелляцию ──
@@ -4122,6 +4299,34 @@ def main_json():
             change["type"].append("fi_status_change")
             change["details"]["old_status"] = old_status
             change["details"]["new_status"] = new_status
+
+        # Вынесено решение по делу 1-й инст. — отдельный тип события
+        # для секции 3.5 дайджеста. Триггер:
+        #   • first_resolution — статус только что перешёл в «Решено», ИЛИ
+        #   • late_result — статус уже был «Решено», но поле «Результат»
+        #     только сейчас пришло непустым (парсер догнал данные; без этой
+        #     ветки мы бы не показали итог, если статус сменился в день,
+        #     когда result в карточке ещё не проставили).
+        first_resolution = (new_status == "Решено" and old_status != "Решено")
+        late_result = (
+            old_status == "Решено"
+            and new_status == "Решено"
+            and bool(new_result)
+            and not old_result
+        )
+        if first_resolution or late_result:
+            raw_result = fi.get("result", "") or new_result
+            verdict = classify_verdict_fi(raw_result)
+            bank_outcome = bank_side_outcome_fi(
+                case_j.get("bank_role", ""), verdict
+            )
+            change["type"].append("fi_resolved")
+            change["details"]["raw_result"] = raw_result
+            change["details"]["verdict_label"] = verdict
+            change["details"]["bank_outcome"] = bank_outcome
+            change["details"]["decision_date"] = fi.get("hearing_date", "")
+            change["details"]["last_event"] = fi.get("last_event", "")
+            change["details"]["category"] = case_j.get("category", "")
 
         # Публикация акта
         if new_act and not old_act:
