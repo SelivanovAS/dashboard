@@ -350,6 +350,194 @@ class TestParseCaseCardCassation:
         assert info["_fi_appeal_filed"] is True
 
 
+# ── State machine жизненного цикла ───────────────────────────────────────────
+
+from datetime import datetime, timedelta
+
+
+def _days_ago(n: int) -> str:
+    return (datetime.now() - timedelta(days=n)).strftime("%d.%m.%Y")
+
+
+class TestAdvanceCaseStage:
+    def test_first_instance_with_appeal_filed_goes_to_awaiting(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {"appeal_filed_date": "01.04.2026"}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "first_instance"
+        assert case["current_stage"] == "awaiting_appeal"
+
+    def test_first_instance_without_appeal_filed_stays(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {"status": "В производстве"}}
+        assert uc.advance_case_stage(case) is None
+        assert case["current_stage"] == "first_instance"
+
+    def test_awaiting_appeal_stays(self):
+        """link_cases — отдельная ветка; advance тут молчит."""
+        case = {"current_stage": "awaiting_appeal",
+                "first_instance": {"appeal_filed_date": "01.04.2026"}}
+        assert uc.advance_case_stage(case) is None
+        assert case["current_stage"] == "awaiting_appeal"
+
+    def test_appeal_with_act_date_goes_to_cassation_watch(self):
+        case = {"current_stage": "appeal",
+                "appeal": {"act_date": "01.05.2026"}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "appeal"
+        assert case["current_stage"] == "cassation_watch"
+
+    def test_appeal_old_hearing_without_act_goes_to_cassation_watch(self):
+        case = {"current_stage": "appeal",
+                "appeal": {"hearing_date": _days_ago(31)}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "appeal"
+        assert case["current_stage"] == "cassation_watch"
+
+    def test_appeal_recent_hearing_without_act_stays(self):
+        case = {"current_stage": "appeal",
+                "appeal": {"hearing_date": _days_ago(29)}}
+        assert uc.advance_case_stage(case) is None
+        assert case["current_stage"] == "appeal"
+
+    def test_cassation_watch_with_cassation_filed_goes_to_pending(self):
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"cassation_filed_date": "15.06.2026"}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "cassation_watch"
+        assert case["current_stage"] == "cassation_pending"
+        assert case["cassation_pending_since"]
+
+    def test_cassation_watch_with_sent_to_cassation_goes_to_pending(self):
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"sent_to_cassation_date": "20.06.2026"}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "cassation_watch"
+        assert case["current_stage"] == "cassation_pending"
+
+    def test_cassation_pending_stays(self):
+        case = {"current_stage": "cassation_pending",
+                "first_instance": {"cassation_filed_date": "01.01.2026"}}
+        assert uc.advance_case_stage(case) is None
+
+
+class TestIsCaseArchived:
+    def test_fi_resolved_overdue_no_appeal_is_archived(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Решено",
+                    "hearing_date": _days_ago(46),
+                }}
+        assert uc.is_case_archived(case) is True
+
+    def test_fi_resolved_within_window_not_archived(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Решено",
+                    "hearing_date": _days_ago(44),
+                }}
+        assert uc.is_case_archived(case) is False
+
+    def test_fi_with_appeal_filed_never_archived(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Решено",
+                    "hearing_date": _days_ago(200),
+                    "appeal_filed_date": _days_ago(150),
+                }}
+        assert uc.is_case_archived(case) is False
+
+    def test_fi_not_resolved_not_archived(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "В производстве",
+                    "hearing_date": _days_ago(365),
+                }}
+        assert uc.is_case_archived(case) is False
+
+    def test_fi_without_hearing_date_not_archived(self):
+        """Защита от пустых данных: без hearing_date — не архивируем."""
+        case = {"current_stage": "first_instance",
+                "first_instance": {"status": "Решено"}}
+        assert uc.is_case_archived(case) is False
+
+    def test_awaiting_appeal_never_archived(self):
+        case = {"current_stage": "awaiting_appeal",
+                "first_instance": {
+                    "status": "Решено",
+                    "hearing_date": _days_ago(365),
+                    "appeal_filed_date": _days_ago(300),
+                }}
+        assert uc.is_case_archived(case) is False
+
+    def test_appeal_never_archived_by_time(self):
+        """Из appeal в архив напрямую не попадают — только через
+        advance_case_stage в cassation_watch."""
+        case = {"current_stage": "appeal",
+                "appeal": {"hearing_date": _days_ago(365)}}
+        assert uc.is_case_archived(case) is False
+
+    def test_cassation_watch_overdue_archived(self):
+        case = {"current_stage": "cassation_watch",
+                "appeal": {"hearing_date": _days_ago(121)}}
+        assert uc.is_case_archived(case) is True
+
+    def test_cassation_watch_within_window_not_archived(self):
+        case = {"current_stage": "cassation_watch",
+                "appeal": {"hearing_date": _days_ago(119)}}
+        assert uc.is_case_archived(case) is False
+
+    def test_cassation_pending_never_archived(self):
+        case = {"current_stage": "cassation_pending",
+                "appeal": {"hearing_date": _days_ago(1000)}}
+        assert uc.is_case_archived(case) is False
+
+
+class TestMigrateStages:
+    def test_cascade_fi_to_awaiting_to_cassation_pending(self):
+        """Каскад: first_instance + appeal_filed_date → awaiting_appeal.
+        Переход в appeal делает link_cases, поэтому каскад до
+        cassation_pending через миграцию невозможен — остановится на
+        awaiting_appeal."""
+        cases = [{
+            "current_stage": "first_instance",
+            "first_instance": {"appeal_filed_date": "01.04.2026"},
+        }]
+        migrated = uc.migrate_stages(cases)
+        assert migrated == 1
+        assert cases[0]["current_stage"] == "awaiting_appeal"
+
+    def test_appeal_with_old_hearing_migrates_to_cassation_watch(self):
+        cases = [{
+            "current_stage": "appeal",
+            "appeal": {"hearing_date": _days_ago(45)},
+        }]
+        migrated = uc.migrate_stages(cases)
+        assert migrated == 1
+        assert cases[0]["current_stage"] == "cassation_watch"
+
+    def test_cassation_watch_with_cass_filed_migrates_to_pending(self):
+        cases = [{
+            "current_stage": "cassation_watch",
+            "first_instance": {"cassation_filed_date": "01.05.2026"},
+            "appeal": {"hearing_date": _days_ago(45)},
+        }]
+        migrated = uc.migrate_stages(cases)
+        assert migrated == 1
+        assert cases[0]["current_stage"] == "cassation_pending"
+
+    def test_idempotent(self):
+        """Повторный вызов не выполняет переходов."""
+        cases = [{
+            "current_stage": "first_instance",
+            "first_instance": {"appeal_filed_date": "01.04.2026"},
+        }]
+        uc.migrate_stages(cases)  # first run
+        migrated = uc.migrate_stages(cases)
+        assert migrated == 0
+        assert cases[0]["current_stage"] == "awaiting_appeal"
+
+
 # ── card_url_alt ─────────────────────────────────────────────────────────────
 
 class TestCardUrlAlt:

@@ -163,9 +163,22 @@ LAST_DIGEST_CONTEXT_PATH = os.environ.get(
     "LAST_DIGEST_CONTEXT_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest_context.json")
 )
-ARCHIVE_DAYS = 30  # Апелляция: дела решённые 30+ дней назад уезжают в архив
-ARCHIVE_DAYS_FI = 45  # Первая инстанция: окно больше — мотивированное решение
-                      # и движение в кассацию могут появиться позже.
+# Окна жизненного цикла дела (state machine — см. advance_case_stage /
+# is_case_archived). Старая модель ARCHIVE_DAYS/ARCHIVE_DAYS_FI отсчитывала
+# архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
+# кассационный срок (3 мес), ни задержку мотивировки. Новые окна привязаны
+# к стадиям процесса и датам заседаний.
+FI_ARCHIVE_DAYS = 45            # 1-я инстанция: 45 дней от даты резолютивки
+                                # без подачи апел. жалобы → архив.
+APPEAL_NO_ACT_GRACE_DAYS = 30   # Апелляция: если акт не опубликован через
+                                # 30 дней от апел. заседания — всё равно
+                                # переходим в cassation_watch.
+CASSATION_WATCH_DAYS = 120      # cassation_watch: 4 мес (≈3 мес срок + почта
+                                # + регистрация) от апел. заседания. После —
+                                # архив, если касс. жалоба так и не подана.
+# Legacy: CSV-ветка архивации (apelljatsiя в CSV) ещё использует старое
+# 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.
+LEGACY_CSV_ARCHIVE_DAYS = 30
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
 FETCH_MAX_RETRIES = 3   # Кол-во попыток загрузки страницы
 DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
@@ -381,7 +394,8 @@ def save_digested_acts(acts: set):
 
 
 def is_archived(case: dict) -> bool:
-    """Дело архивное = решено более ARCHIVE_DAYS дней назад (апелляция CSV)."""
+    """Legacy CSV-ветка: дело архивное = решено более LEGACY_CSV_ARCHIVE_DAYS
+    дней назад. Используется для CSV-архива апелляции до его удаления."""
     if case.get("Статус", "").strip() != "Решено":
         return False
     date_str = case.get("Дата события", "").strip()
@@ -390,26 +404,117 @@ def is_archived(case: dict) -> bool:
     d = parse_date(date_str)
     if not d:
         return False
-    return (datetime.now() - d).days > ARCHIVE_DAYS
+    return (datetime.now() - d).days > LEGACY_CSV_ARCHIVE_DAYS
 
 
-def is_fi_archived(case_j: dict) -> bool:
-    """JSON-дело первой инстанции архивное = status «Решено» и `event_date`
-    старше ARCHIVE_DAYS_FI. Окно дольше, чем у апелляции, потому что после
-    резолютивки могут появиться мотивированное решение и движение в
-    кассацию — раньше архивировать рискованно (потеряем эти события)."""
-    if case_j.get("current_stage") != "first_instance":
+# ── State machine жизненного цикла дела ──────────────────────────────────────
+# Стадии в поле current_stage:
+#   first_instance    — парсим карточку 1-й инст., ждём апел. жалобу или 45 дней.
+#   awaiting_appeal   — жалоба подана, перестали парсить 1-ю, ждём карточку
+#                       в апел. суде (бессрочно).
+#   appeal            — парсим карточку апел. суда.
+#   cassation_watch   — апел. рассмотрел, вернулись к парсингу 1-й для поиска
+#                       касс. жалобы (окно 4 мес от апел. заседания).
+#   cassation_pending — касс. жалоба зарегистрирована, ждём парсер кассации.
+# Архив — через is_case_archived.
+
+def advance_case_stage(case: dict) -> str | None:
+    """Выполнить возможный переход стадии для дела. Возвращает имя предыдущей
+    стадии, если переход произошёл, иначе None.
+
+    Переход first_instance → awaiting_appeal срабатывает, когда парсер 1-й
+    инстанции записал appeal_filed_date. Переход awaiting_appeal → appeal
+    делает link_cases при обнаружении апел. карточки — здесь не трогаем.
+    Переход appeal → cassation_watch по факту публикации апел. акта или
+    по истечении APPEAL_NO_ACT_GRACE_DAYS дней от апел. заседания.
+    Переход cassation_watch → cassation_pending по касс. жалобе или
+    направлению в кассационный суд."""
+    stage = case.get("current_stage")
+    fi = case.get("first_instance") or {}
+    ap = case.get("appeal") or {}
+    now = datetime.now()
+
+    if stage == "first_instance":
+        if fi.get("appeal_filed_date"):
+            case["current_stage"] = "awaiting_appeal"
+            return "first_instance"
+        return None
+
+    if stage == "awaiting_appeal":
+        return None  # переход в appeal — задача link_cases
+
+    if stage == "appeal":
+        if ap.get("act_date"):
+            case["current_stage"] = "cassation_watch"
+            return "appeal"
+        ap_hearing = parse_date(ap.get("hearing_date") or "")
+        if ap_hearing and (now - ap_hearing).days >= APPEAL_NO_ACT_GRACE_DAYS:
+            case["current_stage"] = "cassation_watch"
+            return "appeal"
+        return None
+
+    if stage == "cassation_watch":
+        if fi.get("cassation_filed_date") or fi.get("sent_to_cassation_date"):
+            case["current_stage"] = "cassation_pending"
+            case["cassation_pending_since"] = now.date().isoformat()
+            return "cassation_watch"
+        return None
+
+    return None
+
+
+def is_case_archived(case: dict) -> bool:
+    """Унифицированная архивная проверка по стадии:
+    - first_instance: «Решено» + 45 дней от hearing_date без апел. жалобы.
+    - awaiting_appeal: никогда (ждём бессрочно, пока апел. карточка не найдётся).
+    - appeal: никогда (переход в cassation_watch делает advance_case_stage).
+    - cassation_watch: >120 дней от апел. hearing_date без касс. жалобы.
+    - cassation_pending: никогда (ждём парсер кассации).
+    Остальные (legacy «first_instance» без current_stage, «appeal» без JSON
+    данных) — false, не трогаем."""
+    stage = case.get("current_stage")
+    now = datetime.now()
+    fi = case.get("first_instance") or {}
+    ap = case.get("appeal") or {}
+
+    if stage == "first_instance":
+        if fi.get("appeal_filed_date"):
+            return False
+        if fi.get("status", "").strip() != "Решено":
+            return False
+        hearing = parse_date(fi.get("hearing_date") or "")
+        if hearing and (now - hearing).days > FI_ARCHIVE_DAYS:
+            return True
         return False
-    fi = case_j.get("first_instance") or {}
-    if fi.get("status", "").strip() != "Решено":
+
+    if stage in ("awaiting_appeal", "appeal", "cassation_pending"):
         return False
-    date_str = (fi.get("event_date") or "").strip()
-    if not date_str:
+
+    if stage == "cassation_watch":
+        ap_hearing = parse_date(ap.get("hearing_date") or "")
+        if ap_hearing and (now - ap_hearing).days > CASSATION_WATCH_DAYS:
+            return True
         return False
-    d = parse_date(date_str)
-    if not d:
-        return False
-    return (datetime.now() - d).days > ARCHIVE_DAYS_FI
+
+    return False
+
+
+def migrate_stages(cases: list[dict]) -> int:
+    """Идемпотентная миграция существующих дел под новую state-machine:
+    - first_instance + appeal_filed_date → awaiting_appeal
+    - appeal с опубликованным актом или заседанием старше 30 дней без акта
+      → cassation_watch
+    - cassation_watch с зарегистрированной касс. жалобой → cassation_pending
+    Возвращает число мигрированных дел."""
+    migrated = 0
+    for case in cases:
+        changed = True
+        while changed:
+            prev = advance_case_stage(case)
+            changed = prev is not None
+            if changed:
+                migrated += 1
+    return migrated
 
 
 def case_id_uid(link_str: str) -> tuple[str, str]:
@@ -1687,7 +1792,13 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
             # Есть оба дела — мержим апелляцию в карточку 1 инстанции
             fi_case = cases[fi_idx]
             fi_case["appeal"] = appeal_case.get("appeal")
-            fi_case["current_stage"] = "appeal"
+            # Обычно исходная стадия — awaiting_appeal (жалоба подана, ждём
+            # карточку) или first_instance (карточка пришла раньше жалобы —
+            # редко, но возможно). Из cassation_watch/cassation_pending
+            # обратно в appeal не переводим: эти стадии уже прошли апелляцию.
+            prev_stage = fi_case.get("current_stage")
+            if prev_stage in ("first_instance", "awaiting_appeal", None, ""):
+                fi_case["current_stage"] = "appeal"
             # Обновляем общие поля из апелляции если пусты в 1 инст.
             for field in ("plaintiff", "defendant", "category", "bank_role"):
                 if not fi_case.get(field) and appeal_case.get(field):
@@ -1728,11 +1839,8 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
 
 
 def split_archived(cases: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Разделить дела на активные и архивные.
-
-    Архивное = is_archived(case) (Статус «Решено» + Дата события > ARCHIVE_DAYS дней).
-    Возвращает (active, archive).
-    """
+    """Legacy CSV-аналог: дела с «Статус=Решено» + стариной «Дата события» > 30
+    дней. Остаётся до удаления CSV-ветки архивации апелляции."""
     active, archive = [], []
     for c in cases:
         if is_archived(c):
@@ -1742,16 +1850,12 @@ def split_archived(cases: list[dict]) -> tuple[list[dict], list[dict]]:
     return active, archive
 
 
-def split_archived_fi(cases: list[dict]) -> tuple[list[dict], list[dict]]:
-    """JSON-аналог split_archived для дел первой инстанции.
-
-    Архивное = is_fi_archived(case) (current_stage="first_instance" +
-    status «Решено» + event_date > ARCHIVE_DAYS_FI дней). Дела апелляции
-    и неподходящие FI остаются в active. Возвращает (active, archive).
-    """
+def split_archived_json(cases: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Разделить JSON-дела на активные и архивные по state-machine
+    (is_case_archived). Возвращает (active, archive)."""
     active, archive = [], []
     for c in cases:
-        if is_fi_archived(c):
+        if is_case_archived(c):
             archive.append(c)
         else:
             active.append(c)
@@ -1761,6 +1865,7 @@ def split_archived_fi(cases: list[dict]) -> tuple[list[dict], list[dict]]:
 def update_active_cases(
     cases: list[dict],
     json_appeal_by_num: dict | None = None,
+    skip_apel_nums: set[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Обновить карточки активных (не архивных) дел.
@@ -1769,6 +1874,10 @@ def update_active_cases(
     параллельного обновления полей `events` / `last_event` / `event_date` в
     JSON-хранилище (иначе эти поля в `appeal` dict устаревают).
 
+    skip_apel_nums — номера апел. дел, чей JSON-родитель уже не в стадии
+    "appeal" (напр. cassation_watch). Такие карточки не парсим: апел. уже
+    прошла, парсинг — это лишние запросы и ложные обновления event_date.
+
     Возвращает (обновлённые_дела, список_изменений).
     """
     _digested_acts = load_digested_acts()
@@ -1776,6 +1885,8 @@ def update_active_cases(
 
     for case in cases:
         if is_archived(case):
+            continue
+        if skip_apel_nums and case.get("Номер дела", "").strip() in skip_apel_nums:
             continue
 
         cid, cuid = case_id_uid(case.get("Ссылка", ""))
@@ -4262,6 +4373,14 @@ def main_json():
 
     log.info(f"Загружено {len(cases)} дел из JSON (+{len(archived_cases)} в архиве)")
 
+    # Миграция старой модели стадий (first_instance|appeal) на новую
+    # state-machine. Идемпотентно: прогоняет advance_case_stage до фиксированной
+    # точки. На повторных прогонах мигрирует только дела, у которых с прошлого
+    # раза появились новые сигналы (жалоба/акт/истекло окно).
+    migrated = migrate_stages(cases)
+    if migrated:
+        log.info(f"State-machine: мигрировано {migrated} переходов при загрузке")
+
     # ── 2. Парсинг апелляции: новые дела ──
     t0 = time.perf_counter()
     csv_cases = load_csv(CSV_PATH)
@@ -4352,27 +4471,39 @@ def main_json():
     log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
 
     # ── 4. Обновление существующих дел ──
-    # 4a. Апелляция: обновляем активные дела из CSV
-    # Параллельно обновляем соответствующие appeal dicts в JSON (events, last_event, и т.п.)
+    # 4a. Апелляция: обновляем карточки апел. только для стадии "appeal".
+    # После перехода в cassation_watch апел. карточка больше не
+    # парсится (см. user-decision: «30 дней после апел. заседания или
+    # публикация акта — и мы перестаём парсить сайт апел. инстанции»).
     t0 = time.perf_counter()
     log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
     json_appeal_by_num: dict = {}
+    skip_apel_nums: set[str] = set()
     for c in cases:
         ap = c.get("appeal")
         if ap and ap.get("case_number"):
-            json_appeal_by_num[ap["case_number"].strip()] = ap
-    csv_cases, changes = update_active_cases(csv_cases, json_appeal_by_num)
+            num = ap["case_number"].strip()
+            json_appeal_by_num[num] = ap
+            if c.get("current_stage") != "appeal":
+                skip_apel_nums.add(num)
+    csv_cases, changes = update_active_cases(
+        csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
+    )
 
     if appeal_new_cases_csv:
         csv_cases = appeal_new_cases_csv + csv_cases
 
     timings["appeal_update"] = time.perf_counter() - t0
 
-    # 4b. Первая инстанция: обновляем активные дела из JSON
+    # 4b. Первая инстанция: обновляем карточки 1-й инст. только для стадий,
+    # где она активна — first_instance (стандартный мониторинг) и
+    # cassation_watch (ищем касс. жалобу после апел. определения).
+    # awaiting_appeal / appeal / cassation_pending — парсинг 1-й инст.
+    # не нужен (см. advance_case_stage).
     t0 = time.perf_counter()
     fi_active = [
         c for c in cases
-        if c.get("current_stage") == "first_instance"
+        if c.get("current_stage") in ("first_instance", "cassation_watch")
         and c.get("first_instance", {}).get("case_number")
     ]
     log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
@@ -4747,24 +4878,53 @@ def main_json():
         log.info(f"Связка дел: {len(appeal_fi_numbers)} апелляций с номерами 1 инстанции")
         cases = link_cases(cases, appeal_fi_numbers)
 
-        # Обнаруживаем переходы: current_stage был first_instance → стал appeal
+        # Обнаруживаем переходы: current_stage был first_instance/awaiting_appeal
+        # → стал appeal (последствие link_cases).
         for c in cases:
             cid = c.get("id", "")
-            if cid in stage_before and stage_before[cid] == "first_instance":
-                if c.get("current_stage") == "appeal":
-                    ap = c.get("appeal", {}) or {}
-                    stage_transitions.append({
-                        "fi_case_number": cid,
-                        "appeal_case_number": ap.get("case_number", ""),
-                        "plaintiff": c.get("plaintiff", ""),
-                        "defendant": c.get("defendant", ""),
-                    })
+            prev = stage_before.get(cid)
+            if prev in ("first_instance", "awaiting_appeal") and c.get("current_stage") == "appeal":
+                ap = c.get("appeal", {}) or {}
+                stage_transitions.append({
+                    "fi_case_number": cid,
+                    "appeal_case_number": ap.get("case_number", ""),
+                    "plaintiff": c.get("plaintiff", ""),
+                    "defendant": c.get("defendant", ""),
+                    "from": prev,
+                    "to": "appeal",
+                })
         if stage_transitions:
             log.info(f"Переходов в апелляцию: {len(stage_transitions)}")
 
-    # ── 8. Архивируем FI-дела старше ARCHIVE_DAYS_FI и сохраняем JSON ──
-    # Apellation cases уже архивируются на шаге 5 (в CSV). Здесь — JSON-FI.
-    cases, fi_newly_archived = split_archived_fi(cases)
+    # ── 7b. Прогон state-machine для всех дел ──
+    # Переходы: first_instance → awaiting_appeal (по appeal_filed_date),
+    # appeal → cassation_watch (акт или 30 дней без акта),
+    # cassation_watch → cassation_pending (касс. жалоба или направление в касс. суд).
+    # Пока только логируем. Формат отличается от stage_transitions (который
+    # описывает только переходы в апелляцию), поэтому хранится отдельно —
+    # дайджест подхватит в следующем коммите.
+    lifecycle_transitions: list[dict] = []
+    for c in cases:
+        prev = advance_case_stage(c)
+        if prev is None:
+            continue
+        lifecycle_transitions.append({
+            "case_id": c.get("id", ""),
+            "plaintiff": c.get("plaintiff", ""),
+            "defendant": c.get("defendant", ""),
+            "from": prev,
+            "to": c.get("current_stage", ""),
+        })
+    if lifecycle_transitions:
+        log.info(f"State-machine переходов: {len(lifecycle_transitions)}")
+        for t in lifecycle_transitions:
+            log.info(f"  {t['case_id']}: {t['from']} → {t['to']}")
+
+    # ── 8. Архивирование JSON-дел по state-machine ──
+    # is_case_archived выставляет архив только для стадий, прошедших полный
+    # жизненный цикл (first_instance без жалобы 45+ дней или cassation_watch
+    # без касс. жалобы 120+ дней).
+    cases, fi_newly_archived = split_archived_json(cases)
     if fi_newly_archived:
         archive_data = load_json(JSON_ARCHIVE_PATH)
         archived_cases = archive_data.get("cases", [])
@@ -4779,12 +4939,13 @@ def main_json():
             archive_data["cases"] = archived_cases + to_add
             save_json(archive_data, JSON_ARCHIVE_PATH)
             log.info(
-                f"В JSON-архив перенесено {len(to_add)} дел 1 инстанции"
-                f" (Решено + {ARCHIVE_DAYS_FI}+ дней)"
+                f"В JSON-архив перенесено {len(to_add)} дел "
+                f"(first_instance {FI_ARCHIVE_DAYS}д без жалобы или "
+                f"cassation_watch {CASSATION_WATCH_DAYS}д без касс. жалобы)"
             )
         else:
             log.info(
-                f"FI-кандидатов в архив: {len(fi_newly_archived)}, "
+                f"Архив-кандидатов: {len(fi_newly_archived)}, "
                 "но все уже в архиве"
             )
 
@@ -4799,6 +4960,10 @@ def main_json():
     total_active_appeal = sum(
         1 for c in csv_cases if c.get("Статус", "").strip() != "Решено"
     )
+    # FI-счётчик включает только дела, которые сейчас в мониторинге на 1-й
+    # инстанции и ещё не вынесли решение. cassation_watch — это тоже парсинг
+    # 1-й инстанции, но дело уже решено; в счётчик «активная 1-я инст.»
+    # его не добавляем (исторически счётчик показывал «в производстве»).
     total_active_fi = sum(
         1 for c in cases
         if c.get("current_stage") == "first_instance"
