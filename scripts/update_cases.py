@@ -2553,7 +2553,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 if t == "fi_hearing_new":
                     hd = d.get("hearing_date", "")
                     ht = d.get("hearing_time", "")
-                    line += (f"\n  Назначено заседание: {hd}"
+                    # «Первое» — потому что fi_hearing_new срабатывает только
+                    # если раньше заседаний не было (см. место создания события).
+                    # Без уточнения LLM принимает такое дело за новое исковое.
+                    line += (f"\n  Назначено первое заседание: {hd}"
                              + (f" {ht}" if ht else ""))
                 elif t == "fi_hearing_postponed":
                     old_d = d.get("old_hearing_date", "")
@@ -2680,6 +2683,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
             )
+        text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
 
     try:
@@ -2725,6 +2729,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
             )
+        text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
     except requests.HTTPError as e:
@@ -2747,6 +2752,138 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             new_cases, changes, total_active, cases,
             fi_new_cases, stage_transitions, fi_changes,
         )
+
+
+# ── Пост-процессор: страховка от LLM-галлюцинаций в «новых» секциях ──────────
+
+_DIGEST_CASE_LINK_RE = re.compile(r'<a[^>]*>\s*<b>\s*([^<]+?)\s*</b>\s*</a>')
+
+# Линия считается заголовком подсекции/блока, если начинается с одного из
+# этих эмодзи + <b>. Покрывает все заголовки, которые порождает промпт
+# `generate_digest`. Нужно только для поиска границы секции — не обязано
+# быть полным, главное — не ловить строки-дела.
+_DIGEST_HEADER_RE = re.compile(
+    r'^\s*(?:📥|📅|📨|🔄|⚠|🔁|⚖️|📄|🏛|🔀|📌|📊|📋)\s*<b>'
+)
+
+
+def _bare_case_number(num: str) -> str:
+    """«2-216/2026 (2-1156/2025;)» → «2-216/2026». Нужно потому, что поиск
+    в судах возвращает только текущий номер, а в cases.json хранится полный
+    с суффиксом переномерования."""
+    s = (num or "").strip()
+    if "(" in s:
+        bare = s.split("(")[0].strip()
+        return bare or s
+    return s
+
+
+def _validate_digest_new_sections(
+    html: str,
+    fi_new_cases: list[dict] | None,
+    appeal_new_cases: list[dict] | None,
+) -> str:
+    """Срезать галлюцинации LLM в секциях «Новые иски» (3.1) и «Новые дела» (5.1).
+
+    LLM иногда переносит дела из «Изменений» в «Новые», выдумывая им
+    дату подачи (инцидент 24.04.2026: 2-5844/2026 и 2-216/2026 попали
+    в «Новые иски» из fi_changes). Здесь сверяем номера со списками
+    реально новых дел, лишнее вырезаем, счётчик (N) пересчитываем,
+    пустую секцию удаляем вместе с заголовком.
+    """
+    allowed_fi: set[str] = set()
+    for c in fi_new_cases or []:
+        for key in (c.get("id"), (c.get("first_instance") or {}).get("case_number")):
+            k = (key or "").strip()
+            if k:
+                allowed_fi.add(k)
+                allowed_fi.add(_bare_case_number(k))
+
+    allowed_appeal: set[str] = set()
+    for c in appeal_new_cases or []:
+        n = (c.get("Номер дела") or "").strip()
+        if n:
+            allowed_appeal.add(n)
+            allowed_appeal.add(_bare_case_number(n))
+
+    html = _drop_hallucinated_from_section(
+        html,
+        header_re=re.compile(
+            r'^\s*📥\s*<b>\s*Новые иски\s*\(\s*(\d+)\s*\)\s*:\s*</b>\s*$'
+        ),
+        allowed=allowed_fi,
+        label="1 инст./Новые иски",
+    )
+    html = _drop_hallucinated_from_section(
+        html,
+        header_re=re.compile(
+            r'^\s*📥\s*<b>\s*Новые дела\s*\(\s*(\d+)\s*\)\s*:\s*</b>\s*$'
+        ),
+        allowed=allowed_appeal,
+        label="апелляция/Новые дела",
+    )
+    return html
+
+
+def _drop_hallucinated_from_section(
+    html: str, *, header_re: "re.Pattern[str]", allowed: set[str], label: str
+) -> str:
+    lines = html.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        m = header_re.match(lines[i])
+        if not m:
+            out.append(lines[i])
+            i += 1
+            continue
+
+        # Границы секции: от следующей строки до следующего заголовка
+        # (эмодзи + <b>) либо до конца дайджеста.
+        j = i + 1
+        while j < len(lines) and not _DIGEST_HEADER_RE.match(lines[j]):
+            j += 1
+
+        kept: list[str] = []
+        removed: list[str] = []
+        for ln in lines[i + 1:j]:
+            if not ln.strip():
+                continue  # пустые строки-разделители в «Новых» не ожидаются
+            mnum = _DIGEST_CASE_LINK_RE.search(ln)
+            if not mnum:
+                log.warning(
+                    f"Пост-процессор дайджеста: в секции «{label}» строка "
+                    f"без номера дела, пропускаю: {ln.strip()[:80]}"
+                )
+                continue
+            num = mnum.group(1).strip()
+            if num in allowed or _bare_case_number(num) in allowed:
+                kept.append(ln)
+            else:
+                removed.append(num)
+
+        if not kept:
+            if removed:
+                log.warning(
+                    f"Пост-процессор дайджеста: секция «{label}» удалена "
+                    f"целиком — LLM выдумал {len(removed)} дел ({removed})"
+                )
+            i = j
+            continue
+
+        if removed:
+            log.warning(
+                f"Пост-процессор дайджеста: из секции «{label}» удалено "
+                f"{len(removed)} галлюцинированных дел ({removed})"
+            )
+
+        old_count = m.group(1)
+        new_header = lines[i].replace(f"({old_count})", f"({len(kept)})", 1)
+        out.append(new_header)
+        out.extend(kept)
+        i = j
+
+    return "\n".join(out)
 
 
 def _close_open_tags(html: str) -> str:
