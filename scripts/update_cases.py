@@ -596,6 +596,59 @@ def classify_verdict_fi(result: str) -> str:
     return (result or "").strip() or "итог не распознан"
 
 
+# Вытаскивает ИТОГ из хвоста last_event, когда поле «Результат» карточки
+# пустое или попало под фильтр мусора. Ленивый захват до ближайшей даты
+# вида dd.mm.yyyy или конца строки.
+_FI_RESULT_FROM_EVENT_RX = re.compile(
+    r"Вынесено решение по делу\.\s*(.+?)(?=\s*\d{2}\.\d{2}\.\d{4}|\s*$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def extract_result_from_event(event_text: str) -> str:
+    """Вытаскивает ИТОГ из строки last_event.
+
+    Возвращает «ОТКАЗАНО в удовлетворении иска…» из
+    «Судебное заседание. 11:00. 311. Вынесено решение по делу. ОТКАЗАНО… 20.04.2026».
+    Пустая строка, если маркер «Вынесено решение по делу» отсутствует
+    или захват получился аномально длинным (склейка нескольких событий).
+    """
+    if not event_text:
+        return ""
+    m = _FI_RESULT_FROM_EVENT_RX.search(event_text)
+    if not m:
+        return ""
+    captured = m.group(1).strip().rstrip(".").strip()
+    if len(captured) > 400:
+        return ""
+    return captured
+
+
+def classify_hearing_type(event_text: str) -> str:
+    """Нормализованный ярлык типа заседания из текста события движения дела.
+
+    Ярлыки соответствуют перечислению в разделе 3.2 промпта дайджеста:
+    «подготовка дела / беседа / предварительное заседание / заседание».
+    Распознаёт типовые заголовки карточек ГАС «Правосудие» по первой
+    фразе текста события (до точки):
+      «Предварительное судебное заседание. …» → «предварительное заседание»
+      «Подготовка дела (собеседование). …»    → «подготовка дела»
+      «Беседа. …»                              → «беседа»
+      «Судебное заседание. …»                  → «заседание»
+    Неизвестный/пустой текст — «заседание» (нейтральный дефолт).
+    """
+    if not event_text:
+        return "заседание"
+    t = event_text.lower().lstrip()
+    if t.startswith("предварительное"):
+        return "предварительное заседание"
+    if t.startswith("подготовка дела"):
+        return "подготовка дела"
+    if t.startswith("беседа"):
+        return "беседа"
+    return "заседание"
+
+
 def bank_side_outcome_fi(role: str, verdict_label: str) -> str:
     """Знак исхода для банка в 1-й инстанции — по роли + нормализованному ярлыку.
 
@@ -1911,13 +1964,23 @@ def update_active_cases(
             change["details"]["appellant_role"] = appellant_role
             change["details"]["_appellant_raw"] = appellant_raw
             change["details"]["case_url"] = case_card_url(case)
-            # bank_outcome считаем только когда есть нормализованный verdict_label —
-            # т.е. в этом change есть new_result. Зависит от роли + апеллянта.
+            # bank_outcome считаем, когда есть нормализованный verdict_label
+            # (new_result) или act_verdict_label (new_act — мотивировка в 5.5).
+            # Без этого в 5.5 LLM видел только «роль банка» в общем блоке и
+            # подставлял её в поле «Для банка» (например, «Третье лицо»
+            # вместо реального исхода). Зависит от роли + апеллянта.
             if "new_result" in change["type"]:
                 change["details"]["bank_outcome"] = bank_side_outcome(
                     change["details"]["role"],
                     change["details"]["appellant"],
                     change["details"].get("verdict_label", ""),
+                )
+            elif ("new_act" in change["type"]
+                    and change["details"].get("act_verdict_label")):
+                change["details"]["bank_outcome"] = bank_side_outcome(
+                    change["details"]["role"],
+                    change["details"]["appellant"],
+                    change["details"]["act_verdict_label"],
                 )
             changes.append(change)
 
@@ -2565,6 +2628,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                         line += f"\n  ИТОГ (из карточки): {d['act_verdict_label']}"
                     if d.get("act_verdict_raw"):
                         line += f"\n  Сырое поле «Результат»: {d['act_verdict_raw']}"
+                    if d.get("bank_outcome"):
+                        line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
                     app_str = _appellant_fmt(d)
                     if app_str:
                         line += f"\n  Апеллянт: {app_str}"
@@ -2662,19 +2727,23 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 if t == "fi_hearing_new":
                     hd = d.get("hearing_date", "")
                     ht = d.get("hearing_time", "")
+                    htype = d.get("hearing_type", "заседание")
                     # «Первое» — потому что fi_hearing_new срабатывает только
                     # если раньше заседаний не было (см. место создания события).
                     # Без уточнения LLM принимает такое дело за новое исковое.
-                    line += (f"\n  Назначено первое заседание: {hd}"
+                    # Тип (беседа / предварительное / подготовка / заседание) —
+                    # из того же события в движении дела.
+                    line += (f"\n  Назначено первое {htype}: {hd}"
                              + (f" {ht}" if ht else ""))
                 elif t == "fi_hearing_postponed":
                     old_d = d.get("old_hearing_date", "")
                     old_t = d.get("old_hearing_time", "")
                     new_d = d.get("hearing_date", "")
                     new_t = d.get("hearing_time", "")
+                    htype = d.get("hearing_type", "заседание")
                     old_p = f"{old_d}" + (f" {old_t}" if old_t else "")
                     new_p = f"{new_d}" + (f" {new_t}" if new_t else "")
-                    line += f"\n  Заседание перенесено: {old_p} → {new_p}"
+                    line += f"\n  Заседание перенесено ({htype}): {old_p} → {new_p}"
                 elif t == "fi_status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
@@ -3269,7 +3338,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 if t == "fi_hearing_new":
                     hd = escape_html(d.get("hearing_date", ""))
                     ht = escape_html(d.get("hearing_time", ""))
-                    ev_list.append(f"📅 заседание {hd}" + (f" {ht}" if ht else ""))
+                    htype = escape_html(d.get("hearing_type", "заседание"))
+                    ev_list.append(f"📅 {htype} {hd}" + (f" {ht}" if ht else ""))
                 elif t == "fi_hearing_postponed":
                     old_p = escape_html(
                         d.get("old_hearing_date", "")
@@ -4425,6 +4495,19 @@ def main_json():
                 change["details"]["old_hearing_time"] = old_hearing_time
             change["details"]["hearing_date"] = new_hearing_date
             change["details"]["hearing_time"] = new_hearing_time
+            # Тип заседания (беседа / предварительное / подготовка / заседание) —
+            # нужен LLM для 3.2, чтобы не писать обобщённое «заседание»
+            # вместо конкретики. Ищем в _events запись с той же датой,
+            # распознаём тип по первой фразе текста.
+            matched_ev = next(
+                (ev for ev in (card_info.get("_events") or [])
+                 if ev.get("date") == new_hearing_date),
+                None,
+            )
+            if matched_ev:
+                change["details"]["hearing_type"] = classify_hearing_type(
+                    matched_ev.get("text", "")
+                )
 
         # Смена статуса (регрессии отфильтрованы выше)
         if new_status and new_status != old_status:
@@ -4432,31 +4515,22 @@ def main_json():
             change["details"]["old_status"] = old_status
             change["details"]["new_status"] = new_status
 
-        # Вынесено решение по делу 1-й инст. — отдельный тип события
-        # для секции 3.5 дайджеста. Триггер:
-        #   • first_resolution — статус только что перешёл в «Решено», ИЛИ
-        #   • late_result — статус уже был «Решено», но поле «Результат»
-        #     только сейчас пришло непустым (парсер догнал данные; без этой
-        #     ветки мы бы не показали итог, если статус сменился в день,
-        #     когда result в карточке ещё не проставили).
-        first_resolution = (new_status == "Решено" and old_status != "Решено")
-        late_result = (
-            old_status == "Решено"
-            and new_status == "Решено"
-            and bool(new_result)
-            and not old_result
-        )
-        if first_resolution or late_result:
-            raw_result = fi.get("result", "") or new_result
-            verdict = classify_verdict_fi(raw_result)
-            # ИТОГ обязателен: если карточка суда пока не опубликовала
-            # «Результат» (verdict пуст) — НЕ эмитим fi_resolved, иначе
-            # в 3.5 уйдёт голая «Решение вынесено» без «ОТКАЗАНО/
-            # УДОВЛЕТВОРЕНО». Смена статуса «В производстве → Решено»
-            # в этом случае пойдёт в 3.2 как обычный fi_status_change,
-            # а строка в 3.5 появится на следующем прогоне, когда
-            # поле «Результат» подтянется (ветка late_result).
-            if verdict:
+        # Вынесено решение по делу 1-й инст. — идемпотентный эмит для 3.5.
+        # Триггер: status == «Решено» и флаг resolved_emitted ещё не
+        # выставлен. Отсутствие флага = «ещё не эмитили» — при первом
+        # прогоне после деплоя все уже решённые дела с валидным result
+        # получат fi_resolved и догонят 3.5. Если карточка вернула
+        # пустой/мусорный «Результат», пытаемся достать ИТОГ из
+        # last_event (движение дела часто содержит «Вынесено решение
+        # по делу. ОТКАЗАНО…» раньше, чем поле «Результат»).
+        # Флаг ставим только при успешном эмите — иначе на следующем
+        # прогоне попробуем ещё раз.
+        if fi.get("status") == "Решено" and not fi.get("resolved_emitted", False):
+            raw_result = (fi.get("result") or "").strip()
+            if not raw_result:
+                raw_result = extract_result_from_event(fi.get("last_event", ""))
+            if raw_result:
+                verdict = classify_verdict_fi(raw_result)
                 bank_outcome = bank_side_outcome_fi(
                     case_j.get("bank_role", ""), verdict
                 )
@@ -4467,6 +4541,8 @@ def main_json():
                 change["details"]["decision_date"] = fi.get("hearing_date", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
                 change["details"]["category"] = case_j.get("category", "")
+                fi["resolved_emitted"] = True
+                changed = True
 
         # Публикация акта — только факт (флаг + дата).
         if new_act and not old_act:
