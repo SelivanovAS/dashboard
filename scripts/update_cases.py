@@ -1438,6 +1438,9 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_resolved_n = sum(
             1 for ch in fi_changes if "fi_resolved" in ch["type"]
         )
+        fi_act_texts = sum(
+            1 for ch in fi_changes if "fi_act_text_published" in ch["type"]
+        )
         fi_appeals_filed = sum(
             1 for ch in fi_changes if "fi_appeal_filed" in ch["type"]
         )
@@ -1456,6 +1459,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             parts.append(f"{fi_finals} финал 1 инст.")
         if fi_acts:
             parts.append(f"{fi_acts} акт 1 инст.")
+        if fi_act_texts:
+            parts.append(f"{fi_act_texts} мотивир. 1 инст.")
         if fi_status:
             parts.append(f"{fi_status} статус 1 инст.")
     return " | ".join(parts) if parts else "без изменений"
@@ -2619,10 +2624,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             # информационно тождественны — первый уходит в 3.5, второй
             # в 3.2 не нужен. Оставляем в 3.2 только побочные события
             # (заседание, отложение, final_event и т.п.).
+            # Аналогично для fi_act_text_published — всегда в 3.6; если у
+            # того же дела есть fi_act_published (флаг), тоже подавляем
+            # его в 3.2 (текст уже сказал больше, чем флаг).
             has_resolved = "fi_resolved" in ch["type"]
+            has_act_text = "fi_act_text_published" in ch["type"]
             effective_types = [
                 t for t in ch["type"]
                 if not (has_resolved and t in ("fi_resolved", "fi_status_change"))
+                and t != "fi_act_text_published"
+                and not (has_act_text and t == "fi_act_published")
             ]
             if not effective_types:
                 continue
@@ -2712,6 +2723,40 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 line += f"\n  Последнее событие: {d['last_event']}"
             context_parts.append(line)
 
+    # Отдельный блок «Опубликованы тексты решений 1 инст.» — источник для 3.6.
+    # Зеркало 5.5 апелляции: дело может появиться и в 3.5, и в 3.6 (ИТОГ и
+    # мотивировка — разные события во времени).
+    fi_act_text_changes = [
+        ch for ch in fi_changes if "fi_act_text_published" in ch["type"]
+    ]
+    if fi_act_text_changes:
+        context_parts.append("\nОПУБЛИКОВАНЫ ТЕКСТЫ РЕШЕНИЙ 1 ИНСТ.:")
+        for ch in fi_act_text_changes:
+            d = ch["details"]
+            url = fi_card_url(d)
+            pl = shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True)
+            df = shorten_party_name(ch.get("defendant", ""), keep_fio_full=True)
+            line = (
+                f"- {ch['case']} (URL: {url}) ({ch.get('court', '')}): "
+                f"{pl} (истец) vs {df} (ответчик), "
+                f"роль банка: {ch.get('bank_role', '')}"
+            )
+            if d.get("act_date"):
+                line += f"\n  Дата публикации акта: {d['act_date']}"
+            if d.get("verdict_label"):
+                line += f"\n  ИТОГ (из карточки): {d['verdict_label']}"
+            if d.get("raw_result"):
+                line += f"\n  Сырое поле «Результат»: {d['raw_result']}"
+            if d.get("bank_outcome"):
+                line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
+            if d.get("category"):
+                line += f"\n  Категория спора: {d['category']}"
+            if d.get("last_event"):
+                line += f"\n  Последнее событие: {d['last_event']}"
+            if d.get("act_text"):
+                line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ: {d['act_text']}"
+            context_parts.append(line)
+
     prompt = f"""Ты — помощник юриста ПАО Сбербанк. Сформируй дайджест изменений по судебным делам судов ХМАО-Югры за {today}.
 
 ИМЕНА: все наименования сторон в данных уже сокращены по правилам (ОПФ убрана, ФИО → инициалы, «в лице филиала…» удалено и т.п.). НЕ переписывай их и НЕ возвращай ОПФ обратно. В секциях «Новые дела» имена физлиц приходят полными — там оставляй как есть.
@@ -2748,6 +2793,19 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • НЕ переформулируй ИТОГ своими словами и не подменяй его шаблоном. Имя судьи НЕ указывай.
         • НЕ включай дела, у которых нет блока «ИТОГ» в данных.
         Берётся из событий «fi_resolved» в данных (секция «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.»). Дело, попавшее в 3.5, в 3.2 НЕ дублируется — кроме случая, когда у того же дела есть ещё отдельное побочное событие (заседание/отложение).
+   3.6. 📄 <b>Опубликованные тексты решений (N):</b> — полный текст решения 1-й инст. (выходит через 14+ дней после заседания, иногда не публикуется вовсе). Только дела с полем «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» в данных. Формат — ТРИ строки на дело, между делами пустая строка:
+        • строка 1: <a href="URL"><b>номер</b></a>: {{стороны кратко}}
+        • строка 2: <b>Итог:</b> {{удовлетворено / удовлетворено частично / отказано / прекращено / оставлено без рассмотрения / возвращено — дословно из «ИТОГ (из карточки)»}}. <b>Для банка:</b> {{дословно из поля «В чью пользу для банка»}}. Если «В чью пользу для банка» отсутствует/пусто — блок «<b>Для банка:</b>» НЕ пиши (полностью пропусти), не подставляй «—», «0», «не определено». Если ИТОГа тоже нет — строку «<b>Итог:</b>» НЕ пиши.
+        • строка 3: <b>Почему:</b> 3-4 коротких предложения с КОНКРЕТНЫМ обоснованием из мотивировки — какую норму применил суд, что не доказала сторона, какие факты учёл. Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя. Довод об отсутствии нарушения прав потребителя отклонён.»
+        ЗАПРЕЩЕНО (те же правила, что в 5.5):
+        - писать общие заглушки («суд рассмотрел доводы», «суд проверил законность», «суд исследовал материалы дела», «суд согласился с выводами») без конкретики;
+        - пересказывать ФАКТУРУ спора вместо МОТИВИРОВКИ итога;
+        - выдумывать ИТОГ — если в данных нет поля «ИТОГ (из карточки)», строку «<b>Итог:</b>» не пиши;
+        - упоминать процедуру заседания: явку/неявку, ходатайства, извещения, полномочия представителей — это служебные детали, не мотивировка;
+        - писать «замечаний на протокол не поступало», «извещены надлежащим образом» и подобные штампы;
+        - копировать «в удовлетворении требований отказать» / «требования подлежат удовлетворению» без указания, КАКУЮ норму суд применил и КАКОЙ довод принял/отклонил.
+        Имя судьи НЕ указывай.
+        Берётся из событий «fi_act_text_published» в данных (секция «ОПУБЛИКОВАНЫ ТЕКСТЫ РЕШЕНИЙ 1 ИНСТ.»).
 
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
@@ -2779,6 +2837,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         - копировать «доводы апелляционной жалобы не влекут отмены решения» без указания, КАКУЮ норму суд применил и КАКОЙ довод отклонил.
 
 ВАЖНО про 5.4 и 5.5: это РАЗНЫЕ события, разведённые во времени. Если у одного дела есть И ИТОГ, И МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА — оно появится В ОБЕИХ секциях, это корректно. Не объединяй и не дедублицируй.
+
+ВАЖНО про 3.5 и 3.6: то же самое — РАЗНЫЕ события, разведённые во времени. Дело с вынесенным решением сразу попадает в 3.5; когда через 14+ дней опубликуют мотивировочную часть — оно же попадёт в 3.6. Обе секции показываем, не объединяем.
 
 6. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>. Используй ИМЕННО эти три числа дословно — не считай, не угадывай, не округляй.
 7. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
@@ -3156,13 +3216,20 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Отделяем дела, у которых есть вынесенное решение — они поедут в 3.5.
     # В 3.2 «Изменения» их статус/резолюция не повторяются; оставляем
     # только побочные события того же дела (заседание/отложение и т.п.).
+    # То же для fi_act_text_published — эти дела поедут в 3.6.
     fi_resolved_chs = [ch for ch in fi_changes if "fi_resolved" in ch["type"]]
+    fi_act_text_chs = [
+        ch for ch in fi_changes if "fi_act_text_published" in ch["type"]
+    ]
     fi_changes_rendered: list[str] = []
     for ch in fi_changes:
         has_resolved = "fi_resolved" in ch["type"]
+        has_act_text = "fi_act_text_published" in ch["type"]
         types_for_line = [
             t for t in ch["type"]
             if not (has_resolved and t in ("fi_resolved", "fi_status_change"))
+            and t != "fi_act_text_published"
+            and not (has_act_text and t == "fi_act_published")
         ]
         if not types_for_line:
             continue
@@ -3266,6 +3333,44 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi_block.append(
                 f"  {link} ({court}) — {pl} vs {df}{tail}{extras_str}"
             )
+
+    # ── 3.6: Опубликованные тексты решений 1 инстанции ──
+    # Fallback без LLM — выводим укороченный фрагмент мотивировки как есть,
+    # без попытки написать осмысленное «Почему». Лучше так, чем пустота.
+    if fi_act_text_chs:
+        if fi_block:
+            fi_block.append("")
+        fi_block.append(
+            f"📄 <b>Опубликованные тексты решений ({len(fi_act_text_chs)}):</b>"
+        )
+        for ch in fi_act_text_chs:
+            num = escape_html(ch.get("case", ""))
+            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
+            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+            d = ch["details"]
+            url = fi_card_url(d)
+            link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
+            verdict = escape_html(d.get("verdict_label", ""))
+            bank_out = escape_html(d.get("bank_outcome", ""))
+            act_excerpt = (d.get("act_text") or "").strip()
+            # Обрезаем до ~500 символов для компактности шаблона; добавляем «…»
+            if len(act_excerpt) > 500:
+                act_excerpt = act_excerpt[:500].rstrip() + "…"
+            act_excerpt = escape_html(act_excerpt)
+            fi_block.append(f"  {link}: {pl} vs {df}")
+            itog_parts: list[str] = []
+            if verdict:
+                itog_parts.append(f"<b>Итог:</b> {verdict}")
+            if bank_out:
+                itog_parts.append(f"<b>Для банка:</b> {bank_out}")
+            if itog_parts:
+                fi_block.append("     " + ". ".join(itog_parts))
+            if act_excerpt:
+                fi_block.append(f"     <i>{act_excerpt}</i>")
+            fi_block.append("")  # пустая строка-разделитель между делами
+        # убрать хвостовую пустую строку, если добавили
+        if fi_block and fi_block[-1] == "":
+            fi_block.pop()
 
     # ── Мостик: переходы в апелляцию ──
     transition_block: list[str] = []
@@ -3980,6 +4085,7 @@ def _fi_search_to_json_case(fi: dict) -> dict:
             "link": fi.get("link", ""),
             "act_published": False,
             "act_date": "",
+            "act_text": "",
             "events": [],
         },
         "appeal": None,
@@ -4328,10 +4434,43 @@ def main_json():
             change["details"]["last_event"] = fi.get("last_event", "")
             change["details"]["category"] = case_j.get("category", "")
 
-        # Публикация акта
+        # Публикация акта — только факт (флаг + дата).
         if new_act and not old_act:
             change["type"].append("fi_act_published")
             change["details"]["act_date"] = card_info.get("Дата публикации акта", "")
+
+        # Захват текста опубликованного решения 1-й инстанции — для 3.6.
+        # Отделено от fi_act_published, т.к. текст часто приходит ПОЗЖЕ
+        # самой публикации (акт опубликован сегодня, мотивировочная часть —
+        # через 14+ дней). Идемпотентно по fi["act_text"]: один раз поймали —
+        # больше не тянем и не ретранслируем событие.
+        old_act_text = (fi.get("act_text") or "").strip()
+        if new_act and not old_act_text:
+            act_text_fi = (card_info.get("act_text") or "").strip()
+            if not act_text_fi and card_info.get("_act_url"):
+                fetched = fetch_act_text(card_info["_act_url"])
+                act_text_fi = (fetched or "").strip()
+            if act_text_fi:
+                # Обрезаем как у апелляции: 8000 символов в JSON,
+                # 1800 — мотивировочная часть в контексте для LLM.
+                fi["act_text"] = act_text_fi[:8000]
+                changed = True
+                verdict = classify_verdict_fi(fi.get("result", ""))
+                change["type"].append("fi_act_text_published")
+                change["details"]["act_text"] = extract_motive_part(
+                    act_text_fi, 1800
+                )
+                change["details"]["act_date"] = (
+                    change["details"].get("act_date")
+                    or card_info.get("Дата публикации акта", "")
+                )
+                change["details"]["verdict_label"] = verdict
+                change["details"]["raw_result"] = fi.get("result", "")
+                change["details"]["bank_outcome"] = bank_side_outcome_fi(
+                    case_j.get("bank_role", ""), verdict
+                )
+                change["details"]["category"] = case_j.get("category", "")
+                change["details"]["last_event"] = fi.get("last_event", "")
 
         # Финальные события в движении дела — значимые для юриста
         if new_ev and new_ev != old_event:
