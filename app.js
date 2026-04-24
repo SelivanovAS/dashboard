@@ -190,16 +190,14 @@ function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))r
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ========== JSON Case Conversion ========== */
-function buildCourtLink(linkRaw,domain,deloId,srvNum){
+function buildCourtLink(linkRaw,domain,deloId){
   if(!linkRaw)return '';
   // Pipe format: "case_id|case_uid"
   const pm=linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
   if(pm){
     const d=domain||'oblsud--hmao.sudrf.ru';
     const did=deloId||5;
-    const srv=srvNum||1;
-    const newParam=did===5?5:0;
-    return`https://${d}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
+    return`https://${d}/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${did}`;
   }
   if(/^https?:\/\//.test(linkRaw))return linkRaw;
   return '';
@@ -217,7 +215,7 @@ function jsonToCase(j){
   if(isAppeal){
     link=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
   }else{
-    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id,fi.srv_num);
+    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id);
   }
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
@@ -829,7 +827,7 @@ function renderTable(){
       // Two-stage detail view
       if(hasFi){
         const fii=c._fi;
-        const fiLink=buildCourtLink(fii.link,fii.court_domain,fii.delo_id,fii.srv_num);
+        const fiLink=buildCourtLink(fii.link,fii.court_domain,fii.delo_id);
         detailInner+=`<div class="detail-stage"><div class="detail-stage-title">🏛 Первая инстанция${fii.case_number?' — '+escHtml(fii.case_number):''}</div>`;
         if(fii.court)detailInner+=`<div class="detail-block"><div class="detail-block-title">Суд</div>${escHtml(fii.court)}</div>`;
         if(fii.judge)detailInner+=`<div class="detail-block"><div class="detail-block-title">Судья</div>${escHtml(fii.judge)}</div>`;

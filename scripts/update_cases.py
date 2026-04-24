@@ -87,7 +87,7 @@ class CourtConfig:
         return (
             f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
             f"&case_id={case_id}&case_uid={case_uid}"
-            f"&delo_id={self.delo_id}&new={self._new_param()}"
+            f"&delo_id={self.delo_id}&new=5"
         )
 
 
@@ -762,8 +762,6 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
             "category": category,
             "court": court.name,
             "court_domain": court.domain,
-            "delo_id": court.delo_id,
-            "srv_num": court.srv_num,
             "judge": judge,
             "bank_role": role,
             "status": status,
@@ -2530,8 +2528,6 @@ def _fi_search_to_json_case(fi: dict) -> dict:
             "case_number": fi["case_number"],
             "court": fi.get("court", ""),
             "court_domain": fi.get("court_domain", ""),
-            "delo_id": fi.get("delo_id", 1540005),
-            "srv_num": fi.get("srv_num", 1),
             "judge": fi.get("judge", ""),
             "filing_date": fi.get("filing_date", ""),
             "status": fi.get("status", "В производстве"),
