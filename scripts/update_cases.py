@@ -1144,6 +1144,12 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "_table_count": 0,      # len(tables) — нужно вызывающему коду для фолбэка card_url_alt
         "_fi_appeal_filed": False,  # В карточке 1 инст. подана апелляц. жалоба
         "_fi_appeal_filed_date": "",
+        # Кассационные события в карточке 1 инст. (кассация подаётся через
+        # суд 1-й инстанции). Нужны для state-machine cassation_watch.
+        "_fi_cassation_filed": False,
+        "_fi_cassation_filed_date": "",
+        "_fi_sent_to_cassation": False,
+        "_fi_sent_to_cassation_date": "",
     }
 
     tables = extract_tables(html)
@@ -1355,25 +1361,50 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
 
     info["_appellant_raw"] = appellant_raw
 
-    # ── Дата подачи апелляц. жалобы (если есть в движении) ──
-    # Сам факт подачи жалобы детектится выше по HTML-маркеру «обжалование
-    # решений…» — чтобы сигнал работал и на обрезанных карточках (<6 таблиц).
-    # Здесь достаём точную дату события из таблицы движения (доступна только
-    # при полном парсинге ≥6 таблиц).
+    # ── События подачи жалоб в карточке 1-й инстанции ──
+    # Апелляционная и кассационная жалобы подаются через суд 1-й инстанции —
+    # отсюда же видно и событие «направлено в кассационный суд».
+    # Регексы специфичны по стеблю «апелляционн» / «кассационн», чтобы не
+    # путать апелляцию с кассацией (раньше «поступ.+жалоб» цеплял кассацию
+    # как апелляцию). Флаг HTML-уровня «обжалование решений…» оставлен
+    # выше как сигнал наличия вкладки обжалования (нужен для card_url_alt).
     if movement_table and len(movement_table) > 1:
         for row in movement_table[1:]:
             ev_text = " ".join(cell_text(c) for c in row)
-            if re.search(
-                r'поступ\w+.{0,40}(?:апелляционн\w+\s+)?жалоб\w+',
+            row_date = ""
+            for c in row:
+                ct = cell_text(c)
+                if parse_date(ct):
+                    row_date = ct
+                    break
+            # Кассационная жалоба — проверяем раньше апелляционной, т.к.
+            # слово «кассационн» специфичнее «жалоб» без уточнения.
+            if not info["_fi_cassation_filed"] and re.search(
+                r'поступ\w+.{0,40}кассационн\w+\s+жалоб\w+',
+                ev_text, re.IGNORECASE,
+            ):
+                info["_fi_cassation_filed"] = True
+                info["_fi_cassation_filed_date"] = row_date
+                continue
+            # Направление дела в кассационный суд — отдельный сигнал.
+            if not info["_fi_sent_to_cassation"] and re.search(
+                r'(?:направлен\w+|передан\w+).{0,30}'
+                r'(?:в\s+)?(?:\S+\s+){0,3}кассационн\w+',
+                ev_text, re.IGNORECASE,
+            ):
+                info["_fi_sent_to_cassation"] = True
+                info["_fi_sent_to_cassation_date"] = row_date
+                continue
+            # Апелляционная жалоба — требуем стебель «апелляционн», чтобы
+            # не пересекаться с кассацией.
+            if not info["_fi_appeal_filed_date"] and re.search(
+                r'поступ\w+.{0,40}апелляционн\w+\s+(?:жалоб|представлени)\w+',
                 ev_text, re.IGNORECASE,
             ):
                 info["_fi_appeal_filed"] = True
-                for c in row:
-                    ct = cell_text(c)
-                    if parse_date(ct):
-                        info["_fi_appeal_filed_date"] = ct
-                        break
-                break
+                info["_fi_appeal_filed_date"] = row_date
+                continue
+
 
     # ── Определяем статус ──
     result = info["Результат"].lower()
@@ -4387,13 +4418,18 @@ def main_json():
             if alt_html:
                 alt_info = parse_case_card(alt_html, court_cfg.base_url)
                 if alt_info.get("_table_count", 0) > card_info.get("_table_count", 0):
-                    # Флаг «подана жалоба» мог быть выставлен только на
-                    # короткой вкладке (где и есть маркер «обжалование»).
-                    # Переносим его в alt_info, чтобы событие не потерялось.
-                    if card_info.get("_fi_appeal_filed") and not alt_info.get("_fi_appeal_filed"):
-                        alt_info["_fi_appeal_filed"] = True
-                        if card_info.get("_fi_appeal_filed_date") and not alt_info.get("_fi_appeal_filed_date"):
-                            alt_info["_fi_appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+                    # Флаги жалоб/направления могли быть выставлены только
+                    # на короткой вкладке (HTML-маркеры/частичное движение).
+                    # Переносим их в alt_info, чтобы события не потерялись.
+                    for flag, date_key in (
+                        ("_fi_appeal_filed", "_fi_appeal_filed_date"),
+                        ("_fi_cassation_filed", "_fi_cassation_filed_date"),
+                        ("_fi_sent_to_cassation", "_fi_sent_to_cassation_date"),
+                    ):
+                        if card_info.get(flag) and not alt_info.get(flag):
+                            alt_info[flag] = True
+                            if card_info.get(date_key) and not alt_info.get(date_key):
+                                alt_info[date_key] = card_info[date_key]
                     card_info = alt_info
         _warn_if_card_degraded(card_info, fi["case_number"])
 
@@ -4644,6 +4680,24 @@ def main_json():
             fi["appeal_filed"] = True
             if card_info.get("_fi_appeal_filed_date"):
                 fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+            changed = True
+
+        # Подана кассационная жалоба — идемпотентный флаг. Переход
+        # cassation_watch → cassation_pending выполняется в advance_case_stage;
+        # упоминание в дайджесте — в дайджест-ветке (commit 3).
+        new_cass_filed = bool(card_info.get("_fi_cassation_filed"))
+        if new_cass_filed and not fi.get("cassation_filed", False):
+            fi["cassation_filed"] = True
+            if card_info.get("_fi_cassation_filed_date"):
+                fi["cassation_filed_date"] = card_info["_fi_cassation_filed_date"]
+            changed = True
+
+        # Дело направлено в кассационный суд — идемпотентный флаг.
+        new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
+        if new_sent_cass and not fi.get("sent_to_cassation", False):
+            fi["sent_to_cassation"] = True
+            if card_info.get("_fi_sent_to_cassation_date"):
+                fi["sent_to_cassation_date"] = card_info["_fi_sent_to_cassation_date"]
             changed = True
 
         if change["type"]:

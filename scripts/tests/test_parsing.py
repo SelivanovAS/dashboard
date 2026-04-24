@@ -272,6 +272,84 @@ class TestParseCaseCard:
         assert info["_fi_appeal_filed_date"] == ""
 
 
+# ── parse_case_card: кассационные события ────────────────────────────────────
+
+def _synthetic_fi_card(event_text: str, event_date: str = "10.09.2026") -> str:
+    """Минимальная синтетическая карточка 1 инст. с двумя строками движения.
+    Первая строка-триггер («Передача материалов судье») нужна, чтобы парсер
+    распознал таблицу как ДВИЖЕНИЕ ДЕЛА — он ищет keyword в первых строках."""
+    return (
+        "<html><body>"
+        "<table><tr><td>header</td></tr></table>"
+        "<table><tr><td>breadcrumbs</td></tr></table>"
+        "<table><tr><td>params</td></tr></table>"
+        "<table><tr><td>info</td></tr></table>"
+        "<table><tr><td>spacer</td></tr></table>"
+        "<table class='movementTable'>"
+        "<tr><th>Наименование события</th><th>Дата</th></tr>"
+        "<tr><td>Передача материалов судье</td><td>01.01.2026</td></tr>"
+        f"<tr><td>{event_text}</td><td>{event_date}</td></tr>"
+        "</table>"
+        "</body></html>"
+    )
+
+
+class TestParseCaseCardCassation:
+    def test_cassation_filed_detected(self):
+        html = _synthetic_fi_card("Поступила кассационная жалоба от ответчика",
+                                  "12.09.2026")
+        info = uc.parse_case_card(html)
+        assert info["_fi_cassation_filed"] is True
+        assert info["_fi_cassation_filed_date"] == "12.09.2026"
+        # Критично: касс. жалоба не должна помечать дело как апелляцию.
+        assert info["_fi_appeal_filed_date"] == ""
+
+    def test_cassation_filed_does_not_mark_appeal(self):
+        """Регресс-тест: раньше regex `поступ.+жалоб` с опциональным префиксом
+        «апелляционн» цеплял и кассацию тоже → дело ошибочно помечалось как
+        ушедшее в апелляцию. Новый regex требует явного стебля «апелляционн»."""
+        html = _synthetic_fi_card("Поступила кассационная жалоба", "01.10.2026")
+        info = uc.parse_case_card(html)
+        assert info["_fi_cassation_filed"] is True
+        assert info["_fi_appeal_filed"] is False
+
+    def test_sent_to_cassation_detected(self):
+        html = _synthetic_fi_card(
+            "Дело направлено в Седьмой кассационный суд общей юрисдикции",
+            "20.10.2026",
+        )
+        info = uc.parse_case_card(html)
+        assert info["_fi_sent_to_cassation"] is True
+        assert info["_fi_sent_to_cassation_date"] == "20.10.2026"
+
+    def test_appeal_still_detected_with_strict_regex(self):
+        """После ужесточения регекса (требование стебля «апелляционн»)
+        настоящие апел. жалобы по-прежнему ловятся."""
+        html = _synthetic_fi_card("Поступила апелляционная жалоба от истца",
+                                  "05.04.2026")
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is True
+        assert info["_fi_appeal_filed_date"] == "05.04.2026"
+        assert info["_fi_cassation_filed"] is False
+
+    def test_plain_complaint_without_stem_does_not_trigger_appeal(self):
+        """«Поступила жалоба» без стебля «апелляционн/кассационн» —
+        неоднозначно, поэтому не выставляем ни один из флагов."""
+        html = _synthetic_fi_card("Поступила жалоба", "01.01.2026")
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed_date"] == ""
+        assert info["_fi_cassation_filed"] is False
+        assert info["_fi_sent_to_cassation"] is False
+
+    def test_appellate_representation_detected(self):
+        """Апелляционное представление прокурора — тоже апел. событие."""
+        html = _synthetic_fi_card(
+            "Поступило апелляционное представление прокурора", "07.05.2026"
+        )
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is True
+
+
 # ── card_url_alt ─────────────────────────────────────────────────────────────
 
 class TestCardUrlAlt:
