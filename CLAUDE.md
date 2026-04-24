@@ -29,6 +29,8 @@
 | `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:106](scripts/update_cases.py:106) |
 | `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:114](scripts/update_cases.py:114) |
 | `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:155](scripts/update_cases.py:155) |
+| Константы state-machine (`FI_ARCHIVE_DAYS` и т.д.) | [scripts/update_cases.py:171](scripts/update_cases.py:171) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:421](scripts/update_cases.py:421) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:599](scripts/update_cases.py:599) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:2049](scripts/update_cases.py:2049) |
 | `def generate_digest` — Claude-дайджест | [scripts/update_cases.py:2330](scripts/update_cases.py:2330) |
@@ -44,12 +46,20 @@
   "cases": [
     {
       "id": "номер дела",
-      "current_stage": "first_instance" | "appeal",
+      "current_stage": "first_instance" | "awaiting_appeal" | "appeal" | "cassation_watch" | "cassation_pending",
       "plaintiff": "...", "defendant": "...",
       "bank_role": "Истец|Ответчик|Третье лицо",
       "category": "...", "notes": "...",
-      "first_instance": { "court", "judge", "status", "events": [], "resolved_emitted": bool, ... },
-      "appeal":         { "court", "status", "result", "events": [], "act_published", ... }
+      "first_instance": {
+         "court", "judge", "status", "events": [], "resolved_emitted": bool,
+         "hearing_date",           // дата резолютивки, якорь 45-дневного окна
+         "act_date",               // дата публикации мотивировки (когда есть)
+         "appeal_filed", "appeal_filed_date",        // апел. жалоба в карточке 1-й инст.
+         "cassation_filed", "cassation_filed_date",  // касс. жалоба (идёт через 1-ю инст.)
+         "sent_to_cassation", "sent_to_cassation_date"
+      },
+      "appeal":         { "court", "status", "result", "events": [], "act_published", "hearing_date", "act_date", ... },
+      "cassation_pending_since": "YYYY-MM-DD"  // если перешли в cassation_pending
     }
   ]
 }
@@ -61,10 +71,25 @@
 - Worker вызывает `workflow_dispatch` для `update_cases.yml` через GitHub API (нужен `GITHUB_PAT`).
 - **Автозапуск = Cloudflare Worker, НЕ cron-job.org.** Любые правки расписания — в `wrangler.toml`, потом `wrangler deploy`.
 
-## Окно архивирования
+## Жизненный цикл дела (state machine)
 
-- Апелляция: 30 дней после решения → архив.
-- Первая инстанция: 45 дней (мотивировка может прийти позже).
+Пять рабочих стадий в `current_stage` + архив. Переходы — в
+`advance_case_stage()`, архивация — в `is_case_archived()`.
+
+| Стадия | Что парсим | Что запускает переход |
+|---|---|---|
+| `first_instance` | карточка 1-й инст. | подана апел. жалоба → `awaiting_appeal` · 45 дней от hearing_date без жалобы → архив |
+| `awaiting_appeal` | ничего (жалоба подана, ждём карточку в апел. суде) | link_cases находит апел. карточку → `appeal` · бессрочно, не архивируется |
+| `appeal` | карточка апел. суда | опубликован акт ИЛИ 30 дней от апел. заседания без акта → `cassation_watch` · не архивируется по времени |
+| `cassation_watch` | карточка 1-й инст. (ищем касс. жалобу) | касс. жалоба или направление в кассац. суд → `cassation_pending` · 120 дней от апел. заседания → архив |
+| `cassation_pending` | ничего (будет парсер кассации) | не архивируется по времени |
+
+Константы в [scripts/update_cases.py:171](scripts/update_cases.py:171):
+`FI_ARCHIVE_DAYS=45`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
+`CASSATION_WATCH_DAYS=120`.
+
+`migrate_stages()` идемпотентно подтягивает старые записи (до появления
+state-machine) под новую модель при каждом запуске.
 
 ## Команды
 
