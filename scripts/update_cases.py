@@ -2906,6 +2906,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                         line += f" ({dt})"
                     if app_str:
                         line += f", апеллянт: {app_str}"
+                elif t == "fi_cassation_filed":
+                    dt = d.get("cassation_filed_date", "")
+                    line += "\n  Подана кассационная жалоба"
+                    if dt:
+                        line += f" ({dt})"
+                elif t == "fi_sent_to_cassation":
+                    dt = d.get("sent_to_cassation_date", "")
+                    line += "\n  Дело направлено в кассационный суд"
+                    if dt:
+                        line += f" ({dt})"
                 elif t == "fi_hearing_restart":
                     rd = d.get("restart_date", "")
                     rev = d.get("restart_event", "")
@@ -3038,6 +3048,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
    3.3. 📨 <b>Поданы апелляционные жалобы (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0). `N` = число строк ниже.
         <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | <b>апеллянт:</b> {{Роль Имя}} (дата подачи в скобках, если есть).
         Берётся из событий «fi_appeal_filed» в данных. НЕ дублируй это дело в 3.2 даже если у него есть ещё и смена статуса — событие подачи жалобы приоритетнее и идёт в свою подсекцию.
+   3.4. 📨 <b>Кассационные события (N):</b> — ОДНА строка на дело (подсекция показывается только если N&gt;0). Касс. жалоба подаётся через суд 1-й инстанции, поэтому событие видно в карточке 1-й инст. даже если само дело уже прошло апелляцию. `N` = число строк ниже.
+        <a href="URL"><b>номер</b></a> ({{суд}}) — {{стороны кратко}} | 📨 подана касс. жалоба ({{дата}}) ИЛИ 📤 направлено в касс. суд ({{дата}}).
+        Берётся из событий «fi_cassation_filed» и «fi_sent_to_cassation» в данных. Оба типа мержим в одну строку если присутствуют у одного дела. НЕ дублируй это дело в 3.2.
    3.5. ⚖️ <b>Вынесенные решения (N):</b> — решение суда первой инстанции по существу дела (или процессуальное завершение: прекращение, без рассмотрения, возвращение). ДВЕ строки на дело, между делами пустая строка (подсекция показывается только если N&gt;0). `N` = число дел ниже.
         • строка 1: <a href="URL"><b>номер</b></a> ({{суд}}) — Решение от {{дата решения}}. <b>ИТОГ:</b> {{дословно поле ИТОГ}}. Категория: {{дословно}}.
         • строка 2: Стороны: {{истец}} vs {{ответчик}}, банк — {{роль}}. <b>Для банка:</b> {{дословно «В чью пользу для банка»}}.
@@ -3511,6 +3524,18 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         "📨 подана апелляц. жалоба"
                         + (f" ({dt})" if dt else "")
                         + (f", апеллянт: {app_str}" if app_str else "")
+                    )
+                elif t == "fi_cassation_filed":
+                    dt = escape_html(d.get("cassation_filed_date", ""))
+                    ev_list.append(
+                        "📨 подана кассационная жалоба"
+                        + (f" ({dt})" if dt else "")
+                    )
+                elif t == "fi_sent_to_cassation":
+                    dt = escape_html(d.get("sent_to_cassation_date", ""))
+                    ev_list.append(
+                        "📤 направлено в кассац. суд"
+                        + (f" ({dt})" if dt else "")
                     )
                 elif t == "fi_hearing_restart":
                     rd = escape_html(d.get("restart_date", ""))
@@ -4813,22 +4838,27 @@ def main_json():
                 fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
             changed = True
 
-        # Подана кассационная жалоба — идемпотентный флаг. Переход
-        # cassation_watch → cassation_pending выполняется в advance_case_stage;
-        # упоминание в дайджесте — в дайджест-ветке (commit 3).
+        # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
+        # Переход cassation_watch → cassation_pending делает advance_case_stage.
         new_cass_filed = bool(card_info.get("_fi_cassation_filed"))
         if new_cass_filed and not fi.get("cassation_filed", False):
             fi["cassation_filed"] = True
-            if card_info.get("_fi_cassation_filed_date"):
-                fi["cassation_filed_date"] = card_info["_fi_cassation_filed_date"]
+            cass_date = card_info.get("_fi_cassation_filed_date", "")
+            if cass_date:
+                fi["cassation_filed_date"] = cass_date
+            change["type"].append("fi_cassation_filed")
+            change["details"]["cassation_filed_date"] = cass_date
             changed = True
 
-        # Дело направлено в кассационный суд — идемпотентный флаг.
+        # Дело направлено в кассационный суд — идемпотентный флаг + событие.
         new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
         if new_sent_cass and not fi.get("sent_to_cassation", False):
             fi["sent_to_cassation"] = True
-            if card_info.get("_fi_sent_to_cassation_date"):
-                fi["sent_to_cassation_date"] = card_info["_fi_sent_to_cassation_date"]
+            sent_date = card_info.get("_fi_sent_to_cassation_date", "")
+            if sent_date:
+                fi["sent_to_cassation_date"] = sent_date
+            change["type"].append("fi_sent_to_cassation")
+            change["details"]["sent_to_cassation_date"] = sent_date
             changed = True
 
         if change["type"]:
