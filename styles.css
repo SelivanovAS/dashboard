@@ -848,11 +848,11 @@ tr.detail-row { display:none; }
   .up-date { font-size:var(--fs-xs); }
   /* Toolbar (поиск + фильтры) приклеен к низу экрана как нативный bottom-bar
      PWA. Учитываем safe-area-inset-bottom для iPhone home-indicator. */
-  .toolbar { position:fixed; left:0; right:0; bottom:0; flex-direction:column; align-items:stretch; padding:12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); margin:0; background:var(--bg-3); border-top:1px solid var(--border-strong); box-shadow:0 -10px 28px rgba(0,0,0,0.32), 0 -1px 0 var(--border-strong); z-index:50; gap:8px; }
+  .toolbar { position:fixed; left:0; right:0; bottom:0; flex-direction:column; align-items:stretch; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); margin:0; background:var(--bg-3); border-top:1px solid var(--border-strong); box-shadow:0 -10px 28px rgba(0,0,0,0.32), 0 -1px 0 var(--border-strong); z-index:50; gap:8px; }
   :root[data-theme="dark"] .toolbar { background:#0b0e13; }
   .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
   /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался. */
-  .app-main { padding-bottom:calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .app-main { padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
@@ -902,9 +902,10 @@ tr.detail-row { display:none; }
   .tl-item.tl-recent .tl-text { font-size:var(--fs-lg); }
   .tl-item .tl-date { font-size:var(--fs-xs); }
   .drawer-tab { font-size:var(--fs-md); }
-  /* На 375px две кнопки в одну строку: компактный padding, без переноса. */
-  .drawer-footer { flex-wrap:nowrap; gap:8px; padding:12px 16px; }
-  .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-sm); padding:10px 12px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; }
+  /* На 375px две кнопки в одну строку: больше воздуха по вертикали для
+     удобства тапа, без переноса. */
+  .drawer-footer { flex-wrap:nowrap; gap:8px; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-sm); padding:14px 12px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; }
 }
 
 /* Helpers (extracted from inline styles in app.js) */
