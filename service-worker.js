@@ -113,6 +113,37 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
+// ---------- push: входящее уведомление от сервера ----------
+self.addEventListener('push', (event) => {
+  const data = event.data
+    ? event.data.json()
+    : { title: 'Сбер Юрист', body: 'Есть обновления по делам' };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Сбер Юрист', {
+      body: data.body || 'Есть обновления по делам',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      data: { url: './sberbank_dashboard.html' },
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+// ---------- notificationclick: открыть приложение по клику ----------
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url)
+    || './sberbank_dashboard.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const existing = list.find((w) => w.url.includes('sberbank_dashboard'));
+      if (existing) return existing.focus();
+      return clients.openWindow(url);
+    })
+  );
+});
+
 // ---------- fetch: маршрутизация ----------
 self.addEventListener('fetch', (event) => {
   const { request } = event;

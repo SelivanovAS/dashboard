@@ -35,6 +35,10 @@ jobs:
           # При test_mode=true (галка в UI «Run workflow») шлём в личный чат.
           # Cloudflare Worker дёргает workflow_dispatch без inputs → default=false → группа.
           TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+          # Web Push PWA-уведомления (опционально — если не заданы, пропускаются).
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
           if [ "${{ inputs.test_mode }}" = "true" ]; then
             echo "🧪 TEST MODE: digest will go to personal chat"

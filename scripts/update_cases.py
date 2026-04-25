@@ -187,6 +187,12 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# Web Push (PWA-уведомления)
+PUSH_WORKER_URL = os.environ.get("PUSH_WORKER_URL", "").rstrip("/")
+PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
+# Приватный VAPID-ключ в PEM-формате; хранится только в GitHub Secrets.
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+
 # Переключатель провайдера LLM: "claude" (по умолчанию) или "gigachat".
 # Задаётся в workflow digest_only_gigachat.yml для отдельного прогона
 # дайджеста через GigaChat. Основной мониторинг (update_cases.yml) остаётся
@@ -3856,6 +3862,50 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
+def send_web_push(title: str, body: str) -> None:
+    """Отправить Web Push всем PWA-подписчикам через Cloudflare Worker + pywebpush."""
+    if not PUSH_WORKER_URL or not PUSH_SECRET or not VAPID_PRIVATE_KEY:
+        log.info("Web Push: переменные не настроены, пропуск")
+        return
+    try:
+        # Получаем список подписок от Worker
+        r = requests.get(
+            f"{PUSH_WORKER_URL}/subscriptions",
+            headers={"Authorization": f"Bearer {PUSH_SECRET}"},
+            timeout=10,
+        )
+        if not r.ok:
+            log.warning(f"Web Push: не удалось получить подписки: {r.status_code}")
+            return
+        subscriptions = r.json()
+        if not subscriptions:
+            log.info("Web Push: нет подписчиков")
+            return
+        log.info(f"Web Push: отправляю {len(subscriptions)} подписчикам")
+
+        import warnings as _w
+        _w.filterwarnings("ignore")
+        from pywebpush import webpush, WebPushException  # noqa: PLC0415
+
+        payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
+        ok_count = 0
+        for sub in subscriptions:
+            try:
+                webpush(
+                    subscription_info=sub,
+                    data=payload,
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": "mailto:7selivanov.a@gmail.com"},
+                )
+                ok_count += 1
+            except WebPushException as exc:
+                ep = (sub.get("endpoint") or "?")[:60]
+                log.warning(f"Web Push: ошибка для {ep}: {exc}")
+        log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}")
+    except Exception as exc:
+        log.error(f"Web Push: исключение: {exc}")
+
+
 def send_telegram(text: str):
     """Отправить сообщение в Telegram (HTML-формат)."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -5024,6 +5074,23 @@ def main_json():
     t0 = time.perf_counter()
     send_telegram(digest)
     timings["telegram"] = time.perf_counter() - t0
+
+    # Web Push — краткое уведомление при наличии изменений, разбивка по типам
+    push_new = len(fi_new_cases) + len(appeal_new_cases_csv)
+    push_changes = len(fi_changes) + len(changes)
+    push_stages = len(stage_transitions)
+    if push_new + push_changes + push_stages > 0:
+        parts = []
+        if push_new:
+            parts.append(f"🆕 Новых: {push_new}")
+        if push_changes:
+            parts.append(f"📋 Изменений: {push_changes}")
+        if push_stages:
+            parts.append(f"🔄 Переходов: {push_stages}")
+        send_web_push(
+            title="Мониторинг дел — обновление",
+            body=" · ".join(parts),
+        )
 
     timings["total"] = time.perf_counter() - t_total_start
 

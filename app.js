@@ -1762,11 +1762,69 @@ window.addEventListener('scroll',()=>{
   if(h)h.classList.toggle('scrolled',window.scrollY>30);
 },{passive:true});
 
-// Регистрация Service Worker для PWA-режима (офлайн + установка на главный экран)
+// ── PWA: Service Worker + Web Push ───────────────────────────────────────────
+
+// VAPID-публичный ключ (открытый, не секретный — встраивается в клиент).
+// Приватный ключ хранится только в GitHub Secrets (VAPID_PRIVATE_KEY).
+const VAPID_PUBLIC_KEY = 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU';
+
+// URL Cloudflare Worker — задаётся после деплоя.
+// Формат: https://court-monitor-trigger.<аккаунт>.workers.dev
+const PUSH_WORKER_URL = 'https://court-monitor-trigger.selivanovas.workers.dev';
+
+function urlBase64ToUint8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function setupPushNotifications(reg) {
+  if (!('PushManager' in window)) return; // Safari < 16.4 или не PWA-режим
+  if (Notification.permission === 'denied') return;
+
+  // Если подписка уже есть — обновляем её на Worker (мог истечь TTL)
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    fetch(PUSH_WORKER_URL + '/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(existing.toJSON()),
+    }).catch(() => {});
+    return;
+  }
+
+  // Запрашиваем разрешение (браузер показывает системный диалог)
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+
+  try {
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC_KEY),
+    });
+    await fetch(PUSH_WORKER_URL + '/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON()),
+    });
+    console.log('Push-подписка активирована');
+  } catch (e) {
+    console.warn('Push-подписка не удалась:', e);
+  }
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js')
-      .then(reg => console.log('SW зарегистрирован:', reg.scope))
+      .then(reg => {
+        console.log('SW зарегистрирован:', reg.scope);
+        // Ждём активации SW перед подпиской на push
+        if (reg.active) {
+          setupPushNotifications(reg);
+        } else {
+          navigator.serviceWorker.ready.then(r => setupPushNotifications(r));
+        }
+      })
       .catch(err => console.warn('SW не зарегистрировался:', err));
   });
 }

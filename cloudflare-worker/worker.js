@@ -13,6 +13,9 @@ const HOLIDAYS_2026 = new Set([
   "12-31", // перенос с 04.01 (вс)
 ]);
 
+// GitHub Pages URL для CORS
+const ALLOWED_ORIGIN = "https://selivanovas.github.io";
+
 function isHoliday(date) {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
@@ -23,7 +26,67 @@ function isHoliday(date) {
   return set ? set.has(key) : false;
 }
 
+function corsHeaders(origin) {
+  const allowed = origin === ALLOWED_ORIGIN || origin === "http://localhost:8081";
+  return {
+    "Access-Control-Allow-Origin": allowed ? origin : "",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+}
+
+// ── HTTP-обработчик (push-подписки) ──────────────────────────────────────────
+
+async function handleSubscribe(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const sub = await request.json();
+    if (!sub.endpoint) {
+      return new Response("Bad Request", { status: 400 });
+    }
+    // Ключ: хэш endpoint (берём первые 80 символов после last '/')
+    const parts = sub.endpoint.split("/");
+    const key = `sub:${parts[parts.length - 1].slice(0, 80)}`;
+    // TTL 60 дней — браузер обновит подписку сам при следующем открытии
+    await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
+      expirationTtl: 60 * 24 * 3600,
+    });
+    console.log(`Подписка сохранена: ${key}`);
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  } catch (e) {
+    console.error("subscribe error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
+async function handleListSubscriptions(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
+    const subs = await Promise.all(
+      list.keys.map(async (k) => {
+        const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
+        return val ? JSON.parse(val) : null;
+      })
+    );
+    return new Response(JSON.stringify(subs.filter(Boolean)), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("list error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
+// ── Экспорт ───────────────────────────────────────────────────────────────────
+
 export default {
+  // ── Cron-триггер: запуск GitHub Actions ─────────────────────────────────
   async scheduled(event, env) {
     // Текущая дата по МСК (UTC+3)
     const now = new Date(Date.now() + 3 * 3600 * 1000);
@@ -47,7 +110,6 @@ export default {
     );
 
     if (response.ok) {
-      // GitHub отвечает 204 No Content при успешном workflow_dispatch
       console.log(`dispatch ok: ${response.status}`);
     } else {
       const body = await response.text();
@@ -56,5 +118,26 @@ export default {
         `dispatch failed: ${response.status} ${response.statusText} | body: ${bodyPreview}`
       );
     }
+  },
+
+  // ── HTTP-обработчик: управление push-подписками ──────────────────────────
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const origin = request.headers.get("Origin") || "";
+
+    // Preflight CORS
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    if (url.pathname === "/subscribe" && request.method === "POST") {
+      return handleSubscribe(request, env);
+    }
+
+    if (url.pathname === "/subscriptions" && request.method === "GET") {
+      return handleListSubscriptions(request, env);
+    }
+
+    return new Response("Not Found", { status: 404 });
   },
 };
