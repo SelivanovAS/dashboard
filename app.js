@@ -1770,7 +1770,7 @@ const VAPID_PUBLIC_KEY = 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmc
 
 // URL Cloudflare Worker — задаётся после деплоя.
 // Формат: https://court-monitor-trigger.<аккаунт>.workers.dev
-const PUSH_WORKER_URL = 'https://court-monitor-trigger.selivanovas.workers.dev';
+const PUSH_WORKER_URL = 'https://court-monitor-trigger.7selivanov-a.workers.dev';
 
 function urlBase64ToUint8(b64) {
   const pad = '='.repeat((4 - b64.length % 4) % 4);

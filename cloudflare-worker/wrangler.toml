@@ -10,4 +10,4 @@ crons = ["45 3 * * 1-5"]  # 3:45 UTC = 6:45 МСК, пн-пт
 # Вставить полученный id в поле id ниже, затем wrangler deploy.
 [[kv_namespaces]]
 binding = "PUSH_SUBSCRIPTIONS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "2ffe67ca59ce4bfe986f80d11df2ab39"
