@@ -3886,6 +3886,11 @@ def send_web_push(title: str, body: str) -> None:
         import warnings as _w
         _w.filterwarnings("ignore")
         from pywebpush import webpush, WebPushException  # noqa: PLC0415
+        from py_vapid import Vapid  # noqa: PLC0415
+
+        # pywebpush.from_string не понимает PEM-строку из env (баг py_vapid 1.9.x);
+        # явно создаём Vapid из bytes и передаём объект.
+        vapid = Vapid.from_pem(VAPID_PRIVATE_KEY.encode())
 
         payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
         ok_count = 0
@@ -3894,7 +3899,7 @@ def send_web_push(title: str, body: str) -> None:
                 webpush(
                     subscription_info=sub,
                     data=payload,
-                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_private_key=vapid,
                     vapid_claims={"sub": "mailto:7selivanov.a@gmail.com"},
                 )
                 ok_count += 1
