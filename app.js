@@ -1761,3 +1761,12 @@ window.addEventListener('scroll',()=>{
   const h=document.querySelector('.app-header');
   if(h)h.classList.toggle('scrolled',window.scrollY>30);
 },{passive:true});
+
+// Регистрация Service Worker для PWA-режима (офлайн + установка на главный экран)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(reg => console.log('SW зарегистрирован:', reg.scope))
+      .catch(err => console.warn('SW не зарегистрировался:', err));
+  });
+}
