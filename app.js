@@ -1542,7 +1542,6 @@ function renderDrawer(c){
       </div>
       <div class="drawer-title">
         <div class="dt-main">${escHtml(c.caseNumber)}</div>
-        <div class="dt-sub">${idx+1} из ${totalFiltered}${subTitle?' · '+escHtml(subTitle):''}</div>
       </div>
       <button class="drawer-close" onclick="closeDrawer()" title="Закрыть (Esc)">×</button>
     </div>
@@ -1583,7 +1582,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-footer">
       <button class="btn-secondary" onclick="copyCaseNumber(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Копировать номер</button>
-      ${c.link?`<a class="btn-primary btn-primary-stretch" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка суда</a>`:''}
+      ${c.link?`<a class="btn-primary btn-primary-stretch" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка дела</a>`:''}
     </div>
   `;
 }
