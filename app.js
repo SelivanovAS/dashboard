@@ -1861,4 +1861,163 @@ if ('serviceWorker' in navigator) {
       })
       .catch(err => console.warn('SW не зарегистрировался:', err));
   });
+
+  // SW шлёт postMessage при клике по пушу, если окно уже открыто.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'open-digest') {
+      expandDigest();
+    }
+  });
 }
+
+/* ========== Последний дайджест (свёртываемый блок) ========== */
+
+const DIGEST_COLLAPSED_KEY = 'digest_collapsed';
+
+// Минимальная санитизация HTML дайджеста: разрешаем теги, которые понимает
+// Telegram (b/i/u/s/a/code/pre/strong/em/br), у ссылок чистим href от
+// javascript:. Дополнительно вырезаем дублирующий заголовок «Дайджест dd.mm.yyyy»
+// в самом начале (он есть в шапке блока) и финальную ссылку «📊 ...дашборд» —
+// мы и так находимся в дашборде.
+function sanitizeDigestHtml(html) {
+  if (!html) return '';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const ALLOWED = new Set(['B', 'I', 'A', 'BR', 'STRONG', 'EM', 'U', 'S', 'CODE', 'PRE']);
+  const walk = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === 1) {
+        if (!ALLOWED.has(child.tagName)) {
+          // оставляем текст, выкидываем тег
+          while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+          child.remove();
+          return;
+        }
+        // вычищаем все атрибуты кроме href у <a>
+        [...child.attributes].forEach((attr) => {
+          if (child.tagName === 'A' && attr.name === 'href') {
+            const href = (attr.value || '').trim();
+            if (/^javascript:/i.test(href)) child.removeAttribute('href');
+            else { child.setAttribute('target', '_blank'); child.setAttribute('rel', 'noopener noreferrer'); }
+          } else {
+            child.removeAttribute(attr.name);
+          }
+        });
+        walk(child);
+      }
+    });
+  };
+  walk(tpl.content);
+
+  // Убираем дублирующий заголовок «Дайджест dd.mm.yyyy» в начале — он уже
+  // в шапке свёртываемого блока. И финальную ссылку на сам дашборд — мы
+  // и так на нём. Заодно подчищаем висячие переводы строк.
+  const root = tpl.content;
+  const isHeaderNode = (n) => n && n.nodeType === 1 && n.tagName === 'B'
+    && /^\s*Дайджест\s+\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/i.test(n.textContent || '');
+  const isDashboardLink = (n) => n && n.nodeType === 1 && n.tagName === 'A'
+    && /дашборд|dashboard/i.test(n.textContent || '');
+  // Удаляем первый <b>Дайджест dd.mm</b>, прилегающий пустой текст/перенос
+  // и leading-whitespace в первом непустом текст-узле (он держит «\n\n📥 ...»).
+  const first = [...root.childNodes].find(n => n.nodeType !== 3 || (n.nodeValue || '').trim());
+  if (isHeaderNode(first)) {
+    let next = first.nextSibling;
+    first.remove();
+    while (next && next.nodeType === 3 && /^\s*$/.test(next.nodeValue || '')) {
+      const after = next.nextSibling; next.remove(); next = after;
+    }
+    if (next && next.nodeType === 3) next.nodeValue = next.nodeValue.replace(/^\s+/, '');
+  }
+  // Удаляем последнюю ссылку «📊 Открыть дашборд» (и текст-обёртку вокруг).
+  const last = [...root.childNodes].reverse().find(n => n.nodeType !== 3 || (n.nodeValue || '').trim());
+  if (isDashboardLink(last)) {
+    let prev = last.previousSibling;
+    last.remove();
+    while (prev && prev.nodeType === 3 && /^\s*$/.test(prev.nodeValue || '')) {
+      const before = prev.previousSibling; prev.remove(); prev = before;
+    }
+  }
+
+  return tpl.innerHTML;
+}
+
+function formatDigestDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return { full: `${day}.${month}.${year}`, short: `${day}.${month}`, time: `${hh}:${mm}` };
+}
+
+async function loadLastDigest() {
+  const block = document.getElementById('digest-block');
+  if (!block) return;
+  try {
+    const r = await fetch('./data/last_digest.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data || !data.html) return;
+    document.getElementById('digest-body').innerHTML = sanitizeDigestHtml(data.html);
+    const date = formatDigestDate(data.generated_at);
+    const titleEl = document.getElementById('digest-title');
+    if (date) {
+      titleEl.textContent = `📰 Дайджест ${date.full}`;
+      titleEl.title = `${date.full}, ${date.time}`;
+    } else {
+      titleEl.textContent = '📰 Дайджест';
+    }
+    document.getElementById('digest-meta').textContent = data.summary || '';
+    block.hidden = false;
+
+    // Раскрытие: если в URL ?digest=open или #digest — разворачиваем
+    // принудительно и чистим параметр, чтобы не торчал в адресной строке.
+    // Состояние при этом НЕ персистим: пользователь просил, чтобы при
+    // последующих заходах блок снова был свёрнут.
+    const url = new URL(window.location.href);
+    const fromPush = url.searchParams.get('digest') === 'open' || url.hash === '#digest';
+    if (fromPush) {
+      expandDigest({ persist: false });
+      url.searchParams.delete('digest');
+      if (url.hash === '#digest') url.hash = '';
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+      return;
+    }
+
+    // Иначе — восстанавливаем сохранённое состояние (по умолчанию свёрнут).
+    const collapsed = localStorage.getItem(DIGEST_COLLAPSED_KEY);
+    if (collapsed === 'false') expandDigest({ persist: false });
+  } catch (e) {
+    console.warn('Не удалось загрузить дайджест:', e);
+  }
+}
+
+function toggleDigest() {
+  const block = document.getElementById('digest-block');
+  if (!block) return;
+  if (block.classList.contains('expanded')) collapseDigest();
+  else expandDigest();
+}
+
+function expandDigest(opts = {}) {
+  const block = document.getElementById('digest-block');
+  if (!block) return;
+  block.hidden = false;
+  block.classList.add('expanded');
+  if (opts.persist !== false) {
+    try { localStorage.setItem(DIGEST_COLLAPSED_KEY, 'false'); } catch (e) {}
+  }
+}
+
+function collapseDigest() {
+  const block = document.getElementById('digest-block');
+  if (!block) return;
+  block.classList.remove('expanded');
+  try { localStorage.setItem(DIGEST_COLLAPSED_KEY, 'true'); } catch (e) {}
+}
+
+window.toggleDigest = toggleDigest;
+window.addEventListener('DOMContentLoaded', loadLastDigest);

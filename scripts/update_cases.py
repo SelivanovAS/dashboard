@@ -163,6 +163,13 @@ LAST_DIGEST_CONTEXT_PATH = os.environ.get(
     "LAST_DIGEST_CONTEXT_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest_context.json")
 )
+# Готовый текст последнего дайджеста (HTML) — сохраняется после успешной
+# отправки в Telegram, фронт читает этот файл и показывает свёрнутый блок
+# «Последний дайджест» в дашборде.
+LAST_DIGEST_PATH = os.environ.get(
+    "LAST_DIGEST_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest.json")
+)
 # Окна жизненного цикла дела (state machine — см. advance_case_stage /
 # is_case_archived). Старая модель ARCHIVE_DAYS/ARCHIVE_DAYS_FI отсчитывала
 # архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
@@ -2630,6 +2637,27 @@ def save_digest_context(
         log.warning(f"Не удалось сохранить контекст дайджеста: {exc}")
 
 
+def save_last_digest(html: str, summary: str = "") -> None:
+    """Сохранить готовый HTML дайджеста в LAST_DIGEST_PATH.
+
+    Фронт читает этот файл, чтобы показать блок «Последний дайджест»
+    в дашборде. Вызывается после успешной отправки в Telegram.
+    """
+    if not html:
+        return
+    payload = {
+        "version": 1,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "summary": summary or "",
+        "html": html,
+    }
+    try:
+        save_json(payload, LAST_DIGEST_PATH)
+        log.info(f"Дайджест сохранён для фронта: {LAST_DIGEST_PATH}")
+    except Exception as exc:
+        log.warning(f"Не удалось сохранить дайджест для фронта: {exc}")
+
+
 def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     cases: list[dict] | None = None,
                     fi_new_cases: list[dict] | None = None,
@@ -3862,8 +3890,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
-def send_web_push(title: str, body: str) -> None:
-    """Отправить Web Push всем PWA-подписчикам через Cloudflare Worker + pywebpush."""
+def send_web_push(title: str, body: str, *, click_url: str | None = None) -> None:
+    """Отправить Web Push всем PWA-подписчикам через Cloudflare Worker + pywebpush.
+
+    `click_url` — относительный или абсолютный URL, который Service Worker откроет
+    по клику на уведомление. По умолчанию открывается дашборд с раскрытым блоком
+    последнего дайджеста.
+    """
     if not PUSH_WORKER_URL or not PUSH_SECRET or not VAPID_PRIVATE_KEY:
         log.info("Web Push: переменные не настроены, пропуск")
         return
@@ -3892,7 +3925,11 @@ def send_web_push(title: str, body: str) -> None:
         # явно создаём Vapid из bytes и передаём объект.
         vapid = Vapid.from_pem(VAPID_PRIVATE_KEY.encode())
 
-        payload = json.dumps({"title": title, "body": body}, ensure_ascii=False)
+        target_url = click_url or "/sberbank_dashboard.html?digest=open"
+        payload = json.dumps(
+            {"title": title, "body": body, "data": {"url": target_url}},
+            ensure_ascii=False,
+        )
         ok_count = 0
         for sub in subscriptions:
             try:
@@ -4256,6 +4293,7 @@ def main():
     # 8. Отправляем в Telegram
     t0 = time.perf_counter()
     send_telegram(digest)
+    save_last_digest(digest, summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}")
     timings["telegram"] = time.perf_counter() - t0
 
     # 9. Разделяем на активные и архивные (Решено + 30+ дней)
@@ -5084,6 +5122,7 @@ def main_json():
     push_new = len(fi_new_cases) + len(appeal_new_cases_csv)
     push_changes = len(fi_changes) + len(changes)
     push_stages = len(stage_transitions)
+    push_summary = ""
     if push_new + push_changes + push_stages > 0:
         parts = []
         if push_new:
@@ -5092,10 +5131,14 @@ def main_json():
             parts.append(f"📋 Изменений: {push_changes}")
         if push_stages:
             parts.append(f"🔄 Переходов: {push_stages}")
+        push_summary = " · ".join(parts)
         send_web_push(
             title="Мониторинг дел — обновление",
-            body=" · ".join(parts),
+            body=push_summary,
         )
+
+    # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
+    save_last_digest(digest, summary=push_summary)
 
     timings["total"] = time.perf_counter() - t_total_start
 
@@ -5162,6 +5205,7 @@ def main_replay_last():
     )
 
     send_telegram(digest)
+    save_last_digest(digest, summary="(replay)")
     log.info("Готово!")
 
 
@@ -5200,6 +5244,7 @@ def main_digest_only():
     )
 
     send_telegram(digest)
+    save_last_digest(digest, summary="(digest-only)")
     log.info("Готово!")
 
 

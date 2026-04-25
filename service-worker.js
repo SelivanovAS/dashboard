@@ -6,7 +6,7 @@
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
 */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
@@ -15,9 +15,10 @@ const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
   './sberbank_dashboard.html',
-  './styles.css?v=9',
+  './styles.css?v=10',
   './app.js',
   './manifest.json',
+  './icon-180.png',
   './icon-192.png',
   './icon-512.png',
 ];
@@ -119,12 +120,19 @@ self.addEventListener('push', (event) => {
     ? event.data.json()
     : { title: 'Сбер Юрист', body: 'Есть обновления по делам' };
 
+  // URL, который SW откроет по клику. Бэкенд (Python send_web_push) присылает
+  // абсолютный путь '/sberbank_dashboard.html?digest=open' — приводим к
+  // относительному в рамках scope SW, чтобы работало на GitHub Pages
+  // (хостинг под /dashboard/).
+  const rawUrl = (data.data && data.data.url) || './sberbank_dashboard.html?digest=open';
+  const clickUrl = rawUrl.startsWith('/') ? '.' + rawUrl : rawUrl;
+
   event.waitUntil(
     self.registration.showNotification(data.title || 'Сбер Юрист', {
       body: data.body || 'Есть обновления по делам',
       icon: './icon-192.png',
       badge: './icon-192.png',
-      data: { url: './sberbank_dashboard.html' },
+      data: { url: clickUrl },
       vibrate: [200, 100, 200],
     })
   );
@@ -134,11 +142,16 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url)
-    || './sberbank_dashboard.html';
+    || './sberbank_dashboard.html?digest=open';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       const existing = list.find((w) => w.url.includes('sberbank_dashboard'));
-      if (existing) return existing.focus();
+      if (existing) {
+        // Окно уже открыто — фокусируем и просим страницу развернуть дайджест
+        // (URL-параметр уже не сработает — страница не перезагружается).
+        existing.postMessage({ type: 'open-digest' });
+        return existing.focus();
+      }
       return clients.openWindow(url);
     })
   );

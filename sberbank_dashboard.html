@@ -5,26 +5,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Мониторинг судебных дел Сбера в ХМАО-Югре</title>
 <script>
-  // Применяем тему до парсинга стилей, чтобы избежать FOUC
+  // Тема: 3 состояния — 'auto' | 'light' | 'dark'.
+  //   auto: следуем prefers-color-scheme и обновляемся при смене системной.
+  //   light/dark: фиксируем выбор пользователя.
+  // Применяем до парсинга стилей, чтобы избежать FOUC.
   (function(){
-    try {
-      var saved = localStorage.getItem('theme');
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var theme = saved || (prefersDark ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', theme);
-    } catch (e) {}
+    var ROOT = document.documentElement;
+    var MQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var listener = null;
+
+    function readPref(){
+      try { return localStorage.getItem('theme') || 'auto'; } catch(e){ return 'auto'; }
+    }
+    function applyResolved(pref){
+      var resolved = (pref === 'auto') ? (MQ.matches ? 'dark' : 'light') : pref;
+      ROOT.setAttribute('data-theme', resolved);
+      ROOT.setAttribute('data-theme-pref', pref);
+      var btn = document.getElementById('theme-toggle');
+      if (btn) {
+        var labels = { auto: 'Тема: системная', light: 'Тема: светлая', dark: 'Тема: тёмная' };
+        btn.setAttribute('aria-label', labels[pref] || labels.auto);
+        btn.setAttribute('title', labels[pref] || labels.auto);
+      }
+    }
+    function bindAuto(pref){
+      if (listener) {
+        if (MQ.removeEventListener) MQ.removeEventListener('change', listener);
+        else MQ.removeListener(listener);
+        listener = null;
+      }
+      if (pref === 'auto') {
+        listener = function(){ applyResolved('auto'); };
+        if (MQ.addEventListener) MQ.addEventListener('change', listener);
+        else MQ.addListener(listener);
+      }
+    }
+    function setTheme(pref){
+      try { localStorage.setItem('theme', pref); } catch(e){}
+      applyResolved(pref);
+      bindAuto(pref);
+    }
+    window.toggleTheme = function(){
+      var order = ['auto', 'light', 'dark'];
+      var cur = readPref();
+      var next = order[(order.indexOf(cur) + 1) % order.length];
+      setTheme(next);
+    };
+    var initial = readPref();
+    applyResolved(initial);
+    bindAuto(initial);
   })();
-  function toggleTheme(){
-    var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-    var next = cur === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('theme', next); } catch (e) {}
-  }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=15">
 
 <!-- PWA: установка на главный экран и офлайн-режим -->
 <link rel="manifest" href="manifest.json">
@@ -33,7 +68,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Сбер Юрист">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 </head>
 <body>
 
@@ -89,9 +124,10 @@
       </div>
       <div class="header-actions">
         <div class="header-meta" id="meta-info"></div>
-        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему" title="Переключить тему">
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
         </button>
         <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -110,6 +146,18 @@
       <button class="dismiss" onclick="dismissNewBanner(event)" title="Скрыть">&times;</button>
     </div>
     <div id="error-banner" class="error-banner" style="display:none;"></div>
+
+    <!-- Last digest (collapsible) -->
+    <section id="digest-block" class="digest-block" hidden>
+      <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
+        <span class="digest-title" id="digest-title">📰 Дайджест</span>
+        <span class="digest-meta" id="digest-meta"></span>
+        <button class="digest-toggle" id="digest-toggle" aria-label="Свернуть/развернуть" type="button" onclick="event.stopPropagation();toggleDigest();">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </header>
+      <div class="digest-body" id="digest-body"></div>
+    </section>
 
     <!-- Mobile stats summary -->
     <div class="stats-mobile-summary" id="stats-mobile-summary" onclick="toggleMobileStats()"></div>
@@ -200,6 +248,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=19" defer></script>
+<script src="app.js?v=22" defer></script>
 </body>
 </html>
