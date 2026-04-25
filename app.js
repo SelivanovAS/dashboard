@@ -1778,26 +1778,11 @@ function urlBase64ToUint8(b64) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-async function setupPushNotifications(reg) {
-  if (!('PushManager' in window)) return; // Safari < 16.4 или не PWA-режим
-  if (Notification.permission === 'denied') return;
-
-  // Если подписка уже есть — обновляем её на Worker (мог истечь TTL)
-  const existing = await reg.pushManager.getSubscription();
-  if (existing) {
-    fetch(PUSH_WORKER_URL + '/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(existing.toJSON()),
-    }).catch(() => {});
-    return;
-  }
-
-  // Запрашиваем разрешение (браузер показывает системный диалог)
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') return;
-
+async function subscribeToPush(reg) {
+  // Подписка ВСЕГДА после клика пользователя — иначе iOS глушит запрос разрешения.
   try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return false;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC_KEY),
@@ -1808,9 +1793,58 @@ async function setupPushNotifications(reg) {
       body: JSON.stringify(sub.toJSON()),
     });
     console.log('Push-подписка активирована');
+    return true;
   } catch (e) {
     console.warn('Push-подписка не удалась:', e);
+    return false;
   }
+}
+
+function injectPushButton(reg) {
+  // Кнопка появляется в шапке рядом с переключателем темы;
+  // пропадает после успешной подписки или отказа.
+  const actions = document.querySelector('.header-actions');
+  if (!actions || document.getElementById('btn-push')) return;
+  const btn = document.createElement('button');
+  btn.id = 'btn-push';
+  btn.className = 'theme-toggle';
+  btn.title = 'Включить push-уведомления';
+  btn.setAttribute('aria-label', 'Включить уведомления');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+  btn.onclick = async () => {
+    btn.disabled = true;
+    const ok = await subscribeToPush(reg);
+    if (ok) btn.remove();
+    else btn.disabled = false;
+  };
+  // Вставляем перед .theme-toggle
+  const themeBtn = actions.querySelector('.theme-toggle');
+  actions.insertBefore(btn, themeBtn);
+}
+
+async function setupPushNotifications(reg) {
+  if (!('PushManager' in window)) return; // Safari < 16.4
+  if (Notification.permission === 'denied') return;
+
+  // Если подписка уже есть — освежаем её на Worker (TTL мог истечь)
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    fetch(PUSH_WORKER_URL + '/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(existing.toJSON()),
+    }).catch(() => {});
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    // Разрешение уже есть, но подписка пропала — пересоздаём без UI
+    subscribeToPush(reg);
+    return;
+  }
+
+  // permission === 'default' → показываем кнопку, ждём клика
+  injectPushButton(reg);
 }
 
 if ('serviceWorker' in navigator) {
