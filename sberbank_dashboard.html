@@ -3,16 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Мониторинг судебных дел — ПАО Сбербанк — Апелляция ХМАО</title>
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=7">
+<title>Мониторинг судебных дел Сбера в ХМАО-Югре</title>
+<script>
+  // Применяем тему до парсинга стилей, чтобы избежать FOUC
+  (function(){
+    try {
+      var saved = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = saved || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  })();
+  function toggleTheme(){
+    var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
 <div id="setup-screen" class="setup-screen" style="display:none;">
   <div class="setup-card">
     <div class="setup-header">
-      <h1>&#9878; Настройка дашборда</h1>
+      <h1>Настройка дашборда</h1>
       <p>Подключите Google-таблицу с данными дел</p>
     </div>
     <div class="setup-body">
@@ -52,14 +71,19 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="header-brand">
-        <div class="header-logo">&#9878;</div>
+        <div class="header-logo" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none"><path d="M11 20 l5 5 l13 -13" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
         <div>
-          <div class="header-title">Мониторинг судебных дел</div>
-          <div class="header-sub">Суд ХМАО — Югры &middot; Апелляция &middot; ПАО Сбербанк</div>
+          <div class="header-title">Мониторинг судебных дел Сбера в ХМАО-Югре</div>
         </div>
       </div>
       <div class="header-actions">
         <div class="header-meta" id="meta-info"></div>
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему" title="Переключить тему">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
         <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           Обновить
@@ -167,6 +191,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=16" defer></script>
+<script src="app.js?v=19" defer></script>
 </body>
 </html>

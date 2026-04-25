@@ -328,14 +328,16 @@ function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))r
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ========== JSON Case Conversion ========== */
-function buildCourtLink(linkRaw,domain,deloId){
+function buildCourtLink(linkRaw,domain,deloId,srvNum){
   if(!linkRaw)return '';
   // Pipe format: "case_id|case_uid"
   const pm=linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
   if(pm){
     const d=domain||'oblsud--hmao.sudrf.ru';
     const did=deloId||5;
-    return`https://${d}/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${did}`;
+    const srv=srvNum||1;
+    const newParam=did===5?5:0;
+    return`https://${d}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
   }
   if(/^https?:\/\//.test(linkRaw))return linkRaw;
   return '';
@@ -353,7 +355,7 @@ function jsonToCase(j){
   if(isAppeal){
     link=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
   }else{
-    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id);
+    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id||1540005,fi.srv_num||1);
   }
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
@@ -486,6 +488,13 @@ function jsonToCase(j){
   return caseObj;
 }
 function isSberbank(s){return/сбербанк|ПАО Сбер/i.test(s);}
+// Возвращает экранированную строку, в которой подсвечены вхождения
+// "ПАО Сбербанк" / "Сбербанк" — а остальной текст остаётся обычным.
+function highlightSberbank(s){
+  if(!s)return'';
+  const esc=escHtml(s);
+  return esc.replace(/ПАО\s*Сбербанк|Сбербанк/g,m=>`<span class="party-sberbank">${m}</span>`);
+}
 function shortParty(s){
   if(!s)return'';
   const W='[а-яА-ЯёЁa-zA-Z0-9]+';
@@ -873,7 +882,7 @@ function renderAnalytics(){
         // иконку не дублируем, клик по элементу открывает drawer целиком.
         upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
-          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${escHtml(pl)} vs ${escHtml(df)}</div></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
       });
       upHtml+='</div></div>';
@@ -888,8 +897,9 @@ function renderAnalytics(){
 /* ========== Meta / Footer ========== */
 function renderMeta(){
   const lastVisit=localStorage.getItem(LAST_VISIT_KEY);
-  let metaHtml='Обновлено: '+new Date().toLocaleString('ru-RU');
-  if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+lv.toLocaleString('ru-RU')+'</span>';}
+  const fmtMeta=d=>d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  let metaHtml='Обновлено: '+fmtMeta(new Date());
+  if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+fmtMeta(lv)+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
   document.getElementById('app-footer').textContent='Данные обновляются автоматически (GitHub Actions)';
 }
@@ -1260,8 +1270,8 @@ function renderTable(){
 
     // Highlight Sberbank in parties + appellant badge inline
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
-    const plaintiffHtml=(isSberbank(c.plaintiff)?`<span class="party-sberbank">${escHtml(shortParty(c.plaintiff))}</span>`:escHtml(shortParty(c.plaintiff)))+(vm.plaintiffIsAppellant?appBadge:'');
-    const defendantHtml=(isSberbank(c.defendant)?`<span class="party-sberbank">${escHtml(shortParty(c.defendant))}</span>`:escHtml(shortParty(c.defendant)))+(vm.defendantIsAppellant?appBadge:'');
+    const plaintiffHtml=highlightSberbank(shortParty(c.plaintiff))+(vm.plaintiffIsAppellant?appBadge:'');
+    const defendantHtml=highlightSberbank(shortParty(c.defendant))+(vm.defendantIsAppellant?appBadge:'');
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
@@ -1432,8 +1442,8 @@ function renderDrawer(c){
   // датах», поэтому отдельный блок hero-badges не выводим.
   const roleBadge=c.sberbankRole==='plaintiff'?'<span class="badge badge-plaintiff">Сбер — истец</span>':c.sberbankRole==='defendant'?'<span class="badge badge-defendant">Сбер — ответчик</span>':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
 
-  const plHtml=isSberbank(c.plaintiff)?`<strong class="party-sberbank">${escHtml(shortParty(c.plaintiff))}</strong>`:escHtml(shortParty(c.plaintiff));
-  const dfHtml=isSberbank(c.defendant)?`<strong class="party-sberbank">${escHtml(shortParty(c.defendant))}</strong>`:escHtml(shortParty(c.defendant));
+  const plHtml=highlightSberbank(shortParty(c.plaintiff));
+  const dfHtml=highlightSberbank(shortParty(c.defendant));
 
   // Key dates
   const hearD=c.nextDate?dayDiff(c.nextDate):null;
@@ -1602,8 +1612,8 @@ function renderMobileCards(){
     const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}`:'';
 
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
-    const plHtml=(isSberbank(c.plaintiff)?'<strong class="party-sberbank">'+escHtml(shortParty(c.plaintiff))+'</strong>':escHtml(shortParty(c.plaintiff)))+(vm.plaintiffIsAppellant?appBadge:'');
-    const dfHtml=(isSberbank(c.defendant)?'<strong class="party-sberbank">'+escHtml(shortParty(c.defendant))+'</strong>':escHtml(shortParty(c.defendant)))+(vm.defendantIsAppellant?appBadge:'');
+    const plHtml=highlightSberbank(shortParty(c.plaintiff))+(vm.plaintiffIsAppellant?appBadge:'');
+    const dfHtml=highlightSberbank(shortParty(c.defendant))+(vm.defendantIsAppellant?appBadge:'');
 
     const courtLine=courtLabel(c);
     const hearingHtml=buildHearingHtml(c,vm);
