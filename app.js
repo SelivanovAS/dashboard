@@ -1577,7 +1577,6 @@ function renderDrawer(c){
       <div class="drawer-section">
         <div class="drawer-section-title">Локальная заметка</div>
         <textarea class="notes-edit" id="notes-edit" placeholder="Ваши заметки (сохраняются в браузере)..." oninput="saveLocalNote('${escHtml(c.caseNumber).replace(/'/g,'&#39;')}',this.value)">${escHtml(localNote)}</textarea>
-        <div class="notes-hint">Сохраняется локально в вашем браузере, не синхронизируется</div>
       </div>
     </div>
     <div class="drawer-footer">
@@ -1756,10 +1755,32 @@ function setupDrawerSwipe(){
   dr.addEventListener('touchend',end);
   dr.addEventListener('touchcancel',end);
 }
-window.addEventListener('scroll',()=>{
-  const h=document.querySelector('.app-header');
-  if(h)h.classList.toggle('scrolled',window.scrollY>30);
-},{passive:true});
+// Хедер: тень при скролле. Нижние панели (toolbar мобильный + app-footer):
+// hide-on-scroll — при скролле вниз уезжают за край, при скролле вверх возвращаются.
+let __lastScrollY = 0;
+let __scrollTicking = false;
+const __SCROLL_HIDE_THRESHOLD = 8;   // минимальный сдвиг, чтобы переключить состояние
+const __SCROLL_TOP_REVEAL = 80;      // у самого верха страницы — всегда показываем
+window.addEventListener('scroll', () => {
+  if (__scrollTicking) return;
+  __scrollTicking = true;
+  requestAnimationFrame(() => {
+    const y = window.scrollY;
+    const h = document.querySelector('.app-header');
+    if (h) h.classList.toggle('scrolled', y > 30);
+
+    const dy = y - __lastScrollY;
+    if (Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
+      const goingDown = dy > 0 && y > __SCROLL_TOP_REVEAL;
+      const tb = document.querySelector('.toolbar');
+      const af = document.getElementById('app-footer');
+      if (tb) tb.classList.toggle('is-hidden', goingDown);
+      if (af) af.classList.toggle('is-hidden', goingDown);
+      __lastScrollY = y;
+    }
+    __scrollTicking = false;
+  });
+}, { passive: true });
 
 // ── PWA: Service Worker + Web Push ───────────────────────────────────────────
 
