@@ -59,7 +59,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=23">
+<link rel="stylesheet" href="styles.css?v=26">
 
 <!-- PWA: установка на главный экран и офлайн-режим -->
 <link rel="manifest" href="manifest.json">
@@ -148,10 +148,14 @@
     <div id="error-banner" class="error-banner" style="display:none;"></div>
 
     <!-- Last digest (collapsible) -->
+    <div id="digest-scrim" class="digest-scrim" onclick="closeDigestBeacon()"></div>
     <section id="digest-block" class="digest-block" hidden>
       <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
         <span class="digest-title" id="digest-title">📰 Дайджест</span>
         <span class="digest-meta" id="digest-meta"></span>
+        <button class="digest-close" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
         <button class="digest-toggle" id="digest-toggle" aria-label="Свернуть/развернуть" type="button" onclick="event.stopPropagation();toggleDigest();">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
@@ -248,6 +252,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=24" defer></script>
+<script src="app.js?v=25" defer></script>
 </body>
 </html>

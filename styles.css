@@ -475,7 +475,7 @@ body {
 
 /* Upcoming hearings */
 .up-title { display:flex; justify-content:space-between; align-items:center; }
-.up-counter { display:inline-block; margin-left:6px; padding:1px 8px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-2xs); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
+.up-counter { display:inline-block; margin-left:6px; padding:2px 10px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
 .upcoming-list { display:flex; flex-direction:column; gap:14px; }
 .up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.08em; font-weight:var(--fw-bold); color:var(--fg-3); margin-bottom:8px; }
 .up-group-head::after { content:''; flex:1; height:1px; background:var(--divider); }
@@ -981,7 +981,31 @@ tr.detail-row { display:none; }
   transition: background-color 150ms var(--ease-out);
 }
 .digest-head:hover { background: var(--bg-3); }
-.digest-title { font-weight: var(--fw-semibold); color: var(--fg-1); font-size: var(--fs-md); flex-shrink: 0; }
+/* В свёрнутом виде шапка похожа на заголовок секции «Ближайшие заседания»
+   (.analytics-title): UPPERCASE, мелкий шрифт, дата вынесена в pill. */
+.digest-title {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.digest-date-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(33, 168, 92, 0.14);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+}
 .digest-meta  { color: var(--fg-3); font-size: var(--fs-sm); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .digest-toggle {
   background: transparent;
@@ -1020,9 +1044,114 @@ tr.detail-row { display:none; }
 .digest-body i      { color: var(--fg-2); font-style: italic; }
 .digest-body a      { color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; transition: border-color 150ms var(--ease-out); }
 .digest-body a:hover { border-bottom-color: var(--accent); }
+
+/* Кликабельный номер дела внутри дайджеста — открывает drawer карточки. */
+.digest-body a.digest-case-link {
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+  border-bottom: 1px solid var(--accent);
+  cursor: pointer;
+}
+.digest-body a.digest-case-link:hover { background: rgba(33, 168, 92, 0.08); border-radius: 3px; }
+
+/* ── Beacon-режим: полноэкранный modal со scrim'ом ──────────────────── */
+/* z-index подобран так, чтобы beacon перекрывал app-header (100), мобильный
+   toolbar (50) и нижние панели, но при сворачивании уступал место drawer'у
+   карточки (201). */
+.digest-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 17, 22, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--ease-out);
+  z-index: 150;
+}
+.digest-scrim.open { opacity: 1; pointer-events: auto; }
+
+.digest-close {
+  display: none;
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--fg-3);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.digest-close:hover { background: var(--bg-3); color: var(--fg-1); }
+.digest-close svg { width: 18px; height: 18px; }
+
+.digest-block.beacon {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 720px);
+  max-height: calc(100vh - 48px);
+  margin: 0;
+  z-index: 160;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  border-left-width: 1px;
+  box-shadow: var(--shadow-4);
+  animation: beaconIn 260ms var(--ease-out);
+}
+.digest-block.beacon .digest-head {
+  position: sticky;
+  top: 0;
+  background: var(--bg-1);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+  cursor: default;
+}
+.digest-block.beacon .digest-head:hover { background: var(--bg-1); }
+.digest-block.beacon .digest-title {
+  font-size: var(--fs-lg);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg-1);
+}
+.digest-block.beacon .digest-date-pill { font-size: var(--fs-xs); padding: 2px 10px; }
+.digest-block.beacon .digest-close { display: inline-flex; }
+.digest-block.beacon .digest-toggle { display: none; }
+.digest-block.beacon .digest-body {
+  max-height: none;
+  opacity: 1;
+  padding: 16px 20px 20px;
+  border-top: 0;
+  overflow: visible;
+}
+.digest-block.beacon-leaving {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.96);
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+@keyframes beaconIn {
+  from { opacity: 0; transform: translateX(-50%) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+body.beacon-open { overflow: hidden; }
+
 @media (max-width: 768px) {
   .digest-head { padding: 10px 12px; }
   .digest-title { font-size: var(--fs-sm); }
   .digest-meta { display: none; }
   .digest-block.expanded .digest-body { padding: 0 12px 12px; }
+  .digest-block.beacon {
+    top: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    border-radius: var(--radius-md);
+  }
+  .digest-block.beacon .digest-head { padding: 12px 14px; }
+  .digest-block.beacon .digest-title { font-size: var(--fs-md); text-transform: none; letter-spacing: 0; color: var(--fg-1); }
+  .digest-block.beacon .digest-meta { display: block; font-size: var(--fs-xs); }
+  .digest-block.beacon .digest-body { padding: 14px; }
 }

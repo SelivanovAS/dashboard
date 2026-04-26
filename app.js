@@ -737,6 +737,9 @@ function renderAll(){
 
   populateFilterOptions();
   renderStats();applyFilters();renderMeta();renderAnalytics();
+  // На случай, если дайджест отрендерился раньше, чем загрузились дела —
+  // делаем номера дел кликабельными именно сейчас (идемпотентно).
+  if (typeof enhanceDigestCaseLinks === 'function') enhanceDigestCaseLinks();
   localStorage.setItem(LAST_VISIT_KEY,new Date().toISOString());
 }
 
@@ -1885,14 +1888,26 @@ if ('serviceWorker' in navigator) {
   // SW шлёт postMessage при клике по пушу, если окно уже открыто.
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'open-digest') {
-      expandDigest();
+      // Если дайджест ещё не успел загрузиться (currentDigestGeneratedAt пуст)
+      // — ставим флаг, и loadLastDigest сам покажет beacon в конце.
+      if (!digestLoaded) { pendingShowBeacon = true; return; }
+      showDigestBeacon();
     }
   });
 }
 
-/* ========== Последний дайджест (свёртываемый блок) ========== */
+/* ========== Последний дайджест (свёртываемый блок + beacon) ========== */
 
 const DIGEST_COLLAPSED_KEY = 'digest_collapsed';
+const DIGEST_LAST_SEEN_KEY = 'digest_last_seen_at';
+// generated_at уже показанного дайджеста — для записи в localStorage в момент показа.
+let currentDigestGeneratedAt = null;
+let digestLoaded = false;
+// Флаг: SW прислал postMessage, но дайджест ещё не загрузился.
+let pendingShowBeacon = false;
+// Regex номера российского дела: «2-1234/2026», «33-5678/2026», «2а-15/2025».
+// Допускаем буквы (а/КГ) после первого числа — встречается в категориях дел.
+const CASE_NUMBER_RE = /(\d{1,3}[А-Яа-яA-Za-z]?-\d+\/\d{4})/g;
 
 // Минимальная санитизация HTML дайджеста: разрешаем теги, которые понимает
 // Telegram (b/i/u/s/a/code/pre/strong/em/br), у ссылок чистим href от
@@ -1975,35 +1990,58 @@ function formatDigestDate(iso) {
 
 async function loadLastDigest() {
   const block = document.getElementById('digest-block');
-  if (!block) return;
+  const body = document.getElementById('digest-body');
+  if (!block || !body) return;
   try {
     const r = await fetch('./data/last_digest.json', { cache: 'no-cache' });
     if (!r.ok) return;
     const data = await r.json();
     if (!data || !data.html) return;
-    document.getElementById('digest-body').innerHTML = sanitizeDigestHtml(data.html);
+    body.innerHTML = sanitizeDigestHtml(data.html);
+    // Оборачиваем номера дел в кликабельные ссылки. Если allCases ещё не
+    // загружен — функция поставит флаг, и enhancement выполнится повторно
+    // в конце renderAll() (см. enhanceDigestCaseLinks).
+    enhanceDigestCaseLinks();
+
     const date = formatDigestDate(data.generated_at);
     const titleEl = document.getElementById('digest-title');
+    titleEl.innerHTML = '';
+    titleEl.appendChild(document.createTextNode('Дайджест'));
     if (date) {
-      titleEl.textContent = `📰 Дайджест ${date.full}`;
+      const pill = document.createElement('span');
+      pill.className = 'digest-date-pill';
+      pill.textContent = date.full;
+      titleEl.appendChild(pill);
       titleEl.title = `${date.full}, ${date.time}`;
-    } else {
-      titleEl.textContent = '📰 Дайджест';
     }
     document.getElementById('digest-meta').textContent = data.summary || '';
     block.hidden = false;
+    currentDigestGeneratedAt = data.generated_at || null;
+    digestLoaded = true;
 
-    // Раскрытие: если в URL ?digest=open или #digest — разворачиваем
-    // принудительно и чистим параметр, чтобы не торчал в адресной строке.
-    // Состояние при этом НЕ персистим: пользователь просил, чтобы при
-    // последующих заходах блок снова был свёрнут.
+    // Делегированный клик по номерам дел внутри #digest-body.
+    if (!body.dataset.caseClickBound) {
+      body.addEventListener('click', onDigestBodyClick);
+      body.dataset.caseClickBound = '1';
+    }
+
+    // Триггеры показа beacon:
+    //   1. push (?digest=open / #digest / postMessage от SW),
+    //   2. свежий дайджест, который пользователь ещё не видел.
     const url = new URL(window.location.href);
     const fromPush = url.searchParams.get('digest') === 'open' || url.hash === '#digest';
-    if (fromPush) {
-      expandDigest({ persist: false });
-      url.searchParams.delete('digest');
-      if (url.hash === '#digest') url.hash = '';
-      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem(DIGEST_LAST_SEEN_KEY); } catch (e) {}
+    const isFreshDigest = currentDigestGeneratedAt && lastSeen !== currentDigestGeneratedAt;
+
+    if (fromPush || pendingShowBeacon || isFreshDigest) {
+      pendingShowBeacon = false;
+      showDigestBeacon();
+      if (fromPush) {
+        url.searchParams.delete('digest');
+        if (url.hash === '#digest') url.hash = '';
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+      }
       return;
     }
 
@@ -2013,6 +2051,105 @@ async function loadLastDigest() {
   } catch (e) {
     console.warn('Не удалось загрузить дайджест:', e);
   }
+}
+
+// Оборачивает номера дел в #digest-body в <a class="digest-case-link"
+// data-open-drawer="..."> — но только те, что есть в allCases. Идемпотентна:
+// уже обёрнутые ссылки не трогает.
+//
+// Реальные caseNumber могут иметь суффикс «(2-3719/2025;)» — старый номер дела
+// после переезда между регистрационными журналами. В дайджесте обычно
+// фигурирует только первичный номер. Поэтому строим карту: первичный
+// номер (по CASE_NUMBER_RE) → реальный caseNumber для openDrawer.
+function buildPrimaryNumberMap() {
+  const map = new Map();
+  for (const c of allCases) {
+    if (!c.caseNumber) continue;
+    CASE_NUMBER_RE.lastIndex = 0;
+    const m = CASE_NUMBER_RE.exec(c.caseNumber);
+    if (!m) continue;
+    const primary = m[0];
+    // Первое попадание выигрывает — если две карточки делят первичный номер
+    // (что маловероятно), drawer откроется на первой найденной.
+    if (!map.has(primary)) map.set(primary, c.caseNumber);
+  }
+  return map;
+}
+
+function enhanceDigestCaseLinks() {
+  const body = document.getElementById('digest-body');
+  if (!body) return;
+  if (!Array.isArray(allCases) || allCases.length === 0) return;
+  const primaryToFull = buildPrimaryNumberMap();
+  if (primaryToFull.size === 0) return;
+
+  // 1) Существующие <a> (бэкенд уже обернул номер в ссылку на e-justice):
+  //    если в тексте ссылки есть номер дела из allCases — навешиваем
+  //    data-open-drawer и класс.
+  body.querySelectorAll('a').forEach((a) => {
+    if (a.classList.contains('digest-case-link')) return;
+    CASE_NUMBER_RE.lastIndex = 0;
+    const m = CASE_NUMBER_RE.exec(a.textContent || '');
+    if (!m) return;
+    const full = primaryToFull.get(m[0]);
+    if (!full) return;
+    a.dataset.openDrawer = full;
+    a.classList.add('digest-case-link');
+  });
+
+  // 2) Текстовые ноды: ищем номера, оборачиваем в <a>. Не лезем внутрь
+  //    уже существующих <a>, чтобы не вкладывать ссылку в ссылку.
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      let p = node.parentNode;
+      while (p && p !== body) {
+        if (p.nodeName === 'A') return NodeFilter.FILTER_REJECT;
+        p = p.parentNode;
+      }
+      CASE_NUMBER_RE.lastIndex = 0;
+      return CASE_NUMBER_RE.test(node.nodeValue || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+  const textNodes = [];
+  let n;
+  while ((n = walker.nextNode())) textNodes.push(n);
+  textNodes.forEach((node) => {
+    const text = node.nodeValue;
+    const frag = document.createDocumentFragment();
+    let lastIdx = 0;
+    let touched = false;
+    CASE_NUMBER_RE.lastIndex = 0;
+    text.replace(CASE_NUMBER_RE, (match, _g1, idx) => {
+      const full = primaryToFull.get(match);
+      if (!full) return match;
+      touched = true;
+      if (idx > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, idx)));
+      const a = document.createElement('a');
+      a.className = 'digest-case-link';
+      a.href = '#case-' + encodeURIComponent(full);
+      a.dataset.openDrawer = full;
+      a.textContent = match;
+      frag.appendChild(a);
+      lastIdx = idx + match.length;
+      return match;
+    });
+    if (touched) {
+      if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+      node.parentNode.replaceChild(frag, node);
+    }
+  });
+}
+
+function onDigestBodyClick(e) {
+  const link = e.target.closest('[data-open-drawer]');
+  if (!link) return;
+  e.preventDefault();
+  const caseNumber = link.dataset.openDrawer;
+  const block = document.getElementById('digest-block');
+  const wasBeacon = block && block.classList.contains('beacon');
+  if (wasBeacon) closeDigestBeacon({ keepExpanded: false });
+  // Даём beacon-анимации завершиться, чтобы drawer выезжал на «спокойный» фон.
+  setTimeout(() => openDrawer(caseNumber), wasBeacon ? 230 : 0);
 }
 
 function toggleDigest() {
@@ -2039,5 +2176,43 @@ function collapseDigest() {
   try { localStorage.setItem(DIGEST_COLLAPSED_KEY, 'true'); } catch (e) {}
 }
 
+function showDigestBeacon() {
+  const block = document.getElementById('digest-block');
+  const scrim = document.getElementById('digest-scrim');
+  if (!block || !scrim) return;
+  block.hidden = false;
+  block.classList.remove('beacon-leaving');
+  block.classList.add('beacon');
+  scrim.classList.add('open');
+  document.body.classList.add('beacon-open');
+  document.addEventListener('keydown', beaconEscHandler);
+  // Запоминаем, что этот дайджест уже показан как beacon — чтобы при
+  // следующих заходах он шёл по обычному пути (свёрнутый блок).
+  if (currentDigestGeneratedAt) {
+    try { localStorage.setItem(DIGEST_LAST_SEEN_KEY, currentDigestGeneratedAt); } catch (e) {}
+  }
+}
+
+function closeDigestBeacon(opts = {}) {
+  const { keepExpanded = false } = opts;
+  const block = document.getElementById('digest-block');
+  const scrim = document.getElementById('digest-scrim');
+  if (!block || !scrim) return;
+  if (!block.classList.contains('beacon')) return;
+  block.classList.add('beacon-leaving');
+  scrim.classList.remove('open');
+  document.removeEventListener('keydown', beaconEscHandler);
+  setTimeout(() => {
+    block.classList.remove('beacon', 'beacon-leaving');
+    document.body.classList.remove('beacon-open');
+    if (!keepExpanded) collapseDigest();
+  }, 220);
+}
+
+function beaconEscHandler(e) {
+  if (e.key === 'Escape') closeDigestBeacon();
+}
+
 window.toggleDigest = toggleDigest;
+window.closeDigestBeacon = closeDigestBeacon;
 window.addEventListener('DOMContentLoaded', loadLastDigest);
