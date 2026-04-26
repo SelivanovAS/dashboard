@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-04-21T06:32:57",
+  "updated_at": "2026-04-26T03:51:45",
   "cases": [
     {
       "id": "33-1706/2026",
@@ -292,6 +292,66 @@
             "text": "Дело передано в экспедицию. 18:03. 17.02.2026"
           }
         ]
+      },
+      "appeal": null
+    },
+    {
+      "id": "9-25/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Ерунов Александр Вячеславович",
+      "defendant": "ПАО Сбербанк",
+      "category": "Отношения, связанные с защитой прав потребителей → О защите прав потребителей → - из договоров с финансово-кредитными учреждениями в сфере: → услуг кредитных организаций",
+      "bank_role": "Ответчик",
+      "notes": "",
+      "first_instance": {
+        "case_number": "9-25/2026",
+        "court": "Югорский районный суд",
+        "court_domain": "ugorsk--hmao.sudrf.ru",
+        "judge": "Колобаев В.Н.",
+        "filing_date": "30.12.2025",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюНЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи",
+        "last_event": "Дело передано в экспедицию. 15:36. 17.03.2026",
+        "event_date": "17.03.2026",
+        "hearing_date": "10.03.2026",
+        "hearing_time": "",
+        "link": "258712684|0db5643a-68ec-40ab-9434-bf9d3b56e013",
+        "act_published": true,
+        "act_date": "",
+        "events": [
+          {
+            "date": "",
+            "time": "",
+            "text": "Наименование события. Дата. Время. Место проведения. Результат события. Основание для выбранного результата события. Примечание. Дата размещения Информация о размещении событий в движении дела предоставляется на основе сведений, хранящихся в учетной системе судебного делопроизводства"
+          },
+          {
+            "date": "30.12.2025",
+            "time": "11:28",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 11:28. 30.12.2025"
+          },
+          {
+            "date": "12.01.2026",
+            "time": "09:13",
+            "text": "Передача материалов судье. 09:13. 12.01.2026"
+          },
+          {
+            "date": "16.01.2026",
+            "time": "11:43",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 11:43. Оставление иска (заявления, жалобы) без движения. 20.01.2026"
+          },
+          {
+            "date": "10.03.2026",
+            "time": "14:04",
+            "text": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков. 14:04. 13.03.2026"
+          },
+          {
+            "date": "17.03.2026",
+            "time": "15:36",
+            "text": "Дело передано в экспедицию. 15:36. 17.03.2026"
+          }
+        ],
+        "resolved_emitted": true,
+        "act_text": "копия М-802/2025 ОПРЕДЕЛЕНИЕ о возвращении искового заявления г. Югорск 10 марта 2026 года Судья Югорского районного суда Ханты-Мансийского автономного округа-Югры Колобаев В.Н., рассмотрев исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров, установил: Ерунов А.В. обратился в суд с иском к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров. Просил расторгнуть заключенные между ним и ПАО Сбербанк кредитный договор от ДД.ММ.ГГГГ № , договор кредитования счета от ДД.ММ.ГГГГ . Определением судьи от ДД.ММ.ГГГГ исковое заявление оставлено без движения, заявителю предоставлен срок до ДД.ММ.ГГГГ для устранения обстоятельств, послуживших основанием для оставления заявления без движения, а именно: - представить сведения о месте рождения, месте жительства или месте пребывания истца; - представить кредитный договор от ДД.ММ.ГГГГ № , договор кредитования счета от ДД.ММ.ГГГГ , либо иные документы, подтверждающие наличие отношений между истцом и ответчиком; - указать обстоятельства, на которых истец основывает свои требования, и доказательства, подтверждающие эти обстоятельства (доказательства, подтверждающие нарушение ответчиком прав истца). В установленный судьей срок заявитель недостатки не устранил. При данных обстоятельствах судья приходит к выводу о возвращении иска заявителю, поскольку в силу ч. 2 ст. 136 ГПК РФ в случае, если заявитель в установленный срок не выполнит указания судьи, перечисленные в определении, заявление считается не поданным и возвращается заявителю со всеми приложенными к нему документами. На основании изложенного, руководствуясь ст.ст. 224, 225 ГПК РФ, судья определил: исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров, возвратить заявителю со всеми приложенными к нему документами. Разъяснить заявителю, что возвращение заявления не препятствует повторному обращению в суд к тому же ответчику, о том же предмете, по тому же основанию. На определение может быть подана частная жалоба в Федеральный суд Ханты – Мансийского автономного округа-Югры через Югорский районный суд ХМАО-Югры в течение 15 дней со дня его вынесения. Верно. Судья Югорского районного суда В.Н. Колобаев Секретарь суда ФИО3 изменено function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = masking.maskedLetter.indexOf(placeholder[i]) >= 0; if ((matchesNumber && isInt) || (isCharsetPresent && matchesLetter && isLetter)) { newValue += strippedValue[j++]; } else if ((!isCharsetPresent && !isInt && matchesNumber) || (isCharsetPresent && ((matchesLetter && !isLetter) || (matchesNumber && !isInt)))) { //masking.errorOnKeyEntry(e); // write your own error handling function return newValue; } else { newValue += placeholder[i]; } // break if no characters left and the pattern is non-special character if (strippedValue[j] == undefined) { break; } } if (e.target.getAttribute('data-valid-example')) { return masking.validateProgress(e, newValue); } return newValue; }, validateProgress : function (e, value) { var validExample = e.target.getAttribute('data-valid-example'), pattern = new RegExp(e.target.getAttribute('pattern')), placeholder = e.target.getAttribute('data-placeholder'), l = value.length, testValue = '', id = e.target.getAttribute('id'), maskErrorId = document.getElementById(id + 'MaskError'); maskErrorId.style.display = 'block'; //convert to months if (l == 1 && placeholder.toUpperCase().substr(0,2) == 'MM') { if(value > 1 && value = 0; i--) { testValue = value + validExample.substr(value.length); if(id == 'case__JUDICIAL_UIDSS' && l == 13 && placeholder.toUpperCase().substr(12,4) == 'YYYY') { if(value.substr(12,1) == 1) { testValue = value + '9' + validExample.substr(value.length + 1); } if(value.substr(12,1) == 2) { testValue = value + '0' +"
       },
       "appeal": null
     }
