@@ -66,5 +66,10 @@ jobs:
           if [ -f data/last_digest_context.json ]; then
             git add data/last_digest_context.json
           fi
+          # Готовый HTML дайджеста для блока «📰 Дайджест» на сайте (читает app.js).
+          # Без коммита GitHub Pages обслуживает старую версию.
+          if [ -f data/last_digest.json ]; then
+            git add data/last_digest.json
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push

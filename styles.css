@@ -198,6 +198,9 @@
   --shadow-4:  0 20px 50px rgba(13, 17, 22, 0.14), 0 4px 10px rgba(13, 17, 22, 0.06);
 
   --content-max: 1800px;
+  /* Единая высота для .app-footer и .drawer-footer — диктуется кнопками
+     drawer-footer (16px padding-top + кнопка + 16px padding-bottom). */
+  --footer-h: 68px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
@@ -693,7 +696,7 @@ tr.detail-row { display:none; }
 .drawer-close { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:var(--radius-sm); cursor:pointer; font-size:18px; line-height:1; }
 .drawer-close:hover { background:var(--bg-3); color:var(--fg-1); }
 .drawer-body { flex:1; overflow-y:auto; padding:18px 22px; }
-.drawer-footer { padding:12px 22px; border-top:1px solid var(--border); background:var(--bg-2); display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap; }
+.drawer-footer { padding:16px 22px calc(16px + env(safe-area-inset-bottom, 0px)); border-top:1px solid var(--border); background:var(--bg-2); display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; min-height:var(--footer-h); box-sizing:border-box; }
 .drawer-footer .btn-primary { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; transition:background 120ms var(--ease-out); text-decoration:none; }
 .drawer-footer .btn-primary-stretch { flex:1 1 auto; justify-content:center; }
 .drawer-footer .btn-primary:hover { background:var(--accent-hover); }
@@ -749,7 +752,7 @@ tr.detail-row { display:none; }
 .notes-edit:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 .notes-hint { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
 
-.app-footer { max-width:var(--content-max); margin:0 auto; padding:16px 24px; text-align:center; font-size:var(--fs-2xs); color:var(--fg-4); border-top:1px solid var(--border); }
+.app-footer { max-width:var(--content-max); margin:0 auto; padding:16px 24px calc(16px + env(safe-area-inset-bottom, 0px)); text-align:center; font-size:var(--fs-2xs); color:var(--fg-4); border-top:1px solid var(--border); display:flex; align-items:center; justify-content:center; min-height:var(--footer-h); box-sizing:border-box; }
 
 /* ========== Filters bottom-sheet (mobile) ========== */
 .filters-btn { display:none; align-items:center; gap:6px; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-1); color:var(--fg-1); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; box-shadow:var(--shadow-1); position:relative; }
@@ -819,6 +822,9 @@ tr.detail-row { display:none; }
 .stats-mobile-summary.expanded .sms-chevron { transform:rotate(180deg); }
 
 @media (max-width: 768px) {
+  /* На мобиле кнопки drawer-footer крупнее (padding:14px 12px) → высота
+     футера растёт. Подтягиваем app-footer тем же значением. */
+  :root { --footer-h: 80px; }
   .app-header { padding:0 16px; }
   .app-main { padding:16px; }
   /* Однострочный header на мобиле: лого + сжатый заголовок + кнопки справа.
