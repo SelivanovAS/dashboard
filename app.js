@@ -1837,6 +1837,44 @@ function urlBase64ToUint8(b64) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+async function markAsOwner(reg) {
+  // Помечает текущую подписку как «владельческую» — тестовые пуши
+  // (digest_only / force_postponement) полетят только сюда.
+  // Активируется один раз: открыть PWA с URL-параметром ?owner=<OWNER_SECRET>.
+  const params = new URLSearchParams(window.location.search);
+  const secret = params.get('owner');
+  if (!secret) return;
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    console.warn('markAsOwner: подписка ещё не оформлена, нажмите 🔔 и повторите');
+    return;
+  }
+  try {
+    const r = await fetch(PUSH_WORKER_URL + '/mark-owner', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + secret,
+      },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    });
+    if (r.ok) {
+      // Убираем секрет из адресной строки, чтобы не светил в истории браузера.
+      params.delete('owner');
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+      history.replaceState(null, '', newUrl);
+      alert('✅ Это устройство помечено как владелец. Тестовые push будут приходить только сюда.');
+    } else {
+      const text = await r.text();
+      console.warn('markAsOwner: ' + r.status + ' ' + text);
+      alert('Не удалось пометить устройство: ' + r.status + ' (см. консоль)');
+    }
+  } catch (e) {
+    console.warn('markAsOwner exception:', e);
+  }
+}
+
 async function subscribeToPush(reg) {
   // Подписка ВСЕГДА после клика пользователя — иначе iOS глушит запрос разрешения.
   try {
@@ -1852,6 +1890,8 @@ async function subscribeToPush(reg) {
       body: JSON.stringify(sub.toJSON()),
     });
     console.log('Push-подписка активирована');
+    // Если зашли с ?owner=<secret> и только что подписались — сразу метим владельца.
+    await markAsOwner(reg);
     return true;
   } catch (e) {
     console.warn('Push-подписка не удалась:', e);
@@ -1893,6 +1933,8 @@ async function setupPushNotifications(reg) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(existing.toJSON()),
     }).catch(() => {});
+    // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
+    markAsOwner(reg);
     return;
   }
 

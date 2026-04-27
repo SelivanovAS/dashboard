@@ -3902,20 +3902,34 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
-def send_web_push(title: str, body: str, *, click_url: str | None = None) -> None:
-    """Отправить Web Push всем PWA-подписчикам через Cloudflare Worker + pywebpush.
+def send_web_push(
+    title: str,
+    body: str,
+    *,
+    click_url: str | None = None,
+    owner_only: bool = False,
+) -> None:
+    """Отправить Web Push PWA-подписчикам через Cloudflare Worker + pywebpush.
 
     `click_url` — относительный или абсолютный URL, который Service Worker откроет
     по клику на уведомление. По умолчанию открывается дашборд с раскрытым блоком
     последнего дайджеста.
+
+    `owner_only=True` — слать только устройствам, помеченным владельческими
+    (через POST /mark-owner). Используется в тестовых режимах (`--replay-last`,
+    `--digest-only`, `--force-digest-for`), чтобы пробные пуши не улетали
+    коллегам.
     """
     if not PUSH_WORKER_URL or not PUSH_SECRET or not VAPID_PRIVATE_KEY:
         log.info("Web Push: переменные не настроены, пропуск")
         return
     try:
         # Получаем список подписок от Worker
+        list_url = f"{PUSH_WORKER_URL}/subscriptions"
+        if owner_only:
+            list_url += "?role=owner"
         r = requests.get(
-            f"{PUSH_WORKER_URL}/subscriptions",
+            list_url,
             headers={"Authorization": f"Bearer {PUSH_SECRET}"},
             timeout=10,
         )
@@ -3924,9 +3938,13 @@ def send_web_push(title: str, body: str, *, click_url: str | None = None) -> Non
             return
         subscriptions = r.json()
         if not subscriptions:
-            log.info("Web Push: нет подписчиков")
+            scope = "владельческих" if owner_only else ""
+            log.info(f"Web Push: нет {scope}подписчиков".replace("  ", " ").strip())
             return
-        log.info(f"Web Push: отправляю {len(subscriptions)} подписчикам")
+        log.info(
+            f"Web Push: отправляю {len(subscriptions)} "
+            f"{'владельческим ' if owner_only else ''}подписчикам"
+        )
 
         import warnings as _w
         _w.filterwarnings("ignore")
@@ -4427,6 +4445,11 @@ def main_force_postponement_digest(case_number: str,
         total_active_fi=0,
     )
     send_telegram(digest)
+    send_web_push(
+        title="Мониторинг дел — отложение",
+        body=f"Дело {case_number}",
+        owner_only=True,
+    )
     log.info("Готово!")
 
 
@@ -5308,6 +5331,11 @@ def main_replay_last():
     )
 
     send_telegram(digest)
+    send_web_push(
+        title="Мониторинг дел — replay",
+        body="Переигрывание последнего дайджеста",
+        owner_only=True,
+    )
     save_last_digest(digest, summary="(replay)")
     log.info("Готово!")
 
@@ -5347,6 +5375,11 @@ def main_digest_only():
     )
 
     send_telegram(digest)
+    send_web_push(
+        title="Мониторинг дел — проверка",
+        body="Дайджест по текущим данным",
+        owner_only=True,
+    )
     save_last_digest(digest, summary="(digest-only)")
     log.info("Готово!")
 

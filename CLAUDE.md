@@ -116,16 +116,24 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 - `ANTHROPIC_API_KEY` — Claude.
 - `GIGACHAT_CREDENTIALS` — GigaChat (альтернативный LLM).
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — отправка дайджеста.
+- `TELEGRAM_BOT_TOKEN` — токен бота.
+- `TELEGRAM_CHAT_ID` — корпоративная группа (используется только при `to_group=true`).
+- `TELEGRAM_CHAT_ID_TEST` — личный чат, дефолтный получатель дайджеста.
+- `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` — Web Push для PWA.
+- `OWNER_SECRET` — секрет Worker'а для `POST /mark-owner` (пометка устройства владельцем).
 - `GITHUB_PAT` — в secrets Worker'а, для `workflow_dispatch`.
 - `DIGESTED_ACTS_PATH` — опционально переопределить путь к `.digested_acts`.
+
+## Куда уходит дайджест
+
+- **Telegram:** все workflow'и шлют в личный чат (`TELEGRAM_CHAT_ID_TEST`) по умолчанию. Чтобы продублировать в корпоративную группу — поставить галку `to_group` в UI Run workflow.
+- **PWA push:** `update_cases.yml` (крон) шлёт всем подписчикам PWA. Тестовые workflow'и (`digest_only.yml`, `digest_only_gigachat.yml`, `force_postponement_digest.yml`) шлют push **только устройствам-владельцам**, чтобы не спамить коллегам прототипами. Чтобы пометить своё устройство владельцем — открыть PWA по URL `https://selivanovas.github.io/dashboard/sberbank_dashboard.html?owner=<OWNER_SECRET>` (один раз).
 
 ## Соглашения
 
 - **Язык:** весь код, переменные, комментарии, промпты — **на русском**.
 - **Коммиты:** `EMOJI описание на русском`. Примеры:
   - `📊 Обновление данных 23.04.2026 03:52` — автоматический от workflow.
-  - `🧪 TEST MODE: ...` — тестовый прогон (личный чат вместо группы).
   - `Дайджест: ...`, `Карточка: ...`, `GigaChat: ...` — правки скрипта.
 - **Telegram HTML:** только `<b>`, `<i>`, `<a href>`. Лимит 4096 символов на сообщение, дайджест режется автоматически (целевой объём ~7600).
 - **JSON:** UTF-8 без BOM, `version: 1`, `updated_at` ISO.

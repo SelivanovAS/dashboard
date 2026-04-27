@@ -16,11 +16,11 @@ on:
         required: false
         type: string
         default: ''
-      test_mode:
-        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+      to_group:
+        description: 'Отправить дайджест в корпоративную группу (TELEGRAM_CHAT_ID). Снять галку — в личный чат.'
         required: false
         type: boolean
-        default: true  # обычно дёргают для проверки — по умолчанию в личку
+        default: false  # обычно дёргают для проверки — по умолчанию в личный чат
 
 jobs:
   force-digest:
@@ -42,15 +42,19 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Push в этом workflow идёт только устройству-владельцу (см. send_web_push owner_only=True).
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           INPUT_CASE_NUMBER: ${{ inputs.case_number }}
           INPUT_OLD_DATE: ${{ inputs.old_date }}
           INPUT_OLD_TIME: ${{ inputs.old_time }}
         run: |
-          if [ "${{ inputs.test_mode }}" = "true" ]; then
-            echo "🧪 TEST MODE: digest will go to personal chat"
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 GROUP CHAT: digest will go to corporate group"
           else
-            echo "📢 PROD MODE: digest will go to group chat"
+            echo "📱 PERSONAL CHAT: digest will go to personal chat"
           fi
           python scripts/update_cases.py \
             --force-digest-for "$INPUT_CASE_NUMBER" \

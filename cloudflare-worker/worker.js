@@ -67,6 +67,8 @@ async function handleListSubscriptions(request, env) {
     return new Response("Unauthorized", { status: 401 });
   }
   try {
+    const url = new URL(request.url);
+    const ownerOnly = url.searchParams.get("role") === "owner";
     const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
     const subs = await Promise.all(
       list.keys.map(async (k) => {
@@ -74,12 +76,64 @@ async function handleListSubscriptions(request, env) {
         return val ? JSON.parse(val) : null;
       })
     );
-    return new Response(JSON.stringify(subs.filter(Boolean)), {
+    // Фильтр owner: только подписки, помеченные через POST /mark-owner.
+    // Поле is_owner добавляется на запись в KV, в push-payload не уходит.
+    const filtered = subs.filter((s) => {
+      if (!s) return false;
+      return ownerOnly ? s.is_owner === true : true;
+    });
+    return new Response(JSON.stringify(filtered), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("list error:", e);
     return new Response("Error", { status: 500 });
+  }
+}
+
+async function handleMarkOwner(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.OWNER_SECRET || auth !== `Bearer ${env.OWNER_SECRET}`) {
+    return new Response("Unauthorized", {
+      status: 401,
+      headers: corsHeaders(origin),
+    });
+  }
+  try {
+    const body = await request.json();
+    const endpoint = body.endpoint;
+    if (!endpoint || typeof endpoint !== "string") {
+      return new Response("Bad Request", {
+        status: 400,
+        headers: corsHeaders(origin),
+      });
+    }
+    const parts = endpoint.split("/");
+    const key = `sub:${parts[parts.length - 1].slice(0, 80)}`;
+    const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+    if (!existing) {
+      // Подписка не зарегистрирована — попросим клиент сначала /subscribe.
+      return new Response(
+        JSON.stringify({ ok: false, error: "subscription_not_found" }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+        }
+      );
+    }
+    const sub = JSON.parse(existing);
+    sub.is_owner = true;
+    await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
+      expirationTtl: 60 * 24 * 3600,
+    });
+    console.log(`Подписка помечена как owner: ${key}`);
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  } catch (e) {
+    console.error("mark-owner error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
   }
 }
 
@@ -136,6 +190,10 @@ export default {
 
     if (url.pathname === "/subscriptions" && request.method === "GET") {
       return handleListSubscriptions(request, env);
+    }
+
+    if (url.pathname === "/mark-owner" && request.method === "POST") {
+      return handleMarkOwner(request, env);
     }
 
     return new Response("Not Found", { status: 404 });

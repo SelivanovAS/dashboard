@@ -8,11 +8,11 @@ on:
         required: false
         type: boolean
         default: true
-      test_mode:
-        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+      to_group:
+        description: 'Отправить дайджест в корпоративную группу (TELEGRAM_CHAT_ID). Снять галку — в личный чат.'
         required: false
         type: boolean
-        default: true  # digest_only обычно дёргают для проверки — по умолчанию в личку
+        default: false  # digest_only — для проверки, по умолчанию в личный чат
       model:
         description: 'Модель GigaChat'
         required: false
@@ -47,12 +47,16 @@ jobs:
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
           GIGACHAT_MODEL: ${{ inputs.model }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Push в этом workflow идёт только устройству-владельцу (см. send_web_push owner_only=True).
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
-          if [ "${{ inputs.test_mode }}" = "true" ]; then
-            echo "🧪 TEST MODE: digest will go to personal chat"
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 GROUP CHAT: digest will go to corporate group"
           else
-            echo "📢 PROD MODE: digest will go to group chat"
+            echo "📱 PERSONAL CHAT: digest will go to personal chat"
           fi
           if [ "${{ inputs.replay_last }}" = "true" ]; then
             echo "🔁 REPLAY: using data/last_digest_context.json"

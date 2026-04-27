@@ -3,8 +3,8 @@ name: Update Court Cases
 on:
   workflow_dispatch:  # Запуск через Cloudflare Worker (cron) или вручную из UI
     inputs:
-      test_mode:
-        description: 'Отправить дайджест в личный чат (TELEGRAM_CHAT_ID_TEST), а не в группу'
+      to_group:
+        description: 'Отправить дайджест в корпоративную группу (TELEGRAM_CHAT_ID). Снять галку — в личный чат.'
         required: false
         type: boolean
         default: false
@@ -32,25 +32,23 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          # При test_mode=true (галка в UI «Run workflow») шлём в личный чат.
-          # Cloudflare Worker дёргает workflow_dispatch без inputs → default=false → группа.
-          TELEGRAM_CHAT_ID: ${{ inputs.test_mode && secrets.TELEGRAM_CHAT_ID_TEST || secrets.TELEGRAM_CHAT_ID }}
+          # По умолчанию шлём в личный чат (TELEGRAM_CHAT_ID_TEST). Cloudflare Worker
+          # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.
+          # Чтобы продублировать в корпоративную группу — поставить галку to_group в UI.
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
           # Web Push PWA-уведомления (опционально — если не заданы, пропускаются).
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
-          if [ "${{ inputs.test_mode }}" = "true" ]; then
-            echo "🧪 TEST MODE: digest will go to personal chat"
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 GROUP CHAT: digest will go to corporate group"
           else
-            echo "📢 PROD MODE: digest will go to group chat"
+            echo "📱 PERSONAL CHAT: digest will go to personal chat"
           fi
           python scripts/update_cases.py --json
 
       - name: Commit updated data
-        # В тест-режиме не коммитим: иначе тестовый прогон может «съесть»
-        # изменения, которые prod-крон должен был обработать сам.
-        if: ${{ !inputs.test_mode }}
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
