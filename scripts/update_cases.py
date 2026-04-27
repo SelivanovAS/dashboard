@@ -378,6 +378,10 @@ _HTML_SCRIPT_RE = re.compile(r'<script[^>]*>.*?</script>', re.DOTALL)
 _HTML_STYLE_RE = re.compile(r'<style[^>]*>.*?</style>', re.DOTALL)
 
 _CASE_NUM_RE = re.compile(r'\d+-\d+/\d{4}')
+# 1-я инст.: помимо цифр-префикса (2-X/Y) допускаем буквенные префиксы —
+# «М-» (материалы: иск подан, но ещё не зарегистрирован гражданским 2-XXX).
+# Без них пропадает видимость свежепоступивших исков против Сбера.
+_FI_CASE_NUM_RE = re.compile(r'(?:[А-ЯA-Z]+|\d+)-\d+/\d{4}')
 _TIME_RE = re.compile(r'\b(\d{1,2}:\d{2})\b')
 _CASE_ID_RE = re.compile(r'case_id=(\d+)')
 _CASE_UID_RE = re.compile(r'case_uid=([a-f0-9\-]+)')
@@ -1095,14 +1099,21 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
         case_number_raw = cell_text(case_number_cell).strip()
 
         # Пропускаем заголовок и строки без номера дела
-        if not _CASE_NUM_RE.match(case_number_raw):
+        if not _FI_CASE_NUM_RE.match(case_number_raw):
             continue
 
         # Номер может быть «2-5628/2026 ~ М-3298/2026» — берём первый.
         # Материалы (М-XXXX, 9-XXXX) тоже отслеживаем — юристу нужна
         # видимость по всем поступлениям против Сбербанка, не только по
         # основным гражданским делам.
-        case_number = case_number_raw.split("~")[0].strip()
+        parts = [p.strip() for p in case_number_raw.split("~")]
+        case_number = parts[0]
+        # Хвостовой М-номер сохраняем отдельно — нужен для «промоушена»
+        # ранее сохранённой М-записи в гражданское 2-XXX (когда материал
+        # регистрируется и в выдаче появляется комбо-номер).
+        material_number = next(
+            (p for p in parts[1:] if p.startswith("М-")), ""
+        )
 
         href = cell_href(case_number_cell)
         cid, cuid = "", ""
@@ -1154,6 +1165,7 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
 
         cases.append({
             "case_number": case_number,
+            "material_number": material_number,
             "filing_date": date_received,
             "plaintiff": plaintiff,
             "defendant": defendant,
@@ -4618,6 +4630,14 @@ def main_json():
     enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
     log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
 
+    # Индекс существующих cases по id — нужен для промоушена М-записей
+    # в 2-XXX, когда материал регистрируется и в выдаче появляется
+    # комбо-номер «2-XXX/YYYY ~ М-NNN/YYYY». Без промоушена в JSON
+    # остался бы orphan-материал рядом с новой 2-XXX-записью.
+    case_by_id: dict[str, dict] = {
+        (c.get("id") or "").strip(): c for c in cases
+    }
+
     for court in enabled_courts:
         polite_delay()
         search_html = fetch_page(court.search_url())
@@ -4626,6 +4646,31 @@ def main_json():
             continue
 
         fi_results = parse_first_instance_search(search_html, court)
+
+        # Промоушен материала → 2-XXX до фильтра new_fi.
+        for r in fi_results:
+            mat = (r.get("material_number") or "").strip()
+            if not mat or mat == r["case_number"]:
+                continue
+            old = case_by_id.get(mat)
+            if old is None:
+                continue
+            new_id = r["case_number"]
+            log.info(f"  Промоушен материала: {mat} → {new_id}")
+            old["id"] = new_id
+            fi = old.setdefault("first_instance", {})
+            fi["case_number"] = new_id
+            if r.get("judge"):
+                fi["judge"] = r["judge"]
+            if r.get("link"):
+                fi["link"] = r["link"]
+            if r.get("status"):
+                fi["status"] = r["status"]
+            case_by_id.pop(mat, None)
+            case_by_id[new_id] = old
+            existing_ids.discard(mat)
+            existing_ids.add(new_id)
+
         # Фильтр: только новые дела (первая страница поиска)
         new_fi = [
             r for r in fi_results
