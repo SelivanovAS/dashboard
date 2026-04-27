@@ -4452,6 +4452,57 @@ def _fi_search_to_json_case(fi: dict) -> dict:
     }
 
 
+def _apel_csv_row_to_json_case(row: dict) -> dict:
+    """Конвертировать CSV-строку апел. дела (после обогащения parse_case_card)
+    в JSON-структуру для cases.json. Без этой конверсии новое апел. дело
+    оседает только в CSV: link_cases ищет апел. в существующем JSON-индексе
+    и молча пропускает то, чего там ещё нет."""
+    case_num = (row.get("Номер дела") or "").strip()
+    return {
+        "id": case_num,
+        "current_stage": "appeal",
+        "plaintiff": row.get("Истец", ""),
+        "defendant": row.get("Ответчик", ""),
+        "category": row.get("Категория", ""),
+        "bank_role": row.get("Роль банка", ""),
+        "notes": row.get("Заметки", ""),
+        "first_instance": {
+            "case_number": "",
+            "court": row.get("Суд 1 инстанции", ""),
+            "court_domain": "",
+            "judge": row.get("Судья 1 инстанции", ""),
+            "filing_date": "",
+            "status": "",
+            "result": "",
+            "last_event": "",
+            "event_date": "",
+            "hearing_date": "",
+            "hearing_time": "",
+            "link": "",
+            "act_published": False,
+            "act_date": "",
+            "events": [],
+        },
+        "appeal": {
+            "case_number": case_num,
+            "court": APPEAL_COURT.name,
+            "judge_reporter": row.get("Судья-докладчик", ""),
+            "filing_date": row.get("Дата поступления", ""),
+            "status": row.get("Статус", "В производстве"),
+            "result": row.get("Результат", ""),
+            "last_event": row.get("Последнее событие", ""),
+            "event_date": row.get("Дата события", ""),
+            "hearing_date": row.get("Дата заседания", ""),
+            "hearing_time": row.get("Время заседания", ""),
+            "link": row.get("Ссылка", ""),
+            "act_published": row.get("Акт опубликован", "Нет") == "Да",
+            "act_date": row.get("Дата публикации акта", ""),
+            "appellant": row.get("Апеллянт", ""),
+            "events": [],
+        },
+    }
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -4987,6 +5038,13 @@ def main_json():
     if fi_new_cases:
         cases = fi_new_cases + cases
         log.info(f"Добавлено {len(fi_new_cases)} дел 1 инстанции в JSON")
+
+    # ── 6b. Новые апел. дела → JSON. Без этого link_cases ниже их не увидит
+    # (он индексирует только существующий cases) и дело осядет только в CSV.
+    if appeal_new_cases_csv:
+        apel_new_json = [_apel_csv_row_to_json_case(r) for r in appeal_new_cases_csv]
+        cases = apel_new_json + cases
+        log.info(f"Добавлено {len(apel_new_json)} апел. дел в JSON")
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
