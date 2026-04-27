@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Автоматический мониторинг судебных дел ПАО Сбербанк
 Суд ХМАО-Югры (апелляция) — oblsud--hmao.sudrf.ru
@@ -2649,11 +2650,15 @@ def save_digest_context(
         log.warning(f"Не удалось сохранить контекст дайджеста: {exc}")
 
 
-def save_last_digest(html: str, summary: str = "") -> None:
+def save_last_digest(html: str, summary: str = "", *, is_empty: bool = False) -> None:
     """Сохранить готовый HTML дайджеста в LAST_DIGEST_PATH.
 
     Фронт читает этот файл, чтобы показать блок «Последний дайджест»
     в дашборде. Вызывается после успешной отправки в Telegram.
+
+    `is_empty=True` — дайджест-заглушка (изменений не было). Используется
+    `load_last_meaningful_digest()`, чтобы не цитировать «пустой» дайджест
+    в качестве «предыдущего» в следующий тихий день.
     """
     if not html:
         return
@@ -2662,12 +2667,81 @@ def save_last_digest(html: str, summary: str = "") -> None:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "summary": summary or "",
         "html": html,
+        "is_empty": bool(is_empty),
     }
     try:
         save_json(payload, LAST_DIGEST_PATH)
         log.info(f"Дайджест сохранён для фронта: {LAST_DIGEST_PATH}")
     except Exception as exc:
         log.warning(f"Не удалось сохранить дайджест для фронта: {exc}")
+
+
+def load_last_meaningful_digest() -> dict | None:
+    """Прочитать `last_digest.json` и вернуть payload последнего непустого
+    дайджеста — или None, если такого нет.
+
+    Используется в ветках «no-changes», чтобы добавить в сообщение блок
+    «Предыдущий дайджест от …». Защита от self-reference: если payload
+    помечен `is_empty=True` или html содержит маркеры «no-changes»,
+    возвращается None.
+    """
+    try:
+        if not os.path.exists(LAST_DIGEST_PATH):
+            return None
+        with open(LAST_DIGEST_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        log.warning(f"Не удалось прочитать {LAST_DIGEST_PATH}: {exc}")
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("is_empty"):
+        return None
+    html = data.get("html") or ""
+    if not html:
+        return None
+    # Совместимость со старыми payload без is_empty: считаем пустым по тексту.
+    if "Всё спокойно, изменений нет" in html or "изменений не было" in html:
+        return None
+    return data
+
+
+def _format_iso_date_ru(iso: str) -> str:
+    """ISO datetime → 'dd.mm.yyyy'. На ошибках возвращает исходную строку."""
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(iso).strftime("%d.%m.%Y")
+    except Exception:
+        return iso
+
+
+def render_no_changes_digest(today: str, total_active_line: str) -> str:
+    """Сообщение для дня без изменений.
+
+    Если есть последний непустой дайджест — добавляем его ниже как
+    «Предыдущий дайджест от …». Иначе — fallback на старый короткий вид
+    со ссылкой на дашборд.
+    """
+    header = (
+        f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
+        f"За {today} изменений не было.\n"
+        f"{total_active_line}"
+    )
+    prev = load_last_meaningful_digest()
+    if not prev:
+        return header + f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
+    prev_date = _format_iso_date_ru(prev.get("generated_at", ""))
+    prev_html = prev.get("html", "").strip()
+    sep = "━━━━━━━━━━━━━━━━━━"
+    suffix = (
+        f"\n\n{sep}\n"
+        f"📋 <b>Предыдущий дайджест"
+        + (f" от {prev_date}" if prev_date else "")
+        + ":</b>\n\n"
+        f"{prev_html}"
+    )
+    return header + suffix
 
 
 def generate_digest(new_cases: list[dict], changes: list[dict], *,
@@ -2722,13 +2796,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # ── Короткое сообщение если изменений нет ──
     if (not new_cases and not changes and not fi_new_cases
             and not stage_transitions and not fi_changes):
-        msg = (
-            f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
-            f"Всё спокойно, изменений нет.\n"
-            f"В производстве: {total_active}"
+        return render_no_changes_digest(
+            today, f"В производстве: {total_active}"
         )
-        msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
-        return msg
 
     # ── Формируем контекст для Claude ──
     context_parts = [f"СВОДКА: {summary}"]
@@ -3461,14 +3531,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # ── Короткое сообщение если изменений нет ──
     if (not new_cases and not changes and not fi_new_cases
             and not stage_transitions and not fi_changes):
-        msg = (
-            f"✅ <b>Мониторинг дел Сбербанка — {today}</b>\n\n"
-            f"Всё спокойно, изменений нет.\n"
+        return render_no_changes_digest(
+            today,
             f"В производстве: всего {total_active}"
-            f" (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})"
+            f" (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})",
         )
-        msg += f'\n\n<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
-        return msg
 
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
     postponed = [ch for ch in changes if "hearing_postponed" in ch["type"]]
@@ -4323,7 +4390,11 @@ def main():
     # 8. Отправляем в Telegram
     t0 = time.perf_counter()
     send_telegram(digest)
-    save_last_digest(digest, summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}")
+    save_last_digest(
+        digest,
+        summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
+        is_empty=not (new_cases or changes),
+    )
     timings["telegram"] = time.perf_counter() - t0
 
     # 9. Разделяем на активные и архивные (Решено + 30+ дней)
@@ -5264,7 +5335,11 @@ def main_json():
         )
 
     # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
-    save_last_digest(digest, summary=push_summary)
+    save_last_digest(
+        digest,
+        summary=push_summary,
+        is_empty=not (push_new + push_changes + push_stages),
+    )
 
     timings["total"] = time.perf_counter() - t_total_start
 
@@ -5336,7 +5411,12 @@ def main_replay_last():
         body="Переигрывание последнего дайджеста",
         owner_only=True,
     )
-    save_last_digest(digest, summary="(replay)")
+    replay_is_empty = not (
+        ctx.get("new_cases") or ctx.get("changes")
+        or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
+        or ctx.get("fi_changes")
+    )
+    save_last_digest(digest, summary="(replay)", is_empty=replay_is_empty)
     log.info("Готово!")
 
 
@@ -5380,7 +5460,9 @@ def main_digest_only():
         body="Дайджест по текущим данным",
         owner_only=True,
     )
-    save_last_digest(digest, summary="(digest-only)")
+    # digest-only вызывается с пустыми new_cases/changes — это всегда
+    # «no-changes» дайджест по текущим данным.
+    save_last_digest(digest, summary="(digest-only)", is_empty=True)
     log.info("Готово!")
 
 
