@@ -1,6 +1,6 @@
 {
-  "name": "Сбер Юрист — Дашборд",
-  "short_name": "Сбер Юрист",
+  "name": "Мониторинг дел",
+  "short_name": "Мониторинг дел",
   "description": "Мониторинг гражданских дел Сбербанка в ХМАО-Югре",
   "start_url": "./sberbank_dashboard.html",
   "scope": "./",
