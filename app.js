@@ -980,22 +980,36 @@ function applyFilters(){
   // Таблица сортировки timestamp-полей → ключ в computed, если есть.
   const TS_FIELDS={dateReceived:'tsDateReceived',nextDate:'tsNextDate',lastEventDate:'tsLastEventDate'};
   filteredCases.sort((a,b)=>{
-    // Relevance sort: непрочитанные новые → заседание сегодня/завтра → 7 дней → активные → архив
+    // Relevance sort: новые → с назначенной датой (ближайшая впереди) → поступили без даты → рассмотренные → архив
     if(sortField==='relevance'){
       const rankOf=x=>{
         if(isNewCase(x)&&!readCases.has(x.caseNumber))return 0;
-        if(x.status==='active'&&x.nextDate){const d=dayDiff(x.nextDate);if(d!==null&&d>=0&&d<=1)return 1;if(d!==null&&d>1&&d<=7)return 2;}
-        if(isArchived(x))return 5;
-        if(x.status==='active')return 3;
-        return 4;
+        if(isArchived(x))return 4;
+        if(x.status==='active'&&x.nextDate)return 1;
+        if(x.status==='active')return 2;
+        return 3;
       };
       const ra=rankOf(a),rb=rankOf(b);
       if(ra!==rb)return ra-rb;
-      // Tiebreak по ближайшей дате (заседание или lastEvent), затем по номеру
-      const ta=(a.computed?a.computed.tsNextDate:0)||(a.computed?a.computed.tsDateReceived:0);
-      const tb=(b.computed?b.computed.tsNextDate:0)||(b.computed?b.computed.tsDateReceived:0);
-      if(ta!==tb)return ra<=2?ta-tb:tb-ta;
-      return 0;
+      const cA=a.computed||{},cB=b.computed||{};
+      if(ra===1){
+        // С назначенной датой: сначала сегодня/будущее по возрастанию, прошедшие — в конец подгруппы
+        const todayTs=new Date(new Date().toDateString()).getTime();
+        const ta=cA.tsNextDate||0, tb=cB.tsNextDate||0;
+        const pa=ta<todayTs?1:0, pb=tb<todayTs?1:0;
+        if(pa!==pb)return pa-pb;
+        return pa?tb-ta:ta-tb;
+      }
+      if(ra===0){
+        // Новые: самые свежие первыми (по дате поступления)
+        return (cB.tsDateReceived||0)-(cA.tsDateReceived||0);
+      }
+      if(ra===2){
+        // Поступили без даты: по последнему движению, свежие первыми
+        return (cB.tsLastEventDate||0)-(cA.tsLastEventDate||0);
+      }
+      // Рассмотренные / архив: самые свежие решения первыми
+      return (cB.tsLastEventDate||0)-(cA.tsLastEventDate||0);
     }
     let va,vb;
     const tsKey=TS_FIELDS[sortField];
@@ -1279,13 +1293,16 @@ function renderTable(){
     const accent=rowAccent(c);
     const rowClass=['row-clickable',isNew?'row-new':'',expanded?'row-expanded':'',focused?'row-focus':'',accent].filter(Boolean).join(' ');
 
-    // Sticky-группа «Новое» — показываем разделитель при relevance-sort
+    // Разделители групп при relevance-sort: новые → с датой → без даты → рассмотренные → архив
     if(sortField==='relevance'){
-      const grp=isUnread?'new':(accent==='accent-today'||accent==='accent-soon'?'upcoming':'other');
+      const archived=c.computed?c.computed.archived:isArchived(c);
+      const grp=isUnread?'new':archived?'archive':c.status==='decided'?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
         if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length})</td></tr>`;}
-        else if(grp==='upcoming'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--info);"></span>Ближайшие заседания</td></tr>`;}
-        else if(grp==='other'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-300);"></span>Остальные</td></tr>`;}
+        else if(grp==='upcoming'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--info);"></span>С назначенной датой</td></tr>`;}
+        else if(grp==='awaiting'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-300);"></span>Поступили, дата не назначена</td></tr>`;}
+        else if(grp==='decided'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-400);"></span>Рассмотренные</td></tr>`;}
+        else if(grp==='archive'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-300);"></span>Архив</td></tr>`;}
         prevGroup=grp;
       }
     }
