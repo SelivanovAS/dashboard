@@ -47,11 +47,21 @@ async function handleSubscribe(request, env) {
     // Ключ: хэш endpoint (берём первые 80 символов после last '/')
     const parts = sub.endpoint.split("/");
     const key = `sub:${parts[parts.length - 1].slice(0, 80)}`;
+    // Сохраняем флаг is_owner, если запись уже была помечена владельческой —
+    // иначе любое освежение подписки (которое PWA делает при каждой загрузке)
+    // стирает пометку, и тестовые push перестают доходить.
+    const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+    if (existing) {
+      try {
+        const prev = JSON.parse(existing);
+        if (prev.is_owner === true) sub.is_owner = true;
+      } catch (_) { /* игнор: невалидный JSON в KV — перезапишем */ }
+    }
     // TTL 60 дней — браузер обновит подписку сам при следующем открытии
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
       expirationTtl: 60 * 24 * 3600,
     });
-    console.log(`Подписка сохранена: ${key}`);
+    console.log(`Подписка сохранена: ${key}${sub.is_owner ? " (owner)" : ""}`);
     return new Response(JSON.stringify({ ok: true }), {
       headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
     });
