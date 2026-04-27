@@ -28,12 +28,21 @@ function shortCourt(name){
     .replace(/Ханты-Мансийского\s+автономного\s+округа\s*-?\s*Югры/i,'ХМАО-Югры')
     .replace(/автономного\s+округа\s*-?\s*Югры/i,'АО-Югры');
 }
+// Дело привязано к апел. суду на всех пост-1-инст. стадиях:
+// appeal — рассматривается, cassation_watch / cassation_pending — апелляция
+// уже прошла, ждём кассацию, но фокус карточки всё ещё на Суде ХМАО-Югры,
+// а не на 1-й инстанции. Без этого карточка апел. дела показывала имя
+// 1-инст. суда без подписи, что путало пользователя.
+function isAppealStage(c){
+  const s=c.stage;
+  return s==='appeal'||s==='cassation_watch'||s==='cassation_pending';
+}
 function courtLabel(c){
-  if(c.stage==='appeal')return 'Суд ХМАО-Югры';
+  if(isAppealStage(c))return 'Суд ХМАО-Югры';
   return shortCourt(c.firstInstanceCourt||'');
 }
 function courtTitle(c){
-  if(c.stage==='appeal')return 'Суд Ханты-Мансийского автономного округа - Югры';
+  if(isAppealStage(c))return 'Суд Ханты-Мансийского автономного округа - Югры';
   return c.firstInstanceCourt||'';
 }
 function cleanEvent(s){
@@ -307,7 +316,13 @@ function computeDerived(c){
   // timestamps — для сортировки без повторного new Date().
   const searchBlob=[c.caseNumber,c.fiCaseNumber||'',c.appealCaseNumber||'',c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
   let archived=false;
-  if(c.status==='decided'){
+  // 30-дневная легаси-эвристика применима только к делам, у которых стадия
+  // не управляется state-machine'ом бэкенда. cassation_watch / cassation_pending —
+  // это активные стадии (ждём касс. жалобу), их архивацию решает скрипт через
+  // is_case_archived() и cases_archive.json. Без этого исключения апелляция,
+  // решённая >30 дней назад, исчезала с экрана, хотя кассация ещё не подана.
+  const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal';
+  if(c.status==='decided'&&!stageManaged){
     const decisionDate=c.lastEventDate||c.dateReceived;
     if(decisionDate){
       const d=new Date(decisionDate);
@@ -346,8 +361,11 @@ function jsonToCase(j){
   const fi=j.first_instance||{};
   const ap=j.appeal||{};
   const stage=j.current_stage||'appeal';
-  // Primary data comes from the active stage
-  const isAppeal=stage==='appeal'&&ap.case_number;
+  // Primary data comes from the active stage. cassation_watch / cassation_pending —
+  // апелляция уже прошла, но ещё не начата кассация: самое актуальное событие
+  // лежит в ap (результат, дата, ссылка). Без этого страница показывает
+  // пустой fi и лепит «Не назначено» вместо «Рассмотрено».
+  const isAppeal=(stage==='appeal'||stage==='cassation_watch'||stage==='cassation_pending')&&ap.case_number;
   const primary=isAppeal?ap:fi;
   const caseNumber=isAppeal?ap.case_number:j.id;
   // Link — appeal uses oblsud domain, first instance uses its own domain
@@ -747,6 +765,7 @@ function isArchived(c){
   // Используем предвычисленный флаг, если он есть (у всех дел после rowToCase).
   if(c.computed)return c.computed.archived;
   if(c.status!=='decided')return false;
+  if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal')return false;
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
   const d=new Date(decisionDate);if(isNaN(d))return false;
@@ -1628,7 +1647,7 @@ function renderMobileCards(){
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
         <span class="mc-badges">${stageBadge}${newBadge}${archived}</span>
       </div>
-      ${courtLine&&c.stage!=='appeal'?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
+      ${courtLine&&!isAppealStage(c)?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
       <div class="mc-parties">
         <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${plHtml}</span></div>
