@@ -855,7 +855,7 @@ tr.detail-row { display:none; }
      чтобы drawer-footer визуально не «нависал» больше нижней панели. */
   :root { --footer-h: 72px; }
   .app-header { padding:0 16px; }
-  .app-main { padding:16px; }
+  .app-main { padding:16px 10px; }
   /* Однострочный header на мобиле: лого + сжатый заголовок + кнопки справа.
      Старый column-layout оставлял пустоту между brand и actions. */
   .header-inner { flex-direction:row; align-items:center; gap:10px; padding:10px 0; }
