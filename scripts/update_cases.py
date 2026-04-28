@@ -4143,8 +4143,7 @@ def send_web_push(
 
     `owner_only=True` — слать только устройствам, помеченным владельческими
     (через POST /mark-owner). Используется в тестовых режимах (`--replay-last`,
-    `--digest-only`, `--force-digest-for`), чтобы пробные пуши не улетали
-    коллегам.
+    `--digest-only`), чтобы пробные пуши не улетали коллегам.
 
     `per_subscriber` — опциональный callable(sub_dict) → (title, body, click_url)
     либо None. Если задан, push-payload строится индивидуально для каждой
@@ -4625,95 +4624,6 @@ def main():
             "Archived moved": len(newly_archived),
         },
     )
-
-
-def main_force_postponement_digest(case_number: str,
-                                    old_date: str,
-                                    old_time: str = "") -> None:
-    """
-    Одноразовый «нагон»: отправить дайджест с отложением заседания
-    по уже обновлённому в CSV делу. Используется, когда CSV был обновлён
-    более ранним прогоном (или вручную) и стандартное сравнение
-    `old_event != new_event` уже не сработает.
-
-    Параметры:
-      case_number — номер дела (например, "33-1052/2026")
-      old_date    — старая дата заседания (ДД.ММ.ГГГГ)
-      old_time    — старое время заседания (HH:MM), опционально
-    """
-    log.info("=" * 60)
-    log.info(f"Force-digest-for: {case_number} (отложение)")
-    log.info("=" * 60)
-
-    validate_environment()
-
-    cases = load_csv(CSV_PATH)
-    log.info(f"Загружено {len(cases)} дел из CSV")
-
-    target = None
-    for c in cases:
-        if c.get("Номер дела", "").strip() == case_number.strip():
-            target = c
-            break
-
-    if not target:
-        log.error(f"Дело {case_number} не найдено в CSV")
-        sys.exit(1)
-
-    new_date = target.get("Дата заседания", "").strip()
-    new_time = target.get("Время заседания", "").strip()
-
-    if not parse_date(old_date):
-        log.error(f"Старая дата '{old_date}' не парсится как ДД.ММ.ГГГГ")
-        sys.exit(1)
-    if not parse_date(new_date):
-        log.error(
-            f"Новая дата заседания в CSV '{new_date}' пуста или не парсится"
-        )
-        sys.exit(1)
-
-    change = {
-        "case": case_number,
-        "type": ["hearing_postponed"],
-        "details": {
-            "plaintiff": target.get("Истец", ""),
-            "defendant": target.get("Ответчик", ""),
-            "role": target.get("Роль банка", ""),
-            "category": target.get("Категория", ""),
-            "appellant": target.get("Апеллянт", ""),
-            "case_url": case_card_url(target),
-            "old_hearing_date": old_date,
-            "old_hearing_time": old_time,
-            "new_hearing_date": new_date,
-            "new_hearing_time": new_time,
-        },
-    }
-
-    total_active_appeal = sum(
-        1 for c in cases if c.get("Статус", "").strip() != "Решено"
-    )
-
-    log.info(
-        f"Синтетический change: {old_date} {old_time} → {new_date} {new_time}"
-    )
-    log.info("Генерирую дайджест...")
-    save_digest_context(
-        [], [change], cases=cases,
-        total_active_appeal=total_active_appeal,
-        total_active_fi=0,
-    )
-    digest = generate_digest(
-        [], [change], cases=cases,
-        total_active_appeal=total_active_appeal,
-        total_active_fi=0,
-    )
-    send_telegram(digest)
-    send_web_push(
-        title="Мониторинг дел — отложение",
-        body=f"Дело {case_number}",
-        owner_only=True,
-    )
-    log.info("Готово!")
 
 
 def _fi_search_to_json_case(fi: dict) -> dict:
@@ -5861,24 +5771,6 @@ if __name__ == "__main__":
         )
         entry = main_push_last_digest
         entry_args = (owner_only,)
-    elif "--force-digest-for" in sys.argv:
-        # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
-        def _arg(name: str, required: bool = True) -> str:
-            if name in sys.argv:
-                idx = sys.argv.index(name)
-                if idx + 1 < len(sys.argv):
-                    return sys.argv[idx + 1]
-            if required:
-                log.error(f"Не задан аргумент {name}")
-                sys.exit(2)
-            return ""
-
-        case_num = _arg("--force-digest-for")
-        old_d = _arg("--old-date")
-        old_t = _arg("--old-time", required=False)
-        mode_name = f"force-digest-for {case_num}"
-        entry = main_force_postponement_digest
-        entry_args = (case_num, old_d, old_t)
     elif "--json" in sys.argv:
         mode_name = "main-json"
         entry = main_json

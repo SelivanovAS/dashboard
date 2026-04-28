@@ -20,7 +20,7 @@
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
 - [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit).
 - [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), коммит свежего `data/last_digest.json`.
-- [.github/workflows/digest_only_gigachat.yml](.github/workflows/digest_only_gigachat.yml), [.github/workflows/force_postponement_digest.yml](.github/workflows/force_postponement_digest.yml) — узкие ручные дайджесты (GigaChat / форс отложений).
+- [.github/workflows/digest_only_gigachat.yml](.github/workflows/digest_only_gigachat.yml) — ручной дайджест через GigaChat (альтернативный LLM).
 - [README.md](README.md) — подробная документация на русском (дублирует часть этого файла).
 
 ## Ключевые точки в update_cases.py
@@ -128,7 +128,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 ## Куда уходит дайджест
 
 - **Telegram:** все workflow'и шлют в личный чат (`TELEGRAM_CHAT_ID_TEST`) по умолчанию. Чтобы продублировать в корпоративную группу — поставить галку `to_group` в UI Run workflow.
-- **PWA push:** `update_cases.yml` (крон) шлёт всем подписчикам PWA. Тестовые workflow'и (`test_digest.yml`, `digest_only_gigachat.yml`, `force_postponement_digest.yml`) шлют push **только устройствам-владельцам** по умолчанию, чтобы не спамить коллегам прототипами. У `test_digest.yml` есть галка «push_all» — отправит на все устройства. Чтобы пометить своё устройство владельцем — открыть PWA по URL `https://selivanovas.github.io/dashboard/sberbank_dashboard.html?owner=<OWNER_SECRET>` (один раз).
+- **PWA push:** `update_cases.yml` (крон) шлёт всем подписчикам PWA. Тестовые workflow'и (`test_digest.yml`, `digest_only_gigachat.yml`) шлют push **только устройствам-владельцам** по умолчанию, чтобы не спамить коллегам прототипами. У `test_digest.yml` есть галка «push_all» — отправит на все устройства. Чтобы пометить своё устройство владельцем — открыть PWA по URL `https://selivanovas.github.io/dashboard/sberbank_dashboard.html?owner=<OWNER_SECRET>` (один раз).
 
 ## Соглашения
 
