@@ -37,6 +37,13 @@ function corsHeaders(origin) {
 
 // ── HTTP-обработчик (push-подписки) ──────────────────────────────────────────
 
+// Ключ KV из endpoint подписки. Хвост endpoint браузерного push-сервиса
+// уникален и стабилен в рамках одной подписки.
+function endpointToKey(endpoint) {
+  const parts = endpoint.split("/");
+  return `sub:${parts[parts.length - 1].slice(0, 80)}`;
+}
+
 async function handleSubscribe(request, env) {
   const origin = request.headers.get("Origin") || "";
   try {
@@ -44,17 +51,18 @@ async function handleSubscribe(request, env) {
     if (!sub.endpoint) {
       return new Response("Bad Request", { status: 400 });
     }
-    // Ключ: хэш endpoint (берём первые 80 символов после last '/')
-    const parts = sub.endpoint.split("/");
-    const key = `sub:${parts[parts.length - 1].slice(0, 80)}`;
-    // Сохраняем флаг is_owner, если запись уже была помечена владельческой —
-    // иначе любое освежение подписки (которое PWA делает при каждой загрузке)
-    // стирает пометку, и тестовые push перестают доходить.
+    const key = endpointToKey(sub.endpoint);
+    // Сохраняем флаги, проставленные пользователем ранее — иначе любое
+    // освежение подписки (которое PWA делает при каждой загрузке) стирает
+    // их: is_owner сломает фильтр тестовых push, watchlist обнулит
+    // персональную фильтрацию дайджеста.
+    let prev = null;
     const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
     if (existing) {
       try {
-        const prev = JSON.parse(existing);
+        prev = JSON.parse(existing);
         if (prev.is_owner === true) sub.is_owner = true;
+        if (Array.isArray(prev.watchlist)) sub.watchlist = prev.watchlist;
       } catch (_) { /* игнор: невалидный JSON в KV — перезапишем */ }
     }
     // TTL 60 дней — браузер обновит подписку сам при следующем открытии
@@ -62,12 +70,64 @@ async function handleSubscribe(request, env) {
       expirationTtl: 60 * 24 * 3600,
     });
     console.log(`Подписка сохранена: ${key}${sub.is_owner ? " (owner)" : ""}`);
-    return new Response(JSON.stringify({ ok: true }), {
+    // Возвращаем сохранённый watchlist — клиент использует его при первой
+    // загрузке после переустановки PWA, чтобы восстановить локальный список
+    // отслеживаемых дел без принуждения юриста кликать звёздочки заново.
+    return new Response(JSON.stringify({
+      ok: true,
+      watchlist: Array.isArray(sub.watchlist) ? sub.watchlist : [],
+    }), {
       headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
     });
   } catch (e) {
     console.error("subscribe error:", e);
     return new Response("Error", { status: 500 });
+  }
+}
+
+async function handleSetWatchlist(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    const endpoint = body.endpoint;
+    const watchlist = body.watchlist;
+    if (!endpoint || typeof endpoint !== "string" || !Array.isArray(watchlist)) {
+      return new Response("Bad Request", {
+        status: 400,
+        headers: corsHeaders(origin),
+      });
+    }
+    // Чистим: только строки, обрезаем длину, дедупим. Без auth — защита
+    // через привязку к существующему endpoint: чужой endpoint узнать
+    // нельзя, а перезаписать запись чужого юриста — только зная его.
+    const cleaned = Array.from(new Set(
+      watchlist
+        .filter((x) => typeof x === "string" && x.length > 0 && x.length < 100)
+        .slice(0, 500)
+    ));
+    const key = endpointToKey(endpoint);
+    const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+    if (!existing) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "subscription_not_found" }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+        }
+      );
+    }
+    const sub = JSON.parse(existing);
+    sub.watchlist = cleaned;
+    await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
+      expirationTtl: 60 * 24 * 3600,
+    });
+    console.log(`Watchlist обновлён (${cleaned.length} дел): ${key}`);
+    return new Response(JSON.stringify({ ok: true, count: cleaned.length }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  } catch (e) {
+    console.error("watchlist error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
   }
 }
 
@@ -119,8 +179,7 @@ async function handleMarkOwner(request, env) {
         headers: corsHeaders(origin),
       });
     }
-    const parts = endpoint.split("/");
-    const key = `sub:${parts[parts.length - 1].slice(0, 80)}`;
+    const key = endpointToKey(endpoint);
     const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
     if (!existing) {
       // Подписка не зарегистрирована — попросим клиент сначала /subscribe.
@@ -204,6 +263,10 @@ export default {
 
     if (url.pathname === "/mark-owner" && request.method === "POST") {
       return handleMarkOwner(request, env);
+    }
+
+    if (url.pathname === "/watchlist" && request.method === "POST") {
+      return handleSetWatchlist(request, env);
     }
 
     return new Response("Not Found", { status: 404 });

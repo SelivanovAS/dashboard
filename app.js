@@ -1134,8 +1134,8 @@ function renderCounter(){
 
 /* ========== Table ========== */
 const COLS=[
-  {k:'caseNumber',   l:'Дело',      s:1,w:'200px'},
-  {k:'court',        l:'Суд',       s:1,w:'180px',cls:'col-court'},
+  {k:'caseNumber',   l:'Дело',      s:1,w:'240px'},
+  {k:'court',        l:'Суд',       s:1,w:'130px',cls:'col-court'},
   {k:'parties',      l:'Стороны',   s:0},
   {k:'nextDate',     l:'Заседание', s:1,w:'140px'},
   {k:'state',        l:'Состояние', s:1,w:'220px'}
@@ -1249,7 +1249,7 @@ function buildStateHtml(c,vm){
   }
   return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}</div>`;
 }
-function buildHearingHtml(c,vm){
+function buildHearingHtml(c,vm,opts){
   if(!(c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Без движения до'||c.nextDateLabel==='Рассмотрение'))){
     return '<span class="cell-empty">—</span>';
   }
@@ -1259,13 +1259,27 @@ function buildHearingHtml(c,vm){
   else if(d!==null&&d>1&&d<=7)pCls='hearing-soon';
   else if(d!==null&&d<0)pCls='hearing-past';
   const dateStr=formatDate(c.nextDate);
-  const timeStr=((vm.ds==='scheduled'||vm.ds==='prep'||vm.ds==='prelim'||vm.ds==='main')&&c.hearingTime)?' · '+escHtml(c.hearingTime):'';
+  // Время показываем для всех «живых» статусов с назначенной датой —
+  // включая Отложено и Без движения: бейдж сообщает статус, а юристу
+  // важно увидеть конкретный час следующего заседания.
+  const timeAllowed=['scheduled','prep','prelim','main','postponed','suspended'].includes(vm.ds);
+  const timeStr=(timeAllowed&&c.hearingTime)?escHtml(c.hearingTime):'';
   const rel=relativeDateText(c.nextDate);
   let rCls='';
   if(d===0)rCls='today';
   else if(d!==null&&d>0&&d<=7)rCls='soon';
-  const prefix=c.nextDateLabel==='Отложено до'?'отл. до ':c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
-  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateStr}${timeStr}</span>${rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:''}</div>`;
+  // Префикс «отл. до» / «б/дв. до» больше не выводим — статус и так показан
+  // бейджем в столбце «Состояние», тут было бы дублированием.
+  const compact=!!(opts&&opts.compact);
+  const relRow=rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:'';
+  if(compact){
+    // Мобильная карточка: «<дата> в <время>» одной строкой, метка отдельно справа.
+    const dateLine=timeStr?`${dateStr} в ${timeStr}`:dateStr;
+    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${dateLine}</span>${relRow}</div>`;
+  }
+  // Десктоп-таблица: три строки — дата, время, относительная метка справа.
+  const timeRow=timeStr?`<span class="hearing-time ${pCls}">${timeStr}</span>`:'';
+  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${dateStr}</span>${timeRow}${relRow}</div>`;
 }
 
 function renderTable(){
@@ -1320,6 +1334,10 @@ function renderTable(){
     const stateHtml=buildStateHtml(c,vm);
 
     // ===== Hover-actions =====
+    // Звёздочка вынесена из .row-actions: тот блок прячется через opacity:0
+    // и появляется только по hover/focus, а звёздочка должна быть всегда
+    // видна (иначе отметить дело без mouseover не получится).
+    const watch=watchBtnHtml(c.caseNumber);
     const actions=`<span class="row-actions">`+
       (c.link?`<button class="row-action-btn" title="Открыть на сайте суда" onclick="event.stopPropagation();window.open('${escHtml(c.link).replace(/'/g,'&#39;')}','_blank')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>`:'')+
       `<button class="row-action-btn" title="Скопировать номер" onclick="event.stopPropagation();copyCaseNumber(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`+
@@ -1327,8 +1345,23 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
+    const metaBadges = [stageBadge, newBadge, archived].filter(Boolean).join('');
+    // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
+    // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
+    // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
+    const subMatch = c.caseNumber.match(/^([^(]+?)\s*(\([^)]*\)\s*;?)$/);
+    const caseMain = subMatch ? subMatch[1].trim() : c.caseNumber;
+    const caseSub = subMatch ? subMatch[2].trim() : '';
+    const caseMainEsc = escHtml(caseMain);
+    const caseSubEsc = escHtml(caseSub);
+    // Если sub есть — actions переезжают на 2-ю строку рядом с (доп.номером);
+    // если sub нет — actions остаются в 1-й строке справа от бейджа.
+    const topActions = caseSub ? '' : actions;
+    const subRow = caseSub
+      ? `<span class="case-sub-row"><span class="case-sub">${caseSubEsc}</span>${actions}</span>`
+      : '';
     html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${caseNumEsc}" onclick="openDrawer('${caseNumEsc.replace(/'/g,'&#39;')}')">
-      <td><div class="case-number"><span class="case-main">${caseNumEsc}</span>${newBadge}${archived}${stageBadge}${actions}</div></td>
+      <td><div class="case-number">${watch}<div class="case-num-stack"><span class="case-row-top"><span class="case-main" title="${caseNumEsc}">${caseMainEsc}</span>${metaBadges}${topActions}</span>${subRow}</div></div></td>
       <td class="col-court"><div class="cell-court" title="${escHtml(courtTitle(c))}">${escHtml(courtLabel(c))||'<span class="cell-empty">—</span>'}</div></td>
       <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
       <td>${hearingHtml}</td>
@@ -1580,7 +1613,7 @@ function renderDrawer(c){
         <button class="drawer-nav-btn" onclick="drawerNav(1)" ${idx<0||idx>=totalFiltered-1?'disabled':''} title="Следующее (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></button>
       </div>
       <div class="drawer-title">
-        <div class="dt-main">${escHtml(c.caseNumber)}</div>
+        <div class="dt-main">${escHtml(c.caseNumber)} ${watchBtnHtml(c.caseNumber)}</div>
       </div>
       <button class="drawer-close" onclick="closeDrawer()" title="Закрыть (Esc)">×</button>
     </div>
@@ -1619,7 +1652,7 @@ function renderDrawer(c){
       </div>
     </div>
     <div class="drawer-footer">
-      <button class="btn-secondary" onclick="copyCaseNumber(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Копировать номер</button>
+      <button class="btn-secondary btn-watch ${isWatched(c.caseNumber)?'on':''}" onclick="toggleWatchFromDrawer(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><span class="btn-watch-star">${isWatched(c.caseNumber)?'★':'☆'}</span><span class="btn-watch-label">${isWatched(c.caseNumber)?'Не отслеживать':'Отслеживать дело'}</span></button>
       ${c.link?`<a class="btn-primary btn-primary-stretch" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка дела</a>`:''}
     </div>
   `;
@@ -1653,7 +1686,7 @@ function renderMobileCards(){
     const dfHtml=highlightSberbank(shortParty(c.defendant))+(vm.defendantIsAppellant?appBadge:'');
 
     const courtLine=courtLabel(c);
-    const hearingHtml=buildHearingHtml(c,vm);
+    const hearingHtml=buildHearingHtml(c,vm,{compact:true});
     const stateHtml=buildStateHtml(c,vm);
 
     const cardClass=['mobile-card',isUnread?'card-new':'',accent].filter(Boolean).join(' ');
@@ -1661,6 +1694,7 @@ function renderMobileCards(){
 
     return `<div class="${cardClass}" onclick="openDrawer('${caseNumEsc}')">
       <div class="mc-top">
+        ${watchBtnHtml(c.caseNumber)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
         <span class="mc-badges">${stageBadge}${newBadge}${archived}</span>
       </div>
@@ -1831,6 +1865,136 @@ const VAPID_PUBLIC_KEY = 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmc
 // Формат: https://court-monitor-trigger.<аккаунт>.workers.dev
 const PUSH_WORKER_URL = 'https://court-monitor-trigger.7selivanov-a.workers.dev';
 
+// ── Watchlist: персональный набор отслеживаемых дел ────────────────────────
+// Хранится локально (Set в памяти + localStorage) и синхронизируется с
+// записью push-подписки в Cloudflare KV. Используется на бэке, чтобы слать
+// push только по делам, отмеченным юристом. Пустой watchlist = «всё подряд».
+const WATCHLIST_KEY = 'watchlist_v1';
+const WATCHLIST_HINT_KEY = 'watchlist_hint_shown';
+let watchlist = new Set();
+try {
+  watchlist = new Set(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]'));
+} catch (_) { watchlist = new Set(); }
+let watchlistSyncTimer = null;
+
+function isWatched(caseNumber) {
+  return watchlist.has(caseNumber);
+}
+
+function watchBtnHtml(caseNumber) {
+  const on = isWatched(caseNumber);
+  const num = String(caseNumber).replace(/'/g, '&#39;');
+  return `<button class="watch-btn${on ? ' on' : ''}" `
+    + `title="${on ? 'Не отслеживать это дело' : 'Отслеживать это дело — push только по нему'}" `
+    + `aria-label="${on ? 'Снять отслеживание' : 'Отслеживать дело'}" `
+    + `aria-pressed="${on ? 'true' : 'false'}" `
+    + `onclick="event.stopPropagation();toggleWatch('${num}',this)">`
+    + (on ? '★' : '☆')
+    + `</button>`;
+}
+
+function toggleWatch(caseNumber, btn) {
+  if (watchlist.has(caseNumber)) {
+    watchlist.delete(caseNumber);
+  } else {
+    watchlist.add(caseNumber);
+  }
+  try {
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
+  } catch (_) {}
+  // Обновляем только нажатую кнопку: перерисовка карточки/строки порождает
+  // дёрганье и сбрасывает фокус.
+  if (btn) {
+    const on = isWatched(caseNumber);
+    btn.classList.toggle('on', on);
+    btn.textContent = on ? '★' : '☆';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('title', on
+      ? 'Не отслеживать это дело'
+      : 'Отслеживать это дело — push только по нему');
+    btn.setAttribute('aria-label', on ? 'Снять отслеживание' : 'Отслеживать дело');
+  }
+  // Все остальные копии этой же звёздочки (карточка + строка таблицы +
+  // drawer-шапка могут сосуществовать) — обновляем синхронно по селектору.
+  document.querySelectorAll(
+    `.watch-btn[onclick*="toggleWatch('${String(caseNumber).replace(/'/g, "\\'")}'"]`
+  ).forEach((el) => {
+    if (el === btn) return;
+    const on = isWatched(caseNumber);
+    el.classList.toggle('on', on);
+    el.textContent = on ? '★' : '☆';
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  scheduleWatchlistSync();
+}
+window.toggleWatch = toggleWatch;
+
+function toggleWatchFromDrawer(btn, caseNumber) {
+  toggleWatch(caseNumber);
+  const on = isWatched(caseNumber);
+  btn.classList.toggle('on', on);
+  const star = btn.querySelector('.btn-watch-star');
+  const label = btn.querySelector('.btn-watch-label');
+  if (star) star.textContent = on ? '★' : '☆';
+  if (label) label.textContent = on ? 'Не отслеживать' : 'Отслеживать дело';
+}
+window.toggleWatchFromDrawer = toggleWatchFromDrawer;
+
+function scheduleWatchlistSync() {
+  // Дебаунс 600 мс: серия кликов «отметить 5 дел подряд» = один POST.
+  if (watchlistSyncTimer) clearTimeout(watchlistSyncTimer);
+  watchlistSyncTimer = setTimeout(syncWatchlistToWorker, 600);
+}
+
+async function syncWatchlistToWorker() {
+  watchlistSyncTimer = null;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return; // нет подписки — синхронизировать некуда
+    await fetch(PUSH_WORKER_URL + '/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint, watchlist: [...watchlist] }),
+    });
+  } catch (e) {
+    console.warn('watchlist sync failed:', e);
+  }
+}
+
+// Гидратация watchlist из ответа Worker'а на /subscribe (после переустановки
+// PWA локалка может быть пустой, а в KV — список со старого сеанса).
+function hydrateWatchlistFromServer(serverList) {
+  if (!Array.isArray(serverList) || serverList.length === 0) return;
+  // Мержим: локальные правки приоритетнее свежей серверной копии — иначе
+  // только что снятые звёздочки воскреснут. Гидратируем только если
+  // локальный список пуст (свежеустановленная PWA).
+  if (watchlist.size > 0) return;
+  watchlist = new Set(serverList.filter((x) => typeof x === 'string'));
+  try {
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
+  } catch (_) {}
+  // Если страница уже отрисована — перерендерить, чтобы звёздочки появились.
+  if (typeof renderTable === 'function') {
+    try { renderTable(); renderMobileCards(); } catch (_) {}
+  }
+}
+
+function maybeShowWatchlistHint() {
+  try {
+    if (localStorage.getItem(WATCHLIST_HINT_KEY)) return;
+    localStorage.setItem(WATCHLIST_HINT_KEY, '1');
+  } catch (_) { return; }
+  setTimeout(() => {
+    alert(
+      '🔔 Push включён.\n\n'
+      + 'Поставь ☆ на нужных делах — push будут приходить только по ним.\n'
+      + 'Без звёздочек получаешь все обновления.'
+    );
+  }, 800);
+}
+
 function urlBase64ToUint8(b64) {
   const pad = '='.repeat((4 - b64.length % 4) % 4);
   const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
@@ -1884,14 +2048,22 @@ async function subscribeToPush(reg) {
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC_KEY),
     });
-    await fetch(PUSH_WORKER_URL + '/subscribe', {
+    const r = await fetch(PUSH_WORKER_URL + '/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sub.toJSON()),
     });
+    try {
+      const data = await r.json();
+      hydrateWatchlistFromServer(data && data.watchlist);
+    } catch (_) {}
     console.log('Push-подписка активирована');
     // Если зашли с ?owner=<secret> и только что подписались — сразу метим владельца.
     await markAsOwner(reg);
+    // Если у юриста уже были отмечены дела до включения push — досинкуем
+    // их в KV, чтобы первый же крон учёл watchlist.
+    if (watchlist.size > 0) scheduleWatchlistSync();
+    maybeShowWatchlistHint();
     return true;
   } catch (e) {
     console.warn('Push-подписка не удалась:', e);
@@ -1932,7 +2104,10 @@ async function setupPushNotifications(reg) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(existing.toJSON()),
-    }).catch(() => {});
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) hydrateWatchlistFromServer(data.watchlist); })
+      .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
     markAsOwner(reg);
     return;

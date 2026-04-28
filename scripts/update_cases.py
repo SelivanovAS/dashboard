@@ -3969,12 +3969,58 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
+def _filter_events_by_watchlist(
+    watchlist: set[str],
+    *,
+    fi_new_cases: list[dict],
+    fi_changes: list[dict],
+    stage_transitions: list[dict],
+    appeal_new_cases_csv: list[dict],
+    changes: list[dict],
+) -> dict:
+    """Отфильтровать пять списков событий по идентификаторам дел в watchlist.
+
+    Идентификатор в watchlist = `caseNumber` с фронта (для апел. дел = номер
+    апелляции, для 1-й инст. = номер 1-й инст.). Маппинг полей:
+    · changes (apel)        → ch["case"]
+    · fi_changes            → ch["case"] (= fi.case_number)
+    · fi_new_cases          → c["id"]
+    · appeal_new_cases_csv  → c["Номер дела"]
+    · stage_transitions     → fi_case_number ИЛИ appeal_case_number
+      (юрист может отслеживать дело по любому из них).
+    """
+    return {
+        "fi_new_cases": [
+            c for c in (fi_new_cases or [])
+            if (c.get("id") or "").strip() in watchlist
+        ],
+        "fi_changes": [
+            ch for ch in (fi_changes or [])
+            if (ch.get("case") or "").strip() in watchlist
+        ],
+        "stage_transitions": [
+            t for t in (stage_transitions or [])
+            if (t.get("fi_case_number") or "").strip() in watchlist
+            or (t.get("appeal_case_number") or "").strip() in watchlist
+        ],
+        "appeal_new_cases_csv": [
+            c for c in (appeal_new_cases_csv or [])
+            if (c.get("Номер дела") or "").strip() in watchlist
+        ],
+        "changes": [
+            ch for ch in (changes or [])
+            if (ch.get("case") or "").strip() in watchlist
+        ],
+    }
+
+
 def send_web_push(
     title: str,
     body: str,
     *,
     click_url: str | None = None,
     owner_only: bool = False,
+    per_subscriber=None,
 ) -> None:
     """Отправить Web Push PWA-подписчикам через Cloudflare Worker + pywebpush.
 
@@ -3986,6 +4032,12 @@ def send_web_push(
     (через POST /mark-owner). Используется в тестовых режимах (`--replay-last`,
     `--digest-only`, `--force-digest-for`), чтобы пробные пуши не улетали
     коллегам.
+
+    `per_subscriber` — опциональный callable(sub_dict) → (title, body, click_url)
+    либо None. Если задан, push-payload строится индивидуально для каждой
+    подписки. Возврат None означает «для этой подписки нет персональных
+    событий — пропустить». Используется для персонализации основного крона
+    по watchlist подписчика.
     """
     if not PUSH_WORKER_URL or not PUSH_SECRET or not VAPID_PRIVATE_KEY:
         log.info("Web Push: переменные не настроены, пропуск")
@@ -4022,13 +4074,29 @@ def send_web_push(
         # явно создаём Vapid из bytes и передаём объект.
         vapid = Vapid.from_pem(VAPID_PRIVATE_KEY.encode())
 
-        target_url = click_url or "/sberbank_dashboard.html?digest=open"
-        payload = json.dumps(
-            {"title": title, "body": body, "data": {"url": target_url}},
-            ensure_ascii=False,
-        )
+        default_url = click_url or "/sberbank_dashboard.html?digest=open"
         ok_count = 0
+        skipped = 0
         for sub in subscriptions:
+            if per_subscriber is not None:
+                personalised = per_subscriber(sub)
+                if personalised is None:
+                    skipped += 1
+                    continue
+                p_title, p_body, p_url = personalised
+                payload = json.dumps(
+                    {
+                        "title": p_title,
+                        "body": p_body,
+                        "data": {"url": p_url or default_url},
+                    },
+                    ensure_ascii=False,
+                )
+            else:
+                payload = json.dumps(
+                    {"title": title, "body": body, "data": {"url": default_url}},
+                    ensure_ascii=False,
+                )
             try:
                 webpush(
                     subscription_info=sub,
@@ -4042,7 +4110,8 @@ def send_web_push(
             except WebPushException as exc:
                 ep = (sub.get("endpoint") or "?")[:60]
                 log.warning(f"Web Push: ошибка для {ep}: {exc}")
-        log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}")
+        suffix = f", пропущено по watchlist: {skipped}" if skipped else ""
+        log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}{suffix}")
     except Exception as exc:
         log.error(f"Web Push: исключение: {exc}")
 
@@ -5331,9 +5400,74 @@ def main_json():
         if push_stages:
             parts.append(f"🔄 Переходов: {push_stages}")
         push_summary = " · ".join(parts)
+
+        def _per_sub(sub: dict):
+            """Собрать payload под одного подписчика.
+
+            · watchlist пуст / отсутствует → общий push (всё подряд).
+            · watchlist есть и матчится → персональный push с перечислением
+              своих дел.
+            · watchlist есть, но сегодня по нему ничего → None (пропуск).
+            """
+            wl_raw = sub.get("watchlist") or []
+            wl = {str(x).strip() for x in wl_raw if str(x).strip()}
+            if not wl:
+                return (
+                    "Мониторинг дел — обновление",
+                    push_summary,
+                    "/sberbank_dashboard.html?digest=open",
+                )
+            f = _filter_events_by_watchlist(
+                wl,
+                fi_new_cases=fi_new_cases,
+                fi_changes=fi_changes,
+                stage_transitions=stage_transitions,
+                appeal_new_cases_csv=appeal_new_cases_csv,
+                changes=changes,
+            )
+            n_new = len(f["fi_new_cases"]) + len(f["appeal_new_cases_csv"])
+            n_chg = len(f["fi_changes"]) + len(f["changes"])
+            n_st = len(f["stage_transitions"])
+            if n_new + n_chg + n_st == 0:
+                return None
+            # Перечень: до 3 номеров, остаток сворачиваем в «и ещё N».
+            ids: list[str] = []
+            for c in f["fi_new_cases"]:
+                ids.append((c.get("id") or "").strip())
+            for c in f["appeal_new_cases_csv"]:
+                ids.append((c.get("Номер дела") or "").strip())
+            for ch in f["fi_changes"]:
+                ids.append((ch.get("case") or "").strip())
+            for ch in f["changes"]:
+                ids.append((ch.get("case") or "").strip())
+            for t in f["stage_transitions"]:
+                ids.append(
+                    (t.get("appeal_case_number") or t.get("fi_case_number") or "").strip()
+                )
+            ids_uniq: list[str] = []
+            seen: set[str] = set()
+            for x in ids:
+                if x and x not in seen:
+                    seen.add(x)
+                    ids_uniq.append(x)
+            head = ", ".join(ids_uniq[:3])
+            tail = f" и ещё {len(ids_uniq) - 3}" if len(ids_uniq) > 3 else ""
+            total = n_new + n_chg + n_st
+            body = (
+                f"Изменения по {len(ids_uniq)} "
+                f"{'делу' if len(ids_uniq) == 1 else 'делам'}: {head}{tail}"
+                + (f" · всего событий: {total}" if total > len(ids_uniq) else "")
+            )
+            return (
+                "Мониторинг дел — твои дела",
+                body,
+                "/sberbank_dashboard.html?digest=open&mine=1",
+            )
+
         send_web_push(
             title="Мониторинг дел — обновление",
             body=push_summary,
+            per_subscriber=_per_sub,
         )
 
     # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
