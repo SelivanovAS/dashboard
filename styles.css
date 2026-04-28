@@ -1094,6 +1094,12 @@ tr.detail-row { display:none; }
 .digest-body .mine-vs { color: var(--fg-3); font-size: 0.9em; padding: 0 2px; }
 .digest-body .mine-event { margin-top: 2px; padding-left: 12px; color: var(--fg-2); font-size: var(--fs-sm); line-height: 1.5; }
 .digest-body .mine-event b { font-weight: var(--fw-semibold); color: var(--fg-1); }
+.digest-body .mine-motive { margin: 4px 0 0 12px; }
+.digest-body .mine-motive summary { color: var(--fg-3); font-size: var(--fs-sm); line-height: 1.45; cursor: pointer; padding: 2px 0; outline: none; }
+.digest-body .mine-motive summary:hover { color: var(--fg-2); }
+.digest-body .mine-motive[open] summary { color: var(--fg-2); }
+.digest-body .mine-motive-full { margin-top: 6px; padding: 8px 10px; background: var(--bg-2); border-radius: var(--radius); color: var(--fg-2); font-size: var(--fs-sm); line-height: 1.55; white-space: pre-wrap; }
+.digest-body .mine-motive-line { margin: 4px 0 0 12px; color: var(--fg-3); font-size: var(--fs-sm); line-height: 1.45; }
 .digest-meta  { color: var(--fg-3); font-size: var(--fs-sm); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .digest-toggle {
   background: transparent;

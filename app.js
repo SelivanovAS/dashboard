@@ -2501,6 +2501,40 @@ function formatChangeTypes(t) {
   return out.join(', ');
 }
 
+// Извлечь мотивировочную часть из текста акта. Зеркало extract_motive_part
+// в Python (scripts/update_cases.py:638). Логика: «установил(а):» →
+// «руководствуясь» / «на основании изложенного». Если структуры нет —
+// возвращаем начало текста (там обычно описание сути иска).
+function extractMotive(actText, maxLen) {
+  if (!actText) return '';
+  const text = actText.trim();
+  const startRe = /(?:у\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?\s*:|УСТАНОВИЛ[АИ]?\s*:)/i;
+  const endRe = /(?:руководствуясь|РУКОВОДСТВУЯСЬ|на\s+основании\s+изложенного|судебная\s+коллегия\s+(?:определила|приходит)|о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?\s*:)/i;
+  const startM = text.match(startRe);
+  const endM = text.match(endRe);
+  if (startM && endM && endM.index > startM.index + startM[0].length) {
+    const motive = text.slice(startM.index + startM[0].length, endM.index).trim();
+    if (motive.length > 100) return motive.slice(0, maxLen);
+  }
+  if (startM) {
+    const after = text.slice(startM.index + startM[0].length).trim();
+    if (after.length > 100) return after.slice(0, maxLen);
+  }
+  return text.length > maxLen ? text.slice(0, maxLen) : text;
+}
+
+// Краткая выжимка для встраивания в строку события: 1-2 предложения
+// до ~280 символов, по границе предложения если возможно.
+function shortenMotive(actText, maxLen = 280) {
+  const m = extractMotive(actText, maxLen + 200);
+  if (!m) return '';
+  if (m.length <= maxLen) return m;
+  const cut = m.slice(0, maxLen);
+  const lastDot = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  if (lastDot > maxLen * 0.6) return cut.slice(0, lastDot + 1) + '…';
+  return cut.trim() + '…';
+}
+
 // Подробная формулировка событий в `ch.type` с использованием `ch.details`.
 // Параллель к ev_list в generate_template_digest (scripts/update_cases.py:3683+).
 function formatChangeDetails(ch) {
@@ -2537,6 +2571,15 @@ function formatChangeDetails(ch) {
       let s = `📄 опубликован мотивированный акт${ad ? ' (' + escHtml(ad) + ')' : ''}`;
       if (verdict) s += ` · <b>итог:</b> ${escHtml(verdict)}`;
       if (out) s += ` · <b>для банка:</b> ${escHtml(out)}`;
+      const summary = shortenMotive(d.act_text, 280);
+      const full = extractMotive(d.act_text, 4000);
+      if (summary) {
+        if (full && full.length > summary.length + 20) {
+          s += `<details class="mine-motive"><summary>📝 ${escHtml(summary)}</summary><div class="mine-motive-full">${escHtml(full)}</div></details>`;
+        } else {
+          s += `<div class="mine-motive-line">📝 ${escHtml(summary)}</div>`;
+        }
+      }
       parts.push(s);
     } else if (t === 'fi_act_published') {
       if (actPair) continue; // не дублируем — мотивированный акт уже включает
