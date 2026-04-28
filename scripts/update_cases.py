@@ -5422,6 +5422,44 @@ def main_replay_last():
     log.info("Готово!")
 
 
+def main_push_last_digest():
+    """Тестовый прогон: послать push-уведомление о последнем дайджесте на
+    ВСЕ устройства (без owner_only). Парсинг и генерация не выполняются —
+    читается готовый `data/last_digest.json`, фронт по клику откроет дашборд
+    и подтянет тот же файл из кэша/сети.
+    """
+    log.info("=" * 60)
+    log.info("Режим push-last-digest: пуш по последнему дайджесту, все устройства")
+    log.info("=" * 60)
+
+    if not os.path.exists(LAST_DIGEST_PATH):
+        log.error(
+            f"Дайджест не найден: {LAST_DIGEST_PATH}. "
+            "Сначала выполните полный прогон, чтобы появился файл."
+        )
+        sys.exit(2)
+
+    with open(LAST_DIGEST_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    summary = (data.get("summary") or "").strip()
+    generated_at = (data.get("generated_at") or "")[:10] or "?"
+    placeholder = {"(replay)", "(digest-only)", "(force)"}
+    if not summary or summary in placeholder or data.get("is_empty"):
+        body = f"Открой приложение — последний дайджест от {generated_at}"
+    else:
+        body = summary
+
+    log.info(f"Дайджест от {generated_at}, body: {body!r}")
+    send_web_push(
+        title="Мониторинг дел — тестовая рассылка",
+        body=body,
+        click_url="/sberbank_dashboard.html?digest=open",
+        owner_only=False,
+    )
+    log.info("Готово!")
+
+
 def main_digest_only():
     """Сформировать и отправить дайджест по текущим данным CSV (без обращения к сайту суда)."""
     log.info("=" * 60)
@@ -5477,6 +5515,10 @@ if __name__ == "__main__":
     elif "--digest-only" in sys.argv:
         mode_name = "digest-only"
         entry = main_digest_only
+        entry_args = ()
+    elif "--push-last-digest" in sys.argv:
+        mode_name = "push-last-digest"
+        entry = main_push_last_digest
         entry_args = ()
     elif "--force-digest-for" in sys.argv:
         # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
