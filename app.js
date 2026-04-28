@@ -1868,13 +1868,52 @@ window.addEventListener('scroll', () => {
       const goingDown = dy > 0 && y > __SCROLL_TOP_REVEAL;
       const tb = document.querySelector('.toolbar');
       const af = document.getElementById('app-footer');
-      if (tb) tb.classList.toggle('is-hidden', goingDown);
+      // Если в поиске есть текст или он в фокусе — toolbar не прячем,
+      // чтобы юрист видел поле и кнопку «×» при работе с фильтром.
+      const si = document.getElementById('search-input');
+      const searchActive = !!si && (si.value.length > 0 || document.activeElement === si);
+      if (tb) tb.classList.toggle('is-hidden', goingDown && !searchActive);
       if (af) af.classList.toggle('is-hidden', goingDown);
       __lastScrollY = y;
     }
     __scrollTicking = false;
   });
 }, { passive: true });
+
+// Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
+// остаётся на нижней границе layout-viewport и оказывается под клавиатурой,
+// так что инпут поиска не виден. Через visualViewport приподнимаем toolbar
+// на высоту клавиатуры (= window.innerHeight − visualViewport.height) и сразу
+// скроллим инпут в видимую область.
+(function setupKeyboardAwareToolbar(){
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const tb = () => document.querySelector('.toolbar');
+  function update(){
+    const t = tb();
+    if (!t) return;
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    if (kb > 80) {
+      t.style.transform = `translateY(${-kb}px)`;
+      t.classList.remove('is-hidden');
+    } else {
+      t.style.transform = '';
+    }
+  }
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.id === 'search-input') {
+      // Дать клавиатуре открыться, потом подвинуть toolbar и проскроллить.
+      setTimeout(() => { update(); e.target.scrollIntoView({block:'center', behavior:'smooth'}); }, 250);
+    }
+  });
+  document.addEventListener('focusout', (e) => {
+    if (e.target && e.target.id === 'search-input') {
+      setTimeout(update, 250);
+    }
+  });
+})();
 
 // ── PWA: Service Worker + Web Push ───────────────────────────────────────────
 

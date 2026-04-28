@@ -966,6 +966,8 @@ tr.detail-row { display:none; }
   .cat-bar-label { font-size:var(--fs-md); }
   .cat-bar-count { font-size:var(--fs-sm); }
   .search-input { font-size:16px; }
+  /* На мобиле «×» крупнее и с большим хитбоксом — палец не промахивается. */
+  .search-clear { width:28px; height:28px; font-size:16px; margin-right:-4px; }
   .filter-select { font-size:16px; }
   .table-counter { font-size:var(--fs-md); }
   .badge { font-size:var(--fs-sm); }
