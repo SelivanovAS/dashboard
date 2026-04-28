@@ -6,7 +6,7 @@
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
 */
 
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
@@ -68,8 +68,34 @@ function isDataRequest(url) {
   return /\/data\/.+\.(json|ics)(\?|$)/i.test(url.pathname);
 }
 
+function isLastDigestRequest(url) {
+  // last_digest.json обновляется тестовыми workflow'ами (Push Last Digest,
+  // Digest Only) — пользователь хочет видеть свежий вид сразу, а не на
+  // следующей перезагрузке. Поэтому network-first, а не SWR.
+  return /\/data\/last_digest\.json(\?|$)/i.test(url.pathname);
+}
+
 function isFontRequest(url) {
   return url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+}
+
+// network-first: тянем из сети, при сбое — отдаём кэш. Для критичных файлов,
+// где свежесть важнее скорости (last_digest.json — пользователь только что
+// сгенерил его и хочет увидеть СЕЙЧАС, не «через перезагрузку»).
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return new Response('{}', {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
 }
 
 // stale-while-revalidate: отдаём из кэша моментально, в фоне обновляем кэш.
@@ -166,6 +192,13 @@ self.addEventListener('fetch', (event) => {
 
   // Игнорируем chrome-extension://, data:, blob: и пр.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
+  // last_digest.json должен обновляться сразу после прогона workflow —
+  // ставим network-first, отдельно от остальных data/*.json.
+  if (isLastDigestRequest(url)) {
+    event.respondWith(networkFirst(request, CACHE_NAME));
+    return;
+  }
 
   if (isDataRequest(url)) {
     event.respondWith(staleWhileRevalidate(request, CACHE_NAME));
