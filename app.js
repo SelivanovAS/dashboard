@@ -2023,28 +2023,57 @@ async function syncWatchlistToWorker() {
   }
 }
 
-// Гидратация watchlist из ответа Worker'а на /subscribe (после переустановки
-// PWA локалка может быть пустой, а в KV — список со старого сеанса).
-function hydrateWatchlistFromServer(serverList) {
-  if (!Array.isArray(serverList) || serverList.length === 0) return;
-  // Мержим: локальные правки приоритетнее свежей серверной копии — иначе
-  // только что снятые звёздочки воскреснут. Гидратируем только если
-  // локальный список пуст (свежеустановленная PWA).
-  if (watchlist.size > 0) return;
-  watchlist = new Set(serverList.filter((x) => typeof x === 'string'));
-  try {
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
-  } catch (_) {}
-  // Гидратация с Worker = «первое открытие» на этом устройстве. Если юрист
-  // ещё ни разу не трогал чип «Мои» — включаем фильтр.
-  maybeAutoEnableMineFilter();
-  // Если страница уже отрисована — перерендерить, чтобы звёздочки появились
-  // и chip «Мои» подхватил новый watchlist (через applyFilters → renderChipBar).
-  if (typeof applyFilters === 'function') {
-    try { applyFilters(); } catch (_) {}
-  } else if (typeof renderTable === 'function') {
-    try { renderTable(); renderMobileCards(); } catch (_) {}
+// Двусторонний reconcile watchlist между клиентом и Worker (KV) после
+// `/subscribe`. Покрывает три сценария:
+//   1. Локальный пуст, серверный есть → берём с сервера (PWA переустановлена,
+//      перенос подписок сохраняет KV).
+//   2. Локальный есть, серверный пуст → пушим локальный на сервер. Это
+//      случается, когда юрист ставил звёздочки до того, как `/subscribe`
+//      успел создать запись в KV (тогда `/watchlist` возвращал 404 и
+//      звёздочки не доезжали до сервера); либо когда серверная подписка —
+//      свежая (новое устройство), а звёздочки уже были в localStorage.
+//   3. Оба непустые и расходятся → не сливаем (риск воскресить только что
+//      снятые звёздочки), но если локальный — строгое надмножество, шлём.
+function reconcileWatchlistWithServer(serverList) {
+  const server = new Set(
+    Array.isArray(serverList) ? serverList.filter((x) => typeof x === 'string') : []
+  );
+  // Случай 1: локальный пуст → берём с сервера.
+  if (watchlist.size === 0 && server.size > 0) {
+    watchlist = server;
+    try {
+      localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
+    } catch (_) {}
+    maybeAutoEnableMineFilter();
+    if (typeof applyFilters === 'function') {
+      try { applyFilters(); } catch (_) {}
+    } else if (typeof renderTable === 'function') {
+      try { renderTable(); renderMobileCards(); } catch (_) {}
+    }
+    return;
   }
+  // Случай 2 и 3: локальный непуст. Сверим, есть ли локальные звёздочки,
+  // которых нет на сервере — если да, отправим текущий локальный watchlist.
+  let needsPush = false;
+  if (watchlist.size > server.size) {
+    needsPush = true;
+  } else {
+    for (const x of watchlist) {
+      if (!server.has(x)) { needsPush = true; break; }
+    }
+  }
+  if (needsPush) {
+    // Дёрнем существующий sync — он уже обрабатывает push-подписку и
+    // дебаунс. Без таймаута, чтобы вылилось в /watchlist сразу.
+    if (watchlistSyncTimer) clearTimeout(watchlistSyncTimer);
+    syncWatchlistToWorker();
+  }
+}
+
+// Совместимый алиас для старого имени — на случай если он остался в коде/
+// расширениях. Внутри — тот же reconcile.
+function hydrateWatchlistFromServer(serverList) {
+  reconcileWatchlistWithServer(serverList);
 }
 
 function maybeShowWatchlistHint() {
