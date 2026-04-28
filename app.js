@@ -958,6 +958,9 @@ function applyFilters(){
   const cat=document.getElementById('filter-category').value;
   const stageEl=document.getElementById('filter-stage');
   const stg=stageEl?stageEl.value:'all';
+  // «Только мои дела»: применяем только если юрист отметил хоть одно дело.
+  // Пустой watchlist → нечего фильтровать, фильтр игнорируется.
+  const mineOn=filterMineActive&&watchlist.size>0;
 
   filteredCases=allCases.filter(c=>{
     const archived=c.computed?c.computed.archived:isArchived(c);
@@ -973,6 +976,7 @@ function applyFilters(){
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;
+    if(mineOn&&!isWatched(c.caseNumber)&&!isNewCase(c))return false;
     if(q){const blob=c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!blob.includes(q))return false;}
     return true;
   });
@@ -1072,6 +1076,17 @@ function renderChipBar(){
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
   let html=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
+  // Тоггл «Только мои дела» — отдельный чип. Виден только при непустом
+  // watchlist (иначе фильтровать нечего). Счётчик = подписки + новые,
+  // потому что именно эти дела видны при включённом фильтре.
+  if(watchlist.size>0){
+    let mineCount=0;
+    for(const c of allCases){
+      if(isWatched(c.caseNumber)||isNewCase(c)){mineCount++;}
+    }
+    const active=filterMineActive?'active':'';
+    html=`<button class="chip-btn chip-mine ${active}" title="Только мои дела + новые" aria-pressed="${filterMineActive?'true':'false'}" onclick="setMineFilter(${!filterMineActive})"><span class="chip-mine-star">★</span>Мои<span class="chip-count">${mineCount}</span></button>`+html;
+  }
   // Segmented controls: роль и инстанция
   html+=`<span class="chip-divider"></span>`;
   html+=`<div class="seg-ctrl">
@@ -1108,6 +1123,12 @@ function renderChipBar(){
 function setStatusFilter(v){document.getElementById('filter-status').value=v;applyFilters();}
 function setRoleFilter(v){document.getElementById('filter-role').value=v;applyFilters();}
 function setStageFilter(v){document.getElementById('filter-stage').value=v;applyFilters();}
+function setMineFilter(v){
+  filterMineActive=!!v;
+  try{localStorage.setItem(FILTER_MINE_KEY,filterMineActive?'true':'false');}catch(_){}
+  applyFilters();
+}
+window.setMineFilter=setMineFilter;
 function openFiltersSheet(){
   document.getElementById('filters-sheet').classList.add('open');
   document.getElementById('filters-sheet').setAttribute('aria-hidden','false');
@@ -1871,10 +1892,39 @@ const PUSH_WORKER_URL = 'https://court-monitor-trigger.7selivanov-a.workers.dev'
 // push только по делам, отмеченным юристом. Пустой watchlist = «всё подряд».
 const WATCHLIST_KEY = 'watchlist_v1';
 const WATCHLIST_HINT_KEY = 'watchlist_hint_shown';
+// Фильтр «Только мои дела»: показывать только отслеживаемые (★) + новые.
+// Дефолт: включён при первой звёздочке. При пустом watchlist чип скрывается
+// и фильтр не применяется (нечего фильтровать).
+const FILTER_MINE_KEY = 'filter_mine_v1';
 let watchlist = new Set();
 try {
   watchlist = new Set(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]'));
 } catch (_) { watchlist = new Set(); }
+let filterMineActive = false;
+try {
+  const saved = localStorage.getItem(FILTER_MINE_KEY);
+  // null → дефолт: ON если есть подписки. true/false → явный выбор юриста.
+  filterMineActive = saved === null ? watchlist.size > 0 : saved === 'true';
+  // Если включили автоматически — фиксируем выбор, чтобы при следующем
+  // удалении/постановке звёзд фильтр не возвращался автоматически.
+  if (saved === null && watchlist.size > 0) {
+    localStorage.setItem(FILTER_MINE_KEY, 'true');
+  }
+} catch (_) { filterMineActive = watchlist.size > 0; }
+
+// «Первое открытие» с непустым watchlist (новая звёздочка или гидратация
+// с Worker) — включаем фильтр и фиксируем выбор в localStorage. Если юрист
+// уже трогал чип (saved!=null), функция ничего не меняет: повторного
+// автовключения не будет даже после очистки watchlist и постановки новых.
+function maybeAutoEnableMineFilter() {
+  if (watchlist.size === 0) return;
+  let saved = null;
+  try { saved = localStorage.getItem(FILTER_MINE_KEY); } catch (_) {}
+  if (saved !== null) return;
+  filterMineActive = true;
+  try { localStorage.setItem(FILTER_MINE_KEY, 'true'); } catch (_) {}
+}
+
 let watchlistSyncTimer = null;
 
 function isWatched(caseNumber) {
@@ -1902,6 +1952,18 @@ function toggleWatch(caseNumber, btn) {
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
+  // «Первое открытие» с непустым watchlist — включаем фильтр и фиксируем
+  // выбор в localStorage, чтобы повторно не включать его в будущем.
+  // Если юрист уже сам выключил фильтр (saved='false'), maybeAutoEnable...
+  // ничего не делает — даже после удаления всех звёзд и постановки новых.
+  maybeAutoEnableMineFilter();
+  // Перерисовываем chip-bar и пересчитываем filteredCases — chip появляется
+  // или исчезает в зависимости от размера watchlist, а фильтр пересчитывается.
+  if (typeof applyFilters === 'function') {
+    try { applyFilters(); } catch (_) {}
+  } else if (typeof renderChipBar === 'function') {
+    try { renderChipBar(); } catch (_) {}
+  }
   // Обновляем только нажатую кнопку: перерисовка карточки/строки порождает
   // дёрганье и сбрасывает фокус.
   if (btn) {
@@ -1975,8 +2037,14 @@ function hydrateWatchlistFromServer(serverList) {
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
-  // Если страница уже отрисована — перерендерить, чтобы звёздочки появились.
-  if (typeof renderTable === 'function') {
+  // Гидратация с Worker = «первое открытие» на этом устройстве. Если юрист
+  // ещё ни разу не трогал чип «Мои» — включаем фильтр.
+  maybeAutoEnableMineFilter();
+  // Если страница уже отрисована — перерендерить, чтобы звёздочки появились
+  // и chip «Мои» подхватил новый watchlist (через applyFilters → renderChipBar).
+  if (typeof applyFilters === 'function') {
+    try { applyFilters(); } catch (_) {}
+  } else if (typeof renderTable === 'function') {
     try { renderTable(); renderMobileCards(); } catch (_) {}
   }
 }
@@ -2311,6 +2379,14 @@ async function loadLastDigest() {
     const data = await r.json();
     if (!data || !data.html) return;
     body.innerHTML = sanitizeDigestHtml(data.html);
+    // Если в URL есть ?mine=1 — попробуем подменить тело дайджеста на
+    // персональную версию (свои дела + новые). При пустом watchlist или
+    // отсутствии своих событий — оставляем общий дайджест и показываем
+    // плашку-заметку. Никогда не показываем «пусто» после клика из push.
+    const urlMine = new URL(window.location.href);
+    if (urlMine.searchParams.has('mine')) {
+      await applyMineDigestFilterToBody(body);
+    }
     // Оборачиваем номера дел в кликабельные ссылки. Если allCases ещё не
     // загружен — функция поставит флаг, и enhancement выполнится повторно
     // в конце renderAll() (см. enhanceDigestCaseLinks).
@@ -2326,6 +2402,12 @@ async function loadLastDigest() {
       pill.textContent = date.full;
       titleEl.appendChild(pill);
       titleEl.title = `${date.full}, ${date.time}`;
+    }
+    if (urlMine.searchParams.has('mine')) {
+      const minePill = document.createElement('span');
+      minePill.className = 'digest-mine-pill';
+      minePill.textContent = '★ только мои';
+      titleEl.appendChild(minePill);
     }
     document.getElementById('digest-meta').textContent = data.summary || '';
     block.hidden = false;
@@ -2364,6 +2446,117 @@ async function loadLastDigest() {
   } catch (e) {
     console.warn('Не удалось загрузить дайджест:', e);
   }
+}
+
+// Зеркало `_filter_events_by_watchlist` из update_cases.py. Новые дела
+// (`fi_new_cases`, `new_cases` ≡ apel CSV) — общесистемный сигнал, поэтому
+// возвращаются целиком. Фильтр по watchlist — только для изменений и
+// stage_transitions.
+function filterDigestContextByWatchlist(ctx, wlSet) {
+  const has = (s) => wlSet.has(String(s || '').trim());
+  return {
+    fi_new_cases: Array.isArray(ctx.fi_new_cases) ? ctx.fi_new_cases.slice() : [],
+    appeal_new_cases: Array.isArray(ctx.new_cases) ? ctx.new_cases.slice() : [],
+    fi_changes: (ctx.fi_changes || []).filter((ch) => has(ch.case)),
+    changes: (ctx.changes || []).filter((ch) => has(ch.case)),
+    stage_transitions: (ctx.stage_transitions || []).filter(
+      (t) => has(t.fi_case_number) || has(t.appeal_case_number)
+    ),
+  };
+}
+
+// Стороны: краткая форма для отображения в дайджесте. Если истец и ответчик
+// одинаковые (бывает при ошибках в карточке) — показываем один раз.
+function partiesShort(p, d) {
+  const a = String(p || '').trim();
+  const b = String(d || '').trim();
+  if (!a && !b) return '';
+  if (a === b) return escHtml(a);
+  if (!a) return escHtml(b);
+  if (!b) return escHtml(a);
+  return `${escHtml(a)} <span class="mine-vs">vs</span> ${escHtml(b)}`;
+}
+
+// Минимальный рендер «персонального дайджеста» из структурированного
+// контекста: 5 секций по аналогии с шаблонным дайджестом в Python. Номера
+// дел оборачиваем в `data-open-drawer`, чтобы клик открывал боковую панель —
+// `enhanceDigestCaseLinks()` не обязателен, но идемпотентен.
+function renderMineDigestSections(f) {
+  const out = [];
+  const caseLink = (num) => {
+    const safeNum = String(num || '').replace(/'/g, '&#39;');
+    return `<a class="digest-case-link" data-open-drawer="${safeNum}"><b>${escHtml(num)}</b></a>`;
+  };
+  const fiNew = f.fi_new_cases.map((c) => {
+    const fi = c.first_instance || {};
+    const court = fi.court || '';
+    const filed = fi.filing_date ? ` · поступило ${escHtml(fi.filing_date)}` : '';
+    return `<div class="mine-row">${caseLink(c.id)} — ${partiesShort(c.plaintiff, c.defendant)}${court ? ` · ${escHtml(court)}` : ''}${filed}</div>`;
+  });
+  if (fiNew.length) out.push(`<p>📥 <b>Новые иски (1 инст., ${fiNew.length}):</b></p>${fiNew.join('')}`);
+
+  const apNew = f.appeal_new_cases.map((c) => {
+    const num = c['Номер дела'] || '';
+    const court = c['Суд апелляционной инстанции'] || c['Суд'] || '';
+    return `<div class="mine-row">${caseLink(num)} — ${partiesShort(c['Истец'], c['Ответчик'])}${court ? ` · ${escHtml(court)}` : ''}</div>`;
+  });
+  if (apNew.length) out.push(`<p>📥 <b>Новые дела (апелляция, ${apNew.length}):</b></p>${apNew.join('')}`);
+
+  const fiChg = f.fi_changes.map((ch) => {
+    const types = Array.isArray(ch.type) ? ch.type.join(', ') : (ch.type || '');
+    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${ch.court ? ` · ${escHtml(ch.court)}` : ''}${types ? ` · <i>${escHtml(types)}</i>` : ''}</div>`;
+  });
+  if (fiChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (1 инст., ${fiChg.length}):</b></p>${fiChg.join('')}`);
+
+  const apChg = f.changes.map((ch) => {
+    const types = Array.isArray(ch.type) ? ch.type.join(', ') : (ch.type || '');
+    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${types ? ` · <i>${escHtml(types)}</i>` : ''}</div>`;
+  });
+  if (apChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (апелляция, ${apChg.length}):</b></p>${apChg.join('')}`);
+
+  const tr = f.stage_transitions.map((t) => {
+    const num = t.appeal_case_number || t.fi_case_number || '';
+    const stage = t.to_stage || t.from_stage || '';
+    return `<div class="mine-row">${caseLink(num)}${stage ? ` · ${escHtml(stage)}` : ''}</div>`;
+  });
+  if (tr.length) out.push(`<p>🔀 <b>Перешли в новую стадию (${tr.length}):</b></p>${tr.join('')}`);
+
+  return out.join('');
+}
+
+// Подменяет содержимое блока дайджеста на персональную версию по watchlist.
+// Если в персонале сегодня пусто — оставляет общий дайджест и добавляет
+// плашку «По твоим делам сегодня изменений нет — показан общий дайджест».
+async function applyMineDigestFilterToBody(body) {
+  if (watchlist.size === 0) {
+    prependMineNote(body, 'У тебя пока нет отслеживаемых дел. Поставь звёздочку в карточке, чтобы получать персональный дайджест. Сейчас показан общий.');
+    return;
+  }
+  let ctx = null;
+  try {
+    const r = await fetch('./data/last_digest_context.json', { cache: 'no-cache' });
+    if (r.ok) ctx = await r.json();
+  } catch (_) {}
+  if (!ctx) {
+    prependMineNote(body, 'Не удалось загрузить контекст для персональной версии — показан общий дайджест.');
+    return;
+  }
+  const f = filterDigestContextByWatchlist(ctx, watchlist);
+  const total = f.fi_new_cases.length + f.appeal_new_cases.length
+    + f.fi_changes.length + f.changes.length + f.stage_transitions.length;
+  if (total === 0) {
+    prependMineNote(body, 'По твоим делам сегодня изменений нет — показан общий дайджест.');
+    return;
+  }
+  const sections = renderMineDigestSections(f);
+  body.innerHTML = `<div class="mine-digest-note">★ Только мои дела + новые. Изменений: ${total}.</div>${sections}`;
+}
+
+function prependMineNote(body, text) {
+  const note = document.createElement('div');
+  note.className = 'mine-digest-note mine-digest-note-fallback';
+  note.textContent = text;
+  body.insertBefore(note, body.firstChild);
 }
 
 // Оборачивает номера дел в #digest-body в <a class="digest-case-link"

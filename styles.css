@@ -532,6 +532,9 @@ body {
 .chip-btn.chip-new.active { background:var(--amber-500); border-color:var(--amber-500); color:#fff; }
 .chip-btn.chip-today.active { background:var(--red-500); border-color:var(--red-500); color:#fff; }
 .chip-btn.chip-week.active { background:var(--blue-500); border-color:var(--blue-500); color:#fff; }
+.chip-btn.chip-mine.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip-mine-star { color:var(--amber-500); margin-right:2px; font-size:0.95em; }
+.chip-btn.chip-mine.active .chip-mine-star { color:#fff; }
 .chip-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px; padding:0 5px; border-radius:8px; background:var(--bg-3); color:var(--fg-3); font-size:10px; font-weight:var(--fw-bold); font-variant-numeric:tabular-nums; }
 .chip-new .chip-count { background:var(--amber-100); color:var(--amber-700); }
 .chip-today .chip-count { background:var(--red-100); color:var(--red-700); }
@@ -1056,6 +1059,39 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
+.digest-mine-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--amber-700, #b45309);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.mine-digest-note {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--amber-500, #f59e0b);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.mine-digest-note-fallback {
+  border-left-color: var(--accent);
+  background: rgba(33, 168, 92, 0.08);
+}
+.digest-body .mine-row {
+  margin: 4px 0;
+  padding-left: 8px;
+  border-left: 2px solid transparent;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.digest-body .mine-row:hover { border-left-color: var(--bg-3); }
+.digest-body .mine-vs { color: var(--fg-3); font-size: 0.9em; padding: 0 2px; }
 .digest-meta  { color: var(--fg-3); font-size: var(--fs-sm); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .digest-toggle {
   background: transparent;

@@ -4069,16 +4069,17 @@ def _filter_events_by_watchlist(
     апелляции, для 1-й инст. = номер 1-й инст.). Маппинг полей:
     · changes (apel)        → ch["case"]
     · fi_changes            → ch["case"] (= fi.case_number)
-    · fi_new_cases          → c["id"]
-    · appeal_new_cases_csv  → c["Номер дела"]
+    · fi_new_cases          → c["id"]            (НЕ фильтруем, общесистемно)
+    · appeal_new_cases_csv  → c["Номер дела"]    (НЕ фильтруем, общесистемно)
     · stage_transitions     → fi_case_number ИЛИ appeal_case_number
       (юрист может отслеживать дело по любому из них).
+
+    Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) считаем общесистемным
+    сигналом: они появились впервые и логически не могут быть в чьём-либо
+    watchlist. Поэтому возвращаем их целиком всем подписчикам.
     """
     return {
-        "fi_new_cases": [
-            c for c in (fi_new_cases or [])
-            if (c.get("id") or "").strip() in watchlist
-        ],
+        "fi_new_cases": list(fi_new_cases or []),
         "fi_changes": [
             ch for ch in (fi_changes or [])
             if (ch.get("case") or "").strip() in watchlist
@@ -4088,10 +4089,7 @@ def _filter_events_by_watchlist(
             if (t.get("fi_case_number") or "").strip() in watchlist
             or (t.get("appeal_case_number") or "").strip() in watchlist
         ],
-        "appeal_new_cases_csv": [
-            c for c in (appeal_new_cases_csv or [])
-            if (c.get("Номер дела") or "").strip() in watchlist
-        ],
+        "appeal_new_cases_csv": list(appeal_new_cases_csv or []),
         "changes": [
             ch for ch in (changes or [])
             if (ch.get("case") or "").strip() in watchlist
@@ -4125,6 +4123,90 @@ def _drop_dead_subscription(endpoint: str) -> None:
             )
     except Exception as exc:
         log.warning(f"Web Push: не удалось удалить подписку: {exc}")
+
+
+def _make_per_sub_callback(
+    *,
+    fi_new_cases: list[dict],
+    fi_changes: list[dict],
+    changes: list[dict],
+    stage_transitions: list[dict],
+    appeal_new_cases_csv: list[dict],
+    push_summary: str,
+):
+    """Фабрика callback'а для `send_web_push(per_subscriber=...)`.
+
+    Логика отправки push с учётом подписки на дела:
+    · watchlist пуст и новых дел нет → None (ничего не шлём).
+    · watchlist пуст, но есть новые дела (общесистемные) → общий push с
+      перечнем числа изменений.
+    · watchlist непуст → персональный push: `_filter_events_by_watchlist`
+      пропускает все новые дела целиком + только изменения по своим делам.
+      Заголовок «Мониторинг дел — твои дела», click_url с `?mine=1`.
+    · watchlist непуст, но и своих изменений, и новых дел нет → None.
+
+    Используется в main_json (живой крон), main_replay_last,
+    main_push_last_digest — чтобы тестовые режимы вели себя как боевой.
+    """
+    def _per_sub(sub: dict):
+        wl_raw = sub.get("watchlist") or []
+        wl = {str(x).strip() for x in wl_raw if str(x).strip()}
+        f = _filter_events_by_watchlist(
+            wl,
+            fi_new_cases=fi_new_cases,
+            fi_changes=fi_changes,
+            stage_transitions=stage_transitions,
+            appeal_new_cases_csv=appeal_new_cases_csv,
+            changes=changes,
+        )
+        n_new = len(f["fi_new_cases"]) + len(f["appeal_new_cases_csv"])
+        n_chg = len(f["fi_changes"]) + len(f["changes"])
+        n_st = len(f["stage_transitions"])
+        if n_new + n_chg + n_st == 0:
+            return None
+        if not wl:
+            # Подписчик ничего не отслеживает — приходят только новые дела
+            # как общесистемный сигнал. Текст и click_url — общие.
+            return (
+                "Мониторинг дел — новые дела",
+                push_summary,
+                "/sberbank_dashboard.html?digest=open",
+            )
+        # Перечень: до 3 номеров, остаток сворачиваем в «и ещё N».
+        ids: list[str] = []
+        for c in f["fi_new_cases"]:
+            ids.append((c.get("id") or "").strip())
+        for c in f["appeal_new_cases_csv"]:
+            ids.append((c.get("Номер дела") or "").strip())
+        for ch in f["fi_changes"]:
+            ids.append((ch.get("case") or "").strip())
+        for ch in f["changes"]:
+            ids.append((ch.get("case") or "").strip())
+        for t in f["stage_transitions"]:
+            ids.append(
+                (t.get("appeal_case_number") or t.get("fi_case_number") or "").strip()
+            )
+        ids_uniq: list[str] = []
+        seen: set[str] = set()
+        for x in ids:
+            if x and x not in seen:
+                seen.add(x)
+                ids_uniq.append(x)
+        head = ", ".join(ids_uniq[:3])
+        tail = f" и ещё {len(ids_uniq) - 3}" if len(ids_uniq) > 3 else ""
+        total = n_new + n_chg + n_st
+        body = (
+            f"Изменения по {len(ids_uniq)} "
+            f"{'делу' if len(ids_uniq) == 1 else 'делам'}: {head}{tail}"
+            + (f" · всего событий: {total}" if total > len(ids_uniq) else "")
+        )
+        return (
+            "Мониторинг дел — твои дела",
+            body,
+            "/sberbank_dashboard.html?digest=open&mine=1",
+        )
+
+    return _per_sub
 
 
 def send_web_push(
@@ -5436,73 +5518,17 @@ def main_json():
             parts.append(f"🔄 Переходов: {push_stages}")
         push_summary = " · ".join(parts)
 
-        def _per_sub(sub: dict):
-            """Собрать payload под одного подписчика.
-
-            · watchlist пуст / отсутствует → общий push (всё подряд).
-            · watchlist есть и матчится → персональный push с перечислением
-              своих дел.
-            · watchlist есть, но сегодня по нему ничего → None (пропуск).
-            """
-            wl_raw = sub.get("watchlist") or []
-            wl = {str(x).strip() for x in wl_raw if str(x).strip()}
-            if not wl:
-                return (
-                    "Мониторинг дел — обновление",
-                    push_summary,
-                    "/sberbank_dashboard.html?digest=open",
-                )
-            f = _filter_events_by_watchlist(
-                wl,
-                fi_new_cases=fi_new_cases,
-                fi_changes=fi_changes,
-                stage_transitions=stage_transitions,
-                appeal_new_cases_csv=appeal_new_cases_csv,
-                changes=changes,
-            )
-            n_new = len(f["fi_new_cases"]) + len(f["appeal_new_cases_csv"])
-            n_chg = len(f["fi_changes"]) + len(f["changes"])
-            n_st = len(f["stage_transitions"])
-            if n_new + n_chg + n_st == 0:
-                return None
-            # Перечень: до 3 номеров, остаток сворачиваем в «и ещё N».
-            ids: list[str] = []
-            for c in f["fi_new_cases"]:
-                ids.append((c.get("id") or "").strip())
-            for c in f["appeal_new_cases_csv"]:
-                ids.append((c.get("Номер дела") or "").strip())
-            for ch in f["fi_changes"]:
-                ids.append((ch.get("case") or "").strip())
-            for ch in f["changes"]:
-                ids.append((ch.get("case") or "").strip())
-            for t in f["stage_transitions"]:
-                ids.append(
-                    (t.get("appeal_case_number") or t.get("fi_case_number") or "").strip()
-                )
-            ids_uniq: list[str] = []
-            seen: set[str] = set()
-            for x in ids:
-                if x and x not in seen:
-                    seen.add(x)
-                    ids_uniq.append(x)
-            head = ", ".join(ids_uniq[:3])
-            tail = f" и ещё {len(ids_uniq) - 3}" if len(ids_uniq) > 3 else ""
-            total = n_new + n_chg + n_st
-            body = (
-                f"Изменения по {len(ids_uniq)} "
-                f"{'делу' if len(ids_uniq) == 1 else 'делам'}: {head}{tail}"
-                + (f" · всего событий: {total}" if total > len(ids_uniq) else "")
-            )
-            return (
-                "Мониторинг дел — твои дела",
-                body,
-                "/sberbank_dashboard.html?digest=open&mine=1",
-            )
-
         send_web_push(
             title="Мониторинг дел — обновление",
             body=push_summary,
-            per_subscriber=_per_sub,
+            per_subscriber=_make_per_sub_callback(
+                fi_new_cases=fi_new_cases,
+                fi_changes=fi_changes,
+                changes=changes,
+                stage_transitions=stage_transitions,
+                appeal_new_cases_csv=appeal_new_cases_csv,
+                push_summary=push_summary,
+            ),
         )
 
     # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
@@ -5610,6 +5636,14 @@ def main_replay_last(push_all: bool = False):
         body=body,
         click_url="/sberbank_dashboard.html?digest=open",
         owner_only=not push_all,
+        per_subscriber=_make_per_sub_callback(
+            fi_new_cases=ctx.get("fi_new_cases", []),
+            fi_changes=ctx.get("fi_changes", []),
+            changes=ctx.get("changes", []),
+            stage_transitions=ctx.get("stage_transitions", []),
+            appeal_new_cases_csv=ctx.get("new_cases", []),
+            push_summary=summary or body,
+        ),
     )
     log.info("Готово!")
 
@@ -5699,6 +5733,14 @@ def main_push_last_digest(owner_only: bool = False):
         body=body,
         click_url="/sberbank_dashboard.html?digest=open",
         owner_only=owner_only,
+        per_subscriber=_make_per_sub_callback(
+            fi_new_cases=ctx.get("fi_new_cases", []),
+            fi_changes=ctx.get("fi_changes", []),
+            changes=ctx.get("changes", []),
+            stage_transitions=ctx.get("stage_transitions", []),
+            appeal_new_cases_csv=ctx.get("new_cases", []),
+            push_summary=summary or body,
+        ),
     )
     log.info("Готово!")
 
