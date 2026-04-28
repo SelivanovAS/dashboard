@@ -5621,34 +5621,74 @@ def main_replay_last():
 
 
 def main_push_last_digest():
-    """Тестовый прогон: послать push-уведомление о последнем дайджесте на
-    ВСЕ устройства (без owner_only). Парсинг и генерация не выполняются —
-    читается готовый `data/last_digest.json`, фронт по клику откроет дашборд
-    и подтянет тот же файл из кэша/сети.
+    """Тестовый прогон: переигрывает последний дайджест через LLM из
+    `data/last_digest_context.json` и шлёт push на ВСЕ устройства
+    (без owner_only). В Telegram не отправляет — это режим только для
+    проверки PWA-доставки и текущего вида дайджеста после правок промпта.
+
+    Шаги:
+      1. Читаем контекст последнего продового прогона.
+      2. Прогоняем `generate_digest` (Claude / GigaChat / template-fallback).
+      3. Перезаписываем `data/last_digest.json` — фронт покажет свежий вид.
+      4. Шлём web push всем устройствам со свежей сводкой.
     """
     log.info("=" * 60)
     log.info("Режим push-last-digest: пуш по последнему дайджесту, все устройства")
     log.info("=" * 60)
 
-    if not os.path.exists(LAST_DIGEST_PATH):
+    # validate_environment проверит ANTHROPIC/GIGACHAT_AUTH_KEY и Telegram —
+    # Telegram нам не нужен, но send_web_push также читает PUSH_*-переменные;
+    # их валидация останется внутри send_web_push (логирует и тихо выходит,
+    # если не настроены).
+    validate_environment()
+
+    if not os.path.exists(LAST_DIGEST_CONTEXT_PATH):
         log.error(
-            f"Дайджест не найден: {LAST_DIGEST_PATH}. "
-            "Сначала выполните полный прогон, чтобы появился файл."
+            f"Контекст не найден: {LAST_DIGEST_CONTEXT_PATH}. "
+            "Сначала выполните полный прогон (--json или без флагов), "
+            "чтобы сохранить контекст."
         )
         sys.exit(2)
 
-    with open(LAST_DIGEST_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    with open(LAST_DIGEST_CONTEXT_PATH, "r", encoding="utf-8") as f:
+        ctx = json.load(f)
 
-    summary = (data.get("summary") or "").strip()
-    generated_at = (data.get("generated_at") or "")[:10] or "?"
-    placeholder = {"(replay)", "(digest-only)", "(force)"}
-    if not summary or summary in placeholder or data.get("is_empty"):
-        body = f"Открой приложение — последний дайджест от {generated_at}"
-    else:
-        body = summary
+    saved_at = ctx.get("saved_at", "?")
+    log.info(f"Контекст от {saved_at}: "
+             f"changes={len(ctx.get('changes', []))}, "
+             f"fi_changes={len(ctx.get('fi_changes', []))}, "
+             f"new_cases={len(ctx.get('new_cases', []))}, "
+             f"fi_new={len(ctx.get('fi_new_cases', []))}, "
+             f"transitions={len(ctx.get('stage_transitions', []))}")
 
-    log.info(f"Дайджест от {generated_at}, body: {body!r}")
+    log.info("Генерирую дайджест через LLM...")
+    digest = generate_digest(
+        ctx.get("new_cases", []),
+        ctx.get("changes", []),
+        cases=ctx.get("cases", []),
+        fi_new_cases=ctx.get("fi_new_cases", []),
+        stage_transitions=ctx.get("stage_transitions", []),
+        fi_changes=ctx.get("fi_changes", []),
+        total_active_appeal=ctx.get("total_active_appeal", 0),
+        total_active_fi=ctx.get("total_active_fi", 0),
+    )
+
+    is_empty = not (
+        ctx.get("new_cases") or ctx.get("changes")
+        or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
+        or ctx.get("fi_changes")
+    )
+    summary = build_summary_line(
+        ctx.get("new_cases", []),
+        ctx.get("changes", []),
+        ctx.get("fi_new_cases", []),
+        ctx.get("stage_transitions", []),
+        ctx.get("fi_changes", []),
+    )
+    save_last_digest(digest, summary=summary, is_empty=is_empty)
+
+    body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
+    log.info(f"Push body: {body!r}")
     send_web_push(
         title="Мониторинг дел — тестовая рассылка",
         body=body,

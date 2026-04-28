@@ -1,8 +1,10 @@
 name: Push Last Digest (test)
 
-# Тестовая рассылка push-уведомления о последнем дайджесте на ВСЕ устройства
-# (не только owner). Ничего не парсит, не генерирует, не шлёт в Telegram —
-# просто читает data/last_digest.json и пинает PWA-подписчиков.
+# Тестовая рассылка push-уведомления на ВСЕ устройства (не только owner).
+# Парсинг судов не делает, в Telegram не шлёт. Берёт сохранённый контекст
+# последнего продового прогона (data/last_digest_context.json),
+# ПЕРЕИГРЫВАЕТ дайджест через LLM (Claude/GigaChat — с актуальным промптом),
+# перезаписывает data/last_digest.json и пинает PWA-подписчиков.
 
 on:
   workflow_dispatch:
@@ -25,7 +27,23 @@ jobs:
 
       - name: Push last digest to all devices
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: python scripts/update_cases.py --push-last-digest
+
+      - name: Commit refreshed last_digest.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet data/last_digest.json; then
+            echo "last_digest.json не изменился — нечего коммитить"
+            exit 0
+          fi
+          git add data/last_digest.json
+          git commit -m "🔁 Push Last Digest: переигран дайджест через LLM"
+          git push
