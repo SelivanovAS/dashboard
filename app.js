@@ -2001,16 +2001,30 @@ function urlBase64ToUint8(b64) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// Ключ localStorage, в котором запоминается OWNER_SECRET после успешной
+// первой пометки устройства владельцем. Нужен для автопометки при
+// переподписке (FCM/Mozilla периодически выдают новый endpoint, и без
+// сохранённого секрета пришлось бы каждый раз заходить с ?owner=...).
+const OWNER_SECRET_KEY = 'owner_secret';
+
 async function markAsOwner(reg) {
   // Помечает текущую подписку как «владельческую» — тестовые пуши
   // (digest_only / force_postponement) полетят только сюда.
-  // Активируется один раз: открыть PWA с URL-параметром ?owner=<OWNER_SECRET>.
+  // Источники секрета (приоритет сверху вниз):
+  //   1) URL-параметр ?owner=<OWNER_SECRET> — первичная активация;
+  //   2) localStorage[OWNER_SECRET_KEY] — авторепометка при переподписке.
   const params = new URLSearchParams(window.location.search);
-  const secret = params.get('owner');
+  const urlSecret = params.get('owner');
+  let secret = urlSecret;
+  if (!secret) {
+    try { secret = localStorage.getItem(OWNER_SECRET_KEY); } catch (_) {}
+  }
   if (!secret) return;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) {
-    console.warn('markAsOwner: подписка ещё не оформлена, нажмите 🔔 и повторите');
+    if (urlSecret) {
+      console.warn('markAsOwner: подписка ещё не оформлена, нажмите 🔔 и повторите');
+    }
     return;
   }
   try {
@@ -2023,16 +2037,33 @@ async function markAsOwner(reg) {
       body: JSON.stringify({ endpoint: sub.endpoint }),
     });
     if (r.ok) {
-      // Убираем секрет из адресной строки, чтобы не светил в истории браузера.
-      params.delete('owner');
-      const newSearch = params.toString();
-      const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
-      history.replaceState(null, '', newUrl);
-      alert('✅ Это устройство помечено как владелец. Тестовые push будут приходить только сюда.');
-    } else {
+      // Запоминаем секрет на устройстве, чтобы при следующей ротации
+      // endpoint'а (FCM делает это сам через ~неделю-месяц) подписка
+      // снова автоматически помечалась владельцем без захода по URL.
+      try { localStorage.setItem(OWNER_SECRET_KEY, secret); } catch (_) {}
+      if (urlSecret) {
+        // Первичная активация по ?owner=… — чистим адресную строку и
+        // показываем уведомление. Тихую авто-репометку не трогаем.
+        params.delete('owner');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+        history.replaceState(null, '', newUrl);
+        alert('✅ Это устройство помечено как владелец. Тестовые push будут приходить только сюда.');
+      }
+    } else if (urlSecret) {
       const text = await r.text();
       console.warn('markAsOwner: ' + r.status + ' ' + text);
       alert('Не удалось пометить устройство: ' + r.status + ' (см. консоль)');
+    } else {
+      // Тихий сбой при авто-репометке — не пугаем пользователя alert'ом.
+      // Если секрет в localStorage протух (его сменили), сбрасываем,
+      // чтобы не дёргать /mark-owner на каждый /subscribe.
+      if (r.status === 401) {
+        try { localStorage.removeItem(OWNER_SECRET_KEY); } catch (_) {}
+        console.warn('markAsOwner: сохранённый owner_secret отвергнут (401), сброшен');
+      } else {
+        console.warn('markAsOwner: авто-репометка вернула ' + r.status);
+      }
     }
   } catch (e) {
     console.warn('markAsOwner exception:', e);

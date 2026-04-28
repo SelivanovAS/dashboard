@@ -131,6 +131,34 @@ async function handleSetWatchlist(request, env) {
   }
 }
 
+async function handleUnsubscribe(request, env) {
+  // Удалить подписку из KV. Используется автоочисткой из Python: при
+  // получении 410/404 от push-сервиса (FCM/Mozilla/APNs) подписка мёртвая и
+  // её надо вычистить, иначе она будет ронять каждый прогон. Авторизация
+  // через PUSH_SECRET — тот же шаблон, что и /subscriptions.
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const body = await request.json();
+    const endpoint = body && body.endpoint;
+    if (!endpoint || typeof endpoint !== "string") {
+      return new Response("Bad Request", { status: 400 });
+    }
+    const key = endpointToKey(endpoint);
+    const existed = await env.PUSH_SUBSCRIPTIONS.get(key);
+    await env.PUSH_SUBSCRIPTIONS.delete(key);
+    console.log(`Подписка удалена: ${key} (${existed ? "была" : "не было"})`);
+    return new Response(JSON.stringify({ ok: true, existed: !!existed }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("unsubscribe error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
 async function handleListSubscriptions(request, env) {
   const auth = request.headers.get("Authorization") || "";
   if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
@@ -255,6 +283,10 @@ export default {
 
     if (url.pathname === "/subscribe" && request.method === "POST") {
       return handleSubscribe(request, env);
+    }
+
+    if (url.pathname === "/unsubscribe" && request.method === "POST") {
+      return handleUnsubscribe(request, env);
     }
 
     if (url.pathname === "/subscriptions" && request.method === "GET") {

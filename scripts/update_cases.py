@@ -4084,6 +4084,34 @@ def _filter_events_by_watchlist(
     }
 
 
+def _drop_dead_subscription(endpoint: str) -> None:
+    """Удалить мёртвую подписку из KV через `/unsubscribe` на Worker.
+
+    Вызывается автоматически после WebPushException 410/404. Тихая —
+    любая ошибка логируется и не валит прогон, очистка best-effort.
+    """
+    if not PUSH_WORKER_URL or not PUSH_SECRET or not endpoint:
+        return
+    try:
+        r = requests.post(
+            f"{PUSH_WORKER_URL}/unsubscribe",
+            headers={
+                "Authorization": f"Bearer {PUSH_SECRET}",
+                "Content-Type": "application/json",
+            },
+            json={"endpoint": endpoint},
+            timeout=10,
+        )
+        if r.ok:
+            log.info(f"Web Push: мёртвая подписка удалена из KV ({endpoint[:60]})")
+        else:
+            log.warning(
+                f"Web Push: /unsubscribe вернул {r.status_code} для {endpoint[:60]}"
+            )
+    except Exception as exc:
+        log.warning(f"Web Push: не удалось удалить подписку: {exc}")
+
+
 def send_web_push(
     title: str,
     body: str,
@@ -4178,8 +4206,16 @@ def send_web_push(
                 )
                 ok_count += 1
             except WebPushException as exc:
-                ep = (sub.get("endpoint") or "?")[:60]
-                log.warning(f"Web Push: ошибка для {ep}: {exc}")
+                ep_full = sub.get("endpoint") or ""
+                ep_short = ep_full[:60] or "?"
+                log.warning(f"Web Push: ошибка для {ep_short}: {exc}")
+                # Автоочистка: 410 Gone и 404 Not Found — это «подписка
+                # мертва навсегда» (RFC 8030). Удаляем её из KV, чтобы не
+                # тащить балласт каждый прогон.
+                resp = getattr(exc, "response", None)
+                status = getattr(resp, "status_code", None) if resp is not None else None
+                if status in (404, 410) and ep_full:
+                    _drop_dead_subscription(ep_full)
         suffix = f", пропущено по watchlist: {skipped}" if skipped else ""
         log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}{suffix}")
     except Exception as exc:
