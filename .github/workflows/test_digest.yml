@@ -1,0 +1,76 @@
+name: Test Digest
+
+# Объединённый тестовый прогон. Парсинга не делает — переигрывает
+# последний продовый дайджест из data/last_digest_context.json через LLM
+# с актуальным промптом. Telegram: личный по умолчанию, группа по галке.
+# PWA push: владельцу по умолчанию, всем подписчикам по галке.
+# Перезаписывает data/last_digest.json и коммитит обратно в репо.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_group:
+        description: 'Слать в корпоративную группу Telegram. Снять галку — в личный чат.'
+        required: false
+        type: boolean
+        default: false
+      push_all:
+        description: 'PWA push на ВСЕ устройства (включая коллег). Снять галку — только владельцу.'
+        required: false
+        type: boolean
+        default: false
+
+# Коммит обновлённого last_digest.json — нужен contents: write.
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Replay last digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 GROUP CHAT: digest will go to corporate group"
+          else
+            echo "📱 PERSONAL CHAT: digest will go to personal chat"
+          fi
+          if [ "${{ inputs.push_all }}" = "true" ]; then
+            echo "📣 ALL DEVICES: PWA push to every subscriber"
+            python scripts/update_cases.py --replay-last --push-all
+          else
+            echo "👤 OWNER ONLY: PWA push to owner devices"
+            python scripts/update_cases.py --replay-last
+          fi
+
+      - name: Commit refreshed last_digest.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet data/last_digest.json; then
+            echo "last_digest.json не изменился — нечего коммитить"
+            exit 0
+          fi
+          git add data/last_digest.json
+          git commit -m "🔁 Test Digest: переигран дайджест через LLM"
+          git push

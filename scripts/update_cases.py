@@ -5620,7 +5620,7 @@ def main_json():
     )
 
 
-def main_replay_last():
+def main_replay_last(push_all: bool = False):
     """Прогнать дайджест заново из LAST_DIGEST_CONTEXT_PATH.
 
     Используется для экспериментов с промптом/форматом: после любого
@@ -5628,9 +5628,18 @@ def main_replay_last():
     и этот режим пересоздаёт дайджест на тех же данных без повторного
     парсинга судов. Полезно, когда хочется проверить, как отработает
     изменённый промпт на реальных изменениях последнего дня.
+
+    `push_all=False` (по умолчанию) — push только устройствам-владельцам;
+    `push_all=True` — push всем PWA-подписчикам (включая коллег).
+    Управляется флагом `--push-all` в CLI.
+    Telegram-чат (личный/группа) выбирается через env `TELEGRAM_CHAT_ID`
+    в workflow.
     """
     log.info("=" * 60)
-    log.info("Режим replay-last: дайджест из сохранённого контекста")
+    log.info(
+        "Режим replay-last: дайджест из сохранённого контекста "
+        f"(push: {'все устройства' if push_all else 'только владельцу'})"
+    )
     log.info("=" * 60)
 
     validate_environment()
@@ -5667,17 +5676,31 @@ def main_replay_last():
     )
 
     send_telegram(digest)
-    send_web_push(
-        title="Мониторинг дел — replay",
-        body="Переигрывание последнего дайджеста",
-        owner_only=True,
-    )
     replay_is_empty = not (
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
         or ctx.get("fi_changes")
     )
-    save_last_digest(digest, summary="(replay)", is_empty=replay_is_empty)
+    summary = build_summary_line(
+        ctx.get("new_cases", []),
+        ctx.get("changes", []),
+        ctx.get("fi_new_cases", []),
+        ctx.get("stage_transitions", []),
+        ctx.get("fi_changes", []),
+    )
+    save_last_digest(digest, summary=summary or "(replay)", is_empty=replay_is_empty)
+
+    body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
+    title = (
+        "Мониторинг дел — тестовая рассылка"
+        if push_all else "Мониторинг дел — тестовая рассылка (только владельцу)"
+    )
+    send_web_push(
+        title=title,
+        body=body,
+        click_url="/sberbank_dashboard.html?digest=open",
+        owner_only=not push_all,
+    )
     log.info("Готово!")
 
 
@@ -5819,9 +5842,12 @@ def main_digest_only():
 if __name__ == "__main__":
     # Выбор режима
     if "--replay-last" in sys.argv:
-        mode_name = "replay-last"
+        push_all = "--push-all" in sys.argv
+        mode_name = (
+            "replay-last (push-all)" if push_all else "replay-last"
+        )
         entry = main_replay_last
-        entry_args: tuple = ()
+        entry_args: tuple = (push_all,)
     elif "--digest-only" in sys.argv:
         mode_name = "digest-only"
         entry = main_digest_only
