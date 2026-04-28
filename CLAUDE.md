@@ -137,22 +137,16 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 
 Что показывает по каждой push-подписке: имя (если задано), устройство (парсится из user_agent), флаг owner, дата создания, последний вход в PWA, дата последнего обновления watchlist, размер watchlist и раскрываемый список дел со сторонами (Истец vs Ответчик · Суд) — стороны подтягиваются из `cases.json` по номеру.
 
-Действия по каждой подписке (4 кнопки):
+Действия по каждой подписке (3 кнопки):
 - **✏ Имя** → POST `/admin/label` `{endpoint, label}`. Сохраняет произвольное имя («Иван», «iPhone Дани»).
 - **📋 Ред. watchlist** → POST `/admin/watchlist` `{endpoint, watchlist}`. Перезаписывает watchlist чужой подписки (когда коллега не разобралась со звёздочками).
-- **📨 Тест push** → POST `/admin/test-push` `{endpoint}`. Шлёт пустой push конкретному устройству (без encryption — service-worker показывает дефолтное «Сбер Юрист»). Если endpoint мёртв (404/410) — подписка удаляется автоматически.
 - **🗑 Удалить** → POST `/admin/unsubscribe` `{endpoint}`. Принудительно убирает подписку из KV.
 
 Все админ-эндпоинты авторизуются через `?secret=<OWNER_SECRET>` в URL (для удобства открытия из браузера).
 
 Метаданные в KV: `created_at` (один раз), `last_seen_at` (на каждом `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`, `label`. Старые подписки заполняют поля при следующем `/subscribe`.
 
-**Для тестового push** нужно положить `VAPID_PRIVATE_KEY` в secret Worker'а:
-```
-cd cloudflare-worker && wrangler secret put VAPID_PRIVATE_KEY
-# вставить тот же PEM, что в GitHub Secret VAPID_PRIVATE_KEY
-```
-Без него кнопка «📨 Тест push» возвращает 503 с подсказкой. VAPID public key захардкожен в worker.js — не секретный.
+**Тестовый push отложен** — эндпоинт `/admin/test-push` и VAPID-utility в `worker.js` готовы, но кнопка из UI убрана: для активации нужен `VAPID_PRIVATE_KEY` в Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`), которого сейчас нет. Чтобы вернуть фичу — положить PEM и добавить кнопку обратно в `renderCard`.
 
 ## Подписки на дела (watchlist) на фронте
 

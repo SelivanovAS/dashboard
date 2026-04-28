@@ -684,7 +684,6 @@ function renderCard(sub, casesMap) {
     + '<div class="actions">'
     +   '<button class="btn" data-action="rename">✏ Имя</button>'
     +   '<button class="btn" data-action="watchlist">📋 Ред. watchlist</button>'
-    +   '<button class="btn" data-action="test">📨 Тест push</button>'
     +   '<button class="btn btn-danger" data-action="delete">🗑 Удалить</button>'
     +   '<span class="action-flash"></span>'
     + '</div>'
@@ -732,13 +731,6 @@ async function handleAction(card, action, currentSub) {
     const res = await postAdmin("/admin/unsubscribe", { endpoint });
     if (res.ok) { render(true); }
     else { flash(card, "× ошибка", "err"); }
-  } else if (action === "test") {
-    flash(card, "шлю…", "");
-    const res = await postAdmin("/admin/test-push", { endpoint });
-    if (res.ok && res.data && res.data.ok) flash(card, "✓ доставлено (status " + res.data.status + ")", "ok");
-    else if (res.data && res.data.error === "endpoint_dead") flash(card, "× endpoint мёртв, удалён", "err");
-    else flash(card, "× ошибка: " + ((res.data && (res.data.error || res.data.body)) || res.status), "err");
-    if (res.data && res.data.deleted) render(true);
   } else if (action === "watchlist") {
     const cur = (currentSub.watchlist || []).join(", ");
     const next = prompt("Watchlist через запятую. Пусто — очистить.", cur);
