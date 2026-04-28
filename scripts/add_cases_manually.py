@@ -56,26 +56,8 @@ from update_cases import (  # noqa: E402
 
 
 CASES_TO_ADD: list[tuple[str, str]] = [
-    ("surggor--hmao.sudrf.ru",   "2-583/2026"),
-    ("surggor--hmao.sudrf.ru",   "2-3186/2026"),
-    ("surggor--hmao.sudrf.ru",   "2-3275/2026"),
-    ("surggor--hmao.sudrf.ru",   "2-3730/2026"),
-    ("surggor--hmao.sudrf.ru",   "2-5609/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-1436/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-2798/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-951/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-3626/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-3947/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-857/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-4452/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-3063/2026"),
-    ("vartovgor--hmao.sudrf.ru", "2-5405/2026"),
-    ("sovetsk--hmao.sudrf.ru",   "2-216/2026"),
-    ("sovetsk--hmao.sudrf.ru",   "2-208/2026"),
-    ("surgray--hmao.sudrf.ru",   "2-310/2026"),
-    ("hmray--hmao.sudrf.ru",     "2-76/2026"),
-    ("hmray--hmao.sudrf.ru",     "2-135/2026"),
-    ("uganskray--hmao.sudrf.ru", "2-1050/2026"),
+    ("vartovgor--hmao.sudrf.ru", "2-1394/2026"),
+    ("surggor--hmao.sudrf.ru",   "2-2408/2026"),
 ]
 
 
