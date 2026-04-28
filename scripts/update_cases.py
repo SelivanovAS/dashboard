@@ -3433,13 +3433,19 @@ def _drop_hallucinated_from_section(
         kept: list[str] = []
         removed: list[str] = []
         for ln in lines[i + 1:j]:
-            if not ln.strip():
+            stripped = ln.strip()
+            if not stripped:
                 continue  # пустые строки-разделители в «Новых» не ожидаются
+            # Визуальный разделитель `⸻` между подсекциями — это не
+            # строка-дело и не галлюцинация LLM; пропускаем без warning'а.
+            if stripped == "⸻":
+                kept.append(ln)
+                continue
             mnum = _DIGEST_CASE_LINK_RE.search(ln)
             if not mnum:
                 log.warning(
                     f"Пост-процессор дайджеста: в секции «{label}» строка "
-                    f"без номера дела, пропускаю: {ln.strip()[:80]}"
+                    f"без номера дела, пропускаю: {stripped[:80]}"
                 )
                 continue
             num = mnum.group(1).strip()

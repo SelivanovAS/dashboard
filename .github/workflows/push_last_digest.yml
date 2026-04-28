@@ -15,6 +15,11 @@ on:
         type: boolean
         default: true
 
+# `Commit refreshed last_digest.json` пушит обновлённый файл обратно в репо —
+# для этого нужен contents: write (по умолчанию у github-actions[bot] read-only).
+permissions:
+  contents: write
+
 jobs:
   push:
     runs-on: ubuntu-latest
