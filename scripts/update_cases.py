@@ -5620,20 +5620,27 @@ def main_replay_last():
     log.info("Готово!")
 
 
-def main_push_last_digest():
+def main_push_last_digest(owner_only: bool = False):
     """Тестовый прогон: переигрывает последний дайджест через LLM из
-    `data/last_digest_context.json` и шлёт push на ВСЕ устройства
-    (без owner_only). В Telegram не отправляет — это режим только для
-    проверки PWA-доставки и текущего вида дайджеста после правок промпта.
+    `data/last_digest_context.json` и шлёт push. В Telegram не отправляет —
+    это режим только для проверки PWA-доставки и текущего вида дайджеста
+    после правок промпта.
+
+    `owner_only=False` (по умолчанию) — push на ВСЕ устройства;
+    `owner_only=True` — только устройствам-владельцам (без коллег).
+    Управляется флагом `--owner-only` в CLI.
 
     Шаги:
       1. Читаем контекст последнего продового прогона.
       2. Прогоняем `generate_digest` (Claude / GigaChat / template-fallback).
       3. Перезаписываем `data/last_digest.json` — фронт покажет свежий вид.
-      4. Шлём web push всем устройствам со свежей сводкой.
+      4. Шлём web push с учётом `owner_only`.
     """
     log.info("=" * 60)
-    log.info("Режим push-last-digest: пуш по последнему дайджесту, все устройства")
+    log.info(
+        "Режим push-last-digest: пуш по последнему дайджесту "
+        f"({'только владельцу' if owner_only else 'все устройства'})"
+    )
     log.info("=" * 60)
 
     # validate_environment проверит ANTHROPIC/GIGACHAT_AUTH_KEY и Telegram —
@@ -5688,12 +5695,16 @@ def main_push_last_digest():
     save_last_digest(digest, summary=summary, is_empty=is_empty)
 
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
+    title = (
+        "Мониторинг дел — тестовая рассылка (только владельцу)"
+        if owner_only else "Мониторинг дел — тестовая рассылка"
+    )
     log.info(f"Push body: {body!r}")
     send_web_push(
-        title="Мониторинг дел — тестовая рассылка",
+        title=title,
         body=body,
         click_url="/sberbank_dashboard.html?digest=open",
-        owner_only=False,
+        owner_only=owner_only,
     )
     log.info("Готово!")
 
@@ -5755,9 +5766,14 @@ if __name__ == "__main__":
         entry = main_digest_only
         entry_args = ()
     elif "--push-last-digest" in sys.argv:
-        mode_name = "push-last-digest"
+        # `--owner-only` ограничивает рассылку устройствами-владельцами;
+        # без флага push идёт всем подписчикам PWA.
+        owner_only = "--owner-only" in sys.argv
+        mode_name = (
+            "push-last-digest (owner-only)" if owner_only else "push-last-digest"
+        )
         entry = main_push_last_digest
-        entry_args = ()
+        entry_args = (owner_only,)
     elif "--force-digest-for" in sys.argv:
         # Парсинг: --force-digest-for <case> --old-date <date> [--old-time <time>]
         def _arg(name: str, required: bool = True) -> str:

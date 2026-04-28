@@ -8,6 +8,12 @@ name: Push Last Digest (test)
 
 on:
   workflow_dispatch:
+    inputs:
+      owner_only:
+        description: 'Слать push ТОЛЬКО устройствам-владельцам. Снять галку — слать всем подписчикам PWA (включая коллег).'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   push:
@@ -25,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Push last digest to all devices
+      - name: Push last digest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
@@ -34,7 +40,14 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-        run: python scripts/update_cases.py --push-last-digest
+        run: |
+          if [ "${{ inputs.owner_only }}" = "true" ]; then
+            echo "👤 OWNER ONLY: push только устройствам-владельцам"
+            python scripts/update_cases.py --push-last-digest --owner-only
+          else
+            echo "📣 ALL DEVICES: push всем PWA-подписчикам"
+            python scripts/update_cases.py --push-last-digest
+          fi
 
       - name: Commit refreshed last_digest.json
         run: |
