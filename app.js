@@ -2160,7 +2160,11 @@ let digestLoaded = false;
 let pendingShowBeacon = false;
 // Regex номера российского дела: «2-1234/2026», «33-5678/2026», «2а-15/2025».
 // Допускаем буквы (а/КГ) после первого числа — встречается в категориях дел.
-const CASE_NUMBER_RE = /(\d{1,3}[А-Яа-яA-Za-z]?-\d+\/\d{4})/g;
+// Покрывает три типичных формата номеров:
+// 1) гражданские дела — «2-216/2026», «33-1234/2025», «2а-77/2026»;
+// 2) материалы первой инстанции — «М-626/2026» (заявление до возбуждения дела);
+// 3) апелляционные материалы — «33м-15/2025» (редкий, но встречается).
+const CASE_NUMBER_RE = /((?:\d{1,3}[А-Яа-яA-Za-z]?|[МMмm])-\d+\/\d{4})/g;
 
 // Минимальная санитизация HTML дайджеста: разрешаем теги, которые понимает
 // Telegram (b/i/u/s/a/code/pre/strong/em/br), у ссылок чистим href от
@@ -2197,24 +2201,49 @@ function sanitizeDigestHtml(html) {
   };
   walk(tpl.content);
 
-  // Убираем дублирующий заголовок «Дайджест dd.mm.yyyy» в начале — он уже
-  // в шапке свёртываемого блока. И финальную ссылку на сам дашборд — мы
-  // и так на нём. Заодно подчищаем висячие переводы строк.
+  // Убираем дублирующий заголовок дайджеста в начале — он уже в шапке
+  // свёртываемого блока. И финальную ссылку на сам дашборд — мы и так
+  // на нём. Заодно подчищаем висячие переводы строк.
+  //
+  // Покрываем три формы заголовка, которые порождает бэкенд:
+  //   • «📊 Дайджест судебных дел | Суды ХМАО-Югры | dd.mm.yyyy» — Claude
+  //     (приходит plain-текстом, без обёртки <b>);
+  //   • «📊 Мониторинг дел Сбербанка — dd.mm.yyyy» — template-fallback (в <b>);
+  //   • «Дайджест dd.mm.yyyy» — короткий no-changes (в <b>).
   const root = tpl.content;
-  const isHeaderNode = (n) => n && n.nodeType === 1 && n.tagName === 'B'
-    && /^\s*Дайджест\s+\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/i.test(n.textContent || '');
+  // Регулярки заголовков. Каждая должна матчиться в начале строки —
+  // используется и для <b>, и для plain-text узла.
+  const HEADER_RES = [
+    /^Дайджест\s+\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/i,
+    /^📊\s*Дайджест\s+судебных\s+дел.*\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/i,
+    /^📊\s*Мониторинг\s+дел\s+Сбербанка.*\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/i,
+  ];
+  const matchesHeader = (s) => HEADER_RES.some((re) => re.test((s || '').trim()));
+  const isHeaderTagNode = (n) => n && n.nodeType === 1 && n.tagName === 'B'
+    && matchesHeader(n.textContent || '');
   const isDashboardLink = (n) => n && n.nodeType === 1 && n.tagName === 'A'
     && /дашборд|dashboard/i.test(n.textContent || '');
-  // Удаляем первый <b>Дайджест dd.mm</b>, прилегающий пустой текст/перенос
-  // и leading-whitespace в первом непустом текст-узле (он держит «\n\n📥 ...»).
+  // Удаляем первый заголовок (в <b>...</b> ИЛИ как голую первую строку
+  // текстового узла) и прилегающие пустые переводы строк.
   const first = [...root.childNodes].find(n => n.nodeType !== 3 || (n.nodeValue || '').trim());
-  if (isHeaderNode(first)) {
+  if (isHeaderTagNode(first)) {
     let next = first.nextSibling;
     first.remove();
     while (next && next.nodeType === 3 && /^\s*$/.test(next.nodeValue || '')) {
       const after = next.nextSibling; next.remove(); next = after;
     }
     if (next && next.nodeType === 3) next.nodeValue = next.nodeValue.replace(/^\s+/, '');
+  } else if (first && first.nodeType === 3) {
+    // Plain-текстовый случай: Claude кладёт заголовок голой строкой в начало,
+    // далее идёт «\n\n<b>Сводка:</b>…». Срезаем первую строку, если она —
+    // заголовок, и съедаем последующие пустые строки.
+    const text = first.nodeValue || '';
+    const nlIdx = text.indexOf('\n');
+    const firstLine = nlIdx === -1 ? text : text.slice(0, nlIdx);
+    if (matchesHeader(firstLine)) {
+      const rest = (nlIdx === -1 ? '' : text.slice(nlIdx + 1)).replace(/^\s+/, '');
+      first.nodeValue = rest;
+    }
   }
   // Удаляем последнюю ссылку «📊 Открыть дашборд» (и текст-обёртку вокруг).
   const last = [...root.childNodes].reverse().find(n => n.nodeType !== 3 || (n.nodeValue || '').trim());

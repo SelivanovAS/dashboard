@@ -609,6 +609,32 @@ def parties_short(case: dict) -> str:
     return f"{plaintiff} (истец) vs {defendant} (ответчик)"
 
 
+def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
+    """True если «Сбербанк» явно упомянут в любой из сторон.
+
+    Используется для правила БАНК В ХВОСТЕ: когда банк уже виден в сторонах,
+    хвост «банк — Истец/Ответчик» в строке дайджеста избыточен. Хвост нужен
+    ТОЛЬКО для редкого случая «банк = Третье лицо» (в сторонах не фигурирует).
+    """
+    s = ((plaintiff or "") + " " + (defendant or "")).lower()
+    return "сбербанк" in s
+
+
+def _section_break(block: list[str]) -> None:
+    """Вставить визуальный разделитель «⸻» перед следующей секцией.
+
+    Ничего не делает для пустого блока — у самой первой секции разделитель
+    не нужен. Иначе добавляет: пустую строку, строку с `⸻`, ещё одну
+    пустую строку. Так Telegram и PWA рисуют видимую границу между
+    подсекциями (📥 Новые → 📅 Изменения → 🔁 Отложенные → ⚖️ Вынесенные …).
+    """
+    if not block:
+        return
+    block.append("")
+    block.append("⸻")
+    block.append("")
+
+
 def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
     """
     Извлечь мотивировочную часть из текста судебного акта.
@@ -2856,6 +2882,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             if app_str:
                 line += f", апеллянт: {app_str}"
 
+            has_new_act = "new_act" in ch["type"]
             for t in ch["type"]:
                 if t == "new_event":
                     line += f"\n  Новое событие: {d.get('event', '')}"
@@ -2864,6 +2891,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     if d.get("hearing_date"):
                         line += f"\n  Дата заседания: {d['hearing_date']}"
                 if t == "new_result":
+                    # Дедуп: если в этом же change есть и new_act —
+                    # выводим всё в блоке 5.5 (см. ниже), а 5.4 пропускаем.
+                    if has_new_act:
+                        continue
                     hearing_dt = d.get("hearing_date", "")
                     line += f"\n  ИТОГ: {d.get('verdict_label', '')}"
                     if d.get("bank_outcome"):
@@ -2899,14 +2930,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
                 if t == "hearing_postponed":
-                    old_dt = d.get("old_hearing_date", "")
-                    old_tm = d.get("old_hearing_time", "")
                     new_dt = d.get("new_hearing_date", "")
                     new_tm = d.get("new_hearing_time", "")
-                    old_part = f"{old_dt}" + (f" {old_tm}" if old_tm else "")
                     new_part = f"{new_dt}" + (f" {new_tm}" if new_tm else "")
-                    line += (f"\n  ОТЛОЖЕНО: заседание перенесено "
-                             f"с {old_part} на {new_part}")
+                    # В выходном тексте показываем только новую дату.
+                    # Старая ('old_hearing_*') в d остаётся — на случай если
+                    # промпт когда-нибудь снова попросит её цитировать.
+                    line += f"\n  ОТЛОЖЕНО: заседание отложено на {new_part}"
                 if t == "hearing_new":
                     new_dt = d.get("new_hearing_date", "")
                     new_tm = d.get("new_hearing_time", "")
@@ -3056,8 +3086,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # Отдельный блок «Вынесены решения 1 инст.» — источник для раздела 3.5
     # промпта. Дела с fi_resolved приходят из fi_changes и физически
     # остаются в нём, но их статус+итог рендерятся именно здесь.
+    # Дедуп: если в этом же change есть и fi_act_text_published — выводим
+    # ТОЛЬКО в 3.6 (там и ИТОГ из карточки, и мотивировка). В 3.5 не
+    # повторяем, иначе пользователь видит дело в обоих разделах.
     fi_resolved_changes = [
-        ch for ch in fi_changes if "fi_resolved" in ch["type"]
+        ch for ch in fi_changes
+        if "fi_resolved" in ch["type"]
+        and "fi_act_text_published" not in ch["type"]
     ]
     if fi_resolved_changes:
         context_parts.append("\nВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.:")
@@ -3191,7 +3226,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         ⚠ <a href="URL"><b>номер</b></a> — апелляция перешла к рассмотрению дела по правилам производства в суде первой инстанции ({{дата, если есть}}). {{стороны кратко}} | роль банка. НИКОГДА не выкидывать при нехватке места. Берётся из событий «appeal_to_fi_rules» в данных.
    5.2. 🔁 <b>Отложенные заседания (N):</b> — ДВЕ строки на дело, между делами пустая строка. Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
         • строка 1: 🔁 <a href="URL"><b>номер</b></a> — {{стороны кратко}} | категория: {{категория}}
-        • строка 2: Перенесено: ДД.ММ.ГГГГ HH:MM → ДД.ММ.ГГГГ HH:MM (даты строго из строки «ОТЛОЖЕНО:» в данных)
+        • строка 2: Заседание отложено на ДД.ММ.ГГГГ ЧЧ:ММ (дата строго из строки «ОТЛОЖЕНО:» в данных — берётся ТОЛЬКО новая дата, старую не указывай).
    5.3. 📅 <b>Назначенные заседания (N):</b> — формат: строка 1 «<b>дата/время</b> + <a href="URL"><b>номер</b></a>», строка 2 «стороны | категория. Роль банка если известна», между делами пустая строка. НЕ помещай сюда дела с пометкой «ОТЛОЖЕНО».
    5.4. ⚖️ <b>Вынесенные акты (N):</b> — резолютивная часть (выходит через 1-3 дня после заседания). Только дела с блоком ИТОГ. Одна строка на дело:
         <a href="URL"><b>номер</b></a> — Апелляционное определение от <дата>. ИТОГ: <дословно поле ИТОГ>. Категория: <дословно>. Стороны: <истец> vs <ответчик>, банк — <роль>. Для банка: <дословно «В чью пользу для банка»>.
@@ -3202,14 +3237,17 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • строка 3: <b>Почему:</b> см. ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ (выше). Если из одних сторон неочевидно, кто оспаривал решение и чего добивался (напр., «Сбербанк vs Фин. уполномоченный» — обе стороны институциональные), начни «Почему» с короткой фразы «<Роль апеллянта> <имя> оспаривал <что>…», чтобы читатель сразу понял направление жалобы.
         Применяются ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ (формат трёх строк, блок ЗАПРЕЩЕНО — см. выше).
 
-ВАЖНО про 5.4 и 5.5: это РАЗНЫЕ события, разведённые во времени. Если у одного дела есть И ИТОГ, И МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА — оно появится В ОБЕИХ секциях, это корректно. Не объединяй и не дедублицируй.
+ВАЖНО про 5.4 и 5.5: это РАЗНЫЕ события, разведённые во времени, но если в текущем дайджесте у одного дела есть И ИТОГ, И МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА — выводи дело ТОЛЬКО в 5.5 «Опубликованные тексты актов» (там и ИТОГ из карточки, и мотивировка). В 5.4 такие дела НЕ дублируй. Раздельно дело пойдёт по секциям только когда события приходят в разные дайджесты (резолютивка сегодня, мотивировка через 14+ дней) — в этом случае каждая секция получает «свой» прогон.
 
-ВАЖНО про 3.5 и 3.6: то же самое — РАЗНЫЕ события, разведённые во времени. Дело с вынесенным решением сразу попадает в 3.5; когда через 14+ дней опубликуют мотивировочную часть — оно же попадёт в 3.6. Обе секции показываем, не объединяем.
+ВАЖНО про 3.5 и 3.6: то же правило — если в текущем дайджесте у дела есть И поле «ИТОГ» из «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.», И «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» — выводи ТОЛЬКО в 3.6, в 3.5 не дублируй. В разных прогонах дело распределяется по своим секциям естественным образом.
 
 6. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>. Используй ИМЕННО эти три числа дословно — не считай, не угадывай, не округляй.
 7. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
-ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия больших блоков и секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок. ПУСТЫЕ СТРОКИ (обязательны, без них теряется граница): (а) перед каждой подсекцией 📥/📅/⚖️/📄/🔁/📨/⚠ — ровно одна пустая строка, отделяющая её от предыдущего дела или подсекции; (б) между делами в одной подсекции — ровно одна пустая строка, даже в однострочных подсекциях 3.3/3.5/5.1/5.4.
+ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия больших блоков и секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок. РАЗДЕЛИТЕЛИ И ПУСТЫЕ СТРОКИ (обязательны, без них границы теряются):
+(а) перед заголовком каждой подсекции 📥/📅/⚖️/📄/🔁/📨/⚠ ВНУТРИ одного большого блока — отдельная строка-разделитель «⸻» (ТОЛЬКО этот символ, без HTML-тегов и пробелов вокруг), окружённая пустыми строками: пустая строка → ⸻ → пустая строка → заголовок секции. Перед самой первой подсекцией большого блока (сразу после <b>🏛 ПЕРВАЯ ИНСТАНЦИЯ</b> или <b>⚖️ АПЕЛЛЯЦИЯ</b>) разделитель НЕ ставь — там и так понятно, где начало;
+(б) между делами в одной подсекции — ровно одна пустая строка, даже в однострочных подсекциях 3.3/3.5/5.1/5.4 (без «⸻»);
+(в) между большими блоками (🏛 ПЕРВАЯ ИНСТАНЦИЯ → 🔀 Перешли в апелляцию → ⚖️ АПЕЛЛЯЦИЯ) — ровно одна пустая строка, без «⸻» (граница и так заметна по жирному заголовку большого блока).
 
 СТИЛЬ: кратко, по-деловому, на русском. Без вступлений. Не дублируй информацию между секциями (за исключением 5.4↔5.5, см. выше).
 
@@ -3547,9 +3585,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     events = [ch for ch in changes
               if ("new_event" in ch["type"] or "hearing_new" in ch["type"])
               and ch["case"] not in postponed_nums]
-    # 5.4 и 5.5 — РАЗНЫЕ события (резолютивка и полный текст), разведённые
-    # во времени. Дело может попасть в обе секции — это корректно.
-    results = [ch for ch in changes if "new_result" in ch["type"]]
+    # 5.4 и 5.5 — РАЗНЫЕ события (резолютивка и полный текст), но если в
+    # ОДНОМ прогоне сработали оба — показываем дело ТОЛЬКО в 5.5 (там и
+    # ИТОГ из карточки, и мотивировка). Иначе пользователь видит дубль.
+    # Если события разнесены во времени — в разных прогонах каждая секция
+    # получит «свой» change (защита сохраняется).
+    results = [ch for ch in changes
+               if "new_result" in ch["type"] and "new_act" not in ch["type"]]
     acts = [ch for ch in changes if "new_act" in ch["type"]]
 
     # ── Блок ПЕРВАЯ ИНСТАНЦИЯ ──
@@ -3560,18 +3602,24 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi = c.get("first_instance", {})
             court = escape_html(shorten_court_name(fi.get("court", "")))
             role = c.get("bank_role", "")
-            role_icon = {"Истец": "🏦→", "Ответчик": "→🏦", "Третье лицо": "👁"
-                         }.get(role, "")
             cat = category_short(c.get("category", ""))
-            pl = escape_html(shorten_party_name(c.get("plaintiff", ""), keep_fio_full=True))
-            df = escape_html(shorten_party_name(c.get("defendant", ""), keep_fio_full=True))
+            pl_raw = c.get("plaintiff", "")
+            df_raw = c.get("defendant", "")
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
             num = escape_html(c.get("id", ""))
             filing = escape_html(fi.get("filing_date", ""))
             url = fi_card_url(fi)
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
+            # БАНК В ХВОСТЕ: иконку показываем только когда банк = третье лицо.
+            if _bank_in_parties(pl_raw, df_raw):
+                role_icon = ""
+            else:
+                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦",
+                             "Третье лицо": "👁"}.get(role, "")
+            prefix = f"{role_icon} " if role_icon else ""
             fi_block.append(
-                f"  {link} {role_icon}"
-                f"{pl} vs {df} "
+                f"  {link} {prefix}{pl} vs {df} "
                 f"({cat}) | {court}"
                 + (f" | подано {filing}" if filing else "")
             )
@@ -3580,7 +3628,14 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # В 3.2 «Изменения» их статус/резолюция не повторяются; оставляем
     # только побочные события того же дела (заседание/отложение и т.п.).
     # То же для fi_act_text_published — эти дела поедут в 3.6.
-    fi_resolved_chs = [ch for ch in fi_changes if "fi_resolved" in ch["type"]]
+    # 3.5 vs 3.6 — то же правило, что и для апелляции (5.4 vs 5.5): если в
+    # одном прогоне у дела сработали И вынесение решения, И публикация полного
+    # текста — выводим дело ТОЛЬКО в 3.6 «Опубликованные тексты решений».
+    fi_resolved_chs = [
+        ch for ch in fi_changes
+        if "fi_resolved" in ch["type"]
+        and "fi_act_text_published" not in ch["type"]
+    ]
     fi_act_text_chs = [
         ch for ch in fi_changes if "fi_act_text_published" in ch["type"]
     ]
@@ -3611,15 +3666,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     htype = escape_html(d.get("hearing_type", "заседание"))
                     ev_list.append(f"📅 {htype} {hd}" + (f" {ht}" if ht else ""))
                 elif t == "fi_hearing_postponed":
-                    old_p = escape_html(
-                        d.get("old_hearing_date", "")
-                        + (f" {d['old_hearing_time']}" if d.get("old_hearing_time") else "")
-                    )
                     new_p = escape_html(
                         d.get("hearing_date", "")
                         + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
                     )
-                    ev_list.append(f"🔁 {old_p} → {new_p}")
+                    # Только новая дата (старую больше не показываем —
+                    # по запросу пользователя).
+                    ev_list.append(f"🔁 заседание отложено на {new_p}")
                 elif t == "fi_status_change":
                     ev_list.append(
                         f"статус: {escape_html(d.get('old_status', ''))} → "
@@ -3666,8 +3719,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         )
 
     if fi_changes_rendered:
-        if fi_block:
-            fi_block.append("")
+        _section_break(fi_block)
         fi_block.append(
             f"📅 <b>Изменения ({len(fi_changes_rendered)}):</b>"
         )
@@ -3675,8 +3727,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
     # ── 3.5: Вынесенные решения 1 инстанции ──
     if fi_resolved_chs:
-        if fi_block:
-            fi_block.append("")
+        _section_break(fi_block)
         fi_block.append(
             f"⚖️ <b>Вынесенные решения ({len(fi_resolved_chs)}):</b>"
         )
@@ -3703,7 +3754,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             extras: list[str] = []
             if cat:
                 extras.append(f"категория: {cat}")
-            if bank_role:
+            # БАНК В ХВОСТЕ: «банк — роль» только когда банк не в сторонах.
+            if bank_role and not _bank_in_parties(
+                    ch.get("plaintiff", ""), ch.get("defendant", "")):
                 extras.append(f"банк — {bank_role.lower()}")
             if bank_out:
                 extras.append(f"<b>для банка:</b> {bank_out}")
@@ -3716,8 +3769,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Fallback без LLM — выводим укороченный фрагмент мотивировки как есть,
     # без попытки написать осмысленное «Почему». Лучше так, чем пустота.
     if fi_act_text_chs:
-        if fi_block:
-            fi_block.append("")
+        _section_break(fi_block)
         fi_block.append(
             f"📄 <b>Опубликованные тексты решений ({len(fi_act_text_chs)}):</b>"
         )
@@ -3772,20 +3824,24 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         for c in new_cases:
             link = case_link_html(c)
             role = c.get("Роль банка", "")
-            role_icon = {"Истец": "🏦→", "Ответчик": "→🏦", "Третье лицо": "👁"
-                         }.get(role, "")
             cat = category_short(c.get("Категория", ""))
-            pl = escape_html(shorten_party_name(c['Истец'], keep_fio_full=True))
-            df = escape_html(shorten_party_name(c['Ответчик'], keep_fio_full=True))
+            pl_raw = c.get('Истец', '')
+            df_raw = c.get('Ответчик', '')
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            # БАНК В ХВОСТЕ: если Сбербанк уже в сторонах — иконка/хвост лишние.
+            if _bank_in_parties(pl_raw, df_raw):
+                role_icon = ""
+            else:
+                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦",
+                             "Третье лицо": "👁"}.get(role, "")
+            prefix = f"{role_icon} " if role_icon else ""
             appeal_block.append(
-                f"  {link} {role_icon}"
-                f"{pl} vs {df} "
-                f"({cat})"
+                f"  {link} {prefix}{pl} vs {df} ({cat})"
             )
 
     if to_fi_rules:
-        if appeal_block:
-            appeal_block.append("")
+        _section_break(appeal_block)
         appeal_block.append(
             f"⚠ <b>Переход к правилам 1-й инст. ({len(to_fi_rules)}):</b>"
         )
@@ -3809,8 +3865,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             appeal_block.append(line)
 
     if postponed:
-        if appeal_block:
-            appeal_block.append("")
+        _section_break(appeal_block)
         appeal_block.append(f"🔁 <b>Отложенные заседания ({len(postponed)}):</b>")
         for ch in postponed:
             d = ch["details"]
@@ -3818,25 +3873,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             case_num = escape_html(ch["case"])
             link = (f'<a href="{url}"><b>{case_num}</b></a>'
                     if url else f'<b>{case_num}</b>')
-            old_dt = escape_html(d.get("old_hearing_date", ""))
-            old_tm = escape_html(d.get("old_hearing_time", ""))
             new_dt = escape_html(d.get("new_hearing_date", ""))
             new_tm = escape_html(d.get("new_hearing_time", ""))
-            old_part = old_dt + (f" {old_tm}" if old_tm else "")
             new_part = new_dt + (f" {new_tm}" if new_tm else "")
             plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
             defendant = escape_html(shorten_party_name(d.get("defendant", "")))
+            court = escape_html(shorten_court_name(ch.get("court", "")))
             cat = category_short(d.get("category", ""))
-            appeal_block.append(f"  🔁 {link}: ⏪ {old_part} → ⏩ {new_part}")
+            # Строка 1: «🔁 номер — стороны (суд)». Суд показываем, только
+            # когда он есть в ch (apel-уровень обычно без него — там и так
+            # понятно, что это Суд ХМАО-Югры).
+            line1 = f"  🔁 {link}"
             if plaintiff and defendant:
-                tail = f"     {plaintiff} vs {defendant}"
-                if cat:
-                    tail += f" | {escape_html(cat)}"
-                appeal_block.append(tail)
+                line1 += f" — {plaintiff} vs {defendant}"
+            if court:
+                line1 += f" ({court})"
+            if cat:
+                line1 += f" | {escape_html(cat)}"
+            appeal_block.append(line1)
+            # Строка 2: только новая дата/время — старую не показываем
+            # (по запросу пользователя).
+            if new_part:
+                appeal_block.append(f"     Заседание отложено на {new_part}")
 
     if events:
-        if appeal_block:
-            appeal_block.append("")
+        _section_break(appeal_block)
         appeal_block.append(f"📅 <b>Назначенные заседания ({len(events)}):</b>")
         for ch in events:
             d = ch["details"]
@@ -3890,8 +3951,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             appeal_block.append(line)
 
     if results:
-        if appeal_block:
-            appeal_block.append("")
+        _section_break(appeal_block)
         # Резолютивная часть — выходит через 1-3 дня после заседания.
         appeal_block.append(f"⚖️ <b>Вынесенные акты ({len(results)}):</b>")
         for ch in results:
@@ -3901,7 +3961,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             result_text = escape_html(d.get("result", ""))
             role = d.get("role", "")
-            role_note = f" (банк — {escape_html(role.lower())})" if role else ""
+            # БАНК В ХВОСТЕ: показываем «(банк — роль)» только когда банк не в сторонах.
+            if role and not _bank_in_parties(
+                    d.get("plaintiff", ""), d.get("defendant", "")):
+                role_note = f" (банк — {escape_html(role.lower())})"
+            else:
+                role_note = ""
             hearing_dt = d.get("hearing_date", "")
             date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
             cat = category_short(d.get("category", ""))
@@ -3913,8 +3978,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             )
 
     if acts:
-        if appeal_block:
-            appeal_block.append("")
+        _section_break(appeal_block)
         # Полный текст с мотивировкой — обычно через 14+ дней (или никогда).
         appeal_block.append(f"📄 <b>Опубликованные тексты актов ({len(acts)}):</b>")
         for ch in acts:
