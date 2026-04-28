@@ -1,0 +1,31 @@
+name: Push Last Digest (test)
+
+# Тестовая рассылка push-уведомления о последнем дайджесте на ВСЕ устройства
+# (не только owner). Ничего не парсит, не генерирует, не шлёт в Telegram —
+# просто читает data/last_digest.json и пинает PWA-подписчиков.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Push last digest to all devices
+        env:
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: python scripts/update_cases.py --push-last-digest
