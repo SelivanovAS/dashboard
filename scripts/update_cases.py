@@ -171,6 +171,13 @@ LAST_DIGEST_PATH = os.environ.get(
     "LAST_DIGEST_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest.json")
 )
+# Журнал последней push-рассылки: какие payload'ы ушли каждой подписке.
+# Используется админкой подписчиков для отладки персональной фильтрации
+# (видеть, какой именно вариант — personal/general/skip — получила каждая).
+LAST_PERSONAL_PUSHES_PATH = os.environ.get(
+    "LAST_PERSONAL_PUSHES_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_personal_pushes.json")
+)
 # Окна жизненного цикла дела (state machine — см. advance_case_stage /
 # is_case_archived). Старая модель ARCHIVE_DAYS/ARCHIVE_DAYS_FI отсчитывала
 # архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
@@ -4273,6 +4280,9 @@ def send_web_push(
         skipped = 0
         n_general = 0
         n_personal = 0
+        # Журнал отправленных payload'ов — потом сохраним в
+        # data/last_personal_pushes.json для админки.
+        dump_items: list[dict] = []
         for sub in subscriptions:
             ep_full = sub.get("endpoint") or ""
             ep_short = ep_full[-32:] if ep_full else "?"
@@ -4287,6 +4297,17 @@ def send_web_push(
                         f"Web Push: ⊘ skip ({'owner' if is_owner else 'user'}, "
                         f"watchlist={wl_size}) …{ep_short}"
                     )
+                    dump_items.append({
+                        "endpoint": ep_full,
+                        "endpoint_tail": ep_short,
+                        "is_owner": is_owner,
+                        "watchlist_size": wl_size,
+                        "watchlist": list(wl_raw) if isinstance(wl_raw, list) else [],
+                        "variant": "skip",
+                        "title": None,
+                        "body": None,
+                        "click_url": None,
+                    })
                     continue
                 p_title, p_body, p_url = personalised
                 variant = (
@@ -4310,11 +4331,33 @@ def send_web_push(
                     },
                     ensure_ascii=False,
                 )
+                dump_items.append({
+                    "endpoint": ep_full,
+                    "endpoint_tail": ep_short,
+                    "is_owner": is_owner,
+                    "watchlist_size": wl_size,
+                    "watchlist": list(wl_raw) if isinstance(wl_raw, list) else [],
+                    "variant": variant,
+                    "title": p_title,
+                    "body": p_body,
+                    "click_url": p_url or default_url,
+                })
             else:
                 payload = json.dumps(
                     {"title": title, "body": body, "data": {"url": default_url}},
                     ensure_ascii=False,
                 )
+                dump_items.append({
+                    "endpoint": ep_full,
+                    "endpoint_tail": ep_short,
+                    "is_owner": is_owner,
+                    "watchlist_size": wl_size,
+                    "watchlist": list(wl_raw) if isinstance(wl_raw, list) else [],
+                    "variant": "broadcast",
+                    "title": title,
+                    "body": body,
+                    "click_url": default_url,
+                })
             try:
                 webpush(
                     subscription_info=sub,
@@ -4340,6 +4383,20 @@ def send_web_push(
         if per_subscriber is not None:
             suffix += f"; персональных: {n_personal}, общих: {n_general}"
         log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}{suffix}")
+        # Сохраняем журнал последней рассылки — админка читает этот файл,
+        # чтобы показать «что получила каждая подписка». Перезаписывается
+        # на каждом прогоне (только последняя рассылка, без истории).
+        try:
+            save_json({
+                "version": 1,
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "title_default": title,
+                "body_default": body,
+                "owner_only": owner_only,
+                "items": dump_items,
+            }, LAST_PERSONAL_PUSHES_PATH)
+        except Exception as exc:
+            log.warning(f"Web Push: не удалось сохранить журнал push: {exc}")
     except Exception as exc:
         log.error(f"Web Push: исключение: {exc}")
 

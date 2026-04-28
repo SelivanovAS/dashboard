@@ -542,6 +542,23 @@ h1 { margin:0; font-size:18px; font-weight:600; }
 .action-flash { font-size:11px; color:var(--fg-3); margin-left:6px; }
 .action-flash.ok { color:var(--accent); }
 .action-flash.err { color:#dc2626; }
+.last-push { margin-top:8px; padding:10px 12px; background:var(--bg-2); border-radius:8px;
+             border-left:3px solid var(--accent); font-size:13px; }
+.last-push.broadcast { border-left-color:#3b82f6; }
+.last-push.general { border-left-color:#f59e0b; }
+.last-push.skip { border-left-color:#94a3b8; opacity:0.7; }
+.last-push-head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:4px; }
+.last-push-variant { font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+                     padding:1px 8px; border-radius:999px; background:rgba(33,168,92,0.16); color:var(--accent); }
+.last-push.broadcast .last-push-variant { background:rgba(59,130,246,0.16); color:#3b82f6; }
+.last-push.general .last-push-variant { background:rgba(245,158,11,0.16); color:#b45309; }
+.last-push.skip .last-push-variant { background:rgba(148,163,184,0.18); color:var(--fg-3); }
+.last-push-title { font-weight:600; color:var(--fg); }
+.last-push-body { color:var(--fg-2); margin-top:2px; }
+.last-push-meta { color:var(--fg-3); font-size:12px; margin-top:4px; }
+.last-push-meta a { color:var(--accent); text-decoration:none; word-break:break-all; }
+.last-push-meta a:hover { text-decoration:underline; }
+.last-push-empty { color:var(--fg-3); font-style:italic; padding:6px 0 0; font-size:12px; }
 details { margin-top:10px; }
 details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
                     user-select:none; }
@@ -574,6 +591,7 @@ details > summary:hover { color:var(--fg); }
 <script>
 const SECRET = ${JSON.stringify(secret)};
 const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
+const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_pushes.json";
 
 function bareCaseNumber(n) {
   return String(n || "").trim().split(/[\\s(]/)[0];
@@ -641,10 +659,63 @@ async function fetchAll() {
   } catch (e) {
     console.warn("cases.json не загружен:", e);
   }
-  return { subs, casesMap };
+  // Журнал последней push-рассылки. Собираем карту endpoint → запись;
+  // если файла нет (старый деплой / только что чистый репо) — пустая карта.
+  let pushesMap = new Map();
+  let pushesGeneratedAt = "";
+  try {
+    const r = await fetch(PUSHES_URL, { cache: "no-cache" });
+    if (r.ok) {
+      const j = await r.json();
+      pushesGeneratedAt = j?.generated_at || "";
+      for (const item of (j?.items || [])) {
+        if (item?.endpoint) pushesMap.set(item.endpoint, item);
+      }
+    }
+  } catch (e) {
+    console.warn("last_personal_pushes.json не загружен:", e);
+  }
+  return { subs, casesMap, pushesMap, pushesGeneratedAt };
 }
 
-function renderCard(sub, casesMap) {
+function renderLastPush(item, generatedAt) {
+  if (!item) {
+    return generatedAt
+      ? '<div class="last-push-empty">Нет записи в журнале последней рассылки (' + escHtml(relTime(generatedAt)) + ')</div>'
+      : '<div class="last-push-empty">Журнал push-рассылок пока пуст</div>';
+  }
+  const labels = {
+    personal: "personal",
+    general: "general",
+    skip: "skip",
+    broadcast: "broadcast",
+  };
+  const v = labels[item.variant] || item.variant || "—";
+  const skipped = item.variant === "skip";
+  const headTitle = skipped
+    ? '<span class="last-push-title">Push не отправлен — нет событий по watchlist</span>'
+    : '<span class="last-push-title">' + escHtml(item.title || "—") + '</span>';
+  const body = !skipped && item.body
+    ? '<div class="last-push-body">' + escHtml(item.body) + '</div>'
+    : "";
+  const click = !skipped && item.click_url
+    ? '<div class="last-push-meta">click_url: <a href="https://selivanovas.github.io/dashboard'
+        + escHtml(item.click_url) + '" target="_blank" rel="noopener">'
+        + escHtml(item.click_url) + '</a></div>'
+    : "";
+  const ts = generatedAt
+    ? '<div class="last-push-meta">Рассылка: ' + escHtml(relTime(generatedAt)) + '</div>'
+    : "";
+  return '<div class="last-push ' + escHtml(item.variant || "") + '">'
+    + '<div class="last-push-head">'
+    +   '<span class="last-push-variant">' + escHtml(v) + '</span>'
+    +   headTitle
+    + '</div>'
+    + body + click + ts
+    + '</div>';
+}
+
+function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
   const dev = escHtml(detectDevice(sub.user_agent));
   const owner = sub.is_owner ? '<span class="badge-owner">★ owner</span>' : "";
   const ep = escHtml((sub.endpoint || "").slice(-48));
@@ -687,6 +758,10 @@ function renderCard(sub, casesMap) {
     +   '<button class="btn btn-danger" data-action="delete">🗑 Удалить</button>'
     +   '<span class="action-flash"></span>'
     + '</div>'
+    + '<details>'
+    +   '<summary>🪞 Последний push для этой подписки</summary>'
+    +   renderLastPush(lastPush, pushesGeneratedAt)
+    + '</details>'
     + '<details'+(wl.length<=10 ? ' open' : '')+'>'
     +   '<summary>Список отслеживаемых дел ('+wl.length+')</summary>'
     +   '<div class="cases">'+cases+'</div>'
@@ -747,11 +822,12 @@ async function render(force) {
   const root = document.getElementById("root");
   if (force) root.className = "loading", root.textContent = "Загрузка…";
   try {
-    const { subs, casesMap } = await fetchAll();
+    const { subs, casesMap, pushesMap, pushesGeneratedAt } = await fetchAll();
     const owners = subs.filter((s) => s.is_owner).length;
     const totalWl = subs.reduce((a, s) => a + (s.watchlist?.length || 0), 0);
+    const pushTime = pushesGeneratedAt ? " · последний push: " + relTime(pushesGeneratedAt) : "";
     document.getElementById("summary").textContent =
-      subs.length + " подписок · " + owners + " owner · " + totalWl + " дел в watchlist'ах";
+      subs.length + " подписок · " + owners + " owner · " + totalWl + " дел в watchlist'ах" + pushTime;
     // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
     subs.sort((a, b) => {
       if (a.is_owner !== b.is_owner) return a.is_owner ? -1 : 1;
@@ -760,7 +836,7 @@ async function render(force) {
       return tb - ta;
     });
     root.className = "subs";
-    root.innerHTML = subs.map((s) => renderCard(s, casesMap)).join("");
+    root.innerHTML = subs.map((s) => renderCard(s, casesMap, pushesMap.get(s.endpoint), pushesGeneratedAt)).join("");
     if (subs.length === 0) {
       root.innerHTML = '<div class="empty">Подписок нет.</div>';
     }

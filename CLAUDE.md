@@ -15,6 +15,7 @@
 - [data/cases_archive.json](data/cases_archive.json) — архив.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
+- [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
 - [data/sberbank_cases.csv](data/sberbank_cases.csv) + архив — legacy CSV (UTF-8 с BOM), всё ещё коммитится для совместимости.
 - [app.js](app.js) + [sberbank_dashboard.html](sberbank_dashboard.html) + [styles.css](styles.css) — SPA-фронт (GitHub Pages).
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
@@ -147,6 +148,8 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 Метаданные в KV: `created_at` (один раз), `last_seen_at` (на каждом `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`, `label`. Старые подписки заполняют поля при следующем `/subscribe`.
 
 **Тестовый push отложен** — эндпоинт `/admin/test-push` и VAPID-utility в `worker.js` готовы, но кнопка из UI убрана: для активации нужен `VAPID_PRIVATE_KEY` в Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`), которого сейчас нет. Чтобы вернуть фичу — положить PEM и добавить кнопку обратно в `renderCard`.
+
+**Журнал последней push-рассылки** — на каждой карточке раскрываемый блок «🪞 Последний push для этой подписки». Показывает variant (personal/general/skip/broadcast), title, body, click_url, timestamp. Источник — [data/last_personal_pushes.json](data/last_personal_pushes.json), перезаписывается каждый прогон `send_web_push` в `update_cases.py`. Если по подписке уход push'а в этом прогоне был skipped (нет событий по watchlist) — блок показывает «Push не отправлен — нет событий по watchlist».
 
 ## Подписки на дела (watchlist) на фронте
 
