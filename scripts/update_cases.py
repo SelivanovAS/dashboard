@@ -4271,13 +4271,37 @@ def send_web_push(
         default_url = click_url or "/sberbank_dashboard.html?digest=open"
         ok_count = 0
         skipped = 0
+        n_general = 0
+        n_personal = 0
         for sub in subscriptions:
+            ep_full = sub.get("endpoint") or ""
+            ep_short = ep_full[-32:] if ep_full else "?"
+            wl_raw = sub.get("watchlist") or []
+            wl_size = len(wl_raw) if isinstance(wl_raw, list) else 0
+            is_owner = bool(sub.get("is_owner"))
             if per_subscriber is not None:
                 personalised = per_subscriber(sub)
                 if personalised is None:
                     skipped += 1
+                    log.info(
+                        f"Web Push: ⊘ skip ({'owner' if is_owner else 'user'}, "
+                        f"watchlist={wl_size}) …{ep_short}"
+                    )
                     continue
                 p_title, p_body, p_url = personalised
+                variant = (
+                    "personal" if "твои дела" in (p_title or "")
+                    else "general"
+                )
+                if variant == "personal":
+                    n_personal += 1
+                else:
+                    n_general += 1
+                log.info(
+                    f"Web Push: → {variant} "
+                    f"({'owner' if is_owner else 'user'}, watchlist={wl_size}) "
+                    f"…{ep_short}"
+                )
                 payload = json.dumps(
                     {
                         "title": p_title,
@@ -4313,6 +4337,8 @@ def send_web_push(
                 if status in (404, 410) and ep_full:
                     _drop_dead_subscription(ep_full)
         suffix = f", пропущено по watchlist: {skipped}" if skipped else ""
+        if per_subscriber is not None:
+            suffix += f"; персональных: {n_personal}, общих: {n_general}"
         log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}{suffix}")
     except Exception as exc:
         log.error(f"Web Push: исключение: {exc}")
