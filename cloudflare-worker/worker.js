@@ -63,8 +63,18 @@ async function handleSubscribe(request, env) {
         prev = JSON.parse(existing);
         if (prev.is_owner === true) sub.is_owner = true;
         if (Array.isArray(prev.watchlist)) sub.watchlist = prev.watchlist;
+        if (prev.created_at) sub.created_at = prev.created_at;
+        if (prev.last_watchlist_update_at) {
+          sub.last_watchlist_update_at = prev.last_watchlist_update_at;
+        }
       } catch (_) { /* игнор: невалидный JSON в KV — перезапишем */ }
     }
+    // Метаданные для админки: устройство, когда создана, когда последний
+    // раз заходил юрист в PWA. created_at ставим только при первом субскрайбе,
+    // last_seen_at обновляем на каждом /subscribe (PWA дёргает его при открытии).
+    sub.user_agent = request.headers.get("User-Agent") || "";
+    if (!sub.created_at) sub.created_at = new Date().toISOString();
+    sub.last_seen_at = new Date().toISOString();
     // TTL 60 дней — браузер обновит подписку сам при следующем открытии
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
       expirationTtl: 60 * 24 * 3600,
@@ -118,6 +128,7 @@ async function handleSetWatchlist(request, env) {
     }
     const sub = JSON.parse(existing);
     sub.watchlist = cleaned;
+    sub.last_watchlist_update_at = new Date().toISOString();
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
       expirationTtl: 60 * 24 * 3600,
     });
@@ -234,6 +245,274 @@ async function handleMarkOwner(request, env) {
   }
 }
 
+// ── Админка подписчиков ───────────────────────────────────────────────────────
+
+// Возвращает JSON со всеми подписками (как /subscriptions, но авторизация
+// через ?secret=<OWNER_SECRET> в URL — чтобы HTML-страница могла дёрнуть
+// данные без хранения PUSH_SECRET в JS-коде в браузере).
+async function handleAdminData(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
+    const subs = await Promise.all(
+      list.keys.map(async (k) => {
+        const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
+        return val ? JSON.parse(val) : null;
+      })
+    );
+    // Не отдаём приватные части push-подписки (auth/p256dh) — админке они
+    // не нужны, а светить через GET-параметр в URL secret лишний раз
+    // не стоит.
+    const safe = subs
+      .filter((s) => s)
+      .map((s) => ({
+        endpoint: s.endpoint || "",
+        is_owner: s.is_owner === true,
+        watchlist: Array.isArray(s.watchlist) ? s.watchlist : [],
+        user_agent: s.user_agent || "",
+        created_at: s.created_at || "",
+        last_seen_at: s.last_seen_at || "",
+        last_watchlist_update_at: s.last_watchlist_update_at || "",
+      }));
+    return new Response(JSON.stringify(safe), {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch (e) {
+    console.error("admin/data error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
+// HTML-страница админки. Открывается напрямую в браузере по URL
+// `/admin?secret=<OWNER_SECRET>`. Содержит inline-стили и JS, который
+// тянет /admin/data (с тем же secret) и cases.json с GitHub Pages.
+async function handleAdmin(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  // Embed secret в HTML, чтобы JS мог дёрнуть /admin/data. Secret уже в URL,
+  // дополнительная утечка минимальна, но всё равно экранируем кавычки.
+  const safeSecret = secret.replace(/[<>"&']/g, "");
+  const html = renderAdminHtml(safeSecret);
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+function renderAdminHtml(secret) {
+  return `<!doctype html><html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Подписчики · мониторинг дел</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --fg: #14181f; --fg-2: #4a5160; --fg-3: #707788;
+  --bg: #f7f9fb; --bg-1: #fff; --bg-2: #eef1f5;
+  --border: #e0e4eb; --accent: #21a038; --amber: #f59e0b;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --fg:#e8ecf2; --fg-2:#aab1bf; --fg-3:#7a8090; --bg:#0e1116; --bg-1:#161b22; --bg-2:#1f252e; --border:#2a313c; }
+}
+* { box-sizing: border-box; }
+body { margin:0; padding:16px; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;
+       background:var(--bg); color:var(--fg); font-size:14px; line-height:1.5; }
+header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+         margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+h1 { margin:0; font-size:18px; font-weight:600; }
+.refresh { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px;
+           font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.refresh:hover { opacity:0.92; }
+.summary { color:var(--fg-3); font-size:13px; }
+.subs { display:flex; flex-direction:column; gap:10px; }
+.sub-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.sub-row { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:baseline; }
+.sub-device { font-weight:600; }
+.badge-owner { display:inline-block; background:rgba(245,158,11,0.14); color:var(--amber);
+               padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; }
+.kv { color:var(--fg-3); font-size:12px; }
+.kv b { color:var(--fg-2); font-weight:500; }
+.endpoint { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:11px;
+            overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
+details { margin-top:10px; }
+details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
+                    user-select:none; }
+details > summary:hover { color:var(--fg); }
+.cases { margin-top:6px; padding-left:8px; border-left:2px solid var(--border); display:flex;
+         flex-direction:column; gap:4px; }
+.case-row { display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; padding:4px 0;
+            border-bottom:1px dashed var(--border); }
+.case-row:last-child { border-bottom:0; }
+.case-num { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--accent); min-width:140px; }
+.case-parties { color:var(--fg-2); }
+.case-meta { color:var(--fg-3); font-size:12px; }
+.empty { color:var(--fg-3); font-style:italic; padding:6px 0; }
+.error { color:#dc2626; padding:12px; background:rgba(220,38,38,0.08); border-radius:8px; }
+.loading { color:var(--fg-3); padding:24px; text-align:center; }
+@media (max-width: 600px) {
+  .endpoint { max-width:100%; white-space:normal; word-break:break-all; }
+  .case-num { min-width:auto; }
+}
+</style>
+</head><body>
+<header>
+  <h1>📡 Подписчики · мониторинг дел Сбера</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span class="summary" id="summary">…</span>
+    <button class="refresh" onclick="render(true)">Обновить</button>
+  </div>
+</header>
+<div id="root" class="loading">Загрузка…</div>
+<script>
+const SECRET = ${JSON.stringify(secret)};
+const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
+
+function bareCaseNumber(n) {
+  return String(n || "").trim().split(/[\\s(]/)[0];
+}
+function detectDevice(ua) {
+  if (!ua) return "—";
+  const s = ua;
+  let os = "?", browser = "?";
+  if (/iPhone|iPad|iPod/.test(s)) os = /iPad/.test(s) ? "iPad" : "iPhone";
+  else if (/Android/.test(s)) os = "Android";
+  else if (/Macintosh/.test(s)) os = "macOS";
+  else if (/Windows/.test(s)) os = "Windows";
+  else if (/Linux/.test(s)) os = "Linux";
+  if (/Edg\\//.test(s)) browser = "Edge";
+  else if (/OPR\\/|Opera/.test(s)) browser = "Opera";
+  else if (/YaBrowser/.test(s)) browser = "Yandex";
+  else if (/Firefox/.test(s)) browser = "Firefox";
+  else if (/Chrome/.test(s)) browser = "Chrome";
+  else if (/Safari/.test(s)) browser = "Safari";
+  return os + " · " + browser;
+}
+function relTime(iso) {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "—";
+  const diff = Math.round((Date.now() - t) / 1000);
+  if (diff < 60) return "только что";
+  if (diff < 3600) return Math.floor(diff/60) + " мин назад";
+  if (diff < 86400) return Math.floor(diff/3600) + " ч назад";
+  if (diff < 86400*2) return "вчера в " + new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  if (diff < 86400*30) return Math.floor(diff/86400) + " дн назад";
+  return new Date(iso).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+function fullDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+function escHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function fetchAll() {
+  const subsRes = await fetch("/admin/data?secret=" + encodeURIComponent(SECRET));
+  if (!subsRes.ok) throw new Error("HTTP " + subsRes.status + " /admin/data");
+  const subs = await subsRes.json();
+  let casesMap = new Map();
+  try {
+    const casesRes = await fetch(CASES_URL, { cache: "no-cache" });
+    if (casesRes.ok) {
+      const casesJson = await casesRes.json();
+      const list = Array.isArray(casesJson?.cases) ? casesJson.cases : [];
+      for (const c of list) {
+        const id = bareCaseNumber(c.id);
+        if (!id) continue;
+        casesMap.set(id, {
+          plaintiff: c.plaintiff || "",
+          defendant: c.defendant || "",
+          court: c.first_instance?.court || c.appeal?.court || "",
+          stage: c.current_stage || "",
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("cases.json не загружен:", e);
+  }
+  return { subs, casesMap };
+}
+
+function renderCard(sub, casesMap) {
+  const dev = escHtml(detectDevice(sub.user_agent));
+  const owner = sub.is_owner ? '<span class="badge-owner">★ owner</span>' : "";
+  const ep = escHtml((sub.endpoint || "").slice(-48));
+  const wl = Array.isArray(sub.watchlist) ? sub.watchlist : [];
+  const cases = wl.length
+    ? wl.map((num) => {
+        const bare = bareCaseNumber(num);
+        const c = casesMap.get(bare);
+        if (c) {
+          const parties = (c.plaintiff && c.defendant)
+            ? escHtml(c.plaintiff) + ' <span style="color:var(--fg-3)">vs</span> ' + escHtml(c.defendant)
+            : escHtml(c.plaintiff || c.defendant || "");
+          return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
+                 + '<span class="case-parties">'+parties+'</span>'
+                 + (c.court ? '<span class="case-meta">· '+escHtml(c.court)+'</span>' : '')
+                 + '</div>';
+        }
+        return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
+               + '<span class="case-meta">· нет в cases.json</span></div>';
+      }).join("")
+    : '<div class="empty">Юрист не отслеживает ни одно дело</div>';
+  return '<div class="sub-card">'
+    + '<div class="sub-row">'
+    +   '<span class="sub-device">'+dev+'</span>'
+    +   owner
+    +   '<span class="kv"><b>Создана:</b> '+escHtml(relTime(sub.created_at))+'</span>'
+    +   '<span class="kv"><b>Последний вход:</b> '+escHtml(relTime(sub.last_seen_at))+' <span style="color:var(--fg-3)">('+escHtml(fullDate(sub.last_seen_at))+')</span></span>'
+    +   '<span class="kv"><b>Watchlist обновлён:</b> '+escHtml(relTime(sub.last_watchlist_update_at))+'</span>'
+    +   '<span class="kv"><b>Дел:</b> '+wl.length+'</span>'
+    + '</div>'
+    + '<div class="kv endpoint" title="'+ep+'">…'+ep+'</div>'
+    + '<details'+(wl.length<=10 ? ' open' : '')+'>'
+    +   '<summary>Список отслеживаемых дел ('+wl.length+')</summary>'
+    +   '<div class="cases">'+cases+'</div>'
+    + '</details>'
+    + '</div>';
+}
+
+async function render(force) {
+  const root = document.getElementById("root");
+  if (force) root.className = "loading", root.textContent = "Загрузка…";
+  try {
+    const { subs, casesMap } = await fetchAll();
+    const owners = subs.filter((s) => s.is_owner).length;
+    const totalWl = subs.reduce((a, s) => a + (s.watchlist?.length || 0), 0);
+    document.getElementById("summary").textContent =
+      subs.length + " подписок · " + owners + " owner · " + totalWl + " дел в watchlist'ах";
+    // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
+    subs.sort((a, b) => {
+      if (a.is_owner !== b.is_owner) return a.is_owner ? -1 : 1;
+      const ta = new Date(a.last_seen_at || 0).getTime();
+      const tb = new Date(b.last_seen_at || 0).getTime();
+      return tb - ta;
+    });
+    root.className = "subs";
+    root.innerHTML = subs.map((s) => renderCard(s, casesMap)).join("");
+    if (subs.length === 0) {
+      root.innerHTML = '<div class="empty">Подписок нет.</div>';
+    }
+  } catch (e) {
+    root.className = "error";
+    root.textContent = "Ошибка: " + e.message;
+  }
+}
+
+render();
+</script>
+</body></html>`;
+}
+
 // ── Экспорт ───────────────────────────────────────────────────────────────────
 
 export default {
@@ -299,6 +578,14 @@ export default {
 
     if (url.pathname === "/watchlist" && request.method === "POST") {
       return handleSetWatchlist(request, env);
+    }
+
+    if (url.pathname === "/admin" && request.method === "GET") {
+      return handleAdmin(request, env);
+    }
+
+    if (url.pathname === "/admin/data" && request.method === "GET") {
+      return handleAdminData(request, env);
     }
 
     return new Response("Not Found", { status: 404 });
