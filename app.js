@@ -929,10 +929,25 @@ function renderMeta(){
 /* ========== Filters ========== */
 let searchDebounceTimer=null;
 const SEARCH_DEBOUNCE_MS=300;
+let __searchWasEmpty=true;
 function onSearchInput(){
   const v=document.getElementById('search-input').value;
   // Кнопку-очистку переключаем сразу — это дешёвая операция.
   document.getElementById('search-clear').classList.toggle('visible',v.length>0);
+  // На первом непустом символе — проскроллить к списку дел, чтобы юристу
+  // не пришлось руками промахивать «Ближайшие заседания»/«Сводку».
+  // Дальше при наборе не дёргаем — позиция уже там, где нужно.
+  if(v.length>0&&__searchWasEmpty){
+    const anchor=document.getElementById('table-counter')
+      ||document.getElementById('mobile-cards')
+      ||document.querySelector('.table-wrap');
+    if(anchor){
+      const headerH=(document.querySelector('.app-header')?.offsetHeight)||0;
+      const top=anchor.getBoundingClientRect().top+window.scrollY-headerH-8;
+      window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+    }
+  }
+  __searchWasEmpty=v.length===0;
   // Применение фильтров дорогое (перерисовка таблицы и карточек),
   // поэтому откладываем на 300мс после последнего ввода.
   if(searchDebounceTimer)clearTimeout(searchDebounceTimer);
@@ -941,6 +956,7 @@ function onSearchInput(){
 function clearSearch(){
   document.getElementById('search-input').value='';
   document.getElementById('search-clear').classList.remove('visible');
+  __searchWasEmpty=true;
   if(searchDebounceTimer){clearTimeout(searchDebounceTimer);searchDebounceTimer=null;}
   applyFilters();
 }
