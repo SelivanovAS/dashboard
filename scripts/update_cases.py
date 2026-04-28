@@ -4035,6 +4035,8 @@ def send_web_push(
                     data=payload,
                     vapid_private_key=vapid,
                     vapid_claims={"sub": "mailto:7selivanov.a@gmail.com"},
+                    ttl=43200,  # 12 часов: push-сервис держит сообщение,
+                                # пока устройство не выйдет в сеть
                 )
                 ok_count += 1
             except WebPushException as exc:
