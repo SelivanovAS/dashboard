@@ -6,16 +6,19 @@
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
 */
 
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
 // App shell — то, без чего страница не запустится. Все пути относительные:
 // SW регистрируется на /dashboard/service-worker.js, scope = /dashboard/.
+// styles.css/app.js без `?v=` — pre-cache на голый URL для офлайна; реальные
+// запросы из HTML идут с актуальной `?v=N` и попадают в кэш по cache-first
+// после первого fetch (мисс по голому URL → сеть → кэш с querystring).
 const APP_SHELL = [
   './',
   './sberbank_dashboard.html',
-  './styles.css?v=10',
+  './styles.css',
   './app.js',
   './manifest.json',
   './icon-180.png',
