@@ -67,6 +67,7 @@ async function handleSubscribe(request, env) {
         if (prev.last_watchlist_update_at) {
           sub.last_watchlist_update_at = prev.last_watchlist_update_at;
         }
+        if (typeof prev.label === "string") sub.label = prev.label;
       } catch (_) { /* игнор: невалидный JSON в KV — перезапишем */ }
     }
     // Метаданные для админки: устройство, когда создана, когда последний
@@ -274,6 +275,7 @@ async function handleAdminData(request, env) {
         is_owner: s.is_owner === true,
         watchlist: Array.isArray(s.watchlist) ? s.watchlist : [],
         user_agent: s.user_agent || "",
+        label: typeof s.label === "string" ? s.label : "",
         created_at: s.created_at || "",
         last_seen_at: s.last_seen_at || "",
         last_watchlist_update_at: s.last_watchlist_update_at || "",
@@ -303,6 +305,196 @@ async function handleAdmin(request, env) {
   return new Response(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
+}
+
+// Утилиты для всех /admin/<action> endpoints: проверка secret + загрузка
+// существующей подписки по endpoint.
+async function adminAuthAndLoad(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return { error: new Response("Unauthorized", { status: 401 }) };
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return { error: new Response("Bad JSON", { status: 400 }) };
+  }
+  const endpoint = body && body.endpoint;
+  if (!endpoint || typeof endpoint !== "string") {
+    return { error: new Response("Bad Request: endpoint required", { status: 400 }) };
+  }
+  const key = endpointToKey(endpoint);
+  const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+  if (!existing) {
+    return {
+      error: new Response(
+        JSON.stringify({ ok: false, error: "subscription_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      ),
+    };
+  }
+  let sub;
+  try {
+    sub = JSON.parse(existing);
+  } catch (_) {
+    return { error: new Response("KV corrupt", { status: 500 }) };
+  }
+  return { sub, key, body };
+}
+
+// 1) Назначить/обновить label подписки (отображаемое имя «Иван», и т.п.).
+async function handleAdminLabel(request, env) {
+  const r = await adminAuthAndLoad(request, env);
+  if (r.error) return r.error;
+  const label = typeof r.body.label === "string" ? r.body.label.slice(0, 60).trim() : "";
+  r.sub.label = label;
+  await env.PUSH_SUBSCRIPTIONS.put(r.key, JSON.stringify(r.sub), {
+    expirationTtl: 60 * 24 * 3600,
+  });
+  return new Response(JSON.stringify({ ok: true, label }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// 3) Удалить подписку из KV (вместо очистки по 410 Gone).
+async function handleAdminUnsubscribe(request, env) {
+  const r = await adminAuthAndLoad(request, env);
+  if (r.error) return r.error;
+  await env.PUSH_SUBSCRIPTIONS.delete(r.key);
+  return new Response(JSON.stringify({ ok: true }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// 4) Перезаписать watchlist чужой подписки (когда коллега не разобралась
+// со звёздочками — админ ставит дела руками).
+async function handleAdminWatchlist(request, env) {
+  const r = await adminAuthAndLoad(request, env);
+  if (r.error) return r.error;
+  const wl = Array.isArray(r.body.watchlist) ? r.body.watchlist : null;
+  if (!wl) {
+    return new Response("Bad Request: watchlist must be array", { status: 400 });
+  }
+  const cleaned = Array.from(new Set(
+    wl.filter((x) => typeof x === "string" && x.length > 0 && x.length < 100).slice(0, 500)
+  ));
+  r.sub.watchlist = cleaned;
+  r.sub.last_watchlist_update_at = new Date().toISOString();
+  await env.PUSH_SUBSCRIPTIONS.put(r.key, JSON.stringify(r.sub), {
+    expirationTtl: 60 * 24 * 3600,
+  });
+  return new Response(JSON.stringify({ ok: true, count: cleaned.length }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// ── VAPID JWT для тестового push (RFC 8292) ──────────────────────────────────
+
+// VAPID public key захардкожен — он публичный (известен Service Worker'у через
+// applicationServerKey) и не секретный. Приватный должен быть в secret
+// `VAPID_PRIVATE_KEY` (PEM от py_vapid). Без него тест push возвращает 503.
+const VAPID_PUBLIC_KEY = "BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU";
+const VAPID_SUB = "mailto:7selivanov.a@gmail.com";
+
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s/g, "");
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+function b64urlString(s) {
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlBytes(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function buildVapidAuth(env, audience) {
+  const pem = env.VAPID_PRIVATE_KEY;
+  if (!pem) {
+    throw new Error("VAPID_PRIVATE_KEY не настроен в Worker — выполни `wrangler secret put VAPID_PRIVATE_KEY`");
+  }
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(pem),
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+  const header = b64urlString(JSON.stringify({ typ: "JWT", alg: "ES256" }));
+  const claims = b64urlString(JSON.stringify({
+    aud: audience,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: VAPID_SUB,
+  }));
+  const data = new TextEncoder().encode(header + "." + claims);
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    key,
+    data
+  );
+  const jwt = header + "." + claims + "." + b64urlBytes(new Uint8Array(sig));
+  return { jwt, header: `vapid t=${jwt}, k=${VAPID_PUBLIC_KEY}` };
+}
+
+// 5) Тестовый push конкретной подписке. Без encryption: SW сам покажет
+// дефолтное уведомление «Сбер Юрист — есть обновления по делам». Этого
+// достаточно чтобы убедиться, что push реально доходит до устройства.
+async function handleAdminTestPush(request, env) {
+  const r = await adminAuthAndLoad(request, env);
+  if (r.error) return r.error;
+  const endpoint = r.body.endpoint;
+  let auth;
+  try {
+    const ep = new URL(endpoint);
+    auth = await buildVapidAuth(env, ep.origin);
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ ok: false, error: e.message }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "TTL": "60",
+        "Authorization": auth.header,
+        "Content-Length": "0",
+      },
+    });
+    if (res.status === 404 || res.status === 410) {
+      // Подписка мертва — заодно почистим из KV.
+      await env.PUSH_SUBSCRIPTIONS.delete(r.key);
+      return new Response(
+        JSON.stringify({ ok: false, error: "endpoint_dead", status: res.status, deleted: true }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return new Response(
+        JSON.stringify({ ok: false, status: res.status, body: text.slice(0, 200) }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(JSON.stringify({ ok: true, status: res.status }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ ok: false, error: String(e).slice(0, 200) }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 }
 
 function renderAdminHtml(secret) {
@@ -340,6 +532,16 @@ h1 { margin:0; font-size:18px; font-weight:600; }
 .kv b { color:var(--fg-2); font-weight:500; }
 .endpoint { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:11px;
             overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
+.actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.btn { background:var(--bg-2); color:var(--fg-2); border:1px solid var(--border); padding:5px 10px;
+       border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; line-height:1.2; }
+.btn:hover { background:var(--bg-1); color:var(--fg); }
+.btn-danger:hover { color:#dc2626; border-color:#dc2626; }
+.label-name { color:var(--fg); font-weight:600; }
+.label-empty { color:var(--fg-3); font-style:italic; font-weight:400; }
+.action-flash { font-size:11px; color:var(--fg-3); margin-left:6px; }
+.action-flash.ok { color:var(--accent); }
+.action-flash.err { color:#dc2626; }
 details { margin-top:10px; }
 details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
                     user-select:none; }
@@ -446,7 +648,11 @@ function renderCard(sub, casesMap) {
   const dev = escHtml(detectDevice(sub.user_agent));
   const owner = sub.is_owner ? '<span class="badge-owner">★ owner</span>' : "";
   const ep = escHtml((sub.endpoint || "").slice(-48));
+  const epAttr = escHtml(sub.endpoint || "");
   const wl = Array.isArray(sub.watchlist) ? sub.watchlist : [];
+  const labelHtml = sub.label
+    ? '<span class="label-name">'+escHtml(sub.label)+'</span>'
+    : '<span class="label-empty">без имени</span>';
   const cases = wl.length
     ? wl.map((num) => {
         const bare = bareCaseNumber(num);
@@ -464,8 +670,9 @@ function renderCard(sub, casesMap) {
                + '<span class="case-meta">· нет в cases.json</span></div>';
       }).join("")
     : '<div class="empty">Юрист не отслеживает ни одно дело</div>';
-  return '<div class="sub-card">'
+  return '<div class="sub-card" data-endpoint="'+epAttr+'">'
     + '<div class="sub-row">'
+    +   labelHtml
     +   '<span class="sub-device">'+dev+'</span>'
     +   owner
     +   '<span class="kv"><b>Создана:</b> '+escHtml(relTime(sub.created_at))+'</span>'
@@ -474,11 +681,74 @@ function renderCard(sub, casesMap) {
     +   '<span class="kv"><b>Дел:</b> '+wl.length+'</span>'
     + '</div>'
     + '<div class="kv endpoint" title="'+ep+'">…'+ep+'</div>'
+    + '<div class="actions">'
+    +   '<button class="btn" data-action="rename">✏ Имя</button>'
+    +   '<button class="btn" data-action="watchlist">📋 Ред. watchlist</button>'
+    +   '<button class="btn" data-action="test">📨 Тест push</button>'
+    +   '<button class="btn btn-danger" data-action="delete">🗑 Удалить</button>'
+    +   '<span class="action-flash"></span>'
+    + '</div>'
     + '<details'+(wl.length<=10 ? ' open' : '')+'>'
     +   '<summary>Список отслеживаемых дел ('+wl.length+')</summary>'
     +   '<div class="cases">'+cases+'</div>'
     + '</details>'
     + '</div>';
+}
+
+async function postAdmin(path, body) {
+  const r = await fetch(path + "?secret=" + encodeURIComponent(SECRET), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data = null;
+  try { data = await r.json(); } catch (_) {}
+  return { ok: r.ok, status: r.status, data };
+}
+
+function flash(card, text, kind) {
+  const el = card.querySelector(".action-flash");
+  if (!el) return;
+  el.className = "action-flash " + (kind || "");
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ""; el.className = "action-flash"; }, 3500);
+}
+
+async function handleAction(card, action, currentSub) {
+  const endpoint = card.getAttribute("data-endpoint");
+  if (!endpoint) return;
+  if (action === "rename") {
+    const cur = currentSub.label || "";
+    const next = prompt("Имя для подписки (Иван, рабочий iPhone и т.п.). Пусто — снять имя.", cur);
+    if (next === null) return;
+    flash(card, "сохраняю…", "");
+    const res = await postAdmin("/admin/label", { endpoint, label: next });
+    if (res.ok) { flash(card, "✓ сохранено", "ok"); render(true); }
+    else { flash(card, "× ошибка", "err"); }
+  } else if (action === "delete") {
+    const lbl = currentSub.label ? '"' + currentSub.label + '"' : detectDevice(currentSub.user_agent);
+    if (!confirm("Удалить подписку " + lbl + " из KV? Юрист потеряет push до следующего входа в PWA.")) return;
+    flash(card, "удаляю…", "");
+    const res = await postAdmin("/admin/unsubscribe", { endpoint });
+    if (res.ok) { render(true); }
+    else { flash(card, "× ошибка", "err"); }
+  } else if (action === "test") {
+    flash(card, "шлю…", "");
+    const res = await postAdmin("/admin/test-push", { endpoint });
+    if (res.ok && res.data && res.data.ok) flash(card, "✓ доставлено (status " + res.data.status + ")", "ok");
+    else if (res.data && res.data.error === "endpoint_dead") flash(card, "× endpoint мёртв, удалён", "err");
+    else flash(card, "× ошибка: " + ((res.data && (res.data.error || res.data.body)) || res.status), "err");
+    if (res.data && res.data.deleted) render(true);
+  } else if (action === "watchlist") {
+    const cur = (currentSub.watchlist || []).join(", ");
+    const next = prompt("Watchlist через запятую. Пусто — очистить.", cur);
+    if (next === null) return;
+    const list = next.split(",").map((x) => x.trim()).filter(Boolean);
+    flash(card, "сохраняю…", "");
+    const res = await postAdmin("/admin/watchlist", { endpoint, watchlist: list });
+    if (res.ok) { flash(card, "✓ " + (res.data?.count ?? 0) + " дел", "ok"); render(true); }
+    else { flash(card, "× ошибка", "err"); }
+  }
 }
 
 async function render(force) {
@@ -502,6 +772,18 @@ async function render(force) {
     if (subs.length === 0) {
       root.innerHTML = '<div class="empty">Подписок нет.</div>';
     }
+    // Делегированный клик по кнопкам действий: ищем data-action на кнопке,
+    // ближайший .sub-card — карточка, по data-endpoint находим текущую sub.
+    const subsByEp = new Map(subs.map((s) => [s.endpoint, s]));
+    root.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const card = btn.closest(".sub-card");
+      if (!card) return;
+      const sub = subsByEp.get(card.getAttribute("data-endpoint"));
+      if (!sub) return;
+      handleAction(card, btn.getAttribute("data-action"), sub);
+    });
   } catch (e) {
     root.className = "error";
     root.textContent = "Ошибка: " + e.message;
@@ -586,6 +868,22 @@ export default {
 
     if (url.pathname === "/admin/data" && request.method === "GET") {
       return handleAdminData(request, env);
+    }
+
+    if (url.pathname === "/admin/label" && request.method === "POST") {
+      return handleAdminLabel(request, env);
+    }
+
+    if (url.pathname === "/admin/unsubscribe" && request.method === "POST") {
+      return handleAdminUnsubscribe(request, env);
+    }
+
+    if (url.pathname === "/admin/watchlist" && request.method === "POST") {
+      return handleAdminWatchlist(request, env);
+    }
+
+    if (url.pathname === "/admin/test-push" && request.method === "POST") {
+      return handleAdminTestPush(request, env);
     }
 
     return new Response("Not Found", { status: 404 });

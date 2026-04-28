@@ -135,9 +135,24 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`. Открывается в браузере (мобильно тоже). Endpoint реализован в [cloudflare-worker/worker.js](cloudflare-worker/worker.js): `handleAdmin` рендерит HTML, JS внутри тянет `/admin/data?secret=...` (защищён OWNER_SECRET) и `cases.json` с GitHub Pages.
 
-Что показывает по каждой push-подписке: устройство (парсится из user_agent), флаг owner, дата создания, последний вход в PWA, дата последнего обновления watchlist, размер watchlist и раскрываемый список дел со сторонами (Истец vs Ответчик · Суд) — стороны подтягиваются из `cases.json` по номеру.
+Что показывает по каждой push-подписке: имя (если задано), устройство (парсится из user_agent), флаг owner, дата создания, последний вход в PWA, дата последнего обновления watchlist, размер watchlist и раскрываемый список дел со сторонами (Истец vs Ответчик · Суд) — стороны подтягиваются из `cases.json` по номеру.
 
-Метаданные хранятся в KV: `created_at` (ставится один раз), `last_seen_at` (обновляется на каждом `/subscribe`, т.е. при каждом открытии PWA), `last_watchlist_update_at` (обновляется на `/watchlist`), `user_agent`. Старые подписки заполняют поля при следующем `/subscribe`.
+Действия по каждой подписке (4 кнопки):
+- **✏ Имя** → POST `/admin/label` `{endpoint, label}`. Сохраняет произвольное имя («Иван», «iPhone Дани»).
+- **📋 Ред. watchlist** → POST `/admin/watchlist` `{endpoint, watchlist}`. Перезаписывает watchlist чужой подписки (когда коллега не разобралась со звёздочками).
+- **📨 Тест push** → POST `/admin/test-push` `{endpoint}`. Шлёт пустой push конкретному устройству (без encryption — service-worker показывает дефолтное «Сбер Юрист»). Если endpoint мёртв (404/410) — подписка удаляется автоматически.
+- **🗑 Удалить** → POST `/admin/unsubscribe` `{endpoint}`. Принудительно убирает подписку из KV.
+
+Все админ-эндпоинты авторизуются через `?secret=<OWNER_SECRET>` в URL (для удобства открытия из браузера).
+
+Метаданные в KV: `created_at` (один раз), `last_seen_at` (на каждом `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`, `label`. Старые подписки заполняют поля при следующем `/subscribe`.
+
+**Для тестового push** нужно положить `VAPID_PRIVATE_KEY` в secret Worker'а:
+```
+cd cloudflare-worker && wrangler secret put VAPID_PRIVATE_KEY
+# вставить тот же PEM, что в GitHub Secret VAPID_PRIVATE_KEY
+```
+Без него кнопка «📨 Тест push» возвращает 503 с подсказкой. VAPID public key захардкожен в worker.js — не секретный.
 
 ## Подписки на дела (watchlist) на фронте
 
