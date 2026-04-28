@@ -1952,13 +1952,11 @@ function toggleWatch(caseNumber, btn) {
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
-  // «Первое открытие» с непустым watchlist — включаем фильтр и фиксируем
-  // выбор в localStorage, чтобы повторно не включать его в будущем.
-  // Если юрист уже сам выключил фильтр (saved='false'), maybeAutoEnable...
-  // ничего не делает — даже после удаления всех звёзд и постановки новых.
-  maybeAutoEnableMineFilter();
   // Перерисовываем chip-bar и пересчитываем filteredCases — chip появляется
   // или исчезает в зависимости от размера watchlist, а фильтр пересчитывается.
+  // Авто-включение фильтра «Мои дела» НЕ делаем: пользователь сам решает,
+  // включать ли фильтр после постановки звезды (см. maybeAutoEnableMineFilter
+  // — оно срабатывает только при инициализации страницы или гидратации с KV).
   if (typeof applyFilters === 'function') {
     try { applyFilters(); } catch (_) {}
   } else if (typeof renderChipBar === 'function') {
