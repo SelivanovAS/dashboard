@@ -2465,6 +2465,112 @@ function filterDigestContextByWatchlist(ctx, wlSet) {
   };
 }
 
+// Человекочитаемые ярлыки для технических кодов из `ch.type`.
+// Должны соответствовать формулировкам в generate_template_digest
+// (scripts/update_cases.py:3684+) — без деталей, только заголовок события.
+const MINE_TYPE_LABELS = {
+  fi_hearing_new: 'назначено заседание',
+  fi_hearing_postponed: 'заседание отложено',
+  fi_hearing_restart: 'рассмотрение начато заново',
+  fi_status_change: 'смена статуса',
+  fi_act_published: 'опубликован акт',
+  fi_act_text_published: 'опубликован мотивированный акт',
+  fi_final_event: 'итоговое событие',
+  fi_resolved: 'дело решено',
+  fi_appeal_filed: 'подана апелляционная жалоба',
+  fi_cassation_filed: 'подана кассационная жалоба',
+  fi_sent_to_cassation: 'направлено в кассацию',
+  ap_hearing_new: 'назначено заседание',
+  ap_hearing_postponed: 'заседание отложено',
+  ap_act_published: 'опубликован акт',
+  ap_act_text_published: 'опубликован мотивированный акт',
+  ap_status_change: 'смена статуса',
+  ap_resolved: 'дело решено',
+};
+function formatChangeTypes(t) {
+  const arr = Array.isArray(t) ? t : (t ? [t] : []);
+  if (!arr.length) return '';
+  const seen = new Set();
+  const out = [];
+  for (const code of arr) {
+    const label = MINE_TYPE_LABELS[code] || code;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out.join(', ');
+}
+
+// Подробная формулировка событий в `ch.type` с использованием `ch.details`.
+// Параллель к ev_list в generate_template_digest (scripts/update_cases.py:3683+).
+function formatChangeDetails(ch) {
+  const types = Array.isArray(ch.type) ? ch.type : (ch.type ? [ch.type] : []);
+  const d = ch.details || {};
+  const parts = [];
+  const has = new Set(types);
+  // fi_act_text_published — расширяет fi_act_published, выводим вместе.
+  const actPair = has.has('fi_act_text_published') || has.has('fi_act_published');
+  for (const t of types) {
+    if (t === 'fi_hearing_new') {
+      const hd = d.hearing_date || '';
+      const ht = d.hearing_time || '';
+      const htype = d.hearing_type || 'заседание';
+      parts.push(`📅 ${escHtml(htype)} ${escHtml(hd)}${ht ? ' ' + escHtml(ht) : ''}`.trim());
+    } else if (t === 'fi_hearing_postponed') {
+      const hd = d.hearing_date || '';
+      const ht = d.hearing_time || '';
+      const newP = `${hd}${ht ? ' ' + ht : ''}`.trim();
+      parts.push(`🔁 заседание отложено${newP ? ' на ' + escHtml(newP) : ''}`);
+    } else if (t === 'fi_hearing_restart') {
+      const rd = d.restart_date || '';
+      const nhd = d.next_hearing_date || '';
+      const nht = d.next_hearing_time || '';
+      let s = `🔄 рассмотрение начато с начала${rd ? ' (' + escHtml(rd) + ')' : ''}`;
+      if (nhd) s += `; след. заседание ${escHtml(nhd)}${nht ? ' ' + escHtml(nht) : ''}`;
+      parts.push(s);
+    } else if (t === 'fi_status_change') {
+      parts.push(`статус: ${escHtml(d.old_status || '')} → ${escHtml(d.new_status || '')}`);
+    } else if (t === 'fi_act_text_published') {
+      const ad = d.act_date || '';
+      const verdict = d.verdict_label || d.act_verdict_label || '';
+      const out = d.bank_outcome || '';
+      let s = `📄 опубликован мотивированный акт${ad ? ' (' + escHtml(ad) + ')' : ''}`;
+      if (verdict) s += ` · <b>итог:</b> ${escHtml(verdict)}`;
+      if (out) s += ` · <b>для банка:</b> ${escHtml(out)}`;
+      parts.push(s);
+    } else if (t === 'fi_act_published') {
+      if (actPair) continue; // не дублируем — мотивированный акт уже включает
+      const ad = d.act_date || '';
+      parts.push(`📄 опубликован акт${ad ? ' (' + escHtml(ad) + ')' : ''}`);
+    } else if (t === 'fi_resolved') {
+      const dd = d.decision_date || '';
+      const verdict = d.verdict_label || '';
+      let s = `⚖️ дело решено${dd ? ' (' + escHtml(dd) + ')' : ''}`;
+      if (verdict) s += ` · ${escHtml(verdict)}`;
+      parts.push(s);
+    } else if (t === 'fi_final_event') {
+      parts.push(`⚖️ ${escHtml(d.event || 'итоговое событие')}`);
+    } else if (t === 'fi_appeal_filed') {
+      const dt = d.appeal_filed_date || '';
+      const role = d.appellant_role || '';
+      const name = d.appellant_name || '';
+      const who = `${role} ${name}`.trim();
+      let s = `📨 подана апелляц. жалоба${dt ? ' (' + escHtml(dt) + ')' : ''}`;
+      if (who) s += `, апеллянт: ${escHtml(who)}`;
+      parts.push(s);
+    } else if (t === 'fi_cassation_filed') {
+      const dt = d.cassation_filed_date || '';
+      parts.push(`📨 подана кассац. жалоба${dt ? ' (' + escHtml(dt) + ')' : ''}`);
+    } else if (t === 'fi_sent_to_cassation') {
+      const dt = d.sent_to_cassation_date || '';
+      parts.push(`📤 направлено в кассац. суд${dt ? ' (' + escHtml(dt) + ')' : ''}`);
+    } else {
+      parts.push(escHtml(MINE_TYPE_LABELS[t] || t));
+    }
+  }
+  return parts.join('; ');
+}
+
 // Стороны: краткая форма для отображения в дайджесте. Если истец и ответчик
 // одинаковые (бывает при ошибках в карточке) — показываем один раз.
 function partiesShort(p, d) {
@@ -2503,14 +2609,14 @@ function renderMineDigestSections(f) {
   if (apNew.length) out.push(`<p>📥 <b>Новые дела (апелляция, ${apNew.length}):</b></p>${apNew.join('')}`);
 
   const fiChg = f.fi_changes.map((ch) => {
-    const types = Array.isArray(ch.type) ? ch.type.join(', ') : (ch.type || '');
-    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${ch.court ? ` · ${escHtml(ch.court)}` : ''}${types ? ` · <i>${escHtml(types)}</i>` : ''}</div>`;
+    const types = formatChangeDetails(ch);
+    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${ch.court ? ` · ${escHtml(ch.court)}` : ''}${types ? `<div class="mine-event">${types}</div>` : ''}</div>`;
   });
   if (fiChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (1 инст., ${fiChg.length}):</b></p>${fiChg.join('')}`);
 
   const apChg = f.changes.map((ch) => {
-    const types = Array.isArray(ch.type) ? ch.type.join(', ') : (ch.type || '');
-    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${types ? ` · <i>${escHtml(types)}</i>` : ''}</div>`;
+    const types = formatChangeDetails(ch);
+    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${types ? `<div class="mine-event">${types}</div>` : ''}</div>`;
   });
   if (apChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (апелляция, ${apChg.length}):</b></p>${apChg.join('')}`);
 

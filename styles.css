@@ -1092,6 +1092,8 @@ tr.detail-row { display:none; }
 }
 .digest-body .mine-row:hover { border-left-color: var(--bg-3); }
 .digest-body .mine-vs { color: var(--fg-3); font-size: 0.9em; padding: 0 2px; }
+.digest-body .mine-event { margin-top: 2px; padding-left: 12px; color: var(--fg-2); font-size: var(--fs-sm); line-height: 1.5; }
+.digest-body .mine-event b { font-weight: var(--fw-semibold); color: var(--fg-1); }
 .digest-meta  { color: var(--fg-3); font-size: var(--fs-sm); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .digest-toggle {
   background: transparent;
