@@ -2448,234 +2448,115 @@ async function loadLastDigest() {
   }
 }
 
-// Зеркало `_filter_events_by_watchlist` из update_cases.py. Новые дела
-// (`fi_new_cases`, `new_cases` ≡ apel CSV) — общесистемный сигнал, поэтому
-// возвращаются целиком. Фильтр по watchlist — только для изменений и
-// stage_transitions.
-function filterDigestContextByWatchlist(ctx, wlSet) {
-  const has = (s) => wlSet.has(String(s || '').trim());
-  return {
-    fi_new_cases: Array.isArray(ctx.fi_new_cases) ? ctx.fi_new_cases.slice() : [],
-    appeal_new_cases: Array.isArray(ctx.new_cases) ? ctx.new_cases.slice() : [],
-    fi_changes: (ctx.fi_changes || []).filter((ch) => has(ch.case)),
-    changes: (ctx.changes || []).filter((ch) => has(ch.case)),
-    stage_transitions: (ctx.stage_transitions || []).filter(
-      (t) => has(t.fi_case_number) || has(t.appeal_case_number)
-    ),
-  };
+// Собрать множество номеров «новых дел» из last_digest_context.json. Новые
+// дела — общесистемный сигнал, в mine-режиме они проходят без watchlist.
+function collectNewCaseNumbers(ctx) {
+  const set = new Set();
+  for (const c of ctx?.fi_new_cases || []) {
+    const id = String(c.id || '').trim();
+    if (id) set.add(id);
+  }
+  for (const c of ctx?.new_cases || []) {
+    const id = String(c['Номер дела'] || '').trim();
+    if (id) set.add(id);
+  }
+  return set;
 }
 
-// Человекочитаемые ярлыки для технических кодов из `ch.type`.
-// Должны соответствовать формулировкам в generate_template_digest
-// (scripts/update_cases.py:3684+) — без деталей, только заголовок события.
-const MINE_TYPE_LABELS = {
-  fi_hearing_new: 'назначено заседание',
-  fi_hearing_postponed: 'заседание отложено',
-  fi_hearing_restart: 'рассмотрение начато заново',
-  fi_status_change: 'смена статуса',
-  fi_act_published: 'опубликован акт',
-  fi_act_text_published: 'опубликован мотивированный акт',
-  fi_final_event: 'итоговое событие',
-  fi_resolved: 'дело решено',
-  fi_appeal_filed: 'подана апелляционная жалоба',
-  fi_cassation_filed: 'подана кассационная жалоба',
-  fi_sent_to_cassation: 'направлено в кассацию',
-  ap_hearing_new: 'назначено заседание',
-  ap_hearing_postponed: 'заседание отложено',
-  ap_act_published: 'опубликован акт',
-  ap_act_text_published: 'опубликован мотивированный акт',
-  ap_status_change: 'смена статуса',
-  ap_resolved: 'дело решено',
-};
-function formatChangeTypes(t) {
-  const arr = Array.isArray(t) ? t : (t ? [t] : []);
-  if (!arr.length) return '';
-  const seen = new Set();
+// Маркеры заголовков секций общего дайджеста (Telegram/LLM). По наличию
+// эмодзи в первой строке параграфа определяем тип секции и решаем — это
+// фильтруемая секция (изменения/решения/жалобы/переходы/тексты актов) или
+// общесистемная (новые дела, сводка, заголовок).
+const SECTION_NEW_RE = /(Новые\s+иски|Новые\s+дела)/i;
+const SECTION_HEADER_RE = /<b>\s*[\u{1F4E5}\u{1F4C5}⚖️\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}]/u;
+const SECTION_FILTERED_RE = /<b>\s*[\u{1F4C5}⚖️\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}]/u;
+
+// Регексп для распознавания «голого» номера дела внутри HTML — должен быть
+// ровно тем, что использует enhanceDigestCaseLinks (CASE_NUMBER_RE), плюс
+// учитывать суффиксы вида «(2-3719/2025;)».
+const MINE_CASE_RE = /<a[^>]*><b>([^<]+)<\/b><\/a>/g;
+
+// Извлечь все номера дел, упомянутые в HTML-фрагменте. Берём первый
+// «голый» номер, нормализуем как `_bare_case_number` в Python: до пробела/
+// открывающей скобки. Watchlist хранит номер с суффиксом, но в LLM-выдаче
+// часто без — поэтому при сравнении нормализуем оба.
+function bareCaseNumber(num) {
+  return String(num || '').trim().split(/[\s(]/)[0];
+}
+function casesInFragment(html) {
   const out = [];
-  for (const code of arr) {
-    const label = MINE_TYPE_LABELS[code] || code;
-    if (seen.has(label)) continue;
-    seen.add(label);
-    out.push(label);
+  let m;
+  MINE_CASE_RE.lastIndex = 0;
+  while ((m = MINE_CASE_RE.exec(html)) !== null) {
+    const bare = bareCaseNumber(m[1]);
+    if (bare) out.push(bare);
   }
-  return out.join(', ');
+  return out;
 }
 
-// Извлечь мотивировочную часть из текста акта. Зеркало extract_motive_part
-// в Python (scripts/update_cases.py:638). Логика: «установил(а):» →
-// «руководствуясь» / «на основании изложенного». Если структуры нет —
-// возвращаем начало текста (там обычно описание сути иска).
-function extractMotive(actText, maxLen) {
-  if (!actText) return '';
-  const text = actText.trim();
-  const startRe = /(?:у\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?\s*:|УСТАНОВИЛ[АИ]?\s*:)/i;
-  const endRe = /(?:руководствуясь|РУКОВОДСТВУЯСЬ|на\s+основании\s+изложенного|судебная\s+коллегия\s+(?:определила|приходит)|о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?\s*:)/i;
-  const startM = text.match(startRe);
-  const endM = text.match(endRe);
-  if (startM && endM && endM.index > startM.index + startM[0].length) {
-    const motive = text.slice(startM.index + startM[0].length, endM.index).trim();
-    if (motive.length > 100) return motive.slice(0, maxLen);
-  }
-  if (startM) {
-    const after = text.slice(startM.index + startM[0].length).trim();
-    if (after.length > 100) return after.slice(0, maxLen);
-  }
-  return text.length > maxLen ? text.slice(0, maxLen) : text;
-}
-
-// Краткая выжимка для встраивания в строку события: 1-2 предложения
-// до ~280 символов, по границе предложения если возможно.
-function shortenMotive(actText, maxLen = 280) {
-  const m = extractMotive(actText, maxLen + 200);
-  if (!m) return '';
-  if (m.length <= maxLen) return m;
-  const cut = m.slice(0, maxLen);
-  const lastDot = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
-  if (lastDot > maxLen * 0.6) return cut.slice(0, lastDot + 1) + '…';
-  return cut.trim() + '…';
-}
-
-// Подробная формулировка событий в `ch.type` с использованием `ch.details`.
-// Параллель к ev_list в generate_template_digest (scripts/update_cases.py:3683+).
-function formatChangeDetails(ch) {
-  const types = Array.isArray(ch.type) ? ch.type : (ch.type ? [ch.type] : []);
-  const d = ch.details || {};
-  const parts = [];
-  const has = new Set(types);
-  // fi_act_text_published — расширяет fi_act_published, выводим вместе.
-  const actPair = has.has('fi_act_text_published') || has.has('fi_act_published');
-  for (const t of types) {
-    if (t === 'fi_hearing_new') {
-      const hd = d.hearing_date || '';
-      const ht = d.hearing_time || '';
-      const htype = d.hearing_type || 'заседание';
-      parts.push(`📅 ${escHtml(htype)} ${escHtml(hd)}${ht ? ' ' + escHtml(ht) : ''}`.trim());
-    } else if (t === 'fi_hearing_postponed') {
-      const hd = d.hearing_date || '';
-      const ht = d.hearing_time || '';
-      const newP = `${hd}${ht ? ' ' + ht : ''}`.trim();
-      parts.push(`🔁 заседание отложено${newP ? ' на ' + escHtml(newP) : ''}`);
-    } else if (t === 'fi_hearing_restart') {
-      const rd = d.restart_date || '';
-      const nhd = d.next_hearing_date || '';
-      const nht = d.next_hearing_time || '';
-      let s = `🔄 рассмотрение начато с начала${rd ? ' (' + escHtml(rd) + ')' : ''}`;
-      if (nhd) s += `; след. заседание ${escHtml(nhd)}${nht ? ' ' + escHtml(nht) : ''}`;
-      parts.push(s);
-    } else if (t === 'fi_status_change') {
-      parts.push(`статус: ${escHtml(d.old_status || '')} → ${escHtml(d.new_status || '')}`);
-    } else if (t === 'fi_act_text_published') {
-      const ad = d.act_date || '';
-      const verdict = d.verdict_label || d.act_verdict_label || '';
-      const out = d.bank_outcome || '';
-      let s = `📄 опубликован мотивированный акт${ad ? ' (' + escHtml(ad) + ')' : ''}`;
-      if (verdict) s += ` · <b>итог:</b> ${escHtml(verdict)}`;
-      if (out) s += ` · <b>для банка:</b> ${escHtml(out)}`;
-      const summary = shortenMotive(d.act_text, 280);
-      const full = extractMotive(d.act_text, 4000);
-      if (summary) {
-        if (full && full.length > summary.length + 20) {
-          s += `<details class="mine-motive"><summary>📝 ${escHtml(summary)}</summary><div class="mine-motive-full">${escHtml(full)}</div></details>`;
-        } else {
-          s += `<div class="mine-motive-line">📝 ${escHtml(summary)}</div>`;
-        }
-      }
-      parts.push(s);
-    } else if (t === 'fi_act_published') {
-      if (actPair) continue; // не дублируем — мотивированный акт уже включает
-      const ad = d.act_date || '';
-      parts.push(`📄 опубликован акт${ad ? ' (' + escHtml(ad) + ')' : ''}`);
-    } else if (t === 'fi_resolved') {
-      const dd = d.decision_date || '';
-      const verdict = d.verdict_label || '';
-      let s = `⚖️ дело решено${dd ? ' (' + escHtml(dd) + ')' : ''}`;
-      if (verdict) s += ` · ${escHtml(verdict)}`;
-      parts.push(s);
-    } else if (t === 'fi_final_event') {
-      parts.push(`⚖️ ${escHtml(d.event || 'итоговое событие')}`);
-    } else if (t === 'fi_appeal_filed') {
-      const dt = d.appeal_filed_date || '';
-      const role = d.appellant_role || '';
-      const name = d.appellant_name || '';
-      const who = `${role} ${name}`.trim();
-      let s = `📨 подана апелляц. жалоба${dt ? ' (' + escHtml(dt) + ')' : ''}`;
-      if (who) s += `, апеллянт: ${escHtml(who)}`;
-      parts.push(s);
-    } else if (t === 'fi_cassation_filed') {
-      const dt = d.cassation_filed_date || '';
-      parts.push(`📨 подана кассац. жалоба${dt ? ' (' + escHtml(dt) + ')' : ''}`);
-    } else if (t === 'fi_sent_to_cassation') {
-      const dt = d.sent_to_cassation_date || '';
-      parts.push(`📤 направлено в кассац. суд${dt ? ' (' + escHtml(dt) + ')' : ''}`);
-    } else {
-      parts.push(escHtml(MINE_TYPE_LABELS[t] || t));
+// Фильтр общего HTML дайджеста по mine-набору номеров дел (watchlist + новые).
+// Подход: разбиваем HTML по двойным переводам строк на параграфы; для каждого
+// параграфа определяем заголовок секции (если есть) и блоки дел; если секция
+// «фильтруемая», убираем блоки дел не из mine-набора. «Новые» секции и
+// общесистемные параграфы (сводка, главное, итоги, ссылка на дашборд)
+// оставляем как есть. Это даёт идентичный с Telegram-дайджестом текст по
+// каждому делу — описание актов, мотивы, итоги и т.п. от LLM.
+function filterGeneralHtmlByMine(html, mineSet) {
+  const inMine = (num) => mineSet.has(bareCaseNumber(num));
+  const paragraphs = String(html).split(/\n{2,}/);
+  const kept = [];
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+    const lines = para.split('\n');
+    // Определяем заголовок: первая строка, начинающаяся с <b>+эмодзи секции.
+    let header = null;
+    let rest = lines;
+    if (lines[0] && SECTION_HEADER_RE.test(lines[0])) {
+      header = lines[0];
+      rest = lines.slice(1);
     }
+    const isNewSection = header && SECTION_NEW_RE.test(header);
+    const isFiltered = header && SECTION_FILTERED_RE.test(header) && !isNewSection;
+    if (!isFiltered) {
+      // Общесистемный или новый — оставляем целиком.
+      kept.push(para);
+      continue;
+    }
+    // Фильтруемая секция: группируем строки rest в блоки дел — каждый
+    // блок начинается со строки, содержащей <a><b>NUM</b></a>.
+    const blocks = [];
+    let current = null;
+    for (const line of rest) {
+      MINE_CASE_RE.lastIndex = 0;
+      const hasCase = MINE_CASE_RE.exec(line);
+      if (hasCase) {
+        if (current) blocks.push(current);
+        current = { num: bareCaseNumber(hasCase[1]), lines: [line] };
+      } else if (current) {
+        current.lines.push(line);
+      } else {
+        // Строка перед первым делом в секции — это, например, продолжение
+        // заголовка или вспомогательный текст. Прикрепим к заголовку.
+        header = (header || '') + (header ? '\n' : '') + line;
+      }
+    }
+    if (current) blocks.push(current);
+    const wanted = blocks.filter((b) => inMine(b.num));
+    if (wanted.length === 0) continue;
+    const out = [];
+    if (header) out.push(header);
+    for (const b of wanted) out.push(b.lines.join('\n'));
+    kept.push(out.join('\n'));
   }
-  return parts.join('; ');
-}
-
-// Стороны: краткая форма для отображения в дайджесте. Если истец и ответчик
-// одинаковые (бывает при ошибках в карточке) — показываем один раз.
-function partiesShort(p, d) {
-  const a = String(p || '').trim();
-  const b = String(d || '').trim();
-  if (!a && !b) return '';
-  if (a === b) return escHtml(a);
-  if (!a) return escHtml(b);
-  if (!b) return escHtml(a);
-  return `${escHtml(a)} <span class="mine-vs">vs</span> ${escHtml(b)}`;
-}
-
-// Минимальный рендер «персонального дайджеста» из структурированного
-// контекста: 5 секций по аналогии с шаблонным дайджестом в Python. Номера
-// дел оборачиваем в `data-open-drawer`, чтобы клик открывал боковую панель —
-// `enhanceDigestCaseLinks()` не обязателен, но идемпотентен.
-function renderMineDigestSections(f) {
-  const out = [];
-  const caseLink = (num) => {
-    const safeNum = String(num || '').replace(/'/g, '&#39;');
-    return `<a class="digest-case-link" data-open-drawer="${safeNum}"><b>${escHtml(num)}</b></a>`;
-  };
-  const fiNew = f.fi_new_cases.map((c) => {
-    const fi = c.first_instance || {};
-    const court = fi.court || '';
-    const filed = fi.filing_date ? ` · поступило ${escHtml(fi.filing_date)}` : '';
-    return `<div class="mine-row">${caseLink(c.id)} — ${partiesShort(c.plaintiff, c.defendant)}${court ? ` · ${escHtml(court)}` : ''}${filed}</div>`;
-  });
-  if (fiNew.length) out.push(`<p>📥 <b>Новые иски (1 инст., ${fiNew.length}):</b></p>${fiNew.join('')}`);
-
-  const apNew = f.appeal_new_cases.map((c) => {
-    const num = c['Номер дела'] || '';
-    const court = c['Суд апелляционной инстанции'] || c['Суд'] || '';
-    return `<div class="mine-row">${caseLink(num)} — ${partiesShort(c['Истец'], c['Ответчик'])}${court ? ` · ${escHtml(court)}` : ''}</div>`;
-  });
-  if (apNew.length) out.push(`<p>📥 <b>Новые дела (апелляция, ${apNew.length}):</b></p>${apNew.join('')}`);
-
-  const fiChg = f.fi_changes.map((ch) => {
-    const types = formatChangeDetails(ch);
-    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${ch.court ? ` · ${escHtml(ch.court)}` : ''}${types ? `<div class="mine-event">${types}</div>` : ''}</div>`;
-  });
-  if (fiChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (1 инст., ${fiChg.length}):</b></p>${fiChg.join('')}`);
-
-  const apChg = f.changes.map((ch) => {
-    const types = formatChangeDetails(ch);
-    return `<div class="mine-row">${caseLink(ch.case)} — ${partiesShort(ch.plaintiff, ch.defendant)}${types ? `<div class="mine-event">${types}</div>` : ''}</div>`;
-  });
-  if (apChg.length) out.push(`<p>📅 <b>Изменения по твоим делам (апелляция, ${apChg.length}):</b></p>${apChg.join('')}`);
-
-  const tr = f.stage_transitions.map((t) => {
-    const num = t.appeal_case_number || t.fi_case_number || '';
-    const stage = t.to_stage || t.from_stage || '';
-    return `<div class="mine-row">${caseLink(num)}${stage ? ` · ${escHtml(stage)}` : ''}</div>`;
-  });
-  if (tr.length) out.push(`<p>🔀 <b>Перешли в новую стадию (${tr.length}):</b></p>${tr.join('')}`);
-
-  return out.join('');
+  return kept.join('\n\n');
 }
 
 // Подменяет содержимое блока дайджеста на персональную версию по watchlist.
-// Если в персонале сегодня пусто — оставляет общий дайджест и добавляет
-// плашку «По твоим делам сегодня изменений нет — показан общий дайджест».
+// Подход: переиспользуем ОБЩИЙ HTML дайджеста (тот же, что в Telegram) и
+// просто фильтруем блоки в «фильтруемых» секциях. Описание актов, мотивы и
+// итоги — идентичны Telegram-версии. Если в персональной версии не осталось
+// фильтруемых блоков — показываем общий дайджест плюс плашка-заметка.
 async function applyMineDigestFilterToBody(body) {
   if (watchlist.size === 0) {
     prependMineNote(body, 'У тебя пока нет отслеживаемых дел. Поставь звёздочку в карточке, чтобы получать персональный дайджест. Сейчас показан общий.');
@@ -2690,15 +2571,22 @@ async function applyMineDigestFilterToBody(body) {
     prependMineNote(body, 'Не удалось загрузить контекст для персональной версии — показан общий дайджест.');
     return;
   }
-  const f = filterDigestContextByWatchlist(ctx, watchlist);
-  const total = f.fi_new_cases.length + f.appeal_new_cases.length
-    + f.fi_changes.length + f.changes.length + f.stage_transitions.length;
-  if (total === 0) {
+  // mineSet = watchlist (с нормализацией) ∪ номера новых дел из контекста.
+  const mineSet = new Set();
+  for (const w of watchlist) mineSet.add(bareCaseNumber(w));
+  for (const n of collectNewCaseNumbers(ctx)) mineSet.add(bareCaseNumber(n));
+  // Текущий innerHTML — это уже общий дайджест (sanitize-HTML из last_digest.json).
+  // Возьмём оригинальный data.html, который ещё не был обрезан санитайзером?
+  // Удобнее: data.html уже в body.innerHTML после sanitize. Используем его.
+  const general = body.innerHTML;
+  const filtered = filterGeneralHtmlByMine(general, mineSet);
+  // Считаем, есть ли в результате хоть один <a><b>NUM</b></a> по mine-делам.
+  const cases = casesInFragment(filtered).filter((n) => mineSet.has(n));
+  if (cases.length === 0) {
     prependMineNote(body, 'По твоим делам сегодня изменений нет — показан общий дайджест.');
     return;
   }
-  const sections = renderMineDigestSections(f);
-  body.innerHTML = `<div class="mine-digest-note">★ Только мои дела + новые. Изменений: ${total}.</div>${sections}`;
+  body.innerHTML = `<div class="mine-digest-note">★ Только мои дела + новые. По делам: ${cases.length}.</div>${filtered}`;
 }
 
 function prependMineNote(body, text) {
