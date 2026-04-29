@@ -68,8 +68,11 @@ function shortName(s){
   s=s.replace(new RegExp('Финансов'+Ws+'\\s+уполномоченн'+Ws+'\\s+по\\s+правам\\s+потребителей\\s+финансовых\\s+услуг','gi'),'Фин. уполномоченный');
   // "в лице филиала ..." remove subsidiary details up to "vs" or comma+name
   s=s.replace(/\s*в\s+лице\s+[^,]*(?:,\s*(?=[а-яёА-ЯЁ]))?/gi,'');
-  // Remove org forms: ПАО, ООО, ОАО, АО, ЗАО, НКО, ИП (with optional quotes)
-  s=s.replace(/(ПАО|ООО|ОАО|АО|ЗАО|НКО|ИП)\s*[«""]?\s*/gi,'');
+  // Remove org forms: ПАО, ООО, ОАО, АО, ЗАО, НКО, ИП (with optional quotes).
+  // В JS \b работает только с латиницей/цифрами — для кириллицы нужно
+  // явное окружение через lookbehind/lookahead, иначе «НКО» сматчивало
+  // подстроку «нко» внутри фамилии «Станков» и превращало её в «Став».
+  s=s.replace(/(?<=^|\s)(ПАО|ООО|ОАО|АО|ЗАО|НКО|ИП)(?=\s|[«""]|$)\s*[«""]?\s*/gi,'');
   // Clean leftover closing quotes
   s=s.replace(/[»""]\s*/g,' ');
   // город/города -> г.
