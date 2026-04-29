@@ -901,11 +901,13 @@ function renderAnalytics(){
       if(!items.length)return;
       upHtml+=`<div class="up-group ${g.cls}"><div class="up-group-head">${g.label}<span class="up-group-count">${items.length}</span></div><div class="up-group-body">`;
       items.forEach(c=>{
-        // Не сокращаем ФИО до инициалов: «Став С.Ю.» юрист понимает хуже,
-        // чем «Став Сергей Юрьевич». shortParty всё равно нормализует
-        // длинные названия организаций (ПАО Сбербанк, МТУ Росимущества).
-        const pl=shortParty(c.plaintiff);
-        const df=shortParty(c.defendant);
+        // «Фамилия И.О.» в обоих видах: длинные ФИО занимают 2-3 строки
+        // на мобиле, а полная фамилия + инициалы — компактно и читаемо.
+        // shortParty нормализует длинные названия организаций
+        // (ПАО Сбербанк, МТУ Росимущества), shortName — сокращает только
+        // имя/отчество до инициалов, фамилию оставляет целой.
+        const pl=shortName(shortParty(c.plaintiff));
+        const df=shortName(shortParty(c.defendant));
         const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
         const timeTxt=c.hearingTime||'—';
         const showDate=(g.key==='week'||g.key==='later');
