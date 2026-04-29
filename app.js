@@ -2572,13 +2572,16 @@ function collectNewCaseNumbers(ctx) {
   return set;
 }
 
-// Маркеры заголовков секций общего дайджеста (Telegram/LLM). По наличию
-// эмодзи в первой строке параграфа определяем тип секции и решаем — это
-// фильтруемая секция (изменения/решения/жалобы/переходы/тексты актов) или
-// общесистемная (новые дела, сводка, заголовок).
+// Маркеры заголовков секций общего дайджеста (Telegram/LLM). LLM выдаёт
+// заголовок в формате «<emoji> <b>Текст…</b>» — эмодзи СНАРУЖИ <b>, до
+// него; учитываем это в regex. Для группирующих заголовков (🏛 ПЕРВАЯ
+// ИНСТАНЦИЯ, ⚖️ АПЕЛЛЯЦИЯ) регекс HEADER матчит, FILTERED — нет:
+// группирующие параграфы сохраняем целиком, а блоки дел внутри них —
+// относятся к ближайшей следующей FILTERED-секции (📅 Изменения,
+// 📄 Опубликованные акты и т.п.).
 const SECTION_NEW_RE = /(Новые\s+иски|Новые\s+дела)/i;
-const SECTION_HEADER_RE = /<b>\s*[\u{1F4E5}\u{1F4C5}⚖️\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}]/u;
-const SECTION_FILTERED_RE = /<b>\s*[\u{1F4C5}⚖️\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}]/u;
+const SECTION_HEADER_RE = /^[\u{1F4E5}\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}\u{2696}\u{1F3DB}]\s*\u{FE0F}?\s*<b>/u;
+const SECTION_FILTERED_RE = /^[\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}]\s*<b>/u;
 
 // Регексп для распознавания «голого» номера дела внутри HTML — должен быть
 // ровно тем, что использует enhanceDigestCaseLinks (CASE_NUMBER_RE), плюс
@@ -2604,59 +2607,72 @@ function casesInFragment(html) {
 }
 
 // Фильтр общего HTML дайджеста по mine-набору номеров дел (watchlist + новые).
-// Подход: разбиваем HTML по двойным переводам строк на параграфы; для каждого
-// параграфа определяем заголовок секции (если есть) и блоки дел; если секция
-// «фильтруемая», убираем блоки дел не из mine-набора. «Новые» секции и
-// общесистемные параграфы (сводка, главное, итоги, ссылка на дашборд)
-// оставляем как есть. Это даёт идентичный с Telegram-дайджестом текст по
-// каждому делу — описание актов, мотивы, итоги и т.п. от LLM.
+// State machine между параграфами: LLM делит дайджест на параграфы по
+// двойному \n, и заголовок секции часто оказывается в отдельном
+// параграфе от блоков дел этой секции. Идём слева направо, помним
+// «текущую секцию»: если она фильтруемая (📅 Изменения, 📄 Акты и т.п.),
+// последующие параграфы-блоки фильтруем по mine; если общесистемная
+// («Новые дела», группирующие 🏛/⚖️) — оставляем как есть. Параграф-
+// заголовок фильтруемой секции откладываем и сохраняем только если
+// после него встретился хотя бы один mine-блок (иначе заголовок-сирота
+// «📅 Изменения (2):» без содержимого мусорит на странице).
 function filterGeneralHtmlByMine(html, mineSet) {
   const inMine = (num) => mineSet.has(bareCaseNumber(num));
   const paragraphs = String(html).split(/\n{2,}/);
   const kept = [];
+  // Состояние секции: 'none' | 'new' (общесистемная — оставляем) |
+  // 'filtered' (фильтруемая — пропускаем блоки не из mine) |
+  // 'group' (группирующая 🏛/⚖️ — оставляем заголовок, дальше блоки
+  // будут до следующего заголовка).
+  let section = 'none';
+  // Отложенный заголовок фильтруемой секции — добавим в kept только при
+  // первом mine-блоке этой секции.
+  let pendingFilteredHeader = null;
   for (const para of paragraphs) {
     const trimmed = para.trim();
     if (!trimmed) continue;
-    const lines = para.split('\n');
-    // Определяем заголовок: первая строка, начинающаяся с <b>+эмодзи секции.
-    let header = null;
-    let rest = lines;
-    if (lines[0] && SECTION_HEADER_RE.test(lines[0])) {
-      header = lines[0];
-      rest = lines.slice(1);
-    }
-    const isNewSection = header && SECTION_NEW_RE.test(header);
-    const isFiltered = header && SECTION_FILTERED_RE.test(header) && !isNewSection;
-    if (!isFiltered) {
-      // Общесистемный или новый — оставляем целиком.
-      kept.push(para);
+    const firstLine = para.split('\n')[0] || '';
+    const isHeader = SECTION_HEADER_RE.test(firstLine);
+    if (isHeader) {
+      const isNew = SECTION_NEW_RE.test(firstLine);
+      const isFiltered = SECTION_FILTERED_RE.test(firstLine) && !isNew;
+      if (isFiltered) {
+        section = 'filtered';
+        pendingFilteredHeader = para;
+      } else {
+        // Новые/группирующие — оставляем заголовок и переключаем секцию.
+        section = isNew ? 'new' : 'group';
+        pendingFilteredHeader = null;
+        kept.push(para);
+      }
       continue;
     }
-    // Фильтруемая секция: группируем строки rest в блоки дел — каждый
-    // блок начинается со строки, содержащей <a><b>NUM</b></a>.
-    const blocks = [];
-    let current = null;
-    for (const line of rest) {
+    // Параграф без заголовка. Что делать — зависит от текущей секции.
+    if (section === 'filtered') {
+      // Считаем номера дел в параграфе. В блоке-деле первый <a><b>NUM</b></a>
+      // — заголовочный номер; если он в mine, оставляем параграф целиком.
       MINE_CASE_RE.lastIndex = 0;
-      const hasCase = MINE_CASE_RE.exec(line);
-      if (hasCase) {
-        if (current) blocks.push(current);
-        current = { num: bareCaseNumber(hasCase[1]), lines: [line] };
-      } else if (current) {
-        current.lines.push(line);
-      } else {
-        // Строка перед первым делом в секции — это, например, продолжение
-        // заголовка или вспомогательный текст. Прикрепим к заголовку.
-        header = (header || '') + (header ? '\n' : '') + line;
+      const m = MINE_CASE_RE.exec(para);
+      if (!m) {
+        // Параграф без номера дела внутри фильтруемой секции — служебный
+        // (разделитель «⸻», подпись и т.п.). Оставим как есть, чтобы не
+        // ломать визуальный ритм.
+        kept.push(para);
+        continue;
       }
+      const num = bareCaseNumber(m[1]);
+      if (inMine(num)) {
+        if (pendingFilteredHeader) {
+          kept.push(pendingFilteredHeader);
+          pendingFilteredHeader = null;
+        }
+        kept.push(para);
+      }
+      // иначе — выкидываем (не наш блок).
+    } else {
+      // Общесистемный/новый/группирующий контекст — оставляем.
+      kept.push(para);
     }
-    if (current) blocks.push(current);
-    const wanted = blocks.filter((b) => inMine(b.num));
-    if (wanted.length === 0) continue;
-    const out = [];
-    if (header) out.push(header);
-    for (const b of wanted) out.push(b.lines.join('\n'));
-    kept.push(out.join('\n'));
   }
   return kept.join('\n\n');
 }

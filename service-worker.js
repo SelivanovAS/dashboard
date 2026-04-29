@@ -6,7 +6,7 @@
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
 */
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
