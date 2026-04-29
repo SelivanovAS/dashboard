@@ -834,7 +834,7 @@ function renderAnalytics(){
   const tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
   const weekEnd=new Date(today);weekEnd.setDate(today.getDate()+7);
 
-  const allUpcoming=allCases
+  let allUpcoming=allCases
     .filter(c=>c.status==='active'&&c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Рассмотрение'))
     .map(c=>{
       const t=c.hearingTime||'';
@@ -845,11 +845,19 @@ function renderAnalytics(){
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate);
 
+  // Mine-режим (тоггл «★ Мой» в шапке дайджеста нажат и есть watchlist) —
+  // блок «Ближайшие заседания» показывает только дела из watchlist. Без
+  // звёзд или с отжатым тогглом — все ближайшие.
+  const mineMode = (typeof _digestViewMode !== 'undefined') && _digestViewMode === 'mine' && watchlist.size > 0;
+  if (mineMode) {
+    const mineSet = new Set([...watchlist].map(bareCaseNumber));
+    allUpcoming = allUpcoming.filter(c => mineSet.has(bareCaseNumber(c.caseNumber)));
+  }
+
   // Take up to 10 of each stage, then merge by date — cap at 12 total.
   const fiSlice=allUpcoming.filter(c=>c.stage==='first_instance').slice(0,10);
   const apSlice=allUpcoming.filter(c=>c.stage==='appeal').slice(0,10);
   const shownCases=[...fiSlice,...apSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,12);
-  const totalCount=allUpcoming.length;
 
   const groups={today:[],tomorrow:[],week:[],later:[]};
   shownCases.forEach(c=>{
@@ -866,11 +874,21 @@ function renderAnalytics(){
     {key:'later',label:'Позже',cls:'up-group-later'}
   ];
 
-  const counterTxt=totalCount>shownCases.length?`${shownCases.length} из ${totalCount}`:`${shownCases.length}`;
-  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span>Ближайшие заседания <span class="up-counter">${counterTxt}</span></span><span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>`;
+  // Кнопка-тоггл «★ Мои дела» в шапке блока — рисуется только при
+  // непустом watchlist. Управляет тем же state, что и кнопка в шапке
+  // дайджеста: setDigestView обновит обе по селектору .mine-toggle-btn.
+  const mineBtnHidden=watchlist.size>0?'':'hidden';
+  const mineBtnActive=mineMode?'active':'';
+  const mineBtnAria=mineMode?'true':'false';
+  const mineBtnTitle=mineMode
+    ?'Показан только список твоих дел. Нажми, чтобы вернуть все.'
+    :'Показать только мои дела + новые';
+  const mineBtnHtml=`<button class="chip-btn mine-toggle-btn ${mineBtnActive}" type="button" aria-pressed="${mineBtnAria}" title="${mineBtnTitle}" onclick="event.stopPropagation();toggleDigestMine();" ${mineBtnHidden}><span class="chip-mine-star">★</span>Мои дела</button>`;
+  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span>Ближайшие заседания</span>${mineBtnHtml}<span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>`;
 
   if(shownCases.length===0){
-    upHtml+='<div class="upcoming-empty">Нет предстоящих заседаний</div>';
+    const emptyText=mineMode?'По твоим делам ближайших заседаний нет':'Нет предстоящих заседаний';
+    upHtml+=`<div class="upcoming-empty">${emptyText}</div>`;
   }else{
     upHtml+='<div class="upcoming-list">';
     const isMob=window.innerWidth<=768;
@@ -2036,6 +2054,11 @@ function toggleWatch(caseNumber, btn) {
   if (typeof refreshDigestModeVisibility === 'function') {
     try { refreshDigestModeVisibility(); } catch (_) {}
   }
+  // В mine-режиме блок «Ближайшие заседания» тоже фильтруется по watchlist
+  // — пересоберём при изменении состава звёзд.
+  if (_digestViewMode === 'mine' && typeof renderAnalytics === 'function') {
+    try { renderAnalytics(); } catch (_) {}
+  }
   scheduleWatchlistSync();
 }
 window.toggleWatch = toggleWatch;
@@ -2720,16 +2743,16 @@ async function setDigestView(mode, opts) {
   if (!opts || opts.persist !== false) {
     try { localStorage.setItem(DIGEST_VIEW_KEY, next); } catch (_) {}
   }
-  // Обновляем состояние единственной кнопки-тоггла «★ Мой».
-  const toggleEl = document.getElementById('digest-mode');
-  if (toggleEl) {
-    const on = next === 'mine';
-    toggleEl.classList.toggle('active', on);
-    toggleEl.setAttribute('aria-pressed', on ? 'true' : 'false');
-    toggleEl.setAttribute('title', on
-      ? 'Показан персональный дайджест по watchlist. Нажми, чтобы увидеть общий.'
+  // Обновляем состояние всех кнопок-тогглов «★ Мои дела» (в шапке
+  // дайджеста и в шапке «Ближайшие заседания»).
+  const on = next === 'mine';
+  document.querySelectorAll('.mine-toggle-btn').forEach((el) => {
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    el.setAttribute('title', on
+      ? 'Показан только список твоих дел. Нажми, чтобы вернуть все.'
       : 'Показать только мои дела + новые');
-  }
+  });
   // Удаляем устаревшую mine-pill в шапке, если она там осталась от старой
   // версии (виден тоггл — pill избыточен и тесно становится на мобиле).
   if (titleEl) {
@@ -2756,6 +2779,11 @@ async function setDigestView(mode, opts) {
   }
   // Номера дел в новом innerHTML — снова делаем кликабельными.
   enhanceDigestCaseLinks();
+  // Тоггл «★ Мой» влияет и на блок «Ближайшие заседания»: в mine-режиме
+  // там тоже остаются только дела из watchlist.
+  if (typeof renderAnalytics === 'function') {
+    try { renderAnalytics(); } catch (_) {}
+  }
 }
 window.setDigestView = setDigestView;
 
@@ -2785,10 +2813,10 @@ function escapeHtml(s) {
 // изменился). Вызываем при изменении watchlist (toggleWatch,
 // reconcileWatchlistWithServer) и при загрузке дайджеста.
 function refreshDigestModeVisibility() {
-  const toggleEl = document.getElementById('digest-mode');
-  if (!toggleEl) return;
   const visible = watchlist.size > 0;
-  toggleEl.hidden = !visible;
+  document.querySelectorAll('.mine-toggle-btn').forEach((el) => {
+    el.hidden = !visible;
+  });
   if (!visible) {
     if (_digestViewMode === 'mine') {
       setDigestView('general', { persist: false });

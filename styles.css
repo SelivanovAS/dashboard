@@ -1072,12 +1072,12 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
-/* Кнопка-тоггл «★ Мой» в шапке блока дайджеста. Прижата к правому краю
-   (margin-left:auto) — на десктопе .digest-meta с flex:1 и так толкает,
-   на мобиле .digest-meta скрыта, кнопка сама уходит вправо. Активное
-   состояние — стандартное .chip-btn.active (зелёный фон). На мобиле
-   крупнее, чтобы попадать пальцем (целевой tap-target ≥40px высоты). */
-#digest-mode.digest-mode-btn {
+/* Кнопка-тоггл «★ Мои дела» — рендерится в шапке блока «Дайджест»
+   и в шапке блока «Ближайшие заседания», обе синхронны (одно state).
+   Прижата к правому краю; активное состояние — стандартное
+   .chip-btn.active (зелёный фон). На мобиле крупнее, чтобы попадать
+   пальцем (целевой tap-target ≥40px высоты). */
+.mine-toggle-btn {
   margin-left: auto;
   flex-shrink: 0;
   padding: 8px 14px;
@@ -1086,8 +1086,11 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
+/* .chip-btn задаёт display:inline-flex, что побеждает дефолтное
+   [hidden]{display:none} — явно гасим кнопку при пустом watchlist. */
+.mine-toggle-btn[hidden] { display: none; }
 @media (max-width: 540px) {
-  #digest-mode.digest-mode-btn { padding: 10px 16px; font-size: var(--fs-sm); }
+  .mine-toggle-btn { padding: 10px 16px; font-size: var(--fs-sm); }
 }
 .mine-digest-note {
   margin-bottom: 10px;
