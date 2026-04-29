@@ -1074,20 +1074,20 @@ tr.detail-row { display:none; }
 }
 /* Кнопка-тоггл «★ Мой» в шапке блока дайджеста. Прижата к правому краю
    (margin-left:auto) — на десктопе .digest-meta с flex:1 и так толкает,
-   на мобиле .digest-meta скрыта, кнопка сама уходит вправо. Уменьшена,
-   чтобы не теснить close/toggle. Активное состояние — стандартное
-   .chip-btn.active (зелёный фон). */
+   на мобиле .digest-meta скрыта, кнопка сама уходит вправо. Активное
+   состояние — стандартное .chip-btn.active (зелёный фон). На мобиле
+   крупнее, чтобы попадать пальцем (целевой tap-target ≥40px высоты). */
 #digest-mode.digest-mode-btn {
   margin-left: auto;
   flex-shrink: 0;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
   line-height: 1.2;
   letter-spacing: 0;
   text-transform: none;
 }
 @media (max-width: 540px) {
-  #digest-mode.digest-mode-btn { padding: 3px 10px; font-size: 11px; }
+  #digest-mode.digest-mode-btn { padding: 10px 16px; font-size: var(--fs-sm); }
 }
 .mine-digest-note {
   margin-bottom: 10px;
