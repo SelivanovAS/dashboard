@@ -1137,18 +1137,21 @@ function renderChipBar(){
   html+=`<span class="chip-divider"></span>`;
   html+=`<div class="seg-ctrl">
     <button class="seg-btn ${rl==='all'?'active':''}" onclick="setRoleFilter('all')">Все роли</button>
+    <button class="seg-btn ${rl==='third_party'?'active':''}" onclick="setRoleFilter('third_party')">3-е лицо</button>
     <button class="seg-btn ${rl==='plaintiff'?'active':''}" onclick="setRoleFilter('plaintiff')">Истец</button>
     <button class="seg-btn ${rl==='defendant'?'active':''}" onclick="setRoleFilter('defendant')">Ответчик</button>
-    <button class="seg-btn ${rl==='third_party'?'active':''}" onclick="setRoleFilter('third_party')">3-е лицо</button>
   </div>`;
   // Инстанция — показываем если есть оба типа
   const fiCount=allCases.filter(c=>(c.stage||'appeal')==='first_instance').length;
   const apCount=allCases.filter(c=>(c.stage||'appeal')==='appeal').length;
   if(fiCount>0&&apCount>0){
+    // «Кассация» disabled — в data ещё нет дел, парсера касс. судов нет.
+    // Кнопка-плейсхолдер показывает юристу, что фича в плане.
     html+=`<div class="seg-ctrl">
       <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
       <button class="seg-btn ${stg==='first_instance'?'active':''}" onclick="setStageFilter('first_instance')">1 инст.</button>
       <button class="seg-btn ${stg==='appeal'?'active':''}" onclick="setStageFilter('appeal')">Апелляция</button>
+      <button class="seg-btn" disabled title="Скоро">Кассация</button>
     </div>`;
   }
   bar.innerHTML=html;
