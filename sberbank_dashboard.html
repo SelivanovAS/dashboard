@@ -59,7 +59,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=40">
+<link rel="stylesheet" href="styles.css?v=41">
 
 <!-- PWA: установка на главный экран и офлайн-режим -->
 <link rel="manifest" href="manifest.json">
@@ -176,7 +176,8 @@
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <div class="toolbar-left">
+      <!-- Ряд 1: поиск + кнопка фильтров (мобилка) + быстрые статус-чипы -->
+      <div class="toolbar-row toolbar-row-search">
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
@@ -187,8 +188,14 @@
           <span>Фильтры</span>
           <span class="filters-btn-count" id="filters-btn-count" style="display:none;"></span>
         </button>
-        <!-- Chip-bar быстрых фильтров (динамически рендерится JS) -->
-        <div class="chip-bar" id="chip-bar"></div>
+        <!-- Быстрые статус-чипы (Все/Новые/Сегодня/… + ★Мои) — рендерятся JS -->
+        <div class="chip-bar chip-bar-quick" id="chip-bar-quick"></div>
+      </div>
+      <!-- Ряд 2: сегментные переключатели (роль + инстанция) — рендерятся JS -->
+      <div class="toolbar-row toolbar-row-segments">
+        <div class="chip-bar chip-bar-segments" id="chip-bar-segments"></div>
+      </div>
+      <div class="toolbar-hidden-selects">
         <!-- Hidden selects — используются JS как source of truth -->
         <select class="filter-select" id="filter-status" style="display:none;" onchange="applyFilters()">
           <option value="all">Все статусы</option>
@@ -253,6 +260,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=51" defer></script>
+<script src="app.js?v=52" defer></script>
 </body>
 </html>

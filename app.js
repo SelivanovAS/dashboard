@@ -1104,8 +1104,16 @@ function countCasesByStatus(st){
   }).length;
 }
 function renderChipBar(){
-  const bar=document.getElementById('chip-bar');
-  if(!bar)return;
+  // На десктопе чипы разнесены по двум контейнерам: быстрые статус-чипы +
+  // ★Мои в #chip-bar-quick (рядом с поиском), сегментные переключатели
+  // роль/инстанция в #chip-bar-segments (свой ряд под поиском).
+  // Bottom-sheet (#filters-sheet-body) получает обе пачки склеенными,
+  // как и раньше — мобильный sheet двухрядной структуры не знает.
+  const barQuick=document.getElementById('chip-bar-quick');
+  const barSegments=document.getElementById('chip-bar-segments');
+  // Совместимость со старой разметкой (если где-то остался #chip-bar):
+  const barLegacy=document.getElementById('chip-bar');
+  if(!barQuick&&!barSegments&&!barLegacy)return;
   const st=document.getElementById('filter-status').value;
   const rl=document.getElementById('filter-role').value;
   const stg=document.getElementById('filter-stage').value;
@@ -1121,7 +1129,7 @@ function renderChipBar(){
     {k:'decided',l:'Рассмотрено',n:countCasesByStatus('decided'),cls:''},
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
-  let html=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
+  let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
   // Тоггл «Только мои дела» — отдельный чип. Виден только при непустом
   // watchlist (иначе фильтровать нечего). Счётчик = подписки + новые,
   // потому что именно эти дела видны при включённом фильтре.
@@ -1131,11 +1139,11 @@ function renderChipBar(){
       if(isWatched(c.caseNumber)||isNewCase(c)){mineCount++;}
     }
     const active=filterMineActive?'active':'';
-    html=`<button class="chip-btn chip-mine ${active}" title="Только мои дела + новые" aria-pressed="${filterMineActive?'true':'false'}" onclick="setMineFilter(${!filterMineActive})"><span class="chip-mine-star">★</span>Мои<span class="chip-count">${mineCount}</span></button>`+html;
+    quickHtml=`<button class="chip-btn chip-mine ${active}" title="Только мои дела + новые" aria-pressed="${filterMineActive?'true':'false'}" onclick="setMineFilter(${!filterMineActive})"><span class="chip-mine-star">★</span>Мои<span class="chip-count">${mineCount}</span></button>`+quickHtml;
   }
-  // Segmented controls: роль и инстанция
-  html+=`<span class="chip-divider"></span>`;
-  html+=`<div class="seg-ctrl">
+  // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
+  // в свой ряд тулбара на десктопе (.chip-bar-segments).
+  let segmentsHtml=`<div class="seg-ctrl">
     <button class="seg-btn ${rl==='all'?'active':''}" onclick="setRoleFilter('all')">Все роли</button>
     <button class="seg-btn ${rl==='third_party'?'active':''}" onclick="setRoleFilter('third_party')">3-е лицо</button>
     <button class="seg-btn ${rl==='plaintiff'?'active':''}" onclick="setRoleFilter('plaintiff')">Истец</button>
@@ -1147,17 +1155,21 @@ function renderChipBar(){
   if(fiCount>0&&apCount>0){
     // «Кассация» disabled — в data ещё нет дел, парсера касс. судов нет.
     // Кнопка-плейсхолдер показывает юристу, что фича в плане.
-    html+=`<div class="seg-ctrl">
+    segmentsHtml+=`<div class="seg-ctrl">
       <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
       <button class="seg-btn ${stg==='first_instance'?'active':''}" onclick="setStageFilter('first_instance')">1 инст.</button>
       <button class="seg-btn ${stg==='appeal'?'active':''}" onclick="setStageFilter('appeal')">Апелляция</button>
       <button class="seg-btn" disabled title="Скоро">Кассация</button>
     </div>`;
   }
-  bar.innerHTML=html;
-  // Мобильный bottom-sheet использует тот же HTML
+  if(barQuick)barQuick.innerHTML=quickHtml;
+  if(barSegments)barSegments.innerHTML=segmentsHtml;
+  // Legacy-разметка (#chip-bar): склеиваем обратно с разделителем.
+  if(barLegacy)barLegacy.innerHTML=quickHtml+`<span class="chip-divider"></span>`+segmentsHtml;
+  // Мобильный bottom-sheet получает обе пачки в одном HTML
+  // (там seg-ctrl растягивается через .sheet-body .seg-ctrl { flex-basis:100% }).
   const sheetBody=document.getElementById('filters-sheet-body');
-  if(sheetBody)sheetBody.innerHTML=html;
+  if(sheetBody)sheetBody.innerHTML=quickHtml+`<span class="chip-divider"></span>`+segmentsHtml;
   // Счётчик активных фильтров на мобильной кнопке
   const countEl=document.getElementById('filters-btn-count');
   if(countEl){

@@ -534,8 +534,20 @@ body {
 .upcoming-list.collapsed, .upcoming-empty.collapsed { max-height:0; overflow:hidden; opacity:0; margin:0; padding:0; transition:max-height .25s var(--ease-out), opacity .2s var(--ease-out); }
 .upcoming-list:not(.collapsed), .upcoming-empty:not(.collapsed) { max-height:4000px; opacity:1; transition:max-height .35s var(--ease-out), opacity .2s var(--ease-out); }
 
-/* ========== Toolbar ========== */
-.toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; animation:fadeUp .5s var(--ease-out); }
+/* ========== Toolbar ==========
+   Десктоп: тулбар двухрядный.
+     ряд 1 (.toolbar-row-search) — поиск + быстрые статус-чипы (chip-bar-quick).
+     ряд 2 (.toolbar-row-segments) — сегментные переключатели роль/инстанция.
+   Раньше всё лежало в одном flex-row .toolbar-left, и .seg-ctrl с width:100%
+   ломал раскладку — статус-чипы перемешивались с сегментами и наезжали на
+   thead/search. Теперь сегменты живут в собственном ряду со своей шириной. */
+.toolbar { display:flex; flex-direction:column; align-items:stretch; gap:10px; margin-bottom:14px; animation:fadeUp .5s var(--ease-out); }
+.toolbar-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.toolbar-row-search { gap:12px; }
+.toolbar-row-segments { width:100%; }
+.toolbar-hidden-selects { display:contents; }
+/* Старые .toolbar-left/.toolbar-right больше не используются на десктопе,
+   но классы могут встретиться в drawer/sheet — оставляем безобидными. */
 .toolbar-left { display:flex; gap:8px; align-items:center; flex:1; flex-wrap:wrap; }
 .toolbar-right { display:flex; gap:8px; align-items:center; }
 .search-box { display:flex; align-items:center; gap:8px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-pill); padding:8px 14px; min-width:240px; flex:0 1 320px; transition:all 120ms var(--ease-out); position:relative; }
@@ -551,6 +563,8 @@ body {
 
 /* ========== Chip filters ========== */
 .chip-bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.chip-bar-quick { flex:1 1 auto; min-width:0; }                    /* быстрые статус-чипы заполняют остаток ряда после поиска */
+.chip-bar-segments { display:flex; gap:12px; flex-wrap:wrap; align-items:stretch; width:100%; }
 .chip-bar .chip-divider { width:1px; height:22px; background:var(--border); margin:0 4px; }
 .chip-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius-pill); background:var(--bg-1); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out); font-family:var(--font-sans); white-space:nowrap; line-height:1.3; }
 .chip-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
@@ -567,7 +581,12 @@ body {
 .chip-today .chip-count { background:var(--red-100); color:var(--red-700); }
 .chip-week .chip-count { background:var(--blue-100); color:var(--blue-700); }
 
-.seg-ctrl { display:flex; border:1px solid var(--border); border-radius:var(--radius-pill); overflow:hidden; background:var(--bg-1); width:100%; }
+/* width у .seg-ctrl задаётся контекстом:
+     - на десктопе внутри .chip-bar-segments сегмент имеет натуральную ширину
+       (flex:0 0 auto + min-width), две группы лежат рядом и красиво wrap'ятся;
+     - в мобильном bottom-sheet — растягивается на всю ширину листа (.sheet-body .seg-ctrl). */
+.seg-ctrl { display:flex; border:1px solid var(--border); border-radius:var(--radius-pill); overflow:hidden; background:var(--bg-1); }
+.chip-bar-segments .seg-ctrl { flex:0 0 auto; min-width:280px; }
 .seg-btn { flex:1 1 0; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-xs); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
 .seg-btn:not(:last-child) { border-right:1px solid var(--border); }
 .seg-btn:hover:not(:disabled) { background:var(--bg-3); }
@@ -968,6 +987,10 @@ tr.detail-row { display:none; }
   .toolbar { position:fixed; left:0; right:0; bottom:0; flex-direction:column; align-items:stretch; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); margin:0; background:var(--bg-3); border-top:1px solid var(--border-strong); box-shadow:0 -10px 28px rgba(0,0,0,0.32), 0 -1px 0 var(--border-strong); z-index:50; gap:8px; }
   :root[data-theme="dark"] .toolbar { background:#0b0e13; }
   .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
+  /* Мобилка: единственный видимый ряд тулбара — поиск + кнопка «Фильтры».
+     Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
+  .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
+  .toolbar-row-segments { display:none; }
   /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался. */
   .app-main { padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
