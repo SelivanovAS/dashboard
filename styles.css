@@ -463,7 +463,13 @@ body {
 /* ========== Analytics row (upcoming hearings + categories) ========== */
 .analytics-row { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:20px; animation:fadeUp .5s var(--ease-out); }
 .analytics-card { background:var(--bg-1); border-radius:var(--radius-md); padding:16px 20px; box-shadow:var(--shadow-1); }
-.analytics-title { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; font-weight:var(--fw-semibold); color:var(--fg-3); margin-bottom:14px; }
+.analytics-title { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; font-weight:var(--fw-semibold); color:var(--fg-3); }
+/* Зазор переехал с заголовка на содержимое — иначе при свёрнутом блоке
+   («Ближайшие заседания» с кликом по chevron) внизу карточки висел
+   пустой margin-bottom 14px. Теперь у свёрнутой карточки шапка прижата
+   к низу, у раскрытой — отступ перед списком есть. */
+.analytics-title + .upcoming-list,
+.analytics-title + .upcoming-empty { margin-top:14px; }
 
 /* Categories mini-chart */
 .cat-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:var(--fs-xs); }
@@ -504,6 +510,27 @@ body {
 .up-ext svg { width:14px; height:14px; }
 .upcoming-empty { font-size:var(--fs-sm); color:var(--fg-4); text-align:center; padding:20px 0; }
 .upcoming-chevron { display:none; font-size:var(--fs-xs); color:var(--fg-4); transition:transform .2s; }
+/* Chevron-кнопка в шапке analytics-карточек — тот же визуальный паттерн,
+   что .digest-toggle. По умолчанию блок раскрыт → chevron-up (rotate 180);
+   при .upcoming-collapsed на карточке — chevron-down (rotate 0). */
+.card-chevron-btn {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  margin-left: 4px;
+  cursor: pointer;
+  color: var(--fg-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+  transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
+  transform: rotate(180deg);
+}
+.card-chevron-btn:hover { background: var(--bg-3); color: var(--fg-1); }
+.card-chevron-btn svg { width: 18px; height: 18px; }
+.upcoming-collapsed .card-chevron-btn { transform: rotate(0deg); }
 .upcoming-list.collapsed, .upcoming-empty.collapsed { max-height:0; overflow:hidden; opacity:0; margin:0; padding:0; transition:max-height .25s var(--ease-out), opacity .2s var(--ease-out); }
 .upcoming-list:not(.collapsed), .upcoming-empty:not(.collapsed) { max-height:4000px; opacity:1; transition:max-height .35s var(--ease-out), opacity .2s var(--ease-out); }
 

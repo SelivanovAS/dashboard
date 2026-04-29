@@ -819,10 +819,10 @@ function toggleMobileStats(){
 }
 function toggleUpcoming(){
   const list=document.querySelector('.upcoming-list')||document.querySelector('.upcoming-empty');
-  const chevron=document.getElementById('upcoming-chevron');
-  if(!list)return;
+  const card=document.querySelector('#analytics-row .analytics-card');
+  if(!list||!card)return;
   list.classList.toggle('collapsed');
-  chevron.textContent=list.classList.contains('collapsed')?'▼':'▲';
+  card.classList.toggle('upcoming-collapsed', list.classList.contains('collapsed'));
 }
 
 /* ========== Analytics ========== */
@@ -884,7 +884,11 @@ function renderAnalytics(){
     ?'Показан только список твоих дел. Нажми, чтобы вернуть все.'
     :'Показать только мои дела + новые';
   const mineBtnHtml=`<button class="chip-btn mine-toggle-btn ${mineBtnActive}" type="button" aria-pressed="${mineBtnAria}" title="${mineBtnTitle}" onclick="event.stopPropagation();toggleDigestMine();" ${mineBtnHidden}><span class="chip-mine-star">★</span>Мои дела</button>`;
-  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span>Ближайшие заседания</span>${mineBtnHtml}<span class="upcoming-chevron" id="upcoming-chevron">▲</span></div>`;
+  // Chevron — тот же SVG, что в шапке дайджеста (.digest-toggle), для
+  // визуального единства. Поворот на 180° по классу .upcoming-collapsed
+  // на карточке (см. toggleUpcoming).
+  const chevronHtml=`<button class="card-chevron-btn" id="upcoming-chevron" type="button" aria-label="Свернуть/развернуть" onclick="event.stopPropagation();toggleUpcoming();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`;
+  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">Ближайшие заседания</span>${mineBtnHtml}${chevronHtml}</div>`;
 
   if(shownCases.length===0){
     const emptyText=mineMode?'По твоим делам ближайших заседаний нет':'Нет предстоящих заседаний';
