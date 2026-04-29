@@ -3181,6 +3181,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 СУД в скобках: поле {{суд}} в любой строке бери ДОСЛОВНО из записи того же дела в данных (поля «суд», «Суд 1 инстанции», «court»). Названия судов уже приходят сокращённо — например, «Сургутский гор. суд», «Нефтеюганский рай. суд». Выводи их как есть, НЕ расшифровывай «гор.» → «городской» и «рай.» → «районный». Если у дела поля с судом нет — не пиши суд в скобках вообще. ЗАПРЕЩЕНО переносить название суда из соседней записи. Для апелляционных дел (номер на `33-`) суд в скобках не пиши — все апелляции рассматриваются в Суде ХМАО-Югры, подсвечивать это не нужно. Значение «Суд 1 инстанции» уместно только в секциях про апелляционные дела, где прямо просят показать суд 1 инстанции (5.1).
 
+ИНВАРИАНТ ИНСТАНЦИЙ (КРИТИЧНО): номер дела однозначно определяет, в какой большой блок оно попадает. Если номер начинается с `33-` (формат `33-XXXX/YYYY`) — это АПЕЛЛЯЦИОННОЕ дело, и оно идёт ТОЛЬКО в большой блок «⚖️ АПЕЛЛЯЦИЯ» (подсекции 5.1–5.5). Никогда не размещай номера на `33-` в подсекциях 3.1–3.6 блока «🏛 ПЕРВАЯ ИНСТАНЦИЯ». Все остальные номера 1-й инстанции (`2-…/YYYY`, `М-…/YYYY`, `9-…/YYYY` и т.п.) идут ТОЛЬКО в блок «🏛 ПЕРВАЯ ИНСТАНЦИЯ». Нарушение этого правила = критическая ошибка, дело не должно «всплыть не в той инстанции» ни при каких условиях.
+
+ССЫЛКА НА КАРТОЧКУ ДЕЛА (КРИТИЧНО): в КАЖДОЙ строке, где упоминается номер дела (3.1–3.6, 4, 5.1–5.5), номер ОБЯЗАТЕЛЬНО оборачивается в `<a href="URL"><b>номер</b></a>`, где URL — поле «URL» того же дела из данных (это ссылка на карточку на сайте суда, sudrf.ru). Голый номер без `<a href>` = БРАК. Если URL в данных пустой — всё равно выведи `<b>номер</b>` (без ссылки), но это исключение, а не норма.
+
 БАНК В ХВОСТЕ СТРОКИ: во всех строках, где есть фраза «банк — {{роль}}» (3.2, 3.5, 5.1, 5.4 и т.п.): если «Сбербанк» / «ПАО Сбербанк» / «Сбербанк России» явно упомянут в сторонах (истец или ответчик) — блок «банк — {{роль}}» и «<b>, банк — {{роль}}</b>» НЕ пиши. Хвост нужен ТОЛЬКО когда банк = Третье лицо и в сторонах не фигурирует. Правило действует на все секции промпта без исключения.
 
 ПРАВИЛА РЕЗОЛЮТИВНЫХ СЕКЦИЙ (применяются к 3.5 и 5.4):
@@ -3193,10 +3197,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ (применяются к 3.6 и 5.5):
 Формат — ТРИ строки на дело, между делами пустая строка.
-Строка «<b>Почему:</b>» — 3-4 коротких предложения с КОНКРЕТНЫМ обоснованием из мотивировки: какую норму применил суд, что не доказала сторона, какие факты учёл. Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя. Довод об отсутствии нарушения прав потребителя отклонён.»
+Строка «<b>Почему:</b>» — 4-5 коротких предложений с КОНКРЕТНЫМ обоснованием из мотивировки. Структура (порядок гибкий, но СУЩНОСТЬ обязательна): (а) какую конкретную норму применил суд — со ссылкой на статью/пункт/часть кодекса или закона (ст. 16 ЗоЗПП, п. 1 ст. 167 ГК и т.п.); (б) какой ключевой довод стороны принял или отклонил — и почему (например, «Банк не доказал возможность отказа потребителя», «истец не подтвердил факт оплаты», «довод о пропуске срока отклонён, т.к. течение срока прерывалось»); (в) какое фактическое обстоятельство стало решающим (что именно не доказала / подтвердила сторона); (г) опционально — практическое следствие для банка одной фразой (закрывает риск / создаёт прецедент / усиливает позицию по аналогичным спорам). Пример: «Суд сослался на ст. 16 ЗоЗПП — услуга навязана при выдаче ипотеки. Банк не доказал возможность отказа потребителя от страхования. Довод об отсутствии нарушения прав потребителя отклонён, поскольку условие включено в типовую форму договора. Для банка — риск массовых исков по аналогичным договорам.»
 Имя судьи НЕ указывай.
 ЗАПРЕЩЕНО:
-- писать общие заглушки («суд рассмотрел доводы», «суд проверил законность», «суд исследовал материалы дела», «суд согласился с выводами») без конкретики;
+- писать общие глаголы БЕЗ существа: «пересмотрел», «установил», «отклонил доводы», «согласился с выводами», «рассмотрел доводы», «проверил законность», «исследовал материалы дела» — если рядом нет ни конкретной нормы, ни конкретного факта/довода, фраза = ЗАПРЕЩЕНА. Лучше написать короче (3 предложения), чем 5 предложений воды;
 - пересказывать ФАКТУРУ спора вместо МОТИВИРОВКИ итога (фактура — это строка 1, а не строка «Почему»);
 - выдумывать ИТОГ или апеллянта — если поля нет в данных, соответствующую строку («<b>Итог:</b>» / «<b>Апеллянт:</b>») НЕ пиши, не подставляй «—», «0», «не указано», «не определено»;
 - упоминать процедуру заседания: явку/неявку сторон и представителей, ходатайства о рассмотрении в отсутствие стороны, отложения, извещения, вручение корреспонденции, полномочия представителей, аудиопротоколирование;
@@ -3239,9 +3243,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 4. 🔀 <b>Перешли в апелляцию (N):</b> — самостоятельный блок-мостик. Показывай только если есть данные в секции «ПЕРЕШЛИ В АПЕЛЛЯЦИЮ». Формат: <b>fi_номер</b> → <b>ap_номер</b>: стороны.
 
 5. ⚖️ <b>АПЕЛЛЯЦИЯ</b>
-   5.1. 📥 <b>Новые дела (N):</b> — ДВЕ строки на дело. КРИТИЧНО: строки 1 и 2 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Пустая строка — ТОЛЬКО между разными делами.
+   5.1. 📥 <b>Новые дела (N):</b> — ДВЕ строки на дело. КРИТИЧНО: строки 1 и 2 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Пустая строка — ТОЛЬКО между разными делами. Номер ОБЯЗАТЕЛЬНО оборачивай в <a href="URL"><b>номер</b></a> — без ссылки строка считается БРАКОМ. Категорию и дату поступления НЕ пропускай — без них дайджест бесполезен.
         • строка 1: <a href="URL"><b>номер</b></a> — {{истец}} vs {{ответчик}} (имена физлиц полностью — см. правило ИМЕНА в шапке)
-        • строка 2 (СРАЗУ под строкой 1, БЕЗ пустой строки): Суд 1 инст.: {{суд 1 инстанции}} | банк — {{роль}} (хвост «банк — …» — по правилу БАНК В ХВОСТЕ)
+        • строка 2 (СРАЗУ под строкой 1, БЕЗ пустой строки): Суд 1 инст.: {{суд 1 инстанции}} | категория: {{категория}} | поступило: {{дата поступления}} | банк — {{роль}}
+          (хвост «банк — …» — по правилу БАНК В ХВОСТЕ; категорию бери ДОСЛОВНО из поля «категория», но если она длинная с цепочкой «→ → →» — оставь только последний/самый конкретный сегмент после последней стрелки)
    5.1a. ⚠ <b>Переход к правилам 1-й инстанции (N):</b> — РЕДКОЕ и КРИТИЧНОЕ событие (ч.5 ст.330 ГПК). ОДНА строка на дело (подсекция показывается только если N&gt;0):
         ⚠ <a href="URL"><b>номер</b></a> — апелляция перешла к рассмотрению дела по правилам производства в суде первой инстанции ({{дата, если есть}}). {{стороны кратко}} | роль банка. НИКОГДА не выкидывать при нехватке места. Берётся из событий «appeal_to_fi_rules» в данных.
    5.2. 🔁 <b>Отложенные заседания (N):</b> — ДВЕ строки на дело. КРИТИЧНО: строки 1 и 2 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Пустая строка — ТОЛЬКО между разными делами. Эта секция РЕДКАЯ и ВАЖНАЯ — никогда не выкидывай при нехватке места.
@@ -3292,6 +3297,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_fi=total_active_fi,
             )
         text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
+        text = _warn_misplaced_appeal_cases(text)
+        text = _renumber_section_headers(text)
+        text = _drop_zero_count_sections(text)
+        text = _recount_summary_line(text)
+        text = _normalize_section_spacing(text)
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
 
     try:
@@ -3338,6 +3348,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_fi=total_active_fi,
             )
         text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
+        text = _warn_misplaced_appeal_cases(text)
+        text = _renumber_section_headers(text)
+        text = _drop_zero_count_sections(text)
+        text = _recount_summary_line(text)
+        text = _normalize_section_spacing(text)
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
     except requests.HTTPError as e:
@@ -3374,6 +3389,57 @@ _DIGEST_HEADER_RE = re.compile(
     r'^\s*(?:📥|📅|📨|🔄|⚠|🔁|⚖️|📄|🏛|🔀|📌|📊|📋)\s*<b>'
 )
 
+# Голый номер дела вида «2-216/2026», «М-449/2026», «33-3479/2026»,
+# «9-12/2025». Не обёрнут в <a href>. Используется как fallback,
+# когда LLM забыл обернуть номер в ссылку — пост-процессор обернёт сам.
+_BARE_CASE_NUMBER_RE = re.compile(
+    r'(?<![\w/-])([0-9A-Za-zА-Яа-яЁё]+-\d+/\d{4})(?![\w/-])'
+)
+
+# Большой блок «🏛 ПЕРВАЯ ИНСТАНЦИЯ» / «⚖️ АПЕЛЛЯЦИЯ» / «🔀 Перешли в апелляцию».
+_FI_BLOCK_HEADER_RE = re.compile(r'^\s*🏛\s*<b>\s*ПЕРВАЯ ИНСТАНЦИЯ\s*</b>\s*$')
+_APPEAL_BLOCK_HEADER_RE = re.compile(r'^\s*⚖️\s*<b>\s*АПЕЛЛЯЦИЯ\s*</b>\s*$')
+
+# Номер апелляционного дела всегда начинается с «33-». Используем для
+# инварианта: апелляционные номера запрещены в блоке 1-й инстанции.
+_APPEAL_NUM_RE = re.compile(r'^33-\d+/\d{4}')
+
+
+def _line_has_case_number(line: str) -> bool:
+    """Строка содержит номер дела (в обёртке `<a href><b>num</b></a>` или голый).
+
+    Используется счётчиками подсекций: пересчитываем `(N)` по числу строк
+    с номером, а не только по строкам с обёрнутой ссылкой. Голый номер
+    появляется, когда LLM забыл обернуть; такие строки всё равно нужно
+    учитывать как «дело».
+    """
+    if _DIGEST_CASE_LINK_RE.search(line):
+        return True
+    return bool(_BARE_CASE_NUMBER_RE.search(line))
+
+
+def _wrap_bare_number_in_link(line: str, url_by_num: dict[str, str]) -> str:
+    """Обернуть первый голый номер дела в строке в <a href><b>номер</b></a>.
+
+    Используется когда LLM забыл оформить номер как ссылку. URL берём из
+    словаря {номер → url}, заполненного из `fi_new_cases` / `appeal_new_cases_csv`
+    через fi_card_url/case_card_url. Если номера нет в словаре — строку
+    оставляем как есть (только <b>номер</b>) — это запасной вариант.
+    """
+    if "<a href" in line:
+        return line
+    m = _BARE_CASE_NUMBER_RE.search(line)
+    if not m:
+        return line
+    num = m.group(1)
+    bare = _bare_case_number(num)
+    url = url_by_num.get(num) or url_by_num.get(bare) or ""
+    if url:
+        replacement = f'<a href="{url}"><b>{num}</b></a>'
+    else:
+        replacement = f'<b>{num}</b>'
+    return line[:m.start()] + replacement + line[m.end():]
+
 
 def _bare_case_number(num: str) -> str:
     """«2-216/2026 (2-1156/2025;)» → «2-216/2026». Нужно потому, что поиск
@@ -3398,21 +3464,38 @@ def _validate_digest_new_sections(
     в «Новые иски» из fi_changes). Здесь сверяем номера со списками
     реально новых дел, лишнее вырезаем, счётчик (N) пересчитываем,
     пустую секцию удаляем вместе с заголовком.
+
+    Вторая задача — гарантировать, что каждая строка дела начинается
+    с `<a href><b>номер</b></a>`. Если LLM забыл обернуть — берём URL
+    из словаря и оборачиваем сами (инцидент 29.04.2026: М-449/2026
+    в «Новых исках» и 33-3479/2026 в «Новых делах апелляции» вышли
+    голыми номерами без ссылки).
     """
     allowed_fi: set[str] = set()
+    url_by_num_fi: dict[str, str] = {}
     for c in fi_new_cases or []:
-        for key in (c.get("id"), (c.get("first_instance") or {}).get("case_number")):
+        fi = c.get("first_instance") or {}
+        url = fi_card_url(fi)
+        for key in (c.get("id"), fi.get("case_number")):
             k = (key or "").strip()
             if k:
                 allowed_fi.add(k)
                 allowed_fi.add(_bare_case_number(k))
+                if url:
+                    url_by_num_fi[k] = url
+                    url_by_num_fi[_bare_case_number(k)] = url
 
     allowed_appeal: set[str] = set()
+    url_by_num_appeal: dict[str, str] = {}
     for c in appeal_new_cases or []:
         n = (c.get("Номер дела") or "").strip()
         if n:
             allowed_appeal.add(n)
             allowed_appeal.add(_bare_case_number(n))
+            url = case_card_url(c)
+            if url:
+                url_by_num_appeal[n] = url
+                url_by_num_appeal[_bare_case_number(n)] = url
 
     html = _drop_hallucinated_from_section(
         html,
@@ -3420,6 +3503,7 @@ def _validate_digest_new_sections(
             r'^\s*📥\s*<b>\s*Новые иски\s*\(\s*(\d+)\s*\)\s*:\s*</b>\s*$'
         ),
         allowed=allowed_fi,
+        url_by_num=url_by_num_fi,
         label="1 инст./Новые иски",
     )
     html = _drop_hallucinated_from_section(
@@ -3428,14 +3512,21 @@ def _validate_digest_new_sections(
             r'^\s*📥\s*<b>\s*Новые дела\s*\(\s*(\d+)\s*\)\s*:\s*</b>\s*$'
         ),
         allowed=allowed_appeal,
+        url_by_num=url_by_num_appeal,
         label="апелляция/Новые дела",
     )
     return html
 
 
 def _drop_hallucinated_from_section(
-    html: str, *, header_re: "re.Pattern[str]", allowed: set[str], label: str
+    html: str,
+    *,
+    header_re: "re.Pattern[str]",
+    allowed: set[str],
+    url_by_num: dict[str, str] | None = None,
+    label: str,
 ) -> str:
+    url_by_num = url_by_num or {}
     lines = html.split("\n")
     out: list[str] = []
     i = 0
@@ -3454,6 +3545,7 @@ def _drop_hallucinated_from_section(
 
         kept: list[str] = []
         removed: list[str] = []
+        wrapped: list[str] = []
         for ln in lines[i + 1:j]:
             stripped = ln.strip()
             if not stripped:
@@ -3465,18 +3557,26 @@ def _drop_hallucinated_from_section(
                 continue
             mnum = _DIGEST_CASE_LINK_RE.search(ln)
             if not mnum:
-                log.warning(
-                    f"Пост-процессор дайджеста: в секции «{label}» строка "
-                    f"без номера дела, пропускаю: {stripped[:80]}"
-                )
-                continue
+                # LLM забыл обернуть номер в <a href> — пытаемся починить.
+                fixed = _wrap_bare_number_in_link(ln, url_by_num)
+                mnum = _DIGEST_CASE_LINK_RE.search(fixed)
+                if not mnum:
+                    log.warning(
+                        f"Пост-процессор дайджеста: в секции «{label}» строка "
+                        f"без номера дела, пропускаю: {stripped[:80]}"
+                    )
+                    continue
+                ln = fixed
+                wrapped.append(mnum.group(1).strip())
             num = mnum.group(1).strip()
             if num in allowed or _bare_case_number(num) in allowed:
                 kept.append(ln)
             else:
                 removed.append(num)
 
-        if not kept:
+        case_lines_count = sum(1 for ln in kept if ln.strip() != "⸻")
+
+        if not kept or case_lines_count == 0:
             if removed:
                 log.warning(
                     f"Пост-процессор дайджеста: секция «{label}» удалена "
@@ -3490,13 +3590,477 @@ def _drop_hallucinated_from_section(
                 f"Пост-процессор дайджеста: из секции «{label}» удалено "
                 f"{len(removed)} галлюцинированных дел ({removed})"
             )
+        if wrapped:
+            log.warning(
+                f"Пост-процессор дайджеста: в секции «{label}» {len(wrapped)} "
+                f"номеров обёрнуты в <a href> вручную (LLM забыл): {wrapped}"
+            )
 
         old_count = m.group(1)
-        new_header = lines[i].replace(f"({old_count})", f"({len(kept)})", 1)
+        new_header = lines[i].replace(
+            f"({old_count})", f"({case_lines_count})", 1
+        )
         out.append(new_header)
         out.extend(kept)
         i = j
 
+    return "\n".join(out)
+
+
+# Подзаголовки подсекций со счётчиком (N): — для пост-процессора
+# `_renumber_section_headers`. Каждый паттерн ловит шапку и группу 1 = N.
+_SUBSECTION_HEADERS_WITH_COUNT = [
+    (re.compile(r'^(\s*📅\s*<b>\s*Изменения\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "1 инст./Изменения"),
+    (re.compile(r'^(\s*📨\s*<b>\s*Поданы апелляционные жалобы\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "1 инст./Апел. жалобы"),
+    (re.compile(r'^(\s*📨\s*<b>\s*Кассационные события\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "1 инст./Кассация"),
+    (re.compile(r'^(\s*⚖️\s*<b>\s*Вынесенные решения\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "1 инст./Решения"),
+    (re.compile(r'^(\s*📄\s*<b>\s*Опубликованные тексты решений\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "1 инст./Тексты решений"),
+    (re.compile(r'^(\s*🔁\s*<b>\s*Отложенные заседания\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Апел./Отложено"),
+    (re.compile(r'^(\s*📅\s*<b>\s*Назначенные заседания\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Апел./Назначено"),
+    (re.compile(r'^(\s*⚖️\s*<b>\s*Вынесенные акты\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Апел./Акты"),
+    (re.compile(r'^(\s*📄\s*<b>\s*Опубликованные тексты актов\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Апел./Тексты актов"),
+    (re.compile(r'^(\s*⚠\s*<b>\s*Переход к правилам 1-й инстанции\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Апел./Переход к правилам 1 инст."),
+    (re.compile(r'^(\s*🔀\s*<b>\s*Перешли в апелляцию\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Перешли в апелляцию"),
+]
+
+
+def _renumber_section_headers(html: str) -> str:
+    """Пересчитать `(N)` в шапке каждой подсекции по факту.
+
+    LLM иногда заявляет «Новые иски (2):» а выводит одно дело, либо наоборот.
+    `_validate_digest_new_sections` уже правит «Новые иски/дела» (3.1/5.1).
+    Эта функция покрывает оставшиеся секции с (N): 3.2 «Изменения»,
+    3.3 «Поданы апел. жалобы», 3.4 «Кассация», 3.5 «Вынесенные решения»,
+    3.6 «Тексты решений», 4 «Перешли в апелляцию», 5.1a «Переход к правилам»,
+    5.2 «Отложенные», 5.3 «Назначенные», 5.4 «Вынесенные акты», 5.5
+    «Тексты актов». Считаем строки с `<a href>` номером до следующего
+    заголовка (`_DIGEST_HEADER_RE`).
+    """
+    lines = html.split("\n")
+    out: list[str] = list(lines)
+    n = len(lines)
+    for i in range(n):
+        ln = lines[i]
+        for pat, label in _SUBSECTION_HEADERS_WITH_COUNT:
+            m = pat.match(ln)
+            if not m:
+                continue
+            # Считаем строки-дела до следующего заголовка
+            j = i + 1
+            count = 0
+            while j < n and not _DIGEST_HEADER_RE.match(lines[j]):
+                if _line_has_case_number(lines[j]):
+                    count += 1
+                j += 1
+            old_count = m.group(2)
+            if str(count) != old_count:
+                log.warning(
+                    f"Пост-процессор дайджеста: секция «{label}» — "
+                    f"шапка обещала ({old_count}) дел, фактически {count}; "
+                    f"переписано."
+                )
+                out[i] = f"{m.group(1)}{count}{m.group(3)}"
+            break
+    return "\n".join(out)
+
+
+def _classify_line(line: str) -> str:
+    """Определить тип строки для нормализатора отступов.
+
+    Типы:
+    - "EMPTY" — пустая строка
+    - "BIG_HEADER" — `<b>🏛 ПЕРВАЯ ИНСТАНЦИЯ</b>` / `<b>⚖️ АПЕЛЛЯЦИЯ</b>` /
+      `<b>🔀 Перешли в апелляцию (N)</b>`
+    - "SUB_HEADER" — заголовок подсекции с эмодзи + <b>…(N):</b>
+    - "SEPARATOR" — `⸻`
+    - "CASE_LINE" — содержит `<a href` (строка-дело со ссылкой)
+    - "CONT_LINE" — продолжение строки дела (без ссылки, не пустая,
+      не разделитель, не заголовок) — например, строка 2 двухстрочной
+      записи с «стороны | событие» или «Итог: …», «Почему: …», «Заседание
+      отложено на …»
+    - "TITLE" — заголовок дайджеста (📊 Дайджест …) и сводка (📋 Сводка)
+    - "FOOTER" — итоговая строка `📌 В производстве …` и ссылка на дашборд
+    """
+    s = line.strip()
+    if not s:
+        return "EMPTY"
+    if s == "⸻":
+        return "SEPARATOR"
+    # 📊 Дайджест… / 📋 <b>Сводка</b> / <i>1 инст.:</i> … / <i>Апелл.:</i> …
+    if s.startswith("📊") or s.startswith("📋") or s.startswith("<i>"):
+        return "TITLE"
+    if s.startswith("📌"):
+        return "FOOTER"
+    if _FI_BLOCK_HEADER_RE.match(line) or _APPEAL_BLOCK_HEADER_RE.match(line):
+        return "BIG_HEADER"
+    # «🔀 Перешли в апелляцию» — это самостоятельный мостик, ведёт себя как
+    # большой блок (между ним и соседними блоками — одна пустая строка, без ⸻).
+    if re.match(r'^\s*🔀\s*<b>\s*Перешли в апелляцию', line):
+        return "BIG_HEADER"
+    if _DIGEST_HEADER_RE.match(line) and "(" in s and "):" in s:
+        return "SUB_HEADER"
+    # Заголовок подсекции без счётчика (например, «📨 Поданы апелляционные
+    # жалобы:» — старый формат). Считаем тоже SUB_HEADER, чтобы отступы
+    # ставились корректно.
+    if _DIGEST_HEADER_RE.match(line):
+        return "SUB_HEADER"
+    if "<a href" in line:
+        return "CASE_LINE"
+    # Ссылка на дашборд в самом конце
+    if 'href="' in line and "Дашборд" in line:
+        return "FOOTER"
+    # Голый номер дела (LLM забыл обернуть, и пост-процессор не нашёл URL).
+    # Считаем такую строку CASE_LINE — иначе нормализатор отступов спутает её
+    # с продолжением предыдущего дела.
+    if _BARE_CASE_NUMBER_RE.search(line):
+        return "CASE_LINE"
+    return "CONT_LINE"
+
+
+def _normalize_section_spacing(html: str) -> str:
+    """Привести межсекционные отступы к каноничному виду.
+
+    Промпт (правила (а)/(б)/(б1)/(в)/(г)) описывает отступы подробно, но
+    LLM их нарушает: то перед `⸻` нет пустой строки, то после заголовка
+    подсекции нет пустой строки, то между двумя строками одного дела
+    появляется пустая. Эта функция переписывает отступы по типам строк:
+
+    - перед SUB_HEADER (если предыдущая значимая строка не BIG_HEADER) —
+      `пустая → ⸻ → пустая`;
+    - после BIG_HEADER до первого SUB_HEADER — ровно одна пустая строка;
+    - после SUB_HEADER — ровно одна пустая строка перед первым CASE_LINE;
+    - между CASE_LINE и CONT_LINE (продолжение того же дела) — ноль пустых;
+    - между двумя CASE_LINE / между блоком одного дела и блоком другого —
+      ровно одна пустая строка;
+    - между BIG_HEADER блоками — ровно одна пустая строка, без ⸻;
+    - перед FOOTER (`📌 В производстве …`) — одна пустая строка.
+
+    Идемпотентна: повторный прогон ничего не меняет.
+    """
+    lines = html.split("\n")
+    # Удаляем все ⸻ и пустые строки — оставим только значимые. Потом
+    # вставим разделители заново.
+    significant: list[tuple[str, str]] = []  # (type, line)
+    for ln in lines:
+        t = _classify_line(ln)
+        if t in ("EMPTY", "SEPARATOR"):
+            continue
+        significant.append((t, ln))
+
+    if not significant:
+        return html
+
+    out: list[str] = []
+    prev_type: str | None = None
+    for idx, (t, ln) in enumerate(significant):
+        if prev_type is None:
+            out.append(ln)
+            prev_type = t
+            continue
+
+        # Решаем, что вставить ПЕРЕД этой строкой.
+        if t == "TITLE":
+            s = ln.strip()
+            prev_s = out[-1].strip() if out else ""
+            # 📊 Дайджест… → 📋 Сводка: одна пустая строка между ними.
+            # 📋 Сводка → <i>1 инст.:</i>: одна пустая строка.
+            # <i>1 инст.:</i> → <i>Апелл.:</i>: БЕЗ пустой строки (две строки
+            # сводки идут подряд, см. правило промпта).
+            if (s.startswith("<i>") and prev_s.startswith("<i>")):
+                pass  # две строки сводки — без пустой
+            elif prev_type == "TITLE":
+                out.append("")
+        elif t == "BIG_HEADER":
+            # Между большими блоками — одна пустая строка, без ⸻.
+            out.append("")
+        elif t == "SUB_HEADER":
+            if prev_type == "BIG_HEADER":
+                # После большого блока — одна пустая строка перед первой подсекцией.
+                out.append("")
+            else:
+                # Перед последующими подсекциями того же блока: пустая → ⸻ → пустая.
+                out.append("")
+                out.append("⸻")
+                out.append("")
+        elif t == "CASE_LINE":
+            if prev_type == "SUB_HEADER":
+                # После заголовка подсекции — одна пустая строка перед первым делом.
+                out.append("")
+            elif prev_type == "CASE_LINE":
+                # Между двумя CASE_LINE — пустая строка (это два разных дела).
+                out.append("")
+            elif prev_type == "CONT_LINE":
+                # Конец одного дела, начало следующего — пустая строка.
+                out.append("")
+            elif prev_type == "BIG_HEADER":
+                # CASE_LINE прямо после большого блока — нештатно, но
+                # вставим одну пустую строку для безопасности.
+                out.append("")
+        elif t == "CONT_LINE":
+            # Продолжение того же дела — ноль пустых строк перед.
+            # Однако если предыдущая значимая строка — SUB_HEADER, это
+            # странно (CONT_LINE без CASE_LINE сверху); оставим как есть.
+            pass
+        elif t == "FOOTER":
+            # 📌 В производстве … или ссылка на дашборд — одна пустая
+            # строка перед футером.
+            out.append("")
+
+        out.append(ln)
+        prev_type = t
+
+    return "\n".join(out)
+
+
+def _recount_summary_line(html: str) -> str:
+    """Перегенерировать строки сводки `📋 Сводка` по факту вывода.
+
+    Считает в дайджесте после генерации:
+    - 1 инст.: число дел в 3.2 «Изменения», 3.5 «Решения», 3.3 «Жалобы»,
+      3.4 «Касс.», 3.6 «Тексты решений»;
+    - Апел.: число дел в 5.1 «Новые», 5.2 «Отложенные», 5.3 «Назначенные»,
+      5.4 «Акты», 5.5 «Тексты актов».
+
+    Отдельно «Новые иски (1 инст.)» (3.1) — Y. Формат сохраняем близким
+    к промпту, но цифры — из факта, а не из обещания LLM.
+    """
+    lines = html.split("\n")
+
+    # Карта: тип секции → (block, fact-counter)
+    # block: "fi" / "appeal" / "bridge"
+    # counters считаем по факту строк-дел после соответствующего заголовка.
+    sections: list[tuple[str, str, int]] = []  # (block, label, count)
+
+    n = len(lines)
+    i = 0
+    while i < n:
+        ln = lines[i]
+        matched = False
+        for pat, label in _SUBSECTION_HEADERS_WITH_COUNT:
+            m = pat.match(ln)
+            if not m:
+                continue
+            j = i + 1
+            count = 0
+            while j < n and not _DIGEST_HEADER_RE.match(lines[j]):
+                if _line_has_case_number(lines[j]):
+                    count += 1
+                j += 1
+            block = (
+                "fi" if label.startswith("1 инст.") else
+                "bridge" if label == "Перешли в апелляцию" else
+                "appeal"
+            )
+            sections.append((block, label, count))
+            i = j
+            matched = True
+            break
+        # Также «Новые иски» / «Новые дела» — у них специальный формат.
+        if not matched:
+            m_fi = re.match(
+                r'^(\s*📥\s*<b>\s*Новые иски\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$',
+                ln,
+            )
+            m_ap = re.match(
+                r'^(\s*📥\s*<b>\s*Новые дела\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$',
+                ln,
+            )
+            m = m_fi or m_ap
+            if m:
+                j = i + 1
+                count = 0
+                while j < n and not _DIGEST_HEADER_RE.match(lines[j]):
+                    if _line_has_case_number(lines[j]):
+                        count += 1
+                    j += 1
+                if m_fi:
+                    sections.append(("fi", "1 инст./Новые иски", count))
+                else:
+                    sections.append(("appeal", "Апел./Новые дела", count))
+                i = j
+                matched = True
+
+        if not matched:
+            i += 1
+
+    fi_new = sum(c for b, lbl, c in sections if lbl == "1 инст./Новые иски")
+    fi_changes = sum(c for b, lbl, c in sections if lbl == "1 инст./Изменения")
+    fi_resolved = sum(c for b, lbl, c in sections if lbl in (
+        "1 инст./Решения", "1 инст./Тексты решений",
+    ))
+    fi_appeal_filed = sum(c for b, lbl, c in sections if lbl == "1 инст./Апел. жалобы")
+    fi_cassation = sum(c for b, lbl, c in sections if lbl == "1 инст./Кассация")
+    ap_new = sum(c for b, lbl, c in sections if lbl == "Апел./Новые дела")
+    ap_acts = sum(c for b, lbl, c in sections if lbl in (
+        "Апел./Акты", "Апел./Тексты актов",
+    ))
+    ap_postponed = sum(c for b, lbl, c in sections if lbl == "Апел./Отложено")
+    ap_scheduled = sum(c for b, lbl, c in sections if lbl == "Апел./Назначено")
+
+    # Собираем фразы для каждой инстанции.
+    def _plural(n: int, forms: tuple[str, str, str]) -> str:
+        n = abs(n) % 100
+        n1 = n % 10
+        if 10 < n < 20:
+            return forms[2]
+        if 1 < n1 < 5:
+            return forms[1]
+        if n1 == 1:
+            return forms[0]
+        return forms[2]
+
+    fi_parts: list[str] = []
+    if fi_new:
+        fi_parts.append(f"{fi_new} {_plural(fi_new, ('новый иск', 'новых иска', 'новых исков'))}")
+    if fi_changes:
+        fi_parts.append(f"{fi_changes} {_plural(fi_changes, ('изменение', 'изменения', 'изменений'))}")
+    if fi_appeal_filed:
+        fi_parts.append(
+            f"{fi_appeal_filed} {_plural(fi_appeal_filed, ('апел. жалоба', 'апел. жалобы', 'апел. жалоб'))}"
+        )
+    if fi_cassation:
+        fi_parts.append(
+            f"{fi_cassation} касс. {_plural(fi_cassation, ('событие', 'события', 'событий'))}"
+        )
+    if fi_resolved:
+        fi_parts.append(f"{fi_resolved} {_plural(fi_resolved, ('решение', 'решения', 'решений'))}")
+    fi_summary = ", ".join(fi_parts) if fi_parts else "нет событий"
+
+    ap_parts: list[str] = []
+    if ap_new:
+        ap_parts.append(f"+{ap_new} {_plural(ap_new, ('дело', 'дела', 'дел'))}")
+    if ap_scheduled:
+        ap_parts.append(
+            f"{ap_scheduled} {_plural(ap_scheduled, ('заседание', 'заседания', 'заседаний'))}"
+        )
+    if ap_postponed:
+        ap_parts.append(
+            f"{ap_postponed} {_plural(ap_postponed, ('отложение', 'отложения', 'отложений'))}"
+        )
+    if ap_acts:
+        ap_parts.append(f"{ap_acts} {_plural(ap_acts, ('акт', 'акта', 'актов'))}")
+    ap_summary = ", ".join(ap_parts) if ap_parts else "нет событий"
+
+    new_fi_line = f"<i>1 инст.:</i> {fi_summary}"
+    new_ap_line = f"<i>Апелл.:</i> {ap_summary}"
+
+    out: list[str] = []
+    fi_replaced = False
+    ap_replaced = False
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("<i>1 инст.:</i>"):
+            out.append(new_fi_line)
+            fi_replaced = True
+            continue
+        if s.startswith("<i>Апелл.:</i>"):
+            out.append(new_ap_line)
+            ap_replaced = True
+            continue
+        out.append(ln)
+
+    # Если LLM почему-то не вывел сводку — не вмешиваемся.
+    if not fi_replaced and not ap_replaced:
+        return html
+    return "\n".join(out)
+
+
+_LIST_PRINT_FACTS_FOR_LOG = False  # глушилка, для возможной отладки
+
+
+def _warn_misplaced_appeal_cases(html: str) -> str:
+    """Залогировать апелляционные номера (`33-…`), оказавшиеся в блоке 1 инст.
+
+    Прецедент 29.04.2026: LLM поместил дело 33-2677/2026 в подсекцию
+    «📅 Назначенные заседания» внутри блока 1-й инстанции, хотя по
+    инварианту все `33-…` номера принадлежат блоку «⚖️ АПЕЛЛЯЦИЯ».
+
+    Удалять/переносить такие строки опасно — рядом обычно есть полезная
+    мотивировка, которую юрист хочет видеть, даже если секция выбрана
+    неправильно. Поэтому пост-процессор только логирует предупреждение,
+    а корень фиксится в промпте (явный инвариант «33- = апелляция»).
+    Если повторится — можно будет добавить перенос строк в правильный блок.
+    """
+    lines = html.split("\n")
+    n = len(lines)
+
+    fi_start = None
+    fi_end = n
+    for i, ln in enumerate(lines):
+        if _FI_BLOCK_HEADER_RE.match(ln):
+            fi_start = i
+        elif fi_start is not None and (
+            _APPEAL_BLOCK_HEADER_RE.match(ln)
+            or re.match(r'^\s*🔀\s*<b>\s*Перешли в апелляцию', ln)
+        ):
+            fi_end = i
+            break
+
+    if fi_start is None:
+        return html
+
+    misplaced: list[str] = []
+    for ln in lines[fi_start + 1:fi_end]:
+        m = _DIGEST_CASE_LINK_RE.search(ln)
+        num = m.group(1).strip() if m else ""
+        if not num:
+            mb = _BARE_CASE_NUMBER_RE.search(ln)
+            num = mb.group(1) if mb else ""
+        if num and _APPEAL_NUM_RE.match(num):
+            misplaced.append(num)
+
+    if misplaced:
+        log.warning(
+            f"Пост-процессор дайджеста: в блоке «🏛 ПЕРВАЯ ИНСТАНЦИЯ» "
+            f"найдены апелляционные номера ({misplaced}) — LLM нарушил "
+            f"инвариант «33- = апелляция». Не трогаю содержимое, чтобы "
+            f"не потерять полезную мотивировку; править — в промпте."
+        )
+    return html
+
+
+def _drop_zero_count_sections(html: str) -> str:
+    """Удалить подсекции с заголовком вида «… (0):».
+
+    После пересчёта счётчиков (`_renumber_section_headers`,
+    `_validate_digest_new_sections`) могут появиться шапки `(0):` —
+    это значит, что под ними не оказалось ни одного дела. В дайджест
+    выводить их вредно — занимают место и сбивают читателя. Удаляем
+    шапку и всё содержимое до следующего заголовка (`_DIGEST_HEADER_RE`).
+
+    Также удаляются строки-разделители `⸻`, оказавшиеся подряд из-за
+    удалённой между ними подсекции — `_normalize_section_spacing`
+    дальше всё равно перепишет, но лишний `⸻` поломает классификацию.
+    """
+    lines = html.split("\n")
+    out: list[str] = []
+    n = len(lines)
+    i = 0
+    while i < n:
+        ln = lines[i]
+        # Шапка с (0): любой эмодзи + <b>…(0):</b>
+        if re.match(
+            r'^\s*(?:📥|📅|📨|🔁|⚖️|📄|⚠|🔀)\s*<b>[^<]*\(\s*0\s*\)\s*:\s*</b>\s*$',
+            ln,
+        ):
+            j = i + 1
+            while j < n and not _DIGEST_HEADER_RE.match(lines[j]):
+                j += 1
+            i = j
+            continue
+        out.append(ln)
+        i += 1
     return "\n".join(out)
 
 
