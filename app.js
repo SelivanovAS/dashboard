@@ -1957,28 +1957,18 @@ try {
 } catch (_) { watchlist = new Set(); }
 let filterMineActive = false;
 try {
-  const saved = localStorage.getItem(FILTER_MINE_KEY);
-  // null → дефолт: ON если есть подписки. true/false → явный выбор юриста.
-  filterMineActive = saved === null ? watchlist.size > 0 : saved === 'true';
-  // Если включили автоматически — фиксируем выбор, чтобы при следующем
-  // удалении/постановке звёзд фильтр не возвращался автоматически.
-  if (saved === null && watchlist.size > 0) {
-    localStorage.setItem(FILTER_MINE_KEY, 'true');
-  }
-} catch (_) { filterMineActive = watchlist.size > 0; }
+  // Только явный выбор юриста (клик по чипу «★ Мои»). Автовключения нет:
+  // при подписке на несколько дел подряд фильтр не должен срезать
+  // таблицу — иначе юрист, поставивший первую звезду, не видит дальше
+  // остальные дела для подписки.
+  filterMineActive = localStorage.getItem(FILTER_MINE_KEY) === 'true';
+} catch (_) { filterMineActive = false; }
 
-// «Первое открытие» с непустым watchlist (новая звёздочка или гидратация
-// с Worker) — включаем фильтр и фиксируем выбор в localStorage. Если юрист
-// уже трогал чип (saved!=null), функция ничего не меняет: повторного
-// автовключения не будет даже после очистки watchlist и постановки новых.
-function maybeAutoEnableMineFilter() {
-  if (watchlist.size === 0) return;
-  let saved = null;
-  try { saved = localStorage.getItem(FILTER_MINE_KEY); } catch (_) {}
-  if (saved !== null) return;
-  filterMineActive = true;
-  try { localStorage.setItem(FILTER_MINE_KEY, 'true'); } catch (_) {}
-}
+// No-op для совместимости со старыми вызовами (reconcile с сервера).
+// Раньше функция автовключала фильтр при первой звезде/гидратации, но
+// это мешало подписываться на несколько дел подряд — теперь юрист
+// сам нажимает чип «★ Мои», когда готов смотреть только свои.
+function maybeAutoEnableMineFilter() { /* no-op */ }
 
 let watchlistSyncTimer = null;
 
