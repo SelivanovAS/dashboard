@@ -1146,6 +1146,7 @@ tr.detail-row { display:none; }
   justify-content: center;
   border-radius: var(--radius);
   transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
+  margin-left: auto;
 }
 .digest-toggle:hover { background: var(--bg-3); color: var(--fg-1); }
 .digest-toggle svg { width: 18px; height: 18px; }

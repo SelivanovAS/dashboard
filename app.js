@@ -1994,7 +1994,18 @@ try {
   // при подписке на несколько дел подряд фильтр не должен срезать
   // таблицу — иначе юрист, поставивший первую звезду, не видит дальше
   // остальные дела для подписки.
-  filterMineActive = localStorage.getItem(FILTER_MINE_KEY) === 'true';
+  const stored = localStorage.getItem(FILTER_MINE_KEY) === 'true';
+  if (stored && watchlist.size === 0) {
+    // Stale: при пустом watchlist чип «★ Мои» скрыт и фильтр маскируется
+    // (mineOn = filterMineActive && watchlist.size>0). Юрист не видит,
+    // что флаг включён, и первая же поставленная звезда «внезапно» режет
+    // таблицу. Чистим, чтобы инвариант «пустой watchlist ⇒ фильтр выкл»
+    // соблюдался всегда.
+    try { localStorage.removeItem(FILTER_MINE_KEY); } catch (_) {}
+    filterMineActive = false;
+  } else {
+    filterMineActive = stored;
+  }
 } catch (_) { filterMineActive = false; }
 
 // No-op для совместимости со старыми вызовами (reconcile с сервера).
@@ -2030,6 +2041,15 @@ function toggleWatch(caseNumber, btn) {
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
+  // Снятие последней звезды → фильтр «★ Мои» больше не имеет смысла.
+  // Сбрасываем флаг сразу, до applyFilters(): иначе при следующей звезде
+  // (или перезагрузке страницы с восстановлением stored=true) таблица
+  // схлопнется до 1 дела с активным чипом, и юрист подумает, что
+  // фильтр включила звёздочка.
+  if (watchlist.size === 0 && filterMineActive) {
+    filterMineActive = false;
+    try { localStorage.setItem(FILTER_MINE_KEY, 'false'); } catch (_) {}
+  }
   // Перерисовываем chip-bar и пересчитываем filteredCases — chip появляется
   // или исчезает в зависимости от размера watchlist, а фильтр пересчитывается.
   // Авто-включение фильтра «Мои дела» НЕ делаем: пользователь сам решает,
