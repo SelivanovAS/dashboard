@@ -17,6 +17,10 @@ SBER_GREEN = (33, 160, 56, 255)
 WHITE = (255, 255, 255, 255)
 TRANSPARENT = (0, 0, 0, 0)
 
+# Мягкий вертикальный градиент в одном тоне: светлее сверху → темнее снизу
+GRADIENT_TOP = (46, 184, 75, 255)
+GRADIENT_BOTTOM = (24, 138, 47, 255)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SIZES: dict[str, int] = {
@@ -34,9 +38,24 @@ def render_icon(target_size: int) -> Image.Image:
     canvas = Image.new("RGBA", (big, big), TRANSPARENT)
     draw = ImageDraw.Draw(canvas)
 
-    # Squircle (iOS-стиль скруглённость ~22.5% от стороны)
+    # Squircle (iOS-стиль скруглённость ~22.5% от стороны) с вертикальным градиентом
     radius = int(big * 0.225)
-    draw.rounded_rectangle((0, 0, big - 1, big - 1), radius=radius, fill=SBER_GREEN)
+    gradient = Image.new("RGBA", (big, big))
+    gpx = gradient.load()
+    for y in range(big):
+        t = y / (big - 1)
+        gpx[0, y] = tuple(
+            int(GRADIENT_TOP[i] + (GRADIENT_BOTTOM[i] - GRADIENT_TOP[i]) * t)
+            for i in range(4)
+        )
+    for y in range(big):
+        c = gpx[0, y]
+        for x in range(1, big):
+            gpx[x, y] = c
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, big - 1, big - 1), radius=radius, fill=255)
+    canvas.paste(gradient, (0, 0), mask)
+    draw = ImageDraw.Draw(canvas)
 
     # Символ § — крупно, по центру, белый
     font_size = int(big * 0.62)
