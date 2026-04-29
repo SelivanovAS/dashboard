@@ -63,14 +63,22 @@ jobs:
             python scripts/update_cases.py --replay-last
           fi
 
-      - name: Commit refreshed last_digest.json
+      - name: Commit refreshed data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet data/last_digest.json; then
-            echo "last_digest.json не изменился — нечего коммитить"
+          if [ -f data/last_digest.json ]; then
+            git add data/last_digest.json
+          fi
+          # Журнал последней push-рассылки — читает админка подписчиков. Тестовые
+          # прогоны тоже шлют push (владельцу/всем), и этот файл должен попадать
+          # на GitHub Pages, иначе админка не покажет, что получила подписка.
+          if [ -f data/last_personal_pushes.json ]; then
+            git add data/last_personal_pushes.json
+          fi
+          if git diff --cached --quiet; then
+            echo "Нет изменений — нечего коммитить"
             exit 0
           fi
-          git add data/last_digest.json
           git commit -m "🔁 Test Digest: переигран дайджест через LLM"
           git push

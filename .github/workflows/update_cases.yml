@@ -69,5 +69,12 @@ jobs:
           if [ -f data/last_digest.json ]; then
             git add data/last_digest.json
           fi
+          # Журнал последней push-рассылки — читает админка подписчиков, чтобы
+          # показать «что получила каждая подписка». Без коммита файл теряется
+          # в раннере GitHub Actions и не попадает на GitHub Pages → админка
+          # фетчит 404 и блок «Последний push» остаётся пустым.
+          if [ -f data/last_personal_pushes.json ]; then
+            git add data/last_personal_pushes.json
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push

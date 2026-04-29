@@ -1072,6 +1072,23 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
+/* Кнопка-тоггл «★ Мой» в шапке блока дайджеста. Прижата к правому краю
+   (margin-left:auto) — на десктопе .digest-meta с flex:1 и так толкает,
+   на мобиле .digest-meta скрыта, кнопка сама уходит вправо. Уменьшена,
+   чтобы не теснить close/toggle. Активное состояние — стандартное
+   .chip-btn.active (зелёный фон). */
+#digest-mode.digest-mode-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+}
+@media (max-width: 540px) {
+  #digest-mode.digest-mode-btn { padding: 3px 10px; font-size: 11px; }
+}
 .mine-digest-note {
   margin-bottom: 10px;
   padding: 8px 12px;

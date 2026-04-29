@@ -2040,6 +2040,12 @@ function toggleWatch(caseNumber, btn) {
     el.textContent = on ? '★' : '☆';
     el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  // Тоггл «Общий ⇄ Мой» в шапке дайджеста: появляется при первой звезде,
+  // прячется при снятии последней; в режиме «Мой» пересобирает тело по
+  // новому составу watchlist.
+  if (typeof refreshDigestModeVisibility === 'function') {
+    try { refreshDigestModeVisibility(); } catch (_) {}
+  }
   scheduleWatchlistSync();
 }
 window.toggleWatch = toggleWatch;
@@ -2104,6 +2110,11 @@ function reconcileWatchlistWithServer(serverList) {
       try { applyFilters(); } catch (_) {}
     } else if (typeof renderTable === 'function') {
       try { renderTable(); renderMobileCards(); } catch (_) {}
+    }
+    // Гидратация watchlist с сервера могла сделать пустой watchlist
+    // непустым — показать тоггл «Общий ⇄ Мой» (если дайджест уже загружен).
+    if (typeof refreshDigestModeVisibility === 'function') {
+      try { refreshDigestModeVisibility(); } catch (_) {}
     }
     return;
   }
@@ -2334,11 +2345,21 @@ if ('serviceWorker' in navigator) {
 
 const DIGEST_COLLAPSED_KEY = 'digest_collapsed';
 const DIGEST_LAST_SEEN_KEY = 'digest_last_seen_at';
+// Выбранный пользователем вид блока «Дайджест»: 'general' | 'mine'.
+// Тоггл «Общий ⇄ Мой» в шапке блока. URL ?mine=1 (из click_url push'а)
+// устанавливает начальное значение, дальше — управляется кнопкой.
+const DIGEST_VIEW_KEY = 'digest_view_v1';
 // generated_at уже показанного дайджеста — для записи в localStorage в момент показа.
 let currentDigestGeneratedAt = null;
 let digestLoaded = false;
 // Флаг: SW прислал postMessage, но дайджест ещё не загрузился.
 let pendingShowBeacon = false;
+// Кэш общего HTML и контекста дайджеста. Заполняется в loadLastDigest и
+// переиспользуется в setDigestView, чтобы переключение «Общий ⇄ Мой» не
+// требовало повторного fetch.
+let _digestGeneralHtml = null;
+let _digestContext = null;
+let _digestViewMode = 'general';
 // Regex номера российского дела: «2-1234/2026», «33-5678/2026», «2а-15/2025».
 // Допускаем буквы (а/КГ) после первого числа — встречается в категориях дел.
 // Покрывает три типичных формата номеров:
@@ -2460,19 +2481,12 @@ async function loadLastDigest() {
     if (!r.ok) return;
     const data = await r.json();
     if (!data || !data.html) return;
-    body.innerHTML = sanitizeDigestHtml(data.html);
-    // Если в URL есть ?mine=1 — попробуем подменить тело дайджеста на
-    // персональную версию (свои дела + новые). При пустом watchlist или
-    // отсутствии своих событий — оставляем общий дайджест и показываем
-    // плашку-заметку. Никогда не показываем «пусто» после клика из push.
-    const urlMine = new URL(window.location.href);
-    if (urlMine.searchParams.has('mine')) {
-      await applyMineDigestFilterToBody(body);
-    }
-    // Оборачиваем номера дел в кликабельные ссылки. Если allCases ещё не
-    // загружен — функция поставит флаг, и enhancement выполнится повторно
-    // в конце renderAll() (см. enhanceDigestCaseLinks).
-    enhanceDigestCaseLinks();
+    // Кэшируем общий HTML — переключение «Общий ⇄ Мой» больше не требует
+    // повторного fetch и переживает любое количество переключений.
+    _digestGeneralHtml = sanitizeDigestHtml(data.html);
+    // Контекст — ленивый: грузим только если он понадобится для mine-режима
+    // (либо стартовый ?mine=1 / сохранённый выбор, либо при первом клике).
+    _digestContext = null;
 
     const date = formatDigestDate(data.generated_at);
     const titleEl = document.getElementById('digest-title');
@@ -2485,16 +2499,29 @@ async function loadLastDigest() {
       titleEl.appendChild(pill);
       titleEl.title = `${date.full}, ${date.time}`;
     }
-    if (urlMine.searchParams.has('mine')) {
-      const minePill = document.createElement('span');
-      minePill.className = 'digest-mine-pill';
-      minePill.textContent = '★ только мои';
-      titleEl.appendChild(minePill);
-    }
     document.getElementById('digest-meta').textContent = data.summary || '';
     block.hidden = false;
     currentDigestGeneratedAt = data.generated_at || null;
     digestLoaded = true;
+
+    // Стартовый режим: ?mine=1 (push-click_url) → 'mine'; иначе —
+    // последний выбор пользователя; иначе при наличии watchlist 'mine'
+    // по умолчанию (юрист поставил звёзды → ожидает персональный вид),
+    // при пустом watchlist фолбэк на 'general' (тоггл всё равно скрыт).
+    const urlMine = new URL(window.location.href);
+    let initialMode = 'general';
+    if (watchlist.size > 0) {
+      if (urlMine.searchParams.has('mine')) {
+        initialMode = 'mine';
+        try { localStorage.setItem(DIGEST_VIEW_KEY, 'mine'); } catch (_) {}
+      } else {
+        let saved = null;
+        try { saved = localStorage.getItem(DIGEST_VIEW_KEY); } catch (_) {}
+        initialMode = (saved === 'mine' || saved === 'general') ? saved : 'mine';
+      }
+    }
+    await setDigestView(initialMode, { persist: false });
+    refreshDigestModeVisibility();
 
     // Делегированный клик по номерам дел внутри #digest-body.
     if (!body.dataset.caseClickBound) {
@@ -2634,49 +2661,150 @@ function filterGeneralHtmlByMine(html, mineSet) {
   return kept.join('\n\n');
 }
 
-// Подменяет содержимое блока дайджеста на персональную версию по watchlist.
-// Подход: переиспользуем ОБЩИЙ HTML дайджеста (тот же, что в Telegram) и
-// просто фильтруем блоки в «фильтруемых» секциях. Описание актов, мотивы и
-// итоги — идентичны Telegram-версии. Если в персональной версии не осталось
-// фильтруемых блоков — показываем общий дайджест плюс плашка-заметка.
-async function applyMineDigestFilterToBody(body) {
+// Возвращает HTML персональной версии дайджеста: фильтрует «фильтруемые»
+// секции по mine-набору номеров дел (watchlist ∪ новые). Описание актов,
+// мотивы и итоги — идентичны Telegram-версии. Если по mine-набору ничего
+// не осталось — возвращает { html: generalHtml, fallbackNote, found: 0 }
+// (показываем общий + плашка-заметка). Чистая функция, никаких побочек.
+function buildMineHtml(generalHtml, ctx) {
   if (watchlist.size === 0) {
-    prependMineNote(body, 'У тебя пока нет отслеживаемых дел. Поставь звёздочку в карточке, чтобы получать персональный дайджест. Сейчас показан общий.');
-    return;
+    return {
+      html: generalHtml,
+      fallbackNote: 'У тебя пока нет отслеживаемых дел. Поставь звёздочку в карточке, чтобы получать персональный дайджест. Сейчас показан общий.',
+      found: 0,
+    };
   }
-  let ctx = null;
-  try {
-    const r = await fetch('./data/last_digest_context.json', { cache: 'no-cache' });
-    if (r.ok) ctx = await r.json();
-  } catch (_) {}
   if (!ctx) {
-    prependMineNote(body, 'Не удалось загрузить контекст для персональной версии — показан общий дайджест.');
-    return;
+    return {
+      html: generalHtml,
+      fallbackNote: 'Не удалось загрузить контекст для персональной версии — показан общий дайджест.',
+      found: 0,
+    };
   }
-  // mineSet = watchlist (с нормализацией) ∪ номера новых дел из контекста.
   const mineSet = new Set();
   for (const w of watchlist) mineSet.add(bareCaseNumber(w));
   for (const n of collectNewCaseNumbers(ctx)) mineSet.add(bareCaseNumber(n));
-  // Текущий innerHTML — это уже общий дайджест (sanitize-HTML из last_digest.json).
-  // Возьмём оригинальный data.html, который ещё не был обрезан санитайзером?
-  // Удобнее: data.html уже в body.innerHTML после sanitize. Используем его.
-  const general = body.innerHTML;
-  const filtered = filterGeneralHtmlByMine(general, mineSet);
-  // Считаем, есть ли в результате хоть один <a><b>NUM</b></a> по mine-делам.
+  const filtered = filterGeneralHtmlByMine(generalHtml, mineSet);
   const cases = casesInFragment(filtered).filter((n) => mineSet.has(n));
   if (cases.length === 0) {
-    prependMineNote(body, 'По твоим делам сегодня изменений нет — показан общий дайджест.');
-    return;
+    return {
+      html: generalHtml,
+      fallbackNote: 'По твоим делам сегодня изменений нет — показан общий дайджест.',
+      found: 0,
+    };
   }
-  body.innerHTML = `<div class="mine-digest-note">★ Только мои дела + новые. По делам: ${cases.length}.</div>${filtered}`;
+  return {
+    html: `<div class="mine-digest-note">★ Только мои дела + новые. По делам: ${cases.length}.</div>${filtered}`,
+    fallbackNote: null,
+    found: cases.length,
+  };
 }
 
-function prependMineNote(body, text) {
-  const note = document.createElement('div');
-  note.className = 'mine-digest-note mine-digest-note-fallback';
-  note.textContent = text;
-  body.insertBefore(note, body.firstChild);
+// Переключатель «★ Мой» в шапке блока дайджеста. Одна кнопка-toggle:
+// нажата — показываем mine-версию (только дела из watchlist + новые),
+// отжата — общий дайджест (как в Telegram). Перерисовывает тело без
+// перезагрузки. Принимает opts.persist=false для инициализации (когда не
+// нужно записывать выбор в localStorage).
+async function setDigestView(mode, opts) {
+  const body = document.getElementById('digest-body');
+  const titleEl = document.getElementById('digest-title');
+  if (!body) return;
+  const next = (mode === 'mine' && watchlist.size > 0) ? 'mine' : 'general';
+  _digestViewMode = next;
+  if (!opts || opts.persist !== false) {
+    try { localStorage.setItem(DIGEST_VIEW_KEY, next); } catch (_) {}
+  }
+  // Обновляем состояние единственной кнопки-тоггла «★ Мой».
+  const toggleEl = document.getElementById('digest-mode');
+  if (toggleEl) {
+    const on = next === 'mine';
+    toggleEl.classList.toggle('active', on);
+    toggleEl.setAttribute('aria-pressed', on ? 'true' : 'false');
+    toggleEl.setAttribute('title', on
+      ? 'Показан персональный дайджест по watchlist. Нажми, чтобы увидеть общий.'
+      : 'Показать только мои дела + новые');
+  }
+  // Удаляем устаревшую mine-pill в шапке, если она там осталась от старой
+  // версии (виден тоггл — pill избыточен и тесно становится на мобиле).
+  if (titleEl) {
+    const oldPill = titleEl.querySelector('.digest-mine-pill');
+    if (oldPill) oldPill.remove();
+  }
+  if (next === 'general') {
+    body.innerHTML = _digestGeneralHtml || '';
+  } else {
+    // Контекст нужен один раз; кэшируем — переключение туда-обратно
+    // больше fetch'ей не делает.
+    if (!_digestContext) {
+      try {
+        const r = await fetch('./data/last_digest_context.json', { cache: 'no-cache' });
+        if (r.ok) _digestContext = await r.json();
+      } catch (_) {}
+    }
+    const built = buildMineHtml(_digestGeneralHtml || '', _digestContext);
+    if (built.fallbackNote) {
+      body.innerHTML = `<div class="mine-digest-note mine-digest-note-fallback">${escapeHtml(built.fallbackNote)}</div>${built.html}`;
+    } else {
+      body.innerHTML = built.html;
+    }
+  }
+  // Номера дел в новом innerHTML — снова делаем кликабельными.
+  enhanceDigestCaseLinks();
 }
+window.setDigestView = setDigestView;
+
+// Хэндлер клика по единственной кнопке-тогглу «★ Мой».
+function toggleDigestMine() {
+  const next = _digestViewMode === 'mine' ? 'general' : 'mine';
+  setDigestView(next);
+}
+window.toggleDigestMine = toggleDigestMine;
+
+// Минимальный escape для текста плашки-заметки (контент пользовательский
+// тут не появляется, но пусть будет на всякий случай).
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Видимость тоггла «Общий ⇄ Мой» зависит от размера watchlist: при пустом
+// watchlist mine-режим не имеет смысла. Если watchlist опустел в режиме
+// «Мой» — откатываем на «Общий», но сохранённый выбор в localStorage не
+// перетираем: при появлении новой звёзды вернёмся обратно в mine. Если в
+// режиме «Мой» состав watchlist поменялся — пересобираем тело (mineSet
+// изменился). Вызываем при изменении watchlist (toggleWatch,
+// reconcileWatchlistWithServer) и при загрузке дайджеста.
+function refreshDigestModeVisibility() {
+  const toggleEl = document.getElementById('digest-mode');
+  if (!toggleEl) return;
+  const visible = watchlist.size > 0;
+  toggleEl.hidden = !visible;
+  if (!visible) {
+    if (_digestViewMode === 'mine') {
+      setDigestView('general', { persist: false });
+    }
+    return;
+  }
+  if (_digestViewMode === 'mine' && _digestGeneralHtml) {
+    setDigestView('mine', { persist: false });
+    return;
+  }
+  // Появилась первая звезда (или гидратация watchlist с сервера) — если
+  // последний явный выбор юриста был «Мой» (или ничего не сохранено —
+  // дефолт «Мой» при наличии подписок), переключаемся на mine. Если он
+  // явно выбрал «Общий» при наличии звёзд — выбор уважается.
+  let saved = null;
+  try { saved = localStorage.getItem(DIGEST_VIEW_KEY); } catch (_) {}
+  const want = (saved === 'general') ? 'general' : 'mine';
+  if (want === 'mine' && _digestViewMode !== 'mine' && _digestGeneralHtml) {
+    setDigestView('mine', { persist: false });
+  }
+}
+window.refreshDigestModeVisibility = refreshDigestModeVisibility;
 
 // Оборачивает номера дел в #digest-body в <a class="digest-case-link"
 // data-open-drawer="..."> — но только те, что есть в allCases. Идемпотентна:

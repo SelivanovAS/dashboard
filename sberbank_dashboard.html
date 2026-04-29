@@ -153,6 +153,7 @@
       <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
         <span class="digest-title" id="digest-title">📰 Дайджест</span>
         <span class="digest-meta" id="digest-meta"></span>
+        <button class="chip-btn digest-mode-btn" id="digest-mode" type="button" aria-pressed="false" title="Показать только мои дела + новые" onclick="event.stopPropagation();toggleDigestMine();" hidden><span class="chip-mine-star">★</span>Мой</button>
         <button class="digest-close" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
         </button>
@@ -252,6 +253,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=37" defer></script>
+<script src="app.js?v=39" defer></script>
 </body>
 </html>
