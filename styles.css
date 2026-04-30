@@ -615,7 +615,7 @@ body {
 .table-wrap { background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); overflow:hidden; animation:fadeUp .6s var(--ease-out); }
 .table-scroll { overflow-x:auto; max-height:calc(100vh - 200px); overflow-y:auto; }
 table { width:100%; border-collapse:collapse; font-size:var(--fs-md); font-variant-numeric:tabular-nums; }
-thead th { text-align:left; padding:10px 14px; background:var(--bg-2); border-bottom:1px solid var(--border); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; color:var(--fg-3); font-weight:var(--fw-semibold); white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
+thead th { text-align:left; padding:10px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; color:var(--fg-3); font-weight:var(--fw-semibold); white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
 thead th.sortable { cursor:pointer; }
 thead th.sortable:hover { color:var(--fg-1); }
 thead th.sorted { color:var(--accent); }
@@ -1194,7 +1194,7 @@ tr.detail-row { display:none; }
 }
 .digest-body b      { color: var(--fg-1); font-weight: var(--fw-semibold); }
 .digest-body i      { color: var(--fg-2); font-style: italic; }
-.digest-body a      { color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; transition: border-color 150ms var(--ease-out); }
+.digest-body a      { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); transition: border-color 150ms var(--ease-out); }
 .digest-body a:hover { border-bottom-color: var(--accent); }
 
 /* Кликабельный номер дела внутри дайджеста — открывает drawer карточки. */
