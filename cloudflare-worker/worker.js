@@ -885,7 +885,15 @@ export default {
           Accept: "application/vnd.github.v3+json",
           "User-Agent": "CloudflareWorker",
         },
-        body: JSON.stringify({ ref: "main" }),
+        body: JSON.stringify({
+          ref: "main",
+          // Cron всегда передаёт smart_skip=true: парсер пропускает нерабочие
+          // дни РФ (двойная защита поверх isHoliday() выше) и дела с
+          // известной будущей датой (заседание/«без движения») — экономит
+          // запросы к ГАС «Правосудие». Ручной workflow_dispatch из UI
+          // запускается без этого input и парсит всё как раньше.
+          inputs: { smart_skip: "true" },
+        }),
       }
     );
 
