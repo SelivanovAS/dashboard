@@ -26,7 +26,7 @@ import time
 import traceback
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from html import escape as html_escape
 from html.parser import HTMLParser
 
@@ -803,6 +803,133 @@ def classify_hearing_type(event_text: str) -> str:
     if t.startswith("беседа"):
         return "беседа"
     return "заседание"
+
+
+# ── Smart-skip парсинга ─────────────────────────────────────────────────────
+# Маркеры из текста последнего события, при которых известна дата следующей
+# активности и парсинг до неё бессмысленен. Синхронизированы с фронтовой
+# логикой nextDateLabel в app.js:272-298.
+_HEARING_MARKERS_RX = re.compile(
+    r"(судебное\s+заседани|предварительн\w*\s+(?:судебн\w*\s+)?заседани|"
+    r"подготовк\w*\s+дела|собеседовани|^\s*беседа\b)",
+    re.IGNORECASE,
+)
+_SUSPENDED_RX = re.compile(r"без\s+движения", re.IGNORECASE)
+_DATE_DDMMYYYY_RX = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
+
+
+def get_next_planned_date(events: list[dict]) -> tuple[date | None, str]:
+    """Из последнего события вытаскивает дату следующей запланированной
+    активности. Возвращает (datetime.date, kind) либо (None, '').
+    kind ∈ {'hearing', 'suspended'} — для skip-метрики в логе.
+
+    hearing → берём event['date'] (карточка ГАС добавляет запись на дату
+        заседания заранее).
+    suspended → берём ПОСЛЕДНЮЮ дату DD.MM.YYYY из event['text'] (event.date —
+        день вынесения определения, а срок исправления указан в тексте).
+    """
+    if not events:
+        return None, ""
+    last = events[-1] or {}
+    text = (last.get("text") or "").strip()
+    if not text:
+        return None, ""
+    text_l = text.lower()
+
+    # «Без движения» проверяем первым: текст события заседания не содержит
+    # этого маркера, а наоборот может содержать «оставлено без изменения»
+    # (это про апел. результат, не наш случай — слово другое).
+    if _SUSPENDED_RX.search(text_l):
+        all_dates = _DATE_DDMMYYYY_RX.findall(text)
+        if all_dates:
+            d, m, y = all_dates[-1]
+            try:
+                return date(int(y), int(m), int(d)), "suspended"
+            except ValueError:
+                return None, ""
+        return None, ""
+
+    if _HEARING_MARKERS_RX.search(text_l):
+        ev_date_raw = (last.get("date") or "").strip()
+        m = _DATE_DDMMYYYY_RX.match(ev_date_raw)
+        if m:
+            try:
+                return date(int(m.group(3)), int(m.group(2)), int(m.group(1))), "hearing"
+            except ValueError:
+                return None, ""
+    return None, ""
+
+
+def should_skip_case(
+    case_dict: dict,
+    today: date,
+    force_parse_days: int = 21,
+) -> tuple[bool, str]:
+    """Решает, можно ли пропустить парсинг карточки.
+
+    1. По current_stage выбирает блок first_instance / appeal.
+    2. Force-parse: если last_checked_at нет или ≥ force_parse_days дней назад
+       → не скипать (страховка от тихой отмены/переноса заседания).
+    3. Иначе get_next_planned_date(events). Если planned >= today (включая
+       сам день N) → skip. Парсим строго с N+1.
+    """
+    stage = case_dict.get("current_stage", "")
+    if stage in ("first_instance", "cassation_watch"):
+        block = case_dict.get("first_instance") or {}
+    elif stage == "appeal":
+        block = case_dict.get("appeal") or {}
+    else:
+        return False, ""
+
+    last_checked_raw = block.get("last_checked_at", "")
+    last_checked: date | None = None
+    if last_checked_raw:
+        try:
+            last_checked = date.fromisoformat(last_checked_raw)
+        except ValueError:
+            last_checked = None
+    if last_checked is None or (today - last_checked).days >= force_parse_days:
+        return False, ""
+
+    planned, kind = get_next_planned_date(block.get("events") or [])
+    if planned and planned >= today:
+        ymd = planned.strftime("%d.%m.%Y")
+        if kind == "hearing":
+            return True, f"future_hearing({ymd})"
+        return True, f"suspended_until({ymd})"
+    return False, ""
+
+
+# Праздники/нерабочие дни РФ 2026-2027 (фиксированные даты + переносы).
+# Перенесённые рабочие субботы намеренно не учитываем — если такая суббота
+# попадёт, мы всё равно скипнем её как weekday>=5, что для cron безопасно.
+_RU_HOLIDAYS: frozenset[date] = frozenset({
+    # 2026
+    date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3), date(2026, 1, 4),
+    date(2026, 1, 5), date(2026, 1, 6), date(2026, 1, 7), date(2026, 1, 8),
+    date(2026, 2, 23),
+    date(2026, 3, 8), date(2026, 3, 9),
+    date(2026, 5, 1),
+    date(2026, 5, 9), date(2026, 5, 11),
+    date(2026, 6, 12),
+    date(2026, 11, 4),
+    # 2027
+    date(2027, 1, 1), date(2027, 1, 2), date(2027, 1, 3), date(2027, 1, 4),
+    date(2027, 1, 5), date(2027, 1, 6), date(2027, 1, 7), date(2027, 1, 8),
+    date(2027, 2, 23),
+    date(2027, 3, 8),
+    date(2027, 5, 1), date(2027, 5, 3),
+    date(2027, 5, 9), date(2027, 5, 10),
+    date(2027, 6, 12), date(2027, 6, 14),
+    date(2027, 11, 4),
+})
+
+
+def is_russian_working_day(d: date) -> bool:
+    """True, если d — рабочий день в РФ (не сб/вс и не праздник)."""
+    if d.weekday() >= 5:
+        return False
+    return d not in _RU_HOLIDAYS
 
 
 def bank_side_outcome_fi(role: str, verdict_label: str) -> str:
@@ -1927,7 +2054,7 @@ def update_active_cases(
     cases: list[dict],
     json_appeal_by_num: dict | None = None,
     skip_apel_nums: set[str] | None = None,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], dict]:
     """
     Обновить карточки активных (не архивных) дел.
 
@@ -1939,16 +2066,41 @@ def update_active_cases(
     "appeal" (напр. cassation_watch). Такие карточки не парсим: апел. уже
     прошла, парсинг — это лишние запросы и ложные обновления event_date.
 
-    Возвращает (обновлённые_дела, список_изменений).
+    Возвращает (обновлённые_дела, список_изменений, smart-skip-статы).
     """
     _digested_acts = load_digested_acts()
     changes = []
+    today = date.today()
+    skipped_future = 0
+    skipped_suspended = 0
+    force_parsed = 0
+    parsed = 0
+    eligible_total = 0  # активные не-архивные не-skip_apel — те, по кому решаем парсить или skip
 
     for case in cases:
         if is_archived(case):
             continue
         if skip_apel_nums and case.get("Номер дела", "").strip() in skip_apel_nums:
             continue
+        eligible_total += 1
+
+        # Smart-skip: если есть JSON-двойник апел-дела, проверяем известную
+        # будущую дату. Для CSV-row без JSON-родителя — фолбэк, парсим как раньше.
+        num = case.get("Номер дела", "").strip()
+        ap_dict_skip = (json_appeal_by_num or {}).get(num)
+        if ap_dict_skip is not None:
+            shim = {"current_stage": "appeal", "appeal": ap_dict_skip}
+            skip, reason = should_skip_case(shim, today)
+            if skip:
+                if reason.startswith("future_hearing"):
+                    skipped_future += 1
+                else:
+                    skipped_suspended += 1
+                log.debug(f"  skip {num}: {reason}")
+                continue
+            planned_fp, _kfp = get_next_planned_date(ap_dict_skip.get("events") or [])
+            if planned_fp and planned_fp >= today:
+                force_parsed += 1
 
         cid, cuid = case_id_uid(case.get("Ссылка", ""))
         if not cid or not cuid:
@@ -1963,6 +2115,7 @@ def update_active_cases(
 
         card_info = parse_case_card(html)
         _warn_if_card_degraded(card_info, case["Номер дела"])
+        parsed += 1
 
         # Параллельно обновляем JSON-представление appeal-дела (если передано).
         # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
@@ -1970,6 +2123,7 @@ def update_active_cases(
         if json_appeal_by_num is not None:
             ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
             if ap is not None:
+                ap["last_checked_at"] = today.isoformat()
                 old_events_ap = list(ap.get("events") or [])
                 if card_info.get("_events"):
                     ap["events"] = card_info["_events"]
@@ -2199,7 +2353,13 @@ def update_active_cases(
         log.info(f"  {case['Номер дела']}: {'→ '.join(change['type']) or 'без изменений'}")
 
     save_digested_acts(_digested_acts)
-    return cases, changes
+    return cases, changes, {
+        "skipped_future": skipped_future,
+        "skipped_suspended": skipped_suspended,
+        "force_parsed": force_parsed,
+        "parsed": parsed,
+        "total": eligible_total,
+    }
 
 
 # ── Сокращение наименований сторон ────────────────────────────────────────────
@@ -5383,7 +5543,7 @@ def main():
     # 4. Обновляем активные дела
     t0 = time.perf_counter()
     log.info(f"Обновляю {active_count} активных дел...")
-    cases, changes = update_active_cases(cases)
+    cases, changes, _skip_stats = update_active_cases(cases)
     timings["cards_update"] = time.perf_counter() - t0
 
     # 5. Добавляем новые дела в начало списка
@@ -5550,6 +5710,18 @@ def main_json():
     log.info("=" * 60)
     log.info("Запуск мониторинга дел Сбербанка (JSON-режим)")
     log.info("=" * 60)
+
+    # Smart-skip нерабочих дней РФ (включается при автозапуске через
+    # Worker — он передаёт SKIP_NON_WORKING_DAYS=1 / --smart-skip).
+    # Ручной запуск из UI работает без skip.
+    smart_skip_mode = (
+        "--smart-skip" in sys.argv
+        or os.environ.get("SKIP_NON_WORKING_DAYS") == "1"
+    )
+    today = date.today()
+    if smart_skip_mode and not is_russian_working_day(today):
+        log.info(f"{today.isoformat()} — нерабочий день РФ, парсинг пропущен.")
+        return
 
     _metrics_reset()
     validate_environment()
@@ -5734,7 +5906,7 @@ def main_json():
             json_appeal_by_num[num] = ap
             if c.get("current_stage") != "appeal":
                 skip_apel_nums.add(num)
-    csv_cases, changes = update_active_cases(
+    csv_cases, changes, ap_skip_stats = update_active_cases(
         csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
     )
 
@@ -5758,6 +5930,11 @@ def main_json():
     fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
     fi_update_count = 0
     fi_changes: list[dict] = []
+    # Smart-skip счётчики
+    fi_skipped_future = 0
+    fi_skipped_suspended = 0
+    fi_force_parsed = 0
+    fi_parsed = 0
 
     # Маркеры мусорного значения «Результат» из карточек 1 инстанции:
     # иногда парсер цепляет стандартную подсказку сайта вместо реального
@@ -5779,6 +5956,23 @@ def main_json():
         if not pm:
             continue
         cid, cuid = pm.group(1), pm.group(2)
+
+        # Smart-skip: пропускаем карточки с известной будущей активностью
+        # (заседание/беседа/подг./предв./«без движения») до даты+1.
+        skip, reason = should_skip_case(case_j, today)
+        if skip:
+            if reason.startswith("future_hearing"):
+                fi_skipped_future += 1
+            else:
+                fi_skipped_suspended += 1
+            log.debug(f"  skip {fi.get('case_number','?')}: {reason}")
+            continue
+        # Force-parse счётчик: парсим, но planned_date в будущем — значит
+        # last_checked_at был ≥21 дня назад (страховочный прогон).
+        planned_fp, _kind_fp = get_next_planned_date(fi.get("events") or [])
+        if planned_fp and planned_fp >= today:
+            fi_force_parsed += 1
+
         polite_delay()
         url = court_cfg.card_url(cid, cuid)
         html = fetch_page(url)
@@ -5811,6 +6005,11 @@ def main_json():
                                 alt_info[date_key] = card_info[date_key]
                     card_info = alt_info
         _warn_if_card_degraded(card_info, fi["case_number"])
+
+        # Smart-skip: фиксируем дату успешного парсинга карточки (используется
+        # для force-parse раз в 21 день).
+        fi["last_checked_at"] = today.isoformat()
+        fi_parsed += 1
 
         # Снимок до обновления — нужен для diff и дайджеста
         old_event = fi.get("last_event", "")
@@ -6094,6 +6293,20 @@ def main_json():
         log.info(f"  {fi['case_number']}: {'обновлено' if changed else 'без изменений'}")
 
     timings["fi_update"] = time.perf_counter() - t0
+    fi_total = len(fi_active)
+    fi_skip_total = fi_skipped_future + fi_skipped_suspended
+    log.info(
+        f"1 инст: {fi_parsed}/{fi_total} парсинг "
+        f"(skip {fi_skip_total}: {fi_skipped_future} заседание, "
+        f"{fi_skipped_suspended} без движения; force-parsed {fi_force_parsed})"
+    )
+    ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
+    log.info(
+        f"Апелляция: {ap_skip_stats['parsed']}/{ap_skip_stats['total']} парсинг "
+        f"(skip {ap_skip_total}: {ap_skip_stats['skipped_future']} заседание, "
+        f"{ap_skip_stats['skipped_suspended']} без движения; "
+        f"force-parsed {ap_skip_stats['force_parsed']})"
+    )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
@@ -6300,9 +6513,15 @@ def main_json():
             "FI new": len(fi_new_cases),
             "FI updated": fi_update_count,
             "FI changes": len(fi_changes),
+            "FI parse": f"{fi_parsed}/{fi_total}",
+            "FI skip": fi_skip_total,
+            "FI force": fi_force_parsed,
             "Stage transitions": len(stage_transitions),
             "Appeal new": len(appeal_new_cases_csv),
             "Appeal changes": len(changes),
+            "Appeal parse": f"{ap_skip_stats['parsed']}/{ap_skip_stats['total']}",
+            "Appeal skip": ap_skip_total,
+            "Appeal force": ap_skip_stats["force_parsed"],
             "JSON total": len(cases),
         },
     )

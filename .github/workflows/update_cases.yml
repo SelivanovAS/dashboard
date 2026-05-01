@@ -8,6 +8,11 @@ on:
         required: false
         type: boolean
         default: false
+      smart_skip:
+        description: 'Smart-skip: пропускать дела с известной будущей датой (заседание/без движения) и нерабочие дни РФ. Cron всегда true; ручной запуск — false для полного прогона.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,11 +45,17 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Smart-skip: при автозапуске Worker передаёт smart_skip=true →
+          # парсер пропускает нерабочие дни и дела с известной будущей датой.
+          SKIP_NON_WORKING_DAYS: ${{ inputs.smart_skip && '1' || '' }}
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"
           else
             echo "📱 PERSONAL CHAT: digest will go to personal chat"
+          fi
+          if [ "${{ inputs.smart_skip }}" = "true" ]; then
+            echo "🧠 SMART-SKIP: skip-нерабочих-дней + skip-будущих-заседаний"
           fi
           python scripts/update_cases.py --json
 
