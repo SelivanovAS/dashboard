@@ -1153,7 +1153,7 @@ tr.detail-row { display:none; }
   .mc-hearing .hearing-relative { font-size:var(--fs-xs); }
   .error-banner { font-size:var(--fs-lg); }
   .new-cases-banner { font-size:var(--fs-lg); }
-  .app-footer { font-size:var(--fs-sm); }
+  .app-footer { font-size:var(--fs-sm); padding:8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); min-height:0; }
   /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer. */
   .drawer-body { padding:16px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
   .drawer-title .dt-sub { font-size:var(--fs-xs); }
