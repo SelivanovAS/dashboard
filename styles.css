@@ -66,8 +66,8 @@
   /* ---------- 2. Semantic ---------- */
   --fg-1: var(--gray-900);
   --fg-2: var(--gray-700);
-  --fg-3: var(--gray-500);
-  --fg-4: var(--gray-400);
+  --fg-3: var(--gray-600);   /* WCAG AA на белом ~7:1 (был gray-500 ~3.8:1) */
+  --fg-4: var(--gray-500);   /* для совсем «тихого» текста, был gray-400 */
 
   --bg-1: var(--white);       /* поверхности */
   --bg-2: #eceef2;            /* фон страницы — серее, чем gray-50 */
@@ -168,9 +168,9 @@
   --fs-2xs: 11px;
   --fs-xs:  12px;
   --fs-sm:  13px;
-  --fs-md:  14px;
-  --fs-lg:  15px;
-  --fs-xl:  17px;
+  --fs-md:  15px;   /* база таблицы/карточек, было 14px — комфортнее для длинного чтения */
+  --fs-lg:  16px;   /* было 15px — теперь body-плюс */
+  --fs-xl:  18px;   /* было 17px */
   --fs-2xl: 22px;
   --fs-3xl: 28px;
 
@@ -241,8 +241,8 @@
 
   --fg-1: #ecedef;
   --fg-2: #c5c8cf;
-  --fg-3: #8c92a0;
-  --fg-4: #6b7280;
+  --fg-3: #a8aeba;   /* было #8c92a0 — поднято для AA на тёмном bg-1 */
+  --fg-4: #80868f;   /* было #6b7280 — слабый текст всё ещё читаем */
 
   --bg-1: #181c22;       /* поверхности (карточки, таблицы) */
   --bg-2: #0f1217;       /* фон страницы */
@@ -463,7 +463,7 @@ body {
 .stat-card[data-accent="red"]   { border-left-color:var(--red-500); }
 .stat-card[data-accent="amber"] { border-left-color:var(--amber-500); }
 .stat-value { font-family:var(--font-display); font-size:var(--fs-3xl); font-weight:var(--fw-bold); letter-spacing:-0.02em; line-height:1; color:var(--fg-1); font-variant-numeric:tabular-nums; }
-.stat-label { font-size:var(--fs-2xs); color:var(--fg-3); margin-top:6px; text-transform:uppercase; letter-spacing:0.06em; font-weight:var(--fw-semibold); }
+.stat-label { font-size:var(--fs-sm); color:var(--fg-3); margin-top:6px; font-weight:var(--fw-semibold); letter-spacing:-0.005em; }
 .stat-progress { margin-top:10px; height:5px; border-radius:3px; background:var(--bg-3); overflow:hidden; }
 .stat-progress-fill { height:100%; border-radius:3px; background:var(--accent); transition:width .5s var(--ease-out); }
 
@@ -478,7 +478,7 @@ body {
 /* ========== Analytics row (upcoming hearings + categories) ========== */
 .analytics-row { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:20px; animation:fadeUp .5s var(--ease-out); }
 .analytics-card { background:var(--bg-1); border-radius:var(--radius-md); padding:16px 20px; box-shadow:var(--shadow-1); }
-.analytics-title { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; font-weight:var(--fw-semibold); color:var(--fg-3); }
+.analytics-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); letter-spacing:-0.005em; }
 /* Зазор переехал с заголовка на содержимое — иначе при свёрнутом блоке
    («Ближайшие заседания» с кликом по chevron) внизу карточки висел
    пустой margin-bottom 14px. Теперь у свёрнутой карточки шапка прижата
@@ -495,10 +495,15 @@ body {
 .cat-bar-count { width:28px; text-align:right; font-weight:var(--fw-semibold); color:var(--fg-2); font-family:var(--font-mono); font-size:var(--fs-2xs); }
 
 /* Upcoming hearings */
-.up-title { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.up-title { display:flex; align-items:center; gap:10px; }
+/* Кнопку «★ Мои дела» прижимаем к правому краю; если её нет — chevron сам
+   отъезжает вправо через auto-margin. Аналогично digest-head, чтобы оба
+   тоггла стояли в одинаковой позиции. */
+.up-title .mine-toggle-btn { margin-left:auto; }
+.up-title:not(:has(.mine-toggle-btn:not([hidden]))) .card-chevron-btn { margin-left:auto; }
 .up-counter { display:inline-block; margin-left:6px; padding:2px 10px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
 .upcoming-list { display:flex; flex-direction:column; gap:14px; }
-.up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.08em; font-weight:var(--fw-bold); color:var(--fg-3); margin-bottom:8px; }
+.up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); margin-bottom:8px; letter-spacing:-0.005em; }
 .up-group-head::after { content:''; flex:1; height:1px; background:var(--divider); }
 .up-group-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; padding:0 6px; height:16px; border-radius:8px; background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-2xs); font-weight:var(--fw-bold); letter-spacing:0; order:1; }
 .up-group-today .up-group-head { color:var(--urgency-today-fg); }
@@ -629,14 +634,14 @@ body {
 .table-wrap { background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); overflow:hidden; animation:fadeUp .6s var(--ease-out); }
 .table-scroll { overflow-x:auto; max-height:calc(100vh - 200px); overflow-y:auto; }
 table { width:100%; border-collapse:collapse; font-size:var(--fs-md); font-variant-numeric:tabular-nums; }
-thead th { text-align:left; padding:10px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.06em; color:var(--fg-3); font-weight:var(--fw-semibold); white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
+thead th { text-align:left; padding:12px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-sm); color:var(--fg-3); font-weight:var(--fw-semibold); letter-spacing:-0.005em; white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
 thead th.sortable { cursor:pointer; }
 thead th.sortable:hover { color:var(--fg-1); }
 thead th.sorted { color:var(--accent); }
 .sort-icon { display:inline-block; margin-left:4px; font-size:10px; }
 tbody tr { border-bottom:1px solid var(--divider); transition:background 100ms var(--ease-out); position:relative; }
 tbody tr:hover { background:var(--bg-2); }
-tbody td { padding:10px 14px; vertical-align:top; }
+tbody td { padding:14px 14px; vertical-align:top; }
 tbody td:first-child { position:relative; padding-left:18px; }
 tbody tr td:first-child::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:transparent; transition:background 120ms var(--ease-out); }
 tbody tr.accent-new    td:first-child::before { background:var(--amber-500); }
@@ -660,7 +665,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* Перенос на 2 строки только по пробелам («Нижневартовский / гор. суд»).
    Без word-break, чтобы не ломало слово посередине. Лишнее (3+) обрезается. */
 .cell-court { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-.parties-col { display:flex; flex-direction:column; gap:3px; font-size:var(--fs-md); min-width:180px; line-height:1.35; }
+.parties-col { display:flex; flex-direction:column; gap:4px; font-size:var(--fs-md); min-width:180px; line-height:1.5; }
 .parties-col > span { display:flex; align-items:baseline; gap:4px; }
 .parties-col .party-name { flex:1; min-width:0; word-break:break-word; }
 .party-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; letter-spacing:0.04em; color:var(--fg-4); flex-shrink:0; min-width:14px; }
@@ -792,9 +797,19 @@ tbody tr.row-new { background:var(--amber-50); }
 tbody tr.row-new:hover { background:var(--amber-100); }
 tbody tr.row-new.row-expanded { background:var(--amber-100); }
 
-/* Group header */
-tr.group-header td { padding:14px 14px 6px; background:transparent; border-bottom:none; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.08em; font-weight:var(--fw-bold); color:var(--amber-700); }
+/* Group header — якорь при скане длинного списка. Sentence-case 13-14px,
+   воздух сверху, тонкая нижняя hairline для отделения от строк дел. */
+tr.group-header td { padding:18px 14px 8px; background:transparent; border-bottom:1px solid var(--divider); font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-2); letter-spacing:-0.005em; }
 tr.group-header td .group-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--amber-500); margin-right:8px; vertical-align:middle; }
+tr.group-header + tr td { padding-top:14px; }
+
+/* Те же group-headers для мобильной карточной раскладки. */
+.mc-group-header { padding:18px 4px 8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-2); display:flex; align-items:center; gap:8px; letter-spacing:-0.005em; }
+.mc-group-header .group-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
+.mc-group-header.gh-upcoming .group-dot { background:var(--info); }
+.mc-group-header.gh-awaiting .group-dot { background:var(--gray-400); }
+.mc-group-header.gh-decided .group-dot { background:var(--gray-500); }
+.mc-group-header.gh-archive .group-dot { background:var(--gray-300); }
 
 /* Row click → drawer */
 tbody tr.row-clickable { cursor:pointer; }
@@ -847,21 +862,24 @@ tr.detail-row { display:none; }
 .drawer-hero .hero-category { font-size:var(--fs-sm); color:var(--fg-2); margin:0 0 10px; line-height:1.4; }
 .drawer-hero .hero-category .hc-label { color:var(--fg-4); font-weight:var(--fw-semibold); margin-right:4px; }
 .drawer-section { margin-bottom:18px; }
-.drawer-section-title { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:0.08em; font-weight:var(--fw-bold); color:var(--fg-3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.drawer-section-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); letter-spacing:-0.005em; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
 .drawer-section-title::after { content:''; flex:1; height:1px; background:var(--divider); }
-.kv-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:var(--fs-sm); line-height:1.5; }
-.kv-grid .kv-k { color:var(--fg-3); font-size:var(--fs-xs); }
-.kv-grid .kv-v { color:var(--fg-1); font-weight:var(--fw-medium); }
+.kv-grid { display:grid; grid-template-columns:auto 1fr; gap:10px 16px; line-height:1.5; }
+.kv-grid .kv-k { color:var(--fg-3); font-size:var(--fs-xs); font-weight:var(--fw-medium); padding-top:1px; }
+.kv-grid .kv-v { color:var(--fg-1); font-size:var(--fs-md); font-weight:var(--fw-medium); }
 .kv-grid .kv-v.kv-today { color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
 .kv-grid .kv-v.kv-soon { color:var(--urgency-week-fg); font-weight:var(--fw-bold); }
 .kv-grid .kv-v.kv-mono { font-family:var(--font-mono); }
 
 /* Drawer tabs */
 .drawer-tabs { display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--border); }
-.drawer-tab { padding:8px 14px; border:none; background:transparent; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-family:var(--font-sans); transition:all 120ms var(--ease-out); display:inline-flex; align-items:center; gap:6px; }
+/* Стек: сверху pill-badge инстанции (мелкий), снизу номер дела (mono, крупнее).
+   Так инстанция читается первой как «метка», а номер — основное содержимое. */
+.drawer-tab { padding:8px 14px; border:none; background:transparent; color:var(--fg-3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-family:var(--font-sans); transition:all 120ms var(--ease-out); display:inline-flex; flex-direction:column; align-items:flex-start; gap:6px; line-height:1.2; }
 .drawer-tab:hover { color:var(--fg-1); }
 .drawer-tab.active { color:var(--fg-1); border-bottom-color:var(--accent); }
-.drawer-tab .tab-badge { display:inline-block; padding:1px 6px; border-radius:var(--radius-xs); font-size:10px; font-weight:var(--fw-bold); letter-spacing:0.04em; }
+.drawer-tab .tab-badge { align-self:flex-start; padding:2px 8px; border-radius:var(--radius-pill); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); letter-spacing:0; }
+.drawer-tab .tab-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-bold); letter-spacing:-0.01em; color:inherit; }
 .drawer-tab.tab-fi .tab-badge { background:var(--stage-fi-bg); color:var(--stage-fi-fg); }
 .drawer-tab.tab-ap .tab-badge { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); }
 
@@ -943,6 +961,10 @@ tr.detail-row { display:none; }
 .mc-party { display:flex; align-items:baseline; gap:5px; }
 .mc-party-tag { font-weight:var(--fw-bold); color:var(--fg-4); flex-shrink:0; font-size:var(--fs-2xs); text-transform:uppercase; }
 .mc-party-name { flex:1; min-width:0; word-break:break-word; }
+.mc-recent { display:flex; align-items:flex-start; gap:6px; font-size:var(--fs-sm); line-height:1.4; color:var(--fg-2); margin-bottom:10px; padding:6px 8px; background:var(--bg-2); border-radius:var(--radius-sm); }
+.mc-recent-icon { flex:0 0 auto; line-height:1.4; opacity:0.7; }
+.mc-recent-rel { flex:0 0 auto; font-weight:var(--fw-semibold); color:var(--fg-3); white-space:nowrap; }
+.mc-recent-text { flex:1 1 auto; min-width:0; color:var(--fg-1); overflow:hidden; }
 .mc-bottom { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding-top:8px; border-top:1px solid var(--divider); }
 .mc-state { min-width:0; flex-shrink:1; }
 .mc-hearing { text-align:right; flex-shrink:0; }
@@ -1062,8 +1084,10 @@ tr.detail-row { display:none; }
      Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
   .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
   .toolbar-row-segments { display:none; }
-  /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался. */
-  .app-main { padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px)); }
+  /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался.
+     Высота: toolbar (~60px) + bottom-offset (8px) + zapas (52px), плюс
+     env(safe-area-inset-bottom) для iOS PWA с домашней полоской. */
+  .app-main { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
@@ -1154,6 +1178,37 @@ tr.detail-row { display:none; }
 .toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
 .app-footer.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
 
+/* Мини-FAB справа снизу: появляется только на мобиле и только когда toolbar
+   скрыт. Дает быструю точку входа в поиск/фильтры из любой точки списка. */
+.toolbar-fab {
+  position: fixed;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--pill-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--fg-1);
+  box-shadow: 0 8px 20px rgba(13, 17, 22, 0.18);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 49;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.toolbar-fab svg { width: 20px; height: 20px; }
+.toolbar-fab:active { transform: translateY(8px) scale(0.85); }
+@media (max-width: 768px) {
+  .toolbar-fab { display: flex; }
+  .toolbar-fab.is-visible { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* Helpers (extracted from inline styles in app.js) */
 .stat-of-total { font-size:var(--fs-md); color:var(--fg-4); font-weight:var(--fw-regular); }
 .stat-no-appeal-data { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:6px; }
@@ -1187,13 +1242,12 @@ tr.detail-row { display:none; }
 }
 .digest-head:hover { background: var(--bg-3); }
 /* В свёрнутом виде шапка похожа на заголовок секции «Ближайшие заседания»
-   (.analytics-title): UPPERCASE, мелкий шрифт, дата вынесена в pill. */
+   (.analytics-title): sentence-case 13px, дата вынесена в pill. */
 .digest-title {
-  font-size: var(--fs-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   color: var(--fg-3);
+  letter-spacing: -0.005em;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -1267,8 +1321,11 @@ tr.detail-row { display:none; }
   justify-content: center;
   border-radius: var(--radius);
   transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
-  margin-left: auto;
 }
+/* margin-left:auto только на «Мои дела» (когда показан) или на сам chevron,
+   если кнопки нет — иначе оба auto делят пространство и кнопка зависает по
+   центру вместо правого края. */
+.digest-head:not(:has(.mine-toggle-btn:not([hidden]))) .digest-toggle { margin-left: auto; }
 .digest-toggle:hover { background: var(--bg-3); color: var(--fg-1); }
 .digest-toggle svg { width: 18px; height: 18px; }
 .digest-block.expanded .digest-toggle { transform: rotate(180deg); }

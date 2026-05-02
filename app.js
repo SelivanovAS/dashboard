@@ -1681,8 +1681,8 @@ function renderDrawer(c){
 
   // Tabs
   const tabsHtml=hasBoth?`<div class="drawer-tabs">
-    <button class="drawer-tab tab-fi ${drawerStage==='fi'?'active':''}" onclick="setDrawerStage('fi')"><span class="tab-badge">1 инст.</span>${escHtml(c._fi.case_number)}</button>
-    <button class="drawer-tab tab-ap ${drawerStage==='ap'?'active':''}" onclick="setDrawerStage('ap')"><span class="tab-badge">Апелляция</span>${escHtml(c._ap.case_number)}</button>
+    <button class="drawer-tab tab-fi ${drawerStage==='fi'?'active':''}" onclick="setDrawerStage('fi')"><span class="tab-badge">1 инст.</span><span class="tab-num">${escHtml(c._fi.case_number)}</span></button>
+    <button class="drawer-tab tab-ap ${drawerStage==='ap'?'active':''}" onclick="setDrawerStage('ap')"><span class="tab-badge">Апелляция</span><span class="tab-num">${escHtml(c._ap.case_number)}</span></button>
   </div>`:'';
 
   const subTitle=[c.category,vm.statusLabel].filter(Boolean).join(' · ');
@@ -1751,7 +1751,32 @@ function renderMobileCards(){
     document.getElementById('mobile-cards').innerHTML='<div class="empty-state"><p>Нет дел, соответствующих фильтрам</p></div>';
     return;
   }
+  // Те же группы что и в desktop-таблице — рендерим только при relevance-сортировке.
+  let prevGroup=null;
+  const newCount=filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length;
   document.getElementById('mobile-cards').innerHTML=filteredCases.map(c=>{
+    let groupHeader='';
+    if(sortField==='relevance'){
+      const archived=c.computed?c.computed.archived:isArchived(c);
+      const isNew=isNewCase(c);
+      const isUnread=isNew&&!readCases.has(c.caseNumber);
+      const grp=isUnread?'new':archived?'archive':c.status==='decided'?'decided':c.nextDate?'upcoming':'awaiting';
+      if(grp!==prevGroup){
+        const headers={
+          new:`Новые дела (${newCount})`,
+          upcoming:'С назначенной датой',
+          awaiting:'Поступили, дата не назначена',
+          decided:'Рассмотренные',
+          archive:'Архив',
+        };
+        const label=headers[grp];
+        if(label&&(grp==='new'||prevGroup)){
+          groupHeader=`<div class="mc-group-header gh-${grp}"><span class="group-dot"></span>${label}</div>`;
+        }
+        prevGroup=grp;
+      }
+    }
+    const _cardHtml=(()=>{
     const vm=prepareCaseViewModel(c);
     const isNew=isNewCase(c);
     const isUnread=isNew&&!readCases.has(c.caseNumber);
@@ -1791,6 +1816,8 @@ function renderMobileCards(){
         <div class="mc-hearing">${hearingHtml}</div>
       </div>
     </div>`;
+    })();
+    return groupHeader+_cardHtml;
   }).join('');
 }
 
@@ -1935,11 +1962,29 @@ window.addEventListener('scroll', () => {
       const searchActive = !!si && (si.value.length > 0 || document.activeElement === si);
       if (tb) tb.classList.toggle('is-hidden', goingDown && !searchActive);
       if (af) af.classList.toggle('is-hidden', goingDown);
+      // Мини-FAB виден ровно когда toolbar скрыт (мобилка), скрыт иначе.
+      const fab = document.getElementById('toolbar-fab');
+      if (fab) fab.classList.toggle('is-visible', !!tb && tb.classList.contains('is-hidden'));
       __lastScrollY = y;
     }
     __scrollTicking = false;
   });
 }, { passive: true });
+
+// Возврат toolbar после скрытия скроллом — JS-обработчик мини-FAB
+// (#toolbar-fab). После показа панели ставим фокус в поиск, чтобы тап по
+// иконке сразу открывал клавиатуру.
+function revealToolbar(){
+  const tb = document.querySelector('.toolbar');
+  const af = document.getElementById('app-footer');
+  const fab = document.getElementById('toolbar-fab');
+  if (tb) tb.classList.remove('is-hidden');
+  if (af) af.classList.remove('is-hidden');
+  if (fab) fab.classList.remove('is-visible');
+  const si = document.getElementById('search-input');
+  if (si) setTimeout(() => si.focus(), 80);
+}
+window.revealToolbar = revealToolbar;
 
 // Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
 // остаётся на нижней границе layout-viewport и оказывается под клавиатурой,
@@ -2609,9 +2654,14 @@ async function loadLastDigest() {
       return;
     }
 
-    // Иначе — восстанавливаем сохранённое состояние (по умолчанию свёрнут).
+    // Иначе — восстанавливаем сохранённое состояние. Дефолт зависит от ширины:
+    // на десктопе (≥1024px) дайджест открыт, чтобы главный контент не прятался
+    // за лишний клик; на мобиле свёрнут — там KPI и список важнее, а TL;DR
+    // строка под шапкой и так показывает summary.
     const collapsed = localStorage.getItem(DIGEST_COLLAPSED_KEY);
-    if (collapsed === 'false') expandDigest({ persist: false });
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+    const shouldExpand = collapsed === 'false' || (collapsed === null && isDesktop);
+    if (shouldExpand) expandDigest({ persist: false });
   } catch (e) {
     console.warn('Не удалось загрузить дайджест:', e);
   }
@@ -2641,7 +2691,13 @@ function collectNewCaseNumbers(ctx) {
 // 📄 Опубликованные акты и т.п.).
 const SECTION_NEW_RE = /(Новые\s+иски|Новые\s+дела)/i;
 const SECTION_HEADER_RE = /^[\u{1F4E5}\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}\u{2696}\u{1F3DB}]\s*\u{FE0F}?\s*<b>/u;
-const SECTION_FILTERED_RE = /^[\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}]\s*<b>/u;
+// Фильтруемые секции — списки дел внутри. ⚖️ может быть и группирующим
+// («⚖️ АПЕЛЛЯЦИЯ»), и фильтруемым («⚖️ Вынесенные акты»). Различаем по
+// SECTION_GROUPING_RE ниже: текст в верхнем регистре без скобок = группа.
+const SECTION_FILTERED_RE = /^[\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{2696}]\s*\u{FE0F}?\s*<b>/u;
+// Группирующий заголовок: 🏛/⚖️ + UPPERCASE-русский текст без счётчика
+// в скобках. Пример: «🏛 ПЕРВАЯ ИНСТАНЦИЯ», «⚖️ АПЕЛЛЯЦИЯ».
+const SECTION_GROUPING_RE = /^[\u{1F3DB}\u{2696}]\s*\u{FE0F}?\s*<b>[А-ЯЁ\s]+<\/b>\s*$/u;
 
 // Регексп для распознавания «голого» номера дела внутри HTML — должен быть
 // ровно тем, что использует enhanceDigestCaseLinks (CASE_NUMBER_RE), плюс
@@ -2693,9 +2749,13 @@ function filterGeneralHtmlByMine(html, mineSet) {
     if (!trimmed) continue;
     const firstLine = para.split('\n')[0] || '';
     const isHeader = SECTION_HEADER_RE.test(firstLine);
+    // Служебные параграфы-разделители «⸻» — в mine-режиме после удаления
+    // блоков они становятся «сиротскими» и копят шум. Выкидываем безусловно.
+    if (/^[⸻\u{2014}\-—_]+$/u.test(trimmed)) continue;
     if (isHeader) {
       const isNew = SECTION_NEW_RE.test(firstLine);
-      const isFiltered = SECTION_FILTERED_RE.test(firstLine) && !isNew;
+      const isGrouping = SECTION_GROUPING_RE.test(firstLine.trim());
+      const isFiltered = SECTION_FILTERED_RE.test(firstLine) && !isNew && !isGrouping;
       if (isFiltered) {
         section = 'filtered';
         pendingFilteredHeader = para;
@@ -2715,9 +2775,8 @@ function filterGeneralHtmlByMine(html, mineSet) {
       const m = MINE_CASE_RE.exec(para);
       if (!m) {
         // Параграф без номера дела внутри фильтруемой секции — служебный
-        // (разделитель «⸻», подпись и т.п.). Оставим как есть, чтобы не
-        // ломать визуальный ритм.
-        kept.push(para);
+        // (разделитель «⸻»). В mine-режиме при пустой секции это пыль:
+        // выкидываем, иначе остаются 2-3 ⸻ подряд после удаления блоков.
         continue;
       }
       const num = bareCaseNumber(m[1]);
@@ -2734,7 +2793,28 @@ function filterGeneralHtmlByMine(html, mineSet) {
       kept.push(para);
     }
   }
-  return kept.join('\n\n');
+  // Пост-обработка: убрать группирующие заголовки (🏛 ПЕРВАЯ ИНСТАНЦИЯ /
+  // ⚖️ АПЕЛЛЯЦИЯ), у которых нет ни одной filtered/new подсекции после
+  // (всё внутри было выкинуто фильтром). Иначе остаются «голые» эмодзи.
+  const cleaned = [];
+  for (let i = 0; i < kept.length; i++) {
+    const para = kept[i];
+    const firstLine = (para.split('\n')[0] || '').trim();
+    const isGrouping = SECTION_GROUPING_RE.test(firstLine);
+    if (isGrouping) {
+      // Ищем хоть один не-группирующий параграф впереди.
+      let hasContent = false;
+      for (let j = i + 1; j < kept.length; j++) {
+        const fl = (kept[j].split('\n')[0] || '').trim();
+        if (SECTION_GROUPING_RE.test(fl)) break;
+        hasContent = true;
+        break;
+      }
+      if (!hasContent) continue;
+    }
+    cleaned.push(para);
+  }
+  return cleaned.join('\n\n');
 }
 
 // Возвращает HTML персональной версии дайджеста: фильтрует «фильтруемые»
@@ -3028,7 +3108,11 @@ function showDigestBeacon() {
 }
 
 function closeDigestBeacon(opts = {}) {
-  const { keepExpanded = false } = opts;
+  // На десктопе после закрытия beacon оставляем блок раскрытым — главный
+  // контент не должен прятаться за лишний клик. На мобиле сворачиваем,
+  // чтобы экран не съедало длинным дайджестом.
+  const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+  const { keepExpanded = isDesktop } = opts;
   const block = document.getElementById('digest-block');
   const scrim = document.getElementById('digest-scrim');
   if (!block || !scrim) return;
@@ -3039,7 +3123,11 @@ function closeDigestBeacon(opts = {}) {
   setTimeout(() => {
     block.classList.remove('beacon', 'beacon-leaving');
     document.body.classList.remove('beacon-open');
-    if (!keepExpanded) collapseDigest();
+    if (keepExpanded) {
+      expandDigest({ persist: false });
+    } else {
+      collapseDigest();
+    }
   }, 220);
 }
 
