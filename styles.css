@@ -1,7 +1,7 @@
 /* ============================================================
    Мониторинг дел · v2 design system
    Белый фон, сберовский зелёный — только акцент. Плотный B2B-интерфейс.
-   Шрифт: Golos Text + JetBrains Mono.
+   Шрифт: IBM Plex Sans (цифры — основным шрифтом + tabular-nums) + IBM Plex Mono для <code>.
    Класс-имена сохранены — app.js рендерит без правок.
    ============================================================ */
 
@@ -160,10 +160,12 @@
   --purple-800: var(--violet-700);
 
   /* Типографика */
-  --font-sans: 'Golos Text', 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Golos Text', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: var(--font-sans);
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  /* Цифры и номера дел рендерим основным шрифтом с tabular-nums (см. body) — --font-mono наследует sans для совместимости */
+  --font-mono: var(--font-sans);
+  --font-code: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
 
   --fs-2xs: 11px;
   --fs-xs:  12px;
@@ -398,6 +400,7 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
@@ -420,7 +423,7 @@ body {
 .setup-body ol li { counter-increment:steps; padding:14px 0; border-bottom:1px solid var(--divider); font-size:var(--fs-md); line-height:1.6; display:flex; gap:14px; align-items:flex-start; }
 .setup-body ol li:last-child { border-bottom:none; }
 .setup-body ol li::before { content:counter(steps); display:flex; align-items:center; justify-content:center; min-width:26px; height:26px; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent-active); font-weight:var(--fw-bold); font-size:var(--fs-sm); flex-shrink:0; margin-top:1px; }
-.setup-body code { font-family:var(--font-mono); font-size:var(--fs-xs); background:var(--bg-3); padding:2px 7px; border-radius:var(--radius-xs); color:var(--fg-1); }
+.setup-body code { font-family:var(--font-code); font-size:var(--fs-xs); background:var(--bg-3); padding:2px 7px; border-radius:var(--radius-xs); color:var(--fg-1); }
 .setup-input-group { margin-top:20px; }
 .setup-input-group label { font-weight:var(--fw-semibold); font-size:var(--fs-sm); color:var(--fg-2); display:block; margin-bottom:6px; }
 .setup-input { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); transition:all 120ms var(--ease-out); background:var(--bg-1); color:var(--fg-1); }
@@ -1085,9 +1088,10 @@ tr.detail-row { display:none; }
   .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
   .toolbar-row-segments { display:none; }
   /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался.
-     Высота: toolbar (~60px) + bottom-offset (8px) + zapas (52px), плюс
-     env(safe-area-inset-bottom) для iOS PWA с домашней полоской. */
-  .app-main { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); }
+     Высота: toolbar (~60px) + bottom-offset (8px) + небольшой запас, плюс
+     env(safe-area-inset-bottom) для iOS PWA с home-indicator (теперь рабочий
+     благодаря viewport-fit=cover в meta — даёт ~34px на iPhone). */
+  .app-main { padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
