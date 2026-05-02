@@ -2425,6 +2425,10 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js')
       .then(reg => {
         console.log('SW зарегистрирован:', reg.scope);
+        // Принудительная проверка обновления SW при каждом запуске —
+        // iOS PWA иначе ждёт сутки до проверки. Без этого правки CSS
+        // не доезжают до уже установленного на домашний экран приложения.
+        reg.update().catch(()=>{});
         // Ждём активации SW перед подпиской на push
         if (reg.active) {
           setupPushNotifications(reg);
@@ -2433,6 +2437,15 @@ if ('serviceWorker' in navigator) {
         }
       })
       .catch(err => console.warn('SW не зарегистрировался:', err));
+  });
+
+  // Когда новый SW взял контроль (skipWaiting + clients.claim) — перезагружаем,
+  // чтобы свежий fetch-handler сразу применился к открытой странице.
+  let _swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swReloaded) return;
+    _swReloaded = true;
+    window.location.reload();
   });
 
   // SW шлёт postMessage при клике по пушу, если окно уже открыто.
