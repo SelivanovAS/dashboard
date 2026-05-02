@@ -212,6 +212,10 @@
   --glass-highlight: rgba(255, 255, 255, 0.55);
   --glass-shadow:    0 -1px 14px rgba(15, 23, 42, 0.06);
   --glass-blur:      saturate(180%) blur(24px);
+  /* Floating-pill (мобильные поиск/кнопка фильтра) — ярче и чище серого
+     glass-bg: почти-белый полупрозрачный, читается как iOS-капсула, а не
+     как «серая плашка». Dark переопределяется ниже. */
+  --pill-bg:         rgba(255, 255, 255, 0.78);
 
   /* Тёплый off-white фон тела дайджеста — мягче чем чистый --bg-1, как
      в Reader-режимах. Для долгого чтения LLM-текста удобнее. На dark
@@ -255,6 +259,8 @@
   --glass-border:    rgba(255, 255, 255, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.06);
   --glass-shadow:    0 -1px 14px rgba(0, 0, 0, 0.32);
+  /* Floating-pill в dark — почти-чёрный полупрозрачный, контрастнее серого. */
+  --pill-bg:         rgba(20, 22, 28, 0.78);
 
   /* Дайджест — тёплый чуть светлее --bg-1 фон, отделяет тело от карточек */
   --digest-paper:    #1f242c;
@@ -805,7 +811,7 @@ tr.detail-row { display:none; }
 .drawer-scrim.open { opacity:1; pointer-events:auto; }
 .drawer { position:fixed; top:0; right:0; width:540px; max-width:100vw; height:100vh; background:var(--bg-1); box-shadow:var(--shadow-3); transform:translateX(100%); transition:transform 280ms var(--ease-out); z-index:201; display:flex; flex-direction:column; }
 .drawer.open { transform:translateX(0); }
-.drawer-header { display:flex; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid var(--border); background:var(--bg-1); color:var(--fg-1); flex-shrink:0; }
+.drawer-header { display:flex; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid var(--glass-border); background:var(--pill-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 -1px 0 var(--glass-highlight); color:var(--fg-1); flex-shrink:0; }
 .drawer-header .drawer-nav { display:flex; gap:4px; }
 .drawer-nav-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; transition:all 120ms var(--ease-out); padding:0; }
 .drawer-nav-btn:hover:not(:disabled) { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
@@ -822,7 +828,7 @@ tr.detail-row { display:none; }
 .drawer-body { flex:1; overflow-y:auto; padding:18px 22px calc(var(--footer-h) + 18px + env(safe-area-inset-bottom, 0px)); }
 /* Liquid Glass: абсолютное позиционирование снизу drawer'а — контент
    drawer-body виден сквозь backdrop-filter при скролле. */
-.drawer-footer { position:absolute; left:0; right:0; bottom:0; padding:16px 22px calc(16px + env(safe-area-inset-bottom, 0px)); border-top:1px solid var(--glass-border); background:var(--glass-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 1px 0 var(--glass-highlight), var(--glass-shadow); display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; min-height:var(--footer-h); box-sizing:border-box; z-index:1; }
+.drawer-footer { position:absolute; left:0; right:0; bottom:0; padding:16px 22px calc(16px + env(safe-area-inset-bottom, 0px)); border-top:1px solid var(--glass-border); background:var(--pill-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 1px 0 var(--glass-highlight), var(--glass-shadow); display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; min-height:var(--footer-h); box-sizing:border-box; z-index:1; }
 .drawer-footer .btn-primary { display:inline-flex; align-items:center; gap:6px; padding:10px 18px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; transition:background 120ms var(--ease-out); text-decoration:none; }
 .drawer-footer .btn-primary-stretch { flex:1 1 auto; justify-content:center; }
 .drawer-footer .btn-primary:hover { background:var(--accent-hover); }
@@ -885,6 +891,7 @@ tr.detail-row { display:none; }
    сплошная поверхность с edge-tint, как у Material 3 surface-container. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .app-footer, .drawer-footer { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; }
+  .drawer-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; border-bottom:1px solid var(--border); }
 }
 
 /* ========== Filters bottom-sheet (mobile) ========== */
@@ -963,7 +970,17 @@ tr.detail-row { display:none; }
   /* На мобиле унифицируем высоту футеров с нижним toolbar'ом (~72px),
      чтобы drawer-footer визуально не «нависал» больше нижней панели. */
   :root { --footer-h: 72px; }
-  .app-header { padding:0 16px; }
+  /* Header в стиле iOS Liquid Glass: full-width, прозрачный, blur. Контент
+     проскальзывает под ним. Тот же оттенок --pill-bg, что и floating-капсулы
+     снизу — единая стеклянная среда сверху и снизу. Fallback ниже. */
+  .app-header {
+    padding:0 16px;
+    background:var(--pill-bg);
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border-bottom:1px solid var(--glass-border);
+    box-shadow:inset 0 -1px 0 var(--glass-highlight);
+  }
   .app-main { padding:16px 10px; }
   /* Однострочный header на мобиле: лого + сжатый заголовок + кнопки справа.
      Старый column-layout оставлял пустоту между brand и actions. */
@@ -990,10 +1007,56 @@ tr.detail-row { display:none; }
   .app-main { overflow-x:hidden; }
   .up-time-value { font-size:var(--fs-md); }
   .up-date { font-size:var(--fs-xs); }
-  /* Toolbar (поиск + фильтры) приклеен к низу экрана как нативный bottom-bar
-     PWA. Учитываем safe-area-inset-bottom для iPhone home-indicator. */
-  .toolbar { position:fixed; left:0; right:0; bottom:0; flex-direction:column; align-items:stretch; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); margin:0; background:var(--bg-3); border-top:1px solid var(--border-strong); box-shadow:0 -10px 28px rgba(0,0,0,0.32), 0 -1px 0 var(--border-strong); z-index:50; gap:8px; }
-  :root[data-theme="dark"] .toolbar { background:#0b0e13; }
+  /* Мобильный «toolbar» — невидимый контейнер, который позиционирует два
+     отдельных floating-элемента (поиск-капсула + круглая кнопка фильтра)
+     над контентом. Сам никаких визуалов не несёт — стекло на самих pill'ах. */
+  .toolbar {
+    position:fixed;
+    left:12px; right:12px;
+    bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+    flex-direction:column; align-items:stretch;
+    padding:0;
+    margin:0;
+    background:transparent;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    border:none;
+    border-radius:0;
+    box-shadow:none;
+    z-index:50; gap:8px;
+  }
+  /* Поиск — отдельная iOS-капсула с glass-фоном, скруглением, мягкой тенью. */
+  .toolbar-row-search .search-box {
+    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    border-radius:22px;
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+    padding:0 14px;
+  }
+  /* Кнопка фильтра — круглая иконка-капсула рядом с поиском (без текста). */
+  .toolbar-row-search .filters-btn {
+    width:44px; height:44px; padding:0; gap:0;
+    border-radius:50%;
+    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+    justify-content:center;
+  }
+  .toolbar-row-search .filters-btn span:not(.filters-btn-count) { display:none; }
+  .toolbar-row-search .filters-btn svg { width:18px; height:18px; }
+  .toolbar-row-search .filters-btn .filters-btn-count {
+    position:absolute; top:-4px; right:-4px;
+  }
   .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
   /* Мобилка: единственный видимый ряд тулбара — поиск + кнопка «Фильтры».
      Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
@@ -1017,8 +1080,22 @@ tr.detail-row { display:none; }
   /* На мобиле header сильно перегружен — прячем мета-инфо и сжимаем кнопку
      обновления до иконки (текст «Обновить» гасим font-size:0 без правки HTML). */
   .header-meta { display:none; }
-  .btn-refresh { font-size:0; gap:0; padding:0; width:36px; height:36px; justify-content:center; }
-  .btn-refresh svg { width:16px; height:16px; }
+  /* Theme и refresh — круглые icon-only pill'ы того же языка, что .filters-btn:
+     один тип капсулы по всему экрану (top + bottom), без чужих коробок. */
+  .app-header .theme-toggle,
+  .app-header .btn-refresh {
+    width:44px; height:44px; padding:0; gap:0;
+    border-radius:50%;
+    background:var(--pill-bg);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 4px 12px rgba(13, 17, 22, 0.08);
+    justify-content:center;
+  }
+  .app-header .btn-refresh { font-size:0; }
+  .app-header .theme-toggle svg,
+  .app-header .btn-refresh svg { width:18px; height:18px; }
   .stats-mobile-summary .sms-item { font-size:var(--fs-lg); }
   .stats-mobile-summary .sms-item strong { font-size:22px; }
   .analytics-title { font-size:var(--fs-sm); }
@@ -1058,10 +1135,23 @@ tr.detail-row { display:none; }
   .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-sm); padding:11px 12px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; }
 }
 
+/* Fallback для движков без backdrop-filter (старый Android WebView, Samsung
+   Internet <80, Firefox <103): сплошные поверхности вместо стекла. Floating-
+   позиция и скруглённые углы у toolbar сохраняются — теряется только blur. */
+@media (max-width: 768px) {
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .app-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; border-bottom:1px solid var(--border); box-shadow:none; }
+    .app-header .theme-toggle,
+    .app-header .btn-refresh { background:var(--bg-1); border-color:var(--border); box-shadow:none; }
+    .toolbar-row-search .search-box,
+    .toolbar-row-search .filters-btn { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; border:1px solid var(--border-strong); }
+  }
+}
+
 /* Hide-on-scroll: при скролле вниз нижняя панель уезжает за край экрана,
    при скролле вверх возвращается. JS добавляет/снимает .is-hidden. */
 .toolbar, .app-footer { transition:transform 220ms var(--ease-out); will-change:transform; }
-.toolbar.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
+.toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
 .app-footer.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
 
 /* Helpers (extracted from inline styles in app.js) */
