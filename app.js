@@ -1695,7 +1695,7 @@ function renderDrawer(c){
         <button class="drawer-nav-btn" onclick="drawerNav(1)" ${idx<0||idx>=totalFiltered-1?'disabled':''} title="Следующее (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></button>
       </div>
       <div class="drawer-title">
-        <div class="dt-main">${escHtml(c.caseNumber)} ${watchBtnHtml(c.caseNumber)}</div>
+        <div class="dt-main">${escHtml(c.caseNumber.split('(')[0].trim())} ${watchBtnHtml(c.caseNumber)}</div>
       </div>
       <button class="drawer-close" onclick="closeDrawer()" title="Закрыть (Esc)">×</button>
     </div>
@@ -1734,7 +1734,7 @@ function renderDrawer(c){
       </div>
     </div>
     <div class="drawer-footer">
-      <button class="btn-secondary btn-watch ${isWatched(c.caseNumber)?'on':''}" onclick="toggleWatchFromDrawer(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><span class="btn-watch-star">${isWatched(c.caseNumber)?'★':'☆'}</span><span class="btn-watch-label">${isWatched(c.caseNumber)?'Не отслеживать':'Отслеживать дело'}</span></button>
+      <button class="btn-secondary btn-watch ${isWatched(c.caseNumber)?'on':''}" onclick="toggleWatchFromDrawer(this,'${escHtml(c.caseNumber).replace(/'/g,'&#39;')}')"><span class="btn-watch-star">${isWatched(c.caseNumber)?'★':'☆'}</span><span class="btn-watch-label">${isWatched(c.caseNumber)?'Не отслеживать':'Отслеживать'}</span></button>
       ${c.link?`<a class="btn-primary btn-primary-stretch" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка дела</a>`:''}
     </div>
   `;
@@ -1981,8 +1981,14 @@ function revealToolbar(){
   if (tb) tb.classList.remove('is-hidden');
   if (af) af.classList.remove('is-hidden');
   if (fab) fab.classList.remove('is-visible');
+  // iOS открывает экранную клавиатуру только если focus() вызван синхронно
+  // в user gesture (click). setTimeout убивает «user activation» — поэтому
+  // фокусируемся сразу. Скролл к видимости делаем уже асинхронно.
   const si = document.getElementById('search-input');
-  if (si) setTimeout(() => si.focus(), 80);
+  if (si) {
+    si.focus({ preventScroll: true });
+    setTimeout(() => si.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+  }
 }
 window.revealToolbar = revealToolbar;
 
@@ -2000,10 +2006,14 @@ window.revealToolbar = revealToolbar;
     if (!t) return;
     const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
     if (kb > 80) {
+      // Клавиатура скрывает home-indicator → safe-area-inset-bottom (~34px)
+      // больше не нужна. Класс kb-open сжимает зазор до 6px над клавиатурой.
       t.style.transform = `translateY(${-kb}px)`;
+      t.classList.add('kb-open');
       t.classList.remove('is-hidden');
     } else {
       t.style.transform = '';
+      t.classList.remove('kb-open');
     }
   }
   vv.addEventListener('resize', update);
@@ -2162,7 +2172,7 @@ function toggleWatchFromDrawer(btn, caseNumber) {
   const star = btn.querySelector('.btn-watch-star');
   const label = btn.querySelector('.btn-watch-label');
   if (star) star.textContent = on ? '★' : '☆';
-  if (label) label.textContent = on ? 'Не отслеживать' : 'Отслеживать дело';
+  if (label) label.textContent = on ? 'Не отслеживать' : 'Отслеживать';
 }
 window.toggleWatchFromDrawer = toggleWatchFromDrawer;
 

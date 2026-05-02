@@ -856,7 +856,7 @@ tr.detail-row { display:none; }
 .drawer-footer .btn-secondary { display:inline-flex; align-items:center; gap:8px; padding:12px 20px; background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out); }
 .drawer-footer .btn-secondary:hover { border-color:var(--border-strong); background:var(--bg-3); }
 .drawer-footer .btn-secondary:active { transform:scale(0.97); }
-.drawer-footer svg { width:16px; height:16px; }
+.drawer-footer svg { width:20px; height:20px; }
 
 /* Drawer sections */
 .drawer-hero { margin-bottom:18px; }
@@ -1046,6 +1046,11 @@ tr.detail-row { display:none; }
     position:fixed;
     left:12px; right:12px;
     bottom:env(safe-area-inset-bottom, 0px);
+  }
+  /* Когда экранная клавиатура открыта — safe-area-inset-bottom не нужна
+     (home-indicator перекрыт клавиатурой). Жмём toolbar к самой клавиатуре. */
+  .toolbar.kb-open {
+    bottom:6px;
     flex-direction:column; align-items:stretch;
     padding:0;
     margin:0;
@@ -1167,8 +1172,9 @@ tr.detail-row { display:none; }
   .drawer-tab { font-size:var(--fs-md); }
   /* На 375px две кнопки в одну строку: больше воздуха по вертикали для
      удобства тапа, без переноса. */
-  .drawer-footer { flex-wrap:nowrap; gap:8px; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
-  .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-sm); padding:11px 12px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; }
+  .drawer-footer { flex-wrap:nowrap; gap:8px; padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-md); padding:0 16px; min-height:52px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; border-radius:50px; }
+  .drawer-footer .btn-watch .btn-watch-star { font-size:22px; margin-right:4px; }
 }
 
 /* Fallback для движков без backdrop-filter (старый Android WebView, Samsung
