@@ -2422,7 +2422,7 @@ async function setupPushNotifications(reg) {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js')
+    navigator.serviceWorker.register('./service-worker.js?v=40')
       .then(reg => {
         console.log('SW зарегистрирован:', reg.scope);
         // Принудительная проверка обновления SW при каждом запуске —
