@@ -59,7 +59,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=49">
+<link rel="stylesheet" href="styles.css?v=57">
 
 <!-- PWA: установка на главный экран и офлайн-режим -->
 <link rel="manifest" href="manifest.json">
@@ -229,6 +229,13 @@
       </div>
     </div>
 
+    <!-- Мини-FAB поверх контента: виден только когда toolbar скрыт скроллом
+         (.toolbar.is-hidden) и только на мобиле. По тапу возвращает toolbar
+         и ставит фокус в поиск. -->
+    <button class="toolbar-fab" id="toolbar-fab" type="button" aria-label="Показать поиск и фильтры" onclick="revealToolbar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+
     <!-- Table counter -->
     <div class="table-counter" id="table-counter"></div>
 
@@ -260,6 +267,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=52" defer></script>
+<script src="app.js?v=61" defer></script>
 </body>
 </html>
