@@ -1099,7 +1099,7 @@ tr.detail-row { display:none; }
      Высота: toolbar (~52px) + bottom-offset (8px) — впритык, плюс
      env(safe-area-inset-bottom) для iOS PWA с home-indicator (теперь рабочий
      благодаря viewport-fit=cover в meta — даёт ~34px на iPhone). */
-  .app-main { padding-bottom:calc(48px + env(safe-area-inset-bottom, 0px)); }
+  .app-main { padding-bottom:calc(32px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
