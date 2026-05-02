@@ -6,7 +6,7 @@
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
 */
 
-const CACHE_VERSION = 'v36';
+const CACHE_VERSION = 'v37';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
@@ -210,6 +210,13 @@ self.addEventListener('fetch', (event) => {
 
   if (isFontRequest(url)) {
     event.respondWith(cacheFirst(request, FONTS_CACHE));
+    return;
+  }
+
+  // HTML (navigate) — networkFirst, чтобы PWA не залипал на старом sberbank_dashboard.html
+  // со ссылкой на устаревший styles.css?v=N. Офлайн-fallback — кэш + offline-страница.
+  if (request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')) {
+    event.respondWith(networkFirst(request, CACHE_NAME));
     return;
   }
 
