@@ -1045,7 +1045,7 @@ tr.detail-row { display:none; }
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+    bottom:env(safe-area-inset-bottom, 0px);
     flex-direction:column; align-items:stretch;
     padding:0;
     margin:0;
