@@ -1096,10 +1096,10 @@ tr.detail-row { display:none; }
   .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
   .toolbar-row-segments { display:none; }
   /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался.
-     Высота: toolbar (~52px) + bottom-offset (8px) + небольшой запас, плюс
+     Высота: toolbar (~52px) + bottom-offset (8px) — впритык, плюс
      env(safe-area-inset-bottom) для iOS PWA с home-indicator (теперь рабочий
      благодаря viewport-fit=cover в meta — даёт ~34px на iPhone). */
-  .app-main { padding-bottom:calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .app-main { padding-bottom:calc(48px + env(safe-area-inset-bottom, 0px)); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
