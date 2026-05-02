@@ -213,6 +213,11 @@
   --glass-shadow:    0 -1px 14px rgba(15, 23, 42, 0.06);
   --glass-blur:      saturate(180%) blur(24px);
 
+  /* Тёплый off-white фон тела дайджеста — мягче чем чистый --bg-1, как
+     в Reader-режимах. Для долгого чтения LLM-текста удобнее. На dark
+     переопределяется ниже. */
+  --digest-paper:    #FAFAF7;
+
   /* Motion */
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 120ms;
@@ -250,6 +255,9 @@
   --glass-border:    rgba(255, 255, 255, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.06);
   --glass-shadow:    0 -1px 14px rgba(0, 0, 0, 0.32);
+
+  /* Дайджест — тёплый чуть светлее --bg-1 фон, отделяет тело от карточек */
+  --digest-paper:    #1f242c;
 
   /* Бренд-акцент чуть светлее на тёмном */
   --accent: #2fbf4a;
@@ -1181,7 +1189,7 @@ tr.detail-row { display:none; }
   overflow: hidden;
   transition: max-height 300ms var(--ease-out), opacity 200ms var(--ease-out), padding 250ms var(--ease-out);
   color: var(--fg-1);
-  font-size: var(--fs-md);
+  font-size: 15px;        /* было 14 — крупнее на 1px для удобного чтения */
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -1189,8 +1197,15 @@ tr.detail-row { display:none; }
 .digest-block.expanded .digest-body {
   max-height: 4000px;
   opacity: 1;
-  padding: 0 16px 16px;
+  padding: 14px 16px 16px;
   border-top: 1px solid var(--border);
+  background: var(--digest-paper);
+}
+/* На широких экранах (≥1024px) ограничиваем ширину текста дайджеста, иначе
+   он растягивается на всю карточку (>1300px) — глаз теряет место в строке.
+   ~720px = ~80 русских символов в строке, оптимум для чтения. */
+@media (min-width: 1024px) {
+  .digest-block.expanded .digest-body { padding-left: max(16px, calc(50% - 360px)); padding-right: max(16px, calc(50% - 360px)); }
 }
 .digest-body b      { color: var(--fg-1); font-weight: var(--fw-semibold); }
 .digest-body i      { color: var(--fg-2); font-style: italic; }
@@ -1253,16 +1268,29 @@ tr.detail-row { display:none; }
   box-shadow: var(--shadow-4);
   animation: beaconIn 260ms var(--ease-out);
 }
+/* Liquid Glass шапки beacon: переменные --glass-* — те же, что у .app-footer
+   и .drawer-footer (см. iOS 26 / Material 3 surface). Полупрозрачный фон +
+   blur + тонкий highlight по верхней кромке. Через шапку видно прокручи-
+   вающийся под ней контент. Fallback ниже — для браузеров без backdrop-filter. */
 .digest-block.beacon .digest-head {
   position: sticky;
   top: 0;
-  background: var(--bg-1);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
   z-index: 1;
   cursor: default;
 }
-.digest-block.beacon .digest-head:hover { background: var(--bg-1); }
+.digest-block.beacon .digest-head:hover { background: var(--glass-bg); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .digest-block.beacon .digest-head {
+    background: var(--bg-1);
+    box-shadow: none;
+  }
+}
 .digest-block.beacon .digest-title {
   font-size: var(--fs-lg);
   text-transform: none;
@@ -1278,6 +1306,12 @@ tr.detail-row { display:none; }
   padding: 16px 20px 20px;
   border-top: 0;
   overflow: visible;
+  background: var(--digest-paper);
+}
+/* В beacon на широких экранах текст тоже центрируется в колонке ~720px
+   (само окно beacon шире на padding'ах, центрируем «бумагой» внутри). */
+@media (min-width: 1024px) {
+  .digest-block.beacon .digest-body { padding-left: max(20px, calc(50% - 340px)); padding-right: max(20px, calc(50% - 340px)); }
 }
 .digest-block.beacon-leaving {
   opacity: 0;
@@ -1294,7 +1328,10 @@ body.beacon-open { overflow: hidden; }
   .digest-head { padding: 10px 12px; }
   .digest-title { font-size: var(--fs-sm); }
   .digest-meta { display: none; }
-  .digest-block.expanded .digest-body { padding: 0 12px 12px; }
+  /* На мобиле — чуть крупнее шрифт (16px вместо 15) для удобного чтения
+     с расстояния руки, и плотнее padding по краям. */
+  .digest-body { font-size: 16px; }
+  .digest-block.expanded .digest-body { padding: 12px 12px 12px; }
   .digest-block.beacon {
     top: 12px;
     bottom: 12px;
