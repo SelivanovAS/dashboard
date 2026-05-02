@@ -1116,7 +1116,7 @@ tr.detail-row { display:none; }
      один тип капсулы по всему экрану (top + bottom), без чужих коробок. */
   .app-header .theme-toggle,
   .app-header .btn-refresh {
-    width:44px; height:44px; padding:0; gap:0;
+    width:52px; height:52px; padding:0; gap:0;
     border-radius:50%;
     background:var(--pill-bg);
     border:1px solid var(--glass-border);
@@ -1127,7 +1127,7 @@ tr.detail-row { display:none; }
   }
   .app-header .btn-refresh { font-size:0; }
   .app-header .theme-toggle svg,
-  .app-header .btn-refresh svg { width:18px; height:18px; }
+  .app-header .btn-refresh svg { width:20px; height:20px; }
   .stats-mobile-summary .sms-item { font-size:var(--fs-lg); }
   .stats-mobile-summary .sms-item strong { font-size:22px; }
   .analytics-title { font-size:var(--fs-sm); }
@@ -1192,8 +1192,8 @@ tr.detail-row { display:none; }
   position: fixed;
   right: 14px;
   bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--pill-bg);
