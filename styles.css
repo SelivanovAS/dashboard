@@ -1229,7 +1229,10 @@ tr.detail-row { display:none; }
    скрыт. Дает быструю точку входа в поиск/фильтры из любой точки списка. */
 .toolbar-fab {
   position: fixed;
-  right: 14px;
+  /* Совпадает с .filters-btn в .toolbar: right=12px, bottom=safe-area —
+     иконка лупы остаётся в той же точке, что и кнопка фильтра, при свертывании
+     toolbar. */
+  right: 12px;
   bottom: env(safe-area-inset-bottom, 0px);
   width: 52px;
   height: 52px;
