@@ -1050,7 +1050,7 @@ tr.detail-row { display:none; }
   /* Когда экранная клавиатура открыта — safe-area-inset-bottom не нужна
      (home-indicator перекрыт клавиатурой). Жмём toolbar к самой клавиатуре. */
   .toolbar.kb-open {
-    bottom:6px;
+    bottom:2px;
     flex-direction:column; align-items:stretch;
     padding:0;
     margin:0;
@@ -1172,8 +1172,37 @@ tr.detail-row { display:none; }
   .drawer-tab { font-size:var(--fs-md); }
   /* На 375px две кнопки в одну строку: больше воздуха по вертикали для
      удобства тапа, без переноса. */
-  .drawer-footer { flex-wrap:nowrap; gap:8px; padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
-  .drawer-footer .btn-primary, .drawer-footer .btn-secondary { font-size:var(--fs-md); padding:0 16px; min-height:52px; white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center; border-radius:50px; }
+  /* Прозрачная подложка футера — кнопки сами становятся floating-капсулами,
+     контент drawer-body виден сквозь них (как у toolbar поверх списка). */
+  .drawer-footer {
+    flex-wrap:nowrap; gap:8px;
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background:transparent;
+    -webkit-backdrop-filter:none; backdrop-filter:none;
+    border-top:none;
+    box-shadow:none;
+  }
+  .drawer-footer .btn-primary, .drawer-footer .btn-secondary {
+    font-size:var(--fs-md); padding:0 16px; min-height:52px;
+    white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center;
+    border-radius:50px;
+  }
+  /* Secondary (☆ Отслеживать) — glass pill-капсула как у .filters-btn в toolbar. */
+  .drawer-footer .btn-secondary {
+    background:var(--pill-bg);
+    -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+  }
+  /* Primary остаётся accent — добавляем такую же мягкую тень для floating. */
+  .drawer-footer .btn-primary {
+    box-shadow:
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+  }
   .drawer-footer .btn-watch .btn-watch-star { font-size:22px; margin-right:4px; }
 }
 
