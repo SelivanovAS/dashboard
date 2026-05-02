@@ -1195,7 +1195,7 @@ tr.detail-row { display:none; }
 .toolbar-fab {
   position: fixed;
   right: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  bottom: env(safe-area-inset-bottom, 0px);
   width: 52px;
   height: 52px;
   border-radius: 50%;
