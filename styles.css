@@ -1059,16 +1059,17 @@ tr.detail-row { display:none; }
     -webkit-backdrop-filter:var(--glass-blur);
     backdrop-filter:var(--glass-blur);
     border:1px solid var(--glass-border);
-    border-radius:22px;
+    border-radius:26px;
     box-shadow:
       inset 0 1px 0 var(--glass-highlight),
       0 12px 32px rgba(13, 17, 22, 0.16),
       0 2px 8px rgba(13, 17, 22, 0.08);
-    padding:0 14px;
+    padding:0 16px;
+    min-height:52px;
   }
   /* Кнопка фильтра — круглая иконка-капсула рядом с поиском (без текста). */
   .toolbar-row-search .filters-btn {
-    width:44px; height:44px; padding:0; gap:0;
+    width:52px; height:52px; padding:0; gap:0;
     border-radius:50%;
     background:var(--pill-bg, rgba(255, 255, 255, 0.78));
     -webkit-backdrop-filter:var(--glass-blur);
@@ -1081,7 +1082,7 @@ tr.detail-row { display:none; }
     justify-content:center;
   }
   .toolbar-row-search .filters-btn span:not(.filters-btn-count) { display:none; }
-  .toolbar-row-search .filters-btn svg { width:18px; height:18px; }
+  .toolbar-row-search .filters-btn svg { width:20px; height:20px; }
   .toolbar-row-search .filters-btn .filters-btn-count {
     position:absolute; top:-4px; right:-4px;
   }
