@@ -3,7 +3,12 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [triggers]
-crons = ["45 3 * * 1-5"]  # 3:45 UTC = 6:45 МСК, пн-пт
+# 03:45 UTC = 06:45 МСК, пн-пт.
+# ВАЖНО: используем буквенный синтаксис `mon-fri`, а не цифровой `1-5`.
+# Cloudflare Cron Triggers нумерует дни 1=Sun..7=Sat (не как POSIX), и
+# `1-5` эмпирически срабатывал в т.ч. в воскресенье. Буквенная нотация
+# однозначна — см. https://developers.cloudflare.com/workers/configuration/cron-triggers/
+crons = ["45 3 * * mon-fri"]
 
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS
