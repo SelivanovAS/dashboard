@@ -7,6 +7,9 @@
 
 /* ---------- 1. Base palette ---------- */
 :root {
+  /* Высота нижней безопасной зоны iOS (home-indicator). Резолвится в px,
+     читается из JS для компенсации в visualViewport-расчётах клавиатуры. */
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
   /* Sber green — бренд-акцент (CTA, активные состояния, focus) */
   --sber-green-700: #157f3a;
   --sber-green-600: #1a9f29;
@@ -1045,7 +1048,12 @@ tr.detail-row { display:none; }
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    bottom:env(safe-area-inset-bottom, 0px);
+    /* Намеренно НЕ учитываем env(safe-area-inset-bottom): в PWA на iPhone
+       это поднимало тулбар выше браузерного варианта. Держим единый отступ
+       ~14px от нижнего края экрана (margin-bottom от базового .toolbar),
+       чтобы PWA и обычный браузер выглядели одинаково. Системный home-
+       indicator iOS остаётся видимым поверх стеклянной капсулы. */
+    bottom:0;
   }
   /* Когда экранная клавиатура открыта — safe-area-inset-bottom не нужна
      (home-indicator перекрыт клавиатурой). Жмём toolbar к самой клавиатуре. */
@@ -1229,11 +1237,11 @@ tr.detail-row { display:none; }
    скрыт. Дает быструю точку входа в поиск/фильтры из любой точки списка. */
 .toolbar-fab {
   position: fixed;
-  /* Совпадает с .filters-btn в .toolbar: right=12px, bottom=safe-area —
-     иконка лупы остаётся в той же точке, что и кнопка фильтра, при свертывании
-     toolbar. */
+  /* Совпадает с .filters-btn в .toolbar: тулбар сидит на bottom:0 + margin-bottom:14px,
+     поэтому FAB ставим на 14px от низа экрана — иконка лупы оказывается в точно той же
+     точке, что и кнопка фильтра, и при сворачивании toolbar точка не «прыгает». */
   right: 12px;
-  bottom: env(safe-area-inset-bottom, 0px);
+  bottom: 14px;
   width: 52px;
   height: 52px;
   border-radius: 50%;
