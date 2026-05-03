@@ -69,7 +69,8 @@
 
 ## Автозапуск
 
-- Cron `"45 3 * * 1-5"` = **6:45 МСК пн-пт** в [cloudflare-worker/wrangler.toml:6](cloudflare-worker/wrangler.toml:6).
+- Cron `"45 3 * * mon-fri"` = **6:45 МСК пн-пт** в [cloudflare-worker/wrangler.toml:6](cloudflare-worker/wrangler.toml:6).
+- ⚠️ Cloudflare Cron Triggers нумерует дни недели 1=Sun..7=Sat (не как POSIX). Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье — поэтому используем буквенный `mon-fri`. Дополнительный щит — `isHoliday()` в `worker.js` режет сб/вс через `getDay()`.
 - Worker вызывает `workflow_dispatch` для `update_cases.yml` через GitHub API (нужен `GITHUB_PAT`).
 - **Автозапуск = Cloudflare Worker, НЕ cron-job.org.** Любые правки расписания — в `wrangler.toml`, потом `wrangler deploy`.
 
