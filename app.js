@@ -877,21 +877,12 @@ function renderAnalytics(){
     {key:'later',label:'Позже',cls:'up-group-later'}
   ];
 
-  // Кнопка-тоггл «★ Мои дела» в шапке блока — рисуется только при
-  // непустом watchlist. Управляет тем же state, что и кнопка в шапке
-  // дайджеста: setDigestView обновит обе по селектору .mine-toggle-btn.
-  const mineBtnHidden=watchlist.size>0?'':'hidden';
-  const mineBtnActive=mineMode?'active':'';
-  const mineBtnAria=mineMode?'true':'false';
-  const mineBtnTitle=mineMode
-    ?'Показан только список твоих дел. Нажми, чтобы вернуть все.'
-    :'Показать только мои дела + новые';
-  const mineBtnHtml=`<button class="chip-btn mine-toggle-btn ${mineBtnActive}" type="button" aria-pressed="${mineBtnAria}" title="${mineBtnTitle}" onclick="event.stopPropagation();toggleDigestMine();" ${mineBtnHidden}><span class="chip-mine-star">★</span>Мои дела</button>`;
   // Chevron — тот же SVG, что в шапке дайджеста (.digest-toggle), для
   // визуального единства. Поворот на 180° по классу .upcoming-collapsed
-  // на карточке (см. toggleUpcoming).
+  // на карточке (см. toggleUpcoming). Тоггл «Мои» переехал в ★-кнопку
+  // мобильного тулбара (toggleMobileMine).
   const chevronHtml=`<button class="card-chevron-btn" id="upcoming-chevron" type="button" aria-label="Свернуть/развернуть" onclick="event.stopPropagation();toggleUpcoming();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`;
-  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">Ближайшие заседания</span>${mineBtnHtml}${chevronHtml}</div>`;
+  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">Ближайшие заседания</span>${chevronHtml}</div>`;
 
   if(shownCases.length===0){
     const emptyText=mineMode?'По твоим делам ближайших заседаний нет':'Нет предстоящих заседаний';
@@ -1129,17 +1120,8 @@ function renderChipBar(){
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
   let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
-  // Тоггл «Только мои дела» — отдельный чип. Виден только при непустом
-  // watchlist (иначе фильтровать нечего). Счётчик = подписки + новые,
-  // потому что именно эти дела видны при включённом фильтре.
-  if(watchlist.size>0){
-    let mineCount=0;
-    for(const c of allCases){
-      if(isWatched(c.caseNumber)||isNewCase(c)){mineCount++;}
-    }
-    const active=filterMineActive?'active':'';
-    quickHtml=`<button class="chip-btn chip-mine ${active}" title="Только мои дела + новые" aria-pressed="${filterMineActive?'true':'false'}" onclick="setMineFilter(${!filterMineActive})"><span class="chip-mine-star">★</span>Мои<span class="chip-count">${mineCount}</span></button>`+quickHtml;
-  }
+  // Тоггл «Только мои дела» переехал в круглую ★-кнопку мобильного тулбара
+  // (см. toggleMobileMine + syncMobileMineButton). Чип здесь больше не рисуем.
   // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
   // в свой ряд тулбара на десктопе (.chip-bar-segments).
   let segmentsHtml=`<div class="seg-ctrl">
@@ -1187,8 +1169,31 @@ function setMineFilter(v){
   filterMineActive=!!v;
   try{localStorage.setItem(FILTER_MINE_KEY,filterMineActive?'true':'false');}catch(_){}
   applyFilters();
+  syncMobileMineButton();
 }
 window.setMineFilter=setMineFilter;
+// ★-кнопка в мобильном тулбаре — единый toggle на три места одновременно:
+// (а) фильтр таблицы/карточек, (б) Upcoming в mine, (в) Дайджест в mine.
+function toggleMobileMine(){
+  const next=!(filterMineActive&&_digestViewMode==='mine');
+  setMineFilter(next);
+  setDigestView(next?'mine':'general');
+}
+window.toggleMobileMine=toggleMobileMine;
+// Синхронизация визуала ★-кнопки. Видна только при непустом watchlist.
+// Активна, когда дайджест в mine — это первичный UX-сигнал «вижу только мои».
+function syncMobileMineButton(){
+  const btn=document.getElementById('toolbar-mine-btn');
+  if(!btn)return;
+  btn.hidden=!(watchlist.size>0);
+  const on=(_digestViewMode==='mine');
+  btn.classList.toggle('active',on);
+  btn.setAttribute('aria-pressed',on?'true':'false');
+  btn.title=on
+    ?'Показаны только мои дела. Нажми, чтобы вернуть все.'
+    :'Показать только мои дела + новые';
+}
+window.syncMobileMineButton=syncMobileMineButton;
 function openFiltersSheet(){
   document.getElementById('filters-sheet').classList.add('open');
   document.getElementById('filters-sheet').setAttribute('aria-hidden','false');
@@ -1888,7 +1893,7 @@ function onGlobalKeydown(e){
 }
 
 /* ========== Boot ========== */
-window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();});
+window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();syncMobileMineButton();});
 
 /* ========== Mobile swipe-to-close drawer ========== */
 function setupDrawerSwipe(){
@@ -1936,62 +1941,13 @@ function setupDrawerSwipe(){
   dr.addEventListener('touchend',end);
   dr.addEventListener('touchcancel',end);
 }
-// Хедер: тень при скролле. Мобильный toolbar — hide-on-scroll: при скролле
-// вниз уезжает за край, при скролле вверх возвращается.
-let __lastScrollY = 0;
-let __scrollTicking = false;
-const __SCROLL_HIDE_THRESHOLD = 8;   // минимальный сдвиг, чтобы переключить состояние
-const __SCROLL_TOP_REVEAL = 80;      // у самого верха страницы — всегда показываем
+// Хедер: тень при скролле. Мобильный toolbar остаётся фиксированным на месте
+// (плавающая стеклянная плашка), при скролле не скрывается.
 window.addEventListener('scroll', () => {
-  if (__scrollTicking) return;
-  __scrollTicking = true;
-  requestAnimationFrame(() => {
-    const y = window.scrollY;
-    const h = document.querySelector('.app-header');
-    if (h) h.classList.toggle('scrolled', y > 30);
-
-    // Hide-on-scroll — только на мобилке. На десктопе .toolbar в обычном
-    // потоке: transform делает «прыжки», а сам тулбар прокручивается
-    // вместе со страницей, поэтому скрывать его незачем.
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    const dy = y - __lastScrollY;
-    if (isMobile && Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
-      const goingDown = dy > 0 && y > __SCROLL_TOP_REVEAL;
-      const tb = document.querySelector('.toolbar');
-      // Если в поиске есть текст или он в фокусе — toolbar не прячем,
-      // чтобы юрист видел поле и кнопку «×» при работе с фильтром.
-      const si = document.getElementById('search-input');
-      const searchActive = !!si && (si.value.length > 0 || document.activeElement === si);
-      if (tb) tb.classList.toggle('is-hidden', goingDown && !searchActive);
-      // Мини-FAB виден ровно когда toolbar скрыт (мобилка), скрыт иначе.
-      const fab = document.getElementById('toolbar-fab');
-      if (fab) fab.classList.toggle('is-visible', !!tb && tb.classList.contains('is-hidden'));
-      __lastScrollY = y;
-    } else if (Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
-      __lastScrollY = y;
-    }
-    __scrollTicking = false;
-  });
+  const y = window.scrollY;
+  const h = document.querySelector('.app-header');
+  if (h) h.classList.toggle('scrolled', y > 30);
 }, { passive: true });
-
-// Возврат toolbar после скрытия скроллом — JS-обработчик мини-FAB
-// (#toolbar-fab). После показа панели ставим фокус в поиск, чтобы тап по
-// иконке сразу открывал клавиатуру.
-function revealToolbar(){
-  const tb = document.querySelector('.toolbar');
-  const fab = document.getElementById('toolbar-fab');
-  if (tb) tb.classList.remove('is-hidden');
-  if (fab) fab.classList.remove('is-visible');
-  // iOS открывает экранную клавиатуру только если focus() вызван синхронно
-  // в user gesture (click). setTimeout убивает «user activation» — поэтому
-  // фокусируемся сразу. Скролл к видимости делаем уже асинхронно.
-  const si = document.getElementById('search-input');
-  if (si) {
-    si.focus({ preventScroll: true });
-    setTimeout(() => si.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
-  }
-}
-window.revealToolbar = revealToolbar;
 
 // Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
 // остаётся на нижней границе layout-viewport и оказывается под клавиатурой,
@@ -2015,7 +1971,6 @@ window.revealToolbar = revealToolbar;
       // больше не нужна. Класс kb-open сжимает зазор до 6px над клавиатурой.
       t.style.transform = `translateY(${-kb}px)`;
       t.classList.add('kb-open');
-      t.classList.remove('is-hidden');
     } else {
       t.style.transform = '';
       t.classList.remove('kb-open');
@@ -2165,6 +2120,10 @@ function toggleWatch(caseNumber, btn) {
   // — пересоберём при изменении состава звёзд.
   if (_digestViewMode === 'mine' && typeof renderAnalytics === 'function') {
     try { renderAnalytics(); } catch (_) {}
+  }
+  // ★-кнопка в мобильном тулбаре появляется/исчезает при первой/последней звезде.
+  if (typeof syncMobileMineButton === 'function') {
+    try { syncMobileMineButton(); } catch (_) {}
   }
   scheduleWatchlistSync();
 }
@@ -2939,6 +2898,10 @@ async function setDigestView(mode, opts) {
   if (typeof renderAnalytics === 'function') {
     try { renderAnalytics(); } catch (_) {}
   }
+  // ★-кнопка в мобильном тулбаре отражает _digestViewMode.
+  if (typeof syncMobileMineButton === 'function') {
+    try { syncMobileMineButton(); } catch (_) {}
+  }
 }
 window.setDigestView = setDigestView;
 
@@ -2991,6 +2954,11 @@ function refreshDigestModeVisibility() {
   const want = (saved === 'general') ? 'general' : 'mine';
   if (want === 'mine' && _digestViewMode !== 'mine' && _digestGeneralHtml) {
     setDigestView('mine', { persist: false });
+  }
+  // Видимость/состояние ★-кнопки в мобильном тулбаре — единый сигнал
+  // на всех путях изменения watchlist/режима.
+  if (typeof syncMobileMineButton === 'function') {
+    try { syncMobileMineButton(); } catch (_) {}
   }
 }
 window.refreshDigestModeVisibility = refreshDigestModeVisibility;

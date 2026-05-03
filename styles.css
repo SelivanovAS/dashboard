@@ -1041,33 +1041,30 @@ tr.detail-row { display:none; }
   .app-main { overflow-x:hidden; }
   /* Мобильное переопределение: на десктопе .up-time-value 16px, на мобиле 15 — экономит ширину карточки. */
   .up-time-value { font-size:var(--fs-md); }
-  /* Мобильный «toolbar» — невидимый контейнер, который позиционирует два
-     отдельных floating-элемента (поиск-капсула + круглая кнопка фильтра)
-     над контентом. Сам никаких визуалов не несёт — стекло на самих pill'ах. */
+  /* Мобильный «toolbar» — невидимый контейнер, который позиционирует floating-
+     элементы (★ + поиск + кнопка фильтра) над контентом. Сам никаких визуалов не
+     несёт — стекло на самих pill'ах. Плавающая позиция с воздухом над home-
+     indicator: bottom = safe-area + 16px (как у Bevel). */
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    /* Намеренно НЕ учитываем env(safe-area-inset-bottom): в PWA на iPhone
-       это поднимало тулбар выше браузерного варианта. Держим единый отступ
-       ~14px от нижнего края экрана (margin-bottom от базового .toolbar),
-       чтобы PWA и обычный браузер выглядели одинаково. Системный home-
-       indicator iOS остаётся видимым поверх стеклянной капсулы. */
-    bottom:0;
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 16px);
+    z-index:50;
+    margin:0;
   }
-  /* Когда экранная клавиатура открыта — safe-area-inset-bottom не нужна
-     (home-indicator перекрыт клавиатурой). Жмём toolbar к самой клавиатуре. */
+  /* Когда экранная клавиатура открыта — поднимаем toolbar над клавиатурой через
+     transform в setupKeyboardAwareToolbar(). Здесь только сбрасываем фон/тень
+     самого контейнера (стекло живёт на дочерних капсулах). */
   .toolbar.kb-open {
-    bottom:2px;
     flex-direction:column; align-items:stretch;
     padding:0;
-    margin:0;
     background:transparent;
     -webkit-backdrop-filter:none;
     backdrop-filter:none;
     border:none;
     border-radius:0;
     box-shadow:none;
-    z-index:50; gap:8px;
+    gap:8px;
   }
   /* Поиск — отдельная iOS-капсула с glass-фоном, скруглением, мягкой тенью. */
   .toolbar-row-search .search-box {
@@ -1102,16 +1099,41 @@ tr.detail-row { display:none; }
   .toolbar-row-search .filters-btn .filters-btn-count {
     position:absolute; top:-4px; right:-4px;
   }
+  /* Круглая ★-кнопка слева в мобильном тулбаре. Видна только при непустом
+     watchlist (управляется атрибутом hidden). Стекло как у .filters-btn,
+     активное состояние — accent-заливка. */
+  .toolbar-mine-btn {
+    width:52px; height:52px; padding:0; flex:0 0 auto;
+    align-items:center; justify-content:center;
+    border-radius:50%;
+    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+    font-size:22px; line-height:1;
+    color:var(--amber-500);
+    cursor:pointer;
+  }
+  .toolbar-mine-btn[hidden] { display:none; }
+  .toolbar-mine-btn:not([hidden]) { display:inline-flex; }
+  .toolbar-mine-btn.active {
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
   .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
   /* Мобилка: единственный видимый ряд тулбара — поиск + кнопка «Фильтры».
      Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
   .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
   .toolbar-row-segments { display:none; }
-  /* Освобождаем место под закреплённой панелью, чтобы контент не перекрывался.
-     Высота: toolbar (~52px) + bottom-offset (8px) — впритык, плюс
-     env(safe-area-inset-bottom) для iOS PWA с home-indicator (теперь рабочий
-     благодаря viewport-fit=cover в meta — даёт ~34px на iPhone). */
-  .app-main { padding-bottom:calc(32px + env(safe-area-inset-bottom, 0px)); }
+  /* Освобождаем место под плавающим тулбаром, чтобы контент не перекрывался.
+     Высота: 52 (капсула) + 16 (нижний зазор над home-indicator) + 16 (воздух
+     сверху) + env(safe-area-inset-bottom) (для iPhone home-indicator). */
+  .app-main { padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 84px); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
@@ -1165,8 +1187,9 @@ tr.detail-row { display:none; }
   .mc-hearing .hearing-relative { font-size:var(--fs-xs); }
   .error-banner { font-size:var(--fs-lg); }
   .new-cases-banner { font-size:var(--fs-lg); }
-  /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer. */
-  .drawer-body { padding:16px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer.
+     52 (кнопка) + 16 (нижний зазор) + 24 (воздух над кнопкой) = 92px над safe-area. */
+  .drawer-body { padding:16px 16px calc(env(safe-area-inset-bottom, 0px) + 92px); }
   .drawer-title .dt-sub { font-size:var(--fs-xs); }
   .drawer-hero .hero-parties { font-size:17px; }
   .drawer-hero .hero-category { font-size:var(--fs-md); }
@@ -1182,7 +1205,9 @@ tr.detail-row { display:none; }
      контент drawer-body виден сквозь них (как у toolbar поверх списка). */
   .drawer-footer {
     flex-wrap:nowrap; gap:8px;
-    padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    /* Тот же зазор от низа, что у toolbar (16px над safe-area), чтобы
+       плавающие кнопки drawer и toolbar выглядели на одной высоте. */
+    padding:8px 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
     background:transparent;
     -webkit-backdrop-filter:none; backdrop-filter:none;
     border-top:none;
@@ -1223,48 +1248,6 @@ tr.detail-row { display:none; }
     .toolbar-row-search .search-box,
     .toolbar-row-search .filters-btn { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; border:1px solid var(--border-strong); }
   }
-}
-
-/* Hide-on-scroll: только мобилка. На десктопе .toolbar — в обычном flex-потоке,
-   transform только сдвигает пиксели, оставляя пустую полосу в layout — отсюда
-   визуальные «прыжки». Поэтому правила и transition включаем строго на мобилке. */
-@media (max-width: 768px) {
-  .toolbar { transition:transform 220ms var(--ease-out); will-change:transform; }
-  .toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
-}
-
-/* Мини-FAB справа снизу: появляется только на мобиле и только когда toolbar
-   скрыт. Дает быструю точку входа в поиск/фильтры из любой точки списка. */
-.toolbar-fab {
-  position: fixed;
-  /* Совпадает с .filters-btn в .toolbar: тулбар сидит на bottom:0 + margin-bottom:14px,
-     поэтому FAB ставим на 14px от низа экрана — иконка лупы оказывается в точно той же
-     точке, что и кнопка фильтра, и при сворачивании toolbar точка не «прыгает». */
-  right: 12px;
-  bottom: 14px;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 1px solid var(--glass-border);
-  background: var(--pill-bg);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  color: var(--fg-1);
-  box-shadow: 0 8px 20px rgba(13, 17, 22, 0.18);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 49;
-  cursor: pointer;
-  opacity: 0;
-  transform: translateY(8px) scale(0.9);
-  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
-}
-.toolbar-fab svg { width: 20px; height: 20px; }
-.toolbar-fab:active { transform: translateY(8px) scale(0.85); }
-@media (max-width: 768px) {
-  .toolbar-fab { display: flex; }
-  .toolbar-fab.is-visible { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* Helpers (extracted from inline styles in app.js) */

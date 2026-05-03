@@ -156,7 +156,6 @@
       <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
         <span class="digest-title" id="digest-title">📰 Дайджест</span>
         <span class="digest-meta" id="digest-meta"></span>
-        <button class="chip-btn mine-toggle-btn" type="button" aria-pressed="false" title="Показать только мои дела + новые" onclick="event.stopPropagation();toggleDigestMine();" hidden><span class="chip-mine-star">★</span>Мои дела</button>
         <button class="digest-close" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
         </button>
@@ -179,8 +178,13 @@
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <!-- Ряд 1: поиск + кнопка фильтров (мобилка) + быстрые статус-чипы -->
+      <!-- Ряд 1: ★ (моб) + поиск + кнопка фильтров (моб) + быстрые статус-чипы (десктоп) -->
       <div class="toolbar-row toolbar-row-search">
+        <button class="toolbar-mine-btn" id="toolbar-mine-btn" type="button"
+                aria-label="Только мои дела"
+                aria-pressed="false"
+                hidden
+                onclick="toggleMobileMine()">★</button>
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
@@ -191,7 +195,7 @@
           <span>Фильтры</span>
           <span class="filters-btn-count" id="filters-btn-count" style="display:none;"></span>
         </button>
-        <!-- Быстрые статус-чипы (Все/Новые/Сегодня/… + ★Мои) — рендерятся JS -->
+        <!-- Быстрые статус-чипы (десктоп) — рендерятся JS -->
         <div class="chip-bar chip-bar-quick" id="chip-bar-quick"></div>
       </div>
       <!-- Ряд 2: сегментные переключатели (роль + инстанция) — рендерятся JS -->
@@ -231,13 +235,6 @@
         </select>
       </div>
     </div>
-
-    <!-- Мини-FAB поверх контента: виден только когда toolbar скрыт скроллом
-         (.toolbar.is-hidden) и только на мобиле. По тапу возвращает toolbar
-         и ставит фокус в поиск. -->
-    <button class="toolbar-fab" id="toolbar-fab" type="button" aria-label="Показать поиск и фильтры" onclick="revealToolbar()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </button>
 
     <!-- Table counter -->
     <div class="table-counter" id="table-counter"></div>
