@@ -953,7 +953,6 @@ function renderMeta(){
   let metaHtml='Обновлено: '+fmtMeta(new Date());
   if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+fmtMeta(lv)+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
-  document.getElementById('app-footer').textContent='Данные обновляются автоматически (GitHub Actions)';
 }
 
 /* ========== Filters ========== */
@@ -1937,8 +1936,8 @@ function setupDrawerSwipe(){
   dr.addEventListener('touchend',end);
   dr.addEventListener('touchcancel',end);
 }
-// Хедер: тень при скролле. Нижние панели (toolbar мобильный + app-footer):
-// hide-on-scroll — при скролле вниз уезжают за край, при скролле вверх возвращаются.
+// Хедер: тень при скролле. Мобильный toolbar — hide-on-scroll: при скролле
+// вниз уезжает за край, при скролле вверх возвращается.
 let __lastScrollY = 0;
 let __scrollTicking = false;
 const __SCROLL_HIDE_THRESHOLD = 8;   // минимальный сдвиг, чтобы переключить состояние
@@ -1959,13 +1958,11 @@ window.addEventListener('scroll', () => {
     if (isMobile && Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
       const goingDown = dy > 0 && y > __SCROLL_TOP_REVEAL;
       const tb = document.querySelector('.toolbar');
-      const af = document.getElementById('app-footer');
       // Если в поиске есть текст или он в фокусе — toolbar не прячем,
       // чтобы юрист видел поле и кнопку «×» при работе с фильтром.
       const si = document.getElementById('search-input');
       const searchActive = !!si && (si.value.length > 0 || document.activeElement === si);
       if (tb) tb.classList.toggle('is-hidden', goingDown && !searchActive);
-      if (af) af.classList.toggle('is-hidden', goingDown);
       // Мини-FAB виден ровно когда toolbar скрыт (мобилка), скрыт иначе.
       const fab = document.getElementById('toolbar-fab');
       if (fab) fab.classList.toggle('is-visible', !!tb && tb.classList.contains('is-hidden'));
@@ -1982,10 +1979,8 @@ window.addEventListener('scroll', () => {
 // иконке сразу открывал клавиатуру.
 function revealToolbar(){
   const tb = document.querySelector('.toolbar');
-  const af = document.getElementById('app-footer');
   const fab = document.getElementById('toolbar-fab');
   if (tb) tb.classList.remove('is-hidden');
-  if (af) af.classList.remove('is-hidden');
   if (fab) fab.classList.remove('is-visible');
   // iOS открывает экранную клавиатуру только если focus() вызван синхронно
   // в user gesture (click). setTimeout убивает «user activation» — поэтому

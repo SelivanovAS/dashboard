@@ -203,8 +203,8 @@
   --shadow-4:  0 20px 50px rgba(13, 17, 22, 0.14), 0 4px 10px rgba(13, 17, 22, 0.06);
 
   --content-max: 1800px;
-  /* Единая высота для .app-footer и .drawer-footer — диктуется кнопками
-     drawer-footer (16px padding-top + кнопка + 16px padding-bottom). */
+  /* Высота .drawer-footer — диктуется кнопками
+     (16px padding-top + кнопка + 16px padding-bottom). */
   --footer-h: 68px;
 
   /* ─── Liquid Glass / Material 3 surface ─────────────────────────────────
@@ -524,15 +524,15 @@ body {
 .upcoming-item { display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; transition:background 120ms var(--ease-out); }
 .upcoming-item:hover { background:var(--bg-2); }
 .up-time { min-width:72px; flex-shrink:0; text-align:center; padding:4px 6px; background:var(--bg-2); border-radius:var(--radius-xs); font-family:var(--font-mono); line-height:1.2; display:flex; flex-direction:column; gap:2px; }
-.up-time-value { font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--fg-1); }
-.up-date { font-size:var(--fs-2xs); color:var(--fg-2); font-weight:var(--fw-bold); }
+.up-time-value { font-size:var(--fs-lg); font-weight:var(--fw-bold); color:var(--fg-1); }
+.up-date { font-size:var(--fs-xs); color:var(--fg-2); font-weight:var(--fw-bold); }
 .up-group-today .up-time-value { color:var(--urgency-today-fg); }
 .up-group-tomorrow .up-time-value { color:var(--urgency-tomorrow-fg); }
 .up-body { flex:1; min-width:0; color:var(--fg-2); line-height:1.35; }
 .up-head { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:2px; }
 .upcoming-case { font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); }
-.up-court { font-size:var(--fs-xs); color:var(--fg-3); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.upcoming-parties { font-size:var(--fs-sm); color:var(--fg-2); word-break:break-word; }
+.up-court { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.upcoming-parties { font-size:var(--fs-md); color:var(--fg-2); word-break:break-word; }
 .up-ext { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:var(--radius-sm); color:var(--fg-4); text-decoration:none; flex-shrink:0; transition:all 120ms var(--ease-out); }
 .up-ext:hover { background:var(--bg-3); color:var(--accent); }
 .up-ext svg { width:14px; height:14px; }
@@ -614,7 +614,7 @@ body {
      - в мобильном bottom-sheet — растягивается на всю ширину листа (.sheet-body .seg-ctrl). */
 .seg-ctrl { display:flex; border:1px solid var(--border); border-radius:var(--radius-pill); overflow:hidden; background:var(--bg-1); }
 .chip-bar-segments .seg-ctrl { flex:0 0 auto; min-width:280px; }
-.seg-btn { flex:1 1 0; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-xs); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
+.seg-btn { flex:1 1 0; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
 .seg-btn:not(:last-child) { border-right:1px solid var(--border); }
 .seg-btn:hover:not(:disabled) { background:var(--bg-3); }
 .seg-btn.active { background:var(--accent); color:#fff; }
@@ -625,7 +625,7 @@ body {
 .btn-outline svg { width:14px; height:14px; }
 
 /* Table counter */
-.table-counter { font-size:var(--fs-xs); color:var(--fg-3); margin-bottom:8px; animation:fadeUp .55s var(--ease-out); }
+.table-counter { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:8px; animation:fadeUp .55s var(--ease-out); }
 .table-counter strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
 
 /* ========== Banners ========== */
@@ -672,7 +672,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .court-label { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
 /* Перенос на 2 строки только по пробелам («Нижневартовский / гор. суд»).
    Без word-break, чтобы не ломало слово посередине. Лишнее (3+) обрезается. */
-.cell-court { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.cell-court { font-size:var(--fs-md); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .parties-col { display:flex; flex-direction:column; gap:2px; font-size:var(--fs-md); min-width:180px; line-height:1.4; }
 .parties-col > span { display:flex; align-items:baseline; gap:4px; }
 .parties-col .party-name { flex:1; min-width:0; word-break:break-word; }
@@ -681,7 +681,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 
 /* Колонка «Заседание» */
 .cell-hearing { display:flex; flex-direction:column; gap:2px; line-height:1.2; }
-.hearing-primary { font-family:var(--font-mono); font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; white-space:nowrap; }
+.hearing-primary { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; white-space:nowrap; }
 .hearing-primary.hearing-today { color:var(--urgency-today-fg); }
 .hearing-primary.hearing-soon { color:var(--urgency-week-fg); }
 .hearing-primary.hearing-past { color:var(--fg-4); }
@@ -912,12 +912,11 @@ tr.detail-row { display:none; }
 .notes-hint { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
 
 /* Liquid Glass / Material 3 translucent surface — backdrop-filter работает
-   и в Safari (с -webkit-), и в Chrome/Edge (включая Android). */
-.app-footer { max-width:var(--content-max); margin:0 auto; padding:16px 24px calc(16px + env(safe-area-inset-bottom, 0px)); text-align:center; font-size:var(--fs-2xs); color:var(--fg-4); border-top:1px solid var(--glass-border); background:var(--glass-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 1px 0 var(--glass-highlight), var(--glass-shadow); display:flex; align-items:center; justify-content:center; min-height:var(--footer-h); box-sizing:border-box; animation:fadeUp .55s var(--ease-out) both; }
-/* Fallback для движков без backdrop-filter (старый Android WebView, Firefox <103):
+   и в Safari (с -webkit-), и в Chrome/Edge (включая Android).
+   Fallback для движков без backdrop-filter (старый Android WebView, Firefox <103):
    сплошная поверхность с edge-tint, как у Material 3 surface-container. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .app-footer, .drawer-footer { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; }
+  .drawer-footer { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; }
   .drawer-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; border-bottom:1px solid var(--border); }
 }
 
@@ -1037,11 +1036,11 @@ tr.detail-row { display:none; }
   .upcoming-item { padding:8px; min-width:0; }
   .up-time { min-width:64px; flex-shrink:0; }
   .upcoming-case { font-size:var(--fs-lg); overflow-wrap:anywhere; word-break:break-word; }
-  .upcoming-parties { font-size:var(--fs-md); overflow-wrap:anywhere; word-break:break-word; }
-  .up-court { font-size:var(--fs-sm); overflow-wrap:anywhere; }
+  .upcoming-parties { overflow-wrap:anywhere; word-break:break-word; }
+  .up-court { overflow-wrap:anywhere; white-space:normal; }
   .app-main { overflow-x:hidden; }
+  /* Мобильное переопределение: на десктопе .up-time-value 16px, на мобиле 15 — экономит ширину карточки. */
   .up-time-value { font-size:var(--fs-md); }
-  .up-date { font-size:var(--fs-xs); }
   /* Мобильный «toolbar» — невидимый контейнер, который позиционирует два
      отдельных floating-элемента (поиск-капсула + круглая кнопка фильтра)
      над контентом. Сам никаких визуалов не несёт — стекло на самих pill'ах. */
@@ -1166,7 +1165,6 @@ tr.detail-row { display:none; }
   .mc-hearing .hearing-relative { font-size:var(--fs-xs); }
   .error-banner { font-size:var(--fs-lg); }
   .new-cases-banner { font-size:var(--fs-lg); }
-  .app-footer { font-size:var(--fs-sm); padding:8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); min-height:0; }
   /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer. */
   .drawer-body { padding:16px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
   .drawer-title .dt-sub { font-size:var(--fs-xs); }
@@ -1231,9 +1229,8 @@ tr.detail-row { display:none; }
    transform только сдвигает пиксели, оставляя пустую полосу в layout — отсюда
    визуальные «прыжки». Поэтому правила и transition включаем строго на мобилке. */
 @media (max-width: 768px) {
-  .toolbar, .app-footer { transition:transform 220ms var(--ease-out); will-change:transform; }
+  .toolbar { transition:transform 220ms var(--ease-out); will-change:transform; }
   .toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
-  .app-footer.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
 }
 
 /* Мини-FAB справа снизу: появляется только на мобиле и только когда toolbar
