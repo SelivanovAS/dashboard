@@ -2004,7 +2004,11 @@ window.revealToolbar = revealToolbar;
   function update(){
     const t = tb();
     if (!t) return;
-    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // В PWA на iPhone window.innerHeight включает safe-area-inset-bottom (~34px),
+    // а visualViewport.height — нет. Без компенсации kb завышается, и тулбар
+    // уезжает выше клавиатуры. Вычитаем safe-area, чтобы зазор совпадал с браузером.
+    const sai = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sai-bottom')) || 0;
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop - sai);
     if (kb > 80) {
       // Клавиатура скрывает home-indicator → safe-area-inset-bottom (~34px)
       // больше не нужна. Класс kb-open сжимает зазор до 6px над клавиатурой.
