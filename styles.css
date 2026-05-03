@@ -568,7 +568,7 @@ body {
    Раньше всё лежало в одном flex-row .toolbar-left, и .seg-ctrl с width:100%
    ломал раскладку — статус-чипы перемешивались с сегментами и наезжали на
    thead/search. Теперь сегменты живут в собственном ряду со своей шириной. */
-.toolbar { display:flex; flex-direction:column; align-items:stretch; gap:10px; margin-bottom:14px; animation:fadeUp .5s var(--ease-out); }
+.toolbar { display:flex; flex-direction:column; align-items:stretch; gap:8px; margin-bottom:10px; animation:fadeUp .5s var(--ease-out); }
 .toolbar-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .toolbar-row-search { gap:12px; }
 .toolbar-row-segments { width:100%; }
@@ -642,14 +642,14 @@ body {
 .table-wrap { background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); overflow:hidden; animation:fadeUp .6s var(--ease-out); }
 .table-scroll { overflow-x:auto; max-height:calc(100vh - 200px); overflow-y:auto; }
 table { width:100%; border-collapse:collapse; font-size:var(--fs-md); font-variant-numeric:tabular-nums; }
-thead th { text-align:left; padding:12px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-sm); color:var(--fg-3); font-weight:var(--fw-semibold); letter-spacing:-0.005em; white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
+thead th { text-align:left; padding:10px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-sm); color:var(--fg-3); font-weight:var(--fw-semibold); letter-spacing:-0.005em; white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
 thead th.sortable { cursor:pointer; }
 thead th.sortable:hover { color:var(--fg-1); }
 thead th.sorted { color:var(--accent); }
 .sort-icon { display:inline-block; margin-left:4px; font-size:10px; }
 tbody tr { border-bottom:1px solid var(--divider); transition:background 100ms var(--ease-out); position:relative; }
 tbody tr:hover { background:var(--bg-2); }
-tbody td { padding:14px 14px; vertical-align:top; }
+tbody td { padding:10px 14px; vertical-align:top; }
 tbody td:first-child { position:relative; padding-left:18px; }
 tbody tr td:first-child::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:transparent; transition:background 120ms var(--ease-out); }
 tbody tr.accent-new    td:first-child::before { background:var(--amber-500); }
@@ -673,7 +673,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* Перенос на 2 строки только по пробелам («Нижневартовский / гор. суд»).
    Без word-break, чтобы не ломало слово посередине. Лишнее (3+) обрезается. */
 .cell-court { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-.parties-col { display:flex; flex-direction:column; gap:4px; font-size:var(--fs-md); min-width:180px; line-height:1.5; }
+.parties-col { display:flex; flex-direction:column; gap:2px; font-size:var(--fs-md); min-width:180px; line-height:1.4; }
 .parties-col > span { display:flex; align-items:baseline; gap:4px; }
 .parties-col .party-name { flex:1; min-width:0; word-break:break-word; }
 .party-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; letter-spacing:0.04em; color:var(--fg-4); flex-shrink:0; min-width:14px; }
@@ -1227,11 +1227,14 @@ tr.detail-row { display:none; }
   }
 }
 
-/* Hide-on-scroll: при скролле вниз нижняя панель уезжает за край экрана,
-   при скролле вверх возвращается. JS добавляет/снимает .is-hidden. */
-.toolbar, .app-footer { transition:transform 220ms var(--ease-out); will-change:transform; }
-.toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
-.app-footer.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
+/* Hide-on-scroll: только мобилка. На десктопе .toolbar — в обычном flex-потоке,
+   transform только сдвигает пиксели, оставляя пустую полосу в layout — отсюда
+   визуальные «прыжки». Поэтому правила и transition включаем строго на мобилке. */
+@media (max-width: 768px) {
+  .toolbar, .app-footer { transition:transform 220ms var(--ease-out); will-change:transform; }
+  .toolbar.is-hidden { transform:translateY(calc(100% + 24px + env(safe-area-inset-bottom, 0px))); }
+  .app-footer.is-hidden { transform:translateY(calc(100% + env(safe-area-inset-bottom, 0px))); }
+}
 
 /* Мини-FAB справа снизу: появляется только на мобиле и только когда toolbar
    скрыт. Дает быструю точку входа в поиск/фильтры из любой точки списка. */

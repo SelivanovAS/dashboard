@@ -1951,8 +1951,12 @@ window.addEventListener('scroll', () => {
     const h = document.querySelector('.app-header');
     if (h) h.classList.toggle('scrolled', y > 30);
 
+    // Hide-on-scroll — только на мобилке. На десктопе .toolbar в обычном
+    // потоке: transform делает «прыжки», а сам тулбар прокручивается
+    // вместе со страницей, поэтому скрывать его незачем.
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     const dy = y - __lastScrollY;
-    if (Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
+    if (isMobile && Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
       const goingDown = dy > 0 && y > __SCROLL_TOP_REVEAL;
       const tb = document.querySelector('.toolbar');
       const af = document.getElementById('app-footer');
@@ -1965,6 +1969,8 @@ window.addEventListener('scroll', () => {
       // Мини-FAB виден ровно когда toolbar скрыт (мобилка), скрыт иначе.
       const fab = document.getElementById('toolbar-fab');
       if (fab) fab.classList.toggle('is-visible', !!tb && tb.classList.contains('is-hidden'));
+      __lastScrollY = y;
+    } else if (Math.abs(dy) > __SCROLL_HIDE_THRESHOLD) {
       __lastScrollY = y;
     }
     __scrollTicking = false;
