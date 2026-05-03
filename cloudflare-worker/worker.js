@@ -17,6 +17,11 @@ const HOLIDAYS_2026 = new Set([
 const ALLOWED_ORIGIN = "https://selivanovas.github.io";
 
 function isHoliday(date) {
+  // Второй щит: суббота/воскресенье — нерабочие дни. Защищает от сюрпризов
+  // cron-парсера (см. wrangler.toml) и от ручной правки расписания.
+  // getDay(): 0 = Sunday, 6 = Saturday — стандарт JS.
+  const dow = date.getDay();
+  if (dow === 0 || dow === 6) return true;
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   const key = `${mm}-${dd}`;
