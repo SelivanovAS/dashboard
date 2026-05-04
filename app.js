@@ -879,8 +879,7 @@ function renderAnalytics(){
 
   // Chevron — тот же SVG, что в шапке дайджеста (.digest-toggle), для
   // визуального единства. Поворот на 180° по классу .upcoming-collapsed
-  // на карточке (см. toggleUpcoming). Тоггл «Мои» переехал в ★-кнопку
-  // мобильного тулбара (toggleMobileMine).
+  // на карточке (см. toggleUpcoming).
   const chevronHtml=`<button class="card-chevron-btn" id="upcoming-chevron" type="button" aria-label="Свернуть/развернуть" onclick="event.stopPropagation();toggleUpcoming();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`;
   let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">Ближайшие заседания</span>${chevronHtml}</div>`;
 
@@ -1120,8 +1119,6 @@ function renderChipBar(){
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
   let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
-  // Тоггл «Только мои дела» переехал в круглую ★-кнопку мобильного тулбара
-  // (см. toggleMobileMine + syncMobileMineButton). Чип здесь больше не рисуем.
   // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
   // в свой ряд тулбара на десктопе (.chip-bar-segments).
   let segmentsHtml=`<div class="seg-ctrl">
@@ -1169,31 +1166,18 @@ function setMineFilter(v){
   filterMineActive=!!v;
   try{localStorage.setItem(FILTER_MINE_KEY,filterMineActive?'true':'false');}catch(_){}
   applyFilters();
-  syncMobileMineButton();
 }
 window.setMineFilter=setMineFilter;
-// ★-кнопка в мобильном тулбаре — единый toggle на три места одновременно:
-// (а) фильтр таблицы/карточек, (б) Upcoming в mine, (в) Дайджест в mine.
+// ★-кнопка мобильного тулбара = единый toggle: фильтр + дайджест + upcoming.
+// Опираемся только на _digestViewMode (тот же сигнал, по которому setDigestView
+// флипает класс .active на всех .mine-toggle-btn) — иначе после push-driven
+// setDigestView('mine') без флипа filterMineActive пользователь тапает дважды.
 function toggleMobileMine(){
-  const next=!(filterMineActive&&_digestViewMode==='mine');
+  const next=(_digestViewMode!=='mine');
   setMineFilter(next);
   setDigestView(next?'mine':'general');
 }
 window.toggleMobileMine=toggleMobileMine;
-// Синхронизация визуала ★-кнопки. Видна только при непустом watchlist.
-// Активна, когда дайджест в mine — это первичный UX-сигнал «вижу только мои».
-function syncMobileMineButton(){
-  const btn=document.getElementById('toolbar-mine-btn');
-  if(!btn)return;
-  btn.hidden=!(watchlist.size>0);
-  const on=(_digestViewMode==='mine');
-  btn.classList.toggle('active',on);
-  btn.setAttribute('aria-pressed',on?'true':'false');
-  btn.title=on
-    ?'Показаны только мои дела. Нажми, чтобы вернуть все.'
-    :'Показать только мои дела + новые';
-}
-window.syncMobileMineButton=syncMobileMineButton;
 function openFiltersSheet(){
   document.getElementById('filters-sheet').classList.add('open');
   document.getElementById('filters-sheet').setAttribute('aria-hidden','false');
@@ -1893,7 +1877,7 @@ function onGlobalKeydown(e){
 }
 
 /* ========== Boot ========== */
-window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();syncMobileMineButton();});
+window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();});
 
 /* ========== Mobile swipe-to-close drawer ========== */
 function setupDrawerSwipe(){
@@ -1941,12 +1925,17 @@ function setupDrawerSwipe(){
   dr.addEventListener('touchend',end);
   dr.addEventListener('touchcancel',end);
 }
-// Хедер: тень при скролле. Мобильный toolbar остаётся фиксированным на месте
-// (плавающая стеклянная плашка), при скролле не скрывается.
+// Хедер: тень при скролле. Мобильный toolbar — плавающая стеклянная плашка,
+// фиксированная и не скрывается. Кэшируем header-ref + change-detection,
+// иначе на каждый scroll-event получаем querySelector + DOM-write.
+let __headerEl = null;
+let __headerScrolled = false;
 window.addEventListener('scroll', () => {
-  const y = window.scrollY;
-  const h = document.querySelector('.app-header');
-  if (h) h.classList.toggle('scrolled', y > 30);
+  if (!__headerEl) __headerEl = document.querySelector('.app-header');
+  const want = window.scrollY > 30;
+  if (want === __headerScrolled) return;
+  __headerScrolled = want;
+  __headerEl?.classList.toggle('scrolled', want);
 }, { passive: true });
 
 // Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
@@ -2120,10 +2109,6 @@ function toggleWatch(caseNumber, btn) {
   // — пересоберём при изменении состава звёзд.
   if (_digestViewMode === 'mine' && typeof renderAnalytics === 'function') {
     try { renderAnalytics(); } catch (_) {}
-  }
-  // ★-кнопка в мобильном тулбаре появляется/исчезает при первой/последней звезде.
-  if (typeof syncMobileMineButton === 'function') {
-    try { syncMobileMineButton(); } catch (_) {}
   }
   scheduleWatchlistSync();
 }
@@ -2898,19 +2883,8 @@ async function setDigestView(mode, opts) {
   if (typeof renderAnalytics === 'function') {
     try { renderAnalytics(); } catch (_) {}
   }
-  // ★-кнопка в мобильном тулбаре отражает _digestViewMode.
-  if (typeof syncMobileMineButton === 'function') {
-    try { syncMobileMineButton(); } catch (_) {}
-  }
 }
 window.setDigestView = setDigestView;
-
-// Хэндлер клика по единственной кнопке-тогглу «★ Мой».
-function toggleDigestMine() {
-  const next = _digestViewMode === 'mine' ? 'general' : 'mine';
-  setDigestView(next);
-}
-window.toggleDigestMine = toggleDigestMine;
 
 // Минимальный escape для текста плашки-заметки (контент пользовательский
 // тут не появляется, но пусть будет на всякий случай).
@@ -2954,11 +2928,6 @@ function refreshDigestModeVisibility() {
   const want = (saved === 'general') ? 'general' : 'mine';
   if (want === 'mine' && _digestViewMode !== 'mine' && _digestGeneralHtml) {
     setDigestView('mine', { persist: false });
-  }
-  // Видимость/состояние ★-кнопки в мобильном тулбаре — единый сигнал
-  // на всех путях изменения watchlist/режима.
-  if (typeof syncMobileMineButton === 'function') {
-    try { syncMobileMineButton(); } catch (_) {}
   }
 }
 window.refreshDigestModeVisibility = refreshDigestModeVisibility;
