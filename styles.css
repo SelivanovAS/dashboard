@@ -10,6 +10,9 @@
   /* Высота нижней безопасной зоны iOS (home-indicator). Резолвится в px,
      читается из JS для компенсации в visualViewport-расчётах клавиатуры. */
   --sai-bottom: env(safe-area-inset-bottom, 0px);
+  /* Расстояние от низа экрана до плавающих элементов (toolbar, drawer-footer):
+     12px ниже safe-area, минимум 0. Меняй здесь — обновятся оба места. */
+  --floating-bottom: max(var(--sai-bottom) - 12px, 0px);
   /* Sber green — бренд-акцент (CTA, активные состояния, focus) */
   --sber-green-700: #157f3a;
   --sber-green-600: #1a9f29;
@@ -502,13 +505,13 @@ body {
 .cat-bar-fill { height:100%; border-radius:3px; transition:width .5s var(--ease-out); }
 .cat-bar-count { width:28px; text-align:right; font-weight:var(--fw-semibold); color:var(--fg-2); font-family:var(--font-mono); font-size:var(--fs-2xs); }
 
+/* ★-кнопка тулбара живёт только на мобиле (стилизуется в @media max-width:768px).
+   На десктопе её роль играет фильтр-чип и тоггл в шапке дайджеста. */
+.toolbar-mine-btn { display: none; }
+
 /* Upcoming hearings */
 .up-title { display:flex; align-items:center; gap:10px; }
-/* Кнопку «★ Мои дела» прижимаем к правому краю; если её нет — chevron сам
-   отъезжает вправо через auto-margin. Аналогично digest-head, чтобы оба
-   тоггла стояли в одинаковой позиции. */
-.up-title .mine-toggle-btn { margin-left:auto; }
-.up-title:not(:has(.mine-toggle-btn:not([hidden]))) .card-chevron-btn { margin-left:auto; }
+.up-title .card-chevron-btn { margin-left:auto; }
 .up-counter { display:inline-block; margin-left:6px; padding:2px 10px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
 .upcoming-list { display:flex; flex-direction:column; gap:14px; }
 .up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); margin-bottom:8px; letter-spacing:-0.005em; }
@@ -600,9 +603,6 @@ body {
 .chip-btn.chip-new.active { background:var(--amber-500); border-color:var(--amber-500); color:#fff; }
 .chip-btn.chip-today.active { background:var(--red-500); border-color:var(--red-500); color:#fff; }
 .chip-btn.chip-week.active { background:var(--blue-500); border-color:var(--blue-500); color:#fff; }
-.chip-btn.chip-mine.active { background:var(--accent); border-color:var(--accent); color:#fff; }
-.chip-mine-star { color:var(--amber-500); margin-right:2px; font-size:0.95em; }
-.chip-btn.chip-mine.active .chip-mine-star { color:#fff; }
 .chip-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px; padding:0 5px; border-radius:8px; background:var(--bg-3); color:var(--fg-3); font-size:10px; font-weight:var(--fw-bold); font-variant-numeric:tabular-nums; }
 .chip-new .chip-count { background:var(--amber-100); color:var(--amber-700); }
 .chip-today .chip-count { background:var(--red-100); color:var(--red-700); }
@@ -1042,13 +1042,11 @@ tr.detail-row { display:none; }
   /* Мобильное переопределение: на десктопе .up-time-value 16px, на мобиле 15 — экономит ширину карточки. */
   .up-time-value { font-size:var(--fs-md); }
   /* Мобильный «toolbar» — невидимый контейнер, который позиционирует floating-
-     элементы (★ + поиск + кнопка фильтра) над контентом. Сам никаких визуалов не
-     несёт — стекло на самих pill'ах. Плавающая позиция с воздухом над home-
-     indicator: bottom = safe-area + 16px (как у Bevel). */
+     элементы (★ + поиск + кнопка фильтра) над контентом. Стекло — на pill'ах. */
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    bottom:max(env(safe-area-inset-bottom, 0px) - 12px, 0px);
+    bottom:var(--floating-bottom);
     z-index:50;
     margin:0;
   }
@@ -1080,9 +1078,10 @@ tr.detail-row { display:none; }
     padding:0 16px;
     min-height:52px;
   }
-  /* Кнопка фильтра — круглая иконка-капсула рядом с поиском (без текста). */
-  .toolbar-row-search .filters-btn {
-    width:52px; height:52px; padding:0; gap:0;
+  /* Круглые иконки-капсулы рядом с поиском (★ и фильтр) — общий glass-shape. */
+  .toolbar-row-search .filters-btn,
+  .toolbar-mine-btn {
+    width:52px; height:52px; padding:0;
     border-radius:50%;
     background:var(--pill-bg, rgba(255, 255, 255, 0.78));
     -webkit-backdrop-filter:var(--glass-blur);
@@ -1092,34 +1091,21 @@ tr.detail-row { display:none; }
       inset 0 1px 0 var(--glass-highlight),
       0 12px 32px rgba(13, 17, 22, 0.16),
       0 2px 8px rgba(13, 17, 22, 0.08);
-    justify-content:center;
   }
+  .toolbar-row-search .filters-btn { gap:0; justify-content:center; }
   .toolbar-row-search .filters-btn span:not(.filters-btn-count) { display:none; }
   .toolbar-row-search .filters-btn svg { width:20px; height:20px; }
   .toolbar-row-search .filters-btn .filters-btn-count {
     position:absolute; top:-4px; right:-4px;
   }
-  /* Круглая ★-кнопка слева в мобильном тулбаре. Видна только при непустом
-     watchlist (управляется атрибутом hidden). Стекло как у .filters-btn,
-     активное состояние — accent-заливка. */
   .toolbar-mine-btn {
-    width:52px; height:52px; padding:0; flex:0 0 auto;
-    align-items:center; justify-content:center;
-    border-radius:50%;
-    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
-    -webkit-backdrop-filter:var(--glass-blur);
-    backdrop-filter:var(--glass-blur);
-    border:1px solid var(--glass-border);
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 12px 32px rgba(13, 17, 22, 0.16),
-      0 2px 8px rgba(13, 17, 22, 0.08);
+    display:inline-flex; align-items:center; justify-content:center;
+    flex:0 0 auto;
     font-size:22px; line-height:1;
     color:var(--amber-500);
     cursor:pointer;
   }
   .toolbar-mine-btn[hidden] { display:none; }
-  .toolbar-mine-btn:not([hidden]) { display:inline-flex; }
   .toolbar-mine-btn.active {
     background:var(--accent);
     border-color:var(--accent);
@@ -1205,9 +1191,8 @@ tr.detail-row { display:none; }
      контент drawer-body виден сквозь них (как у toolbar поверх списка). */
   .drawer-footer {
     flex-wrap:nowrap; gap:8px;
-    /* Тот же зазор от низа, что у toolbar (16px над safe-area), чтобы
-       плавающие кнопки drawer и toolbar выглядели на одной высоте. */
-    padding:8px 12px max(env(safe-area-inset-bottom, 0px) - 12px, 0px);
+    /* Тот же зазор, что у toolbar — обе плавающие плашки на одной высоте. */
+    padding:8px 12px var(--floating-bottom);
     background:transparent;
     -webkit-backdrop-filter:none; backdrop-filter:none;
     border-top:none;
@@ -1317,26 +1302,6 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
-/* Кнопка-тоггл «★ Мои дела» — рендерится в шапке блока «Дайджест»
-   и в шапке блока «Ближайшие заседания», обе синхронны (одно state).
-   Прижата к правому краю; активное состояние — стандартное
-   .chip-btn.active (зелёный фон). На мобиле крупнее, чтобы попадать
-   пальцем (целевой tap-target ≥40px высоты). */
-.mine-toggle-btn {
-  margin-left: auto;
-  flex-shrink: 0;
-  padding: 8px 14px;
-  font-size: var(--fs-sm);
-  line-height: 1.2;
-  letter-spacing: 0;
-  text-transform: none;
-}
-/* .chip-btn задаёт display:inline-flex, что побеждает дефолтное
-   [hidden]{display:none} — явно гасим кнопку при пустом watchlist. */
-.mine-toggle-btn[hidden] { display: none; }
-@media (max-width: 540px) {
-  .mine-toggle-btn { padding: 10px 16px; font-size: var(--fs-sm); }
-}
 .mine-digest-note {
   margin-bottom: 10px;
   padding: 8px 12px;
@@ -1363,10 +1328,7 @@ tr.detail-row { display:none; }
   border-radius: var(--radius);
   transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
 }
-/* margin-left:auto только на «Мои дела» (когда показан) или на сам chevron,
-   если кнопки нет — иначе оба auto делят пространство и кнопка зависает по
-   центру вместо правого края. */
-.digest-head:not(:has(.mine-toggle-btn:not([hidden]))) .digest-toggle { margin-left: auto; }
+.digest-head .digest-toggle { margin-left: auto; }
 .digest-toggle:hover { background: var(--bg-3); color: var(--fg-1); }
 .digest-toggle svg { width: 18px; height: 18px; }
 .digest-block.expanded .digest-toggle { transform: rotate(180deg); }
