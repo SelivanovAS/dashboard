@@ -1986,15 +1986,17 @@ window.addEventListener('scroll', () => {
   function update(){
     const t = tb();
     if (!t) return;
-    // В PWA на iPhone window.innerHeight включает safe-area-inset-bottom (~34px),
-    // а visualViewport.height — нет. Без компенсации kb завышается, и тулбар
-    // уезжает выше клавиатуры. Вычитаем safe-area, чтобы зазор совпадал с браузером.
-    const sai = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sai-bottom')) || 0;
-    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop - sai);
-    if (kb > 80) {
-      // Клавиатура скрывает home-indicator → safe-area-inset-bottom (~34px)
-      // больше не нужна. Класс kb-open сжимает зазор до 6px над клавиатурой.
-      t.style.transform = `translateY(${-kb}px)`;
+    // obscured — высота нижней «закрытой» области (клавиатура + system-UI).
+    // Считается одинаково на iOS Safari, iOS PWA и Android Chrome.
+    const obscured = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    if (obscured > 80) {
+      // Тулбар прибит к низу окна через bottom: var(--floating-bottom).
+      // Чтобы его нижний край оказался на 2px выше верха клавиатуры,
+      // сдвигаем на (obscured − fb + 2). fb читаем уже вычисленным
+      // (parseFloat на самой переменной вернул бы NaN — там max(...)).
+      const fb = parseFloat(getComputedStyle(t).bottom) || 0;
+      const lift = obscured - fb + 2;
+      t.style.transform = `translateY(${-lift}px)`;
       t.classList.add('kb-open');
     } else {
       t.style.transform = '';

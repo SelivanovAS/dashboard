@@ -11,8 +11,10 @@
      читается из JS для компенсации в visualViewport-расчётах клавиатуры. */
   --sai-bottom: env(safe-area-inset-bottom, 0px);
   /* Расстояние от низа экрана до плавающих элементов (toolbar, drawer-footer):
-     12px ниже safe-area, минимум 0. Меняй здесь — обновятся оба места. */
-  --floating-bottom: max(var(--sai-bottom) - 12px, 0px);
+     12px ниже safe-area, минимум 12px (чтобы на Android/десктопе, где
+     safe-area = 0, тулбар не прижимался к самому краю). Меняй здесь —
+     обновятся оба места. */
+  --floating-bottom: max(var(--sai-bottom) - 12px, 12px);
   /* Sber green — бренд-акцент (CTA, активные состояния, focus) */
   --sber-green-700: #157f3a;
   --sber-green-600: #1a9f29;
