@@ -1597,6 +1597,63 @@ function buildTimeline(c){
   }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 
+/* Разбор опубликованного акта (LLM-фрагмент дайджеста, привязанный к
+ * делу в Python через attach_act_analyses). Если у активной стадии
+ * (drawerStage) есть act_analysis — рисуем секцию с акцентным фоном.
+ * При наличии разбора у обеих стадий показываем разбор для активной
+ * вкладки; переключение вкладок перерендерит drawer и подменит секцию.
+ * Если нет разбора — секция вообще не выводится (нет шумных пустот). */
+function buildActAnalysisSectionHtml(c){
+  const stage=drawerStage==='fi'?'fi':drawerStage==='ap'?'ap':null;
+  const data=stage==='fi'?(c._fi&&c._fi.act_analysis):stage==='ap'?(c._ap&&c._ap.act_analysis):null;
+  if(!data||!data.html)return'';
+  const meta=[];
+  if(data.act_date)meta.push('по акту от '+formatDate(parseDate(data.act_date)));
+  if(data.generated_at)meta.push('сгенерировано '+formatDateTimeShort(data.generated_at));
+  const isRaw=data.source==='raw_act';
+  if(isRaw)meta.push('сырая мотивировка из карточки суда');
+  const metaHtml=meta.length?`<div class="ai-meta">${meta.join(' · ')}</div>`:'';
+  return `<div class="drawer-section" id="ai-act-analysis">
+    <div class="drawer-section-title">Разбор опубликованного акта</div>
+    <div class="ai-analysis-block${isRaw?' is-raw':''}">
+      <div class="ai-analysis-html">${stripActAnalysisHeader(data.html,c.caseNumber)}</div>
+      ${metaHtml}
+    </div>
+  </div>`;
+}
+
+/* Срезает «заголовочный» первый <p> разбора, если он содержит ссылку на
+ * текущее дело — эта строка дублирует hero drawer (номер + стороны).
+ * Сравнение по bareCaseNumber: дайджест может ссылаться на номер с/без
+ * суффикса переномерования. Если первый <p> не похож на шапку — оставляем.
+ */
+function stripActAnalysisHeader(html,caseNumber){
+  if(!html||!caseNumber)return html||'';
+  const target=bareCaseNumber(caseNumber);
+  if(!target)return html;
+  const m=String(html).match(/^\s*<p\b[^>]*>([\s\S]*?)<\/p>\s*/i);
+  if(!m)return html;
+  const head=m[1];
+  const linkM=head.match(/<a[^>]*><b>([^<]+)<\/b><\/a>/);
+  if(!linkM)return html;
+  if(bareCaseNumber(linkM[1])!==target)return html;
+  return html.slice(m[0].length);
+}
+
+/* Якорный скролл к секции «Разбор» из чипа в «Ключевых датах». */
+function scrollToActAnalysis(){
+  const el=document.getElementById('ai-act-analysis');
+  if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* Короткий формат «04.05.2026 03:49» из ISO-строки '2026-05-04T03:49:49' */
+function formatDateTimeShort(iso){
+  if(!iso)return'';
+  const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(!m)return escHtml(iso);
+  return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
+}
+
 function renderDrawer(c){
   const vm=prepareCaseViewModel(c);
   const isNew=isNewCase(c);
@@ -1638,7 +1695,13 @@ function renderDrawer(c){
       keyDates+=`<div class="kv-k">${resolvedLabel}</div><div class="kv-v kv-mono">${formatDate(rd)}</div>`;
     }
   }
-  if(c.actDate)keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(c.actDate)}</div>`;
+  if(c.actDate){
+    // Если для активной стадии есть LLM-разбор акта — рядом с датой
+    // показываем кликабельный чип-якорь, скроллящий к секции «Разбор».
+    const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):null;
+    const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к разбору акта">✨ Разбор</span>`:'';
+    keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(c.actDate)}${chip}</div>`;
+  }
   keyDates+=`</div>`;
 
   // Суд/состав
@@ -1744,6 +1807,8 @@ function renderDrawer(c){
         <div class="drawer-section-title">${drawerStage==='fi'?'Первая инстанция':drawerStage==='ap'?'Апелляция':'Суд и состав'}</div>
         ${courtSection}
       </div>
+
+      ${buildActAnalysisSectionHtml(c)}
 
       <div class="drawer-section">
         <div class="drawer-section-title">Хронология</div>

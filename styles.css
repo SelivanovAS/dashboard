@@ -1248,6 +1248,51 @@ tr.detail-row { display:none; }
 .tl-empty { font-size:var(--fs-xs); color:var(--fg-4); }
 .drawer-notes-orig { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.5; }
 
+/* ── Разбор опубликованного акта от ИИ (drawer + чип-якорь) ─────────── */
+.badge-ai-analysis {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:5px 11px;
+  border-radius:var(--radius-pill);
+  background:var(--accent-bg-strong);
+  color:var(--accent-active);
+  font-size:var(--fs-sm);
+  font-weight:var(--fw-semibold);
+  line-height:1.1;
+  cursor:pointer;
+  margin-left:10px;
+  vertical-align:middle;
+  transition:background 120ms var(--ease-out), color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.badge-ai-analysis:hover { background:var(--accent); color:#fff; transform:translateY(-1px); }
+.badge-ai-analysis:active { transform:translateY(0); }
+.ai-analysis-block {
+  padding:12px 14px;
+  border-radius:var(--radius);
+  background:var(--accent-bg-soft);
+  border-left:3px solid var(--accent);
+  font-size:var(--fs-sm);
+  line-height:1.5;
+  color:var(--fg-1);
+}
+.ai-analysis-block.is-raw {
+  background:var(--bg-3);
+  border-left-color:var(--fg-4);
+  color:var(--fg-2);
+}
+.ai-analysis-html { word-wrap:break-word; overflow-wrap:break-word; }
+.ai-analysis-html p { margin:0 0 8px; }
+.ai-analysis-html p:last-child { margin-bottom:0; }
+.ai-analysis-html a { color:var(--accent-active); }
+.ai-analysis-block .ai-meta {
+  font-size:var(--fs-2xs);
+  color:var(--fg-3);
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px dashed var(--divider);
+}
+
 /* ── Последний дайджест (свёртываемый блок) ─────────────────────────── */
 .digest-block {
   background: var(--bg-1);
