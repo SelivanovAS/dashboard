@@ -1048,7 +1048,7 @@ tr.detail-row { display:none; }
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    bottom:calc(env(safe-area-inset-bottom, 0px) + 16px);
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 6px);
     z-index:50;
     margin:0;
   }
@@ -1133,7 +1133,7 @@ tr.detail-row { display:none; }
   /* Освобождаем место под плавающим тулбаром, чтобы контент не перекрывался.
      Высота: 52 (капсула) + 16 (нижний зазор над home-indicator) + 16 (воздух
      сверху) + env(safe-area-inset-bottom) (для iPhone home-indicator). */
-  .app-main { padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 84px); }
+  .app-main { padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 74px); }
   .search-box { flex:1 1 0; min-width:0; }
   .search-box input { min-width:0; }
   .filters-btn { flex:0 0 auto; }
@@ -1189,7 +1189,7 @@ tr.detail-row { display:none; }
   .new-cases-banner { font-size:var(--fs-lg); }
   /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer.
      52 (кнопка) + 16 (нижний зазор) + 24 (воздух над кнопкой) = 92px над safe-area. */
-  .drawer-body { padding:16px 16px calc(env(safe-area-inset-bottom, 0px) + 92px); }
+  .drawer-body { padding:16px 16px calc(env(safe-area-inset-bottom, 0px) + 82px); }
   .drawer-title .dt-sub { font-size:var(--fs-xs); }
   .drawer-hero .hero-parties { font-size:17px; }
   .drawer-hero .hero-category { font-size:var(--fs-md); }
@@ -1207,7 +1207,7 @@ tr.detail-row { display:none; }
     flex-wrap:nowrap; gap:8px;
     /* Тот же зазор от низа, что у toolbar (16px над safe-area), чтобы
        плавающие кнопки drawer и toolbar выглядели на одной высоте. */
-    padding:8px 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    padding:8px 12px calc(env(safe-area-inset-bottom, 0px) + 6px);
     background:transparent;
     -webkit-backdrop-filter:none; backdrop-filter:none;
     border-top:none;
