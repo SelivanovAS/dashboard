@@ -2874,6 +2874,159 @@ def save_last_digest(html: str, summary: str = "", *, is_empty: bool = False) ->
         log.warning(f"Не удалось сохранить дайджест для фронта: {exc}")
 
 
+# ── Привязка LLM-разбора опубликованного акта к конкретному делу ──────
+# Дайджест Claude уже содержит осмысленный анализ каждого опубликованного
+# акта (мотивировка, итог, роль банка), но текст монолитный и живёт ровно
+# до следующего дайджеста. Чтобы юрист видел разбор прямо в drawer
+# карточки дела (и чтобы он не пропадал на следующий день), вырезаем
+# относящиеся к делу абзацы из готового HTML и кладём в cases.json под
+# `<stage>.act_analysis`. Парсер опирается на тот же контракт
+# `<a><b>НОМЕР</b></a>`, который сейчас использует фронт в mine-режиме.
+
+def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
+    """Из HTML дайджеста вернуть склейку абзацев, в которых первый
+    `<a><b>НОМЕР</b></a>` соответствует `case_id` (после нормализации
+    `_bare_case_number`). Пустую строку — если ничего не нашлось."""
+    if not html or not case_id:
+        return ""
+    target = _bare_case_number(case_id)
+    if not target:
+        return ""
+    case_re = re.compile(r"<a[^>]*><b>([^<]+)</b></a>")
+    out: list[str] = []
+    for para in re.split(r"\n{2,}", html):
+        m = case_re.search(para)
+        if not m:
+            continue
+        if _bare_case_number(m.group(1)) == target:
+            stripped = para.strip()
+            if stripped:
+                out.append(stripped)
+    return "\n\n".join(out)
+
+
+def _current_digest_model_name() -> str:
+    """Имя модели, которой только что генерили дайджест — для метки
+    `act_analysis.model`. Совпадает с тем, что реально использовалось в
+    `generate_digest()`."""
+    if LLM_PROVIDER == "gigachat":
+        return f"gigachat:{GIGACHAT_MODEL}"
+    return "claude-haiku-4-5-20251001"
+
+
+def attach_act_analyses(
+    cases: list[dict],
+    digest_html: str,
+    *,
+    all_changes: list[dict] | None = None,
+    is_empty: bool = False,
+) -> int:
+    """Записать LLM-разбор опубликованного акта в `cases.json`.
+
+    Для каждого `change`, у которого тип содержит `new_act` (апелляция)
+    или `fi_act_text_published` (1-я инст.), вырезает из `digest_html`
+    относящийся к делу абзац(ы) и кладёт в
+    `case[<stage>]["act_analysis"] = {html, source, act_date, generated_at, model}`.
+
+    Если в дайджесте абзац не нашёлся — fallback: HTML-обёрнутая
+    мотивировка из `change["details"]["act_text"]` с пометкой
+    `source: "raw_act"`. Если и её нет — поле просто не пишем.
+
+    Поле перезаписывается ТОЛЬКО для дел с новым событием в этом прогоне;
+    у остальных дел `act_analysis` сохраняется с прошлых прогонов и
+    переживает любое количество последующих дайджестов. Идемпотентно:
+    при повторном прогоне на тех же данных `generated_at` не обновляется.
+
+    Возвращает кол-во дел, у которых поле реально изменилось.
+    """
+    if is_empty or not digest_html or not all_changes:
+        return 0
+
+    # Индекс «bare-номер дела → объект case»: матчим как по верхнему
+    # `id`, так и по `first_instance.case_number` / `appeal.case_number` —
+    # change["case"] для апелляции содержит апел. номер, для 1-й инст. —
+    # номер 1-й инст., и оба должны находить нужное дело.
+    by_id: dict[str, dict] = {}
+    for c in cases:
+        for raw in (
+            c.get("id"),
+            (c.get("first_instance") or {}).get("case_number"),
+            (c.get("appeal") or {}).get("case_number"),
+        ):
+            bare = _bare_case_number(raw or "")
+            if bare:
+                by_id.setdefault(bare, c)
+
+    model_name = _current_digest_model_name()
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    updated = 0
+
+    for ch in all_changes:
+        types = set(ch.get("type") or [])
+        if "new_act" in types:
+            stage = "appeal"
+        elif "fi_act_text_published" in types:
+            stage = "first_instance"
+        else:
+            continue
+
+        case_num = ch.get("case", "")
+        bare = _bare_case_number(case_num)
+        if not bare:
+            continue
+        case = by_id.get(bare)
+        if not case:
+            log.info(
+                f"act_analysis: дело {case_num} ({stage}) не нашлось "
+                "в cases.json — пропуск"
+            )
+            continue
+
+        details = ch.get("details") or {}
+        act_date = details.get("act_date") or ""
+
+        html_fragment = _extract_case_paragraphs_from_digest(digest_html, bare)
+        if html_fragment:
+            source = "digest"
+        else:
+            raw_act = (details.get("act_text") or "").strip()
+            if not raw_act:
+                continue
+            # Сырая мотивировка: оборачиваем в <p>, экранируем угловые
+            # скобки, переводы строк превращаем в <br> / новые абзацы.
+            escaped = html_escape(raw_act).replace("\r\n", "\n")
+            paragraphs = [p.strip() for p in escaped.split("\n\n") if p.strip()]
+            html_fragment = "".join(
+                "<p>" + p.replace("\n", "<br>") + "</p>" for p in paragraphs
+            )
+            source = "raw_act"
+
+        stage_obj = case.setdefault(stage, {})
+        existing = stage_obj.get("act_analysis") or {}
+        if (
+            existing.get("html") == html_fragment
+            and existing.get("source") == source
+            and existing.get("act_date") == act_date
+            and existing.get("model") == model_name
+        ):
+            # Идемпотентность: содержимое не поменялось — не трогаем
+            # generated_at, иначе git diff пухнет на каждом replay.
+            continue
+
+        stage_obj["act_analysis"] = {
+            "html": html_fragment,
+            "source": source,
+            "act_date": act_date,
+            "generated_at": now_iso,
+            "model": model_name,
+        }
+        updated += 1
+
+    if updated:
+        log.info(f"act_analysis: записан/обновлён для {updated} дел.")
+    return updated
+
+
 def load_last_meaningful_digest() -> dict | None:
     """Прочитать `last_digest.json` и вернуть payload последнего непустого
     дайджеста — или None, если такого нет.
@@ -6497,11 +6650,29 @@ def main_json():
         )
 
     # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
+    digest_is_empty = not (push_new + push_changes + push_stages)
     save_last_digest(
         digest,
         summary=push_summary,
-        is_empty=not (push_new + push_changes + push_stages),
+        is_empty=digest_is_empty,
     )
+
+    # Привязываем LLM-разбор опубликованных актов к делам в cases.json,
+    # чтобы юрист видел его в drawer (и чтобы он жил дольше одного дня).
+    # Поле `act_analysis` обновляется только у дел с new_act /
+    # fi_act_text_published в этом прогоне; остальные не трогаем.
+    act_analyses_updated = attach_act_analyses(
+        cases,
+        digest,
+        all_changes=list(changes) + list(fi_changes),
+        is_empty=digest_is_empty,
+    )
+    if act_analyses_updated:
+        # Дописываем поле в уже сохранённый ранее cases.json. save_json
+        # поверх — единственный безопасный способ донести изменение до
+        # фронта (atomic-write через временный файл уже встроен).
+        data["cases"] = cases
+        save_json(data, JSON_PATH)
 
     timings["total"] = time.perf_counter() - t_total_start
 
@@ -6596,6 +6767,24 @@ def main_replay_last(push_all: bool = False):
         ctx.get("fi_changes", []),
     )
     save_last_digest(digest, summary=summary or "(replay)", is_empty=replay_is_empty)
+
+    # Replay переигрывает дайджест на тех же данных — обновим разбор актов
+    # в cases.json (актуально, если правили промпт и хотим, чтобы новый
+    # вариант разбора попал в drawer карточки дела).
+    try:
+        data = load_json(JSON_PATH)
+        cases = data.get("cases", [])
+        updated = attach_act_analyses(
+            cases,
+            digest,
+            all_changes=list(ctx.get("changes", [])) + list(ctx.get("fi_changes", [])),
+            is_empty=replay_is_empty,
+        )
+        if updated:
+            data["cases"] = cases
+            save_json(data, JSON_PATH)
+    except Exception as exc:
+        log.warning(f"act_analysis (replay): не удалось обновить cases.json: {exc}")
 
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
     title = (
