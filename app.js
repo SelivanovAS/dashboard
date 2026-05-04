@@ -148,6 +148,22 @@ function normalizeResult(raw){
   if(/отменен/i.test(s))return 'reversed';
   return 'pending';
 }
+// Извлекает вердикт 1-й инст. из last_event, когда колонка «Результат»
+// в карточке суда ещё пуста (мотивировка не опубликована). На карточке
+// sudrf формулировки строго формализованы: «Иск (заявление, жалоба)
+// УДОВЛЕТВОРЕН», «ОТКАЗАНО в удовлетворении…», «УДОВЛЕТВОРЕН ЧАСТИЧНО».
+// Возвращает код в той же системе, что normalizeResult.
+function extractFiVerdict(text){
+  if(!text)return '';
+  const s=text.toLowerCase();
+  // Триггер — «вынесено решение по делу», иначе можно поймать ложное
+  // «удовлетворении» в названии события вроде «об отложении…».
+  if(!/вынесено\s+решение/i.test(s))return '';
+  if(/отказано/.test(s))return 'upheld';
+  if(/удовлетворен\S?\s+частично|частично\s+удовлетворен/.test(s))return 'partial';
+  if(/удовлетворен/.test(s))return 'reversed';
+  return '';
+}
 function computeDetailedStatus(c){
   if(c.status==='decided')return 'decided';
   const evLow=(c.lastEvent||'').toLowerCase();
@@ -173,6 +189,10 @@ function computeDetailedStatus(c){
   return 'awaiting';
 }
 const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',pending:'Ожидается'};
+// Лейблы для 1-й инстанции: коды result (upheld/reversed/partial/...) переиспользуем,
+// чтобы getResultFavor работал без правок, но текст бейджа — из «языка карточки суда».
+// upheld в 1-й инст. = «отказано в иске», reversed = «иск удовлетворён».
+const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',pending:'Ожидается'};
 const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
 const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
@@ -380,13 +400,24 @@ function jsonToCase(j){
   }
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
-  const rs=primary.result||'';
+  let rs=primary.result||'';
   const baseStatus=(
     /решен|рассмотрен/i.test(sl) ||
     /вынесено\s+решение/i.test(evText) ||
     /передан[оа]\s+в\s+архив|сдан[оа]\s+в\s+архив/i.test(evText) ||
     (isAppeal && rs && rs.trim().length>0)
   )?'decided':'active';
+  // Если 1-я инст. фактически решена (по last_event), а парсер ещё не
+  // подхватил «Результат» из карточки суда — извлекаем вердикт вручную.
+  if(!isAppeal && baseStatus==='decided' && (!rs||!rs.trim())){
+    const v=extractFiVerdict(evText);
+    if(v){
+      // Подсовываем строку, которую normalizeResult ниже преобразует в код.
+      rs=v==='upheld'?'Отказано в удовлетворении иска'
+        :v==='partial'?'Иск удовлетворен частично'
+        :'Иск удовлетворен';
+    }
+  }
   // Appellant
   const apellRaw=(ap.appellant||'').toLowerCase();
   let appellant=APPELLANT_MAP[apellRaw]||'';
@@ -1240,13 +1271,12 @@ function prepareCaseViewModel(c){
   const isFutureHearing=!!(c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today);
   const resultPresent=!!(c.result&&c.result!=='pending');
   const resultIcon=RESULT_ICONS[c.result]||'';
-  // Апелляционные лейблы вердикта («Отменено», «Оставлено без изменения»)
-  // не подходят делам 1 инстанции: «Иск УДОВЛЕТВОРЕН» нормализуется в код
-  // 'reversed' ради корректной окраски favorable/unfavorable, но лейбл
-  // «Отменено» на карточке 1 инст. читается неправильно. Для 1 инст. —
-  // «Решено»; цвет и иконка благосклонности остаются.
+  // Для 1-й инст. — собственный набор лейблов («Удовлетворено», «Отказано»,
+  // «Удовлетворено частично»), который повторяет язык карточки суда.
+  // Окраска favorable/unfavorable (зелёный/красный) считается отдельно
+  // в getResultFavor с учётом роли банка.
   const resultLabel=(c.stage==='first_instance'&&resultPresent)
-    ?'Решено'
+    ?(FI_RESULT_LABELS[c.result]||c.result||'')
     :(RESULT_LABELS[c.result]||c.result||'');
   const resultBadgeCls=getResultBadgeClass(c);
   const favor=getResultFavor(c);
@@ -1619,8 +1649,14 @@ function renderDrawer(c){
     if(fi.case_number)grid+=`<div class="kv-k">Номер дела</div><div class="kv-v kv-mono">${escHtml(fi.case_number)}</div>`;
     if(fi.court)grid+=`<div class="kv-k">Суд</div><div class="kv-v">${escHtml(fi.court)}</div>`;
     if(fi.judge)grid+=`<div class="kv-k">Судья</div><div class="kv-v">${escHtml(fi.judge)}</div>`;
-    if(fi.status)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(fi.status)}</div>`;
-    if(fi.result)grid+=`<div class="kv-k">Результат</div><div class="kv-v">${escHtml(fi.result)}</div>`;
+    // Если фронт уже распознал вердикт по last_event (c.result!=='pending'),
+    // а парсер ещё не успел переключить fi.status — показываем «Решено»
+    // и точный результат, а не устаревшее «В производстве»/пустую строку.
+    const fiResolved=c.stage==='first_instance'&&c.result&&c.result!=='pending';
+    const fiStatusDisplay=fiResolved?'Решено':fi.status;
+    const fiResultDisplay=fiResolved?(FI_RESULT_LABELS[c.result]||fi.result):fi.result;
+    if(fiStatusDisplay)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(fiStatusDisplay)}</div>`;
+    if(fiResultDisplay)grid+=`<div class="kv-k">Результат</div><div class="kv-v">${escHtml(fiResultDisplay)}</div>`;
     grid+=`</div>`;
     courtSection=grid;
   }else if(drawerStage==='ap'&&stageData){
