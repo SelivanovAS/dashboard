@@ -1048,7 +1048,7 @@ tr.detail-row { display:none; }
   .toolbar {
     position:fixed;
     left:12px; right:12px;
-    bottom:max(env(safe-area-inset-bottom, 0px), 4px);
+    bottom:max(env(safe-area-inset-bottom, 0px) - 12px, 0px);
     z-index:50;
     margin:0;
   }
@@ -1207,7 +1207,7 @@ tr.detail-row { display:none; }
     flex-wrap:nowrap; gap:8px;
     /* Тот же зазор от низа, что у toolbar (16px над safe-area), чтобы
        плавающие кнопки drawer и toolbar выглядели на одной высоте. */
-    padding:8px 12px max(env(safe-area-inset-bottom, 0px), 4px);
+    padding:8px 12px max(env(safe-area-inset-bottom, 0px) - 12px, 0px);
     background:transparent;
     -webkit-backdrop-filter:none; backdrop-filter:none;
     border-top:none;
