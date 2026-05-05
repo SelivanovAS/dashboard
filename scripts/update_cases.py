@@ -5126,9 +5126,9 @@ def _make_per_sub_callback(
     """Фабрика callback'а для `send_web_push(per_subscriber=...)`.
 
     Логика отправки push с учётом подписки на дела:
-    · watchlist пуст и новых дел нет → None (ничего не шлём).
-    · watchlist пуст, но есть новые дела (общесистемные) → общий push с
-      перечнем числа изменений.
+    · watchlist пуст и событий вообще нет → None (ничего не шлём).
+    · watchlist пуст, но есть любые события (новые дела ИЛИ изменения ИЛИ
+      переходы стадий) → общий push с push_summary, без фильтрации.
     · watchlist непуст → персональный push: `_filter_events_by_watchlist`
       пропускает все новые дела целиком + только изменения по своим делам.
       Заголовок «Мониторинг дел — твои дела», click_url с `?mine=1`.
@@ -5140,6 +5140,21 @@ def _make_per_sub_callback(
     def _per_sub(sub: dict):
         wl_raw = sub.get("watchlist") or []
         wl = {str(x).strip() for x in wl_raw if str(x).strip()}
+
+        if not wl:
+            # Пустой watchlist — общесистемный push при любых событиях.
+            total_global = (
+                len(fi_new_cases) + len(appeal_new_cases_csv)
+                + len(fi_changes) + len(changes) + len(stage_transitions)
+            )
+            if total_global == 0:
+                return None
+            return (
+                "Мониторинг дел — обновление",
+                push_summary,
+                "/sberbank_dashboard.html?digest=open",
+            )
+
         f = _filter_events_by_watchlist(
             wl,
             fi_new_cases=fi_new_cases,
@@ -5153,14 +5168,6 @@ def _make_per_sub_callback(
         n_st = len(f["stage_transitions"])
         if n_new + n_chg + n_st == 0:
             return None
-        if not wl:
-            # Подписчик ничего не отслеживает — приходят только новые дела
-            # как общесистемный сигнал. Текст и click_url — общие.
-            return (
-                "Мониторинг дел — новые дела",
-                push_summary,
-                "/sberbank_dashboard.html?digest=open",
-            )
         # Перечень: до 3 номеров, остаток сворачиваем в «и ещё N».
         ids: list[str] = []
         for c in f["fi_new_cases"]:
