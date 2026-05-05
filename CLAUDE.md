@@ -4,7 +4,7 @@
 
 ## Что это
 
-Дашборд юриста ПАО Сбербанк: мониторинг гражданских дел в 20 судах ХМАО-Югры (первая инстанция) + апелляция, AI-дайджесты в Telegram, автозапуск через Cloudflare Worker cron → GitHub Actions. Пользователь — юрист банка, общение на русском.
+Дашборд юриста ПАО Сбербанк: мониторинг гражданских дел в 20 судах ХМАО-Югры (первая инстанция) + апелляция (Суд ХМАО-Югры) + кассация (7-й кассационный суд общей юрисдикции, фильтр по 1-й инст. ХМАО). AI-дайджесты в Telegram, автозапуск через Cloudflare Worker cron → GitHub Actions. Пользователь — юрист банка, общение на русском.
 
 ## Главные файлы
 
@@ -14,6 +14,7 @@
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
 - [data/cases_archive.json](data/cases_archive.json) — архив.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
+- `data/.cassation_acts` — дедуп уже обработанных кассационных определений (планируется при включении LLM-разбора кассации).
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
 - [data/sberbank_cases.csv](data/sberbank_cases.csv) + архив — legacy CSV (UTF-8 с BOM), всё ещё коммитится для совместимости.
@@ -28,12 +29,19 @@
 
 | Что | Где |
 |-----|-----|
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:106](scripts/update_cases.py:106) |
-| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:114](scripts/update_cases.py:114) |
-| `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:155](scripts/update_cases.py:155) |
-| Константы state-machine (`FI_ARCHIVE_DAYS` и т.д.) | [scripts/update_cases.py:171](scripts/update_cases.py:171) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:421](scripts/update_cases.py:421) |
-| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:599](scripts/update_cases.py:599) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:119](scripts/update_cases.py:119) |
+| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:127](scripts/update_cases.py:127) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:154](scripts/update_cases.py:154) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:162](scripts/update_cases.py:162) |
+| `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:216](scripts/update_cases.py:216) |
+| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:246](scripts/update_cases.py:246) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:514](scripts/update_cases.py:514) |
+| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:1110](scripts/update_cases.py:1110) |
+| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:1486](scripts/update_cases.py:1486) |
+| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:2036](scripts/update_cases.py:2036) |
+| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:2124](scripts/update_cases.py:2124) |
+| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:2654](scripts/update_cases.py:2654) |
+| `link_cassation_cases` (link + discovery + remanded) | [scripts/update_cases.py:2756](scripts/update_cases.py:2756) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:2049](scripts/update_cases.py:2049) |
 | `def generate_digest` — Claude-дайджест | [scripts/update_cases.py:2330](scripts/update_cases.py:2330) |
 | Claude model: `claude-haiku-4-5-20251001` | [scripts/update_cases.py:2694](scripts/update_cases.py:2694) |
@@ -48,7 +56,10 @@
   "cases": [
     {
       "id": "номер дела",
-      "current_stage": "first_instance" | "awaiting_appeal" | "appeal" | "cassation_watch" | "cassation_pending",
+      "current_stage": "first_instance" | "awaiting_appeal" | "appeal" | "cassation_watch" | "cassation_pending" | "cassation" | "awaiting_relink",
+      "round": 1,                  // ≥2 после cassation_remanded (см. history)
+      "history": [...],            // снимки прошлых раундов после remanded
+      "discovered_via_cassation": false,  // true если дело создано discovery'ем
       "plaintiff": "...", "defendant": "...",
       "bank_role": "Истец|Ответчик|Третье лицо",
       "category": "...", "notes": "...",
@@ -61,6 +72,13 @@
          "sent_to_cassation", "sent_to_cassation_date"
       },
       "appeal":         { "court", "status", "result", "events": [], "act_published", "hearing_date", "act_date", ... },
+      "cassation":      { "case_number", "cassation_number", "court", "judge",
+                          "filing_date", "decision_date", "act_date",
+                          "result_text", "result_for_appeal", "review_result",
+                          "outcome", "remanded_to", "act_published", "act_text",
+                          "appellant", "appellant_is_bank", "appellant_status",
+                          "events", "link", "last_checked_at",
+                          "discovered_via_cassation" },
       "cassation_pending_since": "YYYY-MM-DD"  // если перешли в cassation_pending
     }
   ]
@@ -76,7 +94,7 @@
 
 ## Жизненный цикл дела (state machine)
 
-Пять рабочих стадий в `current_stage` + архив. Переходы — в
+Семь рабочих стадий в `current_stage` + архив. Переходы — в
 `advance_case_stage()`, архивация — в `is_case_archived()`.
 
 | Стадия | Что парсим | Что запускает переход |
@@ -85,14 +103,25 @@
 | `awaiting_appeal` | ничего (жалоба подана, ждём карточку в апел. суде) | link_cases находит апел. карточку → `appeal` · бессрочно, не архивируется |
 | `appeal` | карточка апел. суда | опубликован акт ИЛИ 30 дней от апел. заседания без акта → `cassation_watch` · не архивируется по времени |
 | `cassation_watch` | карточка 1-й инст. (ищем касс. жалобу) | касс. жалоба или направление в кассац. суд → `cassation_pending` · 120 дней от апел. заседания → архив |
-| `cassation_pending` | ничего (будет парсер кассации) | не архивируется по времени |
+| `cassation_pending` | ничего (ждём появления карточки на 7kas) | link_cassation_cases находит карточку → `cassation` · не архивируется |
+| `cassation` | карточка 7kas (гражданская кассация) | `outcome=cassation_remanded` → `awaiting_relink` (re-link при появлении новой карточки в нижестоящей) · `act_published` + 30 дней / `decision_date` + 45 дней без акта → архив (для финальных исходов, кроме remanded) |
+| `awaiting_relink` | ничего (ждём карточку в нижестоящей инст.) | парсер 1-й инст. находит дело → `first_instance` (round +1, прошлые блоки в `history`) ИЛИ парсер апел. → `appeal` · бессрочно, не архивируется |
 
-Константы в [scripts/update_cases.py:171](scripts/update_cases.py:171):
+Константы в [scripts/update_cases.py:201](scripts/update_cases.py:201):
 `FI_ARCHIVE_DAYS=45`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
-`CASSATION_WATCH_DAYS=120`.
+`CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
+`CASSATION_NO_ACT_PUBLISH_DAYS=45`.
 
 `migrate_stages()` идемпотентно подтягивает старые записи (до появления
 state-machine) под новую модель при каждом запуске.
+
+**7kas.sudrf.ru — параметры запросов** (эмпирически найдены):
+- `delo_id=2800001` (гражданская кассация, не уголовка/админка),
+- `delo_table=g33_case`, `name_field=G33_PARTS__NAMESS`,
+- `new=2800001` (НЕ `0` и НЕ `5` — отдельная ветка для КСОЮ).
+
+Любые правки этих параметров — только после ручной проверки на 7kas, иначе
+поиск молча вернёт «Данных по запросу не обнаружено».
 
 ## Команды
 
@@ -175,6 +204,7 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 - Не переименовывать поля в `cases.json` без миграции — завязан фронт (`app.js`) и архив.
 - Не добавлять cron-job.org / аналоги — автозапуск только через Cloudflare Worker.
 - Не ломать структуру промптов в `generate_digest` / `GIGACHAT_SYSTEM_PROMPT` без предупреждения: пользователь долго их настраивал (см. `git log` по этим функциям).
+- Не менять `delo_table=g33_case` и `new=2800001` для 7kas без проверки — эти константы эмпирически подобраны к API КСОЮ; неверные значения дают «Данных по запросу не обнаружено» без явной ошибки.
 - Не амендить опубликованные коммиты — создавать новые.
 
 ## Когда всё-таки нужна разведка

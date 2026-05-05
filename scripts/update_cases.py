@@ -49,8 +49,8 @@ SBER_NAME_WIN1251 = "%D1%E1%E5%F0%E1%E0%ED%EA"  # «Сбербанк» в Window
 class CourtConfig:
     name: str          # «Суд ХМАО-Югры» / «Сургутский городской суд»
     domain: str        # oblsud--hmao.sudrf.ru
-    delo_id: int       # 5 = апелляция, 1540005 = первая инстанция (гражданские)
-    court_type: str    # "appeal" | "first_instance"
+    delo_id: int       # 5 = апелляция, 1540005 = 1 инст. (гражд.), 2800001 = касс. (гражд.)
+    court_type: str    # "appeal" | "first_instance" | "cassation"
     enabled: bool = True
     srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
 
@@ -62,6 +62,10 @@ class CourtConfig:
     def _delo_table(self) -> str:
         if self.delo_id == 5:
             return "g2_case"
+        if self.delo_id == 2800001:
+            # 7kas.sudrf.ru, гражданская кассация. Эмпирически найдено в форме
+            # поиска (name_op=sf): таблица называется g33_case, не ka1_case.
+            return "g33_case"
         return "g1_case"
 
     @property
@@ -69,12 +73,20 @@ class CourtConfig:
         """Имя поля для фильтрации по стороне (зависит от типа суда)."""
         if self.delo_id == 5:
             return "G2_PARTS__NAMESS"
+        if self.delo_id == 2800001:
+            return "G33_PARTS__NAMESS"
         return "G1_PARTS__NAMESS"
 
     @property
     def _new_param(self) -> int:
-        """Параметр &new= : 5 для апелляции, 0 для 1 инстанции."""
-        return 5 if self.delo_id == 5 else 0
+        """Параметр &new= : 5 для апелляции, 0 для 1 инст., 2800001 для касс.
+        (для кассации значение совпадает с delo_id — нестандарт, но эмпирически
+        проверено: при new=0 поиск возвращает «Данных по запросу не обнаружено»)."""
+        if self.delo_id == 5:
+            return 5
+        if self.delo_id == 2800001:
+            return 2800001
+        return 0
 
     def search_url(self, party_name_encoded: str = SBER_NAME_WIN1251) -> str:
         return (
@@ -135,7 +147,55 @@ FIRST_INSTANCE_COURTS: list[CourtConfig] = [
     CourtConfig("Октябрьский районный суд",        "oktb--hmao.sudrf.ru",      1540005, "first_instance"),
 ]
 
-# Совместимость: глобальные константы на переходный период
+# Седьмой кассационный суд общей юрисдикции (гражданские дела, delo_id=2800001).
+# Покрывает 7 регионов (Свердловск, Челябинск, Курган, Пермь, Тюмень,
+# Башкортостан, ХМАО, Оренбург, ЯНАО). Мы фильтруем по 1-й инст. ХМАО
+# (см. match_hmao_first_instance), поэтому видим только «свои» дела.
+CASSATION_COURT = CourtConfig(
+    name="Седьмой кассационный суд общей юрисдикции",
+    domain="7kas.sudrf.ru",
+    delo_id=2800001,
+    court_type="cassation",
+)
+
+
+def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
+    """Сопоставить длинное имя суда из карточки 7kas с одним из наших ХМАО-судов.
+
+    На 7kas суд 1-й инстанции пишется в развёрнутой форме, например:
+        «Урайский городской суд Ханты-Мансийского автономного округа-Югры»
+    Внутри проекта мы храним короткие имена («Урайский городской суд»). Эта
+    функция ищет короткое имя как подстроку в длинном.
+
+    Особый случай: «Суд Ханты-Мансийского автономного округа - Югры» —
+    окружной суд, иногда служит 1-й инстанцией для отдельных категорий.
+    Возвращает APPEAL_COURT (это та же сущность по domain).
+
+    None — если суд не из ХМАО (фильтр на уровне поиска).
+    """
+    if not long_court_name:
+        return None
+    name_norm = long_court_name.strip().lower()
+    # Окружной суд ХМАО-Югры — может быть 1-й инстанцией для админ. дел и т.п.
+    if "суд ханты-мансийского автономного округа" in name_norm:
+        # Отсекаем районные/городские, у них суффикс «округа-Югры» в конце,
+        # а тут именно «Суд ХМАО» в начале (без префикса города/района).
+        if not any(
+            kw in name_norm
+            for kw in ("городской", "районный", "межрайонный", "мировой")
+        ):
+            return APPEAL_COURT
+    # Перебираем 20 районных/городских судов — ищем короткое имя подстрокой.
+    # Дедуп по domain: Покачи дублирует Нижневартовский районный (один domain).
+    for cfg in FIRST_INSTANCE_COURTS:
+        short = cfg.name.lower()
+        # Покачи: name содержит круглые скобки, его не матчим как «Нижневартовский
+        # районный суд» внутри длинной формы — он отделён скобками.
+        if "(" in short:
+            continue
+        if short in name_norm:
+            return cfg
+    return None
 BASE_URL = APPEAL_COURT.base_url
 SEARCH_URL = APPEAL_COURT.search_url()
 CARD_URL_TPL = (
@@ -191,6 +251,10 @@ APPEAL_NO_ACT_GRACE_DAYS = 30   # Апелляция: если акт не оп�
 CASSATION_WATCH_DAYS = 120      # cassation_watch: 4 мес (≈3 мес срок + почта
                                 # + регистрация) от апел. заседания. После —
                                 # архив, если касс. жалоба так и не подана.
+# Кассация (стадия cassation, парсер 7kas.sudrf.ru):
+CASSATION_ACT_ARCHIVE_DAYS = 30      # 30 дней после публикации опред. → архив.
+CASSATION_NO_ACT_PUBLISH_DAYS = 45   # 45 дней от даты вынесения опред. без
+                                     # публикации текста → архив без акта.
 # Legacy: CSV-ветка архивации (apelljatsiя в CSV) ещё использует старое
 # 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.
 LEGACY_CSV_ARCHIVE_DAYS = 30
@@ -441,6 +505,10 @@ def is_archived(case: dict) -> bool:
 #   cassation_watch   — апел. рассмотрел, вернулись к парсингу 1-й для поиска
 #                       касс. жалобы (окно 4 мес от апел. заседания).
 #   cassation_pending — касс. жалоба зарегистрирована, ждём парсер кассации.
+#   cassation         — карточка найдена на 7kas, парсим до публикации акта.
+#   awaiting_relink   — кассация отменила и направила на новое рассмотрение
+#                       (1-я или апел.); ждём, что соответствующий парсер
+#                       подцепит дело по номеру (бессрочно).
 # Архив — через is_case_archived.
 
 def advance_case_stage(case: dict) -> str | None:
@@ -453,10 +521,16 @@ def advance_case_stage(case: dict) -> str | None:
     Переход appeal → cassation_watch по факту публикации апел. акта или
     по истечении APPEAL_NO_ACT_GRACE_DAYS дней от апел. заседания.
     Переход cassation_watch → cassation_pending по касс. жалобе или
-    направлению в кассационный суд."""
+    направлению в кассационный суд.
+    Переход cassation_pending → cassation делает link_cassation_cases
+    при появлении карточки на 7kas — здесь не трогаем.
+    Переход cassation → awaiting_relink при `outcome == cassation_remanded`
+    (отменено и направлено на новое); дело ждёт появления новой карточки
+    в нижестоящей инстанции."""
     stage = case.get("current_stage")
     fi = case.get("first_instance") or {}
     ap = case.get("appeal") or {}
+    cs = case.get("cassation") or {}
     now = datetime.now()
 
     if stage == "first_instance":
@@ -485,6 +559,21 @@ def advance_case_stage(case: dict) -> str | None:
             return "cassation_watch"
         return None
 
+    if stage == "cassation_pending":
+        return None  # переход в cassation — задача link_cassation_cases
+
+    if stage == "cassation":
+        # Отменено и направлено на новое — переходим в awaiting_relink (ждём
+        # появления новой карточки в нижестоящей инстанции). Архивации нет:
+        # это re-open того же дела на втором круге.
+        if cs.get("outcome") == "cassation_remanded":
+            case["current_stage"] = "awaiting_relink"
+            return "cassation"
+        return None
+
+    if stage == "awaiting_relink":
+        return None  # переход обратно в first_instance/appeal — задача link_cases
+
     return None
 
 
@@ -495,12 +584,16 @@ def is_case_archived(case: dict) -> bool:
     - appeal: никогда (переход в cassation_watch делает advance_case_stage).
     - cassation_watch: >120 дней от апел. hearing_date без касс. жалобы.
     - cassation_pending: никогда (ждём парсер кассации).
+    - cassation: финальный исход (не remanded) + 30 дней после публикации акта,
+      ИЛИ 45 дней от decision_date без публикации акта → архив.
+    - awaiting_relink: никогда (ждём появления карточки в нижестоящей инст.).
     Остальные (legacy «first_instance» без current_stage, «appeal» без JSON
     данных) — false, не трогаем."""
     stage = case.get("current_stage")
     now = datetime.now()
     fi = case.get("first_instance") or {}
     ap = case.get("appeal") or {}
+    cs = case.get("cassation") or {}
 
     if stage == "first_instance":
         if fi.get("appeal_filed_date"):
@@ -512,13 +605,31 @@ def is_case_archived(case: dict) -> bool:
             return True
         return False
 
-    if stage in ("awaiting_appeal", "appeal", "cassation_pending"):
+    if stage in ("awaiting_appeal", "appeal", "cassation_pending", "awaiting_relink"):
         return False
 
     if stage == "cassation_watch":
         ap_hearing = parse_date(ap.get("hearing_date") or "")
         if ap_hearing and (now - ap_hearing).days > CASSATION_WATCH_DAYS:
             return True
+        return False
+
+    if stage == "cassation":
+        # Финальные исходы (не remanded) → можно архивировать.
+        outcome = cs.get("outcome") or ""
+        if outcome == "cassation_remanded":
+            return False  # ждём awaiting_relink, advance_case_stage переведёт.
+        if outcome and outcome != "cassation_other":
+            # Опубликован акт: 30 дней после act_date → архив.
+            act_d = parse_date(cs.get("act_date") or "")
+            if act_d and (now - act_d).days > CASSATION_ACT_ARCHIVE_DAYS:
+                return True
+            # Акт не опубликован, но определение вынесено: 45 дней от
+            # decision_date без публикации → архив без акта.
+            dec_d = parse_date(cs.get("decision_date") or "")
+            if (dec_d and not cs.get("act_published")
+                    and (now - dec_d).days > CASSATION_NO_ACT_PUBLISH_DAYS):
+                return True
         return False
 
     return False
@@ -1346,6 +1457,126 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
     return cases
 
 
+# ── Парсинг поиска и карточки кассации (7kas.sudrf.ru) ───────────────────────
+
+# Регулярки для разбора объединённой ячейки td2 в результатах поиска 7kas.
+# Формат:
+#   КАТЕГОРИЯ: ... → ... Жалобу подал(а): X. Суд (судебный участок) первой
+#   инстанции: Y. Номер дела в первой инстанции: 2-XXX/YYYY
+# В отличие от 1-й инст./апел. (ИСТЕЦ/ОТВЕТЧИК), стороны на 7kas в выдаче не
+# приводятся — только заявитель кассации. Стороны берём из карточки (УЧАСТНИКИ).
+_CASS_CATEGORY_RE = re.compile(
+    r"КАТЕГОРИЯ:\s*(.+?)(?=Жалобу\s+подал|Суд\s|Номер дела|$)", re.IGNORECASE
+)
+_CASS_CASSATOR_RE = re.compile(
+    r"Жалобу\s+подал\(а\):\s*(.+?)(?=Суд\s|Номер дела|$)", re.IGNORECASE
+)
+_CASS_FI_COURT_RE = re.compile(
+    r"Суд\s*\([^)]*\)\s*первой\s+инстанции:\s*(.+?)(?=Номер дела|Категория|$)",
+    re.IGNORECASE,
+)
+_CASS_FI_CASE_NUM_RE = re.compile(
+    r"Номер дела в первой инстанции:\s*([^\s<]+)", re.IGNORECASE
+)
+# Внутренний номер 7kas (8Г-XXX/YYYY) в первой ячейке. Параллельный
+# кассационный (88-XXX/YYYY) тут не всегда показан — берём из карточки.
+_CASS_INTERNAL_NUM_RE = re.compile(r"8[ГГ]-\d+/\d{4}")
+
+
+def parse_cassation_search_page(html: str) -> list[dict]:
+    """Парсит страницу поиска 7kas.sudrf.ru (гражданская кассация).
+
+    Особенности:
+    - Только первая страница результатов (пагинация НЕ обходится).
+    - Колонки: №(ссылка) | дата поступл. | category+cassator+fi_court+fi_num
+      (объединённая) | … | (опционально) судья и результат.
+    - HMAO-фильтр: оставляем только дела с 1-й инстанцией в одном из 20
+      ХМАО-судов или Суд ХМАО-Югры. Остальные регионы 7-го округа отбрасываем.
+
+    Возвращает список dict с case_id, case_uid, cassation_internal_number,
+    filing_date, category, cassator, fi_court_long, fi_court_config,
+    fi_case_number, и опционально result_text.
+    """
+    tables = extract_tables(html)
+    results_table = _find_results_table(tables)
+    if not results_table:
+        log.warning("7kas: таблица результатов не найдена")
+        return []
+
+    found = []
+    for row in results_table:
+        if len(row) < 3:
+            continue
+        # Первая ячейка — внутренний номер 8Г-XXX/YYYY со ссылкой на карточку
+        case_cell = row[0]
+        case_text = cell_text(case_cell).strip()
+        m_internal = _CASS_INTERNAL_NUM_RE.search(case_text)
+        if not m_internal:
+            continue  # заголовок или служебная строка
+        cassation_internal_number = m_internal.group(0)
+        href = cell_href(case_cell)
+        cid, cuid = "", ""
+        if href:
+            m_id = _CASE_ID_RE.search(href)
+            m_uid = _CASE_UID_RE.search(href)
+            if m_id:
+                cid = m_id.group(1)
+            if m_uid:
+                cuid = m_uid.group(1)
+        if not cid or not cuid:
+            continue
+
+        filing_date = cell_text(row[1]).strip() if len(row) > 1 else ""
+
+        combined = cell_text(row[2]) if len(row) > 2 else ""
+        category, cassator, fi_court_long, fi_case_number = "", "", "", ""
+        m = _CASS_CATEGORY_RE.search(combined)
+        if m:
+            category = m.group(1).strip().rstrip("→ \xa0")
+        m = _CASS_CASSATOR_RE.search(combined)
+        if m:
+            cassator = m.group(1).strip().rstrip(". \xa0")
+        m = _CASS_FI_COURT_RE.search(combined)
+        if m:
+            fi_court_long = m.group(1).strip().rstrip(". \xa0")
+        m = _CASS_FI_CASE_NUM_RE.search(combined)
+        if m:
+            fi_case_number = m.group(1).strip().rstrip(". \xa0")
+
+        # Результат рассмотрения и дата вынесения, если уже есть в выдаче
+        # (в готовых делах сидят в td4..td6). На уровне поиска не критичны —
+        # точный исход берём из карточки.
+        result_text = ""
+        for j in range(3, min(8, len(row))):
+            t = cell_text(row[j]).strip()
+            if t and any(kw in t.upper() for kw in (
+                "ОСТАВЛЕНО", "УДОВЛЕТВОРЕН", "ОТМЕНЕН", "ИЗМЕНЕН",
+                "ПРЕКРАЩЕН", "ВОЗВРАЩЕН", "ОТОЗВАН"
+            )):
+                result_text = t
+                break
+
+        # Фильтр по 1-й инстанции: только ХМАО.
+        fi_court_config = match_hmao_first_instance(fi_court_long)
+        # Сохраняем все, чтобы вышестоящий код мог логировать «отброшено N
+        # не-ХМАО». На реальном прогоне non-ХМАО отсеивается до запроса карточки.
+
+        found.append({
+            "case_id": cid,
+            "case_uid": cuid,
+            "cassation_internal_number": cassation_internal_number,
+            "filing_date": filing_date,
+            "category": category,
+            "cassator": cassator,
+            "fi_court_long": fi_court_long,
+            "fi_court_config": fi_court_config,
+            "fi_case_number": fi_case_number,
+            "result_text": result_text,
+        })
+
+    return found
+
+
 # ── Парсинг карточки дела ────────────────────────────────────────────────────
 
 def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
@@ -1763,6 +1994,350 @@ def fetch_act_text(act_url: str) -> str:
     return _strip_html(text)[:5000]  # Сырой текст, обрезается позже
 
 
+# Hidden div на карточке 7kas, в котором размещается полный текст определения
+# (вкладка «Судебные акты» переключается JS, но HTML отдаёт сразу). Пуст до
+# публикации мотивированного определения.
+_CASS_ACT_DIV_RE = re.compile(
+    r"<div[^>]*id=['\"]cont_doc1['\"][^>]*>(.*?)"
+    r"(?=<div[^>]*id=['\"](?:cont|next|footer|copyright)['\"]|</body>)",
+    re.S | re.I,
+)
+# Заголовок «Дело №88-XXXX/YYYY» в начале текста определения.
+_CASS_ACT_DELO_NUM_RE = re.compile(r"Дело\s*№\s*(88-?\d+/\d{4})", re.IGNORECASE)
+
+
+def _extract_cassation_act_text(html: str) -> tuple[str, str]:
+    """Извлечь текст определения из hidden div cont_doc1 на карточке 7kas.
+
+    Возвращает (act_text, cassation_number_88) — текст и официальный касс.
+    номер 88-XXXX/YYYY (если найден в заголовке акта). Если div пуст или
+    короче 200 символов — возвращает ("", "")."""
+    m = _CASS_ACT_DIV_RE.search(html)
+    if not m:
+        return "", ""
+    body = m.group(1)
+    body = _HTML_SCRIPT_RE.sub("", body)
+    body = _HTML_STYLE_RE.sub("", body)
+    text = _strip_html(body)
+    if len(text) < 200:
+        return "", ""
+    cass_num = ""
+    m_num = _CASS_ACT_DELO_NUM_RE.search(text)
+    if m_num:
+        cass_num = m_num.group(1)
+        # Нормализуем: 88-XXXX (без знака №) — единый формат.
+        if cass_num.startswith("88-"):
+            pass
+        elif cass_num.startswith("88") and len(cass_num) > 2:
+            cass_num = "88-" + cass_num[2:]
+    return text, cass_num
+
+
+def classify_cassation_outcome(
+    result_text: str,
+    result_for_appeal: str = "",
+    review_result: str = "",
+) -> str:
+    """Детерминированно мапнуть структурированные поля карточки 7kas
+    в нормализованный enum исхода кассации.
+
+    Источники (в порядке приоритета):
+    - `result_text` — «Результат рассмотрения» (таблица ДЕЛО).
+    - `result_for_appeal` — «Результат в отношении решения апел. инст.».
+    - `review_result` — «Результат изучения жалобы» (таблица ЖАЛОБЫ).
+
+    Значения enum (синхронизированы со схемой cassation блока):
+    - cassation_dismissed_no_transfer — отказ в передаче в коллегию.
+    - cassation_upheld — оставлено без изменения (жалоба отклонена).
+    - cassation_modified — изменено.
+    - cassation_reversed — отменено.
+    - cassation_remanded — отменено и направлено на новое рассмотрение.
+    - cassation_terminated — прекращено / возвращено / отозвано.
+    - cassation_other — не удалось классифицировать (нестандартная формулировка).
+    Пустая строка — если карточка ещё в производстве (нет финального исхода).
+    """
+    rt = (result_text or "").upper()
+    rfa = (result_for_appeal or "").upper()
+    rev = (review_result or "").upper()
+
+    # 1) Отказ в передаче — определяется по ЖАЛОБЫ.review_result.
+    if rev and "ОТКАЗАНО" in rev and "ПЕРЕДАЧ" in rev:
+        return "cassation_dismissed_no_transfer"
+    # 2) Возврат / прекращение / отзыв.
+    for kw in ("ВОЗВРАЩЕН", "ПРЕКРАЩЕН", "ОТОЗВАН"):
+        if kw in rt or kw in rev:
+            return "cassation_terminated"
+    # 3) Финальный исход после рассмотрения коллегией. Берём связку
+    # result_text (что с жалобой) + result_for_appeal (что с актом апел.
+    # или 1-й инст.).
+    if rt and "ОСТАВЛЕНО" in rt and "УДОВЛЕТВОР" in rt:
+        # Жалоба отклонена. Дальше различаем «без изменения» vs «отмена».
+        if "БЕЗ ИЗМЕНЕНИЯ" in rfa:
+            return "cassation_upheld"
+        # «Жалоба отклонена», но апел. изменили — редко, но возможно (касс.
+        # рассмотрел и оставил жалобу без удовл., но сама апел. была изменена).
+        # Для нашего трекинга это всё равно «оставлено в силе».
+        return "cassation_upheld"
+    if rt and "УДОВЛЕТВОР" in rt:
+        # Кассация удовлетворила жалобу — нужно понять, что стало с актом.
+        if "НАПРАВЛ" in rfa or "НА НОВОЕ" in rfa:
+            return "cassation_remanded"
+        if "ОТМЕНЕН" in rfa:
+            return "cassation_reversed"
+        if "ИЗМЕНЕН" in rfa:
+            return "cassation_modified"
+        # Удовлетворили, но result_for_appeal пуст — считаем отменой.
+        return "cassation_reversed"
+    # 4) Без явного «оставлено/удовлетворено», но в rfa есть указание.
+    if "НАПРАВЛ" in rfa or "НА НОВОЕ" in rfa:
+        return "cassation_remanded"
+    if "ОТМЕНЕН" in rfa:
+        return "cassation_reversed"
+    if "ИЗМЕНЕН" in rfa:
+        return "cassation_modified"
+    if "БЕЗ ИЗМЕНЕНИЯ" in rfa:
+        return "cassation_upheld"
+    # 5) Финальный исход не определяется — карточка в производстве.
+    if rt or rfa:
+        return "cassation_other"
+    return ""
+
+
+def cassation_remanded_to(result_for_appeal: str, act_text: str = "") -> str:
+    """Определить, куда направлено дело при `cassation_remanded`.
+
+    Возвращает 'first_instance' | 'appeal' | '' (неизвестно)."""
+    rfa = (result_for_appeal or "").lower()
+    txt = (act_text or "")[:3000].lower()  # Только начало акта — там обычно резолютивная часть.
+    blob = rfa + " " + txt
+    if "новое рассмотрение в суд первой инстанции" in blob or "в суд первой инстанции" in blob:
+        return "first_instance"
+    if "новое рассмотрение в суд апелляционной" in blob or "в суд апелляционной" in blob:
+        return "appeal"
+    if "первой инстанции" in rfa:
+        return "first_instance"
+    if "апелляционн" in rfa:
+        return "appeal"
+    return ""
+
+
+def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
+    """Парсит карточку гражданского касс. дела с 7kas.sudrf.ru.
+
+    Возвращает dict с разобранными полями карточки или None, если карточка
+    не парсится (нет блока «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»).
+
+    Состав:
+    - judicial_uid, filing_date, category, act_kind, judge, decision_date,
+      result_text, result_for_appeal — из таблицы ДЕЛО.
+    - fi_region_code, fi_court_long, fi_case_number, fi_decision_date,
+      fi_judge, fi_court_config (CourtConfig из match_hmao_first_instance,
+      None — если суд НЕ-ХМАО) — из таблицы РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ.
+    - hearing_date, hearing_time, hearings (массив событий) — из СЛУШАНИЯ.
+    - cassator, cassator_status, review_result — из ЖАЛОБЫ.
+    - participants (список dict {role, name, inn?}), sber_present (bool),
+      bank_role — из УЧАСТНИКИ + SBER_PATTERNS.
+    - act_text, cassation_number, act_published — из hidden div cont_doc1.
+    """
+    if not html:
+        return None
+    info: dict = {
+        "judicial_uid": "",
+        "filing_date": "",
+        "category": "",
+        "act_kind": "",
+        "from_supreme_court": "",
+        "judge": "",
+        "decision_date": "",
+        "result_text": "",
+        "result_for_appeal": "",
+        "fi_region_code": "",
+        "fi_court_long": "",
+        "fi_case_number": "",
+        "fi_decision_date": "",
+        "fi_judge": "",
+        "fi_court_config": None,
+        "hearing_date": "",
+        "hearing_time": "",
+        "hearings": [],
+        "cassator": "",
+        "cassator_status": "",
+        "review_result": "",
+        "participants": [],
+        "sber_present": False,
+        "bank_role": "",
+        "act_text": "",
+        "cassation_number": "",
+        "act_published": False,
+    }
+
+    tables = extract_tables(html)
+    # Раскладываем по семантическим заголовкам. Заголовки СЛУШАНИЯ/ЖАЛОБЫ/
+    # УЧАСТНИКИ/РАССМОТРЕНИЕ — внутри первой строки соответствующих таблиц.
+    # А вот заголовок «ДЕЛО» отрисовывается ВНЕ таблицы (рендерится поверх),
+    # поэтому таблица ДЕЛО детектируется по сигнатурному полю «Уникальный
+    # идентификатор дела» в первой ячейке.
+    sections: dict[str, list] = {}
+    for tbl in tables:
+        if not tbl:
+            continue
+        first_row_text = " ".join(cell_text(c) for c in tbl[0]).strip().upper()
+        # ДЕЛО — детект по «УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР»
+        if "УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР" in first_row_text and "ДЕЛО" not in sections:
+            sections["ДЕЛО"] = tbl
+            continue
+        for tag in (
+            "РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ",
+            "СЛУШАНИЯ",
+            "ЖАЛОБЫ",
+            "УЧАСТНИКИ",
+        ):
+            if first_row_text.startswith(tag) and tag not in sections:
+                sections[tag] = tbl
+                break
+
+    # Без блока 1-й инст. карточка нам не нужна (нет ключа для линковки).
+    fi_tbl = sections.get("РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ")
+    if not fi_tbl:
+        return None
+
+    # ── Таблица ДЕЛО ─────────────────────────────────────────────────────
+    # Особенность: row 0 имеет 3 ячейки (section_header + field_label + value),
+    # row 1+ — обычные (field_label + value). Нормализуем до пар (key, val).
+    delo_tbl = sections.get("ДЕЛО") or []
+    for row in delo_tbl:
+        if len(row) >= 3 and cell_text(row[0]).strip().upper() == "ДЕЛО":
+            key = cell_text(row[1]).strip().rstrip(":").lower()
+            val = cell_text(row[2]).strip()
+        elif len(row) >= 2:
+            key = cell_text(row[0]).strip().rstrip(":").lower()
+            val = cell_text(row[1]).strip()
+        else:
+            continue
+        if "уникальный идентификатор" in key:
+            info["judicial_uid"] = val
+        elif "дата поступления" in key:
+            info["filing_date"] = val
+        elif "категория" in key:
+            info["category"] = val.replace("\xa0", " ").strip()
+        elif "вид обжалуемого" in key:
+            info["act_kind"] = val
+        elif "из верховного суда" in key:
+            info["from_supreme_court"] = val
+        elif key == "судья":
+            info["judge"] = val
+        elif "дата рассмотрения" in key:
+            info["decision_date"] = val
+        elif "результат рассмотрения" in key:
+            info["result_text"] = val
+        elif "результат в отношении" in key:
+            info["result_for_appeal"] = val
+
+    # ── Таблица РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ ─────────────────────────
+    for row in fi_tbl:
+        if len(row) < 2:
+            continue
+        key = cell_text(row[0]).strip().rstrip(":").lower()
+        val = cell_text(row[1]).strip()
+        if "регион суда" in key:
+            # Формат «86 - Ханты-Мансийский ...» — берём первое число.
+            m = re.match(r"\s*(\d+)", val)
+            if m:
+                info["fi_region_code"] = m.group(1)
+        elif "суд (судебный участок) первой" in key or "суд (мировой судья) первой" in key:
+            # Иногда таблица содержит поле «Суд (мировой судья) первой
+            # инстанции» вместо обычного. Захватываем оба варианта.
+            if not info["fi_court_long"]:
+                info["fi_court_long"] = val
+        elif "номер дела в первой" in key:
+            info["fi_case_number"] = val
+        elif "дата решения первой" in key:
+            info["fi_decision_date"] = val
+        elif "судья (мировой судья) первой" in key or "судья первой" in key:
+            if not info["fi_judge"]:
+                info["fi_judge"] = val
+
+    info["fi_court_config"] = match_hmao_first_instance(info["fi_court_long"])
+
+    # ── Таблица СЛУШАНИЯ ─────────────────────────────────────────────────
+    sl_tbl = sections.get("СЛУШАНИЯ") or []
+    for row in sl_tbl[2:]:  # row 0 — заголовок «СЛУШАНИЯ», row 1 — шапка колонок
+        cells = [cell_text(c).strip() for c in row]
+        if len(cells) < 2 or not cells[0]:
+            continue
+        ev = {
+            "name": cells[0] if len(cells) > 0 else "",
+            "date": cells[1] if len(cells) > 1 else "",
+            "time": cells[2] if len(cells) > 2 else "",
+            "place": cells[3] if len(cells) > 3 else "",
+            "result_event": cells[4] if len(cells) > 4 else "",
+            "ground": cells[5] if len(cells) > 5 else "",
+            "note": cells[6] if len(cells) > 6 else "",
+            "posted_at": cells[7] if len(cells) > 7 else "",
+        }
+        info["hearings"].append(ev)
+        if ev["date"]:
+            info["hearing_date"] = ev["date"]
+        if ev["time"]:
+            info["hearing_time"] = ev["time"]
+
+    # ── Таблица ЖАЛОБЫ ───────────────────────────────────────────────────
+    zh_tbl = sections.get("ЖАЛОБЫ") or []
+    if len(zh_tbl) >= 3:
+        # row 1 — шапка («Дата поступления», «Процесс. статус», «Заявитель», ...,
+        # «Результат изучения жалобы»), row 2 — данные. Если строк больше —
+        # берём последнюю (актуальная жалоба).
+        data_row = [cell_text(c).strip() for c in zh_tbl[-1]]
+        if len(data_row) >= 3:
+            info["cassator_status"] = data_row[1]  # ИСТЕЦ/ОТВЕТЧИК
+            info["cassator"] = data_row[2]
+        # «Результат изучения» — последняя ячейка с непустым значением,
+        # содержащим ключевые слова «возбуждено» / «отказано».
+        for c in reversed(data_row):
+            if c and any(
+                kw in c.upper()
+                for kw in ("ВОЗБУЖДЕНО", "ОТКАЗАНО", "ПЕРЕДАНО", "ВОЗВРАЩЕНО")
+            ):
+                info["review_result"] = c
+                break
+
+    # ── Таблица УЧАСТНИКИ ────────────────────────────────────────────────
+    uch_tbl = sections.get("УЧАСТНИКИ") or []
+    for row in uch_tbl[2:]:  # row 0 — заголовок, row 1 — шапка колонок
+        cells = [cell_text(c).strip() for c in row]
+        if len(cells) < 2 or not cells[0]:
+            continue
+        info["participants"].append({
+            "role": cells[0],
+            "name": cells[1],
+            "inn": cells[2] if len(cells) > 2 else "",
+        })
+
+    # Sber-presence + bank_role: проверяем вхождение SBER_PATTERNS в имена
+    # участников. Если ни в одном имени Сбербанка нет (поиск иногда матчит
+    # по случайному совпадению в тексте) — sber_present=False, дело отбросим.
+    for p in info["participants"]:
+        nm = p["name"].lower()
+        if any(pat in nm for pat in SBER_PATTERNS):
+            info["sber_present"] = True
+            role = p["role"].upper()
+            if "ИСТЕЦ" in role or "ЗАЯВИТЕЛЬ" in role:
+                info["bank_role"] = "Истец"
+            elif "ОТВЕТЧИК" in role:
+                info["bank_role"] = "Ответчик"
+            else:
+                info["bank_role"] = "Третье лицо"
+            break
+
+    # ── Текст судебного акта (cont_doc1) ────────────────────────────────
+    act_text, cass_num = _extract_cassation_act_text(html)
+    info["act_text"] = act_text
+    info["cassation_number"] = cass_num
+    info["act_published"] = bool(act_text)
+
+    return info
+
+
 def next_tuesday(from_date: datetime | None = None) -> datetime:
     """Вычислить дату ближайшего вторника (включая сегодня, если сегодня вторник)."""
     d = from_date or datetime.now()
@@ -1779,13 +2354,18 @@ def next_tuesday(from_date: datetime | None = None) -> datetime:
 def build_summary_line(new_cases: list[dict], changes: list[dict],
                        fi_new_cases: list[dict] | None = None,
                        stage_transitions: list[dict] | None = None,
-                       fi_changes: list[dict] | None = None) -> str:
+                       fi_changes: list[dict] | None = None,
+                       *,
+                       cass_changes: list[dict] | None = None,
+                       cass_discovered: list[dict] | None = None) -> str:
     """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
     parts = []
     if fi_new_cases:
         parts.append(f"+{len(fi_new_cases)} нов. 1 инст.")
     if new_cases:
         parts.append(f"+{len(new_cases)} нов. апелл.")
+    if cass_discovered:
+        parts.append(f"+{len(cass_discovered)} нов. касс.")
     if stage_transitions:
         parts.append(f"{len(stage_transitions)} в апелляцию")
     events = sum(1 for ch in changes
@@ -1840,6 +2420,19 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             parts.append(f"{fi_act_texts} мотивир. 1 инст.")
         if fi_status:
             parts.append(f"{fi_status} статус 1 инст.")
+    if cass_changes:
+        cass_acts = sum(1 for ch in cass_changes if "new_act" in ch["type"])
+        cass_outcomes = sum(1 for ch in cass_changes if "outcome_change" in ch["type"])
+        cass_reviews = sum(1 for ch in cass_changes if "review_result_change" in ch["type"])
+        cass_news = sum(1 for ch in cass_changes if "new_cassation" in ch["type"])
+        if cass_news:
+            parts.append(f"{cass_news} касс. карточ.")
+        if cass_reviews:
+            parts.append(f"{cass_reviews} реш. изуч. жалоб")
+        if cass_outcomes:
+            parts.append(f"{cass_outcomes} касс. итог.")
+        if cass_acts:
+            parts.append(f"{cass_acts} касс. акт.")
     return " | ".join(parts) if parts else "без изменений"
 
 
@@ -1979,14 +2572,22 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
         if fi_idx is not None and fi_idx != appeal_idx:
             # Есть оба дела — мержим апелляцию в карточку 1 инстанции
             fi_case = cases[fi_idx]
-            fi_case["appeal"] = appeal_case.get("appeal")
-            # Обычно исходная стадия — awaiting_appeal (жалоба подана, ждём
-            # карточку) или first_instance (карточка пришла раньше жалобы —
-            # редко, но возможно). Из cassation_watch/cassation_pending
-            # обратно в appeal не переводим: эти стадии уже прошли апелляцию.
             prev_stage = fi_case.get("current_stage")
-            if prev_stage in ("first_instance", "awaiting_appeal", None, ""):
+            # Особый случай: awaiting_relink — кассация отменила и направила
+            # на новое рассмотрение, пришла новая апел. карточка. Снимок старых
+            # блоков идёт в history, открываем новый раунд апелляции.
+            if prev_stage == "awaiting_relink":
+                _snapshot_round_to_history(fi_case, "cassation_remanded_to_appeal")
+                fi_case["appeal"] = appeal_case.get("appeal")
                 fi_case["current_stage"] = "appeal"
+            else:
+                fi_case["appeal"] = appeal_case.get("appeal")
+                # Обычно исходная стадия — awaiting_appeal (жалоба подана, ждём
+                # карточку) или first_instance (карточка пришла раньше жалобы —
+                # редко, но возможно). Из cassation_watch/cassation_pending
+                # обратно в appeal не переводим: эти стадии уже прошли апелляцию.
+                if prev_stage in ("first_instance", "awaiting_appeal", None, ""):
+                    fi_case["current_stage"] = "appeal"
             # Обновляем общие поля из апелляции если пусты в 1 инст.
             for field in ("plaintiff", "defendant", "category", "bank_role"):
                 if not fi_case.get(field) and appeal_case.get(field):
@@ -2024,6 +2625,338 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
         log.info(f"Связано дел: {linked_count}")
 
     return cases
+
+
+def _snapshot_round_to_history(case: dict, reason: str) -> None:
+    """Для дела в awaiting_relink: сохранить текущие first_instance/appeal/
+    cassation блоки как «прошлый раунд» в case["history"][]. Сбросить эти
+    блоки до пустого состояния. Увеличить case["round"] (по умолчанию 1 → 2).
+
+    `reason` — короткая метка причины (e.g. «cassation_remanded_to_fi»).
+    Используется при повторном открытии дела после отмены кассацией.
+    """
+    history = case.setdefault("history", [])
+    snapshot = {
+        "round": case.get("round", 1),
+        "archived_at": date.today().isoformat(),
+        "reason": reason,
+        "first_instance": case.get("first_instance"),
+        "appeal": case.get("appeal"),
+        "cassation": case.get("cassation"),
+    }
+    history.append(snapshot)
+    case["round"] = (case.get("round", 1) or 1) + 1
+    case["first_instance"] = None
+    case["appeal"] = None
+    case["cassation"] = None
+
+
+def relink_awaiting_relink_first_instance(
+    cases: list[dict],
+    fi_results_by_court: list,
+) -> list[dict]:
+    """Найти дела со стадией `awaiting_relink`, чьи номера снова появились в
+    выдаче 1-й инстанции (касс. отменила и направила на новое рассмотрение).
+
+    Args:
+        cases: cases.json
+        fi_results_by_court: список пар (CourtConfig, list[fi_search_result]).
+            Каждый fi_search_result содержит case_number, court_*, link и т.д.
+
+    Возвращает список (case, fi_result, court) для дел, где сработал re-link
+    (для логирования / дайджеста). Сами cases мутируются на месте: history
+    наполняется, текущий round инкрементируется, current_stage становится
+    `first_instance`, first_instance блок инициализируется новой карточкой.
+    """
+    if not cases or not fi_results_by_court:
+        return []
+    awaiting = {
+        (c.get("id") or "").strip(): c for c in cases
+        if c.get("current_stage") == "awaiting_relink"
+    }
+    if not awaiting:
+        return []
+    # На вход приходит либо список пар (court, results), либо (для совместимости)
+    # dict — нормализуем оба варианта в итерируемые пары.
+    if isinstance(fi_results_by_court, dict):
+        pairs = list(fi_results_by_court.items())
+    else:
+        pairs = list(fi_results_by_court)
+    relinked: list[dict] = []
+    for court, results in pairs:
+        for fi in results:
+            num = (fi.get("case_number") or "").strip()
+            if not num or num not in awaiting:
+                continue
+            case = awaiting[num]
+            _snapshot_round_to_history(case, "cassation_remanded_to_fi")
+            case["current_stage"] = "first_instance"
+            new_fi_block = _fi_search_to_json_case(fi)["first_instance"]
+            case["first_instance"] = new_fi_block
+            relinked.append({"case": case, "fi": fi, "court": court})
+            log.info(
+                f"  Re-link (awaiting_relink → first_instance): {num} "
+                f"в {getattr(court, 'name', court)} (round={case.get('round', 1)})"
+            )
+            del awaiting[num]
+    return relinked
+
+
+def _cassation_card_to_block(info: dict) -> dict:
+    """Сконвертировать результат parse_cassation_card в JSON-блок cassation
+    (схема описана в плане; см. case["cassation"]). Включает производный
+    outcome через classify_cassation_outcome и remanded_to."""
+    outcome = classify_cassation_outcome(
+        info.get("result_text", ""),
+        info.get("result_for_appeal", ""),
+        info.get("review_result", ""),
+    )
+    remanded_to = ""
+    if outcome == "cassation_remanded":
+        remanded_to = cassation_remanded_to(
+            info.get("result_for_appeal", ""), info.get("act_text", "")
+        )
+    cassator_status = (info.get("cassator_status") or "").upper()
+    appellant_is_bank = bool(
+        info.get("cassator")
+        and any(p in info["cassator"].lower() for p in SBER_PATTERNS)
+    )
+    link = ""
+    # Карточка сама не отдаёт case_id/case_uid, поэтому link собирается выше
+    # (в main_json) при обходе результатов поиска и кладётся в info["link"].
+    if info.get("link"):
+        link = info["link"]
+    block = {
+        "case_number": info.get("cassation_internal_number", ""),
+        "cassation_number": info.get("cassation_number", ""),
+        "court": CASSATION_COURT.name,
+        "court_domain": CASSATION_COURT.domain,
+        "judge": info.get("judge", ""),
+        "filing_date": info.get("filing_date", ""),
+        "fi_decision_date": info.get("fi_decision_date", ""),
+        "act_kind": info.get("act_kind", ""),
+        "category": info.get("category", ""),
+        "judicial_uid": info.get("judicial_uid", ""),
+        "appellant": info.get("cassator", ""),
+        "appellant_is_bank": appellant_is_bank,
+        "appellant_status": cassator_status,
+        "review_result": info.get("review_result", ""),
+        "hearing_date": info.get("hearing_date", ""),
+        "hearing_time": info.get("hearing_time", ""),
+        "decision_date": info.get("decision_date", ""),
+        "result_text": info.get("result_text", ""),
+        "result_for_appeal": info.get("result_for_appeal", ""),
+        "act_published": bool(info.get("act_published")),
+        "act_date": info.get("decision_date", "") if info.get("act_published") else "",
+        "act_text": info.get("act_text", ""),
+        "outcome": outcome,
+        "remanded_to": remanded_to,
+        "events": list(info.get("hearings") or []),
+        "link": link,
+        "last_checked_at": date.today().isoformat(),
+        "discovered_via_cassation": False,
+    }
+    return block
+
+
+def link_cassation_cases(
+    cases: list[dict],
+    cass_finds: list[dict],
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
+    создать новые (discovery), если 1-инст. номера нет в БД.
+
+    Args:
+        cases: список JSON-объектов дел (формат cases.json).
+        cass_finds: список dict — каждый = parse_cassation_card(card_html)
+                    + дополненные поля `link` (case_id|case_uid) и
+                    `cassation_internal_number` из результатов поиска.
+
+    Возвращает (обновлённый список cases, список изменений для дайджеста,
+    список новых дел discovered).
+
+    Логика:
+    - Для каждой находки берём fi_case_number (Номер дела в первой инст.).
+    - Если case с таким id уже есть — мержим cassation блок, обновляем
+      current_stage. Перевод стадии:
+      - cassation_pending → cassation;
+      - first_instance / awaiting_appeal / appeal / cassation_watch → cassation
+        (это дело, которое мы прошляпили на промежуточных стадиях, но 7kas
+        уже его рассматривает — догоняем).
+      - awaiting_relink — если кассация во второй раз приехала по тому же
+        делу, обновляем cassation блок и оставляем стадию (либо снова в cassation).
+      - cassation — если уже была cassation, обновляем (новое заседание,
+        акт опубликован и т.п.).
+    - Если case нет — создаём новое со стадией `cassation` и стабом
+      first_instance из карточки 7kas (court + case_number + judge +
+      decision_date). discovered_via_cassation=True.
+    """
+    if not cass_finds:
+        return cases, [], []
+
+    fi_index: dict[str, int] = {}
+    for i, c in enumerate(cases):
+        cid = c.get("id", "")
+        if cid:
+            fi_index.setdefault(cid, i)
+        fi = c.get("first_instance")
+        if fi and fi.get("case_number"):
+            fi_index.setdefault(fi["case_number"], i)
+
+    cass_changes: list[dict] = []
+    discovered: list[dict] = []
+
+    for info in cass_finds:
+        fi_num = (info.get("fi_case_number") or "").strip()
+        if not fi_num:
+            log.warning(
+                f"7kas: пропуск без fi_case_number — "
+                f"{info.get('cassation_internal_number') or '?'}"
+            )
+            continue
+        cass_block = _cassation_card_to_block(info)
+        idx = fi_index.get(fi_num)
+        if idx is not None:
+            case = cases[idx]
+            old_cass = case.get("cassation") or {}
+            old_act_published = bool(old_cass.get("act_published"))
+            old_outcome = old_cass.get("outcome", "")
+            old_review = old_cass.get("review_result", "")
+            # Сохраняем discovered_via_cassation если он был выставлен ранее.
+            cass_block["discovered_via_cassation"] = bool(
+                old_cass.get("discovered_via_cassation")
+            )
+            case["cassation"] = cass_block
+            # Обновим стадию.
+            prev_stage = case.get("current_stage", "")
+            if prev_stage in (
+                "cassation_pending", "first_instance", "awaiting_appeal",
+                "appeal", "cassation_watch", "awaiting_relink", "", None,
+            ):
+                case["current_stage"] = "cassation"
+            # Зафиксируем изменения для дайджеста.
+            change = {
+                "case": fi_num,
+                "cassation_internal_number": cass_block["case_number"],
+                "type": [],
+                "details": {
+                    "stage_prev": prev_stage,
+                    "stage_now": case["current_stage"],
+                    "outcome": cass_block["outcome"],
+                    "review_result": cass_block["review_result"],
+                    "result_text": cass_block["result_text"],
+                    "result_for_appeal": cass_block["result_for_appeal"],
+                    "decision_date": cass_block["decision_date"],
+                    "hearing_date": cass_block["hearing_date"],
+                    "appellant": cass_block["appellant"],
+                    "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "act_kind": cass_block["act_kind"],
+                },
+            }
+            if not old_cass:
+                change["type"].append("new_cassation")
+            if cass_block["review_result"] and cass_block["review_result"] != old_review:
+                change["type"].append("review_result_change")
+            if cass_block["outcome"] and cass_block["outcome"] != old_outcome:
+                change["type"].append("outcome_change")
+            if cass_block["act_published"] and not old_act_published:
+                change["type"].append("new_act")
+                # Текст определения — уже в cass_block["act_text"]. В дайджест
+                # пробрасываем мотивировочную часть.
+                change["details"]["act_text"] = extract_motive_part(
+                    cass_block["act_text"], 1800
+                )
+                change["details"]["act_date"] = cass_block["act_date"]
+            if change["type"]:
+                cass_changes.append(change)
+            log.info(
+                f"  7kas → {fi_num} ({cass_block['case_number']}): "
+                f"{prev_stage}→{case['current_stage']}, outcome={cass_block['outcome'] or '—'}"
+            )
+        else:
+            # Discovery: дела в cases.json нет. Создаём со стадией cassation
+            # и стабом 1-й инст. (только то, что видит 7kas).
+            cass_block["discovered_via_cassation"] = True
+            fi_court_cfg = info.get("fi_court_config")
+            fi_court_short = fi_court_cfg.name if fi_court_cfg else info.get("fi_court_long", "")
+            fi_court_domain = fi_court_cfg.domain if fi_court_cfg else ""
+            new_case = {
+                "id": fi_num,
+                "current_stage": "cassation",
+                "plaintiff": "",
+                "defendant": "",
+                "category": cass_block["category"],
+                "bank_role": info.get("bank_role", ""),
+                "notes": "Найдено через парсер кассации (7kas)",
+                "discovered_via_cassation": True,
+                "first_instance": {
+                    "case_number": fi_num,
+                    "court": fi_court_short,
+                    "court_domain": fi_court_domain,
+                    "judge": info.get("fi_judge", ""),
+                    "filing_date": "",
+                    "status": "Решено",
+                    "result": "",
+                    "last_event": "",
+                    "event_date": "",
+                    "hearing_date": info.get("fi_decision_date", ""),
+                    "hearing_time": "",
+                    "link": "",
+                    "act_published": False,
+                    "act_date": "",
+                    "act_text": "",
+                    "events": [],
+                },
+                "appeal": None,
+                "cassation": cass_block,
+            }
+            # Заполнить plaintiff/defendant из УЧАСТНИКОВ (если есть Сбербанк
+            # как ответчик/истец, противоположную сторону тоже сохраним).
+            for p in info.get("participants") or []:
+                role = (p.get("role") or "").upper()
+                name = p.get("name") or ""
+                if "ИСТЕЦ" in role and not new_case["plaintiff"]:
+                    new_case["plaintiff"] = name
+                elif "ОТВЕТЧИК" in role and not new_case["defendant"]:
+                    new_case["defendant"] = name
+            cases.append(new_case)
+            discovered.append(new_case)
+            cass_changes.append({
+                "case": fi_num,
+                "cassation_internal_number": cass_block["case_number"],
+                "type": ["discovered_in_cassation"],
+                "details": {
+                    "stage_now": "cassation",
+                    "outcome": cass_block["outcome"],
+                    "review_result": cass_block["review_result"],
+                    "result_text": cass_block["result_text"],
+                    "result_for_appeal": cass_block["result_for_appeal"],
+                    "decision_date": cass_block["decision_date"],
+                    "hearing_date": cass_block["hearing_date"],
+                    "appellant": cass_block["appellant"],
+                    "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "fi_court": fi_court_short,
+                    "fi_case_number": fi_num,
+                    "act_kind": cass_block["act_kind"],
+                },
+            })
+            if cass_block["act_published"]:
+                cass_changes[-1]["type"].append("new_act")
+                cass_changes[-1]["details"]["act_text"] = extract_motive_part(
+                    cass_block["act_text"], 1800
+                )
+                cass_changes[-1]["details"]["act_date"] = cass_block["act_date"]
+            log.info(
+                f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "
+                f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"
+            )
+
+    if cass_changes:
+        log.info(
+            f"7kas: касс. изменений {len(cass_changes)}, "
+            f"discovery новых дел {len(discovered)}"
+        )
+    return cases, cass_changes, discovered
 
 
 def split_archived(cases: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -2821,6 +3754,8 @@ def save_digest_context(
     fi_changes: list[dict] | None = None,
     total_active_appeal: int = 0,
     total_active_fi: int = 0,
+    cass_changes: list[dict] | None = None,
+    cass_discovered: list[dict] | None = None,
 ) -> None:
     """Сохранить входные данные дайджеста в LAST_DIGEST_CONTEXT_PATH.
 
@@ -2838,6 +3773,8 @@ def save_digest_context(
         "fi_changes": fi_changes or [],
         "total_active_appeal": total_active_appeal,
         "total_active_fi": total_active_fi,
+        "cass_changes": cass_changes or [],
+        "cass_discovered": cass_discovered or [],
     }
     try:
         save_json(payload, LAST_DIGEST_CONTEXT_PATH)
@@ -3101,7 +4038,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     stage_transitions: list[dict] | None = None,
                     fi_changes: list[dict] | None = None,
                     total_active_appeal: int = 0,
-                    total_active_fi: int = 0) -> str:
+                    total_active_fi: int = 0,
+                    cass_changes: list[dict] | None = None,
+                    cass_discovered: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API.
 
     total_active_appeal/total_active_fi передаются раздельно — раньше передавалась
@@ -3116,6 +4055,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         stage_transitions = []
     if fi_changes is None:
         fi_changes = []
+    if cass_changes is None:
+        cass_changes = []
+    if cass_discovered is None:
+        cass_discovered = []
 
     total_active = total_active_appeal + total_active_fi
 
@@ -3128,6 +4071,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_changes=fi_changes,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
+                cass_changes=cass_changes,
+                cass_discovered=cass_discovered,
             )
     elif not ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
@@ -3137,16 +4082,20 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             fi_changes=fi_changes,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
         )
 
     today = datetime.now().strftime("%d.%m.%Y")
     summary = build_summary_line(
-        new_cases, changes, fi_new_cases, stage_transitions, fi_changes
+        new_cases, changes, fi_new_cases, stage_transitions, fi_changes,
+        cass_changes=cass_changes, cass_discovered=cass_discovered,
     )
 
     # ── Короткое сообщение если изменений нет ──
     if (not new_cases and not changes and not fi_new_cases
-            and not stage_transitions and not fi_changes):
+            and not stage_transitions and not fi_changes
+            and not cass_changes and not cass_discovered):
         return render_no_changes_digest(
             today, f"В производстве: {total_active}"
         )
@@ -3486,6 +4435,78 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ: {d['act_text']}"
             context_parts.append(line)
 
+    # ── Кассация (7kas.sudrf.ru) ──
+    # Discovery: дела, которые впервые появились в БД через 7kas (не было
+    # 1-й инст./апел. в нашей истории). Идут отдельным блоком как «новые».
+    if cass_discovered:
+        context_parts.append("\nНОВЫЕ ДЕЛА КАССАЦИИ (открыты через 7kas):")
+        for c in cass_discovered:
+            cass = c.get("cassation") or {}
+            fi = c.get("first_instance") or {}
+            url_card = ""
+            if cass.get("link"):
+                cid_, cuid_ = case_id_uid(cass["link"])
+                if cid_ and cuid_:
+                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            line = (
+                f"- 1-я инст. № {c.get('id', '')} → касс. № "
+                f"{cass.get('case_number', '')}"
+            )
+            if cass.get("cassation_number"):
+                line += f" [{cass['cassation_number']}]"
+            line += f" (URL: {url_card or '—'}): "
+            line += (
+                f"{shorten_party_name(c.get('plaintiff', ''), keep_fio_full=True)} (истец) vs "
+                f"{shorten_party_name(c.get('defendant', ''), keep_fio_full=True)} (ответчик), "
+            )
+            line += f"роль банка: {c.get('bank_role', '?')}, "
+            line += f"суд 1 инст.: {shorten_court_name(fi.get('court', '') or '?')}, "
+            line += f"касс. судья: {cass.get('judge', '')}, "
+            line += f"поступление: {cass.get('filing_date', '')}, "
+            line += f"заявитель: {cass.get('appellant', '')} ({cass.get('appellant_status', '')})"
+            if cass.get("review_result"):
+                line += f"\n  Изучение жалобы: {cass['review_result']}"
+            if cass.get("outcome"):
+                line += f"\n  ИСХОД: {cass['outcome']}"
+            if cass.get("result_text"):
+                line += f"\n  Результат рассмотрения: {cass['result_text']}"
+            if cass.get("result_for_appeal"):
+                line += f"\n  В отношении апел. инст.: {cass['result_for_appeal']}"
+            context_parts.append(line)
+
+    # Кассационные события по уже известным делам (cassation_pending → cassation,
+    # выход определения, новые слушания и т.п.). Текст определения — в act_text.
+    if cass_changes:
+        context_parts.append("\nКАССАЦИОННЫЕ СОБЫТИЯ (7kas):")
+        for ch in cass_changes:
+            d = ch.get("details") or {}
+            if "discovered_in_cassation" in ch.get("type", []):
+                continue  # уже в блоке «НОВЫЕ ДЕЛА КАССАЦИИ» выше
+            line = (
+                f"- 1-я инст. № {ch.get('case', '')} → касс. № "
+                f"{ch.get('cassation_internal_number', '')}: "
+                f"стадия {d.get('stage_prev', '?')} → {d.get('stage_now', '?')}"
+            )
+            if d.get("appellant"):
+                line += f", заявитель: {d['appellant']} (банк_заявитель={d.get('appellant_is_bank', False)})"
+            if d.get("review_result"):
+                line += f"\n  Изучение жалобы: {d['review_result']}"
+            if d.get("outcome"):
+                line += f"\n  ИСХОД: {d['outcome']}"
+            if d.get("result_text"):
+                line += f"\n  Результат рассмотрения: {d['result_text']}"
+            if d.get("result_for_appeal"):
+                line += f"\n  В отношении апел. инст.: {d['result_for_appeal']}"
+            if d.get("decision_date"):
+                line += f"\n  Дата вынесения опред.: {d['decision_date']}"
+            if d.get("hearing_date"):
+                line += f"\n  Дата заседания: {d['hearing_date']}"
+            if d.get("act_date"):
+                line += f"\n  Дата публикации акта: {d['act_date']}"
+            if d.get("act_text"):
+                line += f"\n  МОТИВИРОВОЧНАЯ ЧАСТЬ ОПРЕДЕЛЕНИЯ: {d['act_text']}"
+            context_parts.append(line)
+
     # Карта «номер дела → URL карточки» для пост-процессора
     # `_wrap_all_bare_case_numbers`: глобально оборачивает голые номера
     # дел в <a href>, если LLM забыл (особенно в 5.3/5.4/3.5 — там
@@ -3628,8 +4649,22 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
 ВАЖНО про 3.5 и 3.6: то же правило — если в текущем дайджесте у дела есть И поле «ИТОГ» из «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.», И «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» — выводи ТОЛЬКО в 3.6, в 3.5 не дублируй. В разных прогонах дело распределяется по своим секциям естественным образом.
 
-6. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>. Используй ИМЕННО эти три числа дословно — не считай, не угадывай, не округляй.
-7. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
+6. ⚖️🔬 <b>КАССАЦИЯ</b> — большой блок, выводится только если есть данные в секциях «НОВЫЕ ДЕЛА КАССАЦИИ» или «КАССАЦИОННЫЕ СОБЫТИЯ» в «Данные» ниже. Между этим большим блоком и предыдущим (⚖️ АПЕЛЛЯЦИЯ) — одна пустая строка, без «⸻». Внутри блока:
+   6.1. 📥 <b>Новые касс. дела (N):</b> — дело впервые видно через 7kas (мы пропустили 1-ю инст./апел.). Источник — секция «НОВЫЕ ДЕЛА КАССАЦИИ» в данных. ДВЕ строки на дело, между делами пустая строка, внутри одного дела пустых строк НЕТ.
+        • строка 1: <a href="URL"><b>1-я инст. №</b></a> (URL берётся из поля URL карточки в данных, если есть; иначе просто <b>номер</b>) — {{истец}} vs {{ответчик}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ).
+        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): касс. № <b>{{касс. номер}}</b> | суд 1 инст.: {{суд}} | заявитель: {{Роль_заявителя имя}} | поступление: {{дата}}.
+   6.2. 📑 <b>Касс. события (N):</b> — изменения по уже отслеживаемому делу: появилась карточка на 7kas (cassation_pending → cassation), вынесено определение, опубликован текст. Источник — секция «КАССАЦИОННЫЕ СОБЫТИЯ» в данных. КРИТИЧНО: строки одного дела идут ПОДРЯД, БЕЗ пустых строк между ними. Между делами — одна пустая строка.
+        • строка 1: <a href="URL"><b>номер 1-й инст.</b></a> — касс. № <b>{{касс. номер}}</b> | стадия: {{stage_prev}} → {{stage_now}}.
+        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{стороны кратко}} | категория: {{категория}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ).
+        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если есть `outcome` или `result_text` в данных:
+          <b>Итог:</b> {{дословно поле «Результат рассмотрения»}}{{, "В отношении апел.: " + поле «В отношении апел. инст.» если есть}}.
+        • строка 4 (СРАЗУ под 3, БЕЗ пустой строки) — ТОЛЬКО если есть «МОТИВИРОВОЧНАЯ ЧАСТЬ ОПРЕДЕЛЕНИЯ»:
+          <b>Почему:</b> 3-4 КОРОТКИХ предложения с конкретным обоснованием (см. ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ — те же запреты, что для 3.6/5.5: никаких «рассмотрел доводы», «исследовал материалы», «без изменений» без причины — нужны нормы и факты).
+        ИСХОД (`outcome`) переводи в человеческую формулировку: cassation_dismissed_no_transfer = «отказ в передаче»; cassation_upheld = «оставлено в силе»; cassation_modified = «изменено»; cassation_reversed = «отменено»; cassation_remanded = «отменено и направлено на новое»; cassation_terminated = «прекращено / отозвано»; cassation_other / пусто = пропусти строку «Итог».
+        Дело с `appellant_is_bank=true` (Сбербанк подал жалобу) — выделяй: добавь в начало строки 1 эмодзи 🏦.
+
+7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>. Используй ИМЕННО эти три числа дословно — не считай, не угадывай, не округляй.
+8. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия больших блоков и секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок. РАЗДЕЛИТЕЛИ И ПУСТЫЕ СТРОКИ (обязательны, без них границы теряются):
 (а) перед заголовком каждой подсекции 📥/📅/⚖️/📄/🔁/📨/⚠ ВНУТРИ одного большого блока — отдельная строка-разделитель «⸻» (ТОЛЬКО этот символ, без HTML-тегов и пробелов вокруг), окружённая пустыми строками: пустая строка → ⸻ → пустая строка → заголовок секции. Перед самой первой подсекцией большого блока (сразу после <b>🏛 ПЕРВАЯ ИНСТАНЦИЯ</b> или <b>⚖️ АПЕЛЛЯЦИЯ</b>) разделитель НЕ ставь — там и так понятно, где начало; ПОСЛЕ заголовка подсекции (📥 Новые иски (N): / 📅 Изменения (N): / 📄 Опубликованные… / 🔁 Отложенные… и т.п.) — ровно ОДНА пустая строка, потом первое дело;
@@ -4556,7 +5591,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              stage_transitions: list[dict] | None = None,
                              fi_changes: list[dict] | None = None,
                              total_active_appeal: int = 0,
-                             total_active_fi: int = 0) -> str:
+                             total_active_fi: int = 0,
+                             cass_changes: list[dict] | None = None,
+                             cass_discovered: list[dict] | None = None) -> str:
     """Шаблонный дайджест (fallback без Claude API). Формат: HTML.
 
     Структура — два больших блока (🏛 ПЕРВАЯ ИНСТАНЦИЯ / ⚖️ АПЕЛЛЯЦИЯ),
@@ -4573,12 +5610,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         stage_transitions = []
     if fi_changes is None:
         fi_changes = []
+    if cass_changes is None:
+        cass_changes = []
+    if cass_discovered is None:
+        cass_discovered = []
 
     total_active = total_active_appeal + total_active_fi
 
     # ── Короткое сообщение если изменений нет ──
     if (not new_cases and not changes and not fi_new_cases
-            and not stage_transitions and not fi_changes):
+            and not stage_transitions and not fi_changes
+            and not cass_changes and not cass_discovered):
         return render_no_changes_digest(
             today,
             f"В производстве: всего {total_active}"
@@ -5010,7 +6052,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
     # ── Сборка ──
     summary = build_summary_line(
-        new_cases, changes, fi_new_cases, stage_transitions, fi_changes
+        new_cases, changes, fi_new_cases, stage_transitions, fi_changes,
+        cass_changes=cass_changes, cass_discovered=cass_discovered,
     )
     lines = [
         f"📊 <b>Мониторинг дел Сбербанка — {today}</b>",
@@ -5028,6 +6071,98 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         lines.append("")
         lines.append("⚖️ <b>АПЕЛЛЯЦИЯ</b>")
         lines.extend(appeal_block)
+
+    # ── Блок КАССАЦИЯ ──
+    cass_block: list[str] = []
+    _OUTCOME_RU = {
+        "cassation_dismissed_no_transfer": "отказ в передаче жалобы",
+        "cassation_upheld": "оставлено без изменения",
+        "cassation_modified": "изменено",
+        "cassation_reversed": "отменено",
+        "cassation_remanded": "отменено и направлено на новое рассмотрение",
+        "cassation_terminated": "прекращено / отозвано / возвращено",
+        "cassation_other": "",
+    }
+    if cass_discovered:
+        cass_block.append(f"📥 <b>Новые касс. дела ({len(cass_discovered)}):</b>")
+        for c in cass_discovered:
+            cass = c.get("cassation") or {}
+            fi_b = c.get("first_instance") or {}
+            num_fi = escape_html(c.get("id", ""))
+            num_cs = escape_html(cass.get("case_number", ""))
+            url = ""
+            if cass.get("link"):
+                cid_, cuid_ = case_id_uid(cass["link"])
+                if cid_ and cuid_:
+                    url = CASSATION_COURT.card_url(cid_, cuid_)
+            link = (f'<a href="{url}"><b>{num_fi}</b></a>'
+                    if url else f'<b>{num_fi}</b>')
+            pl_raw = c.get("plaintiff", "")
+            df_raw = c.get("defendant", "")
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            role = c.get("bank_role", "") or ""
+            tail = "" if _bank_in_parties(pl_raw, df_raw) or not role \
+                else f", банк — {escape_html(role.lower())}"
+            sber_flag = "🏦 " if cass.get("appellant_is_bank") else ""
+            cass_block.append(f"  {sber_flag}{link} — {pl} vs {df}{tail}")
+            cass_block.append(
+                f"     касс. № <b>{num_cs}</b> | "
+                f"суд 1 инст.: {escape_html(shorten_court_name(fi_b.get('court', '') or ''))} | "
+                f"заявитель: {escape_html(cass.get('appellant', '') or '')} "
+                f"({escape_html((cass.get('appellant_status', '') or '').lower())}) | "
+                f"поступление: {escape_html(cass.get('filing_date', '') or '')}"
+            )
+            cass_block.append("")
+        if cass_block and cass_block[-1] == "":
+            cass_block.pop()
+
+    cass_events_only = [
+        ch for ch in cass_changes
+        if "discovered_in_cassation" not in ch.get("type", [])
+    ]
+    if cass_events_only:
+        if cass_block:
+            _section_break(cass_block)
+        cass_block.append(f"📑 <b>Касс. события ({len(cass_events_only)}):</b>")
+        for ch in cass_events_only:
+            d = ch.get("details") or {}
+            num_fi = escape_html(ch.get("case", ""))
+            num_cs = escape_html(ch.get("cassation_internal_number", ""))
+            link = f"<b>{num_fi}</b>"
+            sber_flag = "🏦 " if d.get("appellant_is_bank") else ""
+            stage_prev = escape_html(d.get("stage_prev", "") or "")
+            stage_now = escape_html(d.get("stage_now", "") or "")
+            cass_block.append(
+                f"  {sber_flag}{link} — касс. № <b>{num_cs}</b> | "
+                f"стадия: {stage_prev} → {stage_now}"
+            )
+            outcome = d.get("outcome", "") or ""
+            outcome_ru = _OUTCOME_RU.get(outcome, "")
+            result_text = escape_html(d.get("result_text", "") or "")
+            rfa = escape_html(d.get("result_for_appeal", "") or "")
+            itog_parts: list[str] = []
+            if outcome_ru:
+                itog_parts.append(f"<b>Итог:</b> {escape_html(outcome_ru)}")
+            elif result_text:
+                itog_parts.append(f"<b>Итог:</b> {result_text}")
+            if rfa:
+                itog_parts.append(f"апел.: {rfa}")
+            if itog_parts:
+                cass_block.append("     " + " | ".join(itog_parts))
+            act_excerpt = (d.get("act_text") or "").strip()
+            if act_excerpt:
+                if len(act_excerpt) > 500:
+                    act_excerpt = act_excerpt[:500].rstrip() + "…"
+                cass_block.append(f"     <i>{escape_html(act_excerpt)}</i>")
+            cass_block.append("")
+        if cass_block and cass_block[-1] == "":
+            cass_block.pop()
+
+    if cass_block:
+        lines.append("")
+        lines.append("⚖️🔬 <b>КАССАЦИЯ</b>")
+        lines.extend(cass_block)
 
     lines.append("")
     lines.append(
@@ -5051,21 +6186,26 @@ def _filter_events_by_watchlist(
     stage_transitions: list[dict],
     appeal_new_cases_csv: list[dict],
     changes: list[dict],
+    cass_changes: list[dict] | None = None,
+    cass_discovered: list[dict] | None = None,
 ) -> dict:
-    """Отфильтровать пять списков событий по идентификаторам дел в watchlist.
+    """Отфильтровать списки событий по идентификаторам дел в watchlist.
 
     Идентификатор в watchlist = `caseNumber` с фронта (для апел. дел = номер
     апелляции, для 1-й инст. = номер 1-й инст.). Маппинг полей:
     · changes (apel)        → ch["case"]
     · fi_changes            → ch["case"] (= fi.case_number)
+    · cass_changes          → ch["case"] (= номер 1-й инст., наш ключ id)
     · fi_new_cases          → c["id"]            (НЕ фильтруем, общесистемно)
     · appeal_new_cases_csv  → c["Номер дела"]    (НЕ фильтруем, общесистемно)
+    · cass_discovered       → c["id"]            (НЕ фильтруем, общесистемно)
     · stage_transitions     → fi_case_number ИЛИ appeal_case_number
       (юрист может отслеживать дело по любому из них).
 
-    Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) считаем общесистемным
-    сигналом: они появились впервые и логически не могут быть в чьём-либо
-    watchlist. Поэтому возвращаем их целиком всем подписчикам.
+    Новые дела (`fi_new_cases`, `appeal_new_cases_csv`, `cass_discovered`)
+    считаем общесистемным сигналом: они появились впервые и логически не
+    могут быть в чьём-либо watchlist. Поэтому возвращаем их целиком всем
+    подписчикам.
     """
     return {
         "fi_new_cases": list(fi_new_cases or []),
@@ -5083,6 +6223,11 @@ def _filter_events_by_watchlist(
             ch for ch in (changes or [])
             if (ch.get("case") or "").strip() in watchlist
         ],
+        "cass_changes": [
+            ch for ch in (cass_changes or [])
+            if (ch.get("case") or "").strip() in watchlist
+        ],
+        "cass_discovered": list(cass_discovered or []),
     }
 
 
@@ -5122,6 +6267,8 @@ def _make_per_sub_callback(
     stage_transitions: list[dict],
     appeal_new_cases_csv: list[dict],
     push_summary: str,
+    cass_changes: list[dict] | None = None,
+    cass_discovered: list[dict] | None = None,
 ):
     """Фабрика callback'а для `send_web_push(per_subscriber=...)`.
 
@@ -5137,6 +6284,9 @@ def _make_per_sub_callback(
     Используется в main_json (живой крон), main_replay_last,
     main_push_last_digest — чтобы тестовые режимы вели себя как боевой.
     """
+    cass_changes = cass_changes or []
+    cass_discovered = cass_discovered or []
+
     def _per_sub(sub: dict):
         wl_raw = sub.get("watchlist") or []
         wl = {str(x).strip() for x in wl_raw if str(x).strip()}
@@ -5144,8 +6294,9 @@ def _make_per_sub_callback(
         if not wl:
             # Пустой watchlist — общесистемный push при любых событиях.
             total_global = (
-                len(fi_new_cases) + len(appeal_new_cases_csv)
-                + len(fi_changes) + len(changes) + len(stage_transitions)
+                len(fi_new_cases) + len(appeal_new_cases_csv) + len(cass_discovered)
+                + len(fi_changes) + len(changes) + len(cass_changes)
+                + len(stage_transitions)
             )
             if total_global == 0:
                 return None
@@ -5162,9 +6313,18 @@ def _make_per_sub_callback(
             stage_transitions=stage_transitions,
             appeal_new_cases_csv=appeal_new_cases_csv,
             changes=changes,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
         )
-        n_new = len(f["fi_new_cases"]) + len(f["appeal_new_cases_csv"])
-        n_chg = len(f["fi_changes"]) + len(f["changes"])
+        n_new = (
+            len(f["fi_new_cases"])
+            + len(f["appeal_new_cases_csv"])
+            + len(f.get("cass_discovered") or [])
+        )
+        n_chg = (
+            len(f["fi_changes"]) + len(f["changes"])
+            + len(f.get("cass_changes") or [])
+        )
         n_st = len(f["stage_transitions"])
         if n_new + n_chg + n_st == 0:
             return None
@@ -5174,9 +6334,13 @@ def _make_per_sub_callback(
             ids.append((c.get("id") or "").strip())
         for c in f["appeal_new_cases_csv"]:
             ids.append((c.get("Номер дела") or "").strip())
+        for c in (f.get("cass_discovered") or []):
+            ids.append((c.get("id") or "").strip())
         for ch in f["fi_changes"]:
             ids.append((ch.get("case") or "").strip())
         for ch in f["changes"]:
+            ids.append((ch.get("case") or "").strip())
+        for ch in (f.get("cass_changes") or []):
             ids.append((ch.get("case") or "").strip())
         for t in f["stage_transitions"]:
             ids.append(
@@ -6000,6 +7164,11 @@ def main_json():
         (c.get("id") or "").strip(): c for c in cases
     }
 
+    # Собираем все результаты поиска по 1-й инст. — нужны и для new_fi
+    # фильтра ниже, и для re-link дел, вернувшихся из кассации (awaiting_relink).
+    # Используем список пар, а не dict — CourtConfig не хешируется.
+    fi_results_by_court: list = []
+
     for court in enabled_courts:
         polite_delay()
         search_html = fetch_page(court.search_url())
@@ -6008,6 +7177,7 @@ def main_json():
             continue
 
         fi_results = parse_first_instance_search(search_html, court)
+        fi_results_by_court.append((court, fi_results))
 
         # Промоушен материала → 2-XXX до фильтра new_fi.
         for r in fi_results:
@@ -6046,6 +7216,17 @@ def main_json():
                 existing_ids.add(fi["case_number"])
         else:
             log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
+
+    # Re-link дел, вернувшихся из кассации в 1-ю инст. (awaiting_relink →
+    # first_instance, новый раунд). Делается ПОСЛЕ накопления fi_results_by_court
+    # и ДО фильтра new_fi, потому что таким делам нужен полный сброс блоков
+    # first_instance/appeal/cassation в history, а не очередное обновление.
+    relinked_to_fi = relink_awaiting_relink_first_instance(cases, fi_results_by_court)
+    if relinked_to_fi:
+        # Список case.id, которые мы только что воскресили, — чтобы дальше
+        # их не дублировать в new_fi (они уже в cases с current_stage=first_instance).
+        for r in relinked_to_fi:
+            existing_ids.add(r["case"]["id"])
 
     timings["first_instance"] = time.perf_counter() - t0
     log.info(f"Итого новых дел 1 инстанции: {len(fi_new_cases)}")
@@ -6469,6 +7650,72 @@ def main_json():
     )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
+    # ── 4c. Кассация (7kas.sudrf.ru) ──
+    # Поиск только первая страница (по решению пользователя). Фильтр HMAO —
+    # внутри parse_cassation_search_page по match_hmao_first_instance.
+    # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
+    # поиск иногда матчит по случайному совпадению в тексте.
+    t0 = time.perf_counter()
+    cass_changes: list[dict] = []
+    cass_discovered: list[dict] = []
+    try:
+        log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
+        polite_delay()
+        cass_search_html = fetch_page(CASSATION_COURT.search_url())
+        if cass_search_html:
+            cass_search_results = parse_cassation_search_page(cass_search_html)
+            hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
+            log.info(
+                f"  7kas: всего {len(cass_search_results)} дел, "
+                f"HMAO {len(hmao_results)}, не-HMAO отброшено "
+                f"{len(cass_search_results) - len(hmao_results)}"
+            )
+
+            cass_finds: list[dict] = []
+            for r in hmao_results:
+                polite_delay()
+                card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
+                card_html = fetch_page(card_url)
+                if not card_html:
+                    log.warning(
+                        f"  7kas: не удалось загрузить карточку "
+                        f"{r['cassation_internal_number']}"
+                    )
+                    continue
+                info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
+                if not info:
+                    log.warning(
+                        f"  7kas: не удалось распарсить карточку "
+                        f"{r['cassation_internal_number']}"
+                    )
+                    continue
+                if not info.get("sber_present"):
+                    log.info(
+                        f"  7kas: пропуск {r['cassation_internal_number']} — "
+                        f"Сбербанка нет в УЧАСТНИКАХ"
+                    )
+                    continue
+                # Подмержим поля из выдачи (link, cassation_internal_number,
+                # fi_court_config, fi_case_number — у info уже всё это есть, но
+                # link нет: его нужно собрать из case_id|case_uid).
+                info["link"] = f"{r['case_id']}|{r['case_uid']}"
+                info["cassation_internal_number"] = r["cassation_internal_number"]
+                # Если в карточке fi_case_number пустой (редко) — берём из выдачи.
+                if not info.get("fi_case_number") and r.get("fi_case_number"):
+                    info["fi_case_number"] = r["fi_case_number"]
+                cass_finds.append(info)
+
+            cases, cass_changes, cass_discovered = link_cassation_cases(
+                cases, cass_finds
+            )
+        else:
+            log.warning("7kas: пустой ответ от поиска")
+    except Exception as exc:
+        # Кассация — третий парсер, его падение не должно ронять весь прогон.
+        # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
+        log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
+    timings["cassation"] = time.perf_counter() - t0
+
     # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
     active_csv, newly_archived_csv = split_archived(csv_cases)
@@ -6614,6 +7861,8 @@ def main_json():
         fi_changes=fi_changes,
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
+        cass_changes=cass_changes,
+        cass_discovered=cass_discovered,
     )
     digest = generate_digest(
         appeal_new_cases_csv, changes, cases=csv_cases,
@@ -6621,6 +7870,8 @@ def main_json():
         fi_changes=fi_changes,
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
+        cass_changes=cass_changes,
+        cass_discovered=cass_discovered,
     )
     timings["digest"] = time.perf_counter() - t0
 
@@ -6629,8 +7880,8 @@ def main_json():
     timings["telegram"] = time.perf_counter() - t0
 
     # Web Push — краткое уведомление при наличии изменений, разбивка по типам
-    push_new = len(fi_new_cases) + len(appeal_new_cases_csv)
-    push_changes = len(fi_changes) + len(changes)
+    push_new = len(fi_new_cases) + len(appeal_new_cases_csv) + len(cass_discovered)
+    push_changes = len(fi_changes) + len(changes) + len(cass_changes)
     push_stages = len(stage_transitions)
     push_summary = ""
     if push_new + push_changes + push_stages > 0:
@@ -6653,6 +7904,8 @@ def main_json():
                 stage_transitions=stage_transitions,
                 appeal_new_cases_csv=appeal_new_cases_csv,
                 push_summary=push_summary,
+                cass_changes=cass_changes,
+                cass_discovered=cass_discovered,
             ),
         )
 
@@ -6744,8 +7997,10 @@ def main_replay_last(push_all: bool = False):
     log.info(f"Контекст от {saved_at}: "
              f"changes={len(ctx.get('changes', []))}, "
              f"fi_changes={len(ctx.get('fi_changes', []))}, "
+             f"cass_changes={len(ctx.get('cass_changes', []))}, "
              f"new_cases={len(ctx.get('new_cases', []))}, "
              f"fi_new={len(ctx.get('fi_new_cases', []))}, "
+             f"cass_disc={len(ctx.get('cass_discovered', []))}, "
              f"transitions={len(ctx.get('stage_transitions', []))}")
 
     log.info("Генерирую дайджест...")
@@ -6758,6 +8013,8 @@ def main_replay_last(push_all: bool = False):
         fi_changes=ctx.get("fi_changes", []),
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
     )
 
     send_telegram(digest)
@@ -6765,6 +8022,7 @@ def main_replay_last(push_all: bool = False):
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
         or ctx.get("fi_changes")
+        or ctx.get("cass_changes") or ctx.get("cass_discovered")
     )
     summary = build_summary_line(
         ctx.get("new_cases", []),
@@ -6772,6 +8030,8 @@ def main_replay_last(push_all: bool = False):
         ctx.get("fi_new_cases", []),
         ctx.get("stage_transitions", []),
         ctx.get("fi_changes", []),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
     )
     save_last_digest(digest, summary=summary or "(replay)", is_empty=replay_is_empty)
 
@@ -6810,6 +8070,8 @@ def main_replay_last(push_all: bool = False):
             stage_transitions=ctx.get("stage_transitions", []),
             appeal_new_cases_csv=ctx.get("new_cases", []),
             push_summary=summary or body,
+            cass_changes=ctx.get("cass_changes", []),
+            cass_discovered=ctx.get("cass_discovered", []),
         ),
     )
     log.info("Готово!")
@@ -6859,8 +8121,10 @@ def main_push_last_digest(owner_only: bool = False):
     log.info(f"Контекст от {saved_at}: "
              f"changes={len(ctx.get('changes', []))}, "
              f"fi_changes={len(ctx.get('fi_changes', []))}, "
+             f"cass_changes={len(ctx.get('cass_changes', []))}, "
              f"new_cases={len(ctx.get('new_cases', []))}, "
              f"fi_new={len(ctx.get('fi_new_cases', []))}, "
+             f"cass_disc={len(ctx.get('cass_discovered', []))}, "
              f"transitions={len(ctx.get('stage_transitions', []))}")
 
     log.info("Генерирую дайджест через LLM...")
@@ -6873,12 +8137,15 @@ def main_push_last_digest(owner_only: bool = False):
         fi_changes=ctx.get("fi_changes", []),
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
     )
 
     is_empty = not (
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
         or ctx.get("fi_changes")
+        or ctx.get("cass_changes") or ctx.get("cass_discovered")
     )
     summary = build_summary_line(
         ctx.get("new_cases", []),
@@ -6886,6 +8153,8 @@ def main_push_last_digest(owner_only: bool = False):
         ctx.get("fi_new_cases", []),
         ctx.get("stage_transitions", []),
         ctx.get("fi_changes", []),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
     )
     save_last_digest(digest, summary=summary, is_empty=is_empty)
 
@@ -6907,6 +8176,8 @@ def main_push_last_digest(owner_only: bool = False):
             stage_transitions=ctx.get("stage_transitions", []),
             appeal_new_cases_csv=ctx.get("new_cases", []),
             push_summary=summary or body,
+            cass_changes=ctx.get("cass_changes", []),
+            cass_discovered=ctx.get("cass_discovered", []),
         ),
     )
     log.info("Готово!")
