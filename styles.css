@@ -94,14 +94,16 @@
   --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
 
   /* Стадии дела */
+  /* Градация по важности: 1 инст. (info) → апелляция (warn) → кассация
+     (critical). Юрист сканирует список «снизу вверх» по статусу. */
   --stage-fi-fg:        var(--blue-700);
   --stage-fi-bg:        var(--blue-100);
   --stage-await-fg:     var(--amber-700);
   --stage-await-bg:     var(--amber-100);
-  --stage-appeal-fg:    var(--violet-700);
-  --stage-appeal-bg:    var(--violet-100);
-  --stage-cass-fg:      var(--teal-700);
-  --stage-cass-bg:      var(--teal-100);
+  --stage-appeal-fg:    var(--amber-700);
+  --stage-appeal-bg:    var(--amber-100);
+  --stage-cass-fg:      var(--red-700);
+  --stage-cass-bg:      var(--red-100);
   --stage-archive-fg:   var(--gray-600);
   --stage-archive-bg:   var(--gray-150);
 
@@ -288,10 +290,10 @@
   --stage-fi-bg:        rgba(59, 130, 246, 0.16);
   --stage-await-fg:     #f4c97c;
   --stage-await-bg:     rgba(245, 158, 11, 0.16);
-  --stage-appeal-fg:    #c4b5fd;
-  --stage-appeal-bg:    rgba(139, 92, 246, 0.18);
-  --stage-cass-fg:      #5eead4;
-  --stage-cass-bg:      rgba(20, 184, 166, 0.16);
+  --stage-appeal-fg:    #f4c97c;
+  --stage-appeal-bg:    rgba(245, 158, 11, 0.18);
+  --stage-cass-fg:      #fca5a5;
+  --stage-cass-bg:      rgba(239, 68, 68, 0.20);
   --stage-archive-fg:   #b0b6c0;
   --stage-archive-bg:   rgba(154, 160, 172, 0.14);
 
@@ -756,6 +758,15 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-archived { background:var(--stage-archive-bg); color:var(--stage-archive-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-semibold); text-transform:uppercase; }
 .badge-fi       { background:var(--stage-fi-bg); color:var(--stage-fi-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
 .badge-appeal   { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+.badge-cassation{ background:var(--stage-cass-bg); color:var(--stage-cass-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* Банк-заявитель в кассации (cs.appellant_is_bank). Использует роль-цвет
+   plaintiff (синий) — Сбер выступает активной стороной. */
+.badge-bank     { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* Раскрываемый блок «Текст определения (полный)» в drawer'е кассации.
+   Тексты до 30 КБ — без ограничения высоты drawer задвоит scrollbar. */
+.cass-act       { margin-top:var(--space-3); }
+.cass-act > summary { cursor:pointer; font-weight:var(--fw-semibold); color:var(--fg-2); padding:var(--space-2) 0; }
+.cass-act-pre   { margin-top:var(--space-2); padding:var(--space-3); background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-md); white-space:pre-wrap; font-family:inherit; font-size:var(--fs-xs); max-height:50vh; overflow:auto; }
 
 /* Hover-actions */
 .row-actions { display:inline-flex; gap:4px; margin-left:auto; opacity:0; transition:opacity 120ms var(--ease-out); vertical-align:middle; }
@@ -893,6 +904,7 @@ tr.detail-row { display:none; }
 .drawer-tab .tab-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-bold); letter-spacing:-0.01em; color:inherit; }
 .drawer-tab.tab-fi .tab-badge { background:var(--stage-fi-bg); color:var(--stage-fi-fg); }
 .drawer-tab.tab-ap .tab-badge { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); }
+.drawer-tab.tab-cs .tab-badge { background:var(--stage-cass-bg); color:var(--stage-cass-fg); }
 
 /* Timeline */
 .timeline { position:relative; padding-left:18px; }
