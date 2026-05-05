@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-05-05T03:50:00",
-  "title_default": "Мониторинг дел — обновление",
-  "body_default": "📋 Изменений: 2",
+  "generated_at": "2026-05-05T04:21:11",
+  "title_default": "Мониторинг дел — тестовая рассылка",
+  "body_default": "1 событ. | 1 подано жалоб",
   "owner_only": false,
   "items": [
     {
@@ -11,10 +11,10 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "general",
+      "title": "Мониторинг дел — обновление",
+      "body": "1 событ. | 1 подано жалоб",
+      "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
       "endpoint": "https://web.push.apple.com/QB6yNMp_0MHKzeB5NKK6YynBS8wHakmJuHPG5rvcObNGwNSsr7oADvGSl2-0yiHkbSpHG_6r7FYdEv2bGtFRi6k4ZWWx8mkyzUgk45zSoEeaBEShlTWa-G3e4wC3V6x-rpqEfkKAEfKPpxTx8Gvx1O_Qju5nEojLdH3W9DZ_vBs",
@@ -22,10 +22,10 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "general",
+      "title": "Мониторинг дел — обновление",
+      "body": "1 событ. | 1 подано жалоб",
+      "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
       "endpoint": "https://web.push.apple.com/QF3NRMN1D52UCXsV7I4sZVmX5_rf0niwkaTQy6EwvSt2ky2BI7DwHHA6LlUDaxqMCwguHoUIp__bHHHBvDBBZRzR6WPcVSv-w5Y-k_hoU55FyIKWcVTDeI2f1LXSeTM-7Kw3kg_Mxb3MEboXFWid80VKblhKC-nB9xJmpy9MmoA",
@@ -50,10 +50,10 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "general",
+      "title": "Мониторинг дел — обновление",
+      "body": "1 событ. | 1 подано жалоб",
+      "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
       "endpoint": "https://web.push.apple.com/QJkgJi0AgUCS3AM4ZAXAmW7SNLcSlAJtcHQWNeXm2JIWiYqzdLa7CIGUKjmFxO6zzYJMo7cSb0EANlTPONFB7WVGRjiOxMcGqqbkLB5oDts7z0bvhZEiDgK23IEMuOMlJNahXCCAlmMlUNOOa2bNokgwI5oxlLrjkGgnQEDx01Y",
@@ -101,10 +101,10 @@
       "is_owner": true,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "general",
+      "title": "Мониторинг дел — обновление",
+      "body": "1 событ. | 1 подано жалоб",
+      "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/ctf3mVMvm3M:APA91bFWj2h6S6B1uabZO162SKuSuQJB6RGyMVtR9UkId-xoY_8dY1B9eyHGaGOHHcU2ZMTzV2qd1RsJkAn5we_RBF3hqoWxHGaDlTanf1dZCo7kpsu5ZWjycC3JdhMZP7uJ-y54SV7Y",
@@ -112,10 +112,10 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "general",
+      "title": "Мониторинг дел — обновление",
+      "body": "1 событ. | 1 подано жалоб",
+      "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/dhku8svsJAY:APA91bGOhXHwznuvUfUM6jYjx7XdX3uDxZUWPuGvy-wn77pYKcr8JHw9j6-KX53wnJh6MNpKSzcwmUak4FyJ30Eg1jstZitnMCa-dYxwvUieO-V9stRsdtqPwabE57YenlvNYUaMoUiF",
@@ -132,5 +132,5 @@
       "click_url": null
     }
   ],
-  "updated_at": "2026-05-05T03:50:00"
+  "updated_at": "2026-05-05T04:21:11"
 }
