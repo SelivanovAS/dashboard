@@ -989,6 +989,8 @@ def should_skip_case(
         block = case_dict.get("first_instance") or {}
     elif stage == "appeal":
         block = case_dict.get("appeal") or {}
+    elif stage == "cassation":
+        block = case_dict.get("cassation") or {}
     else:
         return False, ""
 
@@ -1001,6 +1003,19 @@ def should_skip_case(
             last_checked = None
     if last_checked is None or (today - last_checked).days >= force_parse_days:
         return False, ""
+
+    # Кассация: явное поле hearing_date в блоке (формат DD.MM.YYYY) — будущее
+    # заседание известно без чтения events.
+    if stage == "cassation":
+        hd_raw = (block.get("hearing_date") or "").strip()
+        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
+        if m_hd:
+            try:
+                hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
+                if hd >= today:
+                    return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
+            except ValueError:
+                pass
 
     planned, kind = get_next_planned_date(block.get("events") or [])
     if planned and planned >= today:
@@ -7658,6 +7673,10 @@ def main_json():
     t0 = time.perf_counter()
     cass_changes: list[dict] = []
     cass_discovered: list[dict] = []
+    cass_eligible = 0
+    cass_parsed = 0
+    cass_skipped_future = 0
+    cass_skipped_suspended = 0
     try:
         log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
         polite_delay()
@@ -7671,8 +7690,33 @@ def main_json():
                 f"{len(cass_search_results) - len(hmao_results)}"
             )
 
+            # Индекс существующих дел по номеру 1-й инст. — для smart-skip
+            # (discovery-кейсы остаются вне индекса и парсятся всегда).
+            cass_fi_index: dict[str, dict] = {}
+            for c in cases:
+                fi = c.get("first_instance") or {}
+                n = (fi.get("case_number") or c.get("id") or "").strip()
+                if n:
+                    cass_fi_index.setdefault(n, c)
+
+            today_for_skip = date.today()
             cass_finds: list[dict] = []
             for r in hmao_results:
+                cass_eligible += 1
+                fi_num_search = (r.get("fi_case_number") or "").strip()
+                existing_case = cass_fi_index.get(fi_num_search) if fi_num_search else None
+                if existing_case and existing_case.get("current_stage") == "cassation":
+                    skip, reason = should_skip_case(existing_case, today_for_skip)
+                    if skip:
+                        if "future_hearing" in reason:
+                            cass_skipped_future += 1
+                        else:
+                            cass_skipped_suspended += 1
+                        log.info(
+                            f"  7kas: skip {r['cassation_internal_number']} "
+                            f"({fi_num_search}): {reason}"
+                        )
+                        continue
                 polite_delay()
                 card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
                 card_html = fetch_page(card_url)
@@ -7704,6 +7748,7 @@ def main_json():
                 if not info.get("fi_case_number") and r.get("fi_case_number"):
                     info["fi_case_number"] = r["fi_case_number"]
                 cass_finds.append(info)
+                cass_parsed += 1
 
             cases, cass_changes, cass_discovered = link_cassation_cases(
                 cases, cass_finds
@@ -7714,6 +7759,12 @@ def main_json():
         # Кассация — третий парсер, его падение не должно ронять весь прогон.
         # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
         log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
+    cass_skip_total = cass_skipped_future + cass_skipped_suspended
+    log.info(
+        f"Кассация: {cass_parsed}/{cass_eligible} парсинг "
+        f"(skip {cass_skip_total}: {cass_skipped_future} заседание, "
+        f"{cass_skipped_suspended} без движения)"
+    )
     timings["cassation"] = time.perf_counter() - t0
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
