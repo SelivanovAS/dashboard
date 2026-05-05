@@ -56,8 +56,8 @@ from update_cases import (  # noqa: E402
 
 
 CASES_TO_ADD: list[tuple[str, str]] = [
-    ("vartovgor--hmao.sudrf.ru", "2-1394/2026"),
-    ("surggor--hmao.sudrf.ru",   "2-2408/2026"),
+    ("uganskray--hmao.sudrf.ru", "2-1012/2026"),
+    ("uganskray--hmao.sudrf.ru", "2-1071/2026"),
 ]
 
 
@@ -68,6 +68,8 @@ CASES_TO_ADD: list[tuple[str, str]] = [
 FORCE_BANK_ROLE: dict[str, str] = {
     "2-216/2026": "Ответчик",  # Советский районный — Сбер ответчик по факту,
                                 # на сайте суда указан только Альфа-Банк.
+    "2-1012/2026": "Третье лицо",  # Нефтеюганский — иск прокурора, особое производство.
+    "2-1071/2026": "Третье лицо",  # Нефтеюганский — иск прокурора, особое производство.
 }
 
 
