@@ -37,11 +37,19 @@ function isAppealStage(c){
   const s=c.stage;
   return s==='appeal'||s==='cassation_watch'||s==='cassation_pending';
 }
+// На стадии cassation фокус карточки уезжает на 7kas (Седьмой КСОЮ):
+// номер дела — 8Г-XXX, ссылка — на 7kas.sudrf.ru. На других кассац.
+// подстадиях (cassation_watch/pending) карточки на 7kas ещё нет.
+function isCassationStage(c){
+  return (c&&c.stage)==='cassation';
+}
 function courtLabel(c){
+  if(isCassationStage(c))return 'Седьмой КСОЮ';
   if(isAppealStage(c))return 'Суд ХМАО-Югры';
   return shortCourt(c.firstInstanceCourt||'');
 }
 function courtTitle(c){
+  if(isCassationStage(c))return 'Седьмой кассационный суд общей юрисдикции';
   if(isAppealStage(c))return 'Суд Ханты-Мансийского автономного округа - Югры';
   return c.firstInstanceCourt||'';
 }
@@ -195,6 +203,29 @@ const RESULT_LABELS={upheld:'Оставлено без изменения',rever
 const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',pending:'Ожидается'};
 const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
+// Маппинг enum'ов исхода кассации (см. classify_cassation_outcome
+// в scripts/update_cases.py) → читаемые формулировки. Пустая строка =
+// карточка ещё в производстве (исход не вынесен).
+const CASS_RESULT_LABELS={
+  cassation_dismissed_no_transfer:'Отказ в передаче в коллегию',
+  cassation_upheld:'Оставлено без изменения',
+  cassation_modified:'Изменено',
+  cassation_reversed:'Отменено',
+  cassation_remanded:'Отменено и направлено на новое рассмотрение',
+  cassation_terminated:'Прекращено / возвращено / отозвано',
+  cassation_other:'Иной исход',
+  '':'В производстве',
+};
+// Единая точка истины для бейджа стадии — используется в desktop-таблице,
+// mobile-card, drawer-hero, блоке «Ближайшие». Без этого helper'а условие
+// дрейфовало в трёх местах (см. правки кассации).
+function stageBadgeHtml(c){
+  const s=c&&c.stage;
+  if(s==='first_instance')return '<span class="badge badge-fi">1 инст.</span>';
+  if(s==='appeal')return '<span class="badge badge-appeal">Апелляция</span>';
+  if(s==='cassation')return '<span class="badge badge-cassation">Кассация</span>';
+  return '';
+}
 const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
 let allCases=[],filteredCases=[],sortField='relevance',sortDir='desc';
@@ -366,7 +397,7 @@ function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))r
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ========== JSON Case Conversion ========== */
-function buildCourtLink(linkRaw,domain,deloId,srvNum){
+function buildCourtLink(linkRaw,domain,deloId,srvNum,newOverride){
   if(!linkRaw)return '';
   // Pipe format: "case_id|case_uid"
   const pm=linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
@@ -374,7 +405,9 @@ function buildCourtLink(linkRaw,domain,deloId,srvNum){
     const d=domain||'oblsud--hmao.sudrf.ru';
     const did=deloId||5;
     const srv=srvNum||1;
-    const newParam=did===5?5:0;
+    // КСОЮ (delo_id=2800001) требует new=2800001 — отдельная ветка API.
+    // FI: new=0; апел.: new=5; кассация: new=2800001 (см. CLAUDE.md).
+    const newParam=(typeof newOverride==='number')?newOverride:(did===5?5:0);
     return`https://${d}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
   }
   if(/^https?:\/\//.test(linkRaw))return linkRaw;
@@ -383,17 +416,26 @@ function buildCourtLink(linkRaw,domain,deloId,srvNum){
 function jsonToCase(j){
   const fi=j.first_instance||{};
   const ap=j.appeal||{};
+  const cs=j.cassation||{};
   const stage=j.current_stage||'appeal';
   // Primary data comes from the active stage. cassation_watch / cassation_pending —
   // апелляция уже прошла, но ещё не начата кассация: самое актуальное событие
   // лежит в ap (результат, дата, ссылка). Без этого страница показывает
   // пустой fi и лепит «Не назначено» вместо «Рассмотрено».
+  const isCass=stage==='cassation'&&!!cs.case_number;
   const isAppeal=(stage==='appeal'||stage==='cassation_watch'||stage==='cassation_pending')&&ap.case_number;
-  const primary=isAppeal?ap:fi;
-  const caseNumber=isAppeal?ap.case_number:j.id;
-  // Link — appeal uses oblsud domain, first instance uses its own domain
+  const primary=isCass?cs:(isAppeal?ap:fi);
+  // Для дел в кассации основной ID карточки — 8Г-XXX (cassation.case_number).
+  // Номер 1-й инстанции (j.id) сохраняется в caseObj.fiCaseNumber и
+  // используется как alias в watchlist (см. expandWatchlistAliases),
+  // чтобы существующие звёздочки по старому номеру не «осиротели».
+  const caseNumber=isCass?cs.case_number:(isAppeal?ap.case_number:j.id);
+  // Link — кассация уезжает на 7kas (delo_id=2800001, new=2800001 — отдельная
+  // ветка API КСОЮ); апелляция — на oblsud-домен; первая инстанция — на свой.
   let link='';
-  if(isAppeal){
+  if(isCass){
+    link=buildCourtLink(cs.link,'7kas.sudrf.ru',2800001,1,2800001);
+  }else if(isAppeal){
     link=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
   }else{
     link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id||1540005,fi.srv_num||1);
@@ -531,9 +573,18 @@ function jsonToCase(j){
     restartDate:restartDate,
     appealToFirstInstanceRules:appealToFirstInstanceRules,
     hearingTime:hearingTime,
+    // Кассация: код исхода (enum) + читаемый текст рассчитываются в drawer'е
+    // через CASS_RESULT_LABELS. appellantIsBank — флаг для бейджа «Банк-заявитель»
+    // в блоке кассации (отдельный от c.appellant — там апеллянт по апел. жалобе).
+    cassationCaseNumber:cs.case_number||'',
+    cassationOutcome:cs.outcome||'',
+    cassationCourt:cs.court||'',
+    appellantIsBank:!!cs.appellant_is_bank,
+    discoveredViaCassation:!!j.discovered_via_cassation,
     // JSON-specific: full stage data for detail view
     _fi:fi,
     _ap:ap.case_number?ap:null,
+    _cs:cs.case_number?cs:null,
   };
   caseObj.detailedStatus=computeDetailedStatus(caseObj);
   caseObj.computed=computeDerived(caseObj);
@@ -769,6 +820,11 @@ function hideError(){document.getElementById('error-banner').style.display='none
 
 /* ========== Render All ========== */
 function renderAll(){
+  // Watchlist alias-расширение: для дел в кассации обеспечиваем инвариант
+  // «оба ID (8Г-XXX и номер 1-й инст.) либо есть, либо отсутствуют».
+  // Без этого существующие звёздочки по c.id осиротеют после смены
+  // c.caseNumber на 8Г-XXX. Идемпотентно: повторный вызов ничего не делает.
+  try{expandWatchlistAliases();}catch(_){}
   const knownRaw=localStorage.getItem(KNOWN_CASES_KEY);
   const knownSet=knownRaw?new Set(JSON.parse(knownRaw)):new Set();
   const currentNumbers=allCases.map(c=>c.caseNumber);
@@ -889,9 +945,12 @@ function renderAnalytics(){
   }
 
   // Take up to 10 of each stage, then merge by date — cap at 12 total.
+  // Кассац. дела учитываем наряду с FI/Ап.: у 7kas есть hearing_date,
+  // юристу важно видеть касс. заседания так же, как FI/Ап.
   const fiSlice=allUpcoming.filter(c=>c.stage==='first_instance').slice(0,10);
   const apSlice=allUpcoming.filter(c=>c.stage==='appeal').slice(0,10);
-  const shownCases=[...fiSlice,...apSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,12);
+  const csSlice=allUpcoming.filter(c=>c.stage==='cassation').slice(0,10);
+  const shownCases=[...fiSlice,...apSlice,...csSlice].sort((a,b)=>a.hearingDate-b.hearingDate).slice(0,12);
 
   const groups={today:[],tomorrow:[],week:[],later:[]};
   shownCases.forEach(c=>{
@@ -936,7 +995,9 @@ function renderAnalytics(){
         const timeTxt=c.hearingTime||'—';
         const showDate=(g.key==='week'||g.key==='later');
         const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'}))}</span>`:'';
-        const stageBadge=c.stage==='appeal'
+        const stageBadge=c.stage==='cassation'
+          ?'<span class="badge badge-cassation badge-compact">Кассация</span>'
+          :c.stage==='appeal'
           ?'<span class="badge badge-appeal badge-compact">Апелл.</span>'
           :'<span class="badge badge-fi badge-compact">1 инст.</span>';
         // В панели «Ближайшие» не выводим ни тип заседания, ни 🔄 «с начала»:
@@ -945,10 +1006,12 @@ function renderAnalytics(){
         const upChips=c.appealToFirstInstanceRules
           ?'<span class="badge badge-to-fi badge-compact">⚠</span>'
           :'';
-        // Для апелляции суд всегда один — не выводим. Для 1 инст. — суд + судья.
-        const isFi=c.stage!=='appeal';
-        const court=isFi?courtLabel(c):'';
-        const judge=isFi&&c.firstInstanceJudge?' · '+shortName(c.firstInstanceJudge):'';
+        // Для апелляции и кассации суд всегда один (Суд ХМАО / 7-й КСОЮ) —
+        // не дублируем подпись, бейдж стадии и так это сообщает.
+        // Для 1 инст. — суд + судья.
+        const showCourt=c.stage==='first_instance';
+        const court=showCourt?courtLabel(c):'';
+        const judge=showCourt&&c.firstInstanceJudge?' · '+shortName(c.firstInstanceJudge):'';
         const courtHtml=court?`<div class="up-court">${escHtml(court)}${escHtml(judge)}</div>`:'';
         const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
         // Ссылка на карточку суда живёт в drawer — в списке «Ближайших»
@@ -1158,18 +1221,21 @@ function renderChipBar(){
     <button class="seg-btn ${rl==='plaintiff'?'active':''}" onclick="setRoleFilter('plaintiff')">Истец</button>
     <button class="seg-btn ${rl==='defendant'?'active':''}" onclick="setRoleFilter('defendant')">Ответчик</button>
   </div>`;
-  // Инстанция — показываем если есть оба типа
+  // Инстанция — показываем если есть хотя бы две стадии в данных.
+  // Кассация = только current_stage='cassation' (буквально — карточка
+  // живёт на 7kas). cassation_watch / cassation_pending остаются под
+  // меткой «1 инст.» / «Апелляция», т.к. фокус карточки там же.
   const fiCount=allCases.filter(c=>(c.stage||'appeal')==='first_instance').length;
   const apCount=allCases.filter(c=>(c.stage||'appeal')==='appeal').length;
-  if(fiCount>0&&apCount>0){
-    // «Кассация» disabled — в data ещё нет дел, парсера касс. судов нет.
-    // Кнопка-плейсхолдер показывает юристу, что фича в плане.
-    segmentsHtml+=`<div class="seg-ctrl">
+  const csCount=allCases.filter(c=>c.stage==='cassation').length;
+  if(fiCount>0&&(apCount>0||csCount>0)){
+    let inst=`<div class="seg-ctrl">
       <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
-      <button class="seg-btn ${stg==='first_instance'?'active':''}" onclick="setStageFilter('first_instance')">1 инст.</button>
-      <button class="seg-btn ${stg==='appeal'?'active':''}" onclick="setStageFilter('appeal')">Апелляция</button>
-      <button class="seg-btn" disabled title="Скоро">Кассация</button>
-    </div>`;
+      <button class="seg-btn ${stg==='first_instance'?'active':''}" onclick="setStageFilter('first_instance')">1 инст.</button>`;
+    if(apCount>0)inst+=`<button class="seg-btn ${stg==='appeal'?'active':''}" onclick="setStageFilter('appeal')">Апелляция</button>`;
+    if(csCount>0)inst+=`<button class="seg-btn ${stg==='cassation'?'active':''}" onclick="setStageFilter('cassation')">Кассация</button>`;
+    inst+=`</div>`;
+    segmentsHtml+=inst;
   }
   if(barQuick)barQuick.innerHTML=quickHtml;
   if(barSegments)barSegments.innerHTML=segmentsHtml;
@@ -1428,7 +1494,7 @@ function renderTable(){
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
-    const stageBadge=c.stage==='first_instance'?'<span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?'<span class="badge badge-appeal">Апелляция</span>':'';
+    const stageBadge=stageBadgeHtml(c);
 
     const hearingHtml=buildHearingHtml(c,vm);
     const stateHtml=buildStateHtml(c,vm);
@@ -1487,10 +1553,14 @@ function openDrawer(caseNumber){
   if(!c)return;
   activeCaseNumber=caseNumber;
   markCaseRead(caseNumber);
-  // Вкладка по умолчанию: последняя стадия (апелляция если есть)
+  // Вкладка по умолчанию: самая старшая открытая стадия. Для дел в кассации
+  // это «cs», иначе «ap» если есть карточка апелляции, иначе «fi». Если
+  // и того и другого нет (legacy CSV) — null, рендер тогда уйдёт в общий
+  // блок «Суд и состав».
   const hasFi=!!(c._fi&&c._fi.case_number);
   const hasAp=!!(c._ap&&c._ap.case_number);
-  drawerStage=hasAp?'ap':(hasFi?'fi':null);
+  const hasCs=!!(c._cs&&c._cs.case_number);
+  drawerStage=(c.stage==='cassation'&&hasCs)?'cs':(hasAp?'ap':(hasFi?'fi':null));
   const idx=findCaseIdx(caseNumber);
   if(idx>=0)focusedRowIdx=idx;
   renderDrawer(c);
@@ -1529,6 +1599,7 @@ function buildTimeline(c){
   const items=[];
   const fi=c._fi||{};
   const ap=c._ap||{};
+  const cs=c._cs||{};
   const classifyKind=(t)=>/отмен/i.test(t)?'danger'
     :/оставлен.*без.*измен|удовлетвор|решен/i.test(t)?'success'
     :/приостановлен/i.test(t)?'pause'
@@ -1581,6 +1652,12 @@ function buildTimeline(c){
     items.push({date:parseDate(ap.event_date),text:cleanTimelineText(ap.last_event),kind:classifyKind(ap.last_event)});
   }
   if(ap.filing_date)items.push({date:parseDate(ap.filing_date),text:'Поступление в апелляцию',kind:'info'});
+  if(cs.events&&cs.events.length)pushEvents(cs.events);
+  if(cs.filing_date)items.push({date:parseDate(cs.filing_date),text:'Поступление в кассацию',kind:'info'});
+  if(cs.decision_date&&cs.outcome){
+    const outcomeLabel=CASS_RESULT_LABELS[cs.outcome]||'';
+    if(outcomeLabel)items.push({date:parseDate(cs.decision_date),text:'Кассация: '+outcomeLabel,kind:classifyKind(outcomeLabel)});
+  }
   // Legacy / top-level event
   if(!items.length&&c.lastEvent){
     items.push({date:c.lastEventDate,text:cleanTimelineText(c.lastEvent),kind:classifyKind(c.lastEvent)});
@@ -1604,8 +1681,8 @@ function buildTimeline(c){
  * вкладки; переключение вкладок перерендерит drawer и подменит секцию.
  * Если нет разбора — секция вообще не выводится (нет шумных пустот). */
 function buildActAnalysisSectionHtml(c){
-  const stage=drawerStage==='fi'?'fi':drawerStage==='ap'?'ap':null;
-  const data=stage==='fi'?(c._fi&&c._fi.act_analysis):stage==='ap'?(c._ap&&c._ap.act_analysis):null;
+  const stage=drawerStage==='fi'?'fi':drawerStage==='ap'?'ap':drawerStage==='cs'?'cs':null;
+  const data=stage==='fi'?(c._fi&&c._fi.act_analysis):stage==='ap'?(c._ap&&c._ap.act_analysis):stage==='cs'?(c._cs&&c._cs.act_analysis):null;
   if(!data||!data.html)return'';
   const meta=[];
   if(data.act_date)meta.push('по акту от '+formatDate(parseDate(data.act_date)));
@@ -1659,13 +1736,18 @@ function renderDrawer(c){
   const isNew=isNewCase(c);
   const hasFi=!!(c._fi&&c._fi.case_number);
   const hasAp=!!(c._ap&&c._ap.case_number);
-  const hasBoth=hasFi&&hasAp;
+  const hasCs=!!(c._cs&&c._cs.case_number);
+  // ≥2 открытых стадий — рендерим вкладки. Для дел в кассации это
+  // FI + Кассация (если апел. ветка отсутствовала из-за discovery)
+  // или все три, если апелляция тоже разобрана.
+  const stagesOpen=(hasFi?1:0)+(hasAp?1:0)+(hasCs?1:0);
+  const hasMultiStage=stagesOpen>=2;
   const idx=findCaseIdx(c.caseNumber);
   const totalFiltered=filteredCases.length;
-  const stageBadge=c.stage==='first_instance'?'<span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?'<span class="badge badge-appeal">Апелляция</span>':'';
+  const stageBadge=stageBadgeHtml(c);
 
-  // Выбор stage-data для отображения двух-стадийных блоков
-  const stageData=drawerStage==='fi'?c._fi:drawerStage==='ap'?c._ap:null;
+  // Выбор stage-data для отображения трёх-стадийных блоков
+  const stageData=drawerStage==='fi'?c._fi:drawerStage==='ap'?c._ap:drawerStage==='cs'?c._cs:null;
 
   // Hero — статус и публикация акта дублируются в подзаголовке и «Ключевых
   // датах», поэтому отдельный блок hero-badges не выводим.
@@ -1698,7 +1780,7 @@ function renderDrawer(c){
   if(c.actDate){
     // Если для активной стадии есть LLM-разбор акта — рядом с датой
     // показываем кликабельный чип-якорь, скроллящий к секции «Разбор».
-    const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):null;
+    const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):drawerStage==='cs'?(c._cs&&c._cs.act_analysis):null;
     const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к разбору акта">✨ Разбор</span>`:'';
     keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(c.actDate)}${chip}</div>`;
   }
@@ -1742,6 +1824,42 @@ function renderDrawer(c){
     }
     grid+=`</div>`;
     courtSection=grid;
+  }else if(drawerStage==='cs'&&stageData){
+    const cs=stageData;
+    let grid=`<div class="kv-grid">`;
+    if(cs.case_number)grid+=`<div class="kv-k">Номер дела</div><div class="kv-v kv-mono">${escHtml(cs.case_number)}</div>`;
+    if(cs.cassation_number)grid+=`<div class="kv-k">Касс. №</div><div class="kv-v kv-mono">${escHtml(cs.cassation_number)}</div>`;
+    if(cs.court)grid+=`<div class="kv-k">Суд</div><div class="kv-v">${escHtml(cs.court)}</div>`;
+    if(cs.judge)grid+=`<div class="kv-k">Судья-докл.</div><div class="kv-v">${escHtml(cs.judge)}</div>`;
+    if(cs.filing_date)grid+=`<div class="kv-k">Подача</div><div class="kv-v kv-mono">${formatDate(parseDate(cs.filing_date))}</div>`;
+    if(cs.decision_date)grid+=`<div class="kv-k">Решение</div><div class="kv-v kv-mono">${formatDate(parseDate(cs.decision_date))}</div>`;
+    // Заявитель: ФИО + статус (Истец/Ответчик/3-е лицо в исходном деле) +
+    // бейдж «Банк-заявитель» если кассац. жалобу подаёт Сбер.
+    if(cs.appellant){
+      const bankBadge=cs.appellant_is_bank?' <span class="badge badge-bank badge-compact">Банк-заявитель</span>':'';
+      const status=cs.appellant_status?` <span class="kv-v-muted">· ${escHtml(cs.appellant_status.toLowerCase())}</span>`:'';
+      grid+=`<div class="kv-k">Заявитель</div><div class="kv-v">${escHtml(cs.appellant)}${status}${bankBadge}</div>`;
+    }
+    // Исход — детерминированный enum через CASS_RESULT_LABELS. При пустом
+    // outcome → «В производстве» (карточка ещё активна на 7kas).
+    const outcomeLabel=CASS_RESULT_LABELS[cs.outcome||''];
+    if(outcomeLabel)grid+=`<div class="kv-k">Исход</div><div class="kv-v">${escHtml(outcomeLabel)}</div>`;
+    if(cs.result_for_appeal)grid+=`<div class="kv-k">Для апел.</div><div class="kv-v">${escHtml(cs.result_for_appeal)}</div>`;
+    // Краткая инфа о первой инстанции, если её вкладки нет (discovery — apel
+    // ветки нет, fi есть только как стаб с court+judge).
+    if(!hasFi&&c._fi&&(c._fi.court||c._fi.judge)){
+      const parts=[];
+      if(c._fi.court)parts.push(escHtml(c._fi.court));
+      if(c._fi.judge)parts.push('судья '+escHtml(c._fi.judge));
+      grid+=`<div class="kv-k">Из</div><div class="kv-v kv-v-muted">${parts.join(' · ')}</div>`;
+    }
+    grid+=`</div>`;
+    // Полный текст определения: показывается раскрываемым блоком, чтобы
+    // не «топить» drawer длинной портянкой (act_text может быть до 30 КБ).
+    if(cs.act_text){
+      grid+=`<details class="cass-act"><summary>Текст определения (полный)</summary><pre class="cass-act-pre">${escHtml(cs.act_text)}</pre></details>`;
+    }
+    courtSection=grid;
   }else{
     // Legacy (CSV case без _fi/_ap)
     let grid=`<div class="kv-grid">`;
@@ -1766,11 +1884,17 @@ function renderDrawer(c){
   const localNote=userNotes[c.caseNumber]||'';
   const originalNote=c.notes||'';
 
-  // Tabs
-  const tabsHtml=hasBoth?`<div class="drawer-tabs">
-    <button class="drawer-tab tab-fi ${drawerStage==='fi'?'active':''}" onclick="setDrawerStage('fi')"><span class="tab-badge">1 инст.</span><span class="tab-num">${escHtml(c._fi.case_number)}</span></button>
-    <button class="drawer-tab tab-ap ${drawerStage==='ap'?'active':''}" onclick="setDrawerStage('ap')"><span class="tab-badge">Апелляция</span><span class="tab-num">${escHtml(c._ap.case_number)}</span></button>
-  </div>`:'';
+  // Tabs — рендерим если открыто ≥2 стадий. Порядок FI → Ап. → Кассация
+  // (хронологический). Для дел в кассации без апелляции (discovery)
+  // получаем 2 вкладки FI + Кассация.
+  let tabsHtml='';
+  if(hasMultiStage){
+    let tabs='';
+    if(hasFi)tabs+=`<button class="drawer-tab tab-fi ${drawerStage==='fi'?'active':''}" onclick="setDrawerStage('fi')"><span class="tab-badge">1 инст.</span><span class="tab-num">${escHtml(c._fi.case_number)}</span></button>`;
+    if(hasAp)tabs+=`<button class="drawer-tab tab-ap ${drawerStage==='ap'?'active':''}" onclick="setDrawerStage('ap')"><span class="tab-badge">Апелляция</span><span class="tab-num">${escHtml(c._ap.case_number)}</span></button>`;
+    if(hasCs)tabs+=`<button class="drawer-tab tab-cs ${drawerStage==='cs'?'active':''}" onclick="setDrawerStage('cs')"><span class="tab-badge">Кассация</span><span class="tab-num">${escHtml(c._cs.case_number)}</span></button>`;
+    tabsHtml=`<div class="drawer-tabs">${tabs}</div>`;
+  }
 
   const subTitle=[c.category,vm.statusLabel].filter(Boolean).join(' · ');
 
@@ -1804,7 +1928,7 @@ function renderDrawer(c){
       </div>
 
       <div class="drawer-section">
-        <div class="drawer-section-title">${drawerStage==='fi'?'Первая инстанция':drawerStage==='ap'?'Апелляция':'Суд и состав'}</div>
+        <div class="drawer-section-title">${drawerStage==='fi'?'Первая инстанция':drawerStage==='ap'?'Апелляция':drawerStage==='cs'?'Кассация':'Суд и состав'}</div>
         ${courtSection}
       </div>
 
@@ -1874,7 +1998,7 @@ function renderMobileCards(){
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
-    const stageBadge=c.stage==='first_instance'?'<span class="badge badge-fi">1 инст.</span>':c.stage==='appeal'?'<span class="badge badge-appeal">Апелляция</span>':'';
+    const stageBadge=stageBadgeHtml(c);
     const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}`:'';
 
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
@@ -1894,7 +2018,7 @@ function renderMobileCards(){
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
         <span class="mc-badges">${stageBadge}${newBadge}${archived}</span>
       </div>
-      ${courtLine&&!isAppealStage(c)?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
+      ${courtLine&&!isAppealStage(c)&&!isCassationStage(c)?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
       <div class="mc-parties">
         <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${plHtml}</span></div>
@@ -2151,11 +2275,63 @@ function watchBtnHtml(caseNumber) {
     + `</button>`;
 }
 
+// Для дела в стадии cassation возвращает второй ID (alias). Если
+// caseNumber = 8Г-XXX → вернёт номер 1-й инст. (нормализованный
+// bareCaseNumber'ом, без скобок-двойников). И наоборот. Иначе — null.
+// Используется в toggleWatch, чтобы синкать обе подписки одним кликом.
+function watchAliasFor(caseNumber) {
+  if (!Array.isArray(allCases) || allCases.length === 0) return null;
+  const bare = bareCaseNumber(caseNumber);
+  for (const c of allCases) {
+    if (c.stage !== 'cassation') continue;
+    const cs = bareCaseNumber(c.caseNumber);
+    const fi = bareCaseNumber(c.fiCaseNumber);
+    if (!cs || !fi || cs === fi) continue;
+    if (bare === cs || caseNumber === c.caseNumber) return fi;
+    if (bare === fi || caseNumber === c.fiCaseNumber) return cs;
+  }
+  return null;
+}
+
+// Проходим allCases и для дел в кассации синхронизируем ОБА ID в watchlist:
+// оба должны быть либо в watchlist, либо нет. Раньше watchlist хранил только
+// номер 1-й инст. (c.id), и при переключении c.caseNumber на 8Г-XXX
+// существующие звёздочки осиротели бы. Идемпотентно — повторный вызов ничего не даст.
+function expandWatchlistAliases() {
+  if (!Array.isArray(allCases) || allCases.length === 0) return;
+  let dirty = false;
+  for (const c of allCases) {
+    if (c.stage !== 'cassation') continue;
+    const cs = bareCaseNumber(c.caseNumber);
+    const fi = bareCaseNumber(c.fiCaseNumber);
+    if (!cs || !fi || cs === fi) continue;
+    const hasCs = watchlist.has(cs);
+    const hasFi = watchlist.has(fi);
+    if (hasFi && !hasCs) { watchlist.add(cs); dirty = true; }
+    if (hasCs && !hasFi) { watchlist.add(fi); dirty = true; }
+  }
+  if (dirty) {
+    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (_) {}
+    scheduleWatchlistSync();
+  }
+}
+
 function toggleWatch(caseNumber, btn) {
   if (watchlist.has(caseNumber)) {
     watchlist.delete(caseNumber);
   } else {
     watchlist.add(caseNumber);
+  }
+  // Кассация: синкаем оба ID (см. watchAliasFor). Без этого юрист,
+  // снимая звезду в drawer'е (где caseNumber = 8Г-XXX), оставит alias по
+  // номеру 1-й инст. в watchlist'е, и push продолжит приходить.
+  const alias = watchAliasFor(caseNumber);
+  if (alias) {
+    if (watchlist.has(caseNumber)) {
+      watchlist.add(alias);
+    } else {
+      watchlist.delete(alias);
+    }
   }
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
@@ -2193,15 +2369,22 @@ function toggleWatch(caseNumber, btn) {
   }
   // Все остальные копии этой же звёздочки (карточка + строка таблицы +
   // drawer-шапка могут сосуществовать) — обновляем синхронно по селектору.
-  document.querySelectorAll(
-    `.watch-btn[onclick*="toggleWatch('${String(caseNumber).replace(/'/g, "\\'")}'"]`
-  ).forEach((el) => {
-    if (el === btn) return;
-    const on = isWatched(caseNumber);
-    el.classList.toggle('on', on);
-    el.textContent = on ? '★' : '☆';
-    el.setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
+  // Для дел в кассации — также копии звёздочки по alias-номеру (старый
+  // номер 1-й инст. в карточке таблицы / mobile-card, если фронт его где-то
+  // ещё показывает; в текущей реализации основной caseNumber — 8Г-XXX,
+  // но синк не помешает на случай миграции).
+  const ids = alias ? [caseNumber, alias] : [caseNumber];
+  for (const id of ids) {
+    document.querySelectorAll(
+      `.watch-btn[onclick*="toggleWatch('${String(id).replace(/'/g, "\\'")}'"]`
+    ).forEach((el) => {
+      if (el === btn) return;
+      const on = isWatched(id);
+      el.classList.toggle('on', on);
+      el.textContent = on ? '★' : '☆';
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
   // Тоггл «Общий ⇄ Мой» в шапке дайджеста: появляется при первой звезде,
   // прячется при снятии последней; в режиме «Мой» пересобирает тело по
   // новому составу watchlist.
@@ -2269,6 +2452,10 @@ function reconcileWatchlistWithServer(serverList) {
   // Случай 1: локальный пуст → берём с сервера.
   if (watchlist.size === 0 && server.size > 0) {
     watchlist = server;
+    // Гидратация с Worker'а: серверный watchlist мог содержать только
+    // старые номера 1-й инст. (8Г-XXX появились на фронте только сейчас).
+    // Расширяем alias, чтобы карточка кассации сразу подсвечивала звезду.
+    try { expandWatchlistAliases(); } catch (_) {}
     try {
       localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
     } catch (_) {}
