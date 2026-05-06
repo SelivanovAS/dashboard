@@ -221,9 +221,15 @@ const CASS_RESULT_LABELS={
 // дрейфовало в трёх местах (см. правки кассации).
 function stageBadgeHtml(c){
   const s=c&&c.stage;
+  // Переходные стадии показываем как ту инстанцию, куда дело уже движется:
+  // как только подана жалоба — бейдж переключается на следующую ступень.
+  // awaiting_relink = после кассационной отмены, ждём карточку нижестоящей —
+  // последний содержательный акт от КСОЮ, поэтому «Кассация».
   if(s==='first_instance')return '<span class="badge badge-fi">1 инст.</span>';
-  if(s==='appeal')return '<span class="badge badge-appeal">Апелляция</span>';
-  if(s==='cassation')return '<span class="badge badge-cassation">Кассация</span>';
+  if(s==='appeal'||s==='awaiting_appeal'||s==='cassation_watch'||s==='cassation_pending')
+    return '<span class="badge badge-appeal">Апелляция</span>';
+  if(s==='cassation'||s==='awaiting_relink')
+    return '<span class="badge badge-cassation">Кассация</span>';
   return '';
 }
 const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
