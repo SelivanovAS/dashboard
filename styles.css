@@ -59,6 +59,7 @@
   --violet-700: #6d28d9;
   --violet-100: #ede9fe;
 
+  --teal-800:  #115e59;
   --teal-700:  #0d9488;
   --teal-100:  #ccfbf1;
 
@@ -94,16 +95,17 @@
   --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
 
   /* Стадии дела */
-  /* Градация по важности: 1 инст. (info) → апелляция (warn) → кассация
-     (critical). Юрист сканирует список «снизу вверх» по статусу. */
-  --stage-fi-fg:        var(--blue-700);
-  --stage-fi-bg:        var(--blue-100);
-  --stage-await-fg:     var(--amber-700);
-  --stage-await-bg:     var(--amber-100);
-  --stage-appeal-fg:    var(--amber-700);
-  --stage-appeal-bg:    var(--amber-100);
-  --stage-cass-fg:      var(--red-700);
-  --stage-cass-bg:      var(--red-100);
+  /* Холодная градация по насыщенности: 1 инст. (teal) → апелляция (indigo) →
+     кассация (violet). Тёплые цвета (red/amber) оставлены под urgency
+     заседаний, чтобы стадия и срочность не сливались. */
+  --stage-fi-fg:        var(--teal-800);
+  --stage-fi-bg:        var(--teal-100);
+  --stage-await-fg:     var(--indigo-700);
+  --stage-await-bg:     var(--indigo-100);
+  --stage-appeal-fg:    var(--indigo-700);
+  --stage-appeal-bg:    var(--indigo-100);
+  --stage-cass-fg:      var(--violet-700);
+  --stage-cass-bg:      var(--violet-100);
   --stage-archive-fg:   var(--gray-600);
   --stage-archive-bg:   var(--gray-150);
 
@@ -285,15 +287,15 @@
   --accent-bg-strong: rgba(47, 191, 74, 0.20);
   --focus-ring: 0 0 0 3px rgba(47, 191, 74, 0.40);
 
-  /* Стадии — приглушённые фоны на тёмном */
-  --stage-fi-fg:        #8ab4ff;
-  --stage-fi-bg:        rgba(59, 130, 246, 0.16);
-  --stage-await-fg:     #f4c97c;
-  --stage-await-bg:     rgba(245, 158, 11, 0.16);
-  --stage-appeal-fg:    #f4c97c;
-  --stage-appeal-bg:    rgba(245, 158, 11, 0.18);
-  --stage-cass-fg:      #fca5a5;
-  --stage-cass-bg:      rgba(239, 68, 68, 0.20);
+  /* Стадии — приглушённые холодные фоны на тёмном (teal/indigo/violet) */
+  --stage-fi-fg:        #5eead4;
+  --stage-fi-bg:        rgba(20, 184, 166, 0.16);
+  --stage-await-fg:     #c7d2fe;
+  --stage-await-bg:     rgba(99, 102, 241, 0.18);
+  --stage-appeal-fg:    #c7d2fe;
+  --stage-appeal-bg:    rgba(99, 102, 241, 0.18);
+  --stage-cass-fg:      #c4b5fd;
+  --stage-cass-bg:      rgba(139, 92, 246, 0.20);
   --stage-archive-fg:   #b0b6c0;
   --stage-archive-bg:   rgba(154, 160, 172, 0.14);
 
