@@ -1014,11 +1014,14 @@ function renderAnalytics(){
         const judge=showCourt&&c.firstInstanceJudge?' · '+shortName(c.firstInstanceJudge):'';
         const courtHtml=court?`<div class="up-court">${escHtml(court)}${escHtml(judge)}</div>`:'';
         const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
+        // В «Ближайших» показываем только основной номер — старые номера
+        // в скобках (после remand'а или объединения дел) перегружают строку.
+        const caseShort=c.caseNumber.replace(/\s*\(.*$/, '');
         // Ссылка на карточку суда живёт в drawer — в списке «Ближайших»
         // иконку не дублируем, клик по элементу открывает drawer целиком.
         upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
-          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(c.caseNumber)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
       });
       upHtml+='</div></div>';
