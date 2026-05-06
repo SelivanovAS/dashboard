@@ -1401,12 +1401,14 @@ function buildStageChips(c){
 }
 /* Бейдж статуса с учётом «рассмотрение с начала»: если флаг поднят,
  * перед текстом ставим 🔄, SVG-иконку убираем (иначе строка перегружена),
- * в title кладём дату сброса. Для decided/result не применяется. */
+ * в title кладём дату сброса. Для decided/result не применяется.
+ * Исключение — paused: смысл бейджа «дело приостановлено», иконка паузы
+ * первична; «с начала» остаётся в title. */
 function buildStatusBadge(c,vm){
   const title=c.restartFromScratch
     ?` title="${c.restartDate?formatDate(c.restartDate)+' — ':''}рассмотрение дела начато с начала"`
     :'';
-  const prefix=c.restartFromScratch?'🔄 ':statusIcon(vm.ds);
+  const prefix=(c.restartFromScratch&&vm.ds!=='paused')?'🔄 ':statusIcon(vm.ds);
   return `<span class="badge badge-${vm.ds}"${title}>${prefix}${vm.statusLabel}</span>`;
 }
 function buildStateHtml(c,vm){
