@@ -494,6 +494,87 @@ class TemplateDigestSummarizerIntegrationTest(unittest.TestCase):
         self.assertIn("2-1234/2026", html)
 
 
+class AppealResultDeduplicationTest(unittest.TestCase):
+    """Δ2: дело с одновременно `new_event` и `new_result` не должно
+    появляться в «Назначенные заседания» — только в «Вынесенные акты».
+    Регресс относительно Claude-варианта (08.05.2026 после Δ1).
+    """
+
+    def _change_with_event_and_result(self):
+        return {
+            "case": "33-3138/2026",
+            "type": ["status_change", "new_event", "new_result"],
+            "details": {
+                "old_status": "В производстве",
+                "new_status": "Решено",
+                "event": "Судебное заседание. 12:20. Зал 140. Вынесено решение. ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ. 16.04.2026",
+                "event_date": "05.05.2026",
+                "hearing_date": "05.05.2026",
+                "hearing_time": "12:20",
+                "result": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+                "verdict_label": "решение оставлено без изменения, жалоба — без удовлетворения",
+                "plaintiff": "Магадиев М.Г.",
+                "defendant": "ДСК-1",
+                "role": "Третье лицо",
+                "category": "Иные жилищные споры",
+                "case_url": "https://example.com/case",
+                "last_event": "Судебное заседание. 12:20. Зал 140. Вынесено решение. ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ. 16.04.2026",
+                "bank_outcome": "нейтрально (банк — третье лицо)",
+            },
+        }
+
+    def test_change_with_new_result_not_in_scheduled_section(self):
+        html = uc.generate_template_digest(
+            new_cases=[],
+            changes=[self._change_with_event_and_result()],
+            fi_new_cases=[], fi_changes=[],
+            cass_changes=[], cass_discovered=[],
+            total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
+        )
+        # Должно быть в «Вынесенные акты», не в «Назначенные заседания».
+        self.assertIn("Вынесенные акты", html)
+        self.assertNotIn("Назначенные заседания", html)
+        self.assertIn("33-3138/2026", html)
+
+    def test_no_prichina_line_in_acts_section(self):
+        html = uc.generate_template_digest(
+            new_cases=[],
+            changes=[self._change_with_event_and_result()],
+            fi_new_cases=[], fi_changes=[],
+            cass_changes=[], cass_discovered=[],
+            total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
+        )
+        # «Причина: ...» в Claude-варианте не появлялась — это просто
+        # дубль last_event. Убрали из шаблона.
+        self.assertNotIn("Причина:", html)
+
+    def test_pure_new_event_still_in_scheduled(self):
+        # Если у дела ТОЛЬКО new_event (без new_result) — оно по-прежнему
+        # должно идти в «Назначенные заседания».
+        change = {
+            "case": "33-9999/2026",
+            "type": ["new_event"],
+            "details": {
+                "event": "Судебное заседание. 14:00. Зал 1. 20.05.2026",
+                "event_date": "20.05.2026",
+                "hearing_date": "20.05.2026",
+                "hearing_time": "14:00",
+                "plaintiff": "Истец И.И.",
+                "defendant": "Ответчик О.О.",
+                "role": "Истец",
+                "case_url": "https://example.com/case2",
+            },
+        }
+        html = uc.generate_template_digest(
+            new_cases=[], changes=[change],
+            fi_new_cases=[], fi_changes=[],
+            cass_changes=[], cass_discovered=[],
+            total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
+        )
+        self.assertIn("Назначенные заседания", html)
+        self.assertIn("33-9999/2026", html)
+
+
 class GenerateDigestEntryPointTest(unittest.TestCase):
     """Этап 4: generate_digest по умолчанию идёт в гибрид; старая
     ветка работает только при DIGEST_FULL_LLM=1.
@@ -540,6 +621,261 @@ class GenerateDigestEntryPointTest(unittest.TestCase):
             html = uc.generate_digest(**self.kwargs)
         self.assertTrue(html)
         self.assertIn(uc.DASHBOARD_URL, html)
+
+
+class CollectCaseNumbersTest(unittest.TestCase):
+    def test_collects_from_all_sources(self):
+        nums = uc._collect_case_numbers(
+            new_cases=[{"Номер дела": "33-100/2026"}],
+            changes=[{"case": "33-200/2026"}],
+            fi_new_cases=[{"id": "2-300/2026"}],
+            fi_changes=[{"case": "2-400/2026"}],
+            cass_changes=[{"case": "2-500/2025"}],
+            cass_discovered=[{
+                "id": "2-600/2025",
+                "cassation": {"case_number": "8Г-9999/2026"},
+            }],
+        )
+        self.assertEqual(
+            nums,
+            {"33-100/2026", "33-200/2026", "2-300/2026",
+             "2-400/2026", "2-500/2025", "8Г-9999/2026"},
+        )
+
+    def test_handles_empty_inputs(self):
+        self.assertEqual(uc._collect_case_numbers(), set())
+
+    def test_skips_blank_numbers(self):
+        nums = uc._collect_case_numbers(
+            changes=[{"case": ""}, {"case": "   "}, {"case": "OK-1"}],
+        )
+        self.assertEqual(nums, {"OK-1"})
+
+
+class ValidatePolishedHtmlTest(unittest.TestCase):
+    def setUp(self):
+        self.draft = (
+            f'<a href="u"><b>33-100/2026</b></a> текст\n\n'
+            f'<a href="https://selivanovas.github.io/dashboard/sberbank_dashboard.html">📊</a>'
+        )
+        self.expected = {"33-100/2026"}
+        self.max_len = uc.TELEGRAM_MSG_LIMIT * 2
+
+    def _run(self, polished):
+        return uc._validate_polished_html(
+            polished,
+            draft=self.draft,
+            expected_case_numbers=self.expected,
+            max_length=self.max_len,
+        )
+
+    def test_accepts_clean_html(self):
+        polished = (
+            f'<a href="u"><b>33-100/2026</b></a> текст с правкой\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>'
+        )
+        ok, reason = self._run(polished)
+        self.assertTrue(ok, reason)
+
+    def test_rejects_empty(self):
+        ok, reason = self._run("")
+        self.assertFalse(ok)
+        self.assertIn("пустой", reason.lower())
+
+    def test_rejects_too_long(self):
+        polished = "x" * (self.max_len + 100)
+        ok, reason = self._run(polished)
+        self.assertFalse(ok)
+        self.assertIn("длина", reason.lower())
+
+    def test_rejects_forbidden_tag_p(self):
+        polished = (
+            f'<p>что-то</p><a href="u"><b>33-100/2026</b></a>\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 100
+        )
+        ok, reason = self._run(polished)
+        self.assertFalse(ok)
+        self.assertIn("запрещённый", reason.lower())
+
+    def test_rejects_missing_dashboard_link(self):
+        polished = f'<a href="u"><b>33-100/2026</b></a> текст' + "x" * 200
+        ok, reason = self._run(polished)
+        self.assertFalse(ok)
+        self.assertIn("дашборд", reason.lower())
+
+    def test_rejects_missing_case_number(self):
+        polished = (
+            f'<a href="u"><b>другой-номер</b></a> текст\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 100
+        )
+        ok, reason = self._run(polished)
+        self.assertFalse(ok)
+        self.assertIn("33-100/2026", reason)
+
+    def test_rejects_case_number_without_anchor_wrap(self):
+        # Номер есть как plain-text, но не обёрнут в <a><b>...</b></a>.
+        polished = (
+            f'33-100/2026 без обёртки\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 200
+        )
+        ok, reason = self._run(polished)
+        self.assertFalse(ok)
+        self.assertIn("обёртку", reason.lower())
+
+
+class PolishDigestHtmlTest(unittest.TestCase):
+    def setUp(self):
+        self.draft = (
+            f'  <a href="u1"><b>33-100/2026</b></a> Иванов vs Петров\n'
+            f'     🔁 заседание отложено на 09.06.2026 15:00\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊 Дашборд</a>' + "x" * 200
+        )
+        self.expected = {"33-100/2026"}
+
+    def test_returns_draft_on_empty_llm(self):
+        with patch.object(uc, "_call_claude_polish", lambda s, u: None), \
+             patch.object(uc, "LLM_PROVIDER", "claude"):
+            result = uc.polish_digest_html(
+                self.draft, expected_case_numbers=self.expected
+            )
+            self.assertEqual(result, self.draft)
+
+    def test_uses_polished_html_when_valid(self):
+        # Mock возвращает draft с микро-правкой (капитализация заседания).
+        polished_input = self.draft.replace(
+            "🔁 заседание отложено", "🔁 Заседание отложено"
+        )
+
+        def fake(system, user):
+            return polished_input
+
+        with patch.object(uc, "_call_claude_polish", fake), \
+             patch.object(uc, "LLM_PROVIDER", "claude"):
+            result = uc.polish_digest_html(
+                self.draft, expected_case_numbers=self.expected
+            )
+            # polish_digest_html стрипует whitespace по краям, поэтому
+            # сравниваем по сути, а не байт-в-байт.
+            self.assertIn("Заседание отложено", result)
+            self.assertNotIn("заседание отложено", result)
+            self.assertIn("33-100/2026", result)
+
+    def test_falls_back_when_validator_rejects(self):
+        # Mock возвращает HTML с потерей номера дела.
+        broken = (
+            "Просто текст без номеров и без всего.\n\n"
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 100
+        )
+
+        def fake(system, user):
+            return broken
+
+        with patch.object(uc, "_call_claude_polish", fake), \
+             patch.object(uc, "LLM_PROVIDER", "claude"):
+            result = uc.polish_digest_html(
+                self.draft, expected_case_numbers=self.expected
+            )
+            self.assertEqual(result, self.draft)
+
+    def test_falls_back_when_polished_has_p_tag(self):
+        # Mock добавил запрещённый <p>.
+        broken = (
+            f'<p><a href="u1"><b>33-100/2026</b></a> Иванов</p>\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 200
+        )
+
+        def fake(system, user):
+            return broken
+
+        with patch.object(uc, "_call_claude_polish", fake), \
+             patch.object(uc, "LLM_PROVIDER", "claude"):
+            result = uc.polish_digest_html(
+                self.draft, expected_case_numbers=self.expected
+            )
+            self.assertEqual(result, self.draft)
+
+    def test_strips_code_fence_from_llm_response(self):
+        # LLM иногда оборачивает в ```html ... ``` несмотря на запрет.
+        polished_with_fence = (
+            "```html\n"
+            f'<a href="u1"><b>33-100/2026</b></a> Иванов vs Петров\n'
+            f'     🔁 Заседание отложено на <b>09.06.2026 15:00</b>\n\n'
+            f'<a href="{uc.DASHBOARD_URL}">📊</a>' + "x" * 200
+            + "\n```"
+        )
+
+        def fake(system, user):
+            return polished_with_fence
+
+        with patch.object(uc, "_call_claude_polish", fake), \
+             patch.object(uc, "LLM_PROVIDER", "claude"):
+            result = uc.polish_digest_html(
+                self.draft, expected_case_numbers=self.expected
+            )
+            self.assertNotIn("```", result)
+            self.assertIn("Заседание отложено", result)
+
+    def test_empty_draft_returns_empty(self):
+        result = uc.polish_digest_html("", expected_case_numbers=set())
+        self.assertEqual(result, "")
+
+
+class GenerateDigestPolishIntegrationTest(unittest.TestCase):
+    """generate_digest с DIGEST_POLISH=1 — вызывает polish_digest_html
+    после черновика и валидирует контракт.
+    """
+
+    def test_polish_disabled_by_default(self):
+        # Без флага DIGEST_POLISH — полировщик не зовётся.
+        called: list = []
+
+        def fake_polish(draft, *, expected_case_numbers):
+            called.append(draft)
+            return draft
+
+        with patch.object(uc, "DIGEST_POLISH", False), \
+             patch.object(uc, "polish_digest_html", fake_polish):
+            uc.generate_digest(
+                new_cases=[], changes=[],
+                fi_new_cases=[], fi_changes=[],
+                cass_changes=[], cass_discovered=[],
+                total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
+            )
+        self.assertEqual(called, [], "polish не должен вызываться без DIGEST_POLISH=1")
+
+    def test_polish_enabled_calls_polisher(self):
+        called: list = []
+
+        def fake_polish(draft, *, expected_case_numbers):
+            called.append((draft, expected_case_numbers))
+            return draft + "\n<!-- polished -->"
+
+        change = {
+            "case": "33-100/2026",
+            "type": ["new_event"],
+            "details": {
+                "event": "Заседание. 14:00. 20.05.2026",
+                "event_date": "20.05.2026",
+                "hearing_date": "20.05.2026",
+                "hearing_time": "14:00",
+                "plaintiff": "ПАО Сбербанк",
+                "defendant": "Иванов И.",
+                "role": "Истец",
+                "case_url": "https://example.com",
+            },
+        }
+        with patch.object(uc, "DIGEST_POLISH", True), \
+             patch.object(uc, "polish_digest_html", fake_polish):
+            html = uc.generate_digest(
+                new_cases=[], changes=[change],
+                fi_new_cases=[], fi_changes=[],
+                cass_changes=[], cass_discovered=[],
+                total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
+            )
+        self.assertEqual(len(called), 1)
+        _, expected_nums = called[0]
+        self.assertIn("33-100/2026", expected_nums)
+        self.assertIn("<!-- polished -->", html)
 
 
 if __name__ == "__main__":

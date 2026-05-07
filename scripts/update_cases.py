@@ -297,6 +297,16 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
 DIGEST_FULL_LLM = (
     os.environ.get("DIGEST_FULL_LLM", "").strip().lower() in ("1", "true", "yes")
 )
+
+# Включение LLM-полировщика готового HTML (вариант C1 итерации 2).
+# Программа собирает черновик через generate_template_digest + пересказы
+# актов; при `DIGEST_POLISH=1` черновик уходит в polish_digest_html, где
+# LLM делает косметические правки (капитализация, жирные даты, склонения,
+# сокращение длинных категорий). Валидатор проверяет контракт <a><b>NUM</b></a>;
+# при провале — откат к черновику. По умолчанию выключен — для безопасности.
+DIGEST_POLISH = (
+    os.environ.get("DIGEST_POLISH", "").strip().lower() in ("1", "true", "yes")
+)
 GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
 GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
 GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")
@@ -4065,6 +4075,275 @@ def summarize_act_motivation(
     return summary
 
 
+_DIGEST_POLISH_SYSTEM_PROMPT = (
+    "Ты редактор Telegram-дайджеста о судебных делах для юриста ПАО Сбербанк.\n"
+    "Тебе приходит ЧЕРНОВИК HTML, который собрала программа. Твоя задача — "
+    "сделать ТОЛЬКО косметические правки, перечисленные ниже. Структура "
+    "и набор секций должны остаться неизменными.\n\n"
+    "ЧТО МОЖНО ПРАВИТЬ:\n"
+    "1. Капитализация: первая буква строки события после эмодзи — заглавная "
+    "(«🔁 заседание отложено» → «🔁 Заседание отложено»).\n"
+    "2. <b>...</b> вокруг даты+времени в строках про назначение/отложение "
+    "заседания («Заседание отложено на 09.06.2026 15:00» → «Заседание "
+    "отложено на <b>09.06.2026 15:00</b>»).\n"
+    "3. Дедуп между секциями: если одно дело одновременно в «Назначенные "
+    "заседания» и «Вынесенные акты» — оставить ТОЛЬКО в «Вынесенные акты».\n"
+    "4. Сокращение категорий: длинные цепочки «X →Y →Z →W» → последний "
+    "хвост «W». Например, «Споры, связанные с наследственными отношениями "
+    "→Споры, связанные с наследованием имущества →об ответственности "
+    "наследников по долгам наследодателя» → «об ответственности наследников "
+    "по долгам наследодателя».\n"
+    "5. Склонение ролей в касс. жалобе: «от Ответчик X» → «от Ответчика X», "
+    "«от Истец X» → «от Истца X», «от Третье лицо X» → «от третьего лица X».\n"
+    "6. Дубль пробелов в инициалах: «Е. М.» → «Е.М.».\n\n"
+    "ЖЁСТКИЕ ЗАПРЕТЫ:\n"
+    "- НЕ удалять <a href>-ссылки и НЕ менять текст внутри "
+    "<a><b>...</b></a> для номеров дел.\n"
+    "- НЕ добавлять, НЕ удалять, НЕ переименовывать секции.\n"
+    "- Использовать ТОЛЬКО теги <b>, <i>, <a href>. Запрещены <p>, "
+    "<ul>, <li>, <h1>...<h6>, <br>, Markdown.\n"
+    "- НЕ выдумывать события, даты, имена.\n"
+    "- НЕ менять порядок дел внутри секций.\n"
+    "- НЕ менять номера дел, итоги, суммы, даты — только косметика.\n\n"
+    "Верни ТОЛЬКО исправленный HTML, без пояснений, без обёртки в "
+    "```html...```."
+)
+
+
+_FORBIDDEN_TAGS_RE = re.compile(
+    r"<\s*(p|ul|ol|li|h[1-6]|br|div|span|strong|em|table|tr|td|th)\b",
+    re.IGNORECASE,
+)
+
+
+def _collect_case_numbers(
+    new_cases: list[dict] | None = None,
+    changes: list[dict] | None = None,
+    fi_new_cases: list[dict] | None = None,
+    fi_changes: list[dict] | None = None,
+    cass_changes: list[dict] | None = None,
+    cass_discovered: list[dict] | None = None,
+) -> set[str]:
+    """Собрать множество номеров дел из всех source-структур дайджеста.
+    Используется валидатором полировщика — каждый номер должен остаться
+    в HTML после правки. Возвращает уникальные номера в исходном виде
+    (без обрезки), стрипом по краям.
+    """
+    nums: set[str] = set()
+    for c in new_cases or []:
+        n = (c.get("Номер дела") or "").strip()
+        if n:
+            nums.add(n)
+    for c in fi_new_cases or []:
+        n = (c.get("id") or "").strip()
+        if n:
+            nums.add(n)
+    for c in cass_discovered or []:
+        # У cass_discovered «id» — номер 1-й инст., но в дайджесте они
+        # рендерятся под касс. внутренним номером (case_number) из
+        # cassation-блока. Берём тот, что виден в HTML.
+        cass = c.get("cassation") or {}
+        n = (cass.get("case_number") or c.get("id") or "").strip()
+        if n:
+            nums.add(n)
+    for ch in changes or []:
+        n = (ch.get("case") or "").strip()
+        if n:
+            nums.add(n)
+    for ch in fi_changes or []:
+        n = (ch.get("case") or "").strip()
+        if n:
+            nums.add(n)
+    for ch in cass_changes or []:
+        n = (ch.get("case") or "").strip()
+        if n:
+            nums.add(n)
+    return nums
+
+
+def _validate_polished_html(
+    polished: str,
+    *,
+    draft: str,
+    expected_case_numbers: set[str],
+    max_length: int,
+) -> tuple[bool, str]:
+    """Проверить, что полированный HTML не нарушил контракт черновика.
+
+    Возвращает (ok, reason). reason — короткое объяснение, что не так,
+    для лога. Гарантии:
+    - Длина <= max_length.
+    - Каждый номер дела из expected_case_numbers есть в HTML.
+    - Каждый номер обёрнут в <a ...><b>NUM</b></a> хотя бы один раз.
+    - Нет запрещённых тегов (<p>, <ul>, <li>, <h*>, <br>, <div>, ...).
+    - HTML непустой и содержит DASHBOARD_URL.
+    """
+    if not polished or len(polished.strip()) < 100:
+        return False, "пустой или слишком короткий ответ"
+    if len(polished) > max_length:
+        return False, f"длина {len(polished)} > лимита {max_length}"
+    forbidden = _FORBIDDEN_TAGS_RE.search(polished)
+    if forbidden:
+        return False, f"запрещённый тег: {forbidden.group(0)!r}"
+    if DASHBOARD_URL not in polished:
+        return False, "пропала ссылка на дашборд"
+    # Проверяем наличие номеров дел и контракта <a><b>NUM</b></a>.
+    case_link_re = re.compile(r"<a[^>]*><b>([^<]+)</b></a>")
+    polished_anchors = {
+        _bare_case_number(m.group(1))
+        for m in case_link_re.finditer(polished)
+    }
+    polished_anchors.discard("")
+    for num in expected_case_numbers:
+        bare = _bare_case_number(num)
+        if not bare:
+            continue
+        if num not in polished and bare not in polished:
+            return False, f"пропал номер дела {num!r}"
+        if bare not in polished_anchors:
+            return False, f"номер {num!r} потерял обёртку <a><b>...</b></a>"
+    return True, ""
+
+
+def polish_digest_html(
+    draft: str,
+    *,
+    expected_case_numbers: set[str],
+) -> str:
+    """Прогнать черновой HTML дайджеста через LLM-полировщик.
+
+    Алгоритм:
+    1. Шлём draft в Claude/GigaChat с DIGEST_POLISH_SYSTEM_PROMPT.
+    2. Если ответ пустой / LLM упал → возвращаем draft.
+    3. Прогоняем через _validate_polished_html.
+    4. Если валидация не прошла → log warning + draft.
+    5. Иначе → возвращаем полировку.
+
+    Идея — никогда не сделать хуже черновика. Контракт <a><b>NUM</b></a>
+    + DASHBOARD_URL гарантированы.
+    """
+    if not draft:
+        return draft
+    max_length = TELEGRAM_MSG_LIMIT * 2
+
+    user_prompt = f"ЧЕРНОВИК HTML:\n\n{draft}"
+    if LLM_PROVIDER == "gigachat":
+        polished = _call_gigachat_polish(
+            _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
+        )
+    else:
+        polished = _call_claude_polish(
+            _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
+        )
+    if not polished:
+        log.info("Полировщик: пустой ответ LLM, использую черновик")
+        return draft
+
+    # Срезаем code-fence, если LLM всё-таки обернул в Markdown.
+    polished = polished.strip()
+    if polished.startswith("```"):
+        nl = polished.find("\n")
+        if nl != -1:
+            polished = polished[nl + 1:]
+    if polished.endswith("```"):
+        polished = polished[:-3]
+    polished = polished.strip()
+
+    ok, reason = _validate_polished_html(
+        polished,
+        draft=draft,
+        expected_case_numbers=expected_case_numbers,
+        max_length=max_length,
+    )
+    if not ok:
+        log.warning(f"Полировщик: валидация не прошла ({reason}), откат к черновику")
+        return draft
+    log.info(f"Полировщик: применена полировка ({len(draft)} → {len(polished)} chars)")
+    return polished
+
+
+def _call_claude_polish(system_prompt: str, user_prompt: str) -> str | None:
+    """Вызов Anthropic API для полировщика. Отдельная функция (а не
+    `_call_claude_simple`), потому что у полировщика есть system-prompt
+    и существенно больший max_tokens (выходной HTML может быть длинным).
+    """
+    if not ANTHROPIC_API_KEY:
+        return None
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 4096,
+                "temperature": 0.1,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        data = r.json()
+        text = "".join(
+            block["text"] for block in data.get("content", [])
+            if block.get("type") == "text"
+        ).strip()
+        return text or None
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = (e.response.text or "")[:500] if e.response is not None else ""
+        log.warning(f"Claude API (polish) HTTP {status}: {body}")
+        return None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.warning(f"Claude API (polish): {e}")
+        return None
+
+
+def _call_gigachat_polish(system_prompt: str, user_prompt: str) -> str | None:
+    """Вызов GigaChat для полировщика."""
+    token = _gigachat_access_token()
+    if not token:
+        return None
+    try:
+        import urllib3  # noqa: PLC0415
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = requests.post(
+            GIGACHAT_API_URL,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "model": GIGACHAT_MODEL,
+                "temperature": 0.1,
+                "max_tokens": 4096,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+            timeout=60,
+            verify=False,
+        )
+        r.raise_for_status()
+        data = r.json()
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
+        return text or None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.warning(f"GigaChat (polish): {e}")
+        return None
+
+
 def _render_act_summary_or_excerpt(
     act_text: str,
     case_meta: dict,
@@ -4424,12 +4703,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # ── Гибридный путь (по умолчанию) ────────────────────────────────────
     # Программный рендер (generate_template_digest) + LLM-микро-вызов
     # только на пересказ мотивировок (summarize_act_motivation).
+    # При DIGEST_POLISH=1 готовый HTML дополнительно проходит через
+    # polish_digest_html (косметика + валидатор контракта).
     # Старый полный LLM-вызов остаётся за DIGEST_FULL_LLM=1 для отката.
     if not DIGEST_FULL_LLM:
         log.info(
-            "LLM: гибрид (программный рендер + микро-LLM на пересказы актов)"
+            "LLM: гибрид (программный рендер + микро-LLM на пересказы актов"
+            + (", + полировщик HTML" if DIGEST_POLISH else "")
+            + ")"
         )
-        return generate_template_digest(
+        draft = generate_template_digest(
             new_cases, changes, cases=cases,
             fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
             fi_changes=fi_changes,
@@ -4440,6 +4723,16 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             cass_discovered=cass_discovered,
             act_summarizer=summarize_act_motivation,
         )
+        if DIGEST_POLISH:
+            expected_nums = _collect_case_numbers(
+                new_cases=new_cases, changes=changes,
+                fi_new_cases=fi_new_cases, fi_changes=fi_changes,
+                cass_changes=cass_changes, cass_discovered=cass_discovered,
+            )
+            return polish_digest_html(
+                draft, expected_case_numbers=expected_nums
+            )
+        return draft
 
     # ── Старая ветка: полный LLM-вызов (за флагом DIGEST_FULL_LLM=1) ─────
     if LLM_PROVIDER == "gigachat":
@@ -6454,9 +6747,14 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Не дублируем дело в "Назначенные", если оно уже в "Отложенные".
     # hearing_new — первое заседание апелляции; семантически то же самое, что и
     # «назначенное заседание», поэтому показываем тут же.
+    # Если у дела одновременно `new_event` и `new_result` (типичная связка для
+    # дня заседания: появилось событие «Вынесено решение» и зафиксирован итог),
+    # выводим ТОЛЬКО в 5.4 «Вынесенные акты» — иначе тот же текст про
+    # «Вынесено решение» вылез бы дважды (5.3 «Назначенные» + 5.4).
     events = [ch for ch in changes
               if ("new_event" in ch["type"] or "hearing_new" in ch["type"])
-              and ch["case"] not in postponed_nums]
+              and ch["case"] not in postponed_nums
+              and "new_result" not in ch["type"]]
     # 5.4 и 5.5 — РАЗНЫЕ события (резолютивка и полный текст), но если в
     # ОДНОМ прогоне сработали оба — показываем дело ТОЛЬКО в 5.5 (там и
     # ИТОГ из карточки, и мотивировка). Иначе пользователь видит дубль.
@@ -6905,10 +7203,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
             cat = category_short(d.get("category", ""))
             cat_note = f" | {escape_html(cat)}" if cat else ""
-            last_ev = d.get("last_event", "")
-            ev_note = f"\n    Причина: {escape_html(last_ev)}" if last_ev else ""
+            # Строка «Причина: <last_event>» убрана: last_event обычно дублирует
+            # уже сказанное в этой же строке (result_text повторяет «Вынесено
+            # решение …»), а в Claude-варианте такой строки не было.
             appeal_block.append(
-                f"  {link}: {result_text}{cat_note}{role_note}{date_note}{ev_note}"
+                f"  {link}: {result_text}{cat_note}{role_note}{date_note}"
             )
 
     if acts:
