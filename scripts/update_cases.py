@@ -16,6 +16,7 @@
 from __future__ import annotations  # type-hints как строки — импорт на Python 3.9
 
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -217,6 +218,14 @@ DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
 )
+# Кэш LLM-пересказов мотивировок: {sha1(act_text)[:16]: {summary, model,
+# stage, generated_at}}. Хранится отдельно от .digested_acts (тот — set
+# номеров дел, а здесь — мапа hash→текст). Кэш переживает --replay-last
+# и повторные прогоны: один и тот же act_text не пересказываем дважды.
+ACT_SUMMARIES_PATH = os.environ.get(
+    "ACT_SUMMARIES_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", ".act_summaries.json")
+)
 # Снимок контекста последнего дайджеста — сохраняется перед отправкой
 # в Telegram и используется режимом --replay-last для повторной генерации
 # (например, чтобы переиграть с другой версией промпта).
@@ -277,6 +286,17 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 # дайджеста через GigaChat. Основной мониторинг (update_cases.yml) остаётся
 # на Claude и ничего не знает про этот флаг.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
+
+# Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
+# По умолчанию используется гибридный путь: программный рендер
+# (generate_template_digest) + LLM-микро-вызов только на пересказ
+# мотивировок судебных актов (summarize_act_motivation). Флаг
+# `DIGEST_FULL_LLM=1` возвращает старое поведение: ровно тот HTML,
+# который выдавал Claude/GigaChat одним вызовом. Используется как
+# escape hatch на случай регресса стилистики или необходимости A/B.
+DIGEST_FULL_LLM = (
+    os.environ.get("DIGEST_FULL_LLM", "").strip().lower() in ("1", "true", "yes")
+)
 GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
 GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
 GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")
@@ -527,6 +547,29 @@ def save_digested_acts(acts: set):
     os.makedirs(os.path.dirname(DIGESTED_ACTS_PATH) or ".", exist_ok=True)
     with open(DIGESTED_ACTS_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(acts)) + "\n")
+
+
+def _load_act_summaries() -> dict:
+    """Загрузить кэш LLM-пересказов мотивировок: {hash: {summary, ...}}."""
+    if not os.path.exists(ACT_SUMMARIES_PATH):
+        return {}
+    try:
+        with open(ACT_SUMMARIES_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning(f"Не удалось прочитать {ACT_SUMMARIES_PATH}: {e}")
+        return {}
+
+
+def _save_act_summaries(cache: dict) -> None:
+    """Сохранить кэш пересказов атомарно (tmp + replace)."""
+    os.makedirs(os.path.dirname(ACT_SUMMARIES_PATH) or ".", exist_ok=True)
+    tmp = ACT_SUMMARIES_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, ACT_SUMMARIES_PATH)
 
 
 def is_archived(case: dict) -> bool:
@@ -3811,6 +3854,249 @@ def _call_gigachat(prompt: str) -> str | None:
         return None
 
 
+# ── LLM-пересказ мотивировки судебного акта (микро-вызов) ───────────────────
+# Используется программным рендером дайджеста (этап 3b плана миграции):
+# вместо сырого 500-символьного excerpt'а мотивировки в секциях 5.5/3.6/касс.
+# подставляем 1-2 фразы «почему» от LLM. Кэш по sha1(act_text), один пересказ
+# = одна оплата за всё время; --replay-last повторно не платит.
+
+_ACT_KIND_BY_STAGE = {
+    "first_instance": "решение суда первой инстанции",
+    "appeal": "апелляционное определение",
+    "cassation": "кассационное определение",
+}
+
+
+def _build_act_summary_prompt(act_text: str, case_meta: dict) -> str:
+    """Собрать prompt для LLM-пересказа мотивировки. Метаданные дела
+    помогают модели не выдумывать стороны и итог."""
+    stage = (case_meta.get("stage") or "").strip()
+    kind = _ACT_KIND_BY_STAGE.get(stage, "судебный акт")
+    plaintiff = (case_meta.get("plaintiff") or "").strip()
+    defendant = (case_meta.get("defendant") or "").strip()
+    bank_role = (case_meta.get("bank_role") or "").strip()
+    verdict = (case_meta.get("verdict_label") or "").strip()
+    category = (case_meta.get("category") or "").strip()
+
+    meta_parts: list[str] = []
+    if plaintiff or defendant:
+        meta_parts.append(
+            f"стороны: {plaintiff or '—'} (истец) / {defendant or '—'} (ответчик)"
+        )
+    if bank_role:
+        meta_parts.append(f"роль банка: {bank_role}")
+    if verdict:
+        meta_parts.append(f"итог: {verdict}")
+    if category:
+        meta_parts.append(f"категория: {category}")
+    meta_str = "; ".join(meta_parts)
+
+    return (
+        f"Ниже — текст мотивировочной части ({kind}). "
+        + (f"Контекст — {meta_str}. " if meta_str else "")
+        + "Сделай краткое резюме сути решения суда — одно или два коротких "
+        "предложения. Только ОСНОВАНИЯ, по которым суд пришёл к итогу. "
+        "Запрещено: фразы «суд указал», «было установлено», вода, цитаты "
+        "целиком, эмодзи, HTML-теги, Markdown. Никаких префиксов «Кратко:», "
+        "«Резюме:» — только сам пересказ.\n\n"
+        f"ТЕКСТ АКТА:\n{act_text}"
+    )
+
+
+def _call_claude_simple(
+    prompt: str, *, max_tokens: int = 400, temperature: float = 0.2
+) -> str | None:
+    """Минимальный вызов Anthropic API. Возвращает текст или None.
+
+    Дублирует часть `generate_digest`, но с маленьким max_tokens и без
+    post-обработки HTML — для пересказа мотивировки нужен plain text.
+    """
+    if not ANTHROPIC_API_KEY:
+        return None
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+        text = "".join(
+            block["text"] for block in data.get("content", [])
+            if block.get("type") == "text"
+        ).strip()
+        return text or None
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = (e.response.text or "")[:500] if e.response is not None else ""
+        log.warning(f"Claude API (summary) HTTP {status}: {body}")
+        return None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.warning(f"Claude API (summary): {e}")
+        return None
+
+
+def _call_gigachat_simple(prompt: str) -> str | None:
+    """Минимальный вызов GigaChat для пересказа акта — без жёсткого
+    GIGACHAT_SYSTEM_PROMPT (он заточен под формат дайджеста). На любой
+    ошибке — None, вызывающая сторона упадёт на сырой excerpt.
+    """
+    token = _gigachat_access_token()
+    if not token:
+        return None
+    try:
+        import urllib3  # noqa: PLC0415
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        r = requests.post(
+            GIGACHAT_API_URL,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "model": GIGACHAT_MODEL,
+                "temperature": 0.2,
+                "max_tokens": 400,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+            verify=False,
+        )
+        r.raise_for_status()
+        data = r.json()
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
+        return text or None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.warning(f"GigaChat (summary): {e}")
+        return None
+
+
+_SUMMARY_PREFIX_RE = re.compile(
+    r"^\s*(?:кратко|резюме|итого|вкратце)\s*[:\-—]\s*",
+    re.IGNORECASE,
+)
+
+
+def _clean_summary(text: str) -> str:
+    """Убрать кавычки, шаблонные префиксы и лишние пробелы."""
+    s = (text or "").strip().strip('"').strip("'").strip("«»").strip()
+    s = _SUMMARY_PREFIX_RE.sub("", s)
+    # Если модель начала с code-fence — срежем.
+    if s.startswith("```"):
+        nl = s.find("\n")
+        if nl != -1:
+            s = s[nl + 1:]
+    if s.endswith("```"):
+        s = s[:-3]
+    return s.strip()
+
+
+def summarize_act_motivation(
+    act_text: str,
+    *,
+    case_meta: dict,
+    use_cache: bool = True,
+) -> str | None:
+    """Сделать 1-2 фразы пересказа мотивировки судебного акта через LLM.
+
+    Args:
+      act_text: мотивировочная часть (из extract_motive_part или сырой текст
+                акта). Слишком короткий (<100 символов) — не пересказываем.
+      case_meta: {stage, bank_role, verdict_label, plaintiff, defendant,
+                  category} — всё уже есть в change["details"] в точке
+                  сборки дайджеста.
+      use_cache: для тестов можно отключить.
+
+    Returns:
+      Plain-text строка без HTML/Markdown или None при любой ошибке/пустом
+      ответе. Вызывающая сторона при None должна откатиться на сырой
+      excerpt мотивировки.
+    """
+    act = (act_text or "").strip()
+    if not act or len(act) < 100:
+        return None
+
+    key = hashlib.sha1(act.encode("utf-8")).hexdigest()[:16]
+    cache = _load_act_summaries() if use_cache else {}
+    if use_cache and key in cache:
+        cached_summary = (cache[key] or {}).get("summary")
+        if cached_summary:
+            return cached_summary
+
+    prompt = _build_act_summary_prompt(act, case_meta)
+    if LLM_PROVIDER == "gigachat":
+        raw = _call_gigachat_simple(prompt)
+    else:
+        raw = _call_claude_simple(prompt)
+    if not raw:
+        return None
+    summary = _clean_summary(raw)
+    if not summary:
+        return None
+
+    if use_cache:
+        cache[key] = {
+            "summary": summary,
+            "model": _current_digest_model_name(),
+            "stage": (case_meta.get("stage") or ""),
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        try:
+            _save_act_summaries(cache)
+        except OSError as e:
+            log.warning(f"Не удалось сохранить кэш пересказов: {e}")
+
+    return summary
+
+
+def _render_act_summary_or_excerpt(
+    act_text: str,
+    case_meta: dict,
+    *,
+    summarizer,
+    max_excerpt_len: int = 500,
+) -> str:
+    """Вернуть текст для строки «Мотивировка» в дайджесте.
+
+    Если задан `summarizer` (callable вида `summarize_act_motivation`)
+    и он вернул непустой пересказ — используем его. Иначе —
+    обрезанный excerpt act_text (старое поведение шаблона).
+
+    Возврат — строка, уже прошедшая `escape_html`, готовая к вставке
+    в HTML под `<i>…</i>`. Пустая строка — если act_text пуст.
+    """
+    text = (act_text or "").strip()
+    if not text:
+        return ""
+    if summarizer is not None:
+        try:
+            summary = summarizer(text, case_meta=case_meta)
+        except Exception as e:
+            log.warning(f"act_summarizer упал: {e}")
+            summary = None
+        if summary:
+            return escape_html(summary)
+    if len(text) > max_excerpt_len:
+        text = text[:max_excerpt_len].rstrip() + "…"
+    return escape_html(text)
+
+
 # ── Claude API — генерация дайджеста ─────────────────────────────────────────
 
 def save_digest_context(
@@ -4135,6 +4421,27 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
     total_active = total_active_appeal + total_active_fi + total_active_cassation
 
+    # ── Гибридный путь (по умолчанию) ────────────────────────────────────
+    # Программный рендер (generate_template_digest) + LLM-микро-вызов
+    # только на пересказ мотивировок (summarize_act_motivation).
+    # Старый полный LLM-вызов остаётся за DIGEST_FULL_LLM=1 для отката.
+    if not DIGEST_FULL_LLM:
+        log.info(
+            "LLM: гибрид (программный рендер + микро-LLM на пересказы актов)"
+        )
+        return generate_template_digest(
+            new_cases, changes, cases=cases,
+            fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+            fi_changes=fi_changes,
+            total_active_appeal=total_active_appeal,
+            total_active_fi=total_active_fi,
+            total_active_cassation=total_active_cassation,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
+            act_summarizer=summarize_act_motivation,
+        )
+
+    # ── Старая ветка: полный LLM-вызов (за флагом DIGEST_FULL_LLM=1) ─────
     if LLM_PROVIDER == "gigachat":
         if not GIGACHAT_AUTH_KEY:
             log.warning("GIGACHAT_AUTH_KEY не задан, дайджест будет шаблонным")
@@ -6095,13 +6402,21 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              total_active_fi: int = 0,
                              total_active_cassation: int = 0,
                              cass_changes: list[dict] | None = None,
-                             cass_discovered: list[dict] | None = None) -> str:
+                             cass_discovered: list[dict] | None = None,
+                             act_summarizer=None) -> str:
     """Шаблонный дайджест (fallback без Claude API). Формат: HTML.
 
     Структура — два больших блока (🏛 ПЕРВАЯ ИНСТАНЦИЯ / ⚖️ АПЕЛЛЯЦИЯ),
     мостик «🔀 Перешли в апелляцию» между ними. Подсекция выводится только
     если есть данные; большой блок выводится только если хотя бы одна его
     подсекция непуста.
+
+    `act_summarizer` — опциональный callable вида
+    `summarize_act_motivation(act_text, *, case_meta) -> str | None`.
+    Если задан, в секциях 5.5 (апел. опубл. акты), 3.6 (1-й инст. опубл.
+    решения) и кассации (new_act) вместо обрезанного excerpt'а
+    подставляется LLM-пересказ. None или ошибка callable → fallback
+    на excerpt (старое поведение).
     """
     today = datetime.now().strftime("%d.%m.%Y")
     if cases is None:
@@ -6384,11 +6699,21 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
             verdict = escape_html(d.get("verdict_label", ""))
             bank_out = escape_html(d.get("bank_outcome", ""))
-            act_excerpt = (d.get("act_text") or "").strip()
-            # Обрезаем до ~500 символов для компактности шаблона; добавляем «…»
-            if len(act_excerpt) > 500:
-                act_excerpt = act_excerpt[:500].rstrip() + "…"
-            act_excerpt = escape_html(act_excerpt)
+            # 3.6: либо LLM-пересказ мотивировки (если act_summarizer задан),
+            # либо обрезанный excerpt — old behaviour для template-fallback.
+            act_excerpt = _render_act_summary_or_excerpt(
+                d.get("act_text") or "",
+                {
+                    "stage": "first_instance",
+                    "bank_role": ch.get("bank_role", ""),
+                    "verdict_label": d.get("verdict_label", ""),
+                    "plaintiff": ch.get("plaintiff", ""),
+                    "defendant": ch.get("defendant", ""),
+                    "category": d.get("category", ""),
+                },
+                summarizer=act_summarizer,
+                max_excerpt_len=500,
+            )
             fi_block.append(f"  {link}: {pl} vs {df}")
             itog_parts: list[str] = []
             if verdict:
@@ -6595,14 +6920,40 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             url = d.get("case_url", "")
             case_num = escape_html(ch["case"])
             link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
-            # 1-2 фразы мотивировки. act_excerpt уже сжатый, act_text — сырой.
-            excerpt = (d.get("act_excerpt") or d.get("act_text") or "").strip()
-            if excerpt:
-                # Первые 1-2 предложения, лимит ~250 символов.
-                short_parts = re.split(r"(?<=[.!?])\s+", excerpt)[:2]
+            # 5.5: act_excerpt — уже сжатый шаблоном, act_text — сырой.
+            # Если act_summarizer задан, шлём в LLM сырой act_text (он
+            # содержит больше деталей); иначе — берём готовый excerpt
+            # либо обрезаем сырой по двум предложениям/250 символам.
+            raw_act = (d.get("act_text") or "").strip()
+            ready_excerpt = (d.get("act_excerpt") or "").strip()
+            if act_summarizer is not None and raw_act:
+                summary_or_excerpt = _render_act_summary_or_excerpt(
+                    raw_act,
+                    {
+                        "stage": "appeal",
+                        "bank_role": d.get("role", ""),
+                        "verdict_label": (
+                            d.get("act_verdict_label")
+                            or d.get("verdict_label", "")
+                        ),
+                        "plaintiff": d.get("plaintiff", ""),
+                        "defendant": d.get("defendant", ""),
+                        "category": d.get("category", ""),
+                    },
+                    summarizer=act_summarizer,
+                    max_excerpt_len=500,
+                )
+            elif ready_excerpt or raw_act:
+                src = ready_excerpt or raw_act
+                # Старая логика: первые 1-2 предложения, лимит ~250.
+                short_parts = re.split(r"(?<=[.!?])\s+", src)[:2]
                 short = " ".join(short_parts)[:250].rstrip(".") + "."
+                summary_or_excerpt = escape_html(short)
+            else:
+                summary_or_excerpt = ""
+            if summary_or_excerpt:
                 appeal_block.append(
-                    f"  {link}\n    Мотивировка: {escape_html(short)}"
+                    f"  {link}\n    Мотивировка: {summary_or_excerpt}"
                 )
             else:
                 appeal_block.append(f"  {link}")
@@ -6727,11 +7078,23 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 itog_parts.append(f"апел.: {rfa}")
             if itog_parts:
                 cass_block.append("     " + " | ".join(itog_parts))
-            act_excerpt = (d.get("act_text") or "").strip()
+            # Касс. new_act: тот же приём, что и для 3.6/5.5 — пересказ
+            # через act_summarizer (если задан) либо excerpt.
+            act_excerpt = _render_act_summary_or_excerpt(
+                d.get("act_text") or "",
+                {
+                    "stage": "cassation",
+                    "bank_role": d.get("bank_role", ""),
+                    "verdict_label": outcome_ru or result_text,
+                    "plaintiff": d.get("plaintiff", ""),
+                    "defendant": d.get("defendant", ""),
+                    "category": d.get("category", ""),
+                },
+                summarizer=act_summarizer,
+                max_excerpt_len=500,
+            )
             if act_excerpt:
-                if len(act_excerpt) > 500:
-                    act_excerpt = act_excerpt[:500].rstrip() + "…"
-                cass_block.append(f"     <i>{escape_html(act_excerpt)}</i>")
+                cass_block.append(f"     <i>{act_excerpt}</i>")
             cass_block.append("")
         if cass_block and cass_block[-1] == "":
             cass_block.pop()
