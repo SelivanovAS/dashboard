@@ -8218,12 +8218,26 @@ def _fi_search_to_json_case(fi: dict) -> dict:
     }
 
 
-def _apel_csv_row_to_json_case(row: dict) -> dict:
+def _apel_csv_row_to_json_case(
+    row: dict,
+    fi_number_lookup: dict[str, str] | None = None,
+) -> dict:
     """Конвертировать CSV-строку апел. дела (после обогащения parse_case_card)
     в JSON-структуру для cases.json. Без этой конверсии новое апел. дело
     оседает только в CSV: link_cases ищет апел. в существующем JSON-индексе
-    и молча пропускает то, чего там ещё нет."""
+    и молча пропускает то, чего там ещё нет.
+
+    fi_number_lookup — словарь {номер_апелляции → номер_1_инст}, который
+    main_json собирает по результатам парсинга апел. карточек. Если запись
+    есть, кладём её в first_instance.case_number сразу, чтобы новое дело
+    с самого начала имело корректный якорь для link_cassation_cases (иначе
+    кассация на 7kas не находит существующее дело по `fi_case_number` и
+    создаёт двойник через discovery — см. кейс 33-1643/2026 ↔ 8Г-7248/2026).
+    Без словаря — поведение прежнее (`""`)."""
     case_num = (row.get("Номер дела") or "").strip()
+    fi_case_number = ""
+    if fi_number_lookup and case_num:
+        fi_case_number = (fi_number_lookup.get(case_num) or "").strip()
     return {
         "id": case_num,
         "current_stage": "appeal",
@@ -8233,7 +8247,7 @@ def _apel_csv_row_to_json_case(row: dict) -> dict:
         "bank_role": row.get("Роль банка", ""),
         "notes": row.get("Заметки", ""),
         "first_instance": {
-            "case_number": "",
+            "case_number": fi_case_number,
             "court": row.get("Суд 1 инстанции", ""),
             "court_domain": "",
             "judge": row.get("Судья 1 инстанции", ""),
@@ -9085,7 +9099,7 @@ def main_json():
     # ── 6b. Новые апел. дела → JSON. Без этого link_cases ниже их не увидит
     # (он индексирует только существующий cases) и дело осядет только в CSV.
     if appeal_new_cases_csv:
-        apel_new_json = [_apel_csv_row_to_json_case(r) for r in appeal_new_cases_csv]
+        apel_new_json = [_apel_csv_row_to_json_case(r, appeal_fi_numbers) for r in appeal_new_cases_csv]
         cases = apel_new_json + cases
         log.info(f"Добавлено {len(apel_new_json)} апел. дел в JSON")
 
