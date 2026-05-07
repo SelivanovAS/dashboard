@@ -19,6 +19,16 @@ on:
         required: false
         type: boolean
         default: false
+      polish_html:
+        description: 'Включить LLM-полировщик HTML (DIGEST_POLISH=1) — косметика поверх программного шаблона. Без галки — чистый шаблон.'
+        required: false
+        type: boolean
+        default: false
+      full_llm:
+        description: 'Старый Claude-вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом. Перебивает polish_html.'
+        required: false
+        type: boolean
+        default: false
 
 # Коммит обновлённого last_digest.json — нужен contents: write.
 permissions:
@@ -49,11 +59,23 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Управление архитектурой дайджеста для тестирования.
+          # full_llm перебивает polish_html — старый Claude-вариант
+          # игнорирует флаг полировщика.
+          DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
+          DIGEST_POLISH: ${{ inputs.polish_html && '1' || '' }}
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"
           else
             echo "📱 PERSONAL CHAT: digest will go to personal chat"
+          fi
+          if [ "${{ inputs.full_llm }}" = "true" ]; then
+            echo "🤖 FULL LLM: старый Claude-вариант (DIGEST_FULL_LLM=1)"
+          elif [ "${{ inputs.polish_html }}" = "true" ]; then
+            echo "✨ HYBRID + POLISH: программный шаблон + LLM-полировщик (DIGEST_POLISH=1)"
+          else
+            echo "🏗 HYBRID: программный шаблон без полировщика"
           fi
           if [ "${{ inputs.push_all }}" = "true" ]; then
             echo "📣 ALL DEVICES: PWA push to every subscriber"
