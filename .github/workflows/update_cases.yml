@@ -36,6 +36,11 @@ jobs:
       - name: Run court monitor
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Откат на старую логику полного LLM-вызова, пока добиваем
+          # шаблон + LLM-полировщик HTML с валидатором (см. план в
+          # ~/.claude/plans/clever-pondering-corbato.md, итерация 2).
+          # Снять после включения DIGEST_POLISH=1.
+          DIGEST_FULL_LLM: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # По умолчанию шлём в личный чат (TELEGRAM_CHAT_ID_TEST). Cloudflare Worker
           # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.
