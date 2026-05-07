@@ -2456,6 +2456,9 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_status = sum(1 for ch in fi_changes if "fi_status_change" in ch["type"])
         fi_acts = sum(1 for ch in fi_changes if "fi_act_published" in ch["type"])
         fi_finals = sum(1 for ch in fi_changes if "fi_final_event" in ch["type"])
+        fi_motivs = sum(
+            1 for ch in fi_changes if "fi_motivirovka_emitted" in ch["type"]
+        )
         fi_resolved_n = sum(
             1 for ch in fi_changes if "fi_resolved" in ch["type"]
         )
@@ -2480,6 +2483,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             parts.append(f"{fi_finals} финал 1 инст.")
         if fi_acts:
             parts.append(f"{fi_acts} акт 1 инст.")
+        if fi_motivs:
+            parts.append(f"{fi_motivs} мотивир. готов. 1 инст.")
         if fi_act_texts:
             parts.append(f"{fi_act_texts} мотивир. 1 инст.")
         if fi_status:
@@ -3818,6 +3823,7 @@ def save_digest_context(
     fi_changes: list[dict] | None = None,
     total_active_appeal: int = 0,
     total_active_fi: int = 0,
+    total_active_cassation: int = 0,
     cass_changes: list[dict] | None = None,
     cass_discovered: list[dict] | None = None,
 ) -> None:
@@ -3837,6 +3843,7 @@ def save_digest_context(
         "fi_changes": fi_changes or [],
         "total_active_appeal": total_active_appeal,
         "total_active_fi": total_active_fi,
+        "total_active_cassation": total_active_cassation,
         "cass_changes": cass_changes or [],
         "cass_discovered": cass_discovered or [],
     }
@@ -4103,12 +4110,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     fi_changes: list[dict] | None = None,
                     total_active_appeal: int = 0,
                     total_active_fi: int = 0,
+                    total_active_cassation: int = 0,
                     cass_changes: list[dict] | None = None,
                     cass_discovered: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API.
 
-    total_active_appeal/total_active_fi передаются раздельно — раньше передавалась
-    только сумма, и Claude выдумывал разбивку (типа «1 инст.: 2» при реальных 9).
+    total_active_appeal/total_active_fi/total_active_cassation передаются раздельно —
+    раньше передавалась только сумма, и Claude выдумывал разбивку
+    (типа «1 инст.: 2» при реальных 9).
     """
 
     if cases is None:
@@ -4124,7 +4133,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     if cass_discovered is None:
         cass_discovered = []
 
-    total_active = total_active_appeal + total_active_fi
+    total_active = total_active_appeal + total_active_fi + total_active_cassation
 
     if LLM_PROVIDER == "gigachat":
         if not GIGACHAT_AUTH_KEY:
@@ -4135,6 +4144,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_changes=fi_changes,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
+                total_active_cassation=total_active_cassation,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
@@ -4146,6 +4156,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             fi_changes=fi_changes,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
+            total_active_cassation=total_active_cassation,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
         )
@@ -4438,6 +4449,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                         line += f"\n  Событие: {ev}"
                         if d.get("event_date"):
                             line += f" ({d['event_date']})"
+                elif t == "fi_motivirovka_emitted":
+                    md = d.get('motivirovka_date', '')
+                    line += (
+                        "\n  Мотивированное решение изготовлено"
+                        + (f" {md}" if md else "")
+                        + ", полный текст пока не опубликован"
+                    )
                 elif t == "fi_appeal_filed":
                     role = d.get("appellant_role", "")
                     name = d.get("appellant_name", "")
@@ -4574,6 +4592,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             line += f"роль банка: {c.get('bank_role', '?')}, "
             line += f"1-я инст. №: {c.get('id', '')}, "
             line += f"суд 1 инст.: {shorten_court_name(fi.get('court', '') or '?')}, "
+            line += f"категория: {cass.get('category', '') or c.get('category', '') or '—'}, "
             line += f"касс. судья: {cass.get('judge', '')}, "
             line += f"заявитель: {cass.get('appellant', '')} ({cass.get('appellant_status', '')})"
             # Дату поступления вынесли отдельным полем — LLM выводит её
@@ -4699,10 +4718,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 - копировать «в удовлетворении требований отказать» / «требования подлежат удовлетворению» / «доводы апелляционной жалобы не влекут отмены решения» без указания, КАКУЮ норму суд применил и КАКОЙ довод принял/отклонил.
 
 1. Заголовок: 📊 Дайджест судебных дел | Суды ХМАО-Югры | {today}
-2. 📋 <b>Сводка</b> — две отдельные строки, по одной на инстанцию (НЕ через «|» в одну строку). Между заголовком «📋 <b>Сводка</b>» и самими строками — ОДНА пустая строка (отступ). Между двумя строками сводки пустой строки нет. Формат ДОСЛОВНО:
+2. 📋 <b>Сводка</b> — отдельные строки, по одной на инстанцию (НЕ через «|» в одну строку). Между заголовком «📋 <b>Сводка</b>» и самими строками — ОДНА пустая строка (отступ). Между строками сводки пустой строки нет (все идут плотным блоком). Формат ДОСЛОВНО:
    <i>1 инст.:</i> X заседаний, Y решений, Z статусов
    <i>Апелл.:</i> +N дел, M актов, K отложений
-   Если в инстанции событий нет — пиши «нет событий» (например: «<i>Апелл.:</i> нет событий»). УПОМИНАЙ ТОЛЬКО те события, которые реально будут выведены в блоках 3/4/5 ниже. Если событие дедуплицировано правилами (смена статуса свёрнута в 3.5, подача жалобы в 3.3 поглощает 3.2 и т.п.) — в сводке его НЕ считай. После сводки — одна пустая строка перед большим блоком 🏛 ПЕРВАЯ ИНСТАНЦИЯ.
+   <i>Касс.:</i> +K дел, L событий
+   Строки 1 инст. и Апелл. пиши ВСЕГДА (даже если «нет событий» — например: «<i>Апелл.:</i> нет событий»). Строку «<i>Касс.:</i>» пиши ТОЛЬКО если в данных есть «НОВЫЕ ДЕЛА КАССАЦИИ» или «КАССАЦИОННЫЕ СОБЫТИЯ» — иначе её не выводи вообще (без «нет событий»). УПОМИНАЙ ТОЛЬКО те события, которые реально будут выведены в блоках 3/4/5/6 ниже. Если событие дедуплицировано правилами (смена статуса свёрнута в 3.5, подача жалобы в 3.3 поглощает 3.2 и т.п.) — в сводке его НЕ считай. После сводки — одна пустая строка перед большим блоком 🏛 ПЕРВАЯ ИНСТАНЦИЯ.
 
 3. 🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>
    3.1. 📥 <b>Новые иски (N):</b> — ДВЕ строки на дело. 🛑 ЖЁСТКОЕ ПРАВИЛО: если в данных дела есть поле «Дата подачи иска» — строка 2 ОБЯЗАТЕЛЬНА, её отсутствие = БРАК. Не сворачивай дело в одну строку, не клади дату в конец строки 1. КРИТИЧНО: строки 1 и 2 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Между разными делами — одна пустая строка.
@@ -4789,10 +4809,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 ВАЖНО про 3.5 и 3.6: то же правило — если в текущем дайджесте у дела есть И поле «ИТОГ» из «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.», И «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» — выводи ТОЛЬКО в 3.6, в 3.5 не дублируй. В разных прогонах дело распределяется по своим секциям естественным образом.
 
 6. ⚖️🔬 <b>КАССАЦИЯ</b> — большой блок, выводится только если есть данные в секциях «НОВЫЕ ДЕЛА КАССАЦИИ» или «КАССАЦИОННЫЕ СОБЫТИЯ» в «Данные» ниже. Между этим большим блоком и предыдущим (⚖️ АПЕЛЛЯЦИЯ) — одна пустая строка, без «⸻». Внутри блока:
-   6.1. 📥 <b>Новые касс. дела (N):</b> — дело впервые видно через 7kas (мы пропустили 1-ю инст./апел.). Источник — секция «НОВЫЕ ДЕЛА КАССАЦИИ» в данных. ТРИ строки на дело, между делами пустая строка, внутри одного дела пустых строк НЕТ. КРИТИЧНО: заголовок строки 1 — касс. внутренний номер (вид «касс. № 8Г-…/YYYY»), НЕ номер 1-й инстанции. Номер 1-й инст. идёт на строке 2.
-        • строка 1: <a href="URL"><b>касс. № {{касс. номер}}</b></a> (URL берётся из поля URL карточки в данных, если есть; иначе просто <b>касс. № {{номер}}</b>) — {{истец}} vs {{ответчик}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ).
-        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): 1-я инст. №: <b>{{номер 1-й инст.}}</b> | суд 1 инст.: {{суд}} | заявитель: {{Роль_заявителя имя}}.
-        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть поле «Дата поступления касс. жалобы»: <b>{{ДД.ММ.ГГГГ}}</b> — 📥 поступила кассационная жалоба от {{заявитель}}.
+   6.1. 📥 <b>Новые касс. дела (N):</b> — дело впервые видно через 7kas (мы пропустили 1-ю инст./апел.). Источник — секция «НОВЫЕ ДЕЛА КАССАЦИИ» в данных. ТРИ строки на дело, между делами пустая строка, внутри одного дела пустых строк НЕТ. КРИТИЧНО: заголовок строки 1 — касс. внутренний номер (вид «8Г-…/YYYY») БЕЗ префикса «касс. №» — секция и так называется «Новые касс. дела». Номер 1-й инст. в эти три строки НЕ выносить.
+        • строка 1: <a href="URL"><b>{{касс. номер}}</b></a> (URL берётся из поля URL карточки в данных, если есть; иначе просто <b>{{касс. номер}}</b>) — {{истец}} vs {{ответчик}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ). ПРЕФИКС «касс. № » в строке 1 НЕ ставь — он избыточен.
+        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{суд 1 инст.}} | категория: {{категория спора}}. Категорию бери из поля «категория» в данных. Если категории нет / стоит «—» — выводи только «{{суд 1 инст.}}» без «| категория: …». Номер 1-й инст. и «заявитель» в эту строку НЕ помещай.
+        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть поле «Дата поступления касс. жалобы»: <b>{{ДД.ММ.ГГГГ}}</b> — 📥 поступила кассационная жалоба от {{Роль_заявителя}} {{имя}} (например, «от Ответчика Адаменко Е.М.», «от Истца Сбербанка»). Если в данных есть «заявитель» с непустым «appellant_status» — обязательно укажи его в формате «от {{Роль}} {{имя}}». Если заявитель пуст — пиши просто «📥 поступила кассационная жалоба».
         КРИТИЧНО: дату поступления выноси ТОЛЬКО на строку 3. В строку 2 поле «поступление: {{дата}}» больше НЕ помещай. Если данных о дате нет — строку 3 не пиши, не подставляй today()/«—»/«не указано».
    6.2. 📑 <b>Касс. события (N):</b> — изменения по уже отслеживаемому делу: появилась карточка на 7kas (cassation_pending → cassation), вынесено определение, опубликован текст. Источник — секция «КАССАЦИОННЫЕ СОБЫТИЯ» в данных. КРИТИЧНО: строки одного дела идут ПОДРЯД, БЕЗ пустых строк между ними. Между делами — одна пустая строка.
         • строка 1: <a href="URL"><b>номер 1-й инст.</b></a> — касс. № <b>{{касс. номер}}</b> | стадия: {{stage_prev}} → {{stage_now}}.
@@ -4804,7 +4824,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         ИСХОД (`outcome`) переводи в человеческую формулировку: cassation_dismissed_no_transfer = «отказ в передаче»; cassation_upheld = «оставлено в силе»; cassation_modified = «изменено»; cassation_reversed = «отменено»; cassation_remanded = «отменено и направлено на новое»; cassation_terminated = «прекращено / отозвано»; cassation_other / пусто = пропусти строку «Итог».
         Дело с `appellant_is_bank=true` (Сбербанк подал жалобу) — выделяй: добавь в начало строки 1 эмодзи 🏦.
 
-7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>. Используй ИМЕННО эти три числа дословно — не считай, не угадывай, не округляй.
+7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апел.: {total_active_appeal} | касс.: {total_active_cassation})</b>. Используй ИМЕННО эти ЧЕТЫРЕ числа дословно — не считай, не угадывай, не округляй. Касс. — это дела на стадиях `cassation_pending` и `cassation` (жалоба ушла в кассац. суд / уже рассматривается на 7kas).
 8. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия больших блоков и секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок. РАЗДЕЛИТЕЛИ И ПУСТЫЕ СТРОКИ (обязательны, без них границы теряются):
@@ -4833,6 +4853,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_changes=fi_changes,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
+                total_active_cassation=total_active_cassation,
+                cass_changes=cass_changes,
+                cass_discovered=cass_discovered,
             )
         text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
         text = _warn_misplaced_appeal_cases(text)
@@ -4886,6 +4909,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_changes=fi_changes,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
+                total_active_cassation=total_active_cassation,
+                cass_changes=cass_changes,
+                cass_discovered=cass_discovered,
             )
         text = _validate_digest_new_sections(text, fi_new_cases, new_cases)
         text = _warn_misplaced_appeal_cases(text)
@@ -4902,20 +4928,38 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         body = (e.response.text or "")[:500] if e.response is not None else ""
         log.error(f"Claude API HTTP {status}: {body}")
         return generate_template_digest(
-            new_cases, changes, total_active, cases,
-            fi_new_cases, stage_transitions, fi_changes,
+            new_cases, changes, cases=cases,
+            fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+            fi_changes=fi_changes,
+            total_active_appeal=total_active_appeal,
+            total_active_fi=total_active_fi,
+            total_active_cassation=total_active_cassation,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
         )
     except requests.RequestException as e:
         log.error(f"Claude API сетевая ошибка: {e}")
         return generate_template_digest(
-            new_cases, changes, total_active, cases,
-            fi_new_cases, stage_transitions, fi_changes,
+            new_cases, changes, cases=cases,
+            fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+            fi_changes=fi_changes,
+            total_active_appeal=total_active_appeal,
+            total_active_fi=total_active_fi,
+            total_active_cassation=total_active_cassation,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
         )
     except (KeyError, ValueError, json.JSONDecodeError) as e:
         log.error(f"Claude API неожиданный ответ: {e}")
         return generate_template_digest(
-            new_cases, changes, total_active, cases,
-            fi_new_cases, stage_transitions, fi_changes,
+            new_cases, changes, cases=cases,
+            fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+            fi_changes=fi_changes,
+            total_active_appeal=total_active_appeal,
+            total_active_fi=total_active_fi,
+            total_active_cassation=total_active_cassation,
+            cass_changes=cass_changes,
+            cass_discovered=cass_discovered,
         )
 
 
@@ -4938,9 +4982,10 @@ _BARE_CASE_NUMBER_RE = re.compile(
     r'(?<![\w/-])([0-9A-Za-zА-Яа-яЁё]+-\d+/\d{4})(?![\w/-])'
 )
 
-# Большой блок «🏛 ПЕРВАЯ ИНСТАНЦИЯ» / «⚖️ АПЕЛЛЯЦИЯ» / «🔀 Перешли в апелляцию».
+# Большой блок «🏛 ПЕРВАЯ ИНСТАНЦИЯ» / «⚖️ АПЕЛЛЯЦИЯ» / «⚖️🔬 КАССАЦИЯ» / «🔀 Перешли в апелляцию».
 _FI_BLOCK_HEADER_RE = re.compile(r'^\s*🏛\s*<b>\s*ПЕРВАЯ ИНСТАНЦИЯ\s*</b>\s*$')
 _APPEAL_BLOCK_HEADER_RE = re.compile(r'^\s*⚖️\s*<b>\s*АПЕЛЛЯЦИЯ\s*</b>\s*$')
+_CASSATION_BLOCK_HEADER_RE = re.compile(r'^\s*⚖️🔬\s*<b>\s*КАССАЦИЯ\s*</b>\s*$')
 
 # Номер апелляционного дела всегда начинается с «33-». Используем для
 # инварианта: апелляционные номера запрещены в блоке 1-й инстанции.
@@ -5228,6 +5273,10 @@ _SUBSECTION_HEADERS_WITH_COUNT = [
      "Апел./Переход к правилам 1 инст."),
     (re.compile(r'^(\s*🔀\s*<b>\s*Перешли в апелляцию\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
      "Перешли в апелляцию"),
+    (re.compile(r'^(\s*📥\s*<b>\s*Новые касс\. дела\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Касс./Новые дела"),
+    (re.compile(r'^(\s*📑\s*<b>\s*Касс\. события\s*\(\s*)(\d+)(\s*\)\s*:\s*</b>\s*)$'),
+     "Касс./События"),
 ]
 
 
@@ -5298,7 +5347,9 @@ def _classify_line(line: str) -> str:
         return "TITLE"
     if s.startswith("📌"):
         return "FOOTER"
-    if _FI_BLOCK_HEADER_RE.match(line) or _APPEAL_BLOCK_HEADER_RE.match(line):
+    if (_FI_BLOCK_HEADER_RE.match(line)
+            or _APPEAL_BLOCK_HEADER_RE.match(line)
+            or _CASSATION_BLOCK_HEADER_RE.match(line)):
         return "BIG_HEADER"
     # «🔀 Перешли в апелляцию» — это самостоятельный мостик, ведёт себя как
     # большой блок (между ним и соседними блоками — одна пустая строка, без ⸻).
@@ -5503,6 +5554,8 @@ def _recount_summary_line(html: str) -> str:
     ))
     ap_postponed = sum(c for b, lbl, c in sections if lbl == "Апел./Отложено")
     ap_scheduled = sum(c for b, lbl, c in sections if lbl == "Апел./Назначено")
+    cass_new = sum(c for b, lbl, c in sections if lbl == "Касс./Новые дела")
+    cass_events = sum(c for b, lbl, c in sections if lbl == "Касс./События")
 
     # Собираем фразы для каждой инстанции.
     def _plural(n: int, forms: tuple[str, str, str]) -> str:
@@ -5548,12 +5601,28 @@ def _recount_summary_line(html: str) -> str:
         ap_parts.append(f"{ap_acts} {_plural(ap_acts, ('акт', 'акта', 'актов'))}")
     ap_summary = ", ".join(ap_parts) if ap_parts else "нет событий"
 
+    cass_parts: list[str] = []
+    if cass_new:
+        cass_parts.append(
+            f"+{cass_new} {_plural(cass_new, ('дело', 'дела', 'дел'))}"
+        )
+    if cass_events:
+        cass_parts.append(
+            f"{cass_events} {_plural(cass_events, ('событие', 'события', 'событий'))}"
+        )
+    cass_summary = ", ".join(cass_parts)
+    # Строку «Касс.:» выводим только при наличии хоть одного кассационного
+    # события — пустая строка «нет событий» тут не нужна, юрист просил
+    # упоминать кассацию ТОЛЬКО когда она есть.
+    new_cass_line = f"<i>Касс.:</i> {cass_summary}" if cass_summary else None
+
     new_fi_line = f"<i>1 инст.:</i> {fi_summary}"
     new_ap_line = f"<i>Апелл.:</i> {ap_summary}"
 
     out: list[str] = []
     fi_replaced = False
     ap_replaced = False
+    cass_replaced = False
     for ln in lines:
         s = ln.strip()
         if s.startswith("<i>1 инст.:</i>"):
@@ -5563,8 +5632,35 @@ def _recount_summary_line(html: str) -> str:
         if s.startswith("<i>Апелл.:</i>"):
             out.append(new_ap_line)
             ap_replaced = True
+            # Если LLM не вывел строку «Касс.:», но события есть —
+            # вставляем её сразу под «Апелл.:» (без пустой строки между).
+            if new_cass_line is not None:
+                # Проверим, есть ли уже строка «Касс.:» где-то ниже —
+                # если есть, не дублируем (заменим её в блоке ниже).
+                pass
+            continue
+        if s.startswith("<i>Касс.:</i>"):
+            if new_cass_line is not None:
+                out.append(new_cass_line)
+                cass_replaced = True
+            # Если событий по кассации нет — строку «Касс.:» удаляем
+            # (LLM мог вывести её ошибочно с «нет событий»).
             continue
         out.append(ln)
+
+    # Если LLM не вывел строку «Касс.:», но события есть — добавляем её
+    # сразу после «Апелл.:» (вторичный проход по out).
+    if (new_cass_line is not None
+            and ap_replaced
+            and not cass_replaced):
+        out2: list[str] = []
+        inserted = False
+        for ln in out:
+            out2.append(ln)
+            if not inserted and ln.strip().startswith("<i>Апелл.:</i>"):
+                out2.append(new_cass_line)
+                inserted = True
+        out = out2
 
     # Если LLM почему-то не вывел сводку — не вмешиваемся.
     if not fi_replaced and not ap_replaced:
@@ -5869,6 +5965,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              fi_changes: list[dict] | None = None,
                              total_active_appeal: int = 0,
                              total_active_fi: int = 0,
+                             total_active_cassation: int = 0,
                              cass_changes: list[dict] | None = None,
                              cass_discovered: list[dict] | None = None) -> str:
     """Шаблонный дайджест (fallback без Claude API). Формат: HTML.
@@ -5892,7 +5989,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     if cass_discovered is None:
         cass_discovered = []
 
-    total_active = total_active_appeal + total_active_fi
+    total_active = total_active_appeal + total_active_fi + total_active_cassation
 
     # ── Короткое сообщение если изменений нет ──
     # stage_transitions намеренно НЕ учитываем: мостик в дайджест больше
@@ -5903,7 +6000,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         return render_no_changes_digest(
             today,
             f"В производстве: всего {total_active}"
-            f" (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})",
+            f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
+            f" | касс.: {total_active_cassation})",
         )
 
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
@@ -6052,6 +6150,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         )
                     else:
                         ev_list.append(f"⚖️ {escape_html(ev_raw)}")
+                elif t == "fi_motivirovka_emitted":
+                    md = escape_html(d.get('motivirovka_date', ''))
+                    ev_list.append(
+                        "📄 мотивированное решение изготовлено"
+                        + (f" {md}" if md else "")
+                        + ", полный текст не опубликован"
+                    )
                 elif t == "fi_appeal_filed":
                     role = escape_html(d.get("appellant_role", ""))
                     name = escape_html(d.get("appellant_name", ""))
@@ -6409,16 +6514,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         for c in cass_discovered:
             cass = c.get("cassation") or {}
             fi_b = c.get("first_instance") or {}
-            num_fi = escape_html(c.get("id", ""))
             num_cs = escape_html(cass.get("case_number", ""))
             url = ""
             if cass.get("link"):
                 cid_, cuid_ = case_id_uid(cass["link"])
                 if cid_ and cuid_:
                     url = CASSATION_COURT.card_url(cid_, cuid_)
-            # Заголовок строки = касс. внутренний номер; см. правки 6.1.
-            link = (f'<a href="{url}"><b>касс. № {num_cs}</b></a>'
-                    if url else f'<b>касс. № {num_cs}</b>')
+            # Заголовок строки = касс. внутренний номер БЕЗ префикса «касс. №»
+            # (избыточен: секция «Новые касс. дела» сама уже это указывает).
+            link = (f'<a href="{url}"><b>{num_cs}</b></a>'
+                    if url else f'<b>{num_cs}</b>')
             pl_raw = c.get("plaintiff", "")
             df_raw = c.get("defendant", "")
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
@@ -6429,22 +6534,33 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             sber_flag = "🏦 " if cass.get("appellant_is_bank") else ""
             cass_block.append(f"  {sber_flag}{link} — {pl} vs {df}{tail}")
             appellant = escape_html(cass.get("appellant", "") or "")
-            appellant_status = escape_html(
-                (cass.get("appellant_status", "") or "").lower()
+            # Роль заявителя в Title Case для строки 3 («от Ответчика Иванова»).
+            appellant_status_raw = (cass.get("appellant_status", "") or "").strip()
+            appellant_role = escape_html(appellant_status_raw.capitalize())
+            # Строка 2: суд 1 инст. + категория. Без номера 1-й инст. и «заявитель».
+            court_short = escape_html(
+                shorten_court_name(fi_b.get("court", "") or "")
             )
-            cass_block.append(
-                f"     1-я инст. №: <b>{num_fi}</b> | "
-                f"суд 1 инст.: {escape_html(shorten_court_name(fi_b.get('court', '') or ''))} | "
-                f"заявитель: {appellant}"
-                + (f" ({appellant_status})" if appellant_status else "")
-            )
+            cat_raw = (cass.get("category") or c.get("category") or "").strip()
+            cat = escape_html(cat_raw)
+            line2 = f"     {court_short}" if court_short else "     "
+            if cat:
+                line2 += f" | категория: {cat}"
+            cass_block.append(line2)
             filing = escape_html(cass.get("filing_date", "") or "")
             if filing:
                 # Эмодзи 📥 ставим ПОСЛЕ <b>дата</b>, иначе строка попадёт
                 # под _DIGEST_HEADER_RE и будет принята за заголовок секции.
+                # Заявителя выводим в формате «от Роль Имя» (например,
+                # «от Ответчика Адаменко Е.М.»).
+                from_str = ""
+                if appellant_role and appellant:
+                    from_str = f" от {appellant_role} {appellant}"
+                elif appellant:
+                    from_str = f" от {appellant}"
                 cass_block.append(
                     f"     <b>{filing}</b> — 📥 поступила касс. жалоба"
-                    + (f" от {appellant}" if appellant else "")
+                    + from_str
                 )
             cass_block.append("")
         if cass_block and cass_block[-1] == "":
@@ -6500,7 +6616,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     lines.append("")
     lines.append(
         f"📌 <b>В производстве: всего {total_active}"
-        f" (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})</b>"
+        f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
+        f" | касс.: {total_active_cassation})</b>"
     )
     lines.append(f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>')
 
@@ -7923,6 +8040,51 @@ def main_json():
                 change["details"]["event"] = new_ev
                 change["details"]["event_date"] = card_info.get("Дата события", "")
 
+        # Мотивировка изготовлена, но текст акта (act_text) ещё не получен —
+        # юристу нужно знать, чтобы пойти забрать решение в суде. Идемпотентно
+        # через флаг fi["motivirovka_emitted"]: эмит происходит один раз —
+        # в момент, когда впервые видим маркер мотивировки в last_event.
+        # Не зависит от изменения last_event между прогонами (`fi_final_event`
+        # стреляет ТОЛЬКО при изменении, и если карточка обновилась раньше,
+        # юрист пропустит сигнал). Сброс флага не делаем: появление act_text
+        # закроет тему естественным путём через fi_act_text_published (3.6).
+        last_ev_str = (fi.get("last_event") or "")
+        last_ev_l = last_ev_str.lower()
+        has_motiv_marker = (
+            "изготовлено" in last_ev_l
+            and "мотивированное решение" in last_ev_l
+        )
+        already_have_act_text = bool((fi.get("act_text") or "").strip())
+        already_emitted = bool(fi.get("motivirovka_emitted", False))
+        # Не дублируем: если в этом же прогоне уже сработал fi_final_event
+        # на той же фразе «изготовлено мотивированное решение» — он уже
+        # говорит LLM ту же вещь. Ставим только флаг (чтобы в следующем
+        # прогоне fi_motivirovka_emitted не повторил).
+        ff_event_l = ""
+        if "fi_final_event" in change["type"]:
+            ff_event_l = (change["details"].get("event") or "").lower()
+        final_already_covers_motiv = (
+            "изготовлено" in ff_event_l
+            and "мотивированное решение" in ff_event_l
+        )
+        if (has_motiv_marker
+                and not already_have_act_text
+                and not already_emitted):
+            if final_already_covers_motiv:
+                # fi_final_event уже понесёт сообщение — просто ставим флаг,
+                # чтобы в следующем прогоне fi_motivirovka_emitted не выстрелил.
+                fi["motivirovka_emitted"] = True
+                changed = True
+            else:
+                m_md = re.search(r'(\d{2}\.\d{2}\.\d{4})', last_ev_str)
+                motivirovka_date = (
+                    m_md.group(1) if m_md else (fi.get("event_date") or "")
+                )
+                change["type"].append("fi_motivirovka_emitted")
+                change["details"]["motivirovka_date"] = motivirovka_date
+                fi["motivirovka_emitted"] = True
+                changed = True
+
         # «Рассмотрение дела начато с начала» — фиксируется, когда
         # соответствующее событие впервые появилось в истории.
         restart_ev = _events_newly_match(
@@ -8245,6 +8407,14 @@ def main_json():
         if c.get("current_stage") == "first_instance"
         and (c.get("first_instance") or {}).get("status", "").strip() != "Решено"
     )
+    # Касс. — дела на стадиях `cassation_pending` (жалоба ушла, ждём карточку
+    # на 7kas) и `cassation` (карточка появилась, рассматривается). Архивные
+    # отсечены через is_case_archived.
+    total_active_cassation = sum(
+        1 for c in cases
+        if c.get("current_stage") in ("cassation_pending", "cassation")
+        and not is_case_archived(c)
+    )
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
     save_digest_context(
@@ -8253,6 +8423,7 @@ def main_json():
         fi_changes=fi_changes,
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
+        total_active_cassation=total_active_cassation,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
     )
@@ -8262,6 +8433,7 @@ def main_json():
         fi_changes=fi_changes,
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
+        total_active_cassation=total_active_cassation,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
     )
@@ -8405,6 +8577,7 @@ def main_replay_last(push_all: bool = False):
         fi_changes=ctx.get("fi_changes", []),
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
+        total_active_cassation=ctx.get("total_active_cassation", 0),
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
@@ -8529,6 +8702,7 @@ def main_push_last_digest(owner_only: bool = False):
         fi_changes=ctx.get("fi_changes", []),
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
+        total_active_cassation=ctx.get("total_active_cassation", 0),
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
@@ -8597,9 +8771,16 @@ def main_digest_only():
         if c.get("current_stage") == "first_instance"
         and (c.get("first_instance") or {}).get("status", "").strip() != "Решено"
     )
+    total_active_cassation = sum(
+        1 for c in json_cases
+        if c.get("current_stage") in ("cassation_pending", "cassation")
+        and not is_case_archived(c)
+    )
     log.info(
-        f"В производстве: всего {total_active_appeal + total_active_fi}"
-        f" (1 инст.: {total_active_fi} | апелляция: {total_active_appeal})"
+        f"В производстве: всего"
+        f" {total_active_appeal + total_active_fi + total_active_cassation}"
+        f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
+        f" | касс.: {total_active_cassation})"
     )
 
     log.info("Генерирую дайджест...")
@@ -8607,6 +8788,7 @@ def main_digest_only():
         [], [], cases=cases,
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
+        total_active_cassation=total_active_cassation,
     )
 
     send_telegram(digest)
