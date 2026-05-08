@@ -2236,6 +2236,47 @@ def cassation_remanded_to(result_for_appeal: str, act_text: str = "") -> str:
     return ""
 
 
+# Готовые русские подписи для нормализованных enum-исходов кассации
+# (см. classify_cassation_outcome). Используются в обеих ветках дайджеста —
+# и LLM-контексте, и template-fallback, чтобы перевод не делал LLM
+# (снижает риск галлюцинации). cassation_other / "" → пустая строка
+# (вызывающая сторона пропускает блок «Итог»).
+CASSATION_OUTCOME_RU: dict[str, str] = {
+    "cassation_dismissed_no_transfer": "🚫 Отказ в передаче",
+    "cassation_upheld": "Оставлено без изменения",
+    "cassation_modified": "Изменено",
+    "cassation_reversed": "Отменено",
+    "cassation_remanded": "🔁 Отменено и направлено на новое рассмотрение",
+    "cassation_terminated": "🛑 Прекращено / отозвано / возвращено",
+    "cassation_other": "",
+}
+
+
+def cassation_review_label(review_result: str, outcome: str = "") -> str:
+    """Короткая русская метка для ранней стадии кассации, когда финальный
+    `outcome` ещё не выставлен, но `review_result` (поле «Результат изучения
+    жалобы» из таблицы ЖАЛОБЫ на 7kas) уже заполнен.
+
+    Используется как готовая подпись «Итог:» в дайджесте, чтобы LLM не
+    переводила длинные 7kas-формулировки сама.
+
+    Возвращает пустую строку если `outcome` непустой (берём CASSATION_OUTCOME_RU)
+    или формулировка не распознана.
+    """
+    if outcome:
+        return ""
+    rev = (review_result or "").upper()
+    if not rev:
+        return ""
+    if "ОТКАЗАНО" in rev and "ПЕРЕДАЧ" in rev:
+        return "🚫 Отказ в передаче"
+    if "ВОЗВРАЩЕН" in rev:
+        return "🛑 Возвращено"
+    if "ВОЗБУЖДЕНО" in rev or "ПЕРЕДАН" in rev or "ПРИНЯТ" in rev:
+        return "📥 Принято к производству"
+    return ""
+
+
 def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
     """Парсит карточку гражданского касс. дела с 7kas.sudrf.ru.
 
@@ -2970,9 +3011,13 @@ def link_cassation_cases(
                     "result_for_appeal": cass_block["result_for_appeal"],
                     "decision_date": cass_block["decision_date"],
                     "hearing_date": cass_block["hearing_date"],
+                    "hearing_time": cass_block.get("hearing_time", ""),
                     "appellant": cass_block["appellant"],
                     "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "appellant_status": cass_block.get("appellant_status", ""),
                     "act_kind": cass_block["act_kind"],
+                    "act_published": bool(cass_block.get("act_published")),
+                    "link": cass_block.get("link", ""),
                 },
             }
             if not old_cass:
@@ -3055,11 +3100,15 @@ def link_cassation_cases(
                     "result_for_appeal": cass_block["result_for_appeal"],
                     "decision_date": cass_block["decision_date"],
                     "hearing_date": cass_block["hearing_date"],
+                    "hearing_time": cass_block.get("hearing_time", ""),
                     "appellant": cass_block["appellant"],
                     "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "appellant_status": cass_block.get("appellant_status", ""),
                     "fi_court": fi_court_short,
                     "fi_case_number": fi_num,
                     "act_kind": cass_block["act_kind"],
+                    "act_published": bool(cass_block.get("act_published")),
+                    "link": cass_block.get("link", ""),
                 },
             })
             if cass_block["act_published"]:
@@ -5212,23 +5261,84 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 
     # Кассационные события по уже известным делам (cassation_pending → cassation,
     # выход определения, новые слушания и т.п.). Текст определения — в act_text.
+    # Стороны / категория / банк-роль / суд 1 инст. подтягиваются из
+    # родительского case (в самом cass_changes.details их нет, иначе LLM
+    # получает плейсхолдеры «{не указаны}»). URL карточки 7kas собираем из
+    # details.link (case_id|case_uid). Готовые русские метки исхода/стадии
+    # подаём отдельными полями — Python их формирует, чтобы LLM не переводила
+    # длинные 7kas-формулировки самостоятельно.
     if cass_changes:
+        cases_by_id_for_cass: dict[str, dict] = {}
+        for c in cases:
+            cid_b = c.get("id", "")
+            if cid_b:
+                cases_by_id_for_cass.setdefault(cid_b, c)
+            fi_b = c.get("first_instance") or {}
+            fi_num_b = fi_b.get("case_number", "")
+            if fi_num_b:
+                cases_by_id_for_cass.setdefault(fi_num_b, c)
         context_parts.append("\nКАССАЦИОННЫЕ СОБЫТИЯ (7kas):")
         for ch in cass_changes:
             d = ch.get("details") or {}
             if "discovered_in_cassation" in ch.get("type", []):
                 continue  # уже в блоке «НОВЫЕ ДЕЛА КАССАЦИИ» выше
+            parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
+            fi_p = parent.get("first_instance") or {}
+            url_card = ""
+            if d.get("link"):
+                cid_, cuid_ = case_id_uid(d["link"])
+                if cid_ and cuid_:
+                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
             line = (
                 f"- 1-я инст. № {ch.get('case', '')} → касс. № "
-                f"{ch.get('cassation_internal_number', '')}: "
-                f"стадия {d.get('stage_prev', '?')} → {d.get('stage_now', '?')}"
+                f"{ch.get('cassation_internal_number', '')}"
+                f" (URL карточки 7kas: {url_card or '—'})"
             )
+            # «стадия prev → now» оставляем ТОЛЬКО если она реально менялась.
+            # Для review_result_change / outcome_change / new_act prev==now
+            # (повторное событие в стадии cassation) — это не переход.
+            sp = d.get("stage_prev", "")
+            sn = d.get("stage_now", "")
+            if sp and sn and sp != sn:
+                line += f", переход стадии: {sp} → {sn}"
+            pl = parent.get("plaintiff", "")
+            df = parent.get("defendant", "")
+            if pl or df:
+                line += (
+                    f"\n  Стороны: {shorten_party_name(pl, keep_fio_full=True)}"
+                    f" (истец) vs "
+                    f"{shorten_party_name(df, keep_fio_full=True)} (ответчик)"
+                )
+            if parent.get("bank_role"):
+                line += f"\n  Роль банка: {parent['bank_role']}"
+            cat = parent.get("category", "")
+            if cat:
+                line += f"\n  Категория: {cat}"
+            fi_court = fi_p.get("court", "")
+            if fi_court:
+                line += f"\n  Суд 1 инст.: {shorten_court_name(fi_court)}"
             if d.get("appellant"):
-                line += f", заявитель: {d['appellant']} (банк_заявитель={d.get('appellant_is_bank', False)})"
+                ap_status = d.get("appellant_status", "") or ""
+                line += (
+                    f"\n  Заявитель: {d['appellant']}"
+                    f" ({ap_status or '—'}, банк_заявитель="
+                    f"{d.get('appellant_is_bank', False)})"
+                )
+            # Готовые русские подписи: review_label_ru — для ранней стадии
+            # (когда outcome пуст, но review_result есть); outcome_label_ru —
+            # финальный исход. LLM подставляет их в строку «Итог:» как есть.
+            review_label_ru = cassation_review_label(
+                d.get("review_result", ""), d.get("outcome", "")
+            )
+            outcome_label_ru = CASSATION_OUTCOME_RU.get(d.get("outcome", ""), "")
+            if review_label_ru:
+                line += f"\n  Метка стадии (готовая для «Итог»): {review_label_ru}"
+            if outcome_label_ru:
+                line += f"\n  Метка исхода (готовая для «Итог»): {outcome_label_ru}"
             if d.get("review_result"):
-                line += f"\n  Изучение жалобы: {d['review_result']}"
+                line += f"\n  Изучение жалобы (raw): {d['review_result']}"
             if d.get("outcome"):
-                line += f"\n  ИСХОД: {d['outcome']}"
+                line += f"\n  ИСХОД (raw enum): {d['outcome']}"
             if d.get("result_text"):
                 line += f"\n  Результат рассмотрения: {d['result_text']}"
             if d.get("result_for_appeal"):
@@ -5236,7 +5346,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             if d.get("decision_date"):
                 line += f"\n  Дата вынесения опред.: {d['decision_date']}"
             if d.get("hearing_date"):
-                line += f"\n  Дата заседания: {d['hearing_date']}"
+                hd = d['hearing_date']
+                ht = d.get("hearing_time", "") or ""
+                line += f"\n  Дата заседания: {hd}{(' ' + ht) if ht else ''}"
             if d.get("act_date"):
                 line += f"\n  Дата публикации акта: {d['act_date']}"
             if d.get("act_text"):
@@ -5432,15 +5544,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{суд 1 инст.}} | категория: {{категория спора}}. Категорию бери из поля «категория» в данных. Если категории нет / стоит «—» — выводи только «{{суд 1 инст.}}» без «| категория: …». Номер 1-й инст. и «заявитель» в эту строку НЕ помещай.
         • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть поле «Дата поступления касс. жалобы»: <b>{{ДД.ММ.ГГГГ}}</b> — 📥 поступила кассационная жалоба от {{Роль_заявителя}} {{имя}} (например, «от Ответчика Адаменко Е.М.», «от Истца Сбербанка»). Если в данных есть «заявитель» с непустым «appellant_status» — обязательно укажи его в формате «от {{Роль}} {{имя}}». Если заявитель пуст — пиши просто «📥 поступила кассационная жалоба».
         КРИТИЧНО: дату поступления выноси ТОЛЬКО на строку 3. В строку 2 поле «поступление: {{дата}}» больше НЕ помещай. Если данных о дате нет — строку 3 не пиши, не подставляй today()/«—»/«не указано».
-   6.2. 📑 <b>Касс. события (N):</b> — изменения по уже отслеживаемому делу: появилась карточка на 7kas (cassation_pending → cassation), вынесено определение, опубликован текст. Источник — секция «КАССАЦИОННЫЕ СОБЫТИЯ» в данных. КРИТИЧНО: строки одного дела идут ПОДРЯД, БЕЗ пустых строк между ними. Между делами — одна пустая строка.
-        • строка 1: <a href="URL"><b>номер 1-й инст.</b></a> — касс. № <b>{{касс. номер}}</b> | стадия: {{stage_prev}} → {{stage_now}}.
-        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{стороны кратко}} | категория: {{категория}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ).
-        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если есть `outcome` или `result_text` в данных:
-          <b>Итог:</b> {{дословно поле «Результат рассмотрения»}}{{, "В отношении апел.: " + поле «В отношении апел. инст.» если есть}}.
-        • строка 4 (СРАЗУ под 3, БЕЗ пустой строки) — ТОЛЬКО если есть «МОТИВИРОВОЧНАЯ ЧАСТЬ ОПРЕДЕЛЕНИЯ»:
-          <b>Почему:</b> 3-4 КОРОТКИХ предложения с конкретным обоснованием (см. ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ — те же запреты, что для 3.6/5.5: никаких «рассмотрел доводы», «исследовал материалы», «без изменений» без причины — нужны нормы и факты).
-        ИСХОД (`outcome`) переводи в человеческую формулировку: cassation_dismissed_no_transfer = «отказ в передаче»; cassation_upheld = «оставлено в силе»; cassation_modified = «изменено»; cassation_reversed = «отменено»; cassation_remanded = «отменено и направлено на новое»; cassation_terminated = «прекращено / отозвано»; cassation_other / пусто = пропусти строку «Итог».
-        Дело с `appellant_is_bank=true` (Сбербанк подал жалобу) — выделяй: добавь в начало строки 1 эмодзи 🏦.
+   6.2. 📑 <b>Касс. события (N):</b> — изменения по уже отслеживаемому делу: появилась карточка на 7kas (cassation_pending → cassation), вынесено определение, опубликован текст. Источник — секция «КАССАЦИОННЫЕ СОБЫТИЯ» в данных. КРИТИЧНО: строки одного дела идут ПОДРЯД, БЕЗ пустых строк между ними. Между делами — одна пустая строка. У дела может быть от 2 до 5 строк — выводи только те, для которых есть данные:
+        • строка 1 (ВСЕГДА): <a href="URL"><b>номер 1-й инст.</b></a> — касс. № <b>{{касс. номер}}</b>. URL берётся из поля «URL карточки 7kas» в данных; если там «—» — пиши <b>номер 1-й инст.</b> без ссылки. ПРИЗНАК «стадия prev → now» добавляй В КОНЕЦ строки 1 ТОЛЬКО если в данных явно указано «переход стадии: X → Y». Если такой строки в данных нет — НЕ пиши «стадия: cassation → cassation» / «стадия: cassation → cassation» / любую конструкцию со стадией. Это повторное событие в стадии «cassation», переход не нужен.
+        • строка 2 (ВСЕГДА, СРАЗУ под 1, БЕЗ пустой строки): {{стороны кратко}} | категория: {{категория}}, банк — {{роль}} (хвост «банк — …» по правилу БАНК В ХВОСТЕ). Стороны/категория/роль банка — из полей «Стороны», «Категория», «Роль банка» в данных. Если поля «Категория» нет — выводи только «{{стороны}}, банк — {{роль}}» без «| категория:».
+        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть «Дата заседания»: 📅 Заседание: <b>{{дата}}{{ ' ' + время если есть}}</b>.
+        • строка 4 (СРАЗУ под 3, БЕЗ пустой строки) — ТОЛЬКО если в данных есть готовая метка «Метка стадии (готовая для «Итог»)» ИЛИ «Метка исхода (готовая для «Итог»)»: <b>Итог:</b> {{готовая метка ДОСЛОВНО, как в данных, со всеми эмодзи}}. Если в данных есть «Заявитель» с непустым «appellant_status», в КОНЕЦ строки «Итог» дописывай « — от {{Роль}} {{имя}}» (например, «— от Ответчика Чернова В.В.»). Роль приводи к Title Case (Ответчик / Истец / Иное лицо). Если в данных есть и «Метка стадии», и «Метка исхода» — используй «Метка исхода» (она важнее — финальный исход дела).
+        🛑 СТРОГО ЗАПРЕЩЕНО: переводить сырые формулировки из «Изучение жалобы (raw)» / «ИСХОД (raw enum)» / «Результат рассмотрения» в строку «Итог». Эти поля даны для понимания контекста, не для дайджеста. Используй ТОЛЬКО готовые метки из «Метка стадии (готовая)» / «Метка исхода (готовая)» — Python уже перевёл за тебя. Если ни одной из готовых меток нет — строку «Итог» НЕ пиши, не подставляй «—», не выдумывай.
+        • строка 5 (СРАЗУ под 4, БЕЗ пустой строки) — ТОЛЬКО если в данных есть «МОТИВИРОВОЧНАЯ ЧАСТЬ ОПРЕДЕЛЕНИЯ»: <b>Почему:</b> 3-4 КОРОТКИХ предложения с конкретным обоснованием (см. ПРАВИЛА МОТИВИРОВОЧНЫХ СЕКЦИЙ — те же запреты, что для 3.6/5.5: никаких «рассмотрел доводы», «исследовал материалы», «без изменений» без причины — нужны нормы и факты).
+        Дело с `appellant_is_bank=True` (Сбербанк подал жалобу) — выделяй: добавь в начало строки 1 эмодзи 🏦 (перед ссылкой). Если `appellant_is_bank=False` — 🏦 НЕ ставить.
 
 7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апел.: {total_active_appeal} | касс.: {total_active_cassation})</b>. Используй ИМЕННО эти ЧЕТЫРЕ числа дословно — не считай, не угадывай, не округляй. Касс. — это дела на стадиях `cassation_pending` и `cassation` (жалоба ушла в кассац. суд / уже рассматривается на 7kas).
 8. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
@@ -7278,15 +7389,21 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
     # ── Блок КАССАЦИЯ ──
     cass_block: list[str] = []
-    _OUTCOME_RU = {
-        "cassation_dismissed_no_transfer": "отказ в передаче жалобы",
-        "cassation_upheld": "оставлено без изменения",
-        "cassation_modified": "изменено",
-        "cassation_reversed": "отменено",
-        "cassation_remanded": "отменено и направлено на новое рассмотрение",
-        "cassation_terminated": "прекращено / отозвано / возвращено",
-        "cassation_other": "",
-    }
+    # Готовые подписи исхода берём из module-level CASSATION_OUTCOME_RU
+    # (см. рядом с classify_cassation_outcome). Так LLM-ветка и template-ветка
+    # дайджеста используют один и тот же словарь — без дублирования и расхождений.
+    # Словарь cases-by-id для подтягивания plaintiff/defendant/category/
+    # bank_role/first_instance.court по родительскому case (в cass_changes.details
+    # этих полей нет — раньше шаблон выводил пустые «{не указаны}»).
+    cases_by_id_for_cass: dict[str, dict] = {}
+    for c_idx in (cases or []):
+        cid_idx = c_idx.get("id", "")
+        if cid_idx:
+            cases_by_id_for_cass.setdefault(cid_idx, c_idx)
+        fi_idx = c_idx.get("first_instance") or {}
+        fi_num_idx = fi_idx.get("case_number", "")
+        if fi_num_idx:
+            cases_by_id_for_cass.setdefault(fi_num_idx, c_idx)
     if cass_discovered:
         cass_block.append(f"📥 <b>Новые касс. дела ({len(cass_discovered)}):</b>")
         for c in cass_discovered:
@@ -7356,38 +7473,81 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             d = ch.get("details") or {}
             num_fi = escape_html(ch.get("case", ""))
             num_cs = escape_html(ch.get("cassation_internal_number", ""))
-            link = f"<b>{num_fi}</b>"
-            sber_flag = "🏦 " if d.get("appellant_is_bank") else ""
-            stage_prev = escape_html(d.get("stage_prev", "") or "")
-            stage_now = escape_html(d.get("stage_now", "") or "")
-            cass_block.append(
-                f"  {sber_flag}{link} — касс. № <b>{num_cs}</b> | "
-                f"стадия: {stage_prev} → {stage_now}"
+            # URL карточки 7kas (если есть link) — для строки 1.
+            url_card = ""
+            if d.get("link"):
+                cid_, cuid_ = case_id_uid(d["link"])
+                if cid_ and cuid_:
+                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            link_html = (
+                f'<a href="{url_card}"><b>{num_fi}</b></a>'
+                if url_card else f"<b>{num_fi}</b>"
             )
+            sber_flag = "🏦 " if d.get("appellant_is_bank") else ""
+            # Стадия: «prev → now» оставляем ТОЛЬКО при реальной смене.
+            # Для review_result_change / outcome_change / new_act prev==now.
+            sp = (d.get("stage_prev", "") or "").strip()
+            sn = (d.get("stage_now", "") or "").strip()
+            stage_tail = (
+                f" | стадия: {escape_html(sp)} → {escape_html(sn)}"
+                if sp and sn and sp != sn else ""
+            )
+            cass_block.append(
+                f"  {sber_flag}{link_html} — касс. № <b>{num_cs}</b>{stage_tail}"
+            )
+            # Строка 2: стороны | категория, банк — роль (из родительского case).
+            parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
+            fi_p = parent.get("first_instance") or {}
+            pl_raw = parent.get("plaintiff", "") or ""
+            df_raw = parent.get("defendant", "") or ""
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            cat_raw = (parent.get("category", "") or "").strip()
+            role_raw = (parent.get("bank_role", "") or "").strip()
+            line2_parts: list[str] = []
+            if pl or df:
+                line2_parts.append(f"{pl} vs {df}" if (pl and df) else (pl or df))
+            if cat_raw:
+                line2_parts.append(f"категория: {escape_html(cat_raw)}")
+            if role_raw and not _bank_in_parties(pl_raw, df_raw):
+                line2_parts.append(f"банк — {escape_html(role_raw.lower())}")
+            if line2_parts:
+                cass_block.append("     " + " | ".join(line2_parts))
+            # Строка 3: 📅 Заседание (если есть hearing_date).
+            hd = (d.get("hearing_date", "") or "").strip()
+            ht = (d.get("hearing_time", "") or "").strip()
+            if hd:
+                hearing_str = escape_html(f"{hd} {ht}".strip())
+                cass_block.append(f"     📅 Заседание: <b>{hearing_str}</b>")
+            # Строка 4: Итог — готовая подпись из CASSATION_OUTCOME_RU /
+            # cassation_review_label. + «от Роль Имя» из заявителя.
             outcome = d.get("outcome", "") or ""
-            outcome_ru = _OUTCOME_RU.get(outcome, "")
-            result_text = escape_html(d.get("result_text", "") or "")
-            rfa = escape_html(d.get("result_for_appeal", "") or "")
-            itog_parts: list[str] = []
-            if outcome_ru:
-                itog_parts.append(f"<b>Итог:</b> {escape_html(outcome_ru)}")
-            elif result_text:
-                itog_parts.append(f"<b>Итог:</b> {result_text}")
-            if rfa:
-                itog_parts.append(f"апел.: {rfa}")
-            if itog_parts:
-                cass_block.append("     " + " | ".join(itog_parts))
-            # Касс. new_act: тот же приём, что и для 3.6/5.5 — пересказ
-            # через act_summarizer (если задан) либо excerpt.
+            outcome_label_ru = CASSATION_OUTCOME_RU.get(outcome, "")
+            review_label_ru = cassation_review_label(
+                d.get("review_result", ""), outcome
+            )
+            label = outcome_label_ru or review_label_ru
+            if label:
+                appellant = (d.get("appellant", "") or "").strip()
+                ap_status = (d.get("appellant_status", "") or "").strip()
+                from_str = ""
+                if appellant and ap_status:
+                    from_str = f" — от {escape_html(ap_status.capitalize())} {escape_html(appellant)}"
+                elif appellant:
+                    from_str = f" — от {escape_html(appellant)}"
+                cass_block.append(
+                    f"     <b>Итог:</b> {escape_html(label)}{from_str}"
+                )
+            # Строка 5: Почему — пересказ мотивировки через act_summarizer.
             act_excerpt = _render_act_summary_or_excerpt(
                 d.get("act_text") or "",
                 {
                     "stage": "cassation",
-                    "bank_role": d.get("bank_role", ""),
-                    "verdict_label": outcome_ru or result_text,
-                    "plaintiff": d.get("plaintiff", ""),
-                    "defendant": d.get("defendant", ""),
-                    "category": d.get("category", ""),
+                    "bank_role": role_raw,
+                    "verdict_label": label,
+                    "plaintiff": pl_raw,
+                    "defendant": df_raw,
+                    "category": cat_raw,
                 },
                 summarizer=act_summarizer,
                 max_excerpt_len=500,
