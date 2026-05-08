@@ -5268,15 +5268,30 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # подаём отдельными полями — Python их формирует, чтобы LLM не переводила
     # длинные 7kas-формулировки самостоятельно.
     if cass_changes:
+        # cass_changes ссылаются на FI-номер (например, «2-621/2025»), а в
+        # ctx["cases"] / переданном `cases` могут быть только апел. дела
+        # (33-XXXX) — особенно при `--replay-last` с legacy-CSV-контекста.
+        # Поэтому подгружаем актуальный cases.json (JSON-формат, с FI-делами)
+        # как основной источник родительских данных. Передан­ный `cases`
+        # используем как fallback, чтобы тесты с моками тоже работали.
+        try:
+            full_cases_for_cass = load_json(JSON_PATH).get("cases", []) or []
+        except (OSError, json.JSONDecodeError):
+            full_cases_for_cass = []
+        merge_cases = full_cases_for_cass or cases or []
         cases_by_id_for_cass: dict[str, dict] = {}
-        for c in cases:
-            cid_b = c.get("id", "")
-            if cid_b:
-                cases_by_id_for_cass.setdefault(cid_b, c)
-            fi_b = c.get("first_instance") or {}
-            fi_num_b = fi_b.get("case_number", "")
-            if fi_num_b:
-                cases_by_id_for_cass.setdefault(fi_num_b, c)
+        for c in merge_cases:
+            for k in (
+                c.get("id") or "",
+                (c.get("first_instance") or {}).get("case_number") or "",
+                c.get("Номер дела") or "",
+            ):
+                if k:
+                    cases_by_id_for_cass.setdefault(k, c)
+
+        def _g(parent: dict, eng: str, ru: str) -> str:
+            return (parent.get(eng) or parent.get(ru) or "").strip() if parent else ""
+
         context_parts.append("\nКАССАЦИОННЫЕ СОБЫТИЯ (7kas):")
         for ch in cass_changes:
             d = ch.get("details") or {}
@@ -5301,20 +5316,21 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             sn = d.get("stage_now", "")
             if sp and sn and sp != sn:
                 line += f", переход стадии: {sp} → {sn}"
-            pl = parent.get("plaintiff", "")
-            df = parent.get("defendant", "")
+            pl = _g(parent, "plaintiff", "Истец")
+            df = _g(parent, "defendant", "Ответчик")
             if pl or df:
                 line += (
                     f"\n  Стороны: {shorten_party_name(pl, keep_fio_full=True)}"
                     f" (истец) vs "
                     f"{shorten_party_name(df, keep_fio_full=True)} (ответчик)"
                 )
-            if parent.get("bank_role"):
-                line += f"\n  Роль банка: {parent['bank_role']}"
-            cat = parent.get("category", "")
+            role = _g(parent, "bank_role", "Роль банка")
+            if role:
+                line += f"\n  Роль банка: {role}"
+            cat = _g(parent, "category", "Категория")
             if cat:
                 line += f"\n  Категория: {cat}"
-            fi_court = fi_p.get("court", "")
+            fi_court = (fi_p.get("court") or "") or _g(parent, "court", "Суд 1 инстанции")
             if fi_court:
                 line += f"\n  Суд 1 инст.: {shorten_court_name(fi_court)}"
             if d.get("appellant"):
@@ -7403,15 +7419,26 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Словарь cases-by-id для подтягивания plaintiff/defendant/category/
     # bank_role/first_instance.court по родительскому case (в cass_changes.details
     # этих полей нет — раньше шаблон выводил пустые «{не указаны}»).
+    # cass_changes ссылаются на FI-номер. Подгружаем актуальный cases.json
+    # (JSON-формат с FI-делами) — переданный `cases` может быть в legacy
+    # CSV-формате и содержать только апел. дела (33-XXXX), что для касс.
+    # событий с FI-ключами не подходит.
+    try:
+        full_cases_for_cass = load_json(JSON_PATH).get("cases", []) or []
+    except (OSError, json.JSONDecodeError):
+        full_cases_for_cass = []
     cases_by_id_for_cass: dict[str, dict] = {}
-    for c_idx in (cases or []):
-        cid_idx = c_idx.get("id", "")
-        if cid_idx:
-            cases_by_id_for_cass.setdefault(cid_idx, c_idx)
-        fi_idx = c_idx.get("first_instance") or {}
-        fi_num_idx = fi_idx.get("case_number", "")
-        if fi_num_idx:
-            cases_by_id_for_cass.setdefault(fi_num_idx, c_idx)
+    for c_idx in (full_cases_for_cass or cases or []):
+        for k_idx in (
+            c_idx.get("id") or "",
+            (c_idx.get("first_instance") or {}).get("case_number") or "",
+            c_idx.get("Номер дела") or "",
+        ):
+            if k_idx:
+                cases_by_id_for_cass.setdefault(k_idx, c_idx)
+
+    def _g_cass(parent: dict, eng: str, ru: str) -> str:
+        return (parent.get(eng) or parent.get(ru) or "").strip() if parent else ""
     if cass_discovered:
         cass_block.append(f"📥 <b>Новые касс. дела ({len(cass_discovered)}):</b>")
         for c in cass_discovered:
@@ -7504,14 +7531,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 f"  {sber_flag}{link_html} — касс. № <b>{num_cs}</b>{stage_tail}"
             )
             # Строка 2: стороны | категория, банк — роль (из родительского case).
+            # Поля читаем через _g_cass — поддержка JSON и legacy CSV ключей.
             parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
             fi_p = parent.get("first_instance") or {}
-            pl_raw = parent.get("plaintiff", "") or ""
-            df_raw = parent.get("defendant", "") or ""
+            pl_raw = _g_cass(parent, "plaintiff", "Истец")
+            df_raw = _g_cass(parent, "defendant", "Ответчик")
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
             df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
-            cat_raw = (parent.get("category", "") or "").strip()
-            role_raw = (parent.get("bank_role", "") or "").strip()
+            cat_raw = _g_cass(parent, "category", "Категория")
+            role_raw = _g_cass(parent, "bank_role", "Роль банка")
             line2_parts: list[str] = []
             if pl or df:
                 line2_parts.append(f"{pl} vs {df}" if (pl and df) else (pl or df))
