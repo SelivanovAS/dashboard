@@ -495,6 +495,45 @@ _TO_FI_RULES_RE = re.compile(
     r"|перейти\s+к\s+рассмотрени\S*\s+по\s+правилам",
     re.I,
 )
+# Терминальные события 1-й инстанции, оформленные через «фантомную»
+# Дату заседания в карточке (суд назначил «дату» определения, но
+# реального судебного заседания не было). Покрывает возврат иска,
+# отказ в принятии, передачу по подсудности. Используется в эмиссии
+# fi_returned — чтобы не путать с настоящим «первое заседание».
+_TERMINAL_FI_EVENT_RX = re.compile(
+    r"возвращени\S*\s+иск"
+    r"|возвращени\S*\s+заявлени"
+    r"|отказан\S*\s+в\s+принят"
+    r"|передан\S*\s+по\s+подсудност",
+    re.IGNORECASE,
+)
+
+
+def _extract_return_reason(text: str) -> str:
+    """Вынуть короткую причину возврата иска из текста события 1-й инст.
+
+    На вход — что-то вроде «Решение вопроса о принятии иска… Возвращение
+    иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ.
+    08.05.2026». Возвращаем «дело не подсудно данному суду» (lowercase,
+    без хвостовой даты). Если причина не распознана — пустая строка.
+    """
+    if not text:
+        return ""
+    # Берём сегменты между точками (а не текст целиком — он зашумлён
+    # временем и датами публикации).
+    segments = [s.strip() for s in re.split(r"[.;]", text) if s.strip()]
+    reason_patterns = (
+        "не подсудно", "не подсуден", "по подсудности",
+        "не подведомств", "пропущен срок", "не оплачен",
+        "не подписан", "не указан", "истец не явил",
+    )
+    for seg in segments:
+        seg_low = seg.lower()
+        if any(p in seg_low for p in reason_patterns):
+            # Срезаем хвостовую дату ДД.ММ.ГГГГ если она прилипла.
+            cleaned = re.sub(r"\s*\d{2}\.\d{2}\.\d{4}\s*$", "", seg)
+            return cleaned.strip().lower()
+    return ""
 
 
 def _events_newly_match(
@@ -2597,6 +2636,24 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         if cass_acts:
             parts.append(f"{cass_acts} касс. акт.")
     return " | ".join(parts) if parts else "без изменений"
+
+
+def short_category_chain(cat: str) -> str:
+    """Категория для дайджеста: последний сегмент после «→».
+
+    «Споры… → Жилищные → Иные жилищные споры» → «Иные жилищные споры».
+    Короткие категории (без стрелок) возвращаются как есть. Применяется
+    ДО подачи категории в LLM-контекст и в template-рендер — юрист
+    просил видеть только итоговый сегмент, без полной цепочки.
+    """
+    if not cat:
+        return cat
+    # Унифицируем разные варианты стрелок (обычная, длинная, ASCII).
+    normalized = cat.replace("->", "→").replace("→", "→")
+    if "→" not in normalized:
+        return cat
+    parts = [p.strip() for p in normalized.split("→") if p.strip()]
+    return parts[-1] if parts else cat
 
 
 def category_short(cat: str) -> str:
@@ -4838,7 +4895,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             line = (
                 f"- {c['Номер дела']} (URL: {url}): "
                 f"{pl} (истец) vs {df} (ответчик), "
-                f"категория: {c['Категория']}, роль банка: {c['Роль банка']}, "
+                f"категория: {short_category_chain(c['Категория'])}, "
+                f"роль банка: {c['Роль банка']}, "
                 f"суд 1 инст.: {shorten_court_name(c['Суд 1 инстанции'])}"
             )
             # Дату поступления выносим отдельным полем — в дайджесте она
@@ -4907,7 +4965,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += f"\n  ИТОГ: {d.get('verdict_label', '')}"
                     if d.get("bank_outcome"):
                         line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
-                    line += f"\n  Категория спора: {d.get('category', '')}"
+                    line += (
+                        f"\n  Категория спора: "
+                        f"{short_category_chain(d.get('category', ''))}"
+                    )
                     line += f"\n  Роль банка: {d.get('role', '')}"
                     app_str = _appellant_fmt(d)
                     if app_str:
@@ -4978,7 +5039,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             line = (
                 f"- {c['id']} (URL: {url}) (суд: {court}): "
                 f"{pl} (истец) vs {df} (ответчик), "
-                f"категория: {c.get('category', '')}, роль банка: {c.get('bank_role', '')}"
+                f"категория: {short_category_chain(c.get('category', ''))}, "
+                f"роль банка: {c.get('bank_role', '')}"
             )
             # Дату подачи иска выносим отдельным полем — в дайджесте она
             # уходит на самостоятельную строку «<b>дата</b> — 📥 иск
@@ -5053,7 +5115,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     new_p = f"{new_d}" + (f" {new_t}" if new_t else "")
                     line += f"\n  НАЗНАЧЕНО ({htype}): заседание назначено на {new_p}"
                     if ch.get("category"):
-                        line += f"\n  Категория спора: {ch['category']}"
+                        line += (
+                            f"\n  Категория спора: "
+                            f"{short_category_chain(ch['category'])}"
+                        )
                 elif t == "fi_hearing_postponed":
                     new_d = d.get("hearing_date", "")
                     new_t = d.get("hearing_time", "")
@@ -5063,10 +5128,21 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     # видеть только новую дату, без «⏪ старая → ⏩ новая».
                     line += f"\n  ОТЛОЖЕНО ({htype}): заседание отложено на {new_p}"
                     if ch.get("category"):
-                        line += f"\n  Категория спора: {ch['category']}"
+                        line += (
+                            f"\n  Категория спора: "
+                            f"{short_category_chain(ch['category'])}"
+                        )
                 elif t == "fi_status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
+                elif t == "fi_returned":
+                    # Иск возвращён судом (неподсудно / отказ в принятии /
+                    # передача по подсудности). Эмитим короткую фразу с
+                    # причиной — она пойдёт в 3.2 как «🔚 иск возвращён: …».
+                    reason = (d.get("return_reason") or "").strip()
+                    line += "\n  🔚 ИСК ВОЗВРАЩЁН"
+                    if reason:
+                        line += f": {reason}"
                 elif t == "fi_act_published":
                     # Срабатывает, когда в карточке появилась дата публикации
                     # резолютивки, но полного текста (act_text) ещё нет.
@@ -5172,7 +5248,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             if d.get("decision_date"):
                 line += f"\n  Дата решения: {d['decision_date']}"
             if d.get("category"):
-                line += f"\n  Категория спора: {d['category']}"
+                line += (
+                    f"\n  Категория спора: "
+                    f"{short_category_chain(d['category'])}"
+                )
             if d.get("bank_outcome"):
                 line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
             if d.get("last_event"):
@@ -5208,7 +5287,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             if d.get("bank_outcome"):
                 line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
             if d.get("category"):
-                line += f"\n  Категория спора: {d['category']}"
+                line += (
+                    f"\n  Категория спора: "
+                    f"{short_category_chain(d['category'])}"
+                )
             if d.get("last_event"):
                 line += f"\n  Последнее событие: {d['last_event']}"
             if d.get("act_text"):
@@ -5241,7 +5323,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             line += f"роль банка: {c.get('bank_role', '?')}, "
             line += f"1-я инст. №: {c.get('id', '')}, "
             line += f"суд 1 инст.: {shorten_court_name(fi.get('court', '') or '?')}, "
-            line += f"категория: {cass.get('category', '') or c.get('category', '') or '—'}, "
+            _cat_for_llm = (
+                cass.get('category', '') or c.get('category', '') or '—'
+            )
+            if _cat_for_llm != '—':
+                _cat_for_llm = short_category_chain(_cat_for_llm) or '—'
+            line += f"категория: {_cat_for_llm}, "
             line += f"касс. судья: {cass.get('judge', '')}, "
             line += f"заявитель: {cass.get('appellant', '')} ({cass.get('appellant_status', '')})"
             # Дату поступления вынесли отдельным полем — LLM выводит её
@@ -5327,7 +5414,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             role = _g(parent, "bank_role", "Роль банка")
             if role:
                 line += f"\n  Роль банка: {role}"
-            cat = _g(parent, "category", "Категория")
+            cat = short_category_chain(_g(parent, "category", "Категория"))
             if cat:
                 line += f"\n  Категория: {cat}"
             fi_court = (fi_p.get("court") or "") or _g(parent, "court", "Суд 1 инстанции")
@@ -5466,8 +5553,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • строка 1 (первая строка дела, БЕЗ пустой строки после): 📅 <b>ДД.ММ.ГГГГ ЧЧ:ММ</b> — <a href="URL"><b>номер</b></a> ({{суд}})
           — если это назначенное заседание, дата жирным СПЕРЕДИ.
           Для событий без даты (смена статуса, публикация акта, «рассмотрение начато с начала», «назначено первое заседание (дата и время не опубликованы)» и т.п.) — строка 1 без даты впереди: <a href="URL"><b>номер</b></a> ({{суд}}).
-        • строка 2 (СРАЗУ под строкой 1, БЕЗ пустой строки между ними): {{стороны кратко}} | событие (подготовка дела / беседа / предварительное заседание / заседание / назначено первое заседание (дата и время не опубликованы) / статус X→Y / 📄 мотивированное решение изготовлено ДД.ММ, полный текст не опубликован / возвращение иска / в архив / рассмотрение с начала). КРИТИЧНО: фразу «📄 мотивированное решение изготовлено …, полный текст не опубликован» бери ДОСЛОВНО из строки «Мотивированное решение изготовлено …» во входных данных дела — это событие появляется, когда в карточке проставлена дата резолютивки, но полного текста (мотивировки) ещё нет. Если у того же дела в данных есть поле «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» — дело идёт ТОЛЬКО в 3.6 «Опубликованные тексты решений», в 3.2 эту строку НЕ дублируй.
+        • строка 2 (СРАЗУ под строкой 1, БЕЗ пустой строки между ними): {{стороны кратко}} | событие (подготовка дела / беседа / предварительное заседание / заседание / назначено первое заседание (дата и время не опубликованы) / статус X→Y / 📄 мотивированное решение изготовлено ДД.ММ, полный текст не опубликован / 🔚 иск возвращён: ПРИЧИНА / в архив / рассмотрение с начала). КРИТИЧНО: фразу «📄 мотивированное решение изготовлено …, полный текст не опубликован» бери ДОСЛОВНО из строки «Мотивированное решение изготовлено …» во входных данных дела — это событие появляется, когда в карточке проставлена дата резолютивки, но полного текста (мотивировки) ещё нет. Если у того же дела в данных есть поле «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ» — дело идёт ТОЛЬКО в 3.6 «Опубликованные тексты решений», в 3.2 эту строку НЕ дублируй.
           — Если в данных дела стоит фраза «Назначено первое заседание (дата и время не опубликованы)» — копируй её В строку 2 ДОСЛОВНО, НЕ выдумывай дату/время, НЕ добавляй префикс 📅 ДД.ММ.ГГГГ в строку 1. Это означает: на сайте суда дата заседания не опубликована, мы только зафиксировали факт назначения.
+          — Если в данных дела стоит маркер «🔚 ИСК ВОЗВРАЩЁН[: причина]» — это терминальное событие 1-й инст. (суд вернул иск из-за неподсудности, отказа в принятии или передачи по подсудности). Копируй в строку 2 ДОСЛОВНО маленькими буквами: «🔚 иск возвращён: {{причина}}» (например, «🔚 иск возвращён: дело не подсудно данному суду»). Если причины нет — просто «🔚 иск возвращён». ПРИОРИТЕТ: при наличии этого маркера НЕ пиши параллельно «Назначено первое заседание …» или «статус: В производстве → Решено» для этого же дела — возврат уже всё объясняет.
         • ОТЛОЖЕНИЕ ЗАСЕДАНИЯ (источник — поле «ОТЛОЖЕНО» во входных данных дела) — ТРИ строки, БЕЗ стрелочек, БЕЗ старой даты. Формат строго:
           – строка 1: <a href="URL"><b>номер</b></a> ({{суд}})  [БЕЗ даты впереди]
           – строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{стороны кратко}} | категория: {{категория из «Категория спора»}}
@@ -5505,7 +5593,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         КРИТИЧНО: строки 1, 2 и 3 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Пустая строка — ТОЛЬКО между разными делами. Номер ОБЯЗАТЕЛЬНО оборачивай в <a href="URL"><b>номер</b></a> — без ссылки строка считается БРАКОМ.
         • строка 1: <a href="URL"><b>номер</b></a> — {{истец}} vs {{ответчик}} (имена физлиц полностью — см. правило ИМЕНА в шапке)
         • строка 2 (СРАЗУ под строкой 1, БЕЗ пустой строки): Суд 1 инст.: {{суд 1 инстанции}} | категория: {{категория}} | банк — {{роль}}
-          (хвост «банк — …» — по правилу БАНК В ХВОСТЕ; категорию бери ДОСЛОВНО из поля «категория», но если она длинная с цепочкой «→ → →» — оставь только последний/самый конкретный сегмент после последней стрелки)
+          (хвост «банк — …» — по правилу БАНК В ХВОСТЕ; категория уже ПОДГОТОВЛЕНА Python — копируй ДОСЛОВНО, НЕ обрезай, НЕ удлиняй, НЕ переписывай. Цепочек «X → Y → Z» в данных уже нет: тебе подаётся ТОЛЬКО конечный сегмент.)
         • строка 3 (СРАЗУ под строкой 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть поле «Дата поступления в апел. суд»: <b>{{ДД.ММ.ГГГГ}}</b> — 📥 поступило в апел. суд.
         КРИТИЧНО: дату поступления больше НЕ оставлять в строке 2 — только отдельной строкой 3. Эмодзи 📥 ставь ПОСЛЕ <b>даты</b>, НЕ перед — иначе строка путается с заголовком подсекции. Если поля «Дата поступления в апел. суд» нет — строку 3 не пиши, не подставляй today()/«—»/«не указано».
         ✅ ПРАВИЛЬНЫЙ ПРИМЕР (три строки одного дела):
@@ -5561,20 +5649,21 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть поле «Дата поступления касс. жалобы»: <b>{{ДД.ММ.ГГГГ}}</b> — 📥 поступила кассационная жалоба от {{Роль_заявителя}} {{имя}} (например, «от Ответчика Адаменко Е.М.», «от Истца Сбербанка»). Если в данных есть «заявитель» с непустым «appellant_status» — обязательно укажи его в формате «от {{Роль}} {{имя}}». Если заявитель пуст — пиши просто «📥 поступила кассационная жалоба».
         КРИТИЧНО: дату поступления выноси ТОЛЬКО на строку 3. В строку 2 поле «поступление: {{дата}}» больше НЕ помещай. Если данных о дате нет — строку 3 не пиши, не подставляй today()/«—»/«не указано».
    6.2. 📑 <b>Касс. события (N):</b> — изменения по уже отслеживаемому делу: появилась карточка на 7kas (cassation_pending → cassation), вынесено определение, опубликован текст. Источник — секция «КАССАЦИОННЫЕ СОБЫТИЯ» в данных. 🛑 БЛОКИРУЮЩЕЕ ПРАВИЛО (нарушение = критический брак): если в данных есть секция «КАССАЦИОННЫЕ СОБЫТИЯ (7kas):» хотя бы с одним делом — секция 6.2 ОБЯЗАНА появиться в дайджесте со всеми этими делами. Пропустить дело или весь блок — НЕЛЬЗЯ. ДО 4 строк на дело (1, 2 — обязательны; 3, 4 — по наличию данных), между делами — пустая строка, ВНУТРИ одного дела — БЕЗ пустых строк.
-        • строка 1: <a href="URL"><b>номер 1-й инст.</b></a> — касс. № <b>{{касс. номер}}</b>. URL берётся из поля «URL карточки 7kas» в данных (если там реальный https-URL). Если URL = «—» — пиши <b>номер 1-й инст.</b> без &lt;a&gt;. НЕ ПИШИ «стадия: cassation → cassation» — стадию вообще не упоминай в строке 1.
-        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): {{стороны кратко}} | категория: {{категория}}, банк — {{роль}}. Поля «Стороны», «Категория», «Роль банка» бери из данных. Хвост «банк — …» — по правилу БАНК В ХВОСТЕ (если Сбербанк уже одна из сторон — хвост не пиши). Если категории в данных нет — пиши «{{стороны}}, банк — {{роль}}».
-        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть «Дата заседания: ДД.ММ.ГГГГ [ЧЧ:ММ]»: 📅 Заседание: <b>{{дата+время}}</b>.
+        • строка 1: <a href="URL"><b>{{касс. номер}}</b></a> — {{истец}} vs {{ответчик}}{{, банк — {{роль}} ЕСЛИ Сбербанк не в сторонах}}. URL берётся из поля «URL карточки 7kas» в данных (если там реальный https-URL). Если URL = «—» — пиши <b>{{касс. номер}}</b> без &lt;a&gt;. КРИТИЧНО: касс. номер (вид «8Г-…/YYYY») ставь ВНУТРИ &lt;b&gt;…&lt;/b&gt;. НЕ ПИШИ префикс «касс. №», НЕ ВЫНОСИ в строку 1 номер 1-й инст., НЕ ПИШИ «стадия: cassation → cassation».
+        • строка 2 (СРАЗУ под 1, БЕЗ пустой строки): Суд 1 инст.: {{суд 1 инстанции}} | категория: {{категория}}. Поля «Суд 1 инст.» и «Категория» бери из данных. Если суда 1 инст. нет — пропусти этот фрагмент. Если категории нет — пропусти. Если оба пусты — строку 2 не пиши вовсе.
+        • строка 3 (СРАЗУ под 2, БЕЗ пустой строки) — ТОЛЬКО если в данных есть «Дата заседания: ДД.ММ.ГГГГ [ЧЧ:ММ]»: 📅 Назначено судебное заседание на <b>{{ДД.ММ.ГГГГ в ЧЧ:ММ}}</b>. Если в данных только дата без времени — «на <b>{{ДД.ММ.ГГГГ}}</b>» без «в ЧЧ:ММ». КРИТИЧНО: фраза начинается с «Назначено судебное заседание на», старый формат «📅 Заседание: …» НЕ использовать.
         • строка 4 (СРАЗУ под 3, БЕЗ пустой строки) — ТОЛЬКО если в данных есть «Метка исхода (готовая для «Итог»)» ИЛИ «Метка стадии (готовая для «Итог»)»: <b>Итог:</b> {{ДОСЛОВНО метка с эмодзи}}{{ — от {{Роль}} {{имя}} если есть «Заявитель» с непустым «appellant_status»}}. Приоритет: «Метка исхода» > «Метка стадии». Роль заявителя — в Title Case (Ответчика / Истца / Иного лица). Если ни одной метки нет — строку 4 НЕ пиши.
         Если в данных есть «МОТИВИРОВОЧНАЯ ЧАСТЬ ОПРЕДЕЛЕНИЯ» — добавь ещё одну строку (5) сразу под 4: <b>Почему:</b> 3-4 КОРОТКИХ предложения по ПРАВИЛАМ МОТИВИРОВОЧНЫХ СЕКЦИЙ.
         Перевод исхода/стадии: НЕ переводи сам поля «Изучение жалобы (raw)»/«ИСХОД (raw enum)» — Python уже подготовил готовую метку, её и используй ДОСЛОВНО.
         🏦 в начале строки 1 ставь ТОЛЬКО если в данных явно `банк_заявитель=True` (Сбербанк подал кассационную жалобу). При `банк_заявитель=False` — 🏦 НЕ ставить.
         ✅ ПРАВИЛЬНЫЙ ПРИМЕР (одно дело, 4 строки):
-            <a href="https://7kas.sudrf.ru/..."><b>2-946/2025</b></a> — касс. № <b>8Г-6851/2026</b>
-            Сбербанк vs Чернов В.В. | категория: Кредитный договор, банк — истец
-            📅 Заседание: <b>02.06.2026 17:00</b>
+            <a href="https://7kas.sudrf.ru/..."><b>8Г-6851/2026</b></a> — Сбербанк vs Чернов В.В.
+            Суд 1 инст.: Сургутский гор. суд | категория: Кредитный договор
+            📅 Назначено судебное заседание на <b>02.06.2026 в 17:00</b>
             <b>Итог:</b> 📥 Принято к производству — от Ответчика Чернова В.В.
-        ❌ НЕПРАВИЛЬНО (стадия в строке 1 — мусор):
-            <b>2-946/2025</b> — касс. № <b>8Г-6851/2026</b> | стадия: cassation → cassation
+        ❌ НЕПРАВИЛЬНО (старый формат с номером 1-й инст. в заголовке и префиксом «касс. №»):
+            <b>2-946/2025</b> — касс. № <b>8Г-6851/2026</b>
+            Сбербанк vs Чернов В.В. | категория: Кредитный договор, банк — истец
         ❌ НЕПРАВИЛЬНО (выкинута часть строк или весь блок при наличии данных в источнике): любой пропуск дела из «КАССАЦИОННЫЕ СОБЫТИЯ» — критический брак.
 
 7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апел.: {total_active_appeal} | касс.: {total_active_cassation})</b>. Используй ИМЕННО эти ЧЕТЫРЕ числа дословно — не считай, не угадывай, не округляй. Касс. — это дела на стадиях `cassation_pending` и `cassation` (жалоба ушла в кассац. суд / уже рассматривается на 7kas).
@@ -6907,7 +6996,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi = c.get("first_instance", {})
             court = escape_html(shorten_court_name(fi.get("court", "")))
             role = c.get("bank_role", "")
-            cat = category_short(c.get("category", ""))
+            cat = category_short(short_category_chain(c.get("category", "")))
             pl_raw = c.get("plaintiff", "")
             df_raw = c.get("defendant", "")
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
@@ -7000,6 +7089,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         f"статус: {escape_html(d.get('old_status', ''))} → "
                         f"{escape_html(d.get('new_status', ''))}"
                     )
+                elif t == "fi_returned":
+                    reason = escape_html((d.get("return_reason") or "").strip())
+                    ev_list.append(
+                        "🔚 иск возвращён" + (f": {reason}" if reason else "")
+                    )
                 elif t == "fi_act_published":
                     ad = escape_html(d.get("act_date", ""))
                     ev_list.append(
@@ -7091,7 +7185,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
             verdict = escape_html(d.get("verdict_label", ""))
             dec_date = escape_html(d.get("decision_date", ""))
-            cat = escape_html(category_short(d.get("category", "")))
+            cat = escape_html(category_short(short_category_chain(d.get("category", ""))))
             bank_role = escape_html(ch.get("bank_role", ""))
             bank_out = escape_html(d.get("bank_outcome", ""))
             # В template держим компактно: одна строка. Формат симметричен
@@ -7169,7 +7263,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         for c in new_cases:
             link = case_link_html(c)
             role = c.get("Роль банка", "")
-            cat = category_short(c.get("Категория", ""))
+            cat = category_short(short_category_chain(c.get("Категория", "")))
             pl_raw = c.get('Истец', '')
             df_raw = c.get('Ответчик', '')
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
@@ -7246,7 +7340,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
             defendant = escape_html(shorten_party_name(d.get("defendant", "")))
             court = escape_html(shorten_court_name(ch.get("court", "")))
-            cat = category_short(d.get("category", ""))
+            cat = category_short(short_category_chain(d.get("category", "")))
             # Строка 1: «🔁 номер — стороны (суд)». Суд показываем, только
             # когда он есть в ch (apel-уровень обычно без него — там и так
             # понятно, что это Суд ХМАО-Югры).
@@ -7336,7 +7430,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 role_note = ""
             hearing_dt = d.get("hearing_date", "")
             date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
-            cat = category_short(d.get("category", ""))
+            cat = category_short(short_category_chain(d.get("category", "")))
             cat_note = f" | {escape_html(cat)}" if cat else ""
             # Строка «Причина: <last_event>» убрана: last_event обычно дублирует
             # уже сказанное в этой же строке (result_text повторяет «Вынесено
@@ -7472,7 +7566,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 shorten_court_name(fi_b.get("court", "") or "")
             )
             cat_raw = (cass.get("category") or c.get("category") or "").strip()
-            cat = escape_html(cat_raw)
+            cat = escape_html(short_category_chain(cat_raw))
             line2 = f"     {court_short}" if court_short else "     "
             if cat:
                 line2 += f" | категория: {cat}"
@@ -7514,24 +7608,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 cid_, cuid_ = case_id_uid(d["link"])
                 if cid_ and cuid_:
                     url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            # URL карточки 7kas теперь оборачивает КАССАЦИОННЫЙ номер,
+            # не номер 1-й инст. Юрист просил убрать «2-XXX — касс. № 8Г-…»
+            # и сразу выводить касс. номер + стороны на строке 1.
             link_html = (
-                f'<a href="{url_card}"><b>{num_fi}</b></a>'
-                if url_card else f"<b>{num_fi}</b>"
+                f'<a href="{url_card}"><b>{num_cs}</b></a>'
+                if url_card else f"<b>{num_cs}</b>"
             )
             sber_flag = "🏦 " if d.get("appellant_is_bank") else ""
-            # Стадия: «prev → now» оставляем ТОЛЬКО при реальной смене.
-            # Для review_result_change / outcome_change / new_act prev==now.
-            sp = (d.get("stage_prev", "") or "").strip()
-            sn = (d.get("stage_now", "") or "").strip()
-            stage_tail = (
-                f" | стадия: {escape_html(sp)} → {escape_html(sn)}"
-                if sp and sn and sp != sn else ""
-            )
-            cass_block.append(
-                f"  {sber_flag}{link_html} — касс. № <b>{num_cs}</b>{stage_tail}"
-            )
-            # Строка 2: стороны | категория, банк — роль (из родительского case).
-            # Поля читаем через _g_cass — поддержка JSON и legacy CSV ключей.
+            # Подтягиваем стороны / категорию / роль / суд 1 инст. из
+            # родительского case (в cass_changes.details этих полей нет).
             parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
             fi_p = parent.get("first_instance") or {}
             pl_raw = _g_cass(parent, "plaintiff", "Истец")
@@ -7539,22 +7625,48 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
             df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
             cat_raw = _g_cass(parent, "category", "Категория")
+            cat_short = short_category_chain(cat_raw)
             role_raw = _g_cass(parent, "bank_role", "Роль банка")
+            # Строка 1: касс. номер — стороны[, банк — роль]. Хвост «банк — …»
+            # — по правилу БАНК В ХВОСТЕ (если Сбербанк в сторонах — нет).
+            parties_str = (
+                f"{pl} vs {df}" if (pl and df) else (pl or df or "")
+            )
+            role_tail_l1 = (
+                f", банк — {escape_html(role_raw.lower())}"
+                if role_raw and not _bank_in_parties(pl_raw, df_raw)
+                else ""
+            )
+            line1_main = f"  {sber_flag}{link_html}"
+            if parties_str:
+                line1_main += f" — {parties_str}{role_tail_l1}"
+            cass_block.append(line1_main)
+            # Строка 2: Суд 1 инст.: ... | категория: ... (без сторон/роли).
+            fi_court_raw = (
+                (fi_p.get("court") or "")
+                or _g_cass(parent, "court", "Суд 1 инстанции")
+            )
             line2_parts: list[str] = []
-            if pl or df:
-                line2_parts.append(f"{pl} vs {df}" if (pl and df) else (pl or df))
-            if cat_raw:
-                line2_parts.append(f"категория: {escape_html(cat_raw)}")
-            if role_raw and not _bank_in_parties(pl_raw, df_raw):
-                line2_parts.append(f"банк — {escape_html(role_raw.lower())}")
+            if fi_court_raw:
+                line2_parts.append(
+                    f"Суд 1 инст.: {escape_html(shorten_court_name(fi_court_raw))}"
+                )
+            if cat_short:
+                line2_parts.append(f"категория: {escape_html(cat_short)}")
             if line2_parts:
                 cass_block.append("     " + " | ".join(line2_parts))
-            # Строка 3: 📅 Заседание (если есть hearing_date).
+            # Строка 3: «📅 Назначено судебное заседание на ДД.ММ.ГГГГ в ЧЧ:ММ».
+            # Юрист просил полную русскую фразу вместо терсе «📅 Заседание: …».
             hd = (d.get("hearing_date", "") or "").strip()
             ht = (d.get("hearing_time", "") or "").strip()
             if hd:
-                hearing_str = escape_html(f"{hd} {ht}".strip())
-                cass_block.append(f"     📅 Заседание: <b>{hearing_str}</b>")
+                if ht:
+                    hearing_str = f"<b>{escape_html(hd)} в {escape_html(ht)}</b>"
+                else:
+                    hearing_str = f"<b>{escape_html(hd)}</b>"
+                cass_block.append(
+                    f"     📅 Назначено судебное заседание на {hearing_str}"
+                )
             # Строка 4: Итог — готовая подпись из CASSATION_OUTCOME_RU /
             # cassation_review_label. + «от Роль Имя» из заявителя.
             outcome = d.get("outcome", "") or ""
@@ -8898,11 +9010,29 @@ def main_json():
                 None,
             )
             if not matched_ev:
-                # Фантомная дата — эмитим fi_hearing_new с честной пометкой
-                # «дата и время не опубликованы», без подсовывания фантома
-                # в детали (рендер ничего не вытащит).
-                change["type"].append("fi_hearing_new")
-                change["details"]["hearing_date_unpublished"] = True
+                # Фантомная session-дата. Возможны два случая:
+                # (1) суд вернул иск / отказал в принятии / передал по
+                #     подсудности — на ту же «дату заседания» висит
+                #     терминальное событие. Эмитим fi_returned с короткой
+                #     причиной, чтобы дайджест сказал «иск возвращён: …»
+                #     вместо ложного «назначено первое заседание».
+                # (2) обычная фантомная дата без терминального события —
+                #     старая ветка с пометкой «дата и время не опубликованы».
+                terminal_ev = next(
+                    (ev for ev in events_fi
+                     if ev.get("date") == new_hearing_date
+                     and _TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")),
+                    None,
+                )
+                if terminal_ev:
+                    change["type"].append("fi_returned")
+                    change["details"]["event_text"] = terminal_ev.get("text", "")
+                    change["details"]["return_reason"] = _extract_return_reason(
+                        terminal_ev.get("text", "")
+                    )
+                else:
+                    change["type"].append("fi_hearing_new")
+                    change["details"]["hearing_date_unpublished"] = True
             else:
                 new_h_dt_fi = parse_date(new_hearing_date)
                 # Узкая проверка: в прошлом было настоящее судебное
@@ -8937,8 +9067,11 @@ def main_json():
                     matched_ev.get("text", "")
                 )
 
-        # Смена статуса (регрессии отфильтрованы выше)
-        if new_status and new_status != old_status:
+        # Смена статуса (регрессии отфильтрованы выше). Подавляем, если
+        # уже сработал fi_returned — «В производстве → Решено» избыточно
+        # при возврате иска, юрист и так видит факт возврата.
+        if (new_status and new_status != old_status
+                and "fi_returned" not in change["type"]):
             change["type"].append("fi_status_change")
             change["details"]["old_status"] = old_status
             change["details"]["new_status"] = new_status
