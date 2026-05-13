@@ -381,7 +381,11 @@ function computeDerived(c){
   // это активные стадии (ждём касс. жалобу), их архивацию решает скрипт через
   // is_case_archived() и cases_archive.json. Без этого исключения апелляция,
   // решённая >30 дней назад, исчезала с экрана, хотя кассация ещё не подана.
-  const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal';
+  // first_instance + поданная жалоба — фактически «awaiting_appeal» (парсер
+  // ещё не подтянул дату из вкладки «Обжалование решений»). Архивировать
+  // нельзя — иначе дело пропадёт с экрана раньше, чем переедет в апел. суд.
+  const fiHasFiledAppeal=c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation);
+  const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||fiHasFiledAppeal;
   if(c.status==='decided'&&!stageManaged){
     const decisionDate=c.lastEventDate||c.dateReceived;
     if(decisionDate){
@@ -587,6 +591,14 @@ function jsonToCase(j){
     cassationCourt:cs.court||'',
     appellantIsBank:!!cs.appellant_is_bank,
     discoveredViaCassation:!!j.discovered_via_cassation,
+    // Флаги жалоб с 1-й инст. — нужны фронту, чтобы НЕ архивировать
+    // first_instance, когда апел./касс. жалоба уже подана, но дата ещё
+    // не извлечена парсером (state-machine остаётся first_instance).
+    // См. кейс 2-208/2026: без этого фронт прятал дело по 30-дневному
+    // правилу, хотя апелляция подана.
+    fiAppealFiled:!!fi.appeal_filed,
+    fiCassationFiled:!!fi.cassation_filed,
+    fiSentToCassation:!!fi.sent_to_cassation,
     // JSON-specific: full stage data for detail view
     _fi:fi,
     _ap:ap.case_number?ap:null,
@@ -862,6 +874,7 @@ function isArchived(c){
   if(c.computed)return c.computed.archived;
   if(c.status!=='decided')return false;
   if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal')return false;
+  if(c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation))return false;
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
   const d=new Date(decisionDate);if(isNaN(d))return false;
