@@ -1834,10 +1834,16 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         # дату направления в drawer'е до того, как появится апел. карточка.
         "_fi_sent_to_appeal": False,
         "_fi_sent_to_appeal_date": "",
+        # Полные движения жалобы из вкладки «Обжалование решений». Каждый
+        # элемент: {"date": "DD.MM.YYYY", "text": "Регистрация / Без движения
+        # / Направлено в вышестоящую и т.п."}. Используется фронтом для
+        # отрисовки хронологии и ключевой даты «жалоба предъявлена».
+        "_fi_appeal_events": [],
         # Кассационные события в карточке 1 инст. (кассация подаётся через
         # суд 1-й инстанции). Нужны для state-machine cassation_watch.
         "_fi_cassation_filed": False,
         "_fi_cassation_filed_date": "",
+        "_fi_cassation_events": [],
         "_fi_sent_to_cassation": False,
         "_fi_sent_to_cassation_date": "",
     }
@@ -2147,40 +2153,74 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     info["_appellant_raw"] = value
                 continue
 
-            # События движения жалобы — нужны строки с реальной датой.
+            # События движения жалобы — нужна реальная дата (или дата
+            # размещения как fallback: для «срок для возражений» в колонке
+            # «Дата» стоит 01.01.1900, а реальная — в «Дата размещения»).
             row_date = ""
+            publish_date = ""
             for c in row:
-                ct = cell_text(c)
-                d = parse_date(ct)
-                # 01.01.1900 — sudrf-заглушка для «срок не назначен».
-                if d and ct.strip() != "01.01.1900":
-                    row_date = ct
-                    break
-            if not row_date:
+                ct = cell_text(c).strip()
+                if ct == "01.01.1900":
+                    continue
+                if parse_date(ct):
+                    if not row_date:
+                        row_date = ct
+                    publish_date = ct  # последняя валидная дата = «Дата размещения»
+            effective_date = row_date or publish_date
+            if not effective_date or current_kind not in ("appeal", "cassation"):
                 continue
+
+            # Текст события — название из 1-й колонки + примечание (если есть,
+            # например «Срок до DD.MM.YYYY»). Это даёт юристу полный контекст
+            # в хронологии: «Установлен срок для возражений · Срок до 27.04.2026».
+            event_label = cell_text(row[0]).strip()
+            if not event_label or parse_date(event_label):
+                # Пустая ячейка или строка-дата (заголовок) — пропускаем.
+                continue
+            note = ""
+            if len(row) >= 5:
+                # Структура «Движения жалобы»: Событие | Дата | Результат |
+                # Основание | Примечание | Дата размещения. Примечание — [-2].
+                note = cell_text(row[-2]).strip()
+                if parse_date(note):  # колонка примечания пустая, попала дата
+                    note = ""
+            event_text = (
+                f"{event_label} · {note}" if note and note.lower() != event_label.lower()
+                else event_label
+            )
+            events_list = (
+                info["_fi_appeal_events"] if current_kind == "appeal"
+                else info["_fi_cassation_events"]
+            )
+            # Дедуп по (date, label) — заголовки таблиц / повторные строки.
+            if not any(
+                e.get("date") == effective_date and e.get("text", "").startswith(event_label)
+                for e in events_list
+            ):
+                events_list.append({"date": effective_date, "text": event_text})
+
             # Регистрация жалобы → дата подачи апел. или касс. жалобы.
             if re.search(r'регистрац\w*\s+жалоб', row_lc):
                 if current_kind == "appeal":
                     if not info["_fi_appeal_filed_date"]:
                         info["_fi_appeal_filed"] = True
-                        info["_fi_appeal_filed_date"] = row_date
+                        info["_fi_appeal_filed_date"] = effective_date
                 elif current_kind == "cassation":
                     if not info["_fi_cassation_filed_date"]:
                         info["_fi_cassation_filed"] = True
-                        info["_fi_cassation_filed_date"] = row_date
+                        info["_fi_cassation_filed_date"] = effective_date
                 continue
             # Направлено в вышестоящую инстанцию:
             # - кассация → уход дела в касс. суд (state-machine: cassation_pending);
-            # - апелляция → отправка в Суд ХМАО-Югры (для отображения в drawer'е
-            #   до появления апел. карточки; переход в `appeal` всё равно делает
-            #   link_cases, поле sent_to_appeal_date — чисто информационное).
+            # - апелляция → отправка в Суд ХМАО-Югры (информационно для drawer'а;
+            #   переход в `appeal` делает link_cases по самой апел. карточке).
             if re.search(r'направлен\w+.{0,30}вышестоящ', row_lc):
                 if current_kind == "cassation" and not info["_fi_sent_to_cassation_date"]:
                     info["_fi_sent_to_cassation"] = True
-                    info["_fi_sent_to_cassation_date"] = row_date
+                    info["_fi_sent_to_cassation_date"] = effective_date
                 elif current_kind == "appeal" and not info["_fi_sent_to_appeal_date"]:
                     info["_fi_sent_to_appeal"] = True
-                    info["_fi_sent_to_appeal_date"] = row_date
+                    info["_fi_sent_to_appeal_date"] = effective_date
                 continue
 
 
@@ -9131,6 +9171,12 @@ def main_json():
                     # не содержит «Заявитель жалобы».
                     if card_info.get("_appellant_raw") and not alt_info.get("_appellant_raw"):
                         alt_info["_appellant_raw"] = card_info["_appellant_raw"]
+                    # Полные events движения жалобы — только на короткой
+                    # вкладке. Переносим в alt_info, иначе они потеряются
+                    # после fallback на new=0.
+                    for events_key in ("_fi_appeal_events", "_fi_cassation_events"):
+                        if card_info.get(events_key) and not alt_info.get(events_key):
+                            alt_info[events_key] = card_info[events_key]
                     card_info = alt_info
         _warn_if_card_degraded(card_info, fi["case_number"])
 
@@ -9491,6 +9537,20 @@ def main_json():
             if sent_app_date:
                 fi["sent_to_appeal_date"] = sent_app_date
             changed = True
+
+        # Полные events движения жалобы — обновляем JSON, если в парсе
+        # появились новые / расширенные данные (например, добавилось
+        # «Оставлено без движения» между прогонами). Перезаписываем целиком,
+        # чтобы сбросить устаревшие записи при перепарсинге.
+        for key, json_field in (
+            ("_fi_appeal_events", "appeal_events"),
+            ("_fi_cassation_events", "cassation_events"),
+        ):
+            new_events = card_info.get(key) or []
+            old_events = fi.get(json_field) or []
+            if new_events != old_events:
+                fi[json_field] = new_events
+                changed = True
 
         # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
         # Переход cassation_watch → cassation_pending делает advance_case_stage.
