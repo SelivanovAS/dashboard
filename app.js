@@ -232,6 +232,23 @@ function stageBadgeHtml(c){
     return '<span class="badge badge-cassation">Кассация</span>';
   return '';
 }
+// Бейдж «Обжалуется» — рядом со стадией, когда жалоба подана, но карточка
+// в следующей инстанции ещё не появилась. Направление однозначно вытекает
+// из соседнего stage-бейджа («1 инст. · Обжалуется» = в апел., «Апелляция ·
+// Обжалуется» = в касс.), поэтому текст без уточнения.
+function pendingAppealBadge(c){
+  if(!c)return '';
+  const s=c.stage;
+  if(s==='first_instance'&&(c.fiAppealFiled||c.fiSentToAppeal||c.fiCassationFiled||c.fiSentToCassation))
+    return '<span class="badge badge-pending-appeal">Обжалуется</span>';
+  if(s==='awaiting_appeal')
+    return '<span class="badge badge-pending-appeal">Обжалуется</span>';
+  if(s==='cassation_watch'&&(c.fiCassationFiled||c.fiSentToCassation))
+    return '<span class="badge badge-pending-appeal">Обжалуется</span>';
+  if(s==='cassation_pending')
+    return '<span class="badge badge-pending-appeal">Обжалуется</span>';
+  return '';
+}
 const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
 let allCases=[],filteredCases=[],sortField='relevance',sortDir='desc';
@@ -1524,6 +1541,7 @@ function renderTable(){
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
     const stageBadge=stageBadgeHtml(c);
+    const pendingBadge=pendingAppealBadge(c);
 
     const hearingHtml=buildHearingHtml(c,vm);
     const stateHtml=buildStateHtml(c,vm);
@@ -1540,7 +1558,7 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
-    const metaBadges = [stageBadge, newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -1968,7 +1986,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
@@ -2055,6 +2073,7 @@ function renderMobileCards(){
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
     const stageBadge=stageBadgeHtml(c);
+    const pendingBadge=pendingAppealBadge(c);
     const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}`:'';
 
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
@@ -2072,7 +2091,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c.caseNumber)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${stageBadge}${newBadge}${archived}</span>
+        <span class="mc-badges">${stageBadge}${pendingBadge}${newBadge}${archived}</span>
       </div>
       ${courtLine&&!isAppealStage(c)&&!isCassationStage(c)?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}

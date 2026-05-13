@@ -761,6 +761,10 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-fi       { background:var(--stage-fi-bg); color:var(--stage-fi-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
 .badge-appeal   { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
 .badge-cassation{ background:var(--stage-cass-bg); color:var(--stage-cass-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* «Обжалуется» — рядом со stage-бейджем, пока карточка в следующей
+   инстанции ещё не появилась. Тёплый amber для отличия от холодных
+   тонов стадий (teal/indigo/violet). */
+.badge-pending-appeal { background:var(--amber-100); color:var(--amber-700); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
 /* Банк-заявитель в кассации (cs.appellant_is_bank). Использует роль-цвет
    plaintiff (синий) — Сбер выступает активной стороной. */
 .badge-bank     { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
