@@ -599,6 +599,11 @@ function jsonToCase(j){
     fiAppealFiled:!!fi.appeal_filed,
     fiCassationFiled:!!fi.cassation_filed,
     fiSentToCassation:!!fi.sent_to_cassation,
+    fiSentToAppeal:!!fi.sent_to_appeal,
+    fiAppealFiledDate:fi.appeal_filed_date||'',
+    fiSentToAppealDate:fi.sent_to_appeal_date||'',
+    fiCassationFiledDate:fi.cassation_filed_date||'',
+    fiSentToCassationDate:fi.sent_to_cassation_date||'',
     // JSON-specific: full stage data for detail view
     _fi:fi,
     _ap:ap.case_number?ap:null,
@@ -1671,6 +1676,13 @@ function buildTimeline(c){
     items.push({date:parseDate(fi.event_date),text:cleanTimelineText(fi.last_event),kind:classifyKind(fi.last_event)});
   }
   if(fi.filing_date)items.push({date:parseDate(fi.filing_date),text:'Поступление в 1-ю инстанцию',kind:'info'});
+  // Жалобы с вкладки «Обжалование решений» — отдельные узлы в хронологии.
+  // Дедупликация по (date,text) ниже не даст задвоиться даже если событие
+  // придёт из fi.events.
+  if(fi.appeal_filed_date)items.push({date:parseDate(fi.appeal_filed_date),text:'Подана апелляционная жалоба',kind:'info'});
+  if(fi.sent_to_appeal_date)items.push({date:parseDate(fi.sent_to_appeal_date),text:'Направлена в Суд ХМАО-Югры',kind:'info'});
+  if(fi.cassation_filed_date)items.push({date:parseDate(fi.cassation_filed_date),text:'Подана кассационная жалоба',kind:'info'});
+  if(fi.sent_to_cassation_date)items.push({date:parseDate(fi.sent_to_cassation_date),text:'Направлена в 7-й кассац. суд',kind:'info'});
   if(ap.events&&ap.events.length)pushEvents(ap.events);
   else if(ap.event_date&&ap.last_event){
     items.push({date:parseDate(ap.event_date),text:cleanTimelineText(ap.last_event),kind:classifyKind(ap.last_event)});
@@ -1826,6 +1838,33 @@ function renderDrawer(c){
     const fiResultDisplay=fiResolved?(FI_RESULT_LABELS[c.result]||fi.result):fi.result;
     if(fiStatusDisplay)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(fiStatusDisplay)}</div>`;
     if(fiResultDisplay)grid+=`<div class="kv-k">Результат</div><div class="kv-v">${escHtml(fiResultDisplay)}</div>`;
+    // Жалобы из вкладки «Обжалование решений, определений (пост.)» —
+    // юристу важно видеть, что апел./касс. жалоба подана и/или направлена
+    // в вышестоящий суд, пока дело ещё в стадии first_instance/awaiting_appeal.
+    if(fi.appeal_filed||fi.sent_to_appeal){
+      const parts=[];
+      if(fi.appeal_filed){
+        parts.push(fi.appeal_filed_date?`Подана ${formatDate(fi.appeal_filed_date)}`:'Подана');
+      }
+      if(fi.sent_to_appeal_date){
+        parts.push(`направлена в Суд ХМАО-Югры ${formatDate(fi.sent_to_appeal_date)}`);
+      }else if(fi.sent_to_appeal){
+        parts.push('направлена в Суд ХМАО-Югры');
+      }
+      grid+=`<div class="kv-k">Апел. жалоба</div><div class="kv-v">${parts.join(' · ')}</div>`;
+    }
+    if(fi.cassation_filed||fi.sent_to_cassation){
+      const parts=[];
+      if(fi.cassation_filed){
+        parts.push(fi.cassation_filed_date?`Подана ${formatDate(fi.cassation_filed_date)}`:'Подана');
+      }
+      if(fi.sent_to_cassation_date){
+        parts.push(`направлена в 7-й кассац. суд ${formatDate(fi.sent_to_cassation_date)}`);
+      }else if(fi.sent_to_cassation){
+        parts.push('направлена в 7-й кассац. суд');
+      }
+      grid+=`<div class="kv-k">Касс. жалоба</div><div class="kv-v">${parts.join(' · ')}</div>`;
+    }
     grid+=`</div>`;
     courtSection=grid;
   }else if(drawerStage==='ap'&&stageData){

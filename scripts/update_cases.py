@@ -1829,6 +1829,11 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "_table_count": 0,      # len(tables) — нужно вызывающему коду для фолбэка card_url_alt
         "_fi_appeal_filed": False,  # В карточке 1 инст. подана апелляц. жалоба
         "_fi_appeal_filed_date": "",
+        # «Направлено в вышестоящую инстанцию» для апелляц. жалобы — это
+        # отправка дела в Суд ХМАО-Югры. Нужно фронту, чтобы юрист видел
+        # дату направления в drawer'е до того, как появится апел. карточка.
+        "_fi_sent_to_appeal": False,
+        "_fi_sent_to_appeal_date": "",
         # Кассационные события в карточке 1 инст. (кассация подаётся через
         # суд 1-й инстанции). Нужны для state-machine cassation_watch.
         "_fi_cassation_filed": False,
@@ -2164,14 +2169,18 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                         info["_fi_cassation_filed"] = True
                         info["_fi_cassation_filed_date"] = row_date
                 continue
-            # Направлено в вышестоящую инстанцию — для кассации это уход
-            # дела в касс. суд (нужно state-machine для cassation_pending).
-            # Для апелляции игнорируем: переход в `appeal` сделает link_cases
-            # по самой апел. карточке.
+            # Направлено в вышестоящую инстанцию:
+            # - кассация → уход дела в касс. суд (state-machine: cassation_pending);
+            # - апелляция → отправка в Суд ХМАО-Югры (для отображения в drawer'е
+            #   до появления апел. карточки; переход в `appeal` всё равно делает
+            #   link_cases, поле sent_to_appeal_date — чисто информационное).
             if re.search(r'направлен\w+.{0,30}вышестоящ', row_lc):
                 if current_kind == "cassation" and not info["_fi_sent_to_cassation_date"]:
                     info["_fi_sent_to_cassation"] = True
                     info["_fi_sent_to_cassation_date"] = row_date
+                elif current_kind == "appeal" and not info["_fi_sent_to_appeal_date"]:
+                    info["_fi_sent_to_appeal"] = True
+                    info["_fi_sent_to_appeal_date"] = row_date
                 continue
 
 
@@ -9109,6 +9118,7 @@ def main_json():
                     # парсе из «Движения дела».
                     for flag, date_key in (
                         ("_fi_appeal_filed", "_fi_appeal_filed_date"),
+                        ("_fi_sent_to_appeal", "_fi_sent_to_appeal_date"),
                         ("_fi_cassation_filed", "_fi_cassation_filed_date"),
                         ("_fi_sent_to_cassation", "_fi_sent_to_cassation_date"),
                     ):
@@ -9469,6 +9479,17 @@ def main_json():
             fi["appeal_filed"] = True
             if card_info.get("_fi_appeal_filed_date"):
                 fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+            changed = True
+
+        # Дело направлено в апел. инстанцию (Суд ХМАО-Югры) — чисто
+        # информационный флаг для drawer'а. В дайджест не выводим: переход
+        # в стадию `appeal` сделает link_cases по самой апел. карточке.
+        new_sent_app = bool(card_info.get("_fi_sent_to_appeal"))
+        if new_sent_app and not fi.get("sent_to_appeal", False):
+            fi["sent_to_appeal"] = True
+            sent_app_date = card_info.get("_fi_sent_to_appeal_date", "")
+            if sent_app_date:
+                fi["sent_to_appeal_date"] = sent_app_date
             changed = True
 
         # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
