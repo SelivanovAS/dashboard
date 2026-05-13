@@ -737,6 +737,13 @@ def is_case_archived(case: dict) -> bool:
     if stage == "first_instance":
         if fi.get("appeal_filed_date"):
             return False
+        # Защита от потери даты: если флаг жалобы/кассации стоит, но дата
+        # не извлечена (короткая вкладка, расхождение шаблонов sudrf) —
+        # держим в активных, парсер next-cron вытащит дату из «ДВИЖЕНИЕ
+        # ЖАЛОБЫ». См. кейс 2-208/2026: дело уходило в архив раньше, чем
+        # парсер обнаруживал апел. жалобу.
+        if fi.get("appeal_filed") or fi.get("cassation_filed") or fi.get("sent_to_cassation"):
+            return False
         if fi.get("status", "").strip() != "Решено":
             return False
         hearing = parse_date(fi.get("hearing_date") or "")
@@ -1832,11 +1839,11 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
 
     tables = extract_tables(html)
     info["_table_count"] = len(tables)
-    # Маркер «обжалование решений» нужен вызывающему коду для решения о фолбэке
-    # на card_url_alt(new=0) — некоторые суды открывают вкладку обжалования
-    # поверх основной «Дело», и основную надо запросить отдельным URL.
-    if re.search(r'обжалован\w*\s+решен\w*', html, re.IGNORECASE):
-        info["_fi_appeal_filed"] = True
+    # Вкладка «обжалование решений, определений (пост.)» — sudrf нередко
+    # открывает её по умолчанию (≤4 таблиц) вместо «ДЕЛО». Раньше тут стоял
+    # ранний флаг `_fi_appeal_filed=True` по regex «обжалован.*решен» — он
+    # ставился без даты даже на пустых вкладках. Дата ниже извлекается
+    # из таблицы «ДВИЖЕНИЕ ЖАЛОБЫ»; флаг — только при реальной регистрации.
     # Раньше здесь был ранний return при <6 таблиц — он отбрасывал живые
     # карточки с укороченным шаблоном (напр. Сургутский районный суд
     # отдаёт 4 таблицы, но с полным «ДВИЖЕНИЕ ДЕЛА»). Циклы ниже защищены
@@ -1905,11 +1912,24 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                             info["Номер дела 1 инстанции"] = fi_num_m.group(0)
 
     # ── Таблица ДВИЖЕНИЕ ДЕЛА (обычно индекс 5 или 6) ──
-    # Ищем таблицу с событиями: содержит столбцы "Событие" / "Дата"
+    # Ищем таблицу с событиями: содержит столбцы "Событие" / "Дата".
+    # ВАЖНО: исключаем «ДВИЖЕНИЕ ЖАЛОБЫ» с вкладки обжалования — у неё тоже
+    # столбец «Событие», но отличительный столбец «Дата размещения», и в
+    # ней наши апеллянт-эвристики (pattern «жалоб + ФИО») цепляют мусор
+    # вроде «(представления) в суде». «Движение жалобы» парсится отдельно
+    # ниже как источник дат регистрации/направления.
     movement_table = None
     for tbl_idx in range(len(tables)):
         tbl = tables[tbl_idx]
         if len(tbl) > 1:
+            # «Дата размещения» / «движение жалобы» — характерные маркеры
+            # таблицы апел.-касс. жалоб; их движение парсится отдельно.
+            top_text = " ".join(
+                " ".join(cell_text(c) for c in r)
+                for r in tbl[:3]
+            ).lower()
+            if "дата размещения" in top_text or "движение жалобы" in top_text:
+                continue
             header = " ".join(cell_text(c) for c in tbl[0]).lower()
             if "событие" in header or "движение" in header:
                 movement_table = tbl
@@ -2081,6 +2101,77 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             ):
                 info["_fi_appeal_filed"] = True
                 info["_fi_appeal_filed_date"] = row_date
+                continue
+
+    # ── Вкладка «Обжалование решений, определений (пост.)» ──
+    # На основной «ДЕЛО» (new=0) события «Поступила апелляционная жалоба» у
+    # многих судов нет — это движение жалобы живёт в отдельной вкладке.
+    # Структура: блоки «ЖАЛОБА № N» со строками «Вид жалобы (представления)»,
+    # «Заявитель», «Вышестоящий суд», далее таблица «ДВИЖЕНИЕ ЖАЛОБЫ» со
+    # строками «Регистрация жалобы (представления) в суде» / «Направлено
+    # в вышестоящую инстанцию». При коротком ответе sudrf отдаёт именно эту
+    # вкладку (≤4 таблицы) — оттуда и берём даты, fallback на new=0 потом
+    # дополнит движение дела.
+    current_kind: str | None = None  # "appeal" | "cassation"
+    for tbl in tables:
+        for row in tbl:
+            if len(row) < 1:
+                continue
+            row_text = " ".join(cell_text(c) for c in row)
+            row_lc = row_text.lower()
+            label = cell_text(row[0]).strip().lower()
+            value = cell_text(row[-1]).strip() if len(row) >= 2 else ""
+
+            # Новый блок «ЖАЛОБА № N» сбрасывает контекст вида.
+            if re.search(r'жалоба\s*№', row_lc):
+                current_kind = None
+                continue
+            # Вид жалобы (представления) — определяет апелляцию vs кассацию.
+            if "вид жалобы" in label or "вид жалобы" in row_lc[:40]:
+                val_lc = value.lower() if value else row_lc
+                if "апелляционн" in val_lc:
+                    current_kind = "appeal"
+                elif "кассационн" in val_lc:
+                    current_kind = "cassation"
+                continue
+            # Заявитель — короткое поле на вкладке обжалования («ИСТЕЦ» /
+            # «ОТВЕТЧИК»). Не путать с «заявитель жалобы» из таблиц апел.
+            # карточки. Заполняем только если выше парсер ничего не нашёл.
+            if label == "заявитель" and not info["_appellant_raw"]:
+                if value and value.lower() != "заявитель":
+                    info["_appellant_raw"] = value
+                continue
+
+            # События движения жалобы — нужны строки с реальной датой.
+            row_date = ""
+            for c in row:
+                ct = cell_text(c)
+                d = parse_date(ct)
+                # 01.01.1900 — sudrf-заглушка для «срок не назначен».
+                if d and ct.strip() != "01.01.1900":
+                    row_date = ct
+                    break
+            if not row_date:
+                continue
+            # Регистрация жалобы → дата подачи апел. или касс. жалобы.
+            if re.search(r'регистрац\w*\s+жалоб', row_lc):
+                if current_kind == "appeal":
+                    if not info["_fi_appeal_filed_date"]:
+                        info["_fi_appeal_filed"] = True
+                        info["_fi_appeal_filed_date"] = row_date
+                elif current_kind == "cassation":
+                    if not info["_fi_cassation_filed_date"]:
+                        info["_fi_cassation_filed"] = True
+                        info["_fi_cassation_filed_date"] = row_date
+                continue
+            # Направлено в вышестоящую инстанцию — для кассации это уход
+            # дела в касс. суд (нужно state-machine для cassation_pending).
+            # Для апелляции игнорируем: переход в `appeal` сделает link_cases
+            # по самой апел. карточке.
+            if re.search(r'направлен\w+.{0,30}вышестоящ', row_lc):
+                if current_kind == "cassation" and not info["_fi_sent_to_cassation_date"]:
+                    info["_fi_sent_to_cassation"] = True
+                    info["_fi_sent_to_cassation_date"] = row_date
                 continue
 
 
@@ -9010,9 +9101,12 @@ def main_json():
             if alt_html:
                 alt_info = parse_case_card(alt_html, court_cfg.base_url)
                 if alt_info.get("_table_count", 0) > card_info.get("_table_count", 0):
-                    # Флаги жалоб/направления могли быть выставлены только
-                    # на короткой вкладке (HTML-маркеры/частичное движение).
-                    # Переносим их в alt_info, чтобы события не потерялись.
+                    # Флаги и даты жалоб/направления могут быть только на
+                    # короткой вкладке «Обжалование решений» (там — таблица
+                    # «ДВИЖЕНИЕ ЖАЛОБЫ» с датой регистрации). Переносим в
+                    # alt_info — флаг и дата мигрируют независимо, чтобы
+                    # дата подтянулась даже если флаг уже стоит в длинном
+                    # парсе из «Движения дела».
                     for flag, date_key in (
                         ("_fi_appeal_filed", "_fi_appeal_filed_date"),
                         ("_fi_cassation_filed", "_fi_cassation_filed_date"),
@@ -9020,8 +9114,13 @@ def main_json():
                     ):
                         if card_info.get(flag) and not alt_info.get(flag):
                             alt_info[flag] = True
-                            if card_info.get(date_key) and not alt_info.get(date_key):
-                                alt_info[date_key] = card_info[date_key]
+                        if card_info.get(date_key) and not alt_info.get(date_key):
+                            alt_info[date_key] = card_info[date_key]
+                    # Апеллянт со вкладки обжалования («ИСТЕЦ»/«ОТВЕТЧИК»)
+                    # — единственный источник для дел, где основная вкладка
+                    # не содержит «Заявитель жалобы».
+                    if card_info.get("_appellant_raw") and not alt_info.get("_appellant_raw"):
+                        alt_info["_appellant_raw"] = card_info["_appellant_raw"]
                     card_info = alt_info
         _warn_if_card_degraded(card_info, fi["case_number"])
 
