@@ -1406,7 +1406,7 @@ tr.detail-row { display:none; }
   word-wrap: break-word;
 }
 .digest-block.expanded .digest-body {
-  max-height: 4000px;
+  max-height: 10000px;
   opacity: 1;
   padding: 14px 16px 16px;
   border-top: 1px solid var(--border);
