@@ -1280,6 +1280,18 @@ def should_skip_case(
         if kind == "hearing":
             return True, f"future_hearing({ymd})"
         return True, f"suspended_until({ymd})"
+
+    # Дело «без движения» без явной будущей даты исправления — парсим раз
+    # в 7 дней. Суды 1-й инст. ХМАО часто не указывают срок устранения
+    # (или он уже прошёл), а ежедневный парс бесполезен: новое определение
+    # появится только после подачи исправлений юристом.
+    events = block.get("events") or []
+    if events:
+        last_ev_text = ((events[-1] or {}).get("text") or "").lower()
+        if _SUSPENDED_RX.search(last_ev_text):
+            days_since = (today - last_checked).days
+            if days_since < 7:
+                return True, f"suspended_weekly({days_since}d/7d)"
     return False, ""
 
 
