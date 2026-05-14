@@ -1150,8 +1150,9 @@ def should_skip_case(
     if last_checked is None or (today - last_checked).days >= force_parse_days:
         return False, ""
 
-    # Кассация: явное поле hearing_date в блоке (формат DD.MM.YYYY) — будущее
-    # заседание известно без чтения events.
+    # Кассация: явные поля hearing_date / suspended_until в блоке (DD.MM.YYYY).
+    # events карточки 7kas хранят текст в поле name (не text), поэтому
+    # get_next_planned_date по ним не сработает — читаем явные поля.
     if stage == "cassation":
         hd_raw = (block.get("hearing_date") or "").strip()
         m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
@@ -1160,6 +1161,15 @@ def should_skip_case(
                 hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
                 if hd >= today:
                     return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
+            except ValueError:
+                pass
+        su_raw = (block.get("suspended_until") or "").strip()
+        m_su = _DATE_DDMMYYYY_RX.match(su_raw)
+        if m_su:
+            try:
+                su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
+                if su >= today:
+                    return True, f"suspended_until({su.strftime('%d.%m.%Y')})"
             except ValueError:
                 pass
 
@@ -2550,6 +2560,7 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         "cassator": "",
         "cassator_status": "",
         "review_result": "",
+        "suspended_until": "",
         "participants": [],
         "sber_present": False,
         "bank_role": "",
@@ -2715,6 +2726,67 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             else:
                 info["bank_role"] = "Третье лицо"
             break
+
+    # ── Жалоба оставлена без движения [до DD.MM.YYYY] ────────────────────
+    # 7kas может разместить этот статус в разных секциях карточки: чаще
+    # всего в «ЖАЛОБЫ» (графа «Результат изучения жалобы»), реже —
+    # отдельной строкой в «СЛУШАНИЯ» (графа result_event/note) или
+    # в «ДЕЛО» (графа «Результат рассмотрения»). Сканируем все три,
+    # берём строку с маркером «без движения» и извлекаем ВСЕ даты:
+    # самая ранняя — дата вынесения определения («когда оставили»),
+    # самая поздняя — срок устранения недостатков («до какого числа»).
+    suspended_until = ""
+    suspended_event_date = ""
+    for section_name in ("ЖАЛОБЫ", "СЛУШАНИЯ", "ДЕЛО"):
+        if suspended_until:
+            break
+        tbl = sections.get(section_name) or []
+        for row in tbl:
+            joined = " | ".join(cell_text(c) for c in row)
+            if not _SUSPENDED_RX.search(joined):
+                continue
+            raw_dates = _DATE_DDMMYYYY_RX.findall(joined)
+            if not raw_dates:
+                continue
+            try:
+                parsed = [date(int(y), int(m), int(d)) for d, m, y in raw_dates]
+            except ValueError:
+                continue
+            suspended_until = max(parsed).strftime("%d.%m.%Y")
+            # event_date — самая ранняя дата в той же строке; одна-единственная
+            # дата трактуется как «до», event_date остаётся пустым (fallback в B4).
+            if len(parsed) > 1:
+                suspended_event_date = min(parsed).strftime("%d.%m.%Y")
+            break
+    if suspended_until:
+        info["suspended_until"] = suspended_until
+        # Дублируем статус в hearings, чтобы drawer нарисовал событие
+        # в хронологии (buildTimeline → pushEvents). Smart-skip для кассации
+        # работает через явное поле cassation.suspended_until (see
+        # should_skip_case), event'ы для этого не нужны.
+        has_existing = any(
+            h
+            and _SUSPENDED_RX.search(
+                f"{h.get('name','')} {h.get('result_event','')} {h.get('note','')}"
+            )
+            for h in info["hearings"]
+        )
+        if not has_existing:
+            # name содержит полный текст «… до DD.MM.YYYY», чтобы юрист видел
+            # дедлайн прямо в timeline; cleanTimelineText (фронт) поправлен —
+            # 4-значный год больше не съедается trailing-паттерном.
+            # date — дата вынесения определения (когда оставили); fallback на
+            # suspended_until если в строке нашлась только одна дата.
+            info["hearings"].append({
+                "name": f"Жалоба оставлена без движения до {suspended_until}",
+                "date": suspended_event_date or suspended_until,
+                "time": "",
+                "place": "",
+                "result_event": "",
+                "ground": "",
+                "note": "",
+                "posted_at": "",
+            })
 
     # ── Текст судебного акта (cont_doc1) ────────────────────────────────
     act_text, cass_num = _extract_cassation_act_text(html)
@@ -3153,6 +3225,7 @@ def _cassation_card_to_block(info: dict) -> dict:
         "appellant_is_bank": appellant_is_bank,
         "appellant_status": cassator_status,
         "review_result": info.get("review_result", ""),
+        "suspended_until": info.get("suspended_until", ""),
         "hearing_date": info.get("hearing_date", ""),
         "hearing_time": info.get("hearing_time", ""),
         "decision_date": info.get("decision_date", ""),
@@ -9698,6 +9771,105 @@ def main_json():
         f"{cass_skipped_suspended} без движения)"
     )
     timings["cassation"] = time.perf_counter() - t0
+
+    # ── 4d. Refresh кассации по cassation.link ──
+    # Раздел 4c берёт только первую страницу выдачи 7kas — старые касс. дела
+    # вытесняются и перестают обновляться. Этот раздел добивает «хвост»:
+    # ходит по всем делам стадии cassation, у которых сохранён cassation.link.
+    # Smart-skip (should_skip_case) использует get_next_planned_date по events,
+    # включая «жалоба оставлена без движения до DD.MM.YYYY», поэтому реальные
+    # HTTP-запросы летят только когда есть смысл (D+1 после плановой даты).
+    t0 = time.perf_counter()
+    cass_refresh_total = 0
+    cass_refresh_skipped_future = 0
+    cass_refresh_skipped_suspended = 0
+    cass_refresh_fresh = 0
+    cass_refresh_parsed = 0
+    try:
+        today_for_refresh = date.today()
+        today_iso = today_for_refresh.isoformat()
+        cass_refresh_finds: list[dict] = []
+        for case in cases:
+            if case.get("current_stage") != "cassation":
+                continue
+            cass = case.get("cassation") or {}
+            # Уже обновили в 4c → пропускаем (last_checked_at = сегодня).
+            if cass.get("last_checked_at") == today_iso:
+                cass_refresh_fresh += 1
+                continue
+            link = (cass.get("link") or "").strip()
+            if not link:
+                continue
+            cid, cuid = case_id_uid(link)
+            if not cid or not cuid:
+                continue
+            cass_refresh_total += 1
+            skip, reason = should_skip_case(case, today_for_refresh)
+            if skip:
+                if "future_hearing" in reason:
+                    cass_refresh_skipped_future += 1
+                else:
+                    cass_refresh_skipped_suspended += 1
+                fi_saved = (
+                    (case.get("first_instance") or {}).get("case_number")
+                    or case.get("id")
+                    or "?"
+                )
+                log.info(
+                    f"  7kas refresh: skip {cass.get('case_number') or '?'} "
+                    f"({fi_saved}): {reason}"
+                )
+                continue
+            polite_delay()
+            try:
+                card_url = CASSATION_COURT.card_url(cid, cuid)
+                card_html = fetch_page(card_url)
+            except Exception as exc:
+                log.warning(
+                    f"  7kas refresh: ошибка загрузки "
+                    f"{cass.get('case_number') or '?'}: {exc}"
+                )
+                continue
+            if not card_html:
+                log.warning(
+                    f"  7kas refresh: пустой ответ для "
+                    f"{cass.get('case_number') or '?'}"
+                )
+                continue
+            info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
+            if not info:
+                log.warning(
+                    f"  7kas refresh: не удалось распарсить "
+                    f"{cass.get('case_number') or '?'}"
+                )
+                continue
+            # Карточка не отдаёт link и внутренний номер — берём из БД.
+            info["link"] = link
+            info["cassation_internal_number"] = cass.get("case_number", "")
+            if not info.get("fi_case_number"):
+                fi_saved = (
+                    (case.get("first_instance") or {}).get("case_number")
+                    or case.get("id")
+                    or ""
+                )
+                if fi_saved:
+                    info["fi_case_number"] = fi_saved
+            cass_refresh_finds.append(info)
+            cass_refresh_parsed += 1
+        if cass_refresh_finds:
+            cases, more_changes, _ = link_cassation_cases(cases, cass_refresh_finds)
+            # Изменения от refresh попадают в общий канал дайджеста.
+            cass_changes.extend(more_changes)
+    except Exception as exc:
+        log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
+    log.info(
+        f"7kas refresh: {cass_refresh_parsed}/{cass_refresh_total} парсинг "
+        f"(skip {cass_refresh_skipped_future + cass_refresh_skipped_suspended}: "
+        f"{cass_refresh_skipped_future} заседание, "
+        f"{cass_refresh_skipped_suspended} без движения; "
+        f"{cass_refresh_fresh} уже свежие)"
+    )
+    timings["cassation_refresh"] = time.perf_counter() - t0
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()

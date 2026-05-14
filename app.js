@@ -531,6 +531,14 @@ function jsonToCase(j){
       }
     }
   }
+  // Кассация: «Жалоба оставлена без движения до DD.MM.YYYY». Перебивает
+  // эвристики выше — статус явный и приоритетный, чтобы в шапке drawer'а
+  // и в карточке списка показывался чип «б/дв. до …», а smart-skip на
+  // бэке корректно скипал дело до этой даты.
+  if(stage==='cassation'&&cs.suspended_until){
+    nextDate=parseDate(cs.suspended_until);
+    nextDateLabel='Без движения до';
+  }
   // Тип ближайшего будущего заседания — из events[] активной стадии
   // (беседа/предв./осн.). Если события не найдены — остаётся null.
   let nextHearingType=null;
@@ -575,7 +583,7 @@ function jsonToCase(j){
     stage:stage,
     fiCaseNumber:fi.case_number||'',
     appealCaseNumber:ap.case_number||'',
-    dateReceived:parseDate(isAppeal?(ap.filing_date||fi.filing_date||''):(fi.filing_date||'')),
+    dateReceived:parseDate(isCass?(cs.filing_date||fi.filing_date||''):isAppeal?(ap.filing_date||fi.filing_date||''):(fi.filing_date||'')),
     plaintiff:j.plaintiff||'',
     defendant:j.defendant||'',
     category:(j.category||'').split('→').pop().trim(),
@@ -1670,7 +1678,7 @@ function buildTimeline(c){
       /\s*[.,]\s*\d{1,2}\.\d{1,2}\.\d{4}\s*\.?$/,              // trailing DD.MM.YYYY
       /\s*[.,]\s*\d{1,2}:\d{2}(?::\d{2})?\s*\.?$/,              // trailing HH:MM
       /\s*[.,]\s*зал(?:\s+[^.]+?)?\s*\.?$/i,                    // trailing «Зал 131» / «Зал судебного заседания 407»
-      /\s*[.,]\s*\d{1,4}\s*\.?$/,                               // trailing «204» (номер зала без слова)
+      /\s*[.,]\s*\d{1,3}\s*\.?$/,                               // trailing «204» (номер зала без слова; до 3 цифр, чтобы не съедать 4-значные годы DD.MM.YYYY)
     ];
     for(let i=0;i<6;i++){
       const before=out;
@@ -1683,7 +1691,10 @@ function buildTimeline(c){
     if(!Array.isArray(arr))return;
     arr.forEach(e=>{
       if(!e||!e.date)return;
-      const raw=e.text||'';
+      // FI/AP кладут текст события в поле .text. Парсер кассации 7kas
+      // использует .name (структура hearings из таблицы СЛУШАНИЯ) —
+      // fallback нужен, иначе события кассации не попадут в хронологию.
+      const raw=e.text||e.name||'';
       if(!raw)return;
       const cleaned=cleanTimelineText(raw);
       const prefix=e.time?e.time+' · ':'';
@@ -1812,6 +1823,64 @@ function renderDrawer(c){
   // Выбор stage-data для отображения трёх-стадийных блоков
   const stageData=drawerStage==='fi'?c._fi:drawerStage==='ap'?c._ap:drawerStage==='cs'?c._cs:null;
 
+  // Стадийно-зависимые «Ключевые даты»: на каждой вкладке drawer'а
+  // (1 инст. / апел. / кассация) свои даты — берём из соответствующего
+  // блока _fi/_ap/_cs. Когда drawerStage совпадает с текущей стадией дела
+  // (c.stage), значения уже посчитаны в processJson на уровне c.* — этим
+  // и пользуемся как первичным fallback'ом; для остальных вкладок —
+  // достаём из соответствующего блока.
+  let kdReceived=c.dateReceived;
+  let kdNext=c.nextDate;
+  let kdNextLabel=c.nextDateLabel;
+  let kdHearingTime=c.hearingTime;
+  let kdActDate=c.actDate;
+  let kdLastEventDate=c.lastEventDate;
+  let kdResultPresent=vm.resultPresent;
+  if(drawerStage==='fi'&&c._fi){
+    if(c.stage==='first_instance'){
+      // Совпадает с активной стадией — kd* уже корректные (взяты из c.*).
+      // На случай discovery-стаба без filing_date — fallback на c.dateReceived.
+      kdReceived=parseDate(c._fi.filing_date)||kdReceived;
+    }else{
+      // Чужая вкладка — НЕ фолбачить на c.* (там даты другой стадии).
+      kdReceived=parseDate(c._fi.filing_date||'')||'';
+      kdNext=parseDate(c._fi.hearing_date||'')||'';
+      kdNextLabel=kdNext?'Заседание':'';
+      kdHearingTime=c._fi.hearing_time||'';
+      kdActDate=parseDate(c._fi.act_date||'')||'';
+      kdLastEventDate=parseDate(c._fi.event_date||'')||'';
+      kdResultPresent=!!(c._fi.result);
+    }
+  }else if(drawerStage==='ap'&&c._ap){
+    if(c.stage==='appeal'){
+      kdReceived=parseDate(c._ap.filing_date)||kdReceived;
+    }else{
+      kdReceived=parseDate(c._ap.filing_date||'')||'';
+      kdNext=parseDate(c._ap.hearing_date||'')||'';
+      kdNextLabel=kdNext?'Заседание':'';
+      kdHearingTime=c._ap.hearing_time||'';
+      kdActDate=parseDate(c._ap.act_date||'')||'';
+      kdLastEventDate=parseDate(c._ap.event_date||'')||'';
+      kdResultPresent=!!(c._ap.result);
+    }
+  }else if(drawerStage==='cs'&&c._cs){
+    kdReceived=parseDate(c._cs.filing_date||'')||(c.stage==='cassation'?kdReceived:'');
+    // Приоритет: «без движения» → ближайшее заседание.
+    if(c._cs.suspended_until){
+      kdNext=parseDate(c._cs.suspended_until);
+      kdNextLabel='Без движения до';
+    }else if(c._cs.hearing_date){
+      kdNext=parseDate(c._cs.hearing_date);
+      kdNextLabel='Заседание';
+    }else{
+      kdNext='';kdNextLabel='';
+    }
+    kdHearingTime=c._cs.hearing_time||'';
+    kdActDate=parseDate(c._cs.act_date||'')||'';
+    kdLastEventDate=parseDate(c._cs.decision_date||'')||'';
+    kdResultPresent=!!(c._cs.outcome);
+  }
+
   // Hero — статус и публикация акта дублируются в подзаголовке и «Ключевых
   // датах», поэтому отдельный блок hero-badges не выводим.
   const roleBadge=c.sberbankRole==='plaintiff'?'<span class="badge badge-plaintiff">Сбер — истец</span>':c.sberbankRole==='defendant'?'<span class="badge badge-defendant">Сбер — ответчик</span>':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
@@ -1819,33 +1888,35 @@ function renderDrawer(c){
   const plHtml=highlightSberbank(shortParty(c.plaintiff));
   const dfHtml=highlightSberbank(shortParty(c.defendant));
 
-  // Key dates
-  const hearD=c.nextDate?dayDiff(c.nextDate):null;
+  // Key dates — используем kd* (зависят от drawerStage)
+  const hearD=kdNext?dayDiff(kdNext):null;
   const hearCls=hearD===0||hearD===1?'kv-today':(hearD!==null&&hearD<=7&&hearD>0?'kv-soon':'');
-  const hearPrefix=vm.resultPresent?'':c.nextDateLabel==='Отложено до'?'отл. до ':c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
-  const rel=c.nextDate?relativeDateText(c.nextDate):'';
-  const hearValue=c.nextDate
-    ?`${hearPrefix}${formatDate(c.nextDate)}${c.hearingTime?' · '+escHtml(c.hearingTime):''}${rel?` <span style="color:var(--slate-500);font-weight:500;">(${rel})</span>`:''}`
+  const hearPrefix=kdResultPresent?'':kdNextLabel==='Отложено до'?'отл. до ':kdNextLabel==='Без движения до'?'б/дв. до ':'';
+  const rel=kdNext?relativeDateText(kdNext):'';
+  const hearValue=kdNext
+    ?`${hearPrefix}${formatDate(kdNext)}${kdHearingTime?' · '+escHtml(kdHearingTime):''}${rel?` <span style="color:var(--slate-500);font-weight:500;">(${rel})</span>`:''}`
     :'—';
 
   // Для решённых дел заседание уже в прошлом — подпись «Последнее заседание»
-  const hearLabel=vm.resultPresent?'Последнее заседание':'Заседание';
-  let keyDates=`<div class="kv-grid">
-    <div class="kv-k">Поступление</div><div class="kv-v kv-mono">${formatDate(c.dateReceived)}</div>
-    <div class="kv-k">${hearLabel}</div><div class="kv-v kv-mono ${hearCls}">${hearValue}</div>`;
-  if(vm.resultPresent){
-    const rd=c.lastEventDate||c.nextDate;
+  const hearLabel=kdResultPresent?'Последнее заседание':'Заседание';
+  let keyDates=`<div class="kv-grid">`;
+  if(kdReceived)keyDates+=`<div class="kv-k">Поступление</div><div class="kv-v kv-mono">${formatDate(kdReceived)}</div>`;
+  keyDates+=`<div class="kv-k">${hearLabel}</div><div class="kv-v kv-mono ${hearCls}">${hearValue}</div>`;
+  if(kdResultPresent){
+    const rd=kdLastEventDate||kdNext;
     if(rd){
-      const resolvedLabel=(c.stage==='appeal')?'Рассмотрено':'Решение';
+      // На вкладке cassation решение — это «Определение», на апел. —
+      // «Рассмотрено», иначе «Решение».
+      const resolvedLabel=drawerStage==='cs'?'Определение':drawerStage==='ap'?'Рассмотрено':(c.stage==='appeal'?'Рассмотрено':'Решение');
       keyDates+=`<div class="kv-k">${resolvedLabel}</div><div class="kv-v kv-mono">${formatDate(rd)}</div>`;
     }
   }
-  if(c.actDate){
+  if(kdActDate){
     // Если для активной стадии есть LLM-разбор акта — рядом с датой
     // показываем кликабельный чип-якорь, скроллящий к секции «Разбор».
     const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):drawerStage==='cs'?(c._cs&&c._cs.act_analysis):null;
     const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к разбору акта">✨ Разбор</span>`:'';
-    keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(c.actDate)}${chip}</div>`;
+    keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(kdActDate)}${chip}</div>`;
   }
   // Ключевая дата «Жалоба предъявлена» — крайний свежий факт подачи апел.
   // или касс. жалобы (либо «Подана» без даты, если парсер ещё не подтянул
@@ -1905,8 +1976,8 @@ function renderDrawer(c){
     if(cs.cassation_number)grid+=`<div class="kv-k">Касс. №</div><div class="kv-v kv-mono">${escHtml(cs.cassation_number)}</div>`;
     if(cs.court)grid+=`<div class="kv-k">Суд</div><div class="kv-v">${escHtml(cs.court)}</div>`;
     if(cs.judge)grid+=`<div class="kv-k">Судья-докл.</div><div class="kv-v">${escHtml(cs.judge)}</div>`;
-    if(cs.filing_date)grid+=`<div class="kv-k">Подача</div><div class="kv-v kv-mono">${formatDate(parseDate(cs.filing_date))}</div>`;
-    if(cs.decision_date)grid+=`<div class="kv-k">Решение</div><div class="kv-v kv-mono">${formatDate(parseDate(cs.decision_date))}</div>`;
+    // Даты (filing_date / suspended_until / decision_date) теперь живут
+    // в блоке «Ключевые даты» — здесь дублировать не надо.
     // Заявитель: ФИО + статус (Истец/Ответчик/3-е лицо в исходном деле) +
     // бейдж «Банк-заявитель» если кассац. жалобу подаёт Сбер.
     if(cs.appellant){
@@ -1914,10 +1985,15 @@ function renderDrawer(c){
       const status=cs.appellant_status?` <span class="kv-v-muted">· ${escHtml(cs.appellant_status.toLowerCase())}</span>`:'';
       grid+=`<div class="kv-k">Заявитель</div><div class="kv-v">${escHtml(cs.appellant)}${status}${bankBadge}</div>`;
     }
-    // Исход — детерминированный enum через CASS_RESULT_LABELS. При пустом
-    // outcome → «В производстве» (карточка ещё активна на 7kas).
-    const outcomeLabel=CASS_RESULT_LABELS[cs.outcome||''];
-    if(outcomeLabel)grid+=`<div class="kv-k">Исход</div><div class="kv-v">${escHtml(outcomeLabel)}</div>`;
+    // Статус кассации:
+    // • outcome непуст → CASS_RESULT_LABELS[outcome] (исход вынесен).
+    // • outcome пуст, есть suspended_until → «Оставлено без движения до …».
+    // • иначе → «В производстве» (CASS_RESULT_LABELS[''] fallback).
+    let statusLabel=CASS_RESULT_LABELS[cs.outcome||''];
+    if(!cs.outcome&&cs.suspended_until){
+      statusLabel='Оставлено без движения до '+formatDate(parseDate(cs.suspended_until));
+    }
+    if(statusLabel)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(statusLabel)}</div>`;
     if(cs.result_for_appeal)grid+=`<div class="kv-k">Для апел.</div><div class="kv-v">${escHtml(cs.result_for_appeal)}</div>`;
     // Краткая инфа о первой инстанции, если её вкладки нет (discovery — apel
     // ветки нет, fi есть только как стаб с court+judge).
@@ -1989,7 +2065,7 @@ function renderDrawer(c){
         <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
-          <div class="party-row"><span class="p-tag">Отв.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
+          <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
         </div>
         ${c.category?`<div class="hero-category"><span class="hc-label">Категория:</span> ${escHtml(c.category)}</div>`:''}
       </div>
