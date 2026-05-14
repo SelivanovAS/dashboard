@@ -799,6 +799,107 @@ def migrate_stages(cases: list[dict]) -> int:
     return migrated
 
 
+def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
+    """Идемпотентный дедуп «сирот» по базовому номеру 1-й инст.
+
+    Сирота — запись с `current_stage="appeal"`, у которой `first_instance` —
+    stub (нет `events`, `act_text`, `link`, `act_date`), а `appeal.case_number`
+    заполнен. Возникает, если `link_cases` не сматчил апел. карточку с
+    реальной записью 1-й инст. из-за «гибридного» номера
+    `2-208/2026 (2-1148/2025;)` vs `2-208/2026`. До правки матчера это
+    случалось регулярно; после правки — резервный щит на случай регрессии.
+
+    Хозяин — запись с тем же `_bare_case_number(id)`, у которой есть реальные
+    данные карточки 1-й инст. (`events` или `act_text`), и стадия
+    `first_instance`/`awaiting_appeal`.
+
+    Сливаем сироту в хозяина: дозаполняем `appeal` хозяина, не перезаписывая
+    уже заполненные поля. Стадию хозяина переводим в `appeal`. Сироту
+    удаляем из `cases` in-place.
+
+    Возвращает число слитых сирот.
+    """
+    groups: dict[str, list[int]] = {}
+    for i, c in enumerate(cases):
+        base = _bare_case_number(c.get("id", ""))
+        if base:
+            groups.setdefault(base, []).append(i)
+
+    to_remove: set[int] = set()
+    merged = 0
+
+    for base, idxs in groups.items():
+        if len(idxs) < 2:
+            continue
+
+        orphans: list[int] = []
+        owners: list[int] = []
+
+        for i in idxs:
+            c = cases[i]
+            stage = c.get("current_stage", "")
+            fi = c.get("first_instance") or {}
+            apl = c.get("appeal") or {}
+
+            is_stub_fi = not (
+                fi.get("events") or fi.get("act_text")
+                or fi.get("link") or fi.get("act_date")
+            )
+            if (
+                stage == "appeal"
+                and apl.get("case_number")
+                and not c.get("discovered_via_cassation")
+                and is_stub_fi
+            ):
+                orphans.append(i)
+                continue
+
+            if (
+                stage in ("first_instance", "awaiting_appeal")
+                and (fi.get("events") or fi.get("act_text"))
+            ):
+                owners.append(i)
+
+        if len(orphans) == 1 and len(owners) == 1:
+            orph = cases[orphans[0]]
+            host = cases[owners[0]]
+            orph_appeal = orph.get("appeal") or {}
+            host_appeal = host.get("appeal")
+
+            if not host_appeal:
+                host["appeal"] = dict(orph_appeal)
+            else:
+                # Дозаполняем пустые поля у хозяина; `act_text`/`events`/
+                # `link`/`act_date` хозяина не перезаписываем никогда.
+                protected = {"act_text", "events", "link", "act_date"}
+                for k, v in orph_appeal.items():
+                    cur = host_appeal.get(k)
+                    is_empty = cur in (None, "", [], False)
+                    if k in protected:
+                        if k not in host_appeal or is_empty:
+                            host_appeal[k] = v
+                    elif is_empty:
+                        host_appeal[k] = v
+
+            host["current_stage"] = "appeal"
+            to_remove.add(orphans[0])
+            merged += 1
+            log.info(
+                f"Дедуп: {base} сирота {orph.get('id', '?')} слита "
+                f"в {host.get('id', '?')}"
+            )
+        elif len(orphans) + len(owners) > 2 or (orphans and not owners):
+            log.warning(
+                f"Дедуп: {base} неоднозначная группа "
+                f"(сирот: {len(orphans)}, хозяев: {len(owners)}) — не трогаю"
+            )
+
+    if to_remove:
+        cases[:] = [c for i, c in enumerate(cases) if i not in to_remove]
+
+    return merged
+
+
 def case_id_uid(link_str: str) -> tuple[str, str]:
     """Извлечь case_id и case_uid из поля Ссылка (формат 'id|uid')."""
     parts = link_str.strip().split("|")
@@ -2649,7 +2750,11 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             if not info["fi_court_long"]:
                 info["fi_court_long"] = val
         elif "номер дела в первой" in key:
-            info["fi_case_number"] = val
+            # 7kas иногда отдаёт «гибридный» номер `2-208/2026 (2-1148/2025;)`
+            # — режем хвост, чтобы матч в `link_cassation_cases` сработал
+            # независимо от формы, в которой у нас лежит id. Симметрия с
+            # parse_case_card → re.search(r"\d+-\d+/\d{4}", value).
+            info["fi_case_number"] = _bare_case_number(val) or val
         elif "дата решения первой" in key:
             info["fi_decision_date"] = val
         elif "судья (мировой судья) первой" in key or "судья первой" in key:
@@ -3036,23 +3141,33 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
     if not appeal_fi_numbers:
         return cases
 
-    # Индексы для быстрого поиска
+    # Индексы для быстрого поиска. Ключи кладём дуально: исходный («сырой»)
+    # номер дела и его базовая форма через `_bare_case_number` — чтобы
+    # «гибридные» номера 1-й инст. вида `2-208/2026 (2-1148/2025;)` ловились
+    # парсером апелляции, который из карточки достаёт короткую форму
+    # `2-208/2026`. Иначе матч не сработает и появится «сирота».
+    def _put_idx(idx_map: dict[str, int], key: str, i: int) -> None:
+        if not key:
+            return
+        idx_map.setdefault(key, i)
+        base = _bare_case_number(key)
+        if base and base != key:
+            idx_map.setdefault(base, i)
+
     fi_index: dict[str, int] = {}   # номер_1_инст → индекс в cases
     appeal_index: dict[str, int] = {}  # номер_апелляции → индекс в cases
     for i, c in enumerate(cases):
         cid = c.get("id", "")
-        stage = c.get("current_stage", "")
         # Индекс по номеру 1 инстанции (если дело начато с 1 инстанции)
         fi = c.get("first_instance")
         if fi and fi.get("case_number"):
-            fi_index[fi["case_number"]] = i
+            _put_idx(fi_index, fi["case_number"], i)
         # Также индексируем по id (который может быть номером 1 инст. или апелляции)
-        if cid and cid not in fi_index:
-            fi_index.setdefault(cid, i)
+        _put_idx(fi_index, cid, i)
         # Индекс по номеру апелляции
         appeal = c.get("appeal")
         if appeal and appeal.get("case_number"):
-            appeal_index[appeal["case_number"]] = i
+            _put_idx(appeal_index, appeal["case_number"], i)
 
     linked_count = 0
     to_remove: set[int] = set()
@@ -3062,7 +3177,11 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
             continue
 
         appeal_idx = appeal_index.get(appeal_num)
+        if appeal_idx is None:
+            appeal_idx = appeal_index.get(_bare_case_number(appeal_num))
         fi_idx = fi_index.get(fi_num)
+        if fi_idx is None:
+            fi_idx = fi_index.get(_bare_case_number(fi_num))
 
         if appeal_idx is None:
             continue  # апелляционное дело не в нашей базе — пропускаем
@@ -3095,6 +3214,12 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
             to_remove.add(appeal_idx)
             linked_count += 1
             log.info(f"  Связка: {fi_num} (1 инст.) ← {appeal_num} (апелляция)")
+        elif fi_idx == appeal_idx:
+            # 1-я инст. и апелляция — уже одна запись (например, после
+            # дедупа сирот: id хранится в длинной форме, а fi_num пришёл
+            # в короткой и нашёл ту же запись через дуальный индекс).
+            # Связка уже есть, ничего не делаем.
+            pass
         else:
             # Дела 1 инстанции нет в базе — обновляем id апелляционного дела
             # на номер 1 инстанции для будущей привязки
@@ -3295,14 +3420,30 @@ def link_cassation_cases(
     if not cass_finds:
         return cases, [], []
 
+    # Дуальная индексация: помимо сырого ключа кладём базовую форму
+    # `_bare_case_number(...)`. Иначе пара «у нас id с хвостом
+    # `(2-1148/2025;)`, а 7kas прислал короткий» (или наоборот) не сматчится.
+    def _put_idx(idx_map: dict[str, int], key: str, i: int) -> None:
+        if not key:
+            return
+        idx_map.setdefault(key, i)
+        base = _bare_case_number(key)
+        if base and base != key:
+            idx_map.setdefault(base, i)
+
     fi_index: dict[str, int] = {}
     for i, c in enumerate(cases):
         cid = c.get("id", "")
-        if cid:
-            fi_index.setdefault(cid, i)
+        _put_idx(fi_index, cid, i)
         fi = c.get("first_instance")
         if fi and fi.get("case_number"):
-            fi_index.setdefault(fi["case_number"], i)
+            _put_idx(fi_index, fi["case_number"], i)
+        appeal = c.get("appeal")
+        if appeal and appeal.get("case_number"):
+            # Кассация может прийти на дело, которое мы знаем только по
+            # апел. номеру (если 1-я инст. ещё не подтянулась) — пусть
+            # индекс тоже их видит.
+            _put_idx(fi_index, appeal["case_number"], i)
 
     cass_changes: list[dict] = []
     discovered: list[dict] = []
@@ -3317,6 +3458,8 @@ def link_cassation_cases(
             continue
         cass_block = _cassation_card_to_block(info)
         idx = fi_index.get(fi_num)
+        if idx is None:
+            idx = fi_index.get(_bare_case_number(fi_num))
         if idx is not None:
             case = cases[idx]
             old_cass = case.get("cassation") or {}
@@ -9123,6 +9266,16 @@ def main_json():
     migrated = migrate_stages(cases)
     if migrated:
         log.info(f"State-machine: мигрировано {migrated} переходов при загрузке")
+
+    # Слить «сирот»-апелляций, возникших из-за рассинхрона базового номера
+    # (`2-208/2026` vs `2-208/2026 (2-1148/2025;)`). До правки link_cases —
+    # лечит уже накопившиеся дубли; после — резервный щит от регрессий.
+    merged_orphans = dedupe_orphan_by_base_number(cases)
+    if merged_orphans:
+        log.info(
+            f"Дедуп: слито {merged_orphans} сирот в дела с гибридным "
+            f"номером 1-й инст."
+        )
 
     # ── 2. Парсинг апелляции: новые дела ──
     t0 = time.perf_counter()
