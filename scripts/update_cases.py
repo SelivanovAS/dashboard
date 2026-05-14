@@ -6069,6 +6069,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
         # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
         text = _strip_section_numbering(text)
+        # Срезаем «X → Y → Z» в строках «категория: …» — LLM иногда
+        # подставляет родительскую категорию вопреки промпту.
+        text = _shorten_categories_in_html(text)
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
@@ -6130,6 +6133,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
         # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
         text = _strip_section_numbering(text)
+        # Срезаем «X → Y → Z» в строках «категория: …» — LLM иногда
+        # подставляет родительскую категорию вопреки промпту.
+        text = _shorten_categories_in_html(text)
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
@@ -7067,6 +7073,32 @@ def _warn_misplaced_appeal_cases(html: str) -> str:
             f"не потерять полезную мотивировку; править — в промпте."
         )
     return html
+
+
+def _shorten_categories_in_html(html: str) -> str:
+    """Срезать родительские сегменты в строках «категория: X → Y → Z».
+
+    LLM иногда вопреки правилу промпта («категория уже ПОДГОТОВЛЕНА Python —
+    копируй ДОСЛОВНО») реконструирует полную цепочку категорий из своего
+    знания (например, «Иски, связанные с возмещением ущерба → Иные о
+    возмещении имущественного вреда»). Юрист просит только конечный
+    сегмент. Срезаем по «→», оставляя последний.
+
+    Регексп ловит «категория: …» / «Категория: …» до ближайшего `|`, `<`
+    или конца строки — это покрывает форматы «| категория: X | банк — …»
+    и «| категория: X» в концовке строки.
+    """
+    pattern = re.compile(r'((?:к|К)атегория:\s*)([^|<\n]+?)(\s*(?:\||$))', re.MULTILINE)
+
+    def _replace(m: re.Match) -> str:
+        prefix, cat, suffix = m.group(1), m.group(2).strip(), m.group(3)
+        if "→" in cat:
+            parts = [p.strip() for p in cat.split("→") if p.strip()]
+            if parts:
+                cat = parts[-1]
+        return f"{prefix}{cat}{suffix}"
+
+    return pattern.sub(_replace, html)
 
 
 def _drop_zero_count_sections(html: str) -> str:
