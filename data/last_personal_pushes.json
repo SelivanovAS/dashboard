@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-05-14T05:45:46",
+  "generated_at": "2026-05-14T07:07:39",
   "title_default": "Мониторинг дел — тестовая рассылка (только владельцу)",
   "body_default": "+3 нов. апелл. | +1 нов. касс.",
   "owner_only": true,
@@ -17,5 +17,5 @@
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-05-14T05:45:46"
+  "updated_at": "2026-05-14T07:07:39"
 }
