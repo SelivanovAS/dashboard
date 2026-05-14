@@ -1914,18 +1914,35 @@ def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
     return "", ""
 
 
-def _warn_if_card_degraded(card_info: dict, case_number: str) -> None:
+def _warn_if_card_degraded(
+    card_info: dict,
+    case_number: str,
+    case_block: dict | None = None,
+) -> None:
     """Логируем обрезанную карточку только если из неё не удалось
-    выдернуть ни одного события (иначе компактный шаблон — это норма)."""
+    выдернуть ни одного события (иначе компактный шаблон — это норма).
+
+    Если у дела последний сохранённый event — «без движения», обрезанная
+    карточка ожидаема (sudrf отдаёт огрызок, smart-skip парсит раз в 7
+    дней). Понижаем до debug, чтобы не шуметь в логе каждую неделю.
+    """
     if card_info.get("_table_count", 0) >= 6:
         return
     if card_info.get("_events"):
         return
-    log.warning(
+    msg = (
         f"  {case_number}: карточка обрезана "
         f"({card_info.get('_table_count', 0)} таблиц), "
         f"движение не распозналось"
     )
+    if case_block:
+        events = case_block.get("events") or []
+        if events:
+            last_text = ((events[-1] or {}).get("text") or "").lower()
+            if _SUSPENDED_RX.search(last_text):
+                log.debug(msg + " (suspended — ожидаемо)")
+                return
+    log.warning(msg)
 
 
 def parse_case_card(html: str, court_base_url: str = "") -> dict:
@@ -9557,7 +9574,7 @@ def main_json():
                         if card_info.get(events_key) and not alt_info.get(events_key):
                             alt_info[events_key] = card_info[events_key]
                     card_info = alt_info
-        _warn_if_card_degraded(card_info, fi["case_number"])
+        _warn_if_card_degraded(card_info, fi["case_number"], case_block=fi)
 
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
         # для force-parse раз в 21 день).
