@@ -10091,6 +10091,7 @@ def main_json():
     cass_refresh_skipped_suspended = 0
     cass_refresh_fresh = 0
     cass_refresh_parsed = 0
+    cass_refresh_force_parsed = 0
     try:
         today_for_refresh = date.today()
         today_iso = today_for_refresh.isoformat()
@@ -10126,6 +10127,9 @@ def main_json():
                     f"({fi_saved}): {reason}"
                 )
                 continue
+            planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
+            if planned_fp and planned_fp >= today_for_refresh:
+                cass_refresh_force_parsed += 1
             polite_delay()
             try:
                 card_url = CASSATION_COURT.card_url(cid, cuid)
@@ -10173,6 +10177,7 @@ def main_json():
         f"(skip {cass_refresh_skipped_future + cass_refresh_skipped_suspended}: "
         f"{cass_refresh_skipped_future} заседание, "
         f"{cass_refresh_skipped_suspended} без движения; "
+        f"force-parsed {cass_refresh_force_parsed}; "
         f"{cass_refresh_fresh} уже свежие)"
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
@@ -10424,6 +10429,9 @@ def main_json():
             "Appeal parse": f"{ap_skip_stats['parsed']}/{ap_skip_stats['total']}",
             "Appeal skip": ap_skip_total,
             "Appeal force": ap_skip_stats["force_parsed"],
+            "Cassation parse": f"{cass_refresh_parsed}/{cass_refresh_total}",
+            "Cassation skip": cass_refresh_skipped_future + cass_refresh_skipped_suspended,
+            "Cassation force": cass_refresh_force_parsed,
             "JSON total": len(cases),
         },
     )
