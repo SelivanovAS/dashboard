@@ -5118,6 +5118,28 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     if cass_discovered is None:
         cass_discovered = []
 
+    # Чистим спайк-кейсы status_change «Решено → В производстве» из
+    # уже сформированного контекста (например, при --replay-last, когда
+    # парсер заново не вызывается и его spike-фильтр на ~3599 не сработает).
+    # См. парный гард в парсере апелляции.
+    cleaned_changes: list[dict] = []
+    for ch in changes:
+        types = ch.get("type") or []
+        d = ch.get("details") or {}
+        is_spike = (
+            "status_change" in types
+            and d.get("old_status") == "Решено"
+            and d.get("new_status") == "В производстве"
+        )
+        if not is_spike:
+            cleaned_changes.append(ch)
+            continue
+        remaining = [t for t in types if t != "status_change"]
+        if remaining:
+            cleaned_changes.append({**ch, "type": remaining})
+        # Если status_change был единственным типом — change целиком уходит.
+    changes = cleaned_changes
+
     total_active = total_active_appeal + total_active_fi + total_active_cassation
 
     # ── Гибридный путь (по умолчанию) ────────────────────────────────────
