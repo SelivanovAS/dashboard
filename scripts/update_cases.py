@@ -2561,6 +2561,7 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         "cassator_status": "",
         "review_result": "",
         "suspended_until": "",
+        "suspended_event_date": "",
         "participants": [],
         "sber_present": False,
         "bank_role": "",
@@ -2698,6 +2699,23 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             ):
                 info["review_result"] = c
                 break
+        # «Без движения»: фиксированный порядок колонок на 7kas:
+        #   data_row[5] = «Дата опр. об оставл. жалобы без движения / напр. уведомления»
+        #   data_row[6] = «Срок для устранения недостатков»
+        # Слова «без движения» сидят в ЗАГОЛОВКЕ колонки, в данных — только
+        # даты, поэтому regex-поиск по тексту не работает; читаем по индексу.
+        if len(data_row) > 5 and data_row[5]:
+            m_ev = _DATE_DDMMYYYY_RX.match(data_row[5])
+            if m_ev:
+                info["suspended_event_date"] = data_row[5]
+                if len(data_row) > 6 and data_row[6]:
+                    m_su = _DATE_DDMMYYYY_RX.match(data_row[6])
+                    if m_su:
+                        info["suspended_until"] = data_row[6]
+                # Если суда столбца «Срок для устранения недостатков» нет
+                # или он пуст — оставляем suspended_until="", а событие
+                # «Жалоба оставлена без движения» добавляется ниже только
+                # при наличии конкретного срока (см. блок hearings.append).
 
     # ── Таблица УЧАСТНИКИ ────────────────────────────────────────────────
     uch_tbl = sections.get("УЧАСТНИКИ") or []
@@ -2728,38 +2746,36 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             break
 
     # ── Жалоба оставлена без движения [до DD.MM.YYYY] ────────────────────
-    # 7kas может разместить этот статус в разных секциях карточки: чаще
-    # всего в «ЖАЛОБЫ» (графа «Результат изучения жалобы»), реже —
-    # отдельной строкой в «СЛУШАНИЯ» (графа result_event/note) или
-    # в «ДЕЛО» (графа «Результат рассмотрения»). Сканируем все три,
-    # берём строку с маркером «без движения» и извлекаем ВСЕ даты:
-    # самая ранняя — дата вынесения определения («когда оставили»),
-    # самая поздняя — срок устранения недостатков («до какого числа»).
-    suspended_until = ""
-    suspended_event_date = ""
-    for section_name in ("ЖАЛОБЫ", "СЛУШАНИЯ", "ДЕЛО"):
-        if suspended_until:
-            break
-        tbl = sections.get(section_name) or []
-        for row in tbl:
-            joined = " | ".join(cell_text(c) for c in row)
-            if not _SUSPENDED_RX.search(joined):
-                continue
-            raw_dates = _DATE_DDMMYYYY_RX.findall(joined)
-            if not raw_dates:
-                continue
-            try:
-                parsed = [date(int(y), int(m), int(d)) for d, m, y in raw_dates]
-            except ValueError:
-                continue
-            suspended_until = max(parsed).strftime("%d.%m.%Y")
-            # event_date — самая ранняя дата в той же строке; одна-единственная
-            # дата трактуется как «до», event_date остаётся пустым (fallback в B4).
-            if len(parsed) > 1:
-                suspended_event_date = min(parsed).strftime("%d.%m.%Y")
-            break
+    # Основной путь — структурный парсинг колонок 5/6 таблицы ЖАЛОБЫ выше.
+    # Этот блок — fallback на случай, если 7kas разместит маркер в другой
+    # секции/формате (СЛУШАНИЯ result_event, ДЕЛО result_text и т.п.).
+    # Запускается только если структурный парсинг не нашёл suspended_until.
+    suspended_until = info.get("suspended_until", "")
+    suspended_event_date = info.get("suspended_event_date", "")
+    if not suspended_until:
+        for section_name in ("ЖАЛОБЫ", "СЛУШАНИЯ", "ДЕЛО"):
+            if suspended_until:
+                break
+            tbl = sections.get(section_name) or []
+            for row in tbl:
+                joined = " | ".join(cell_text(c) for c in row)
+                if not _SUSPENDED_RX.search(joined):
+                    continue
+                raw_dates = _DATE_DDMMYYYY_RX.findall(joined)
+                if not raw_dates:
+                    continue
+                try:
+                    parsed = [date(int(y), int(m), int(d)) for d, m, y in raw_dates]
+                except ValueError:
+                    continue
+                suspended_until = max(parsed).strftime("%d.%m.%Y")
+                if len(parsed) > 1:
+                    suspended_event_date = min(parsed).strftime("%d.%m.%Y")
+                break
     if suspended_until:
         info["suspended_until"] = suspended_until
+        if suspended_event_date and not info.get("suspended_event_date"):
+            info["suspended_event_date"] = suspended_event_date
         # Дублируем статус в hearings, чтобы drawer нарисовал событие
         # в хронологии (buildTimeline → pushEvents). Smart-skip для кассации
         # работает через явное поле cassation.suspended_until (see
