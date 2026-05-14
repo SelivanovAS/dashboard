@@ -3601,6 +3601,13 @@ def update_active_cases(
         new_act = card_info.get("Акт опубликован", old_act)
         new_result = card_info.get("Результат", "")
 
+        # Гард: регрессия Решено → В производстве — обычно карточка sudrf
+        # не вернула «Результат» корректно (мусор в поле или отсутствие
+        # завершающего last_event). Не понижаем статус. Та же логика
+        # уже стоит для 1-й инст. — см. ~9326+.
+        if old_status == "Решено" and new_status == "В производстве":
+            new_status = old_status
+
         change = {"case": case["Номер дела"], "type": [], "details": {}}
 
         # Новый статус
@@ -5852,11 +5859,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 - копировать «в удовлетворении требований отказать» / «требования подлежат удовлетворению» / «доводы апелляционной жалобы не влекут отмены решения» без указания, КАКУЮ норму суд применил и КАКОЙ довод принял/отклонил.
 
 1. Заголовок: 📊 Дайджест судебных дел | Суды ХМАО-Югры | {today}
-2. 📋 <b>Сводка</b> — отдельные строки, по одной на инстанцию (НЕ через «|» в одну строку). Между заголовком «📋 <b>Сводка</b>» и самими строками — ОДНА пустая строка (отступ). Между строками сводки пустой строки нет (все идут плотным блоком). Формат ДОСЛОВНО:
+2. 📋 <b>Сводка</b> — отдельные строки, по одной на ИНСТАНЦИЮ С СОБЫТИЯМИ (НЕ через «|» в одну строку). Между заголовком «📋 <b>Сводка</b>» и самими строками — ОДНА пустая строка (отступ). Между строками сводки пустой строки нет (все идут плотным блоком). Формат ДОСЛОВНО:
    <i>1 инст.:</i> X заседаний, Y решений, Z статусов
    <i>Апелл.:</i> +N дел, M актов, K отложений
    <i>Касс.:</i> +K дел, L событий
-   Строки 1 инст. и Апелл. пиши ВСЕГДА (даже если «нет событий» — например: «<i>Апелл.:</i> нет событий»). Строку «<i>Касс.:</i>» пиши ТОЛЬКО если в данных есть «НОВЫЕ ДЕЛА КАССАЦИИ» или «КАССАЦИОННЫЕ СОБЫТИЯ» — иначе её не выводи вообще (без «нет событий»). УПОМИНАЙ ТОЛЬКО те события, которые реально будут выведены в блоках 3/4/5/6 ниже. Если событие дедуплицировано правилами (смена статуса свёрнута в 3.5, подача жалобы в 3.3 поглощает 3.2 и т.п.) — в сводке его НЕ считай. После сводки — одна пустая строка перед большим блоком 🏛 ПЕРВАЯ ИНСТАНЦИЯ.
+   ВАЖНО: каждую из трёх строк <i>1 инст.:</i>, <i>Апелл.:</i>, <i>Касс.:</i> пиши ТОЛЬКО если по этой инстанции в данных реально есть события, которые будут выведены в блоках 3/5/6 ниже. Если по инстанции пусто — соответствующую строку НЕ выводи, НЕ пиши «нет событий», НЕ оставляй пустую строку. Если событие дедуплицировано правилами (смена статуса свёрнута в 3.5, подача жалобы в 3.3 поглощает 3.2 и т.п.) — в сводке его НЕ считай. Если по всем трём инстанциям пусто — блок «📋 <b>Сводка</b>» вообще не выводи. После сводки — одна пустая строка перед большим блоком 🏛 ПЕРВАЯ ИНСТАНЦИЯ.
+
+2bis. НУМЕРАЦИЯ ПОДСЕКЦИЙ: номера типа «3.1.», «3.6.», «5.1.», «5.1a.», «6.2.» в этом промпте — ВНУТРЕННИЕ идентификаторы для ссылок между правилами (например, «не дублируй в 3.2», «дело попадает в 3.6»). В ВЫВОДЕ дайджеста нумерацию НЕ показывай. Заголовки подсекций выводи СТРОГО в виде «<emoji> <b>Название (N):</b>» — БЕЗ префикса «X.Y.». Пример: пиши «📥 <b>Новые дела (3):</b>», а НЕ «5.1. 📥 <b>Новые дела (3):</b>». Это касается всех 14 подсекций (3.1–3.6, 5.1, 5.1a, 5.2–5.5, 6.1–6.2).
 
 3. 🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>
    3.1. 📥 <b>Новые иски (N):</b> — ДВЕ строки на дело. 🛑 ЖЁСТКОЕ ПРАВИЛО: если в данных дела есть поле «Дата подачи иска» — строка 2 ОБЯЗАТЕЛЬНА, её отсутствие = БРАК. Не сворачивай дело в одну строку, не клади дату в конец строки 1. КРИТИЧНО: строки 1 и 2 ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Между разными делами — одна пустая строка.
@@ -6034,6 +6043,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         text = _purge_3_6_without_act_text(text, fi_changes or [])
         text = _drop_zero_count_sections(text)
         text = _recount_summary_line(text)
+        # Срезаем «5.1.», «6.2.» и т.п. префиксы из заголовков подсекций —
+        # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
+        # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
+        text = _strip_section_numbering(text)
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
@@ -6091,6 +6104,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         text = _purge_3_6_without_act_text(text, fi_changes or [])
         text = _drop_zero_count_sections(text)
         text = _recount_summary_line(text)
+        # Срезаем «5.1.», «6.2.» и т.п. префиксы из заголовков подсекций —
+        # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
+        # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
+        text = _strip_section_numbering(text)
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
@@ -6910,60 +6927,69 @@ def _recount_summary_line(html: str) -> str:
             f"{cass_events} {_plural(cass_events, ('событие', 'события', 'событий'))}"
         )
     cass_summary = ", ".join(cass_parts)
-    # Строку «Касс.:» выводим только при наличии хоть одного кассационного
-    # события — пустая строка «нет событий» тут не нужна, юрист просил
-    # упоминать кассацию ТОЛЬКО когда она есть.
-    new_cass_line = f"<i>Касс.:</i> {cass_summary}" if cass_summary else None
-
-    new_fi_line = f"<i>1 инст.:</i> {fi_summary}"
-    new_ap_line = f"<i>Апелл.:</i> {ap_summary}"
+    # Юрист просил не выводить инстанции «нет событий». Если по
+    # инстанции пусто — строки в сводке нет вообще (вырезаем уже
+    # выведенные LLM, не вставляем недостающие).
+    new_fi_line = f"<i>1 инст.:</i> {fi_summary}" if fi_parts else None
+    new_ap_line = f"<i>Апелл.:</i> {ap_summary}" if ap_parts else None
+    new_cass_line = f"<i>Касс.:</i> {cass_summary}" if cass_parts else None
 
     out: list[str] = []
-    fi_replaced = False
-    ap_replaced = False
-    cass_replaced = False
+    fi_seen = False
+    ap_seen = False
+    cass_seen = False
     for ln in lines:
         s = ln.strip()
         if s.startswith("<i>1 инст.:</i>"):
-            out.append(new_fi_line)
-            fi_replaced = True
+            fi_seen = True
+            if new_fi_line is not None:
+                out.append(new_fi_line)
             continue
         if s.startswith("<i>Апелл.:</i>"):
-            out.append(new_ap_line)
-            ap_replaced = True
-            # Если LLM не вывел строку «Касс.:», но события есть —
-            # вставляем её сразу под «Апелл.:» (без пустой строки между).
-            if new_cass_line is not None:
-                # Проверим, есть ли уже строка «Касс.:» где-то ниже —
-                # если есть, не дублируем (заменим её в блоке ниже).
-                pass
+            ap_seen = True
+            if new_ap_line is not None:
+                out.append(new_ap_line)
             continue
         if s.startswith("<i>Касс.:</i>"):
+            cass_seen = True
             if new_cass_line is not None:
                 out.append(new_cass_line)
-                cass_replaced = True
-            # Если событий по кассации нет — строку «Касс.:» удаляем
-            # (LLM мог вывести её ошибочно с «нет событий»).
             continue
         out.append(ln)
 
-    # Если LLM не вывел строку «Касс.:», но события есть — добавляем её
-    # сразу после «Апелл.:» (вторичный проход по out).
-    if (new_cass_line is not None
-            and ap_replaced
-            and not cass_replaced):
-        out2: list[str] = []
-        inserted = False
-        for ln in out:
-            out2.append(ln)
-            if not inserted and ln.strip().startswith("<i>Апелл.:</i>"):
-                out2.append(new_cass_line)
-                inserted = True
-        out = out2
+    # Вставка недостающих строк сводки. LLM мог пропустить «Касс.:»
+    # (раньше так и было — это и есть исходный баг). Вставляем под
+    # последней уже-присутствующей строкой сводки, либо под «📋 Сводка».
+    def _insert_after(anchor_pred, line: str) -> bool:
+        for i, ln_ in enumerate(out):
+            if anchor_pred(ln_):
+                out.insert(i + 1, line)
+                return True
+        return False
 
-    # Если LLM почему-то не вывел сводку — не вмешиваемся.
-    if not fi_replaced and not ap_replaced:
-        return html
+    if new_cass_line is not None and not cass_seen:
+        inserted = False
+        for anchor in (
+            lambda ln_: ln_.strip().startswith("<i>Апелл.:</i>"),
+            lambda ln_: ln_.strip().startswith("<i>1 инст.:</i>"),
+            lambda ln_: ln_.strip().startswith("📋"),
+        ):
+            if _insert_after(anchor, new_cass_line):
+                inserted = True
+                break
+        if not inserted:
+            # Якорей нет — LLM не вывел даже заголовок сводки. Не вмешиваемся.
+            pass
+    if new_ap_line is not None and not ap_seen:
+        for anchor in (
+            lambda ln_: ln_.strip().startswith("<i>1 инст.:</i>"),
+            lambda ln_: ln_.strip().startswith("📋"),
+        ):
+            if _insert_after(anchor, new_ap_line):
+                break
+    if new_fi_line is not None and not fi_seen:
+        _insert_after(lambda ln_: ln_.strip().startswith("📋"), new_fi_line)
+
     return "\n".join(out)
 
 
@@ -7054,6 +7080,30 @@ def _drop_zero_count_sections(html: str) -> str:
             continue
         out.append(ln)
         i += 1
+    return "\n".join(out)
+
+
+def _strip_section_numbering(html: str) -> str:
+    """Удалить префикс «N.M.» / «N.Ma.» перед заголовками подсекций.
+
+    LLM иногда возвращает заголовок вида `5.1. 📥 <b>Новые дела (3):</b>`
+    вопреки явному правилу 2bis в промпте. Юрист просил без нумерации —
+    стрипим префикс из любой строки, которая ПОСЛЕ стрипа становится
+    валидным заголовком подсекции (по `_DIGEST_HEADER_RE`). Другие строки
+    (например, абзац с фразой «5.1 — это апелляция») остаются нетронутыми,
+    т.к. они не матчатся `_DIGEST_HEADER_RE`.
+    """
+    lines = html.split("\n")
+    out: list[str] = []
+    prefix_re = re.compile(r'^(\s*)(\d+(?:\.\d+[a-z]?)*\.\s+)(.*)$')
+    for ln in lines:
+        m = prefix_re.match(ln)
+        if m:
+            stripped = m.group(1) + m.group(3)
+            if _DIGEST_HEADER_RE.match(stripped):
+                out.append(stripped)
+                continue
+        out.append(ln)
     return "\n".join(out)
 
 
