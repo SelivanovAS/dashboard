@@ -1748,8 +1748,8 @@ function buildTimeline(c){
   }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 
-/* Разбор опубликованного акта (LLM-фрагмент дайджеста, привязанный к
- * делу в Python через attach_act_analyses). Если у активной стадии
+/* AI анализ опубликованного акта (LLM-фрагмент дайджеста, привязанный
+ * к делу в Python через attach_act_analyses). Если у активной стадии
  * (drawerStage) есть act_analysis — рисуем секцию с акцентным фоном.
  * При наличии разбора у обеих стадий показываем разбор для активной
  * вкладки; переключение вкладок перерендерит drawer и подменит секцию.
@@ -1760,12 +1760,11 @@ function buildActAnalysisSectionHtml(c){
   if(!data||!data.html)return'';
   const meta=[];
   if(data.act_date)meta.push('по акту от '+formatDate(parseDate(data.act_date)));
-  if(data.generated_at)meta.push('сгенерировано '+formatDateTimeShort(data.generated_at));
   const isRaw=data.source==='raw_act';
   if(isRaw)meta.push('сырая мотивировка из карточки суда');
   const metaHtml=meta.length?`<div class="ai-meta">${meta.join(' · ')}</div>`:'';
   return `<div class="drawer-section" id="ai-act-analysis">
-    <div class="drawer-section-title">Разбор опубликованного акта</div>
+    <div class="drawer-section-title">AI анализ опубликованного акта</div>
     <div class="ai-analysis-block${isRaw?' is-raw':''}">
       <div class="ai-analysis-html">${stripActAnalysisHeader(data.html,c.caseNumber)}</div>
       ${metaHtml}
@@ -1791,18 +1790,10 @@ function stripActAnalysisHeader(html,caseNumber){
   return html.slice(m[0].length);
 }
 
-/* Якорный скролл к секции «Разбор» из чипа в «Ключевых датах». */
+/* Якорный скролл к секции «AI анализ» из чипа в «Ключевых датах». */
 function scrollToActAnalysis(){
   const el=document.getElementById('ai-act-analysis');
   if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-/* Короткий формат «04.05.2026 03:49» из ISO-строки '2026-05-04T03:49:49' */
-function formatDateTimeShort(iso){
-  if(!iso)return'';
-  const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-  if(!m)return escHtml(iso);
-  return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
 }
 
 function renderDrawer(c){
@@ -1913,9 +1904,9 @@ function renderDrawer(c){
   }
   if(kdActDate){
     // Если для активной стадии есть LLM-разбор акта — рядом с датой
-    // показываем кликабельный чип-якорь, скроллящий к секции «Разбор».
+    // показываем кликабельный чип-якорь, скроллящий к секции «AI анализ».
     const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):drawerStage==='cs'?(c._cs&&c._cs.act_analysis):null;
-    const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к разбору акта">✨ Разбор</span>`:'';
+    const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к AI-анализу акта">✨ AI-анализ</span>`:'';
     keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(kdActDate)}${chip}</div>`;
   }
   // Ключевая дата «Жалоба предъявлена» — крайний свежий факт подачи апел.
