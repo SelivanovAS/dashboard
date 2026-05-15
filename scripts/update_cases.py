@@ -5086,9 +5086,16 @@ def save_last_digest(html: str, summary: str = "", *, is_empty: bool = False) ->
 # `<a><b>НОМЕР</b></a>`, который сейчас использует фронт в mine-режиме.
 
 def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
-    """Из HTML дайджеста вернуть склейку абзацев, в которых первый
-    `<a><b>НОМЕР</b></a>` соответствует `case_id` (после нормализации
-    `_bare_case_number`). Пустую строку — если ничего не нашлось."""
+    """Из HTML дайджеста вернуть «разборный» абзац — тот, в котором есть
+    маркер `<b>Почему:</b>` и первый `<a><b>НОМЕР</b></a>` соответствует
+    `case_id`. Маркер «Почему:» уникален для раздела «Опубликованные
+    тексты актов» (5.5) — он отличает мотивировочный разбор от
+    одностроковых упоминаний дела в других разделах дайджеста
+    («Вынесенные акты» 5.4, «Новые дела», «Заседания»), которые иначе
+    склеиваются в одно поле `act_analysis.html`. Если разборных абзацев
+    нет (старый шаблонный дайджест без LLM-мотивировки) — возвращаем
+    все найденные абзацы как раньше, чтобы не сломать исторический
+    fallback. Пустую строку — если ничего не нашлось."""
     if not html or not case_id:
         return ""
     target = _bare_case_number(case_id)
@@ -5104,7 +5111,10 @@ def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
             stripped = para.strip()
             if stripped:
                 out.append(stripped)
-    return "\n\n".join(out)
+    if not out:
+        return ""
+    explained = [p for p in out if "<b>Почему:</b>" in p]
+    return "\n\n".join(explained or out)
 
 
 def _current_digest_model_name() -> str:
@@ -5121,18 +5131,27 @@ def attach_act_analyses(
     digest_html: str,
     *,
     all_changes: list[dict] | None = None,
+    cass_changes: list[dict] | None = None,
     is_empty: bool = False,
 ) -> int:
     """Записать LLM-разбор опубликованного акта в `cases.json`.
 
-    Для каждого `change`, у которого тип содержит `new_act` (апелляция)
-    или `fi_act_text_published` (1-я инст.), вырезает из `digest_html`
-    относящийся к делу абзац(ы) и кладёт в
-    `case[<stage>]["act_analysis"] = {html, source, act_date, generated_at, model}`.
+    Триггеры по типу change'а:
+    - `new_act` в `all_changes` → `appeal.act_analysis` (апел. акт);
+    - `fi_act_text_published` в `all_changes` → `first_instance.act_analysis`
+      (мотивировка решения 1-й инст.);
+    - `new_act` в `cass_changes` → `cassation.act_analysis` (текст касс.
+      определения; `cass_changes` лежат отдельным списком, потому что у
+      них тот же тип `new_act`, что и у апелляции, и стадию нужно
+      назначить по источнику).
 
-    Если в дайджесте абзац не нашёлся — fallback: HTML-обёрнутая
-    мотивировка из `change["details"]["act_text"]` с пометкой
-    `source: "raw_act"`. Если и её нет — поле просто не пишем.
+    Для каждого триггера вырезает из `digest_html` относящийся к делу
+    абзац с маркером `<b>Почему:</b>` (мотивировочный разбор LLM) и
+    кладёт в `case[<stage>]["act_analysis"] = {html, source, act_date,
+    generated_at, model}`. Если разборного абзаца в дайджесте нет
+    (шаблонный fallback или нет мотивировки) — fallback на HTML-обёрнутую
+    `change["details"]["act_text"]` с пометкой `source: "raw_act"`. Если
+    и `act_text` пуст — поле просто не пишем.
 
     Поле перезаписывается ТОЛЬКО для дел с новым событием в этом прогоне;
     у остальных дел `act_analysis` сохраняется с прошлых прогонов и
@@ -5141,37 +5160,46 @@ def attach_act_analyses(
 
     Возвращает кол-во дел, у которых поле реально изменилось.
     """
-    if is_empty or not digest_html or not all_changes:
+    if is_empty or not digest_html or (not all_changes and not cass_changes):
         return 0
 
     # Индекс «bare-номер дела → объект case»: матчим как по верхнему
-    # `id`, так и по `first_instance.case_number` / `appeal.case_number` —
-    # change["case"] для апелляции содержит апел. номер, для 1-й инст. —
-    # номер 1-й инст., и оба должны находить нужное дело.
+    # `id`, так и по case_number в каждой стадии. `change["case"]` для
+    # апелляции = апел. номер, для 1-й инст. = номер 1-й инст., для
+    # кассации = обычно номер 1-й инст. (см. cass_changes append'ы) —
+    # все три должны находить нужное дело.
     by_id: dict[str, dict] = {}
     for c in cases:
         for raw in (
             c.get("id"),
             (c.get("first_instance") or {}).get("case_number"),
             (c.get("appeal") or {}).get("case_number"),
+            (c.get("cassation") or {}).get("case_number"),
         ):
             bare = _bare_case_number(raw or "")
             if bare:
                 by_id.setdefault(bare, c)
 
+    # Собираем (stage, change) — один цикл вместо ветвлений в середине.
+    # У апеллированного `new_act` и кассационного `new_act` тип совпадает,
+    # поэтому списки разные.
+    queued: list[tuple[str, dict]] = []
+    for ch in all_changes or []:
+        types = set(ch.get("type") or [])
+        if "new_act" in types:
+            queued.append(("appeal", ch))
+        elif "fi_act_text_published" in types:
+            queued.append(("first_instance", ch))
+    for ch in cass_changes or []:
+        types = set(ch.get("type") or [])
+        if "new_act" in types:
+            queued.append(("cassation", ch))
+
     model_name = _current_digest_model_name()
     now_iso = datetime.now().isoformat(timespec="seconds")
     updated = 0
 
-    for ch in all_changes:
-        types = set(ch.get("type") or [])
-        if "new_act" in types:
-            stage = "appeal"
-        elif "fi_act_text_published" in types:
-            stage = "first_instance"
-        else:
-            continue
-
+    for stage, ch in queued:
         case_num = ch.get("case", "")
         bare = _bare_case_number(case_num)
         if not bare:
@@ -5226,6 +5254,47 @@ def attach_act_analyses(
 
     if updated:
         log.info(f"act_analysis: записан/обновлён для {updated} дел.")
+    return updated
+
+
+def _dedupe_existing_act_analyses(cases: list[dict]) -> int:
+    """Идемпотентная чистка ранее сохранённых `act_analysis.html` от
+    «склейки» абзацев. До правки `_extract_case_paragraphs_from_digest`
+    функция могла отдать сразу несколько абзацев дайджеста с одним
+    номером дела (например, одностроковое упоминание из «Вынесенных
+    актов» + полноценный мотивировочный разбор из «Опубликованных
+    текстов»). Дальше эти абзацы навсегда залипали в `cases.json`,
+    потому что change[new_act] для уже опубликованного акта больше не
+    приходит, и `attach_act_analyses` не пересчитывает поле.
+
+    Здесь проходим по всем стадиям всех дел и применяем тот же приоритет
+    «разборного» абзаца: если в html есть несколько абзацев и хотя бы
+    один содержит маркер `<b>Почему:</b>` — оставляем только такие.
+    Не трогаем `source="raw_act"` (там html собран вручную через `<p>` и
+    делить его на абзацы по `\\n{2,}` неправильно). После прогона на
+    почищенных данных функция отрабатывает no-op."""
+    updated = 0
+    for c in cases:
+        for stage_key in ("first_instance", "appeal", "cassation"):
+            stage = c.get(stage_key) or {}
+            aa = stage.get("act_analysis") or {}
+            if not aa or aa.get("source") != "digest":
+                continue
+            html = aa.get("html") or ""
+            if not html:
+                continue
+            parts = [p.strip() for p in re.split(r"\n{2,}", html) if p.strip()]
+            if len(parts) <= 1:
+                continue
+            explained = [p for p in parts if "<b>Почему:</b>" in p]
+            if not explained or len(explained) == len(parts):
+                continue
+            aa["html"] = "\n\n".join(explained)
+            updated += 1
+    if updated:
+        log.info(
+            f"act_analysis: дедуп старых склеек применён к {updated} делам."
+        )
     return updated
 
 
@@ -9391,6 +9460,12 @@ def main_json():
     if migrated:
         log.info(f"State-machine: мигрировано {migrated} переходов при загрузке")
 
+    # Одноразовая чистка ранее склеенных `act_analysis.html`: для уже
+    # опубликованных актов change[new_act] больше не придёт, поэтому
+    # `attach_act_analyses` не перепишет поле. На почищенных данных
+    # функция — no-op.
+    _dedupe_existing_act_analyses(cases)
+
     # Слить «сирот»-апелляций, возникших из-за рассинхрона базового номера
     # (`2-208/2026` vs `2-208/2026 (2-1148/2025;)`). До правки link_cases —
     # лечит уже накопившиеся дубли; после — резервный щит от регрессий.
@@ -10516,12 +10591,13 @@ def main_json():
 
     # Привязываем LLM-разбор опубликованных актов к делам в cases.json,
     # чтобы юрист видел его в drawer (и чтобы он жил дольше одного дня).
-    # Поле `act_analysis` обновляется только у дел с new_act /
-    # fi_act_text_published в этом прогоне; остальные не трогаем.
+    # Поле `act_analysis` обновляется только у дел с new_act (апел. или
+    # касс.) / fi_act_text_published в этом прогоне; остальные не трогаем.
     act_analyses_updated = attach_act_analyses(
         cases,
         digest,
         all_changes=list(changes) + list(fi_changes),
+        cass_changes=cass_changes,
         is_empty=digest_is_empty,
     )
     if act_analyses_updated:
@@ -10656,17 +10732,22 @@ def main_replay_last(push_all: bool = False):
 
     # Replay переигрывает дайджест на тех же данных — обновим разбор актов
     # в cases.json (актуально, если правили промпт и хотим, чтобы новый
-    # вариант разбора попал в drawer карточки дела).
+    # вариант разбора попал в drawer карточки дела). Заодно прогоняем
+    # одноразовый дедуп старой «склейки» абзацев: для уже опубликованных
+    # актов change[new_act] не приходит, поэтому attach_act_analyses
+    # ничего бы не починил.
     try:
         data = load_json(JSON_PATH)
         cases = data.get("cases", [])
+        deduped = _dedupe_existing_act_analyses(cases)
         updated = attach_act_analyses(
             cases,
             digest,
             all_changes=list(ctx.get("changes", [])) + list(ctx.get("fi_changes", [])),
+            cass_changes=list(ctx.get("cass_changes", [])),
             is_empty=replay_is_empty,
         )
-        if updated:
+        if updated or deduped:
             data["cases"] = cases
             save_json(data, JSON_PATH)
     except Exception as exc:

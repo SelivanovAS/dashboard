@@ -1266,7 +1266,7 @@ tr.detail-row { display:none; }
 .tl-empty { font-size:var(--fs-xs); color:var(--fg-4); }
 .drawer-notes-orig { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.5; }
 
-/* ── Разбор опубликованного акта от ИИ (drawer + чип-якорь) ─────────── */
+/* ── AI анализ опубликованного акта (drawer + чип-якорь) ─────────────── */
 .badge-ai-analysis {
   display:inline-flex;
   align-items:center;
