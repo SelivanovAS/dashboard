@@ -841,15 +841,11 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
             fi = c.get("first_instance") or {}
             apl = c.get("appeal") or {}
 
-            is_stub_fi = not (
-                fi.get("events") or fi.get("act_text")
-                or fi.get("link") or fi.get("act_date")
-            )
             if (
                 stage == "appeal"
                 and apl.get("case_number")
                 and not c.get("discovered_via_cassation")
-                and is_stub_fi
+                and not _has_real_fi(c)
             ):
                 orphans.append(i)
                 continue
@@ -3185,15 +3181,23 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
 
     fi_index: dict[str, int] = {}   # номер_1_инст → индекс в cases
     appeal_index: dict[str, int] = {}  # номер_апелляции → индекс в cases
-    for i, c in enumerate(cases):
+    # fi_index строим в два прохода: сначала записи с реальными FI-данными,
+    # потом stub-записи. Без приоритета сирота-апелляция со stub-FI и коротким
+    # id `2-208/2026`, оказавшаяся в `cases` раньше хозяина с гибридным id
+    # `2-208/2026 (2-1148/2025;)` (новые апел. дела препендятся в начало
+    # списка), занимает bare-ключ `2-208/2026` через `setdefault`, и матчер
+    # ниже принимает её саму за свою же 1-ю инст. (fi_idx == appeal_idx).
+    fi_order = sorted(range(len(cases)), key=lambda i: not _has_real_fi(cases[i]))
+    for i in fi_order:
+        c = cases[i]
         cid = c.get("id", "")
-        # Индекс по номеру 1 инстанции (если дело начато с 1 инстанции)
         fi = c.get("first_instance")
         if fi and fi.get("case_number"):
             _put_idx(fi_index, fi["case_number"], i)
         # Также индексируем по id (который может быть номером 1 инст. или апелляции)
         _put_idx(fi_index, cid, i)
-        # Индекс по номеру апелляции
+    # appeal_index — однопроходно: у апелляций нет конфликта orphan vs real.
+    for i, c in enumerate(cases):
         appeal = c.get("appeal")
         if appeal and appeal.get("case_number"):
             _put_idx(appeal_index, appeal["case_number"], i)
@@ -6494,6 +6498,21 @@ def _bare_case_number(num: str) -> str:
         bare = s.split("(")[0].strip()
         return bare or s
     return s
+
+
+def _has_real_fi(case: dict) -> bool:
+    """Карточка 1-й инст. заполнена реальными данными парсера (не stub-блок,
+    автозаполняемый при создании сироты-апелляции по `appeal_fi_numbers`).
+
+    Тот же 4-полевой критерий, что использует `dedupe_orphan_by_base_number`
+    для отличия orphan-stub от хозяина — оба места должны идти от одного
+    предиката, иначе матч и мердж рассинхронятся.
+    """
+    fi = case.get("first_instance") or {}
+    return bool(
+        fi.get("events") or fi.get("act_text")
+        or fi.get("link") or fi.get("act_date")
+    )
 
 
 def _ensure_appeal_new_case_full_layout(
@@ -10244,6 +10263,15 @@ def main_json():
     if appeal_fi_numbers:
         log.info(f"Связка дел: {len(appeal_fi_numbers)} апелляций с номерами 1 инстанции")
         cases = link_cases(cases, appeal_fi_numbers)
+
+        # Резервный щит: ловит сирот, которые link_cases пропустил
+        # (например, edge-case с конфликтом приоритетов в fi_index, или
+        # сироты от других путей). Идемпотентно, O(n). До правки
+        # link_cases этот вызов был только на старте — сироту, созданную
+        # в текущем прогоне, пользователь видел сутки до следующего cron.
+        post_link_merged = dedupe_orphan_by_base_number(cases)
+        if post_link_merged:
+            log.info(f"Дедуп после link_cases: слито {post_link_merged} сирот")
 
         # Обнаруживаем переходы: current_stage был first_instance/awaiting_appeal
         # → стал appeal (последствие link_cases).
