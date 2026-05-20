@@ -3553,10 +3553,17 @@ def link_cassation_cases(
                 change["details"]["act_date"] = cass_block["act_date"]
             if change["type"]:
                 cass_changes.append(change)
-            log.info(
+            stage_changed = prev_stage != case["current_stage"]
+            log_line = (
                 f"  7kas → {fi_num} ({cass_block['case_number']}): "
                 f"{prev_stage}→{case['current_stage']}, outcome={cass_block['outcome'] or '—'}"
             )
+            if change["type"] or stage_changed:
+                if change["type"]:
+                    log_line += f" [{', '.join(change['type'])}]"
+                log.info(log_line)
+            else:
+                log.debug(log_line)
         else:
             # Discovery: дела в cases.json нет. Создаём со стадией cassation
             # и стабом 1-й инст. (только то, что видит 7kas).
