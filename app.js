@@ -402,7 +402,12 @@ function computeDerived(c){
   // ещё не подтянул дату из вкладки «Обжалование решений»). Архивировать
   // нельзя — иначе дело пропадёт с экрана раньше, чем переедет в апел. суд.
   const fiHasFiledAppeal=c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation);
-  const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||fiHasFiledAppeal;
+  // cassation / awaiting_relink — также архивирует state-machine на бэке
+  // (CASSATION_ACT_ARCHIVE_DAYS=30, CASSATION_NO_ACT_PUBLISH_DAYS=45).
+  // Без этого исключения кассац. дело со status=decided (см. фикс ниже
+  // через cs.outcome) уходит под 30-дневный легаси-фильтр и исчезает
+  // с экрана раньше публикации мотивированного определения.
+  const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink'||fiHasFiledAppeal;
   if(c.status==='decided'&&!stageManaged){
     const decisionDate=c.lastEventDate||c.dateReceived;
     if(decisionDate){
@@ -470,11 +475,21 @@ function jsonToCase(j){
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
   let rs=primary.result||'';
+  // Кассация: блок не имеет полей status/last_event/result, поэтому
+  // маркер «дело рассмотрено КСОЮ» — это непустой cs.outcome (enum,
+  // см. classify_cassation_outcome в scripts/update_cases.py). Подкладываем
+  // человеко-читаемый лейбл в rs, чтобы normalizeResult ниже сматчил
+  // тот же код, что для апелляции (cassation_upheld →
+  // «оставлено без изменения» → 'upheld' → favor-icon работает).
+  if(isCass && !rs && cs.outcome){
+    rs=CASS_RESULT_LABELS[cs.outcome]||'';
+  }
   const baseStatus=(
     /решен|рассмотрен/i.test(sl) ||
     /вынесено\s+решение/i.test(evText) ||
     /передан[оа]\s+в\s+архив|сдан[оа]\s+в\s+архив/i.test(evText) ||
-    (isAppeal && rs && rs.trim().length>0)
+    (isAppeal && rs && rs.trim().length>0) ||
+    (isCass && cs.outcome && cs.outcome.trim().length>0)
   )?'decided':'active';
   // Если 1-я инст. фактически решена (по last_event), а парсер ещё не
   // подхватил «Результат» из карточки суда — извлекаем вердикт вручную.
@@ -909,7 +924,7 @@ function isArchived(c){
   // Используем предвычисленный флаг, если он есть (у всех дел после rowToCase).
   if(c.computed)return c.computed.archived;
   if(c.status!=='decided')return false;
-  if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal')return false;
+  if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink')return false;
   if(c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation))return false;
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
