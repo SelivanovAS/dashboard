@@ -535,9 +535,15 @@ function jsonToCase(j){
   // эвристики выше — статус явный и приоритетный, чтобы в шапке drawer'а
   // и в карточке списка показывался чип «б/дв. до …», а smart-skip на
   // бэке корректно скипал дело до этой даты.
+  // НО: если уже назначено рассмотрение позже suspended_until (hearing_date
+  // в блоке) — «без движения» отменено, не перебиваем.
   if(stage==='cassation'&&cs.suspended_until){
-    nextDate=parseDate(cs.suspended_until);
-    nextDateLabel='Без движения до';
+    const su=parseDate(cs.suspended_until);
+    const hd=parseDate(cs.hearing_date||'');
+    if(!hd||su>hd){
+      nextDate=su;
+      nextDateLabel='Без движения до';
+    }
   }
   // Тип ближайшего будущего заседания — из events[] активной стадии
   // (беседа/предв./осн.). Если события не найдены — остаётся null.
@@ -1856,12 +1862,15 @@ function renderDrawer(c){
     }
   }else if(drawerStage==='cs'&&c._cs){
     kdReceived=parseDate(c._cs.filing_date||'')||(c.stage==='cassation'?kdReceived:'');
-    // Приоритет: «без движения» → ближайшее заседание.
-    if(c._cs.suspended_until){
-      kdNext=parseDate(c._cs.suspended_until);
+    // Приоритет: «без движения» → ближайшее заседание. Но если назначение
+    // позже suspended_until — «без движения» уже отменено фактически.
+    const _su=c._cs.suspended_until?parseDate(c._cs.suspended_until):'';
+    const _hd=c._cs.hearing_date?parseDate(c._cs.hearing_date):'';
+    if(_su&&(!_hd||_su>_hd)){
+      kdNext=_su;
       kdNextLabel='Без движения до';
-    }else if(c._cs.hearing_date){
-      kdNext=parseDate(c._cs.hearing_date);
+    }else if(_hd){
+      kdNext=_hd;
       kdNextLabel='Заседание';
     }else{
       kdNext='';kdNextLabel='';
@@ -1978,11 +1987,16 @@ function renderDrawer(c){
     }
     // Статус кассации:
     // • outcome непуст → CASS_RESULT_LABELS[outcome] (исход вынесен).
-    // • outcome пуст, есть suspended_until → «Оставлено без движения до …».
+    // • outcome пуст, есть актуальный suspended_until (новое назначение НЕ
+    //   позже него) → «Оставлено без движения до …».
     // • иначе → «В производстве» (CASS_RESULT_LABELS[''] fallback).
     let statusLabel=CASS_RESULT_LABELS[cs.outcome||''];
     if(!cs.outcome&&cs.suspended_until){
-      statusLabel='Оставлено без движения до '+formatDate(parseDate(cs.suspended_until));
+      const _suSt=parseDate(cs.suspended_until);
+      const _hdSt=cs.hearing_date?parseDate(cs.hearing_date):'';
+      if(!_hdSt||_suSt>_hdSt){
+        statusLabel='Оставлено без движения до '+formatDate(_suSt);
+      }
     }
     if(statusLabel)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(statusLabel)}</div>`;
     if(cs.result_for_appeal)grid+=`<div class="kv-k">Для апел.</div><div class="kv-v">${escHtml(cs.result_for_appeal)}</div>`;
