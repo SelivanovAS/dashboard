@@ -2378,6 +2378,20 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                 continue
 
 
+    # Доимплить «Результат», если карточка sudrf оставила его пустым,
+    # а в «Движении дела» уже есть событие «Вынесено решение по делу».
+    # Бывает, что после решения добавлены админ-шаги («Изготовлено
+    # мотивированное», «Сдано в отдел», «Дело оформлено») — last_event
+    # смотрит на них, а вердикт остаётся «похоронен» в середине events.
+    if not info.get("Результат") and info.get("_events"):
+        for ev in reversed(info["_events"]):
+            text = ev.get("text") or ""
+            if "вынесено решение по делу" in text.lower():
+                verdict = extract_result_from_event(text)
+                if verdict:
+                    info["Результат"] = verdict
+                    break
+
     # ── Определяем статус ──
     result = info["Результат"].lower()
     last_event = info["Последнее событие"].lower()
