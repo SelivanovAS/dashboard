@@ -7155,24 +7155,22 @@ def _normalize_section_spacing(html: str) -> str:
     return "\n".join(out)
 
 
-def _recount_summary_line(html: str) -> str:
-    """Перегенерировать строки сводки `📋 Сводка` по факту вывода.
+def _count_digest_subsections(html: str) -> list[tuple[str, str, int]]:
+    """Парсит HTML дайджеста и возвращает [(block, label, count), ...]
+    по каждой найденной подсекции с (N).
 
-    Считает в дайджесте после генерации:
-    - 1 инст.: число дел в 3.2 «Изменения», 3.5 «Решения», 3.3 «Жалобы»,
-      3.4 «Касс.», 3.6 «Тексты решений»;
-    - Апел.: число дел в 5.1 «Новые», 5.2 «Отложенные», 5.3 «Назначенные»,
-      5.4 «Акты», 5.5 «Тексты актов».
-
-    Отдельно «Новые иски (1 инст.)» (3.1) — Y. Формат сохраняем близким
-    к промпту, но цифры — из факта, а не из обещания LLM.
+    block: "fi" / "appeal" / "bridge" / "cass" — нужен только для
+    дальнейшей группировки потребителем (свод по инстанциям и т.п.).
+    label: «1 инст./Изменения», «Апел./Отложено», «Перешли в апелляцию»,
+    «Касс./События» и т.п. — берётся из `_SUBSECTION_HEADERS_WITH_COUNT`,
+    либо синтезируется для «Новые иски» / «Новые дела» (у них другие
+    регексы).
+    count: число строк-дел, попавших между этим заголовком и следующим
+    заголовком секции/подсекции. Совпадает с тем, что выставит
+    `_renumber_section_headers` в `(N):`.
     """
     lines = html.split("\n")
-
-    # Карта: тип секции → (block, fact-counter)
-    # block: "fi" / "appeal" / "bridge"
-    # counters считаем по факту строк-дел после соответствующего заголовка.
-    sections: list[tuple[str, str, int]] = []  # (block, label, count)
+    sections: list[tuple[str, str, int]] = []
 
     n = len(lines)
     i = 0
@@ -7192,6 +7190,7 @@ def _recount_summary_line(html: str) -> str:
             block = (
                 "fi" if label.startswith("1 инст.") else
                 "bridge" if label == "Перешли в апелляцию" else
+                "cass" if label.startswith("Касс.") else
                 "appeal"
             )
             sections.append((block, label, count))
@@ -7227,6 +7226,53 @@ def _recount_summary_line(html: str) -> str:
 
         if not matched:
             i += 1
+
+    return sections
+
+
+# Лейблы подсекций, которые в шапке считаются как «новые» / «переходы»
+# (а не общие «изменения»). Остальные лейблы из `_SUBSECTION_HEADERS_WITH_COUNT`
+# и «Касс./Новые дела» относятся к одной из этих категорий или к «изменениям».
+_DIGEST_SUMMARY_NEW_LABELS = frozenset({
+    "1 инст./Новые иски", "Апел./Новые дела", "Касс./Новые дела",
+})
+_DIGEST_SUMMARY_STAGE_LABELS = frozenset({"Перешли в апелляцию"})
+
+
+def summarize_digest_counters(html: str) -> dict[str, int]:
+    """Возвращает {'new': N, 'changes': N, 'stages': N} по фактически
+    выведенным в дайджесте подсекциям.
+
+    Используется в шапке фронта («Дайджест / dd.mm.yyyy / 📋 Изменений: N»)
+    и в body web-push, чтобы не показывать сырое число change-объектов до
+    дедупа (которое в LLM-сборке режется правилами 3.2↔3.5, 3.3 поглощает
+    смену статуса и т.п.).
+    """
+    sections = _count_digest_subsections(html)
+    new_n = sum(c for _b, lbl, c in sections if lbl in _DIGEST_SUMMARY_NEW_LABELS)
+    stages_n = sum(c for _b, lbl, c in sections if lbl in _DIGEST_SUMMARY_STAGE_LABELS)
+    changes_n = sum(
+        c for _b, lbl, c in sections
+        if lbl not in _DIGEST_SUMMARY_NEW_LABELS
+        and lbl not in _DIGEST_SUMMARY_STAGE_LABELS
+    )
+    return {"new": new_n, "changes": changes_n, "stages": stages_n}
+
+
+def _recount_summary_line(html: str) -> str:
+    """Перегенерировать строки сводки `📋 Сводка` по факту вывода.
+
+    Считает в дайджесте после генерации:
+    - 1 инст.: число дел в 3.2 «Изменения», 3.5 «Решения», 3.3 «Жалобы»,
+      3.4 «Касс.», 3.6 «Тексты решений»;
+    - Апел.: число дел в 5.1 «Новые», 5.2 «Отложенные», 5.3 «Назначенные»,
+      5.4 «Акты», 5.5 «Тексты актов».
+
+    Отдельно «Новые иски (1 инст.)» (3.1) — Y. Формат сохраняем близким
+    к промпту, но цифры — из факта, а не из обещания LLM.
+    """
+    lines = html.split("\n")
+    sections = _count_digest_subsections(html)
 
     fi_new = sum(c for b, lbl, c in sections if lbl == "1 инст./Новые иски")
     fi_changes = sum(c for b, lbl, c in sections if lbl == "1 инст./Изменения")
@@ -10595,10 +10641,22 @@ def main_json():
     send_telegram(digest)
     timings["telegram"] = time.perf_counter() - t0
 
-    # Web Push — краткое уведомление при наличии изменений, разбивка по типам
-    push_new = len(fi_new_cases) + len(appeal_new_cases_csv) + len(cass_discovered)
-    push_changes = len(fi_changes) + len(changes) + len(cass_changes)
-    push_stages = len(stage_transitions)
+    # Web Push — краткое уведомление при наличии изменений, разбивка по типам.
+    # Числа берём из ФАКТИЧЕСКОГО HTML дайджеста (после _renumber_section_headers /
+    # _recount_summary_line), чтобы шапка фронта и web-push body показывали ту же
+    # цифру, что и блок «📋 Сводка». Сырое len(fi_changes)+len(changes)+...
+    # перерезалось дедупом 3.2↔3.5 и завышало показатель «Изменений: N».
+    # Fallback на сырые значения — только если в HTML вообще нет подсекций с (N)
+    # (шаблонный дайджест / no-changes-вариант), чтобы не «занулять» события.
+    _digest_counters = summarize_digest_counters(digest)
+    if any(_digest_counters.values()):
+        push_new = _digest_counters["new"]
+        push_changes = _digest_counters["changes"]
+        push_stages = _digest_counters["stages"]
+    else:
+        push_new = len(fi_new_cases) + len(appeal_new_cases_csv) + len(cass_discovered)
+        push_changes = len(fi_changes) + len(changes) + len(cass_changes)
+        push_stages = len(stage_transitions)
     push_summary = ""
     if push_new + push_changes + push_stages > 0:
         parts = []
