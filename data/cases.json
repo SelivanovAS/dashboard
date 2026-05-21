@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-21T12:59:30",
+  "updated_at": "2026-05-21T08:18:21+00:00",
   "cases": [
     {
       "id": "33-3913/2026",
@@ -9417,7 +9417,7 @@
         "appellant_is_bank": false,
         "appellant_status": "ОТВЕТЧИК",
         "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
-        "suspended_until": "29.05.2026",
+        "suspended_until": "",
         "hearing_date": "09.06.2026",
         "hearing_time": "09:00",
         "decision_date": "",

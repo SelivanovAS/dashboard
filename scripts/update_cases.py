@@ -802,6 +802,27 @@ def migrate_stages(cases: list[dict]) -> int:
             changed = prev is not None
             if changed:
                 migrated += 1
+    # Чистка кассации: если у блока одновременно есть suspended_until и
+    # hearing_date, и hearing_date позже (или совпадает) — суспенд устарел
+    # (заседание назначено уже после периода «без движения»). Иначе фронт
+    # отрисует чип «б/дв.», а skip-logic будет долго не парсить дело.
+    for case in cases:
+        cs = case.get("cassation") or {}
+        su_raw = (cs.get("suspended_until") or "").strip()
+        hd_raw = (cs.get("hearing_date") or "").strip()
+        if not su_raw or not hd_raw:
+            continue
+        m_su = _DATE_DDMMYYYY_RX.match(su_raw)
+        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
+        if not (m_su and m_hd):
+            continue
+        try:
+            su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
+            hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
+        except ValueError:
+            continue
+        if hd >= su:
+            cs["suspended_until"] = ""
     return migrated
 
 
@@ -3425,6 +3446,23 @@ def _cassation_card_to_block(info: dict) -> dict:
     # (в main_json) при обходе результатов поиска и кладётся в info["link"].
     if info.get("link"):
         link = info["link"]
+    # «Без движения» отменяется фактическим назначением рассмотрения: если
+    # hearing_date позже или равно suspended_until, в блок suspended_until
+    # не пишем (иначе фронт показывает чип «б/дв.» даже когда уже назначено
+    # единоличное/коллегиальное рассмотрение, а skip-logic тормозит обновление).
+    suspended_until = info.get("suspended_until", "")
+    hd_raw = info.get("hearing_date", "")
+    if suspended_until and hd_raw:
+        m_su = _DATE_DDMMYYYY_RX.match(suspended_until)
+        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
+        if m_su and m_hd:
+            try:
+                su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
+                hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
+                if hd >= su:
+                    suspended_until = ""
+            except ValueError:
+                pass
     block = {
         "case_number": info.get("cassation_internal_number", ""),
         "cassation_number": info.get("cassation_number", ""),
@@ -3440,7 +3478,7 @@ def _cassation_card_to_block(info: dict) -> dict:
         "appellant_is_bank": appellant_is_bank,
         "appellant_status": cassator_status,
         "review_result": info.get("review_result", ""),
-        "suspended_until": info.get("suspended_until", ""),
+        "suspended_until": suspended_until,
         "hearing_date": info.get("hearing_date", ""),
         "hearing_time": info.get("hearing_time", ""),
         "decision_date": info.get("decision_date", ""),
