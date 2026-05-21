@@ -377,6 +377,11 @@ function rowToCase(h,row){
       }
     }
   }
+  // CSV-legacy — только FI; срок «б/дв. до …» в карточке суда не пишется,
+  // вытащенная regex'ом дата — публикация определения, не дедлайн. Прочерк.
+  if(nextDateLabel==='Без движения до'){
+    nextDate='';
+  }
   const baseStatus=STATUS_MAP[sl]||sl||'active';
   const hearingTime=g(['время заседания']);
   const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),firstInstanceJudge:g(['судья 1 инстанции','судья первой','судья 1']),appellateJudge:g(['судья-докладчик','судья докладчик','докладчик']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
@@ -545,6 +550,13 @@ function jsonToCase(j){
         else{nextDate=extractedDate;nextDateLabel='Событие';}
       }
     }
+  }
+  // FI/апелляция: в карточке ПИ ГАС-Правосудие срок устранения недостатков
+  // не публикуется — regex выхватывает из текста события дату публикации
+  // определения, а не дедлайн. Лучше прочерк, чем дезориентирующая дата.
+  // Кассация использует структурный suspended_until ниже.
+  if(nextDateLabel==='Без движения до'&&stage!=='cassation'){
+    nextDate='';
   }
   // Кассация: «Жалоба оставлена без движения до DD.MM.YYYY». Перебивает
   // эвристики выше — статус явный и приоритетный, чтобы в шапке drawer'а
