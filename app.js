@@ -1494,18 +1494,20 @@ function buildHearingHtml(c,vm,opts){
   let rCls='';
   if(d===0)rCls='today';
   else if(d!==null&&d>0&&d<=7)rCls='soon';
-  // Префикс «отл. до» / «б/дв. до» больше не выводим — статус и так показан
-  // бейджем в столбце «Состояние», тут было бы дублированием.
+  // Для «Без движения» — префикс «б/дв. до» в самой дате, чтобы голая дата
+  // не выглядела как заседание (дублирование с бейджем намеренное — без префикса
+  // юрист путается, см. дело 8Г-6864/2026). Для «Отложено до» оставляем без префикса.
+  const prefix=c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
   const compact=!!(opts&&opts.compact);
   const relRow=rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:'';
   if(compact){
     // Мобильная карточка: «<дата> в <время>» одной строкой, метка отдельно справа.
     const dateLine=timeStr?`${dateStr} в ${timeStr}`:dateStr;
-    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${dateLine}</span>${relRow}</div>`;
+    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateLine}</span>${relRow}</div>`;
   }
   // Десктоп-таблица: три строки — дата, время, относительная метка справа.
   const timeRow=timeStr?`<span class="hearing-time ${pCls}">${timeStr}</span>`:'';
-  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${dateStr}</span>${timeRow}${relRow}</div>`;
+  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateStr}</span>${timeRow}${relRow}</div>`;
 }
 
 function renderTable(){
