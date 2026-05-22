@@ -1161,6 +1161,36 @@ def extract_result_from_event(event_text: str) -> str:
     return captured
 
 
+# Содержимое поля «Результат» карточки, которое суд ошибочно (или нестандартно)
+# заполняет текстом события вместо итога рассмотрения. Семантически такие
+# значения — это «заседание перенесено/назначено», а не «дело решено».
+# Если их пропустить как `new_result`, дело уезжает в секцию «Вынесенные акты»
+# дайджеста, хотя никакого акта нет. См. _is_event_text_in_result_field.
+_RESULT_FIELD_EVENT_RX = re.compile(
+    r"^\s*(?:"
+    r"заседание\s+отлож\w+"          # «Заседание отложено на ...»
+    r"|заседание\s+назначен\w+"       # «Заседание назначено на ...»
+    r"|рассмотрени\w*\s+начат\w*\s+с\s+начала"  # «Рассмотрение начато с начала»
+    r"|назначен\w*\s+первое\s+заседани"          # «Назначено первое заседание ...»
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_event_text_in_result_field(text: str) -> bool:
+    """Распознать, что в поле «Результат» карточки лежит текст события
+    («Заседание отложено/назначено», «Рассмотрение начато с начала»,
+    «Назначено первое заседание»), а не итог рассмотрения.
+
+    Используется и парсером (чтобы не выставлять new_result), и template-
+    рендерером (страховка фильтра секции «Вынесенные акты»), чтобы такие
+    дела не попадали в дайджест как резолютивные акты.
+    """
+    if not text:
+        return False
+    return bool(_RESULT_FIELD_EVENT_RX.match(text))
+
+
 def classify_hearing_type(event_text: str) -> str:
     """Нормализованный ярлык типа заседания из текста события движения дела.
 
@@ -3037,7 +3067,17 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
     # в 5.1 «Новые дела апелляции», отдельная пометка юристу не нужна.
     events = sum(1 for ch in changes
                  if "new_event" in ch["type"] or "hearing_new" in ch["type"])
-    results = sum(1 for ch in changes if "new_result" in ch["type"])
+    # «Ложные» new_result, содержащие текст события в поле «Результат»,
+    # из подсчёта вырезаем — иначе template-сводка показывает лишние
+    # «N суд. акт.». Парсер их теперь не создаёт, но защищаемся от
+    # старых контекстов (--replay-last) и legacy JSON.
+    results = sum(
+        1 for ch in changes
+        if "new_result" in ch["type"]
+        and not _is_event_text_in_result_field(
+            (ch.get("details") or {}).get("result", "")
+        )
+    )
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
     postponed = sum(1 for ch in changes if "hearing_postponed" in ch["type"])
     to_fi_rules = sum(1 for ch in changes if "appeal_to_fi_rules" in ch["type"])
@@ -3927,8 +3967,17 @@ def update_active_cases(
                     change["details"]["act_verdict_label"] = act_verdict_label
                     change["details"]["act_verdict_raw"] = act_verdict_raw
 
-        # Новый результат
-        if new_result and new_result != old_result:
+        # Новый результат.
+        # Гард: суд иногда заполняет поле «Результат» текстом события
+        # («Заседание отложено на ДД.ММ.ГГГГ ЧЧ:ММ», «Назначено первое
+        # заседание», «Рассмотрение начато с начала») — это НЕ итог
+        # рассмотрения. Если такой текст попадает в new_result, дело
+        # уезжает в секцию «Вынесенные акты» дайджеста (и в template, и в
+        # LLM-ветке), хотя никакого акта нет. Игнорируем: hearing_postponed/
+        # hearing_new тогда нормально создадутся через сравнение «Дата
+        # заседания» (см. ниже, гард `not new_result`).
+        if new_result and new_result != old_result \
+                and not _is_event_text_in_result_field(new_result):
             change["type"].append("new_result")
             change["details"]["result"] = new_result
             # Обогащаем контекст: дата заседания, последнее событие
@@ -6277,11 +6326,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 - копировать «в удовлетворении требований отказать» / «требования подлежат удовлетворению» / «доводы апелляционной жалобы не влекут отмены решения» без указания, КАКУЮ норму суд применил и КАКОЙ довод принял/отклонил.
 
 1. Заголовок: 📊 Дайджест судебных дел | Суды ХМАО-Югры | {today}
-2. 📋 <b>Сводка</b> — отдельные строки, по одной на ИНСТАНЦИЮ С СОБЫТИЯМИ (НЕ через «|» в одну строку). Между заголовком «📋 <b>Сводка</b>» и самими строками — ОДНА пустая строка (отступ). Между строками сводки пустой строки нет (все идут плотным блоком). Формат ДОСЛОВНО:
-   <i>1 инст.:</i> X заседаний, Y решений, Z статусов
-   <i>Апелл.:</i> +N дел, M актов, K отложений
-   <i>Касс.:</i> +K дел, L событий
-   ВАЖНО: каждую из трёх строк <i>1 инст.:</i>, <i>Апелл.:</i>, <i>Касс.:</i> пиши ТОЛЬКО если по этой инстанции в данных реально есть события, которые будут выведены в блоках 3/5/6 ниже. Если по инстанции пусто — соответствующую строку НЕ выводи, НЕ пиши «нет событий», НЕ оставляй пустую строку. Если событие дедуплицировано правилами (смена статуса свёрнута в 3.5, подача жалобы в 3.3 поглощает 3.2 и т.п.) — в сводке его НЕ считай. Если по всем трём инстанциям пусто — блок «📋 <b>Сводка</b>» вообще не выводи. После сводки — одна пустая строка перед большим блоком 🏛 ПЕРВАЯ ИНСТАНЦИЯ.
+2. 📋 <b>Сводку</b> НЕ пиши — Python сам вставит её детерминированно по факту вывода (он точно знает, сколько дел в каждой подсекции, и не ошибётся в счётчиках). Сразу после заголовка 📊 переходи к большому блоку 🏛 ПЕРВАЯ ИНСТАНЦИЯ. Если случайно вывел блок «📋 Сводка» — он будет вырезан и заменён.
 
 2bis. НУМЕРАЦИЯ ПОДСЕКЦИЙ: номера типа «3.1.», «3.6.», «5.1.», «5.1a.», «6.2.» в этом промпте — ВНУТРЕННИЕ идентификаторы для ссылок между правилами (например, «не дублируй в 3.2», «дело попадает в 3.6»). В ВЫВОДЕ дайджеста нумерацию НЕ показывай. Заголовки подсекций выводи СТРОГО в виде «<emoji> <b>Название (N):</b>» — БЕЗ префикса «X.Y.». Пример: пиши «📥 <b>Новые дела (3):</b>», а НЕ «5.1. 📥 <b>Новые дела (3):</b>». Это касается всех 13 подсекций (3.1–3.6, 5.1, 5.1a, 5.2, 5.4–5.5, 6.1–6.2). Номер 5.3 во внутренней нумерации пропущен (см. ниже у 5.2 «Изменения»).
 
@@ -6364,6 +6409,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
    5.4. ⚖️ <b>Вынесенные акты (N):</b> — резолютивная часть (выходит через 1-3 дня после заседания). Только дела с блоком ИТОГ. ТРИ строки на дело, между делами пустая строка. Формат — как в 5.2 «Отложенные заседания»: первая строка — номер + стороны, вторая — категория + банк-роль, третья — итог. Дату определения встраиваем в строку «Итог», чтобы строка 1 оставалась короткой и читаемой.
         🛑 БЛОКИРУЮЩЕЕ ПРАВИЛО (нарушение = критический брак): каждое дело из «ИЗМЕНЕНИЯ ПО ДЕЛАМ» с полем «ИТОГ: …» и БЕЗ поля «МОТИВИРОВОЧНАЯ ЧАСТЬ АКТА» ОБЯЗАТЕЛЬНО появляется в секции 5.4. Поле «Апеллянт» в 5.4 не используется и не выводится — его пустота / отсутствие НЕ повод пропустить дело. Любые правила про поле «Апеллянт» (включая запрет на его вычисление в 5.5) к секции 5.4 НЕ применяются.
 
+        🛑 ИСКЛЮЧЕНИЕ ИЗ БЛОКИРУЮЩЕГО (нарушение = критический брак): если поле «ИТОГ: …» дословно начинается с «Заседание отложено», «Заседание назначено», «Рассмотрение начато с начала» или «Назначено первое заседание» — это НЕ результат рассмотрения, а текст события заседания (суд иногда нестандартно заполняет поле «Результат» текстом события). Такое дело идёт в 5.2 «Изменения» (как обычное отложение/назначение заседания), в 5.4 НЕ выводится; никакая «Метка исхода» в 5.4 для него не выставляется. Этот фильтр имеет приоритет над блокирующим правилом выше.
+
         🛑 СТРОГО ЗАПРЕЩЕНО в строке 1: писать «— Апелляционное определение от ДД.ММ.ГГГГ.», «: апелляционное определение», «— Определение от …». Строка 1 — ТОЛЬКО номер + стороны, ничего больше. Дата идёт ИСКЛЮЧИТЕЛЬНО в скобках строки 3 «Итог (ДД.ММ.ГГГГ): …». Любое упоминание «Апелляционное определение» в строке 1 = критический брак, нарушает запрос юриста на формат «как в отложениях».
 
         КРИТИЧНО: строки 1, 2 и 3 ОДНОГО дела идут ПОДРЯД, БЕЗ пустых строк между ними:
@@ -6434,8 +6481,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             Сбербанк vs Чернов В.В. | категория: Кредитный договор, банк — истец
         ❌ НЕПРАВИЛЬНО (выкинута часть строк или весь блок при наличии данных в источнике): любой пропуск дела из «КАССАЦИОННЫЕ СОБЫТИЯ» — критический брак.
 
-7. 📌 Итоговая строка: <b>В производстве: всего {total_active} (1 инст.: {total_active_fi} | апел.: {total_active_appeal} | касс.: {total_active_cassation})</b>. Используй ИМЕННО эти ЧЕТЫРЕ числа дословно — не считай, не угадывай, не округляй. Касс. — это дела на стадиях `cassation_pending` и `cassation` (жалоба ушла в кассац. суд / уже рассматривается на 7kas).
-8. В конце: <a href="{DASHBOARD_URL}">📊 Дашборд</a> — обязательно всегда.
+7. 📌 Финальную плашку «В производстве: всего N (1 инст.: X | апел.: Y | касс.: Z)» и ссылку «📊 Дашборд» НЕ пиши — Python сам их допишет в самом конце детерминированно (точные числа total_active* у него уже есть, гарантированно совпадут с дашбордом). Если случайно вывел эти строки — они будут вырезаны и заменены свежими.
 
 ОФОРМЛЕНИЕ: без маркеров списка («• », «- »); названия больших блоков и секций — <b>жирным</b>; номера дел — <b>жирным</b> внутри ссылок. РАЗДЕЛИТЕЛИ И ПУСТЫЕ СТРОКИ (обязательны, без них границы теряются):
 (а) перед заголовком каждой подсекции 📥/📅/⚖️/📄/🔁/📨/⚠ ВНУТРИ одного большого блока — отдельная строка-разделитель «⸻» (ТОЛЬКО этот символ, без HTML-тегов и пробелов вокруг), окружённая пустыми строками: пустая строка → ⸻ → пустая строка → заголовок секции. Перед самой первой подсекцией большого блока (сразу после <b>🏛 ПЕРВАЯ ИНСТАНЦИЯ</b> или <b>⚖️ АПЕЛЛЯЦИЯ</b>) разделитель НЕ ставь — там и так понятно, где начало; ПОСЛЕ заголовка подсекции (📥 Новые иски (N): / 📅 Изменения (N): / 📄 Опубликованные… / 🔁 Отложенные… и т.п.) — ровно ОДНА пустая строка, потом первое дело;
@@ -6474,7 +6520,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         text = _renumber_section_headers(text)
         text = _purge_3_6_without_act_text(text, fi_changes or [])
         text = _drop_zero_count_sections(text)
-        text = _recount_summary_line(text)
+        # Сводку (📋) полностью переписываем по факту вывода — раньше
+        # _recount_summary_line редактировал только если LLM использовал
+        # ровно <i>1 инст.:</i>/<i>Апелл.:</i>/<i>Касс.:</i> обёртки.
+        # Теперь любая «свободная» сводка от LLM вырезается целиком и
+        # заменяется детерминированной (см. _replace_summary_block).
+        text = _replace_summary_block(text)
         # Срезаем «5.1.», «6.2.» и т.п. префиксы из заголовков подсекций —
         # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
         # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
@@ -6482,6 +6533,17 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         # Срезаем «X → Y → Z» в строках «категория: …» — LLM иногда
         # подставляет родительскую категорию вопреки промпту.
         text = _shorten_categories_in_html(text)
+        # Гарантируем финальную плашку «📌 В производстве …» и ссылку
+        # «📊 Дашборд». LLM иногда упирается в max_tokens и обрезается
+        # перед ними, а считать total_active*-цифры он не должен (мы
+        # передаём их сюда напрямую).
+        text = _ensure_footer(
+            text,
+            total_active=total_active,
+            total_active_fi=total_active_fi,
+            total_active_appeal=total_active_appeal,
+            total_active_cassation=total_active_cassation,
+        )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         return truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2)
@@ -6538,7 +6600,12 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         text = _renumber_section_headers(text)
         text = _purge_3_6_without_act_text(text, fi_changes or [])
         text = _drop_zero_count_sections(text)
-        text = _recount_summary_line(text)
+        # Сводку (📋) полностью переписываем по факту вывода — раньше
+        # _recount_summary_line редактировал только если LLM использовал
+        # ровно <i>1 инст.:</i>/<i>Апелл.:</i>/<i>Касс.:</i> обёртки.
+        # Теперь любая «свободная» сводка от LLM вырезается целиком и
+        # заменяется детерминированной (см. _replace_summary_block).
+        text = _replace_summary_block(text)
         # Срезаем «5.1.», «6.2.» и т.п. префиксы из заголовков подсекций —
         # юрист просил без нумерации. Идём после _renumber/_recount, чтобы
         # счётчики (N) пересчитались до удаления префикса. См. _strip_section_numbering.
@@ -6546,6 +6613,17 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         # Срезаем «X → Y → Z» в строках «категория: …» — LLM иногда
         # подставляет родительскую категорию вопреки промпту.
         text = _shorten_categories_in_html(text)
+        # Гарантируем финальную плашку «📌 В производстве …» и ссылку
+        # «📊 Дашборд». LLM иногда упирается в max_tokens и обрезается
+        # перед ними, а считать total_active*-цифры он не должен (мы
+        # передаём их сюда напрямую).
+        text = _ensure_footer(
+            text,
+            total_active=total_active,
+            total_active_fi=total_active_fi,
+            total_active_appeal=total_active_appeal,
+            total_active_cassation=total_active_cassation,
+        )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
         # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
@@ -7142,6 +7220,55 @@ def _classify_line(line: str) -> str:
     return "CONT_LINE"
 
 
+# Финальная плашка («📌 В производстве: всего N (1 инст.: X | апел.: Y | касс.: Z)»)
+# и ссылка на дашборд («📊 Дашборд»). Эти регексы используются, чтобы
+# срезать существующие варианты, прежде чем добавить детерминированные —
+# защита от дублей при разных формулировках LLM.
+_FOOTER_BADGE_RE = re.compile(r'^\s*📌\s*<b>\s*В\s+производстве:')
+_DASHBOARD_LINK_RE = re.compile(
+    r'^\s*<a\s+href="[^"]*">\s*📊\s*Дашборд\s*</a>\s*$'
+)
+
+
+def _ensure_footer(
+    html: str,
+    *,
+    total_active: int,
+    total_active_fi: int,
+    total_active_appeal: int,
+    total_active_cassation: int,
+) -> str:
+    """Гарантировать наличие финальной плашки `📌 В производстве …` и
+    ссылки `📊 Дашборд` в конце дайджеста.
+
+    LLM в полном режиме иногда упирается в max_tokens и обрезается перед
+    финальной плашкой; реже — путает порядок (ссылка раньше плашки) или
+    пишет лишнюю свою формулировку. Удаляем существующие плашку/ссылку
+    и всегда добавляем детерминированные в самый конец (плашка → ссылка).
+    Числа берутся ровно те же, что считает `main()` для template-ветки
+    (см. финальные строки `generate_template_digest`).
+    """
+    lines = html.split("\n")
+    cleaned = [
+        ln for ln in lines
+        if not _FOOTER_BADGE_RE.match(ln) and not _DASHBOARD_LINK_RE.match(ln)
+    ]
+    # Срезаем хвостовые пустые строки — добавим свои отступы.
+    while cleaned and cleaned[-1].strip() == "":
+        cleaned.pop()
+
+    badge = (
+        f"📌 <b>В производстве: всего {total_active}"
+        f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
+        f" | касс.: {total_active_cassation})</b>"
+    )
+    link = f'<a href="{DASHBOARD_URL}">📊 Дашборд</a>'
+    cleaned.append("")
+    cleaned.append(badge)
+    cleaned.append(link)
+    return "\n".join(cleaned)
+
+
 def _normalize_section_spacing(html: str) -> str:
     """Привести межсекционные отступы к каноничному виду.
 
@@ -7341,154 +7468,269 @@ def summarize_digest_counters(html: str) -> dict[str, int]:
     return {"new": new_n, "changes": changes_n, "stages": stages_n}
 
 
-def _recount_summary_line(html: str) -> str:
-    """Перегенерировать строки сводки `📋 Сводка` по факту вывода.
-
-    Считает в дайджесте после генерации:
-    - 1 инст.: число дел в 3.2 «Изменения», 3.5 «Решения», 3.3 «Жалобы»,
-      3.4 «Касс.», 3.6 «Тексты решений»;
-    - Апел.: число дел в 5.1 «Новые», 5.2 «Отложенные», 5.3 «Назначенные»,
-      5.4 «Акты», 5.5 «Тексты актов».
-
-    Отдельно «Новые иски (1 инст.)» (3.1) — Y. Формат сохраняем близким
-    к промпту, но цифры — из факта, а не из обещания LLM.
-    """
-    lines = html.split("\n")
-    sections = _count_digest_subsections(html)
-
-    fi_new = sum(c for b, lbl, c in sections if lbl == "1 инст./Новые иски")
-    fi_changes = sum(c for b, lbl, c in sections if lbl == "1 инст./Изменения")
-    fi_resolved = sum(c for b, lbl, c in sections if lbl in (
-        "1 инст./Решения", "1 инст./Тексты решений",
-    ))
-    fi_appeal_filed = sum(c for b, lbl, c in sections if lbl == "1 инст./Апел. жалобы")
-    fi_cassation = sum(c for b, lbl, c in sections if lbl == "1 инст./Кассация")
-    ap_new = sum(c for b, lbl, c in sections if lbl == "Апел./Новые дела")
-    ap_acts = sum(c for b, lbl, c in sections if lbl in (
-        "Апел./Акты", "Апел./Тексты актов",
-    ))
-    ap_postponed = sum(c for b, lbl, c in sections if lbl == "Апел./Отложено")
-    ap_scheduled = sum(c for b, lbl, c in sections if lbl == "Апел./Назначено")
-    cass_new = sum(c for b, lbl, c in sections if lbl == "Касс./Новые дела")
-    cass_events = sum(c for b, lbl, c in sections if lbl == "Касс./События")
-
-    # Собираем фразы для каждой инстанции.
-    def _plural(n: int, forms: tuple[str, str, str]) -> str:
-        n = abs(n) % 100
-        n1 = n % 10
-        if 10 < n < 20:
-            return forms[2]
-        if 1 < n1 < 5:
-            return forms[1]
-        if n1 == 1:
-            return forms[0]
+def _plural_ru(n: int, forms: tuple[str, str, str]) -> str:
+    """Русский множественный выбор: (1, 2-4, 5+)."""
+    n = abs(n) % 100
+    n1 = n % 10
+    if 10 < n < 20:
         return forms[2]
+    if 1 < n1 < 5:
+        return forms[1]
+    if n1 == 1:
+        return forms[0]
+    return forms[2]
+
+
+def _compute_summary_lines(html: str) -> tuple[str | None, str | None, str | None]:
+    """Собрать три детерминированные строки сводки `📋` по факту вывода.
+
+    Возвращает (1_инст.-строка, Апелл.-строка, Касс.-строка). Каждая
+    может быть None — если по этой инстанции в дайджесте ни одной
+    подсекции с (N) не выведено.
+
+    Считает заново (не через `_count_digest_subsections`), потому что
+    тот не различает контекст big-header'а: лейбл «Изменения» одинаков
+    для 1 инст. (3.2) и апелляции (5.2), а нам нужно знать инстанцию.
+    Идём по строкам, отслеживаем текущий BIG_HEADER, и для каждой
+    подсекции (`📅 Изменения`, `📥 Новые иски`, `⚖️ Вынесенные акты`
+    и т.п.) присваиваем счётчик правильной инстанции.
+    """
+    # Категории внутри одной инстанции — раздельно, чтобы выбрать нужную
+    # формулировку при плюрализации.
+    counters = {
+        "fi": {
+            "new_cases": 0,        # 3.1 Новые иски
+            "changes": 0,          # 3.2 Изменения
+            "appeal_filed": 0,     # 3.3 Поданы апел. жалобы
+            "cassation": 0,        # 3.4 Кассационные события
+            "resolved": 0,         # 3.5 + 3.6 (решения + тексты)
+        },
+        "appeal": {
+            "new_cases": 0,        # 5.1 Новые дела
+            "changes": 0,          # 5.2 Изменения (объединяет «Отложенные»+«Назначенные»)
+            "acts": 0,             # 5.4 + 5.5 (акты + тексты актов)
+        },
+        "cass": {
+            "new_cases": 0,        # 6.1 Новые касс. дела
+            "events": 0,           # 6.2 Касс. события
+        },
+    }
+
+    # Регексы подсекций (с count в скобках), без префикса инстанции —
+    # инстанцию определим по окружающему BIG_HEADER. Для «📅 Изменения»
+    # и «📥 Новые иски/дела» один регекс работает в обеих инстанциях.
+    sub_patterns = [
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📅\s*<b>\s*Изменения\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "changes", "appeal": "changes"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📥\s*<b>\s*Новые иски\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "new_cases"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📥\s*<b>\s*Новые дела\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"appeal": "new_cases"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📨\s*<b>\s*Поданы апелляционные жалобы\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "appeal_filed"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📨\s*<b>\s*Кассационные события\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "cassation"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'⚖️\s*<b>\s*Вынесенные решения\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "resolved"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📄\s*<b>\s*Опубликованные тексты решений\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"fi": "resolved"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'⚖️\s*<b>\s*Вынесенные акты\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"appeal": "acts"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📄\s*<b>\s*Опубликованные тексты актов\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"appeal": "acts"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📥\s*<b>\s*Новые касс\. дела\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"cass": "new_cases"}),
+        (re.compile(r'^\s*' + _SUBSECTION_NUM_PREFIX
+                    + r'📑\s*<b>\s*Касс\. события\s*\(\s*\d+\s*\)\s*:\s*</b>\s*$'),
+         {"cass": "events"}),
+    ]
+
+    lines = html.split("\n")
+    n = len(lines)
+    cur_big = ""  # "fi" / "appeal" / "cass" / ""
+    i = 0
+    while i < n:
+        ln = lines[i]
+        if _FI_BLOCK_HEADER_RE.match(ln):
+            cur_big = "fi"
+            i += 1
+            continue
+        if _APPEAL_BLOCK_HEADER_RE.match(ln):
+            cur_big = "appeal"
+            i += 1
+            continue
+        if _CASSATION_BLOCK_HEADER_RE.match(ln):
+            cur_big = "cass"
+            i += 1
+            continue
+        matched = False
+        for pat, mapping in sub_patterns:
+            if not pat.match(ln):
+                continue
+            bucket = mapping.get(cur_big)
+            if bucket is None:
+                # Подсекция в неожиданной инстанции — пропускаем (например,
+                # «📅 Изменения» внутри `🔀 Перешли в апелляцию` мостика).
+                break
+            # Считаем строки-дела до следующего заголовка.
+            j = i + 1
+            count = 0
+            while j < n and not _DIGEST_HEADER_RE.match(lines[j]):
+                if _line_has_case_number(lines[j]):
+                    count += 1
+                j += 1
+            counters[cur_big][bucket] += count
+            i = j
+            matched = True
+            break
+        if not matched:
+            i += 1
+
+    fi = counters["fi"]
+    ap = counters["appeal"]
+    ca = counters["cass"]
 
     fi_parts: list[str] = []
-    if fi_new:
-        fi_parts.append(f"{fi_new} {_plural(fi_new, ('новый иск', 'новых иска', 'новых исков'))}")
-    if fi_changes:
-        fi_parts.append(f"{fi_changes} {_plural(fi_changes, ('изменение', 'изменения', 'изменений'))}")
-    if fi_appeal_filed:
+    if fi["new_cases"]:
         fi_parts.append(
-            f"{fi_appeal_filed} {_plural(fi_appeal_filed, ('апел. жалоба', 'апел. жалобы', 'апел. жалоб'))}"
+            f"{fi['new_cases']} "
+            f"{_plural_ru(fi['new_cases'], ('новый иск', 'новых иска', 'новых исков'))}"
         )
-    if fi_cassation:
+    if fi["changes"]:
         fi_parts.append(
-            f"{fi_cassation} касс. {_plural(fi_cassation, ('событие', 'события', 'событий'))}"
+            f"{fi['changes']} "
+            f"{_plural_ru(fi['changes'], ('изменение', 'изменения', 'изменений'))}"
         )
-    if fi_resolved:
-        fi_parts.append(f"{fi_resolved} {_plural(fi_resolved, ('решение', 'решения', 'решений'))}")
-    fi_summary = ", ".join(fi_parts) if fi_parts else "нет событий"
+    if fi["appeal_filed"]:
+        fi_parts.append(
+            f"{fi['appeal_filed']} "
+            f"{_plural_ru(fi['appeal_filed'], ('апел. жалоба', 'апел. жалобы', 'апел. жалоб'))}"
+        )
+    if fi["cassation"]:
+        fi_parts.append(
+            f"{fi['cassation']} касс. "
+            f"{_plural_ru(fi['cassation'], ('событие', 'события', 'событий'))}"
+        )
+    if fi["resolved"]:
+        fi_parts.append(
+            f"{fi['resolved']} "
+            f"{_plural_ru(fi['resolved'], ('решение', 'решения', 'решений'))}"
+        )
 
     ap_parts: list[str] = []
-    if ap_new:
-        ap_parts.append(f"+{ap_new} {_plural(ap_new, ('дело', 'дела', 'дел'))}")
-    if ap_scheduled:
+    if ap["new_cases"]:
         ap_parts.append(
-            f"{ap_scheduled} {_plural(ap_scheduled, ('заседание', 'заседания', 'заседаний'))}"
+            f"+{ap['new_cases']} "
+            f"{_plural_ru(ap['new_cases'], ('дело', 'дела', 'дел'))}"
         )
-    if ap_postponed:
+    if ap["changes"]:
         ap_parts.append(
-            f"{ap_postponed} {_plural(ap_postponed, ('отложение', 'отложения', 'отложений'))}"
+            f"{ap['changes']} "
+            f"{_plural_ru(ap['changes'], ('изменение', 'изменения', 'изменений'))}"
         )
-    if ap_acts:
-        ap_parts.append(f"{ap_acts} {_plural(ap_acts, ('акт', 'акта', 'актов'))}")
-    ap_summary = ", ".join(ap_parts) if ap_parts else "нет событий"
+    if ap["acts"]:
+        ap_parts.append(
+            f"{ap['acts']} "
+            f"{_plural_ru(ap['acts'], ('акт', 'акта', 'актов'))}"
+        )
 
     cass_parts: list[str] = []
-    if cass_new:
+    if ca["new_cases"]:
         cass_parts.append(
-            f"+{cass_new} {_plural(cass_new, ('дело', 'дела', 'дел'))}"
+            f"+{ca['new_cases']} "
+            f"{_plural_ru(ca['new_cases'], ('дело', 'дела', 'дел'))}"
         )
-    if cass_events:
+    if ca["events"]:
         cass_parts.append(
-            f"{cass_events} {_plural(cass_events, ('событие', 'события', 'событий'))}"
+            f"{ca['events']} "
+            f"{_plural_ru(ca['events'], ('событие', 'события', 'событий'))}"
         )
-    cass_summary = ", ".join(cass_parts)
-    # Юрист просил не выводить инстанции «нет событий». Если по
-    # инстанции пусто — строки в сводке нет вообще (вырезаем уже
-    # выведенные LLM, не вставляем недостающие).
-    new_fi_line = f"<i>1 инст.:</i> {fi_summary}" if fi_parts else None
-    new_ap_line = f"<i>Апелл.:</i> {ap_summary}" if ap_parts else None
-    new_cass_line = f"<i>Касс.:</i> {cass_summary}" if cass_parts else None
 
-    out: list[str] = []
-    fi_seen = False
-    ap_seen = False
-    cass_seen = False
-    for ln in lines:
-        s = ln.strip()
-        if s.startswith("<i>1 инст.:</i>"):
-            fi_seen = True
-            if new_fi_line is not None:
-                out.append(new_fi_line)
-            continue
-        if s.startswith("<i>Апелл.:</i>"):
-            ap_seen = True
-            if new_ap_line is not None:
-                out.append(new_ap_line)
-            continue
-        if s.startswith("<i>Касс.:</i>"):
-            cass_seen = True
-            if new_cass_line is not None:
-                out.append(new_cass_line)
-            continue
-        out.append(ln)
+    fi_line = f"<i>1 инст.:</i> {', '.join(fi_parts)}" if fi_parts else None
+    ap_line = f"<i>Апелл.:</i> {', '.join(ap_parts)}" if ap_parts else None
+    cass_line = f"<i>Касс.:</i> {', '.join(cass_parts)}" if cass_parts else None
+    return fi_line, ap_line, cass_line
 
-    # Вставка недостающих строк сводки. LLM мог пропустить «Касс.:»
-    # (раньше так и было — это и есть исходный баг). Вставляем под
-    # последней уже-присутствующей строкой сводки, либо под «📋 Сводка».
-    def _insert_after(anchor_pred, line: str) -> bool:
-        for i, ln_ in enumerate(out):
-            if anchor_pred(ln_):
-                out.insert(i + 1, line)
-                return True
-        return False
 
-    if new_cass_line is not None and not cass_seen:
-        inserted = False
-        for anchor in (
-            lambda ln_: ln_.strip().startswith("<i>Апелл.:</i>"),
-            lambda ln_: ln_.strip().startswith("<i>1 инст.:</i>"),
-            lambda ln_: ln_.strip().startswith("📋"),
-        ):
-            if _insert_after(anchor, new_cass_line):
-                inserted = True
-                break
-        if not inserted:
-            # Якорей нет — LLM не вывел даже заголовок сводки. Не вмешиваемся.
-            pass
-    if new_ap_line is not None and not ap_seen:
-        for anchor in (
-            lambda ln_: ln_.strip().startswith("<i>1 инст.:</i>"),
-            lambda ln_: ln_.strip().startswith("📋"),
-        ):
-            if _insert_after(anchor, new_ap_line):
-                break
-    if new_fi_line is not None and not fi_seen:
-        _insert_after(lambda ln_: ln_.strip().startswith("📋"), new_fi_line)
+# Заголовок блока «📋 Сводка». Допускаем оба варианта: с <b> и без —
+# LLM иногда забывает обёртку.
+_SUMMARY_HEADER_RE = re.compile(
+    r'^\s*📋\s*(?:<b>\s*Сводка\s*</b>|Сводка)\s*$'
+)
+# Маркер «следующего большого блока» — где заканчивается зона «📋 Сводка»
+# (включая всё, что LLM туда написал — даже если без <i> обёрток). Это
+# либо заголовок раздела (🏛/⚖️/⚖️🔬), либо финальная плашка/ссылка/⸻.
+_SUMMARY_END_RE = re.compile(
+    r'^\s*(?:🏛|⚖️🔬|⚖️|📌|📊|⸻|<a\s)'
+)
 
+
+def _replace_summary_block(html: str) -> str:
+    """Полностью переписать блок «📋 Сводка» детерминированной Python-сборкой.
+
+    Раньше `_recount_summary_line` лишь редактировала строки `<i>1 инст.:</i>`
+    и т.п. ВНУТРИ существующего блока — но LLM иногда писал сводку в
+    свободной форме (например, «Апелл.: 7 актов» без <i>-обёрток или
+    без всех трёх инстанций), и якорь не находился, сводка оставалась
+    неполной. Новая функция вырезает ВЕСЬ блок (от строки «📋 Сводка»
+    до начала следующего большого блока) и вставляет три детерминированные
+    строки с факт-счётчиками. Если по всем трём инстанциям пусто — блок
+    удаляется вовсе. Если LLM не вывел даже заголовок «📋 Сводка» —
+    вставляем блок сразу после первой строки `📊`.
+    """
+    fi_line, ap_line, cass_line = _compute_summary_lines(html)
+    new_lines = [ln for ln in (fi_line, ap_line, cass_line) if ln is not None]
+
+    src_lines = html.split("\n")
+    n = len(src_lines)
+
+    # Найти заголовок «📋 Сводка» (если есть).
+    header_idx = -1
+    for i, ln in enumerate(src_lines):
+        if _SUMMARY_HEADER_RE.match(ln):
+            header_idx = i
+            break
+
+    # Собрать готовый блок (заголовок + строки + одна пустая строка снизу).
+    if new_lines:
+        block = ["📋 <b>Сводка</b>", ""] + new_lines + [""]
+    else:
+        block = []
+
+    if header_idx == -1:
+        # Заголовка нет — вставим после первой строки `📊` (заголовок дайджеста).
+        if not block:
+            return html
+        for i, ln in enumerate(src_lines):
+            if ln.lstrip().startswith("📊"):
+                # Если сразу после `📊` уже пустая строка — встроимся ПОСЛЕ неё.
+                insert_at = i + 1
+                if insert_at < n and src_lines[insert_at].strip() == "":
+                    insert_at += 1
+                out = src_lines[:insert_at] + block + src_lines[insert_at:]
+                return "\n".join(out)
+        # Якоря нет вовсе — вставим в самое начало.
+        return "\n".join(block + src_lines)
+
+    # Найти, где блок заканчивается (следующая «большая» строка).
+    end_idx = header_idx + 1
+    while end_idx < n and not _SUMMARY_END_RE.match(src_lines[end_idx]):
+        end_idx += 1
+    # Срежем хвостовые пустые строки перед end_idx — block их добавит сам.
+    while end_idx > header_idx + 1 and src_lines[end_idx - 1].strip() == "":
+        end_idx -= 1
+    # Срежем ведущие пустые строки в block, если перед header_idx уже есть.
+    out = src_lines[:header_idx] + block + src_lines[end_idx:]
     return "\n".join(out)
 
 
@@ -7909,8 +8151,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # ИТОГ из карточки, и мотивировка). Иначе пользователь видит дубль.
     # Если события разнесены во времени — в разных прогонах каждая секция
     # получит «свой» change (защита сохраняется).
+    # Подстраховка: если в `result` лежит текст события (см. одноимённую
+    # утилиту), отрезаем — это «ложный» итог, дело принадлежит секции 5.2
+    # «Изменения», а не 5.4 «Вынесенные акты». Парсер с гардом такие
+    # `new_result` больше не выставляет, но фильтр защищает на случай
+    # старого payload (например, `--replay-last` после регрессии).
     results = [ch for ch in changes
-               if "new_result" in ch["type"] and "new_act" not in ch["type"]]
+               if "new_result" in ch["type"]
+               and "new_act" not in ch["type"]
+               and not _is_event_text_in_result_field(
+                   (ch.get("details") or {}).get("result", "")
+               )]
     acts = [ch for ch in changes if "new_act" in ch["type"]]
 
     # ── Блок ПЕРВАЯ ИНСТАНЦИЯ ──
