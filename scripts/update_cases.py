@@ -3897,6 +3897,9 @@ def update_active_cases(
                     ap["act_published"] = True
                     if card_info.get("Дата публикации акта"):
                         ap["act_date"] = card_info["Дата публикации акта"]
+                new_jr_j = card_info.get("Судья-докладчик", "")
+                if new_jr_j and new_jr_j != ap.get("judge_reporter", ""):
+                    ap["judge_reporter"] = new_jr_j
 
         # Сравниваем и фиксируем изменения
         old_status = case.get("Статус", "")
