@@ -8979,6 +8979,84 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
+def _extract_paren_numbers(s) -> list[str]:
+    """Достаёт номера из скобок hybrid-ID. `2-208/2026 (2-1148/2025;)` →
+    `["2-1148/2025"]`. Зеркало одноимённой функции в worker.js и
+    audit_watchlists.py."""
+    m = re.search(r"\(([^)]+)\)", str(s or ""))
+    if not m:
+        return []
+    return [
+        b for b in (_bare_case_number(x) for x in re.split(r"[;,]", m.group(1)))
+        if b
+    ]
+
+
+def _build_watchlist_alias_indexes(
+    cases: list[dict],
+) -> tuple[dict[str, str], dict[str, set[str]]]:
+    """По списку дел строит (alias_to_canonical, canonical_to_aliases) для
+    расширения watchlist при фильтрации push-событий.
+
+    Канонический ID = `_bare_case_number(c.id)`. Алиасами считаются bare-формы:
+    `c.id`, `first_instance.case_number`, `appeal.case_number`,
+    `cassation.case_number`, `cassation.cassation_number`, а также все
+    предыдущие номера из скобок hybrid-ID (`(2-1148/2025;)`).
+
+    Возвращает две карты:
+    · alias_to_canonical — по любому known-bare-номеру даёт канон. id;
+    · canonical_to_aliases — по канон. id даёт все его алиасы (set).
+
+    Юрист звёздил `8Г-5513/2026` → bare = `8Г-5513/2026` → канон. =
+    `2-3760/2025` → expanded set содержит и кассац., и FI-номер.
+    """
+    alias_to_canonical: dict[str, str] = {}
+    canonical_to_aliases: dict[str, set[str]] = {}
+    for c in cases:
+        canonical = _bare_case_number(c.get("id", ""))
+        if not canonical:
+            continue
+        fi = c.get("first_instance") or {}
+        ap = c.get("appeal") or {}
+        ca = c.get("cassation") or {}
+        aliases: set[str] = set()
+        for raw in (
+            c.get("id"),
+            fi.get("case_number"),
+            ap.get("case_number"),
+            ca.get("case_number"),
+            ca.get("cassation_number"),
+        ):
+            bare = _bare_case_number(raw)
+            if bare:
+                aliases.add(bare)
+        for prev in _extract_paren_numbers(c.get("id", "")):
+            aliases.add(prev)
+        for a in aliases:
+            # Первая встретившаяся канон. побеждает — как в worker.js.
+            if a not in alias_to_canonical:
+                alias_to_canonical[a] = canonical
+        canonical_to_aliases.setdefault(canonical, set()).update(aliases)
+    return alias_to_canonical, canonical_to_aliases
+
+
+def _expand_watchlist_via_aliases(
+    wl_raw: list[str],
+    alias_to_canonical: dict[str, str],
+    canonical_to_aliases: dict[str, set[str]],
+) -> set[str]:
+    """`{"8Г-5513/2026"}` → `{"8Г-5513/2026", "2-3760/2025"}` если канон.
+    запись найдена в alias-картe. Звезда на любом алиасе расширяется во все
+    известные номера того же дела."""
+    wl_bare = {_bare_case_number(x) for x in (wl_raw or []) if _bare_case_number(x)}
+    expanded = set(wl_bare)
+    for b in wl_bare:
+        cid = alias_to_canonical.get(b)
+        if cid:
+            expanded |= canonical_to_aliases.get(cid, set())
+    return expanded
+
+
 def _filter_events_by_watchlist(
     watchlist: set[str],
     *,
@@ -8992,41 +9070,42 @@ def _filter_events_by_watchlist(
 ) -> dict:
     """Отфильтровать списки событий по идентификаторам дел в watchlist.
 
-    Идентификатор в watchlist = `caseNumber` с фронта (для апел. дел = номер
-    апелляции, для 1-й инст. = номер 1-й инст.). Маппинг полей:
-    · changes (apel)        → ch["case"]
-    · fi_changes            → ch["case"] (= fi.case_number)
-    · cass_changes          → ch["case"] (= номер 1-й инст., наш ключ id)
+    Идентификатор в watchlist (после `_expand_watchlist_via_aliases`) = set
+    bare-номеров: c.id, fi.case_number, appeal.case_number,
+    cassation.case_number, hybrid-предки. Поля события (`ch.get("case")`)
+    нормализуются через `_bare_case_number` — это закрывает hybrid-форму
+    `fi.case_number = "2-208/2026 (2-1148/2025;)"` (она тоже сравнивается в
+    bare-форме `2-208/2026`).
+
+    Маппинг полей:
+    · changes (apel)        → ch["case"] (номер апел. дела)
+    · fi_changes            → ch["case"] (= fi.case_number, может быть hybrid)
+    · cass_changes          → ch["case"] (= номер 1-й инст., канон. id)
     · fi_new_cases          → c["id"]            (НЕ фильтруем, общесистемно)
     · appeal_new_cases_csv  → c["Номер дела"]    (НЕ фильтруем, общесистемно)
     · cass_discovered       → c["id"]            (НЕ фильтруем, общесистемно)
     · stage_transitions     → fi_case_number ИЛИ appeal_case_number
       (юрист может отслеживать дело по любому из них).
-
-    Новые дела (`fi_new_cases`, `appeal_new_cases_csv`, `cass_discovered`)
-    считаем общесистемным сигналом: они появились впервые и логически не
-    могут быть в чьём-либо watchlist. Поэтому возвращаем их целиком всем
-    подписчикам.
     """
     return {
         "fi_new_cases": list(fi_new_cases or []),
         "fi_changes": [
             ch for ch in (fi_changes or [])
-            if (ch.get("case") or "").strip() in watchlist
+            if _bare_case_number(ch.get("case")) in watchlist
         ],
         "stage_transitions": [
             t for t in (stage_transitions or [])
-            if (t.get("fi_case_number") or "").strip() in watchlist
-            or (t.get("appeal_case_number") or "").strip() in watchlist
+            if _bare_case_number(t.get("fi_case_number")) in watchlist
+            or _bare_case_number(t.get("appeal_case_number")) in watchlist
         ],
         "appeal_new_cases_csv": list(appeal_new_cases_csv or []),
         "changes": [
             ch for ch in (changes or [])
-            if (ch.get("case") or "").strip() in watchlist
+            if _bare_case_number(ch.get("case")) in watchlist
         ],
         "cass_changes": [
             ch for ch in (cass_changes or [])
-            if (ch.get("case") or "").strip() in watchlist
+            if _bare_case_number(ch.get("case")) in watchlist
         ],
         "cass_discovered": list(cass_discovered or []),
     }
@@ -9062,6 +9141,7 @@ def _drop_dead_subscription(endpoint: str) -> None:
 
 def _make_per_sub_callback(
     *,
+    cases: list[dict],
     fi_new_cases: list[dict],
     fi_changes: list[dict],
     changes: list[dict],
@@ -9072,6 +9152,12 @@ def _make_per_sub_callback(
     cass_discovered: list[dict] | None = None,
 ):
     """Фабрика callback'а для `send_web_push(per_subscriber=...)`.
+
+    `cases` — список активных + архивных дел; нужен для построения alias-
+    индексов. Юрист может звёздить дело по любому из 3-4 номеров (FI,
+    апел., касс., hybrid-предок), а `_filter_events_by_watchlist` шлёт
+    события по канон. ID. Без расширения watchlist через алиасы push'и
+    не долетают по таким звёздам.
 
     Логика отправки push с учётом подписки на дела:
     · watchlist пуст и событий вообще нет → None (ничего не шлём).
@@ -9088,9 +9174,17 @@ def _make_per_sub_callback(
     cass_changes = cass_changes or []
     cass_discovered = cass_discovered or []
 
+    # Карты алиасов строим один раз на крон-прогон. Стоимость — ~150 записей,
+    # копейки. Дальше каждая подписка дёшево расширяется через эти карты.
+    alias_to_canonical, canonical_to_aliases = _build_watchlist_alias_indexes(
+        cases or []
+    )
+
     def _per_sub(sub: dict):
         wl_raw = sub.get("watchlist") or []
-        wl = {str(x).strip() for x in wl_raw if str(x).strip()}
+        wl = _expand_watchlist_via_aliases(
+            wl_raw, alias_to_canonical, canonical_to_aliases
+        )
 
         if not wl:
             # Пустой watchlist — общесистемный push при любых событиях.
@@ -11062,6 +11156,7 @@ def main_json():
             title="Мониторинг дел — обновление",
             body=push_summary,
             per_subscriber=_make_per_sub_callback(
+                cases=list(cases) + list(archived_cases),
                 fi_new_cases=fi_new_cases,
                 fi_changes=fi_changes,
                 changes=changes,
@@ -11250,12 +11345,17 @@ def main_replay_last(push_all: bool = False):
         "Мониторинг дел — тестовая рассылка"
         if push_all else "Мониторинг дел — тестовая рассылка (только владельцу)"
     )
+    # Для alias-расширения watchlist'а нужны актуальные active + archive
+    # cases. Read-only — данные уже подмержены через act_analysis выше.
+    _replay_active = load_json(JSON_PATH).get("cases", []) or []
+    _replay_archive = load_json(JSON_ARCHIVE_PATH).get("cases", []) or []
     send_web_push(
         title=title,
         body=body,
         click_url="/sberbank_dashboard.html?digest=open",
         owner_only=not push_all,
         per_subscriber=_make_per_sub_callback(
+            cases=_replay_active + _replay_archive,
             fi_new_cases=ctx.get("fi_new_cases", []),
             fi_changes=ctx.get("fi_changes", []),
             changes=ctx.get("changes", []),
@@ -11373,12 +11473,16 @@ def main_push_last_digest(owner_only: bool = False):
         if owner_only else "Мониторинг дел — тестовая рассылка"
     )
     log.info(f"Push body: {body!r}")
+    # Для alias-расширения watchlist'а: active + archive cases.
+    _push_active = load_json(JSON_PATH).get("cases", []) or []
+    _push_archive = load_json(JSON_ARCHIVE_PATH).get("cases", []) or []
     send_web_push(
         title=title,
         body=body,
         click_url="/sberbank_dashboard.html?digest=open",
         owner_only=owner_only,
         per_subscriber=_make_per_sub_callback(
+            cases=_push_active + _push_archive,
             fi_new_cases=ctx.get("fi_new_cases", []),
             fi_changes=ctx.get("fi_changes", []),
             changes=ctx.get("changes", []),
