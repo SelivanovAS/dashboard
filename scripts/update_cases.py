@@ -9139,6 +9139,118 @@ def _drop_dead_subscription(endpoint: str) -> None:
         log.warning(f"Web Push: не удалось удалить подписку: {exc}")
 
 
+def _canonicalize_one_watchlist(
+    wl_raw: list, alias_to_canonical: dict[str, str],
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Чистая функция: нормализует список номеров через alias_to_canonical.
+
+    Возвращает (canonical_list, replaced) — где canonical_list это
+    дедуплицированный набор канон. ID (плюс «неразрешённые» bare-номера —
+    М-материалы, truly-orphan), а replaced — пары (bare, канон) для лога.
+    """
+    canon_list: list[str] = []
+    replaced: list[tuple[str, str]] = []
+    for x in wl_raw or []:
+        bare = _bare_case_number(x)
+        if not bare:
+            continue
+        canonical = alias_to_canonical.get(bare, bare)
+        canon_list.append(canonical)
+        if canonical != bare:
+            replaced.append((bare, canonical))
+    return list(dict.fromkeys(canon_list)), replaced
+
+
+def canonicalize_kv_watchlists(alias_to_canonical: dict[str, str]) -> None:
+    """Канонизация watchlist'ов в KV через POST /admin/watchlist.
+
+    Для каждой подписки: если в watchlist есть апел./касс./hybrid номера,
+    заменяем их на канон. FI-ID. М-материалы и truly-orphan номера
+    остаются как есть (нет соответствия в alias_to_canonical).
+
+    Зачем: после Этапа 4a фильтр умеет расширять алиасы в runtime, но KV
+    остаётся «грязной» — со временем накапливаются устаревшие апел./касс.
+    звёзды. Канонизация постепенно вычищает их.
+
+    Запускать только в живом кроне (main_json), НЕ в replay/test режимах
+    — тестовые прогоны не должны менять состояние KV.
+
+    Список подписок берём через `/subscriptions` (тот же endpoint, что
+    send_web_push, auth Bearer PUSH_SECRET). Обновляем через
+    `/admin/watchlist?secret=$OWNER_SECRET`.
+    """
+    if not PUSH_WORKER_URL or not PUSH_SECRET:
+        log.info("Канонизация watchlist'ов: переменные не настроены, пропуск")
+        return
+    secret = os.environ.get("OWNER_SECRET", "")
+    if not secret:
+        log.warning(
+            "Канонизация watchlist'ов: нет OWNER_SECRET в env, пропуск"
+        )
+        return
+    try:
+        r = requests.get(
+            f"{PUSH_WORKER_URL}/subscriptions",
+            headers={"Authorization": f"Bearer {PUSH_SECRET}"},
+            timeout=10,
+        )
+        if not r.ok:
+            log.warning(
+                f"Канонизация: GET /subscriptions вернул {r.status_code}"
+            )
+            return
+        subs = r.json() or []
+    except Exception as exc:
+        log.warning(f"Канонизация: GET /subscriptions упал: {exc}")
+        return
+
+    updated = 0
+    for sub in subs:
+        endpoint = sub.get("endpoint") or ""
+        wl_raw = sub.get("watchlist") or []
+        if not endpoint or not isinstance(wl_raw, list) or not wl_raw:
+            continue
+
+        canon_list, replaced = _canonicalize_one_watchlist(wl_raw, alias_to_canonical)
+
+        # Сравниваем с тем, что юрист отправил, в bare-форме с дедупом.
+        # Если разницы нет — не дёргаем Worker зря.
+        raw_normalised = list(dict.fromkeys(
+            b for b in (_bare_case_number(x) for x in wl_raw) if b
+        ))
+        if canon_list == raw_normalised:
+            continue
+
+        try:
+            resp = requests.post(
+                f"{PUSH_WORKER_URL}/admin/watchlist",
+                params={"secret": secret},
+                json={"endpoint": endpoint, "watchlist": canon_list},
+                timeout=10,
+            )
+            if resp.ok:
+                label = sub.get("label") or "?"
+                ep_short = endpoint[-32:]
+                log.info(
+                    f"Канонизация watchlist'а ({label} …{ep_short}): "
+                    f"{len(wl_raw)} → {len(canon_list)} дел, "
+                    f"заменено алиасов: {len(replaced)}"
+                )
+                updated += 1
+            else:
+                log.warning(
+                    f"Канонизация: POST /admin/watchlist {resp.status_code} "
+                    f"для …{endpoint[-32:]}"
+                )
+        except Exception as exc:
+            log.warning(f"Канонизация: POST упал: {exc}")
+
+    if updated:
+        log.info(f"Канонизация watchlist'ов: обновлено {updated} подписок")
+    else:
+        log.info("Канонизация watchlist'ов: всё уже канон., обновлений нет")
+
+
 def _make_per_sub_callback(
     *,
     cases: list[dict],
@@ -11167,6 +11279,14 @@ def main_json():
                 cass_discovered=cass_discovered,
             ),
         )
+
+        # Канонизация watchlist'ов в KV: заменяем апел./касс./hybrid
+        # звёзды на канон. FI-ID, чтобы со временем вычистить грязные
+        # алиасы. Только в живом кроне, не в replay/test режимах.
+        _alias_to_canonical, _ = _build_watchlist_alias_indexes(
+            list(cases) + list(archived_cases)
+        )
+        canonicalize_kv_watchlists(_alias_to_canonical)
 
     # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
     digest_is_empty = not (push_new + push_changes + push_stages)
