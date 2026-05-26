@@ -49,6 +49,78 @@ function endpointToKey(endpoint) {
   return `sub:${parts[parts.length - 1].slice(0, 80)}`;
 }
 
+// ── Канонизация watchlist (Этап 4c) ──────────────────────────────────────────
+// При POST /watchlist и /admin/watchlist прогоняем входящие номера через
+// alias-карту от текущего cases.json. ★ на апел./касс./hybrid → канон. FI-ID.
+// Идея зеркальная Этапу 4a (Python) и Этапу 1 (inline-JS админки).
+
+const CASES_DATA_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
+
+function wnBareCaseNumber(n) {
+  return String(n || "").trim().split(/[\s(]/)[0];
+}
+function wnExtractParenNumbers(s) {
+  const m = String(s || "").match(/\(([^)]+)\)/);
+  if (!m) return [];
+  return m[1].split(/[;,]/).map((x) => wnBareCaseNumber(x)).filter(Boolean);
+}
+function wnBuildAliasToCanonical(cases) {
+  const map = new Map();
+  for (const c of cases || []) {
+    const canonical = wnBareCaseNumber(c.id);
+    if (!canonical) continue;
+    const fi = c.first_instance || {};
+    const ap = c.appeal || {};
+    const ca = c.cassation || {};
+    const candidates = [
+      c.id, fi.case_number, ap.case_number,
+      ca.case_number, ca.cassation_number,
+      ...wnExtractParenNumbers(c.id),
+    ];
+    for (const raw of candidates) {
+      const bare = wnBareCaseNumber(raw);
+      if (bare && !map.has(bare)) map.set(bare, canonical);
+    }
+  }
+  return map;
+}
+// Возвращает Map<bare → canonical> от свежего cases.json через CF edge cache.
+// TTL 300s — cases.json регенерируется кроном раз в день, держать дольше
+// нет смысла, держать короче — лишние fetch'и. Если cases.json недоступен
+// (ошибка сети или 5xx), возвращает null — в этом случае канонизация
+// пропускается и в KV ложится то, что отправил клиент.
+async function getAliasMapCached() {
+  try {
+    const r = await fetch(CASES_DATA_URL, {
+      cf: { cacheTtl: 300, cacheEverything: true },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const list = Array.isArray(j?.cases) ? j.cases : [];
+    return wnBuildAliasToCanonical(list);
+  } catch (e) {
+    console.warn("Канонизация watchlist: cases.json недоступен:", e);
+    return null;
+  }
+}
+// Канонизирует массив номеров через alias-карту. Дедупит, сохраняет порядок.
+// Если aliasMap = null — возвращает исходный массив без изменений.
+function canonicalizeWatchlistArr(arr, aliasMap) {
+  if (!aliasMap) return arr;
+  const out = [];
+  const seen = new Set();
+  for (const x of arr || []) {
+    const bare = wnBareCaseNumber(x);
+    if (!bare) continue;
+    const canonical = aliasMap.get(bare) || bare;
+    if (!seen.has(canonical)) {
+      seen.add(canonical);
+      out.push(canonical);
+    }
+  }
+  return out;
+}
+
 async function handleSubscribe(request, env) {
   const origin = request.headers.get("Origin") || "";
   try {
@@ -132,16 +204,25 @@ async function handleSetWatchlist(request, env) {
         }
       );
     }
+    // Канонизация: апел./касс./hybrid → канон. FI-ID. Если cases.json
+    // недоступен (edge cache промахнулся + ошибка сети) — сохраняем cleaned
+    // как есть, фильтр Python всё равно расширит через алиасы (Этап 4a).
+    const aliasMap = await getAliasMapCached();
+    const canonical = canonicalizeWatchlistArr(cleaned, aliasMap);
     const sub = JSON.parse(existing);
-    sub.watchlist = cleaned;
+    sub.watchlist = canonical;
     sub.last_watchlist_update_at = new Date().toISOString();
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
       expirationTtl: 60 * 24 * 3600,
     });
-    console.log(`Watchlist обновлён (${cleaned.length} дел): ${key}`);
-    return new Response(JSON.stringify({ ok: true, count: cleaned.length }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
-    });
+    console.log(
+      `Watchlist обновлён (${canonical.length} дел, ` +
+      `${cleaned.length - canonical.length} алиасов схлопнуто): ${key}`
+    );
+    return new Response(
+      JSON.stringify({ ok: true, count: canonical.length, canonical }),
+      { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+    );
   } catch (e) {
     console.error("watchlist error:", e);
     return new Response("Error", { status: 500, headers: corsHeaders(origin) });
@@ -385,14 +466,21 @@ async function handleAdminWatchlist(request, env) {
   const cleaned = Array.from(new Set(
     wl.filter((x) => typeof x === "string" && x.length > 0 && x.length < 100).slice(0, 500)
   ));
-  r.sub.watchlist = cleaned;
+  // Канонизация — та же логика что в /watchlist (handleSetWatchlist).
+  // Python (Этап 4b) сюда шлёт уже канон. версию; повторная канонизация
+  // идемпотентна. Админ через UI может прислать апел./касс. номер —
+  // схлопнем в канон.
+  const aliasMap = await getAliasMapCached();
+  const canonical = canonicalizeWatchlistArr(cleaned, aliasMap);
+  r.sub.watchlist = canonical;
   r.sub.last_watchlist_update_at = new Date().toISOString();
   await env.PUSH_SUBSCRIPTIONS.put(r.key, JSON.stringify(r.sub), {
     expirationTtl: 60 * 24 * 3600,
   });
-  return new Response(JSON.stringify({ ok: true, count: cleaned.length }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ ok: true, count: canonical.length, canonical }),
+    { headers: { "Content-Type": "application/json" } }
+  );
 }
 
 // ── VAPID JWT для тестового push (RFC 8292) ──────────────────────────────────
@@ -685,7 +773,7 @@ async function fetchAll() {
         addAlias(casesMap, c.appeal?.case_number, payload);
         addAlias(casesMap, c.cassation?.case_number, payload);
         addAlias(casesMap, c.cassation?.cassation_number, payload);
-        // Предыдущие номера из hybrid-ID `2-208/2026 (2-1148/2025;)`.
+        // Предыдущие номера из hybrid-ID '2-208/2026 (2-1148/2025;)'.
         for (const prev of extractParenNumbers(c.id)) {
           addAlias(casesMap, prev, payload);
         }
