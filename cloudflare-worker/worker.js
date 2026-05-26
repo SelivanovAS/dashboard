@@ -73,7 +73,9 @@ function wnBuildAliasToCanonical(cases) {
     const ap = c.appeal || {};
     const ca = c.cassation || {};
     const candidates = [
-      c.id, fi.case_number, ap.case_number,
+      c.id,
+      fi.case_number, fi.material_number,  // material_number — М-предок (Этап 3)
+      ap.case_number,
       ca.case_number, ca.cassation_number,
       ...wnExtractParenNumbers(c.id),
     ];
@@ -769,7 +771,11 @@ async function fetchAll() {
         addAlias(casesMap, c.id, payload);
         // Алиасы: FI / апелл. / касс. (касс. бывает в двух полях —
         // case_number и cassation_number, заполняем оба варианта).
+        // material_number — М-предок дела (Этап 3): когда юрист звёздит
+        // материал, а парсер потом промоутит его в 2-XXX, эта связь
+        // сохраняется и звезда не теряется.
         addAlias(casesMap, c.first_instance?.case_number, payload);
+        addAlias(casesMap, c.first_instance?.material_number, payload);
         addAlias(casesMap, c.appeal?.case_number, payload);
         addAlias(casesMap, c.cassation?.case_number, payload);
         addAlias(casesMap, c.cassation?.cassation_number, payload);
