@@ -9023,6 +9023,7 @@ def _build_watchlist_alias_indexes(
         for raw in (
             c.get("id"),
             fi.get("case_number"),
+            fi.get("material_number"),  # М-предок (Этап 3)
             ap.get("case_number"),
             ca.get("case_number"),
             ca.get("cassation_number"),
@@ -10229,6 +10230,11 @@ def main_json():
             old["id"] = new_id
             fi = old.setdefault("first_instance", {})
             fi["case_number"] = new_id
+            # Сохраняем М-номер как алиас: без него ★ юриста на материале
+            # «теряется» при возбуждении дела (Этап 3 плана). Не перезаписываем,
+            # если уже стоит — на случай повторного промоушена.
+            if not fi.get("material_number"):
+                fi["material_number"] = mat
             if r.get("judge"):
                 fi["judge"] = r["judge"]
             if r.get("link"):

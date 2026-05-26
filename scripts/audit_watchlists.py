@@ -76,6 +76,7 @@ def build_alias_map(cases: list[dict]) -> dict[str, dict]:
         }
         add_alias(amap, c.get("id", ""), payload)
         add_alias(amap, fi.get("case_number", ""), payload)
+        add_alias(amap, fi.get("material_number", ""), payload)  # М-предок (Этап 3)
         add_alias(amap, ap.get("case_number", ""), payload)
         add_alias(amap, ca.get("case_number", ""), payload)
         add_alias(amap, ca.get("cassation_number", ""), payload)
