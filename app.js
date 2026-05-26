@@ -2609,11 +2609,35 @@ async function syncWatchlistToWorker() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return; // нет подписки — синхронизировать некуда
-    await fetch(PUSH_WORKER_URL + '/watchlist', {
+    const r = await fetch(PUSH_WORKER_URL + '/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: sub.endpoint, watchlist: [...watchlist] }),
     });
+    if (!r.ok) return;
+    // Worker канонизирует входящие апел./касс./hybrid алиасы в FI-ID
+    // (Этап 4c). Если ответ отличается от того, что мы отправили —
+    // принимаем серверную версию, иначе localStorage будет вечно держать
+    // алиасы, а KV — канон. ID, и при каждом sync будет лишний трафик.
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (!data || !Array.isArray(data.canonical)) return;
+    const local = [...watchlist].sort().join('|');
+    const server = [...data.canonical].sort().join('|');
+    if (local === server) return;
+    watchlist = new Set(data.canonical);
+    // Локальное расширение алиасов оставляем — UI должен показать звёзды
+    // на всех известных номерах дела (FI/апел./касс.), а не только на
+    // канон.: фронт берёт alias-карту из window.casesData.
+    try { expandWatchlistAliases(); } catch (_) {}
+    try {
+      localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
+    } catch (_) {}
+    if (typeof applyFilters === 'function') {
+      try { applyFilters(); } catch (_) {}
+    } else if (typeof renderTable === 'function') {
+      try { renderTable(); renderMobileCards(); } catch (_) {}
+    }
   } catch (e) {
     console.warn('watchlist sync failed:', e);
   }
