@@ -576,6 +576,8 @@ details > summary:hover { color:var(--fg); }
 .case-num { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--accent); min-width:140px; }
 .case-parties { color:var(--fg-2); }
 .case-meta { color:var(--fg-3); font-size:12px; }
+.case-alias { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:12px;
+              background:rgba(127,127,127,0.10); padding:1px 6px; border-radius:4px; }
 .empty { color:var(--fg-3); font-style:italic; padding:6px 0; }
 .error { color:#dc2626; padding:12px; background:rgba(220,38,38,0.08); border-radius:8px; }
 .loading { color:var(--fg-3); padding:24px; text-align:center; }
@@ -600,6 +602,19 @@ const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_p
 
 function bareCaseNumber(n) {
   return String(n || "").trim().split(/[\\s(]/)[0];
+}
+// Достаёт номера из скобок hybrid-ID. Пример:
+// "2-208/2026 (2-1148/2025;)" → ["2-1148/2025"].
+function extractParenNumbers(s) {
+  const m = String(s || "").match(/\\(([^)]+)\\)/);
+  if (!m) return [];
+  return m[1].split(/[;,]/).map((x) => bareCaseNumber(x)).filter(Boolean);
+}
+// Кладёт алиас в карту, не перезатирая уже существующий ключ —
+// первое добавление становится канонической записью для алиаса.
+function addAlias(map, key, payload) {
+  const bare = bareCaseNumber(key);
+  if (bare && !map.has(bare)) map.set(bare, payload);
 }
 function detectDevice(ua) {
   if (!ua) return "—";
@@ -651,14 +666,29 @@ async function fetchAll() {
       const casesJson = await casesRes.json();
       const list = Array.isArray(casesJson?.cases) ? casesJson.cases : [];
       for (const c of list) {
-        const id = bareCaseNumber(c.id);
-        if (!id) continue;
-        casesMap.set(id, {
+        // Канонический bare-id — приоритетный ключ карты. Если его нет
+        // (теоретически невозможно), пропускаем запись целиком.
+        const canonical = bareCaseNumber(c.id);
+        if (!canonical) continue;
+        const payload = {
           plaintiff: c.plaintiff || "",
           defendant: c.defendant || "",
           court: c.first_instance?.court || c.appeal?.court || "",
           stage: c.current_stage || "",
-        });
+          canonical_id: canonical,
+        };
+        // Канонический ID — первым (он же дефолт для алиаса).
+        addAlias(casesMap, c.id, payload);
+        // Алиасы: FI / апелл. / касс. (касс. бывает в двух полях —
+        // case_number и cassation_number, заполняем оба варианта).
+        addAlias(casesMap, c.first_instance?.case_number, payload);
+        addAlias(casesMap, c.appeal?.case_number, payload);
+        addAlias(casesMap, c.cassation?.case_number, payload);
+        addAlias(casesMap, c.cassation?.cassation_number, payload);
+        // Предыдущие номера из hybrid-ID `2-208/2026 (2-1148/2025;)`.
+        for (const prev of extractParenNumbers(c.id)) {
+          addAlias(casesMap, prev, payload);
+        }
       }
     }
   } catch (e) {
@@ -737,7 +767,14 @@ function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
           const parties = (c.plaintiff && c.defendant)
             ? escHtml(c.plaintiff) + ' <span style="color:var(--fg-3)">vs</span> ' + escHtml(c.defendant)
             : escHtml(c.plaintiff || c.defendant || "");
+          // Алиас-плашка: ★ стоит на номере, который отличается от
+          // канонического ID дела (звезда выставлена по апел./касс./
+          // hybrid-предку, а дело хранится под номером 1-й инст.).
+          const aliasNote = (c.canonical_id && c.canonical_id !== bare)
+            ? '<span class="case-alias">→ '+escHtml(c.canonical_id)+'</span>'
+            : '';
           return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
+                 + aliasNote
                  + '<span class="case-parties">'+parties+'</span>'
                  + (c.court ? '<span class="case-meta">· '+escHtml(c.court)+'</span>' : '')
                  + '</div>';
