@@ -923,6 +923,136 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
     return merged
 
 
+def dedupe_cassation_by_internal_number(cases: list[dict]) -> int:
+    """Идемпотентный дедуп записей с одинаковым `cassation.case_number`.
+
+    Один и тот же `8Г-XXXX/YYYY` может оказаться в нескольких записях,
+    если 7kas в разные периоды возвращал разный `fi_case_number` для одной
+    касс. жалобы (после cassation_remanded → round+1; либо рассинхрон
+    апел./1-инст. номера в выдаче 7kas). До правки `link_cassation_cases`
+    индексировал записи только по 1-инст./апел. номерам — поэтому в БД
+    возникал discovery-двойник с `discovered_via_cassation=true`. С правкой
+    регрессия закрыта; эта функция чистит уже накопившиеся пары.
+
+    Хост (winner) выбирается по приоритетам (от важного к менее важному):
+    1. `discovered_via_cassation=False` сильнее, чем `True` — настоящее
+       дело сильнее discovery-stub.
+    2. Заполненный `appeal.case_number` сильнее.
+    3. `_has_real_fi(case)` (FI прошёл реальный парсер) сильнее.
+    4. Свежее `cassation.last_checked_at` сильнее.
+    5. Длиннее JSON-сериализация — «информационная плотность» как tie-breaker.
+
+    Полевой мердж в host:
+    - top-level (`plaintiff`/`defendant`/`category`/`bank_role`) —
+      дозаполняем пустые из loser, заполненные у host не перетираем.
+    - `appeal` берём от loser только если у host `None`.
+    - `first_instance` — оставляем у host, если у host real_fi или у
+      loser тоже stub; иначе берём блок loser целиком.
+    - `cassation` — заменяем целиком только если у loser свежее
+      `last_checked_at`. `discovered_via_cassation` итогового блока — AND
+      обоих флагов (если хоть у одного из дублей `False` — итог `False`).
+    - `discovered_via_cassation` на верхнем уровне — то же AND.
+    - `history` — мердж по `round`, без дублей.
+    - `notes` — дописываем след слияния.
+
+    Группы из ≥3 записей — все loser'ы сливаются в один host в порядке
+    убывания «силы».
+
+    Возвращает число удалённых loser-записей.
+    """
+    groups: dict[str, list[int]] = {}
+    for i, c in enumerate(cases):
+        cass = c.get("cassation") or {}
+        cn = (cass.get("case_number") or "").strip()
+        if cn:
+            groups.setdefault(cn, []).append(i)
+
+    def _score(c: dict) -> tuple:
+        cass = c.get("cassation") or {}
+        appeal = c.get("appeal") or {}
+        last_checked = (cass.get("last_checked_at") or "").strip()
+        return (
+            0 if c.get("discovered_via_cassation") else 1,
+            1 if (appeal and appeal.get("case_number")) else 0,
+            1 if _has_real_fi(c) else 0,
+            last_checked,
+            len(json.dumps(c, ensure_ascii=False)),
+        )
+
+    today_iso = date.today().isoformat()
+    to_remove: set[int] = set()
+    merged = 0
+
+    for cn, idxs in groups.items():
+        if len(idxs) < 2:
+            continue
+        sorted_idxs = sorted(idxs, key=lambda i: _score(cases[i]), reverse=True)
+        host_i = sorted_idxs[0]
+        host = cases[host_i]
+
+        for loser_i in sorted_idxs[1:]:
+            loser = cases[loser_i]
+
+            for k in ("plaintiff", "defendant", "category", "bank_role"):
+                if not host.get(k) and loser.get(k):
+                    host[k] = loser[k]
+
+            if host.get("appeal") is None and loser.get("appeal"):
+                host["appeal"] = loser["appeal"]
+
+            if not _has_real_fi(host) and _has_real_fi(loser):
+                host["first_instance"] = loser.get("first_instance") or {}
+
+            host_cass = host.get("cassation") or {}
+            loser_cass = loser.get("cassation") or {}
+            host_lc = (host_cass.get("last_checked_at") or "").strip()
+            loser_lc = (loser_cass.get("last_checked_at") or "").strip()
+            if loser_lc and loser_lc > host_lc:
+                merged_cass = dict(loser_cass)
+                merged_cass["discovered_via_cassation"] = bool(
+                    host_cass.get("discovered_via_cassation")
+                ) and bool(loser_cass.get("discovered_via_cassation"))
+                host["cassation"] = merged_cass
+
+            host["discovered_via_cassation"] = bool(
+                host.get("discovered_via_cassation")
+            ) and bool(loser.get("discovered_via_cassation"))
+
+            loser_history = loser.get("history") or []
+            if loser_history:
+                host_history = host.get("history") or []
+                seen_rounds = {
+                    h.get("round") for h in host_history if isinstance(h, dict)
+                }
+                for h in loser_history:
+                    r = h.get("round") if isinstance(h, dict) else None
+                    if r not in seen_rounds:
+                        host_history.append(h)
+                        seen_rounds.add(r)
+                host["history"] = host_history
+
+            merge_tag = (
+                f"дубль {loser.get('id', '?')} (касс. {cn}) "
+                f"слит автоматически {today_iso}"
+            )
+            old_notes = host.get("notes") or ""
+            if merge_tag not in old_notes:
+                sep = " • " if old_notes else ""
+                host["notes"] = (old_notes + sep + merge_tag).strip()
+
+            to_remove.add(loser_i)
+            merged += 1
+            log.info(
+                f"Дедуп касс.: {cn} loser {loser.get('id', '?')} "
+                f"слит в host {host.get('id', '?')}"
+            )
+
+    if to_remove:
+        cases[:] = [c for i, c in enumerate(cases) if i not in to_remove]
+
+    return merged
+
+
 def case_id_uid(link_str: str) -> tuple[str, str]:
     """Извлечь case_id и case_uid из поля Ссылка (формат 'id|uid')."""
     parts = link_str.strip().split("|")
@@ -3590,6 +3720,13 @@ def link_cassation_cases(
             idx_map.setdefault(base, i)
 
     fi_index: dict[str, int] = {}
+    # Параллельный индекс по `cassation.case_number` (`8Г-XXXX/YYYY`).
+    # Это стабильный идентификатор касс. жалобы — в отличие от fi_case_number,
+    # который 7kas может вернуть с разным значением в разные периоды (после
+    # cassation_remanded → round+1, либо просто из-за того, что в выдаче 7kas
+    # показывается то 1-инст., то апел. номер). Без этого индекса discovery
+    # создаёт второго двойника с `discovered_via_cassation=true`.
+    cass_index: dict[str, int] = {}
     for i, c in enumerate(cases):
         cid = c.get("id", "")
         _put_idx(fi_index, cid, i)
@@ -3602,6 +3739,10 @@ def link_cassation_cases(
             # апел. номеру (если 1-я инст. ещё не подтянулась) — пусть
             # индекс тоже их видит.
             _put_idx(fi_index, appeal["case_number"], i)
+        cass = c.get("cassation") or {}
+        cn = (cass.get("case_number") or "").strip()
+        if cn:
+            cass_index.setdefault(cn, i)
 
     cass_changes: list[dict] = []
     discovered: list[dict] = []
@@ -3615,7 +3756,13 @@ def link_cassation_cases(
             )
             continue
         cass_block = _cassation_card_to_block(info)
-        idx = fi_index.get(fi_num)
+        # Первичный матч — по стабильному `8Г-...`. Сначала пробуем сматчить
+        # по нему, и только если касс. карточка вообще новая (нет в БД) —
+        # идём через fi_case_number, который может «плавать».
+        cass_int_num = (info.get("cassation_internal_number") or "").strip()
+        idx = cass_index.get(cass_int_num) if cass_int_num else None
+        if idx is None:
+            idx = fi_index.get(fi_num)
         if idx is None:
             idx = fi_index.get(_bare_case_number(fi_num))
         if idx is not None:
@@ -10130,6 +10277,16 @@ def main_json():
             f"номером 1-й инст."
         )
 
+    # Слить кассац. дубли по `cassation.case_number`: один и тот же `8Г-...`
+    # мог оказаться в двух записях, если 7kas прислал «плавающий»
+    # fi_case_number и discovery создал двойник. Теперь link_cassation_cases
+    # матчит первичным ключом `cass_index`; здесь лечим уже накопившееся.
+    merged_cass = dedupe_cassation_by_internal_number(cases)
+    if merged_cass:
+        log.info(
+            f"Дедуп: слито {merged_cass} касс. дублей по cassation.case_number"
+        )
+
     # ── 2. Парсинг апелляции: новые дела ──
     t0 = time.perf_counter()
     csv_cases = load_csv(CSV_PATH)
@@ -11060,6 +11217,18 @@ def main_json():
         f"{cass_refresh_fresh} уже свежие)"
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
+
+    # Резервный щит после обоих link_cassation_cases (раздел 4c + 4d):
+    # если по какой-то причине свежий прогон создал двойника (нашёлся
+    # касс. номер, которого нет в cass_index в момент построения индекса
+    # — например, индекс был построен до append'а в этом же прогоне) —
+    # вычищаем сразу, не дожидаясь следующего cron.
+    post_cass_merged = dedupe_cassation_by_internal_number(cases)
+    if post_cass_merged:
+        log.info(
+            f"Дедуп после link_cassation_cases: слито {post_cass_merged} "
+            f"касс. дублей"
+        )
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
