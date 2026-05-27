@@ -258,8 +258,15 @@ LAST_PERSONAL_PUSHES_PATH = os.environ.get(
 # архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
 # кассационный срок (3 мес), ни задержку мотивировки. Новые окна привязаны
 # к стадиям процесса и датам заседаний.
-FI_ARCHIVE_DAYS = 45            # 1-я инстанция: 45 дней от даты резолютивки
-                                # без подачи апел. жалобы → архив.
+FI_ARCHIVE_DAYS = 60            # 1-я инстанция: 60 дней от даты резолютивки
+                                # без подачи апел. жалобы → архив. Раньше было
+                                # 45, но мотивировка часто задерживается на
+                                # 2-3 недели, плюс 1 мес. на жалобу по ст. 321
+                                # ГПК + лаг парсера на обновление карточки —
+                                # реальное окно «решение → запись о жалобе» до
+                                # 60-70 дней. Архив теперь не финален: при
+                                # появлении жалобы дело возвращается в активные
+                                # через reactivate_archived_first_instance.
 APPEAL_NO_ACT_GRACE_DAYS = 30   # Апелляция: если акт не опубликован через
                                 # 30 дней от апел. заседания — всё равно
                                 # переходим в cassation_watch.
@@ -724,7 +731,7 @@ def advance_case_stage(case: dict) -> str | None:
 
 def is_case_archived(case: dict) -> bool:
     """Унифицированная архивная проверка по стадии:
-    - first_instance: «Решено» + 45 дней от hearing_date без апел. жалобы.
+    - first_instance: «Решено» + FI_ARCHIVE_DAYS (60) от hearing_date без апел. жалобы.
     - awaiting_appeal: никогда (ждём бессрочно, пока апел. карточка не найдётся).
     - appeal: никогда (переход в cassation_watch делает advance_case_stage).
     - cassation_watch: >120 дней от апел. hearing_date без касс. жалобы.
@@ -3596,6 +3603,77 @@ def relink_awaiting_relink_first_instance(
             )
             del awaiting[num]
     return relinked
+
+
+def reactivate_archived_first_instance(
+    cases: list[dict],
+    archived_cases: list[dict],
+    max_age_days: int = 180,
+) -> int:
+    """Подмешать недавние архивные дела 1-й инст. обратно в `cases`, чтобы
+    парсер обновил карточку и обнаружил поздно поданную апел./касс. жалобу.
+
+    Логика реактивации: дела архивируются через `FI_ARCHIVE_DAYS` после
+    резолютивки без жалобы, но запись о жалобе может появиться в карточке
+    ещё позже (задержка регистрации, почтовая подача в последний день,
+    апелляционное представление прокурора через 2-3 мес.). Эта функция
+    переносит подходящих кандидатов в `cases`; парсер 1-й инст. в `main_json`
+    их перепарсит как обычные активные дела. Если в карточке найдётся
+    `appeal_filed_date`/`cassation_filed_date`/`sent_to_cassation_date` —
+    `advance_case_stage` переведёт дело в `awaiting_appeal` (или дальше),
+    и `split_archived_json` в конце оставит его в активных. Иначе
+    `split_archived_json` сам вернёт дело в архив через `is_case_archived`.
+
+    Кандидат на реактивацию:
+      - `current_stage == "first_instance"`,
+      - `status == "Решено"`,
+      - `hearing_date` ≤ `max_age_days` (по умолчанию 180; дальше — статист.
+        нет смысла, апелляция уже невозможна без восстановления срока).
+
+    Защита от двойников: если номер дела уже есть в `cases` (например,
+    через discovery) — оставляем архивную запись в архиве.
+
+    `archived_cases` мутируется на месте (удаление перенесённых),
+    `cases` — добавление. Возвращает количество перенесённых дел.
+    """
+    if not archived_cases:
+        return 0
+    now = datetime.now()
+    active_ids = {(c.get("id") or "").strip() for c in cases if c.get("id")}
+    moved: list[dict] = []
+    keep: list[dict] = []
+    for c in archived_cases:
+        if c.get("current_stage") != "first_instance":
+            keep.append(c)
+            continue
+        fi = c.get("first_instance") or {}
+        if fi.get("status", "").strip() != "Решено":
+            keep.append(c)
+            continue
+        cid = (c.get("id") or "").strip()
+        if not cid or cid in active_ids:
+            keep.append(c)
+            continue
+        hearing = parse_date(fi.get("hearing_date") or "")
+        if not hearing:
+            keep.append(c)
+            continue
+        age = (now - hearing).days
+        if age < 0 or age > max_age_days:
+            keep.append(c)
+            continue
+        moved.append(c)
+        active_ids.add(cid)
+    if not moved:
+        return 0
+    cases.extend(moved)
+    archived_cases[:] = keep
+    log.info(
+        f"Реактивация из архива: подмешано {len(moved)} дел 1-й инст. "
+        f"(возраст ≤{max_age_days} дн.) для повторного парсинга карточки. "
+        f"Без новой жалобы вернутся в архив через split_archived_json."
+    )
+    return len(moved)
 
 
 def _cassation_card_to_block(info: dict) -> dict:
@@ -10261,6 +10339,12 @@ def main_json():
     if migrated:
         log.info(f"State-machine: мигрировано {migrated} переходов при загрузке")
 
+    # Реактивация архивных дел 1-й инст. с потенциалом поздней жалобы.
+    # Подмешиваем их в cases ДО парсинга карточек, чтобы fi_active включил
+    # их в обычный цикл обновления. Если жалоба не найдётся — split в конце
+    # вернёт обратно в архив. См. reactivate_archived_first_instance.
+    reactivated_count = reactivate_archived_first_instance(cases, archived_cases)
+
     # Одноразовая чистка ранее склеенных `act_analysis.html`: для уже
     # опубликованных актов change[new_act] больше не придёт, поэтому
     # `attach_act_analyses` не перепишет поле. На почищенных данных
@@ -11332,29 +11416,41 @@ def main_json():
     # жизненный цикл (first_instance без жалобы 45+ дней или cassation_watch
     # без касс. жалобы 120+ дней).
     cases, fi_newly_archived = split_archived_json(cases)
-    if fi_newly_archived:
-        archive_data = load_json(JSON_ARCHIVE_PATH)
-        archived_cases = archive_data.get("cases", [])
-        existing_archive_ids = {
-            (c.get("id") or "").strip() for c in archived_cases
-        }
-        to_add = [
-            c for c in fi_newly_archived
-            if (c.get("id") or "").strip() not in existing_archive_ids
-        ]
+    # archived_cases уже в памяти (мутирован reactivate_archived_first_instance —
+    # оттуда удалены реактивированные дела). Сохранять архив надо, если:
+    #   - появились новые архивные кандидаты (fi_newly_archived), ИЛИ
+    #   - reactivate изъял хоть одно дело — иначе на диске останется дубль
+    #     (дело и в активных, и в архиве).
+    existing_archive_ids = {
+        (c.get("id") or "").strip() for c in archived_cases
+    }
+    to_add = [
+        c for c in fi_newly_archived
+        if (c.get("id") or "").strip() not in existing_archive_ids
+    ]
+    if to_add or reactivated_count:
+        archive_data["cases"] = archived_cases + to_add
+        save_json(archive_data, JSON_ARCHIVE_PATH)
+        # Синхронизируем локальную ссылку на актуальный архив — иначе
+        # дальнейшие проверки watchlist/push (объединяющие cases + archived_cases)
+        # потеряют дела, которые были временно реактивированы и возвращены в архив.
+        archived_cases = archive_data["cases"]
         if to_add:
-            archive_data["cases"] = archived_cases + to_add
-            save_json(archive_data, JSON_ARCHIVE_PATH)
             log.info(
                 f"В JSON-архив перенесено {len(to_add)} дел "
                 f"(first_instance {FI_ARCHIVE_DAYS}д без жалобы или "
                 f"cassation_watch {CASSATION_WATCH_DAYS}д без касс. жалобы)"
             )
-        else:
+        if reactivated_count:
             log.info(
-                f"Архив-кандидатов: {len(fi_newly_archived)}, "
-                "но все уже в архиве"
+                f"Из JSON-архива убрано {reactivated_count} реактивированных "
+                f"дел (или возвращено в архив split'ом, если жалоба не нашлась)"
             )
+    elif fi_newly_archived:
+        log.info(
+            f"Архив-кандидатов: {len(fi_newly_archived)}, "
+            "но все уже в архиве"
+        )
 
     data["cases"] = cases
     save_json(data, JSON_PATH)
