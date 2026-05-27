@@ -104,17 +104,6 @@ class CourtConfig:
             f"&delo_id={self.delo_id}&new={self._new_param}"
         )
 
-    def card_url_alt(self, case_id: str, case_uid: str) -> str:
-        # Фолбэк с new=0: при появлении вкладки «обжалование решений,
-        # определений (пост.)» карточка 1 инст. при new=5 отдаёт обрезанный
-        # набор таблиц (только вкладка обжалования). new=0 возвращает
-        # основную вкладку «Дело» с полным движением.
-        return (
-            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
-            f"&case_id={case_id}&case_uid={case_uid}"
-            f"&delo_id={self.delo_id}&new=0"
-        )
-
 
 # Апелляционный суд (текущий — единственный источник данных)
 APPEAL_COURT = CourtConfig(
@@ -2166,7 +2155,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "Номер дела 1 инстанции": "",  # Извлекается из таблицы «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
         "_appellant_raw": "",  # Сырой текст об апеллянте (для определения в update_active_cases)
-        "_table_count": 0,      # len(tables) — нужно вызывающему коду для фолбэка card_url_alt
+        "_table_count": 0,      # len(tables) — индикатор «обрезанной» карточки для _warn_if_card_degraded
         "_fi_appeal_filed": False,  # В карточке 1 инст. подана апелляц. жалоба
         "_fi_appeal_filed_date": "",
         # «Направлено в вышестоящую инстанцию» для апелляц. жалобы — это
@@ -2420,8 +2409,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     # отсюда же видно и событие «направлено в кассационный суд».
     # Регексы специфичны по стеблю «апелляционн» / «кассационн», чтобы не
     # путать апелляцию с кассацией (раньше «поступ.+жалоб» цеплял кассацию
-    # как апелляцию). Флаг HTML-уровня «обжалование решений…» оставлен
-    # выше как сигнал наличия вкладки обжалования (нужен для card_url_alt).
+    # как апелляцию).
     if movement_table and len(movement_table) > 1:
         for row in movement_table[1:]:
             ev_text = " ".join(cell_text(c) for c in row)
@@ -10638,45 +10626,6 @@ def main_json():
             log.warning(f"  {fi['case_number']}: не удалось загрузить карточку")
             continue
         card_info = parse_case_card(html, court_cfg.base_url)
-
-        # Фолбэк: при малом числе таблиц повторяем с new=0 — sudrf при наличии
-        # вкладки «обжалование решений, определений (пост.)» по умолчанию
-        # открывает её (≤4 таблиц) вместо основной «Дело» (≥6 таблиц с
-        # движением). new=0 форсит основную вкладку.
-        if card_info.get("_table_count", 0) < 6:
-            polite_delay()
-            alt_html = fetch_page(court_cfg.card_url_alt(cid, cuid))
-            if alt_html:
-                alt_info = parse_case_card(alt_html, court_cfg.base_url)
-                if alt_info.get("_table_count", 0) > card_info.get("_table_count", 0):
-                    # Флаги и даты жалоб/направления могут быть только на
-                    # короткой вкладке «Обжалование решений» (там — таблица
-                    # «ДВИЖЕНИЕ ЖАЛОБЫ» с датой регистрации). Переносим в
-                    # alt_info — флаг и дата мигрируют независимо, чтобы
-                    # дата подтянулась даже если флаг уже стоит в длинном
-                    # парсе из «Движения дела».
-                    for flag, date_key in (
-                        ("_fi_appeal_filed", "_fi_appeal_filed_date"),
-                        ("_fi_sent_to_appeal", "_fi_sent_to_appeal_date"),
-                        ("_fi_cassation_filed", "_fi_cassation_filed_date"),
-                        ("_fi_sent_to_cassation", "_fi_sent_to_cassation_date"),
-                    ):
-                        if card_info.get(flag) and not alt_info.get(flag):
-                            alt_info[flag] = True
-                        if card_info.get(date_key) and not alt_info.get(date_key):
-                            alt_info[date_key] = card_info[date_key]
-                    # Апеллянт со вкладки обжалования («ИСТЕЦ»/«ОТВЕТЧИК»)
-                    # — единственный источник для дел, где основная вкладка
-                    # не содержит «Заявитель жалобы».
-                    if card_info.get("_appellant_raw") and not alt_info.get("_appellant_raw"):
-                        alt_info["_appellant_raw"] = card_info["_appellant_raw"]
-                    # Полные events движения жалобы — только на короткой
-                    # вкладке. Переносим в alt_info, иначе они потеряются
-                    # после fallback на new=0.
-                    for events_key in ("_fi_appeal_events", "_fi_cassation_events"):
-                        if card_info.get(events_key) and not alt_info.get(events_key):
-                            alt_info[events_key] = card_info[events_key]
-                    card_info = alt_info
         _warn_if_card_degraded(card_info, fi["case_number"], case_block=fi)
 
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
