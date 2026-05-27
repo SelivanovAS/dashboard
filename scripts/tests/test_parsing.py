@@ -426,7 +426,7 @@ class TestIsCaseArchived:
         case = {"current_stage": "first_instance",
                 "first_instance": {
                     "status": "Решено",
-                    "hearing_date": _days_ago(46),
+                    "hearing_date": _days_ago(uc.FI_ARCHIVE_DAYS + 5),
                 }}
         assert uc.is_case_archived(case) is True
 
@@ -434,7 +434,7 @@ class TestIsCaseArchived:
         case = {"current_stage": "first_instance",
                 "first_instance": {
                     "status": "Решено",
-                    "hearing_date": _days_ago(44),
+                    "hearing_date": _days_ago(uc.FI_ARCHIVE_DAYS - 5),
                 }}
         assert uc.is_case_archived(case) is False
 
