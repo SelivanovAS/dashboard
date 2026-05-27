@@ -550,7 +550,12 @@ class AppealResultDeduplicationTest(unittest.TestCase):
 
     def test_pure_new_event_still_in_scheduled(self):
         # Если у дела ТОЛЬКО new_event (без new_result) — оно по-прежнему
-        # должно идти в «Назначенные заседания».
+        # должно идти в секцию «📅 Изменения» с маркером «Заседание
+        # назначено на», а не в «🔁 Заседание отложено на». Бывшая
+        # отдельная секция «Назначенные заседания» (5.3) объединена с
+        # «Отложенные» (5.2) в одну «Изменения» — см. combined_apel_changes
+        # в generate_template_digest и комментарий «бывшие "Отложенные" 5.2
+        # и "Назначенные" 5.3 объединены» в GIGACHAT_SYSTEM_PROMPT.
         change = {
             "case": "33-9999/2026",
             "type": ["new_event"],
@@ -571,8 +576,10 @@ class AppealResultDeduplicationTest(unittest.TestCase):
             cass_changes=[], cass_discovered=[],
             total_active_appeal=1, total_active_fi=0, total_active_cassation=0,
         )
-        self.assertIn("Назначенные заседания", html)
+        self.assertIn("📅 <b>Изменения", html)
         self.assertIn("33-9999/2026", html)
+        self.assertIn("Заседание назначено на", html)
+        self.assertNotIn("Заседание отложено", html)
 
 
 class GenerateDigestEntryPointTest(unittest.TestCase):
