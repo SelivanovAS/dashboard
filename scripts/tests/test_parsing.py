@@ -225,8 +225,8 @@ class TestParseCaseCard:
         assert info["Результат"] == ""
 
     def test_table_count_exposed(self):
-        """_table_count прокидывается вызывающему коду для фолбэка
-        на card_url_alt (new=0)."""
+        """_table_count прокидывается вызывающему коду — используется
+        в _warn_if_card_degraded для детекции обрезанной карточки."""
         html = _read_fixture("case_card_first_instance.html")
         info = uc.parse_case_card(html)
         assert info["_table_count"] >= 6
@@ -247,8 +247,8 @@ class TestParseCaseCard:
 
     def test_short_card_with_appeal_tab_sets_flag(self):
         """Короткая карточка (<6 таблиц) с маркером «обжалование решений…»
-        всё равно выставляет _fi_appeal_filed — чтобы сигнал не терялся,
-        даже если фолбэк на new=0 не дотянется до сервера."""
+        всё равно выставляет _fi_appeal_filed — сигнал берётся из самой
+        короткой вкладки, без обращения к альтернативному URL."""
         html = _read_fixture("case_card_fi_with_appeal.html")
         info = uc.parse_case_card(html)
         assert info["_table_count"] < 6
@@ -538,23 +538,17 @@ class TestMigrateStages:
         assert cases[0]["current_stage"] == "awaiting_appeal"
 
 
-# ── card_url_alt ─────────────────────────────────────────────────────────────
+# ── card_url ─────────────────────────────────────────────────────────────────
 
-class TestCardUrlAlt:
-    def test_alt_url_uses_new_zero(self):
-        """card_url() и card_url_alt() для 1 инст. суда оба возвращают URL
-        с new=0 — это намеренное поведение после коммита 6696e0c, чтобы
-        sudrf сразу отдавал основную вкладку «Дело», а не обрезанную
-        «обжалование решений (пост.)». card_url_alt сейчас фактически
-        алиас card_url; фолбэк-вызов в update_active_cases остался на
-        случай, если sudrf вернёт короткую карточку даже при new=0."""
-        court = uc.FIRST_INSTANCE_COURTS[0]  # любой суд 1 инст.
-        primary = court.card_url("12345", "aaaa-bbbb")
-        alt = court.card_url_alt("12345", "aaaa-bbbb")
-        assert "new=0" in primary
-        assert "new=0" in alt
-        assert "new=5" not in primary
-        assert "new=5" not in alt
+class TestCardUrl:
+    def test_first_instance_uses_new_zero(self):
+        """card_url() для суда 1 инст. использует new=0 — sudrf сразу
+        отдаёт основную вкладку «Дело», а не обрезанную «обжалование
+        решений (пост.)». Регрессия-защита от возврата к new=5."""
+        court = uc.FIRST_INSTANCE_COURTS[0]
+        url = court.card_url("12345", "aaaa-bbbb")
+        assert "new=0" in url
+        assert "new=5" not in url
 
 
 # ── extract_motive_part ──────────────────────────────────────────────────────
