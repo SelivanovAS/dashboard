@@ -542,13 +542,18 @@ class TestMigrateStages:
 
 class TestCardUrlAlt:
     def test_alt_url_uses_new_zero(self):
-        """card_url_alt() для 1 инст. суда возвращает URL с new=0 — это нужно
-        как фолбэк, когда карточка при new=5 отдаёт обрезанную вкладку."""
+        """card_url() и card_url_alt() для 1 инст. суда оба возвращают URL
+        с new=0 — это намеренное поведение после коммита 6696e0c, чтобы
+        sudrf сразу отдавал основную вкладку «Дело», а не обрезанную
+        «обжалование решений (пост.)». card_url_alt сейчас фактически
+        алиас card_url; фолбэк-вызов в update_active_cases остался на
+        случай, если sudrf вернёт короткую карточку даже при new=0."""
         court = uc.FIRST_INSTANCE_COURTS[0]  # любой суд 1 инст.
         primary = court.card_url("12345", "aaaa-bbbb")
         alt = court.card_url_alt("12345", "aaaa-bbbb")
-        assert "new=5" in primary
+        assert "new=0" in primary
         assert "new=0" in alt
+        assert "new=5" not in primary
         assert "new=5" not in alt
 
 
@@ -661,13 +666,15 @@ class TestClassifyVerdict:
 # ── bank_side_outcome ────────────────────────────────────────────────────────
 
 class TestBankSideOutcome:
-    def test_third_party_role_is_neutral(self):
-        """Банк как третье лицо — нейтрально, независимо от исхода."""
+    def test_third_party_role_returns_empty(self):
+        """Банк как третье лицо — пустая строка (намеренно, коммит 6b4a058):
+        downstream-генерация дайджеста не должна дублировать «банк — третье
+        лицо», эта роль уже отображается в хвосте строки 2 по правилу промпта."""
         result = uc.bank_side_outcome(
             "Третье лицо", "банк",
             "решение оставлено без изменения, жалоба — без удовлетворения",
         )
-        assert result == "нейтрально (банк — третье лицо)"
+        assert result == ""
 
     def test_unknown_appellant_returns_empty(self):
         """При пустом апеллянте исход не угадывается — пусто, не «не определено»."""

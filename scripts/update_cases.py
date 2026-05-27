@@ -2468,6 +2468,21 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     # в вышестоящую инстанцию». При коротком ответе sudrf отдаёт именно эту
     # вкладку (≤4 таблицы) — оттуда и берём даты, fallback на new=0 потом
     # дополнит движение дела.
+    #
+    # Маркер вкладки апелляции в шапке (есть в табах карточки): «обжалование
+    # решений, определений (пост.)». Если он встречается — короткие таблицы
+    # с лейблами «Заявитель жалобы» / «Дата поступления жалобы» считаются
+    # сигналом об апел. жалобе даже без таблицы «ДВИЖЕНИЕ ЖАЛОБЫ» (фолбэк
+    # на new=0 мог не дотянуться, но факт жалобы терять нельзя).
+    has_appeal_tab_marker = False
+    for tbl in tables[:3]:
+        for row in tbl:
+            row_lc = " ".join(cell_text(c) for c in row).lower()
+            if re.search(r'обжалован\w*\s+решен', row_lc):
+                has_appeal_tab_marker = True
+                break
+        if has_appeal_tab_marker:
+            break
     current_kind: str | None = None  # "appeal" | "cassation"
     for tbl in tables:
         for row in tbl:
@@ -2497,6 +2512,24 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                 if value and value.lower() != "заявитель":
                     info["_appellant_raw"] = value
                 continue
+
+            # Короткая шапка жалобы (без «ДВИЖЕНИЕ ЖАЛОБЫ»): «Заявитель
+            # жалобы» / «Дата поступления жалобы». Бывает на укороченной
+            # вкладке апелляции при new=5, когда фолбэк на new=0 не сработал.
+            # Привязываем к маркеру вкладки и к contextual current_kind: для
+            # касс. блока такие лейблы не используем, чтобы не путать сигналы.
+            if has_appeal_tab_marker and current_kind != "cassation":
+                if label == "заявитель жалобы":
+                    info["_fi_appeal_filed"] = True
+                    if value and value.lower() != label and not info["_appellant_raw"]:
+                        info["_appellant_raw"] = value
+                    continue
+                if label == "дата поступления жалобы":
+                    if value and parse_date(value):
+                        info["_fi_appeal_filed"] = True
+                        if not info["_fi_appeal_filed_date"]:
+                            info["_fi_appeal_filed_date"] = value
+                    continue
 
             # События движения жалобы — нужна реальная дата (или дата
             # размещения как fallback: для «срок для возражений» в колонке
