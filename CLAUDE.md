@@ -209,6 +209,10 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 - **JSON:** UTF-8 без BOM, `version: 1`, `updated_at` ISO.
 - **CSV:** UTF-8 с BOM, legacy-формат, по-прежнему коммитится.
 - **Дедупликация актов:** через `.digested_acts` — не обрабатывать акт дважды.
+- **Bust фронта/PWA:** при любых правках [app.js](app.js) или [styles.css](styles.css) **обязательно**:
+  - инкрементить `?v=N` в [sberbank_dashboard.html](sberbank_dashboard.html) (строка `<script src="app.js?v=N">` и/или `<link href="styles.css?v=N">`),
+  - инкрементить `CACHE_VERSION` в [service-worker.js](service-worker.js).
+  Без этого у юриста на устройстве PWA будет показывать старую версию из cache-first (см. инцидент `0b70826` — реактивация архива не была видна, потому что забыли bust).
 
 ## Чего НЕ делать
 
