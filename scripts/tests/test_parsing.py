@@ -801,3 +801,218 @@ class TestTemplateDigestDefaults:
             total_active_appeal=0, total_active_fi=1,
         )
         assert "апеллянт: Истец Шамов Д.С." in out
+
+
+# ── determine_bank_role_from_participants ───────────────────────────────────
+
+class TestDetermineBankRoleFromParticipants:
+    def test_bank_as_defendant(self):
+        parts = [
+            {"role": "ИСТЕЦ", "name": "Иванов И.И."},
+            {"role": "ОТВЕТЧИК", "name": "ПАО Сбербанк"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Ответчик"
+
+    def test_bank_as_plaintiff(self):
+        parts = [
+            {"role": "ИСТЕЦ", "name": "ПАО Сбербанк"},
+            {"role": "ОТВЕТЧИК", "name": "Петров П.П."},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Истец"
+
+    def test_bank_as_third_party(self):
+        parts = [
+            {"role": "ИСТЕЦ", "name": "Иванов И.И."},
+            {"role": "ОТВЕТЧИК", "name": "Банк ВТБ (ПАО)"},
+            {"role": "ТРЕТЬЕ ЛИЦО", "name": "ПАО Сбербанк"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Третье лицо"
+
+    def test_bank_absent_returns_empty(self):
+        """Если ПАО Сбербанка нет среди участников — хелпер возвращает "",
+        внешний код решает что с этим делать."""
+        parts = [
+            {"role": "ИСТЕЦ", "name": "Иванов И.И."},
+            {"role": "ОТВЕТЧИК", "name": "Банк ВТБ (ПАО)"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == ""
+
+    def test_only_subsidiary_returns_empty(self):
+        """Сбербанк страхование / НПФ / лизинг — не ПАО Сбербанк."""
+        parts = [
+            {"role": "ИСТЕЦ", "name": "Иванов И.И."},
+            {"role": "ОТВЕТЧИК", "name": "ООО «Сбербанк страхование жизни»"},
+            {"role": "ТРЕТЬЕ ЛИЦО", "name": "АО «НПФ Сбербанк»"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == ""
+
+    def test_mixed_subsidiary_and_real_bank(self):
+        """Дочка как ответчик + ПАО Сбербанк как 3-е лицо → роль = Третье лицо."""
+        parts = [
+            {"role": "ИСТЕЦ", "name": "Иванов И.И."},
+            {"role": "ОТВЕТЧИК", "name": "ООО «Сбербанк страхование»"},
+            {"role": "ТРЕТЬЕ ЛИЦО", "name": "ПАО Сбербанк"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Третье лицо"
+
+    def test_defendant_wins_over_third_party(self):
+        """Если банк в двух ролях (редкий артефакт sudrf) — Ответчик приоритетнее."""
+        parts = [
+            {"role": "ОТВЕТЧИК", "name": "ПАО Сбербанк"},
+            {"role": "ТРЕТЬЕ ЛИЦО", "name": "ПАО Сбербанк, филиал N"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Ответчик"
+
+    def test_empty_list(self):
+        assert uc.determine_bank_role_from_participants([]) == ""
+
+    def test_zayavitel_is_plaintiff(self):
+        """ЗАЯВИТЕЛЬ (особое производство) маппится в Истец."""
+        parts = [
+            {"role": "ЗАЯВИТЕЛЬ", "name": "ПАО Сбербанк"},
+        ]
+        assert uc.determine_bank_role_from_participants(parts) == "Истец"
+
+
+# ── parse_case_card: УЧАСТНИКИ + bank_role_from_participants ────────────────
+
+class TestParseCaseCardParticipants:
+    def test_bank_as_third_party_in_fixture(self):
+        """Карточка моделирует дело 2-5405/2026: банк переведён в 3-е лицо."""
+        html = _read_fixture("case_card_fi_bank_third_party.html")
+        info = uc.parse_case_card(html)
+        assert info["bank_role_from_participants"] == "Третье лицо"
+        # Все три участника распарсились
+        names = [p["name"] for p in info["participants"]]
+        assert "Рамазанов Фануз Фатыхович" in names
+        assert "Банк ВТБ (ПАО)" in names
+        assert "ПАО Сбербанк" in names
+
+    def test_bank_excluded_from_card(self):
+        """Сбербанка нет среди участников вообще → хелпер возвращает ""."""
+        html = _read_fixture("case_card_fi_bank_excluded.html")
+        info = uc.parse_case_card(html)
+        assert info["bank_role_from_participants"] == ""
+        # Хотя бы 2 участника распарсились
+        assert len(info["participants"]) >= 2
+
+    def test_bank_as_defendant_in_fixture(self):
+        """Контроль: ПАО Сбербанк в УЧАСТНИКАХ как ответчик → 'Ответчик'.
+        Дочка (Сбербанк страхование) отдельно не должна перебить роль."""
+        html = _read_fixture("case_card_fi_bank_defendant.html")
+        info = uc.parse_case_card(html)
+        assert info["bank_role_from_participants"] == "Ответчик"
+
+    def test_no_participants_section_yields_empty(self):
+        """Если в HTML нет таблицы «Лица, участвующие в деле» — пустой список,
+        и bank_role_from_participants == "" (нет данных — нет решения)."""
+        html = _read_fixture("case_card_first_instance.html")
+        info = uc.parse_case_card(html)
+        assert info["participants"] == []
+        assert info["bank_role_from_participants"] == ""
+
+
+# ── migrate_stages: initial_bank_role ───────────────────────────────────────
+
+class TestInitialBankRoleMigration:
+    def test_fills_initial_bank_role_for_existing_case(self):
+        cases = [
+            {
+                "id": "2-1/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Ответчик",
+                "first_instance": {
+                    "case_number": "2-1/2026",
+                    "court": "Сургутский гор. суд",
+                },
+            }
+        ]
+        uc.migrate_stages(cases)
+        assert cases[0]["initial_bank_role"] == "Ответчик"
+
+    def test_does_not_overwrite_existing(self):
+        cases = [
+            {
+                "id": "2-2/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Третье лицо",
+                "initial_bank_role": "Ответчик",
+                "first_instance": {"case_number": "2-2/2026"},
+            }
+        ]
+        uc.migrate_stages(cases)
+        assert cases[0]["initial_bank_role"] == "Ответчик"
+
+    def test_skips_when_bank_role_empty(self):
+        cases = [
+            {
+                "id": "2-3/2026",
+                "current_stage": "first_instance",
+                "bank_role": "",
+                "first_instance": {"case_number": "2-3/2026"},
+            }
+        ]
+        uc.migrate_stages(cases)
+        assert cases[0].get("initial_bank_role", "") == ""
+
+
+# ── generate_template_digest: fi_bank_role_changed ──────────────────────────
+
+class TestDigestBankRoleChanged:
+    def test_role_change_event_rendered_in_changes(self):
+        fi_changes = [{
+            "case": "2-5405/2026",
+            "court": "Нижневартовский городской суд",
+            "plaintiff": "Рамазанов Ф.Ф.",
+            "defendant": "Банк ВТБ ПАО, ПАО Сбербанк",
+            "bank_role": "Третье лицо",
+            "type": ["fi_bank_role_changed"],
+            "details": {
+                "link": "266212717|3687234d-b2a9-403f-8a25-3dc9fa8f199f",
+                "court_domain": "vartovgor--hmao.sudrf.ru",
+                "old_role": "Ответчик",
+                "new_role": "Третье лицо",
+                "reason_hint": "банк исключён из числа ответчиков",
+            },
+        }]
+        out = uc.generate_template_digest(
+            [], [], cases=[], fi_new_cases=[], stage_transitions=[],
+            fi_changes=fi_changes,
+            total_active_appeal=0, total_active_fi=1,
+        )
+        assert "роль банка: Ответчик → Третье лицо" in out
+        assert "Дальнейшие исходы — нейтральны" in out
+
+    def test_role_change_plus_resolved_adds_neutral_tail(self):
+        """Когда у дела есть И fi_resolved, И fi_bank_role_changed — в строке
+        «Вынесенные решения» появляется хвост «нейтрально — банк не сторона»."""
+        fi_changes = [{
+            "case": "2-5405/2026",
+            "court": "Нижневартовский городской суд",
+            "plaintiff": "Рамазанов Ф.Ф.",
+            "defendant": "Банк ВТБ ПАО, ПАО Сбербанк",
+            "bank_role": "Третье лицо",
+            "type": ["fi_resolved", "fi_bank_role_changed"],
+            "details": {
+                "link": "266212717|3687234d-b2a9-403f-8a25-3dc9fa8f199f",
+                "court_domain": "vartovgor--hmao.sudrf.ru",
+                "raw_result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+                "verdict_label": "удовлетворено",
+                "bank_outcome": "",  # обновлённый bank_role даёт пусто
+                "decision_date": "25.05.2026",
+                "category": "Защита прав потребителей",
+                "old_role": "Ответчик",
+                "new_role": "Третье лицо",
+                "reason_hint": "банк исключён из числа ответчиков",
+            },
+        }]
+        out = uc.generate_template_digest(
+            [], [], cases=[], fi_new_cases=[], stage_transitions=[],
+            fi_changes=fi_changes,
+            total_active_appeal=0, total_active_fi=1,
+        )
+        assert "Вынесенные решения" in out
+        assert "нейтрально — банк не сторона согласно карточке" in out
+        # И НЕ должно быть «против банка»
+        assert "против банка" not in out
+
