@@ -790,6 +790,12 @@ def migrate_stages(cases: list[dict]) -> int:
       → cassation_watch
     - cassation_watch с зарегистрированной касс. жалобой → cassation_pending
     Возвращает число мигрированных дел."""
+    # Идемпотентно заполняем initial_bank_role у дел, где его ещё нет.
+    # Используется в дайджесте, чтобы показать «было: <роль>» при изменении
+    # bank_role (напр. банк исключён из ответчиков → стал «Третье лицо»).
+    for case in cases:
+        if not case.get("initial_bank_role") and case.get("bank_role"):
+            case["initial_bank_role"] = case["bank_role"]
     migrated = 0
     for case in cases:
         changed = True
@@ -1715,6 +1721,53 @@ def is_subsidiary_only_case(plaintiff: str, defendant: str) -> bool:
 is_insurance_only_case = is_subsidiary_only_case
 
 
+def _is_real_sberbank(name: str) -> bool:
+    """True, если имя содержит ПАО Сбербанк (не дочку: страхование/НПФ/лизинг/УК).
+    Возвращает False для пустых имён и для строк без подстроки «сбербанк»."""
+    nm = (name or "").lower()
+    if "сбербанк" not in nm:
+        return False
+    cleaned = nm
+    for pat in _SBER_SUBSIDIARY_PATTERNS:
+        cleaned = pat.sub("", cleaned)
+    return "сбербанк" in cleaned
+
+
+def determine_bank_role_from_participants(participants: list[dict]) -> str:
+    """Вернуть фактическую роль ПАО Сбербанк по списку участников карточки.
+
+    participants: список dict с ключами 'role' (вид участника, напр. ИСТЕЦ /
+    ОТВЕТЧИК / ТРЕТЬЕ ЛИЦО) и 'name' (наименование стороны).
+
+    Возвращает:
+    - «Истец» / «Ответчик» / «Третье лицо» — если ПАО Сбербанк найден среди
+      участников хотя бы один раз. При нескольких вхождениях приоритет:
+      Ответчик > Истец > Третье лицо (банк может быть упомянут в разных ролях,
+      но «Ответчик» — самая значимая для исхода).
+    - "" (пустая строка) — если ПАО Сбербанка нет среди участников вообще
+      (только дочки или вовсе нет). Внешний код решает, что с этим делать:
+      для 1-й инстанции = «Третье лицо» (нейтрально), для кассации = drop.
+    """
+    found_roles: set[str] = set()
+    for p in participants or []:
+        if not _is_real_sberbank(p.get("name") or ""):
+            continue
+        role_up = (p.get("role") or "").upper()
+        if "ОТВЕТЧИК" in role_up:
+            found_roles.add("Ответчик")
+        elif "ИСТЕЦ" in role_up or "ЗАЯВИТЕЛЬ" in role_up:
+            found_roles.add("Истец")
+        else:
+            found_roles.add("Третье лицо")
+    if "Ответчик" in found_roles:
+        return "Ответчик"
+    if "Истец" in found_roles:
+        return "Истец"
+    if "Третье лицо" in found_roles:
+        return "Третье лицо"
+    return ""
+
+
 def parse_search_page(html: str) -> list[dict]:
     """
     Парсит страницу результатов поиска.
@@ -2175,6 +2228,12 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "_fi_cassation_events": [],
         "_fi_sent_to_cassation": False,
         "_fi_sent_to_cassation_date": "",
+        # Участники дела из таблицы «Лица, участвующие в деле» (sudrf 1-й инст.)
+        # / «УЧАСТНИКИ» (7kas). Используется для пересчёта актуальной роли
+        # банка: при исключении из ответчиков bank_role переключается на
+        # «Третье лицо» автоматически (см. determine_bank_role_from_participants).
+        "participants": [],
+        "bank_role_from_participants": "",
     }
 
     tables = extract_tables(html)
@@ -2656,6 +2715,46 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         info["Акт опубликован"] = "Да"
         info["Дата публикации акта"] = pub_date_str
 
+    # ── Лица, участвующие в деле ────────────────────────────────────────
+    # Нужно для пересчёта актуальной роли банка. На sudrf 1-й инст. таблица
+    # называется «Лица, участвующие в деле», на апелляции — «Стороны по делу»
+    # / «Участники», на 7kas — «УЧАСТНИКИ». Заголовок секции — в первой строке
+    # таблицы (рендерится внутри <td>/<th>). Шапка колонок — в строке 1.
+    part_header_rx = re.compile(
+        r"(лица,\s*участвующи|^участники\b|стороны\s+по\s+делу)",
+        re.IGNORECASE,
+    )
+    for tbl in tables:
+        if not tbl:
+            continue
+        first_row_text = " ".join(cell_text(c) for c in tbl[0]).strip()
+        if not part_header_rx.search(first_row_text):
+            continue
+        for row in tbl[1:]:
+            cells = [cell_text(c).strip() for c in row]
+            if len(cells) < 2 or not cells[0]:
+                continue
+            role_up = cells[0].upper()
+            # Пропустить строку-шапку колонок (если есть)
+            if (
+                "ВИД ЛИЦА" in role_up
+                or "ВИД УЧАСТНИКА" in role_up
+                or role_up in ("ФИО", "НАИМЕНОВАНИЕ", "ЛИЦО", "РОЛЬ")
+            ):
+                continue
+            # Скип служебных строк без распознаваемой роли стороны
+            if not any(
+                kw in role_up
+                for kw in ("ИСТЕЦ", "ОТВЕТЧИК", "ТРЕТЬЕ", "ЗАЯВИТ", "ПРОКУР", "ПРЕДСТАВ")
+            ):
+                continue
+            info["participants"].append({"role": cells[0], "name": cells[1]})
+        break
+
+    info["bank_role_from_participants"] = (
+        determine_bank_role_from_participants(info["participants"])
+    )
+
     return info
 
 
@@ -3106,30 +3205,12 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             "inn": cells[2] if len(cells) > 2 else "",
         })
 
-    # Sber-presence + bank_role: проверяем вхождение SBER_PATTERNS в имена
-    # участников. Если ни в одном имени Сбербанка нет (поиск иногда матчит
-    # по случайному совпадению в тексте) — sber_present=False, дело отбросим.
-    # Также отсекаем «дочки» (Сбербанк страхование / НПФ / лизинг / факторинг /
-    # УК): «сбербанк страхование жизни» содержит подстроку «сбербанк», но это
-    # не ПАО Сбербанк. Параллель с фильтром апел./1-инст. (is_subsidiary_only_case).
-    for p in info["participants"]:
-        nm = p["name"].lower()
-        if not any(pat in nm for pat in SBER_PATTERNS):
-            continue
-        cleaned = nm
-        for sub_pat in _SBER_SUBSIDIARY_PATTERNS:
-            cleaned = sub_pat.sub("", cleaned)
-        if "сбербанк" not in cleaned:
-            continue  # только дочка, не сам ПАО Сбербанк
-        info["sber_present"] = True
-        role = p["role"].upper()
-        if "ИСТЕЦ" in role or "ЗАЯВИТЕЛЬ" in role:
-            info["bank_role"] = "Истец"
-        elif "ОТВЕТЧИК" in role:
-            info["bank_role"] = "Ответчик"
-        else:
-            info["bank_role"] = "Третье лицо"
-        break
+    # Sber-presence + bank_role через единый хелпер. Дочки (страхование/НПФ/
+    # лизинг/факторинг/УК) фильтруются внутри _is_real_sberbank — параллель с
+    # is_subsidiary_only_case. Если хелпер вернул "" — Сбербанка нет среди
+    # участников, дело отбросим в link_cassation_cases.
+    info["sber_present"] = any(_is_real_sberbank(p["name"]) for p in info["participants"])
+    info["bank_role"] = determine_bank_role_from_participants(info["participants"])
 
     # ── Жалоба оставлена без движения [до DD.MM.YYYY] ────────────────────
     # Основной путь — структурный парсинг колонок 5/6 таблицы ЖАЛОБЫ выше.
@@ -6260,6 +6341,19 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     if nhd:
                         nxt = nhd + (f" {nht}" if nht else "")
                         line += f"\n  Следующее заседание: {nxt}"
+                elif t == "fi_bank_role_changed":
+                    old_r = d.get("old_role", "")
+                    new_r = d.get("new_role", "")
+                    hint = d.get("reason_hint", "") or ""
+                    line += (
+                        f"\n  ИЗМЕНЕНИЕ РОЛИ БАНКА: {old_r} → {new_r}"
+                    )
+                    if hint:
+                        line += f" ({hint})"
+                    line += (
+                        ". Согласно карточке банк не является стороной."
+                        " Все исходы по этому делу — НЕЙТРАЛЬНО для банка."
+                    )
             fi_changes_buf.append(line)
         if fi_changes_buf:
             context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ:")
@@ -6299,6 +6393,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 )
             if d.get("bank_outcome"):
                 line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
+            if "fi_bank_role_changed" in ch["type"]:
+                line += (
+                    f"\n  Смена роли банка: {d.get('old_role', '')} → "
+                    f"{d.get('new_role', '')}"
+                    f" (банк не является стороной согласно карточке;"
+                    f" для банка — нейтрально)"
+                )
             if d.get("last_event"):
                 line += f"\n  Последнее событие: {d['last_event']}"
             context_parts.append(line)
@@ -6331,6 +6432,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 line += f"\n  Сырое поле «Результат»: {d['raw_result']}"
             if d.get("bank_outcome"):
                 line += f"\n  В чью пользу для банка: {d['bank_outcome']}"
+            if "fi_bank_role_changed" in ch["type"]:
+                line += (
+                    f"\n  Смена роли банка: {d.get('old_role', '')} → "
+                    f"{d.get('new_role', '')}"
+                    f" (банк не является стороной согласно карточке;"
+                    f" для банка — нейтрально)"
+                )
             if d.get("category"):
                 line += (
                     f"\n  Категория спора: "
@@ -6581,6 +6689,8 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 ССЫЛКА НА КАРТОЧКУ ДЕЛА (КРИТИЧНО): в КАЖДОЙ строке, где упоминается номер дела (3.1–3.6, 4, 5.1–5.5), номер ОБЯЗАТЕЛЬНО оборачивается в `<a href="URL"><b>номер</b></a>`, где URL — поле «URL» того же дела из данных (это ссылка на карточку на сайте суда, sudrf.ru). Голый номер без `<a href>` = БРАК. Если URL в данных пустой — всё равно выведи `<b>номер</b>` (без ссылки), но это исключение, а не норма.
 
 БАНК В ХВОСТЕ СТРОКИ: во всех строках, где есть фраза «банк — {{роль}}» (3.2, 3.5, 5.1, 5.4 и т.п.): если «Сбербанк» / «ПАО Сбербанк» / «Сбербанк России» явно упомянут в сторонах (истец или ответчик) — блок «банк — {{роль}}» и «<b>, банк — {{роль}}</b>» НЕ пиши. Хвост нужен ТОЛЬКО когда банк = Третье лицо и в сторонах не фигурирует. Правило действует на все секции промпта без исключения.
+
+ИЗМЕНЕНИЕ РОЛИ БАНКА (fi_bank_role_changed): если у дела в разделе «ИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ» есть строка «ИЗМЕНЕНИЕ РОЛИ БАНКА: <старая> → <новая>» — это значит, что суд исключил банк из числа ответчиков (или перевёл в иную роль). Правила: (а) выведи это событие в 3.2 «Изменения» отдельной строкой «🔄 роль банка: <старая> → <новая> ({{подсказка причины, если есть}}). Дальнейшие исходы — нейтральны». (б) Если у этого же дела одновременно есть «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.» (3.5) или «ОПУБЛИКОВАНЫ ТЕКСТЫ РЕШЕНИЙ 1 ИНСТ.» (3.6) — в строке исхода добавь хвост «<b>Для банка:</b> нейтрально — банк не сторона согласно карточке» вместо «в пользу банка»/«против банка», даже если в данных есть поле «В чью пользу для банка». (в) НЕ помечай результат как «против банка» или «в пользу банка» при изменении роли — банк больше не сторона, исход к нему не относится.
 
 ПРАВИЛА РЕЗОЛЮТИВНЫХ СЕКЦИЙ (применяются к 3.5 и 5.4):
 • ИТОГ цитируй ДОСЛОВНО из поля «ИТОГ»; не переформулируй и не подменяй шаблоном.
@@ -8629,6 +8739,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     if nhd:
                         part += f"; след. заседание {nhd}" + (f" {nht}" if nht else "")
                     ev_list.append(part)
+                elif t == "fi_bank_role_changed":
+                    old_r = escape_html(d.get("old_role", ""))
+                    new_r = escape_html(d.get("new_role", ""))
+                    hint = escape_html(d.get("reason_hint", "") or "")
+                    msg = f"🔄 роль банка: {old_r} → {new_r}"
+                    if hint:
+                        msg += f" ({hint})"
+                    msg += ". Дальнейшие исходы — нейтральны."
+                    ev_list.append(msg)
         ev_str = "; ".join(ev_list) if ev_list else ""
         fi_changes_rendered.append(
             f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
@@ -8676,6 +8795,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 extras.append(f"банк — {bank_role.lower()}")
             if bank_out:
                 extras.append(f"<b>для банка:</b> {bank_out}")
+            # Если в том же change есть fi_bank_role_changed (банк исключён
+            # из ответчиков / переведён в 3-е лицо) — явно поясняем нейтралитет,
+            # т.к. иначе юрист видит «Иск удовлетворён» и думает, что это
+            # против банка. _bank_in_parties может вернуть True (банк всё ещё
+            # упоминается в defendant-строке поиска), поэтому хвост «банк — роль»
+            # не выводится сам по себе.
+            if "fi_bank_role_changed" in ch["type"]:
+                extras.append(
+                    "<b>для банка:</b> нейтрально — банк не сторона согласно карточке"
+                )
             extras_str = (" | " + "; ".join(extras)) if extras else ""
             fi_block.append(
                 f"  {link} ({court}) — {pl} vs {df}{tail}{extras_str}"
@@ -8726,6 +8855,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 itog_parts.append(f"<b>Итог:</b> {verdict}")
             if bank_out:
                 itog_parts.append(f"<b>Для банка:</b> {bank_out}")
+            if "fi_bank_role_changed" in ch["type"]:
+                itog_parts.append(
+                    "<b>Для банка:</b> нейтрально — банк не сторона согласно карточке"
+                )
             if itog_parts:
                 fi_block.append("     " + ". ".join(itog_parts))
             if act_excerpt:
@@ -10200,13 +10333,18 @@ def main():
 
 def _fi_search_to_json_case(fi: dict) -> dict:
     """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
+    initial_role = fi.get("bank_role", "Ответчик")
     return {
         "id": fi["case_number"],
         "current_stage": "first_instance",
         "plaintiff": fi.get("plaintiff", ""),
         "defendant": fi.get("defendant", ""),
         "category": fi.get("category", ""),
-        "bank_role": fi.get("bank_role", "Ответчик"),
+        "bank_role": initial_role,
+        # initial_bank_role фиксирует роль при создании дела и не меняется
+        # даже если bank_role позже переключится (банк исключили из ответчиков).
+        # Используется в дайджесте для показа «было: Ответчик».
+        "initial_bank_role": initial_role,
         "notes": "",
         "first_instance": {
             "case_number": fi["case_number"],
@@ -10697,6 +10835,49 @@ def main_json():
         if changed:
             fi_update_count += 1
 
+        # ── Пересчёт актуальной роли банка по разделу «Лица, участвующие в деле» ──
+        # Случай: суд исключил Сбербанк из числа ответчиков в ходе процесса.
+        # На странице результатов поиска defendant-строка не обновляется, поэтому
+        # bank_role оставался «Ответчик» и bank_outcome для нового акта считался
+        # как «против банка», хотя фактически банк — не сторона по карточке.
+        # Источник истины — таблица УЧАСТНИКОВ карточки 1-й инст.
+        old_bank_role = case_j.get("bank_role", "")
+        parts = card_info.get("participants") or []
+        bank_role_change_event: dict | None = None
+        if parts:
+            new_bank_role = card_info.get("bank_role_from_participants") or ""
+            # Хелпер вернул "" → Сбербанка нет среди участников вообще
+            # (исключён без перевода в 3-е лицо). Считаем «Третье лицо»:
+            # bank_side_outcome_fi для этой роли вернёт пусто (нейтрально).
+            if not new_bank_role:
+                new_bank_role = "Третье лицо"
+            # Зафиксировать initial_bank_role один раз — пригодится в дайджесте
+            # для пометки «было: Ответчик».
+            if not case_j.get("initial_bank_role") and old_bank_role:
+                case_j["initial_bank_role"] = old_bank_role
+            if new_bank_role != old_bank_role and old_bank_role:
+                case_j["bank_role"] = new_bank_role
+                changed = True
+                bank_role_change_event = {
+                    "old_role": old_bank_role,
+                    "new_role": new_bank_role,
+                }
+                # Если дело уже было «Решено» с резко иным bank_outcome —
+                # сбрасываем флаг, чтобы fi_resolved пере-эмитился ниже с
+                # актуальной (нейтральной) ролью. Иначе на следующих прогонах
+                # дайджест по-прежнему покажет «против банка».
+                if (
+                    fi.get("resolved_emitted")
+                    and old_bank_role in ("Истец", "Ответчик")
+                    and new_bank_role == "Третье лицо"
+                ):
+                    fi["resolved_emitted"] = False
+                    log.info(
+                        f"  {case_j.get('id') or fi.get('case_number','?')}: "
+                        f"сброс resolved_emitted из-за смены роли "
+                        f"{old_bank_role} → {new_bank_role}"
+                    )
+
         # ── Собираем события для дайджеста ──
         change = {
             "case": fi.get("case_number", ""),
@@ -10713,6 +10894,17 @@ def main_json():
                 "court_domain": fi.get("court_domain", ""),
             },
         }
+        if bank_role_change_event:
+            change["type"].append("fi_bank_role_changed")
+            change["details"]["old_role"] = bank_role_change_event["old_role"]
+            change["details"]["new_role"] = bank_role_change_event["new_role"]
+            # Подсказка для LLM/шаблона: «исключён из ответчиков» —
+            # самый частый сценарий перехода Ответчик → Третье лицо.
+            if (
+                bank_role_change_event["old_role"] == "Ответчик"
+                and bank_role_change_event["new_role"] == "Третье лицо"
+            ):
+                change["details"]["reason_hint"] = "банк исключён из числа ответчиков"
 
         # Новое/перенесённое заседание
         if new_hearing_date and new_hearing_date != old_hearing_date:
