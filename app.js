@@ -507,9 +507,19 @@ function jsonToCase(j){
         :'Иск удовлетворен';
     }
   }
-  // Appellant
-  const apellRaw=(ap.appellant||'').toLowerCase();
-  let appellant=APPELLANT_MAP[apellRaw]||'';
+  // Appellant. Источники в порядке приоритета:
+  // 1) ap.appellant_is_bank / appellant_status — новый формат от парсера 1-й
+  //    инст. (Этап «Кассатор»): имя в appellant, метаданные в отдельных полях.
+  // 2) ap.appellant как роль ("Истец"/"Ответчик"/"Иное лицо") через APPELLANT_MAP —
+  //    legacy-формат до 2026-05.
+  // 3) Regex по last_event — самый старый fallback (CSV-only данные).
+  let appellant='';
+  if(ap.appellant_is_bank===true)appellant='bank';
+  else if(ap.appellant_is_bank===false&&(ap.appellant||ap.appellant_status))appellant='other';
+  if(!appellant){
+    const apellRaw=(ap.appellant||'').toLowerCase();
+    appellant=APPELLANT_MAP[apellRaw]||'';
+  }
   if(!appellant&&evText){
     if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
     else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';
@@ -1456,14 +1466,34 @@ function prepareCaseViewModel(c){
     else{actLabel='Акт не опубликован';actNegative=true;}
   }
   // Апеллянт среди сторон (для не-third). Совпадает для десктопа и мобилки.
-  const plaintiffIsAppellant=roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.plaintiff))||(c.appellant==='other'&&!isSberbank(c.plaintiff)));
-  const defendantIsAppellant=roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.defendant))||(c.appellant==='other'&&!isSberbank(c.defendant)));
+  // На кассац. стадиях бейдж "Апеллянт" подавляем — там может появиться
+  // отдельный "Кассатор" из cs.appellant_*. Сюда входят cassation_watch и
+  // cassation_pending (где карточки 7kas ещё нет, но в 1-й инст. карточке
+  // парсер мог уже найти кассатора и положить в cs.appellant_* предв.).
+  const isCassStage=['cassation','cassation_watch','cassation_pending','awaiting_relink'].includes(c.stage);
+  const plaintiffIsAppellant=!isCassStage&&roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.plaintiff))||(c.appellant==='other'&&!isSberbank(c.plaintiff)));
+  const defendantIsAppellant=!isCassStage&&roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.defendant))||(c.appellant==='other'&&!isSberbank(c.defendant)));
+  // Кассатор: симметрично с appellant — клеим бейдж по схеме «банк vs не-банк».
+  // cs.appellant_is_bank=true → бейдж на стороне, где Сбер; false → на не-Сбер
+  // стороне. Без cs.appellant — бейджа нет (это покрывает cassation_watch без
+  // данных). Edge case 8Г-7520/2026: cs.appellant="МТУ Росимущества" (не Сбер,
+  // статус "ИСТЕЦ" по 1-й инст., но Сбер тоже истец) — берём по is_bank, не по
+  // статусу, чтобы бейдж не уехал на Сбер.
+  const cs=c._cs||{};
+  const csHasData=!!(cs.appellant||cs.appellant_status);
+  const csIsBank=cs.appellant_is_bank===true;
+  const plaintiffIsCassator=isCassStage&&roleClass!=='third'&&csHasData&&
+    ((csIsBank&&isSberbank(c.plaintiff))||(!csIsBank&&!isSberbank(c.plaintiff)));
+  const defendantIsCassator=isCassStage&&roleClass!=='third'&&csHasData&&
+    ((csIsBank&&isSberbank(c.defendant))||(!csIsBank&&!isSberbank(c.defendant)));
   return{
     roleClass,ds,isFutureHearing,
     resultPresent,resultIcon,resultLabel,resultBadgeCls,favor,
     statusLabel,statusInlineDate,statusBelowDate,
     actLabel,actNegative,
     plaintiffIsAppellant,defendantIsAppellant,
+    plaintiffIsCassator,defendantIsCassator,
+    isCassStage,
   };
 }
 
@@ -1576,10 +1606,18 @@ function renderTable(){
       }
     }
 
-    // Highlight Sberbank in parties + appellant badge inline
+    // Highlight Sberbank in parties + appellant/cassator badge inline.
+    // На кассац. стадиях бейдж "Апеллянт" подавлён (см. prepareCaseViewModel),
+    // вместо него — "Кассатор" из cs.appellant_*. Бейджи rose vs violet —
+    // визуально явное разделение апелляции и кассации.
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
-    const plaintiffHtml=highlightSberbank(shortParty(c.plaintiff))+(vm.plaintiffIsAppellant?appBadge:'');
-    const defendantHtml=highlightSberbank(shortParty(c.defendant))+(vm.defendantIsAppellant?appBadge:'');
+    const cassBadge=' <span class="badge badge-cassator badge-compact">Кассатор</span>';
+    const plaintiffHtml=highlightSberbank(shortParty(c.plaintiff))
+      +(vm.plaintiffIsAppellant?appBadge:'')
+      +(vm.plaintiffIsCassator?cassBadge:'');
+    const defendantHtml=highlightSberbank(shortParty(c.defendant))
+      +(vm.defendantIsAppellant?appBadge:'')
+      +(vm.defendantIsCassator?cassBadge:'');
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
@@ -1619,7 +1657,7 @@ function renderTable(){
     html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${caseNumEsc}" onclick="openDrawer('${caseNumEsc.replace(/'/g,'&#39;')}')">
       <td><div class="case-number">${watch}<div class="case-num-stack"><span class="case-row-top"><span class="case-main" title="${caseNumEsc}">${caseMainEsc}</span>${metaBadges}${topActions}</span>${subRow}</div></div></td>
       <td class="col-court"><div class="cell-court" title="${escHtml(courtTitle(c))}">${escHtml(courtLabel(c))||'<span class="cell-empty">—</span>'}</div></td>
-      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(c.appellant==='bank'?appBadge:'')+'</span>':''}</div></td>
+      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(vm.isCassStage?(c._cs&&c._cs.appellant_is_bank?cassBadge:''):(c.appellant==='bank'?appBadge:''))+'</span>':''}</div></td>
       <td>${hearingHtml}</td>
       <td>${stateHtml}</td>
     </tr>`;
@@ -2098,8 +2136,8 @@ function renderDrawer(c){
       <div class="drawer-hero">
         <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
-          <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
-          <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}</span></div>
+          <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
+          <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
         </div>
         ${c.category?`<div class="hero-category"><span class="hc-label">Категория:</span> ${escHtml(c.category)}</div>`:''}
       </div>
@@ -2184,11 +2222,21 @@ function renderMobileCards(){
     const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
     const stageBadge=stageBadgeHtml(c);
     const pendingBadge=pendingAppealBadge(c);
-    const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':''}`:'';
+    // Третье лицо: на кассац. стадии — «Кассатор» если Сбер кассатор; иначе
+    // на других стадиях — «Апеллянт» если Сбер апеллянт (старая логика).
+    const thirdSuffixBadge=vm.isCassStage
+      ?(c._cs&&c._cs.appellant_is_bank?' <span class="badge badge-cassator">Кассатор</span>':'')
+      :(c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':'');
+    const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${thirdSuffixBadge}`:'';
 
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
-    const plHtml=highlightSberbank(shortParty(c.plaintiff))+(vm.plaintiffIsAppellant?appBadge:'');
-    const dfHtml=highlightSberbank(shortParty(c.defendant))+(vm.defendantIsAppellant?appBadge:'');
+    const cassBadge=' <span class="badge badge-cassator badge-compact">Кассатор</span>';
+    const plHtml=highlightSberbank(shortParty(c.plaintiff))
+      +(vm.plaintiffIsAppellant?appBadge:'')
+      +(vm.plaintiffIsCassator?cassBadge:'');
+    const dfHtml=highlightSberbank(shortParty(c.defendant))
+      +(vm.defendantIsAppellant?appBadge:'')
+      +(vm.defendantIsCassator?cassBadge:'');
 
     const courtLine=courtLabel(c);
     const hearingHtml=buildHearingHtml(c,vm,{compact:true});
