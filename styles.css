@@ -738,7 +738,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-upheld    { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 .badge-reversed  { background:var(--red-100); color:var(--red-700); }
 .badge-partial   { background:var(--amber-100); color:var(--amber-700); }
-.badge-returned  { background:var(--indigo-100); color:var(--indigo-700); }
+.badge-returned  { background:var(--slate-100); color:var(--slate-600); }
 .badge-dismissed { background:var(--gray-100); color:var(--fg-2); }
 .badge-pending   { background:var(--gray-100); color:var(--fg-2); }
 .badge-favorable { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }

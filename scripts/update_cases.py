@@ -505,6 +505,7 @@ _TO_FI_RULES_RE = re.compile(
 _TERMINAL_FI_EVENT_RX = re.compile(
     r"возвращени\S*\s+иск"
     r"|возвращени\S*\s+заявлени"
+    r"|материал\S*\s+возвращ"
     r"|отказан\S*\s+в\s+принят"
     r"|передан\S*\s+по\s+подсудност",
     re.IGNORECASE,
@@ -720,7 +721,7 @@ def advance_case_stage(case: dict) -> str | None:
 
 def is_case_archived(case: dict) -> bool:
     """Унифицированная архивная проверка по стадии:
-    - first_instance: «Решено» + FI_ARCHIVE_DAYS (60) от hearing_date без апел. жалобы.
+    - first_instance: «Решено»/«Возвращено» + FI_ARCHIVE_DAYS (60) от hearing_date без апел. жалобы.
     - awaiting_appeal: никогда (ждём бессрочно, пока апел. карточка не найдётся).
     - appeal: никогда (переход в cassation_watch делает advance_case_stage).
     - cassation_watch: >120 дней от апел. hearing_date без касс. жалобы.
@@ -746,7 +747,7 @@ def is_case_archived(case: dict) -> bool:
         # парсер обнаруживал апел. жалобу.
         if fi.get("appeal_filed") or fi.get("cassation_filed") or fi.get("sent_to_cassation"):
             return False
-        if fi.get("status", "").strip() != "Решено":
+        if fi.get("status", "").strip() not in ("Решено", "Возвращено"):
             return False
         hearing = parse_date(fi.get("hearing_date") or "")
         if hearing and (now - hearing).days > FI_ARCHIVE_DAYS:
@@ -2716,6 +2717,14 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "передано в архив", "сдано в архив",  # 1 инстанция: закрытие
     ]):
         info["Статус"] = "Решено"
+    elif _TERMINAL_FI_EVENT_RX.search(info["Последнее событие"]):
+        # Терминальный возврат 1-й инстанции без заполненного «Результата»:
+        # «Материалы возвращены в связи с истечением срока…», возврат иска/
+        # заявления, отказ в принятии. Поле «Результат» пустое, поэтому в
+        # верхний if не попадаем — помечаем отдельным статусом «Возвращено»
+        # (терминальный для архивации, см. is_case_archived). Передача по
+        # подсудности сюда не доходит — у неё «Результат» заполнен → «Решено».
+        info["Статус"] = "Возвращено"
 
     # ── Судебный акт ──
     act_text, act_url = _extract_act_text(html, court_base_url)
@@ -10801,6 +10810,39 @@ def main_json():
         card_info = parse_case_card(html, court_cfg.base_url)
         _warn_if_card_degraded(card_info, fi["case_number"], case_block=fi)
 
+        # Промоушен материала по карточке: М-XXXX → постоянный 2-XXXX.
+        # Комбо-промоушен в списке поиска (выше) срабатывает только когда суд
+        # отдаёт «2-…/2026 ~ М-…/2026». Многие суды показывают в списке голый
+        # М-номер даже после принятия иска к производству, а постоянный номер
+        # виден лишь на карточке («Номер дела в первой инстанции»). Подменяем id
+        # здесь, чтобы дело не «застревало» под номером материала.
+        cur_id = (case_j.get("id") or "").strip()
+        card_fi_num = (card_info.get("Номер дела 1 инстанции") or "").strip()
+        if (
+            cur_id.startswith("М-")
+            and card_fi_num
+            and card_fi_num != cur_id
+            and re.match(r'^\d+-\d+/\d{4}$', card_fi_num)
+        ):
+            collide = case_by_id.get(card_fi_num)
+            if collide is not None and collide is not case_j:
+                log.warning(
+                    f"  Промоушен по карточке пропущен: {cur_id} → {card_fi_num} "
+                    f"(номер уже занят другим делом)"
+                )
+            else:
+                log.info(f"  Промоушен по карточке: {cur_id} → {card_fi_num}")
+                # М-номер сохраняем как алиас — иначе ★ юриста на материале
+                # теряется при подмене номера (фронт матчит material_number).
+                if not fi.get("material_number"):
+                    fi["material_number"] = cur_id
+                case_j["id"] = card_fi_num
+                fi["case_number"] = card_fi_num
+                case_by_id.pop(cur_id, None)
+                case_by_id[card_fi_num] = case_j
+                existing_ids.discard(cur_id)
+                existing_ids.add(card_fi_num)
+
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
         # для force-parse раз в 21 день).
         fi["last_checked_at"] = today.isoformat()
@@ -10834,10 +10876,10 @@ def main_json():
             fi["result"] = ""
             changed = True
             old_result = ""
-        # Гард 2: регрессия статуса Решено → В производстве обычно означает,
-        # что карточка не вернула статус корректно (мусор в поле result или
-        # отсутствие нужного last_event). Не понижаем статус.
-        if old_status == "Решено" and new_status == "В производстве":
+        # Гард 2: регрессия статуса Решено/Возвращено → В производстве обычно
+        # означает, что карточка не вернула статус корректно (мусор в поле
+        # result или отсутствие нужного last_event). Не понижаем статус.
+        if old_status in ("Решено", "Возвращено") and new_status == "В производстве":
             new_status = old_status
 
         # ── Обновляем поля первой инстанции ──

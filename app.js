@@ -11,8 +11,8 @@ const SORT_PREF_KEY='sber-court-sort';
 const ARCHIVE_DAYS=60;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
-const STATUS_MAP={'в производстве':'active','решено':'decided'};
-const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено',prep:'Беседа',prelim:'Предв-ое СЗ',main:'Основное СЗ'};
+const STATUS_MAP={'в производстве':'active','решено':'decided','возвращено':'returned'};
+const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',returned:'Возвращено',scheduled:'Назначено',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено',prep:'Беседа',prelim:'Предв-ое СЗ',main:'Основное СЗ'};
 const CAT_SHORT={
   'Иски о взыскании сумм по договору займа, кредитному договору':'Кредитный договор',
   'об ответственности наследников по долгам наследодателя':'Долги наследодателя',
@@ -174,6 +174,7 @@ function extractFiVerdict(text){
 }
 function computeDetailedStatus(c){
   if(c.status==='decided')return 'decided';
+  if(c.status==='returned')return 'returned';
   const evLow=(c.lastEvent||'').toLowerCase();
   const today=new Date();today.setHours(0,0,0,0);
   const isFuture=c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today;
@@ -413,7 +414,7 @@ function computeDerived(c){
   // через cs.outcome) уходит под 30-дневный легаси-фильтр и исчезает
   // с экрана раньше публикации мотивированного определения.
   const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink'||fiHasFiledAppeal;
-  if(c.status==='decided'&&!stageManaged){
+  if((c.status==='decided'||c.status==='returned')&&!stageManaged){
     const decisionDate=c.lastEventDate||c.dateReceived;
     if(decisionDate){
       const d=new Date(decisionDate);
@@ -625,6 +626,7 @@ function jsonToCase(j){
     caseNumber:caseNumber,
     stage:stage,
     fiCaseNumber:fi.case_number||'',
+    materialNumber:fi.material_number||'',
     appealCaseNumber:ap.case_number||'',
     dateReceived:parseDate(isCass?(cs.filing_date||fi.filing_date||''):isAppeal?(ap.filing_date||fi.filing_date||''):(fi.filing_date||'')),
     plaintiff:j.plaintiff||'',
@@ -945,7 +947,7 @@ function renderAll(){
 function isArchived(c){
   // Используем предвычисленный флаг, если он есть (у всех дел после rowToCase).
   if(c.computed)return c.computed.archived;
-  if(c.status!=='decided')return false;
+  if(c.status!=='decided'&&c.status!=='returned')return false;
   if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink')return false;
   if(c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation))return false;
   const decisionDate=c.lastEventDate||c.dateReceived;
@@ -1195,7 +1197,7 @@ function applyFilters(){
     else if(st==='all'){if(archived)return false;}
     else if(st==='active'){if(c.status!=='active'||archived)return false;}
     else if(st==='scheduled'||st==='postponed'||st==='suspended'||st==='paused'||st==='awaiting'){if(c.detailedStatus!==st||archived)return false;}
-    else if(st==='decided'){if(c.status!=='decided'||archived)return false;}
+    else if(st==='decided'){if((c.status!=='decided'&&c.status!=='returned')||archived)return false;}
     else if(st==='lost'){if(getResultFavor(c)!=='unfavorable')return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
@@ -1246,8 +1248,8 @@ function applyFilters(){
     else if(sortField==='court'){va=courtLabel(a)||'';vb=courtLabel(b)||'';}
     else if(sortField==='state'){
       const ord={scheduled:1,postponed:2,suspended:3,paused:4,awaiting:5,decided:6};
-      va=a.status==='decided'?0:(ord[a.detailedStatus]||9);
-      vb=b.status==='decided'?0:(ord[b.detailedStatus]||9);
+      va=(a.status==='decided'||a.status==='returned')?0:(ord[a.detailedStatus]||9);
+      vb=(b.status==='decided'||b.status==='returned')?0:(ord[b.detailedStatus]||9);
     }
     else{va=a[sortField]||'';vb=b[sortField]||'';}
     if(sortField==='detailedStatus'){const ord={scheduled:1,postponed:2,suspended:3,paused:4,awaiting:5,decided:6};va=ord[va]||9;vb=ord[vb]||9;}
@@ -1276,7 +1278,7 @@ function countCasesByStatus(st){
     if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=1;}
     if(st==='week'){const d=c.nextDate?dayDiff(c.nextDate):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=7;}
     if(st==='active')return c.status==='active'&&!archived;
-    if(st==='decided')return c.status==='decided'&&!archived;
+    if(st==='decided')return (c.status==='decided'||c.status==='returned')&&!archived;
     if(st==='archived')return archived;
     return false;
   }).length;
@@ -1412,6 +1414,8 @@ const STATUS_ICONS={
   paused:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>',
   awaiting:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7l8 6 8-6M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M4 7l2-3h12l2 3"/></svg>',
   decided:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8l7-5 7 5M3 14l4-6 4 6M13 14l4-6 4 6M3 14a4 4 0 008 0M13 14a4 4 0 008 0"/></svg>',
+  // Возвращено — стрелка-разворот (иск/материал возвращён заявителю)
+  returned:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 015 5v0a5 5 0 01-5 5H7"/></svg>',
   // Беседа — две реплики (диалог)
   prep:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
   // Предв. СЗ — календарь с галочкой
@@ -1456,6 +1460,9 @@ function prepareCaseViewModel(c){
     if(d)statusInlineDate=formatDate(d);
   }else if(ds==='decided'){
     const d=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
+    if(d)statusInlineDate=formatDate(d);
+  }else if(ds==='returned'){
+    const d=c.lastEventDate||c.nextDate;
     if(d)statusInlineDate=formatDate(d);
   }
   if(transferToJudge&&c.lastEventDate)statusInlineDate=formatDate(c.lastEventDate);
@@ -1595,7 +1602,7 @@ function renderTable(){
     // Разделители групп при relevance-sort: новые → с датой → без даты → рассмотренные → архив
     if(sortField==='relevance'){
       const archived=c.computed?c.computed.archived:isArchived(c);
-      const grp=isUnread?'new':archived?'archive':c.status==='decided'?'decided':c.nextDate?'upcoming':'awaiting';
+      const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
         if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length})</td></tr>`;}
         else if(grp==='upcoming'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--info);"></span>С назначенной датой</td></tr>`;}
@@ -2195,7 +2202,7 @@ function renderMobileCards(){
       const archived=c.computed?c.computed.archived:isArchived(c);
       const isNew=isNewCase(c);
       const isUnread=isNew&&!readCases.has(c.caseNumber);
-      const grp=isUnread?'new':archived?'archive':c.status==='decided'?'decided':c.nextDate?'upcoming':'awaiting';
+      const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
         const headers={
           new:`Новые дела (${newCount})`,
@@ -2523,6 +2530,17 @@ function watchAliasFor(caseNumber) {
     if (bare === cs || caseNumber === c.caseNumber) return fi;
     if (bare === fi || caseNumber === c.fiCaseNumber) return cs;
   }
+  // 1-я инстанция: материал М-XXXX подменён постоянным 2-XXXX (промоушен на
+  // бэке). material_number хранит старый М-номер — ★ должна синкаться по обоим,
+  // иначе звезда юриста на материале осиротеет после подмены номера.
+  for (const c of allCases) {
+    if (!c.materialNumber) continue;
+    const mat = bareCaseNumber(c.materialNumber);
+    const cur = bareCaseNumber(c.caseNumber);
+    if (!mat || !cur || mat === cur) continue;
+    if (bare === cur || caseNumber === c.caseNumber) return c.materialNumber;
+    if (bare === mat || caseNumber === c.materialNumber) return c.caseNumber;
+  }
   return null;
 }
 
@@ -2542,6 +2560,18 @@ function expandWatchlistAliases() {
     const hasFi = watchlist.has(fi);
     if (hasFi && !hasCs) { watchlist.add(cs); dirty = true; }
     if (hasCs && !hasFi) { watchlist.add(fi); dirty = true; }
+  }
+  // То же для подмены номера материала (М-XXXX → 2-XXXX): синкаем ★ по
+  // material_number и текущему id, чтобы звезда не осиротела после промоушена.
+  for (const c of allCases) {
+    if (!c.materialNumber) continue;
+    const mat = bareCaseNumber(c.materialNumber);
+    const cur = bareCaseNumber(c.caseNumber);
+    if (!mat || !cur || mat === cur) continue;
+    const hasMat = watchlist.has(mat);
+    const hasCur = watchlist.has(cur);
+    if (hasMat && !hasCur) { watchlist.add(cur); dirty = true; }
+    if (hasCur && !hasMat) { watchlist.add(mat); dirty = true; }
   }
   if (dirty) {
     try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (_) {}
