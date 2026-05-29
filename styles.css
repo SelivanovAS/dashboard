@@ -56,6 +56,9 @@
   --red-500:   #ef4444;
   --red-100:   #fee2e2;
 
+  --rose-700:  #be123c;
+  --rose-100:  #ffe4e6;
+
   --violet-700: #6d28d9;
   --violet-100: #ede9fe;
 
@@ -726,6 +729,10 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-defendant { background:var(--role-defendant-bg); color:var(--role-defendant-fg); }
 .badge-third     { background:var(--role-third-bg); color:var(--role-third-fg); }
 .badge-appellant { background:var(--violet-100); color:var(--violet-700); font-weight:var(--fw-semibold); }
+/* Кассатор — податель кассац. жалобы, показывается на стадиях cassation*/
+/* awaiting_relink ВМЕСТО Апеллянта. Источник: cs.appellant_* (карточка 7kas) */
+/* или _fi_cassator_raw (1-я инст. карточка, пока 7kas-карточки нет). */
+.badge-cassator  { background:var(--rose-100); color:var(--rose-700); font-weight:var(--fw-semibold); }
 
 /* Исходы */
 .badge-upheld    { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }

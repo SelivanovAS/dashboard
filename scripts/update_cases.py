@@ -2207,7 +2207,15 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "Судья-докладчик": "",
         "Номер дела 1 инстанции": "",  # Извлекается из таблицы «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
-        "_appellant_raw": "",  # Сырой текст об апеллянте (для определения в update_active_cases)
+        # Раздельные сырые имена подателей жалоб из карточки 1-й инст.:
+        # «Вид жалобы» во вкладке «Обжалование решений» и стебель «кассационн»/
+        # «апелляционн» в regex событий движения — теперь разводят сигналы по
+        # видам, чтобы фронт показывал бейдж «Кассатор» уже на cassation_watch,
+        # не дожидаясь карточки 7kas. Legacy `_appellant_raw` (= apel or cass)
+        # сохраняем для CSV-маппинга и `_appellant_fmt` в дайджесте.
+        "_fi_appellant_raw": "",
+        "_fi_cassator_raw": "",
+        "_appellant_raw": "",  # Legacy-алиас, заполняется в конце parse_case_card
         "_table_count": 0,      # len(tables) — индикатор «обрезанной» карточки для _warn_if_card_degraded
         "_fi_appeal_filed": False,  # В карточке 1 инст. подана апелляц. жалоба
         "_fi_appeal_filed_date": "",
@@ -2403,8 +2411,10 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                         info["Дата заседания"] = ev_date
                         break
 
-    # ── Определяем апеллянта ──
-    # 1. Ищем в таблицах карточки: поле "Заявитель жалобы" / "Податель жалобы"
+    # ── Определяем апеллянта / кассатора ──
+    # Pattern 1: поля в таблицах карточки. Лейблы «заявитель жалобы»/«податель
+    # жалобы»/«апеллянт» исторически относятся к апелляции — кассационных
+    # эквивалентов в шапке не встречалось. Пишем в _fi_appellant_raw.
     appellant_raw = ""
     for tbl_idx in range(min(len(tables), 8)):
         tbl = tables[tbl_idx]
@@ -2423,20 +2433,28 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     break
         if appellant_raw:
             break
+    if appellant_raw:
+        info["_fi_appellant_raw"] = appellant_raw
 
-    # 2. Ищем в событиях движения дела: "поступила жалоба от ..."
-    if not appellant_raw and movement_table and len(movement_table) > 1:
+    # Pattern 2: события движения дела. Detect стебля «кассационн» — пишем в
+    # _fi_cassator_raw, иначе в _fi_appellant_raw. Каждый канал заполняется
+    # один раз (fill-once), оба могут получить данные с разных строк таблицы.
+    if movement_table and len(movement_table) > 1:
         for row in movement_table[1:]:
             ev = " ".join(cell_text(c) for c in row)
+            is_cassation_ev = bool(re.search(r'кассационн', ev, re.IGNORECASE))
+            target_key = "_fi_cassator_raw" if is_cassation_ev else "_fi_appellant_raw"
+            if info[target_key]:
+                continue  # этот канал уже заполнен
             m = re.search(
                 r'(?:поступи\w+|подан\w+|принят\w+)\s+'
-                r'(?:апелляционн\w+\s+)?жалоб\w+\s+'
+                r'(?:апелляционн\w+\s+|кассационн\w+\s+)?жалоб\w+\s+'
                 r'(?:от\s+)?(.{3,80}?)(?:\.|,|$)',
                 ev, re.IGNORECASE,
             )
             if m:
-                appellant_raw = m.group(1).strip()
-                break
+                info[target_key] = m.group(1).strip()
+                continue
             # Альтернативный паттерн: "жалоба ФИО / наименование"
             m2 = re.search(
                 r'жалоб\w+\s+(.{3,80}?)'
@@ -2451,8 +2469,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     r'на определение|рассмотрен)',
                     candidate, re.IGNORECASE,
                 ):
-                    appellant_raw = candidate
-                    break
+                    info[target_key] = candidate
 
     # Pattern 3 (fuzzy-поиск «жалоба + ФИО» по всему HTML) раньше жил здесь —
     # удалён после кейса 33-1161/2026, где карточка прошла «по правилам 1-й
@@ -2461,7 +2478,6 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     # чем неверный апеллянт — полагаемся только на структурные источники
     # (поле «Заявитель жалобы» в таблицах + событие движения).
 
-    info["_appellant_raw"] = appellant_raw
 
     # ── События подачи жалоб в карточке 1-й инстанции ──
     # Апелляционная и кассационная жалобы подаются через суд 1-й инстанции —
@@ -2554,29 +2570,43 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                 continue
             # Заявитель — короткое поле на вкладке обжалования («ИСТЕЦ» /
             # «ОТВЕТЧИК»). Не путать с «заявитель жалобы» из таблиц апел.
-            # карточки. Заполняем только если выше парсер ничего не нашёл.
-            if label == "заявитель" and not info["_appellant_raw"]:
-                if value and value.lower() != "заявитель":
-                    info["_appellant_raw"] = value
+            # карточки. Заполняем только если соответствующий канал пуст.
+            if label == "заявитель":
+                target_key = "_fi_cassator_raw" if current_kind == "cassation" else "_fi_appellant_raw"
+                if value and value.lower() != "заявитель" and not info[target_key]:
+                    info[target_key] = value
                 continue
 
             # Короткая шапка жалобы (без «ДВИЖЕНИЕ ЖАЛОБЫ»): «Заявитель
             # жалобы» / «Дата поступления жалобы». Бывает на укороченной
             # вкладке апелляции при new=5, когда фолбэк на new=0 не сработал.
             # Привязываем к маркеру вкладки и к contextual current_kind: для
-            # касс. блока такие лейблы не используем, чтобы не путать сигналы.
-            if has_appeal_tab_marker and current_kind != "cassation":
-                if label == "заявитель жалобы":
-                    info["_fi_appeal_filed"] = True
-                    if value and value.lower() != label and not info["_appellant_raw"]:
-                        info["_appellant_raw"] = value
-                    continue
-                if label == "дата поступления жалобы":
-                    if value and parse_date(value):
+            # касс. блока пишем в _fi_cassator_raw + _fi_cassation_filed.
+            if has_appeal_tab_marker:
+                if current_kind == "cassation":
+                    if label == "заявитель жалобы":
+                        info["_fi_cassation_filed"] = True
+                        if value and value.lower() != label and not info["_fi_cassator_raw"]:
+                            info["_fi_cassator_raw"] = value
+                        continue
+                    if label == "дата поступления жалобы":
+                        if value and parse_date(value):
+                            info["_fi_cassation_filed"] = True
+                            if not info["_fi_cassation_filed_date"]:
+                                info["_fi_cassation_filed_date"] = value
+                        continue
+                else:
+                    if label == "заявитель жалобы":
                         info["_fi_appeal_filed"] = True
-                        if not info["_fi_appeal_filed_date"]:
-                            info["_fi_appeal_filed_date"] = value
-                    continue
+                        if value and value.lower() != label and not info["_fi_appellant_raw"]:
+                            info["_fi_appellant_raw"] = value
+                        continue
+                    if label == "дата поступления жалобы":
+                        if value and parse_date(value):
+                            info["_fi_appeal_filed"] = True
+                            if not info["_fi_appeal_filed_date"]:
+                                info["_fi_appeal_filed_date"] = value
+                        continue
 
             # События движения жалобы — нужна реальная дата (или дата
             # размещения как fallback: для «срок для возражений» в колонке
@@ -2754,6 +2784,11 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     info["bank_role_from_participants"] = (
         determine_bank_role_from_participants(info["participants"])
     )
+
+    # Legacy-алиас: единое поле для CSV-маппинга (case["Апеллянт"] в
+    # update_active_cases) и `_appellant_fmt` в дайджесте. Апеллянт имеет
+    # приоритет — кассатор берётся только когда апеллянта нет.
+    info["_appellant_raw"] = info["_fi_appellant_raw"] or info["_fi_cassator_raw"]
 
     return info
 
@@ -11183,7 +11218,10 @@ def main_json():
         new_appeal_filed = bool(card_info.get("_fi_appeal_filed"))
         old_appeal_filed = bool(fi.get("appeal_filed", False))
         if new_appeal_filed and not old_appeal_filed:
-            appellant_raw = card_info.get("_appellant_raw", "")
+            appellant_raw = (
+                card_info.get("_fi_appellant_raw")
+                or card_info.get("_appellant_raw", "")
+            )
             role, short = classify_appellant_role(
                 appellant_raw,
                 case_j.get("plaintiff", ""),
@@ -11199,6 +11237,37 @@ def main_json():
             if card_info.get("_fi_appeal_filed_date"):
                 fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
             changed = True
+
+        # Заполнение appeal.appellant_* из 1-й инст. карточки — работает
+        # независимо от события fi_appeal_filed (карточка апел. суда не
+        # публикует подателя жалобы, поэтому источник — только 1-я инст.).
+        # Перезаписываем «грязное» legacy-значение (роль вместо имени) и
+        # пустое поле. Уже найденное настоящее имя не трогаем.
+        appeal_block = case_j.get("appeal")
+        fi_appellant_raw = card_info.get("_fi_appellant_raw", "").strip()
+        if appeal_block and fi_appellant_raw:
+            old_app_name = (appeal_block.get("appellant") or "").strip()
+            is_legacy_role = old_app_name.lower() in (
+                "", "истец", "ответчик", "иное лицо", "банк",
+            )
+            if is_legacy_role:
+                ap_role, ap_short = classify_appellant_role(
+                    fi_appellant_raw,
+                    case_j.get("plaintiff", ""),
+                    case_j.get("defendant", ""),
+                )
+                ap_is_bank = any(
+                    p in fi_appellant_raw.lower() for p in SBER_PATTERNS
+                )
+                if ap_short and ap_short != old_app_name:
+                    appeal_block["appellant"] = ap_short
+                    changed = True
+                if appeal_block.get("appellant_is_bank") != ap_is_bank:
+                    appeal_block["appellant_is_bank"] = ap_is_bank
+                    changed = True
+                if ap_role and appeal_block.get("appellant_status") != ap_role:
+                    appeal_block["appellant_status"] = ap_role
+                    changed = True
 
         # Дело направлено в апел. инстанцию (Суд ХМАО-Югры) — чисто
         # информационный флаг для drawer'а. В дайджест не выводим: переход
@@ -11236,6 +11305,42 @@ def main_json():
             change["type"].append("fi_cassation_filed")
             change["details"]["cassation_filed_date"] = cass_date
             changed = True
+
+        # Предварительное заполнение cassation.appellant_* из 1-й инст. карточки
+        # для стадий cassation_watch/cassation_pending. Карточка 7kas каноническая —
+        # пишем ТОЛЬКО когда её ещё нет (cs.case_number пуст). При появлении
+        # карточки на 7kas все поля перезапишутся в _cassation_card_to_block.
+        fi_cassator_raw = card_info.get("_fi_cassator_raw", "").strip()
+        cs_existing = case_j.get("cassation") or {}
+        cs_has_card = bool((cs_existing.get("case_number") or "").strip())
+        if fi_cassator_raw and not cs_has_card:
+            cs_role, cs_short = classify_appellant_role(
+                fi_cassator_raw,
+                case_j.get("plaintiff", ""),
+                case_j.get("defendant", ""),
+            )
+            cs_is_bank = any(
+                p in fi_cassator_raw.lower() for p in SBER_PATTERNS
+            )
+            if not case_j.get("cassation"):
+                case_j["cassation"] = {
+                    "appellant": cs_short,
+                    "appellant_is_bank": cs_is_bank,
+                    "appellant_status": cs_role,
+                    "discovered_via_cassation": False,
+                }
+                changed = True
+            else:
+                cs_block = case_j["cassation"]
+                if cs_short and not (cs_block.get("appellant") or "").strip():
+                    cs_block["appellant"] = cs_short
+                    changed = True
+                if cs_block.get("appellant_is_bank") is None:
+                    cs_block["appellant_is_bank"] = cs_is_bank
+                    changed = True
+                if cs_role and not (cs_block.get("appellant_status") or "").strip():
+                    cs_block["appellant_status"] = cs_role
+                    changed = True
 
         # Дело направлено в кассационный суд — идемпотентный флаг + событие.
         new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
