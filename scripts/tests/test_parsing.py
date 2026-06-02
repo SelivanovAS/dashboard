@@ -1016,3 +1016,62 @@ class TestDigestBankRoleChanged:
         # И НЕ должно быть «против банка»
         assert "против банка" not in out
 
+
+
+# ── _discovered_already_resolved_old ──────────────────────────────────────────
+
+class TestDiscoveredAlreadyResolvedOld:
+    """Дело, найденное поиском уже завершённым и давно, не должно идти как
+    «новый иск» (кейс 2-630/2025)."""
+
+    @staticmethod
+    def _ddmmyyyy(days_ago: int) -> str:
+        from datetime import datetime, timedelta
+        return (datetime.now() - timedelta(days=days_ago)).strftime("%d.%m.%Y")
+
+    def test_terminal_and_old_is_true(self):
+        fi = {
+            "status": "Решено",
+            "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯ",
+            "result_date": self._ddmmyyyy(400),
+            "filing_date": self._ddmmyyyy(420),
+        }
+        assert uc._discovered_already_resolved_old(fi) is True
+
+    def test_terminal_returned_status_old_is_true(self):
+        fi = {
+            "status": "Возвращено",
+            "result_date": self._ddmmyyyy(90),
+            "filing_date": self._ddmmyyyy(100),
+        }
+        assert uc._discovered_already_resolved_old(fi) is True
+
+    def test_terminal_but_recent_is_false(self):
+        """Свежерешённое дело (< FI_ARCHIVE_DAYS) ещё показываем — банк может
+        захотеть апелляцию."""
+        fi = {
+            "status": "Решено",
+            "result_date": self._ddmmyyyy(10),
+            "filing_date": self._ddmmyyyy(30),
+        }
+        assert uc._discovered_already_resolved_old(fi) is False
+
+    def test_in_progress_is_false(self):
+        fi = {
+            "status": "В производстве",
+            "result_date": "",
+            "filing_date": self._ddmmyyyy(400),
+        }
+        assert uc._discovered_already_resolved_old(fi) is False
+
+    def test_no_dates_is_false(self):
+        fi = {"status": "Решено", "result_date": "", "filing_date": ""}
+        assert uc._discovered_already_resolved_old(fi) is False
+
+    def test_falls_back_to_filing_date_when_no_result_date(self):
+        fi = {
+            "status": "Решено",
+            "result_date": "",
+            "filing_date": self._ddmmyyyy(400),
+        }
+        assert uc._discovered_already_resolved_old(fi) is True
