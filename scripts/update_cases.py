@@ -492,6 +492,19 @@ _SESSION_START_RX = re.compile(
     r"|беседа\b)",
     re.IGNORECASE,
 )
+# Интерлокутивные «Вынесено определение …» — процессуальные решения о
+# движении дела, которые НЕ являются датой заседания. Нужен, чтобы
+# fallback-поиск «Даты заседания» в parse_case_card не принял дату
+# определения о подготовке/назначении/отложении за дату слушания —
+# реальная дата придёт отдельной session-строкой (см. _SESSION_START_RX).
+# Инцидент: дело 2-406/2026 (определение о подготовке дела → ложное
+# «заседание 03.06 без времени»).
+_INTERLOCUTORY_PREP_RX = re.compile(
+    r"подготовк\w*\s+дела"
+    r"|о\s+назначени\w*\s+(?:предварительн\w*\s+)?(?:судебн\w*\s+)?заседани"
+    r"|об\s+отложени",
+    re.IGNORECASE,
+)
 _TO_FI_RULES_RE = re.compile(
     r"по\s+правилам\s+производства\s+в\s+суде\s+первой\s+инстанции"
     r"|перейти\s+к\s+рассмотрени\S*\s+по\s+правилам",
@@ -2408,7 +2421,8 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                                "без изменени", "отменен", "изменен"]
                 for ev_date, ev_time, ev_desc in reversed(events_data):
                     ev_low = ev_desc.lower()
-                    if ev_date and any(kw in ev_low for kw in decision_kw):
+                    if (ev_date and any(kw in ev_low for kw in decision_kw)
+                            and not _INTERLOCUTORY_PREP_RX.search(ev_low)):
                         info["Дата заседания"] = ev_date
                         break
 
