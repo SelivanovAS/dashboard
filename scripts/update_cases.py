@@ -10375,6 +10375,20 @@ def main():
     )
 
 
+def _discovered_already_resolved_old(fi: dict, now: datetime | None = None) -> bool:
+    """True, если дело 1-й инст. найдено поиском уже в терминальном статусе
+    («Решено»/«Возвращено») и его дата решения/поступления старше FI_ARCHIVE_DAYS.
+    Такие дела не подаём как «новый иск»: это не новая тяжба против банка, а давно
+    завершённое дело, поздно всплывшее в выдаче суда. Заводим сразу в архив."""
+    now = now or datetime.now()
+    if (fi.get("status") or "").strip() not in ("Решено", "Возвращено"):
+        return False
+    anchor = parse_date(fi.get("result_date") or "") or parse_date(fi.get("filing_date") or "")
+    if not anchor:
+        return False
+    return (now - anchor).days > FI_ARCHIVE_DAYS
+
+
 def _fi_search_to_json_case(fi: dict) -> dict:
     """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
     initial_role = fi.get("bank_role", "Ответчик")
@@ -10635,6 +10649,11 @@ def main_json():
     # ── 3. Парсинг судов первой инстанции: новые дела ──
     t0 = time.perf_counter()
     fi_new_cases: list[dict] = []
+    # Дела, найденные поиском уже завершёнными и давно (status «Решено»/
+    # «Возвращено» + дата старше FI_ARCHIVE_DAYS). Не подаём как «новый иск»:
+    # персистим, но в дайджест/push не отдаём, дальше split_archived_json
+    # отправит их в архив этим же прогоном.
+    fi_discovered_resolved: list[dict] = []
     enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
     log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
 
@@ -10696,10 +10715,24 @@ def main_json():
             if r["case_number"] not in existing_ids
         ]
         if new_fi:
-            log.info(f"  {court.name}: {len(fi_results)} дел, {len(new_fi)} новых")
-            for fi in new_fi:
+            fresh = [r for r in new_fi if not _discovered_already_resolved_old(r)]
+            stale = [r for r in new_fi if _discovered_already_resolved_old(r)]
+            log.info(
+                f"  {court.name}: {len(fi_results)} дел, {len(fresh)} новых"
+                + (f", {len(stale)} завершённых-старых" if stale else "")
+            )
+            for fi in fresh:
                 json_case = _fi_search_to_json_case(fi)
                 fi_new_cases.append(json_case)
+                existing_ids.add(fi["case_number"])
+            for fi in stale:
+                json_case = _fi_search_to_json_case(fi)
+                # Якорь архивации: дата решения (= hearing_date в схеме).
+                # is_case_archived отправит дело в архив в этом же прогоне.
+                json_case["first_instance"]["hearing_date"] = (
+                    fi.get("result_date") or fi.get("filing_date") or ""
+                )
+                fi_discovered_resolved.append(json_case)
                 existing_ids.add(fi["case_number"])
         else:
             log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
@@ -11653,9 +11686,12 @@ def main_json():
     save_csv(active_csv, CSV_PATH)
 
     # ── 6. Обновляем JSON-базу: добавляем новые дела 1 инстанции ──
-    if fi_new_cases:
-        cases = fi_new_cases + cases
-        log.info(f"Добавлено {len(fi_new_cases)} дел 1 инстанции в JSON")
+    if fi_new_cases or fi_discovered_resolved:
+        cases = fi_new_cases + fi_discovered_resolved + cases
+        log.info(
+            f"Добавлено {len(fi_new_cases)} новых + "
+            f"{len(fi_discovered_resolved)} завершённых-старых дел 1 инстанции в JSON"
+        )
 
     # ── 6b. Новые апел. дела → JSON. Без этого link_cases ниже их не увидит
     # (он индексирует только существующий cases) и дело осядет только в CSV.
