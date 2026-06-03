@@ -1186,6 +1186,9 @@ function applyFilters(){
   const stg=stageEl?stageEl.value:'all';
   // «Только мои дела»: применяем только если юрист отметил хоть одно дело.
   // Пустой watchlist → нечего фильтровать, фильтр игнорируется.
+  // Непустой поиск (q) перекрывает фильтр «Мои» — ищем по всей базе,
+  // а не только по watchlist'у (см. условие `!q` ниже). Очистка поиска
+  // через clearSearch() возвращает представление «Мои».
   const mineOn=filterMineActive&&watchlist.size>0;
 
   filteredCases=allCases.filter(c=>{
@@ -1202,7 +1205,7 @@ function applyFilters(){
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;
-    if(mineOn&&!isWatched(c.caseNumber)&&!isNewCase(c))return false;
+    if(mineOn&&!q&&!isWatched(c.caseNumber)&&!isNewCase(c))return false;
     if(q){const blob=c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!blob.includes(q))return false;}
     return true;
   });
