@@ -1443,6 +1443,16 @@ def should_skip_case(
     else:
         return False, ""
 
+    # Материал ещё под временным М-номером: НЕ скипать, иначе промоушен
+    # М→2 по карточке (см. e7a1513, блок «Промоушен материала по карточке»
+    # в main_json) не сработает, пока висит будущая дата собеседования/
+    # заседания — карточку перестаём грузить, а постоянный 2-XXXX виден
+    # только на ней. Парсим каждый прогон, пока суд не присвоит 2-XXXX
+    # (тогда case_number сменится и этот гард самоотключится). Инцидент:
+    # М-1401/2026 завис под М-номером из-за собеседования 03.06.2026.
+    if (block.get("case_number") or case_dict.get("id") or "").strip().startswith("М-"):
+        return False, "material_pending_promotion"
+
     last_checked_raw = block.get("last_checked_at", "")
     last_checked: date | None = None
     if last_checked_raw:
