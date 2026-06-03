@@ -1075,3 +1075,48 @@ class TestDiscoveredAlreadyResolvedOld:
             "filing_date": self._ddmmyyyy(400),
         }
         assert uc._discovered_already_resolved_old(fi) is True
+
+
+# ── should_skip_case: гард материалов под М-номером ───────────────────────────
+
+class TestShouldSkipMaterialGuard:
+    """Материал 1-й инст. под временным М-номером не должен скипаться даже при
+    будущем собеседовании/заседании — иначе промоушен М→2 по карточке не
+    отработает (инцидент М-1401/2026 с собеседованием 03.06.2026)."""
+
+    @staticmethod
+    def _case(case_number: str):
+        from datetime import date, timedelta
+        today = date(2026, 6, 3)
+        future = (today + timedelta(days=3)).strftime("%d.%m.%Y")
+        yesterday = (today - timedelta(days=1)).isoformat()
+        case = {
+            "current_stage": "first_instance",
+            "id": case_number,
+            "first_instance": {
+                "case_number": case_number,
+                "last_checked_at": yesterday,
+                "events": [
+                    {
+                        "date": future,
+                        "time": "10:30",
+                        "text": "Подготовка дела (собеседование). 10:30. 19.05.2026",
+                    },
+                ],
+            },
+        }
+        return case, today
+
+    def test_material_not_skipped(self):
+        case, today = self._case("М-1401/2026")
+        skip, reason = uc.should_skip_case(case, today)
+        assert skip is False
+        assert reason == "material_pending_promotion"
+
+    def test_promoted_number_still_skipped(self):
+        """Контроль: то же дело, но уже с постоянным 2-номером — старое
+        поведение (skip по будущему заседанию) сохраняется."""
+        case, today = self._case("2-1401/2026")
+        skip, reason = uc.should_skip_case(case, today)
+        assert skip is True
+        assert reason.startswith("future_hearing")
