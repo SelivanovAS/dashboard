@@ -199,6 +199,11 @@ CARD_URL_TPL = (
     "&case_id={case_id}&case_uid={case_uid}&delo_id=5&new=5"
 )
 
+# Уникальный идентификатор дела (УИД), напр. 86RS0020-01-2025-000203-13.
+# Глобально уникален и сквозной для всех инстанций (1-я → апел. → касс.),
+# поэтому служит надёжным мостом для связки апелляции с кассацией на 7kas.
+JUDICIAL_UID_RE = re.compile(r"\d{2}[A-ZА-Я]{2}\d{4}-\d{2}-\d{4}-\d+-\d{2}")
+
 CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
 CSV_ARCHIVE_PATH = os.environ.get(
     "CSV_ARCHIVE_PATH",
@@ -1060,6 +1065,131 @@ def dedupe_cassation_by_internal_number(cases: list[dict]) -> int:
             merged += 1
             log.info(
                 f"Дедуп касс.: {cn} loser {loser.get('id', '?')} "
+                f"слит в host {host.get('id', '?')}"
+            )
+
+    if to_remove:
+        cases[:] = [c for i, c in enumerate(cases) if i not in to_remove]
+
+    return merged
+
+
+def dedupe_cassation_by_uid(cases: list[dict]) -> int:
+    """Idempotent-дедуп: слить касс. discovery-двойник в реальную апел./watch-
+    запись по совпадению УИД (`86RS...`).
+
+    Класс бага: апел.-запись (`33-XXXX`, стадии `appeal`/`cassation_watch`) не
+    имела `first_instance.case_number`, поэтому `link_cassation_cases` не находил
+    её по fi_case_number с 7kas и плодил `discovered_via_cassation`-дубль
+    (`2-278/2025` ↔ `33-2082/2026`). После того как апел.-запись получает УИД
+    (бэкфилл из апел. карточки), discovery-дубль и якорь делят один УИД — здесь
+    их и сшиваем.
+
+    Сливаем ТОЛЬКО когда в группе ровно один host — НЕ-discovery (anchor с
+    appeal/first_instance), а остальные — `discovered_via_cassation`. Если
+    не-discovery записей ≥2 — не трогаем (это разные дела с коллизией данных,
+    хотя по УИД такого быть не должно). Одиночные discovery (без anchor) тоже
+    оставляем — это настоящие находки кассации.
+
+    `id` host сохраняется (как в ручных сшивках bea0f7d) — иначе ломаются
+    watchlist-подписки и фронт.
+
+    Возвращает число удалённых discovery-двойников.
+    """
+    groups: dict[str, list[int]] = {}
+    for i, c in enumerate(cases):
+        seen: set[str] = set()
+        for block in ("first_instance", "appeal", "cassation"):
+            b = c.get(block) or {}
+            uid = (b.get("judicial_uid") or "").strip()
+            if uid:
+                seen.add(uid)
+        for uid in seen:
+            groups.setdefault(uid, []).append(i)
+
+    today_iso = date.today().isoformat()
+    to_remove: set[int] = set()
+    merged = 0
+
+    for uid, idxs in groups.items():
+        idxs = [i for i in idxs if i not in to_remove]
+        if len(idxs) < 2:
+            continue
+        anchors = [i for i in idxs if not cases[i].get("discovered_via_cassation")]
+        losers = [i for i in idxs if cases[i].get("discovered_via_cassation")]
+        if len(anchors) != 1 or not losers:
+            if len(anchors) > 1:
+                log.warning(
+                    f"Дедуп касс./УИД: {uid} — {len(anchors)} не-discovery "
+                    f"записей, не трогаю"
+                )
+            continue
+
+        host = cases[anchors[0]]
+        for loser_i in losers:
+            loser = cases[loser_i]
+
+            for k in ("plaintiff", "defendant", "category", "bank_role"):
+                if not host.get(k) and loser.get(k):
+                    host[k] = loser[k]
+
+            # Дозаполняем пустые поля first_instance host из loser (у discovery
+            # есть case_number/court_domain/judicial_uid/decision_date).
+            host_fi = host.get("first_instance")
+            loser_fi = loser.get("first_instance") or {}
+            if isinstance(host_fi, dict):
+                for k, v in loser_fi.items():
+                    if v and not host_fi.get(k):
+                        host_fi[k] = v
+            elif loser_fi:
+                host["first_instance"] = loser_fi
+
+            # Переносим касс. блок: discovery-запись несёт реальную карточку 7kas.
+            host_cass = host.get("cassation") or {}
+            loser_cass = loser.get("cassation") or {}
+            host_lc = (host_cass.get("last_checked_at") or "").strip()
+            loser_lc = (loser_cass.get("last_checked_at") or "").strip()
+            if loser_cass and (not host_cass or loser_lc >= host_lc):
+                merged_cass = dict(loser_cass)
+                merged_cass["discovered_via_cassation"] = False
+                host["cassation"] = merged_cass
+
+            # Стадию подтягиваем к кассации (host обычно в pre-cassation).
+            if host.get("current_stage") in (
+                "first_instance", "awaiting_appeal", "appeal",
+                "cassation_watch", "awaiting_relink", "", None,
+            ):
+                host["current_stage"] = loser.get("current_stage") or "cassation"
+
+            host["discovered_via_cassation"] = False
+
+            loser_history = loser.get("history") or []
+            if loser_history:
+                host_history = host.get("history") or []
+                seen_rounds = {
+                    h.get("round") for h in host_history if isinstance(h, dict)
+                }
+                for h in loser_history:
+                    r = h.get("round") if isinstance(h, dict) else None
+                    if r not in seen_rounds:
+                        host_history.append(h)
+                        seen_rounds.add(r)
+                host["history"] = host_history
+
+            cn = (loser_cass.get("case_number") or "?")
+            merge_tag = (
+                f"дубль {loser.get('id', '?')} (касс. {cn}, УИД {uid}) "
+                f"слит автоматически {today_iso}"
+            )
+            old_notes = host.get("notes") or ""
+            if merge_tag not in old_notes:
+                sep = " • " if old_notes else ""
+                host["notes"] = (old_notes + sep + merge_tag).strip()
+
+            to_remove.add(loser_i)
+            merged += 1
+            log.info(
+                f"Дедуп касс./УИД: {uid} loser {loser.get('id', '?')} "
                 f"слит в host {host.get('id', '?')}"
             )
 
@@ -2230,6 +2360,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         "Судья 1 инстанции": "",
         "Судья-докладчик": "",
         "Номер дела 1 инстанции": "",  # Извлекается из таблицы «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ»
+        "УИД": "",  # Уникальный идентификатор дела (86RS...) — сквозной мост 1-я инст. ↔ апел. ↔ касс.
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
         # Раздельные сырые имена подателей жалоб из карточки 1-й инст.:
         # «Вид жалобы» во вкладке «Обжалование решений» и стебель «кассационн»/
@@ -2310,6 +2441,13 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     fi_num_m = re.search(r'\d+-\d+/\d{4}', value)
                     if fi_num_m:
                         info["Номер дела 1 инстанции"] = fi_num_m.group(0)
+            # Уникальный идентификатор дела (УИД, формат 86RS0020-01-2025-000203-13).
+            # На апел. карточке значение завёрнуто в <a href=...r_juid...> — cell_text
+            # его разворачивает. УИД сквозной для всех инстанций → мост к кассации.
+            if "уникальный идентификатор" in label_l and not info["УИД"]:
+                uid_m = JUDICIAL_UID_RE.search(value)
+                if uid_m:
+                    info["УИД"] = uid_m.group(0)
             # Судья первой инстанции — приоритетнее, т.к. ключ длиннее
             # и содержит подстроку «судья». Лейбл вида:
             # «Судья (мировой судья) первой инстанции»
@@ -3975,14 +4113,20 @@ def link_cassation_cases(
     # показывается то 1-инст., то апел. номер). Без этого индекса discovery
     # создаёт второго двойника с `discovered_via_cassation=true`.
     cass_index: dict[str, int] = {}
+    # Индекс по УИД (`86RS...`) — глобально уникальный сквозной идентификатор
+    # дела. Самый надёжный мост: апел. карточка и карточка 7kas несут один и тот
+    # же УИД, тогда как fi_case_number у апел.-записи часто пуст (sudrf не
+    # проставил «Номер дела в первой инстанции»). Закрывает класс discovery-
+    # дублей вида `2-278/2025` ↔ `33-2082/2026`.
+    uid_index: dict[str, int] = {}
     for i, c in enumerate(cases):
         cid = c.get("id", "")
         _put_idx(fi_index, cid, i)
-        fi = c.get("first_instance")
-        if fi and fi.get("case_number"):
+        fi = c.get("first_instance") or {}
+        if fi.get("case_number"):
             _put_idx(fi_index, fi["case_number"], i)
-        appeal = c.get("appeal")
-        if appeal and appeal.get("case_number"):
+        appeal = c.get("appeal") or {}
+        if appeal.get("case_number"):
             # Кассация может прийти на дело, которое мы знаем только по
             # апел. номеру (если 1-я инст. ещё не подтянулась) — пусть
             # индекс тоже их видит.
@@ -3991,6 +4135,14 @@ def link_cassation_cases(
         cn = (cass.get("case_number") or "").strip()
         if cn:
             cass_index.setdefault(cn, i)
+        for uid in (
+            fi.get("judicial_uid"),
+            appeal.get("judicial_uid"),
+            cass.get("judicial_uid"),
+        ):
+            uid = (uid or "").strip()
+            if uid:
+                uid_index.setdefault(uid, i)
 
     cass_changes: list[dict] = []
     discovered: list[dict] = []
@@ -4009,6 +4161,11 @@ def link_cassation_cases(
         # идём через fi_case_number, который может «плавать».
         cass_int_num = (info.get("cassation_internal_number") or "").strip()
         idx = cass_index.get(cass_int_num) if cass_int_num else None
+        # УИД — надёжнее «плавающего» fi_case_number: пробуем до него.
+        if idx is None:
+            uid = (info.get("judicial_uid") or "").strip()
+            if uid:
+                idx = uid_index.get(uid)
         if idx is None:
             idx = fi_index.get(fi_num)
         if idx is None:
@@ -4199,6 +4356,7 @@ def update_active_cases(
     cases: list[dict],
     json_appeal_by_num: dict | None = None,
     skip_apel_nums: set[str] | None = None,
+    json_case_by_apnum: dict | None = None,
 ) -> tuple[list[dict], list[dict], dict]:
     """
     Обновить карточки активных (не архивных) дел.
@@ -4206,6 +4364,12 @@ def update_active_cases(
     json_appeal_by_num — опциональный словарь {номер_дела: appeal_dict} для
     параллельного обновления полей `events` / `last_event` / `event_date` в
     JSON-хранилище (иначе эти поля в `appeal` dict устаревают).
+
+    json_case_by_apnum — опциональный словарь {номер_апел_дела: json_case} для
+    дозаполнения якорей `first_instance.judicial_uid` / `case_number` из апел.
+    карточки. sudrf часто заполняет «Номер дела в первой инстанции» и УИД позже
+    первого обнаружения апелляции — здесь подхватываем их при каждом перепарсинге,
+    чтобы кассация на 7kas потом сматчилась по УИД, а не плодила discovery-дубль.
 
     skip_apel_nums — номера апел. дел, чей JSON-родитель уже не в стадии
     "appeal" (напр. cassation_watch). Такие карточки не парсим: апел. уже
@@ -4295,6 +4459,22 @@ def update_active_cases(
                 new_jr_j = card_info.get("Судья-докладчик", "")
                 if new_jr_j and new_jr_j != ap.get("judge_reporter", ""):
                     ap["judge_reporter"] = new_jr_j
+
+        # Дозаполняем якоря 1-й инст. (УИД + номер дела) у JSON-записи. sudrf
+        # часто проставляет их на апел. карточке позже первого обнаружения, а
+        # прежде эти значения отбрасывались — отсюда касс. discovery-дубли.
+        # `id` записи НЕ трогаем (ломает watchlist/фронт): только якоря.
+        if json_case_by_apnum is not None:
+            jc = json_case_by_apnum.get(case.get("Номер дела", "").strip())
+            if jc is not None:
+                fi = jc.get("first_instance")
+                if isinstance(fi, dict):
+                    uid_card = card_info.get("УИД", "")
+                    if uid_card and not (fi.get("judicial_uid") or "").strip():
+                        fi["judicial_uid"] = uid_card
+                    fi_num_card = card_info.get("Номер дела 1 инстанции", "")
+                    if fi_num_card and not (fi.get("case_number") or "").strip():
+                        fi["case_number"] = fi_num_card
 
         # Сравниваем и фиксируем изменения
         old_status = case.get("Статус", "")
@@ -10517,6 +10697,83 @@ def _apel_csv_row_to_json_case(
     }
 
 
+def main_backfill_appeal_anchors():
+    """Разовый ретро-бэкфилл якорей 1-й инст. (УИД + номер дела) для уже
+    отслеживаемых апел./watch-записей.
+
+    Зачем: записи в стадиях `appeal`/`cassation_watch`/`awaiting_appeal`, у
+    которых пуст `first_instance.judicial_uid`, не сматчатся с кассацией на 7kas
+    (нет общего ключа) → discovery плодит дубль. sudrf проставляет «Номер дела в
+    первой инстанции» и УИД на апел. карточке позже первого обнаружения, поэтому
+    перезапрашиваем карточку по сохранённому `appeal.link` и дозаполняем якоря.
+    cassation_watch-записи в обычном прогоне не парсятся (см. skip_apel_nums),
+    поэтому им нужен именно этот разовый проход.
+
+    В конце — `dedupe_cassation_by_uid`: уже накопившиеся discovery-дубли
+    (`2-278/2025`, `2-1111/2025`, …) автоматически вливаются в свои anchor-записи.
+    """
+    log.info("=" * 60)
+    log.info("Ретро-бэкфилл якорей 1-й инст. (УИД/номер) для апелляций")
+    log.info("=" * 60)
+
+    data = load_json(JSON_PATH)
+    cases = data.get("cases", [])
+
+    target_stages = {"appeal", "cassation_watch", "awaiting_appeal"}
+    candidates = [
+        c for c in cases
+        if not c.get("discovered_via_cassation")
+        and c.get("current_stage") in target_stages
+        and not ((c.get("first_instance") or {}).get("judicial_uid") or "").strip()
+        and ((c.get("appeal") or {}).get("link") or "").strip()
+    ]
+    log.info(f"Кандидатов на бэкфилл: {len(candidates)}")
+
+    backfilled_uid = 0
+    backfilled_fi = 0
+    fetched = 0
+    for c in candidates:
+        ap = c.get("appeal") or {}
+        cid, cuid = case_id_uid(ap.get("link", ""))
+        if not cid or not cuid:
+            continue
+        polite_delay()
+        html = fetch_page(APPEAL_COURT.card_url(cid, cuid))
+        if not html:
+            log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
+            continue
+        fetched += 1
+        card_info = parse_case_card(html, APPEAL_COURT.base_url)
+        fi = c.get("first_instance")
+        if not isinstance(fi, dict):
+            fi = {}
+            c["first_instance"] = fi
+        uid_card = card_info.get("УИД", "")
+        fi_num_card = card_info.get("Номер дела 1 инстанции", "")
+        if uid_card and not (fi.get("judicial_uid") or "").strip():
+            fi["judicial_uid"] = uid_card
+            backfilled_uid += 1
+        if fi_num_card and not (fi.get("case_number") or "").strip():
+            fi["case_number"] = fi_num_card
+            backfilled_fi += 1
+        log.info(
+            f"  {c.get('id', '?')}: УИД={uid_card or '—'} "
+            f"fi_num={fi_num_card or '—'}"
+        )
+
+    log.info(
+        f"Бэкфилл: запрошено {fetched} карточек, проставлено "
+        f"УИД={backfilled_uid}, fi_num={backfilled_fi}"
+    )
+
+    uid_merged = dedupe_cassation_by_uid(cases)
+    log.info(f"Дедуп по УИД: слито {uid_merged} discovery-дублей")
+
+    data["cases"] = cases
+    save_json(data, JSON_PATH)
+    log.info("Готово.")
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -10783,16 +11040,19 @@ def main_json():
     t0 = time.perf_counter()
     log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
     json_appeal_by_num: dict = {}
+    json_case_by_apnum: dict = {}
     skip_apel_nums: set[str] = set()
     for c in cases:
         ap = c.get("appeal")
         if ap and ap.get("case_number"):
             num = ap["case_number"].strip()
             json_appeal_by_num[num] = ap
+            json_case_by_apnum[num] = c
             if c.get("current_stage") != "appeal":
                 skip_apel_nums.add(num)
     csv_cases, changes, ap_skip_stats = update_active_cases(
         csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
+        json_case_by_apnum=json_case_by_apnum,
     )
 
     if appeal_new_cases_csv:
@@ -11691,6 +11951,14 @@ def main_json():
             f"Дедуп после link_cassation_cases: слито {post_cass_merged} "
             f"касс. дублей"
         )
+    # Щит по УИД: discovery-двойник, не сматченный по fi_case_number (у апел.-
+    # записи он пуст), но делящий УИД с реальной апел./watch-записью.
+    post_cass_uid_merged = dedupe_cassation_by_uid(cases)
+    if post_cass_uid_merged:
+        log.info(
+            f"Дедуп по УИД после link_cassation_cases: слито "
+            f"{post_cass_uid_merged} касс. дублей"
+        )
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
@@ -12344,6 +12612,10 @@ if __name__ == "__main__":
         )
         entry = main_push_last_digest
         entry_args = (owner_only,)
+    elif "--backfill-appeal-anchors" in sys.argv:
+        mode_name = "backfill-appeal-anchors"
+        entry = main_backfill_appeal_anchors
+        entry_args = ()
     elif "--json" in sys.argv:
         mode_name = "main-json"
         entry = main_json
