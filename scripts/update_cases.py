@@ -10762,34 +10762,46 @@ def main_backfill_appeal_anchors():
     backfilled_uid = 0
     backfilled_fi = 0
     fetched = 0
-    for c in candidates:
-        ap = c.get("appeal") or {}
-        cid, cuid = case_id_uid(ap.get("link", ""))
-        if not cid or not cuid:
-            continue
-        polite_delay()
-        html = fetch_page(APPEAL_COURT.card_url(cid, cuid))
-        if not html:
-            log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
-            continue
-        fetched += 1
-        card_info = parse_case_card(html, APPEAL_COURT.base_url)
-        fi = c.get("first_instance")
-        if not isinstance(fi, dict):
-            fi = {}
-            c["first_instance"] = fi
-        uid_card = card_info.get("УИД", "")
-        fi_num_card = card_info.get("Номер дела 1 инстанции", "")
-        if uid_card and not (fi.get("judicial_uid") or "").strip():
-            fi["judicial_uid"] = uid_card
-            backfilled_uid += 1
-        if fi_num_card and not (fi.get("case_number") or "").strip():
-            fi["case_number"] = fi_num_card
-            backfilled_fi += 1
-        log.info(
-            f"  {c.get('id', '?')}: УИД={uid_card or '—'} "
-            f"fi_num={fi_num_card or '—'}"
-        )
+    # Инкрементальный чекпойнт: при сбое/сне ноута перезапуск догоняет остаток
+    # (кандидаты фильтруются по пустому judicial_uid → уже проставленные пропустит).
+    SAVE_EVERY = 15
+    total = len(candidates)
+    for i, c in enumerate(candidates, 1):
+        try:
+            ap = c.get("appeal") or {}
+            cid, cuid = case_id_uid(ap.get("link", ""))
+            if not cid or not cuid:
+                continue
+            polite_delay()
+            html = fetch_page(APPEAL_COURT.card_url(cid, cuid))
+            if not html:
+                log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
+                continue
+            fetched += 1
+            card_info = parse_case_card(html, APPEAL_COURT.base_url)
+            fi = c.get("first_instance")
+            if not isinstance(fi, dict):
+                fi = {}
+                c["first_instance"] = fi
+            uid_card = card_info.get("УИД", "")
+            fi_num_card = card_info.get("Номер дела 1 инстанции", "")
+            if uid_card and not (fi.get("judicial_uid") or "").strip():
+                fi["judicial_uid"] = uid_card
+                backfilled_uid += 1
+            if fi_num_card and not (fi.get("case_number") or "").strip():
+                fi["case_number"] = fi_num_card
+                backfilled_fi += 1
+            log.info(
+                f"  [{i}/{total}] {c.get('id', '?')}: УИД={uid_card or '—'} "
+                f"fi_num={fi_num_card or '—'}"
+            )
+        except Exception as exc:
+            # Одна упавшая карточка не должна ронять весь проход.
+            log.warning(f"  {c.get('id', '?')}: ошибка обработки — {exc}")
+        if i % SAVE_EVERY == 0:
+            data["cases"] = cases
+            save_json(data, JSON_PATH)
+            log.info(f"  …чекпойнт ({i}/{total})")
 
     log.info(
         f"Бэкфилл: запрошено {fetched} карточек, проставлено "
