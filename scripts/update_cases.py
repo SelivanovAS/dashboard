@@ -557,6 +557,25 @@ def _extract_return_reason(text: str) -> str:
     return ""
 
 
+def _fi_return_reason_for_render(d: dict) -> str:
+    """Причина возврата иска/материала для строки 3.2 «Изменения».
+
+    Сначала коротко распознанная (`return_reason` из `_extract_return_reason`),
+    иначе — первый осмысленный сегмент `event_text` без хвостовых времени/даты.
+    Нужна, чтобы возврат материала, который больше не попадает в 3.5
+    «Вынесенные решения», всё равно нёс понятную причину
+    («материалы возвращены в связи с истечением срока…»)."""
+    reason = (d.get("return_reason") or "").strip()
+    if reason:
+        return reason
+    ev = (d.get("event_text") or "").strip()
+    if not ev:
+        return ""
+    seg = re.split(r"[.;]", ev)[0].strip()
+    seg = re.sub(r"\s*\d{1,2}:\d{2}\s*$", "", seg)   # прилипшее «09:50»
+    return seg.lower()
+
+
 def _events_newly_match(
     old_events: list, new_events: list, pattern: re.Pattern
 ) -> dict | None:
@@ -3556,7 +3575,10 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             1 for ch in fi_changes if "fi_motivirovka_emitted" in ch["type"]
         )
         fi_resolved_n = sum(
-            1 for ch in fi_changes if "fi_resolved" in ch["type"]
+            1 for ch in fi_changes
+            if "fi_resolved" in ch["type"]
+            # возврат материала считаем изменением, а не решением (см. 3.5)
+            and "fi_returned" not in ch["type"]
         )
         fi_act_texts = sum(
             1 for ch in fi_changes if "fi_act_text_published" in ch["type"]
@@ -6501,7 +6523,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     # Иск возвращён судом (неподсудно / отказ в принятии /
                     # передача по подсудности). Эмитим короткую фразу с
                     # причиной — она пойдёт в 3.2 как «🔚 иск возвращён: …».
-                    reason = (d.get("return_reason") or "").strip()
+                    # Возврат материала больше не дублируется в 3.5, поэтому
+                    # причину берём с fallback на event_text (см. хелпер).
+                    reason = _fi_return_reason_for_render(d)
                     line += "\n  🔚 ИСК ВОЗВРАЩЁН"
                     if reason:
                         line += f": {reason}"
@@ -6617,6 +6641,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         ch for ch in fi_changes
         if "fi_resolved" in ch["type"]
         and "fi_act_text_published" not in ch["type"]
+        # Возврат материала/заявления — процессуальный возврат, не решение
+        # по существу. Он уже выведен в 3.2 «Изменения» (🔚 иск возвращён: …),
+        # в 3.5 «Вынесенные решения» не дублируем.
+        and "fi_returned" not in ch["type"]
     ]
     if fi_resolved_changes:
         context_parts.append("\nВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.:")
@@ -7003,7 +7031,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         • строка 1: <a href="URL"><b>номер</b></a> ({{суд}}) — Решение от {{дата решения}}. <b>ИТОГ:</b> {{дословно поле ИТОГ}}. Категория: {{дословно}}.
         • строка 2: Стороны: {{истец}} vs {{ответчик}}, банк — {{роль}}. <b>Для банка:</b> {{дословно «В чью пользу для банка»}}.
         Применяются ПРАВИЛА РЕЗОЛЮТИВНЫХ СЕКЦИЙ (см. выше).
-        Берётся из событий «fi_resolved» в данных (секция «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.»). Дело, попавшее в 3.5, в 3.2 НЕ дублируется — кроме случая, когда у того же дела есть ещё отдельное побочное событие (заседание/отложение).
+        Берётся из событий «fi_resolved» в данных (секция «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.»). Дело, попавшее в 3.5, в 3.2 НЕ дублируется — кроме случая, когда у того же дела есть ещё отдельное побочное событие (заседание/отложение). Возврат материала/заявления (строка «🔚 ИСК ВОЗВРАЩЁН» в данных) в 3.5 НЕ выводится — это процессуальный возврат, а не решение по существу; он уже отражён в 3.2 «Изменения», и в секцию «ВЫНЕСЕНЫ РЕШЕНИЯ 1 ИНСТ.» такие дела не попадают.
    3.6. 📄 <b>Опубликованные тексты решений (N):</b> — полный текст решения 1-й инст. (выходит через 14+ дней после заседания, иногда не публикуется вовсе).
         🛑 БЛОКИРУЮЩЕЕ ПРАВИЛО (нарушение = критический брак): дело попадает в 3.6 ИСКЛЮЧИТЕЛЬНО если в его данных явно есть непустое поле «МОТИВИРОВОЧНАЯ ЧАСТЬ РЕШЕНИЯ:» с фактическим текстом мотивировки. ИСТОЧНИК ДАННЫХ ДЛЯ 3.6 — ТОЛЬКО секция «ОПУБЛИКОВАНЫ ТЕКСТЫ РЕШЕНИЙ 1 ИНСТ.» во входных данных. Если этой секции нет или дела в ней нет — дело НЕ попадает в 3.6 НИ ПРИ КАКИХ УСЛОВИЯХ. Запрещено: класть дело в 3.6 на основании фразы «Изготовлено мотивированное решение в окончательной форме» в last_event/event (это событие fi_final_event/fi_act_published, идёт в 3.2, не в 3.6). Запрещено выдумывать «Итог», «Почему», «требуется уточнение», «полный текст ещё не опубликован» — если фактической мотивировки в данных нет, дело идёт в 3.2 с фразой «📄 мотивированное решение изготовлено ДД.ММ, полный текст не опубликован», а не в 3.6.
         КРИТИЧНО: ТРИ строки ОДНОГО дела идут ПОДРЯД, БЕЗ пустой строки между ними. Пустая строка ставится ТОЛЬКО между разными делами:
@@ -8850,6 +8878,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         ch for ch in fi_changes
         if "fi_resolved" in ch["type"]
         and "fi_act_text_published" not in ch["type"]
+        # Возврат материала — уже в 3.2 «Изменения», в 3.5 не дублируем.
+        and "fi_returned" not in ch["type"]
     ]
     fi_act_text_chs = [
         ch for ch in fi_changes if "fi_act_text_published" in ch["type"]
@@ -8906,7 +8936,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         f"{escape_html(d.get('new_status', ''))}"
                     )
                 elif t == "fi_returned":
-                    reason = escape_html((d.get("return_reason") or "").strip())
+                    reason = escape_html(_fi_return_reason_for_render(d))
                     ev_list.append(
                         "🔚 иск возвращён" + (f": {reason}" if reason else "")
                     )
