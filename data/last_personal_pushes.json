@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-06-08T03:50:48",
+  "generated_at": "2026-06-09T03:50:53",
   "title_default": "Мониторинг дел — обновление",
   "body_default": "📋 Изменений: 2",
   "owner_only": false,
@@ -45,10 +45,10 @@
         "2-6103/2026",
         "2-884/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 1 делу: 2-884/2026",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
@@ -189,5 +189,5 @@
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-06-08T03:50:48"
+  "updated_at": "2026-06-09T03:50:53"
 }
