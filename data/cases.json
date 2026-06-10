@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-10T03:58:29",
+  "updated_at": "2026-06-10T09:09:52",
   "cases": [
     {
       "id": "33-4365/2026",
@@ -5712,8 +5712,8 @@
         "court_domain": "rdj--hmao.sudrf.ru",
         "judge": "Першина Елена Юрьевна",
         "filing_date": "09.02.2026",
-        "status": "Решено",
-        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "status": "В производстве",
+        "result": "",
         "last_event": "Судебное заседание. 16:30. 102. 04.06.2026",
         "event_date": "15.07.2026",
         "hearing_date": "15.07.2026",
@@ -5774,7 +5774,8 @@
           }
         ],
         "last_checked_at": "2026-06-05",
-        "resolved_emitted": true
+        "resolved_emitted": false,
+        "result_date": ""
       },
       "appeal": null,
       "initial_bank_role": "Ответчик"
