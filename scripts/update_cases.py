@@ -1472,6 +1472,33 @@ def extract_result_from_event(event_text: str) -> str:
     return captured
 
 
+def extract_fi_verdict_from_events(events: list) -> str:
+    """Сырой ИТОГ 1-й инст. из истории заседаний.
+
+    Нужен, когда статус уже «Решено» (его поднял парсер служебным движением),
+    но вердикт не нашёлся ни в поле «Результат», ни в last_event. Узкий набор
+    ТЕРМИНАЛЬНЫХ диспозиций, которые живут только в тексте session-события:
+      • «Вынесено решение по делу. <ИТОГ>» (→ extract_result_from_event),
+      • «Иск … оставлены без рассмотрения» → «оставлено без рассмотрения»,
+      • «Производство по делу прекращено»  → «прекращено».
+    Сознательно НЕ матчит интерлокутивные события: «оставлено без движения»
+    (≠ «без рассмотрения»), «производство приостановлено» (≠ «прекращено»),
+    «заседание отложено», «рассмотрение начато с начала». Если ничего не
+    распознали — пустая строка (тихий пропуск, не ложный отчёт).
+    """
+    for ev in reversed(events or []):
+        text = ev.get("text") or ""
+        r = extract_result_from_event(text)
+        if r:
+            return r
+        low = text.lower()
+        if "оставлен" in low and "без рассмотрени" in low:
+            return "оставлено без рассмотрения"
+        if "прекращ" in low and "производств" in low:
+            return "прекращено"
+    return ""
+
+
 # Содержимое поля «Результат» карточки, которое суд ошибочно (или нестандартно)
 # заполняет текстом события вместо итога рассмотрения. Семантически такие
 # значения — это «заседание перенесено/назначено», а не «дело решено».
@@ -11610,14 +11637,16 @@ def main_json():
             fi["accepted_pending_emit"] = False
             changed = True
 
-        # Смена статуса (регрессии отфильтрованы выше). Подавляем, если
-        # уже сработал fi_returned — «В производстве → Решено» избыточно
+        # Смена статуса (регрессии отфильтрованы выше). Сам эмит откладываем
+        # до конца блока (см. ниже, после fi_resolved/fi_act_*): голый переход
+        # «В производстве → Решено» без сопутствующего исхода — шум, а узнать,
+        # появился ли исход в этом прогоне, можно только после их блоков.
+        # Подавляем и при fi_returned — «В производстве → Решено» избыточно
         # при возврате иска, юрист и так видит факт возврата.
-        if (new_status and new_status != old_status
-                and "fi_returned" not in change["type"]):
-            change["type"].append("fi_status_change")
-            change["details"]["old_status"] = old_status
-            change["details"]["new_status"] = new_status
+        status_change_pending = (
+            bool(new_status) and new_status != old_status
+            and "fi_returned" not in change["type"]
+        )
 
         # Вынесено решение по делу 1-й инст. — идемпотентный эмит для 3.5.
         # Триггер: status == «Решено» и флаг resolved_emitted ещё не
@@ -11633,6 +11662,11 @@ def main_json():
             raw_result = (fi.get("result") or "").strip()
             if not raw_result:
                 raw_result = extract_result_from_event(fi.get("last_event", ""))
+            if not raw_result:
+                # Хвост процессуальных закрытий: вердикт («оставлено без
+                # рассмотрения» / «прекращено») лежит только в тексте
+                # session-события, а поле «Результат» и last_event пусты.
+                raw_result = extract_fi_verdict_from_events(fi.get("events") or [])
             if raw_result:
                 verdict = classify_verdict_fi(raw_result)
                 bank_outcome = bank_side_outcome_fi(
@@ -11689,6 +11723,40 @@ def main_json():
                 )
                 change["details"]["category"] = case_j.get("category", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
+                # Текст акта уже сообщил исход (verdict_label + полная
+                # мотивировка в 3.6). Закрываем канал fi_resolved, чтобы
+                # расширенный поиск вердикта по истории (extract_fi_verdict_
+                # from_events) не до-репортил тот же исход на следующем прогоне,
+                # когда статус догонит «Решено» служебным движением (инцидент
+                # 2-1012: акт 08.06 → служебное «сдано в отдел» 09.06).
+                fi["resolved_emitted"] = True
+
+        # Отложенный эмит смены статуса. Голый переход «В производстве →
+        # Решено» подавляем, если в этом прогоне НЕ сработал ни один
+        # содержательный исход (fi_resolved → 3.5; fi_act_published /
+        # fi_act_text_published → акт). Такой переход возникает, когда статус
+        # поднят чисто служебным движением карточки («Дело сдано в отдел
+        # делопроизводства» / экспедиция / архив), а исхода по делу у нас
+        # нет: поле «Результат» пусто и в last_event вердикта нет — иначе бы
+        # сработал fi_resolved (он извлекает вердикт и из результата, и из
+        # last_event). Ложных подавлений тут практически нет: единственный
+        # арбитр «есть ли что сказать» — наличие любого из трёх содержательных
+        # событий. Любой иной переход статуса (напр. → «Возвращено», или когда
+        # рядом есть исход) эмитим как обычно.
+        if status_change_pending:
+            bare_bureaucratic_resolved = (
+                new_status == "Решено"
+                and old_status == "В производстве"
+                and not any(
+                    t in change["type"]
+                    for t in ("fi_resolved", "fi_act_published",
+                              "fi_act_text_published")
+                )
+            )
+            if not bare_bureaucratic_resolved:
+                change["type"].append("fi_status_change")
+                change["details"]["old_status"] = old_status
+                change["details"]["new_status"] = new_status
 
         # Финальные события в движении дела — значимые для юриста
         if new_ev and new_ev != old_event:
