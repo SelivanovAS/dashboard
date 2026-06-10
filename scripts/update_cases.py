@@ -1673,6 +1673,66 @@ def should_skip_case(
     return False, ""
 
 
+def fi_resolution_contradicted_by_future_hearing(fi: dict, today: date) -> bool:
+    """True, если блок 1-й инст. помечен «Решено», но последнее session-событие
+    — заседание в БУДУЩЕМ, а «Вынесено решение по делу» в движении нет.
+
+    Сценарии: «Рассмотрение дела начато с начала» (привлечение соответчика и
+    т.п.) либо преждевременный/ошибочный «Результат» в выдаче суда. Дело
+    фактически НЕ рассмотрено — назначено новое заседание. Реально решённые
+    дела (есть событие «Вынесено решение по делу», даже если позже назначено
+    заседание по судебным расходам) под правило НЕ попадают.
+    Инцидент: 2-233/2026 — «Иск удовлетворён» из выдачи + заседание 15.07.2026.
+    """
+    if (fi.get("status") or "").strip() != "Решено":
+        return False
+
+    def _as_date(x):
+        # parse_date возвращает datetime; today — date. Приводим к date.
+        return x.date() if isinstance(x, datetime) else x
+
+    hd = _as_date(parse_date((fi.get("hearing_date") or "").strip()))
+    if not hd or hd <= today:
+        return False
+    events = fi.get("events") or []
+    has_future_session = any(
+        _as_date(parse_date(ev.get("date") or "")) == hd
+        and _SESSION_START_RX.search(ev.get("text") or "")
+        for ev in events
+    )
+    if not has_future_session:
+        return False
+    has_decision = any(
+        re.search(r"вынесено\s+(?:заочное\s+)?решение\s+по\s+делу",
+                  (ev.get("text") or "").lower())
+        for ev in events
+    )
+    return not has_decision
+
+
+def repair_spurious_fi_resolutions(cases: list[dict], today: date) -> int:
+    """Чинит дела 1-й инст. с ложным «Решено» при назначенном будущем заседании
+    (см. fi_resolution_contradicted_by_future_hearing). Идемпотентно, как
+    migrate_stages: на повторных прогонах ничего не меняет. hearing_date НЕ
+    трогаем — фронт покажет предстоящее заседание."""
+    n = 0
+    for case in cases:
+        if case.get("current_stage") not in ("first_instance", "cassation_watch"):
+            continue
+        fi = case.get("first_instance") or {}
+        if fi_resolution_contradicted_by_future_hearing(fi, today):
+            fi["status"] = "В производстве"
+            fi["result"] = ""
+            fi["result_date"] = ""
+            fi["resolved_emitted"] = False
+            n += 1
+            log.info(
+                f"  {case.get('id', '?')}: снят ложный «Решено» "
+                f"(назначено заседание {fi.get('hearing_date')})"
+            )
+    return n
+
+
 # Праздники/нерабочие дни РФ 2026-2027 (фиксированные даты + переносы).
 # Перенесённые рабочие субботы намеренно не учитываем — если такая суббота
 # попадёт, мы всё равно скипнем её как weekday>=5, что для cron безопасно.
@@ -11162,6 +11222,12 @@ def main_json():
         and c.get("first_instance", {}).get("case_number")
     ]
     log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
+    # Нормализация: снимаем ложный «Решено» там, где назначено будущее
+    # заседание (карточка такого дела часто скипается smart-skip'ом, поэтому
+    # чиним по сохранённым данным до цикла обновления).
+    repaired_fi = repair_spurious_fi_resolutions(cases, today)
+    if repaired_fi:
+        log.info(f"Снято ложных «Решено» (будущее заседание): {repaired_fi}")
     fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
     fi_update_count = 0
     fi_changes: list[dict] = []
@@ -11295,10 +11361,28 @@ def main_json():
             fi["result"] = ""
             changed = True
             old_result = ""
+        # Контр-сигнал «Решено»: карточка/история отдаёт статус «Решено», но
+        # последнее session-событие — заседание в будущем без «Вынесено решение
+        # по делу» в движении («Рассмотрение дела начато с начала» / преждевр.
+        # «Результат» в выдаче суда). Дело не рассмотрено — не помечаем решённым.
+        probe = {
+            "status": "Решено",
+            "hearing_date": new_hearing_date or fi.get("hearing_date", ""),
+            "events": card_info.get("_events") or fi.get("events") or [],
+        }
+        spurious_resolution = (
+            (new_status == "Решено" or old_status == "Решено")
+            and fi_resolution_contradicted_by_future_hearing(probe, today)
+        )
+        if spurious_resolution:
+            new_status = "В производстве"
+            new_result = ""
         # Гард 2: регрессия статуса Решено/Возвращено → В производстве обычно
         # означает, что карточка не вернула статус корректно (мусор в поле
         # result или отсутствие нужного last_event). Не понижаем статус.
-        if old_status in ("Решено", "Возвращено") and new_status == "В производстве":
+        if (old_status in ("Решено", "Возвращено")
+                and new_status == "В производстве"
+                and not spurious_resolution):
             new_status = old_status
 
         # ── Обновляем поля первой инстанции ──
@@ -11338,6 +11422,15 @@ def main_json():
             fi["hearing_time"] = ""
         if new_hearing_time:
             fi["hearing_time"] = new_hearing_time
+        # Снимаем ложную резолюцию (см. spurious_resolution выше): чистим вердикт
+        # и флаг, чтобы fi_resolved не сработал, а реальное решение позже
+        # заэмитилось заново.
+        if spurious_resolution:
+            if fi.get("result"):
+                fi["result"] = ""
+                changed = True
+            fi["result_date"] = ""
+            fi["resolved_emitted"] = False
         if card_info.get("Судья"):
             fi["judge"] = card_info["Судья"]
         if new_act:
