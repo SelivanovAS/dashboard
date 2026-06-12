@@ -4,9 +4,11 @@
      · data/*.json|.ics                       — stale-while-revalidate
      · Google Fonts                            — cache-first с долгим TTL
    При обновлении файлов — увеличить CACHE_VERSION, старые кэши очистятся в activate.
+   ⚠️ CACHE_VERSION = единый номер с ?v= у styles.css/app.js в HTML
+   (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v70';
+const CACHE_VERSION = 'v93';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
