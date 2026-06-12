@@ -807,7 +807,16 @@ function resolveSheetUrl(){
   }
   return stored;
 }
-function init(){loadFromSheet(resolveSheetUrl());}
+function init(){
+  // PWA-shortcut «Новые дела» и прямые ссылки: ?filter=<значение #filter-status>.
+  // Невалидные значения молча игнорируем, applyFilters подхватит select сам.
+  try{
+    const f=new URLSearchParams(window.location.search).get('filter');
+    const sel=document.getElementById('filter-status');
+    if(f&&sel&&[...sel.options].some(o=>o.value===f))sel.value=f;
+  }catch(_){}
+  loadFromSheet(resolveSheetUrl());
+}
 function showSetup(){document.getElementById('setup-screen').style.display='';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='none';}
 function showLoading(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='';document.getElementById('app').style.display='none';}
 function showApp(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='';}
@@ -911,6 +920,27 @@ function refreshData(){loadFromSheet(resolveSheetUrl());}
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.textContent='';const s=document.createElement('strong');s.textContent='Ошибка: ';e.appendChild(s);e.appendChild(document.createTextNode(m));}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
+/* ========== Toast-уведомления ========== */
+// Лёгкая замена блокирующих alert(): неблокирующая плашка с авто-скрытием.
+// Контейнер создаётся лениво при первом вызове, aria-live="polite" — чтобы
+// скринридеры озвучивали сообщения без перехвата фокуса.
+let _toastContainer=null;
+function showToast(msg,opts){
+  const {type='info',duration=4000}=opts||{};
+  if(!_toastContainer){
+    _toastContainer=document.createElement('div');
+    _toastContainer.className='toast-container';
+    _toastContainer.setAttribute('aria-live','polite');
+    document.body.appendChild(_toastContainer);
+  }
+  const t=document.createElement('div');
+  t.className='toast toast-'+type;
+  t.textContent=msg; // textContent — защита от HTML-инъекций
+  _toastContainer.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),250);},duration);
+}
+
 /* ========== Render All ========== */
 function renderAll(){
   // Watchlist alias-расширение: для дел в кассации обеспечиваем инвариант
@@ -968,6 +998,10 @@ function populateFilterOptions(){
 }
 
 /* ========== Stats ========== */
+// Активация div-«кнопок» (stat-card, mobile-card, upcoming-item) с клавиатуры:
+// Enter/Space → click. Проверка event.target===this — чтобы нажатия на
+// вложенных настоящих кнопках (звезда ★) не всплывали на контейнер.
+const KBD_ACT=`onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();this.click();}"`;
 function renderStats(){
   const active=allCases.filter(c=>c.status==='active').length;
   const w=allCases.filter(c=>getResultFavor(c)==='favorable').length;
@@ -978,13 +1012,13 @@ function renderStats(){
   const freshActs=allCases.filter(c=>c.hasPublishedActs&&(c.actDate&&c.actDate>=weekAgoIso||c.lastEventDate&&c.lastEventDate>=weekAgoIso)).length;
 
   document.getElementById('stats-primary').innerHTML=`
-    <div class="stat-card clickable" data-accent="gold" onclick="setStatusFilter('active')"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
+    <div class="stat-card clickable" data-accent="gold" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('active')"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
     <div class="stat-card" data-accent="green">
       <div class="stat-value">${w} <span class="stat-of-total">из ${meaningful}</span></div>
       <div class="stat-label">В пользу банка${meaningful>0?` · ${winRate}%`:''}</div>
       ${meaningful>0?`<div class="stat-progress"><div class="stat-progress-fill" style="width:${winRate}%"></div></div>`:`<div class="stat-no-appeal-data">Нет данных</div>`}
     </div>
-    <div class="stat-card clickable" data-accent="red" onclick="setStatusFilter('lost')">
+    <div class="stat-card clickable" data-accent="red" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('lost')">
       <div class="stat-value">${lost}</div>
       <div class="stat-label">Проиграно по существу</div>
     </div>
@@ -1072,7 +1106,6 @@ function renderAnalytics(){
     upHtml+=`<div class="upcoming-empty">${emptyText}</div>`;
   }else{
     upHtml+='<div class="upcoming-list">';
-    const isMob=window.innerWidth<=768;
     groupMeta.forEach(g=>{
       const items=groups[g.key];
       if(!items.length)return;
@@ -1113,7 +1146,7 @@ function renderAnalytics(){
         const caseShort=c.caseNumber.replace(/\s*\(.*$/, '');
         // Ссылка на карточку суда живёт в drawer — в списке «Ближайших»
         // иконку не дублируем, клик по элементу открывает drawer целиком.
-        upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" onclick="openDrawer('${caseEsc}')">`+
+        upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
           `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
@@ -1313,6 +1346,16 @@ function renderChipBar(){
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
   let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
+  // Чип «★ Мои» — единый mine-режим (фильтр + дайджест), как у мобильной
+  // кнопки #toolbar-mine-btn. Виден только при непустом watchlist. Состояние —
+  // из _digestViewMode (см. комментарий у toggleMobileMine), класс
+  // mine-toggle-btn включает чип в синхронизацию setDigestView/
+  // refreshDigestModeVisibility (флип .active через querySelectorAll).
+  if(watchlist.size>0){
+    const mineOn=(typeof _digestViewMode!=='undefined')&&_digestViewMode==='mine';
+    const nMine=allCases.filter(c=>isWatched(c.caseNumber)&&!(c.computed?c.computed.archived:isArchived(c))).length;
+    quickHtml+=`<button class="chip-btn chip-mine mine-toggle-btn ${mineOn?'active':''}" aria-pressed="${mineOn?'true':'false'}" onclick="toggleMobileMine()">★ Мои<span class="chip-count">${nMine}</span></button>`;
+  }
   // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
   // в свой ряд тулбара на десктопе (.chip-bar-segments).
   let segmentsHtml=`<div class="seg-ctrl">
@@ -2255,7 +2298,7 @@ function renderMobileCards(){
     const cardClass=['mobile-card',isUnread?'card-new':'',accent].filter(Boolean).join(' ');
     const caseNumEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
 
-    return `<div class="${cardClass}" onclick="openDrawer('${caseNumEsc}')">
+    return `<div class="${cardClass}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseNumEsc}')">
       <div class="mc-top">
         ${watchBtnHtml(c.caseNumber)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
@@ -2338,6 +2381,10 @@ function onGlobalKeydown(e){
     return;
   }
   if((e.key==='Enter'||e.key===' ')&&focusedRowIdx>=0&&focusedRowIdx<filteredCases.length){
+    // Фокус на интерактивном элементе (звезда ★, ссылка, div-«кнопка») —
+    // Enter/Space обрабатывает он сам, не дублируем открытием drawer
+    // сфокусированной строки.
+    if(e.target&&e.target.closest&&e.target.closest('button,a,[role="button"]'))return;
     e.preventDefault();
     openDrawer(filteredCases[focusedRowIdx].caseNumber);
     return;
@@ -2792,10 +2839,10 @@ function maybeShowWatchlistHint() {
     localStorage.setItem(WATCHLIST_HINT_KEY, '1');
   } catch (_) { return; }
   setTimeout(() => {
-    alert(
-      '🔔 Push включён.\n\n'
-      + 'Поставь ☆ на нужных делах — push будут приходить только по ним.\n'
-      + 'Без звёздочек получаешь все обновления.'
+    showToast(
+      '🔔 Push включён. Поставь ☆ на нужных делах — push будут приходить только по ним. '
+      + 'Без звёздочек получаешь все обновления.',
+      { duration: 8000 }
     );
   }, 800);
 }
@@ -2853,12 +2900,12 @@ async function markAsOwner(reg) {
         const newSearch = params.toString();
         const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
         history.replaceState(null, '', newUrl);
-        alert('✅ Это устройство помечено как владелец. Тестовые push будут приходить только сюда.');
+        showToast('✅ Это устройство помечено как владелец. Тестовые push будут приходить только сюда.', { type: 'success', duration: 6000 });
       }
     } else if (urlSecret) {
       const text = await r.text();
       console.warn('markAsOwner: ' + r.status + ' ' + text);
-      alert('Не удалось пометить устройство: ' + r.status + ' (см. консоль)');
+      showToast('Не удалось пометить устройство: ' + r.status + ' (см. консоль)', { type: 'error', duration: 6000 });
     } else {
       // Тихий сбой при авто-репометке — не пугаем пользователя alert'ом.
       // Если секрет в localStorage протух (его сменили), сбрасываем,
@@ -3171,6 +3218,9 @@ async function loadLastDigest() {
       if (urlMine.searchParams.has('mine')) {
         initialMode = 'mine';
         try { localStorage.setItem(DIGEST_VIEW_KEY, 'mine'); } catch (_) {}
+        // ?mine=1 (push-click_url, PWA-shortcut) включает единый mine-режим:
+        // не только дайджест, но и фильтр таблицы — консистентно с кнопкой ★.
+        setMineFilter(true);
       } else {
         let saved = null;
         try { saved = localStorage.getItem(DIGEST_VIEW_KEY); } catch (_) {}
@@ -3444,6 +3494,10 @@ async function setDigestView(mode, opts) {
     // Контекст нужен один раз; кэшируем — переключение туда-обратно
     // больше fetch'ей не делает.
     if (!_digestContext) {
+      // На медленной сети fetch занимает секунды — показываем спиннер,
+      // чтобы переключение не выглядело зависанием. innerHTML ниже
+      // перезапишется результатом buildMineHtml.
+      body.innerHTML = '<div class="digest-loading"><span class="digest-spinner"></span>Собираю мои дела…</div>';
       try {
         const r = await fetch('./data/last_digest_context.json', { cache: 'no-cache' });
         if (r.ok) _digestContext = await r.json();

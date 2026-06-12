@@ -7,6 +7,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Сбер Юрист</title>
+<!-- theme-color стоит ДО скрипта темы: applyResolved меняет его content
+     при переключении light/dark, ниже по <head> тег был бы ещё не распарсен -->
+<meta name="theme-color" content="#21a038">
 <script>
   // Тема: 3 состояния — 'auto' | 'light' | 'dark'.
   //   auto: следуем prefers-color-scheme и обновляемся при смене системной.
@@ -24,6 +27,10 @@
       var resolved = (pref === 'auto') ? (MQ.matches ? 'dark' : 'light') : pref;
       ROOT.setAttribute('data-theme', resolved);
       ROOT.setAttribute('data-theme-pref', pref);
+      // Цвет статус-бара/title-bar в PWA под текущую тему:
+      // тёмная — фон страницы (--bg-2 dark), светлая — Сбер-зелёный.
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0f1217' : '#21a038');
       var btn = document.getElementById('theme-toggle');
       if (btn) {
         var labels = { auto: 'Тема: системная', light: 'Тема: светлая', dark: 'Тема: тёмная' };
@@ -62,11 +69,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=85">
+<link rel="stylesheet" href="styles.css?v=93">
 
-<!-- PWA: установка на главный экран и офлайн-режим -->
+<!-- PWA: установка на главный экран и офлайн-режим
+     (theme-color вынесен выше, до скрипта темы) -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#21a038">
 <!-- iOS Safari требует отдельных apple-* мета-тегов помимо стандартного manifest -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -267,6 +274,6 @@
   </aside>
 </div>
 
-<script src="app.js?v=92" defer></script>
+<script src="app.js?v=93" defer></script>
 </body>
 </html>
