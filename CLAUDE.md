@@ -12,7 +12,8 @@
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
 - [scripts/migrate_csv_to_json.py](scripts/migrate_csv_to_json.py) — одноразовая миграция CSV→JSON (выполнена).
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
-- [data/cases_archive.json](data/cases_archive.json) — архив.
+- [data/cases_archive.json](data/cases_archive.json) — «горячий» архив: дела, заархивированные за последние 12 мес. (`COLD_ARCHIVE_DAYS`). Грузится фронтом.
+- `data/cases_archive_YYYY.json` — «холодные» годовые архивы: дела старше года, вынесенные ротацией (`rotate_cold_archive`). **Фронт их не грузит** (чтобы вес не рос безгранично), но скрипт читает их в индекс дедупликации. Холодные дела «заморожены»: не реактивируются автоматически.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
 - `data/.cassation_acts` — дедуп уже обработанных кассационных определений (планируется при включении LLM-разбора кассации).
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
@@ -110,7 +111,17 @@
 Константы в [scripts/update_cases.py:201](scripts/update_cases.py:201):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
-`CASSATION_NO_ACT_PUBLISH_DAYS=45`.
+`CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
+
+**Ротация архива (`rotate_cold_archive`):** при каждом полном прогоне дела,
+заархивированные более `COLD_ARCHIVE_DAYS` назад (по полю `archived_at`),
+выносятся из горячего [data/cases_archive.json](data/cases_archive.json) в
+холодные годовые `data/cases_archive_YYYY.json`. Якорь `archived_at` ставится
+при переносе в архив; старым делам без штампа он бэкфиллится из дат стадий.
+Фронт холодные файлы не грузит — их id подмешиваются только в индекс
+дедупликации (`existing_ids`), чтобы старое дело не всплыло как «новое».
+Холодные дела не сканируются `reactivate_archived_first_instance` (возврат —
+вручную через [scripts/add_cases_manually.py](scripts/add_cases_manually.py)).
 
 ⚠ Фронт ([app.js:11](app.js:11)) держит свою константу `ARCHIVE_DAYS` —
 синхронизировать вручную при правке `FI_ARCHIVE_DAYS`, иначе фронт
