@@ -16,6 +16,7 @@
 from __future__ import annotations  # type-hints как строки — импорт на Python 3.9
 
 import csv
+import glob
 import hashlib
 import io
 import json
@@ -214,6 +215,21 @@ JSON_ARCHIVE_PATH = os.environ.get(
     "JSON_ARCHIVE_PATH",
     os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_archive.json")
 )
+
+
+def cold_archive_path(year: int) -> str:
+    """Путь к «холодному» годовому архиву cases_archive_YYYY.json (лежит рядом
+    с горячим JSON_ARCHIVE_PATH). Фронт эти файлы не грузит — см.
+    rotate_cold_archive."""
+    base = os.path.dirname(JSON_ARCHIVE_PATH) or "data"
+    return os.path.join(base, f"cases_archive_{year}.json")
+
+
+def cold_archive_glob() -> str:
+    """Glob-шаблон всех холодных годовых архивов — для подмешивания их id
+    в индекс дедупликации (см. main_json)."""
+    base = os.path.dirname(JSON_ARCHIVE_PATH) or "data"
+    return os.path.join(base, "cases_archive_*.json")
 DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
@@ -271,6 +287,11 @@ CASSATION_WATCH_DAYS = 120      # cassation_watch: 4 мес (≈3 мес сро�
 CASSATION_ACT_ARCHIVE_DAYS = 30      # 30 дней после публикации опред. → архив.
 CASSATION_NO_ACT_PUBLISH_DAYS = 45   # 45 дней от даты вынесения опред. без
                                      # публикации текста → архив без акта.
+# Ротация архива: дела, заархивированные более года назад (по archived_at),
+# уезжают из «горячего» cases_archive.json (его грузит фронт) в «холодные»
+# годовые файлы cases_archive_YYYY.json, которые фронт не загружает. Так вес
+# того, что качает браузер, перестаёт расти безгранично. См. rotate_cold_archive.
+COLD_ARCHIVE_DAYS = 365
 # Legacy: CSV-ветка архивации (apelljatsiя в CSV) ещё использует старое
 # 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.
 LEGACY_CSV_ARCHIVE_DAYS = 30
@@ -4488,6 +4509,108 @@ def split_archived_json(cases: list[dict]) -> tuple[list[dict], list[dict]]:
         else:
             active.append(c)
     return active, archive
+
+
+def _parse_iso_date(s: str) -> datetime | None:
+    """Распарсить ISO-дату (`YYYY-MM-DD` или полный ISO-таймстамп) — формат, в
+    котором хранится `archived_at`. Отдельно от parse_date, который понимает
+    только судебный формат `ДД.ММ.ГГГГ`."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _infer_archived_at(case: dict) -> str:
+    """Вывести дату архивации дела из самой поздней даты его стадий —
+    для бэкфилла поля `archived_at` у дел, попавших в архив до появления
+    штампа. Порядок проб: кассация → апелляция → 1-я инстанция. Если ни одна
+    дата не распарсилась — сегодня (консервативно: подержим в горячем ещё год,
+    а не потеряем в холодном раньше времени)."""
+    cs = case.get("cassation") or {}
+    ap = case.get("appeal") or {}
+    fi = case.get("first_instance") or {}
+    candidates = [
+        cs.get("act_date"), cs.get("decision_date"),
+        ap.get("hearing_date"),
+        fi.get("act_date"), fi.get("hearing_date"),
+    ]
+    for raw in candidates:
+        d = parse_date(raw or "")
+        if d:
+            return d.date().isoformat()
+    return date.today().isoformat()
+
+
+def rotate_cold_archive(hot_archive: list[dict]) -> list[dict]:
+    """Ротация архива по годам: дела старше COLD_ARCHIVE_DAYS (по `archived_at`)
+    уезжают из горячего cases_archive.json в холодные годовые файлы
+    cases_archive_YYYY.json (фронт их не грузит). Возвращает урезанный горячий
+    список (только дела свежее года), который вызывающий код записывает обратно
+    в JSON_ARCHIVE_PATH.
+
+    Бэкфилл: делам без `archived_at` штамп выводится из дат стадий
+    (_infer_archived_at) и записывается обратно — считается один раз.
+
+    Идемпотентно: дело дописывается в холодный файл только если его `id`/
+    `first_instance.case_number` там ещё нет.
+
+    Известное ограничение: холодные дела «заморожены» — они попадают в индекс
+    дедупликации (см. main_json), но reactivate_archived_first_instance их НЕ
+    сканирует (работает только по горячему архиву). Если дело годичной давности
+    внезапно возобновится (новая жалоба), автоматически оно не реактивируется —
+    вернуть вручную через add_cases_manually.py. Для гражданских дел такое после
+    года практически не встречается.
+    """
+    now = datetime.now()
+    keep_hot: list[dict] = []
+    to_cold_by_year: dict[int, list[dict]] = {}
+
+    for c in hot_archive:
+        stamp = (c.get("archived_at") or "").strip()
+        if not stamp:
+            stamp = _infer_archived_at(c)
+            c["archived_at"] = stamp  # бэкфилл — пишем обратно, считаем один раз
+        d = _parse_iso_date(stamp)
+        if d and (now - d).days > COLD_ARCHIVE_DAYS:
+            to_cold_by_year.setdefault(d.year, []).append(c)
+        else:
+            keep_hot.append(c)
+
+    if not to_cold_by_year:
+        return keep_hot
+
+    for year, moved in sorted(to_cold_by_year.items()):
+        path = cold_archive_path(year)
+        cold = load_json(path)
+        cold_cases = cold.get("cases", [])
+        seen = {(c.get("id") or "").strip() for c in cold_cases}
+        seen |= {
+            ((c.get("first_instance") or {}).get("case_number") or "").strip()
+            for c in cold_cases
+        }
+        seen.discard("")
+        added = 0
+        for c in moved:
+            cid = (c.get("id") or "").strip()
+            fi_num = ((c.get("first_instance") or {}).get("case_number") or "").strip()
+            if cid in seen or (fi_num and fi_num in seen):
+                continue
+            cold_cases.append(c)
+            if cid:
+                seen.add(cid)
+            if fi_num:
+                seen.add(fi_num)
+            added += 1
+        if added:
+            cold["cases"] = cold_cases
+            save_json(cold, path)
+            log.info(f"В холодный архив {os.path.basename(path)} перенесено {added} дел")
+
+    return keep_hot
 
 
 def update_active_cases(
@@ -10977,11 +11100,21 @@ def main_json():
     # юрист уже отправил в архив, не появлялись снова как «новые» в дайджесте.
     archive_data = load_json(JSON_ARCHIVE_PATH)
     archived_cases = archive_data.get("cases", [])
+    # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
+    # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
+    # задвоилось как «новое». В archived_cases их не добавляем: иначе при
+    # обратной записи горячего архива они вернулись бы в cases_archive.json.
+    cold_archived_cases: list[dict] = []
+    for cold_path in glob.glob(cold_archive_glob()):
+        if os.path.abspath(cold_path) == os.path.abspath(JSON_ARCHIVE_PATH):
+            continue  # на всякий случай: не путать горячий файл с холодными
+        cold_archived_cases.extend(load_json(cold_path).get("cases", []))
     timings["load_json"] = time.perf_counter() - t0
 
-    # Индексы для быстрого поиска по всем номерам дел
+    # Индексы для быстрого поиска по всем номерам дел (включая холодный архив —
+    # только для дедупликации, см. выше).
     existing_ids = set()
-    for c in cases + archived_cases:
+    for c in cases + archived_cases + cold_archived_cases:
         cid = (c.get("id") or "").strip()
         if cid:
             existing_ids.add(cid)
@@ -10998,7 +11131,10 @@ def main_json():
         if ap and ap.get("case_number"):
             existing_ids.add(ap["case_number"].strip())
 
-    log.info(f"Загружено {len(cases)} дел из JSON (+{len(archived_cases)} в архиве)")
+    log.info(
+        f"Загружено {len(cases)} дел из JSON (+{len(archived_cases)} в горячем "
+        f"архиве, +{len(cold_archived_cases)} в холодном для дедупликации)"
+    )
 
     # Миграция старой модели стадий (first_instance|appeal) на новую
     # state-machine. Идемпотентно: прогоняет advance_case_stage до фиксированной
@@ -12383,13 +12519,16 @@ def main_json():
         c for c in fi_newly_archived
         if (c.get("id") or "").strip() not in existing_archive_ids
     ]
+    # Штамп даты архивации для впервые архивируемых дел — якорь ротации
+    # холодного архива (см. rotate_cold_archive). setdefault на случай, если
+    # дело уже несло archived_at (например, после реактивации и повторного
+    # ухода в архив).
+    today_iso = date.today().isoformat()
+    for c in to_add:
+        c.setdefault("archived_at", today_iso)
+
     if to_add or reactivated_count:
-        archive_data["cases"] = archived_cases + to_add
-        save_json(archive_data, JSON_ARCHIVE_PATH)
-        # Синхронизируем локальную ссылку на актуальный архив — иначе
-        # дальнейшие проверки watchlist/push (объединяющие cases + archived_cases)
-        # потеряют дела, которые были временно реактивированы и возвращены в архив.
-        archived_cases = archive_data["cases"]
+        archived_cases = archived_cases + to_add
         if to_add:
             log.info(
                 f"В JSON-архив перенесено {len(to_add)} дел "
@@ -12406,6 +12545,29 @@ def main_json():
             f"Архив-кандидатов: {len(fi_newly_archived)}, "
             "но все уже в архиве"
         )
+
+    # ── 8b. Ротация холодного архива по годам ──
+    # Дела, заархивированные более COLD_ARCHIVE_DAYS назад, уезжают из горячего
+    # cases_archive.json в cases_archive_YYYY.json (фронт холодные не грузит).
+    # rotate_cold_archive может изменить горячий список даже без новых архивных
+    # кандидатов и бэкфиллит archived_at старым делам — поэтому «дирти» считаем
+    # отдельно (нужно ли пересохранять горячий файл).
+    hot_before = len(archived_cases)
+    needs_backfill = any(
+        not (c.get("archived_at") or "").strip() for c in archived_cases
+    )
+    archived_cases = rotate_cold_archive(archived_cases)
+    archive_dirty = (
+        bool(to_add or reactivated_count)
+        or len(archived_cases) != hot_before
+        or needs_backfill
+    )
+    # Синхронизируем локальную ссылку на актуальный горячий архив — иначе
+    # дальнейшие проверки watchlist/push (объединяющие cases + archived_cases)
+    # потеряют дела, временно реактивированные и возвращённые в архив.
+    if archive_dirty:
+        archive_data["cases"] = archived_cases
+        save_json(archive_data, JSON_ARCHIVE_PATH)
 
     data["cases"] = cases
     save_json(data, JSON_PATH)
