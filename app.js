@@ -147,6 +147,7 @@ function normalizeResult(raw){
   if(/снято\s+с\s+рассмотрен/i.test(s))return 'withdrawn';
   if(/прекращен/i.test(s))return 'dismissed';
   if(/возвращен|жалоб\S+.*возвращен/i.test(s))return 'returned';
+  if(/без\s+рассмотрени/i.test(s))return 'unconsidered';
   // «отказано» проверяем ДО «удовлетворен»: «ОТКАЗАНО в удовлетворении иска»
   // иначе матчится по подстроке «удовлетворении» → 'reversed' и favor
   // показывает противоположное направление (✕ вместо ✓).
@@ -170,6 +171,19 @@ function extractFiVerdict(text){
   if(/отказано/.test(s))return 'upheld';
   if(/удовлетворен\S?\s+частично|частично\s+удовлетворен/.test(s))return 'partial';
   if(/удовлетворен/.test(s))return 'reversed';
+  return '';
+}
+// ТЕРМИНАЛЬНЫЕ процессуальные завершения 1-й инст. без решения по существу.
+// Зеркало extract_fi_verdict_from_events в scripts/update_cases.py: парсер
+// держит такие дела со status="В производстве" (карточка суда не флипает
+// «Решено»), поэтому фронт распознаёт исход сам — по тексту last_event.
+// Возвращает каноничную строку для normalizeResult или ''. Сознательно НЕ
+// матчит интерлокутив «оставлено без ДВИЖЕНИЯ» и «производство приостановлено».
+function fiProceduralEnding(text){
+  const s=(text||'').toLowerCase();
+  if(!s)return '';
+  if(/оставл\S*\s+без\s+рассмотрени/.test(s))return 'оставлено без рассмотрения';
+  if(/прекращ\S*/.test(s)&&/производств/.test(s))return 'прекращено';
   return '';
 }
 function computeDetailedStatus(c){
@@ -197,12 +211,12 @@ function computeDetailedStatus(c){
   // Активное дело без будущей даты
   return 'awaiting';
 }
-const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',pending:'Ожидается'};
+const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',pending:'Ожидается'};
 // Лейблы для 1-й инстанции: коды result (upheld/reversed/partial/...) переиспользуем,
 // чтобы getResultFavor работал без правок, но текст бейджа — из «языка карточки суда».
 // upheld в 1-й инст. = «отказано в иске», reversed = «иск удовлетворён».
-const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',pending:'Ожидается'};
-const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',pending:'…'};
+const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',pending:'Ожидается'};
+const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',unconsidered:'⊘',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
 // Маппинг enum'ов исхода кассации (см. classify_cassation_outcome
 // в scripts/update_cases.py) → читаемые формулировки. Пустая строка =
@@ -490,10 +504,16 @@ function jsonToCase(j){
   if(isCass && !rs && cs.outcome){
     rs=CASS_RESULT_LABELS[cs.outcome]||'';
   }
+  // 1-я инст.: терминальное процессуальное завершение («оставлено без
+  // рассмотрения» / «прекращено») парсер держит со status="В производстве".
+  // Распознаём по last_event — иначе дело с прошедшим заседанием висит как
+  // «Не назначено» вместо «Рассмотрено».
+  const fiEnding=(!isCass && !isAppeal)?fiProceduralEnding(evText):'';
   const baseStatus=(
     /решен|рассмотрен/i.test(sl) ||
     /вынесено\s+решение/i.test(evText) ||
     /передан[оа]\s+в\s+архив|сдан[оа]\s+в\s+архив/i.test(evText) ||
+    !!fiEnding ||
     (isAppeal && rs && rs.trim().length>0) ||
     (isCass && cs.outcome && cs.outcome.trim().length>0)
   )?'decided':'active';
@@ -506,6 +526,10 @@ function jsonToCase(j){
       rs=v==='upheld'?'Отказано в удовлетворении иска'
         :v==='partial'?'Иск удовлетворен частично'
         :'Иск удовлетворен';
+    }else if(fiEnding){
+      // «оставлено без рассмотрения» / «прекращено» → normalizeResult →
+      // 'unconsidered' / 'dismissed'.
+      rs=fiEnding;
     }
   }
   // Appellant. Источники в порядке приоритета:
@@ -749,7 +773,7 @@ function getResultFavor(c){
   // Банк — 3-е лицо: исход по существу ему безразличен, кроме случая, когда он сам апеллировал.
   if(c.sberbankRole==='third_party'){
     if(c.appellant!=='bank')return 'neutral';
-    if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed')return 'unfavorable';
+    if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed'||c.result==='unconsidered')return 'unfavorable';
     if(c.result==='reversed'||c.result==='partial')return 'favorable';
     if(c.result==='upheld')return 'unfavorable';
     return 'neutral';
@@ -768,7 +792,7 @@ function getResultFavor(c){
   if(!app)return 'neutral';
   // Жалоба не достигла цели — первоначальное решение устояло.
   // Для апеллянта это плохо, для противоположной стороны — хорошо.
-  if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed'){
+  if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed'||c.result==='unconsidered'){
     return app==='bank'?'unfavorable':'favorable';
   }
   if(app==='bank'){
