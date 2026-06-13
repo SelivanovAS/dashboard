@@ -8,7 +8,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v93';
+const CACHE_VERSION = 'v94';
 const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
 const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
 
