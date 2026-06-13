@@ -75,6 +75,10 @@ jobs:
           if [ -f data/cases_archive.json ]; then
             git add data/cases_archive.json
           fi
+          # Холодные годовые архивы (cases_archive_YYYY.json) — дела старше года,
+          # вынесенные из горячего архива ротацией (rotate_cold_archive). Фронт
+          # их не грузит, но без коммита новые файлы теряются между прогонами.
+          git add data/cases_archive_*.json 2>/dev/null || true
           # Контекст дайджеста нужен workflow `Digest Only` (--replay-last).
           # Без коммита каждый следующий запуск видит пустой checkout и падает.
           if [ -f data/last_digest_context.json ]; then
