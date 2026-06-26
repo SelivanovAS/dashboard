@@ -14,6 +14,10 @@ __pycache__/
 *.tmp
 *.bak
 
+# Одноразовые отчёты аудит-скриптов (регенерируются запуском)
+data/orphan_cassation_report.md
+data/orphan_watchlist_report.md
+
 # Node / Cloudflare Worker
 node_modules/
 
