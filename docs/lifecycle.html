@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Жизненный цикл судебного дела — схема парсинга и архивации</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --violet: #a78bfa;
+    --pink: #ec4899;
+    --grey: #64748b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.55; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 36px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--accent); }
+  p { color: var(--text); }
+  .lead { color: var(--muted); margin: 0 0 24px; max-width: 820px; }
+  code { background: #0b1221; color: #e2e8f0; padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Stages diagram */
+  .stages {
+    display: grid;
+    gap: 12px;
+    margin: 14px 0 4px;
+  }
+  .stages-main { grid-template-columns: repeat(4, 1fr); }
+  .stages-cass { grid-template-columns: repeat(3, 1fr); margin-top: 4px; }
+  .row-label {
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 18px 0 4px;
+  }
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 14px 12px;
+    position: relative;
+    min-height: 160px;
+  }
+  .stage .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #0b1221; font-weight: 700; letter-spacing: 0.3px; margin-bottom: 8px; }
+  .stage h4 { margin: 0 0 4px; font-size: 14px; }
+  .stage .sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .stage ul { margin: 0; padding: 0 0 0 16px; font-size: 12.5px; color: var(--text); }
+  .stage ul li { margin-bottom: 3px; }
+  .stage.fi   .badge { background: var(--green); }
+  .stage.aw   .badge { background: var(--amber); }
+  .stage.ap   .badge { background: var(--violet); }
+  .stage.cw   .badge { background: var(--pink); }
+  .stage.cp   .badge { background: var(--grey); color: #fff; }
+  .stage.ca   .badge { background: var(--accent); }
+  .stage.ar   .badge { background: var(--red); color: #fff; }
+
+  .arrows {
+    display: grid;
+    gap: 12px;
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  .arrows-main { grid-template-columns: repeat(4, 1fr); }
+  .arrows-cass { grid-template-columns: repeat(3, 1fr); }
+  .arrows div { text-align: center; }
+  .arrows div::before { content: "↓"; display: block; color: var(--accent); font-size: 18px; line-height: 1; margin-bottom: 2px; }
+  .arrows div.loop::before { content: "↺"; color: var(--red); }
+  .arrows div.bridge::before { content: "↪"; color: var(--accent); }
+
+  .archive-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .archive {
+    background: linear-gradient(135deg, #3f1d1d, #1f1313);
+    border: 1px solid #7f1d1d;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .archive h4 { margin: 0 0 4px; font-size: 14px; color: #fecaca; }
+  .archive p { margin: 0; font-size: 12.5px; color: #fda4af; }
+  .nofate {
+    background: var(--panel-2);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .nofate h4 { margin: 0 0 4px; font-size: 14px; color: var(--text); }
+  .nofate p { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  /* Pipeline */
+  .pipe {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 10px 0 4px;
+  }
+  .pipe .step {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px 12px 10px;
+    font-size: 12.5px;
+  }
+  .pipe .step .num { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: 0.4px; }
+  .pipe .step h5 { margin: 4px 0 6px; font-size: 13.5px; color: var(--text); }
+  .pipe .step .who { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .pipe .step ul { margin: 0; padding-left: 16px; }
+  .pipe .step ul li { margin-bottom: 2px; }
+
+  /* Matrix */
+  table.matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 13px;
+  }
+  table.matrix th, table.matrix td {
+    border: 1px solid var(--border);
+    padding: 9px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.matrix th { background: var(--panel); color: var(--accent); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.matrix td.yes { color: #4ade80; font-weight: 600; }
+  table.matrix td.no  { color: #94a3b8; }
+  table.matrix tr:nth-child(odd) td { background: rgba(30, 41, 59, 0.4); }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-size: 12px; color: var(--muted);
+  }
+  .legend span::before { content: "●"; margin-right: 6px; }
+  .lg-fi::before { color: var(--green); }
+  .lg-aw::before { color: var(--amber); }
+  .lg-ap::before { color: var(--violet); }
+  .lg-cw::before { color: var(--pink); }
+  .lg-cp::before { color: var(--grey); }
+  .lg-ca::before { color: var(--accent); }
+  .lg-ar::before { color: var(--red); }
+  .lg-arc::before { color: #7f1d1d; }
+
+  .notes {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 14px;
+  }
+  .notes ul { margin: 6px 0 0; padding-left: 20px; }
+  .notes li { margin-bottom: 6px; font-size: 13.5px; }
+
+  .const {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 0;
+  }
+  .const div {
+    background: #0b1221;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .const b { color: var(--accent); }
+
+  @media (max-width: 980px) {
+    .stages-main, .stages-cass, .arrows-main, .arrows-cass { grid-template-columns: repeat(2, 1fr); }
+    .pipe { grid-template-columns: repeat(2, 1fr); }
+    .archive-row { grid-template-columns: 1fr; }
+    .arrows div::before { content: "↓"; }
+    table.matrix { display: block; overflow-x: auto; max-width: 100%; }
+  }
+  @media print {
+    body { background: #fff; color: #111; }
+    .stage, .pipe .step, .notes, table.matrix th { background: #fff !important; color: #111 !important; }
+    .archive { background: #fee2e2 !important; color: #7f1d1d !important; }
+    .nofate { background: #f3f4f6 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Жизненный цикл судебного дела</h1>
+  <p class="lead">Как <code>scripts/update_cases.py</code> решает: какое дело и в какой момент парсить, как переводить между стадиями и когда отправлять в архив. Один прогон cron = один оборот пайплайна.</p>
+
+  <div class="legend">
+    <span class="lg-fi">first_instance</span>
+    <span class="lg-aw">awaiting_appeal</span>
+    <span class="lg-ap">appeal</span>
+    <span class="lg-cw">cassation_watch</span>
+    <span class="lg-cp">cassation_pending</span>
+    <span class="lg-ca">cassation</span>
+    <span class="lg-ar">awaiting_relink</span>
+    <span class="lg-arc">архив</span>
+  </div>
+
+  <h2>1. Семь стадий + архив</h2>
+
+  <div class="row-label">Основной путь — апелляция</div>
+
+  <div class="stages stages-main">
+    <div class="stage fi">
+      <span class="badge">1</span>
+      <h4>first_instance</h4>
+      <div class="sub">Дело в суде 1-й инстанции</div>
+      <ul>
+        <li>Парсим карточку 1-й инст. (20 судов ХМАО)</li>
+        <li>Ищем апел. жалобу, движение, акт</li>
+        <li>Считываем <code>hearing_date</code>, <code>act_date</code>, <code>status</code></li>
+      </ul>
+    </div>
+    <div class="stage aw">
+      <span class="badge">2</span>
+      <h4>awaiting_appeal</h4>
+      <div class="sub">Жалоба подана, ждём карточку в апел. суде</div>
+      <ul>
+        <li><b>Не парсим ничего.</b></li>
+        <li>Ждём, пока апел. суд опубликует дело</li>
+        <li>Связку делает <code>link_cases</code></li>
+      </ul>
+    </div>
+    <div class="stage ap">
+      <span class="badge">3</span>
+      <h4>appeal</h4>
+      <div class="sub">Дело в апел. инстанции (Суд ХМАО-Югры)</div>
+      <ul>
+        <li>Парсим карточку апел.</li>
+        <li>Следим за <code>hearing_date</code> и публикацией акта</li>
+        <li>Карточку 1-й инст. больше не трогаем</li>
+      </ul>
+    </div>
+    <div class="stage cw">
+      <span class="badge">4</span>
+      <h4>cassation_watch</h4>
+      <div class="sub">Окно для подачи касс. жалобы</div>
+      <ul>
+        <li>Снова парсим карточку 1-й инст.</li>
+        <li>Касс. жалоба регистрируется именно там</li>
+        <li>Апел. карточку больше не трогаем</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="arrows arrows-main">
+    <div>есть <code>appeal_filed_date</code><br/>в карточке 1-й инст.</div>
+    <div><code>link_cases</code> нашёл<br/>карточку в апел. суде</div>
+    <div>акт опубликован<br/>или 30 дн без акта</div>
+    <div class="bridge">касс. жалоба или<br/>направление в касс. суд</div>
+  </div>
+
+  <div class="row-label">Кассационная ветка — 7-й КСОЮ</div>
+
+  <div class="stages stages-cass">
+    <div class="stage cp">
+      <span class="badge">5</span>
+      <h4>cassation_pending</h4>
+      <div class="sub">Жалоба подана / дело направлено в кассацию</div>
+      <ul>
+        <li><b>Не парсим ничего.</b></li>
+        <li>Ждём появления карточки на 7kas.sudrf.ru</li>
+        <li>Связку делает <code>link_cassation_cases</code></li>
+      </ul>
+    </div>
+    <div class="stage ca">
+      <span class="badge">6</span>
+      <h4>cassation</h4>
+      <div class="sub">Дело в 7-м кассационном суде</div>
+      <ul>
+        <li>Парсим карточку 7kas.sudrf.ru</li>
+        <li>Считываем <code>outcome</code>, <code>act_date</code>, <code>decision_date</code></li>
+        <li>Refresh старых дел по сохранённому <code>cassation.link</code></li>
+      </ul>
+    </div>
+    <div class="stage ar">
+      <span class="badge">7</span>
+      <h4>awaiting_relink</h4>
+      <div class="sub">Кассация отменила, ждём новую карточку</div>
+      <ul>
+        <li><b>Не парсим ничего.</b></li>
+        <li>Ждём дело в нижестоящей инст. (1-я или апел.)</li>
+        <li>При обнаружении: <code>round += 1</code>, прошлое в <code>history</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="arrows arrows-cass">
+    <div><code>link_cassation_cases</code><br/>нашёл карточку на 7kas</div>
+    <div><code>outcome=cassation_remanded</code><br/>(отменено и направлено на новое)</div>
+    <div class="loop">relink-парсер нашёл<br/>дело в нижестоящей инст.</div>
+  </div>
+
+  <div class="archive-row">
+    <div class="archive">
+      <h4>→ архив (по таймауту, 3 точки выхода)</h4>
+      <p><b>Из first_instance:</b> статус «Решено» + 45 дн от <code>hearing_date</code> без апел. жалобы.<br/>
+         <b>Из cassation_watch:</b> 120 дн от апел. <code>hearing_date</code> без касс. движения.<br/>
+         <b>Из cassation:</b> финальный исход (не <code>remanded</code>) + 30 дн после акта <i>или</i> 45 дн от <code>decision_date</code> без публикации.</p>
+    </div>
+    <div class="nofate">
+      <h4>В архив НЕ уходят (4 стадии)</h4>
+      <p><code>awaiting_appeal</code>, <code>appeal</code>, <code>cassation_pending</code>, <code>awaiting_relink</code> — стадии без таймаута. Висят, пока не появится сигнал из соседней инстанции.</p>
+    </div>
+  </div>
+
+  <div class="const" style="margin-top:14px;">
+    <div><b>FI_ARCHIVE_DAYS</b> = 45</div>
+    <div><b>APPEAL_NO_ACT_GRACE_DAYS</b> = 30</div>
+    <div><b>CASSATION_WATCH_DAYS</b> = 120</div>
+    <div><b>CASSATION_ACT_ARCHIVE_DAYS</b> = 30</div>
+    <div><b>CASSATION_NO_ACT_PUBLISH_DAYS</b> = 45</div>
+  </div>
+
+  <h2>2. Что делает один прогон <code>main_json</code></h2>
+
+  <div class="pipe">
+    <div class="step">
+      <div class="num">ШАГ 1</div>
+      <h5>Загрузка состояния</h5>
+      <div class="who">cases.json + cases_archive.json</div>
+      <ul>
+        <li>Архив подмешиваем в индекс дедупликации, чтобы старые номера не появлялись как «новые»</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 2</div>
+      <h5>migrate_stages</h5>
+      <div class="who">advance_case_stage в цикле</div>
+      <ul>
+        <li>Идемпотентно догоняет дела до фикс. точки по сигналам, появившимся со вчера</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 3</div>
+      <h5>Апелляция — поиск новых</h5>
+      <div class="who">parse_search_page → parse_case_card</div>
+      <ul>
+        <li>Сайт апел. суда (<code>oblsud--hmao.sudrf.ru</code>)</li>
+        <li>Из новых карточек тянем «Номер дела 1 инст.» в <code>appeal_fi_numbers</code></li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 4</div>
+      <h5>1-я инстанция — поиск новых</h5>
+      <div class="who">parse_first_instance_search × ~20 судов</div>
+      <ul>
+        <li>Один обход по каждому из включённых <code>FIRST_INSTANCE_COURTS</code></li>
+        <li>Промоушен «М-…» → «2-…» при регистрации иска</li>
+        <li><code>relink_awaiting_relink_first_instance</code> ловит дела после <code>remanded</code></li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 5</div>
+      <h5>Апелляция — обновление</h5>
+      <div class="who">только стадия = appeal, smart-skip</div>
+      <ul>
+        <li>Дела с <code>cassation_watch</code> и др. идут в <code>skip_apel_nums</code></li>
+        <li><code>should_skip_case</code> пропускает дела с известным будущим заседанием</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 6</div>
+      <h5>1-я инст. — обновление</h5>
+      <div class="who">first_instance + cassation_watch, smart-skip</div>
+      <ul>
+        <li>На <code>first_instance</code> — общий мониторинг</li>
+        <li>На <code>cassation_watch</code> — ловим касс. жалобу</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 7</div>
+      <h5>Кассация — поиск и парсинг</h5>
+      <div class="who">parse_cassation_search_page → parse_cassation_card</div>
+      <ul>
+        <li>7kas.sudrf.ru, фильтр <code>match_hmao_first_instance</code></li>
+        <li><code>link_cassation_cases</code> мержит или создаёт «discovery»-дело</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 8</div>
+      <h5>Кассация — refresh старых</h5>
+      <div class="who">стадия = cassation, по сохранённому link</div>
+      <ul>
+        <li>Дела с заполненным <code>cassation.link</code> и не обновлённые сегодня</li>
+        <li>Тот же smart-skip + force-parse 21 день</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 9</div>
+      <h5>link_cases</h5>
+      <div class="who">awaiting_appeal → appeal</div>
+      <ul>
+        <li>Мержит апел. карточку в дело по совпадению «номер 1-й инст.»</li>
+        <li>Отдельная апел. запись удаляется (дедуп)</li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 10</div>
+      <h5>advance_case_stage + архивация</h5>
+      <div class="who">is_case_archived → save_json</div>
+      <ul>
+        <li>Все остальные переходы по новым полям</li>
+        <li>Активные → <code>cases.json</code>, архивные → <code>cases_archive.json</code></li>
+      </ul>
+    </div>
+    <div class="step">
+      <div class="num">ШАГ 11</div>
+      <h5>Дайджест и рассылка</h5>
+      <div class="who">generate_digest → Telegram + PWA push</div>
+      <ul>
+        <li>Контекст в <code>data/last_digest_context.json</code> (для <code>--replay-last</code>)</li>
+        <li>Push персонализируется по watchlist через <code>_make_per_sub_callback</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3. Матрица «стадия — поведение»</h2>
+
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Стадия</th>
+        <th>Карточка 1-й инст.</th>
+        <th>Карточка апел.</th>
+        <th>Карточка 7kas</th>
+        <th>Что выводит из стадии</th>
+        <th>Архив по таймауту</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>first_instance</b></td>
+        <td class="yes">да — ищем жалобу, движение, акт</td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td>Появилась апел. жалоба → <code>awaiting_appeal</code></td>
+        <td class="yes">да — 45 дн от <code>hearing_date</code>, статус «Решено», жалобы нет</td>
+      </tr>
+      <tr>
+        <td><b>awaiting_appeal</b></td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td><code>link_cases</code> нашёл апел. карточку → <code>appeal</code></td>
+        <td class="no">никогда — ждём бессрочно</td>
+      </tr>
+      <tr>
+        <td><b>appeal</b></td>
+        <td class="no">—</td>
+        <td class="yes">да — следим за заседанием и актом</td>
+        <td class="no">—</td>
+        <td>Акт опубликован <b>или</b> 30 дн без акта → <code>cassation_watch</code></td>
+        <td class="no">никогда (переход всегда в <code>cassation_watch</code>)</td>
+      </tr>
+      <tr>
+        <td><b>cassation_watch</b></td>
+        <td class="yes">да — ищем касс. жалобу / направление в кассацию</td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td>Касс. жалоба или дело направлено в касс. суд → <code>cassation_pending</code></td>
+        <td class="yes">да — 120 дн от апел. <code>hearing_date</code></td>
+      </tr>
+      <tr>
+        <td><b>cassation_pending</b></td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td><code>link_cassation_cases</code> нашёл дело на 7kas → <code>cassation</code></td>
+        <td class="no">никогда</td>
+      </tr>
+      <tr>
+        <td><b>cassation</b></td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td class="yes">да — outcome, акт, события 7-го КСОЮ</td>
+        <td><code>outcome=cassation_remanded</code> → <code>awaiting_relink</code><br/>иначе финальный исход → архив</td>
+        <td class="yes">да — 30 дн после акта <i>или</i> 45 дн от <code>decision_date</code> без публикации</td>
+      </tr>
+      <tr>
+        <td><b>awaiting_relink</b></td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td class="no">—</td>
+        <td>Дело нашлось в 1-й инст. или апел. → <code>first_instance</code> / <code>appeal</code> (<code>round += 1</code>)</td>
+        <td class="no">никогда — ждём бессрочно</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Когда вообще запускается прогон</h2>
+
+  <div class="notes">
+    <ul>
+      <li><b>Cron-выражение:</b> <code>"45 3 * * mon-fri"</code> в <code>cloudflare-worker/wrangler.toml</code> = <b>03:45 UTC</b> = <b>06:45 МСК</b>, пн–пт.</li>
+      <li><b>Буквенное <code>mon-fri</code>, а не <code>1-5</code>.</b> Cloudflare Cron Triggers нумерует дни 1=Sun..7=Sat (не как POSIX). Цифровое <code>1-5</code> эмпирически срабатывало и в воскресенье — буквенная нотация однозначна.</li>
+      <li><b>Второй щит — <code>isHoliday()</code> в <code>worker.js</code>.</b> Отсекает сб/вс через <code>getDay()</code> и сверяется с <code>HOLIDAYS_2026</code> (производственный календарь РФ; обновлять ежегодно).</li>
+      <li><b>Worker → GitHub API → workflow_dispatch.</b> Если день рабочий, Worker POST'ит в <code>.github/workflows/update_cases.yml</code> с <code>inputs.smart_skip=true</code>.</li>
+      <li><b>Двойная защита.</b> Внутри Python переменная <code>SKIP_NON_WORKING_DAYS=1</code> ещё раз проверяет <code>is_russian_working_day(today)</code> и выходит, если что-то проскочило.</li>
+    </ul>
+  </div>
+
+  <h2>5. Куда ходим за данными</h2>
+
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Сайт</th>
+        <th>Стадии, где парсится</th>
+        <th>Параметры запроса</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>20 судов ХМАО</b><br/><span style="color:var(--muted);font-size:12px;">FIRST_INSTANCE_COURTS</span></td>
+        <td><code>first_instance</code>, <code>cassation_watch</code></td>
+        <td><code>delo_id=1540005</code>, <code>delo_table=g1_case</code>, <code>new=0</code>, <code>G1_PARTS__NAMESS=Сбербанк</code></td>
+      </tr>
+      <tr>
+        <td><b>Суд ХМАО-Югры</b><br/><span style="color:var(--muted);font-size:12px;">oblsud--hmao.sudrf.ru</span></td>
+        <td><code>appeal</code></td>
+        <td><code>delo_id=5</code>, <code>new=5</code>, <code>G2_PARTS__NAMESS=Сбербанк</code></td>
+      </tr>
+      <tr>
+        <td><b>7-й КСОЮ</b><br/><span style="color:var(--muted);font-size:12px;">7kas.sudrf.ru</span></td>
+        <td><code>cassation</code></td>
+        <td><code>delo_id=2800001</code>, <code>delo_table=g33_case</code>, <code>new=2800001</code>, <code>name_field=G33_PARTS__NAMESS</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="color:var(--muted);font-size:12.5px;margin-top:8px;">Параметры 7kas (<code>delo_id=2800001</code>, <code>new=2800001</code>) подобраны эмпирически — менять только после ручной проверки на сайте, иначе поиск молча вернёт «Данных по запросу не обнаружено».</p>
+
+  <h2>6. Как мы НЕ дёргаем суд лишний раз (smart-skip)</h2>
+
+  <div class="notes">
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">Функция <code>should_skip_case()</code> в <code>scripts/update_cases.py</code>. Применяется для стадий <code>first_instance</code>, <code>cassation_watch</code>, <code>appeal</code>, <code>cassation</code> на этапе обновления карточек. На <code>awaiting_*</code> и <code>cassation_pending</code> вообще не вызывается — там парсинг карточек не идёт.</p>
+    <ul>
+      <li><b>Force-parse страховка:</b> если <code>last_checked_at</code> пуст или прошло ≥ <b>21 дня</b> — всё равно парсим. Защита от потерянных событий.</li>
+      <li><b>Будущее заседание:</b> следующая плановая дата (из <code>events</code> или явного <code>hearing_date</code>) ≥ сегодня → skip с причиной <code>future_hearing(DD.MM.YYYY)</code>.</li>
+      <li><b>Приостановлено:</b> <code>suspended_until</code> ≥ сегодня → skip с причиной <code>suspended_until(...)</code>.</li>
+      <li><b>Оставлено без движения:</b> если последнее событие содержит «оставлено без движения» и прошло &lt; <b>7 дней</b> с прошлой проверки → skip с причиной <code>suspended_weekly(Xd/7d)</code>.</li>
+    </ul>
+  </div>
+
+  <h2>7. Если кассация отменила — что дальше</h2>
+
+  <div class="notes">
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">Ветка <code>cassation_remanded</code>: дело не теряется и не архивируется, оно начинает новый раунд.</p>
+    <ul>
+      <li><b>Распознавание:</b> <code>parse_cassation_card</code> вытаскивает текст определения и <code>classify_cassation_outcome</code> ставит <code>outcome="cassation_remanded"</code> для исходов вида «решение отменить, направить на новое рассмотрение».</li>
+      <li><b>Переход:</b> <code>advance_case_stage</code> переводит дело в <code>awaiting_relink</code>. Парсинг карточек прекращается — ждём появления дела в нижестоящей инстанции.</li>
+      <li><b>Re-link:</b> <code>relink_awaiting_relink_first_instance</code> (или <code>link_cases</code> для апел.) при обнаружении карточки в выдаче поиска:
+        <ul>
+          <li>копирует текущие блоки <code>first_instance</code>/<code>appeal</code>/<code>cassation</code> в <code>history</code> (снимок раунда);</li>
+          <li>увеличивает <code>round += 1</code>;</li>
+          <li>ставит стадию <code>first_instance</code> (или <code>appeal</code>, если касс. отправила обратно в апел.);</li>
+          <li>заполняет новый блок данными из найденной карточки.</li>
+        </ul>
+      </li>
+      <li><b>Без таймаута.</b> Архив для <code>awaiting_relink</code> не работает — суды иногда долго регистрируют возвращённое дело, и пропустить его дороже, чем хранить «висящую» запись.</li>
+    </ul>
+  </div>
+
+  <h2>8. Ключевые идеи</h2>
+  <div class="notes">
+    <ul>
+      <li><b>Поиск новых дел идёт всегда</b> — каждый прогон, по всем включённым 20 судам ХМАО, по апел. суду и по 7-му КСОЮ. Это единственный способ заметить впервые поданное (или вернувшееся через кассацию) дело.</li>
+      <li><b>Парсинг карточки активен только там, где он что-то даёт.</b> На <code>awaiting_appeal</code>, <code>cassation_pending</code>, <code>awaiting_relink</code> на сайт суда вообще не идём — просто ждём сигнала из соседней инстанции.</li>
+      <li><b>Два «склеивателя» инстанций.</b> <code>link_cases</code> матчит апел. карточку с делом 1-й инст. <code>link_cassation_cases</code> матчит 7kas-карточку с 1-й инст. или создаёт «discovery»-дело, если в реестре такого ещё нет.</li>
+      <li><b>В архив уходят 3 стадии</b> — <code>first_instance</code> (45 дн без жалобы), <code>cassation_watch</code> (120 дн без касс.), <code>cassation</code> (финальный исход + 30/45 дн). Остальные 4 ждут бессрочно.</li>
+      <li><b>После <code>cassation_remanded</code> дело не теряется</b> — <code>awaiting_relink</code> ждёт новую карточку, начинается новый <code>round</code> со снимком прошлого в <code>history</code>.</li>
+      <li><b><code>migrate_stages</code> в начале прогона</b> идемпотентно догоняет старые записи под текущую модель: если за ночь появилась касс. жалоба, дело уедет в <code>cassation_pending</code> ещё до того, как будут парситься карточки.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
