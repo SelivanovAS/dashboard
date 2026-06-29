@@ -1,32 +1,10 @@
 {
   "version": 1,
-  "generated_at": "2026-06-26T03:52:03",
+  "generated_at": "2026-06-29T03:51:32",
   "title_default": "Мониторинг дел — обновление",
-  "body_default": "📋 Изменений: 4",
+  "body_default": "📋 Изменений: 5",
   "owner_only": false,
   "items": [
-    {
-      "endpoint": "https://web.push.apple.com/QAZ-xg_mYG2jQeGwbMnwFmubIgQO41uJaZe_n5Pz_e8uxI2hwyYR4-9YWOW4L2m1Vgl3D4wLD5aVcs5kaJXNcuLTAKgHBNFLLrG4w53MCD9tUIFGQ_D2hmQw5AY3B5L2He6pHgVWVxQui6jVLxzUc0_Mqx4dxY4CAoeKl-r82jg",
-      "endpoint_tail": "ui6jVLxzUc0_Mqx4dxY4CAoeKl-r82jg",
-      "is_owner": false,
-      "watchlist_size": 0,
-      "watchlist": [],
-      "variant": "general",
-      "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
-      "click_url": "/sberbank_dashboard.html?digest=open"
-    },
-    {
-      "endpoint": "https://web.push.apple.com/QB6yNMp_0MHKzeB5NKK6YynBS8wHakmJuHPG5rvcObNGwNSsr7oADvGSl2-0yiHkbSpHG_6r7FYdEv2bGtFRi6k4ZWWx8mkyzUgk45zSoEeaBEShlTWa-G3e4wC3V6x-rpqEfkKAEfKPpxTx8Gvx1O_Qju5nEojLdH3W9DZ_vBs",
-      "endpoint_tail": "PpxTx8Gvx1O_Qju5nEojLdH3W9DZ_vBs",
-      "is_owner": false,
-      "watchlist_size": 0,
-      "watchlist": [],
-      "variant": "general",
-      "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
-      "click_url": "/sberbank_dashboard.html?digest=open"
-    },
     {
       "endpoint": "https://web.push.apple.com/QF3NRMN1D52UCXsV7I4sZVmX5_rf0niwkaTQy6EwvSt2ky2BI7DwHHA6LlUDaxqMCwguHoUIp__bHHHBvDBBZRzR6WPcVSv-w5Y-k_hoU55FyIKWcVTDeI2f1LXSeTM-7Kw3kg_Mxb3MEboXFWid80VKblhKC-nB9xJmpy9MmoA",
       "endpoint_tail": "MEboXFWid80VKblhKC-nB9xJmpy9MmoA",
@@ -47,10 +25,10 @@
         "2-193/2026",
         "33-4206/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-583/2026 (2-9702/2025;)",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
@@ -60,7 +38,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "📋 Изменений: 5",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -75,10 +53,10 @@
         "2-5609/2026",
         "2-713/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-3063/2026 (2-10385/2025;)",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QLGYfW6JWyyZiKc45AIJKxN-UklPSQLdpiUgJWjSiVoc2n7SOPq-kPg8FO8A3-CWd_aCym1GThbROIYGjyZRrgV6MMBKlqcMHzaRdHqaBE-iK-vj3rfKfiU8nDnjxo4WOJz1py4OBLIWjDLHdGTr8HnVF0KhG955JORfnJDh8tY",
@@ -114,7 +92,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "📋 Изменений: 5",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -125,7 +103,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "📋 Изменений: 5",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -136,7 +114,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "📋 Изменений: 5",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -177,9 +155,9 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "📋 Изменений: 5",
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-06-26T03:52:03"
+  "updated_at": "2026-06-29T03:51:32"
 }
