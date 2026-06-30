@@ -150,6 +150,14 @@ CASSATION_COURT = CourtConfig(
 )
 
 
+def _eyo(s: str) -> str:
+    """Нормализация ё→е для матчинга названий судов. ГАС «Правосудие»/7kas
+    пишут букву ё непоследовательно (напр. «Березовский» через е, тогда как
+    в нашем реестре — «Берёзовский» через ё). Буквальный substring-match
+    без этой нормализации молча отсекает такие суды как «не-ХМАО»."""
+    return s.replace("ё", "е").replace("Ё", "Е")
+
+
 def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
     """Сопоставить длинное имя суда из карточки 7kas с одним из наших ХМАО-судов.
 
@@ -166,7 +174,7 @@ def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
     """
     if not long_court_name:
         return None
-    name_norm = long_court_name.strip().lower()
+    name_norm = _eyo(long_court_name.strip().lower())
     # Окружной суд ХМАО-Югры — может быть 1-й инстанцией для админ. дел и т.п.
     if "суд ханты-мансийского автономного округа" in name_norm:
         # Отсекаем районные/городские, у них суффикс «округа-Югры» в конце,
@@ -185,7 +193,7 @@ def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
     # Перебираем 20 районных/городских судов — ищем короткое имя подстрокой.
     # Дедуп по domain: Покачи дублирует Нижневартовский районный (один domain).
     for cfg in FIRST_INSTANCE_COURTS:
-        short = cfg.name.lower()
+        short = _eyo(cfg.name.lower())
         # Покачи: name содержит круглые скобки, его не матчим как «Нижневартовский
         # районный суд» внутри длинной формы — он отделён скобками.
         if "(" in short:
@@ -12321,6 +12329,16 @@ def main_json():
                 f"HMAO {len(hmao_results)}, не-HMAO отброшено "
                 f"{len(cass_search_results) - len(hmao_results)}"
             )
+            # Печатаем НАЗВАНИЯ отброшенных судов (различающиеся) — чтобы любой
+            # будущий рассинхрон названия (ё/е, переименование, новый суд)
+            # был виден в логе, а не исчезал в счётчике. Именно эта строка
+            # вскрыла бы баг с «Березовским» (е vs ё) сразу. См. _eyo.
+            dropped_courts = sorted({
+                (r.get("fi_court_long") or "").strip()
+                for r in cass_search_results if not r["fi_court_config"]
+            } - {""})
+            if dropped_courts:
+                log.info("  7kas: отброшено как не-HMAO: " + "; ".join(dropped_courts))
 
             # Индекс существующих дел по номеру 1-й инст. — для smart-skip
             # (discovery-кейсы остаются вне индекса и парсятся всегда).

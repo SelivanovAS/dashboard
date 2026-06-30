@@ -1202,3 +1202,48 @@ class TestShouldSkipMaterialGuard:
         skip, reason = uc.should_skip_case(case, today)
         assert skip is True
         assert reason.startswith("future_hearing")
+
+
+# ── match_hmao_first_instance: фильтр HMAO на 7kas (ё/е-рассинхрон) ───────────
+
+class TestMatchHmaoFirstInstance:
+    """Регресс: дело Берёзовского суда не находилось в кассации, т.к. 7kas
+    пишет «Березовский» (е), а реестр — «Берёзовский» (ё), и буквальный
+    substring-match отсекал его как не-HMAO. См. _eyo."""
+
+    def test_berezovsky_e_matches_config_yo(self):
+        """7kas-форма через «е» матчится на реестровый суд с «ё»."""
+        cfg = uc.match_hmao_first_instance(
+            "Березовский районный суд Ханты-Мансийского автономного округа-Югры"
+        )
+        assert cfg is not None
+        assert cfg.name == "Берёзовский районный суд"
+
+    def test_berezovsky_yo_matches_too(self):
+        """Симметрия направления: если 7kas вдруг напишет через «ё» — тоже матч."""
+        cfg = uc.match_hmao_first_instance(
+            "Берёзовский районный суд Ханты-Мансийского автономного округа-Югры"
+        )
+        assert cfg is not None
+        assert cfg.name == "Берёзовский районный суд"
+
+    def test_same_name_other_region_rejected(self):
+        """Одноимённый суд другого региона (без маркера ХМАО) — None."""
+        assert uc.match_hmao_first_instance(
+            "Октябрьский районный суд г. Екатеринбурга Свердловской области"
+        ) is None
+
+    def test_okrug_court_maps_to_appeal(self):
+        """Окружной суд ХМАО как 1-я инстанция → APPEAL_COURT (не сломан)."""
+        cfg = uc.match_hmao_first_instance(
+            "Суд Ханты-Мансийского автономного округа - Югры"
+        )
+        assert cfg is uc.APPEAL_COURT
+
+    def test_regular_hmao_court_still_matches(self):
+        """Контроль: суд без ё матчится как и раньше."""
+        cfg = uc.match_hmao_first_instance(
+            "Урайский городской суд Ханты-Мансийского автономного округа-Югры"
+        )
+        assert cfg is not None
+        assert cfg.name == "Урайский городской суд"
