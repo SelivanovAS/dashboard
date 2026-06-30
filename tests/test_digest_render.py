@@ -885,5 +885,95 @@ class GenerateDigestPolishIntegrationTest(unittest.TestCase):
         self.assertIn("<!-- polished -->", html)
 
 
+class RecessAndRestartGuardTest(unittest.TestCase):
+    """Регресс инцидента 30.06.2026 (дело 2-857/2026): решённое дело не должно
+    «воскресать» как «рассмотрение начато с начала» из-за ретроактивной правки
+    судом старого события; перерыв (ст. 157 ГПК) показывается отдельной строкой,
+    а не как отложение."""
+
+    def _fi_change(self, types, details):
+        return {
+            "case": "2-857/2026",
+            "court": "Нижневартовский городской суд",
+            "plaintiff": "Володин Степан Александрович",
+            "defendant": "ПАО Сбербанк",
+            "bank_role": "Ответчик",
+            "category": "услуг кредитных организаций",
+            "type": types,
+            "details": {
+                "link": "247736247|uid",
+                "court_domain": "vartovgor--hmao.sudrf.ru",
+                **details,
+            },
+        }
+
+    def test_is_latest_session_event_false_for_backedit(self):
+        # Суд дописал «начато с начала» в старое событие 30.09.2025, тогда как
+        # последнее заседание — 25.06.2026. Это не свежий перезапуск.
+        events = [
+            {"date": "30.09.2025",
+             "text": "Предварительное судебное заседание. 10:00. 307. "
+                     "Рассмотрение дела начато с начала. 24.08.2025"},
+            {"date": "25.06.2026",
+             "text": "Судебное заседание. 09:45. 307. Вынесено решение по делу. "
+                     "ОТКАЗАНО в удовлетворении иска. 25.06.2026"},
+        ]
+        ev = uc._events_newly_match([], events, uc._RESTART_RE)
+        self.assertIsNotNone(ev)
+        self.assertFalse(uc._is_latest_session_event(ev, events))
+
+    def test_is_latest_session_event_true_for_fresh_restart(self):
+        events = [
+            {"date": "01.02.2026",
+             "text": "Судебное заседание. 10:00. 307. 01.01.2026"},
+            {"date": "01.06.2026",
+             "text": "Судебное заседание. 11:00. 307. "
+                     "Рассмотрение дела начато с начала. 02.02.2026"},
+        ]
+        ev = uc._events_newly_match([], events, uc._RESTART_RE)
+        self.assertIsNotNone(ev)
+        self.assertTrue(uc._is_latest_session_event(ev, events))
+
+    def test_recess_regex(self):
+        self.assertTrue(uc._RECESS_RE.search("Судебное заседание. Объявлен перерыв."))
+        self.assertFalse(uc._RECESS_RE.search("Судебное заседание. Отложено."))
+
+    def test_recess_renders_as_recess_line(self):
+        html = uc.generate_template_digest(
+            new_cases=[], changes=[], fi_changes=[self._fi_change(
+                ["fi_hearing_recess"],
+                {"hearing_date": "25.06.2026", "hearing_time": "09:45",
+                 "hearing_type": "заседание"},
+            )],
+            total_active_fi=1,
+        )
+        self.assertIn("в заседании объявлен перерыв до 25.06.2026 09:45", html)
+        self.assertNotIn("отложено на 25.06.2026", html)
+        self.assertNotIn("рассмотрение начато с начала", html)
+
+    def test_restart_future_date_shown(self):
+        html = uc.generate_template_digest(
+            new_cases=[], changes=[], fi_changes=[self._fi_change(
+                ["fi_hearing_restart"],
+                {"restart_date": "10.07.2026",
+                 "next_hearing_date": "20.08.2026", "next_hearing_time": "10:00"},
+            )],
+            total_active_fi=1,
+        )
+        self.assertIn("рассмотрение начато с начала", html)
+        self.assertIn("20.08.2026", html)
+
+    def test_restart_without_next_hearing_has_no_following_session(self):
+        # Future-gate отсёк прошедшую дату → поля next_hearing_date нет.
+        html = uc.generate_template_digest(
+            new_cases=[], changes=[], fi_changes=[self._fi_change(
+                ["fi_hearing_restart"], {"restart_date": "30.09.2025"},
+            )],
+            total_active_fi=1,
+        )
+        self.assertIn("рассмотрение начато с начала", html)
+        self.assertNotIn("след. заседание", html)
+
+
 if __name__ == "__main__":
     unittest.main()
