@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -348,6 +349,87 @@ class TestParseCaseCardCassation:
         )
         info = uc.parse_case_card(html)
         assert info["_fi_appeal_filed"] is True
+
+
+# ── parse_case_card: вложенная вкладка «Обжалование» (регресс 2-3063/2026) ────
+
+class TestParseCaseCardAppealTabNested:
+    """Регресс дела 2-3063/2026: вкладка «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ»
+    приходит вложенными таблицами — внешняя «ЖАЛОБА № N» (со строкой «Вид
+    жалобы → Апелляционная/Кассационная», задающей current_kind) + вложенная
+    «ДВИЖЕНИЕ ЖАЛОБЫ» со строкой «Регистрация жалобы». Плоский TableExtractor
+    терял внешнюю таблицу (её перезатирала вложенная), поэтому current_kind
+    оставался None и подача жалобы пропадала МОЛЧА. Фикстура воспроизводит ту
+    самую вёрстку (блок «ЖАЛОБА» скопирован дословно с реальной карточки)."""
+
+    FIXTURE = "case_card_appeal_nested.html"
+
+    def test_nested_extractor_keeps_outer_and_inner_tables(self):
+        """TableExtractor должен вернуть ОБЕ вложенные таблицы: внешнюю
+        (с «Вид жалобы») и вложенную (с «Регистрация жалобы»)."""
+        html = _read_fixture(self.FIXTURE)
+        tables = uc.extract_tables(html)
+        flat = [
+            " ".join(uc.cell_text(c) for row in t for c in row).lower()
+            for t in tables
+        ]
+        assert any("вид жалобы" in f for f in flat), "внешняя таблица «ЖАЛОБА» потеряна"
+        assert any("регистрация жалоб" in f for f in flat), "вложенная «ДВИЖЕНИЕ ЖАЛОБЫ» потеряна"
+
+    def test_appeal_filing_detected_from_nested_tab(self):
+        html = _read_fixture(self.FIXTURE)
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is True
+        assert info["_fi_appeal_filed_date"] == "25.06.2026"
+        assert info["_fi_appellant_raw"] == "ИСТЕЦ"
+        # Это апелляция, а не кассация.
+        assert info["_fi_cassation_filed"] is False
+
+    def test_cassation_filing_detected_from_nested_tab(self):
+        """Та же вёрстка, но вид жалобы — кассационная: ловится касс. флаг,
+        апелляция при этом НЕ выставляется."""
+        html = _read_fixture(self.FIXTURE).replace(
+            "Апелляционная жалоба (на не вступивший в силу судебный акт)",
+            "Кассационная жалоба (представление)",
+        )
+        info = uc.parse_case_card(html)
+        assert info["_fi_cassation_filed"] is True
+        assert info["_fi_cassation_filed_date"] == "25.06.2026"
+        assert info["_fi_appeal_filed"] is False
+
+    def test_guard_warns_when_complaint_kind_unrecognized(self, caplog):
+        """Рантайм-страж: «Регистрация жалобы» есть, текст «апелляционная»
+        в карточке присутствует, но лейбл «Вид жалобы» сломан (имитация новой
+        вёрстки) → current_kind не выставился, флаг пуст → пишется warning."""
+        html = _read_fixture(self.FIXTURE).replace(
+            "<b>Вид жалобы (представления)</b>",
+            "<b>Тип жалобы (представления)</b>",  # парсер такой лейбл не узнаёт
+        )
+        with caplog.at_level(logging.WARNING, logger="court-monitor"):
+            info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is False
+        assert info["_fi_cassation_filed"] is False
+        assert "вид жалобы не распознан" in caplog.text.lower()
+
+    def test_guard_silent_when_appeal_recognized(self, caplog):
+        """Страж молчит, когда подача жалобы корректно распознана."""
+        html = _read_fixture(self.FIXTURE)
+        with caplog.at_level(logging.WARNING, logger="court-monitor"):
+            uc.parse_case_card(html)
+        assert "вид жалобы не распознан" not in caplog.text.lower()
+
+    def test_guard_silent_for_private_complaint(self, caplog):
+        """Анти-шум: частная жалоба (на определение) тоже даёт «Регистрация
+        жалобы», но это не апел./касс. подача — страж не должен срабатывать."""
+        html = _read_fixture(self.FIXTURE).replace(
+            "Апелляционная жалоба (на не вступивший в силу судебный акт)",
+            "Частная жалоба",
+        )
+        with caplog.at_level(logging.WARNING, logger="court-monitor"):
+            info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is False
+        assert info["_fi_cassation_filed"] is False
+        assert "вид жалобы не распознан" not in caplog.text.lower()
 
 
 # ── State machine жизненного цикла ───────────────────────────────────────────

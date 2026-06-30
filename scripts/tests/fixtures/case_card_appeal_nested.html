@@ -1,0 +1,47 @@
+<html><head><title>Дело</title></head><body>
+<!--
+  Синтетическая фикстура карточки 1-й инстанции для регресс-теста вложенных
+  таблиц вкладки «ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)».
+
+  Стороны/УИД/судья обезличены. Блок «ЖАЛОБА № 1» (div#cont4) скопирован
+  ДОСЛОВНО с реальной карточки (дело 2-3063/2026, Нижневартовский горсуд) —
+  именно его вложенная структура (внешняя таблица «ЖАЛОБА № N» + вложенная
+  «ДВИЖЕНИЕ ЖАЛОБЫ») воспроизводит баг, при котором плоский TableExtractor
+  терял внешнюю таблицу и подача апел./касс. жалобы пропадала. Персональных
+  данных во фрагменте нет — только роль «ИСТЕЦ» и даты регистрации жалобы.
+-->
+<ul class='tabs'>
+  <li id='tab1' class='sel'><a href='#' onclick='index(1, 4); return false;'>&nbsp;ДЕЛО&nbsp;</a></li>
+  <li id='tab2' class='nonsel'><a href='#' onclick='index(2, 4); return false;'>&nbsp;ДВИЖЕНИЕ ДЕЛА&nbsp;</a></li>
+  <li id='tab3' class='nonsel'><a href='#' onclick='index(3, 4); return false;'>&nbsp;СТОРОНЫ ПО ДЕЛУ (ТРЕТЬИ ЛИЦА)&nbsp;</a></li>
+  <li id='tab4' class='nonsel'><a href='#' onclick='index(4, 4); return false;'>&nbsp;ОБЖАЛОВАНИЕ РЕШЕНИЙ, ОПРЕДЕЛЕНИЙ (ПОСТ.)&nbsp;</a></li>
+</ul>
+<div id='cont1'>
+  <table width='100%' border='0' cellpadding='3' cellspacing='0' id='tablcont' class='table'>
+    <tr><td><b>Уникальный идентификатор дела</b></td><td>86RS0000-01-2025-000001-01</td></tr>
+    <tr><td><b>Дата поступления</b></td><td>12.12.2025</td></tr>
+    <tr><td><b>Категория дела</b></td><td>Прочие исковые дела&nbsp;&rarr;прочие (прочие исковые дела)</td></tr>
+    <tr><td><b>Судья</b></td><td>Иванов И.И.</td></tr>
+    <tr><td><b>Дата рассмотрения</b></td><td>11.06.2026</td></tr>
+    <tr><td><b>Результат рассмотрения</b></td><td>Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО</td></tr>
+  </table>
+</div>
+<div id='cont2' style='display: none;'>
+  <table width='100%' border='0' cellpadding='3' cellspacing='0' id='tablcont' class='table'>
+    <tr><th colspan=8><b>ДВИЖЕНИЕ ДЕЛА</b></th></tr>
+    <tr><td><b>Наименование события</b></td><td><b>Дата</b></td><td><b>Время</b></td><td><b>Место проведения</b></td><td><b>Результат события</b></td><td><b>Основание для выбранного результата события</b></td><td><b>Примечание</b></td><td><b>Дата размещения</b></td></tr>
+    <tr><td>Регистрация иска (заявления, жалобы) в суде</td><td>12.12.2025</td><td>14:39</td><td></td><td></td><td></td><td></td><td>12.12.2025</td></tr>
+    <tr><td>Судебное заседание</td><td>11.06.2026</td><td>15:30</td><td>207</td><td>Вынесено решение по делу</td><td>Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО</td><td></td><td>24.04.2026</td></tr>
+    <tr><td>Изготовлено мотивированное решение в окончательной форме</td><td>19.06.2026</td><td>14:19</td><td></td><td></td><td></td><td></td><td>25.06.2026</td></tr>
+  </table>
+</div>
+<div id='cont3' style='display: none;'>
+  <table width='100%' border='0' cellpadding='3' cellspacing='0' id='tablcont' class='table'>
+    <tr><th colspan=6><b>СТОРОНЫ ПО ДЕЛУ (ТРЕТЬИ ЛИЦА)</b></th></tr>
+    <tr><td><b>Вид лица, участвующего в деле</b></td><td><b>Фамилия / наименование</b></td><td><b>ИНН</b></td><td><b>КПП</b></td><td><b>ОГРН</b></td><td><b>ОГРНИП</b></td></tr>
+    <tr><td>ОТВЕТЧИК</td><td>ПАО Сбербанк</td><td>7707083893</td><td></td><td>1027700132195</td><td></td></tr>
+    <tr><td>ИСТЕЦ</td><td>Истцов Истец Истцович</td><td></td><td></td><td></td><td></td></tr>
+  </table>
+</div>
+<div id='cont4' style='display: none; padding: 0 15px 15px 15px;'><div style='float: right; margin: 20px 0; font-size: 12px'>* отсортировано по дате регистрации жалобы</div><table width='100%' border='0' cellpadding='3' cellspacing='0' id='tablcont' class='table'><tr><th class='vert-align' colspan=2><b>ЖАЛОБА № 1*</b></th></tr><tr><td><b>Вид жалобы (представления)</b></td><td>Апелляционная жалоба (на не вступивший в силу судебный акт)&nbsp;</td></tr><tr><td><b>Заявитель</b></td><td>ИСТЕЦ&nbsp;</td></tr><tr><th colspan=2 align='center'><b>---=== ДВИЖЕНИЕ ЖАЛОБЫ ===---</b></th></tr><tr><td colspan=2><table width='100%' border='0' cellpadding='3' cellspacing='0' id='tablcont' class='table'><thead class='vert-align'><tr><td class='vert-align'><b>Событие</b></td><td class='vert-align'><b>Дата</b></td><td class='vert-align'><b>Результат</b></td><td class='vert-align'><b>Основание для выбранного результата</b></td><td class='vert-align'><b>Примечание</b></td><td align='center'><b>Дата размещения</b>&nbsp;<span class='tooltipShow'><img src='/images/help.gif'><span>Информация о размещении событий в движении жалобы предоставляется на основе сведений, хранящихся в учетной системе судебного делопроизводства</span></span></td></tr></thead><tr><td class='vert-align'>Регистрация жалобы (представления) в суде</td><td class='vert-align'>25.06.2026</td><td class='vert-align'></td><td class='vert-align'></td><td class='vert-align'></td><td class='vert-align'>26.06.2026</td></tr></table></td></tr></table><br></div>
+</body></html>

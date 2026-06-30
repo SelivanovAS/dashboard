@@ -1908,29 +1908,40 @@ def bank_side_outcome(role: str, appellant: str, verdict_label: str) -> str:
 # ── Простой HTML-парсер для извлечения таблиц ────────────────────────────────
 
 class TableExtractor(HTMLParser):
-    """Извлекает все <table> со страницы как списки строк (списков ячеек)."""
+    """Извлекает все <table> со страницы как списки строк (списков ячеек).
+
+    Поддерживает вложенные таблицы через стеки (`_tstack`/`_rstack`). Таблица
+    добавляется в `self.tables` в момент ОТКРЫТИЯ — это сохраняет порядок
+    документа (внешняя раньше внутренней). Критично для разбора вкладки
+    «Обжалование»: внешняя таблица «ЖАЛОБА № N» (со строкой «Вид жалобы →
+    Апелляционная/Кассационная», задающей `current_kind`) должна попасть в
+    `self.tables` раньше вложенной таблицы «ДВИЖЕНИЕ ЖАЛОБЫ» со строкой
+    «Регистрация жалобы». Плоская версия (один `_current_table`) теряла внешнюю
+    таблицу — её строки перезатирались вложенной, и подача жалобы пропадала.
+    """
 
     def __init__(self):
         super().__init__()
         self.tables = []
-        self._current_table = None
-        self._current_row = None
-        self._current_cell = None
+        self._tstack = []          # стек таблиц (список рядов) по глубине вложенности
+        self._rstack = []          # текущий ряд на каждом уровне (или None)
         self._in_cell = False
-        self._cell_tag = None
+        self._current_cell = None
         # Для извлечения href из ссылок внутри ячеек
         self._current_href = ""
 
     def handle_starttag(self, tag, attrs):
         attrs_dict = dict(attrs)
         if tag == "table":
-            self._current_table = []
-        elif tag == "tr" and self._current_table is not None:
-            self._current_row = []
-        elif tag in ("td", "th") and self._current_row is not None:
+            new_table = []
+            self.tables.append(new_table)   # порядок документа: внешняя раньше внутренней
+            self._tstack.append(new_table)
+            self._rstack.append(None)
+        elif tag == "tr" and self._tstack:
+            self._rstack[-1] = []
+        elif tag in ("td", "th") and self._tstack and self._rstack[-1] is not None:
             self._current_cell = ""
             self._in_cell = True
-            self._cell_tag = tag
             self._current_href = ""
         elif tag == "a" and self._in_cell:
             self._current_href = attrs_dict.get("href", "")
@@ -1945,17 +1956,16 @@ class TableExtractor(HTMLParser):
             # Сохраняем href если есть, через специальный маркер
             if self._current_href:
                 cell_text = f"{cell_text}\x00HREF:{self._current_href}"
-            if self._current_row is not None:
-                self._current_row.append(cell_text)
+            if self._rstack and self._rstack[-1] is not None:
+                self._rstack[-1].append(cell_text)
             self._in_cell = False
             self._current_cell = None
-        elif tag == "tr" and self._current_row is not None:
-            if self._current_table is not None:
-                self._current_table.append(self._current_row)
-            self._current_row = None
-        elif tag == "table" and self._current_table is not None:
-            self.tables.append(self._current_table)
-            self._current_table = None
+        elif tag == "tr" and self._tstack and self._rstack[-1] is not None:
+            self._tstack[-1].append(self._rstack[-1])
+            self._rstack[-1] = None
+        elif tag == "table" and self._tstack:
+            self._tstack.pop()
+            self._rstack.pop()
 
 
 def extract_tables(html: str) -> list:
@@ -3024,6 +3034,32 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                     info["_fi_sent_to_appeal_date"] = effective_date
                 continue
 
+    # ── Рантайм-страж: подача апел./касс. жалобы есть, но не распознана ──
+    # Если в карточке есть строка «Регистрация жалобы» (жалоба фактически подана
+    # через 1-ю инст.) И где-то рядом фигурирует «апелляционн»/«кассационн», но
+    # ни апел., ни касс. флаг не выставлен — значит, вид жалобы не определился
+    # (`current_kind` остался None, напр. из-за новой вёрстки вкладки
+    # «Обжалование»). Это ровно тот тихий сбой, что прятал подачу апелляции по
+    # делу 2-3063/2026. Логируем предупреждение, чтобы будущие неучтённые
+    # варианты вёрстки не пропадали молча. Скан независим от основного цикла
+    # (тот пропускает строки при `current_kind not in (...)`).
+    # NB1: regex требует «регистрац…» вплотную к «жалоб», поэтому строка движения
+    #   дела «Регистрация иска (заявления, жалобы)» сюда не попадает.
+    # NB2: маркер «апелляционн|кассационн» отсекает ЧАСТНЫЕ жалобы (на определения)
+    #   — их мы как подачу апел./касс. не трекаем, и страж по ним молчит.
+    if not (info["_fi_appeal_filed"] or info["_fi_cassation_filed"]):
+        all_text = " ".join(
+            cell_text(c) for tbl in tables for row in tbl for c in row
+        ).lower()
+        saw_complaint_registration = bool(re.search(r'регистрац\w*\s+жалоб', all_text))
+        looks_like_appeal_or_cassation = bool(re.search(r'апелляционн|кассационн', all_text))
+        if saw_complaint_registration and looks_like_appeal_or_cassation:
+            ident = info.get("УИД") or info.get("case_number") or "?"
+            log.warning(
+                f"Карточка {ident}: найдена «Регистрация жалобы» (апел./касс.), но "
+                f"вид жалобы не распознан — флаг не выставлен; проверить вёрстку "
+                f"вкладки «Обжалование решений»."
+            )
 
     # Доимплить «Результат», если карточка sudrf оставила его пустым,
     # а в «Движении дела» уже есть событие «Вынесено [заочное] решение по делу».
