@@ -1077,6 +1077,75 @@ class TestRotateColdArchive:
         assert keep[0]["archived_at"]  # бэкфилл записан
 
 
+# ── update_parse_health (детектор молчаливой поломки парсеров) ───────────────
+
+class TestUpdateParseHealth:
+    @staticmethod
+    def _fresh():
+        return {"version": 1, "updated_at": "", "sources": {}}
+
+    @staticmethod
+    def _warm(state, key="fi:x", value=6, runs=5):
+        for _ in range(runs):
+            state, _ = uc.update_parse_health({key: value}, state=state)
+        return state
+
+    def test_first_run_no_alerts(self):
+        state, alerts = uc.update_parse_health({"fi:x": 5}, state=self._fresh())
+        assert alerts == []
+        assert state["sources"]["fi:x"]["counts"] == [5]
+
+    def test_zero_after_healthy_history_alerts(self):
+        state = self._warm(self._fresh())
+        state, alerts = uc.update_parse_health(
+            {"fi:x": 0}, {"fi:x": "Сургутский горсуд"}, state
+        )
+        assert len(alerts) == 1
+        assert "Сургутский горсуд" in alerts[0]
+        assert "0 результатов" in alerts[0]
+
+    def test_zero_streak_alerts_on_first_and_third_only(self):
+        state = self._warm(self._fresh())
+        state, a1 = uc.update_parse_health({"fi:x": 0}, state=state)
+        state, a2 = uc.update_parse_health({"fi:x": 0}, state=state)
+        state, a3 = uc.update_parse_health({"fi:x": 0}, state=state)
+        state, a4 = uc.update_parse_health({"fi:x": 0}, state=state)
+        assert len(a1) == 1 and a2 == [] and len(a3) == 1 and a4 == []
+
+    def test_recovery_alert_after_zero_streak(self):
+        state = self._warm(self._fresh())
+        state, _ = uc.update_parse_health({"fi:x": 0}, state=state)
+        state, alerts = uc.update_parse_health({"fi:x": 4}, state=state)
+        assert len(alerts) == 1 and "снова отдаёт" in alerts[0]
+        assert state["sources"]["fi:x"]["zero_streak"] == 0
+
+    def test_always_zero_source_never_alerts(self):
+        """Суд, у которого 0 — норма (нет дел банка на первой странице)."""
+        state = self._fresh()
+        for _ in range(6):
+            state, alerts = uc.update_parse_health({"fi:tiny": 0}, state=state)
+            assert alerts == []
+
+    def test_fetch_fail_alerts_on_third_run(self):
+        state = self._warm(self._fresh())
+        state, a1 = uc.update_parse_health({"fi:x": None}, state=state)
+        state, a2 = uc.update_parse_health({"fi:x": None}, state=state)
+        state, a3 = uc.update_parse_health({"fi:x": None}, state=state)
+        assert a1 == [] and a2 == []
+        assert len(a3) == 1 and "не загружается" in a3[0]
+
+    def test_global_zero_alert(self):
+        state = self._fresh()
+        for _ in range(3):
+            state, _ = uc.update_parse_health(
+                {"fi:x": 5, "fi:y": 7}, state=state
+            )
+        state, alerts = uc.update_parse_health(
+            {"fi:x": 0, "fi:y": None}, state=state
+        )
+        assert any("ВСЕ источники" in a for a in alerts)
+
+
 # ── card_url ─────────────────────────────────────────────────────────────────
 
 class TestCardUrl:
