@@ -13,7 +13,20 @@
 
 ## Главные файлы
 
-- [scripts/update_cases.py](scripts/update_cases.py) — **монолит** (~13 500 строк): парсеры судов, LLM-дайджесты, Telegram, CLI.
+- [scripts/update_cases.py](scripts/update_cases.py) — **тонкий фасад CLI** (~220 строк): разбор argv + ре-экспорт прежних имён. Весь код — в пакете `scripts/court_monitor/` (распил монолита, см. [docs/Распил_монолита_контекст.md](docs/Распил_монолита_контекст.md)).
+- `scripts/court_monitor/` — **пакет модулей** (читать только нужный):
+  - [config.py](scripts/court_monitor/config.py) — env-константы, пути данных, окна state-machine, `log`, `METRICS`. Патчабельные константы код читает ТОЛЬКО как `config.X` — тесты патчат `monkeypatch.setattr(config, ...)`.
+  - [textutil.py](scripts/court_monitor/textutil.py) — даты, HTML-очистка, экранирование, сокращение имён сторон/судов, производственный календарь.
+  - [netutil.py](scripts/court_monitor/netutil.py) — `session`, `fetch_page` (ретраи, win-1251), `polite_delay`.
+  - [courts.py](scripts/court_monitor/courts.py) — `CourtConfig`, реестры судов (апелляция, 20 судов 1-й инст., 7kas), матчер ХМАО, URL карточек.
+  - [storage.py](scripts/court_monitor/storage.py) — cases.json/CSV, `.digested_acts`, `.cassation_acts`, кэш пересказов.
+  - [health.py](scripts/court_monitor/health.py) — журнал здоровья парсеров + детектор молчаливой поломки.
+  - [lifecycle.py](scripts/court_monitor/lifecycle.py) — классификация событий карточки, state machine стадий, дедуп, архив.
+  - [parsing/](scripts/court_monitor/parsing/__init__.py) — `tables.py` (TableExtractor), `search.py` (поисковая выдача), `cards.py` (карточки дел), `cassation.py` (7kas).
+  - [linking.py](scripts/court_monitor/linking.py) — связка FI ↔ апелляция ↔ кассация, discovery, реактивация, ротация архива.
+  - [digest/](scripts/court_monitor/digest/__init__.py) — `llm.py` (Claude/GigaChat, промпты — патч-цели тестов живут тут), `postprocess.py` (валидация/чистка HTML), `template.py` (программный рендер), `core.py` (диспетчер `generate_digest`).
+  - [delivery.py](scripts/court_monitor/delivery.py) — Telegram, Web Push с watchlist-персонализацией, алерты.
+  - [runs.py](scripts/court_monitor/runs.py) — `main_json` и остальные режимы прогона, `update_active_cases`.
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
 - `scripts/tests/` + `tests/` — pytest-набор (230+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
@@ -33,40 +46,42 @@
 - [.github/workflows/digest_only_gigachat.yml](.github/workflows/digest_only_gigachat.yml) — ручной дайджест через GigaChat (альтернативный LLM).
 - [README.md](README.md) — подробная документация на русском (дублирует часть этого файла).
 
-## Ключевые точки в update_cases.py
+## Ключевые точки в пакете court_monitor
 
 | Что | Где |
 |-----|-----|
-| `CourtConfig` (dataclass + `search_url`/`card_url`) | [scripts/update_cases.py:51](scripts/update_cases.py:51) |
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:111](scripts/update_cases.py:111) |
-| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:119](scripts/update_cases.py:119) |
-| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:146](scripts/update_cases.py:146) |
-| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:162](scripts/update_cases.py:162) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/update_cases.py:242](scripts/update_cases.py:242) |
-| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:300](scripts/update_cases.py:300) |
-| `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/update_cases.py:783](scripts/update_cases.py:783) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:921](scripts/update_cases.py:921) |
-| `reactivate_archived_first_instance` (возврат из архива) | [scripts/update_cases.py:4359](scripts/update_cases.py:4359) |
-| `rotate_cold_archive` (горячий → холодный архив) | [scripts/update_cases.py:4979](scripts/update_cases.py:4979) |
-| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:2091](scripts/update_cases.py:2091) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/update_cases.py:2703](scripts/update_cases.py:2703) |
-| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:2524](scripts/update_cases.py:2524) |
-| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:3419](scripts/update_cases.py:3419) |
-| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:3600](scripts/update_cases.py:3600) |
-| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:4291](scripts/update_cases.py:4291) |
-| `link_cases` (FI ↔ апелляция) | [scripts/update_cases.py:4110](scripts/update_cases.py:4110) |
-| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/update_cases.py:4505](scripts/update_cases.py:4505) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/update_cases.py:5047](scripts/update_cases.py:5047) |
-| `main_json` (оркестрация полного прогона) | [scripts/update_cases.py:11524](scripts/update_cases.py:11524) |
-| `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:5652](scripts/update_cases.py:5652) |
-| `def generate_digest` — диспетчер дайджеста | [scripts/update_cases.py:6799](scripts/update_cases.py:6799) |
-| `summarize_act_motivation` — LLM-пересказ акта | [scripts/update_cases.py:6070](scripts/update_cases.py:6070) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/update_cases.py:6267](scripts/update_cases.py:6267) |
-| Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | [scripts/update_cases.py:8191](scripts/update_cases.py:8191)–9400 |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/update_cases.py:6550](scripts/update_cases.py:6550) |
-| `def generate_template_digest` — программный рендер | [scripts/update_cases.py:9441](scripts/update_cases.py:9441) |
-| `send_telegram` / `send_web_push` (доставка) | [scripts/update_cases.py:10927](scripts/update_cases.py:10927) / [10742](scripts/update_cases.py:10742) |
-| `_make_per_sub_callback` / `_filter_events_by_watchlist` (персонализация push) | [scripts/update_cases.py:10617](scripts/update_cases.py:10617) / [10423](scripts/update_cases.py:10423) |
+| dataclass конфига суда: `CourtConfig` | [scripts/court_monitor/courts.py:29](scripts/court_monitor/courts.py:29) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/court_monitor/courts.py:88](scripts/court_monitor/courts.py:88) |
+| массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:96](scripts/court_monitor/courts.py:96) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:123](scripts/court_monitor/courts.py:123) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:139](scripts/court_monitor/courts.py:139) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:87](scripts/court_monitor/config.py:87) |
+| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
+| `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:410](scripts/court_monitor/lifecycle.py:410) |
+| `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:273](scripts/court_monitor/linking.py:273) |
+| `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:835](scripts/court_monitor/linking.py:835) |
+| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:113](scripts/court_monitor/parsing/cards.py:113) |
+| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
+| `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
+| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
+| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:205](scripts/court_monitor/linking.py:205) |
+| `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:48](scripts/court_monitor/linking.py:48) |
+| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:419](scripts/court_monitor/linking.py:419) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:83](scripts/court_monitor/runs.py:83) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:834](scripts/court_monitor/runs.py:834) |
+| `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
+| `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
+| `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:688](scripts/court_monitor/digest/llm.py:688) |
+| Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:827](scripts/court_monitor/digest/llm.py:827) |
+| `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
+| доставка: `send_telegram` | [scripts/court_monitor/delivery.py:615](scripts/court_monitor/delivery.py:615) |
+| PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:430](scripts/court_monitor/delivery.py:430) |
+| персонализация push: `_make_per_sub_callback` | [scripts/court_monitor/delivery.py:305](scripts/court_monitor/delivery.py:305) |
+| фильтр по watchlist: `_filter_events_by_watchlist` | [scripts/court_monitor/delivery.py:111](scripts/court_monitor/delivery.py:111) |
 
 ## Схема cases.json
 
@@ -128,7 +143,7 @@
 | `cassation` | карточка 7kas (гражданская кассация) | `outcome=cassation_remanded` → `awaiting_relink` (re-link при появлении новой карточки в нижестоящей) · `act_published` + 30 дней / `decision_date` + 45 дней без акта → архив (для финальных исходов, кроме remanded) |
 | `awaiting_relink` | ничего (ждём карточку в нижестоящей инст.) | парсер 1-й инст. находит дело → `first_instance` (round +1, прошлые блоки в `history`) ИЛИ парсер апел. → `appeal` · бессрочно, не архивируется |
 
-Константы в [scripts/update_cases.py:279](scripts/update_cases.py:279):
+Константы в [scripts/court_monitor/config.py:78](scripts/court_monitor/config.py:78):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
@@ -186,7 +201,7 @@ python3 scripts/add_cases_manually.py
 # Тесты (оба каталога одним прогоном, см. pytest.ini)
 python3 -m pytest
 
-# После правок update_cases.py: обновить якоря строк в docs/technical и CLAUDE.md
+# После правок модулей court_monitor: обновить якоря строк в docs/technical и CLAUDE.md
 python3 scripts/refresh_doc_anchors.py --write
 
 # Зависимости
@@ -214,7 +229,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 - **Telegram:** все workflow'и шлют в личный чат (`TELEGRAM_CHAT_ID_TEST`) по умолчанию. Чтобы продублировать в корпоративную группу — поставить галку `to_group` в UI Run workflow. Текст дайджеста в Telegram **общий**, не персонализированный.
 - **PWA push:** `update_cases.yml` (крон) шлёт всем подписчикам PWA. Тестовые workflow'и (`test_digest.yml`, `digest_only_gigachat.yml`) шлют push **только устройствам-владельцам** по умолчанию, чтобы не спамить коллегам прототипами. У `test_digest.yml` есть галка «push_all» — отправит на все устройства. Чтобы пометить своё устройство владельцем — открыть PWA по URL `https://selivanovas.github.io/dashboard/sberbank_dashboard.html?owner=<OWNER_SECRET>` (один раз).
-- **Персонализация push по watchlist (`_per_sub` callback):** push-payload собирается под каждого подписчика отдельно через фабрику `_make_per_sub_callback` ([scripts/update_cases.py:4128](scripts/update_cases.py:4128)). Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) — общесистемный сигнал, шлются всем; изменения и переходы стадий — только если дело в watchlist подписчика. Click_url для подписчиков с watchlist — `?digest=open&mine=1`. Используется в основном кроне (`main_json`), `--replay-last`, `--push-last-digest`.
+- **Персонализация push по watchlist (`_per_sub` callback):** push-payload собирается под каждого подписчика отдельно через фабрику `_make_per_sub_callback` ([scripts/court_monitor/delivery.py:305](scripts/court_monitor/delivery.py:305)). Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) — общесистемный сигнал, шлются всем; изменения и переходы стадий — только если дело в watchlist подписчика. Click_url для подписчиков с watchlist — `?digest=open&mine=1`. Используется в основном кроне (`main_json`), `--replay-last`, `--push-last-digest`.
 
 ## Админка подписчиков
 
@@ -233,7 +248,7 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 
 **Тестовый push отложен** — эндпоинт `/admin/test-push` и VAPID-utility в `worker.js` готовы, но кнопка из UI убрана: для активации нужен `VAPID_PRIVATE_KEY` в Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`), которого сейчас нет. Чтобы вернуть фичу — положить PEM и добавить кнопку обратно в `renderCard`.
 
-**Журнал последней push-рассылки** — на каждой карточке раскрываемый блок «🪞 Последний push для этой подписки». Показывает variant (personal/general/skip/broadcast), title, body, click_url, timestamp. Источник — [data/last_personal_pushes.json](data/last_personal_pushes.json), перезаписывается каждый прогон `send_web_push` в `update_cases.py`. Если по подписке уход push'а в этом прогоне был skipped (нет событий по watchlist) — блок показывает «Push не отправлен — нет событий по watchlist».
+**Журнал последней push-рассылки** — на каждой карточке раскрываемый блок «🪞 Последний push для этой подписки». Показывает variant (personal/general/skip/broadcast), title, body, click_url, timestamp. Источник — [data/last_personal_pushes.json](data/last_personal_pushes.json), перезаписывается каждый прогон `send_web_push` в `court_monitor/delivery.py`. Если по подписке уход push'а в этом прогоне был skipped (нет событий по watchlist) — блок показывает «Push не отправлен — нет событий по watchlist».
 
 ## Подписки на дела (watchlist) на фронте
 
@@ -269,7 +284,7 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 
 Если задача касается:
 - Конкретного парсера одного суда — читать `CourtConfig` в `FIRST_INSTANCE_COURTS`.
-- Логики парсинга таблиц → `TableExtractor` ([scripts/update_cases.py:599](scripts/update_cases.py:599)).
+- Логики парсинга таблиц → `TableExtractor` ([scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13)).
 - Фронтенда (фильтры, рендер) → [app.js](app.js).
 - Конкретного workflow → соответствующий `.github/workflows/*.yml`.
 

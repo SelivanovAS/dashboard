@@ -10,17 +10,17 @@ Actions, какие есть вспомогательные скрипты и т
 ## Режимы запуска (CLI)
 
 `update_cases.py` выбирает режим по флагу в `sys.argv`
-([__main__, 13611](../../scripts/update_cases.py#L13611)). Любое необработанное
+([__main__, 13611](../../scripts/update_cases.py#L177)). Любое необработанное
 исключение оборачивается в `send_crash_alert` → уходит в Telegram.
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([11524](../../scripts/update_cases.py#L11524)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([11149](../../scripts/update_cases.py#L11149)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([13557](../../scripts/update_cases.py#L13557)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([13282](../../scripts/update_cases.py#L13282)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([13430](../../scripts/update_cases.py#L13430)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([11435](../../scripts/update_cases.py#L11435)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([834](../../scripts/court_monitor/runs.py#L834)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([500](../../scripts/court_monitor/runs.py#L500)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([2865](../../scripts/court_monitor/runs.py#L2865)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([2590](../../scripts/court_monitor/runs.py#L2590)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([2738](../../scripts/court_monitor/runs.py#L2738)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([747](../../scripts/court_monitor/runs.py#L747)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -52,8 +52,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([11108](../../scripts/update_cases.py#L11108)) проверяет
-наличие ключей на старте; `check_court_available` ([11137](../../scripts/update_cases.py#L11137))
+`validate_environment` ([459](../../scripts/court_monitor/runs.py#L459)) проверяет
+наличие ключей на старте; `check_court_available` ([488](../../scripts/court_monitor/runs.py#L488))
 — доступность сайта суда.
 
 ## GitHub Actions
@@ -113,7 +113,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | [`audit_watchlists.py`](../../scripts/audit_watchlists.py) | Аудит подписок: находит в watchlist'ах номера дел, которых нет в активном `cases.json`. Пишет отчёт, **ничего не меняет**. Запуск: `OWNER_SECRET=… python3 scripts/audit_watchlists.py`. |
 | [`find_cassation_orphans.py`](../../scripts/find_cassation_orphans.py) | Находит discovery-дубли кассации (эвристика: тот же суд/судья/ответчик). Печатает отчёт, не пишет в JSON. |
 | [`generate_icon.py`](../../scripts/generate_icon.py) | Генерация иконок PWA (squircle Sber green + «§»). Требует Pillow. |
-| [`refresh_doc_anchors.py`](../../scripts/refresh_doc_anchors.py) | Переанкеровка ссылок на строки монолита в docs/technical и CLAUDE.md после правок кода: `symbol` рядом со ссылкой → актуальная строка `def`/`class`. Dry-run по умолчанию, `--write` — применить. Главу 05 не трогает (она якорит места вызовов внутри `main_json`, а не def). |
+| [`refresh_doc_anchors.py`](../../scripts/refresh_doc_anchors.py) | Переанкеровка ссылок на строки кода в docs/technical и CLAUDE.md после правок модулей `court_monitor`: `symbol` рядом со ссылкой → актуальные файл и строка `def`/`class` (символ ищется по всем модулям пакета — переезд функции между модулями чинится автоматически). Dry-run по умолчанию, `--write` — применить. Главу 05 не трогает (она якорит места вызовов внутри `runs.main_json`, а не def). |
 
 ## Тесты
 
@@ -142,10 +142,10 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([11022](../../scripts/update_cases.py#L11022)) — итоговая
+- `log_run_summary` ([710](../../scripts/court_monitor/delivery.py#L710)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, отправленные сообщения,
   карточки-«огрызки»).
-- `send_crash_alert` ([11087](../../scripts/update_cases.py#L11087)) — падение
+- `send_crash_alert` ([775](../../scripts/court_monitor/delivery.py#L775)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в
