@@ -33,25 +33,29 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from update_cases import (  # noqa: E402
-    FIRST_INSTANCE_COURTS,
+# Импорт напрямую из модулей пакета court_monitor (бывший монолит
+# update_cases.py распилен — см. docs/Распил_монолита_контекст.md).
+from court_monitor.config import (  # noqa: E402
     JSON_PATH,
     SBER_PATTERNS,
-    _CASE_ID_RE,
-    _CASE_NUM_RE,
-    _CASE_UID_RE,
+    log,
+)
+from court_monitor.courts import FIRST_INSTANCE_COURTS  # noqa: E402
+from court_monitor.netutil import fetch_page, polite_delay  # noqa: E402
+from court_monitor.parsing import (  # noqa: E402
     _find_results_table,
     _parse_combined_cell,
     cell_href,
     cell_text,
     extract_tables,
-    fetch_page,
     is_subsidiary_only_case,
-    load_json,
-    log,
     parse_case_card,
-    polite_delay,
-    save_json,
+)
+from court_monitor.storage import load_json, save_json  # noqa: E402
+from court_monitor.textutil import (  # noqa: E402
+    _CASE_ID_RE,
+    _CASE_NUM_RE,
+    _CASE_UID_RE,
 )
 
 
