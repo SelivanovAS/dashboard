@@ -186,6 +186,9 @@ python3 scripts/add_cases_manually.py
 # Тесты (оба каталога одним прогоном, см. pytest.ini)
 python3 -m pytest
 
+# После правок update_cases.py: обновить якоря строк в docs/technical и CLAUDE.md
+python3 scripts/refresh_doc_anchors.py --write
+
 # Зависимости
 pip install -r scripts/requirements.txt
 
