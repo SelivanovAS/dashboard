@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-07-01T03:51:07",
-  "title_default": "Мониторинг дел — обновление",
-  "body_default": "📋 Изменений: 4",
+  "generated_at": "2026-07-02T11:55:28",
+  "title_default": "Мониторинг дел — тестовая рассылка",
+  "body_default": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
   "owner_only": false,
   "items": [
     {
@@ -25,10 +25,10 @@
         "2-193/2026",
         "33-4206/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 5 делам: 33-4811/2026, 33-4781/2026, 33-4759/2026 и ещё 2",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
@@ -38,7 +38,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -55,7 +55,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-3063/2026 (2-10385/2025;)",
+      "body": "Изменения по 4 делам: 33-4811/2026, 33-4781/2026, 33-4759/2026 и ещё 1",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -79,10 +79,10 @@
         "2-2216/2026",
         "2-7354/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 4 делам: 33-4811/2026, 33-4781/2026, 33-4759/2026 и ещё 1",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QO74bl1BkImPve7CzdafxLVujoUGYSAdwZt0-cYLyXZ1_Dpk4497Jp-mMANBW-xW4P8pdwFOzqoQDudWxg5jbPPw_IiFuVr2y5ZJhjRetZGjQNHGVvGUgSKoLMkXb--79a0knIWYLrwUJ1UMkM_zVwwMaSaZezmB8BfwjqNE8bM",
@@ -92,7 +92,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -103,7 +103,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -114,7 +114,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -126,10 +126,10 @@
         "2-1394/2026 (2-8383/2025;)",
         "2-2408/2026 (2-13712/2025;)"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 4 делам: 33-4811/2026, 33-4781/2026, 33-4759/2026 и ещё 1",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/eMo8GfnIBbM:APA91bHNZ8Sc-DTjW4grEkYo1TKSBOf6HXflM4kGp20yGeemNhbUyDcvinFdwu-kSM0N3mJwKal1eUMTapYY3-WsWy6Pk58KY2Jg9Wgzmm-hoEsPIA2I9yNEPUo9Bt02zUUwgJG3aAvi",
@@ -142,10 +142,10 @@
         "8Г-5513/2026",
         "2-3760/2025"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 4 делам: 33-4811/2026, 33-4781/2026, 33-4759/2026 и ещё 1",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/egDvQO7fZPc:APA91bH6yGYtXQdjkKHFnuitsEofc8l6CrJJcXiVkL97Of2JF-xktYGJmHpXvDsGzWFlGQZe16Y_sbVK8pf85XnDBIz3J5tnvHZ9fAOXL4zlFkeTsoR7srezoNtmNZTSeSheLWVfOsWp",
@@ -155,9 +155,9 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📋 Изменений: 4",
+      "body": "+4 нов. апелл. | 8 событ. | 3 отлож. | 3 суд. акт. | 1 засед. 1 инст.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-07-01T03:51:07"
+  "updated_at": "2026-07-02T11:55:28"
 }
