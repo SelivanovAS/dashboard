@@ -826,6 +826,89 @@ class TestLinkCassationCases:
         assert out == [] and discovered == [] and changes == []
 
 
+# ── link_cases (1-я инст. ↔ апелляция) ───────────────────────────────────────
+
+def _fi_case_for_link(cid: str = "2-100/2025", stage: str = "awaiting_appeal",
+                      appeal: dict | None = None) -> dict:
+    return {
+        "id": cid,
+        "current_stage": stage,
+        "plaintiff": "ПАО Сбербанк",
+        "defendant": "Смирнов Сергей Сергеевич",
+        "first_instance": {
+            "case_number": cid,
+            "status": "Решено",
+            "events": [{"date": "01.03.2026", "text": "Решение вынесено"}],
+            "appeal_filed_date": "10.03.2026",
+        },
+        "appeal": appeal,
+    }
+
+
+def _orphan_appeal_case(ap_num: str = "33-999/2026", **ap_over) -> dict:
+    ap = {"case_number": ap_num, "court": "Суд ХМАО-Югры",
+          "status": "В производстве", "events": [], "act_published": False}
+    ap.update(ap_over)
+    return {
+        "id": ap_num,
+        "current_stage": "appeal",
+        "plaintiff": "",
+        "defendant": "",
+        "first_instance": None,
+        "appeal": ap,
+    }
+
+
+class TestLinkCases:
+    def test_merge_appeal_into_fi_case(self):
+        fi_case = _fi_case_for_link()
+        orphan = _orphan_appeal_case()
+        cases = [orphan, fi_case]
+        out = uc.link_cases(cases, {"33-999/2026": "2-100/2025"})
+        assert len(out) == 1
+        merged = out[0]
+        assert merged["id"] == "2-100/2025"
+        assert merged["current_stage"] == "appeal"
+        assert merged["appeal"]["case_number"] == "33-999/2026"
+
+    def test_second_appeal_card_does_not_overwrite_substantive_appeal(self):
+        """Частная жалоба порождает вторую апел. карточку с тем же номером
+        1-й инст. — она не должна затирать апелляцию по существу (с актом)."""
+        fi_case = _fi_case_for_link(
+            stage="cassation_watch",
+            appeal={"case_number": "33-100/2026", "act_date": "01.05.2026",
+                    "act_published": True, "hearing_date": "20.04.2026",
+                    "events": [{"date": "20.04.2026", "text": "Заседание"}]},
+        )
+        orphan = _orphan_appeal_case("33-999/2026")
+        cases = [orphan, fi_case]
+        out = uc.link_cases(cases, {"33-999/2026": "2-100/2025"})
+        merged = [c for c in out if c.get("id") == "2-100/2025"][0]
+        assert merged["appeal"]["case_number"] == "33-100/2026"
+        assert merged["current_stage"] == "cassation_watch"
+        # Вторая карточка осталась отдельной записью — юрист её видит.
+        assert any(c.get("id") == "33-999/2026" for c in out)
+
+    def test_awaiting_relink_new_appeal_opens_round(self):
+        fi_case = _fi_case_for_link(
+            stage="awaiting_relink",
+            appeal={"case_number": "33-100/2026", "act_date": "01.05.2026",
+                    "events": [{"date": "20.04.2026", "text": "Заседание"}]},
+        )
+        fi_case["cassation"] = {"case_number": "8Г-777/2026",
+                                "outcome": "cassation_remanded"}
+        orphan = _orphan_appeal_case("33-2000/2026")
+        cases = [orphan, fi_case]
+        out = uc.link_cases(cases, {"33-2000/2026": "2-100/2025"})
+        assert len(out) == 1
+        merged = out[0]
+        assert merged["current_stage"] == "appeal"
+        assert merged["round"] == 2
+        assert merged["appeal"]["case_number"] == "33-2000/2026"
+        assert merged["history"][0]["appeal"]["case_number"] == "33-100/2026"
+        assert merged["history"][0]["cassation"]["case_number"] == "8Г-777/2026"
+
+
 # ── relink_awaiting_relink_first_instance ────────────────────────────────────
 
 class TestRelinkAwaitingRelink:
