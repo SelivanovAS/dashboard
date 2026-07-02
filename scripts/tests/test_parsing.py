@@ -28,6 +28,9 @@ FIXTURES_DIR = os.path.join(TESTS_DIR, "fixtures")
 sys.path.insert(0, SCRIPTS_DIR)
 
 import update_cases as uc  # noqa: E402
+# Конфиг-константы патчатся на модуле-доме: код читает их как config.X,
+# патч фасада uc.X до чтений не доходит (см. docs/Распил_монолита_контекст.md).
+from court_monitor import config as cm_config  # noqa: E402
 
 
 def _read_fixture(name: str) -> str:
@@ -702,7 +705,7 @@ class TestLinkCassationCases:
     def _isolate_cassation_acts(self, monkeypatch, tmp_path):
         """Дедуп .cassation_acts пишется в tmp, а не в data/ репозитория."""
         monkeypatch.setattr(
-            uc, "CASSATION_ACTS_PATH", str(tmp_path / ".cassation_acts")
+            cm_config, "CASSATION_ACTS_PATH", str(tmp_path / ".cassation_acts")
         )
 
     def test_pending_case_links_and_becomes_cassation(self):
@@ -1078,7 +1081,7 @@ class TestReactivateArchivedFirstInstance:
 class TestRotateColdArchive:
     def _with_tmp_archive(self, monkeypatch, tmp_path):
         monkeypatch.setattr(
-            uc, "JSON_ARCHIVE_PATH", str(tmp_path / "cases_archive.json")
+            cm_config, "JSON_ARCHIVE_PATH", str(tmp_path / "cases_archive.json")
         )
 
     def test_old_case_moves_to_cold_year_file(self, monkeypatch, tmp_path):
