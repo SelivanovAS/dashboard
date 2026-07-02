@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-07-01T03:50:49",
+  "updated_at": "2026-07-02T16:49:31",
   "cases": [
     {
       "id": "33-1706/2026",
@@ -603,6 +603,346 @@
       "archived_at": "2026-06-29"
     },
     {
+      "id": "33-1739/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "ООО Здоровая Экология, Петер Яков Андреевич",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-6473/2025",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Генрихс Юлия Николаевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2025-006507-97"
+      },
+      "appeal": {
+        "case_number": "33-1739/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Воронин Сергей Николаевич",
+        "filing_date": "13.02.2026",
+        "status": "Решено",
+        "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 11:21. 18.03.2026",
+        "event_date": "18.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "10:10",
+        "link": "24468319|5fa637fd-6421-4471-a104-f789aeeb30b2",
+        "act_published": true,
+        "act_date": "",
+        "appellant": "Иное лицо"
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1674/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "ООО \"Бизнес Трейд\", Субботина Мария Григорьевна",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-724/2025",
+        "court": "Сургутский городской суд",
+        "court_domain": "",
+        "judge": "Ким А.А.",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2024-010481-81"
+      },
+      "appeal": {
+        "case_number": "33-1674/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Клюпа Юрий Николаевич",
+        "filing_date": "13.02.2026",
+        "status": "Решено",
+        "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 12:06. 23.03.2026",
+        "event_date": "23.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "15:10",
+        "link": "24465362|ee6887cb-7c83-42dc-9e3f-50fd9dbcdb47",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": [
+          {
+            "date": "",
+            "time": "",
+            "text": "Наименование события. Дата. Время. Место проведения. Результат события. Основание для выбранного результата события. Примечание. Дата размещения Информация о размещении событий в движении дела предоставляется на основе сведений, хранящихся в учетной системе судебного делопроизводства"
+          },
+          {
+            "date": "13.02.2026",
+            "time": "12:30",
+            "text": "Передача дела судье. 12:30. 13.02.2026"
+          },
+          {
+            "date": "03.03.2026",
+            "time": "15:10",
+            "text": "Судебное заседание. 15:10. Зал 142. Вынесено решение. РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ. 18.02.2026"
+          },
+          {
+            "date": "13.03.2026",
+            "time": "16:35",
+            "text": "Составлено мотивированное апелляционное определение в окончательной форме. 16:35. 16.03.2026"
+          },
+          {
+            "date": "18.03.2026",
+            "time": "15:50",
+            "text": "Дело сдано в отдел судебного делопроизводства. 15:50. 18.03.2026"
+          },
+          {
+            "date": "23.03.2026",
+            "time": "12:06",
+            "text": "Передано в экспедицию. 12:06. 23.03.2026"
+          }
+        ]
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1621/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк России",
+      "defendant": "Абросимова Наталья Анатольевна",
+      "category": "Жилищные споры",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-5969/2025",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Чернобривка Алёна Николаевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2025-005717-42"
+      },
+      "appeal": {
+        "case_number": "33-1621/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Калиниченко Нина Алексеевна",
+        "filing_date": "13.02.2026",
+        "status": "Решено",
+        "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 14:08. 19.03.2026",
+        "event_date": "19.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "10:40",
+        "link": "24464279|92aa7e8f-68a1-4900-81af-e5201e335b31",
+        "act_published": true,
+        "act_date": "",
+        "appellant": "Иное лицо"
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1589/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "Черников Евгений Александрович",
+      "defendant": "",
+      "category": "Иное",
+      "bank_role": "Третье лицо",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-4204/2025",
+        "court": "Ханты-Мансийский районный суд",
+        "court_domain": "",
+        "judge": "Бакшеев Иван Васильевич",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0001-01-2025-006477-46"
+      },
+      "appeal": {
+        "case_number": "33-1589/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Воронин Сергей Николаевич",
+        "filing_date": "13.02.2026",
+        "status": "Решено",
+        "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 14:11. 19.03.2026",
+        "event_date": "19.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "10:15",
+        "link": "24463873|235b1676-5f30-4b90-bb48-3f90f8bd82d2",
+        "act_published": true,
+        "act_date": "",
+        "appellant": "Иное лицо"
+      },
+      "initial_bank_role": "Третье лицо",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1533/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Беловицкая Оксана Леонидовна",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-1925/2025",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Артеменко Александра Валентиновна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2024-012431-60"
+      },
+      "appeal": {
+        "case_number": "33-1533/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Баранцева Наталья Валериевна",
+        "filing_date": "10.02.2026",
+        "status": "Решено",
+        "result": "определение отменено полностью с разрешением вопроса по существу",
+        "last_event": "Передано в экспедицию. 11:21. 18.03.2026",
+        "event_date": "18.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "12:50",
+        "link": "24454425|066c88f9-308f-403b-9c0f-f11bdebbf025",
+        "act_published": true,
+        "act_date": "",
+        "appellant": "Банк"
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1379/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Алексеенко Юрий Викторович, Кобаль Ярослав Юлиевич, ООО ЮК ПРОФ-Строй",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-1410/2025",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Пименова Оксана Васильевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2024-011978-61"
+      },
+      "appeal": {
+        "case_number": "33-1379/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Шанауров Константин Вячеславович",
+        "filing_date": "06.02.2026",
+        "status": "Решено",
+        "result": "производство по делу прекращено (с отменой решения) - в связи с отказом от иска",
+        "last_event": "Передано в экспедицию. 12:45. 20.03.2026",
+        "event_date": "20.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "11:00",
+        "link": "24436858|37b0cd77-8507-4d1a-be4f-31b98013b546",
+        "act_published": false,
+        "act_date": "",
+        "appellant": ""
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
+      "id": "33-1293/2026",
+      "current_stage": "cassation_watch",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Ульенко Марина Юрьевна",
+      "category": "Кредитный договор",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-6793/2025",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Колебина Елена Эдуардовна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2025-006957-08"
+      },
+      "appeal": {
+        "case_number": "33-1293/2026",
+        "court": "Суд ХМАО-Югры",
+        "judge_reporter": "Шанауров Константин Вячеславович",
+        "filing_date": "06.02.2026",
+        "status": "Решено",
+        "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+        "last_event": "Передано в экспедицию. 12:40. 20.03.2026",
+        "event_date": "20.03.2026",
+        "hearing_date": "03.03.2026",
+        "hearing_time": "10:10",
+        "link": "24433018|a24fe670-760b-498e-8037-1ee9266abe42",
+        "act_published": false,
+        "act_date": "",
+        "appellant": ""
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-07-02"
+    },
+    {
       "id": "9-104/2026",
       "current_stage": "first_instance",
       "plaintiff": "Бондаренко Анастасия Васильевна",
@@ -660,7 +1000,7 @@
             "text": "Дело передано в экспедицию. 12:11. 04.05.2026"
           }
         ],
-        "last_checked_at": "2026-07-01",
+        "last_checked_at": "2026-07-02",
         "resolved_emitted": true
       },
       "appeal": null,
@@ -738,7 +1078,7 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-07-01"
+        "last_checked_at": "2026-07-02"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",
@@ -794,7 +1134,7 @@
             "text": "Дело передано в экспедицию. 10:41. 02.02.2026"
           }
         ],
-        "last_checked_at": "2026-07-01",
+        "last_checked_at": "2026-07-02",
         "resolved_emitted": true
       },
       "appeal": null,
@@ -851,7 +1191,7 @@
             "text": "Дело передано в экспедицию. 18:03. 17.02.2026"
           }
         ],
-        "last_checked_at": "2026-07-01",
+        "last_checked_at": "2026-07-02",
         "resolved_emitted": true,
         "act_text": "копия М-801/2025 ОПРЕДЕЛЕНИЕ о возвращении искового заявления г. Югорск 16 января 2026 года Судья Югорского районного суда Ханты-Мансийского автономного округа – Югры Колобаев В.Н., рассмотрев исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора № от ДД.ММ.ГГГГ , установил: Ерунов А.В. обратился в суд с иском к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора № от ДД.ММ.ГГГГ . В обоснование иска указал, что между ним и ответчиком заключен кредитный договор от ДД.ММ.ГГГГ № , в соответствии с которым ему был предоставлен кредит на сумму 1 276 335,79 рублей под 13,5% годовых. В связи с неблагоприятным стечением обстоятельств, в связи с изменением материального положения, он утратил возможность производить ежемесячные платежи и исполнять свои обязательства в соответствии с условиями погашения по договору. Он неоднократно обращался к ответчику с заявлением о расторжении кредитного договора, ответчик требование не исполнил. Просил расторгнуть заключенный между ним и ПАО Сбербанк кредитный договор № от ДД.ММ.ГГГГ . Рассмотрев исковое заявление с приложенными к нему материалами, судья приходит к следующему. Как следует из искового заявления, Ерунов А.В. обратился в суд с иском к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора № от ДД.ММ.ГГГГ . Судом установлено, что ДД.ММ.ГГГГ в суд также поступил иск Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора от ДД.ММ.ГГГГ № и договора кредитования счета от ДД.ММ.ГГГГ . Иск зарегистрирован судом ДД.ММ.ГГГГ под номером М-802/2025. Определением суда от ДД.ММ.ГГГГ исковое заявление оставлено без движения, истцу предоставлен срок для устранения недостатков. В настоящее время исковое заявление находится в производстве суда. В соответствии с пунктом 5 части 1 статьи 135 ГПК РФ судья возвращает исковое заявление в случае, если в производстве этого или другого суда либо третейского суда имеется дело по спору между теми же сторонами, о том же предмете и по тем же основаниям. Анализ данной нормы позволяет сделать вывод о недопустимости повторного рассмотрения и разрешения тождественного спора, то есть спора, в котором совпадают стороны, предмет и основание. При этом предметом иска является конкретное материально-правовое требование истца к ответчику, возникающее из спорного правоотношения и по поводу которого суд должен вынести решение. Новых документов и сведений, которые являются новыми основаниями заявленных требований, истцом к вновь поданному исковому заявлению не приложено. При таких обстоятельствах судья приходит к выводу, что в поданном Еруновым А.В. исковом заявлении содержатся те же требования по спору между теми же сторонами, о том же предмете и по тем же основаниям, в связи с чем приходит к выводу об его возвращении на основании п.5 ч.1 ст.135 ГПК РФ. При данных обстоятельствах исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора № от ДД.ММ.ГГГГ не может быть принято к производству Югорского районного суда ХМАО-Югры и подлежит возврату заявителю. На основании изложенного, руководствуясь ст.ст. 135, 224, 225 ГПК РФ, судья определил: Исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитного договора № от ДД.ММ.ГГГГ возвратить заявителю со всеми приложенными к нему документами. На определение может быть подана частная жалоба в Федеральный суд Ханты – Мансийского автономного округа-Югры через Югорский районный суд ХМАО-Югры в течение 15 дней со дня его вынесения. Верно. Судья Югорского районного суда В.Н. Колобаев Секретарь суда ФИО3 опубликовано 30.12.2025 12:12, изменено 17.02.2026 03:10 function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = maskin"
       },
@@ -916,7 +1256,7 @@
         ],
         "resolved_emitted": true,
         "act_text": "копия М-802/2025 ОПРЕДЕЛЕНИЕ о возвращении искового заявления г. Югорск 10 марта 2026 года Судья Югорского районного суда Ханты-Мансийского автономного округа-Югры Колобаев В.Н., рассмотрев исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров, установил: Ерунов А.В. обратился в суд с иском к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров. Просил расторгнуть заключенные между ним и ПАО Сбербанк кредитный договор от ДД.ММ.ГГГГ № , договор кредитования счета от ДД.ММ.ГГГГ . Определением судьи от ДД.ММ.ГГГГ исковое заявление оставлено без движения, заявителю предоставлен срок до ДД.ММ.ГГГГ для устранения обстоятельств, послуживших основанием для оставления заявления без движения, а именно: - представить сведения о месте рождения, месте жительства или месте пребывания истца; - представить кредитный договор от ДД.ММ.ГГГГ № , договор кредитования счета от ДД.ММ.ГГГГ , либо иные документы, подтверждающие наличие отношений между истцом и ответчиком; - указать обстоятельства, на которых истец основывает свои требования, и доказательства, подтверждающие эти обстоятельства (доказательства, подтверждающие нарушение ответчиком прав истца). В установленный судьей срок заявитель недостатки не устранил. При данных обстоятельствах судья приходит к выводу о возвращении иска заявителю, поскольку в силу ч. 2 ст. 136 ГПК РФ в случае, если заявитель в установленный срок не выполнит указания судьи, перечисленные в определении, заявление считается не поданным и возвращается заявителю со всеми приложенными к нему документами. На основании изложенного, руководствуясь ст.ст. 224, 225 ГПК РФ, судья определил: исковое заявление Ерунова Александра Вячеславовича к ПАО Сбербанк о защите прав потребителя, расторжении кредитных договоров, возвратить заявителю со всеми приложенными к нему документами. Разъяснить заявителю, что возвращение заявления не препятствует повторному обращению в суд к тому же ответчику, о том же предмете, по тому же основанию. На определение может быть подана частная жалоба в Федеральный суд Ханты – Мансийского автономного округа-Югры через Югорский районный суд ХМАО-Югры в течение 15 дней со дня его вынесения. Верно. Судья Югорского районного суда В.Н. Колобаев Секретарь суда ФИО3 изменено function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = masking.maskedLetter.indexOf(placeholder[i]) >= 0; if ((matchesNumber && isInt) || (isCharsetPresent && matchesLetter && isLetter)) { newValue += strippedValue[j++]; } else if ((!isCharsetPresent && !isInt && matchesNumber) || (isCharsetPresent && ((matchesLetter && !isLetter) || (matchesNumber && !isInt)))) { //masking.errorOnKeyEntry(e); // write your own error handling function return newValue; } else { newValue += placeholder[i]; } // break if no characters left and the pattern is non-special character if (strippedValue[j] == undefined) { break; } } if (e.target.getAttribute('data-valid-example')) { return masking.validateProgress(e, newValue); } return newValue; }, validateProgress : function (e, value) { var validExample = e.target.getAttribute('data-valid-example'), pattern = new RegExp(e.target.getAttribute('pattern')), placeholder = e.target.getAttribute('data-placeholder'), l = value.length, testValue = '', id = e.target.getAttribute('id'), maskErrorId = document.getElementById(id + 'MaskError'); maskErrorId.style.display = 'block'; //convert to months if (l == 1 && placeholder.toUpperCase().substr(0,2) == 'MM') { if(value > 1 && value = 0; i--) { testValue = value + validExample.substr(value.length); if(id == 'case__JUDICIAL_UIDSS' && l == 13 && placeholder.toUpperCase().substr(12,4) == 'YYYY') { if(value.substr(12,1) == 1) { testValue = value + '9' + validExample.substr(value.length + 1); } if(value.substr(12,1) == 2) { testValue = value + '0' +",
-        "last_checked_at": "2026-07-01"
+        "last_checked_at": "2026-07-02"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",
@@ -973,7 +1313,7 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-07-01"
+        "last_checked_at": "2026-07-02"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",
