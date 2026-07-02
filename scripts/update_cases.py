@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import statistics
 import sys
 import time
 import traceback
@@ -271,6 +272,18 @@ LAST_PERSONAL_PUSHES_PATH = os.environ.get(
     "LAST_PERSONAL_PUSHES_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_personal_pushes.json")
 )
+# Журнал здоровья парсеров: пер-источник история количества результатов
+# поиска (суды 1-й инст., апелляция, 7kas). Детектор «молчаливой поломки»:
+# суд, стабильно дававший результаты, вдруг отдаёт 0 (смена вёрстки,
+# слетевший матчер судов) — без истории это неотличимо от «нет новостей».
+# См. update_parse_health и блок 4e в main_json.
+PARSE_HEALTH_PATH = os.environ.get(
+    "PARSE_HEALTH_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", "parse_health.json")
+)
+PARSE_HEALTH_HISTORY_LEN = 14   # сколько последних успешных прогонов помним
+PARSE_HEALTH_FAIL_ALERT = 3     # HTTP-фейлов подряд до алерта
+PARSE_HEALTH_DEGRADED_ALERT = 5  # карточек-«огрызков» за прогон до алерта
 # Окна жизненного цикла дела (state machine — см. advance_case_stage /
 # is_case_archived). Старая модель ARCHIVE_DAYS/ARCHIVE_DAYS_FI отсчитывала
 # архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
@@ -402,6 +415,7 @@ METRICS: dict[str, int] = {
     "requests_retried": 0,   # попытки fetch_page после неудачи
     "telegram_sent": 0,      # успешно отправленных сообщений (после split)
     "telegram_failed": 0,    # полностью не отправленных частей
+    "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
 }
 
 
@@ -705,6 +719,116 @@ def save_digested_acts(acts: set):
     os.makedirs(os.path.dirname(DIGESTED_ACTS_PATH) or ".", exist_ok=True)
     with open(DIGESTED_ACTS_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(acts)) + "\n")
+
+
+# ── Здоровье парсеров (детектор молчаливой поломки) ─────────────────────────
+
+def load_parse_health() -> dict:
+    """Загрузить журнал здоровья парсеров ({version, updated_at, sources})."""
+    if not os.path.exists(PARSE_HEALTH_PATH):
+        return {"version": 1, "updated_at": "", "sources": {}}
+    try:
+        with open(PARSE_HEALTH_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        log.warning(f"parse-health: не удалось прочитать {PARSE_HEALTH_PATH}")
+        return {"version": 1, "updated_at": "", "sources": {}}
+    if not isinstance(data, dict):
+        return {"version": 1, "updated_at": "", "sources": {}}
+    data.setdefault("sources", {})
+    return data
+
+
+def save_parse_health(state: dict) -> None:
+    os.makedirs(os.path.dirname(PARSE_HEALTH_PATH) or ".", exist_ok=True)
+    with open(PARSE_HEALTH_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=1)
+
+
+def update_parse_health(
+    observations: dict,
+    labels: dict | None = None,
+    state: dict | None = None,
+) -> tuple[dict, list[str]]:
+    """Обновить журнал здоровья парсеров и вернуть (state, список алертов).
+
+    observations: {ключ источника: int — сколько строк дал поиск в этом
+    прогоне; None — страница поиска не загрузилась после всех ретраев}.
+    labels: {ключ: человекочитаемое имя для алертов}.
+    state: журнал (по умолчанию читается из PARSE_HEALTH_PATH; параметр —
+    для тестов).
+
+    Правила алертов:
+    - «стал нулём»: медиана последних успешных прогонов ≥1, а сегодня 0 —
+      алерт на 1-м и 3-м нулевом прогоне подряд, дальше тишина до
+      восстановления (тогда придёт «снова отдаёт результаты»). Суды, у
+      которых 0 — норма (нет дел банка на первой странице), не алертят:
+      медиана их истории < 1.
+    - HTTP-фейл PARSE_HEALTH_FAIL_ALERT прогонов подряд — алерт на каждом
+      кратном пороге (3, 6, 9…): одиночные сетевые сбои не шумят.
+    - Все источники разом 0/фейл при живой истории — отдельный алерт
+      (лежит sudrf целиком или глобально сменилась вёрстка).
+    """
+    labels = labels or {}
+    state = state if state is not None else load_parse_health()
+    sources = state.setdefault("sources", {})
+    alerts: list[str] = []
+    now_iso = datetime.now().isoformat(timespec="seconds")
+
+    for key, count in observations.items():
+        src = sources.setdefault(key, {
+            "counts": [], "zero_streak": 0, "fail_streak": 0,
+            "alerted_zero": False,
+        })
+        name = labels.get(key, key)
+        if count is None:
+            src["fail_streak"] = int(src.get("fail_streak", 0)) + 1
+            src["last_run_at"] = now_iso
+            if src["fail_streak"] % PARSE_HEALTH_FAIL_ALERT == 0:
+                alerts.append(
+                    f"{name}: страница поиска не загружается "
+                    f"{src['fail_streak']} прогонов подряд"
+                )
+            continue
+        src["fail_streak"] = 0
+        history = [c for c in src.get("counts", []) if isinstance(c, int)]
+        median = statistics.median(history) if history else 0
+        if count == 0 and median >= 1:
+            src["zero_streak"] = int(src.get("zero_streak", 0)) + 1
+            if src["zero_streak"] in (1, 3):
+                src["alerted_zero"] = True
+                alerts.append(
+                    f"{name}: поиск вернул 0 результатов, хотя обычно "
+                    f"~{int(median)} ({src['zero_streak']}-й нулевой "
+                    f"прогон подряд)"
+                )
+        elif count > 0:
+            if src.get("alerted_zero"):
+                alerts.append(f"{name}: снова отдаёт результаты ({count})")
+            src["zero_streak"] = 0
+            src["alerted_zero"] = False
+        src["counts"] = (history + [count])[-PARSE_HEALTH_HISTORY_LEN:]
+        src["last_count"] = count
+        src["last_run_at"] = now_iso
+
+    # Глобальный ноль: ни один источник не дал результатов, при том что
+    # раньше жизнь была (иначе первый прогон на пустой истории алертил бы).
+    # Требуем ≥2 источников: для одиночного это дубль пер-судового алерта.
+    if len(observations) >= 2:
+        all_dead = all((c is None or c == 0) for c in observations.values())
+        had_life = any(
+            any(isinstance(x, int) and x > 0
+                for x in (sources.get(k, {}).get("counts") or []))
+            for k in observations
+        )
+        if all_dead and had_life:
+            alerts.append(
+                "ВСЕ источники разом вернули 0 или не загрузились — похоже, "
+                "лежит sudrf целиком либо глобально сменилась вёрстка"
+            )
+
+    state["updated_at"] = now_iso
+    return state, alerts
 
 
 def _load_act_summaries() -> dict:
@@ -2537,6 +2661,7 @@ def _warn_if_card_degraded(
             if _SUSPENDED_RX.search(last_text):
                 log.debug(msg + " (suspended — ожидаемо)")
                 return
+    METRICS["cards_degraded"] += 1
     log.warning(msg)
 
 
@@ -11445,13 +11570,22 @@ def main_json():
     }
     csv_active_count = sum(1 for c in csv_cases if not is_archived(c))
 
+    # Наблюдения для детектора молчаливой поломки парсеров (блок 4e):
+    # {ключ источника: сколько строк дал поиск; None — страница не загрузилась}.
+    health_obs: dict = {}
+    health_labels: dict = {}
+
     log.info("Загружаю страницу поиска апелляции...")
     search_html = fetch_page(APPEAL_COURT.search_url())
     appeal_new_cases_csv: list[dict] = []
     appeal_fi_numbers: dict[str, str] = {}
 
+    health_labels["appeal:oblsud"] = f"Апелляция ({APPEAL_COURT.name})"
+    if not search_html:
+        health_obs["appeal:oblsud"] = None
     if search_html:
         search_cases = parse_search_page(search_html)
+        health_obs["appeal:oblsud"] = len(search_cases)
         log.info(f"Апелляция: {len(search_cases)} дел на странице")
 
         if not search_cases and csv_active_count > 0:
@@ -11517,13 +11651,16 @@ def main_json():
     fi_results_by_court: list = []
 
     for court in enabled_courts:
+        health_labels[f"fi:{court.domain}"] = court.name
         polite_delay()
         search_html = fetch_page(court.search_url())
         if not search_html:
+            health_obs[f"fi:{court.domain}"] = None
             log.warning(f"  {court.name}: не удалось загрузить поиск")
             continue
 
         fi_results = parse_first_instance_search(search_html, court)
+        health_obs[f"fi:{court.domain}"] = len(fi_results)
         fi_results_by_court.append((court, fi_results))
 
         # Промоушен материала → 2-XXX до фильтра new_fi.
@@ -12482,13 +12619,21 @@ def main_json():
     cass_skipped_future = 0
     cass_skipped_suspended = 0
     cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
+    health_labels["cassation:7kas:total"] = "Кассация 7kas (вся выдача)"
+    health_labels["cassation:7kas:hmao"] = "Кассация 7kas (HMAO-фильтр)"
     try:
         log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
         polite_delay()
         cass_search_html = fetch_page(CASSATION_COURT.search_url())
+        if not cass_search_html:
+            health_obs["cassation:7kas:total"] = None
         if cass_search_html:
             cass_search_results = parse_cassation_search_page(cass_search_html)
             hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
+            # Отдельные источники: total ловит поломку парсера выдачи 7kas,
+            # hmao — слетевший матчер судов (класс бага «Берёзовский», ё/е).
+            health_obs["cassation:7kas:total"] = len(cass_search_results)
+            health_obs["cassation:7kas:hmao"] = len(hmao_results)
             log.info(
                 f"  7kas: всего {len(cass_search_results)} дел, "
                 f"HMAO {len(hmao_results)}, не-HMAO отброшено "
@@ -12710,6 +12855,32 @@ def main_json():
             f"Дедуп по УИД после link_cassation_cases: слито "
             f"{post_cass_uid_merged} касс. дублей"
         )
+
+    # ── 4e. Здоровье парсеров: детектор молчаливой поломки ──
+    # Суд, вернувший 0 при живой истории, HTTP-фейлы подряд, глобальный ноль
+    # и всплеск карточек-«огрызков» — сервисное сообщение в Telegram, иначе
+    # смена вёрстки суда выглядит как «нет новостей». Сам детектор не должен
+    # ронять прогон ни при каких обстоятельствах.
+    try:
+        health_state, health_alerts = update_parse_health(
+            health_obs, health_labels
+        )
+        save_parse_health(health_state)
+        if METRICS.get("cards_degraded", 0) >= PARSE_HEALTH_DEGRADED_ALERT:
+            health_alerts.append(
+                f"карточек-«огрызков» без событий за прогон: "
+                f"{METRICS['cards_degraded']} (возможна смена вёрстки карточек)"
+            )
+        if health_alerts:
+            log.warning(
+                "parse-health: " + "; ".join(health_alerts)
+            )
+            send_telegram(
+                "🩺 <b>Мониторинг парсеров</b>\n"
+                + "\n".join(f"• {escape_html(a)}" for a in health_alerts)
+            )
+    except Exception as exc:
+        log.warning(f"parse-health: ошибка детектора: {exc}", exc_info=True)
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
     t0 = time.perf_counter()
