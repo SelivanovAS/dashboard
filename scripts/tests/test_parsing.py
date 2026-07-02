@@ -780,6 +780,76 @@ class TestLinkCassationCases:
         assert changes and "discovered_in_cassation" in changes[0]["type"]
 
 
+# ── relink_awaiting_relink_first_instance ────────────────────────────────────
+
+class TestRelinkAwaitingRelink:
+    @staticmethod
+    def _awaiting_case(cid: str) -> dict:
+        return {
+            "id": cid,
+            "current_stage": "awaiting_relink",
+            "round": 1,
+            "first_instance": {"case_number": cid, "status": "Решено"},
+            "appeal": {"case_number": "33-500/2026"},
+            "cassation": {"case_number": "8Г-444/2026",
+                          "outcome": "cassation_remanded"},
+        }
+
+    @staticmethod
+    def _fi_result(num: str) -> dict:
+        return {"case_number": num, "court": "Сургутский городской суд",
+                "judge": "Сидорова В.В.", "link": "https://x/case/1",
+                "status": "В производстве"}
+
+    def test_relink_exact_number(self):
+        case = self._awaiting_case("2-208/2026")
+        court = uc.FIRST_INSTANCE_COURTS[0]
+        relinked = uc.relink_awaiting_relink_first_instance(
+            [case], [(court, [self._fi_result("2-208/2026")])]
+        )
+        assert len(relinked) == 1
+        assert case["current_stage"] == "first_instance"
+        assert case["round"] == 2
+        assert case["history"][0]["cassation"]["case_number"] == "8Г-444/2026"
+        assert case["cassation"] is None
+        assert case["first_instance"]["status"] == "В производстве"
+
+    def test_relink_hybrid_id_matches_bare_search_number(self):
+        """id после кассации может быть гибридным («2-208/2026
+        (2-1148/2025;)»), поиск 1-й инст. отдаёт короткую форму — матч
+        должен сработать через _bare_case_number."""
+        case = self._awaiting_case("2-208/2026 (2-1148/2025;)")
+        court = uc.FIRST_INSTANCE_COURTS[0]
+        relinked = uc.relink_awaiting_relink_first_instance(
+            [case], [(court, [self._fi_result("2-208/2026")])]
+        )
+        assert len(relinked) == 1
+        assert case["current_stage"] == "first_instance"
+        assert case["round"] == 2
+
+    def test_same_number_in_two_courts_snapshots_once(self):
+        case = self._awaiting_case("2-208/2026 (2-1148/2025;)")
+        court_a, court_b = uc.FIRST_INSTANCE_COURTS[:2]
+        relinked = uc.relink_awaiting_relink_first_instance(
+            [case],
+            [(court_a, [self._fi_result("2-208/2026 (2-1148/2025;)")]),
+             (court_b, [self._fi_result("2-208/2026")])],
+        )
+        assert len(relinked) == 1
+        assert case["round"] == 2
+        assert len(case["history"]) == 1
+
+    def test_unrelated_number_no_relink(self):
+        case = self._awaiting_case("2-208/2026")
+        court = uc.FIRST_INSTANCE_COURTS[0]
+        relinked = uc.relink_awaiting_relink_first_instance(
+            [case], [(court, [self._fi_result("2-999/2026")])]
+        )
+        assert relinked == []
+        assert case["current_stage"] == "awaiting_relink"
+        assert case["round"] == 1
+
+
 # ── card_url ─────────────────────────────────────────────────────────────────
 
 class TestCardUrl:
