@@ -9,6 +9,10 @@
 
 **Дашборд:** [selivanovas.github.io/dashboard](https://selivanovas.github.io/dashboard/sberbank_dashboard.html)
 
+> 📚 **Подробная техническая документация** — [`docs/technical/`](docs/technical/README.md):
+> архитектура, модель данных, жизненный цикл дела, парсеры, конвейер, дайджест,
+> доставка, фронтенд, Cloudflare Worker, CI/CD и рантбук.
+
 ---
 
 ## Оглавление

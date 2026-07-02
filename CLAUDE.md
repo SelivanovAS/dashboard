@@ -2,13 +2,18 @@
 
 Карта проекта для новых сессий — чтобы не тратить токены на разведку.
 
+> 📚 **Полная техническая документация** — [docs/technical/README.md](docs/technical/README.md).
+> Этот файл — быстрая карта (где что в коде); `docs/technical/` — глубокий
+> справочник «как всё работает» (архитектура, модель данных, жизненный цикл,
+> парсеры, конвейер, дайджест, доставка, фронтенд, worker, эксплуатация).
+
 ## Что это
 
 Дашборд юриста ПАО Сбербанк: мониторинг гражданских дел в 20 судах ХМАО-Югры (первая инстанция) + апелляция (Суд ХМАО-Югры) + кассация (7-й кассационный суд общей юрисдикции, фильтр по 1-й инст. ХМАО). AI-дайджесты в Telegram, автозапуск через Cloudflare Worker cron → GitHub Actions. Пользователь — юрист банка, общение на русском.
 
 ## Главные файлы
 
-- [scripts/update_cases.py](scripts/update_cases.py) — **монолит** (~231 KB): парсеры судов, LLM-дайджесты, Telegram, CLI.
+- [scripts/update_cases.py](scripts/update_cases.py) — **монолит** (~13 200 строк): парсеры судов, LLM-дайджесты, Telegram, CLI.
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
 - [data/cases_archive.json](data/cases_archive.json) — «горячий» архив: дела, заархивированные за последние 12 мес. (`COLD_ARCHIVE_DAYS`). Грузится фронтом.
@@ -29,23 +34,35 @@
 
 | Что | Где |
 |-----|-----|
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:119](scripts/update_cases.py:119) |
-| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:127](scripts/update_cases.py:127) |
-| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:154](scripts/update_cases.py:154) |
-| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:162](scripts/update_cases.py:162) |
-| `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:216](scripts/update_cases.py:216) |
-| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:246](scripts/update_cases.py:246) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:514](scripts/update_cases.py:514) |
-| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:1110](scripts/update_cases.py:1110) |
-| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:1486](scripts/update_cases.py:1486) |
-| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:2036](scripts/update_cases.py:2036) |
-| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:2124](scripts/update_cases.py:2124) |
-| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:2654](scripts/update_cases.py:2654) |
-| `link_cassation_cases` (link + discovery + remanded) | [scripts/update_cases.py:2756](scripts/update_cases.py:2756) |
-| `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:2049](scripts/update_cases.py:2049) |
-| `def generate_digest` — Claude-дайджест | [scripts/update_cases.py:2330](scripts/update_cases.py:2330) |
-| Claude model: `claude-haiku-4-5-20251001` | [scripts/update_cases.py:2694](scripts/update_cases.py:2694) |
-| `def generate_template_digest` — fallback без LLM | [scripts/update_cases.py:2820](scripts/update_cases.py:2820) |
+| `CourtConfig` (dataclass + `search_url`/`card_url`) | [scripts/update_cases.py:51](scripts/update_cases.py:51) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:110](scripts/update_cases.py:110) |
+| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:118](scripts/update_cases.py:118) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:145](scripts/update_cases.py:145) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:161](scripts/update_cases.py:161) |
+| `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:241](scripts/update_cases.py:241) |
+| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:279](scripts/update_cases.py:279) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:762](scripts/update_cases.py:762) |
+| `reactivate_archived_first_instance` (возврат из архива) | [scripts/update_cases.py:4147](scripts/update_cases.py:4147) |
+| `rotate_cold_archive` (горячий → холодный архив) | [scripts/update_cases.py:4620](scripts/update_cases.py:4620) |
+| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:1918](scripts/update_cases.py:1918) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/update_cases.py:2529](scripts/update_cases.py:2529) |
+| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:2351](scripts/update_cases.py:2351) |
+| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:3245](scripts/update_cases.py:3245) |
+| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:3426](scripts/update_cases.py:3426) |
+| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:4096](scripts/update_cases.py:4096) |
+| `link_cases` (FI ↔ апелляция) | [scripts/update_cases.py:3936](scripts/update_cases.py:3936) |
+| `link_cassation_cases` (link + discovery + remanded) | [scripts/update_cases.py:4293](scripts/update_cases.py:4293) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/update_cases.py:4688](scripts/update_cases.py:4688) |
+| `main_json` (оркестрация полного прогона) | [scripts/update_cases.py:11165](scripts/update_cases.py:11165) |
+| `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:5293](scripts/update_cases.py:5293) |
+| `def generate_digest` — диспетчер дайджеста | [scripts/update_cases.py:6440](scripts/update_cases.py:6440) |
+| `summarize_act_motivation` — LLM-пересказ акта | [scripts/update_cases.py:5711](scripts/update_cases.py:5711) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/update_cases.py:5908](scripts/update_cases.py:5908) |
+| Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | [scripts/update_cases.py:7716](scripts/update_cases.py:7716)–9054 |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/update_cases.py:6191](scripts/update_cases.py:6191) |
+| `def generate_template_digest` — программный рендер | [scripts/update_cases.py:9082](scripts/update_cases.py:9082) |
+| `send_telegram` / `send_web_push` (доставка) | [scripts/update_cases.py:10568](scripts/update_cases.py:10568) / [10383](scripts/update_cases.py:10383) |
+| `_make_per_sub_callback` / `_filter_events_by_watchlist` (персонализация push) | [scripts/update_cases.py:10258](scripts/update_cases.py:10258) / [10064](scripts/update_cases.py:10064) |
 
 ## Схема cases.json
 
@@ -87,7 +104,7 @@
 
 ## Автозапуск
 
-- Cron `"45 3 * * mon-fri"` = **6:45 МСК пн-пт** в [cloudflare-worker/wrangler.toml:6](cloudflare-worker/wrangler.toml:6).
+- Cron `"45 3 * * mon-fri"` = **6:45 МСК пн-пт** в [cloudflare-worker/wrangler.toml:11](cloudflare-worker/wrangler.toml:11).
 - ⚠️ Cloudflare Cron Triggers нумерует дни недели 1=Sun..7=Sat (не как POSIX). Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье — поэтому используем буквенный `mon-fri`. Дополнительный щит — `isHoliday()` в `worker.js` режет сб/вс через `getDay()`.
 - Worker вызывает `workflow_dispatch` для `update_cases.yml` через GitHub API (нужен `GITHUB_PAT`).
 - **Автозапуск = Cloudflare Worker, НЕ cron-job.org.** Любые правки расписания — в `wrangler.toml`, потом `wrangler deploy`.
@@ -107,7 +124,7 @@
 | `cassation` | карточка 7kas (гражданская кассация) | `outcome=cassation_remanded` → `awaiting_relink` (re-link при появлении новой карточки в нижестоящей) · `act_published` + 30 дней / `decision_date` + 45 дней без акта → архив (для финальных исходов, кроме remanded) |
 | `awaiting_relink` | ничего (ждём карточку в нижестоящей инст.) | парсер 1-й инст. находит дело → `first_instance` (round +1, прошлые блоки в `history`) ИЛИ парсер апел. → `appeal` · бессрочно, не архивируется |
 
-Константы в [scripts/update_cases.py:201](scripts/update_cases.py:201):
+Константы в [scripts/update_cases.py:279](scripts/update_cases.py:279):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
