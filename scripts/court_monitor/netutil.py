@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+"""Сетевой слой: общая requests-сессия, вежливая задержка, загрузка страниц
+судов (win-1251) с ретраями. Счётчики пишутся в config.METRICS.
+"""
+
+from __future__ import annotations
+
+import random
+import time
+
+import requests
+
+from court_monitor import config
+from court_monitor.config import log
+
+session = requests.Session()
+session.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5",
+})
+
+
+
+
+def polite_delay():
+    """Случайная задержка между запросами."""
+    time.sleep(random.uniform(*config.REQUEST_DELAY))
+
+
+def fetch_page(url: str) -> str:
+    """Скачать страницу с сайта суда (win-1251) с повторными попытками."""
+    for attempt in range(1, config.FETCH_MAX_RETRIES + 1):
+        try:
+            r = session.get(url, timeout=30)
+            r.raise_for_status()
+            config.METRICS["requests_ok"] += 1
+            if attempt > 1:
+                config.METRICS["requests_retried"] += 1
+            return r.content.decode("windows-1251", errors="replace")
+        except requests.RequestException as e:
+            if attempt < config.FETCH_MAX_RETRIES:
+                wait = attempt * 5
+                log.warning(f"Попытка {attempt}/{config.FETCH_MAX_RETRIES} не удалась для {url}: {e}. Повтор через {wait}с...")
+                time.sleep(wait)
+            else:
+                config.METRICS["requests_failed"] += 1
+                log.error(f"Ошибка загрузки {url} после {config.FETCH_MAX_RETRIES} попыток: {e}")
+    return ""

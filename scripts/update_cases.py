@@ -251,48 +251,11 @@ from court_monitor.textutil import (  # noqa: F401 — ре-экспорт дл�
     _SBER_RU_RE, _shorten_single, shorten_party_name, shorten_court_name,
     _norm_party_tokens, classify_appellant_role, _bare_case_number,
 )
-
-session = requests.Session()
-session.headers.update({
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5",
-})
-
-
-
+from court_monitor.netutil import (  # noqa: F401 — ре-экспорт для совместимости
+    session, polite_delay, fetch_page,
+)
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
-
-def polite_delay():
-    """Случайная задержка между запросами."""
-    time.sleep(random.uniform(*REQUEST_DELAY))
-
-
-def fetch_page(url: str) -> str:
-    """Скачать страницу с сайта суда (win-1251) с повторными попытками."""
-    for attempt in range(1, FETCH_MAX_RETRIES + 1):
-        try:
-            r = session.get(url, timeout=30)
-            r.raise_for_status()
-            METRICS["requests_ok"] += 1
-            if attempt > 1:
-                METRICS["requests_retried"] += 1
-            return r.content.decode("windows-1251", errors="replace")
-        except requests.RequestException as e:
-            if attempt < FETCH_MAX_RETRIES:
-                wait = attempt * 5
-                log.warning(f"Попытка {attempt}/{FETCH_MAX_RETRIES} не удалась для {url}: {e}. Повтор через {wait}с...")
-                time.sleep(wait)
-            else:
-                METRICS["requests_failed"] += 1
-                log.error(f"Ошибка загрузки {url} после {FETCH_MAX_RETRIES} попыток: {e}")
-    return ""
-
 
 def _has_held_prior_event(
     events: list,
