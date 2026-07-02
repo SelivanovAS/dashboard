@@ -13,19 +13,22 @@
 
 ## Главные файлы
 
-- [scripts/update_cases.py](scripts/update_cases.py) — **монолит** (~13 200 строк): парсеры судов, LLM-дайджесты, Telegram, CLI.
+- [scripts/update_cases.py](scripts/update_cases.py) — **монолит** (~13 500 строк): парсеры судов, LLM-дайджесты, Telegram, CLI.
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
+- `scripts/tests/` + `tests/` — pytest-набор (230+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
 - [data/cases_archive.json](data/cases_archive.json) — «горячий» архив: дела, заархивированные за последние 12 мес. (`COLD_ARCHIVE_DAYS`). Грузится фронтом.
 - `data/cases_archive_YYYY.json` — «холодные» годовые архивы: дела старше года, вынесенные ротацией (`rotate_cold_archive`). **Фронт их не грузит** (чтобы вес не рос безгранично), но скрипт читает их в индекс дедупликации. Холодные дела «заморожены»: не реактивируются автоматически.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
-- `data/.cassation_acts` — дедуп уже обработанных кассационных определений (планируется при включении LLM-разбора кассации).
+- `data/.cassation_acts` — дедуп кассационных определений: ключи «8Г-номер|дата акта», чьи `new_act` уже уходили в дайджест. Гасит повторный `new_act` при «мигании» `act_published` (сбойный парс 7kas). Ведётся в `link_cassation_cases`.
+- `data/parse_health.json` — журнал здоровья парсеров: пер-источник история количества результатов поиска (20 судов 1-й инст., апелляция, 7kas до/после HMAO-фильтра). Детектор «молчаливой поломки» (`update_parse_health`, блок 4e в `main_json`) шлёт сервисный 🩺-алерт в Telegram: суд с медианой ≥1 вернул 0 (на 1-м и 3-м нулевом прогоне + сообщение о восстановлении), HTTP-фейл 3 прогона подряд, все источники разом по нулям, ≥5 карточек-«огрызков» за прогон.
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
 - [data/sberbank_cases.csv](data/sberbank_cases.csv) + архив — legacy CSV (UTF-8 с BOM), всё ещё коммитится для совместимости.
 - [app.js](app.js) + [sberbank_dashboard.html](sberbank_dashboard.html) + [styles.css](styles.css) — SPA-фронт (GitHub Pages).
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
-- [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit).
+- [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit). При падении любого шага шлёт 🚨-алерт в личный Telegram (шаг `if: failure()`, curl без Python).
+- [.github/workflows/tests.yml](.github/workflows/tests.yml) — pytest на каждый push (кроме правок только .md/docs).
 - [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), коммит свежего `data/last_digest.json`.
 - [.github/workflows/digest_only_gigachat.yml](.github/workflows/digest_only_gigachat.yml) — ручной дайджест через GigaChat (альтернативный LLM).
 - [README.md](README.md) — подробная документация на русском (дублирует часть этого файла).
@@ -35,34 +38,35 @@
 | Что | Где |
 |-----|-----|
 | `CourtConfig` (dataclass + `search_url`/`card_url`) | [scripts/update_cases.py:51](scripts/update_cases.py:51) |
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:110](scripts/update_cases.py:110) |
-| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:118](scripts/update_cases.py:118) |
-| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:145](scripts/update_cases.py:145) |
-| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:161](scripts/update_cases.py:161) |
-| `DIGESTED_ACTS_PATH` | [scripts/update_cases.py:241](scripts/update_cases.py:241) |
-| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:279](scripts/update_cases.py:279) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:762](scripts/update_cases.py:762) |
-| `reactivate_archived_first_instance` (возврат из архива) | [scripts/update_cases.py:4147](scripts/update_cases.py:4147) |
-| `rotate_cold_archive` (горячий → холодный архив) | [scripts/update_cases.py:4620](scripts/update_cases.py:4620) |
-| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:1918](scripts/update_cases.py:1918) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/update_cases.py:2529](scripts/update_cases.py:2529) |
-| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:2351](scripts/update_cases.py:2351) |
-| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:3245](scripts/update_cases.py:3245) |
-| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:3426](scripts/update_cases.py:3426) |
-| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:4096](scripts/update_cases.py:4096) |
-| `link_cases` (FI ↔ апелляция) | [scripts/update_cases.py:3936](scripts/update_cases.py:3936) |
-| `link_cassation_cases` (link + discovery + remanded) | [scripts/update_cases.py:4293](scripts/update_cases.py:4293) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/update_cases.py:4688](scripts/update_cases.py:4688) |
-| `main_json` (оркестрация полного прогона) | [scripts/update_cases.py:11165](scripts/update_cases.py:11165) |
-| `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:5293](scripts/update_cases.py:5293) |
-| `def generate_digest` — диспетчер дайджеста | [scripts/update_cases.py:6440](scripts/update_cases.py:6440) |
-| `summarize_act_motivation` — LLM-пересказ акта | [scripts/update_cases.py:5711](scripts/update_cases.py:5711) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/update_cases.py:5908](scripts/update_cases.py:5908) |
-| Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | [scripts/update_cases.py:7716](scripts/update_cases.py:7716)–9054 |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/update_cases.py:6191](scripts/update_cases.py:6191) |
-| `def generate_template_digest` — программный рендер | [scripts/update_cases.py:9082](scripts/update_cases.py:9082) |
-| `send_telegram` / `send_web_push` (доставка) | [scripts/update_cases.py:10568](scripts/update_cases.py:10568) / [10383](scripts/update_cases.py:10383) |
-| `_make_per_sub_callback` / `_filter_events_by_watchlist` (персонализация push) | [scripts/update_cases.py:10258](scripts/update_cases.py:10258) / [10064](scripts/update_cases.py:10064) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/update_cases.py:111](scripts/update_cases.py:111) |
+| `FIRST_INSTANCE_COURTS` (массив 20 `CourtConfig`) | [scripts/update_cases.py:119](scripts/update_cases.py:119) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/update_cases.py:146](scripts/update_cases.py:146) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/update_cases.py:162](scripts/update_cases.py:162) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/update_cases.py:242](scripts/update_cases.py:242) |
+| Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/update_cases.py:300](scripts/update_cases.py:300) |
+| `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/update_cases.py:783](scripts/update_cases.py:783) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/update_cases.py:921](scripts/update_cases.py:921) |
+| `reactivate_archived_first_instance` (возврат из архива) | [scripts/update_cases.py:4359](scripts/update_cases.py:4359) |
+| `rotate_cold_archive` (горячий → холодный архив) | [scripts/update_cases.py:4979](scripts/update_cases.py:4979) |
+| `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/update_cases.py:2091](scripts/update_cases.py:2091) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/update_cases.py:2703](scripts/update_cases.py:2703) |
+| `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/update_cases.py:2524](scripts/update_cases.py:2524) |
+| `classify_cassation_outcome` — детерм. enum исхода | [scripts/update_cases.py:3419](scripts/update_cases.py:3419) |
+| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/update_cases.py:3600](scripts/update_cases.py:3600) |
+| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/update_cases.py:4291](scripts/update_cases.py:4291) |
+| `link_cases` (FI ↔ апелляция) | [scripts/update_cases.py:4110](scripts/update_cases.py:4110) |
+| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/update_cases.py:4505](scripts/update_cases.py:4505) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/update_cases.py:5047](scripts/update_cases.py:5047) |
+| `main_json` (оркестрация полного прогона) | [scripts/update_cases.py:11524](scripts/update_cases.py:11524) |
+| `GIGACHAT_SYSTEM_PROMPT` | [scripts/update_cases.py:5652](scripts/update_cases.py:5652) |
+| `def generate_digest` — диспетчер дайджеста | [scripts/update_cases.py:6799](scripts/update_cases.py:6799) |
+| `summarize_act_motivation` — LLM-пересказ акта | [scripts/update_cases.py:6070](scripts/update_cases.py:6070) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/update_cases.py:6267](scripts/update_cases.py:6267) |
+| Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | [scripts/update_cases.py:8191](scripts/update_cases.py:8191)–9400 |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/update_cases.py:6550](scripts/update_cases.py:6550) |
+| `def generate_template_digest` — программный рендер | [scripts/update_cases.py:9441](scripts/update_cases.py:9441) |
+| `send_telegram` / `send_web_push` (доставка) | [scripts/update_cases.py:10927](scripts/update_cases.py:10927) / [10742](scripts/update_cases.py:10742) |
+| `_make_per_sub_callback` / `_filter_events_by_watchlist` (персонализация push) | [scripts/update_cases.py:10617](scripts/update_cases.py:10617) / [10423](scripts/update_cases.py:10423) |
 
 ## Схема cases.json
 
@@ -153,6 +157,11 @@ state-machine) под новую модель при каждом запуске
 касс. жалобы (`appeal_filed*`, `cassation_filed*`, `sent_to_cassation*`).
 Прочие изменения карточки реактивацию не триггерят. Отдельного события
 в дайджесте нет: сработает обычное `fi_appeal_filed`.
+Второй канал восстановления — `link_cassation_cases`: если карточка 7kas
+сматчилась с делом из горячего архива (ушло из `cassation_watch` по
+120-дневному окну до регистрации жалобы на 7kas), дело возвращается в
+активные со всей историей вместо создания discovery-дубля; карточки
+прошлых кругов (их 8Г-номер уже в `history`) ничего не воскрешают.
 
 **7kas.sudrf.ru — параметры запросов** (эмпирически найдены):
 - `delo_id=2800001` (гражданская кассация, не уголовка/админка),
@@ -173,6 +182,9 @@ python3 scripts/update_cases.py --replay-last
 
 # Добавить дело 1-й инстанции вручную
 python3 scripts/add_cases_manually.py
+
+# Тесты (оба каталога одним прогоном, см. pytest.ini)
+python3 -m pytest
 
 # Зависимости
 pip install -r scripts/requirements.txt
