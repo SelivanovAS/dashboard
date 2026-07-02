@@ -4031,6 +4031,27 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
                 fi_case["appeal"] = appeal_case.get("appeal")
                 fi_case["current_stage"] = "appeal"
             else:
+                # Защита содержательной апелляции: если у дела уже есть апел.
+                # блок с данными (акт/события/результат), а пришла карточка с
+                # ДРУГИМ апел. номером — обычно это частная жалоба на
+                # определение (отдельный 33-номер по тому же номеру 1-й
+                # инст.). Не даём ей затереть апелляцию по существу: новая
+                # карточка остаётся отдельной записью (дальше link_cases её
+                # не пересвязывает — appeal_fi_numbers приходит только по
+                # новым карточкам).
+                old_ap = fi_case.get("appeal") or {}
+                new_ap = appeal_case.get("appeal") or {}
+                old_num = _bare_case_number((old_ap.get("case_number") or "").strip())
+                new_num = _bare_case_number((new_ap.get("case_number") or "").strip())
+                if (old_num and new_num and old_num != new_num
+                        and (old_ap.get("act_date") or old_ap.get("act_published")
+                             or old_ap.get("events") or old_ap.get("result"))):
+                    log.warning(
+                        f"  Связка: {fi_num} уже несёт апелляцию {old_num}; "
+                        f"вторая апел. карточка {appeal_num} (возможно, частная "
+                        f"жалоба) оставлена отдельной записью"
+                    )
+                    continue
                 fi_case["appeal"] = appeal_case.get("appeal")
                 # Обычно исходная стадия — awaiting_appeal (жалоба подана, ждём
                 # карточку) или first_instance (карточка пришла раньше жалобы —
