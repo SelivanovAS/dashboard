@@ -801,7 +801,13 @@ def advance_case_stage(case: dict) -> str | None:
         return None
 
     if stage == "cassation_watch":
-        if fi.get("cassation_filed_date") or fi.get("sent_to_cassation_date"):
+        # Переходим и по флагу без даты: короткая вкладка «Обжалование»
+        # умеет показать касс. жалобу («Заявитель жалобы») без «Даты
+        # поступления» — см. parse_case_card. Без этого дело зависает в
+        # cassation_watch и через 120 дней уходит в архив с фактически
+        # поданной жалобой (зеркало кейса 2-208/2026 по 1-й инст.).
+        if (fi.get("cassation_filed_date") or fi.get("sent_to_cassation_date")
+                or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
             case["current_stage"] = "cassation_pending"
             case["cassation_pending_since"] = now.date().isoformat()
             return "cassation_watch"
@@ -864,6 +870,14 @@ def is_case_archived(case: dict) -> bool:
         return False
 
     if stage == "cassation_watch":
+        # Страховка (в норме advance_case_stage уже перевёл бы такое дело в
+        # cassation_pending): при любом признаке касс. жалобы — даже флаге
+        # без даты — из архива исключаем. Аналогична защите first_instance
+        # от «флага без даты» выше.
+        if (fi.get("cassation_filed") or fi.get("sent_to_cassation")
+                or fi.get("cassation_filed_date")
+                or fi.get("sent_to_cassation_date")):
+            return False
         ap_hearing = parse_date(ap.get("hearing_date") or "")
         if ap_hearing and (now - ap_hearing).days > CASSATION_WATCH_DAYS:
             return True

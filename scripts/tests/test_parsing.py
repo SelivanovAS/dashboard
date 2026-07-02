@@ -502,6 +502,33 @@ class TestAdvanceCaseStage:
                 "first_instance": {"cassation_filed_date": "01.01.2026"}}
         assert uc.advance_case_stage(case) is None
 
+    def test_cassation_watch_flag_without_date_goes_to_pending(self):
+        """Короткая вкладка «Обжалование»: касс. жалоба видна («Заявитель
+        жалобы»), но «Дата поступления» не извлеклась. Переход по флагу —
+        иначе через 120 дней архив с поданной жалобой."""
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"cassation_filed": True,
+                                   "cassation_filed_date": ""}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "cassation_watch"
+        assert case["current_stage"] == "cassation_pending"
+        assert case["cassation_pending_since"]
+
+    def test_cassation_watch_sent_flag_without_date_goes_to_pending(self):
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"sent_to_cassation": True,
+                                   "sent_to_cassation_date": ""}}
+        prev = uc.advance_case_stage(case)
+        assert prev == "cassation_watch"
+        assert case["current_stage"] == "cassation_pending"
+
+    def test_cassation_watch_without_any_signal_stays(self):
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"status": "Решено"},
+                "appeal": {"hearing_date": "01.05.2026"}}
+        assert uc.advance_case_stage(case) is None
+        assert case["current_stage"] == "cassation_watch"
+
 
 class TestIsCaseArchived:
     def test_fi_resolved_overdue_no_appeal_is_archived(self):
@@ -572,6 +599,20 @@ class TestIsCaseArchived:
     def test_cassation_pending_never_archived(self):
         case = {"current_stage": "cassation_pending",
                 "appeal": {"hearing_date": _days_ago(1000)}}
+        assert uc.is_case_archived(case) is False
+
+    def test_cassation_watch_overdue_with_filed_flag_not_archived(self):
+        """Флаг касс. жалобы без даты (короткая вкладка «Обжалование»)
+        держит дело в активных даже за пределами 120-дневного окна."""
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"cassation_filed": True},
+                "appeal": {"hearing_date": _days_ago(200)}}
+        assert uc.is_case_archived(case) is False
+
+    def test_cassation_watch_overdue_with_sent_flag_not_archived(self):
+        case = {"current_stage": "cassation_watch",
+                "first_instance": {"sent_to_cassation": True},
+                "appeal": {"hearing_date": _days_ago(200)}}
         assert uc.is_case_archived(case) is False
 
 
