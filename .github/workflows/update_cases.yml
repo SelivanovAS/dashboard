@@ -69,6 +69,11 @@ jobs:
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
           git add data/sberbank_cases.csv data/.digested_acts data/cases.json
+          # Дедуп кассационных определений (аналог .digested_acts) — без
+          # коммита повторный new_act по тому же определению не подавится.
+          if [ -f data/.cassation_acts ]; then
+            git add data/.cassation_acts
+          fi
           if [ -f data/sberbank_cases_archive.csv ]; then
             git add data/sberbank_cases_archive.csv
           fi
