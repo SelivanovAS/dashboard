@@ -10,17 +10,17 @@ Actions, какие есть вспомогательные скрипты и т
 ## Режимы запуска (CLI)
 
 `update_cases.py` выбирает режим по флагу в `sys.argv`
-([__main__, 13200](../../scripts/update_cases.py#L13200)). Любое необработанное
+([__main__, 13611](../../scripts/update_cases.py#L13611)). Любое необработанное
 исключение оборачивается в `send_crash_alert` → уходит в Telegram.
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([11165](../../scripts/update_cases.py#L11165)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([10790](../../scripts/update_cases.py#L10790)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([13146](../../scripts/update_cases.py#L13146)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([12871](../../scripts/update_cases.py#L12871)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([13019](../../scripts/update_cases.py#L13019)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([11076](../../scripts/update_cases.py#L11076)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([11524](../../scripts/update_cases.py#L11524)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([11149](../../scripts/update_cases.py#L11149)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([13557](../../scripts/update_cases.py#L13557)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([13282](../../scripts/update_cases.py#L13282)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([13430](../../scripts/update_cases.py#L13430)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([11435](../../scripts/update_cases.py#L11435)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -48,23 +48,24 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `LLM_PROVIDER` | `claude` (по умолч.) / `gigachat`. |
 | `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
 | `SKIP_NON_WORKING_DAYS` | `1` → smart-skip (передаёт крон). |
-| `JSON_PATH`, `CSV_PATH`, `DIGESTED_ACTS_PATH`, … | Переопределение путей к файлам данных. |
+| `JSON_PATH`, `CSV_PATH`, `DIGESTED_ACTS_PATH`, `CASSATION_ACTS_PATH`, `PARSE_HEALTH_PATH`, … | Переопределение путей к файлам данных. |
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([10749](../../scripts/update_cases.py#L10749)) проверяет
-наличие ключей на старте; `check_court_available` ([10778](../../scripts/update_cases.py#L10778))
+`validate_environment` ([11108](../../scripts/update_cases.py#L11108)) проверяет
+наличие ключей на старте; `check_court_available` ([11137](../../scripts/update_cases.py#L11137))
 — доступность сайта суда.
 
 ## GitHub Actions
 
-Три workflow в [`.github/workflows/`](../../.github/workflows). Запускаются из UI
-(Run workflow) или кроном Worker'а.
+Четыре workflow в [`.github/workflows/`](../../.github/workflows). Основные
+запускаются из UI (Run workflow) или кроном Worker'а; тесты — на каждый push.
 
 ### `update_cases.yml` — основной
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
 (кроном Worker'а или вручную). Шаги: checkout → Python 3.12 → установка зависимостей
-→ `python scripts/update_cases.py --json` → коммит данных.
+→ `python scripts/update_cases.py --json` → коммит данных → (при падении любого
+шага) 🚨-алерт в личный Telegram.
 
 Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
 `TELEGRAM_CHAT_ID_TEST`), `smart_skip` (крон всегда `true`).
@@ -76,8 +77,19 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 Коммит-шаг добавляет: `cases.json`, `cases_archive.json`, `cases_archive_*.json`
 (холодные), `last_digest_context.json`, `last_digest.json`,
-`last_personal_pushes.json`, legacy CSV, `.digested_acts`. Сообщение коммита —
-`📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
+`last_personal_pushes.json`, legacy CSV, `.digested_acts`, `.cassation_acts`,
+`parse_health.json`. Сообщение коммита — `📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
+
+Алерт о падении сделан через `curl` (не Python) — сработает, даже если упала
+установка зависимостей; текст содержит ссылку на лог упавшего run'а.
+
+### `tests.yml` — тесты на каждый push
+[Файл](../../.github/workflows/tests.yml). Триггер — любой push (кроме правок
+только `.md`/`docs/`) + ручной запуск. Ставит зависимости + pytest и гоняет
+весь набор (`python -m pytest`). Прогоняется и на автокоммитах данных — это
+осознанно: baseline-тесты дайджеста рендерят свежий
+`data/last_digest_context.json`, так что регрессия рендера на реальных данных
+всплывёт на следующее утро.
 
 ### `test_digest.yml` — ручной тест
 [Файл](../../.github/workflows/test_digest.yml). Не парсит — переигрывает
@@ -101,30 +113,46 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | [`audit_watchlists.py`](../../scripts/audit_watchlists.py) | Аудит подписок: находит в watchlist'ах номера дел, которых нет в активном `cases.json`. Пишет отчёт, **ничего не меняет**. Запуск: `OWNER_SECRET=… python3 scripts/audit_watchlists.py`. |
 | [`find_cassation_orphans.py`](../../scripts/find_cassation_orphans.py) | Находит discovery-дубли кассации (эвристика: тот же суд/судья/ответчик). Печатает отчёт, не пишет в JSON. |
 | [`generate_icon.py`](../../scripts/generate_icon.py) | Генерация иконок PWA (squircle Sber green + «§»). Требует Pillow. |
+| [`refresh_doc_anchors.py`](../../scripts/refresh_doc_anchors.py) | Переанкеровка ссылок на строки монолита в docs/technical и CLAUDE.md после правок кода: `symbol` рядом со ссылкой → актуальная строка `def`/`class`. Dry-run по умолчанию, `--write` — применить. Главу 05 не трогает (она якорит места вызовов внутри `main_json`, а не def). |
 
 ## Тесты
 
-`pytest`. Покрытие:
+`pytest`, 228 тестов (июль 2026). Оба каталога собираются одним прогоном —
+конфиг [`pytest.ini`](../../pytest.ini) (для этого у `scripts/` есть
+`__init__.py`: пакеты `scripts.tests` и `tests` не конфликтуют именами).
 
-- [`scripts/tests/test_parsing.py`](../../scripts/tests/test_parsing.py) (~65 KB)
+- [`scripts/tests/test_parsing.py`](../../scripts/tests/test_parsing.py)
   + [`scripts/tests/fixtures/`](../../scripts/tests/fixtures) — парсеры на
-  зафиксированных HTML-снимках карточек. Главный страховочный слой для хрупких
-  парсеров: добавляя обработку нового кейса суда, кладите фикстуру и тест.
-- [`tests/test_digest_render.py`](../../tests/test_digest_render.py) (~43 KB) —
-  программный рендер и пост-обработка дайджеста.
+  зафиксированных HTML-снимках карточек; state machine; линковка
+  (`link_cases`, `link_cassation_cases`, `relink`), реактивация и ротация
+  архива, детектор здоровья парсеров, дедуп кассационных определений.
+  Главный страховочный слой для хрупких парсеров: добавляя обработку нового
+  кейса суда, кладите фикстуру и тест.
+- [`tests/test_digest_render.py`](../../tests/test_digest_render.py) —
+  программный рендер и пост-обработка дайджеста; baseline-тесты гоняются на
+  реальном `data/last_digest_context.json`.
 - [`scripts/tests/test_versions.py`](../../scripts/tests/test_versions.py) —
   синхронность версий cache-bust (`?v=N` ↔ `CACHE_VERSION`).
 
 ```bash
-python3 -m pytest scripts/tests tests
+python3 -m pytest
 ```
+
+CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([10663](../../scripts/update_cases.py#L10663)) — итоговая
-  сводка прогона (тайминги, счётчики `METRICS`: запросы, отправленные сообщения).
-- `send_crash_alert` ([10728](../../scripts/update_cases.py#L10728)) — падение
-  прогона уходит в Telegram, чтобы не потеряться в логах Actions.
+- `log_run_summary` ([11022](../../scripts/update_cases.py#L11022)) — итоговая
+  сводка прогона (тайминги, счётчики `METRICS`: запросы, отправленные сообщения,
+  карточки-«огрызки»).
+- `send_crash_alert` ([11087](../../scripts/update_cases.py#L11087)) — падение
+  прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
+  шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
+- **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в
+  `data/parse_health.json`) — 🩺-алерт в Telegram, когда суд, стабильно
+  дававший результаты, вернул 0; когда страница поиска не грузится 3 прогона
+  подряд; когда все источники разом по нулям; когда за прогон ≥5
+  карточек-«огрызков». См. [05](05-конвейер-обновления.md).
 - Логи прогона — во вкладке Actions соответствующего workflow.
 
 ## Рантбук (типичные инциденты)
@@ -133,7 +161,7 @@ python3 -m pytest scripts/tests tests
 |---------|-------------------------------|
 | **Дайджест не пришёл в Telegram** | Проверить `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`/`*_CHAT_ID` в secrets; смотреть лог Actions и crash-alert. |
 | **7kas: «Данных по запросу не обнаружено»** | Изменились параметры запроса. Проверить вручную на 7kas; не менять `delo_id=2800001`/`delo_table=g33_case`/`new=2800001` без проверки (см. [04](04-сбор-данных-и-парсеры.md)). |
-| **Парсер суда вернул мало/0 дел** | Суд сменил вёрстку или временно недоступен. Сравнить карточку на сайте с ожиданиями парсера; обновить фикстуру и тест. |
+| **Парсер суда вернул мало/0 дел** | Суд сменил вёрстку или временно недоступен. С июля 2026 об этом сам сообщит 🩺-алерт детектора (история в `parse_health.json`). Сравнить карточку на сайте с ожиданиями парсера; обновить фикстуру и тест. |
 | **Push не приходят** | На локали push выключен (нет `VAPID_PRIVATE_KEY`). В проде: проверить secrets Worker'а, что устройство в подписках (`/subscriptions`), watchlist. |
 | **Дашборд показывает старую версию** | Забыт cache-bust. Инкрементить `?v=N` в HTML и `CACHE_VERSION` в `service-worker.js` синхронно (см. [08](08-фронтенд.md)). |
 | **Появились дубли дел** | Сработает один из `dedupe_*` щитов на следующем прогоне (см. [05](05-конвейер-обновления.md)); если нет — `find_cassation_orphans.py` + ручной мердж. |
