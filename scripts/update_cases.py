@@ -4418,6 +4418,25 @@ def link_cassation_cases(
         if idx is not None:
             case = cases[idx]
             old_cass = case.get("cassation") or {}
+            # ── Защита от «воскрешения» прошлого круга ──
+            # После cassation_remanded → re-link (снимок блоков в history,
+            # round+1) старая карточка 7kas ещё месяцами висит в выдаче
+            # поиска. Без guard'а она заново матчится по номеру 1-й инст.,
+            # перезаписывает пустой cassation-блок нового круга, даёт ложное
+            # new_cassation и утаскивает дело обратно в cassation →
+            # awaiting_relink → повторный snapshot (round растёт на каждом
+            # прогоне). Карточки, чей 8Г-номер уже лежит в history, — прошлый
+            # круг: пропускаем.
+            past_cass_nums = {
+                ((h.get("cassation") or {}).get("case_number") or "").strip()
+                for h in (case.get("history") or [])
+            } - {""}
+            if cass_int_num and cass_int_num in past_cass_nums:
+                log.debug(
+                    f"  7kas: {cass_int_num} — карточка прошлого круга дела "
+                    f"{fi_num} (round={case.get('round', 1)}), пропуск"
+                )
+                continue
             old_act_published = bool(old_cass.get("act_published"))
             old_outcome = old_cass.get("outcome", "")
             old_review = old_cass.get("review_result", "")
@@ -4425,12 +4444,34 @@ def link_cassation_cases(
             cass_block["discovered_via_cassation"] = bool(
                 old_cass.get("discovered_via_cassation")
             )
+            if (case.get("current_stage") == "awaiting_relink"
+                    and old_cass.get("case_number")
+                    and cass_int_num
+                    and old_cass["case_number"].strip() != cass_int_num):
+                # awaiting_relink с уже известной кассацией, а 7kas принёс
+                # ДРУГОЙ 8Г-номер (например, вторая жалоба до пересмотра) —
+                # обновляем блок, но оставляем след в логе: снимок текущего
+                # блока при будущем re-link уйдёт в history уже с новыми
+                # данными.
+                log.warning(
+                    f"  7kas: {fi_num} в awaiting_relink — блок кассации "
+                    f"{old_cass['case_number']} замещается {cass_int_num}"
+                )
             case["cassation"] = cass_block
             # Обновим стадию.
             prev_stage = case.get("current_stage", "")
-            if prev_stage in (
+            if prev_stage == "awaiting_relink":
+                # Стадию НЕ возвращаем в cassation: дело ждёт новую карточку
+                # нижестоящей инстанции после remanded. Возврат был бы чистым
+                # шумом — advance_case_stage тут же увёл бы его обратно в
+                # awaiting_relink (outcome=remanded), а до снятия снимка ещё
+                # и породил бы ложные stage-переходы в логе. Сам блок выше
+                # обновили: поздняя публикация текста определения (new_act)
+                # по-прежнему ловится.
+                pass
+            elif prev_stage in (
                 "cassation_pending", "first_instance", "awaiting_appeal",
-                "appeal", "cassation_watch", "awaiting_relink", "", None,
+                "appeal", "cassation_watch", "", None,
             ):
                 case["current_stage"] = "cassation"
             # Зафиксируем изменения для дайджеста.
