@@ -214,192 +214,32 @@ CARD_URL_TPL = (
 # поэтому служит надёжным мостом для связки апелляции с кассацией на 7kas.
 JUDICIAL_UID_RE = re.compile(r"\d{2}[A-ZА-Я]{2}\d{4}-\d{2}-\d{4}-\d+-\d{2}")
 
-CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
-CSV_ARCHIVE_PATH = os.environ.get(
-    "CSV_ARCHIVE_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "sberbank_cases_archive.csv")
+# ── Конфигурация вынесена в court_monitor.config ─────────────────────────────
+# Фасад ре-экспортирует прежние имена (снимки значений) для внешних
+# импортёров. Патчабельные константы (CASSATION_ACTS_PATH, JSON_ARCHIVE_PATH,
+# ACT_SUMMARIES_PATH, LLM_PROVIDER, ANTHROPIC_API_KEY, DIGEST_FULL_LLM,
+# DIGEST_POLISH) код фасада читает ТОЛЬКО как config.X — тесты патчат
+# monkeypatch.setattr(config, ...), и патч виден во всех местах чтения.
+from court_monitor import config
+from court_monitor.config import (  # noqa: F401 — ре-экспорт для совместимости
+    CSV_PATH, CSV_ARCHIVE_PATH, JSON_PATH, JSON_ARCHIVE_PATH,
+    cold_archive_path, cold_archive_glob,
+    DIGESTED_ACTS_PATH, CASSATION_ACTS_PATH, ACT_SUMMARIES_PATH,
+    LAST_DIGEST_CONTEXT_PATH, LAST_DIGEST_PATH, LAST_PERSONAL_PUSHES_PATH,
+    PARSE_HEALTH_PATH, PARSE_HEALTH_HISTORY_LEN, PARSE_HEALTH_FAIL_ALERT,
+    PARSE_HEALTH_DEGRADED_ALERT,
+    FI_ARCHIVE_DAYS, APPEAL_NO_ACT_GRACE_DAYS, CASSATION_WATCH_DAYS,
+    CASSATION_ACT_ARCHIVE_DAYS, CASSATION_NO_ACT_PUBLISH_DAYS,
+    COLD_ARCHIVE_DAYS, LEGACY_CSV_ARCHIVE_DAYS,
+    REQUEST_DELAY, FETCH_MAX_RETRIES, DASHBOARD_URL,
+    ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+    PUSH_WORKER_URL, PUSH_SECRET, VAPID_PRIVATE_KEY,
+    LLM_PROVIDER, DIGEST_FULL_LLM, DIGEST_POLISH,
+    GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE, GIGACHAT_MODEL,
+    GIGACHAT_OAUTH_URL, GIGACHAT_API_URL,
+    TELEGRAM_MSG_LIMIT, DIGEST_CHAR_LIMIT, SBER_PATTERNS, CSV_COLUMNS,
+    log, METRICS, _metrics_reset,
 )
-JSON_PATH = os.environ.get("JSON_PATH", "data/cases.json")
-JSON_ARCHIVE_PATH = os.environ.get(
-    "JSON_ARCHIVE_PATH",
-    os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_archive.json")
-)
-
-
-def cold_archive_path(year: int) -> str:
-    """Путь к «холодному» годовому архиву cases_archive_YYYY.json (лежит рядом
-    с горячим JSON_ARCHIVE_PATH). Фронт эти файлы не грузит — см.
-    rotate_cold_archive."""
-    base = os.path.dirname(JSON_ARCHIVE_PATH) or "data"
-    return os.path.join(base, f"cases_archive_{year}.json")
-
-
-def cold_archive_glob() -> str:
-    """Glob-шаблон всех холодных годовых архивов — для подмешивания их id
-    в индекс дедупликации (см. main_json)."""
-    base = os.path.dirname(JSON_ARCHIVE_PATH) or "data"
-    return os.path.join(base, "cases_archive_*.json")
-DIGESTED_ACTS_PATH = os.environ.get(
-    "DIGESTED_ACTS_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
-)
-# Дедуп кассационных определений: ключи «8Г-номер|дата акта», чьи new_act
-# уже уходили в дайджест. Без него «мигание» act_published (сбойный парс
-# карточки 7kas перезаписывает блок с False, следующий удачный снова ставит
-# True) даёт повторный new_act → дубль пересказа определения в дайджесте.
-CASSATION_ACTS_PATH = os.environ.get(
-    "CASSATION_ACTS_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", ".cassation_acts")
-)
-# Кэш LLM-пересказов мотивировок: {sha1(act_text)[:16]: {summary, model,
-# stage, generated_at}}. Хранится отдельно от .digested_acts (тот — set
-# номеров дел, а здесь — мапа hash→текст). Кэш переживает --replay-last
-# и повторные прогоны: один и тот же act_text не пересказываем дважды.
-ACT_SUMMARIES_PATH = os.environ.get(
-    "ACT_SUMMARIES_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", ".act_summaries.json")
-)
-# Снимок контекста последнего дайджеста — сохраняется перед отправкой
-# в Telegram и используется режимом --replay-last для повторной генерации
-# (например, чтобы переиграть с другой версией промпта).
-LAST_DIGEST_CONTEXT_PATH = os.environ.get(
-    "LAST_DIGEST_CONTEXT_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest_context.json")
-)
-# Готовый текст последнего дайджеста (HTML) — сохраняется после успешной
-# отправки в Telegram, фронт читает этот файл и показывает свёрнутый блок
-# «Последний дайджест» в дашборде.
-LAST_DIGEST_PATH = os.environ.get(
-    "LAST_DIGEST_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest.json")
-)
-# Журнал последней push-рассылки: какие payload'ы ушли каждой подписке.
-# Используется админкой подписчиков для отладки персональной фильтрации
-# (видеть, какой именно вариант — personal/general/skip — получила каждая).
-LAST_PERSONAL_PUSHES_PATH = os.environ.get(
-    "LAST_PERSONAL_PUSHES_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_personal_pushes.json")
-)
-# Журнал здоровья парсеров: пер-источник история количества результатов
-# поиска (суды 1-й инст., апелляция, 7kas). Детектор «молчаливой поломки»:
-# суд, стабильно дававший результаты, вдруг отдаёт 0 (смена вёрстки,
-# слетевший матчер судов) — без истории это неотличимо от «нет новостей».
-# См. update_parse_health и блок 4e в main_json.
-PARSE_HEALTH_PATH = os.environ.get(
-    "PARSE_HEALTH_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "parse_health.json")
-)
-PARSE_HEALTH_HISTORY_LEN = 14   # сколько последних успешных прогонов помним
-PARSE_HEALTH_FAIL_ALERT = 3     # HTTP-фейлов подряд до алерта
-PARSE_HEALTH_DEGRADED_ALERT = 5  # карточек-«огрызков» за прогон до алерта
-# Окна жизненного цикла дела (state machine — см. advance_case_stage /
-# is_case_archived). Старая модель ARCHIVE_DAYS/ARCHIVE_DAYS_FI отсчитывала
-# архивацию от даты последнего события — ненадёжный якорь, не учитывал ни
-# кассационный срок (3 мес), ни задержку мотивировки. Новые окна привязаны
-# к стадиям процесса и датам заседаний.
-FI_ARCHIVE_DAYS = 60            # 1-я инстанция: 60 дней от даты резолютивки
-                                # без подачи апел. жалобы → архив. Раньше было
-                                # 45, но мотивировка часто задерживается на
-                                # 2-3 недели, плюс 1 мес. на жалобу по ст. 321
-                                # ГПК + лаг парсера на обновление карточки —
-                                # реальное окно «решение → запись о жалобе» до
-                                # 60-70 дней. Архив теперь не финален: при
-                                # появлении жалобы дело возвращается в активные
-                                # через reactivate_archived_first_instance.
-APPEAL_NO_ACT_GRACE_DAYS = 30   # Апелляция: если акт не опубликован через
-                                # 30 дней от апел. заседания — всё равно
-                                # переходим в cassation_watch.
-CASSATION_WATCH_DAYS = 120      # cassation_watch: 4 мес (≈3 мес срок + почта
-                                # + регистрация) от апел. заседания. После —
-                                # архив, если касс. жалоба так и не подана.
-# Кассация (стадия cassation, парсер 7kas.sudrf.ru):
-CASSATION_ACT_ARCHIVE_DAYS = 30      # 30 дней после публикации опред. → архив.
-CASSATION_NO_ACT_PUBLISH_DAYS = 45   # 45 дней от даты вынесения опред. без
-                                     # публикации текста → архив без акта.
-# Ротация архива: дела, заархивированные более года назад (по archived_at),
-# уезжают из «горячего» cases_archive.json (его грузит фронт) в «холодные»
-# годовые файлы cases_archive_YYYY.json, которые фронт не загружает. Так вес
-# того, что качает браузер, перестаёт расти безгранично. См. rotate_cold_archive.
-COLD_ARCHIVE_DAYS = 365
-# Legacy: CSV-ветка архивации (apelljatsiя в CSV) ещё использует старое
-# 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.
-LEGACY_CSV_ARCHIVE_DAYS = 30
-REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
-FETCH_MAX_RETRIES = 3   # Кол-во попыток загрузки страницы
-DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
-
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
-
-# Web Push (PWA-уведомления)
-PUSH_WORKER_URL = os.environ.get("PUSH_WORKER_URL", "").rstrip("/")
-PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
-# Приватный VAPID-ключ в PEM-формате; хранится только в GitHub Secrets.
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
-
-# Переключатель провайдера LLM: "claude" (по умолчанию) или "gigachat".
-# Задаётся в workflow digest_only_gigachat.yml для отдельного прогона
-# дайджеста через GigaChat. Основной мониторинг (update_cases.yml) остаётся
-# на Claude и ничего не знает про этот флаг.
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
-
-# Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
-# По умолчанию используется гибридный путь: программный рендер
-# (generate_template_digest) + LLM-микро-вызов только на пересказ
-# мотивировок судебных актов (summarize_act_motivation). Флаг
-# `DIGEST_FULL_LLM=1` возвращает старое поведение: ровно тот HTML,
-# который выдавал Claude/GigaChat одним вызовом. Используется как
-# escape hatch на случай регресса стилистики или необходимости A/B.
-DIGEST_FULL_LLM = (
-    os.environ.get("DIGEST_FULL_LLM", "").strip().lower() in ("1", "true", "yes")
-)
-
-# Включение LLM-полировщика готового HTML (вариант C1 итерации 2).
-# Программа собирает черновик через generate_template_digest + пересказы
-# актов; при `DIGEST_POLISH=1` черновик уходит в polish_digest_html, где
-# LLM делает косметические правки (капитализация, жирные даты, склонения,
-# сокращение длинных категорий). Валидатор проверяет контракт <a><b>NUM</b></a>;
-# при провале — откат к черновику. По умолчанию выключен — для безопасности.
-DIGEST_POLISH = (
-    os.environ.get("DIGEST_POLISH", "").strip().lower() in ("1", "true", "yes")
-)
-GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
-GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")
-GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
-
-# Лимит Telegram на одно сообщение
-TELEGRAM_MSG_LIMIT = 4096
-# Целевой лимит длины дайджеста (передаётся в промпт). Должен быть ЗАМЕТНО
-# больше реального объёма — иначе Haiku 4.5 в режиме «экономии» сворачивает
-# дела в одну строку и выкидывает события, чтобы уложиться. На выходе
-# truncate_html_message(text, TELEGRAM_MSG_LIMIT * 2) = 8192, а Telegram
-# split_message режет на 2 сообщения по 4096, так что фактически лимита
-# особо и нет — нет смысла зажимать LLM.
-DIGEST_CHAR_LIMIT = 12000
-
-# Паттерны для опознания «Сбербанка» среди сторон дела (lowercase substring match).
-# Используется и при первичном парсинге поисковой выдачи, и при определении
-# апеллянта на стадии обновления карточки. Должен быть один источник истины,
-# иначе роль банка проставляется неконсистентно.
-SBER_PATTERNS = ("сбербанк", "сбербанк россии", "пао сбербанк", "пао сбер")
-
-CSV_COLUMNS = [
-    "Номер дела", "Дата поступления", "Истец", "Ответчик", "Категория",
-    "Суд 1 инстанции", "Судья 1 инстанции", "Роль банка", "Статус",
-    "Последнее событие", "Дата события", "Время заседания",
-    "Акт опубликован", "Результат", "Ссылка", "Заметки", "Апеллянт",
-    "Дата публикации акта", "Дата заседания", "Судья-докладчик"
-]
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger("court-monitor")
 
 session = requests.Session()
 session.headers.update({
@@ -413,23 +253,6 @@ session.headers.update({
 })
 
 
-# ── Метрики прогона ──────────────────────────────────────────────────────────
-
-# Глобальные счётчики прогона — собираются по ходу выполнения,
-# сбрасываются в начале каждого main()/main_digest_only().
-METRICS: dict[str, int] = {
-    "requests_ok": 0,
-    "requests_failed": 0,
-    "requests_retried": 0,   # попытки fetch_page после неудачи
-    "telegram_sent": 0,      # успешно отправленных сообщений (после split)
-    "telegram_failed": 0,    # полностью не отправленных частей
-    "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
-}
-
-
-def _metrics_reset() -> None:
-    for k in METRICS:
-        METRICS[k] = 0
 
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
@@ -732,15 +555,15 @@ def save_digested_acts(acts: set):
 def load_cassation_acts() -> set:
     """Загрузить ключи кассационных определений, уже ушедших в дайджест
     (формат ключа — см. _cassation_act_key)."""
-    if not os.path.exists(CASSATION_ACTS_PATH):
+    if not os.path.exists(config.CASSATION_ACTS_PATH):
         return set()
-    with open(CASSATION_ACTS_PATH, "r", encoding="utf-8") as f:
+    with open(config.CASSATION_ACTS_PATH, "r", encoding="utf-8") as f:
         return {line.strip() for line in f if line.strip()}
 
 
 def save_cassation_acts(acts: set):
-    os.makedirs(os.path.dirname(CASSATION_ACTS_PATH) or ".", exist_ok=True)
-    with open(CASSATION_ACTS_PATH, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(config.CASSATION_ACTS_PATH) or ".", exist_ok=True)
+    with open(config.CASSATION_ACTS_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(acts)) + "\n")
 
 
@@ -868,25 +691,25 @@ def update_parse_health(
 
 def _load_act_summaries() -> dict:
     """Загрузить кэш LLM-пересказов мотивировок: {hash: {summary, ...}}."""
-    if not os.path.exists(ACT_SUMMARIES_PATH):
+    if not os.path.exists(config.ACT_SUMMARIES_PATH):
         return {}
     try:
-        with open(ACT_SUMMARIES_PATH, "r", encoding="utf-8") as f:
+        with open(config.ACT_SUMMARIES_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError) as e:
-        log.warning(f"Не удалось прочитать {ACT_SUMMARIES_PATH}: {e}")
+        log.warning(f"Не удалось прочитать {config.ACT_SUMMARIES_PATH}: {e}")
         return {}
 
 
 def _save_act_summaries(cache: dict) -> None:
     """Сохранить кэш пересказов атомарно (tmp + replace)."""
-    os.makedirs(os.path.dirname(ACT_SUMMARIES_PATH) or ".", exist_ok=True)
-    tmp = ACT_SUMMARIES_PATH + ".tmp"
+    os.makedirs(os.path.dirname(config.ACT_SUMMARIES_PATH) or ".", exist_ok=True)
+    tmp = config.ACT_SUMMARIES_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    os.replace(tmp, ACT_SUMMARIES_PATH)
+    os.replace(tmp, config.ACT_SUMMARIES_PATH)
 
 
 def is_archived(case: dict) -> bool:
@@ -4900,7 +4723,7 @@ def link_cassation_cases(
         try:
             save_cassation_acts(digested_cass_acts)
         except OSError as e:
-            log.warning(f"Не удалось сохранить {CASSATION_ACTS_PATH}: {e}")
+            log.warning(f"Не удалось сохранить {config.CASSATION_ACTS_PATH}: {e}")
 
     # Изымаем восстановленные дела из архивного списка (мутируем на месте —
     # вызывающий код пишет archived_cases обратно в cases_archive.json).
@@ -5971,13 +5794,13 @@ def _call_claude_simple(
     Дублирует часть `generate_digest`, но с маленьким max_tokens и без
     post-обработки HTML — для пересказа мотивировки нужен plain text.
     """
-    if not ANTHROPIC_API_KEY:
+    if not config.ANTHROPIC_API_KEY:
         return None
     try:
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
+                "x-api-key": config.ANTHROPIC_API_KEY,
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
@@ -6103,7 +5926,7 @@ def summarize_act_motivation(
             return cached_summary
 
     prompt = _build_act_summary_prompt(act, case_meta)
-    if LLM_PROVIDER == "gigachat":
+    if config.LLM_PROVIDER == "gigachat":
         raw = _call_gigachat_simple(prompt)
     else:
         raw = _call_claude_simple(prompt)
@@ -6286,7 +6109,7 @@ def polish_digest_html(
     max_length = TELEGRAM_MSG_LIMIT * 2
 
     user_prompt = f"ЧЕРНОВИК HTML:\n\n{draft}"
-    if LLM_PROVIDER == "gigachat":
+    if config.LLM_PROVIDER == "gigachat":
         polished = _call_gigachat_polish(
             _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
         )
@@ -6326,13 +6149,13 @@ def _call_claude_polish(system_prompt: str, user_prompt: str) -> str | None:
     `_call_claude_simple`), потому что у полировщика есть system-prompt
     и существенно больший max_tokens (выходной HTML может быть длинным).
     """
-    if not ANTHROPIC_API_KEY:
+    if not config.ANTHROPIC_API_KEY:
         return None
     try:
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
+                "x-api-key": config.ANTHROPIC_API_KEY,
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
@@ -6551,7 +6374,7 @@ def _current_digest_model_name() -> str:
     """Имя модели, которой только что генерили дайджест — для метки
     `act_analysis.model`. Совпадает с тем, что реально использовалось в
     `generate_digest()`."""
-    if LLM_PROVIDER == "gigachat":
+    if config.LLM_PROVIDER == "gigachat":
         return f"gigachat:{GIGACHAT_MODEL}"
     return "claude-haiku-4-5-20251001"
 
@@ -6856,10 +6679,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # При DIGEST_POLISH=1 готовый HTML дополнительно проходит через
     # polish_digest_html (косметика + валидатор контракта).
     # Старый полный LLM-вызов остаётся за DIGEST_FULL_LLM=1 для отката.
-    if not DIGEST_FULL_LLM:
+    if not config.DIGEST_FULL_LLM:
         log.info(
             "LLM: гибрид (программный рендер + микро-LLM на пересказы актов"
-            + (", + полировщик HTML" if DIGEST_POLISH else "")
+            + (", + полировщик HTML" if config.DIGEST_POLISH else "")
             + ")"
         )
         draft = generate_template_digest(
@@ -6873,7 +6696,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             cass_discovered=cass_discovered,
             act_summarizer=summarize_act_motivation,
         )
-        if DIGEST_POLISH:
+        if config.DIGEST_POLISH:
             expected_nums = _collect_case_numbers(
                 new_cases=new_cases, changes=changes,
                 fi_new_cases=fi_new_cases, fi_changes=fi_changes,
@@ -6885,7 +6708,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         return draft
 
     # ── Старая ветка: полный LLM-вызов (за флагом DIGEST_FULL_LLM=1) ─────
-    if LLM_PROVIDER == "gigachat":
+    if config.LLM_PROVIDER == "gigachat":
         if not GIGACHAT_AUTH_KEY:
             log.warning("GIGACHAT_AUTH_KEY не задан, дайджест будет шаблонным")
             return generate_template_digest(
@@ -6898,7 +6721,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
-    elif not ANTHROPIC_API_KEY:
+    elif not config.ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
         return generate_template_digest(
             new_cases, changes, cases=cases,
@@ -7856,7 +7679,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 Данные:
 {chr(10).join(context_parts)}"""
 
-    if LLM_PROVIDER == "gigachat":
+    if config.LLM_PROVIDER == "gigachat":
         log.info(f"LLM: GigaChat (model={GIGACHAT_MODEL}, scope={GIGACHAT_SCOPE})")
         text = _call_gigachat(prompt)
         if not text:
@@ -7908,7 +7731,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
+                "x-api-key": config.ANTHROPIC_API_KEY,
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
@@ -11114,10 +10937,10 @@ def validate_environment(require_anthropic: bool = True) -> None:
     """
     missing: list[str] = []
     if require_anthropic:
-        if LLM_PROVIDER == "gigachat":
+        if config.LLM_PROVIDER == "gigachat":
             if not GIGACHAT_AUTH_KEY:
                 missing.append("GIGACHAT_AUTH_KEY")
-        elif not ANTHROPIC_API_KEY:
+        elif not config.ANTHROPIC_API_KEY:
             missing.append("ANTHROPIC_API_KEY")
     if not TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
@@ -11551,7 +11374,7 @@ def main_json():
     cases = data.get("cases", [])
     # Архив подмешиваем только в индекс дедупликации, чтобы дела, которые
     # юрист уже отправил в архив, не появлялись снова как «новые» в дайджесте.
-    archive_data = load_json(JSON_ARCHIVE_PATH)
+    archive_data = load_json(config.JSON_ARCHIVE_PATH)
     archived_cases = archive_data.get("cases", [])
     # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
     # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
@@ -11559,7 +11382,7 @@ def main_json():
     # обратной записи горячего архива они вернулись бы в cases_archive.json.
     cold_archived_cases: list[dict] = []
     for cold_path in glob.glob(cold_archive_glob()):
-        if os.path.abspath(cold_path) == os.path.abspath(JSON_ARCHIVE_PATH):
+        if os.path.abspath(cold_path) == os.path.abspath(config.JSON_ARCHIVE_PATH):
             continue  # на всякий случай: не путать горячий файл с холодными
         cold_archived_cases.extend(load_json(cold_path).get("cases", []))
     timings["load_json"] = time.perf_counter() - t0
@@ -13117,7 +12940,7 @@ def main_json():
     # потеряют дела, временно реактивированные и возвращённые в архив.
     if archive_dirty:
         archive_data["cases"] = archived_cases
-        save_json(archive_data, JSON_ARCHIVE_PATH)
+        save_json(archive_data, config.JSON_ARCHIVE_PATH)
 
     data["cases"] = cases
     save_json(data, JSON_PATH)
@@ -13406,7 +13229,7 @@ def main_replay_last(push_all: bool = False):
     # Для alias-расширения watchlist'а нужны актуальные active + archive
     # cases. Read-only — данные уже подмержены через act_analysis выше.
     _replay_active = load_json(JSON_PATH).get("cases", []) or []
-    _replay_archive = load_json(JSON_ARCHIVE_PATH).get("cases", []) or []
+    _replay_archive = load_json(config.JSON_ARCHIVE_PATH).get("cases", []) or []
     send_web_push(
         title=title,
         body=body,
@@ -13533,7 +13356,7 @@ def main_push_last_digest(owner_only: bool = False):
     log.info(f"Push body: {body!r}")
     # Для alias-расширения watchlist'а: active + archive cases.
     _push_active = load_json(JSON_PATH).get("cases", []) or []
-    _push_archive = load_json(JSON_ARCHIVE_PATH).get("cases", []) or []
+    _push_archive = load_json(config.JSON_ARCHIVE_PATH).get("cases", []) or []
     send_web_push(
         title=title,
         body=body,
