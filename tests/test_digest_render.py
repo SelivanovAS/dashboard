@@ -76,36 +76,45 @@ class TemplateDigestBaselineTest(unittest.TestCase):
                          "Шаблонный дайджест неидемпотентен")
 
     def test_all_case_numbers_present(self):
-        nums = set()
+        # Каждый элемент — множество равнозначных представлений номера:
+        # дело «присутствует», если в HTML есть хотя бы одно из них. Для
+        # касс. событий рендер по просьбе юриста выводит кассационный номер
+        # (8Г-…) вместо номера 1-й инст. — принимаем оба.
+        expected: list[set] = []
         for c in self.ctx.get("new_cases") or []:
             n = (c.get("Номер дела") or "").strip()
             if n:
-                nums.add(n)
+                expected.append({n})
         for c in self.ctx.get("fi_new_cases") or []:
             n = (c.get("id") or "").strip()
             if n:
-                nums.add(n)
+                expected.append({n})
         for ch in self.ctx.get("changes") or []:
             n = (ch.get("case") or "").strip()
             if n:
-                nums.add(n)
+                expected.append({n})
         for ch in self.ctx.get("fi_changes") or []:
             n = (ch.get("case") or "").strip()
             if n:
-                nums.add(n)
+                expected.append({n})
         for ch in self.ctx.get("cass_changes") or []:
-            n = (ch.get("case") or "").strip()
-            if n:
-                nums.add(n)
-        if not nums:
+            alts = {
+                (ch.get("case") or "").strip(),
+                (ch.get("cassation_internal_number") or "").strip(),
+            } - {""}
+            if alts:
+                expected.append(alts)
+        if not expected:
             self.skipTest("В контексте нет номеров дел")
-        present = sum(1 for n in nums if n in self.html)
-        ratio = present / len(nums)
+        present = sum(
+            1 for alts in expected if any(n in self.html for n in alts)
+        )
+        ratio = present / len(expected)
         # Допускаем небольшую усушку при truncate_html_message,
         # но >=70% номеров должны быть в HTML.
         self.assertGreaterEqual(
             ratio, 0.7,
-            f"Слишком мало номеров в HTML: {present}/{len(nums)}",
+            f"Слишком мало номеров в HTML: {present}/{len(expected)}",
         )
 
     def test_dashboard_link_present(self):
