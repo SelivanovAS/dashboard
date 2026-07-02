@@ -698,6 +698,13 @@ def _cass_find(fi_num: str, cass_num: str = "8Г-111/2026", **over) -> dict:
 
 
 class TestLinkCassationCases:
+    @pytest.fixture(autouse=True)
+    def _isolate_cassation_acts(self, monkeypatch, tmp_path):
+        """Дедуп .cassation_acts пишется в tmp, а не в data/ репозитория."""
+        monkeypatch.setattr(
+            uc, "CASSATION_ACTS_PATH", str(tmp_path / ".cassation_acts")
+        )
+
     def test_pending_case_links_and_becomes_cassation(self):
         cases = [{
             "id": "2-100/2025",
@@ -807,6 +814,45 @@ class TestLinkCassationCases:
         assert case["cassation"]["case_number"] == "8Г-555/2026"
         assert "archived_at" not in case
         assert changes and "new_cassation" in changes[0]["type"]
+
+    def test_act_published_flap_does_not_redigest(self):
+        """«Мигание» act_published: акт ушёл в дайджест, затем сбойный парс
+        перезаписал блок с act_published=False, следующий удачный парс снова
+        ставит True — повторный new_act подавляется через .cassation_acts."""
+        find = _cass_find(
+            "2-600/2025", cass_num="8Г-888/2026",
+            result_text="УДОВЛЕТВОРЕНО",
+            result_for_appeal="ОТМЕНЕНО",
+            decision_date="01.06.2026",
+            act_published=True,
+            act_text="установил: мотивировка определения ...",
+        )
+        case = {"id": "2-600/2025", "current_stage": "cassation",
+                "first_instance": {"case_number": "2-600/2025"},
+                "cassation": {"case_number": "8Г-888/2026",
+                              "act_published": False}}
+        cases = [case]
+        cases, changes, _ = uc.link_cassation_cases(cases, [dict(find)])
+        assert any("new_act" in ch["type"] for ch in changes)
+        # Сбойный парс: блок перезаписан с act_published=False.
+        cases[0]["cassation"]["act_published"] = False
+        cases, changes2, _ = uc.link_cassation_cases(cases, [dict(find)])
+        assert not any("new_act" in ch["type"] for ch in changes2)
+
+    def test_new_determination_with_other_date_passes_dedup(self):
+        uc.save_cassation_acts({"8Г-888/2026|01.06.2026"})
+        find = _cass_find(
+            "2-601/2025", cass_num="8Г-888/2026",
+            result_text="УДОВЛЕТВОРЕНО", result_for_appeal="ОТМЕНЕНО",
+            decision_date="15.07.2026", act_published=True,
+            act_text="установил: новое определение ...",
+        )
+        case = {"id": "2-601/2025", "current_stage": "cassation",
+                "first_instance": {"case_number": "2-601/2025"},
+                "cassation": {"case_number": "8Г-888/2026",
+                              "act_published": False}}
+        _, changes, _ = uc.link_cassation_cases([case], [find])
+        assert any("new_act" in ch["type"] for ch in changes)
 
     def test_archived_past_round_card_not_resurrected(self):
         """Карточка прошлого круга архивного дела (8Г уже в history)

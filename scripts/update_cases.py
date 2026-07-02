@@ -243,6 +243,14 @@ DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")
 )
+# Дедуп кассационных определений: ключи «8Г-номер|дата акта», чьи new_act
+# уже уходили в дайджест. Без него «мигание» act_published (сбойный парс
+# карточки 7kas перезаписывает блок с False, следующий удачный снова ставит
+# True) даёт повторный new_act → дубль пересказа определения в дайджесте.
+CASSATION_ACTS_PATH = os.environ.get(
+    "CASSATION_ACTS_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", ".cassation_acts")
+)
 # Кэш LLM-пересказов мотивировок: {sha1(act_text)[:16]: {summary, model,
 # stage, generated_at}}. Хранится отдельно от .digested_acts (тот — set
 # номеров дел, а здесь — мапа hash→текст). Кэш переживает --replay-last
@@ -719,6 +727,33 @@ def save_digested_acts(acts: set):
     os.makedirs(os.path.dirname(DIGESTED_ACTS_PATH) or ".", exist_ok=True)
     with open(DIGESTED_ACTS_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(acts)) + "\n")
+
+
+def load_cassation_acts() -> set:
+    """Загрузить ключи кассационных определений, уже ушедших в дайджест
+    (формат ключа — см. _cassation_act_key)."""
+    if not os.path.exists(CASSATION_ACTS_PATH):
+        return set()
+    with open(CASSATION_ACTS_PATH, "r", encoding="utf-8") as f:
+        return {line.strip() for line in f if line.strip()}
+
+
+def save_cassation_acts(acts: set):
+    os.makedirs(os.path.dirname(CASSATION_ACTS_PATH) or ".", exist_ok=True)
+    with open(CASSATION_ACTS_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(sorted(acts)) + "\n")
+
+
+def _cassation_act_key(cass_block: dict) -> str:
+    """Ключ дедупа определения: «8Г-номер|дата». Дата — act_date (= дата
+    вынесения при опубликованном тексте), фолбэк decision_date: если по
+    одной жалобе когда-нибудь появится второе определение с другой датой,
+    оно пройдёт в дайджест как новое."""
+    num = (cass_block.get("case_number") or "").strip()
+    dt = (cass_block.get("act_date") or cass_block.get("decision_date") or "").strip()
+    if not num:
+        return ""
+    return f"{num}|{dt}"
 
 
 # ── Здоровье парсеров (детектор молчаливой поломки) ─────────────────────────
@@ -4577,6 +4612,12 @@ def link_cassation_cases(
             _index_case(c, i, arch_fi_index, arch_cass_index, arch_uid_index)
     resurrected: set[int] = set()  # позиции archived_cases, изъятые в активные
 
+    # Дедуп определений (.cassation_acts): повторный new_act по тому же
+    # определению («мигание» act_published из-за сбойного парса) в дайджест
+    # не уходит. Зеркало .digested_acts для актов 1-й инст./апелляции.
+    digested_cass_acts = load_cassation_acts()
+    cass_acts_dirty = False
+
     cass_changes: list[dict] = []
     discovered: list[dict] = []
 
@@ -4730,13 +4771,26 @@ def link_cassation_cases(
             if cass_block["outcome"] and cass_block["outcome"] != old_outcome:
                 change["type"].append("outcome_change")
             if cass_block["act_published"] and not old_act_published:
-                change["type"].append("new_act")
-                # Текст определения — уже в cass_block["act_text"]. В дайджест
-                # пробрасываем мотивировочную часть.
-                change["details"]["act_text"] = extract_motive_part(
-                    cass_block["act_text"], 1800
-                )
-                change["details"]["act_date"] = cass_block["act_date"]
+                act_key = _cassation_act_key(cass_block)
+                if act_key and act_key in digested_cass_acts:
+                    # Определение уже уходило в дайджест — act_published
+                    # «мигнул» (сбойный парс перезаписал блок с False).
+                    # Блок обновили, событие не дублируем.
+                    log.debug(
+                        f"  7kas: {cass_block['case_number']} — определение "
+                        f"уже было в дайджесте, new_act подавлен"
+                    )
+                else:
+                    change["type"].append("new_act")
+                    # Текст определения — уже в cass_block["act_text"].
+                    # В дайджест пробрасываем мотивировочную часть.
+                    change["details"]["act_text"] = extract_motive_part(
+                        cass_block["act_text"], 1800
+                    )
+                    change["details"]["act_date"] = cass_block["act_date"]
+                    if act_key:
+                        digested_cass_acts.add(act_key)
+                        cass_acts_dirty = True
             if change["type"]:
                 cass_changes.append(change)
             stage_changed = prev_stage != case["current_stage"]
@@ -4822,15 +4876,31 @@ def link_cassation_cases(
                 },
             })
             if cass_block["act_published"]:
-                cass_changes[-1]["type"].append("new_act")
-                cass_changes[-1]["details"]["act_text"] = extract_motive_part(
-                    cass_block["act_text"], 1800
-                )
-                cass_changes[-1]["details"]["act_date"] = cass_block["act_date"]
+                act_key = _cassation_act_key(cass_block)
+                if act_key and act_key in digested_cass_acts:
+                    log.debug(
+                        f"  7kas: {cass_block['case_number']} — определение "
+                        f"уже было в дайджесте, new_act подавлен (discovery)"
+                    )
+                else:
+                    cass_changes[-1]["type"].append("new_act")
+                    cass_changes[-1]["details"]["act_text"] = extract_motive_part(
+                        cass_block["act_text"], 1800
+                    )
+                    cass_changes[-1]["details"]["act_date"] = cass_block["act_date"]
+                    if act_key:
+                        digested_cass_acts.add(act_key)
+                        cass_acts_dirty = True
             log.info(
                 f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "
                 f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"
             )
+
+    if cass_acts_dirty:
+        try:
+            save_cassation_acts(digested_cass_acts)
+        except OSError as e:
+            log.warning(f"Не удалось сохранить {CASSATION_ACTS_PATH}: {e}")
 
     # Изымаем восстановленные дела из архивного списка (мутируем на месте —
     # вызывающий код пишет archived_cases обратно в cases_archive.json).
