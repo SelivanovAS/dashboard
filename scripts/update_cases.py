@@ -4126,10 +4126,22 @@ def relink_awaiting_relink_first_instance(
     """
     if not cases or not fi_results_by_court:
         return []
-    awaiting = {
-        (c.get("id") or "").strip(): c for c in cases
-        if c.get("current_stage") == "awaiting_relink"
-    }
+    # Дуальные ключи (сырой id + базовая форма): id дела после кассации может
+    # быть «гибридным» («2-208/2026 (2-1148/2025;)»), а поиск 1-й инст.
+    # возвращает короткую форму «2-208/2026». Без нормализации такое дело
+    # зависает в awaiting_relink навсегда — как «новое» его тоже не заведут
+    # (existing_ids уже содержит голую часть id).
+    awaiting: dict[str, dict] = {}
+    for c in cases:
+        if c.get("current_stage") != "awaiting_relink":
+            continue
+        cid = (c.get("id") or "").strip()
+        if not cid:
+            continue
+        awaiting.setdefault(cid, c)
+        base = _bare_case_number(cid)
+        if base and base != cid:
+            awaiting.setdefault(base, c)
     if not awaiting:
         return []
     # На вход приходит либо список пар (court, results), либо (для совместимости)
@@ -4142,9 +4154,11 @@ def relink_awaiting_relink_first_instance(
     for court, results in pairs:
         for fi in results:
             num = (fi.get("case_number") or "").strip()
-            if not num or num not in awaiting:
+            if not num:
                 continue
-            case = awaiting[num]
+            case = awaiting.get(num) or awaiting.get(_bare_case_number(num))
+            if case is None:
+                continue
             _snapshot_round_to_history(case, "cassation_remanded_to_fi")
             case["current_stage"] = "first_instance"
             new_fi_block = _fi_search_to_json_case(fi)["first_instance"]
@@ -4154,7 +4168,10 @@ def relink_awaiting_relink_first_instance(
                 f"  Re-link (awaiting_relink → first_instance): {num} "
                 f"в {getattr(court, 'name', court)} (round={case.get('round', 1)})"
             )
-            del awaiting[num]
+            # Снимаем ВСЕ ключи этого дела (сырой и базовый), иначе вторая
+            # форма номера может сработать повторно и снять второй снимок.
+            for k in [k for k, v in awaiting.items() if v is case]:
+                del awaiting[k]
     return relinked
 
 
