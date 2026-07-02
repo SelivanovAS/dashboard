@@ -39,3 +39,7 @@ from court_monitor.digest.template import (  # noqa: F401
     load_last_meaningful_digest, _format_iso_date_ru,
     render_no_changes_digest, generate_template_digest,
 )
+from court_monitor.digest.core import (  # noqa: F401
+    save_digest_context, save_last_digest, _extract_case_paragraphs_from_digest,
+    attach_act_analyses, _dedupe_existing_act_analyses, generate_digest,
+)
