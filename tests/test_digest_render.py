@@ -23,6 +23,8 @@ import update_cases as uc  # noqa: E402
 # Конфиг-константы патчатся на модуле-доме: код читает их как config.X,
 # патч фасада uc.X до чтений не доходит (см. docs/Распил_монолита_контекст.md).
 from court_monitor import config as cm_config  # noqa: E402
+# LLM-функции — тоже на модуле-доме: вызовы идут как llm.X(...).
+from court_monitor.digest import llm as cm_llm  # noqa: E402
 
 LAST_CTX_PATH = os.path.join(REPO_ROOT, "data", "last_digest_context.json")
 
@@ -261,7 +263,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
             called.append(prompt)
             return "should not be called"
 
-        with patch.object(uc, "_call_claude_simple", fake_claude):
+        with patch.object(cm_llm, "_call_claude_simple", fake_claude):
             self.assertIsNone(
                 uc.summarize_act_motivation(
                     "короткий", case_meta={"stage": "appeal"},
@@ -289,7 +291,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
 
         try:
             with patch.object(cm_config, "ACT_SUMMARIES_PATH", cache_path), \
-                 patch.object(uc, "_call_claude_simple", fake_claude), \
+                 patch.object(cm_llm, "_call_claude_simple", fake_claude), \
                  patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
                  patch.object(cm_config, "LLM_PROVIDER", "claude"):
                 act_text = "Мотивировочная часть акта. " * 10
@@ -311,7 +313,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
                     pass
 
     def test_returns_none_on_llm_failure(self):
-        with patch.object(uc, "_call_claude_simple", lambda p, **kw: None), \
+        with patch.object(cm_llm, "_call_claude_simple", lambda p, **kw: None), \
              patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.summarize_act_motivation(
@@ -325,7 +327,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
         def fake_claude(prompt, **kw):
             return '"Кратко: суд отказал."'
 
-        with patch.object(uc, "_call_claude_simple", fake_claude), \
+        with patch.object(cm_llm, "_call_claude_simple", fake_claude), \
              patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.summarize_act_motivation(
@@ -616,7 +618,7 @@ class GenerateDigestEntryPointTest(unittest.TestCase):
             return "TEST_HYBRID_SUMMARY"
 
         with patch.object(cm_config, "DIGEST_FULL_LLM", False), \
-             patch.object(uc, "summarize_act_motivation", fake_summarize):
+             patch.object(cm_llm, "summarize_act_motivation", fake_summarize):
             html = uc.generate_digest(**self.kwargs)
         self.assertTrue(html)
         # Контракт абзацев не должен быть нарушен.
@@ -752,7 +754,7 @@ class PolishDigestHtmlTest(unittest.TestCase):
         self.expected = {"33-100/2026"}
 
     def test_returns_draft_on_empty_llm(self):
-        with patch.object(uc, "_call_claude_polish", lambda s, u: None), \
+        with patch.object(cm_llm, "_call_claude_polish", lambda s, u: None), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.polish_digest_html(
                 self.draft, expected_case_numbers=self.expected
@@ -768,7 +770,7 @@ class PolishDigestHtmlTest(unittest.TestCase):
         def fake(system, user):
             return polished_input
 
-        with patch.object(uc, "_call_claude_polish", fake), \
+        with patch.object(cm_llm, "_call_claude_polish", fake), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.polish_digest_html(
                 self.draft, expected_case_numbers=self.expected
@@ -789,7 +791,7 @@ class PolishDigestHtmlTest(unittest.TestCase):
         def fake(system, user):
             return broken
 
-        with patch.object(uc, "_call_claude_polish", fake), \
+        with patch.object(cm_llm, "_call_claude_polish", fake), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.polish_digest_html(
                 self.draft, expected_case_numbers=self.expected
@@ -806,7 +808,7 @@ class PolishDigestHtmlTest(unittest.TestCase):
         def fake(system, user):
             return broken
 
-        with patch.object(uc, "_call_claude_polish", fake), \
+        with patch.object(cm_llm, "_call_claude_polish", fake), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.polish_digest_html(
                 self.draft, expected_case_numbers=self.expected
@@ -826,7 +828,7 @@ class PolishDigestHtmlTest(unittest.TestCase):
         def fake(system, user):
             return polished_with_fence
 
-        with patch.object(uc, "_call_claude_polish", fake), \
+        with patch.object(cm_llm, "_call_claude_polish", fake), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.polish_digest_html(
                 self.draft, expected_case_numbers=self.expected
@@ -853,7 +855,7 @@ class GenerateDigestPolishIntegrationTest(unittest.TestCase):
             return draft
 
         with patch.object(cm_config, "DIGEST_POLISH", False), \
-             patch.object(uc, "polish_digest_html", fake_polish):
+             patch.object(cm_llm, "polish_digest_html", fake_polish):
             uc.generate_digest(
                 new_cases=[], changes=[],
                 fi_new_cases=[], fi_changes=[],
@@ -884,7 +886,7 @@ class GenerateDigestPolishIntegrationTest(unittest.TestCase):
             },
         }
         with patch.object(cm_config, "DIGEST_POLISH", True), \
-             patch.object(uc, "polish_digest_html", fake_polish):
+             patch.object(cm_llm, "polish_digest_html", fake_polish):
             html = uc.generate_digest(
                 new_cases=[], changes=[change],
                 fi_new_cases=[], fi_changes=[],
