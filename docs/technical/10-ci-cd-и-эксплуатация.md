@@ -1,0 +1,149 @@
+# 10. CI/CD и эксплуатация
+
+## Что это и зачем
+
+Этот документ — для того, кто **запускает, обслуживает и чинит** систему: какие
+есть режимы запуска, какие переменные окружения нужны, как устроены GitHub
+Actions, какие есть вспомогательные скрипты и тесты, и что делать, когда
+что-то сломалось (рантбук).
+
+## Режимы запуска (CLI)
+
+`update_cases.py` выбирает режим по флагу в `sys.argv`
+([__main__, 13200](../../scripts/update_cases.py#L13200)). Любое необработанное
+исключение оборачивается в `send_crash_alert` → уходит в Telegram.
+
+| Команда | Функция | Что делает |
+|---------|---------|-----------|
+| `--json` | `main_json` ([11165](../../scripts/update_cases.py#L11165)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([10790](../../scripts/update_cases.py#L10790)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([13146](../../scripts/update_cases.py#L13146)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([12871](../../scripts/update_cases.py#L12871)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([13019](../../scripts/update_cases.py#L13019)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([11076](../../scripts/update_cases.py#L11076)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+
+```bash
+# Полный боевой прогон локально
+python3 scripts/update_cases.py --json
+
+# Переиграть последний дайджест
+python3 scripts/update_cases.py --replay-last
+
+# Зависимости
+pip install -r scripts/requirements.txt   # requests, pywebpush
+```
+
+## Переменные окружения
+
+| Переменная | Назначение |
+|------------|-----------|
+| `ANTHROPIC_API_KEY` | Claude (генерация/пересказ). |
+| `GIGACHAT_CREDENTIALS` / `GIGACHAT_*` | GigaChat (альтернативный LLM). |
+| `TELEGRAM_BOT_TOKEN` | Токен бота. |
+| `TELEGRAM_CHAT_ID` | Корпоративная группа (только при `to_group=true`). |
+| `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель. |
+| `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` | Web Push для PWA. |
+| `OWNER_SECRET` | Секрет Worker'а для `/mark-owner` и админки. |
+| `GITHUB_PAT` | В secrets Worker'а — для `workflow_dispatch`. |
+| `LLM_PROVIDER` | `claude` (по умолч.) / `gigachat`. |
+| `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
+| `SKIP_NON_WORKING_DAYS` | `1` → smart-skip (передаёт крон). |
+| `JSON_PATH`, `CSV_PATH`, `DIGESTED_ACTS_PATH`, … | Переопределение путей к файлам данных. |
+
+В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
+
+`validate_environment` ([10749](../../scripts/update_cases.py#L10749)) проверяет
+наличие ключей на старте; `check_court_available` ([10778](../../scripts/update_cases.py#L10778))
+— доступность сайта суда.
+
+## GitHub Actions
+
+Три workflow в [`.github/workflows/`](../../.github/workflows). Запускаются из UI
+(Run workflow) или кроном Worker'а.
+
+### `update_cases.yml` — основной
+[Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
+(кроном Worker'а или вручную). Шаги: checkout → Python 3.12 → установка зависимостей
+→ `python scripts/update_cases.py --json` → коммит данных.
+
+Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
+`TELEGRAM_CHAT_ID_TEST`), `smart_skip` (крон всегда `true`).
+
+> ⚠️ **Сейчас в этом workflow выставлен `DIGEST_FULL_LLM: "1"`** — то есть в
+> продакшене дайджест генерируется старым «полным LLM»-путём, а не гибридным
+> (хотя гибрид — дефолт самого кода). Это временный откат на время доводки
+> полировщика; снять при включении `DIGEST_POLISH=1`.
+
+Коммит-шаг добавляет: `cases.json`, `cases_archive.json`, `cases_archive_*.json`
+(холодные), `last_digest_context.json`, `last_digest.json`,
+`last_personal_pushes.json`, legacy CSV, `.digested_acts`. Сообщение коммита —
+`📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
+
+### `test_digest.yml` — ручной тест
+[Файл](../../.github/workflows/test_digest.yml). Не парсит — переигрывает
+последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
+иначе только владельцу), `polish_html` (`DIGEST_POLISH=1`), `full_llm`
+(`DIGEST_FULL_LLM=1`, перебивает `polish_html`). Коммитит свежий `last_digest.json`.
+
+### `digest_only_gigachat.yml` — дайджест через GigaChat
+[Файл](../../.github/workflows/digest_only_gigachat.yml). Альтернативный LLM.
+Входы: `replay_last`, `to_group`, `model` (выбор модели GigaChat).
+
+### Деплой Cloudflare Worker
+Не через Actions, а вручную: `cd cloudflare-worker && wrangler deploy`. См.
+[09. Cloudflare Worker](09-cloudflare-worker.md).
+
+## Вспомогательные скрипты
+
+| Скрипт | Назначение |
+|--------|-----------|
+| [`add_cases_manually.py`](../../scripts/add_cases_manually.py) | Добавить дела 1-й инстанции в `cases.json` по списку `(court_domain, case_number)` — для дел, не попавших в авто-выборку (старые / банк-истец / возврат из холодного архива). |
+| [`audit_watchlists.py`](../../scripts/audit_watchlists.py) | Аудит подписок: находит в watchlist'ах номера дел, которых нет в активном `cases.json`. Пишет отчёт, **ничего не меняет**. Запуск: `OWNER_SECRET=… python3 scripts/audit_watchlists.py`. |
+| [`find_cassation_orphans.py`](../../scripts/find_cassation_orphans.py) | Находит discovery-дубли кассации (эвристика: тот же суд/судья/ответчик). Печатает отчёт, не пишет в JSON. |
+| [`generate_icon.py`](../../scripts/generate_icon.py) | Генерация иконок PWA (squircle Sber green + «§»). Требует Pillow. |
+
+## Тесты
+
+`pytest`. Покрытие:
+
+- [`scripts/tests/test_parsing.py`](../../scripts/tests/test_parsing.py) (~65 KB)
+  + [`scripts/tests/fixtures/`](../../scripts/tests/fixtures) — парсеры на
+  зафиксированных HTML-снимках карточек. Главный страховочный слой для хрупких
+  парсеров: добавляя обработку нового кейса суда, кладите фикстуру и тест.
+- [`tests/test_digest_render.py`](../../tests/test_digest_render.py) (~43 KB) —
+  программный рендер и пост-обработка дайджеста.
+- [`scripts/tests/test_versions.py`](../../scripts/tests/test_versions.py) —
+  синхронность версий cache-bust (`?v=N` ↔ `CACHE_VERSION`).
+
+```bash
+python3 -m pytest scripts/tests tests
+```
+
+## Наблюдаемость
+
+- `log_run_summary` ([10663](../../scripts/update_cases.py#L10663)) — итоговая
+  сводка прогона (тайминги, счётчики `METRICS`: запросы, отправленные сообщения).
+- `send_crash_alert` ([10728](../../scripts/update_cases.py#L10728)) — падение
+  прогона уходит в Telegram, чтобы не потеряться в логах Actions.
+- Логи прогона — во вкладке Actions соответствующего workflow.
+
+## Рантбук (типичные инциденты)
+
+| Симптом | Вероятная причина и что делать |
+|---------|-------------------------------|
+| **Дайджест не пришёл в Telegram** | Проверить `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`/`*_CHAT_ID` в secrets; смотреть лог Actions и crash-alert. |
+| **7kas: «Данных по запросу не обнаружено»** | Изменились параметры запроса. Проверить вручную на 7kas; не менять `delo_id=2800001`/`delo_table=g33_case`/`new=2800001` без проверки (см. [04](04-сбор-данных-и-парсеры.md)). |
+| **Парсер суда вернул мало/0 дел** | Суд сменил вёрстку или временно недоступен. Сравнить карточку на сайте с ожиданиями парсера; обновить фикстуру и тест. |
+| **Push не приходят** | На локали push выключен (нет `VAPID_PRIVATE_KEY`). В проде: проверить secrets Worker'а, что устройство в подписках (`/subscriptions`), watchlist. |
+| **Дашборд показывает старую версию** | Забыт cache-bust. Инкрементить `?v=N` в HTML и `CACHE_VERSION` в `service-worker.js` синхронно (см. [08](08-фронтенд.md)). |
+| **Появились дубли дел** | Сработает один из `dedupe_*` щитов на следующем прогоне (см. [05](05-конвейер-обновления.md)); если нет — `find_cassation_orphans.py` + ручной мердж. |
+| **Дело пропало из дашборда** | Ушло в архив по тайм-ауту (см. [03](03-жизненный-цикл-дела.md)). При поздней жалобе реактивируется автоматически (≤180 дн); старше года — вернуть через `add_cases_manually.py`. |
+| **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
+| **Автозапуск не сработал** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday` (праздник/выходной), логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
+
+## Чего НЕ делать
+
+- Не коммитить секреты (`.env`, ключи, `GITHUB_PAT`).
+- Не амендить опубликованные коммиты — создавать новые.
+- Не переименовывать поля `cases.json` без миграции (завязан фронт и архив).
+- Не добавлять сторонние планировщики — автозапуск только через Cloudflare Worker.
