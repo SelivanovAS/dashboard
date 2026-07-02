@@ -779,6 +779,52 @@ class TestLinkCassationCases:
         assert nc["cassation"]["case_number"] == "8Г-333/2026"
         assert changes and "discovered_in_cassation" in changes[0]["type"]
 
+    def test_archived_case_resurrected_instead_of_discovery(self):
+        """Дело ушло в архив из cassation_watch (120 дней), касс. карточка
+        появилась позже — восстанавливаем запись с историей и сторонами,
+        а не создаём discovery-дубль."""
+        archived = [{
+            "id": "2-400/2025",
+            "current_stage": "cassation_watch",
+            "archived_at": "2026-05-01",
+            "plaintiff": "ПАО Сбербанк",
+            "defendant": "Кузнецов Константин Константинович",
+            "first_instance": {"case_number": "2-400/2025"},
+            "appeal": {"case_number": "33-800/2025",
+                       "hearing_date": "01.01.2026"},
+            "cassation": None,
+        }]
+        cases: list = []
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-400/2025", cass_num="8Г-555/2026")], archived
+        )
+        assert discovered == []
+        assert archived == []
+        assert len(out) == 1
+        case = out[0]
+        assert case["current_stage"] == "cassation"
+        assert case["plaintiff"] == "ПАО Сбербанк"
+        assert case["cassation"]["case_number"] == "8Г-555/2026"
+        assert "archived_at" not in case
+        assert changes and "new_cassation" in changes[0]["type"]
+
+    def test_archived_past_round_card_not_resurrected(self):
+        """Карточка прошлого круга архивного дела (8Г уже в history)
+        не восстанавливает его и не создаёт дубль."""
+        archived = [{
+            "id": "2-500/2025",
+            "current_stage": "first_instance",
+            "archived_at": "2026-01-01",
+            "history": [{"cassation": {"case_number": "8Г-666/2025"}}],
+            "first_instance": {"case_number": "2-500/2025"},
+            "cassation": None,
+        }]
+        out, changes, discovered = uc.link_cassation_cases(
+            [], [_cass_find("2-500/2025", cass_num="8Г-666/2025")], archived
+        )
+        assert len(archived) == 1
+        assert out == [] and discovered == [] and changes == []
+
 
 # ── relink_awaiting_relink_first_instance ────────────────────────────────────
 
