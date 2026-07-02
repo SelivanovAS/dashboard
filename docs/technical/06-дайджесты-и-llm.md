@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([6799](../../scripts/update_cases.py#L6799)) — точка входа,
+`generate_digest` ([333](../../scripts/court_monitor/digest/core.py#L333)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -25,45 +25,45 @@
 | **Полный LLM** | `DIGEST_FULL_LLM=1` | Старое поведение: весь HTML генерирует один большой LLM-вызов. Escape hatch для A/B и на случай регресса. |
 
 Провайдер LLM выбирается переменной `LLM_PROVIDER` (`claude` по умолчанию или
-`gigachat`, [строка 345](../../scripts/update_cases.py#L345)). Основной мониторинг
+`gigachat`, [строка 144](../../scripts/court_monitor/config.py#L144)). Основной мониторинг
 работает на Claude; GigaChat включается отдельным workflow.
 
 **Модель Claude:** `claude-haiku-4-5-20251001`
-([_current_digest_model_name, 6191](../../scripts/update_cases.py#L6191)).
+([_current_digest_model_name, 6191](../../scripts/court_monitor/digest/llm.py#L612)).
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 9441](../../scripts/update_cases.py#L9441). Собирает весь HTML дайджеста
+[Строка 322](../../scripts/court_monitor/digest/template.py#L322). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([6771](../../scripts/update_cases.py#L6771)).
+([294](../../scripts/court_monitor/digest/template.py#L294)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 6070](../../scripts/update_cases.py#L6070). Единственное место, где
+[Строка 491](../../scripts/court_monitor/digest/llm.py#L491). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
-   [1563](../../scripts/update_cases.py#L1563)). Слишком короткий текст
+   [72](../../scripts/court_monitor/textutil.py#L72)). Слишком короткий текст
    (<100 символов) не пересказывается.
 2. Считается ключ кэша `sha1(act_text + "|v2-ratio")[:16]`. Если пересказ уже
    в кэше `.act_summaries.json` — возвращается он (повторно LLM не оплачивается,
    кэш переживает `--replay-last`).
 3. Иначе строится промпт (`_build_act_summary_prompt`,
-   [5907](../../scripts/update_cases.py#L5907)) и вызывается
-   `_call_claude_simple` ([5966](../../scripts/update_cases.py#L5966)) или
-   `_call_gigachat_simple` ([6010](../../scripts/update_cases.py#L6010)).
+   [328](../../scripts/court_monitor/digest/llm.py#L328)) и вызывается
+   `_call_claude_simple` ([387](../../scripts/court_monitor/digest/llm.py#L387)) или
+   `_call_gigachat_simple` ([431](../../scripts/court_monitor/digest/llm.py#L431)).
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
-   [6406](../../scripts/update_cases.py#L6406)).
+   [222](../../scripts/court_monitor/digest/template.py#L222)).
 
-Кэш пересказов: `_load_act_summaries` ([869](../../scripts/update_cases.py#L869))
-и `_save_act_summaries` ([882](../../scripts/update_cases.py#L882)),
+Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
+и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
 путь — `ACT_SUMMARIES_PATH` (`.act_summaries.json`). Это отдельный кэш от
 `.digested_acts` (тот хранит номера дел, чтобы не пересказывать акт дважды).
 
@@ -77,33 +77,33 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 6267](../../scripts/update_cases.py#L6267). При `DIGEST_POLISH=1`
+[Строка 688](../../scripts/court_monitor/digest/llm.py#L688). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([6131](../../scripts/update_cases.py#L6131)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([552](../../scripts/court_monitor/digest/llm.py#L552)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([6223](../../scripts/update_cases.py#L6223)): проверяется контракт
+([644](../../scripts/court_monitor/digest/llm.py#L644)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
 ## Слой пост-обработки HTML
 
 После рендера (и до отправки) HTML проходит цепочку детерминированных
-«санитайзеров» и валидаторов ([строки 7716–9054](../../scripts/update_cases.py#L7716)).
+«санитайзеров» и валидаторов ([строки 7716–9054](../../scripts/court_monitor/digest/core.py#L1250)).
 Они гарантируют корректность вёрстки и согласованность счётчиков:
 
 | Функция | Что гарантирует |
 |---------|-----------------|
-| `_wrap_all_bare_case_numbers` ([8088](../../scripts/update_cases.py#L8088)) | Все «голые» номера дел обёрнуты в ссылки на карточки. |
-| `_ensure_appeal_new_case_full_layout` ([8191](../../scripts/update_cases.py#L8191)) | Полная вёрстка блока нового апел. дела. |
-| `_validate_digest_new_sections` ([8299](../../scripts/update_cases.py#L8299)) / `_drop_hallucinated_from_section` ([8365](../../scripts/update_cases.py#L8365)) | Отсев галлюцинаций (только для full-LLM-режима). |
-| `_renumber_section_headers` ([8488](../../scripts/update_cases.py#L8488)) / `_drop_zero_count_sections` ([9179](../../scripts/update_cases.py#L9179)) | Перенумерация разделов, выкидывание пустых. |
-| `summarize_digest_counters` ([8812](../../scripts/update_cases.py#L8812)) / `_compute_summary_lines` ([8845](../../scripts/update_cases.py#L8845)) / `_replace_summary_block` ([9039](../../scripts/update_cases.py#L9039)) | Блок «📋 Сводка» считается по фактическому HTML — те же цифры, что и в push. |
-| `_normalize_section_spacing` ([8633](../../scripts/update_cases.py#L8633)) | Отступы: строки одного дела подряд, пустая строка только между разными делами. |
-| `_shorten_categories_in_html` ([9153](../../scripts/update_cases.py#L9153)) | Сокращение длинных категорий. |
-| `_purge_3_6_without_act_text` ([9239](../../scripts/update_cases.py#L9239)) | Чистка раздела без текста акта. |
-| `_ensure_footer` ([8594](../../scripts/update_cases.py#L8594)) | Футер со ссылкой на дашборд. |
-| `_close_open_tags` ([9373](../../scripts/update_cases.py#L9373)) / `_strip_orphan_close_tags` ([9389](../../scripts/update_cases.py#L9389)) / `truncate_html_message` ([9413](../../scripts/update_cases.py#L9413)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
+| `_wrap_all_bare_case_numbers` ([78](../../scripts/court_monitor/digest/postprocess.py#L78)) | Все «голые» номера дел обёрнуты в ссылки на карточки. |
+| `_ensure_appeal_new_case_full_layout` ([155](../../scripts/court_monitor/digest/postprocess.py#L155)) | Полная вёрстка блока нового апел. дела. |
+| `_validate_digest_new_sections` ([263](../../scripts/court_monitor/digest/postprocess.py#L263)) / `_drop_hallucinated_from_section` ([329](../../scripts/court_monitor/digest/postprocess.py#L329)) | Отсев галлюцинаций (только для full-LLM-режима). |
+| `_renumber_section_headers` ([452](../../scripts/court_monitor/digest/postprocess.py#L452)) / `_drop_zero_count_sections` ([1143](../../scripts/court_monitor/digest/postprocess.py#L1143)) | Перенумерация разделов, выкидывание пустых. |
+| `summarize_digest_counters` ([776](../../scripts/court_monitor/digest/postprocess.py#L776)) / `_compute_summary_lines` ([809](../../scripts/court_monitor/digest/postprocess.py#L809)) / `_replace_summary_block` ([1003](../../scripts/court_monitor/digest/postprocess.py#L1003)) | Блок «📋 Сводка» считается по фактическому HTML — те же цифры, что и в push. |
+| `_normalize_section_spacing` ([597](../../scripts/court_monitor/digest/postprocess.py#L597)) | Отступы: строки одного дела подряд, пустая строка только между разными делами. |
+| `_shorten_categories_in_html` ([1117](../../scripts/court_monitor/digest/postprocess.py#L1117)) | Сокращение длинных категорий. |
+| `_purge_3_6_without_act_text` ([1203](../../scripts/court_monitor/digest/postprocess.py#L1203)) | Чистка раздела без текста акта. |
+| `_ensure_footer` ([558](../../scripts/court_monitor/digest/postprocess.py#L558)) | Футер со ссылкой на дашборд. |
+| `_close_open_tags` ([1337](../../scripts/court_monitor/digest/postprocess.py#L1337)) / `_strip_orphan_close_tags` ([1353](../../scripts/court_monitor/digest/postprocess.py#L1353)) / `truncate_html_message` ([1377](../../scripts/court_monitor/digest/postprocess.py#L1377)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
 
 ## Структура дайджеста
 
@@ -116,25 +116,25 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([381](../../scripts/update_cases.py#L381)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([180](../../scripts/court_monitor/config.py#L180)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
-`attach_act_analyses` ([6559](../../scripts/update_cases.py#L6559)) после рассылки
+`attach_act_analyses` ([161](../../scripts/court_monitor/digest/core.py#L161)) после рассылки
 сохраняет LLM-разбор опубликованных актов в поле `act_analysis` соответствующих
 дел в `cases.json` — чтобы юрист видел его в drawer'е дашборда дольше одного дня.
 Обновляются только дела с новым актом в этом прогоне.
 
 ## Контекст и replay
 
-Перед отправкой `save_digest_context` ([6440](../../scripts/update_cases.py#L6440))
+Перед отправкой `save_digest_context` ([51](../../scripts/court_monitor/digest/core.py#L51))
 сохраняет снимок всех входных списков в `last_digest_context.json`. Это позволяет
 режиму `--replay-last` переиграть дайджест с обновлённым промптом, не запрашивая
 суды заново (LLM-пересказы при этом берутся из кэша — повторно не оплачиваются).
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
-[6483](../../scripts/update_cases.py#L6483)) для блока «Последний дайджест» на фронте.
+[94](../../scripts/court_monitor/digest/core.py#L94)) для блока «Последний дайджест» на фронте.
 
-> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [5652](../../scripts/update_cases.py#L5652),
+> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [73](../../scripts/court_monitor/digest/llm.py#L73),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались
 > вручную. Менять их структуру — только осознанно и с предупреждением; см.
 > «Чего НЕ делать» в [`CLAUDE.md`](../../CLAUDE.md).

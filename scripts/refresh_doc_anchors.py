@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Переанкеровка ссылок на строки монолита в технической документации.
+"""Переанкеровка ссылок на строки кода в технической документации.
 
-Документация (docs/technical/*.md, CLAUDE.md) ссылается на код паттерном:
+Документация (docs/technical/*.md, CLAUDE.md) ссылается на код паттернами:
 
-    `symbol` … [762](../../scripts/update_cases.py#L762)
-    `symbol(...)` … [Строка 762](../../scripts/update_cases.py#L762)
+    `symbol` … [762](../../scripts/court_monitor/health.py#L762)
+    `symbol(...)` … [Строка 762](../../scripts/court_monitor/health.py#L762)
+    `symbol` … [scripts/court_monitor/health.py:762](scripts/court_monitor/health.py:762)
 
-После правок update_cases.py номера строк уезжают. Скрипт находит такие
-ссылки, где в пределах 60 символов ПЕРЕД ссылкой стоит `symbol` в бэктиках,
-ищет актуальную строку `def symbol` / `class symbol` / `SYMBOL =` в монолите
-и переписывает и текст ссылки, и #L-якорь. Ссылки без распознанного символа
-(диапазоны «строки 100–200», якоря на баннеры-комментарии) не трогает —
+После правок кода номера строк уезжают, а после переносов между модулями
+пакета court_monitor устаревает и путь. Скрипт находит такие ссылки, где в
+пределах 60 символов ПЕРЕД ссылкой стоит `symbol` в бэктиках, ищет
+актуальные файл и строку `def symbol` / `class symbol` / `SYMBOL =` по всем
+модулям пакета (scripts/court_monitor/**/*.py + фасад scripts/update_cases.py)
+и переписывает текст ссылки, путь и #L-якорь. Ссылки без распознанного
+символа (диапазоны «строки 100–200», якоря на места вызовов) не трогает —
 печатает списком, чтобы поправить руками.
 
 Запуск из корня репозитория:
@@ -25,56 +28,65 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "scripts", "update_cases.py")
+# Фасад + все модули пакета. Порядок важен: при коллизии имён побеждает
+# ПЕРВЫЙ файл, поэтому фасад (только ре-экспорты, реальных def нет) — в конце.
+SRC_FILES = sorted(
+    glob.glob(os.path.join(ROOT, "scripts", "court_monitor", "**", "*.py"),
+              recursive=True)
+) + [os.path.join(ROOT, "scripts", "update_cases.py")]
 DOC_GLOBS = [
     os.path.join(ROOT, "docs", "technical", "*.md"),
     os.path.join(ROOT, "CLAUDE.md"),
 ]
 # 05-конвейер якорит места ВЫЗОВОВ внутри main_json (а не def функций) —
-# переанкеровка по def их сломала бы. Обновлять руками вместе с main_json.
+# переанкеровка по def их сломала бы. Обновлять руками вместе с runs.main_json.
 SKIP_FILES = {"05-конвейер-обновления.md"}
 
 # `symbol` или `symbol(...)` в бэктиках, затем ≤60 символов БЕЗ бэктиков
 # (перенос строки допустим — ссылка бывает на следующей строке), затем
-# markdown-ссылка [762] / [Строка 762] на update_cases.py#L762. Запрет
-# бэктиков в середине гарантирует, что ссылка привязывается к БЛИЖАЙШЕМУ
-# символу, а не к случайному имени поля из прозы левее.
+# markdown-ссылка на код: [762](…#L762), [Строка 762](…#L762) или
+# [scripts/...py:762](scripts/...py:762). Запрет бэктиков в середине
+# гарантирует привязку к БЛИЖАЙШЕМУ символу, а не к имени из прозы левее.
+_CODE_PATH = r"scripts/(?:court_monitor/[\w/]+\.py|update_cases\.py|add_cases_manually\.py)"
 LINK_RX = re.compile(
     r"`(?P<sym>[A-Za-z_]\w*)(?:\([^)`]*\))?`"
     r"(?P<mid>[^`]{0,60}?)"
-    r"\[(?P<word>[Сс]трока\s+)?(?P<disp>\d+)\]"
-    r"\((?P<path>(?:\.\./)+scripts/update_cases\.py|scripts/update_cases\.py)"
-    r"#L(?P<line>\d+)\)"
+    r"\[(?P<label>(?:[Сс]трока\s+)?\d+|" + _CODE_PATH + r":\d+)\]"
+    r"\((?P<prefix>(?:\.\./)*)(?P<path>" + _CODE_PATH + r")"
+    r"(?P<sep>#L|:)(?P<line>\d+)\)"
 )
 
 
-def build_symbol_table(path: str) -> dict[str, int]:
-    """{имя → номер строки} для def/class/КОНСТАНТ верхнего уровня.
+def build_symbol_table(paths: list[str]) -> dict[str, tuple[str, int]]:
+    """{имя → (путь_от_корня, номер строки)} для def/class/КОНСТАНТ
+    верхнего уровня по всем файлам пакета.
 
-    Фолбэк: методы классов (def с отступом) добавляются, только если имя
-    встречается в файле ровно один раз — например, `CourtConfig.search_url`.
-    Неоднозначные имена методов в таблицу не попадают (лучше «не распознан»,
-    чем неверный якорь)."""
-    table: dict[str, int] = {}
-    indented: dict[str, list[int]] = {}
-    with open(path, encoding="utf-8") as f:
-        for i, line in enumerate(f, 1):
-            m = re.match(r"^(?:def|class)\s+([A-Za-z_]\w*)", line)
-            if not m:
-                m = re.match(r"^([A-Za-z_]\w*)\s*(?::[^=]+)?=", line)
-            if m:
-                table.setdefault(m.group(1), i)
-                continue
-            m = re.match(r"^\s+def\s+([A-Za-z_]\w*)", line)
-            if m:
-                indented.setdefault(m.group(1), []).append(i)
-    for name, lines in indented.items():
-        if name not in table and len(lines) == 1:
-            table[name] = lines[0]
+    Импорты (в т.ч. ре-экспорты фасада) не учитываются — матчится только
+    определение. Фолбэк: методы классов (def с отступом) добавляются, только
+    если имя встречается во всех файлах ровно один раз."""
+    table: dict[str, tuple[str, int]] = {}
+    indented: dict[str, list[tuple[str, int]]] = {}
+    for path in paths:
+        rel = os.path.relpath(path, ROOT)
+        with open(path, encoding="utf-8") as f:
+            for i, line in enumerate(f, 1):
+                m = re.match(r"^(?:def|class)\s+([A-Za-z_]\w*)", line)
+                if not m:
+                    m = re.match(r"^([A-Za-z_]\w*)\s*(?::[^=]+)?=", line)
+                if m:
+                    table.setdefault(m.group(1), (rel, i))
+                    continue
+                m = re.match(r"^\s+def\s+([A-Za-z_]\w*)", line)
+                if m:
+                    indented.setdefault(m.group(1), []).append((rel, i))
+    for name, locs in indented.items():
+        if name not in table and len(locs) == 1:
+            table[name] = locs[0]
     return table
 
 
-def refresh_file(path: str, table: dict[str, int], write: bool) -> tuple[int, list[str]]:
+def refresh_file(path: str, table: dict[str, tuple[str, int]],
+                 write: bool) -> tuple[int, list[str]]:
     """Обновить якоря в одном файле. Возвращает (сколько поправлено,
     список нераспознанных ссылок для ручной правки)."""
     with open(path, encoding="utf-8") as f:
@@ -85,18 +97,28 @@ def refresh_file(path: str, table: dict[str, int], write: bool) -> tuple[int, li
     unresolved: list[str] = []
     for m in LINK_RX.finditer(text):
         sym = m.group("sym")
-        new_line = table.get(sym)
-        if new_line is None:
+        loc = table.get(sym)
+        if loc is None:
             unresolved.append(
-                f"{os.path.basename(path)}: `{sym}` → #L{m.group('line')} (символ не найден)"
+                f"{os.path.basename(path)}: `{sym}` → {m.group('path')}"
+                f"{m.group('sep')}{m.group('line')} (символ не найден)"
             )
             continue
-        if int(m.group("line")) == new_line and m.group("disp") == str(new_line):
+        new_path, new_line = loc
+        if (m.group("path") == new_path
+                and int(m.group("line")) == new_line
+                and (m.group("label").endswith(str(new_line)))):
             continue
-        out.append(text[pos:m.start("disp")])
-        out.append(str(new_line))
-        out.append(text[m.end("disp"):m.start("line")])
-        out.append(str(new_line))
+        # подпись: число / «Строка N» / «путь:N» — сохраняем стиль
+        label = m.group("label")
+        if re.fullmatch(r"(?:[Сс]трока\s+)?\d+", label):
+            new_label = re.sub(r"\d+$", str(new_line), label)
+        else:
+            new_label = f"{new_path}:{new_line}"
+        out.append(text[pos:m.start("label")])
+        out.append(new_label)
+        out.append(text[m.end("label"):m.start("path")])
+        out.append(new_path + m.group("sep") + str(new_line))
         pos = m.end("line")
         fixed += 1
     out.append(text[pos:])
@@ -110,7 +132,7 @@ def refresh_file(path: str, table: dict[str, int], write: bool) -> tuple[int, li
 
 def main() -> None:
     write = "--write" in sys.argv
-    table = build_symbol_table(SRC)
+    table = build_symbol_table(SRC_FILES)
     total = 0
     all_unresolved: list[str] = []
     for pattern in DOC_GLOBS:
