@@ -96,5 +96,25 @@ jobs:
           if [ -f data/last_personal_pushes.json ]; then
             git add data/last_personal_pushes.json
           fi
+          # Журнал здоровья парсеров (детектор молчаливой поломки): история
+          # количества результатов по каждому суду. Без коммита история
+          # обнуляется каждый прогон и детектор слепнет.
+          if [ -f data/parse_health.json ]; then
+            git add data/parse_health.json
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
+
+      # Падение любого шага выше — сигнал в личный Telegram (не в группу):
+      # иначе упавший ночной прогон выглядит как «сегодня нет новостей».
+      # curl вместо python — сработает, даже если упала установка зависимостей.
+      - name: Notify on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            --data-urlencode text="🚨 Ночной прогон мониторинга упал (run #${{ github.run_number }}). Логи: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null || true
