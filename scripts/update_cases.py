@@ -240,6 +240,17 @@ from court_monitor.config import (  # noqa: F401 — ре-экспорт для 
     TELEGRAM_MSG_LIMIT, DIGEST_CHAR_LIMIT, SBER_PATTERNS, CSV_COLUMNS,
     log, METRICS, _metrics_reset,
 )
+from court_monitor.textutil import (  # noqa: F401 — ре-экспорт для совместимости
+    parse_date, _strip_html,
+    _HTML_TAG_RE, _HTML_NBSP_RE, _WS_RE, _HTML_SCRIPT_RE, _HTML_STYLE_RE,
+    _CASE_NUM_RE, _FI_CASE_NUM_RE, _TIME_RE, _CASE_ID_RE, _CASE_UID_RE,
+    case_id_uid, escape_html, parties_short, extract_motive_part,
+    _RU_HOLIDAYS, is_russian_working_day,
+    ROLE_INSTRUMENTAL, _OPF_RE, _CITY_RE, _MTU_RE, _FIO_RE, _FIN_OMBUD_RE,
+    _HERITAGE_RE, _QUOTES_RE, _V_LICE_RE, _BRANCH_DASH_RE, _BRANCH_COMMA_RE,
+    _SBER_RU_RE, _shorten_single, shorten_party_name, shorten_court_name,
+    _norm_party_tokens, classify_appellant_role, _bare_case_number,
+)
 
 session = requests.Session()
 session.headers.update({
@@ -281,17 +292,6 @@ def fetch_page(url: str) -> str:
                 METRICS["requests_failed"] += 1
                 log.error(f"Ошибка загрузки {url} после {FETCH_MAX_RETRIES} попыток: {e}")
     return ""
-
-
-def parse_date(s: str) -> datetime | None:
-    """Парсинг даты формата ДД.ММ.ГГГГ."""
-    s = s.strip()
-    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            continue
-    return None
 
 
 def _has_held_prior_event(
@@ -509,32 +509,6 @@ def _is_latest_session_event(ev: dict, events: list) -> bool:
         if d and d > ev_dt:
             return False
     return True
-
-
-# ── Регулярные выражения, используемые в hot loops ───────────────────────────
-# Скомпилированы один раз на уровне модуля.
-_HTML_TAG_RE = re.compile(r'<[^>]+>')
-_HTML_NBSP_RE = re.compile(r'&nbsp;')
-_WS_RE = re.compile(r'\s+')
-_HTML_SCRIPT_RE = re.compile(r'<script[^>]*>.*?</script>', re.DOTALL)
-_HTML_STYLE_RE = re.compile(r'<style[^>]*>.*?</style>', re.DOTALL)
-
-_CASE_NUM_RE = re.compile(r'\d+-\d+/\d{4}')
-# 1-я инст.: помимо цифр-префикса (2-X/Y) допускаем буквенные префиксы —
-# «М-» (материалы: иск подан, но ещё не зарегистрирован гражданским 2-XXX).
-# Без них пропадает видимость свежепоступивших исков против Сбера.
-_FI_CASE_NUM_RE = re.compile(r'(?:[А-ЯA-Z]+|\d+)-\d+/\d{4}')
-_TIME_RE = re.compile(r'\b(\d{1,2}:\d{2})\b')
-_CASE_ID_RE = re.compile(r'case_id=(\d+)')
-_CASE_UID_RE = re.compile(r'case_uid=([a-f0-9\-]+)')
-
-
-def _strip_html(text: str) -> str:
-    """Убрать HTML-теги, &nbsp; и схлопнуть пробелы. Используется для извлечения
-    чистого текста из фрагментов карточки дела и судебных актов."""
-    text = _HTML_TAG_RE.sub(' ', text)
-    text = _HTML_NBSP_RE.sub(' ', text)
-    return _WS_RE.sub(' ', text).strip()
 
 
 def load_digested_acts() -> set:
@@ -1283,19 +1257,6 @@ def dedupe_cassation_by_uid(cases: list[dict]) -> int:
     return merged
 
 
-def case_id_uid(link_str: str) -> tuple[str, str]:
-    """Извлечь case_id и case_uid из поля Ссылка (формат 'id|uid')."""
-    parts = link_str.strip().split("|")
-    if len(parts) == 2:
-        return parts[0], parts[1]
-    return "", ""
-
-
-def escape_html(text: str) -> str:
-    """Экранировать спецсимволы HTML для Telegram."""
-    return html_escape(str(text), quote=False)
-
-
 def case_card_url(case: dict, court: CourtConfig | None = None) -> str:
     """Построить полный URL карточки дела."""
     cid, cuid = case_id_uid(case.get("Ссылка", ""))
@@ -1350,13 +1311,6 @@ def case_link_html(case: dict) -> str:
     return f'<b>{num}</b>'
 
 
-def parties_short(case: dict) -> str:
-    """Стороны в формате 'Истец (истец) vs Ответчик (ответчик)'."""
-    plaintiff = escape_html(case.get("Истец", ""))
-    defendant = escape_html(case.get("Ответчик", ""))
-    return f"{plaintiff} (истец) vs {defendant} (ответчик)"
-
-
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
     """True если «Сбербанк» явно упомянут в любой из сторон.
 
@@ -1381,47 +1335,6 @@ def _section_break(block: list[str]) -> None:
     block.append("")
     block.append("⸻")
     block.append("")
-
-
-def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
-    """
-    Извлечь мотивировочную часть из текста судебного акта.
-    Ищем от 'установил(а):' до 'руководствуясь' / 'определила' — это суть решения.
-    Если не нашли — берём последние max_len символов (ближе к резолюции).
-    """
-    if not act_text:
-        return ""
-
-    text = act_text.strip()
-
-    # Пробуем вырезать мотивировочную часть
-    # Коллегия пишет "установила:", судья — "установил:"
-    start_match = re.search(
-        r'(?:у\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?\s*:|УСТАНОВИЛ[АИ]?\s*:)',
-        text, re.IGNORECASE
-    )
-    end_match = re.search(
-        r'(?:руководствуясь|РУКОВОДСТВУЯСЬ|на\s+основании\s+изложенного|'
-        r'судебная\s+коллегия\s+(?:определила|приходит)|'
-        r'о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?\s*:)',
-        text, re.IGNORECASE
-    )
-
-    if start_match and end_match and end_match.start() > start_match.end():
-        motive = text[start_match.end():end_match.start()].strip()
-        if len(motive) > 100:  # Достаточно содержательный кусок
-            return motive[:max_len]
-
-    # Fallback 2: ищем хотя бы начало (установил(а):) и берём max_len символов после
-    if start_match:
-        after = text[start_match.end():].strip()
-        if len(after) > 100:
-            return after[:max_len]
-
-    # Fallback 3: берём последнюю часть текста (ближе к решению)
-    if len(text) > max_len:
-        return "..." + text[-(max_len - 3):]
-    return text
 
 
 # ── Классификация итога апелляции и стороны ──────────────────────────────────
@@ -1810,38 +1723,6 @@ def repair_spurious_fi_resolutions(cases: list[dict], today: date) -> int:
                 f"(назначено заседание {fi.get('hearing_date')})"
             )
     return n
-
-
-# Праздники/нерабочие дни РФ 2026-2027 (фиксированные даты + переносы).
-# Перенесённые рабочие субботы намеренно не учитываем — если такая суббота
-# попадёт, мы всё равно скипнем её как weekday>=5, что для cron безопасно.
-_RU_HOLIDAYS: frozenset[date] = frozenset({
-    # 2026
-    date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3), date(2026, 1, 4),
-    date(2026, 1, 5), date(2026, 1, 6), date(2026, 1, 7), date(2026, 1, 8),
-    date(2026, 2, 23),
-    date(2026, 3, 8), date(2026, 3, 9),
-    date(2026, 5, 1),
-    date(2026, 5, 9), date(2026, 5, 11),
-    date(2026, 6, 12),
-    date(2026, 11, 4),
-    # 2027
-    date(2027, 1, 1), date(2027, 1, 2), date(2027, 1, 3), date(2027, 1, 4),
-    date(2027, 1, 5), date(2027, 1, 6), date(2027, 1, 7), date(2027, 1, 8),
-    date(2027, 2, 23),
-    date(2027, 3, 8),
-    date(2027, 5, 1), date(2027, 5, 3),
-    date(2027, 5, 9), date(2027, 5, 10),
-    date(2027, 6, 12), date(2027, 6, 14),
-    date(2027, 11, 4),
-})
-
-
-def is_russian_working_day(d: date) -> bool:
-    """True, если d — рабочий день в РФ (не сб/вс и не праздник)."""
-    if d.weekday() >= 5:
-        return False
-    return d not in _RU_HOLIDAYS
 
 
 def bank_side_outcome_fi(role: str, verdict_label: str) -> str:
@@ -5243,190 +5124,6 @@ def update_active_cases(
     }
 
 
-# ── Сокращение наименований сторон ────────────────────────────────────────────
-
-# Творительный падеж процессуальных ролей — для конструкции «жалоба подана
-# Ответчиком Ивановым И.И.» (вместо корявого «от Ответчика Иванова И.И.»).
-ROLE_INSTRUMENTAL = {
-    "Истец":       "Истцом",
-    "Ответчик":    "Ответчиком",
-    "Иное лицо":   "Иным лицом",
-    "Третье лицо": "Третьим лицом",
-}
-
-_OPF_RE = re.compile(
-    r'\b(?:ПАО|ООО|АО|ОАО|ЗАО|НАО|НПО|'
-    r'Публичное акционерное общество|'
-    r'Общество с ограниченной ответственностью|'
-    r'Акционерное общество|'
-    r'Открытое акционерное общество|'
-    r'Закрытое акционерное общество|'
-    r'Непубличное акционерное общество|'
-    r'Научно-производственное объединение)\s*',
-    re.IGNORECASE,
-)
-_CITY_RE = re.compile(r'\bгорода\b', re.IGNORECASE)
-# Матчит обе формы региональных управлений Росимущества — полную
-# («Межрегиональное территориальное управление Росимущества …») и принятую
-# в нашей БД сокращённую («МТУ Росимущества в Тюменской области, ХМАО-Югре,
-# ЯНАО»). Используется и в `_shorten_single` (на одиночное имя без запятых),
-# и в `shorten_party_name` (pre-pass до сплита, иначе перечисление регионов
-# через запятую развалит вход и сократится только первая часть).
-_MTU_RE = re.compile(
-    r'^(?:Межрегиональное\s+территориальное\s+управление|МТУ\s+Росимущества?)\b.*',
-    re.IGNORECASE,
-)
-_FIO_RE = re.compile(
-    r'^([А-ЯЁа-яё-]+)\s+([А-ЯЁа-яё])[а-яё]+\s+([А-ЯЁа-яё])[а-яё]+$'
-)
-_FIN_OMBUD_RE = re.compile(
-    r'^Финансовый уполномоченный.*$', re.IGNORECASE,
-)
-_HERITAGE_RE = re.compile(
-    r'наследственное имущество умершего заемщика\s+', re.IGNORECASE,
-)
-_QUOTES_RE = re.compile(r'[«»"]+')
-_V_LICE_RE = re.compile(r'\s+в лице\s+.*', re.IGNORECASE)
-# «Сбербанк — Югорское отделение № 5940», «Сбербанк - отделение ...» — дефисный вариант филиала (без запятой, на уровне _shorten_single)
-_BRANCH_DASH_RE = re.compile(
-    r'\s*[-–—]\s*(?:[А-ЯЁ][а-яё]+\s+)?отделение\b.*',
-    re.IGNORECASE,
-)
-# «Сбербанк, Югорское отделение № 5940» — вариант через запятую (на уровне всей строки, до split по запятым)
-_BRANCH_COMMA_RE = re.compile(
-    r'(Сбербанк)\s*,\s*(?:[А-ЯЁ][а-яё]+\s+)?отделение\b[^,]*',
-    re.IGNORECASE,
-)
-_SBER_RU_RE = re.compile(r'^Сбербанк\s+России$', re.IGNORECASE)
-
-
-def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
-    """Сокращение одного наименования (без запятых)."""
-    name = name.strip()
-    if not name:
-        return name
-    # МТУ Росимущество
-    if _MTU_RE.match(name):
-        return "МТУ Росимущество"
-    # Финансовый уполномоченный по правам потребителей финансовых услуг → Фин. уполномоченный
-    if _FIN_OMBUD_RE.match(name):
-        return "Фин. уполномоченный"
-    # Убрать ОПФ
-    name = _OPF_RE.sub('', name).strip()
-    # Убрать кавычки-ёлочки, оставшиеся после удаления ОПФ
-    name = _QUOTES_RE.sub('', name).strip()
-    # Сбербанк: убрать «в лице филиала ...», «в лице ... банка ...» и т.п.
-    name = _V_LICE_RE.sub('', name).strip()
-    # Сбербанк — Югорское отделение № 5940 — дефисный вариант филиала
-    name = _BRANCH_DASH_RE.sub('', name).strip()
-    # Сбербанк России → Сбербанк
-    name = _SBER_RU_RE.sub('Сбербанк', name)
-    # «города» → «г.»
-    name = _CITY_RE.sub('г.', name)
-    # «наследственное имущество умершего заемщика ФИО» → «насл. имущество ФИО»
-    name = _HERITAGE_RE.sub('насл. имущество ', name)
-    # ФИО → Фамилия И.О.
-    if not keep_fio_full:
-        m = _FIO_RE.match(name)
-        if m:
-            name = f"{m.group(1)} {m.group(2).upper()}.{m.group(3).upper()}."
-    return name
-
-
-def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
-    """Сокращение наименования стороны по правилам дайджеста.
-
-    Если в поле несколько сторон через запятую — сокращает каждую отдельно.
-    keep_fio_full=True — не сокращать ФИО физлиц (для секции «Новые дела»).
-    """
-    if not name or not name.strip():
-        return name
-    # Pre-pass для МТУ Росимущества: их региональное название обычно
-    # содержит запятые («МТУ Росимущества в Тюменской области, ХМАО-Югре,
-    # ЯНАО»), и сплит по запятой развалил бы строку — сократилась бы только
-    # первая часть, остальные «ХМАО-Югре» / «ЯНАО» уехали бы в результат.
-    if _MTU_RE.match(name.strip()):
-        return "МТУ Росимущество"
-    # Сначала склеиваем «Сбербанк, Югорское отделение № 5940» до split,
-    # иначе отдельная часть «отделение № 5940» проскочит в результат.
-    name = _BRANCH_COMMA_RE.sub(r'\1', name)
-    parts = name.split(",")
-    shortened = [_shorten_single(p, keep_fio_full=keep_fio_full) for p in parts]
-    return ", ".join(s for s in shortened if s)
-
-
-def shorten_court_name(name: str) -> str:
-    """«Сургутский городской суд» → «Сургутский гор. суд».
-
-    Компактная форма для дайджеста и шаблонного fallback. В cases.json
-    и FIRST_INSTANCE_COURTS названия хранятся полными — сокращаем только
-    на выводе.
-    """
-    if not name:
-        return name
-    return (
-        name
-        .replace(" городской ", " гор. ")
-        .replace(" районный ", " рай. ")
-    )
-
-
-def _norm_party_tokens(name: str) -> list[str]:
-    """Разбить строку стороны на нормализованные токены для матчинга.
-
-    Склеиваем филиальный запятый-вариант Сбербанка, сплитим по запятым,
-    каждый токен прогоняем через _shorten_single и приводим к нижнему
-    регистру со схлопнутыми пробелами. Пустые отбрасываем.
-    """
-    if not name or not name.strip():
-        return []
-    collapsed = _BRANCH_COMMA_RE.sub(r'\1', name)
-    out = []
-    for part in collapsed.split(","):
-        short = _shorten_single(part, keep_fio_full=False)
-        norm = re.sub(r'\s+', ' ', short).strip().lower()
-        if norm:
-            out.append(norm)
-    return out
-
-
-def classify_appellant_role(
-    appellant_raw: str,
-    plaintiff: str,
-    defendant: str,
-) -> tuple[str, str]:
-    """Определить роль апеллянта и его сокращённое имя.
-
-    Возвращает (role, short_name):
-      role ∈ {"Истец", "Ответчик", "Иное лицо", ""}
-      short_name — shorten_party_name(appellant_raw) или "" если пусто.
-
-    Логика: сравниваем нормализованные токены apellant_raw с токенами
-    истца и ответчика. Матч — равенство токенов или подстрока (в любом
-    направлении) при длине содержащего ≥ 4 символов. Если нет матча —
-    возвращаем «Иное лицо» (но имя всё равно сохраняем).
-    """
-    if not appellant_raw or not appellant_raw.strip():
-        return ("", "")
-    short_name = shorten_party_name(appellant_raw)
-    app_tokens = _norm_party_tokens(appellant_raw)
-    if not app_tokens:
-        return ("Иное лицо", short_name)
-    for role, party in (("Истец", plaintiff), ("Ответчик", defendant)):
-        party_tokens = _norm_party_tokens(party)
-        if not party_tokens:
-            continue
-        for a in app_tokens:
-            for p in party_tokens:
-                if a == p:
-                    return (role, short_name)
-                if len(p) >= 4 and a in p:
-                    return (role, short_name)
-                if len(a) >= 4 and p in a:
-                    return (role, short_name)
-    return ("Иное лицо", short_name)
-
-
 # ── GigaChat API — альтернативный провайдер для digest_only ───────────────────
 
 def _gigachat_access_token() -> str | None:
@@ -7983,17 +7680,6 @@ def _wrap_bare_number_in_link(line: str, url_by_num: dict[str, str]) -> str:
     else:
         replacement = f'<b>{num}</b>'
     return line[:m.start()] + replacement + line[m.end():]
-
-
-def _bare_case_number(num: str) -> str:
-    """«2-216/2026 (2-1156/2025;)» → «2-216/2026». Нужно потому, что поиск
-    в судах возвращает только текущий номер, а в cases.json хранится полный
-    с суффиксом переномерования."""
-    s = (num or "").strip()
-    if "(" in s:
-        bare = s.split("(")[0].strip()
-        return bare or s
-    return s
 
 
 def _has_real_fi(case: dict) -> bool:
