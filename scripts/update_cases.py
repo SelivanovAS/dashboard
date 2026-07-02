@@ -4324,6 +4324,7 @@ def _cassation_card_to_block(info: dict) -> dict:
 def link_cassation_cases(
     cases: list[dict],
     cass_finds: list[dict],
+    archived_cases: list[dict] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
     создать новые (discovery), если 1-инст. номера нет в БД.
@@ -4333,6 +4334,13 @@ def link_cassation_cases(
         cass_finds: список dict — каждый = parse_cassation_card(card_html)
                     + дополненные поля `link` (case_id|case_uid) и
                     `cassation_internal_number` из результатов поиска.
+        archived_cases: горячий архив (cases_archive.json), опционально.
+                    Если карточка 7kas матчится с архивным делом (например,
+                    дело ушло из cassation_watch по 120-дневному окну, а
+                    касс. жалоба зарегистрировалась ещё позже) — дело
+                    восстанавливается в активные со всей историей вместо
+                    создания discovery-дубля без сторон. Список мутируется
+                    (восстановленные дела удаляются).
 
     Возвращает (обновлённый список cases, список изменений для дайджеста,
     список новых дел discovered).
@@ -4381,22 +4389,25 @@ def link_cassation_cases(
     # проставил «Номер дела в первой инстанции»). Закрывает класс discovery-
     # дублей вида `2-278/2025` ↔ `33-2082/2026`.
     uid_index: dict[str, int] = {}
-    for i, c in enumerate(cases):
-        cid = c.get("id", "")
-        _put_idx(fi_index, cid, i)
+
+    def _index_case(
+        c: dict, i: int,
+        fi_idx: dict[str, int], cs_idx: dict[str, int], u_idx: dict[str, int],
+    ) -> None:
+        _put_idx(fi_idx, c.get("id", ""), i)
         fi = c.get("first_instance") or {}
         if fi.get("case_number"):
-            _put_idx(fi_index, fi["case_number"], i)
+            _put_idx(fi_idx, fi["case_number"], i)
         appeal = c.get("appeal") or {}
         if appeal.get("case_number"):
             # Кассация может прийти на дело, которое мы знаем только по
             # апел. номеру (если 1-я инст. ещё не подтянулась) — пусть
             # индекс тоже их видит.
-            _put_idx(fi_index, appeal["case_number"], i)
+            _put_idx(fi_idx, appeal["case_number"], i)
         cass = c.get("cassation") or {}
         cn = (cass.get("case_number") or "").strip()
         if cn:
-            cass_index.setdefault(cn, i)
+            cs_idx.setdefault(cn, i)
         for uid in (
             fi.get("judicial_uid"),
             appeal.get("judicial_uid"),
@@ -4404,7 +4415,21 @@ def link_cassation_cases(
         ):
             uid = (uid or "").strip()
             if uid:
-                uid_index.setdefault(uid, i)
+                u_idx.setdefault(uid, i)
+
+    for i, c in enumerate(cases):
+        _index_case(c, i, fi_index, cass_index, uid_index)
+
+    # Параллельные индексы горячего архива (если передан): касс. жалоба на
+    # дело, уже ушедшее в архив (например, из cassation_watch по 120-дневному
+    # окну), должна восстановить его, а не плодить discovery-дубль.
+    arch_fi_index: dict[str, int] = {}
+    arch_cass_index: dict[str, int] = {}
+    arch_uid_index: dict[str, int] = {}
+    if archived_cases:
+        for i, c in enumerate(archived_cases):
+            _index_case(c, i, arch_fi_index, arch_cass_index, arch_uid_index)
+    resurrected: set[int] = set()  # позиции archived_cases, изъятые в активные
 
     cass_changes: list[dict] = []
     discovered: list[dict] = []
@@ -4432,6 +4457,44 @@ def link_cassation_cases(
             idx = fi_index.get(fi_num)
         if idx is None:
             idx = fi_index.get(_bare_case_number(fi_num))
+        # Промах по активным — пробуем горячий архив: восстановление вместо
+        # discovery-дубля. Порядок ключей тот же (8Г → УИД → номер 1-й инст.).
+        if idx is None and archived_cases:
+            arch_i = arch_cass_index.get(cass_int_num) if cass_int_num else None
+            if arch_i is None:
+                uid = (info.get("judicial_uid") or "").strip()
+                if uid:
+                    arch_i = arch_uid_index.get(uid)
+            if arch_i is None:
+                arch_i = arch_fi_index.get(fi_num)
+            if arch_i is None:
+                arch_i = arch_fi_index.get(_bare_case_number(fi_num))
+            if arch_i is not None and arch_i not in resurrected:
+                arch_case = archived_cases[arch_i]
+                arch_past = {
+                    ((h.get("cassation") or {}).get("case_number") or "").strip()
+                    for h in (arch_case.get("history") or [])
+                } - {""}
+                if cass_int_num and cass_int_num in arch_past:
+                    # Карточка прошлого круга архивного дела — не трогаем.
+                    log.debug(
+                        f"  7kas: {cass_int_num} — прошлый круг архивного "
+                        f"дела {fi_num}, пропуск"
+                    )
+                    continue
+                # Штамп архивации снимаем: дело снова живёт; при повторном
+                # уходе в архив получит свежий якорь для ротации.
+                arch_case.pop("archived_at", None)
+                resurrected.add(arch_i)
+                cases.append(arch_case)
+                idx = len(cases) - 1
+                # Регистрируем ключи в активных индексах: повторная находка
+                # по этому делу в том же прогоне сматчится уже с активным.
+                _index_case(arch_case, idx, fi_index, cass_index, uid_index)
+                log.info(
+                    f"  7kas: {fi_num} восстановлено из архива "
+                    f"(стадия была {arch_case.get('current_stage') or '—'})"
+                )
         if idx is not None:
             case = cases[idx]
             old_cass = case.get("cassation") or {}
@@ -4622,6 +4685,14 @@ def link_cassation_cases(
                 f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "
                 f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"
             )
+
+    # Изымаем восстановленные дела из архивного списка (мутируем на месте —
+    # вызывающий код пишет archived_cases обратно в cases_archive.json).
+    if archived_cases and resurrected:
+        archived_cases[:] = [
+            c for i, c in enumerate(archived_cases) if i not in resurrected
+        ]
+        log.info(f"7kas: восстановлено из архива {len(resurrected)} дел")
 
     if cass_changes:
         log.info(
@@ -12389,6 +12460,7 @@ def main_json():
     cass_parsed = 0
     cass_skipped_future = 0
     cass_skipped_suspended = 0
+    cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
     try:
         log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
         polite_delay()
@@ -12472,9 +12544,14 @@ def main_json():
                 cass_finds.append(info)
                 cass_parsed += 1
 
+            # Передаём горячий архив: касс. жалоба на архивное дело (ушло из
+            # cassation_watch по 120-дневному окну до регистрации на 7kas)
+            # восстанавливает запись с историей, а не плодит discovery-дубль.
+            archived_before_cass = len(archived_cases)
             cases, cass_changes, cass_discovered = link_cassation_cases(
-                cases, cass_finds
+                cases, cass_finds, archived_cases
             )
+            cass_resurrected_count += archived_before_cass - len(archived_cases)
         else:
             log.warning("7kas: пустой ответ от поиска")
     except Exception as exc:
@@ -12769,7 +12846,7 @@ def main_json():
     )
     archived_cases = rotate_cold_archive(archived_cases)
     archive_dirty = (
-        bool(to_add or reactivated_count)
+        bool(to_add or reactivated_count or cass_resurrected_count)
         or len(archived_cases) != hot_before
         or needs_backfill
     )
