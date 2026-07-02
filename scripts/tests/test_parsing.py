@@ -979,6 +979,104 @@ class TestRelinkAwaitingRelink:
         assert case["round"] == 1
 
 
+# ── reactivate_archived_first_instance / rotate_cold_archive ─────────────────
+
+def _days_ago_iso(n: int) -> str:
+    return (datetime.now() - timedelta(days=n)).date().isoformat()
+
+
+class TestReactivateArchivedFirstInstance:
+    @staticmethod
+    def _archived_fi(cid: str, hearing_days_ago: int) -> dict:
+        return {
+            "id": cid,
+            "current_stage": "first_instance",
+            "first_instance": {"case_number": cid, "status": "Решено",
+                               "hearing_date": _days_ago(hearing_days_ago)},
+        }
+
+    def test_recent_resolved_case_is_reactivated(self):
+        cases: list = []
+        archived = [self._archived_fi("2-1/2026", 90)]
+        moved = uc.reactivate_archived_first_instance(cases, archived)
+        assert moved == 1
+        assert len(cases) == 1 and cases[0]["id"] == "2-1/2026"
+        assert archived == []
+
+    def test_too_old_case_stays_archived(self):
+        cases: list = []
+        archived = [self._archived_fi("2-2/2026", 200)]
+        moved = uc.reactivate_archived_first_instance(cases, archived)
+        assert moved == 0
+        assert cases == [] and len(archived) == 1
+
+    def test_duplicate_id_in_active_stays_archived(self):
+        cases = [{"id": "2-3/2026", "current_stage": "cassation"}]
+        archived = [self._archived_fi("2-3/2026", 90)]
+        moved = uc.reactivate_archived_first_instance(cases, archived)
+        assert moved == 0
+        assert len(archived) == 1
+
+    def test_non_first_instance_stage_stays_archived(self):
+        archived = [{
+            "id": "2-4/2026",
+            "current_stage": "cassation_watch",
+            "first_instance": {"case_number": "2-4/2026", "status": "Решено",
+                               "hearing_date": _days_ago(90)},
+        }]
+        moved = uc.reactivate_archived_first_instance([], archived)
+        assert moved == 0
+        assert len(archived) == 1
+
+
+class TestRotateColdArchive:
+    def _with_tmp_archive(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            uc, "JSON_ARCHIVE_PATH", str(tmp_path / "cases_archive.json")
+        )
+
+    def test_old_case_moves_to_cold_year_file(self, monkeypatch, tmp_path):
+        self._with_tmp_archive(monkeypatch, tmp_path)
+        stamp = _days_ago_iso(400)
+        year = int(stamp[:4])
+        hot = [{"id": "2-10/2025", "archived_at": stamp,
+                "first_instance": {"case_number": "2-10/2025"}}]
+        keep = uc.rotate_cold_archive(hot)
+        assert keep == []
+        cold = uc.load_json(uc.cold_archive_path(year))
+        assert [c["id"] for c in cold["cases"]] == ["2-10/2025"]
+
+    def test_rotation_idempotent_no_duplicates(self, monkeypatch, tmp_path):
+        self._with_tmp_archive(monkeypatch, tmp_path)
+        stamp = _days_ago_iso(400)
+        year = int(stamp[:4])
+        case = {"id": "2-11/2025", "archived_at": stamp,
+                "first_instance": {"case_number": "2-11/2025"}}
+        uc.rotate_cold_archive([dict(case)])
+        uc.rotate_cold_archive([dict(case)])  # повторно — id уже в холодном
+        cold = uc.load_json(uc.cold_archive_path(year))
+        assert len(cold["cases"]) == 1
+
+    def test_fresh_case_stays_hot(self, monkeypatch, tmp_path):
+        self._with_tmp_archive(monkeypatch, tmp_path)
+        hot = [{"id": "2-12/2026", "archived_at": _days_ago_iso(30),
+                "first_instance": {"case_number": "2-12/2026"}}]
+        keep = uc.rotate_cold_archive(hot)
+        assert len(keep) == 1
+        assert not os.path.exists(uc.cold_archive_path(datetime.now().year))
+
+    def test_backfill_archived_at_from_stage_dates(self, monkeypatch, tmp_path):
+        """Дело без штампа: archived_at выводится из дат стадий и пишется
+        обратно; свежая дата оставляет дело в горячем архиве."""
+        self._with_tmp_archive(monkeypatch, tmp_path)
+        hot = [{"id": "2-13/2026",
+                "first_instance": {"case_number": "2-13/2026",
+                                   "hearing_date": _days_ago(30)}}]
+        keep = uc.rotate_cold_archive(hot)
+        assert len(keep) == 1
+        assert keep[0]["archived_at"]  # бэкфилл записан
+
+
 # ── card_url ─────────────────────────────────────────────────────────────────
 
 class TestCardUrl:
