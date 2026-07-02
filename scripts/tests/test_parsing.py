@@ -661,6 +661,125 @@ class TestMigrateStages:
         assert cases[0]["current_stage"] == "awaiting_appeal"
 
 
+# ── link_cassation_cases ─────────────────────────────────────────────────────
+
+def _cass_find(fi_num: str, cass_num: str = "8Г-111/2026", **over) -> dict:
+    """Минимальный info в форме parse_cassation_card + поля из выдачи."""
+    info = {
+        "fi_case_number": fi_num,
+        "cassation_internal_number": cass_num,
+        "cassation_number": "",
+        "judge": "Петрова А.А.",
+        "filing_date": "01.05.2026",
+        "fi_decision_date": "",
+        "act_kind": "",
+        "category": "О взыскании задолженности",
+        "judicial_uid": "",
+        "cassator": "Иванов Иван Иванович",
+        "cassator_status": "",
+        "review_result": "",
+        "suspended_until": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "decision_date": "",
+        "result_text": "",
+        "result_for_appeal": "",
+        "act_published": False,
+        "act_text": "",
+        "hearings": [],
+        "link": "123|abc-def",
+        "participants": [],
+        "bank_role": "Ответчик",
+        "fi_court_config": None,
+        "fi_court_long": "Сургутский городской суд",
+    }
+    info.update(over)
+    return info
+
+
+class TestLinkCassationCases:
+    def test_pending_case_links_and_becomes_cassation(self):
+        cases = [{
+            "id": "2-100/2025",
+            "current_stage": "cassation_pending",
+            "first_instance": {"case_number": "2-100/2025"},
+            "cassation": None,
+        }]
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-100/2025")]
+        )
+        assert out[0]["current_stage"] == "cassation"
+        assert out[0]["cassation"]["case_number"] == "8Г-111/2026"
+        assert len(changes) == 1 and "new_cassation" in changes[0]["type"]
+        assert discovered == []
+
+    def test_past_round_card_does_not_resurrect(self):
+        """После remanded + re-link старая карточка 7kas (её 8Г уже в
+        history) не должна воскрешать кассацию и утаскивать дело из
+        first_instance — иначе round растёт на каждом прогоне."""
+        cases = [{
+            "id": "2-100/2025",
+            "current_stage": "first_instance",
+            "round": 2,
+            "history": [{
+                "round": 1,
+                "reason": "cassation_remanded_to_fi",
+                "cassation": {"case_number": "8Г-111/2026",
+                              "outcome": "cassation_remanded"},
+            }],
+            "first_instance": {"case_number": "2-100/2025",
+                               "status": "В производстве"},
+            "cassation": None,
+        }]
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-100/2025")]
+        )
+        assert out[0]["current_stage"] == "first_instance"
+        assert out[0]["cassation"] is None
+        assert out[0]["round"] == 2
+        assert changes == [] and discovered == []
+
+    def test_awaiting_relink_same_card_updates_block_keeps_stage(self):
+        """awaiting_relink (снимок ещё не снят): та же касс. карточка
+        обновляет блок (поздняя публикация текста определения), но стадию
+        назад в cassation не возвращает."""
+        cases = [{
+            "id": "2-200/2025",
+            "current_stage": "awaiting_relink",
+            "first_instance": {"case_number": "2-200/2025"},
+            "cassation": {"case_number": "8Г-222/2026",
+                          "outcome": "cassation_remanded",
+                          "act_published": False},
+        }]
+        find = _cass_find(
+            "2-200/2025", cass_num="8Г-222/2026",
+            result_text="УДОВЛЕТВОРЕНО",
+            result_for_appeal="ОТМЕНЕНО, НАПРАВЛЕНО НА НОВОЕ РАССМОТРЕНИЕ",
+            decision_date="01.06.2026",
+            act_published=True,
+            act_text="установил: ... руководствуясь ...",
+        )
+        out, changes, discovered = uc.link_cassation_cases(cases, [find])
+        assert out[0]["current_stage"] == "awaiting_relink"
+        assert out[0]["cassation"]["act_published"] is True
+        assert len(changes) == 1
+        assert "new_act" in changes[0]["type"]
+        assert "new_cassation" not in changes[0]["type"]
+        assert discovered == []
+
+    def test_unknown_case_discovered(self):
+        cases: list = []
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-300/2025", cass_num="8Г-333/2026")]
+        )
+        assert len(out) == 1 and len(discovered) == 1
+        nc = out[0]
+        assert nc["current_stage"] == "cassation"
+        assert nc["discovered_via_cassation"] is True
+        assert nc["cassation"]["case_number"] == "8Г-333/2026"
+        assert changes and "discovered_in_cassation" in changes[0]["type"]
+
+
 # ── card_url ─────────────────────────────────────────────────────────────────
 
 class TestCardUrl:
