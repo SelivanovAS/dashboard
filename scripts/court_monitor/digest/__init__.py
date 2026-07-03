@@ -36,8 +36,12 @@ from court_monitor.digest.postprocess import (  # noqa: F401
 from court_monitor.digest.template import (  # noqa: F401
     _bank_in_parties, _section_break, next_tuesday, build_summary_line,
     short_category_chain, category_short, _render_act_summary_or_excerpt,
+    _act_summary_or_excerpt_with_kind,
     load_last_meaningful_digest, _format_iso_date_ru,
     render_no_changes_digest, generate_template_digest,
+)
+from court_monitor.digest.lint import (  # noqa: F401
+    lint_digest_html,
 )
 from court_monitor.digest.core import (  # noqa: F401
     save_digest_context, save_last_digest, _extract_case_paragraphs_from_digest,

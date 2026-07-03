@@ -63,7 +63,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # last_digest.json — Claude-версия для блока «📰 Дайджест» на сайте.
+          # last_digest.json — готовый дайджест для блока «📰 Дайджест» на сайте.
           if [ -f data/last_digest.json ]; then
             git add data/last_digest.json
           fi
@@ -71,9 +71,27 @@ jobs:
           if [ -f data/last_personal_pushes.json ]; then
             git add data/last_personal_pushes.json
           fi
+          # cases.json: replay пишет разбор акта (act_analysis) в карточку
+          # дела — без коммита drawer в приложении оставался со старым
+          # сырым текстом от Mac-прогона.
+          if [ -f data/cases.json ]; then
+            git add data/cases.json
+          fi
+          # Кэш LLM-пересказов мотивировок: без коммита каждый повторный
+          # replay заново оплачивает пересказ тех же актов.
+          if [ -f data/.act_summaries.json ]; then
+            git add data/.act_summaries.json
+          fi
           if git diff --cached --quiet; then
             echo "Нет изменений — нечего коммитить"
             exit 0
           fi
           git commit -m "📰 Дайджест собран (replay после Mac-парсинга)"
+          # Гонка с параллельным пушем Mac: подтягиваем свежий main перед
+          # своим пушем. При конфликте не роняем workflow — дайджест уже
+          # отправлен, act_analysis догонит следующим прогоном.
+          git pull --rebase origin main || {
+            echo "⚠ rebase не удался — пропускаю коммит (дайджест уже отправлен)"
+            exit 0
+          }
           git push

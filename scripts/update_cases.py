@@ -159,6 +159,9 @@ from court_monitor.digest.core import (  # noqa: F401 — ре-экспорт д
     save_digest_context, save_last_digest, _extract_case_paragraphs_from_digest,
     attach_act_analyses, _dedupe_existing_act_analyses, generate_digest,
 )
+from court_monitor.digest.lint import (  # noqa: F401 — ре-экспорт для совместимости
+    lint_digest_html,
+)
 from court_monitor.delivery import (  # noqa: F401 — ре-экспорт для совместимости
     _extract_paren_numbers, _build_watchlist_alias_indexes,
     _expand_watchlist_via_aliases, _filter_events_by_watchlist,

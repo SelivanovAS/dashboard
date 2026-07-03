@@ -69,8 +69,8 @@
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:205](scripts/court_monitor/linking.py:205) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:48](scripts/court_monitor/linking.py:48) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:419](scripts/court_monitor/linking.py:419) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:83](scripts/court_monitor/runs.py:83) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:834](scripts/court_monitor/runs.py:834) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:84](scripts/court_monitor/runs.py:84) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:873](scripts/court_monitor/runs.py:873) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |

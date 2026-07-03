@@ -157,6 +157,9 @@ git add data/cases_archive_*.json 2>/dev/null
 [ -f data/last_digest.json ]           && git add data/last_digest.json
 [ -f data/last_personal_pushes.json ]  && git add data/last_personal_pushes.json
 [ -f data/parse_health.json ]          && git add data/parse_health.json
+# Кэш LLM-пересказов: на Mac не пополняется (нет ANTHROPIC-ключа), но список
+# файлов держим идентичным workflow'ам — защита на будущее.
+[ -f data/.act_summaries.json ]        && git add data/.act_summaries.json
 
 if git diff --cached --quiet; then
   log "Изменений нет — коммит не нужен (нерабочий день или без движения)"
