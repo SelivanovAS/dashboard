@@ -522,6 +522,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_block.append(
                     f"     <b>{filing}</b> — 📥 иск зарегистрирован в суде"
                 )
+            # Пустая строка между делами (правило вёрстки юриста: строки
+            # одного дела подряд, пустая строка — между разными делами).
+            fi_block.append("")
+        if fi_block and fi_block[-1] == "":
+            fi_block.pop()
 
     # Отделяем дела, у которых есть вынесенное решение — они поедут в 3.5.
     # В 3.2 «Изменения» их статус/резолюция не повторяются; оставляем
@@ -862,6 +867,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 appeal_block.append(
                     f"     <b>{filing}</b> — 📥 поступило в апел. суд"
                 )
+            # Пустая строка между делами (правило вёрстки юриста).
+            appeal_block.append("")
+        if appeal_block and appeal_block[-1] == "":
+            appeal_block.pop()
 
     if to_fi_rules:
         _section_break(appeal_block)
@@ -886,6 +895,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             if plaintiff and defendant:
                 line += f"\n     {plaintiff} vs {defendant}{role_note}"
             appeal_block.append(line)
+            # Пустая строка между делами (правило вёрстки юриста).
+            appeal_block.append("")
+        if appeal_block and appeal_block[-1] == "":
+            appeal_block.pop()
 
     # Объединяем «Отложенные» и «Назначенные» апелляции в одну секцию
     # «📅 Изменения» (по запросу юриста, как 3.2 в 1-й инст.). Формат —
@@ -961,6 +974,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     f"     статус: {escape_html(d.get('old_status', ''))} → "
                     f"{escape_html(d.get('new_status', ''))}"
                 )
+            # Пустая строка между делами (правило вёрстки юриста: формат
+            # трёхстрочный, без разделителя дела визуально слипаются).
+            appeal_block.append("")
+        if appeal_block and appeal_block[-1] == "":
+            appeal_block.pop()
 
     if results:
         _section_break(appeal_block)
