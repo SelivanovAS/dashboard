@@ -24,6 +24,18 @@
 | **+ Полировщик** | `DIGEST_POLISH=1` | Готовый черновик дополнительно прогоняется через `polish_digest_html` (косметика) с валидатором и откатом. |
 | **Полный LLM** | `DIGEST_FULL_LLM=1` | Старое поведение: весь HTML генерирует один большой LLM-вызов. Escape hatch для A/B и на случай регресса. |
 
+**С 03.07.2026 гибрид — боевой режим**: флаг `DIGEST_FULL_LLM` снят из
+`replay_on_push.yml` и `update_cases.yml` после A/B-сравнения (юрист выбрал
+компакт-вёрстку, покрытие всех 29 типов событий закреплено матрицей тестов
+`tests/test_digest_template_events.py`). Откат — вернуть флаг в env workflow.
+
+После отправки дайджест проверяет **программный линтер**
+(`digest/lint.py`, `lint_digest_html`): полнота номеров дел (с касс.
+альтернативами 8Г-…), обёртка `<a><b>`, счётчики `(N)` секций по строкам
+с номерами, баланс тегов, футер, лимит длины. Ничего не блокирует — при
+аномалии шлёт сервисный 🩺-алерт «Дайджест-линтер» в Telegram (по образцу
+детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
+
 Провайдер LLM выбирается переменной `LLM_PROVIDER` (`claude` по умолчанию или
 `gigachat`, [строка 144](../../scripts/court_monitor/config.py#L144)). Основной мониторинг
 работает на Claude; GigaChat включается отдельным workflow.
@@ -33,14 +45,14 @@
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 372](../../scripts/court_monitor/digest/template.py#L372). Собирает весь HTML дайджеста
+[Строка 448](../../scripts/court_monitor/digest/template.py#L448). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([344](../../scripts/court_monitor/digest/template.py#L344)).
+([420](../../scripts/court_monitor/digest/template.py#L420)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
@@ -60,7 +72,7 @@ LLM реально «думает». Алгоритм:
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
-   [290](../../scripts/court_monitor/digest/template.py#L290)).
+   [366](../../scripts/court_monitor/digest/template.py#L366)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),

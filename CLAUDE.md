@@ -24,16 +24,17 @@
   - [lifecycle.py](scripts/court_monitor/lifecycle.py) — классификация событий карточки, state machine стадий, дедуп, архив.
   - [parsing/](scripts/court_monitor/parsing/__init__.py) — `tables.py` (TableExtractor), `search.py` (поисковая выдача), `cards.py` (карточки дел), `cassation.py` (7kas).
   - [linking.py](scripts/court_monitor/linking.py) — связка FI ↔ апелляция ↔ кассация, discovery, реактивация, ротация архива.
-  - [digest/](scripts/court_monitor/digest/__init__.py) — `llm.py` (Claude/GigaChat, промпты — патч-цели тестов живут тут), `postprocess.py` (валидация/чистка HTML), `template.py` (программный рендер), `core.py` (диспетчер `generate_digest`).
+  - [digest/](scripts/court_monitor/digest/__init__.py) — `llm.py` (Claude/GigaChat, промпты — патч-цели тестов живут тут), `postprocess.py` (валидация/чистка HTML), `template.py` (программный рендер — **боевой путь с 03.07.2026**, компакт-вёрстка без отступов), `core.py` (диспетчер `generate_digest`), `lint.py` (программный линтер готового HTML после отправки: полнота номеров, счётчики (N), теги, футер → 🩺-алерт; `DIGEST_LINT=0` — выключатель). Прод — гибрид: события рендерит код, LLM только пересказывает мотивировки актов; `DIGEST_FULL_LLM=1` — откат на полный LLM-дайджест.
   - [delivery.py](scripts/court_monitor/delivery.py) — Telegram, Web Push с watchlist-персонализацией, алерты.
   - [runs.py](scripts/court_monitor/runs.py) — `main_json` и остальные режимы прогона, `update_active_cases`.
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
-- `scripts/tests/` + `tests/` — pytest-набор (230+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
+- `scripts/tests/` + `tests/` — pytest-набор (320+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста — матрица всех 29 типов событий в [tests/test_digest_template_events.py](tests/test_digest_template_events.py), линтер). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
 - [data/cases_archive.json](data/cases_archive.json) — «горячий» архив: дела, заархивированные за последние 12 мес. (`COLD_ARCHIVE_DAYS`). Грузится фронтом.
 - `data/cases_archive_YYYY.json` — «холодные» годовые архивы: дела старше года, вынесенные ротацией (`rotate_cold_archive`). **Фронт их не грузит** (чтобы вес не рос безгранично), но скрипт читает их в индекс дедупликации. Холодные дела «заморожены»: не реактивируются автоматически.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
 - `data/.cassation_acts` — дедуп кассационных определений: ключи «8Г-номер|дата акта», чьи `new_act` уже уходили в дайджест. Гасит повторный `new_act` при «мигании» `act_published` (сбойный парс 7kas). Ведётся в `link_cassation_cases`.
+- `data/.act_summaries.json` — кэш LLM-пересказов мотивировок актов (ключ `sha1(act_text+"|v2-ratio")[:16]`). Пополняется на GitHub-replay (на Mac ключа Anthropic нет), коммитится workflow'ами — без коммита каждый replay заново оплачивал бы пересказ тех же актов.
 - `data/parse_health.json` — журнал здоровья парсеров: пер-источник история количества результатов поиска (20 судов 1-й инст., апелляция, 7kas до/после HMAO-фильтра). Детектор «молчаливой поломки» (`update_parse_health`, блок 4e в `main_json`) шлёт сервисный 🩺-алерт в Telegram: суд с медианой ≥1 вернул 0 (на 1-м и 3-м нулевом прогоне + сообщение о восстановлении), HTTP-фейл 3 прогона подряд, все источники разом по нулям, ≥5 карточек-«огрызков» за прогон.
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
@@ -141,11 +142,16 @@
   заглушённой `validate_environment` — иначе `exit(2)` без секретов; доставка
   сама скипается, контекст сохраняется) → `git commit && push`. Установка/откат
   — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
-- **Дайджест Claude + доставка — на GitHub** (там Claude доступен). Workflow
+- **Дайджест + доставка — на GitHub** (Claude нужен для пересказов актов,
+  из РФ недоступен). Workflow
   [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
   ловит `push` с изменённым `data/last_digest_context.json` → `--replay-last
-  --push-all` → Claude-дайджест в личный Telegram + Web Push всем подписчикам →
-  коммитит `last_digest.json`. Анти-петля: replay не трогает контекст +
+  --push-all` → **гибридный дайджест** (программный рендер + Claude только на
+  пересказ мотивировок; с 03.07.2026, откат — `DIGEST_FULL_LLM: "1"` в env)
+  в личный Telegram + Web Push всем подписчикам → программный линтер с
+  🩺-алертом → коммитит `last_digest.json`, `last_personal_pushes.json`,
+  `cases.json` (act_analysis) и `.act_summaries.json` (кэш пересказов) с
+  `git pull --rebase`. Анти-петля: replay не трогает контекст +
   GITHUB_TOKEN-пуши не триггерят workflow.
 - **Cloudflare Worker cron ОТКЛЮЧЁН** (`crons = []` в
   [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml), нужен
