@@ -37,6 +37,7 @@ from court_monitor.digest.core import (
     attach_act_analyses, _dedupe_existing_act_analyses, generate_digest,
     save_digest_context, save_last_digest,
 )
+from court_monitor.digest.lint import lint_digest_html
 from court_monitor.digest.template import build_summary_line
 from court_monitor.health import (
     load_parse_health, save_parse_health, update_parse_health,
@@ -831,6 +832,44 @@ def main_backfill_appeal_anchors():
     data["cases"] = cases
     save_json(data, config.JSON_PATH)
     log.info("Готово.")
+
+
+def _lint_digest_and_alert(digest_html: str, *,
+                           new_cases: list | None = None,
+                           changes: list | None = None,
+                           fi_new_cases: list | None = None,
+                           fi_changes: list | None = None,
+                           cass_changes: list | None = None,
+                           cass_discovered: list | None = None) -> None:
+    """Прогнать линтер по УЖЕ отправленному дайджесту; при проблемах —
+    сервисный 🩺-алерт в Telegram (по образцу детектора здоровья парсеров).
+
+    Ничего не блокирует и не имеет права ронять прогон: дайджест к этому
+    моменту доставлен, линтер — только сторож качества рендера. На Mac
+    (без TELEGRAM-токенов) send_telegram молча скипается — алерт дойдёт
+    с GitHub-replay. Kill-switch: env DIGEST_LINT=0.
+    """
+    if not config.DIGEST_LINT:
+        return
+    try:
+        problems = lint_digest_html(
+            digest_html,
+            new_cases=new_cases, changes=changes,
+            fi_new_cases=fi_new_cases, fi_changes=fi_changes,
+            cass_changes=cass_changes, cass_discovered=cass_discovered,
+        )
+        if problems:
+            log.warning("digest-lint: " + "; ".join(problems))
+            send_telegram(
+                "🩺 <b>Дайджест-линтер</b>\n"
+                + "\n".join(f"• {escape_html(p)}" for p in problems)
+            )
+        else:
+            log.info("digest-lint: проверки пройдены, аномалий нет")
+    except Exception as exc:
+        log.warning(f"digest-lint: ошибка линтера: {exc}", exc_info=True)
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -2485,6 +2524,14 @@ def main_json():
     send_telegram(digest)
     timings["telegram"] = time.perf_counter() - t0
 
+    # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
+    _lint_digest_and_alert(
+        digest,
+        new_cases=appeal_new_cases_csv, changes=changes,
+        fi_new_cases=fi_new_cases, fi_changes=fi_changes,
+        cass_changes=cass_changes, cass_discovered=cass_discovered,
+    )
+
     # Web Push — краткое уведомление при наличии изменений, разбивка по типам.
     # Числа берём из ФАКТИЧЕСКОГО HTML дайджеста (после _renumber_section_headers /
     # _recount_summary_line), чтобы шапка фронта и web-push body показывали ту же
@@ -2666,6 +2713,16 @@ def main_replay_last(push_all: bool = False):
     )
 
     send_telegram(digest)
+    # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
+    _lint_digest_and_alert(
+        digest,
+        new_cases=ctx.get("new_cases", []),
+        changes=ctx.get("changes", []),
+        fi_new_cases=ctx.get("fi_new_cases", []),
+        fi_changes=ctx.get("fi_changes", []),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
+    )
     replay_is_empty = not (
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")

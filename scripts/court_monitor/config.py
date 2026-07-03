@@ -163,6 +163,16 @@ DIGEST_FULL_LLM = (
 DIGEST_POLISH = (
     os.environ.get("DIGEST_POLISH", "").strip().lower() in ("1", "true", "yes")
 )
+
+# Программный линтер готового дайджеста (digest/lint.py): детерминированные
+# проверки HTML после отправки (полнота номеров, счётчики (N), баланс тегов,
+# футер, лимит). Дайджест НЕ блокирует — при аномалии уходит сервисный
+# 🩺-алерт в Telegram (по образцу детектора здоровья парсеров). Включён по
+# умолчанию; DIGEST_LINT=0 — аварийный выключатель.
+DIGEST_LINT = (
+    os.environ.get("DIGEST_LINT", "").strip().lower()
+    not in ("0", "false", "no")
+)
 GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
 GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
 GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")

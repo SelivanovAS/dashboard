@@ -107,6 +107,11 @@ jobs:
           if [ -f data/parse_health.json ]; then
             git add data/parse_health.json
           fi
+          # Кэш LLM-пересказов мотивировок актов (гибридный дайджест).
+          # Без коммита каждый прогон заново оплачивает пересказ тех же актов.
+          if [ -f data/.act_summaries.json ]; then
+            git add data/.act_summaries.json
+          fi
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           git push
 
