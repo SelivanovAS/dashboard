@@ -2,23 +2,31 @@
 
 ## Что это и зачем
 
-Cloudflare Worker — это маленький серверный скрипт, который делает две вещи,
-которые иначе делать негде:
+Cloudflare Worker — это маленький серверный скрипт, который:
 
-1. **Запускает обновление точно по расписанию** (каждое утро в будни) — потому
-   что встроенный cron GitHub Actions на бесплатном плане опаздывает на часы.
-2. **Хранит push-подписки и watchlist** пользователей PWA и отдаёт **админку**
+1. **Хранит push-подписки и watchlist** пользователей PWA и отдаёт **админку**
    подписчиков — потому что у дашборда (статика на GitHub Pages) нет своего
    бэкенда, а где-то хранить подписки нужно.
+2. **Показывает онлайн-статус парсинга** (блок «🛰 Парсинг» в админке): Mac
+   шлёт вехи прогона на `/run-progress`, админка автообновляется — ход парсинга
+   видно из браузера и с телефона.
+3. ~~Запускает обновление точно по расписанию~~ — **отключено 03.07.2026**
+   (`crons = []`): суды режут иностранные IP, и запускаемый Worker'ом
+   `update_cases.yml` перестал добираться до судов. Расписание переехало в
+   LaunchAgent на Mac юриста (см. [01. Обзор](01-обзор-и-архитектура.md) и
+   [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md)).
+   Это **временная схема** — в будущем парсинг переедет на сервер (RU VPS),
+   тогда расписание вернётся в инфраструктуру.
 
 Код — [`cloudflare-worker/worker.js`](../../cloudflare-worker/worker.js),
 конфигурация — [`cloudflare-worker/wrangler.toml`](../../cloudflare-worker/wrangler.toml).
 Деплой: `cd cloudflare-worker && wrangler deploy`.
 
-> ⚠️ **Автозапуск — только через этот Worker.** cron-job.org и аналоги не
-> добавлять. Любые правки расписания — в `wrangler.toml`, затем `wrangler deploy`.
+> ⚠️ cron-job.org и аналоги не добавлять по-прежнему. Сейчас расписание —
+> LaunchAgent на Mac (`~/Library/LaunchAgents/com.court-monitor.parse.plist`);
+> вернуть Worker-cron — раскомментировать `crons` в `wrangler.toml` + деплой.
 
-## Автозапуск (cron)
+## Автозапуск (cron) — ОТКЛЮЧЁН, оставлено как справка
 
 `scheduled(event, env)` ([worker.js:1006](../../cloudflare-worker/worker.js#L1006)):
 
@@ -30,7 +38,10 @@ Cloudflare Worker — это маленький серверный скрипт,
    `…/actions/workflows/update_cases.yml/dispatches` с `ref: "main"` и входом
    `inputs: { smart_skip: "true" }`. Авторизация — `Bearer ${env.GITHUB_PAT}`.
 
-Расписание в `wrangler.toml`: `crons = ["45 3 * * mon-fri"]` = **06:45 МСК, пн-пт**.
+Расписание в `wrangler.toml`: сейчас `crons = []` (отключено); прежнее значение
+`"45 3 * * mon-fri"` = **06:45 МСК, пн-пт** — закомментировано рядом. Код
+`scheduled()` из worker.js не удалён: при возврате расписания достаточно
+раскомментировать cron и задеплоить.
 
 > ⚠️ Cloudflare Cron Triggers нумерует дни недели **1=Sun..7=Sat** (не как POSIX).
 > Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье, поэтому
@@ -54,12 +65,14 @@ UI идёт без этого input и парсит всё.
 | `/unsubscribe` | POST | `handleUnsubscribe` ([234](../../cloudflare-worker/worker.js#L234)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
 | `/subscriptions` | GET | `handleListSubscriptions` ([262](../../cloudflare-worker/worker.js#L262)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
 | `/mark-owner` | POST | `handleMarkOwner` ([292](../../cloudflare-worker/worker.js#L292)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/admin` | GET | `handleAdmin` ([383](../../cloudflare-worker/worker.js#L383)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
-| `/admin/data` | GET | `handleAdminData` ([342](../../cloudflare-worker/worker.js#L342)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([436](../../cloudflare-worker/worker.js#L436)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([461](../../cloudflare-worker/worker.js#L461)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([450](../../cloudflare-worker/worker.js#L450)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([546](../../cloudflare-worker/worker.js#L546)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/run-progress` | POST | `handleRunProgress` ([343](../../cloudflare-worker/worker.js#L343)) | `PROGRESS_SECRET` (Bearer) | Принять батч вех парсинга с Mac (`progress_pusher.py`). KV `progress:current`/`progress:prev`, cap 300 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([385](../../cloudflare-worker/worker.js#L385)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона для блока «🛰 Парсинг». |
+| `/admin` | GET | `handleAdmin` ([455](../../cloudflare-worker/worker.js#L455)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
+| `/admin/data` | GET | `handleAdminData` ([414](../../cloudflare-worker/worker.js#L414)) | `OWNER_SECRET` | JSON-данные для админки. |
+| `/admin/label` | POST | `handleAdminLabel` ([508](../../cloudflare-worker/worker.js#L508)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([533](../../cloudflare-worker/worker.js#L533)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([522](../../cloudflare-worker/worker.js#L522)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([618](../../cloudflare-worker/worker.js#L618)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 
 CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (`corsHeaders`,
 [34](../../cloudflare-worker/worker.js#L34)).
@@ -76,25 +89,36 @@ CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (
 ## Админка подписчиков
 
 URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`.
-`handleAdmin` ([383](../../cloudflare-worker/worker.js#L383)) рендерит HTML
-(`renderAdminHtml`, [595](../../cloudflare-worker/worker.js#L595)), внутри JS
+`handleAdmin` ([455](../../cloudflare-worker/worker.js#L455)) рендерит HTML
+(`renderAdminHtml`, [667](../../cloudflare-worker/worker.js#L667)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
-устройство (`detectDevice`, [709](../../cloudflare-worker/worker.js#L709)), флаг
-owner, даты создания/входа/обновления watchlist, размер и раскрываемый список дел
-со сторонами, а также **журнал последнего push** (из `last_personal_pushes.json`,
-`renderLastPush`, [810](../../cloudflare-worker/worker.js#L810)). Действия: ✏ имя,
-📋 редактировать watchlist, 🗑 удалить.
+устройство, флаг owner, даты создания/входа/обновления watchlist, размер и
+раскрываемый список дел со сторонами, а также **журнал последнего push** (из
+`last_personal_pushes.json`). Действия: ✏ имя, 📋 редактировать watchlist,
+🗑 удалить.
+
+Вверху страницы — блок **«🛰 Парсинг»** (`loadProgress`,
+[797](../../cloudflare-worker/worker.js#L797)): статус текущего прогона на Mac
+(⏳ идёт / ✅ завершён + давность), вехи по каждому суду, автообновление каждые
+5 с, пока прогон не завершён; предыдущий прогон — под спойлером. Источник —
+`GET /admin/run-progress`; вехи заливает Mac
+([`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py)).
 
 ## Секреты Worker'а
 
 Задаются через `wrangler secret put <NAME>`:
 
-- `GITHUB_PAT` — токен для `workflow_dispatch` (запуск GitHub Actions).
+- `GITHUB_PAT` — токен для `workflow_dispatch` (нужен только если вернуть
+  Worker-cron; сейчас не используется).
 - `PUSH_SECRET` — авторизация служебных эндпоинтов рассылки (`/subscriptions`,
   `/unsubscribe`), общий с бэкендом.
 - `OWNER_SECRET` — авторизация `/mark-owner` и админки.
+- `PROGRESS_SECRET` — авторизация `POST /run-progress` (вехи парсинга с Mac).
+  Низкопривилегированный: умеет только дописывать строки прогресса. То же
+  значение лежит на Mac в `~/.config/court-monitor/progress_token` (chmod 600,
+  вне публичного репозитория).
 - `VAPID_PRIVATE_KEY` — нужен только для test-push из админки (сейчас не
   положен, фича отложена).
 
-Как Worker встроен в общий поток (cron → GitHub Actions → парсер) — см.
+Как Worker встроен в общий поток (Mac-парсинг → push → replay на GitHub) — см.
 [01. Обзор](01-обзор-и-архитектура.md) и [10. CI/CD и эксплуатация](10-ci-cd-и-эксплуатация.md).

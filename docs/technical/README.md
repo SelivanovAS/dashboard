@@ -25,6 +25,15 @@
 > CLI-фасадом с прежними флагами. Ссылки на код в главах переанкерованы на
 > модули; имена функций и поведение не менялись.
 
+> ⚠️ **03.07.2026: временная схема запуска (D2).** Сайты судов начали дропать
+> TLS с иностранных IP → парсинг переехал с GitHub Actions на **Mac юриста**
+> (LaunchAgent + [`ops/mac-local-run/`](../../ops/mac-local-run/README.md)),
+> а Claude-дайджест собирается на GitHub по факту push'а
+> (`replay_on_push.yml`); cron Cloudflare Worker'а отключён. Это **временное
+> решение — в будущем парсинг переедет на сервер (российский VPS)**, после
+> чего главы 01/09/10 нужно будет снова обновить. Детали: [01. Обзор](01-обзор-и-архитектура.md),
+> [09. Cloudflare Worker](09-cloudflare-worker.md), [10. CI/CD](10-ci-cd-и-эксплуатация.md).
+
 ## Как читать
 
 Документы пронумерованы в порядке «от общего к частному». Рекомендуемый порядок
@@ -40,8 +49,8 @@
 | 06 | [Дайджесты и LLM](06-дайджесты-и-llm.md) | Генерация дайджеста (Claude / GigaChat), пересказ актов, пост-обработка HTML, шаблонный fallback. |
 | 07 | [Доставка и уведомления](07-доставка-и-уведомления.md) | Telegram и Web Push, персонализация рассылки по watchlist. |
 | 08 | [Фронтенд](08-фронтенд.md) | SPA-дашборд `app.js`: рендер, фильтры, подписки, PWA. |
-| 09 | [Cloudflare Worker](09-cloudflare-worker.md) | Автозапуск по расписанию, API подписок, админка. |
-| 10 | [CI/CD и эксплуатация](10-ci-cd-и-эксплуатация.md) | GitHub Actions, переменные окружения, CLI-режимы, тесты, рантбук. |
+| 09 | [Cloudflare Worker](09-cloudflare-worker.md) | API подписок, админка (+ блок «🛰 Парсинг»), секреты; cron-автозапуск отключён. |
+| 10 | [CI/CD и эксплуатация](10-ci-cd-и-эксплуатация.md) | Временная схема запуска (Mac → GitHub), workflows, переменные окружения, CLI-режимы, тесты, рантбук. |
 
 ## Где что лежит в репозитории
 
@@ -52,8 +61,9 @@ dashboard/
 ├── data/                       # cases.json + архивы + служебные снимки
 ├── app.js / sberbank_dashboard.html / styles.css   # SPA-дашборд (GitHub Pages)
 ├── service-worker.js / manifest.json                # PWA
-├── cloudflare-worker/worker.js / wrangler.toml      # Автозапуск + API подписок
-├── .github/workflows/*.yml     # GitHub Actions
+├── cloudflare-worker/worker.js / wrangler.toml      # API подписок + админка (cron отключён)
+├── ops/mac-local-run/          # ⏳ ВРЕМЕННО: парсинг судов на Mac юриста (геоблок)
+├── .github/workflows/*.yml     # GitHub Actions (replay_on_push — прод-дайджест)
 └── docs/technical/             # ← вы здесь
 ```
 
