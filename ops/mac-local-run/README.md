@@ -23,6 +23,8 @@
 ## Что уже готово в репозитории
 
 - `parse_and_push.sh` — обёртка (preflight, маршрут, парсинг, commit/push).
+- `run_parse.py` — запуск `main_json` без секретов (глушит `validate_environment`,
+  иначе `exit(2)`); обёртка зовёт его.
 - `com.court-monitor.parse.plist` — LaunchAgent (будни 08:00 местного, +05).
 - `court-monitor-route.sudoers` — правило sudo для команды `route`.
 
