@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-07-03T05:27:27",
+  "generated_at": "2026-07-03T06:00:39",
   "title_default": "Мониторинг дел — тестовая рассылка",
-  "body_default": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+  "body_default": "2 событ.",
   "owner_only": false,
   "items": [
     {
@@ -25,10 +25,10 @@
         "2-193/2026",
         "33-4206/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: М-468/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
@@ -38,7 +38,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+      "body": "2 событ.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -53,10 +53,10 @@
         "2-5609/2026",
         "2-713/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: М-468/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QLGYfW6JWyyZiKc45AIJKxN-UklPSQLdpiUgJWjSiVoc2n7SOPq-kPg8FO8A3-CWd_aCym1GThbROIYGjyZRrgV6MMBKlqcMHzaRdHqaBE-iK-vj3rfKfiU8nDnjxo4WOJz1py4OBLIWjDLHdGTr8HnVF0KhG955JORfnJDh8tY",
@@ -79,10 +79,10 @@
         "2-2216/2026",
         "2-7354/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: М-468/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QO74bl1BkImPve7CzdafxLVujoUGYSAdwZt0-cYLyXZ1_Dpk4497Jp-mMANBW-xW4P8pdwFOzqoQDudWxg5jbPPw_IiFuVr2y5ZJhjRetZGjQNHGVvGUgSKoLMkXb--79a0knIWYLrwUJ1UMkM_zVwwMaSaZezmB8BfwjqNE8bM",
@@ -92,7 +92,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+      "body": "2 событ.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -103,7 +103,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+      "body": "2 событ.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -114,7 +114,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+      "body": "2 событ.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -126,10 +126,10 @@
         "2-1394/2026 (2-8383/2025;)",
         "2-2408/2026 (2-13712/2025;)"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: М-468/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/eMo8GfnIBbM:APA91bHNZ8Sc-DTjW4grEkYo1TKSBOf6HXflM4kGp20yGeemNhbUyDcvinFdwu-kSM0N3mJwKal1eUMTapYY3-WsWy6Pk58KY2Jg9Wgzmm-hoEsPIA2I9yNEPUo9Bt02zUUwgJG3aAvi",
@@ -142,10 +142,10 @@
         "8Г-5513/2026",
         "2-3760/2025"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: М-468/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/egDvQO7fZPc:APA91bH6yGYtXQdjkKHFnuitsEofc8l6CrJJcXiVkL97Of2JF-xktYGJmHpXvDsGzWFlGQZe16Y_sbVK8pf85XnDBIz3J5tnvHZ9fAOXL4zlFkeTsoR7srezoNtmNZTSeSheLWVfOsWp",
@@ -155,9 +155,9 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "+1 нов. 1 инст. | 1 реш. 1 инст. | 1 статус 1 инст.",
+      "body": "2 событ.",
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-07-03T05:27:27"
+  "updated_at": "2026-07-03T06:00:39"
 }
