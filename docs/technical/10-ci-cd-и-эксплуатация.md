@@ -56,19 +56,48 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 наличие ключей на старте; `check_court_available` ([488](../../scripts/court_monitor/runs.py#L488))
 — доступность сайта суда.
 
+## Ежедневный прогон (временная схема D2, с 03.07.2026)
+
+> ⚠️ **Временное решение.** Суды `*.sudrf.ru` дропают TLS с иностранных IP →
+> GitHub Actions больше не может их парсить; Claude, наоборот, недоступен из РФ.
+> Поэтому парсинг выполняет **Mac юриста** (LaunchAgent
+> `com.court-monitor.parse`, будни ~08:00 местного, сеть Сбера), а дайджест и
+> доставку — GitHub по факту push'а. **В будущем парсинг переедет на сервер
+> (RU VPS)**, и эта секция будет переписана. Установка/логи/откат Mac-звена —
+> [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
+
+Цепочка: `parse_and_push.sh` (Mac: preflight сети → маршрут судов мимо VPN →
+`run_parse.py` = `main_json` без секретов → коммит `📊 Обновление данных …
+(Mac-парсинг)` → push) → `replay_on_push.yml` (GitHub: Claude-дайджест +
+Telegram + Web Push). Ход парсинга виден в ярлыке «Парсинг судов.command» на
+Mac и в блоке «🛰 Парсинг» админки Worker.
+
 ## GitHub Actions
 
-Четыре workflow в [`.github/workflows/`](../../.github/workflows). Основные
-запускаются из UI (Run workflow) или кроном Worker'а; тесты — на каждый push.
+Пять workflow в [`.github/workflows/`](../../.github/workflows).
 
-### `update_cases.yml` — основной
+### `replay_on_push.yml` — дайджест по факту Mac-парсинга (прод)
+[Файл](../../.github/workflows/replay_on_push.yml). Триггер — `push` в `main`,
+задевший `data/last_digest_context.json` (его коммитит Mac-обёртка). Шаги:
+checkout → Python 3.12 → `python scripts/update_cases.py --replay-last
+--push-all` со всеми секретами (Claude-дайджест в личный Telegram + Web Push
+всем подписчикам) → коммит `last_digest.json` + `last_personal_pushes.json`
+(`📰 Дайджест собран…`). Анти-петля: replay не меняет сам контекст, а пуши
+через `GITHUB_TOKEN` не триггерят workflow. Паритет с прежним кроном:
+`DIGEST_FULL_LLM: "1"`.
+
+### `update_cases.yml` — прежний основной (сейчас только вручную)
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
-(кроном Worker'а или вручную). Шаги: checkout → Python 3.12 → установка зависимостей
-→ `python scripts/update_cases.py --json` → коммит данных → (при падении любого
-шага) 🚨-алерт в личный Telegram.
+(раньше его дёргал cron Worker'а — **отключён 03.07.2026**). Шаги: checkout →
+Python 3.12 → установка зависимостей → `python scripts/update_cases.py --json`
+→ коммит данных → (при падении любого шага) 🚨-алерт в личный Telegram.
+
+> ⚠️ С GitHub-раннера парсинг судов сейчас **упадёт на таймаутах** (геоблок) —
+> запуск вручную имеет смысл только если блокировка снята или суды доступны
+> раннеру иным способом. Workflow сохранён на случай возврата серверной схемы.
 
 Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
-`TELEGRAM_CHAT_ID_TEST`), `smart_skip` (крон всегда `true`).
+`TELEGRAM_CHAT_ID_TEST`), `smart_skip` (крон передавал `true`).
 
 > ⚠️ **Сейчас в этом workflow выставлен `DIGEST_FULL_LLM: "1"`** — то есть в
 > продакшене дайджест генерируется старым «полным LLM»-путём, а не гибридным
@@ -154,6 +183,11 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   подряд; когда все источники разом по нулям; когда за прогон ≥5
   карточек-«огрызков». См. [05](05-конвейер-обновления.md).
 - Логи прогона — во вкладке Actions соответствующего workflow.
+- **Mac-парсинг (временная схема):** лог `ops/mac-local-run/parse_and_push.log`
+  (ротация автоматическая) — живой просмотр двойным кликом по ярлыку
+  «Парсинг судов.command» (рабочий стол юриста); те же вехи — в блоке
+  «🛰 Парсинг» админки Worker (с телефона). Уведомления macOS: старт/готово/
+  ошибка/пропуск.
 
 ## Рантбук (типичные инциденты)
 
@@ -167,11 +201,18 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 | **Появились дубли дел** | Сработает один из `dedupe_*` щитов на следующем прогоне (см. [05](05-конвейер-обновления.md)); если нет — `find_cassation_orphans.py` + ручной мердж. |
 | **Дело пропало из дашборда** | Ушло в архив по тайм-ауту (см. [03](03-жизненный-цикл-дела.md)). При поздней жалобе реактивируется автоматически (≤180 дн); старше года — вернуть через `add_cases_manually.py`. |
 | **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
-| **Автозапуск не сработал** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday` (праздник/выходной), логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
+| **Утром нет дайджеста (нет и 🚨)** | Скорее всего Mac спал/выключен или не в сети Сбера — прогон не состоялся (best-effort). Открыть Mac в офисной сети: LaunchAgent догонит при входе, либо запустить руками `launchctl start com.court-monitor.parse`. Проверить лог/уведомления macOS. |
+| **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |
+| **Блок «🛰 Парсинг» в админке молчит** | Нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: парсинг работает и без вех. |
+| **Прогон был, а дайджест не пришёл** | Смотреть Actions → `Replay digest on push` (стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
+| **Автозапуск через Worker (если вернули cron)** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday`, логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
 
 ## Чего НЕ делать
 
-- Не коммитить секреты (`.env`, ключи, `GITHUB_PAT`).
+- Не коммитить секреты (`.env`, ключи, `GITHUB_PAT`, `progress_token`).
 - Не амендить опубликованные коммиты — создавать новые.
 - Не переименовывать поля `cases.json` без миграции (завязан фронт и архив).
-- Не добавлять сторонние планировщики — автозапуск только через Cloudflare Worker.
+- Не добавлять сторонние планировщики (cron-job.org и т.п.). Сейчас расписание —
+  LaunchAgent на Mac (временно), при возврате серверной схемы — Cloudflare Worker.
+- Не редактировать `data/last_digest_context.json` руками в `main` — push,
+  задевший этот файл, запускает боевую рассылку (`replay_on_push.yml`).
