@@ -24,7 +24,7 @@ import re
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.digest.postprocess import (
-    _DIGEST_HEADER_RE, _close_open_tags,
+    _DIGEST_HEADER_RE, _close_open_tags, _line_has_case_number,
 )
 from court_monitor.textutil import _bare_case_number
 
@@ -85,10 +85,13 @@ def _expected_number_alternatives(
 def _check_section_counters(html: str) -> list[str]:
     """Сверить `(N)` каждого заголовка подсекции с числом дел под ним.
 
-    Дело = строка с отступом ровно в два пробела (строки-продолжения
-    имеют 4-5 пробелов, заголовки — без отступа). Граница секции — любая
-    строка-заголовок (_DIGEST_HEADER_RE: и подсекции, и большие блоки,
-    и футер «📌 <b>В производстве…»)."""
+    Дело = строка с номером дела (обёрнутым или голым —
+    `_line_has_case_number`, тот же критерий, каким postprocess
+    пересчитывает `(N)` у LLM-дайджеста). НЕ считаем по отступам:
+    формат full-LLM пути не имеет отступов, и счётчик по отступам давал
+    ложный алерт «по факту дел 0» (A/B 03.07.2026). Граница секции —
+    любая строка-заголовок (_DIGEST_HEADER_RE: и подсекции, и большие
+    блоки, и футер «📌 <b>В производстве…»)."""
     problems: list[str] = []
     lines = html.split("\n")
     current_header: str | None = None
@@ -114,7 +117,7 @@ def _check_section_counters(html: str) -> list[str]:
                 # Человекочитаемое имя секции без тегов.
                 current_header = re.sub(r"<[^>]+>", "", ln).strip()
             continue
-        if current_header is not None and re.match(r"^  \S", ln):
+        if current_header is not None and _line_has_case_number(ln):
             counted += 1
     _flush()
     return problems

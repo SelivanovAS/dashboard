@@ -613,11 +613,42 @@ class AppealEventMatrixTest(unittest.TestCase):
         self.assertNotIn("15.07.2026", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
-    def test_new_event_extracts_date_from_text(self):
-        # new_hearing_date нет — дата и время достаются из текста события.
+    def test_new_event_hearing_from_card_fields(self):
+        # new_hearing_date нет — дата и время берутся из полей карточки
+        # (hearing_date/hearing_time), текст события — только fallback.
         html = render(changes=[make_appeal_change(["new_event"])])
         self.assertIn("📅 Заседание назначено на <b>03.08.2026 11:30</b>", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_new_event_prefers_card_fields_over_text_tail(self):
+        # Регресс A/B 03.07.2026 (дело 33-4521/2026): хвостовая дата в
+        # тексте события — дата размещения записи (03.07), реальное
+        # заседание — в поле карточки (14.07). Раньше шаблон брал хвост.
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 14:30. 03.07.2026",
+             "event_date": "14.07.2026",
+             "hearing_date": "14.07.2026", "hearing_time": "14:30"},
+        )])
+        self.assertIn("📅 Заседание назначено на <b>14.07.2026 14:30</b>", html)
+        self.assertNotIn("03.07.2026 14:30", html)
+
+    def test_new_event_informative_shown_as_text(self):
+        # Регресс A/B 03.07.2026 (дело 33-3793/2026): заседание уже
+        # состоялось, производство приостановлено (экспертиза) — событие
+        # нельзя маскировать под «Заседание назначено на <вчера>».
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 15:00. Зал 142. Производство "
+                      "по делу приостановлено. НАЗНАЧЕНИЕ СУДОМ "
+                      "ЭКСПЕРТИЗЫ. 02.07.2026",
+             "event_date": "02.07.2026",
+             "hearing_date": "02.07.2026", "hearing_time": "15:00"},
+        )])
+        self.assertIn("📌 Судебное заседание. 15:00. Зал 142. Производство "
+                      "по делу приостановлено. НАЗНАЧЕНИЕ СУДОМ ЭКСПЕРТИЗЫ. "
+                      "02.07.2026", html)
+        self.assertNotIn("Заседание назначено на", html)
 
     def test_new_result_in_acts_section(self):
         html = render(changes=[make_appeal_change(["new_result"])])
