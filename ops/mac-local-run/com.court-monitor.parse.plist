@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent: парсинг судов на Mac по будням.
+  Ставится в ~/Library/LaunchAgents/ (см. ops/mac-local-run/README.md).
+
+  Время — ЛОКАЛЬНОЕ (этот Mac на +05, Ханты-Мансийск). 08:00 местного ≈
+  06:00 МСК. LaunchAgent досрабатывает при пробуждении/входе, если в 08:00
+  Mac спал или ты не был залогинен. Поменять время — Hour/Minute ниже.
+  Weekday: 1=Пн … 5=Пт.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.court-monitor.parse</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/parse_and_push.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/launchd.err.log</string>
+</dict>
+</plist>

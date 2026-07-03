@@ -3,12 +3,17 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [triggers]
-# 03:45 UTC = 06:45 МСК, пн-пт.
-# ВАЖНО: используем буквенный синтаксис `mon-fri`, а не цифровой `1-5`.
-# Cloudflare Cron Triggers нумерует дни 1=Sun..7=Sat (не как POSIX), и
-# `1-5` эмпирически срабатывал в т.ч. в воскресенье. Буквенная нотация
-# однозначна — см. https://developers.cloudflare.com/workers/configuration/cron-triggers/
-crons = ["45 3 * * mon-fri"]
+# ⏸ Cron ОТКЛЮЧЁН 03.07.2026. Причина: суды (*.sudrf.ru) режут TLS с иностранных
+# IP, а GitHub Actions ходит из США → update_cases.yml падал на парсинге и слал
+# 🚨 каждое утро. Парсинг переехал на Mac юриста (ops/mac-local-run/, вариант
+# D2), дайджест собирает workflow replay_on_push.yml по факту push'а контекста.
+# Деплой пустого crons снимает расписание Worker'а: `wrangler deploy`.
+#
+# Чтобы ВЕРНУТЬ автозапуск через Worker — раскомментировать строку ниже
+# (03:45 UTC = 06:45 МСК, пн-пт; буквенный `mon-fri`, т.к. Cloudflare нумерует
+# дни 1=Sun..7=Sat и цифровой `1-5` срабатывал в воскресенье) и `wrangler deploy`.
+# crons = ["45 3 * * mon-fri"]
+crons = []
 
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS
