@@ -1,0 +1,79 @@
+name: Replay digest on push
+
+# Вторая половина автозапуска (вариант D2). Парсинг судов делает Mac юриста
+# (ops/mac-local-run/) и пушит свежий data/last_digest_context.json. Этот
+# workflow ловит такой push и собирает НАСТОЯЩИЙ дайджест: Claude доступен из
+# GitHub (США), а из РФ — нет, поэтому дайджест живёт здесь, а не на Mac.
+#
+# Эквивалент прежнего кроного update_cases.yml, но без парсинга: переигрывает
+# сохранённый контекст (--replay-last) и рассылает всем (--push-all).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/last_digest_context.json'
+
+# Коммит перерисованного last_digest.json — нужен contents: write.
+permissions:
+  contents: write
+
+# Не наслаивать прогоны, если пуши придут кучно.
+concurrency:
+  group: replay-on-push
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    # Анти-петля: коммит этого же workflow (last_digest.json) сделан
+    # github-actions[bot]. Пуши через GITHUB_TOKEN и так не триггерят workflow,
+    # плюс paths-фильтр смотрит только на last_digest_context.json (его replay
+    # не трогает) — но оставляем явный щит на всякий случай.
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Replay digest (Claude) + доставка
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Паритет с прежним продовым кроном: полный LLM-вызов.
+          DIGEST_FULL_LLM: "1"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          # Личный чат — как и старый крон по умолчанию (to_group=false).
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        # --push-all: рассылка всем PWA-подписчикам (как продовый крон),
+        # а не только владельцу.
+        run: python scripts/update_cases.py --replay-last --push-all
+
+      - name: Commit rendered digest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # last_digest.json — Claude-версия для блока «📰 Дайджест» на сайте.
+          if [ -f data/last_digest.json ]; then
+            git add data/last_digest.json
+          fi
+          # Журнал последней push-рассылки — читает админка подписчиков.
+          if [ -f data/last_personal_pushes.json ]; then
+            git add data/last_personal_pushes.json
+          fi
+          if git diff --cached --quiet; then
+            echo "Нет изменений — нечего коммитить"
+            exit 0
+          fi
+          git commit -m "📰 Дайджест собран (replay после Mac-парсинга)"
+          git push

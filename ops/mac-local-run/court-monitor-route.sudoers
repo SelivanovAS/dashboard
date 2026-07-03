@@ -1,0 +1,13 @@
+# Court Monitor — разрешить парсеру ставить/снимать host-маршруты судов мимо
+# VPN через шлюз сети Сбера БЕЗ запроса пароля (иначе launchd-прогон повиснет
+# на вводе пароля). Область строго ограничена командой /sbin/route; для add —
+# ещё и фиксированным шлюзом 10.217.111.250. sudo НЕ вызывает shell, поэтому
+# инъекция через аргументы невозможна.
+#
+# Установка (см. README.md):
+#   sudo cp ops/mac-local-run/court-monitor-route.sudoers /etc/sudoers.d/court-monitor-route
+#   sudo chmod 440 /etc/sudoers.d/court-monitor-route
+#   sudo visudo -c        # проверка синтаксиса
+#
+# ⚠ Если сменится имя пользователя или шлюз Сбера — поправь строку ниже.
+aleksandrselivanov ALL=(root) NOPASSWD: /sbin/route -n add -host * 10.217.111.250, /sbin/route -n delete -host *

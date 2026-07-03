@@ -121,12 +121,32 @@
 }
 ```
 
-## Автозапуск
+## Автозапуск (вариант D2 — с 03.07.2026)
 
-- Cron `"45 3 * * mon-fri"` = **6:45 МСК пн-пт** в [cloudflare-worker/wrangler.toml:11](cloudflare-worker/wrangler.toml:11).
-- ⚠️ Cloudflare Cron Triggers нумерует дни недели 1=Sun..7=Sat (не как POSIX). Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье — поэтому используем буквенный `mon-fri`. Дополнительный щит — `isHoliday()` в `worker.js` режет сб/вс через `getDay()`.
-- Worker вызывает `workflow_dispatch` для `update_cases.yml` через GitHub API (нужен `GITHUB_PAT`).
-- **Автозапуск = Cloudflare Worker, НЕ cron-job.org.** Любые правки расписания — в `wrangler.toml`, потом `wrangler deploy`.
+⚠️ **Суды режут иностранные IP.** `*.sudrf.ru` молча дропает TLS с не-российских
+адресов (TCP проходит, хендшейк — нет). GitHub Actions ходит из США → парсинг
+судов оттуда невозможен. Одновременно `api.anthropic.com` недоступен из РФ. Отсюда
+разделение конвейера по географии (детали — [ops/mac-local-run/README.md](ops/mac-local-run/README.md)).
+
+- **Парсинг судов — на Mac юриста** (физически в сети Сбера, egress РФ). Планировщик
+  — LaunchAgent `com.court-monitor.parse` (будни, local-время +05), запускает
+  [ops/mac-local-run/parse_and_push.sh](ops/mac-local-run/parse_and_push.sh):
+  preflight «в сети Сбера?» → маршрут судов мимо VPN через шлюз `10.217.111.250`
+  → `update_cases.py --json` **без секретов** (доставка скипается, контекст
+  сохраняется) → `git commit && push`. Установка/откат — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
+- **Дайджест Claude + доставка — на GitHub** (там Claude доступен). Workflow
+  [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
+  ловит `push` с изменённым `data/last_digest_context.json` → `--replay-last
+  --push-all` → Claude-дайджест в личный Telegram + Web Push всем подписчикам →
+  коммитит `last_digest.json`. Анти-петля: replay не трогает контекст +
+  GITHUB_TOKEN-пуши не триггерят workflow.
+- **Cloudflare Worker cron ОТКЛЮЧЁН** (`crons = []` в
+  [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml), нужен
+  `wrangler deploy`). `worker.js` и админка подписчиков живы — выключено только
+  расписание. Вернуть прежний автозапуск — раскомментировать `crons` и задеплоить
+  (но тогда снова упрётся в блокировку судов).
+- **НЕ cron-job.org.** Планировщик теперь — LaunchAgent на Mac; расписание правится
+  в `.plist`, не в чужих крон-сервисах.
 
 ## Жизненный цикл дела (state machine)
 
