@@ -87,12 +87,14 @@ if [ -z "$UNIQ_IPS" ]; then
   log "WARN: не удалось резолвить домены судов — продолжаю (вдруг маршрут уже есть)"
 fi
 for ip in $UNIQ_IPS; do
-  if netstat -rn -f inet | awk '{print $1}' | grep -qx "$ip"; then
-    log "  маршрут $ip уже есть"
-  elif sudo -n /sbin/route -n add -host "$ip" "$SBER_GATEWAY" >>"$LOG" 2>&1; then
-    log "  маршрут $ip → $SBER_GATEWAY добавлен"
+  # Пересоздаём маршрут заново каждый прогон: старый мог остаться в таблице,
+  # но битым после смены IP en0 (route висит, а connect даёт EADDRNOTAVAIL).
+  # delete (без ошибки, если нет) + add. Идемпотентно и самозалечивается.
+  sudo -n /sbin/route -n delete -host "$ip" >/dev/null 2>&1
+  if sudo -n /sbin/route -n add -host "$ip" "$SBER_GATEWAY" >>"$LOG" 2>&1; then
+    log "  маршрут $ip → $SBER_GATEWAY (пересоздан)"
   else
-    log "  WARN: не смог добавить маршрут $ip (sudoers не настроен? см. README)"
+    log "  WARN: не смог поставить маршрут $ip (sudoers не настроен? см. README)"
   fi
 done
 
@@ -104,8 +106,10 @@ else
 fi
 
 # ── Парсинг (без секретов; доставка скипается, контекст сохраняется) ──────────
-log "Парсинг судов: update_cases.py --json ..."
-SKIP_NON_WORKING_DAYS=1 "$PYTHON" scripts/update_cases.py --json >>"$LOG" 2>&1
+# run_parse.py = main_json с заглушённой validate_environment (иначе exit(2)
+# без секретов). Доставка (Telegram/push) сама пропускается без токенов.
+log "Парсинг судов: run_parse.py (main_json без секретов) ..."
+SKIP_NON_WORKING_DAYS=1 "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
 RC=$?
 if [ "$RC" -ne 0 ]; then
   die "парсинг завершился с кодом $RC (см. лог)"
