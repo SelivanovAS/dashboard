@@ -58,6 +58,46 @@ _EVENT_NOISE_SEGMENT_RE = re.compile(
 )
 
 
+# Приостановление/возобновление производства. Ключевой процессуальный
+# статус (ст. 216 ГПК: экспертиза, розыск ответчика и т.п.) — дайджест
+# обязан назвать его прямо, а не показывать сырой текст события и тем
+# более не «Заседание назначено на <прошедшую дату>» (кейс 33-3793/2026,
+# 02.07.2026: производство приостановлено из-за экспертизы).
+_SUSPENDED_RE = re.compile(
+    r"производств[а-яё]*[^.]*приостановлен[а-яё]*"
+    r"|приостановлен[а-яё]*[^.]*производств[а-яё]*",
+    re.IGNORECASE,
+)
+_RESUMED_RE = re.compile(
+    r"производств[а-яё]*[^.]*возобновлен[а-яё]*"
+    r"|возобновлен[а-яё]*[^.]*производств[а-яё]*",
+    re.IGNORECASE,
+)
+
+
+def _suspension_reason_from_event(event: str) -> str:
+    """Причина приостановления из хвоста текста события.
+
+    «Судебное заседание. 15:00. Зал 142. Производство по делу
+    приостановлено. НАЗНАЧЕНИЕ СУДОМ ЭКСПЕРТИЗЫ. 02.07.2026»
+    → «назначение судом экспертизы» (шумовые сегменты — время/зал/даты —
+    отброшены, КРИЧАЩИЙ РЕГИСТР ГАС «Правосудие» приведён к строчным).
+    Пустая строка — если содержательного хвоста нет."""
+    m = _SUSPENDED_RE.search(event or "")
+    if not m:
+        return ""
+    segs: list[str] = []
+    for seg in (event or "")[m.end():].split(". "):
+        seg = seg.strip().rstrip(".").lstrip(". ")
+        if not seg or _EVENT_NOISE_SEGMENT_RE.match(seg):
+            continue
+        segs.append(seg)
+    reason = "; ".join(segs)
+    if reason and reason.isupper():
+        reason = reason.lower()
+    return reason
+
+
 def _event_text_is_informative(event: str) -> bool:
     """True, если текст события несёт содержание сверх «голого» анонса
     заседания (тип сессии + время + зал + даты).
@@ -1008,10 +1048,33 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 "new_event" in ch["type"]
                 and _event_text_is_informative(event_raw)
             )
+            is_new_event = "new_event" in ch["type"]
+            ev_date = escape_html(
+                d.get("event_date", "") or d.get("hearing_date", "")
+            )
             if is_postponed and hp:
                 appeal_block.append(
                     f"🔁 Заседание отложено на <b>{hp}</b>"
                 )
+            elif is_new_event and _SUSPENDED_RE.search(event_raw):
+                # Приостановление производства — интерпретируем, а не
+                # цитируем: «⏸ Производство по делу приостановлено —
+                # назначение судом экспертизы (02.07.2026)».
+                line_susp = "⏸ Производство по делу приостановлено"
+                reason = _suspension_reason_from_event(event_raw)
+                if reason:
+                    line_susp += f" — {escape_html(reason)}"
+                if ev_date:
+                    line_susp += f" ({ev_date})"
+                appeal_block.append(line_susp)
+            elif is_new_event and _RESUMED_RE.search(event_raw):
+                line_res = "▶️ Производство по делу возобновлено"
+                if ev_date:
+                    line_res += f" ({ev_date})"
+                if hp and hd != ev_date:
+                    # Вместе с возобновлением суд обычно назначает заседание.
+                    line_res += f"; заседание <b>{hp}</b>"
+                appeal_block.append(line_res)
             elif informative_event:
                 appeal_block.append(
                     f"📌 {escape_html(event_raw)}"

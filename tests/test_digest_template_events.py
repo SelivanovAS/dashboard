@@ -633,10 +633,11 @@ class AppealEventMatrixTest(unittest.TestCase):
         self.assertIn("📅 Заседание назначено на <b>14.07.2026 14:30</b>", html)
         self.assertNotIn("03.07.2026 14:30", html)
 
-    def test_new_event_informative_shown_as_text(self):
-        # Регресс A/B 03.07.2026 (дело 33-3793/2026): заседание уже
-        # состоялось, производство приостановлено (экспертиза) — событие
-        # нельзя маскировать под «Заседание назначено на <вчера>».
+    def test_suspension_interpreted_not_quoted(self):
+        # Кейс 33-3793/2026 (03.07.2026): 02.07 суд приостановил
+        # производство в связи с назначением экспертизы. Дайджест обязан
+        # назвать это прямо — не «Заседание назначено на <вчера>» и не
+        # сырой текст события.
         html = render(changes=[make_appeal_change(
             ["new_event"],
             {"event": "Судебное заседание. 15:00. Зал 142. Производство "
@@ -645,9 +646,50 @@ class AppealEventMatrixTest(unittest.TestCase):
              "event_date": "02.07.2026",
              "hearing_date": "02.07.2026", "hearing_time": "15:00"},
         )])
-        self.assertIn("📌 Судебное заседание. 15:00. Зал 142. Производство "
-                      "по делу приостановлено. НАЗНАЧЕНИЕ СУДОМ ЭКСПЕРТИЗЫ. "
-                      "02.07.2026", html)
+        self.assertIn(
+            "⏸ Производство по делу приостановлено — "
+            "назначение судом экспертизы (02.07.2026)", html,
+        )
+        self.assertNotIn("Заседание назначено на", html)
+        # Сырой текст события не цитируется (📌-ветка не сработала).
+        self.assertNotIn("📌 Судебное заседание", html)
+
+    def test_suspension_without_reason(self):
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 10:00. Производство по делу "
+                      "приостановлено. 01.07.2026",
+             "event_date": "01.07.2026",
+             "hearing_date": "01.07.2026", "hearing_time": "10:00"},
+        )])
+        self.assertIn(
+            "⏸ Производство по делу приостановлено (01.07.2026)", html
+        )
+
+    def test_resume_interpreted(self):
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Производство по делу возобновлено. 01.09.2026",
+             "event_date": "01.09.2026",
+             "hearing_date": "20.09.2026", "hearing_time": "11:00"},
+        )])
+        self.assertIn(
+            "▶️ Производство по делу возобновлено (01.09.2026); "
+            "заседание <b>20.09.2026 11:00</b>", html,
+        )
+
+    def test_new_event_informative_shown_as_text(self):
+        # Содержательное событие БЕЗ спец-обработки (не приостановление) —
+        # показываем текстом, а не «Заседание назначено на <прошлое>».
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 11:00. Заявлен отвод судье. "
+                      "01.07.2026",
+             "event_date": "01.07.2026",
+             "hearing_date": "01.07.2026", "hearing_time": "11:00"},
+        )])
+        self.assertIn("📌 Судебное заседание. 11:00. Заявлен отвод судье. "
+                      "01.07.2026", html)
         self.assertNotIn("Заседание назначено на", html)
 
     def test_new_result_in_acts_section(self):
