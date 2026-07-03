@@ -548,15 +548,20 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 role_icon = {"Истец": "🏦→", "Ответчик": "→🏦",
                              "Третье лицо": "👁"}.get(role, "")
             prefix = f"{role_icon} " if role_icon else ""
+            # КОМПАКТ-ВЁРСТКА (выбор юриста 03.07.2026, все секции): без
+            # левых отступов — Telegram сохраняет ведущие пробелы только
+            # на первой физической строке, при переносе «лесенка»
+            # ломается. Структуру дают пустые строки между делами,
+            # жирный номер-ссылка в начале дела и эмодзи-маркеры строк.
             # Строка 1: номер, стороны, категория, суд (без даты подачи).
             fi_block.append(
-                f"  {link} {prefix}{pl} vs {df} ({cat}) | {court}"
+                f"{link} {prefix}{pl} vs {df} ({cat}) | {court}"
             )
             # Строка 2: дата подачи отдельной строкой, эмодзи 📥 ПОСЛЕ
             # <b>дата</b>, чтобы не попасть под _DIGEST_HEADER_RE.
             if filing:
                 fi_block.append(
-                    f"     <b>{filing}</b> — 📥 иск зарегистрирован в суде"
+                    f"<b>{filing}</b> — 📥 иск зарегистрирован в суде"
                 )
             # Пустая строка между делами (правило вёрстки юриста: строки
             # одного дела подряд, пустая строка — между разными делами).
@@ -737,7 +742,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     )
         ev_str = "; ".join(ev_list) if ev_list else ""
         fi_changes_rendered.append(
-            f"  {link} ({court}) — {pl} vs {df} | {ev_str}"
+            f"{link} ({court}) — {pl} vs {df} | {ev_str}"
         )
 
     if fi_changes_rendered:
@@ -794,7 +799,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 )
             extras_str = (" | " + "; ".join(extras)) if extras else ""
             fi_block.append(
-                f"  {link} ({court}) — {pl} vs {df}{tail}{extras_str}"
+                f"{link} ({court}) — {pl} vs {df}{tail}{extras_str}"
             )
 
     # ── 3.6: Опубликованные тексты решений 1 инстанции ──
@@ -836,7 +841,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 summarizer=act_summarizer,
                 max_excerpt_len=500,
             )
-            fi_block.append(f"  {link}: {pl} vs {df}")
+            fi_block.append(f"{link} — {pl} vs {df}")
             itog_parts: list[str] = []
             if verdict:
                 itog_parts.append(f"<b>Итог:</b> {verdict}")
@@ -847,13 +852,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     "<b>Для банка:</b> нейтрально — банк не сторона согласно карточке"
                 )
             if itog_parts:
-                fi_block.append("     " + ". ".join(itog_parts))
+                fi_block.append(". ".join(itog_parts))
             # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
             # и drawer'а карточки дела); сырой excerpt — просто курсивом.
             if act_excerpt and act_kind == "summary":
-                fi_block.append(f"     <b>Почему:</b> <i>{act_excerpt}</i>")
+                fi_block.append(f"<b>Почему:</b> <i>{act_excerpt}</i>")
             elif act_excerpt:
-                fi_block.append(f"     <i>{act_excerpt}</i>")
+                fi_block.append(f"<i>{act_excerpt}</i>")
             fi_block.append("")  # пустая строка-разделитель между делами
         # убрать хвостовую пустую строку, если добавили
         if fi_block and fi_block[-1] == "":
@@ -885,8 +890,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 role_tail = (f" | банк — {escape_html(role.lower())}"
                              if role else "")
             prefix = f"{role_icon} " if role_icon else ""
-            # Строка 1: номер + стороны.
-            appeal_block.append(f"  {link} {prefix}{pl} vs {df}")
+            # Строка 1: номер + стороны (компакт-вёрстка, без отступов).
+            appeal_block.append(f"{link} {prefix}{pl} vs {df}")
             # Строка 2: суд 1 инст. | категория | банк (если не в сторонах).
             line2_parts: list[str] = []
             if court_fi:
@@ -895,13 +900,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line2_parts.append(f"категория: {escape_html(cat)}")
             if line2_parts or role_tail:
                 appeal_block.append(
-                    "     " + " | ".join(line2_parts) + role_tail
+                    " | ".join(line2_parts) + role_tail
                 )
             # Строка 3: дата поступления отдельной строкой, эмодзи 📥
             # ПОСЛЕ <b>дата</b>, чтобы не попасть под _DIGEST_HEADER_RE.
             if filing:
                 appeal_block.append(
-                    f"     <b>{filing}</b> — 📥 поступило в апел. суд"
+                    f"<b>{filing}</b> — 📥 поступило в апел. суд"
                 )
             # Пустая строка между делами (правило вёрстки юриста).
             appeal_block.append("")
@@ -924,12 +929,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             tr_dt = escape_html(d.get("transition_date", ""))
             role = d.get("role", "")
             role_note = f" | банк — {escape_html(role.lower())}" if role else ""
-            line = f"  ⚠ {link}"
+            line = f"⚠ {link}"
             if tr_dt:
                 line += f" ({tr_dt})"
             line += " — по правилам производства в суде первой инстанции"
             if plaintiff and defendant:
-                line += f"\n     {plaintiff} vs {defendant}{role_note}"
+                line += f"\n{plaintiff} vs {defendant}{role_note}"
             appeal_block.append(line)
             # Пустая строка между делами (правило вёрстки юриста).
             appeal_block.append("")
@@ -938,10 +943,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
 
     # Объединяем «Отложенные» и «Назначенные» апелляции в одну секцию
     # «📅 Изменения» (по запросу юриста, как 3.2 в 1-й инст.). Формат —
-    # три строки на дело: номер; стороны + категория; «🔁 Заседание
-    # отложено на …» / «📅 Заседание назначено на …». `events` уже
-    # исключает дела из `postponed_nums`, дублирования нет.
-    # Сюда же — «голые» status_change (строка 3: «статус: X → Y»).
+    # компакт (выбор юриста 03.07.2026): «номер — стороны | категория»
+    # одной строкой, событие — второй; без левых отступов (в Telegram
+    # они ломаются переносом строк). `events` уже исключает дела из
+    # `postponed_nums`, дублирования нет.
+    # Сюда же — «голые» status_change (строка 2: «статус: X → Y»).
     combined_apel_changes = postponed + events + status_only
     if combined_apel_changes:
         _section_break(appeal_block)
@@ -981,18 +987,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     elif re.match(r'^\d{1,2}:\d{2}$', ps) and not ht:
                         ht = escape_html(ps)
             hp = hd + (f" {ht}" if ht else "")
-            # Строка 1: только номер дела (суд не показываем — для
-            # апелляции это всегда Суд ХМАО-Югры).
-            appeal_block.append(f"  {link}")
-            # Строка 2: стороны | категория.
-            line2_parts: list[str] = []
+            # Строка 1: «номер — стороны | категория» (суд не показываем —
+            # для апелляции это всегда Суд ХМАО-Югры).
+            line1 = link
             if plaintiff and defendant:
-                line2_parts.append(f"{plaintiff} vs {defendant}")
+                line1 += f" — {plaintiff} vs {defendant}"
             if cat:
-                line2_parts.append(f"категория: {escape_html(cat)}")
-            if line2_parts:
-                appeal_block.append("     " + " | ".join(line2_parts))
-            # Строка 3: 🔁 отложено / 📅 назначено / 📌 текст события /
+                line1 += f" | категория: {escape_html(cat)}"
+            appeal_block.append(line1)
+            # Строка 2: 🔁 отложено / 📅 назначено / 📌 текст события /
             # статус. Содержательное событие (исход, приостановление,
             # экспертиза — см. _event_text_is_informative) показываем
             # текстом, а не «Заседание назначено на <прошедшую дату>».
@@ -1007,27 +1010,27 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             )
             if is_postponed and hp:
                 appeal_block.append(
-                    f"     🔁 Заседание отложено на <b>{hp}</b>"
+                    f"🔁 Заседание отложено на <b>{hp}</b>"
                 )
             elif informative_event:
                 appeal_block.append(
-                    f"     📌 {escape_html(event_raw)}"
+                    f"📌 {escape_html(event_raw)}"
                 )
             elif hp:
                 appeal_block.append(
-                    f"     📅 Заседание назначено на <b>{hp}</b>"
+                    f"📅 Заседание назначено на <b>{hp}</b>"
                 )
             elif "new_event" in ch["type"] and event_raw:
                 appeal_block.append(
-                    f"     📌 {escape_html(event_raw)}"
+                    f"📌 {escape_html(event_raw)}"
                 )
             elif "status_change" in ch["type"]:
                 appeal_block.append(
-                    f"     статус: {escape_html(d.get('old_status', ''))} → "
+                    f"статус: {escape_html(d.get('old_status', ''))} → "
                     f"{escape_html(d.get('new_status', ''))}"
                 )
-            # Пустая строка между делами (правило вёрстки юриста: формат
-            # трёхстрочный, без разделителя дела визуально слипаются).
+            # Пустая строка между делами (правило вёрстки юриста: без
+            # разделителя двухстрочные карточки дел визуально слипаются).
             appeal_block.append("")
         if appeal_block and appeal_block[-1] == "":
             appeal_block.pop()
@@ -1057,7 +1060,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # уже сказанное в этой же строке (result_text повторяет «Вынесено
             # решение …»), а в Claude-варианте такой строки не было.
             appeal_block.append(
-                f"  {link}: {result_text}{cat_note}{role_note}{date_note}"
+                f"{link}: {result_text}{cat_note}{role_note}{date_note}"
             )
 
     if acts:
@@ -1106,7 +1109,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 summary_or_excerpt, sum_kind = escape_html(short), "excerpt"
             else:
                 summary_or_excerpt, sum_kind = "", ""
-            appeal_block.append(f"  {link}")
+            # Строка 1: «номер — стороны» (компакт-вёрстка, без отступов).
+            pl55 = escape_html(shorten_party_name(
+                d.get("plaintiff", ""), keep_fio_full=True
+            ))
+            df55 = escape_html(shorten_party_name(
+                d.get("defendant", ""), keep_fio_full=True
+            ))
+            line1_55 = link
+            if pl55 and df55:
+                line1_55 += f" — {pl55} vs {df55}"
+            appeal_block.append(line1_55)
             # Итог из карточки + «в чью пользу» — симметрично 3.6 (данные
             # уже в details: act_verdict_label / bank_outcome).
             verdict55 = escape_html(
@@ -1119,15 +1132,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             if bank_out55:
                 itog55.append(f"<b>Для банка:</b> {bank_out55}")
             if itog55:
-                appeal_block.append("     " + ". ".join(itog55))
+                appeal_block.append(". ".join(itog55))
             # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
             # и drawer'а); сырой excerpt — по-старому «Мотивировка: …».
             if summary_or_excerpt and sum_kind == "summary":
                 appeal_block.append(
-                    f"     <b>Почему:</b> <i>{summary_or_excerpt}</i>"
+                    f"<b>Почему:</b> <i>{summary_or_excerpt}</i>"
                 )
             elif summary_or_excerpt:
-                appeal_block.append(f"     Мотивировка: {summary_or_excerpt}")
+                appeal_block.append(f"Мотивировка: {summary_or_excerpt}")
             # Пустая строка между делами — правило вёрстки юриста; заодно
             # attach_act_analyses режет 5.5 на абзацы по-делово, а не одним
             # куском на всю секцию.
@@ -1205,7 +1218,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             tail = "" if _bank_in_parties(pl_raw, df_raw) or not role \
                 else f", банк — {escape_html(role.lower())}"
             sber_flag = "🏦 " if cass.get("appellant_is_bank") else ""
-            cass_block.append(f"  {sber_flag}{link} — {pl} vs {df}{tail}")
+            cass_block.append(f"{sber_flag}{link} — {pl} vs {df}{tail}")
             # appellant — имя стороны-заявителя из карточки 7kas (например,
             # «МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО»).
             # Прогоняем через shorten_party_name — иначе строка «📥 поступила
@@ -1222,10 +1235,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             )
             cat_raw = (cass.get("category") or c.get("category") or "").strip()
             cat = escape_html(short_category_chain(cat_raw))
-            line2 = f"     {court_short}" if court_short else "     "
+            line2_disc_parts: list[str] = []
+            if court_short:
+                line2_disc_parts.append(court_short)
             if cat:
-                line2 += f" | категория: {cat}"
-            cass_block.append(line2)
+                line2_disc_parts.append(f"категория: {cat}")
+            if line2_disc_parts:
+                cass_block.append(" | ".join(line2_disc_parts))
             filing = escape_html(cass.get("filing_date", "") or "")
             if filing:
                 # Эмодзи 📥 ставим ПОСЛЕ <b>дата</b>, иначе строка попадёт
@@ -1238,7 +1254,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 elif appellant:
                     from_str = f" от {appellant}"
                 cass_block.append(
-                    f"     <b>{filing}</b> — 📥 поступила касс. жалоба"
+                    f"<b>{filing}</b> — 📥 поступила касс. жалоба"
                     + from_str
                 )
             # Discovery с уже известным исходом: дело нашлось на 7kas
@@ -1261,7 +1277,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 # Дублирует строку «📥 поступила касс. жалоба» выше.
                 label_d = ""
             if label_d:
-                itog_line = f"     <b>Итог:</b> {escape_html(label_d)}"
+                itog_line = f"<b>Итог:</b> {escape_html(label_d)}"
                 if reason_d:
                     itog_line += f"; {escape_html(reason_d)}"
                 cass_block.append(itog_line)
@@ -1279,9 +1295,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 max_excerpt_len=500,
             )
             if disc_excerpt and disc_kind == "summary":
-                cass_block.append(f"     <b>Почему:</b> <i>{disc_excerpt}</i>")
+                cass_block.append(f"<b>Почему:</b> <i>{disc_excerpt}</i>")
             elif disc_excerpt:
-                cass_block.append(f"     <i>{disc_excerpt}</i>")
+                cass_block.append(f"<i>{disc_excerpt}</i>")
             cass_block.append("")
         if cass_block and cass_block[-1] == "":
             cass_block.pop()
@@ -1333,7 +1349,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 if role_raw and not _bank_in_parties(pl_raw, df_raw)
                 else ""
             )
-            line1_main = f"  {sber_flag}{link_html}"
+            line1_main = f"{sber_flag}{link_html}"
             if parties_str:
                 line1_main += f" — {parties_str}{role_tail_l1}"
             cass_block.append(line1_main)
@@ -1350,7 +1366,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             if cat_short:
                 line2_parts.append(f"категория: {escape_html(cat_short)}")
             if line2_parts:
-                cass_block.append("     " + " | ".join(line2_parts))
+                cass_block.append(" | ".join(line2_parts))
             # Строка 3: «📅 Назначено судебное заседание на ДД.ММ.ГГГГ в ЧЧ:ММ».
             # Юрист просил полную русскую фразу вместо терсе «📅 Заседание: …».
             # Подавляем при готовом outcome: заседание уже состоялось, итог
@@ -1365,7 +1381,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 else:
                     hearing_str = f"<b>{escape_html(hd)}</b>"
                 cass_block.append(
-                    f"     📅 Назначено судебное заседание на {hearing_str}"
+                    f"📅 Назначено судебное заседание на {hearing_str}"
                 )
             # Строка 4: Итог — готовая подпись из CASSATION_OUTCOME_RU /
             # cassation_review_label. + «от Роль Имя» из заявителя. Для
@@ -1413,7 +1429,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     if outcome_reason_ru else ""
                 )
                 cass_block.append(
-                    f"     <b>Итог:</b> {escape_html(label)}{from_str}{reason_tail}"
+                    f"<b>Итог:</b> {escape_html(label)}{from_str}{reason_tail}"
                 )
             # Строка 5: Почему — пересказ мотивировки через act_summarizer.
             # Сокращаем имена сторон: pl_raw/df_raw — сырые поля parent case,
@@ -1434,9 +1450,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
             # и drawer'а); сырой excerpt — просто курсивом.
             if act_excerpt and act_kind == "summary":
-                cass_block.append(f"     <b>Почему:</b> <i>{act_excerpt}</i>")
+                cass_block.append(f"<b>Почему:</b> <i>{act_excerpt}</i>")
             elif act_excerpt:
-                cass_block.append(f"     <i>{act_excerpt}</i>")
+                cass_block.append(f"<i>{act_excerpt}</i>")
             cass_block.append("")
         if cass_block and cass_block[-1] == "":
             cass_block.pop()
