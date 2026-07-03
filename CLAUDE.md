@@ -131,9 +131,11 @@
 - **Парсинг судов — на Mac юриста** (физически в сети Сбера, egress РФ). Планировщик
   — LaunchAgent `com.court-monitor.parse` (будни, local-время +05), запускает
   [ops/mac-local-run/parse_and_push.sh](ops/mac-local-run/parse_and_push.sh):
-  preflight «в сети Сбера?» → маршрут судов мимо VPN через шлюз `10.217.111.250`
-  → `update_cases.py --json` **без секретов** (доставка скипается, контекст
-  сохраняется) → `git commit && push`. Установка/откат — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
+  preflight «в сети Сбера?» → пересоздание маршрута судов мимо VPN через шлюз
+  `10.217.111.250` → `ops/mac-local-run/run_parse.py` (это `main_json` с
+  заглушённой `validate_environment` — иначе `exit(2)` без секретов; доставка
+  сама скипается, контекст сохраняется) → `git commit && push`. Установка/откат
+  — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
 - **Дайджест Claude + доставка — на GitHub** (там Claude доступен). Workflow
   [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
   ловит `push` с изменённым `data/last_digest_context.json` → `--replay-last
