@@ -783,6 +783,34 @@ class HybridActRenderingTest(unittest.TestCase):
         self.assertIn("\n\n", between,
                       "между делами 5.5 нет пустой строки")
 
+    def test_blank_line_between_cases_in_multiline_sections(self):
+        # То же правило для остальных многострочных секций: 3.1 «Новые
+        # иски», 5.1 «Новые дела», 5.2 «Изменения» апелляции.
+        pairs = [
+            dict(fi_new_cases=[make_fi_new_case("2-301/2026"),
+                               make_fi_new_case("2-302/2026")]),
+            dict(new_cases=[make_appeal_new_case("33-301/2026"),
+                            make_appeal_new_case("33-302/2026")]),
+            dict(changes=[make_appeal_change(["hearing_new"],
+                                             case="33-303/2026"),
+                          make_appeal_change(["hearing_new"],
+                                             case="33-304/2026")]),
+        ]
+        for kwargs in pairs:
+            html = render(**kwargs)
+            nums = sorted(
+                n for lst in kwargs.values() for n in (
+                    [c.get("id") or c.get("Номер дела") for c in lst]
+                    if isinstance(lst[0], dict) and "type" not in lst[0]
+                    else [ch["case"] for ch in lst]
+                )
+            )
+            between = html[html.index(nums[0]):html.index(nums[1])]
+            self.assertIn(
+                "\n\n", between,
+                f"между делами {nums} нет пустой строки",
+            )
+
 
 class ActAnalysisContractTest(unittest.TestCase):
     """attach_act_analyses должен вырезать «Почему»-абзац из гибридного
