@@ -1170,6 +1170,13 @@ class AllEventTypesTest(unittest.TestCase):
         # предшествовать строке-продолжению (отступ 4+ пробела).
         self.assertNotRegex(self.html, r"\n\n {4,}\S")
 
+    def test_layout_compact_no_leading_indents(self):
+        # Компакт-вёрстка (выбор юриста 03.07.2026): без левых отступов —
+        # Telegram сохраняет ведущие пробелы только на первой физической
+        # строке, при переносе «лесенка» ломается. Ни одна строка дайджеста
+        # не должна начинаться с пробела.
+        self.assertNotRegex(self.html, r"\n +\S")
+
     def test_layout_no_triple_blank_lines(self):
         self.assertNotIn("\n\n\n", self.html)
 
