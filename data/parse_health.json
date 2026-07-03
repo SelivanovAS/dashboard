@@ -1,9 +1,10 @@
 {
  "version": 1,
- "updated_at": "2026-07-03T10:26:06",
+ "updated_at": "2026-07-03T11:00:14",
  "sources": {
   "appeal:oblsud": {
    "counts": [
+    23,
     23,
     23
    ],
@@ -11,43 +12,35 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 23,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:surgray--hmao.sudrf.ru": {
    "counts": [
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:vartovgor--hmao.sudrf.ru": {
    "counts": [
     0,
-    0
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:vartovray--hmao.sudrf.ru": {
-   "counts": [
     0,
     0
    ],
@@ -55,29 +48,21 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:vartovray--hmao.sudrf.ru": {
+   "counts": [
+    0,
+    0,
+    0
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 0,
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:hmray--hmao.sudrf.ru": {
-   "counts": [
-    1
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_run_at": "2026-07-03T10:26:06",
-   "last_count": 1
-  },
-  "fi:uray--hmao.sudrf.ru": {
-   "counts": [
-    2
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_run_at": "2026-07-03T10:26:06",
-   "last_count": 2
-  },
-  "fi:nyagan--hmao.sudrf.ru": {
    "counts": [
     1,
     1
@@ -85,21 +70,10 @@
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 1,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14",
+   "last_count": 1
   },
-  "fi:uganskray--hmao.sudrf.ru": {
-   "counts": [
-    0,
-    0
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:kogalym--hmao.sudrf.ru": {
+  "fi:uray--hmao.sudrf.ru": {
    "counts": [
     2,
     2
@@ -107,22 +81,48 @@
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
+   "last_run_at": "2026-07-03T11:00:14",
+   "last_count": 2
+  },
+  "fi:nyagan--hmao.sudrf.ru": {
+   "counts": [
+    1,
+    1,
+    1
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 1,
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:uganskray--hmao.sudrf.ru": {
+   "counts": [
+    0,
+    0,
+    0
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 0,
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:kogalym--hmao.sudrf.ru": {
+   "counts": [
+    2,
+    2,
+    2
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
    "last_count": 2,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:kondinsk--hmao.sudrf.ru": {
    "counts": [
     0,
-    0
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:langepas--hmao.sudrf.ru": {
-   "counts": [
     0,
     0
    ],
@@ -130,10 +130,23 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:langepas--hmao.sudrf.ru": {
+   "counts": [
+    0,
+    0,
+    0
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 0,
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:megion--hmao.sudrf.ru": {
    "counts": [
+    5,
     5,
     5
    ],
@@ -141,65 +154,23 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 5,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:sovetsk--hmao.sudrf.ru": {
    "counts": [
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "fi:ugorsk--hmao.sudrf.ru": {
    "counts": [
     2,
-    2
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 2,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:bel--hmao.sudrf.ru": {
-   "counts": [
-    0,
-    0
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:pth--hmao.sudrf.ru": {
-   "counts": [
-    0,
-    0
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 0,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:berezovo--hmao.sudrf.ru": {
-   "counts": [
-    1,
-    1
-   ],
-   "zero_streak": 0,
-   "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 1,
-   "last_run_at": "2026-07-03T10:26:06"
-  },
-  "fi:rdj--hmao.sudrf.ru": {
-   "counts": [
     2,
     2
    ],
@@ -207,10 +178,35 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 2,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
-  "fi:oktb--hmao.sudrf.ru": {
+  "fi:bel--hmao.sudrf.ru": {
    "counts": [
+    0,
+    0,
+    0
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 0,
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:pth--hmao.sudrf.ru": {
+   "counts": [
+    0,
+    0,
+    0
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 0,
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:berezovo--hmao.sudrf.ru": {
+   "counts": [
+    1,
     1,
     1
    ],
@@ -218,10 +214,35 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 1,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:rdj--hmao.sudrf.ru": {
+   "counts": [
+    2,
+    2,
+    2
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 2,
+   "last_run_at": "2026-07-03T11:00:14"
+  },
+  "fi:oktb--hmao.sudrf.ru": {
+   "counts": [
+    1,
+    1,
+    1
+   ],
+   "zero_streak": 0,
+   "fail_streak": 0,
+   "alerted_zero": false,
+   "last_count": 1,
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "cassation:7kas:total": {
    "counts": [
+    25,
     25,
     25
    ],
@@ -229,10 +250,11 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 25,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   },
   "cassation:7kas:hmao": {
    "counts": [
+    2,
     2,
     2
    ],
@@ -240,7 +262,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 2,
-   "last_run_at": "2026-07-03T10:26:06"
+   "last_run_at": "2026-07-03T11:00:14"
   }
  }
 }
