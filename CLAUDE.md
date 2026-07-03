@@ -149,6 +149,11 @@
   (но тогда снова упрётся в блокировку судов).
 - **НЕ cron-job.org.** Планировщик теперь — LaunchAgent на Mac; расписание правится
   в `.plist`, не в чужих крон-сервисах.
+- **Живой просмотр парсинга:** ярлык `ops/mac-local-run/Парсинг судов.command`
+  (двойной клик — текущий прогон с начала + live) и блок «🛰 Парсинг» в админке
+  Worker (`progress_pusher.py` шлёт вехи на `POST /run-progress`, auth —
+  Worker-секрет `PROGRESS_SECRET`, токен на Mac в
+  `~/.config/court-monitor/progress_token` вне репо).
 
 ## Жизненный цикл дела (state machine)
 

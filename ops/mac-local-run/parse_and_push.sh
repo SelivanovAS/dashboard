@@ -33,7 +33,31 @@ notify() {  # $1 = текст уведомления macOS
   /usr/bin/osascript -e "display notification \"$1\" with title \"Court Monitor\"" >/dev/null 2>&1 || true
 }
 die() {  # $1 = текст → в лог, уведомление, выход 1
-  log "ERROR: $1"; notify "Ошибка: $1"; rmdir "$LOCK" 2>/dev/null; exit 1
+  log "ERROR: $1"; notify "Ошибка: $1"
+  finish_pusher   # дать pusher'у дослать «ERROR:» в админку (он выйдет сам)
+  rmdir "$LOCK" 2>/dev/null; exit 1
+}
+
+# ── Онлайн-вехи в админку Worker (блок «🛰 Парсинг»; некритичная функция) ─────
+PUSHER_PID=""
+start_pusher() {
+  # Токен вне репо (репо публичный). Нет токена — прогресс просто выключен.
+  if [ -f "$HOME/.config/court-monitor/progress_token" ]; then
+    "$PYTHON" "$REPO/ops/mac-local-run/progress_pusher.py" "run-$(date '+%Y%m%d-%H%M%S')" &
+    PUSHER_PID=$!
+    log "progress: онлайн-вехи включены (pid $PUSHER_PID)"
+  else
+    log "progress: токена нет (~/.config/court-monitor/progress_token) — пропуск"
+  fi
+}
+finish_pusher() {
+  # Pusher выходит сам, увидев финальную строку лога; ждём до ~12с, потом kill.
+  [ -n "$PUSHER_PID" ] || return 0
+  for _ in 1 2 3 4 5 6; do
+    kill -0 "$PUSHER_PID" 2>/dev/null || { PUSHER_PID=""; return 0; }
+    sleep 2
+  done
+  kill "$PUSHER_PID" 2>/dev/null; PUSHER_PID=""
 }
 
 # ── Один экземпляр за раз ─────────────────────────────────────────────────────
@@ -43,6 +67,11 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   exit 0
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+
+# ── Ротация лога: держим историю нескольких прогонов, но не даём расти вечно ──
+if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 4000 ]; then
+  tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
 
 log "=================================================================="
 log "Старт parse_and_push (pid $$)"
@@ -59,6 +88,8 @@ if ! netstat -rn -f inet | awk '$1=="default"{print $2}' | grep -qx "$SBER_GATEW
   exit 0
 fi
 log "Сеть Сбера подтверждена (шлюз $SBER_GATEWAY)"
+
+start_pusher
 
 # ── Подтянуть вчерашние replay-коммиты GitHub (иначе push отклонят) ───────────
 if ! git pull --rebase --autostash origin main >>"$LOG" 2>&1; then
@@ -130,6 +161,7 @@ git add data/cases_archive_*.json 2>/dev/null
 if git diff --cached --quiet; then
   log "Изменений нет — коммит не нужен (нерабочий день или без движения)"
   notify "Прогон завершён — изменений нет"
+  finish_pusher
   exit 0
 fi
 
@@ -145,3 +177,4 @@ else
 fi
 
 log "Готово"
+finish_pusher

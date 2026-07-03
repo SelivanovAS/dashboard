@@ -334,6 +334,78 @@ async function handleMarkOwner(request, env) {
   }
 }
 
+// ── Прогресс парсинга с Mac ──────────────────────────────────────────────────
+// Mac-обёртка (ops/mac-local-run/parse_and_push.sh → progress_pusher.py) шлёт
+// вехи парсинга батчами. Auth — отдельный низкопривилегированный
+// PROGRESS_SECRET: умеет ТОЛЬКО дописывать строки прогресса, доступа к
+// подпискам/делам не даёт. Ключи progress:* не пересекаются с подписками —
+// все выборки подписок идут по префиксу "sub:".
+async function handleRunProgress(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PROGRESS_SECRET || auth !== `Bearer ${env.PROGRESS_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const body = await request.json();
+    const runId = String(body.run_id || "");
+    const newLines = Array.isArray(body.lines)
+      ? body.lines.map(String).slice(0, 100)
+      : [];
+    if (!runId) return new Response("Bad Request", { status: 400 });
+
+    const now = new Date().toISOString();
+    const raw = await env.PUSH_SUBSCRIPTIONS.get("progress:current");
+    let cur = null;
+    try { cur = raw ? JSON.parse(raw) : null; } catch (_) { cur = null; }
+
+    if (cur && cur.run_id !== runId) {
+      // Начался новый прогон — прежний уезжает в progress:prev.
+      await env.PUSH_SUBSCRIPTIONS.put("progress:prev", JSON.stringify(cur), {
+        expirationTtl: 14 * 24 * 3600,
+      });
+      cur = null;
+    }
+    if (!cur) cur = { run_id: runId, started_at: now, lines: [] };
+    cur.lines = cur.lines.concat(newLines).slice(-300);
+    cur.updated_at = now;
+    if (body.done === true) cur.done = true;
+    await env.PUSH_SUBSCRIPTIONS.put("progress:current", JSON.stringify(cur), {
+      expirationTtl: 14 * 24 * 3600,
+    });
+    return new Response(JSON.stringify({ ok: true, total: cur.lines.length }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("run-progress error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
+// JSON для блока «🛰 Парсинг» в админке: текущий и предыдущий прогон.
+async function handleAdminRunProgress(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const [curRaw, prevRaw] = await Promise.all([
+      env.PUSH_SUBSCRIPTIONS.get("progress:current"),
+      env.PUSH_SUBSCRIPTIONS.get("progress:prev"),
+    ]);
+    const parse = (s) => {
+      try { return s ? JSON.parse(s) : null; } catch (_) { return null; }
+    };
+    return new Response(
+      JSON.stringify({ current: parse(curRaw), prev: parse(prevRaw) }),
+      { headers: { "Content-Type": "application/json; charset=utf-8" } }
+    );
+  } catch (e) {
+    console.error("admin/run-progress error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
 // ── Админка подписчиков ───────────────────────────────────────────────────────
 
 // Возвращает JSON со всеми подписками (как /subscriptions, но авторизация
@@ -654,6 +726,17 @@ h1 { margin:0; font-size:18px; font-weight:600; }
 .last-push-meta a { color:var(--accent); text-decoration:none; word-break:break-all; }
 .last-push-meta a:hover { text-decoration:underline; }
 .last-push-empty { color:var(--fg-3); font-style:italic; padding:6px 0 0; font-size:12px; }
+.progress-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
+                 padding:12px 14px; margin-bottom:14px; }
+.progress-head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.progress-title { font-weight:600; }
+.progress-state { font-weight:700; }
+.progress-state.running { color:var(--amber); }
+.progress-state.done { color:var(--accent); }
+.progress-meta { color:var(--fg-3); font-size:12px; }
+.progress-log { margin:8px 0 0; padding:10px 12px; background:var(--bg-2); border-radius:8px;
+                font-family:ui-monospace,Menlo,monospace; font-size:11.5px; line-height:1.55;
+                max-height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
 details { margin-top:10px; }
 details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
                     user-select:none; }
@@ -684,11 +767,61 @@ details > summary:hover { color:var(--fg); }
     <button class="refresh" onclick="render(true)">Обновить</button>
   </div>
 </header>
+<div class="progress-card" id="progress-card" style="display:none;">
+  <div class="progress-head">
+    <span class="progress-title">🛰 Парсинг на Mac</span>
+    <span class="progress-state" id="progress-state"></span>
+    <span class="progress-meta" id="progress-meta"></span>
+  </div>
+  <pre class="progress-log" id="progress-log"></pre>
+  <details id="progress-prev" style="display:none;">
+    <summary>Предыдущий прогон</summary>
+    <pre class="progress-log" id="progress-prev-log"></pre>
+  </details>
+</div>
 <div id="root" class="loading">Загрузка…</div>
 <script>
 const SECRET = ${JSON.stringify(secret)};
 const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
 const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_pushes.json";
+
+// ── Блок «🛰 Парсинг»: вехи прогона с Mac, автообновление пока прогон идёт ──
+function progressAgo(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 90) return Math.round(s) + " сек назад";
+  if (s < 5400) return Math.round(s / 60) + " мин назад";
+  return new Date(iso).toLocaleString("ru-RU");
+}
+let progressTimer = null;
+async function loadProgress() {
+  try {
+    const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
+    if (!r.ok) return;
+    const d = await r.json();
+    const card = document.getElementById("progress-card");
+    const cur = d.current;
+    if (!cur) { card.style.display = "none"; return; }
+    card.style.display = "";
+    const running = cur.done !== true;
+    const st = document.getElementById("progress-state");
+    st.textContent = running ? "⏳ идёт" : "✅ завершён";
+    st.className = "progress-state " + (running ? "running" : "done");
+    document.getElementById("progress-meta").textContent =
+      "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
+    const logEl = document.getElementById("progress-log");
+    const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+    logEl.textContent = (cur.lines || []).join("\\n");
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    if (d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length) {
+      document.getElementById("progress-prev").style.display = "";
+      document.getElementById("progress-prev-log").textContent = d.prev.lines.join("\\n");
+    }
+    clearTimeout(progressTimer);
+    if (running) progressTimer = setTimeout(loadProgress, 5000);
+  } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
+}
+loadProgress();
 
 function bareCaseNumber(n) {
   return String(n || "").trim().split(/[\\s(]/)[0];
@@ -1080,6 +1213,14 @@ export default {
 
     if (url.pathname === "/admin/data" && request.method === "GET") {
       return handleAdminData(request, env);
+    }
+
+    if (url.pathname === "/run-progress" && request.method === "POST") {
+      return handleRunProgress(request, env);
+    }
+
+    if (url.pathname === "/admin/run-progress" && request.method === "GET") {
+      return handleAdminRunProgress(request, env);
     }
 
     if (url.pathname === "/admin/label" && request.method === "POST") {
