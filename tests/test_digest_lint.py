@@ -123,6 +123,26 @@ class LintProblemsTest(unittest.TestCase):
             problems,
         )
 
+    def test_full_llm_format_without_indent_counts_correctly(self):
+        # Регресс A/B 03.07.2026: формат full-LLM пути не имеет отступов
+        # у строк дел — счётчик по отступам давал ложный алерт «по факту
+        # дел 0». Считаем по строкам с номерами дел, формат-независимо.
+        ctx = _ctx(changes=[
+            make_appeal_change(["hearing_new"], case="33-1/2026"),
+            make_appeal_change(["hearing_new"], case="33-2/2026"),
+        ])
+        llm_style_html = (
+            "📊 Дайджест судебных дел | 03.07.2026\n\n"
+            "📅 <b>Изменения (2):</b>\n\n"
+            '<a href="https://x/1"><b>33-1/2026</b></a> — Иванов vs Петров\n'
+            "📅 Заседание назначено на 14.07.2026 14:30\n\n"
+            '<a href="https://x/2"><b>33-2/2026</b></a> — Сидоров vs Козлов\n'
+            "📅 Заседание назначено на 02.07.2026 15:00\n\n"
+            "📌 <b>В производстве: всего 65</b>\n"
+            f'<a href="{cm_config.DASHBOARD_URL}">📊 Дашборд</a>'
+        )
+        self.assertEqual(uc.lint_digest_html(llm_style_html, **ctx), [])
+
     def test_truncated_digest_flagged_without_number_noise(self):
         # Обрезка — одна общая проблема; потерянные номера не перечисляем.
         many = [make_fi_new_case(case=f"2-{8000 + i}/2026") for i in range(80)]

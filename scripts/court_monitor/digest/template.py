@@ -44,6 +44,42 @@ def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
     return "сбербанк" in s
 
 
+# Шумовые сегменты текста события (через «. »): тип сессии, время, зал,
+# даты. Всё, что остаётся сверх них, — содержательная часть события
+# (исход, приостановление, экспертиза и т.п.).
+_EVENT_NOISE_SEGMENT_RE = re.compile(
+    r"^(?:"
+    r"судебное заседание|предварительное судебное заседание|"
+    r"подготовка дела(?:\s*\(собеседование\))?|беседа|собеседование|"
+    r"зал\b.*|каб(?:инет)?\.?\s*№?\s*\d*|"
+    r"\d{1,2}:\d{2}|\d{2}\.\d{2}\.\d{4}"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _event_text_is_informative(event: str) -> bool:
+    """True, если текст события несёт содержание сверх «голого» анонса
+    заседания (тип сессии + время + зал + даты).
+
+    «Судебное заседание. 14:30. 03.07.2026» → False (голый анонс);
+    «Судебное заседание. 15:00. Зал 142. Производство по делу
+    приостановлено. НАЗНАЧЕНИЕ СУДОМ ЭКСПЕРТИЗЫ. 02.07.2026» → True.
+
+    Нужен секции 5.2: содержательное событие показываем текстом
+    («📌 …»), а не строкой «Заседание назначено на <вчера>» — иначе
+    состоявшееся заседание с исходом маскируется под будущее
+    (A/B 03.07.2026, дело 33-3793/2026: оба варианта потеряли
+    приостановление производства и экспертизу)."""
+    for seg in (event or "").split(". "):
+        seg = seg.strip().rstrip(".")
+        if not seg:
+            continue
+        if not _EVENT_NOISE_SEGMENT_RE.match(seg):
+            return True
+    return False
+
+
 def _section_break(block: list[str]) -> None:
     """Вставить визуальный разделитель «⸻» перед следующей секцией.
 
@@ -923,12 +959,19 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cat = category_short(short_category_chain(d.get("category", "")))
             is_postponed = "hearing_postponed" in ch["type"]
             # Дата+время заседания. Для отложений — new_hearing_*; для
-            # назначений берём new_hearing_* при наличии, иначе из event_raw
-            # пытаемся вытащить (для legacy-новых событий).
+            # назначений: new_hearing_* → ПОЛЯ КАРТОЧКИ hearing_date/time →
+            # разбор текста события (legacy-payload без полей). Поля
+            # карточки приоритетнее хвоста текста: в «Судебное заседание.
+            # 14:30. 03.07.2026» хвостовая дата — дата размещения записи,
+            # а не заседания (A/B 03.07.2026, дело 33-4521/2026: реальное
+            # заседание 14.07.2026, хвост текста — 03.07.2026).
+            event_raw = (d.get("event") or "").strip()
             hd = escape_html(d.get("new_hearing_date", ""))
             ht = escape_html(d.get("new_hearing_time", ""))
             if not hd and not is_postponed:
-                event_raw = d.get("event", "") or ""
+                hd = escape_html(d.get("hearing_date", ""))
+                ht = ht or escape_html(d.get("hearing_time", ""))
+            if not hd and not is_postponed:
                 # Из «Судебное заседание. 11:30. 03.06.2026» вытаскиваем
                 # дату и время.
                 for p in event_raw.split(". "):
@@ -949,25 +992,34 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line2_parts.append(f"категория: {escape_html(cat)}")
             if line2_parts:
                 appeal_block.append("     " + " | ".join(line2_parts))
-            # Строка 3: 🔁 отложено / 📅 назначено. Если дату вытащить не
-            # удалось — показываем сырой текст события (иначе карточка дела
-            # информационно пуста: номер и стороны без сути). «📌 текст» без
-            # <b> не ловится _DIGEST_HEADER_RE — за заголовок не примут.
+            # Строка 3: 🔁 отложено / 📅 назначено / 📌 текст события /
+            # статус. Содержательное событие (исход, приостановление,
+            # экспертиза — см. _event_text_is_informative) показываем
+            # текстом, а не «Заседание назначено на <прошедшую дату>».
+            # Если дату вытащить не удалось — тоже текст события (иначе
+            # карточка дела информационно пуста). «📌 текст» без <b> не
+            # ловится _DIGEST_HEADER_RE — за заголовок не примут.
             # Для «голого» status_change — строка «статус: X → Y» (формат
             # как в 3.2 первой инстанции).
-            if hp:
-                if is_postponed:
-                    appeal_block.append(
-                        f"     🔁 Заседание отложено на <b>{hp}</b>"
-                    )
-                else:
-                    appeal_block.append(
-                        f"     📅 Заседание назначено на <b>{hp}</b>"
-                    )
-            elif ("new_event" in ch["type"]
-                    and (d.get("event") or "").strip()):
+            informative_event = (
+                "new_event" in ch["type"]
+                and _event_text_is_informative(event_raw)
+            )
+            if is_postponed and hp:
                 appeal_block.append(
-                    f"     📌 {escape_html(d['event'].strip())}"
+                    f"     🔁 Заседание отложено на <b>{hp}</b>"
+                )
+            elif informative_event:
+                appeal_block.append(
+                    f"     📌 {escape_html(event_raw)}"
+                )
+            elif hp:
+                appeal_block.append(
+                    f"     📅 Заседание назначено на <b>{hp}</b>"
+                )
+            elif "new_event" in ch["type"] and event_raw:
+                appeal_block.append(
+                    f"     📌 {escape_html(event_raw)}"
                 )
             elif "status_change" in ch["type"]:
                 appeal_block.append(
