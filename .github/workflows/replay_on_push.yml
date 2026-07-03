@@ -44,11 +44,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Replay digest (Claude) + доставка
+      - name: Replay digest (гибрид) + доставка
         env:
+          # Гибрид — дефолт кода (с 03.07.2026): программный рендер
+          # generate_template_digest + Claude ТОЛЬКО на пересказ мотивировок
+          # актов (summarize_act_motivation, кэш data/.act_summaries.json).
+          # Откат на старый полный LLM-дайджест — вернуть строку
+          # `DIGEST_FULL_LLM: "1"` в этот env-блок.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Паритет с прежним продовым кроном: полный LLM-вызов.
-          DIGEST_FULL_LLM: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # Личный чат — как и старый крон по умолчанию (to_group=false).
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}

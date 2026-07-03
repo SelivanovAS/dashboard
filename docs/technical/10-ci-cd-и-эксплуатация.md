@@ -80,11 +80,17 @@ Mac и в блоке «🛰 Парсинг» админки Worker.
 [Файл](../../.github/workflows/replay_on_push.yml). Триггер — `push` в `main`,
 задевший `data/last_digest_context.json` (его коммитит Mac-обёртка). Шаги:
 checkout → Python 3.12 → `python scripts/update_cases.py --replay-last
---push-all` со всеми секретами (Claude-дайджест в личный Telegram + Web Push
-всем подписчикам) → коммит `last_digest.json` + `last_personal_pushes.json`
-(`📰 Дайджест собран…`). Анти-петля: replay не меняет сам контекст, а пуши
-через `GITHUB_TOKEN` не триггерят workflow. Паритет с прежним кроном:
-`DIGEST_FULL_LLM: "1"`.
+--push-all` со всеми секретами (гибридный дайджест в личный Telegram + Web
+Push всем подписчикам) → коммит `last_digest.json`, `last_personal_pushes.json`,
+`cases.json` (act_analysis из replay) и `.act_summaries.json` (кэш пересказов),
+с `git pull --rebase` от гонки с Mac-пушем (`📰 Дайджест собран…`). Анти-петля:
+replay не меняет сам контекст, а пуши через `GITHUB_TOKEN` не триггерят
+workflow.
+
+**С 03.07.2026 дайджест здесь — гибрид** (дефолт кода, флаг не выставлен):
+программный рендер `generate_template_digest` + Claude только на пересказ
+мотивировок актов; после отправки — программный линтер с 🩺-алертом. Откат
+на старый полный LLM-дайджест — вернуть `DIGEST_FULL_LLM: "1"` в env шага.
 
 ### `update_cases.yml` — прежний основной (сейчас только вручную)
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
@@ -99,15 +105,14 @@ Python 3.12 → установка зависимостей → `python scripts/
 Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
 `TELEGRAM_CHAT_ID_TEST`), `smart_skip` (крон передавал `true`).
 
-> ⚠️ **Сейчас в этом workflow выставлен `DIGEST_FULL_LLM: "1"`** — то есть в
-> продакшене дайджест генерируется старым «полным LLM»-путём, а не гибридным
-> (хотя гибрид — дефолт самого кода). Это временный откат на время доводки
-> полировщика; снять при включении `DIGEST_POLISH=1`.
+С 03.07.2026 дайджест и здесь гибридный (флаг `DIGEST_FULL_LLM` снят, дефолт
+кода); откат — вернуть `DIGEST_FULL_LLM: "1"` в env шага.
 
 Коммит-шаг добавляет: `cases.json`, `cases_archive.json`, `cases_archive_*.json`
 (холодные), `last_digest_context.json`, `last_digest.json`,
 `last_personal_pushes.json`, legacy CSV, `.digested_acts`, `.cassation_acts`,
-`parse_health.json`. Сообщение коммита — `📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
+`parse_health.json`, `.act_summaries.json` (кэш пересказов).
+Сообщение коммита — `📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
 
 Алерт о падении сделан через `curl` (не Python) — сработает, даже если упала
 установка зависимостей; текст содержит ссылку на лог упавшего run'а.
