@@ -30,7 +30,7 @@ from court_monitor.digest.postprocess import (
     _warn_misplaced_appeal_cases, _shorten_categories_in_html,
     _strip_section_numbering, _purge_3_6_without_act_text,
     _close_open_tags, _strip_orphan_close_tags, truncate_html_message,
-    _wrap_all_bare_case_numbers,
+    _wrap_all_bare_case_numbers, _DIGEST_HEADER_RE,
 )
 from court_monitor.digest.template import (
     generate_template_digest, render_no_changes_digest, build_summary_line,
@@ -149,7 +149,14 @@ def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
         if not m:
             continue
         if _bare_case_number(m.group(1)) == target:
-            stripped = para.strip()
+            # У первого дела секции в абзац прилипает строка-заголовок
+            # («📄 <b>Опубликованные тексты актов (N):</b>» идёт без пустой
+            # строки перед делом) — в drawer'е карточки это шум, срезаем.
+            lines = [
+                ln for ln in para.split("\n")
+                if not _DIGEST_HEADER_RE.match(ln)
+            ]
+            stripped = "\n".join(lines).strip()
             if stripped:
                 out.append(stripped)
     if not out:
@@ -248,6 +255,14 @@ def attach_act_analyses(
         act_date = details.get("act_date") or ""
 
         html_fragment = _extract_case_paragraphs_from_digest(digest_html, bare)
+        if not html_fragment and stage == "cassation":
+            # Шаблонный рендер кассации оборачивает КАССАЦИОННЫЙ номер
+            # (8Г-…), а не номер 1-й инст. из change["case"] — пробуем его.
+            alt = _bare_case_number(ch.get("cassation_internal_number") or "")
+            if alt:
+                html_fragment = _extract_case_paragraphs_from_digest(
+                    digest_html, alt
+                )
         if html_fragment:
             source = "digest"
         else:

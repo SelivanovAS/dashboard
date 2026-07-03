@@ -635,7 +635,12 @@ def _collect_case_numbers(
         if n:
             nums.add(n)
     for ch in cass_changes or []:
-        n = (ch.get("case") or "").strip()
+        # Шаблон рендерит КАССАЦИОННЫЙ внутренний номер (8Г-…), а не номер
+        # 1-й инст. (по просьбе юриста, см. блок КАССАЦИЯ в template.py).
+        # Валидатор должен требовать тот номер, что реально виден в HTML —
+        # иначе полировщик ложно откатывался на любом касс. событии.
+        n = (ch.get("cassation_internal_number")
+             or ch.get("case") or "").strip()
         if n:
             nums.add(n)
     return nums

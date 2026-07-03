@@ -105,6 +105,15 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
     acts = sum(1 for ch in changes if "new_act" in ch["type"])
     postponed = sum(1 for ch in changes if "hearing_postponed" in ch["type"])
     to_fi_rules = sum(1 for ch in changes if "appeal_to_fi_rules" in ch["type"])
+    # «Голый» status_change (без других визуальных типов) — рендерится
+    # в 5.2 строкой «статус: X → Y», считаем и в сводке.
+    app_status = sum(
+        1 for ch in changes
+        if "status_change" in ch["type"]
+        and not (set(ch["type"]) & {"new_event", "hearing_new",
+                                    "hearing_postponed", "new_result",
+                                    "new_act", "appeal_to_fi_rules"})
+    )
     if events:
         parts.append(f"{events} событ.")
     if postponed:
@@ -115,6 +124,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         parts.append(f"{results} суд. акт.")
     if acts:
         parts.append(f"{acts} акт.")
+    if app_status:
+        parts.append(f"{app_status} статус апел.")
     if fi_changes:
         fi_hearings = sum(
             1 for ch in fi_changes
@@ -144,14 +155,36 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_restarts = sum(
             1 for ch in fi_changes if "fi_hearing_restart" in ch["type"]
         )
+        fi_returns = sum(
+            1 for ch in fi_changes if "fi_returned" in ch["type"]
+        )
+        fi_cass_filed = sum(
+            1 for ch in fi_changes if "fi_cassation_filed" in ch["type"]
+        )
+        fi_sent_cass = sum(
+            1 for ch in fi_changes if "fi_sent_to_cassation" in ch["type"]
+        )
+        fi_accepted = sum(
+            1 for ch in fi_changes if "fi_accepted_no_hearing" in ch["type"]
+        )
+        # fi_bank_role_changed в сводку осознанно НЕ выносим: смена роли —
+        # редкий служебный признак, строка в 3.2 «Изменения» его уже несёт.
         if fi_hearings:
             parts.append(f"{fi_hearings} засед. 1 инст.")
         if fi_restarts:
             parts.append(f"{fi_restarts} с начала")
         if fi_resolved_n:
             parts.append(f"{fi_resolved_n} реш. 1 инст.")
+        if fi_returns:
+            parts.append(f"{fi_returns} возвр. исков")
         if fi_appeals_filed:
             parts.append(f"{fi_appeals_filed} подано жалоб")
+        if fi_cass_filed:
+            parts.append(f"{fi_cass_filed} касс. жалоб")
+        if fi_sent_cass:
+            parts.append(f"{fi_sent_cass} в касс. суд")
+        if fi_accepted:
+            parts.append(f"{fi_accepted} принято к пр-ву")
         if fi_finals:
             parts.append(f"{fi_finals} финал 1 инст.")
         if fi_acts:
@@ -219,25 +252,28 @@ def category_short(cat: str) -> str:
 
 # ── Основная логика обновления ───────────────────────────────────────────────
 
-def _render_act_summary_or_excerpt(
+def _act_summary_or_excerpt_with_kind(
     act_text: str,
     case_meta: dict,
     *,
     summarizer,
     max_excerpt_len: int = 500,
-) -> str:
-    """Вернуть текст для строки «Мотивировка» в дайджесте.
+) -> tuple[str, str]:
+    """Текст мотивировки для дайджеста + признак его происхождения.
 
-    Если задан `summarizer` (callable вида `summarize_act_motivation`)
-    и он вернул непустой пересказ — используем его. Иначе —
-    обрезанный excerpt act_text (старое поведение шаблона).
+    Возвращает (text, kind):
+      - ("…", "summary") — LLM-пересказ от `summarizer` (рендерится с
+        маркером «<b>Почему:</b>» — на нём держится attach_act_analyses
+        и разбор акта в drawer'е карточки дела);
+      - ("…", "excerpt") — обрезанный сырой фрагмент (маркер «Почему»
+        НЕ ставим: «Почему» из сырого куска текста выглядело бы враньём);
+      - ("", "") — act_text пуст.
 
-    Возврат — строка, уже прошедшая `escape_html`, готовая к вставке
-    в HTML под `<i>…</i>`. Пустая строка — если act_text пуст.
+    text уже прошёл `escape_html`, готов к вставке в HTML.
     """
     text = (act_text or "").strip()
     if not text:
-        return ""
+        return "", ""
     if summarizer is not None:
         try:
             summary = summarizer(text, case_meta=case_meta)
@@ -245,10 +281,24 @@ def _render_act_summary_or_excerpt(
             log.warning(f"act_summarizer упал: {e}")
             summary = None
         if summary:
-            return escape_html(summary)
+            return escape_html(summary), "summary"
     if len(text) > max_excerpt_len:
         text = text[:max_excerpt_len].rstrip() + "…"
-    return escape_html(text)
+    return escape_html(text), "excerpt"
+
+
+def _render_act_summary_or_excerpt(
+    act_text: str,
+    case_meta: dict,
+    *,
+    summarizer,
+    max_excerpt_len: int = 500,
+) -> str:
+    """Совместимость: только текст, без признака (см. *_with_kind)."""
+    return _act_summary_or_excerpt_with_kind(
+        act_text, case_meta,
+        summarizer=summarizer, max_excerpt_len=max_excerpt_len,
+    )[0]
 
 
 def load_last_meaningful_digest() -> dict | None:
@@ -343,6 +393,22 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     решения) и кассации (new_act) вместо обрезанного excerpt'а
     подставляется LLM-пересказ. None или ошибка callable → fallback
     на excerpt (старое поведение).
+
+    Поля details, которые шаблон НЕ выводит ОСОЗНАННО (не дыры покрытия):
+    - `old_hearing_date`/`old_hearing_time` — юрист просил показывать
+      только новую дату отложения;
+    - `event_text` у fi_returned — рендерится только распознанная причина
+      (`_fi_return_reason_for_render`);
+    - `restart_event` у fi_hearing_restart — сырой текст события, в строке
+      достаточно даты и следующего заседания;
+    - `appellant`/`appellant_name`/`appellant_role`/`_appellant_raw` у
+      апел. changes — использовались только full-LLM промптом; в 5.4/5.5
+      апеллянта не выводим (юрист не просил);
+    - `hearing_long_ago`, `act_verdict_raw`, `last_event`, `act_excerpt`
+      (при живом act_text) — вспомогательный контекст для LLM-путей;
+    - `stage_prev`/`stage_now`, `act_kind`, `decision_date`,
+      `result_for_appeal` у кассации — служебные поля линковки;
+    - stage_transitions — намеренно не секция дайджеста (см. ниже).
     """
     today = datetime.now().strftime("%d.%m.%Y")
     if cases is None:
@@ -374,37 +440,53 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         )
 
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
+    # Порядок вычисления корзин — от специфичного к общему: сначала
+    # отложения и переходы (по типу), затем акты (5.5), резолютивки (5.4)
+    # и в конце события (5.2). Членство в «событиях» определяется как
+    # «change не попал в results/acts», а не проверкой по типам: иначе
+    # «ложный» new_result (текст события в поле «Результат») исчезал из
+    # ВСЕХ секций (results отбрасывал его по гарду, events — по типу), а
+    # связка new_event+new_act дублировалась (5.2 + 5.5).
     postponed = [ch for ch in changes if "hearing_postponed" in ch["type"]]
     postponed_nums = {ch["case"] for ch in postponed}
     to_fi_rules = [ch for ch in changes if "appeal_to_fi_rules" in ch["type"]]
-    # Не дублируем дело в "Назначенные", если оно уже в "Отложенные".
-    # hearing_new — первое заседание апелляции; семантически то же самое, что и
-    # «назначенное заседание», поэтому показываем тут же.
-    # Если у дела одновременно `new_event` и `new_result` (типичная связка для
-    # дня заседания: появилось событие «Вынесено решение» и зафиксирован итог),
-    # выводим ТОЛЬКО в 5.4 «Вынесенные акты» — иначе тот же текст про
-    # «Вынесено решение» вылез бы дважды (5.3 «Назначенные» + 5.4).
-    events = [ch for ch in changes
-              if ("new_event" in ch["type"] or "hearing_new" in ch["type"])
-              and ch["case"] not in postponed_nums
-              and "new_result" not in ch["type"]]
     # 5.4 и 5.5 — РАЗНЫЕ события (резолютивка и полный текст), но если в
     # ОДНОМ прогоне сработали оба — показываем дело ТОЛЬКО в 5.5 (там и
     # ИТОГ из карточки, и мотивировка). Иначе пользователь видит дубль.
     # Если события разнесены во времени — в разных прогонах каждая секция
     # получит «свой» change (защита сохраняется).
+    acts = [ch for ch in changes if "new_act" in ch["type"]]
+    _acts_ids = {id(ch) for ch in acts}
     # Подстраховка: если в `result` лежит текст события (см. одноимённую
-    # утилиту), отрезаем — это «ложный» итог, дело принадлежит секции 5.2
+    # утилиту), это «ложный» итог — дело принадлежит секции 5.2
     # «Изменения», а не 5.4 «Вынесенные акты». Парсер с гардом такие
     # `new_result` больше не выставляет, но фильтр защищает на случай
     # старого payload (например, `--replay-last` после регрессии).
     results = [ch for ch in changes
                if "new_result" in ch["type"]
-               and "new_act" not in ch["type"]
+               and id(ch) not in _acts_ids
                and not _is_event_text_in_result_field(
                    (ch.get("details") or {}).get("result", "")
                )]
-    acts = [ch for ch in changes if "new_act" in ch["type"]]
+    _results_ids = {id(ch) for ch in results}
+    # Не дублируем дело в "Назначенные", если оно уже в "Отложенные".
+    # hearing_new — первое заседание апелляции; семантически то же самое,
+    # что и «назначенное заседание», поэтому показываем тут же.
+    events = [ch for ch in changes
+              if ("new_event" in ch["type"] or "hearing_new" in ch["type"])
+              and ch["case"] not in postponed_nums
+              and id(ch) not in _results_ids
+              and id(ch) not in _acts_ids]
+    # «Голый» status_change — change, не попавший ни в одну корзину выше.
+    # Раньше такой change молча выпадал из дайджеста (у full-LLM пути он
+    # выводился строкой «Статус: X → Y»). Показываем в 5.2 «Изменения».
+    _known_ids = (
+        {id(ch) for ch in postponed} | {id(ch) for ch in to_fi_rules}
+        | _acts_ids | _results_ids | {id(ch) for ch in events}
+    )
+    status_only = [ch for ch in changes
+                   if "status_change" in ch["type"]
+                   and id(ch) not in _known_ids]
 
     # ── Блок ПЕРВАЯ ИНСТАНЦИЯ ──
     fi_block: list[str] = []
@@ -696,7 +778,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # Стороны прогоняем через shorten_party_name — LLM иначе тянет в
             # «Почему» громоздкие имена вроде «МТУ Росимущества в Тюменской
             # области, ХМАО-Югре, ЯНАО».
-            act_excerpt = _render_act_summary_or_excerpt(
+            act_excerpt, act_kind = _act_summary_or_excerpt_with_kind(
                 d.get("act_text") or "",
                 {
                     "stage": "first_instance",
@@ -725,7 +807,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 )
             if itog_parts:
                 fi_block.append("     " + ". ".join(itog_parts))
-            if act_excerpt:
+            # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
+            # и drawer'а карточки дела); сырой excerpt — просто курсивом.
+            if act_excerpt and act_kind == "summary":
+                fi_block.append(f"     <b>Почему:</b> <i>{act_excerpt}</i>")
+            elif act_excerpt:
                 fi_block.append(f"     <i>{act_excerpt}</i>")
             fi_block.append("")  # пустая строка-разделитель между делами
         # убрать хвостовую пустую строку, если добавили
@@ -806,7 +892,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # три строки на дело: номер; стороны + категория; «🔁 Заседание
     # отложено на …» / «📅 Заседание назначено на …». `events` уже
     # исключает дела из `postponed_nums`, дублирования нет.
-    combined_apel_changes = postponed + events
+    # Сюда же — «голые» status_change (строка 3: «статус: X → Y»).
+    combined_apel_changes = postponed + events + status_only
     if combined_apel_changes:
         _section_break(appeal_block)
         appeal_block.append(
@@ -849,7 +936,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line2_parts.append(f"категория: {escape_html(cat)}")
             if line2_parts:
                 appeal_block.append("     " + " | ".join(line2_parts))
-            # Строка 3: 🔁 отложено / 📅 назначено.
+            # Строка 3: 🔁 отложено / 📅 назначено. Если дату вытащить не
+            # удалось — показываем сырой текст события (иначе карточка дела
+            # информационно пуста: номер и стороны без сути). «📌 текст» без
+            # <b> не ловится _DIGEST_HEADER_RE — за заголовок не примут.
+            # Для «голого» status_change — строка «статус: X → Y» (формат
+            # как в 3.2 первой инстанции).
             if hp:
                 if is_postponed:
                     appeal_block.append(
@@ -859,6 +951,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     appeal_block.append(
                         f"     📅 Заседание назначено на <b>{hp}</b>"
                     )
+            elif ("new_event" in ch["type"]
+                    and (d.get("event") or "").strip()):
+                appeal_block.append(
+                    f"     📌 {escape_html(d['event'].strip())}"
+                )
+            elif "status_change" in ch["type"]:
+                appeal_block.append(
+                    f"     статус: {escape_html(d.get('old_status', ''))} → "
+                    f"{escape_html(d.get('new_status', ''))}"
+                )
 
     if results:
         _section_break(appeal_block)
@@ -904,7 +1006,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             raw_act = (d.get("act_text") or "").strip()
             ready_excerpt = (d.get("act_excerpt") or "").strip()
             if act_summarizer is not None and raw_act:
-                summary_or_excerpt = _render_act_summary_or_excerpt(
+                summary_or_excerpt, sum_kind = _act_summary_or_excerpt_with_kind(
                     raw_act,
                     {
                         "stage": "appeal",
@@ -931,15 +1033,37 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 # Старая логика: первые 1-2 предложения, лимит ~250.
                 short_parts = re.split(r"(?<=[.!?])\s+", src)[:2]
                 short = " ".join(short_parts)[:250].rstrip(".") + "."
-                summary_or_excerpt = escape_html(short)
+                summary_or_excerpt, sum_kind = escape_html(short), "excerpt"
             else:
-                summary_or_excerpt = ""
-            if summary_or_excerpt:
+                summary_or_excerpt, sum_kind = "", ""
+            appeal_block.append(f"  {link}")
+            # Итог из карточки + «в чью пользу» — симметрично 3.6 (данные
+            # уже в details: act_verdict_label / bank_outcome).
+            verdict55 = escape_html(
+                d.get("act_verdict_label") or d.get("verdict_label") or ""
+            )
+            bank_out55 = escape_html(d.get("bank_outcome", ""))
+            itog55: list[str] = []
+            if verdict55:
+                itog55.append(f"<b>Итог:</b> {verdict55}")
+            if bank_out55:
+                itog55.append(f"<b>Для банка:</b> {bank_out55}")
+            if itog55:
+                appeal_block.append("     " + ". ".join(itog55))
+            # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
+            # и drawer'а); сырой excerpt — по-старому «Мотивировка: …».
+            if summary_or_excerpt and sum_kind == "summary":
                 appeal_block.append(
-                    f"  {link}\n    Мотивировка: {summary_or_excerpt}"
+                    f"     <b>Почему:</b> <i>{summary_or_excerpt}</i>"
                 )
-            else:
-                appeal_block.append(f"  {link}")
+            elif summary_or_excerpt:
+                appeal_block.append(f"     Мотивировка: {summary_or_excerpt}")
+            # Пустая строка между делами — правило вёрстки юриста; заодно
+            # attach_act_analyses режет 5.5 на абзацы по-делово, а не одним
+            # куском на всю секцию.
+            appeal_block.append("")
+        if appeal_block and appeal_block[-1] == "":
+            appeal_block.pop()
 
     # ── Сборка ──
     summary = build_summary_line(
@@ -1047,6 +1171,47 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     f"     <b>{filing}</b> — 📥 поступила касс. жалоба"
                     + from_str
                 )
+            # Discovery с уже известным исходом: дело нашлось на 7kas
+            # постфактум, когда определение уже вынесено/опубликовано.
+            # Раньше карточка «нового дела» молчала об исходе — он терялся
+            # из дайджеста. Метки — те же, что в «Касс. событиях».
+            outcome_d = (cass.get("outcome") or "").strip()
+            reason_d = ""
+            if outcome_d == "cassation_terminated":
+                label_d, reason_d = cassation_terminated_label(
+                    cass.get("review_result", ""), cass.get("result_text", "")
+                )
+            else:
+                label_d = CASSATION_OUTCOME_RU.get(outcome_d, "")
+            if not label_d:
+                label_d = cassation_review_label(
+                    cass.get("review_result", ""), outcome_d
+                )
+            if label_d == "📥 Принято к производству":
+                # Дублирует строку «📥 поступила касс. жалоба» выше.
+                label_d = ""
+            if label_d:
+                itog_line = f"     <b>Итог:</b> {escape_html(label_d)}"
+                if reason_d:
+                    itog_line += f"; {escape_html(reason_d)}"
+                cass_block.append(itog_line)
+            disc_excerpt, disc_kind = _act_summary_or_excerpt_with_kind(
+                cass.get("act_text") or "",
+                {
+                    "stage": "cassation",
+                    "bank_role": role,
+                    "verdict_label": label_d,
+                    "plaintiff": shorten_party_name(pl_raw, keep_fio_full=True),
+                    "defendant": shorten_party_name(df_raw, keep_fio_full=True),
+                    "category": cat_raw,
+                },
+                summarizer=act_summarizer,
+                max_excerpt_len=500,
+            )
+            if disc_excerpt and disc_kind == "summary":
+                cass_block.append(f"     <b>Почему:</b> <i>{disc_excerpt}</i>")
+            elif disc_excerpt:
+                cass_block.append(f"     <i>{disc_excerpt}</i>")
             cass_block.append("")
         if cass_block and cass_block[-1] == "":
             cass_block.pop()
@@ -1183,7 +1348,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # Строка 5: Почему — пересказ мотивировки через act_summarizer.
             # Сокращаем имена сторон: pl_raw/df_raw — сырые поля parent case,
             # для LLM-пересказа они слишком длинные («МТУ Росимущества в …»).
-            act_excerpt = _render_act_summary_or_excerpt(
+            act_excerpt, act_kind = _act_summary_or_excerpt_with_kind(
                 d.get("act_text") or "",
                 {
                     "stage": "cassation",
@@ -1196,7 +1361,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 summarizer=act_summarizer,
                 max_excerpt_len=500,
             )
-            if act_excerpt:
+            # LLM-пересказ — с маркером «Почему:» (контракт attach_act_analyses
+            # и drawer'а); сырой excerpt — просто курсивом.
+            if act_excerpt and act_kind == "summary":
+                cass_block.append(f"     <b>Почему:</b> <i>{act_excerpt}</i>")
+            elif act_excerpt:
                 cass_block.append(f"     <i>{act_excerpt}</i>")
             cass_block.append("")
         if cass_block and cass_block[-1] == "":

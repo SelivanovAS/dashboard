@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([333](../../scripts/court_monitor/digest/core.py#L333)) — точка входа,
+`generate_digest` ([348](../../scripts/court_monitor/digest/core.py#L348)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -33,14 +33,14 @@
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 322](../../scripts/court_monitor/digest/template.py#L322). Собирает весь HTML дайджеста
+[Строка 372](../../scripts/court_monitor/digest/template.py#L372). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([294](../../scripts/court_monitor/digest/template.py#L294)).
+([344](../../scripts/court_monitor/digest/template.py#L344)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
@@ -60,7 +60,7 @@ LLM реально «думает». Алгоритм:
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
-   [222](../../scripts/court_monitor/digest/template.py#L222)).
+   [290](../../scripts/court_monitor/digest/template.py#L290)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
@@ -77,12 +77,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 688](../../scripts/court_monitor/digest/llm.py#L688). При `DIGEST_POLISH=1`
+[Строка 693](../../scripts/court_monitor/digest/llm.py#L693). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
 `_DIGEST_POLISH_SYSTEM_PROMPT` ([552](../../scripts/court_monitor/digest/llm.py#L552)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([644](../../scripts/court_monitor/digest/llm.py#L644)): проверяется контракт
+([649](../../scripts/court_monitor/digest/llm.py#L649)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -120,7 +120,7 @@ LLM реально «думает». Алгоритм:
 
 ## Разбор акта в карточке (`act_analysis`)
 
-`attach_act_analyses` ([161](../../scripts/court_monitor/digest/core.py#L161)) после рассылки
+`attach_act_analyses` ([168](../../scripts/court_monitor/digest/core.py#L168)) после рассылки
 сохраняет LLM-разбор опубликованных актов в поле `act_analysis` соответствующих
 дел в `cases.json` — чтобы юрист видел его в drawer'е дашборда дольше одного дня.
 Обновляются только дела с новым актом в этом прогоне.

@@ -111,15 +111,15 @@ class TemplateDigestBaselineTest(unittest.TestCase):
                 expected.append(alts)
         if not expected:
             self.skipTest("В контексте нет номеров дел")
-        present = sum(
-            1 for alts in expected if any(n in self.html for n in alts)
-        )
-        ratio = present / len(expected)
-        # Допускаем небольшую усушку при truncate_html_message,
-        # но >=70% номеров должны быть в HTML.
-        self.assertGreaterEqual(
-            ratio, 0.7,
-            f"Слишком мало номеров в HTML: {present}/{len(expected)}",
+        missing = [alts for alts in expected
+                   if not any(n in self.html for n in alts)]
+        # После фиксов покрытия (голый status_change, «ложный» new_result)
+        # на реальных объёмах дайджест обязан нести ВСЕ номера. Если
+        # когда-нибудь сработает truncate_html_message — тест честно
+        # покажет, что дайджест перестал влезать в 2×4096.
+        self.assertFalse(
+            missing,
+            f"Потеряны номера ({len(missing)}/{len(expected)}): {missing}",
         )
 
     def test_dashboard_link_present(self):
@@ -662,6 +662,17 @@ class CollectCaseNumbersTest(unittest.TestCase):
             {"33-100/2026", "33-200/2026", "2-300/2026",
              "2-400/2026", "2-500/2025", "8Г-9999/2026"},
         )
+
+    def test_cass_change_prefers_internal_number(self):
+        # Шаблон рендерит касс. номер (8Г-…), а не номер 1-й инст. —
+        # валидатор должен требовать видимый в HTML номер.
+        nums = uc._collect_case_numbers(
+            cass_changes=[{
+                "case": "2-501/2025",
+                "cassation_internal_number": "8Г-77/2026",
+            }],
+        )
+        self.assertEqual(nums, {"8Г-77/2026"})
 
     def test_handles_empty_inputs(self):
         self.assertEqual(uc._collect_case_numbers(), set())

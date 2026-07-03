@@ -644,6 +644,25 @@ class AppealEventMatrixTest(unittest.TestCase):
         )
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
+    def test_status_change_alone_rendered(self):
+        # Фикс B1: change с ЕДИНСТВЕННЫМ типом status_change раньше молча
+        # выпадал из дайджеста — теперь строка «статус: X → Y» в 5.2.
+        html = render(changes=[make_appeal_change(["status_change"])])
+        self.assertIn("📅 <b>Изменения (1):</b>", html)
+        self.assertIn("статус: В производстве → Решено", html)
+        self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_new_event_without_date_shows_raw_text(self):
+        # Фикс B4: дата из события не распарсилась — показываем сырой текст
+        # события, а не пустую карточку «номер + стороны».
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Ознакомление с материалами дела",
+             "event_date": "", "hearing_date": "", "hearing_time": ""},
+        )])
+        self.assertIn("📌 Ознакомление с материалами дела", html)
+        self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
 
 # ── Апелляция: комбо-дедупы ─────────────────────────────────────────────────
 
@@ -669,6 +688,150 @@ class AppealComboTest(unittest.TestCase):
         ])
         self.assertIn("Вынесенные акты (1)", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_false_result_with_event_not_lost(self):
+        # Фикс B2: «ложный» new_result (текст события в поле «Результат»)
+        # исключался и из 5.4 (гард), и из 5.2 (по типу) — дело исчезало
+        # из дайджеста целиком. Теперь оно в 5.2 «Изменения».
+        html = render(changes=[make_appeal_change(
+            ["new_event", "new_result"],
+            {"result": "Заседание отложено на 05.08.2026 11:30",
+             "event": "Судебное заседание. 11:30. 05.08.2026",
+             "hearing_date": "05.08.2026", "hearing_time": "11:30"},
+        )])
+        self.assertNotIn("Вынесенные акты", html)
+        self.assertIn("📅 <b>Изменения (1):</b>", html)
+        self.assertIn("Заседание назначено на <b>05.08.2026 11:30</b>", html)
+        self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_event_plus_act_only_in_published_texts(self):
+        # Фикс B3: связка new_event+new_act раньше дублировалась в 5.2 и
+        # 5.5 — теперь только «Опубликованные тексты актов».
+        html = render(changes=[make_appeal_change(["new_event", "new_act"])])
+        self.assertIn("Опубликованные тексты актов (1)", html)
+        self.assertNotIn("📅 <b>Изменения", html)
+        self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+
+# ── Гибридный рендер актов: маркер «Почему:», Итог в 5.5, вёрстка ───────────
+
+def _fake_summarizer(act_text, *, case_meta):
+    return f"ПЕРЕСКАЗ_{(case_meta.get('stage') or '').upper()}"
+
+
+class HybridActRenderingTest(unittest.TestCase):
+    """Фиксы B5/B9: LLM-пересказ выводится с маркером «<b>Почему:</b>»
+    (на нём держится attach_act_analyses и drawer карточки дела), excerpt
+    остаётся без маркера; 5.5 получает строку Итог/Для банка и пустую
+    строку между делами."""
+
+    def test_pochemu_marker_in_3_6(self):
+        html = render(
+            fi_changes=[make_fi_change(["fi_act_text_published"])],
+            act_summarizer=_fake_summarizer,
+        )
+        self.assertIn(
+            "<b>Почему:</b> <i>ПЕРЕСКАЗ_FIRST_INSTANCE</i>", html
+        )
+
+    def test_pochemu_marker_in_5_5(self):
+        html = render(
+            changes=[make_appeal_change(["new_act"])],
+            act_summarizer=_fake_summarizer,
+        )
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_APPEAL</i>", html)
+
+    def test_pochemu_marker_in_cassation(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with patch.object(cm_config, "JSON_PATH",
+                          os.path.join(tmp.name, "нет.json")):
+            html = render(
+                cass_changes=[make_cass_change(["outcome_change", "new_act"])],
+                act_summarizer=_fake_summarizer,
+            )
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_CASSATION</i>", html)
+
+    def test_excerpt_fallback_has_no_pochemu(self):
+        # Сырой excerpt (LLM недоступен) — без маркера: «Почему» из
+        # необработанного куска текста выглядело бы враньём.
+        html = render(
+            fi_changes=[make_fi_change(["fi_act_text_published"])],
+            changes=[make_appeal_change(["new_act"])],
+        )
+        self.assertNotIn("Почему:", html)
+
+    def test_5_5_itog_line(self):
+        # Фикс B9: Итог из карточки + «в чью пользу» — симметрично 3.6.
+        html = render(changes=[make_appeal_change(["new_act"])])
+        self.assertIn(
+            "<b>Итог:</b> решение оставлено без изменения, "
+            "жалоба — без удовлетворения", html,
+        )
+        self.assertIn(
+            "<b>Для банка:</b> нейтрально (банк — третье лицо)", html
+        )
+
+    def test_5_5_blank_line_between_cases(self):
+        # Фикс B5: правило юриста — пустая строка между разными делами.
+        html = render(changes=[
+            make_appeal_change(["new_act"], case="33-101/2026"),
+            make_appeal_change(["new_act"], case="33-102/2026"),
+        ])
+        first_end = html.index("33-102/2026")
+        between = html[html.index("33-101/2026"):first_end]
+        self.assertIn("\n\n", between,
+                      "между делами 5.5 нет пустой строки")
+
+
+class ActAnalysisContractTest(unittest.TestCase):
+    """attach_act_analyses должен вырезать «Почему»-абзац из гибридного
+    дайджеста и класть его в cases.json (source=digest), включая кассацию,
+    где шаблон оборачивает касс. номер вместо номера 1-й инст."""
+
+    def test_appeal_act_analysis_from_hybrid_digest(self):
+        html = render(
+            changes=[make_appeal_change(["new_act"])],
+            act_summarizer=_fake_summarizer,
+        )
+        cases = [{
+            "id": "2-777/2025",
+            "appeal": {"case_number": "33-100/2026"},
+        }]
+        updated = uc.attach_act_analyses(
+            cases, html,
+            all_changes=[make_appeal_change(["new_act"])],
+            cass_changes=[],
+        )
+        self.assertEqual(updated, 1)
+        aa = cases[0]["appeal"]["act_analysis"]
+        self.assertEqual(aa["source"], "digest")
+        self.assertIn("<b>Почему:</b>", aa["html"])
+        self.assertIn("ПЕРЕСКАЗ_APPEAL", aa["html"])
+        # В абзац не должна попасть вся секция целиком (см. B5: пустые
+        # строки режут 5.5 на абзацы по-делово).
+        self.assertNotIn("Опубликованные тексты", aa["html"])
+
+    def test_cassation_act_analysis_via_cass_number(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cass_ch = make_cass_change(["outcome_change", "new_act"])
+        with patch.object(cm_config, "JSON_PATH",
+                          os.path.join(tmp.name, "нет.json")):
+            html = render(
+                cass_changes=[cass_ch], act_summarizer=_fake_summarizer,
+            )
+        cases = [{
+            "id": "2-500/2025",
+            "cassation": {"case_number": "8Г-100/2026"},
+        }]
+        updated = uc.attach_act_analyses(
+            cases, html, all_changes=[], cass_changes=[cass_ch],
+        )
+        self.assertEqual(updated, 1)
+        aa = cases[0]["cassation"]["act_analysis"]
+        self.assertEqual(aa["source"], "digest")
+        self.assertIn("ПЕРЕСКАЗ_CASSATION", aa["html"])
 
 
 # ── Кассация ─────────────────────────────────────────────────────────────────
@@ -778,14 +941,37 @@ class CassationMatrixTest(unittest.TestCase):
         self.assertIn("Новые касс. дела (1)", html)
         self.assertNotIn("Касс. события", html)
 
+    def test_discovered_with_outcome_shows_itog_and_pochemu(self):
+        # Фикс B6: discovery с уже известным исходом — раньше карточка
+        # «нового дела» молчала об исходе, он терялся из дайджеста.
+        c = make_cass_discovered()
+        c["cassation"].update({
+            "outcome": "cassation_upheld",
+            "review_result": "",
+            "result_text": "Жалоба оставлена без удовлетворения",
+            "act_text": "Судебная коллегия не установила нарушений. " * 5,
+        })
+        html = render(
+            cass_discovered=[c], act_summarizer=_fake_summarizer,
+        )
+        self.assertIn("<b>Итог:</b> Оставлено без изменения", html)
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_CASSATION</i>", html)
+
+    def test_discovered_accepted_label_suppressed(self):
+        # «📥 Принято к производству» дублирует строку «📥 поступила касс.
+        # жалоба» — в discovery-карточке метку не показываем.
+        c = make_cass_discovered()
+        c["cassation"]["review_result"] = "ПРИНЯТО К ПРОИЗВОДСТВУ"
+        html = render(cass_discovered=[c])
+        self.assertIn("поступила касс. жалоба", html)
+        self.assertNotIn("Принято к производству", html)
+
 
 # ── «Всё сразу»: полный контекст ────────────────────────────────────────────
 
-# Голый апелляционный status_change сейчас теряется шаблоном (известная дыра,
-# план Блок B1) — в матрицу «всё сразу» НЕ включён; добавится вместе с фиксом.
 APPEAL_TYPES_RENDERED = [
     "new_event", "new_result", "new_act",
-    "hearing_postponed", "hearing_new", "appeal_to_fi_rules",
+    "status_change", "hearing_postponed", "hearing_new", "appeal_to_fi_rules",
 ]
 
 FI_ALL_TYPES = [
@@ -901,8 +1087,9 @@ class AllEventTypesTest(unittest.TestCase):
         self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", self.html)
         self.assertIn("📄 <b>Опубликованные тексты решений (1):</b>", self.html)
         self.assertIn("📥 <b>Новые иски (1):</b>", self.html)
-        # Апелляция: postponed + new_event + hearing_new → «Изменения (3)».
-        self.assertIn("📅 <b>Изменения (3):</b>", self.html)
+        # Апелляция: postponed + new_event + hearing_new + голый
+        # status_change → «Изменения (4)».
+        self.assertIn("📅 <b>Изменения (4):</b>", self.html)
         self.assertIn("⚖️ <b>Вынесенные акты (1):</b>", self.html)
         self.assertIn("📄 <b>Опубликованные тексты актов (1):</b>", self.html)
         self.assertIn("⚠ <b>Переход к правилам 1-й инст. (1):</b>", self.html)
@@ -944,10 +1131,14 @@ class AllEventTypesTest(unittest.TestCase):
                              f"Markdown-заголовок: {line!r}")
 
     def test_summary_line_mentions_key_categories(self):
-        # Сводка — вторая строка дайджеста.
+        # Сводка — вторая строка дайджеста. Включая счётчики фикса B7
+        # (возвраты, касс. жалобы, направления в касс. суд, принято к
+        # производству, голый статус апелляции).
         summary_line = self.html.split("\n")[1]
         for token in ("нов. 1 инст.", "нов. апелл.", "нов. касс.",
-                      "реш. 1 инст.", "касс. акт."):
+                      "реш. 1 инст.", "касс. акт.", "возвр. исков",
+                      "касс. жалоб", "в касс. суд", "принято к пр-ву",
+                      "статус апел."):
             self.assertIn(token, summary_line)
 
 
