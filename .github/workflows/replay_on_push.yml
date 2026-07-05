@@ -26,11 +26,17 @@ concurrency:
 jobs:
   replay:
     runs-on: ubuntu-latest
-    # Анти-петля: коммит этого же workflow (last_digest.json) сделан
-    # github-actions[bot]. Пуши через GITHUB_TOKEN и так не триггерят workflow,
-    # плюс paths-фильтр смотрит только на last_digest_context.json (его replay
-    # не трогает) — но оставляем явный щит на всякий случай.
-    if: github.actor != 'github-actions[bot]'
+    # ⏸ 05.07.2026: D2-резерв УСЫПЛЁН — основной автозапуск вернулся в облако
+    # (update_cases.yml по крону). `if: false` глушит сборку дайджеста, даже
+    # если Mac ещё раз запушит last_digest_context.json (чтобы не было второго
+    # дайджеста, пока Mac-LaunchAgent не выгружен). Разбудить резерв: вернуть
+    # условие `github.actor != 'github-actions[bot]'` + `launchctl load` на Mac +
+    # отключить облачный крон в update_cases.yml. См. CLAUDE.md, «Процедура флипа».
+    #
+    # (Прежняя анти-петля: коммит last_digest.json делает github-actions[bot];
+    # GITHUB_TOKEN-пуши и так не триггерят workflow, paths-фильтр смотрит только
+    # на last_digest_context.json — но держали явный щит.)
+    if: false
 
     steps:
       - name: Checkout repository
