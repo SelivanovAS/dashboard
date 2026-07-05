@@ -1,7 +1,13 @@
 name: Update Court Cases
 
 on:
-  workflow_dispatch:  # Запуск через Cloudflare Worker (cron) или вручную из UI
+  # Основной автозапуск (с 05.07.2026 возвращён в облако): суды снова пускают
+  # US-IP GitHub (проверено probe_courts.yml), поэтому полный прогон снова
+  # умещается в один раннер — без Mac и Cloudflare Worker. Cron в UTC:
+  # 03:00 UTC = 08:00 ХМАО (UTC+5), будни. Совпадает с окном Mac-плиста-резерва.
+  schedule:
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch:  # Ручной запуск из UI (и запасной путь через Worker, если вернут)
     inputs:
       to_group:
         description: 'Отправить дайджест в корпоративную группу (TELEGRAM_CHAT_ID). Снять галку — в личный чат.'
@@ -48,9 +54,10 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          # Smart-skip: при автозапуске Worker передаёт smart_skip=true →
-          # парсер пропускает нерабочие дни и дела с известной будущей датой.
-          SKIP_NON_WORKING_DAYS: ${{ inputs.smart_skip && '1' || '' }}
+          # Smart-skip: плановый запуск (schedule) всегда smart_skip=true —
+          # парсер пропускает нерабочие дни РФ и дела с известной будущей датой
+          # (как прежний Worker-крон). Ручной запуск — по галке (дефолт false).
+          SKIP_NON_WORKING_DAYS: ${{ (inputs.smart_skip || github.event_name == 'schedule') && '1' || '' }}
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"

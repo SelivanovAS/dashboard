@@ -122,49 +122,63 @@
 }
 ```
 
-## Автозапуск (вариант D2 — с 03.07.2026, ⏳ ВРЕМЕННОЕ решение)
+## Автозапуск (с 05.07.2026 — облако; D2/Mac — спящий резерв)
 
-> **Временно до переезда на сервер.** План: перенести парсинг на российский VPS
-> (точечный прокси `COURT_PROXY_URL` → `netutil.session.proxies` — Claude и
-> Telegram ходят мимо общей session, проверено; либо полный перенос прогона).
-> После переезда Mac-звено демонтируется, расписание вернётся в инфраструктуру.
+> **История.** 02.07.2026 суды начали резать иностранные IP (`*.sudrf.ru` молча
+> дропал TLS с не-российских адресов: TCP проходит, хендшейк — нет) → парсинг с
+> GitHub (США) встал, и за день собрали раскол D2: парсинг на Mac юриста +
+> дайджест на GitHub. 05.07.2026 проверка [.github/workflows/probe_courts.yml](.github/workflows/probe_courts.yml)
+> с раннера GitHub показала: **блок сняли и для США** — US-IP снова получает 200
+> + данные по всем судам (побайтово те же страницы, что из РФ). Полный прогон
+> снова умещается в один раннер → автозапуск возвращён в облако, Mac — в резерв.
+> ⚠️ Блок появился и ушёл за 3 дня — может вернуться (см. «Процедура флипа»).
 
-⚠️ **Суды режут иностранные IP.** `*.sudrf.ru` молча дропает TLS с не-российских
-адресов (TCP проходит, хендшейк — нет). GitHub Actions ходит из США → парсинг
-судов оттуда невозможен. Одновременно `api.anthropic.com` недоступен из РФ. Отсюда
-разделение конвейера по географии (детали — [ops/mac-local-run/README.md](ops/mac-local-run/README.md)).
+### Основной путь — облако (бесплатно, без включённой машины)
 
-- **Парсинг судов — на Mac юриста** (физически в сети Сбера, egress РФ). Планировщик
-  — LaunchAgent `com.court-monitor.parse` (будни, local-время +05), запускает
-  [ops/mac-local-run/parse_and_push.sh](ops/mac-local-run/parse_and_push.sh):
-  preflight «в сети Сбера?» → пересоздание маршрута судов мимо VPN через шлюз
-  `10.217.111.250` → `ops/mac-local-run/run_parse.py` (это `main_json` с
-  заглушённой `validate_environment` — иначе `exit(2)` без секретов; доставка
-  сама скипается, контекст сохраняется) → `git commit && push`. Установка/откат
-  — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
-- **Дайджест + доставка — на GitHub** (Claude нужен для пересказов актов,
-  из РФ недоступен). Workflow
-  [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
+- **Полный прогон на GitHub Actions:** [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml)
+  по нативному крону `schedule: '0 3 * * 1-5'` (03:00 UTC = 08:00 ХМАО, будни)
+  гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
+  апелляция + 7kas → гибридный дайджест (программный рендер + Claude только на
+  пересказ мотивировок; откат — `DIGEST_FULL_LLM: "1"` в env) → Telegram (личный
+  чат `TELEGRAM_CHAT_ID_TEST`) + Web Push всем подписчикам → коммит данных.
+  Плановый прогон идёт со `smart_skip=true` (пропуск нерабочих дней РФ и дел с
+  известной будущей датой); ручной — по галке. Падение шага → 🚨-алерт в личный
+  Telegram (шаг `if: failure()`, curl без Python).
+- **Секреты** уже в repo secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_*`, `PUSH_*`) —
+  новых не нужно.
+- **Cloudflare Worker cron остаётся ОТКЛЮЧЁННЫМ** (`crons = []` в
+  [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml)): расписание
+  теперь на нативном GitHub-кроне, Worker-крон не нужен. `worker.js`, push-
+  подписки и админка — живы.
+
+### Спящий резерв — D2 (Mac-парсинг), НЕ демонтирован
+
+На случай, если суды снова закроют иностранные IP. Ничего в коде/репо не удалено:
+
+- **Парсинг на Mac юриста** (физически в сети Сбера, egress РФ): LaunchAgent
+  `com.court-monitor.parse` → [ops/mac-local-run/parse_and_push.sh](ops/mac-local-run/parse_and_push.sh)
+  (preflight «в сети Сбера?» → маршрут судов мимо VPN через шлюз `10.217.111.250`
+  → `ops/mac-local-run/run_parse.py` = `main_json` с заглушённой
+  `validate_environment` → `git commit && push`). Сейчас **усыплён**:
+  `launchctl unload ~/Library/LaunchAgents/com.court-monitor.parse.plist` (плист
+  на месте, реактивация — `launchctl load …`).
+- **Дайджест-на-push:** [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
   ловит `push` с изменённым `data/last_digest_context.json` → `--replay-last
-  --push-all` → **гибридный дайджест** (программный рендер + Claude только на
-  пересказ мотивировок; с 03.07.2026, откат — `DIGEST_FULL_LLM: "1"` в env)
-  в личный Telegram + Web Push всем подписчикам → программный линтер с
-  🩺-алертом → коммитит `last_digest.json`, `last_personal_pushes.json`,
-  `cases.json` (act_analysis) и `.act_summaries.json` (кэш пересказов) с
-  `git pull --rebase`. Анти-петля: replay не трогает контекст +
-  GITHUB_TOKEN-пуши не триггерят workflow.
-- **Cloudflare Worker cron ОТКЛЮЧЁН** (`crons = []` в
-  [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml), нужен
-  `wrangler deploy`). `worker.js` и админка подписчиков живы — выключено только
-  расписание. Вернуть прежний автозапуск — раскомментировать `crons` и задеплоить
-  (но тогда снова упрётся в блокировку судов).
-- **НЕ cron-job.org.** Планировщик теперь — LaunchAgent на Mac; расписание правится
-  в `.plist`, не в чужих крон-сервисах.
-- **Живой просмотр парсинга:** ярлык `ops/mac-local-run/Парсинг судов.command`
-  (двойной клик — текущий прогон с начала + live) и блок «🛰 Парсинг» в админке
-  Worker (`progress_pusher.py` шлёт вехи на `POST /run-progress`, auth —
-  Worker-секрет `PROGRESS_SECRET`, токен на Mac в
+  --push-all`. Пока Mac спит — молчит; push облачного крона идёт через
+  GITHUB_TOKEN и его **не триггерит** (двойного дайджеста нет).
+- **Живой просмотр парсинга (для резерва):** ярлык `ops/mac-local-run/Парсинг судов.command`
+  + блок «🛰 Парсинг» в админке Worker (`progress_pusher.py` → `POST /run-progress`,
+  auth — Worker-секрет `PROGRESS_SECRET`, токен на Mac в
   `~/.config/court-monitor/progress_token` вне репо).
+
+### Процедура флипа обратно на Mac (если блок вернётся)
+
+1. Сигнал: 🩺-алерт «все источники по нулям» / 🚨-падение прогона; при сомнении —
+   запустить `probe_courts.yml` вручную (Actions → Run workflow).
+2. Отключить облако: закомментировать `schedule:` в `update_cases.yml` (коммит).
+3. Разбудить Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
+
+Детали установки/отката Mac-звена — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
 
 ## Жизненный цикл дела (state machine)
 
