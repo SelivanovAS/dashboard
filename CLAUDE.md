@@ -163,9 +163,11 @@
   `launchctl unload ~/Library/LaunchAgents/com.court-monitor.parse.plist` (плист
   на месте, реактивация — `launchctl load …`).
 - **Дайджест-на-push:** [.github/workflows/replay_on_push.yml](.github/workflows/replay_on_push.yml)
-  ловит `push` с изменённым `data/last_digest_context.json` → `--replay-last
-  --push-all`. Пока Mac спит — молчит; push облачного крона идёт через
-  GITHUB_TOKEN и его **не триггерит** (двойного дайджеста нет).
+  ловил `push` с изменённым `data/last_digest_context.json` → `--replay-last
+  --push-all`. Сейчас **заглушён** (`if: false` на job'е) — страховка от второго
+  дайджеста, если Mac ещё раз отработает до выгрузки LaunchAgent'а. Разбудить —
+  вернуть `if: github.actor != 'github-actions[bot]'`. (Push облачного крона и
+  так идёт через GITHUB_TOKEN и его бы не триггерил.)
 - **Живой просмотр парсинга (для резерва):** ярлык `ops/mac-local-run/Парсинг судов.command`
   + блок «🛰 Парсинг» в админке Worker (`progress_pusher.py` → `POST /run-progress`,
   auth — Worker-секрет `PROGRESS_SECRET`, токен на Mac в
@@ -176,7 +178,9 @@
 1. Сигнал: 🩺-алерт «все источники по нулям» / 🚨-падение прогона; при сомнении —
    запустить `probe_courts.yml` вручную (Actions → Run workflow).
 2. Отключить облако: закомментировать `schedule:` в `update_cases.yml` (коммит).
-3. Разбудить Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
+3. Включить дайджест-на-push: в `replay_on_push.yml` вернуть
+   `if: github.actor != 'github-actions[bot]'` вместо `if: false` (коммит).
+4. Разбудить Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
 
 Детали установки/отката Mac-звена — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
 

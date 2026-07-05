@@ -153,9 +153,10 @@ launchctl list | grep court-monitor   # должно быть пусто
 ```
 
 **Разбудить** (если суды снова закрыли иностранные IP — см. «Процедура флипа» в
-CLAUDE.md). ⚠️ Сначала **отключи облачный крон**, иначе GitHub будет параллельно
-пытаться парсить заблокированные суды: закомментируй `schedule:` в
-`.github/workflows/update_cases.yml` и закоммить. Затем:
+CLAUDE.md). ⚠️ Сначала со стороны GitHub (коммит): **отключи облачный крон**
+(закомментируй `schedule:` в `.github/workflows/update_cases.yml`) и **включи
+дайджест-на-push** (в `.github/workflows/replay_on_push.yml` верни
+`if: github.actor != 'github-actions[bot]'` вместо `if: false`). Затем на Mac:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist
