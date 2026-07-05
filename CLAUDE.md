@@ -136,7 +136,7 @@
 ### Основной путь — облако (бесплатно, без включённой машины)
 
 - **Полный прогон на GitHub Actions:** [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml)
-  по нативному крону `schedule: '0 3 * * 1-5'` (03:00 UTC = 08:00 ХМАО, будни)
+  по нативному крону `schedule: '45 3 * * 1-5'` (03:45 UTC = 08:45 ХМАО, будни)
   гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
   апелляция + 7kas → гибридный дайджест (программный рендер + Claude только на
   пересказ мотивировок; откат — `DIGEST_FULL_LLM: "1"` в env) → Telegram (личный
