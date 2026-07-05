@@ -136,8 +136,8 @@
 ### Основной путь — облако (бесплатно, без включённой машины)
 
 - **Полный прогон на GitHub Actions:** [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml)
-  по нативному крону `schedule: '45 3 * * 1-5'` (03:45 UTC = 08:45 ХМАО, будни)
-  гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
+  — Cloudflare Worker по крону дёргает его через `workflow_dispatch` (03:45 UTC =
+  08:45 ХМАО, пн-пт) — гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
   апелляция + 7kas → гибридный дайджест (программный рендер + Claude только на
   пересказ мотивировок; откат — `DIGEST_FULL_LLM: "1"` в env) → Telegram (личный
   чат `TELEGRAM_CHAT_ID_TEST`) + Web Push всем подписчикам → коммит данных.
@@ -146,10 +146,12 @@
   Telegram (шаг `if: failure()`, curl без Python).
 - **Секреты** уже в repo secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_*`, `PUSH_*`) —
   новых не нужно.
-- **Cloudflare Worker cron остаётся ОТКЛЮЧЁННЫМ** (`crons = []` в
-  [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml)): расписание
-  теперь на нативном GitHub-кроне, Worker-крон не нужен. `worker.js`, push-
-  подписки и админка — живы.
+- **Планировщик — Cloudflare Worker cron** (`crons = ["45 3 * * mon-fri"]` в
+  [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml); применяется
+  только после `wrangler deploy`). Worker дёргает `workflow_dispatch`
+  `update_cases.yml` с `smart_skip=true` (`worker.js:1139` — `scheduled`).
+  ⚠️ `mon-fri` буквами, не `1-5`: Cloudflare нумерует дни 1=Sun..7=Sat. push-
+  подписки и админка Worker'а — там же.
 
 ### Спящий резерв — D2 (Mac-парсинг), НЕ демонтирован
 
@@ -177,7 +179,8 @@
 
 1. Сигнал: 🩺-алерт «все источники по нулям» / 🚨-падение прогона; при сомнении —
    запустить `probe_courts.yml` вручную (Actions → Run workflow).
-2. Отключить облако: закомментировать `schedule:` в `update_cases.yml` (коммит).
+2. Отключить облако: вернуть `crons = []` в `wrangler.toml` + `wrangler deploy`
+   (Worker перестанет дёргать прогон).
 3. Включить дайджест-на-push: в `replay_on_push.yml` вернуть
    `if: github.actor != 'github-actions[bot]'` вместо `if: false` (коммит).
 4. Разбудить Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
