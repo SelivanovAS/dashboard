@@ -1,0 +1,64 @@
+name: 🔬 Проба доступа к судам с GitHub (US-egress)
+
+# Диагностический одноразовый workflow. Проверяет, отвечают ли сайты судов
+# на американский IP раннера GitHub Actions (после того как 02.07.2026 суды
+# начали резать иностранные IP → раскол D2). НИЧЕГО не парсит, не коммитит,
+# не шлёт дайджест — только curl + реальный запрос парсера и печать статуса.
+# Запуск вручную: вкладка Actions → этот workflow → Run workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сырой curl — TLS-хендшейк и HTTP-код (подпись блока)
+        run: |
+          for host in oblsud--hmao.sudrf.ru surggor--hmao.sudrf.ru 7kas.sudrf.ru; do
+            echo "=== $host ==="
+            curl -sS -o /dev/null \
+              --connect-timeout 12 --max-time 25 \
+              -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -w "  code=%{http_code}  time_connect(TCP)=%{time_connect}s  time_appconnect(TLS)=%{time_appconnect}s  time_total=%{time_total}s\n" \
+              "https://$host/" || echo "  curl ВЕРНУЛ ОШИБКУ (код 000 = TLS/таймаут — вероятен блок)"
+            echo
+          done
+
+      - name: Python — реальный запрос парсера (приходят ли данные)
+        run: |
+          python3 -m pip install --quiet requests
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          from court_monitor import courts
+          from court_monitor.netutil import session
+
+          targets = [
+              ("Апелляция ХМАО",   courts.APPEAL_COURT),
+              ("Сургутский горсуд", courts.FIRST_INSTANCE_COURTS[0]),
+              ("Нижневартовский ГС", courts.FIRST_INSTANCE_COURTS[2]),
+              ("7-й КСОЮ",          courts.CASSATION_COURT),
+          ]
+          ok = 0
+          for label, c in targets:
+              url = c.search_url()
+              try:
+                  r = session.get(url, timeout=30)
+                  body = r.content.decode("windows-1251", errors="replace")
+                  marks = []
+                  if "Данных по запросу не обнаружено" in body: marks.append("НЕТ ДАННЫХ")
+                  if "Сбербанк" in body: marks.append("данные ✓");
+                  if "sud_delo" in body: marks.append("таблица дел")
+                  if "Сбербанк" in body: ok += 1
+                  print(f"{label:20} HTTP {r.status_code}  len={len(body):>7}  {' | '.join(marks) or '—'}")
+              except Exception as e:
+                  print(f"{label:20} ОШИБКА: {type(e).__name__}: {e}")
+          print()
+          print(f"ИТОГ: с данными {ok}/{len(targets)}")
+          print(">>> Если у всех 'данные ✓' — блок для US снят, облако снова может парсить.")
+          print(">>> Если ОШИБКА/таймаут или 'НЕТ ДАННЫХ' — блок для GitHub жив, Mac-схема оправдана.")
+          PY
