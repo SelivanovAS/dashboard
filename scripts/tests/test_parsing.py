@@ -353,6 +353,19 @@ class TestParseCaseCardCassation:
         info = uc.parse_case_card(html)
         assert info["_fi_appeal_filed"] is True
 
+    def test_cassation_representation_detected(self):
+        """Кассационное представление (прокурорский аналог жалобы) в движении
+        дела — тоже касс. событие. Регресс 2-716/2025: регекс требовал слова
+        «жалоба» и пропускал «представление» (апелляционный регекс при этом
+        обе формы уже принимал)."""
+        html = _synthetic_fi_card(
+            "Поступило кассационное представление прокурора", "02.07.2026"
+        )
+        info = uc.parse_case_card(html)
+        assert info["_fi_cassation_filed"] is True
+        assert info["_fi_cassation_filed_date"] == "02.07.2026"
+        assert info["_fi_appeal_filed"] is False
+
 
 # ── parse_case_card: вложенная вкладка «Обжалование» (регресс 2-3063/2026) ────
 
@@ -1822,3 +1835,187 @@ class TestMatchHmaoFirstInstance:
         )
         assert cfg is not None
         assert cfg.name == "Урайский городской суд"
+
+
+# ── Бэкфилл ссылок на карточку 1-й инст. (регресс 2-716/2025) ────────────────
+# У дел, пришедших «сверху» (через поиск апелляции), first_instance.link пуст —
+# карточка 1-й инст. не парсилась, cassation_watch слеп к касс. жалобам.
+# Фикс: целевой поиск по номеру дела (G1_CASE__CASE_NUMBERSS, проверен вживую
+# на surggor--hmao.sudrf.ru 06.07.2026) → find_fi_case_link → fi.link.
+
+from court_monitor import linking as cm_linking  # noqa: E402
+from court_monitor.courts import (  # noqa: E402
+    APPEAL_COURT, match_fi_court_by_short_name,
+)
+from court_monitor.parsing import find_fi_case_link  # noqa: E402
+
+_BF_CASE_ID = "233606509"
+_BF_CASE_UID = "25707f8a-0aa3-4ee3-b4b8-601fccfcf8f5"
+
+
+def _fi_number_search_html(num_cell_text: str) -> str:
+    """Синтетическая выдача поиска по номеру дела (по образцу реальной
+    страницы surggor--hmao.sudrf.ru): шапка + таблица результатов с
+    заголовком «№ дела / Дата поступления» (её ищет _find_results_table)."""
+    return (
+        "<html><body>"
+        "<table><tr><td>шапка сайта</td></tr></table>"
+        "<table>"
+        "<tr><th>№ дела</th><th>Дата поступления</th><th>Категория</th></tr>"
+        "<tr><td>"
+        f"<a href='/modules.php?name=sud_delo&srv_num=1&name_op=case"
+        f"&case_id={_BF_CASE_ID}&case_uid={_BF_CASE_UID}&delo_id=1540005'>"
+        f"{num_cell_text}</a>"
+        "</td><td>13.11.2024</td><td>КАТЕГОРИЯ: Иные споры</td></tr>"
+        "</table>"
+        "</body></html>"
+    )
+
+
+class TestSearchByNumberUrl:
+    def test_first_instance_url_contains_number_field(self):
+        court = match_fi_court_by_short_name("Сургутский городской суд")
+        url = court.search_by_number_url("2-716/2025")
+        assert "surggor--hmao.sudrf.ru" in url
+        assert "G1_CASE__CASE_NUMBERSS=2-716%2F2025" in url
+        assert "delo_id=1540005" in url
+        assert "new=0" in url
+        assert "delo_table=g1_case" in url
+
+    def test_appeal_court_rejected(self):
+        """Поле G1_CASE__* — только для 1-й инст.; апелляция должна падать
+        явно, а не молча искать не в той таблице."""
+        with pytest.raises(ValueError):
+            APPEAL_COURT.search_by_number_url("33-1/2026")
+
+
+class TestMatchFiCourtByShortName:
+    def test_exact_name(self):
+        cfg = match_fi_court_by_short_name("Сургутский городской суд")
+        assert cfg is not None and cfg.domain == "surggor--hmao.sudrf.ru"
+
+    def test_eyo_normalization(self):
+        """В данных «Березовский» через е, в реестре «Берёзовский» через ё."""
+        cfg = match_fi_court_by_short_name("Березовский районный суд")
+        assert cfg is not None and cfg.domain == "berezovo--hmao.sudrf.ru"
+
+    def test_unknown_court_returns_none(self):
+        assert match_fi_court_by_short_name("Суд ХМАО-Югры") is None
+        assert match_fi_court_by_short_name("") is None
+
+
+class TestFindFiCaseLink:
+    def test_combo_number_row_extracted(self):
+        """Реальный формат ячейки: «2-716/2025 (2-9422/2024;) ~ М-7693/2024»."""
+        html = _fi_number_search_html("2-716/2025 (2-9422/2024;) ~ М-7693/2024")
+        assert find_fi_case_link(html, "2-716/2025") == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
+
+    def test_exact_number_row_extracted(self):
+        html = _fi_number_search_html("2-716/2025")
+        assert find_fi_case_link(html, "2-716/2025") == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
+
+    def test_substring_number_does_not_match(self):
+        """Сервер ищет подстрокой: запрос «2-71/2025» вернёт и «2-716/2025» —
+        граница номера обязана отсечь чужую строку."""
+        html = _fi_number_search_html("2-716/2025 (2-9422/2024;) ~ М-7693/2024")
+        assert find_fi_case_link(html, "2-71/2025") == ""
+
+    def test_empty_page_returns_empty(self):
+        assert find_fi_case_link("<html><body>ничего</body></html>", "2-716/2025") == ""
+
+
+class TestBackfillFiLinks:
+    def _case(self, num="2-716/2025", court="Сургутский городской суд",
+              stage="cassation_watch", link=""):
+        return {
+            "id": num,
+            "current_stage": stage,
+            "first_instance": {"case_number": num, "court": court,
+                               "court_domain": "", "link": link},
+        }
+
+    @pytest.fixture(autouse=True)
+    def _no_delay(self, monkeypatch):
+        monkeypatch.setattr(cm_linking, "polite_delay", lambda: None)
+
+    def test_fills_link_and_domain(self, monkeypatch):
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return _fi_number_search_html(
+                "2-716/2025 (2-9422/2024;) ~ М-7693/2024"
+            )
+
+        monkeypatch.setattr(cm_linking, "fetch_page", fake_fetch)
+        cases = [self._case()]
+        assert cm_linking.backfill_fi_links(cases) == 1
+        fi = cases[0]["first_instance"]
+        assert fi["link"] == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
+        assert fi["court_domain"] == "surggor--hmao.sudrf.ru"
+        assert len(fetched_urls) == 1
+        assert "G1_CASE__CASE_NUMBERSS=2-716%2F2025" in fetched_urls[0]
+
+    def test_eyo_court_name_matches_registry(self, monkeypatch):
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url: _fi_number_search_html("2-18/2026"),
+        )
+        cases = [self._case(num="2-18/2026", court="Березовский районный суд")]
+        assert cm_linking.backfill_fi_links(cases) == 1
+        assert cases[0]["first_instance"]["court_domain"] == "berezovo--hmao.sudrf.ru"
+
+    def test_existing_link_untouched_no_fetch(self, monkeypatch):
+        def boom(url):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(link="111|aaa-bbb")]
+        assert cm_linking.backfill_fi_links(cases) == 0
+        assert cases[0]["first_instance"]["link"] == "111|aaa-bbb"
+
+    def test_unknown_court_skipped_no_fetch(self, monkeypatch):
+        def boom(url):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(court="Суд ХМАО-Югры")]
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_inactive_stage_skipped(self, monkeypatch):
+        """appeal/awaiting_appeal — карточка 1-й инст. не нужна, не тратим
+        запросы; дозаполнится при переходе в cassation_watch."""
+        def boom(url):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(stage="appeal")]
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_not_found_in_results_leaves_empty(self, monkeypatch, caplog):
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url: _fi_number_search_html("2-9999/2025"),
+        )
+        cases = [self._case()]
+        with caplog.at_level(logging.WARNING, logger="court-monitor"):
+            assert cm_linking.backfill_fi_links(cases) == 0
+        assert cases[0]["first_instance"]["link"] == ""
+        assert "не найдено" in caplog.text or "не достроена" in caplog.text
+
+    def test_cap_limits_requests_per_run(self, monkeypatch):
+        fetched = []
+
+        def fake_fetch(url):
+            fetched.append(url)
+            return _fi_number_search_html("2-1/2025")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", fake_fetch)
+        cases = [
+            self._case(num="2-1/2025"),
+            self._case(num="2-2/2025"),
+        ]
+        assert cm_linking.backfill_fi_links(cases, max_per_run=1) == 1
+        assert len(fetched) == 1
+        # Второе дело не тронуто — доберётся на следующем прогоне.
+        assert cases[1]["first_instance"]["link"] == ""

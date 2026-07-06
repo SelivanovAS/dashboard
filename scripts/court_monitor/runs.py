@@ -61,7 +61,7 @@ from court_monitor.lifecycle import (
 from court_monitor.linking import (
     find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
-    rotate_cold_archive, _fi_search_to_json_case,
+    rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
 )
 from court_monitor.netutil import fetch_page, polite_delay, session
 from court_monitor.parsing import (
@@ -1193,6 +1193,14 @@ def main_json():
     # awaiting_appeal / appeal / cassation_pending — парсинг 1-й инст.
     # не нужен (см. advance_case_stage).
     t0 = time.perf_counter()
+    # Бэкфилл ссылок на карточку 1-й инст. для дел, пришедших «сверху» (через
+    # поиск апелляции): у них link/court_domain пусты, и без этого цикл ниже
+    # пропускает дело до всякого запроса — стадия cassation_watch слепнет
+    # (инцидент 2-716/2025: не увидели «Кассационное представление»).
+    # Целевой поиск по номеру дела; ссылка персистится — запрос одноразовый.
+    backfilled = backfill_fi_links(cases)
+    if backfilled:
+        log.info(f"Достроено ссылок на карточку 1-й инст.: {backfilled}")
     fi_active = [
         c for c in cases
         if c.get("current_stage") in ("first_instance", "cassation_watch")

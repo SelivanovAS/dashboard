@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from dataclasses import dataclass
 
 from court_monitor.textutil import case_id_uid, escape_html
@@ -73,6 +74,27 @@ class CourtConfig:
             f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
             f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
             f"&{self._name_field}={party_name_encoded}"
+            f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def search_by_number_url(self, case_number: str) -> str:
+        """URL целевого поиска по номеру дела (только 1-я инстанция, g1_case).
+
+        Поле G1_CASE__CASE_NUMBERSS проверено вживую на surggor--hmao.sudrf.ru
+        (06.07.2026): «2-716/2025» вернул ровно одну строку с href карточки.
+        Сервер ищет подстрокой — точную границу номера проверяет клиентская
+        сторона (см. find_fi_case_link). Остальные параметры — как в search_url.
+        """
+        if self.court_type != "first_instance":
+            raise ValueError(
+                f"search_by_number_url поддерживает только суды 1-й инстанции, "
+                f"получен {self.court_type} ({self.name})"
+            )
+        num_enc = urllib.parse.quote(case_number, safe="")
+        return (
+            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
+            f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
+            f"&G1_CASE__CASE_NUMBERSS={num_enc}"
             f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
         )
 
@@ -208,6 +230,24 @@ def case_card_url(case: dict, court: CourtConfig | None = None) -> str:
 _FI_COURTS_BY_DOMAIN: dict[str, CourtConfig] = {}
 for _c in FIRST_INSTANCE_COURTS:
     _FI_COURTS_BY_DOMAIN.setdefault(_c.domain, _c)
+
+# Индекс судов 1-й инст. по нормализованному короткому имени (ё→е) — для
+# бэкфилла ссылок на карточку 1-й инст. по имени суда из cases.json.
+_FI_COURTS_BY_NAME: dict[str, CourtConfig] = {}
+for _c in FIRST_INSTANCE_COURTS:
+    _FI_COURTS_BY_NAME.setdefault(_eyo(_c.name.lower()), _c)
+
+
+def match_fi_court_by_short_name(short_name: str) -> CourtConfig | None:
+    """CourtConfig 1-й инст. по короткому имени («Сургутский городской суд»).
+
+    Нормализует ё→е: в данных встречается «Березовский районный суд» против
+    реестрового «Берёзовский» (ГАС «Правосудие» пишет ё непоследовательно).
+    None — суд не из нашего реестра (например, «Суд ХМАО-Югры» как 1-я инст.).
+    """
+    if not short_name:
+        return None
+    return _FI_COURTS_BY_NAME.get(_eyo(short_name.strip().lower()))
 
 
 def fi_card_url(fi_or_details: dict) -> str:

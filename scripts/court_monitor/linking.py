@@ -16,6 +16,7 @@ from court_monitor import config
 from court_monitor.config import log, cold_archive_path
 from court_monitor.courts import (
     CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
+    match_fi_court_by_short_name,
 )
 from court_monitor.lifecycle import (
     _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
@@ -24,6 +25,7 @@ from court_monitor.lifecycle import (
 from court_monitor.netutil import fetch_page, polite_delay
 from court_monitor.parsing import (
     parse_cassation_card, classify_cassation_outcome, cassation_remanded_to,
+    find_fi_case_link,
 )
 from court_monitor.storage import (
     load_cassation_acts, save_cassation_acts, _cassation_act_key,
@@ -268,6 +270,79 @@ def relink_awaiting_relink_first_instance(
             for k in [k for k, v in awaiting.items() if v is case]:
                 del awaiting[k]
     return relinked
+
+
+def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
+    """Достроить `first_instance.link`/`court_domain` целевым поиском по номеру.
+
+    Зачем: у дел, попавших в мониторинг «сверху» (через поиск апелляции),
+    ссылку на карточку 1-й инст. никто не проставляет — её пишет только
+    `_fi_search_to_json_case` при первичном обнаружении поиском 1-й инст.
+    Без ссылки цикл обновления карточек 1-й инст. пропускает дело до всякого
+    запроса, и стадия `cassation_watch` слепнет: подача касс. жалобы в
+    карточке не видна (инцидент 2-716/2025, «Кассационное представление»
+    от 02.07.2026). Общий свип не спасает: он качает только первую страницу
+    выдачи (сортировка по дате поступления), старые дела туда не попадают.
+
+    Механика: для активных дел в стадиях `first_instance`/`cassation_watch`
+    с непустым `case_number` и пустым `link` ищем суд по короткому имени
+    (ё-нормализация) и дёргаем поиск по номеру дела
+    (`CourtConfig.search_by_number_url`). Совпавшую строку выдачи проверяет
+    `find_fi_case_link` (граница номера — от ложных подстрочных матчей).
+    Ссылка персистится в cases.json — запрос одноразовый на дело.
+
+    max_per_run — кэп запросов на прогон (защита от лавины на первом прогоне
+    с накопленным долгом ~55 дел); хвост доберётся на следующих прогонах.
+
+    Возвращает число дел, которым достроили ссылку.
+    """
+    filled = 0
+    attempted = 0
+    for case in cases:
+        if case.get("current_stage") not in ("first_instance", "cassation_watch"):
+            continue
+        fi = case.get("first_instance")
+        if not isinstance(fi, dict):
+            continue
+        num = (fi.get("case_number") or "").strip()
+        if not num or (fi.get("link") or "").strip():
+            continue
+        court = match_fi_court_by_short_name(fi.get("court") or "")
+        if court is None:
+            log.debug(
+                f"  backfill_fi_links: {num} — суд «{fi.get('court', '')}» "
+                f"не из реестра 1-й инст., пропуск"
+            )
+            continue
+        if attempted >= max_per_run:
+            log.info(
+                f"  backfill_fi_links: достигнут кэп {max_per_run} запросов, "
+                f"остальные дела — на следующем прогоне"
+            )
+            break
+        attempted += 1
+        polite_delay()
+        html = fetch_page(court.search_by_number_url(num))
+        if not html:
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — поиск по номеру "
+                f"не загрузился"
+            )
+            continue
+        link = find_fi_case_link(html, num)
+        if not link:
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — дело не найдено "
+                f"в выдаче поиска по номеру, ссылка не достроена"
+            )
+            continue
+        fi["link"] = link
+        fi["court_domain"] = court.domain
+        if not (fi.get("court") or "").strip():
+            fi["court"] = court.name
+        filled += 1
+        log.info(f"  backfill_fi_links: {num} → карточка {court.domain} ({link})")
+    return filled
 
 
 def reactivate_archived_first_instance(
