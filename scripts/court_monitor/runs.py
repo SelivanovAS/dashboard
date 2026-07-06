@@ -44,6 +44,7 @@ from court_monitor.health import (
 )
 from court_monitor.lifecycle import (
     advance_case_stage, is_archived, is_case_archived, migrate_stages,
+    should_parse_fi_card,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
     split_archived, split_archived_json, should_skip_case,
@@ -1201,11 +1202,12 @@ def main_json():
     backfilled = backfill_fi_links(cases)
     if backfilled:
         log.info(f"Достроено ссылок на карточку 1-й инст.: {backfilled}")
-    fi_active = [
-        c for c in cases
-        if c.get("current_stage") in ("first_instance", "cassation_watch")
-        and c.get("first_instance", {}).get("case_number")
-    ]
+    # Парсим карточку 1-й инст. в first_instance/cassation_watch, а также в
+    # awaiting_appeal/cassation_pending — ПОКА дело не направлено в вышестоящий
+    # суд (продолжаем следить за карточкой 1-й инст. до sent_to_*; см.
+    # should_parse_fi_card и ТЗ юриста «продолжаем парсить до направления в
+    # кассацию/апелляцию либо появления карточки в вышестоящем суде»).
+    fi_active = [c for c in cases if should_parse_fi_card(c)]
     log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
     # Нормализация: снимаем ложный «Решено» там, где назначено будущее
     # заседание (карточка такого дела часто скипается smart-skip'ом, поэтому

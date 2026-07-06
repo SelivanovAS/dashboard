@@ -20,7 +20,7 @@ from court_monitor.courts import (
 )
 from court_monitor.lifecycle import (
     _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
-    _infer_archived_at, _parse_iso_date,
+    _infer_archived_at, _parse_iso_date, should_parse_fi_card,
 )
 from court_monitor.netutil import fetch_page, polite_delay
 from court_monitor.parsing import (
@@ -284,8 +284,10 @@ def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
     от 02.07.2026). Общий свип не спасает: он качает только первую страницу
     выдачи (сортировка по дате поступления), старые дела туда не попадают.
 
-    Механика: для активных дел в стадиях `first_instance`/`cassation_watch`
-    с непустым `case_number` и пустым `link` ищем суд по короткому имени
+    Механика: для дел, по которым на этом прогоне нужен парсинг карточки 1-й
+    инст. (`should_parse_fi_card`: first_instance/cassation_watch, а также
+    awaiting_appeal/cassation_pending до направления в вышестоящий суд), с
+    непустым `case_number` и пустым `link` ищем суд по короткому имени
     (ё-нормализация) и дёргаем поиск по номеру дела
     (`CourtConfig.search_by_number_url`). Совпавшую строку выдачи проверяет
     `find_fi_case_link` (граница номера — от ложных подстрочных матчей).
@@ -299,7 +301,7 @@ def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
     filled = 0
     attempted = 0
     for case in cases:
-        if case.get("current_stage") not in ("first_instance", "cassation_watch"):
+        if not should_parse_fi_card(case):
             continue
         fi = case.get("first_instance")
         if not isinstance(fi, dict):
