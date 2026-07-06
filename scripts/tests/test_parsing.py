@@ -1438,6 +1438,54 @@ class TestBankSideOutcome:
 
 # ── build_summary_line ───────────────────────────────────────────────────────
 
+class TestTextShorteners:
+    """Хелперы вёрстки дайджеста (правки читаемости 06.07.2026)."""
+
+    def test_plural_ru(self):
+        from court_monitor.textutil import plural_ru
+        assert plural_ru(1, "дело", "дела", "дел") == "дело"
+        assert plural_ru(2, "дело", "дела", "дел") == "дела"
+        assert plural_ru(5, "дело", "дела", "дел") == "дел"
+        assert plural_ru(11, "дело", "дела", "дел") == "дел"
+        assert plural_ru(21, "дело", "дела", "дел") == "дело"
+        assert plural_ru(114, "дело", "дела", "дел") == "дел"
+
+    def test_role_genitive_has_zayavitel(self):
+        """«Заявитель» — статус 7kas, из-за его отсутствия в словаре
+        старый формат выдавал «подана Заявитель X» без склонения."""
+        from court_monitor.textutil import ROLE_GENITIVE
+        assert ROLE_GENITIVE["Заявитель"] == "заявителя"
+        assert ROLE_GENITIVE["Ответчик"] == "ответчика"
+
+    def test_org_form_abbreviated(self):
+        """Полные формы кооперативов/товариществ → аббревиатуры: одна
+        организация одинаково выглядит в шапке дела и в строке «Итог»."""
+        assert uc.shorten_party_name(
+            "Жилищный накопительный кооператив «Единство»"
+        ) == "ЖНК Единство"
+        assert uc.shorten_party_name(
+            "Товарищество собственников жилья Уют"
+        ) == "ТСЖ Уют"
+        # Уже сокращённое имя не трогаем.
+        assert uc.shorten_party_name("ЖНК Единство") == "ЖНК Единство"
+
+    def test_fio_initials_in_multi_party_list(self):
+        """Инициалы в перечислении сторон (выбор юриста 06.07.2026)."""
+        assert uc.shorten_party_name(
+            "Подкин Николай Сергеевич, Подкина Любовь Сергеевна"
+        ) == "Подкин Н.С., Подкина Л.С."
+
+    def test_category_short_cuts_at_word_boundary(self):
+        """Обрезка по границе слова: «иные, связанные с на…» → «…с…»."""
+        cut = uc.category_short(
+            "иные, связанные с наследственными правоотношениями"
+        )
+        assert cut == "иные, связанные с…"
+        # Короткие категории и маппинг — без изменений.
+        assert uc.category_short("Жилищные споры") == "жилищн. спор"
+        assert uc.category_short("прочие иски") == "прочие иски"
+
+
 class TestBuildSummaryLine:
     def test_empty_input(self):
         """Пустые данные — фраза «без изменений»."""
@@ -1455,14 +1503,18 @@ class TestBuildSummaryLine:
         assert "смен статуса" not in line
 
     def test_event_counter_still_works(self):
-        """Другие счётчики не затронуты правкой."""
+        """Другие счётчики не затронуты правкой.
+
+        Формат 06.07.2026: слова вместо аббревиатур («1 событие в апелляции»
+        вместо «1 событ.»), склонение по числу через plural_ru.
+        """
         changes = [
             {"type": ["new_event"], "case": "33-1/2026", "details": {}},
             {"type": ["hearing_postponed"], "case": "33-2/2026", "details": {}},
         ]
         line = uc.build_summary_line([], changes, [], [], [])
-        assert "1 событ." in line
-        assert "1 отлож." in line
+        assert "1 событие в апелляции" in line
+        assert "1 отложение в апелляции" in line
 
 
 # ── generate_template_digest — дефолты убраны ────────────────────────────────
@@ -2097,3 +2149,83 @@ class TestBackfillFiLinks:
         assert len(fetched) == 1
         # Второе дело не тронуто — доберётся на следующем прогоне.
         assert cases[1]["first_instance"]["link"] == ""
+
+
+# ── classify_appellant_role: слово-роль vs имя ──────────────────────────────
+class TestClassifyAppellantRole:
+    """Вкладка «Обжалование» карточки 1-й инст. в поле «Заявитель» даёт
+    слово-роль («ИСТЕЦ»/«ОТВЕТЧИК»), а не ФИО. Классификатор обязан вернуть
+    роль напрямую, не уходя ложно в «Иное лицо»."""
+
+    def test_bare_role_plaintiff(self):
+        assert uc.classify_appellant_role(
+            "ИСТЕЦ", "ПАО Сбербанк", "Иванов Иван Иванович"
+        ) == ("Истец", "Истец")
+
+    def test_bare_role_defendant(self):
+        assert uc.classify_appellant_role(
+            "ОТВЕТЧИК", "Иванов", "ПАО Сбербанк"
+        ) == ("Ответчик", "Ответчик")
+
+    def test_bare_role_case_insensitive_and_spaced(self):
+        assert uc.classify_appellant_role("  Ответчик  ", "", "")[0] == "Ответчик"
+        assert uc.classify_appellant_role("третье лицо", "", "")[0] == "Третье лицо"
+
+    def test_name_still_matches_party(self):
+        """Именной вход по-прежнему матчится токенами (регресс)."""
+        role, _ = uc.classify_appellant_role(
+            "ПАО Сбербанк", "ПАО Сбербанк", "Иванов Иван Иванович"
+        )
+        assert role == "Истец"
+
+    def test_empty_returns_empty(self):
+        assert uc.classify_appellant_role("", "Истец", "Ответчик") == ("", "")
+
+
+# ── _apply_fi_appellant: персист апеллянта в first_instance ──────────────────
+class TestApplyFiAppellant:
+    """Апеллянт из карточки 1-й инст. должен попадать в first_instance
+    (источник бейджа «Апеллянт») даже без блока appeal."""
+
+    def _apply(self, fi, case_j, raw):
+        from court_monitor.runs import _apply_fi_appellant
+        return _apply_fi_appellant(fi, case_j, {"_fi_appellant_raw": raw})
+
+    def test_bank_defendant_files_appeal(self):
+        """Банк — ответчик, жалобу подал ответчик → банк-апеллянт."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert fi["appeal_appellant_status"] == "Ответчик"
+        assert fi["appeal_appellant_is_bank"] is True
+
+    def test_opponent_files_appeal(self):
+        """Банк — ответчик, жалобу подал истец → не банк-апеллянт."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ИСТЕЦ") is True
+        assert fi["appeal_appellant_status"] == "Истец"
+        assert fi["appeal_appellant_is_bank"] is False
+
+    def test_no_raw_noop(self):
+        fi = {}
+        assert self._apply(fi, {}, "") is False
+        assert fi == {}
+
+    def test_idempotent(self):
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is False  # ничего не поменялось
+
+    def test_also_fills_existing_appeal_block(self):
+        """Если блок appeal уже создан — синхронно заполняем и его."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик", "appeal": {"case_number": "33-1/2026"}}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert cj["appeal"]["appellant_status"] == "Ответчик"
+        assert cj["appeal"]["appellant_is_bank"] is True
