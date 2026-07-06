@@ -30,7 +30,7 @@ from court_monitor.parsing import (
 from court_monitor.storage import load_json
 from court_monitor.textutil import (
     escape_html, shorten_party_name, shorten_court_name, _bare_case_number,
-    parties_short, parse_date, case_id_uid, ROLE_INSTRUMENTAL,
+    parties_short, parse_date, case_id_uid, ROLE_GENITIVE, plural_ru,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -42,6 +42,14 @@ def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
     """
     s = ((plaintiff or "") + " " + (defendant or "")).lower()
     return "сбербанк" in s
+
+
+# ФИО физлиц в дайджесте: False — инициалы («Подкин Н.С.», выбор юриста
+# 06.07.2026 — полные ФИО раздували строки сторон на 2-3 физлицах), True —
+# полные ФИО (прежнее поведение). НЕ влияет на payload LLM-пересказов
+# мотивировок: туда имена идут полными (keep_fio_full=_DIGEST_FIO_FULL), чтобы LLM
+# сматчил стороны с текстом акта.
+_DIGEST_FIO_FULL = False
 
 
 # Шумовые сегменты текста события (через «. »): тип сессии, время, зал,
@@ -135,6 +143,30 @@ def _section_break(block: list[str]) -> None:
     block.append("")
 
 
+# Заголовок подсекции — единственные строки блока, чей <b>-текст кончается
+# на «(N):» («📅 Изменения (3):», «📥 Новые дела (1):» …). Строки дел/событий
+# такой формы не имеют, поэтому по ней надёжно отличаем заголовок раздела.
+_SUBSECTION_COUNT_HEADER_RE = re.compile(r'\(\d+\):</b>\s*$')
+
+
+def _air_after_subsection_headers(block: list[str]) -> list[str]:
+    """Пустая строка после каждого заголовка раздела «… (N):».
+
+    Просьба юриста 06.07.2026: воздух не только между разделами (⸻), но и
+    сразу после самого заголовка раздела — чтобы он не «слипался» с первым
+    делом. Одиночная пустая строка (не двойная — двойные только перед
+    заголовками крупных секций).
+    """
+    out: list[str] = []
+    for i, ln in enumerate(block):
+        out.append(ln)
+        if _SUBSECTION_COUNT_HEADER_RE.search(ln):
+            nxt = block[i + 1] if i + 1 < len(block) else ""
+            if nxt != "":
+                out.append("")
+    return out
+
+
 def next_tuesday(from_date: datetime | None = None) -> datetime:
     """Вычислить дату ближайшего вторника (включая сегодня, если сегодня вторник)."""
     d = from_date or datetime.now()
@@ -155,14 +187,33 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                        *,
                        cass_changes: list[dict] | None = None,
                        cass_discovered: list[dict] | None = None) -> str:
-    """Сводка-саммари одной строкой: +N новых, M событий, K решений, L актов."""
+    """Сводка-саммари одной строкой: N новых дел, M заседаний, K итогов.
+
+    Формат 06.07.2026 (просьба юриста): слова вместо аббревиатур
+    («+1 нов. апелл.» → «📥 1 новая апелляция»), разделитель « · »,
+    склонение по числу через plural_ru. Счётчики и состав частей прежние.
+    """
     parts = []
     if fi_new_cases:
-        parts.append(f"+{len(fi_new_cases)} нов. 1 инст.")
+        n = len(fi_new_cases)
+        parts.append(
+            f"📥 {n} {plural_ru(n, 'новое дело', 'новых дела', 'новых дел')}"
+            " в 1-й инст."
+        )
     if new_cases:
-        parts.append(f"+{len(new_cases)} нов. апелл.")
+        n = len(new_cases)
+        parts.append(
+            f"📥 {n} "
+            + plural_ru(n, 'новая апелляция', 'новые апелляции',
+                        'новых апелляций')
+        )
     if cass_discovered:
-        parts.append(f"+{len(cass_discovered)} нов. касс.")
+        n = len(cass_discovered)
+        parts.append(
+            f"📥 {n} "
+            + plural_ru(n, 'новая кассация', 'новые кассации',
+                        'новых кассаций')
+        )
     # Мостик stage_transitions из дайджеста убран: дело и так попадает
     # в 5.1 «Новые дела апелляции», отдельная пометка юристу не нужна.
     events = sum(1 for ch in changes
@@ -191,17 +242,42 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                                     "new_act", "appeal_to_fi_rules"})
     )
     if events:
-        parts.append(f"{events} событ.")
+        parts.append(
+            f"📌 {events} "
+            + plural_ru(events, 'событие', 'события', 'событий')
+            + " в апелляции"
+        )
     if postponed:
-        parts.append(f"{postponed} отлож.")
+        parts.append(
+            f"🔁 {postponed} "
+            + plural_ru(postponed, 'отложение', 'отложения', 'отложений')
+            + " в апелляции"
+        )
     if to_fi_rules:
-        parts.append(f"{to_fi_rules} перех. к 1-й инст.")
+        parts.append(
+            f"⚠ {to_fi_rules} "
+            + plural_ru(to_fi_rules, 'переход', 'перехода', 'переходов')
+            + " к правилам 1-й инст."
+        )
     if results:
-        parts.append(f"{results} суд. акт.")
+        parts.append(
+            f"⚖️ {results} "
+            + plural_ru(results, 'итог апелляции', 'итога апелляции',
+                        'итогов апелляции')
+        )
     if acts:
-        parts.append(f"{acts} акт.")
+        parts.append(
+            f"📄 {acts} "
+            + plural_ru(acts, 'текст акта', 'текста актов', 'текстов актов')
+            + " апелляции"
+        )
     if app_status:
-        parts.append(f"{app_status} статус апел.")
+        parts.append(
+            f"🔄 {app_status} "
+            + plural_ru(app_status, 'смена статуса', 'смены статуса',
+                        'смен статуса')
+            + " в апелляции"
+        )
     if fi_changes:
         fi_hearings = sum(
             1 for ch in fi_changes
@@ -246,45 +322,121 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         # fi_bank_role_changed в сводку осознанно НЕ выносим: смена роли —
         # редкий служебный признак, строка в 3.2 «Изменения» его уже несёт.
         if fi_hearings:
-            parts.append(f"{fi_hearings} засед. 1 инст.")
+            parts.append(
+                f"📅 {fi_hearings} "
+                + plural_ru(fi_hearings, 'заседание', 'заседания',
+                            'заседаний')
+                + " в 1-й инст."
+            )
         if fi_restarts:
-            parts.append(f"{fi_restarts} с начала")
+            parts.append(
+                f"🔄 {fi_restarts} "
+                + plural_ru(fi_restarts, 'рассмотрение с начала',
+                            'рассмотрения с начала',
+                            'рассмотрений с начала')
+            )
         if fi_resolved_n:
-            parts.append(f"{fi_resolved_n} реш. 1 инст.")
+            parts.append(
+                f"⚖️ {fi_resolved_n} "
+                + plural_ru(fi_resolved_n, 'решение', 'решения', 'решений')
+                + " 1-й инст."
+            )
         if fi_returns:
-            parts.append(f"{fi_returns} возвр. исков")
+            parts.append(
+                f"🔚 {fi_returns} "
+                + plural_ru(fi_returns, 'возврат иска', 'возврата исков',
+                            'возвратов исков')
+            )
         if fi_appeals_filed:
-            parts.append(f"{fi_appeals_filed} подано жалоб")
+            parts.append(
+                f"📨 {fi_appeals_filed} "
+                + plural_ru(fi_appeals_filed, 'апел. жалоба',
+                            'апел. жалобы', 'апел. жалоб')
+            )
         if fi_cass_filed:
-            parts.append(f"{fi_cass_filed} касс. жалоб")
+            parts.append(
+                f"📨 {fi_cass_filed} "
+                + plural_ru(fi_cass_filed, 'касс. жалоба', 'касс. жалобы',
+                            'касс. жалоб')
+            )
         if fi_sent_cass:
-            parts.append(f"{fi_sent_cass} в касс. суд")
+            parts.append(
+                f"📤 {fi_sent_cass} "
+                + plural_ru(fi_sent_cass, 'дело', 'дела', 'дел')
+                + " — в касс. суд"
+            )
         if fi_accepted:
-            parts.append(f"{fi_accepted} принято к пр-ву")
+            parts.append(
+                f"📥 {fi_accepted} "
+                + plural_ru(fi_accepted, 'дело принято', 'дела принято',
+                            'дел принято')
+                + " к производству"
+            )
         if fi_finals:
-            parts.append(f"{fi_finals} финал 1 инст.")
+            parts.append(
+                f"🏁 {fi_finals} "
+                + plural_ru(fi_finals, 'финальное событие',
+                            'финальных события', 'финальных событий')
+                + " 1-й инст."
+            )
         if fi_acts:
-            parts.append(f"{fi_acts} акт 1 инст.")
+            parts.append(
+                f"📄 {fi_acts} "
+                + plural_ru(fi_acts, 'решение изготовлено',
+                            'решения изготовлено', 'решений изготовлено')
+                + " (1-я инст.)"
+            )
         if fi_motivs:
-            parts.append(f"{fi_motivs} мотивир. готов. 1 инст.")
+            parts.append(
+                f"📄 {fi_motivs} "
+                + plural_ru(fi_motivs, 'мотивировка готова',
+                            'мотивировки готовы', 'мотивировок готово')
+                + " (1-я инст.)"
+            )
         if fi_act_texts:
-            parts.append(f"{fi_act_texts} мотивир. 1 инст.")
+            parts.append(
+                f"📄 {fi_act_texts} "
+                + plural_ru(fi_act_texts, 'текст решения',
+                            'текста решений', 'текстов решений')
+                + " (1-я инст.)"
+            )
         if fi_status:
-            parts.append(f"{fi_status} статус 1 инст.")
+            parts.append(
+                f"🔄 {fi_status} "
+                + plural_ru(fi_status, 'смена статуса', 'смены статуса',
+                            'смен статуса')
+                + " (1-я инст.)"
+            )
     if cass_changes:
         cass_acts = sum(1 for ch in cass_changes if "new_act" in ch["type"])
         cass_outcomes = sum(1 for ch in cass_changes if "outcome_change" in ch["type"])
         cass_reviews = sum(1 for ch in cass_changes if "review_result_change" in ch["type"])
         cass_news = sum(1 for ch in cass_changes if "new_cassation" in ch["type"])
         if cass_news:
-            parts.append(f"{cass_news} касс. карточ.")
+            parts.append(
+                f"📥 {cass_news} "
+                + plural_ru(cass_news, 'касс. карточка', 'касс. карточки',
+                            'касс. карточек')
+            )
         if cass_reviews:
-            parts.append(f"{cass_reviews} реш. изуч. жалоб")
+            parts.append(
+                f"🔍 {cass_reviews} "
+                + plural_ru(cass_reviews, 'итог изучения жалобы',
+                            'итога изучения жалоб', 'итогов изучения жалоб')
+            )
         if cass_outcomes:
-            parts.append(f"{cass_outcomes} касс. итог.")
+            parts.append(
+                f"🏁 {cass_outcomes} "
+                + plural_ru(cass_outcomes, 'итог кассации',
+                            'итога кассации', 'итогов кассации')
+            )
         if cass_acts:
-            parts.append(f"{cass_acts} касс. акт.")
-    return " | ".join(parts) if parts else "без изменений"
+            parts.append(
+                f"📄 {cass_acts} "
+                + plural_ru(cass_acts, 'касс. акт', 'касс. акта',
+                            'касс. актов')
+            )
+    return " · ".join(parts) if parts else "без изменений"
 
 
 def short_category_chain(cat: str) -> str:
@@ -320,9 +472,13 @@ def category_short(cat: str) -> str:
     for key, short in mapping.items():
         if key in cat_lower:
             return short
-    # Если не нашли — обрезаем до 20 символов
+    # Если не нашли — обрезаем по границе слова (~20 символов), чтобы не
+    # получать обрывки вида «иные, связанные с на…».
     if len(cat) > 22:
-        return cat[:20] + "…"
+        head = cat[:21]
+        space = head.rfind(" ")
+        head = head[:space] if space > 0 else cat[:20]
+        return head.rstrip(" ,;:—–-") + "…"
     return cat
 
 
@@ -575,18 +731,21 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cat = category_short(short_category_chain(c.get("category", "")))
             pl_raw = c.get("plaintiff", "")
             df_raw = c.get("defendant", "")
-            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
-            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=_DIGEST_FIO_FULL))
             num = escape_html(c.get("id", ""))
             filing = escape_html(fi.get("filing_date", ""))
             url = fi_card_url(fi)
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
-            # БАНК В ХВОСТЕ: иконку показываем только когда банк = третье лицо.
+            # БАНК В ХВОСТЕ: иконка — для истца/ответчика; «третье лицо» —
+            # словами в хвосте (выбор юриста 06.07.2026: иконка 👁 неочевидна).
             if _bank_in_parties(pl_raw, df_raw):
                 role_icon = ""
+                role_tail = ""
             else:
-                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦",
-                             "Третье лицо": "👁"}.get(role, "")
+                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦"}.get(role, "")
+                role_tail = (" | банк — третье лицо"
+                             if role == "Третье лицо" else "")
             prefix = f"{role_icon} " if role_icon else ""
             # КОМПАКТ-ВЁРСТКА (выбор юриста 03.07.2026, все секции): без
             # левых отступов — Telegram сохраняет ведущие пробелы только
@@ -595,7 +754,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # жирный номер-ссылка в начале дела и эмодзи-маркеры строк.
             # Строка 1: номер, стороны, категория, суд (без даты подачи).
             fi_block.append(
-                f"{link} {prefix}{pl} vs {df} ({cat}) | {court}"
+                f"{link} {prefix}{pl} vs {df} ({cat}) | {court}{role_tail}"
             )
             # Строка 2: дата подачи отдельной строкой, эмодзи 📥 ПОСЛЕ
             # <b>дата</b>, чтобы не попасть под _DIGEST_HEADER_RE.
@@ -640,8 +799,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             continue
         num = escape_html(ch.get("case", ""))
         court = escape_html(shorten_court_name(ch.get("court", "")))
-        pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
-        df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+        pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=_DIGEST_FIO_FULL))
+        df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL))
         d = ch["details"]
         url = fi_card_url(d)
         link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
@@ -654,16 +813,23 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                             "(дата и время не опубликованы)"
                         )
                     else:
+                        # Даты предстоящих заседаний — жирным (просьба юриста
+                        # 06.07.2026): дата — главное в строке, глаз должен
+                        # цепляться сразу. Прошедшие даты (актов, подач)
+                        # не выделяем — иначе не выделено ничего.
                         hd = escape_html(d.get("hearing_date", ""))
                         ht = escape_html(d.get("hearing_time", ""))
                         htype = escape_html(d.get("hearing_type", "заседание"))
-                        ev_list.append(f"📅 {htype} {hd}" + (f" {ht}" if ht else ""))
+                        hp = hd + (f" {ht}" if ht else "")
+                        ev_list.append(
+                            f"📅 {htype} <b>{hp}</b>" if hp else f"📅 {htype}"
+                        )
                 elif t == "fi_hearing_next":
                     new_p = escape_html(
                         d.get("hearing_date", "")
                         + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
                     )
-                    ev_list.append(f"📅 заседание назначено на {new_p}")
+                    ev_list.append(f"📅 заседание назначено на <b>{new_p}</b>")
                 elif t == "fi_hearing_postponed":
                     new_p = escape_html(
                         d.get("hearing_date", "")
@@ -671,13 +837,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     )
                     # Только новая дата (старую больше не показываем —
                     # по запросу пользователя).
-                    ev_list.append(f"🔁 заседание отложено на {new_p}")
+                    ev_list.append(f"🔁 заседание отложено на <b>{new_p}</b>")
                 elif t == "fi_hearing_recess":
                     new_p = escape_html(
                         d.get("hearing_date", "")
                         + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
                     )
-                    ev_list.append(f"🔁 в заседании объявлен перерыв до {new_p}")
+                    ev_list.append(
+                        f"🔁 в заседании объявлен перерыв до <b>{new_p}</b>"
+                    )
                 elif t == "fi_status_change":
                     ev_list.append(
                         f"статус: {escape_html(d.get('old_status', ''))} → "
@@ -726,7 +894,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         if sh_d:
                             sh_p = sh_d + (f" {sh_t}" if sh_t else "")
                             ev_list.append(
-                                f"📅 заседание назначено на {sh_p}"
+                                f"📅 заседание назначено на <b>{sh_p}</b>"
                             )
                 elif t == "fi_motivirovka_emitted":
                     md = escape_html(d.get('motivirovka_date', ''))
@@ -763,7 +931,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     nht = escape_html(d.get("next_hearing_time", ""))
                     part = "🔄 рассмотрение начато с начала" + (f" ({rd})" if rd else "")
                     if nhd:
-                        part += f"; след. заседание {nhd}" + (f" {nht}" if nht else "")
+                        nhp = nhd + (f" {nht}" if nht else "")
+                        part += f"; след. заседание <b>{nhp}</b>"
                     ev_list.append(part)
                 elif t == "fi_bank_role_changed":
                     old_r = escape_html(d.get("old_role", ""))
@@ -780,9 +949,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         "📥 принято к производству — заседание не назначено"
                         + (f" (было {mat})" if mat else "")
                     )
+        # Событие — на ОТДЕЛЬНОЙ строке под «номер (суд) — стороны» (просьба
+        # юриста 06.07.2026). Строки одного дела идут подряд без пустой между
+        # ними (правило вёрстки); пустая строка ставится только между делами.
+        head = f"{link} ({court}) — {pl} vs {df}"
         ev_str = "; ".join(ev_list) if ev_list else ""
         fi_changes_rendered.append(
-            f"{link} ({court}) — {pl} vs {df} | {ev_str}"
+            f"{head}\n{ev_str}" if ev_str else head
         )
 
     if fi_changes_rendered:
@@ -790,7 +963,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         fi_block.append(
             f"📅 <b>Изменения ({len(fi_changes_rendered)}):</b>"
         )
-        fi_block.extend(fi_changes_rendered)
+        # Пустая строка между событиями (просьба юриста 06.07.2026: события
+        # шли подряд и на 3+ делах сливались в стену текста; правило
+        # «пустая строка между делами» — как в «Новых делах»).
+        for i, ev_line in enumerate(fi_changes_rendered):
+            if i:
+                fi_block.append("")
+            fi_block.append(ev_line)
 
     # ── 3.5: Вынесенные решения 1 инстанции ──
     if fi_resolved_chs:
@@ -801,8 +980,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         for ch in fi_resolved_chs:
             num = escape_html(ch.get("case", ""))
             court = escape_html(shorten_court_name(ch.get("court", "")))
-            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
-            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL))
             d = ch["details"]
             url = fi_card_url(d)
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
@@ -841,6 +1020,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi_block.append(
                 f"{link} ({court}) — {pl} vs {df}{tail}{extras_str}"
             )
+            # Пустая строка между делами (воздух, просьба юриста 06.07.2026).
+            fi_block.append("")
+        if fi_block and fi_block[-1] == "":
+            fi_block.pop()
 
     # ── 3.6: Опубликованные тексты решений 1 инстанции ──
     # Fallback без LLM — выводим укороченный фрагмент мотивировки как есть,
@@ -852,8 +1035,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         )
         for ch in fi_act_text_chs:
             num = escape_html(ch.get("case", ""))
-            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=True))
-            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=True))
+            pl = escape_html(shorten_party_name(ch.get("plaintiff", ""), keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL))
             d = ch["details"]
             url = fi_card_url(d)
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
@@ -914,19 +1097,20 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cat = category_short(short_category_chain(c.get("Категория", "")))
             pl_raw = c.get('Истец', '')
             df_raw = c.get('Ответчик', '')
-            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
-            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=_DIGEST_FIO_FULL))
             court_fi = escape_html(
                 shorten_court_name(c.get('Суд 1 инстанции', '') or '')
             )
             filing = escape_html(c.get('Дата поступления', '') or '')
             # БАНК В ХВОСТЕ: если Сбербанк уже в сторонах — иконка/хвост лишние.
+            # «Третье лицо» — только словами в хвосте, без иконки 👁 (выбор
+            # юриста 06.07.2026: иконка неочевидна и дублировала текст).
             if _bank_in_parties(pl_raw, df_raw):
                 role_icon = ""
                 role_tail = ""
             else:
-                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦",
-                             "Третье лицо": "👁"}.get(role, "")
+                role_icon = {"Истец": "🏦→", "Ответчик": "→🏦"}.get(role, "")
                 role_tail = (f" | банк — {escape_html(role.lower())}"
                              if role else "")
             prefix = f"{role_icon} " if role_icon else ""
@@ -1174,10 +1358,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 summary_or_excerpt, sum_kind = "", ""
             # Строка 1: «номер — стороны» (компакт-вёрстка, без отступов).
             pl55 = escape_html(shorten_party_name(
-                d.get("plaintiff", ""), keep_fio_full=True
+                d.get("plaintiff", ""), keep_fio_full=_DIGEST_FIO_FULL
             ))
             df55 = escape_html(shorten_party_name(
-                d.get("defendant", ""), keep_fio_full=True
+                d.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL
             ))
             line1_55 = link
             if pl55 and df55:
@@ -1216,19 +1400,29 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         new_cases, changes, fi_new_cases, stage_transitions, fi_changes,
         cass_changes=cass_changes, cass_discovered=cass_discovered,
     )
+    # Заголовок «📋 Сводка» отдельной строкой, счётчики — под ним (просьба
+    # юриста 06.07.2026). Строка счётчиков начинается с 📥/📅/… + цифра —
+    # под _DIGEST_HEADER_RE (нужен <b>+буква) не попадает, за заголовок не
+    # примут.
     lines = [
-        f"📊 <b>Мониторинг дел Сбербанка — {today}</b>",
-        f"📋 {escape_html(summary)}",
+        f"📊 <b>Мониторинг дел Сбербанка ХМАО-Югра — {today}</b>",
+        "📋 <b>Сводка</b>",
+        escape_html(summary),
     ]
 
+    # Две пустые строки перед заголовком крупной секции + одна ПОСЛЕ него
+    # (просьба юриста 06.07.2026: воздух после заголовка секции и раздела).
+    # `_air_after_subsection_headers` добавляет воздух после «… (N):».
     if fi_block:
-        lines.append("")
+        lines.extend(["", ""])
         lines.append("🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>")
-        lines.extend(fi_block)
-    if appeal_block:
         lines.append("")
+        lines.extend(_air_after_subsection_headers(fi_block))
+    if appeal_block:
+        lines.extend(["", ""])
         lines.append("⚖️ <b>АПЕЛЛЯЦИЯ</b>")
-        lines.extend(appeal_block)
+        lines.append("")
+        lines.extend(_air_after_subsection_headers(appeal_block))
 
     # ── Блок КАССАЦИЯ ──
     cass_block: list[str] = []
@@ -1275,8 +1469,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     if url else f'<b>{num_cs}</b>')
             pl_raw = c.get("plaintiff", "")
             df_raw = c.get("defendant", "")
-            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
-            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=_DIGEST_FIO_FULL))
             role = c.get("bank_role", "") or ""
             tail = "" if _bank_in_parties(pl_raw, df_raw) or not role \
                 else f", банк — {escape_html(role.lower())}"
@@ -1287,11 +1481,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # Прогоняем через shorten_party_name — иначе строка «📥 поступила
             # касс. жалоба от Ответчика …» становится непомерно длинной.
             appellant = escape_html(
-                shorten_party_name(cass.get("appellant", "") or "", keep_fio_full=True)
+                shorten_party_name(cass.get("appellant", "") or "", keep_fio_full=_DIGEST_FIO_FULL)
             )
-            # Роль заявителя в Title Case для строки 3 («от Ответчика Иванова»).
+            # Роль заявителя в родительном падеже для строки 3
+            # («от ответчика Иванова И.И.») — раньше выходило «от Истец X»
+            # (та же болезнь, что «подана Заявитель» в «Итоге», фикс 06.07.2026).
             appellant_status_raw = (cass.get("appellant_status", "") or "").strip()
-            appellant_role = escape_html(appellant_status_raw.capitalize())
+            _role_title = appellant_status_raw.capitalize()
+            appellant_role = escape_html(
+                ROLE_GENITIVE.get(_role_title, _role_title.lower())
+            ) if _role_title else ""
             # Строка 2: суд 1 инст. + категория. Без номера 1-й инст. и «заявитель».
             court_short = escape_html(
                 shorten_court_name(fi_b.get("court", "") or "")
@@ -1397,8 +1596,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi_p = parent.get("first_instance") or {}
             pl_raw = _g_cass(parent, "plaintiff", "Истец")
             df_raw = _g_cass(parent, "defendant", "Ответчик")
-            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=True))
-            df = escape_html(shorten_party_name(df_raw, keep_fio_full=True))
+            pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
+            df = escape_html(shorten_party_name(df_raw, keep_fio_full=_DIGEST_FIO_FULL))
             cat_raw = _g_cass(parent, "category", "Категория")
             cat_short = short_category_chain(cat_raw)
             role_raw = _g_cass(parent, "bank_role", "Роль банка")
@@ -1472,21 +1671,22 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 # «Новые касс. дела»): громоздкие «МТУ Росимущества в …»
                 # ломают строку Итог.
                 appellant = shorten_party_name(
-                    (d.get("appellant", "") or "").strip(), keep_fio_full=True
+                    (d.get("appellant", "") or "").strip(), keep_fio_full=_DIGEST_FIO_FULL
                 )
                 ap_status = (d.get("appellant_status", "") or "").strip()
-                # «; подана Ответчиком Ивановым И.И.» вместо корявого
-                # «— от Ответчика Иванова И.И.». Роль в творительный падеж
-                # через ROLE_INSTRUMENTAL; имя стороны оставляем без изменений
-                # (склонение фамилий — отдельная история). Если у нас только
-                # имя без роли — пишем «подана X» без падежа роли.
+                # «(жалоба заявителя ЖНК Единство)» вместо оборванного
+                # «; подана Заявителем X» (переформулировка 06.07.2026:
+                # видно, что речь о жалобе). Роль в родительный падеж через
+                # ROLE_GENITIVE (нижний регистр — середина фразы); имя
+                # стороны без изменений (склонение фамилий — отдельная
+                # история). Если у нас только имя без роли — «(жалоба X)».
                 from_str = ""
                 if appellant and ap_status:
                     role_title = ap_status.capitalize()
-                    role_instr = ROLE_INSTRUMENTAL.get(role_title, role_title)
-                    from_str = f"; подана {escape_html(role_instr)} {escape_html(appellant)}"
+                    role_gen = ROLE_GENITIVE.get(role_title, role_title.lower())
+                    from_str = f" (жалоба {escape_html(role_gen)} {escape_html(appellant)})"
                 elif appellant:
-                    from_str = f"; подана {escape_html(appellant)}"
+                    from_str = f" (жалоба {escape_html(appellant)})"
                 reason_tail = (
                     f"; {escape_html(outcome_reason_ru)}"
                     if outcome_reason_ru else ""
@@ -1521,11 +1721,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cass_block.pop()
 
     if cass_block:
-        lines.append("")
+        lines.extend(["", ""])
         lines.append("⚖️🔬 <b>КАССАЦИЯ</b>")
-        lines.extend(cass_block)
+        lines.append("")
+        lines.extend(_air_after_subsection_headers(cass_block))
 
-    lines.append("")
+    lines.extend(["", ""])
     lines.append(
         f"📌 <b>В производстве: всего {total_active}"
         f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"

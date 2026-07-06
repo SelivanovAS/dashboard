@@ -13,7 +13,7 @@ from court_monitor import config
 from court_monitor.config import log
 from court_monitor.courts import case_card_url, fi_card_url
 from court_monitor.textutil import (
-    _bare_case_number, escape_html, shorten_court_name,
+    _bare_case_number, escape_html, plural_ru, shorten_court_name,
 )
 
 _DIGEST_CASE_LINK_RE = re.compile(r'<a[^>]*>\s*<b>\s*([^<]+?)\s*</b>\s*</a>')
@@ -794,16 +794,13 @@ def summarize_digest_counters(html: str) -> dict[str, int]:
 
 
 def _plural_ru(n: int, forms: tuple[str, str, str]) -> str:
-    """Русский множественный выбор: (1, 2-4, 5+)."""
-    n = abs(n) % 100
-    n1 = n % 10
-    if 10 < n < 20:
-        return forms[2]
-    if 1 < n1 < 5:
-        return forms[1]
-    if n1 == 1:
-        return forms[0]
-    return forms[2]
+    """Русский множественный выбор: (1, 2-4, 5+).
+
+    Обёртка над канонической textutil.plural_ru (появилась 06.07.2026
+    для сводки дайджеста) — оставлена ради прежней сигнатуры (tuple)
+    и ре-экспорта в фасаде update_cases.
+    """
+    return plural_ru(n, *forms)
 
 
 def _compute_summary_lines(html: str) -> tuple[str | None, str | None, str | None]:

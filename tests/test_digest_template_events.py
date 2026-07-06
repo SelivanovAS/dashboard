@@ -385,7 +385,10 @@ class FiEventMatrixTest(unittest.TestCase):
 
     def test_fi_hearing_new(self):
         html = self._one(["fi_hearing_new"])
-        self.assert_in_changes_section(html, "📅 заседание 15.08.2026 10:30")
+        # Даты предстоящих заседаний — жирным (просьба юриста 06.07.2026).
+        self.assert_in_changes_section(
+            html, "📅 заседание <b>15.08.2026 10:30</b>"
+        )
 
     def test_fi_hearing_new_unpublished(self):
         html = self._one(
@@ -400,13 +403,13 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_hearing_next(self):
         html = self._one(["fi_hearing_next"])
         self.assert_in_changes_section(
-            html, "📅 заседание назначено на 15.08.2026 10:30"
+            html, "📅 заседание назначено на <b>15.08.2026 10:30</b>"
         )
 
     def test_fi_hearing_postponed_shows_only_new_date(self):
         html = self._one(["fi_hearing_postponed"])
         self.assert_in_changes_section(
-            html, "🔁 заседание отложено на 20.09.2026 12:00"
+            html, "🔁 заседание отложено на <b>20.09.2026 12:00</b>"
         )
         # Старую дату юрист просил не показывать.
         self.assertNotIn("15.07.2026", html)
@@ -414,7 +417,7 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_hearing_recess(self):
         html = self._one(["fi_hearing_recess"])
         self.assert_in_changes_section(
-            html, "🔁 в заседании объявлен перерыв до 21.08.2026 11:00"
+            html, "🔁 в заседании объявлен перерыв до <b>21.08.2026 11:00</b>"
         )
 
     def test_fi_status_change_alone(self):
@@ -440,7 +443,7 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_final_event_regular_with_scheduled_date(self):
         html = self._one(["fi_final_event"])
         self.assert_in_changes_section(html, "⚖️ Подготовка дела (собеседование)")
-        self.assertIn("📅 заседание назначено на 25.08.2026 09:00", html)
+        self.assertIn("📅 заседание назначено на <b>25.08.2026 09:00</b>", html)
 
     def test_fi_final_event_motivirovka_normalized(self):
         # Фраза «Изготовлено мотивированное решение…» нормализуется под
@@ -491,7 +494,7 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assert_in_changes_section(
             html,
             "🔄 рассмотрение начато с начала (10.06.2026); "
-            "след. заседание 20.08.2026 10:00",
+            "след. заседание <b>20.08.2026 10:00</b>",
         )
 
     def test_fi_bank_role_changed(self):
@@ -586,7 +589,7 @@ class FiComboTest(unittest.TestCase):
             make_fi_change(["fi_resolved", "fi_hearing_postponed"])
         ])
         self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn("🔁 заседание отложено на 20.09.2026 12:00", html)
+        self.assertIn("🔁 заседание отложено на <b>20.09.2026 12:00</b>", html)
         self.assertEqual(anchors(html).count("2-100/2026"), 2)
 
 
@@ -967,9 +970,10 @@ class CassationMatrixTest(unittest.TestCase):
         html = render(cass_changes=[make_cass_change(
             ["outcome_change"], {"outcome": "cassation_upheld"},
         )])
-        # Метка из CASSATION_OUTCOME_RU + творительный падеж роли заявителя.
+        # Метка из CASSATION_OUTCOME_RU + «(жалоба {род. падеж роли} {имя})»
+        # (формат 06.07.2026 — вместо оборванного «подана Ответчиком X»).
         self.assertIn("<b>Итог:</b> Оставлено без изменения", html)
-        self.assertIn("подана Ответчиком", html)
+        self.assertIn("(жалоба ответчика", html)
         self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
 
     def test_hearing_suppressed_when_outcome_present(self):
@@ -1219,8 +1223,38 @@ class AllEventTypesTest(unittest.TestCase):
         # не должна начинаться с пробела.
         self.assertNotRegex(self.html, r"\n +\S")
 
-    def test_layout_no_triple_blank_lines(self):
-        self.assertNotIn("\n\n\n", self.html)
+    def test_layout_double_blank_only_before_sections(self):
+        # Воздух 06.07.2026: две пустые строки — ТОЛЬКО перед заголовками
+        # крупных секций и футером «В производстве». Трёх пустых подряд
+        # не бывает нигде.
+        self.assertNotIn("\n\n\n\n", self.html)
+        section_re = re.compile(
+            r"^(?:🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>|⚖️ <b>АПЕЛЛЯЦИЯ</b>"
+            r"|⚖️🔬 <b>КАССАЦИЯ</b>|📌 <b>В производстве)"
+        )
+        for m in re.finditer(r"\n\n\n([^\n]*)", self.html):
+            self.assertRegex(
+                m.group(1), section_re,
+                f"Двойная пустая строка не перед секцией: {m.group(1)!r}",
+            )
+        # И перед каждой секцией (кроме первой строки) воздух есть.
+        for header in ("🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>", "⚖️ <b>АПЕЛЛЯЦИЯ</b>",
+                       "⚖️🔬 <b>КАССАЦИЯ</b>", "📌 <b>В производстве"):
+            self.assertIn(f"\n\n\n{header}", self.html)
+
+    def test_air_after_section_and_subsection_headers(self):
+        # Воздух 06.07.2026: пустая строка ПОСЛЕ заголовка крупной секции
+        # и ПОСЛЕ заголовка раздела «… (N):».
+        for section in ("🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>", "⚖️ <b>АПЕЛЛЯЦИЯ</b>",
+                        "⚖️🔬 <b>КАССАЦИЯ</b>"):
+            self.assertIn(f"{section}\n\n", self.html)
+        # Каждый заголовок раздела «… (N):» — с пустой строкой под ним.
+        for m in re.finditer(r"^.*\(\d+\):</b>$", self.html, re.MULTILINE):
+            after = self.html[m.end():m.end() + 2]
+            self.assertEqual(
+                after, "\n\n",
+                f"Нет воздуха после заголовка раздела: {m.group(0)!r}",
+            )
 
     def test_tags_balanced(self):
         self.assertEqual(cm_post._close_open_tags(self.html), self.html)
@@ -1239,14 +1273,18 @@ class AllEventTypesTest(unittest.TestCase):
                              f"Markdown-заголовок: {line!r}")
 
     def test_summary_line_mentions_key_categories(self):
-        # Сводка — вторая строка дайджеста. Включая счётчики фикса B7
-        # (возвраты, касс. жалобы, направления в касс. суд, принято к
-        # производству, голый статус апелляции).
-        summary_line = self.html.split("\n")[1]
-        for token in ("нов. 1 инст.", "нов. апелл.", "нов. касс.",
-                      "реш. 1 инст.", "касс. акт.", "возвр. исков",
-                      "касс. жалоб", "в касс. суд", "принято к пр-ву",
-                      "статус апел."):
+        # Формат 06.07.2026: заголовок «📋 Сводка» (строка 1), счётчики —
+        # строкой ниже (строка 2); слова вместо аббревиатур, склонение по
+        # числу, разделитель « · ». Включая счётчики фикса B7 (возвраты,
+        # касс. жалобы, направления в касс. суд, принято к производству,
+        # голый статус апелляции).
+        header_line, summary_line = self.html.split("\n")[1:3]
+        self.assertEqual(header_line, "📋 <b>Сводка</b>")
+        for token in ("новое дело в 1-й инст.", "новая апелляция",
+                      "новая кассация", "решение 1-й инст.", "касс. акт",
+                      "возврат иска", "касс. жалоба", "дело — в касс. суд",
+                      "дело принято к производству",
+                      "смена статуса в апелляции", " · "):
             self.assertIn(token, summary_line)
 
 
