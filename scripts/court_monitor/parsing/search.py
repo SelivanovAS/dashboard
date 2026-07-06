@@ -233,6 +233,39 @@ def _find_results_table(tables: list) -> list | None:
     return None
 
 
+def find_fi_case_link(html: str, case_number: str) -> str:
+    """Найти в выдаче поиска 1-й инст. строку ровно этого дела → "cid|cuid".
+
+    Для бэкфилла ссылок на карточку (см. linking.backfill_fi_links): целевой
+    поиск по номеру (G1_CASE__CASE_NUMBERSS) сервер ведёт подстрокой, поэтому
+    границу номера проверяем сами — текст ячейки должен быть равен номеру или
+    продолжаться скобкой/тильдой (комбо-номер вида
+    «2-716/2025 (2-9422/2024;) ~ М-7693/2024»), чтобы запрос «2-71/2025» не
+    сматчил строку «2-716/2025». Возвращает "case_id|case_uid" или "".
+    """
+    if not case_number:
+        return ""
+    tables = extract_tables(html)
+    results_table = _find_results_table(tables)
+    if not results_table:
+        return ""
+    boundary = re.compile(rf'^{re.escape(case_number)}\s*(?:$|[(~])')
+    for row in results_table:
+        if not row:
+            continue
+        num_cell = row[0]
+        if not boundary.match(cell_text(num_cell).strip()):
+            continue
+        href = cell_href(num_cell)
+        if not href:
+            continue
+        m_id = _CASE_ID_RE.search(href)
+        m_uid = _CASE_UID_RE.search(href)
+        if m_id and m_uid:
+            return f"{m_id.group(1)}|{m_uid.group(1)}"
+    return ""
+
+
 def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
     """Парсит страницу поиска суда первой инстанции.
 

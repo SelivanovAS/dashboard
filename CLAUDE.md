@@ -51,25 +51,26 @@
 
 | Что | Где |
 |-----|-----|
-| dataclass конфига суда: `CourtConfig` | [scripts/court_monitor/courts.py:29](scripts/court_monitor/courts.py:29) |
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/court_monitor/courts.py:88](scripts/court_monitor/courts.py:88) |
-| массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:96](scripts/court_monitor/courts.py:96) |
-| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:123](scripts/court_monitor/courts.py:123) |
-| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:139](scripts/court_monitor/courts.py:139) |
+| dataclass конфига суда: `CourtConfig` | [scripts/court_monitor/courts.py:30](scripts/court_monitor/courts.py:30) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/court_monitor/courts.py:110](scripts/court_monitor/courts.py:110) |
+| массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:118](scripts/court_monitor/courts.py:118) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:145](scripts/court_monitor/courts.py:145) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:161](scripts/court_monitor/courts.py:161) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:87](scripts/court_monitor/config.py:87) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:410](scripts/court_monitor/lifecycle.py:410) |
-| `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:273](scripts/court_monitor/linking.py:273) |
-| `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:835](scripts/court_monitor/linking.py:835) |
+| `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:348](scripts/court_monitor/linking.py:348) |
+| `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
+| `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:910](scripts/court_monitor/linking.py:910) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
 | `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:113](scripts/court_monitor/parsing/cards.py:113) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
-| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:205](scripts/court_monitor/linking.py:205) |
-| `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:48](scripts/court_monitor/linking.py:48) |
-| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:419](scripts/court_monitor/linking.py:419) |
+| `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:207](scripts/court_monitor/linking.py:207) |
+| `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
+| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:494](scripts/court_monitor/linking.py:494) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:84](scripts/court_monitor/runs.py:84) |
 | `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:873](scripts/court_monitor/runs.py:873) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
