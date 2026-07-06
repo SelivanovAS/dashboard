@@ -262,6 +262,39 @@ def is_archived(case: dict) -> bool:
 #                       подцепит дело по номеру (бессрочно).
 # Архив — через is_case_archived.
 
+def should_parse_fi_card(case: dict) -> bool:
+    """Нужно ли на этом прогоне парсить карточку 1-й инстанции по делу.
+
+    - `first_instance`   — да (мониторинг дела + ловим апел. жалобу).
+    - `cassation_watch`  — да (после апелляции ловим касс. жалобу в 1-й инст.).
+    - `awaiting_appeal`  — да, ПОКА дело не направлено в апелляцию: продолжаем
+      следить за карточкой 1-й инст. (промежуточные события, «направлено в
+      вышестоящую инстанцию»). После `sent_to_appeal` — ждём только появления
+      апел. карточки (её найдёт `link_cases`).
+    - `cassation_pending`— да, ПОКА дело не направлено в кассацию: следим за
+      карточкой 1-й инст. до «направлено в кассационный суд». После
+      `sent_to_cassation` — ждём только появления карточки на 7kas
+      (её найдёт `link_cassation_cases`).
+    - прочие стадии (`appeal`/`cassation`/`awaiting_relink`) — нет: там либо
+      парсим карточку вышестоящего суда, либо ждём появления дела по номеру.
+
+    Появление карточки в вышестоящем суде уводит дело в `appeal`/`cassation`
+    (см. `link_cases`/`link_cassation_cases`), где предикат тоже вернёт False —
+    второе условие «стоп» из ТЗ юриста.
+    """
+    stage = case.get("current_stage")
+    fi = case.get("first_instance") or {}
+    if not fi.get("case_number"):
+        return False
+    if stage in ("first_instance", "cassation_watch"):
+        return True
+    if stage == "awaiting_appeal":
+        return not (fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date"))
+    if stage == "cassation_pending":
+        return not (fi.get("sent_to_cassation") or fi.get("sent_to_cassation_date"))
+    return False
+
+
 def advance_case_stage(case: dict) -> str | None:
     """Выполнить возможный переход стадии для дела. Возвращает имя предыдущей
     стадии, если переход произошёл, иначе None.

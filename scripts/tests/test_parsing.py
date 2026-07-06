@@ -546,6 +546,46 @@ class TestAdvanceCaseStage:
         assert case["current_stage"] == "cassation_watch"
 
 
+class TestShouldParseFiCard:
+    """Продолжаем парсить карточку 1-й инст. в awaiting_appeal/cassation_pending
+    ПОКА дело не направлено в вышестоящий суд (ТЗ юриста «продолжаем парсить до
+    направления в кассацию/апелляцию либо появления карточки в вышестоящем
+    суде»). После sent_to_* — гейт закрывается."""
+
+    def _c(self, stage, fi):
+        return {"current_stage": stage, "first_instance": fi}
+
+    def test_first_instance_and_watch_always_parsed(self):
+        assert uc.should_parse_fi_card(self._c("first_instance", {"case_number": "2-1/2025"}))
+        assert uc.should_parse_fi_card(self._c("cassation_watch", {"case_number": "2-1/2025"}))
+
+    def test_awaiting_appeal_parsed_until_sent(self):
+        assert uc.should_parse_fi_card(self._c("awaiting_appeal", {"case_number": "2-1/2025"}))
+        assert not uc.should_parse_fi_card(
+            self._c("awaiting_appeal", {"case_number": "2-1/2025", "sent_to_appeal": True})
+        )
+        assert not uc.should_parse_fi_card(
+            self._c("awaiting_appeal", {"case_number": "2-1/2025", "sent_to_appeal_date": "01.05.2026"})
+        )
+
+    def test_cassation_pending_parsed_until_sent(self):
+        assert uc.should_parse_fi_card(self._c("cassation_pending", {"case_number": "2-1/2025"}))
+        assert not uc.should_parse_fi_card(
+            self._c("cassation_pending", {"case_number": "2-1/2025", "sent_to_cassation": True})
+        )
+        assert not uc.should_parse_fi_card(
+            self._c("cassation_pending", {"case_number": "2-1/2025", "sent_to_cassation_date": "01.07.2026"})
+        )
+
+    def test_terminal_and_dormant_stages_not_parsed(self):
+        for stage in ("appeal", "cassation", "awaiting_relink"):
+            assert not uc.should_parse_fi_card(self._c(stage, {"case_number": "2-1/2025"}))
+
+    def test_no_case_number_not_parsed(self):
+        assert not uc.should_parse_fi_card(self._c("first_instance", {}))
+        assert not uc.should_parse_fi_card(self._c("cassation_watch", {}))
+
+
 class TestIsCaseArchived:
     def test_fi_resolved_overdue_no_appeal_is_archived(self):
         case = {"current_stage": "first_instance",
@@ -1983,14 +2023,52 @@ class TestBackfillFiLinks:
         assert cm_linking.backfill_fi_links(cases) == 0
 
     def test_inactive_stage_skipped(self, monkeypatch):
-        """appeal/awaiting_appeal — карточка 1-й инст. не нужна, не тратим
-        запросы; дозаполнится при переходе в cassation_watch."""
+        """appeal — парсим карточку апел. суда, карточка 1-й инст. не нужна:
+        не тратим запросы (дозаполнится при переходе в cassation_watch)."""
         def boom(url):
             raise AssertionError("fetch_page не должен вызываться")
 
         monkeypatch.setattr(cm_linking, "fetch_page", boom)
         cases = [self._case(stage="appeal")]
         assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_cassation_pending_backfilled_until_sent(self, monkeypatch):
+        """cassation_pending без sent_to_cassation — продолжаем следить за
+        карточкой 1-й инст., значит и ссылку достраиваем."""
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url: _fi_number_search_html("2-716/2025"),
+        )
+        cases = [self._case(stage="cassation_pending")]
+        assert cm_linking.backfill_fi_links(cases) == 1
+        assert cases[0]["first_instance"]["link"] == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
+
+    def test_cassation_pending_sent_skipped_no_fetch(self, monkeypatch):
+        """После «направлено в кассацию» карточку 1-й инст. больше не парсим —
+        и ссылку не достраиваем."""
+        def boom(url):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(stage="cassation_pending")]
+        cases[0]["first_instance"]["sent_to_cassation"] = True
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_awaiting_appeal_backfilled_until_sent(self, monkeypatch):
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url: _fi_number_search_html("2-716/2025"),
+        )
+        cases = [self._case(stage="awaiting_appeal")]
+        assert cm_linking.backfill_fi_links(cases) == 1
+        cases2 = [self._case(stage="awaiting_appeal")]
+        cases2[0]["first_instance"]["sent_to_appeal_date"] = "01.05.2026"
+        # После направления в апелляцию — fetch не нужен (гейт закрыт).
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url: (_ for _ in ()).throw(AssertionError("не должен вызываться")),
+        )
+        assert cm_linking.backfill_fi_links(cases2) == 0
 
     def test_not_found_in_results_leaves_empty(self, monkeypatch, caplog):
         monkeypatch.setattr(
