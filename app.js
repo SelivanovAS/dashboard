@@ -550,6 +550,14 @@ function jsonToCase(j){
     const apellRaw=(ap.appellant||'').toLowerCase();
     appellant=APPELLANT_MAP[apellRaw]||'';
   }
+  // 2.5) Апеллянт из карточки 1-й инст. (fi.appeal_appellant_*) — источник
+  //      для раннего окна first_instance/awaiting_appeal, когда блока appeal
+  //      ещё нет. Бейдж не ставим для третьего/иного лица, чтобы он не
+  //      «уехал» на неверную главную сторону.
+  if(!appellant){
+    if(fi.appeal_appellant_is_bank===true)appellant='bank';
+    else if(fi.appeal_appellant_status&&fi.appeal_appellant_status!=='Иное лицо'&&fi.appeal_appellant_status!=='Третье лицо')appellant='other';
+  }
   if(!appellant&&evText){
     if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
     else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';

@@ -871,6 +871,71 @@ def _lint_digest_and_alert(digest_html: str, *,
         log.warning(f"digest-lint: ошибка линтера: {exc}", exc_info=True)
 
 
+def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
+    """Проставить апеллянта из карточки 1-й инстанции.
+
+    Источник — `card_info["_fi_appellant_raw"]` (поле «Заявитель» вкладки
+    обжалования / «заявитель жалобы»; бывает слово-роль «ИСТЕЦ»/«ОТВЕТЧИК»
+    или ФИО). Считаем роль/имя/is_bank ОДИН раз и пишем И в first_instance
+    (`fi.appeal_appellant_*` — источник бейджа «Апеллянт» уже в раннем окне
+    first_instance/awaiting_appeal, до появления карточки в апел. суде, т.к.
+    карточка апел. суда подателя жалобы не публикует), И — если блок уже
+    создан link_cases — в appeal (`appeal.appellant_*`). Перезаписываем
+    пустое/«грязное» legacy-значение (роль вместо имени); настоящее найденное
+    имя не трогаем.
+
+    Возвращает True, если что-то изменилось (для флага `changed`).
+    """
+    raw = (card_info.get("_fi_appellant_raw") or "").strip()
+    if not raw:
+        return False
+    role, short = classify_appellant_role(
+        raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
+    )
+    raw_lc = raw.lower()
+    # Слово-роль само по себе не содержит признаков банка: банк — апеллянт
+    # тогда, когда роль подателя совпадает с ролью банка. Именной вход
+    # определяем по SBER_PATTERNS, как раньше.
+    if raw_lc in ("истец", "ответчик", "третье лицо", "иное лицо"):
+        is_bank = role in ("Истец", "Ответчик") and role == case_j.get("bank_role", "")
+    else:
+        is_bank = any(p in raw_lc for p in config.SBER_PATTERNS)
+
+    changed = False
+
+    # first_instance — источник для бейджа в раннем окне.
+    old_fi_name = (fi.get("appeal_appellant") or "").strip()
+    if old_fi_name.lower() in (
+        "", "истец", "ответчик", "третье лицо", "иное лицо", "банк",
+    ):
+        if short and short != old_fi_name:
+            fi["appeal_appellant"] = short
+            changed = True
+        if fi.get("appeal_appellant_is_bank") != is_bank:
+            fi["appeal_appellant_is_bank"] = is_bank
+            changed = True
+        if role and fi.get("appeal_appellant_status") != role:
+            fi["appeal_appellant_status"] = role
+            changed = True
+
+    # appeal — те же значения, если блок уже создан link_cases.
+    appeal_block = case_j.get("appeal")
+    if appeal_block:
+        old_app_name = (appeal_block.get("appellant") or "").strip()
+        if old_app_name.lower() in ("", "истец", "ответчик", "иное лицо", "банк"):
+            if short and short != old_app_name:
+                appeal_block["appellant"] = short
+                changed = True
+            if appeal_block.get("appellant_is_bank") != is_bank:
+                appeal_block["appellant_is_bank"] = is_bank
+                changed = True
+            if role and appeal_block.get("appellant_status") != role:
+                appeal_block["appellant_status"] = role
+                changed = True
+
+    return changed
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -1898,36 +1963,12 @@ def main_json():
                 fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
             changed = True
 
-        # Заполнение appeal.appellant_* из 1-й инст. карточки — работает
-        # независимо от события fi_appeal_filed (карточка апел. суда не
-        # публикует подателя жалобы, поэтому источник — только 1-я инст.).
-        # Перезаписываем «грязное» legacy-значение (роль вместо имени) и
-        # пустое поле. Уже найденное настоящее имя не трогаем.
-        appeal_block = case_j.get("appeal")
-        fi_appellant_raw = card_info.get("_fi_appellant_raw", "").strip()
-        if appeal_block and fi_appellant_raw:
-            old_app_name = (appeal_block.get("appellant") or "").strip()
-            is_legacy_role = old_app_name.lower() in (
-                "", "истец", "ответчик", "иное лицо", "банк",
-            )
-            if is_legacy_role:
-                ap_role, ap_short = classify_appellant_role(
-                    fi_appellant_raw,
-                    case_j.get("plaintiff", ""),
-                    case_j.get("defendant", ""),
-                )
-                ap_is_bank = any(
-                    p in fi_appellant_raw.lower() for p in config.SBER_PATTERNS
-                )
-                if ap_short and ap_short != old_app_name:
-                    appeal_block["appellant"] = ap_short
-                    changed = True
-                if appeal_block.get("appellant_is_bank") != ap_is_bank:
-                    appeal_block["appellant_is_bank"] = ap_is_bank
-                    changed = True
-                if ap_role and appeal_block.get("appellant_status") != ap_role:
-                    appeal_block["appellant_status"] = ap_role
-                    changed = True
+        # Апеллянт из карточки 1-й инст. (поле «Заявитель» вкладки
+        # обжалования / «заявитель жалобы»). Пишет и в first_instance
+        # (источник бейджа «Апеллянт» в раннем окне), и в appeal, если блок
+        # уже создан. См. _apply_fi_appellant.
+        if _apply_fi_appellant(fi, case_j, card_info):
+            changed = True
 
         # Дело направлено в апел. инстанцию (Суд ХМАО-Югры) — чисто
         # информационный флаг для drawer'а. В дайджест не выводим: переход
