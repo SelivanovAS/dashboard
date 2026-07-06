@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  deployments: read   # читать статус github-pages деплоя (страховка публикации)
 
 jobs:
   update:
@@ -67,6 +68,7 @@ jobs:
           python scripts/update_cases.py --json
 
       - name: Commit updated data
+        id: commit
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
@@ -114,8 +116,59 @@ jobs:
           if [ -f data/.act_summaries.json ]; then
             git add data/.act_summaries.json
           fi
+          BEFORE_SHA=$(git rev-parse HEAD)
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
+          AFTER_SHA=$(git rev-parse HEAD)
           git push
+          # Запомним, создан ли новый коммит: по нему проверяем публикацию Pages
+          # (нет коммита → нет нового деплоя → проверять нечего).
+          if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$AFTER_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Страховка публикации сайта. GitHub Pages (Deploy from a branch → Jekyll)
+      # иногда плавающе роняет сборку: если деплой для только что запушенного
+      # коммита упал, сайт «замерзает» на прошлой версии — данные на сайте не
+      # обновляются, хотя сам прогон зелёный (инцидент 06.07.2026, см. фикс
+      # .nojekyll). Ловим упавший деплой и шлём отдельный 🚨-алерт в личный чат.
+      - name: Проверка публикации GitHub Pages
+        if: success() && steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+        run: |
+          SHA="${{ steps.commit.outputs.sha }}"
+          echo "Ждём публикацию GitHub Pages для ${SHA}…"
+          STATE=""
+          # ~4 мин с запасом: обычно деплой Pages завершается меньше чем за минуту.
+          for i in $(seq 1 24); do
+            DID=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=github-pages&sha=${SHA}&per_page=1" --jq '.[0].id // empty' 2>/dev/null || true)
+            if [ -n "$DID" ]; then
+              STATE=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${DID}/statuses?per_page=1" --jq '.[0].state // empty' 2>/dev/null || true)
+              echo "[$i] deployment ${DID} → ${STATE:-<нет статуса>}"
+              case "$STATE" in
+                success) echo "✅ Pages опубликован"; exit 0 ;;
+                failure|error) break ;;
+              esac
+            else
+              echo "[$i] github-pages деплой ещё не создан…"
+            fi
+            sleep 10
+          done
+          if [ "$STATE" = "failure" ] || [ "$STATE" = "error" ]; then
+            echo "❌ Публикация Pages упала — шлём алерт"
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              --data-urlencode text="🚨 Публикация сайта (GitHub Pages) упала — данные на сайте НЕ обновились, хотя прогон прошёл. Коммит ${SHA}. Перезапусти: Actions → workflow «pages build and deployment» → Re-run. Прогон: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}" \
+              >/dev/null || true
+          else
+            echo "⚠️ Статус Pages не подтвердился за отведённое время (${STATE:-нет данных}) — алерт не шлём, обычно достраивается."
+          fi
+          exit 0
 
       # Падение любого шага выше — сигнал в личный Telegram (не в группу):
       # иначе упавший ночной прогон выглядит как «сегодня нет новостей».
