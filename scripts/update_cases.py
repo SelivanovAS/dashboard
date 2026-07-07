@@ -87,6 +87,7 @@ from court_monitor.lifecycle import (  # noqa: F401 — ре-экспорт дл
     is_archived, advance_case_stage, is_case_archived, migrate_stages,
     should_parse_fi_card, appeal_card_linked, cassation_card_linked,
     suppress_fi_echo_events, FI_ECHO_CATCHUP_TYPES,
+    suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid,
     SERVICE_EVENT_PATTERNS, classify_verdict, classify_verdict_fi,

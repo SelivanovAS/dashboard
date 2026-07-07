@@ -47,6 +47,7 @@ from court_monitor.health import (
 from court_monitor.lifecycle import (
     advance_case_stage, is_archived, is_case_archived, migrate_stages,
     should_parse_fi_card, cassation_card_linked, suppress_fi_echo_events,
+    suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
     split_archived, split_archived_json, should_skip_case,
@@ -886,13 +887,15 @@ def _filter_ctx_fi_changes_echo(
     Прогоняем сохранённые fi_changes через тот же фильтр по актуальному
     состоянию дел, чтобы переигранный дайджест не тащил эхо-события.
     Дела ищем и по id, и по first_instance.case_number (у дел «с апелляции»
-    id — апел. номер), в обеих формах (_bare_case_number). Change'и без
-    оставшихся типов выбрасываются целиком.
+    id — апел. номер), в обеих формах (_bare_case_number). Дополнительно:
+    стародатный фильтр (suppress_stale_fi_events — работает по датам в самом
+    change, матч с делом не нужен) и дедуп записей одного FI-дела
+    (dedupe_fi_changes). Change'и без оставшихся типов выбрасываются целиком.
     """
-    if not fi_changes or not cases:
+    if not fi_changes:
         return fi_changes
     idx: dict[str, dict] = {}
-    for c in cases:
+    for c in cases or []:
         for key in (
             (c.get("id") or ""),
             ((c.get("first_instance") or {}).get("case_number") or ""),
@@ -911,11 +914,15 @@ def _filter_ctx_fi_changes_echo(
         case = idx.get(num) or idx.get(_bare_case_number(num))
         if case is not None:
             dropped += len(suppress_fi_echo_events(case, ch))
+        # Стародатные события фильтруем и без матча с делом — даты лежат
+        # в самом change.
+        dropped += len(suppress_stale_fi_events(ch))
         if ch.get("type"):
             kept.append(ch)
-    if dropped:
+    kept = dedupe_fi_changes(kept)
+    if dropped or len(kept) != len(fi_changes):
         log.info(
-            f"Replay: эхо-фильтр убрал {dropped} событий; "
+            f"Replay: эхо/стародатный фильтр убрал {dropped} событий; "
             f"дел в fi_changes: {len(fi_changes)} → {len(kept)}"
         )
     return kept
@@ -2116,6 +2123,14 @@ def main_json():
                 f"({', '.join(removed_echo)}) — вышестоящая карточка уже "
                 f"связана, в дайджест не шлём"
             )
+        # Стародатные события (анонс заседания в прошлом, жалоба старше
+        # DIGEST_STALE_EVENT_DAYS) — не новости, а раскопки первого парса.
+        removed_stale = suppress_stale_fi_events(change)
+        if removed_stale:
+            log.info(
+                f"  {fi.get('case_number', '')}: стародатные события "
+                f"({', '.join(removed_stale)}) — в дайджест не шлём"
+            )
 
         if change["type"]:
             fi_changes.append(change)
@@ -2138,6 +2153,17 @@ def main_json():
         f"force-parsed {ap_skip_stats['force_parsed']})"
     )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
+
+    # Одно FI-дело может жить в двух записях (апелляция по существу +
+    # частная жалоба) — обе парсят одну карточку и дают идентичные события.
+    # В дайджест такое дело должно попасть один раз.
+    before_dedupe = len(fi_changes)
+    fi_changes = dedupe_fi_changes(fi_changes)
+    if len(fi_changes) != before_dedupe:
+        log.info(
+            f"Дедуп fi_changes: {before_dedupe} → {len(fi_changes)} "
+            f"(дубли от записей одного FI-дела)"
+        )
 
     # ── 4c. Кассация (7kas.sudrf.ru) ──
     # Поиск только первая страница (по решению пользователя). Фильтр HMAO —

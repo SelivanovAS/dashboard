@@ -450,7 +450,7 @@ class TestParseCaseCardAppealTabNested:
 
 # ── State machine жизненного цикла ───────────────────────────────────────────
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 
 def _days_ago(n: int) -> str:
@@ -724,6 +724,89 @@ class TestSuppressFiEchoEvents:
         ch = self._change([])
         assert uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch) == []
         assert ch["type"] == []
+
+
+class TestSuppressStaleFiEvents:
+    """Стародатный фильтр дайджеста: анонс заседания с датой в прошлом и
+    жалобы старше DIGEST_STALE_EVENT_DAYS — раскопки первого парса карточки,
+    не новости (инцидент 07.07: «заседание 17.12.2025», касс. жалобы
+    октября-2025 в июльском дайджесте)."""
+
+    TODAY = date(2026, 7, 7)
+
+    def _ch(self, types, details):
+        return {"case": "2-1/2025", "type": list(types), "details": details}
+
+    def test_past_hearing_dropped(self):
+        ch = self._ch(["fi_hearing_new"], {"hearing_date": "17.12.2025"})
+        removed = uc.suppress_stale_fi_events(ch, today=self.TODAY)
+        assert removed == ["fi_hearing_new"]
+        assert ch["type"] == []
+
+    def test_future_and_today_hearing_kept(self):
+        for d in ("04.09.2026", "07.07.2026"):
+            ch = self._ch(["fi_hearing_next"], {"hearing_date": d})
+            assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
+            assert ch["type"] == ["fi_hearing_next"]
+
+    def test_hearing_without_date_kept(self):
+        # Ветка «дата и время не опубликованы» — hearing_date нет, fail-open.
+        ch = self._ch(["fi_hearing_new"], {"hearing_date_unpublished": True})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
+
+    def test_old_complaints_dropped_fresh_kept(self):
+        ch = self._ch(
+            ["fi_cassation_filed", "fi_sent_to_cassation", "fi_appeal_filed"],
+            {"cassation_filed_date": "02.10.2025",      # 9 мес. — протухла
+             "sent_to_cassation_date": "07.10.2025",    # тоже
+             "appeal_filed_date": "03.07.2026"},        # 4 дня — свежая
+        )
+        removed = uc.suppress_stale_fi_events(ch, today=self.TODAY)
+        assert sorted(removed) == ["fi_cassation_filed", "fi_sent_to_cassation"]
+        assert ch["type"] == ["fi_appeal_filed"]
+
+    def test_window_boundary(self):
+        # Ровно 45 дней — ещё свежая; 46 — уже нет.
+        ch45 = self._ch(["fi_cassation_filed"],
+                        {"cassation_filed_date": "23.05.2026"})
+        assert uc.suppress_stale_fi_events(ch45, today=self.TODAY) == []
+        ch46 = self._ch(["fi_cassation_filed"],
+                        {"cassation_filed_date": "22.05.2026"})
+        assert uc.suppress_stale_fi_events(ch46, today=self.TODAY) == [
+            "fi_cassation_filed"
+        ]
+
+    def test_undated_complaint_kept(self):
+        ch = self._ch(["fi_cassation_filed"], {"cassation_filed_date": ""})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
+
+    def test_other_types_untouched(self):
+        ch = self._ch(["fi_resolved", "fi_final_event"],
+                      {"hearing_date": "17.12.2025"})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
+
+
+class TestDedupeFiChanges:
+    """Одно FI-дело в двух записях (апелляция + частная жалоба) даёт
+    идентичные события — в дайджесте дело не должно двоиться."""
+
+    def test_identical_changes_collapsed(self):
+        ch = {"case": "2-155/2025", "type": ["fi_hearing_new"],
+              "details": {"hearing_date": "17.12.2025"}}
+        out = uc.dedupe_fi_changes([ch, dict(ch)])
+        assert len(out) == 1
+
+    def test_different_events_same_case_kept(self):
+        a = {"case": "2-155/2025", "type": ["fi_hearing_new"],
+             "details": {"hearing_date": "17.12.2025"}}
+        b = {"case": "2-155/2025", "type": ["fi_resolved"],
+             "details": {}}
+        assert len(uc.dedupe_fi_changes([a, b])) == 2
+
+    def test_order_preserved(self):
+        a = {"case": "2-1/2025", "type": ["fi_resolved"], "details": {}}
+        b = {"case": "2-2/2025", "type": ["fi_resolved"], "details": {}}
+        assert uc.dedupe_fi_changes([a, b, dict(a)]) == [a, b]
 
 
 class TestReplayEchoFilter:
