@@ -46,7 +46,7 @@ from court_monitor.health import (
 )
 from court_monitor.lifecycle import (
     advance_case_stage, is_archived, is_case_archived, migrate_stages,
-    should_parse_fi_card,
+    should_parse_fi_card, cassation_card_linked, suppress_fi_echo_events,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
     split_archived, split_archived_json, should_skip_case,
@@ -2016,8 +2016,7 @@ def main_json():
         # пишем ТОЛЬКО когда её ещё нет (cs.case_number пуст). При появлении
         # карточки на 7kas все поля перезапишутся в _cassation_card_to_block.
         fi_cassator_raw = card_info.get("_fi_cassator_raw", "").strip()
-        cs_existing = case_j.get("cassation") or {}
-        cs_has_card = bool((cs_existing.get("case_number") or "").strip())
+        cs_has_card = cassation_card_linked(case_j)
         if fi_cassator_raw and not cs_has_card:
             cs_role, cs_short = classify_appellant_role(
                 fi_cassator_raw,
@@ -2057,6 +2056,20 @@ def main_json():
             change["type"].append("fi_sent_to_cassation")
             change["details"]["sent_to_cassation_date"] = sent_date
             changed = True
+
+        # Эхо-фильтр дайджеста: если вышестоящая карточка уже связана,
+        # «догоняющие» события 1-й инст. (жалобы, решение, акты, статусы)
+        # юристу не шлём — он всё это знает из апел./касс. карточки. Флаги
+        # и данные в JSON выше уже проставлены: state machine, бейджи и
+        # drawer не затронуты. См. suppress_fi_echo_events (там же —
+        # схлопывание дубля «изготовлено» + «текст опубликован»).
+        removed_echo = suppress_fi_echo_events(case_j, change)
+        if removed_echo:
+            log.info(
+                f"  {fi.get('case_number', '')}: эхо-события "
+                f"({', '.join(removed_echo)}) — вышестоящая карточка уже "
+                f"связана, в дайджест не шлём"
+            )
 
         if change["type"]:
             fi_changes.append(change)
