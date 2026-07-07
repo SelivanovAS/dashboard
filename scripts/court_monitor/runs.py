@@ -875,6 +875,52 @@ def _lint_digest_and_alert(digest_html: str, *,
         log.warning(f"digest-lint: ошибка линтера: {exc}", exc_info=True)
 
 
+def _filter_ctx_fi_changes_echo(
+    fi_changes: list[dict], cases: list[dict]
+) -> list[dict]:
+    """Эхо-фильтр для replay-режимов (--replay-last / --push-last-digest).
+
+    Контекст `last_digest_context.json` записывается на парсинге, поэтому
+    suppress_fi_echo_events мог там ещё не действовать (контекст старше
+    фильтра) или дело связалось с вышестоящей карточкой уже ПОСЛЕ записи.
+    Прогоняем сохранённые fi_changes через тот же фильтр по актуальному
+    состоянию дел, чтобы переигранный дайджест не тащил эхо-события.
+    Дела ищем и по id, и по first_instance.case_number (у дел «с апелляции»
+    id — апел. номер), в обеих формах (_bare_case_number). Change'и без
+    оставшихся типов выбрасываются целиком.
+    """
+    if not fi_changes or not cases:
+        return fi_changes
+    idx: dict[str, dict] = {}
+    for c in cases:
+        for key in (
+            (c.get("id") or ""),
+            ((c.get("first_instance") or {}).get("case_number") or ""),
+        ):
+            key = key.strip()
+            if not key:
+                continue
+            idx.setdefault(key, c)
+            base = _bare_case_number(key)
+            if base:
+                idx.setdefault(base, c)
+    kept: list[dict] = []
+    dropped = 0
+    for ch in fi_changes:
+        num = (ch.get("case") or "").strip()
+        case = idx.get(num) or idx.get(_bare_case_number(num))
+        if case is not None:
+            dropped += len(suppress_fi_echo_events(case, ch))
+        if ch.get("type"):
+            kept.append(ch)
+    if dropped:
+        log.info(
+            f"Replay: эхо-фильтр убрал {dropped} событий; "
+            f"дел в fi_changes: {len(fi_changes)} → {len(kept)}"
+        )
+    return kept
+
+
 def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     """Проставить апеллянта из карточки 1-й инстанции.
 
@@ -2739,6 +2785,22 @@ def main_replay_last(push_all: bool = False):
     with open(config.LAST_DIGEST_CONTEXT_PATH, "r", encoding="utf-8") as f:
         ctx = json.load(f)
 
+    # Эхо-фильтр по актуальному состоянию дел: контекст мог быть записан
+    # до появления фильтра или до связки с вышестоящей карточкой. Кладём
+    # результат обратно в ctx, чтобы дайджест, линтер, сводка и per-sub
+    # push видели одно и то же (иначе линтер пожалуется на «потерянные»
+    # номера подавленных дел).
+    try:
+        _echo_cases = (
+            (load_json(config.JSON_PATH).get("cases") or [])
+            + (load_json(config.JSON_ARCHIVE_PATH).get("cases") or [])
+        )
+        ctx["fi_changes"] = _filter_ctx_fi_changes_echo(
+            ctx.get("fi_changes") or [], _echo_cases
+        )
+    except Exception as exc:
+        log.warning(f"Replay: эхо-фильтр пропущен: {exc}")
+
     # Fallback: если контекст сохранён до появления total_active_cassation
     # (старый ctx-payload), считаем из data/cases.json — там state-machine
     # с current_stage. ctx["cases"] хранит CSV-апелляцию без current_stage,
@@ -2903,6 +2965,18 @@ def main_push_last_digest(owner_only: bool = False):
 
     with open(config.LAST_DIGEST_CONTEXT_PATH, "r", encoding="utf-8") as f:
         ctx = json.load(f)
+
+    # Эхо-фильтр — см. main_replay_last.
+    try:
+        _echo_cases = (
+            (load_json(config.JSON_PATH).get("cases") or [])
+            + (load_json(config.JSON_ARCHIVE_PATH).get("cases") or [])
+        )
+        ctx["fi_changes"] = _filter_ctx_fi_changes_echo(
+            ctx.get("fi_changes") or [], _echo_cases
+        )
+    except Exception as exc:
+        log.warning(f"Replay: эхо-фильтр пропущен: {exc}")
 
     # Fallback: см. main_replay_last — если ctx сохранён до появления
     # total_active_cassation, считаем из data/cases.json (state-machine).
