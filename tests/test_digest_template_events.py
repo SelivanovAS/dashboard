@@ -597,6 +597,17 @@ class FiEventMatrixTest(unittest.TestCase):
         # В 3.2 «Изменения» дело не дублируется.
         self.assertNotIn("📅 <b>Изменения", html)
 
+    def test_fi_resolved_category_full_not_truncated(self):
+        """Категория в 3.5 — последним сегментом ЦЕЛИКОМ, без обрезки «…»
+        (просьба 07.07.2026, кейс 2-425/2026 «об освобождении…»)."""
+        html = self._one(
+            ["fi_resolved"],
+            {"category": "Споры, связанные с исполнительным производством → "
+                         "об освобождении имущества от ареста"},
+        )
+        self.assertIn("категория: об освобождении имущества от ареста", html)
+        self.assertNotIn("об освобождении…", html)
+
     def test_fi_act_text_published_in_3_6(self):
         html = self._one(["fi_act_text_published"])
         self.assertIn("📄 <b>Опубликованные тексты решений (1):</b>", html)
