@@ -114,8 +114,11 @@ FI_TYPE_DETAILS: dict[str, dict] = {
         "appellant_role": "Ответчик", "appellant_name": "Иванов И.И.",
         "appeal_filed_date": "05.06.2026",
     },
-    # runs.py:1917
-    "fi_cassation_filed": {"cassation_filed_date": "05.06.2026"},
+    # runs.py:1917 — cassator_* кладёт update_active_cases из _fi_cassator_raw
+    "fi_cassation_filed": {
+        "cassation_filed_date": "05.06.2026",
+        "cassator_role": "Ответчик", "cassator_name": "Иванов И.И.",
+    },
     # runs.py:1964
     "fi_sent_to_cassation": {"sent_to_cassation_date": "06.06.2026"},
     # runs.py:1812-1824
@@ -385,9 +388,10 @@ class FiEventMatrixTest(unittest.TestCase):
 
     def test_fi_hearing_new(self):
         html = self._one(["fi_hearing_new"])
-        # Даты предстоящих заседаний — жирным (просьба юриста 06.07.2026).
+        # Даты предстоящих заседаний — жирным (просьба юриста 06.07.2026);
+        # «назначено» перед типом заседания (просьба 07.07.2026).
         self.assert_in_changes_section(
-            html, "📅 заседание <b>15.08.2026 10:30</b>"
+            html, "📅 назначено заседание <b>15.08.2026 10:30</b>"
         )
 
     def test_fi_hearing_new_unpublished(self):
@@ -461,6 +465,33 @@ class FiEventMatrixTest(unittest.TestCase):
         )
         self.assertNotIn("⚖️ Изготовлено", html)
 
+    def test_fi_final_event_archive_suppressed(self):
+        """«Дело передано в архив» — клерикальное событие, в дайджест не идёт
+        (просьба 07.07.2026). Change только с архивом выпадает целиком → дайджест
+        становится «без изменений». Прошлый дайджест изолируем, иначе его эхо
+        (со словом «архив») подмешается в no-changes-ветку."""
+        with patch.object(cm_config, "LAST_DIGEST_PATH", "/nonexistent/none.json"):
+            html = self._one(
+                ["fi_final_event"],
+                {"event": "Дело передано в архив. 14:31. 06.07.2026",
+                 "event_date": "06.07.2026",
+                 "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+            )
+        self.assertNotIn("в архив", html)
+        self.assertNotIn("2-100/2026", html)  # дело в дайджесте не появилось
+        self.assertIn("изменений не было", html)
+
+    def test_fi_final_event_archive_kept_alongside_resolved(self):
+        """Архив гасится, но соседнее решение того же дела остаётся: дело
+        уходит в «Вынесенные решения», а не в «Изменения»."""
+        html = self._one(
+            ["fi_resolved", "fi_final_event"],
+            {"event": "Дело сдано в архив. 10:00. 06.07.2026"},
+        )
+        self.assertNotIn("в архив", html)
+        self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", html)
+        self.assertNotIn("📅 <b>Изменения", html)
+
     def test_fi_motivirovka_emitted(self):
         html = self._one(["fi_motivirovka_emitted"])
         self.assert_in_changes_section(
@@ -470,18 +501,50 @@ class FiEventMatrixTest(unittest.TestCase):
         )
 
     def test_fi_appeal_filed(self):
+        # Наименование лица, а не статус (просьба 07.07.2026): имя апеллянта
+        # выводится без слова-роли «Ответчик».
         html = self._one(["fi_appeal_filed"])
         self.assert_in_changes_section(
             html,
-            "📨 подана апелляц. жалоба (05.06.2026), "
-            "апеллянт: Ответчик Иванов И.И.",
+            "📨 подана апелляц. жалоба (05.06.2026), апеллянт: Иванов И.И.",
         )
+        self.assertNotIn("апеллянт: Ответчик", html)
+
+    def test_fi_appeal_filed_bare_role_resolves_to_party(self):
+        """Карточка дала слово-роль вместо имени («Истец»/«Истец») — в
+        дайджесте показываем наименование стороны, а не «Истец Истец»
+        (кейс 2-951/2026, 07.07.2026)."""
+        html = self._one(
+            ["fi_appeal_filed"],
+            {"appellant_role": "Истец", "appellant_name": "Истец"},
+            plaintiff="Гайсина Лилия Альбертовна",
+        )
+        self.assert_in_changes_section(
+            html,
+            "📨 подана апелляц. жалоба (05.06.2026), апеллянт: Гайсина Л.А.",
+        )
+        self.assertNotIn("Истец Истец", html)
+        self.assertNotIn("апеллянт: Истец", html)
 
     def test_fi_cassation_filed(self):
+        # Показываем подателя кассации по наименованию (просьба 07.07.2026).
         html = self._one(["fi_cassation_filed"])
+        self.assert_in_changes_section(
+            html,
+            "📨 подана кассационная жалоба (05.06.2026), податель: Иванов И.И.",
+        )
+
+    def test_fi_cassation_filed_without_filer(self):
+        """Старый контекст без cassator_* (replay) — строка без подателя,
+        не падаем и не пишем пустое «податель:»."""
+        html = self._one(
+            ["fi_cassation_filed"],
+            {"cassator_role": "", "cassator_name": ""},
+        )
         self.assert_in_changes_section(
             html, "📨 подана кассационная жалоба (05.06.2026)"
         )
+        self.assertNotIn("податель:", html)
 
     def test_fi_sent_to_cassation(self):
         html = self._one(["fi_sent_to_cassation"])
@@ -515,11 +578,21 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_resolved_in_3_5(self):
         html = self._one(["fi_resolved"])
         self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", html)
-        self.assertIn("Решение от 01.06.2026", html)
-        self.assertIn("<b>ИТОГ:</b> иск удовлетворён частично", html)
-        self.assertIn("<b>для банка:</b> в пользу банка", html)
+        # Двухстрочно (просьба 07.07.2026): категория — в строке сторон;
+        # дата+исход — с новой строки «{дата} вынесено решение. Итог: …».
+        self.assertIn("01.06.2026 вынесено решение", html)
+        self.assertIn("<b>Итог:</b> иск удовлетворён частично", html)
+        self.assertIn("<b>Для банка:</b> в пользу банка", html)
+        self.assertNotIn("Решение от", html)
+        self.assertNotIn("<b>ИТОГ:</b>", html)
         # Категория сокращается до «кредит».
         self.assertIn("категория: кредит", html)
+        # Категория — в строке со сторонами, «вынесено решение» — в другой.
+        head_line = next(
+            ln for ln in html.split("\n")
+            if "2-100/2026" in ln and "категория: кредит" in ln
+        )
+        self.assertNotIn("вынесено решение", head_line)
         self.assertEqual(anchors(html).count("2-100/2026"), 1)
         # В 3.2 «Изменения» дело не дублируется.
         self.assertNotIn("📅 <b>Изменения", html)

@@ -601,6 +601,64 @@ def render_no_changes_digest(today: str, total_active_line: str) -> str:
     return header + suffix
 
 
+# Административное перемещение «дело передано/сдано в архив» — клерикальное
+# событие ПОСЛЕ вынесения решения (само решение уже уходит в «⚖️ Вынесенные
+# решения»). Юристу в дайджесте не нужно (просьба 07.07.2026): гасим его
+# fi_final_event и в теле, и в сводке. Флаг/стадия в JSON не затронуты —
+# фильтруется только доставка (как эхо- и стародатный фильтры).
+_FI_ARCHIVE_EVENT_RE = re.compile(r"в\s+архив\b", re.IGNORECASE)
+
+
+def _strip_archive_final_events(fi_changes: list[dict]) -> list[dict]:
+    """Убрать fi_final_event «дело передано в архив» из fi_changes.
+
+    Возвращает новый список: у change'ей с архивным fi_final_event тип
+    вычищается (change с прочими типами — например, fi_resolved — остаётся
+    и рендерится в своей секции); change, где кроме архива ничего не было,
+    выбрасывается целиком. Оригинальные dict'ы не мутируем — контекст
+    переиспользуется на replay.
+    """
+    out: list[dict] = []
+    for ch in fi_changes:
+        types = ch.get("type") or []
+        ev = (ch.get("details") or {}).get("event", "") or ""
+        if "fi_final_event" in types and _FI_ARCHIVE_EVENT_RE.search(ev):
+            kept = [t for t in types if t != "fi_final_event"]
+            if not kept:
+                continue
+            ch = {**ch, "type": kept}
+        out.append(ch)
+    return out
+
+
+# Слова-роли из карточки: вкладка «Обжалование» в поле «Заявитель» отдаёт
+# «ИСТЕЦ»/«ОТВЕТЧИК» вместо имени. В дайджесте показываем НАИМЕНОВАНИЕ лица,
+# а не статус (просьба юриста 07.07.2026: «апеллянт: Истец Истец» → имя лица).
+_BARE_ROLE_WORDS = {"Истец", "Ответчик", "Третье лицо", "Иное лицо"}
+
+
+def _fi_appellant_display(role: str, name: str,
+                          pl_disp: str, df_disp: str) -> str:
+    """Наименование подателя жалобы (апелляц./кассац.) для строки дайджеста.
+
+    Показываем ИМЯ лица, а не слово-статус, и один раз. Если карточка дала
+    только слово-роль («Истец»/«Ответчик») — резолвим его в сторону дела по
+    роли (истец → истец дела, ответчик → ответчик дела). pl_disp/df_disp уже
+    прошли shorten_party_name + escape_html; настоящее имя экранируем здесь.
+    Пустая строка — если ни имени, ни резолвимой роли нет (голое «третье/иное
+    лицо»): статус в строке не показываем.
+    """
+    role = (role or "").strip()
+    name = (name or "").strip()
+    if not name or name in _BARE_ROLE_WORDS:
+        if role == "Истец":
+            return pl_disp
+        if role == "Ответчик":
+            return df_disp
+        return ""
+    return escape_html(name)
+
+
 def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              cases: list[dict] | None = None,
                              fi_new_cases: list[dict] | None = None,
@@ -655,6 +713,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         cass_changes = []
     if cass_discovered is None:
         cass_discovered = []
+
+    # Гасим административное «дело передано в архив» ДО сводки и тела —
+    # чтобы счётчики сводки и содержимое секций считались по одному списку.
+    fi_changes = _strip_archive_final_events(fi_changes)
 
     total_active = total_active_appeal + total_active_fi + total_active_cassation
 
@@ -821,8 +883,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         ht = escape_html(d.get("hearing_time", ""))
                         htype = escape_html(d.get("hearing_type", "заседание"))
                         hp = hd + (f" {ht}" if ht else "")
+                        # «назначено» перед типом заседания (просьба юриста
+                        # 07.07.2026): «📅 заседание 04.08.2026» →
+                        # «📅 назначено заседание 04.08.2026».
                         ev_list.append(
-                            f"📅 {htype} <b>{hp}</b>" if hp else f"📅 {htype}"
+                            f"📅 назначено {htype} <b>{hp}</b>"
+                            if hp else f"📅 назначено {htype}"
                         )
                 elif t == "fi_hearing_next":
                     new_p = escape_html(
@@ -908,20 +974,26 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         + ", полный текст не опубликован"
                     )
                 elif t == "fi_appeal_filed":
-                    role = escape_html(d.get("appellant_role", ""))
-                    name = escape_html(d.get("appellant_name", ""))
                     dt = escape_html(d.get("appeal_filed_date", ""))
-                    app_str = f"{role} {name}".strip()
+                    who = _fi_appellant_display(
+                        d.get("appellant_role", ""),
+                        d.get("appellant_name", ""), pl, df,
+                    )
                     ev_list.append(
                         "📨 подана апелляц. жалоба"
                         + (f" ({dt})" if dt else "")
-                        + (f", апеллянт: {app_str}" if app_str else "")
+                        + (f", апеллянт: {who}" if who else "")
                     )
                 elif t == "fi_cassation_filed":
                     dt = escape_html(d.get("cassation_filed_date", ""))
+                    who = _fi_appellant_display(
+                        d.get("cassator_role", ""),
+                        d.get("cassator_name", ""), pl, df,
+                    )
                     ev_list.append(
                         "📨 подана кассационная жалоба"
                         + (f" ({dt})" if dt else "")
+                        + (f", податель: {who}" if who else "")
                     )
                 elif t == "fi_sent_to_cassation":
                     dt = escape_html(d.get("sent_to_cassation_date", ""))
@@ -994,36 +1066,35 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cat = escape_html(category_short(short_category_chain(d.get("category", ""))))
             bank_role = escape_html(ch.get("bank_role", ""))
             bank_out = escape_html(d.get("bank_outcome", ""))
-            # В template держим компактно: одна строка. Формат симметричен
-            # тому, что просит LLM в 3.5, но без лишних отступов.
-            tail = (
-                f" — Решение"
-                + (f" от {dec_date}" if dec_date else "")
-                + (f". <b>ИТОГ:</b> {verdict}" if verdict else "")
-            )
-            extras: list[str] = []
+            # Двухстрочная вёрстка (просьба юриста 07.07.2026): строка 1 —
+            # стороны + категория (+ роль банка, если банк не в сторонах);
+            # строка 2 — «{дата} вынесено решение. Итог: …. Для банка: …».
+            # Строки одного дела идут ПОДРЯД (пустая — только между делами).
+            head_extras: list[str] = []
             if cat:
-                extras.append(f"категория: {cat}")
+                head_extras.append(f"категория: {cat}")
             # БАНК В ХВОСТЕ: «банк — роль» только когда банк не в сторонах.
             if bank_role and not _bank_in_parties(
                     ch.get("plaintiff", ""), ch.get("defendant", "")):
-                extras.append(f"банк — {bank_role.lower()}")
+                head_extras.append(f"банк — {bank_role.lower()}")
+            head_tail = (" | " + " | ".join(head_extras)) if head_extras else ""
+            fi_block.append(f"{link} ({court}) — {pl} vs {df}{head_tail}")
+            # Строка 2: дата вынесения + исход.
+            decision_parts: list[str] = [
+                f"{dec_date} вынесено решение" if dec_date
+                else "Вынесено решение"
+            ]
+            if verdict:
+                decision_parts.append(f"<b>Итог:</b> {verdict}")
             if bank_out:
-                extras.append(f"<b>для банка:</b> {bank_out}")
-            # Если в том же change есть fi_bank_role_changed (банк исключён
-            # из ответчиков / переведён в 3-е лицо) — явно поясняем нейтралитет,
-            # т.к. иначе юрист видит «Иск удовлетворён» и думает, что это
-            # против банка. _bank_in_parties может вернуть True (банк всё ещё
-            # упоминается в defendant-строке поиска), поэтому хвост «банк — роль»
-            # не выводится сам по себе.
+                decision_parts.append(f"<b>Для банка:</b> {bank_out}")
+            # Банк исключён из сторон / переведён в 3-е лицо — явный нейтралитет
+            # (иначе «иск удовлетворён» читается как «против банка»).
             if "fi_bank_role_changed" in ch["type"]:
-                extras.append(
-                    "<b>для банка:</b> нейтрально — банк не сторона согласно карточке"
+                decision_parts.append(
+                    "<b>Для банка:</b> нейтрально — банк не сторона согласно карточке"
                 )
-            extras_str = (" | " + "; ".join(extras)) if extras else ""
-            fi_block.append(
-                f"{link} ({court}) — {pl} vs {df}{tail}{extras_str}"
-            )
+            fi_block.append(". ".join(decision_parts))
             # Пустая строка между делами (воздух, просьба юриста 06.07.2026).
             fi_block.append("")
         if fi_block and fi_block[-1] == "":
