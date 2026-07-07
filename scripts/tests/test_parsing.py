@@ -726,6 +726,48 @@ class TestSuppressFiEchoEvents:
         assert ch["type"] == []
 
 
+class TestReplayEchoFilter:
+    """_filter_ctx_fi_changes_echo — эхо-фильтр replay-режимов: сохранённый
+    контекст (записан до фильтра/до связки) чистится по актуальному
+    состоянию дел перед переигрыванием дайджеста."""
+
+    def _cases(self):
+        return [
+            # Дело «с апелляции»: id — апел. номер, FI-номер в блоке.
+            {"id": "33-100/2026",
+             "first_instance": {"case_number": "2-10/2026"},
+             "appeal": {"case_number": "33-100/2026"}},
+            # Обычное дело без связки.
+            {"id": "2-20/2026",
+             "first_instance": {"case_number": "2-20/2026"}},
+        ]
+
+    def test_echo_case_dropped_normal_kept(self):
+        from court_monitor import runs as cm_runs
+        fi_changes = [
+            {"case": "2-10/2026", "type": ["fi_resolved", "fi_appeal_filed"],
+             "details": {}},
+            {"case": "2-20/2026", "type": ["fi_hearing_new"], "details": {}},
+        ]
+        kept = cm_runs._filter_ctx_fi_changes_echo(fi_changes, self._cases())
+        assert [ch["case"] for ch in kept] == ["2-20/2026"]
+        assert kept[0]["type"] == ["fi_hearing_new"]
+
+    def test_unknown_case_passes_through(self):
+        from court_monitor import runs as cm_runs
+        fi_changes = [
+            {"case": "2-99/2026", "type": ["fi_resolved"], "details": {}},
+        ]
+        kept = cm_runs._filter_ctx_fi_changes_echo(fi_changes, self._cases())
+        assert kept == fi_changes
+
+    def test_empty_inputs_noop(self):
+        from court_monitor import runs as cm_runs
+        assert cm_runs._filter_ctx_fi_changes_echo([], self._cases()) == []
+        ch = [{"case": "2-10/2026", "type": ["fi_resolved"], "details": {}}]
+        assert cm_runs._filter_ctx_fi_changes_echo(ch, []) == ch
+
+
 class TestIsCaseArchived:
     def test_fi_resolved_overdue_no_appeal_is_archived(self):
         case = {"current_stage": "first_instance",
