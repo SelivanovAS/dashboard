@@ -369,6 +369,83 @@ def suppress_fi_echo_events(case: dict, change: dict) -> list[str]:
     return removed
 
 
+# Анонсы заседаний: событие несёт details["hearing_date"]. Дата в прошлом —
+# не анонс, а раскопанная история карточки (первый парс после backfill).
+_FI_HEARING_ANNOUNCE_TYPES = (
+    "fi_hearing_new", "fi_hearing_next",
+    "fi_hearing_postponed", "fi_hearing_recess",
+)
+# Жалобы/направления: тип → ключ details с датой самого события.
+_FI_DATED_COMPLAINT_TYPES = {
+    "fi_appeal_filed": "appeal_filed_date",
+    "fi_cassation_filed": "cassation_filed_date",
+    "fi_sent_to_cassation": "sent_to_cassation_date",
+}
+
+
+def suppress_stale_fi_events(change: dict, today: date | None = None) -> list[str]:
+    """Убрать из change["type"] стародатные события (дополнение к
+    suppress_fi_echo_events — то ловит «вышестоящее дело уже известно»,
+    это — «новость протухла», даже если вышестоящей карточки нет):
+
+    - анонс заседания (fi_hearing_new/next/postponed/recess) с датой
+      СТРОГО в прошлом — «заседание назначено на 17.12.2025» в июле-2026
+      не новость (сегодняшняя дата — ещё анонс);
+    - жалоба/направление в касс. суд с датой старше
+      config.DIGEST_STALE_EVENT_DAYS (первый парс старой карточки).
+
+    Дата отсутствует/не парсится — событие остаётся (fail-open: лучше
+    лишняя строка, чем молча съеденная новость). Флаги, стадии и данные
+    JSON не трогаем — фильтруется только доставка в дайджест/push.
+    Возвращает список убранных типов (для лога).
+    """
+    types = change.get("type") or []
+    if not types:
+        return []
+    if today is None:
+        today = date.today()
+    details = change.get("details") or {}
+    removed: list[str] = []
+    kept: list[str] = []
+    for t in types:
+        stale = False
+        if t in _FI_HEARING_ANNOUNCE_TYPES:
+            d = parse_date(details.get("hearing_date") or "")
+            if d and d.date() < today:
+                stale = True
+        elif t in _FI_DATED_COMPLAINT_TYPES:
+            d = parse_date(details.get(_FI_DATED_COMPLAINT_TYPES[t]) or "")
+            if d and (today - d.date()).days > config.DIGEST_STALE_EVENT_DAYS:
+                stale = True
+        (removed if stale else kept).append(t)
+    if removed:
+        change["type"] = kept
+    return removed
+
+
+def dedupe_fi_changes(fi_changes: list[dict]) -> list[dict]:
+    """Схлопнуть одинаковые fi_changes от разных записей одного FI-дела.
+
+    Одно дело 1-й инст. может жить в двух записях cases.json (апелляция по
+    существу + частная жалоба — у каждой свой 33-номер, обе в
+    cassation_watch). Обе парсят ОДНУ карточку 1-й инст. и дают идентичные
+    события — в дайджесте дело двоится (инцидент 07.07: 2-155/2025 пришло
+    дважды). Ключ — (номер дела, типы, details) целиком: разные события
+    одного дела не склеиваются."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for ch in fi_changes:
+        key = json.dumps(
+            [ch.get("case"), ch.get("type"), ch.get("details")],
+            ensure_ascii=False, sort_keys=True, default=str,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(ch)
+    return out
+
+
 def advance_case_stage(case: dict) -> str | None:
     """Выполнить возможный переход стадии для дела. Возвращает имя предыдущей
     стадии, если переход произошёл, иначе None.

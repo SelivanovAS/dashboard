@@ -885,13 +885,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         # Запланированная дата ближайшего заседания (для
                         # «подготовки дела»/«беседы»/«предварительного
                         # заседания») — юристу нужна, к когда готовиться.
+                        # ТОЛЬКО будущая: прошедшая дата из старой карточки
+                        # («заседание назначено на 24.06» в июльском
+                        # дайджесте) — мусор первого парса, не анонс.
                         sh_d = escape_html(
                             d.get("scheduled_hearing_date", "")
                         )
                         sh_t = escape_html(
                             d.get("scheduled_hearing_time", "")
                         )
-                        if sh_d:
+                        sh_parsed = parse_date(sh_d) if sh_d else None
+                        if sh_parsed and sh_parsed.date() >= datetime.now().date():
                             sh_p = sh_d + (f" {sh_t}" if sh_t else "")
                             ev_list.append(
                                 f"📅 заседание назначено на <b>{sh_p}</b>"
