@@ -45,14 +45,14 @@
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 662](../../scripts/court_monitor/digest/template.py#L662). Собирает весь HTML дайджеста
+[Строка 671](../../scripts/court_monitor/digest/template.py#L671). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([576](../../scripts/court_monitor/digest/template.py#L576)).
+([585](../../scripts/court_monitor/digest/template.py#L585)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
@@ -72,7 +72,7 @@ LLM реально «думает». Алгоритм:
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
-   [522](../../scripts/court_monitor/digest/template.py#L522)).
+   [531](../../scripts/court_monitor/digest/template.py#L531)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),

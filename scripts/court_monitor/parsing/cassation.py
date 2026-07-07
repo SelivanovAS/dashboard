@@ -602,6 +602,10 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
                 try:
                     parsed = [date(int(y), int(m), int(d)) for d, m, y in raw_dates]
                 except ValueError:
+                    log.debug(
+                        f"7kas: невалидная дата в строке «без движения» "
+                        f"({section_name}): {joined!r}"
+                    )
                     continue
                 suspended_until = max(parsed).strftime("%d.%m.%Y")
                 if len(parsed) > 1:

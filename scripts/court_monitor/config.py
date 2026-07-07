@@ -211,8 +211,14 @@ CSV_COLUMNS = [
     "Дата публикации акта", "Дата заседания", "Судья-докладчик"
 ]
 
+# Уровень логирования: LOG_LEVEL=DEBUG включает диагностику (skip-строки
+# по каждому делу, полные списки не-HMAO судов, нераспарсенные даты и т.п.).
+# Неизвестное значение молча откатывается на INFO — прогон важнее строгости.
+_LOG_LEVEL_RAW = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+if _LOG_LEVEL_RAW not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+    _LOG_LEVEL_RAW = "INFO"
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, _LOG_LEVEL_RAW),
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
 )

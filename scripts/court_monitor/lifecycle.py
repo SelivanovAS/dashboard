@@ -630,6 +630,10 @@ def migrate_stages(cases: list[dict]) -> int:
             su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
             hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
         except ValueError:
+            log.debug(
+                f"  {case.get('id', '?')}: не разобрал даты кассации "
+                f"(suspended_until={su_raw!r}, hearing_date={hd_raw!r})"
+            )
             continue
         if hd >= su:
             cs["suspended_until"] = ""
@@ -1211,6 +1215,7 @@ def get_next_planned_date(events: list[dict]) -> tuple[date | None, str]:
             try:
                 return date(int(y), int(m), int(d)), "suspended"
             except ValueError:
+                log.debug(f"Невалидная дата «без движения» в событии: {text!r}")
                 return None, ""
         return None, ""
 
@@ -1221,6 +1226,7 @@ def get_next_planned_date(events: list[dict]) -> tuple[date | None, str]:
             try:
                 return date(int(m.group(3)), int(m.group(2)), int(m.group(1))), "hearing"
             except ValueError:
+                log.debug(f"Невалидная дата заседания в событии: {ev_date_raw!r}")
                 return None, ""
     return None, ""
 
@@ -1264,6 +1270,10 @@ def should_skip_case(
         try:
             last_checked = date.fromisoformat(last_checked_raw)
         except ValueError:
+            log.debug(
+                f"  {case_dict.get('id', '?')}: невалидный last_checked_at "
+                f"{last_checked_raw!r} — парсим принудительно"
+            )
             last_checked = None
     if last_checked is None or (today - last_checked).days >= force_parse_days:
         return False, ""
@@ -1284,7 +1294,10 @@ def should_skip_case(
                 if hd > today:
                     return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
             except ValueError:
-                pass
+                log.debug(
+                    f"  {case_dict.get('id', '?')}: невалидная hearing_date "
+                    f"кассации {hd_raw!r}"
+                )
         su_raw = (block.get("suspended_until") or "").strip()
         m_su = _DATE_DDMMYYYY_RX.match(su_raw)
         if m_su:
@@ -1293,7 +1306,10 @@ def should_skip_case(
                 if su > today:
                     return True, f"suspended_until({su.strftime('%d.%m.%Y')})"
             except ValueError:
-                pass
+                log.debug(
+                    f"  {case_dict.get('id', '?')}: невалидная suspended_until "
+                    f"кассации {su_raw!r}"
+                )
 
     planned, kind = get_next_planned_date(block.get("events") or [])
     if planned and planned >= today:
@@ -1314,6 +1330,27 @@ def should_skip_case(
             if days_since < 7:
                 return True, f"suspended_weekly({days_since}d/7d)"
     return False, ""
+
+
+def skip_reason_ru(reason: str) -> str:
+    """Человекочитаемая причина skip для лога.
+
+    Внутренние коды `should_skip_case` («future_hearing(12.08.2026)») остаются
+    как были — на них завязана логика подсчёта; переводим только при печати.
+    Неизвестный код возвращается как есть.
+    """
+    m = re.match(r"future_hearing\((.+)\)$", reason)
+    if m:
+        return f"заседание {m.group(1)} ещё впереди"
+    m = re.match(r"suspended_until\((.+)\)$", reason)
+    if m:
+        return f"без движения до {m.group(1)}"
+    m = re.match(r"suspended_weekly\((\d+)d/(\d+)d\)$", reason)
+    if m:
+        return f"без движения без срока, парсим раз в {m.group(2)} дн. (прошло {m.group(1)})"
+    if reason == "material_pending_promotion":
+        return "материал под М-номером, ждём промоушен"
+    return reason
 
 
 def fi_resolution_contradicted_by_future_hearing(fi: dict, today: date) -> bool:

@@ -62,7 +62,7 @@
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:594](scripts/court_monitor/lifecycle.py:594) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:350](scripts/court_monitor/linking.py:350) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
-| `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:912](scripts/court_monitor/linking.py:912) |
+| `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:916](scripts/court_monitor/linking.py:916) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
 | `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:113](scripts/court_monitor/parsing/cards.py:113) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
@@ -70,9 +70,9 @@
 | `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:207](scripts/court_monitor/linking.py:207) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
-| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:496](scripts/court_monitor/linking.py:496) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:88](scripts/court_monitor/runs.py:88) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:996](scripts/court_monitor/runs.py:996) |
+| `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:98](scripts/court_monitor/runs.py:98) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1030](scripts/court_monitor/runs.py:1030) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |
@@ -228,7 +228,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:879](scripts/court_monitor/runs.py:879):
+Константы в [scripts/court_monitor/runs.py:913](scripts/court_monitor/runs.py:913):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
@@ -309,6 +309,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 - `OWNER_SECRET` — секрет Worker'а для `POST /mark-owner` (пометка устройства владельцем).
 - `GITHUB_PAT` — в secrets Worker'а, для `workflow_dispatch`.
 - `DIGESTED_ACTS_PATH` — опционально переопределить путь к `.digested_acts`.
+- `LOG_LEVEL` — уровень логов прогона (`DEBUG`/`INFO`/`WARNING`/`ERROR`, дефолт `INFO`); `DEBUG` показывает пер-кейсовые skip/«без изменений» и прочую диагностику.
 
 ## Куда уходит дайджест
 

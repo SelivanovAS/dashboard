@@ -50,7 +50,7 @@ from court_monitor.lifecycle import (
     suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
-    split_archived, split_archived_json, should_skip_case,
+    split_archived, split_archived_json, should_skip_case, skip_reason_ru,
     get_next_planned_date, classify_verdict, classify_verdict_fi,
     extract_fi_verdict_from_events, extract_result_from_event,
     classify_hearing_type, bank_side_outcome, bank_side_outcome_fi,
@@ -81,9 +81,19 @@ from court_monitor.storage import (
 from court_monitor.textutil import (
     parse_date, escape_html, case_id_uid, _bare_case_number,
     extract_motive_part, shorten_party_name, shorten_court_name,
-    classify_appellant_role, is_russian_working_day,
+    classify_appellant_role, is_russian_working_day, plural_ru,
     _strip_html, _TIME_RE, _FI_CASE_NUM_RE, _CASE_NUM_RE,
 )
+
+
+def log_phase(num: int, total: int, title: str) -> None:
+    """Разделитель фазы прогона в логе: «— [3/9] Название —».
+
+    Формат «— [» ловится MILESTONE_RE в ops/mac-local-run/progress_pusher.py
+    (онлайн-вехи в админке) — менять согласованно.
+    """
+    log.info(f"— [{num}/{total}] {title} —")
+
 
 def update_active_cases(
     cases: list[dict],
@@ -119,12 +129,31 @@ def update_active_cases(
     parsed = 0
     eligible_total = 0  # активные не-архивные не-skip_apel — те, по кому решаем парсить или skip
 
+    # Считаем очередь заранее — для стартовой строки и прогресса «X/Y».
+    active_total = sum(1 for c in cases if not is_archived(c))
+    planned_total = sum(
+        1 for c in cases
+        if not is_archived(c)
+        and not (skip_apel_nums and c.get("Номер дела", "").strip() in skip_apel_nums)
+    )
+    past_stage = active_total - planned_total
+    log.info(
+        f"Обновляю {planned_total} активных дел апелляции"
+        + (f" (ещё {past_stage} уже прошли апелляцию — карточки не парсим)"
+           if past_stage else "")
+    )
+
     for case in cases:
         if is_archived(case):
             continue
         if skip_apel_nums and case.get("Номер дела", "").strip() in skip_apel_nums:
             continue
         eligible_total += 1
+        if eligible_total % 20 == 0:
+            log.info(
+                f"Апелляция: обработано {eligible_total}/{planned_total} "
+                f"(изменений {len(changes)})"
+            )
 
         # Smart-skip: если есть JSON-двойник апел-дела, проверяем известную
         # будущую дату. Для CSV-row без JSON-родителя — фолбэк, парсим как раньше.
@@ -138,7 +167,7 @@ def update_active_cases(
                     skipped_future += 1
                 else:
                     skipped_suspended += 1
-                log.debug(f"  skip {num}: {reason}")
+                log.debug(f"  skip {num}: {skip_reason_ru(reason)}")
                 continue
             planned_fp, _kfp = get_next_planned_date(ap_dict_skip.get("events") or [])
             if planned_fp and planned_fp >= today:
@@ -449,7 +478,12 @@ def update_active_cases(
         if "new_act" in change["type"]:
             _digested_acts.add(case["Номер дела"])
 
-        log.info(f"  {case['Номер дела']}: {'→ '.join(change['type']) or 'без изменений'}")
+        # «Без изменений» — фоновый шум (100+ строк за прогон), уводим в DEBUG;
+        # прогресс по очереди виден по строкам «Апелляция: обработано X/Y».
+        if change["type"]:
+            log.info(f"  {case['Номер дела']}: {' → '.join(change['type'])}")
+        else:
+            log.debug(f"  {case['Номер дела']}: без изменений")
 
     save_digested_acts(_digested_acts)
     return cases, changes, {
@@ -496,7 +530,8 @@ def check_court_available(court: CourtConfig | None = None) -> bool:
     try:
         r = session.get(url, timeout=15)
         return r.status_code == 200
-    except Exception:
+    except Exception as e:
+        log.debug(f"Суд недоступен ({url}): {type(e).__name__}: {e}")
         return False
 
 
@@ -590,9 +625,8 @@ def main():
         log.warning("Не удалось загрузить страницу поиска")
     timings["search"] = time.perf_counter() - t0
 
-    # 4. Обновляем активные дела
+    # 4. Обновляем активные дела (строку «Обновляю N …» печатает сама функция)
     t0 = time.perf_counter()
-    log.info(f"Обновляю {active_count} активных дел...")
     cases, changes, _skip_stats = update_active_cases(cases)
     timings["cards_update"] = time.perf_counter() - t0
 
@@ -1018,6 +1052,7 @@ def main_json():
     t_total_start = time.perf_counter()
 
     # 1. Загружаем текущие данные JSON
+    log_phase(1, 9, "Загрузка данных, миграция, дедуп")
     t0 = time.perf_counter()
     data = load_json(config.JSON_PATH)
     cases = data.get("cases", [])
@@ -1057,8 +1092,9 @@ def main_json():
             existing_ids.add(ap["case_number"].strip())
 
     log.info(
-        f"Загружено {len(cases)} дел из JSON (+{len(archived_cases)} в горячем "
-        f"архиве, +{len(cold_archived_cases)} в холодном для дедупликации)"
+        f"Загружено {len(cases)} {plural_ru(len(cases), 'дело', 'дела', 'дел')} "
+        f"из JSON (+{len(archived_cases)} в горячем архиве, "
+        f"+{len(cold_archived_cases)} в холодном для дедупликации)"
     )
 
     # Миграция старой модели стадий (first_instance|appeal) на новую
@@ -1067,7 +1103,10 @@ def main_json():
     # раза появились новые сигналы (жалоба/акт/истекло окно).
     migrated = migrate_stages(cases)
     if migrated:
-        log.info(f"State-machine: мигрировано {migrated} переходов при загрузке")
+        log.info(
+            f"State-machine: мигрировано {migrated} "
+            f"{plural_ru(migrated, 'переход', 'перехода', 'переходов')} при загрузке"
+        )
 
     # Реактивация архивных дел 1-й инст. с потенциалом поздней жалобы.
     # Подмешиваем их в cases ДО парсинга карточек, чтобы fi_active включил
@@ -1102,6 +1141,7 @@ def main_json():
         )
 
     # ── 2. Парсинг апелляции: новые дела ──
+    log_phase(2, 9, "Поиск апелляции: новые дела")
     t0 = time.perf_counter()
     csv_cases = load_csv(config.CSV_PATH)
     csv_archived = load_csv(config.CSV_ARCHIVE_PATH)
@@ -1128,7 +1168,10 @@ def main_json():
     if search_html:
         search_cases = parse_search_page(search_html)
         health_obs["appeal:oblsud"] = len(search_cases)
-        log.info(f"Апелляция: {len(search_cases)} дел на странице")
+        log.info(
+            f"Апелляция: {len(search_cases)} "
+            f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
+        )
 
         if not search_cases and csv_active_count > 0:
             warn = (
@@ -1177,7 +1220,7 @@ def main_json():
     # отправит их в архив этим же прогоном.
     fi_discovered_resolved: list[dict] = []
     enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
-    log.info(f"Парсинг {len(enabled_courts)} судов первой инстанции...")
+    log_phase(3, 9, f"Поиск новых дел: {len(enabled_courts)} судов 1-й инстанции")
 
     # Индекс существующих cases по id — нужен для промоушена М-записей
     # в 2-XXX, когда материал регистрируется и в выдаче появляется
@@ -1192,13 +1235,14 @@ def main_json():
     # Используем список пар, а не dict — CourtConfig не хешируется.
     fi_results_by_court: list = []
 
-    for court in enabled_courts:
+    for court_idx, court in enumerate(enabled_courts, 1):
+        court_tag = f"[{court_idx}/{len(enabled_courts)}]"
         health_labels[f"fi:{court.domain}"] = court.name
         polite_delay()
         search_html = fetch_page(court.search_url())
         if not search_html:
             health_obs[f"fi:{court.domain}"] = None
-            log.warning(f"  {court.name}: не удалось загрузить поиск")
+            log.warning(f"  {court_tag} {court.name}: не удалось загрузить поиск")
             continue
 
         fi_results = parse_first_instance_search(search_html, court)
@@ -1249,7 +1293,9 @@ def main_json():
             fresh = [r for r in new_fi if not _discovered_already_resolved_old(r)]
             stale = [r for r in new_fi if _discovered_already_resolved_old(r)]
             log.info(
-                f"  {court.name}: {len(fi_results)} дел, {len(fresh)} новых"
+                f"  {court_tag} {court.name}: {len(fi_results)} "
+                f"{plural_ru(len(fi_results), 'дело', 'дела', 'дел')}, "
+                f"{len(fresh)} новых"
                 + (f", {len(stale)} завершённых-старых" if stale else "")
             )
             for fi in fresh:
@@ -1266,7 +1312,10 @@ def main_json():
                 fi_discovered_resolved.append(json_case)
                 existing_ids.add(fi["case_number"])
         else:
-            log.info(f"  {court.name}: {len(fi_results)} дел, новых нет")
+            log.info(
+                f"  {court_tag} {court.name}: {len(fi_results)} "
+                f"{plural_ru(len(fi_results), 'дело', 'дела', 'дел')}, новых нет"
+            )
 
     # Re-link дел, вернувшихся из кассации в 1-ю инст. (awaiting_relink →
     # first_instance, новый раунд). Делается ПОСЛЕ накопления fi_results_by_court
@@ -1287,8 +1336,8 @@ def main_json():
     # После перехода в cassation_watch апел. карточка больше не
     # парсится (см. user-decision: «30 дней после апел. заседания или
     # публикация акта — и мы перестаём парсить сайт апел. инстанции»).
+    log_phase(4, 9, "Обновление карточек апелляции")
     t0 = time.perf_counter()
-    log.info(f"Обновляю {csv_active_count} активных дел апелляции...")
     json_appeal_by_num: dict = {}
     json_case_by_apnum: dict = {}
     skip_apel_nums: set[str] = set()
@@ -1315,6 +1364,7 @@ def main_json():
     # cassation_watch (ищем касс. жалобу после апел. определения).
     # awaiting_appeal / appeal / cassation_pending — парсинг 1-й инст.
     # не нужен (см. advance_case_stage).
+    log_phase(5, 9, "Обновление карточек 1-й инстанции")
     t0 = time.perf_counter()
     # Бэкфилл ссылок на карточку 1-й инст. для дел, пришедших «сверху» (через
     # поиск апелляции): у них link/court_domain пусты, и без этого цикл ниже
@@ -1330,7 +1380,7 @@ def main_json():
     # should_parse_fi_card и ТЗ юриста «продолжаем парсить до направления в
     # кассацию/апелляцию либо появления карточки в вышестоящем суде»).
     fi_active = [c for c in cases if should_parse_fi_card(c)]
-    log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции...")
+    log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции")
     # Нормализация: снимаем ложный «Решено» там, где назначено будущее
     # заседание (карточка такого дела часто скипается smart-skip'ом, поэтому
     # чиним по сохранённым данным до цикла обновления).
@@ -1345,6 +1395,9 @@ def main_json():
     fi_skipped_suspended = 0
     fi_force_parsed = 0
     fi_parsed = 0
+    # Дела без карточки для запроса (нет ссылки/суд не из реестра) — раньше
+    # выпадали из цикла молча, и разрыв «спарсено X из Y» был необъясним.
+    fi_no_card = 0
 
     # Маркеры мусорного значения «Результат» из карточек 1 инстанции:
     # иногда парсер цепляет стандартную подсказку сайта вместо реального
@@ -1352,18 +1405,30 @@ def main_json():
     # осмысленные данные и не поднимать ложные события в дайджесте.
     _garbage_result_markers = ("Дата размещения", "Информация о размещении")
 
-    for case_j in fi_active:
+    for fi_idx, case_j in enumerate(fi_active, 1):
+        if fi_idx % 20 == 0:
+            log.info(
+                f"1 инст: обработано {fi_idx}/{len(fi_active)} "
+                f"(изменений {len(fi_changes)})"
+            )
         fi = case_j.get("first_instance", {})
+        fi_num_log = fi.get("case_number") or case_j.get("id") or "?"
         court_domain = fi.get("court_domain", "")
         court_cfg = fi_court_map.get(court_domain)
         if not court_cfg:
+            fi_no_card += 1
+            log.debug(f"  {fi_num_log}: суд не из реестра 1-й инст., карточку не парсим")
             continue
         link_raw = fi.get("link", "")
         if not link_raw:
+            fi_no_card += 1
+            log.debug(f"  {fi_num_log}: нет ссылки на карточку (ждём backfill_fi_links)")
             continue
         # Извлекаем case_id и case_uid из ссылки
         pm = re.match(r'^(\d+)\|([a-f0-9-]+)$', link_raw)
         if not pm:
+            fi_no_card += 1
+            log.debug(f"  {fi_num_log}: ссылка на карточку не разобралась: {link_raw!r}")
             continue
         cid, cuid = pm.group(1), pm.group(2)
 
@@ -1375,7 +1440,7 @@ def main_json():
                 fi_skipped_future += 1
             else:
                 fi_skipped_suspended += 1
-            log.debug(f"  skip {fi.get('case_number','?')}: {reason}")
+            log.debug(f"  skip {fi.get('case_number','?')}: {skip_reason_ru(reason)}")
             continue
         # Force-parse счётчик: парсим, но planned_date в будущем — значит
         # last_checked_at был ≥21 дня назад (страховочный прогон).
@@ -2147,22 +2212,29 @@ def main_json():
         if change["type"]:
             fi_changes.append(change)
 
-        log.info(f"  {fi['case_number']}: {'обновлено' if changed else 'без изменений'}")
+        # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: обработано X/Y».
+        if change["type"]:
+            log.info(f"  {fi['case_number']}: {' → '.join(change['type'])}")
+        elif changed:
+            log.info(f"  {fi['case_number']}: обновлено (без событий для дайджеста)")
+        else:
+            log.debug(f"  {fi['case_number']}: без изменений")
 
     timings["fi_update"] = time.perf_counter() - t0
     fi_total = len(fi_active)
     fi_skip_total = fi_skipped_future + fi_skipped_suspended
     log.info(
-        f"1 инст: {fi_parsed}/{fi_total} парсинг "
-        f"(skip {fi_skip_total}: {fi_skipped_future} заседание, "
-        f"{fi_skipped_suspended} без движения; force-parsed {fi_force_parsed})"
+        f"1 инст: спарсено {fi_parsed}/{fi_total} карточек "
+        f"(пропуски: {fi_skipped_future} заседание впереди, "
+        f"{fi_skipped_suspended} без движения, {fi_no_card} без ссылки/суда; "
+        f"форс-парс {fi_force_parsed})"
     )
     ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
     log.info(
-        f"Апелляция: {ap_skip_stats['parsed']}/{ap_skip_stats['total']} парсинг "
-        f"(skip {ap_skip_total}: {ap_skip_stats['skipped_future']} заседание, "
+        f"Апелляция: спарсено {ap_skip_stats['parsed']}/{ap_skip_stats['total']} "
+        f"карточек (пропуски: {ap_skip_stats['skipped_future']} заседание впереди, "
         f"{ap_skip_stats['skipped_suspended']} без движения; "
-        f"force-parsed {ap_skip_stats['force_parsed']})"
+        f"форс-парс {ap_skip_stats['force_parsed']})"
     )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
@@ -2182,6 +2254,7 @@ def main_json():
     # внутри parse_cassation_search_page по match_hmao_first_instance.
     # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
     # поиск иногда матчит по случайному совпадению в тексте.
+    log_phase(6, 9, "Кассация 7kas: поиск и карточки")
     t0 = time.perf_counter()
     cass_changes: list[dict] = []
     cass_discovered: list[dict] = []
@@ -2210,16 +2283,38 @@ def main_json():
                 f"HMAO {len(hmao_results)}, не-HMAO отброшено "
                 f"{len(cass_search_results) - len(hmao_results)}"
             )
-            # Печатаем НАЗВАНИЯ отброшенных судов (различающиеся) — чтобы любой
-            # будущий рассинхрон названия (ё/е, переименование, новый суд)
-            # был виден в логе, а не исчезал в счётчике. Именно эта строка
-            # вскрыла бы баг с «Березовским» (е vs ё) сразу. См. _eyo.
+            # Отброшенные суды нужны в логе, чтобы рассинхрон названия (ё/е,
+            # переименование, новый суд) был виден, а не исчезал в счётчике —
+            # именно такая строка вскрыла бы баг с «Березовским» (е vs ё).
+            # Чтобы не печатать простыню из ~20 чужих судов: похожие на ХМАО —
+            # WARNING (кандидаты на рассинхрон реестра), остальные — первые 5
+            # на INFO, полный список на DEBUG.
             dropped_courts = sorted({
                 (r.get("fi_court_long") or "").strip()
                 for r in cass_search_results if not r["fi_court_config"]
             } - {""})
             if dropped_courts:
-                log.info("  7kas: отброшено как не-HMAO: " + "; ".join(dropped_courts))
+                suspicious = [
+                    c for c in dropped_courts
+                    if re.search(r"Ханты-Манс|Югор|Югр|ХМАО", c, re.IGNORECASE)
+                ]
+                for s in suspicious:
+                    log.warning(
+                        f"  7kas: суд похож на ХМАО, но не сматчился с реестром "
+                        f"(возможен рассинхрон названия, класс бага «ё/е»): {s}"
+                    )
+                others = [c for c in dropped_courts if c not in suspicious]
+                shown = others[:5]
+                rest = len(others) - len(shown)
+                if shown:
+                    log.info(
+                        "  7kas: отброшено как не-HMAO: " + "; ".join(shown)
+                        + (f" — и ещё {rest} (полный список на DEBUG)" if rest else "")
+                    )
+                log.debug(
+                    "  7kas: отброшено как не-HMAO (полный список): "
+                    + "; ".join(dropped_courts)
+                )
 
             # Индекс существующих дел по номеру 1-й инст. — для smart-skip
             # (discovery-кейсы остаются вне индекса и парсятся всегда).
@@ -2243,9 +2338,9 @@ def main_json():
                             cass_skipped_future += 1
                         else:
                             cass_skipped_suspended += 1
-                        log.info(
+                        log.debug(
                             f"  7kas: skip {r['cassation_internal_number']} "
-                            f"({fi_num_search}): {reason}"
+                            f"({fi_num_search}): {skip_reason_ru(reason)}"
                         )
                         continue
                 polite_delay()
@@ -2295,10 +2390,9 @@ def main_json():
         # Кассация — третий парсер, его падение не должно ронять весь прогон.
         # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
         log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
-    cass_skip_total = cass_skipped_future + cass_skipped_suspended
     log.info(
-        f"Кассация: {cass_parsed}/{cass_eligible} парсинг "
-        f"(skip {cass_skip_total}: {cass_skipped_future} заседание, "
+        f"Кассация: спарсено {cass_parsed}/{cass_eligible} карточек "
+        f"(пропуски: {cass_skipped_future} заседание впереди, "
         f"{cass_skipped_suspended} без движения)"
     )
     timings["cassation"] = time.perf_counter() - t0
@@ -2347,9 +2441,9 @@ def main_json():
                     or case.get("id")
                     or "?"
                 )
-                log.info(
+                log.debug(
                     f"  7kas refresh: skip {cass.get('case_number') or '?'} "
-                    f"({fi_saved}): {reason}"
+                    f"({fi_saved}): {skip_reason_ru(reason)}"
                 )
                 continue
             planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
@@ -2398,11 +2492,10 @@ def main_json():
     except Exception as exc:
         log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
     log.info(
-        f"7kas refresh: {cass_refresh_parsed}/{cass_refresh_total} парсинг "
-        f"(skip {cass_refresh_skipped_future + cass_refresh_skipped_suspended}: "
-        f"{cass_refresh_skipped_future} заседание, "
+        f"7kas refresh: спарсено {cass_refresh_parsed}/{cass_refresh_total} карточек "
+        f"(пропуски: {cass_refresh_skipped_future} заседание впереди, "
         f"{cass_refresh_skipped_suspended} без движения; "
-        f"force-parsed {cass_refresh_force_parsed}; "
+        f"форс-парс {cass_refresh_force_parsed}; "
         f"{cass_refresh_fresh} уже свежие)"
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
@@ -2432,6 +2525,7 @@ def main_json():
     # и всплеск карточек-«огрызков» — сервисное сообщение в Telegram, иначе
     # смена вёрстки суда выглядит как «нет новостей». Сам детектор не должен
     # ронять прогон ни при каких обстоятельствах.
+    log_phase(7, 9, "Здоровье парсеров")
     try:
         health_state, health_alerts = update_parse_health(
             health_obs, health_labels
@@ -2454,6 +2548,7 @@ def main_json():
         log.warning(f"parse-health: ошибка детектора: {exc}", exc_info=True)
 
     # ── 5. Сохраняем CSV (обратная совместимость) ──
+    log_phase(8, 9, "Связка, state-machine, архив, сохранение")
     t0 = time.perf_counter()
     active_csv, newly_archived_csv = split_archived(csv_cases)
     if newly_archived_csv:
@@ -2649,6 +2744,7 @@ def main_json():
         and not is_case_archived(c)
     )
     t0 = time.perf_counter()
+    log_phase(9, 9, "Дайджест и доставка")
     log.info("Генерирую дайджест...")
     save_digest_context(
         appeal_new_cases_csv, changes, cases=csv_cases,

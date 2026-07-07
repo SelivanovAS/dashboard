@@ -458,7 +458,11 @@ def _cassation_card_to_block(info: dict) -> dict:
                 if hd >= su:
                     suspended_until = ""
             except ValueError:
-                pass
+                log.debug(
+                    f"  7kas {info.get('cassation_internal_number') or '?'}: "
+                    f"не разобрал даты (suspended_until={suspended_until!r}, "
+                    f"hearing_date={hd_raw!r})"
+                )
     block = {
         "case_number": info.get("cassation_internal_number", ""),
         "cassation_number": info.get("cassation_number", ""),
