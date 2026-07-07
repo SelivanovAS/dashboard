@@ -149,6 +149,7 @@ from court_monitor.digest.postprocess import (  # noqa: F401 — ре-экспо
     _shorten_categories_in_html, _drop_zero_count_sections,
     _strip_section_numbering, _purge_3_6_without_act_text,
     _close_open_tags, _strip_orphan_close_tags, truncate_html_message,
+    truncate_digest_for_telegram,
 )
 from court_monitor.digest.template import (  # noqa: F401 — ре-экспорт для совместимости
     _bank_in_parties, _section_break, next_tuesday, build_summary_line,

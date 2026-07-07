@@ -42,7 +42,8 @@ _FORBIDDEN_TAGS_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Маркер truncate_html_message: дайджест не влез в 2×4096 и был обрезан.
+# Маркер обрезки (truncate_html_message). В боевой генерации больше не
+# ставится — HTML не обрезаем; оставлен как страховочный сигнал линтеру.
 _TRUNCATED_MARKER = "сообщение обрезано"
 
 
@@ -177,16 +178,17 @@ def _lint_digest_html_inner(
     if not (html or "").strip():
         return ["дайджест пуст при непустом контексте данных"]
 
+    # Готовый HTML дайджеста больше не обрезаем по длине: дашборд показывает
+    # его целиком, а send_telegram через split_message сам режет на сообщения.
+    # Поэтому проверки «длина > 2×4096» тут нет — это не дефект. Маркер обрезки
+    # оставляем как страховку: если какой-то другой путь всё же обрежет текст,
+    # линтер это заметит и погасит пономерной шум.
     truncated = _TRUNCATED_MARKER in html
     if truncated:
         problems.append(
-            "дайджест обрезан по лимиту Telegram — часть дел не видна "
+            "дайджест обрезан — часть дел не видна "
             "(проверки полноты номеров пропущены)"
         )
-
-    limit = config.TELEGRAM_MSG_LIMIT * 2
-    if len(html) > limit:
-        problems.append(f"длина {len(html)} превышает лимит {limit}")
 
     if _close_open_tags(html) != html:
         problems.append("несбалансированные HTML-теги")

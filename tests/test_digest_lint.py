@@ -144,11 +144,18 @@ class LintProblemsTest(unittest.TestCase):
         self.assertEqual(uc.lint_digest_html(llm_style_html, **ctx), [])
 
     def test_truncated_digest_flagged_without_number_noise(self):
-        # Обрезка — одна общая проблема; потерянные номера не перечисляем.
+        # Боевая генерация HTML больше не обрезает (truncate_html_message
+        # снят), но линтер обязан корректно отработать страховочный путь:
+        # если маркер обрезки всё же появится — сообщить об этом ОДНОЙ общей
+        # проблемой и НЕ перечислять потерянные номера.
         many = [make_fi_new_case(case=f"2-{8000 + i}/2026") for i in range(80)]
         ctx = _ctx(fi_new_cases=many)
-        html = render(**ctx)
-        self.assertIn("сообщение обрезано", html)
+        # Симулируем обрезанный дайджест: только первое дело + маркер обрезки.
+        html = (
+            "📊 <b>Мониторинг</b>\n\n"
+            '<a href="u"><b>2-8000/2026</b></a> — Истец vs Сбербанк\n\n'
+            "…<i>сообщение обрезано</i>"
+        )
         problems = uc.lint_digest_html(html, **ctx)
         self.assertTrue(
             any("обрезан" in p for p in problems), problems

@@ -19,7 +19,7 @@ from court_monitor.config import log
 from court_monitor.courts import (
     CASSATION_COURT, case_card_url, case_link_html, fi_card_url,
 )
-from court_monitor.digest.postprocess import truncate_html_message
+from court_monitor.digest.postprocess import _close_open_tags
 from court_monitor.lifecycle import (
     bank_side_outcome, bank_side_outcome_fi,
     _is_event_text_in_result_field, _fi_return_reason_for_render,
@@ -1735,8 +1735,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     lines.append(f'<a href="{config.DASHBOARD_URL}">📊 Дашборд</a>')
 
     text = "\n".join(lines)
-    # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
-    return truncate_html_message(text, config.TELEGRAM_MSG_LIMIT * 2)
+    # HTML не обрезаем: дашборд рендерит дайджест целиком, а send_telegram
+    # через split_message сам разложит его на сообщения по лимиту Telegram.
+    # Раньше здесь стоял truncate_html_message(…, 2×4096) — на многособытийных
+    # днях он резал хвост дайджеста (вплоть до футера и ссылки на дашборд).
+    return _close_open_tags(text)
 
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
