@@ -616,7 +616,9 @@ def send_telegram(text: str):
     """Отправить сообщение в Telegram (HTML-формат)."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         log.warning("Telegram не настроен, сообщение не отправлено")
-        log.info(f"Дайджест:\n{text}")
+        preview = "\n".join(text.splitlines()[:3])
+        log.info(f"Сообщение ({len(text)} символов), начало:\n{preview}")
+        log.debug(f"Сообщение целиком:\n{text}")
         return
 
     # Разбиваем на части если превышен лимит
@@ -699,12 +701,53 @@ def split_message(text: str, limit: int = 4096) -> list[str]:
 # ── Run summary ──────────────────────────────────────────────────────────────
 
 def _format_timings(timings: dict[str, float]) -> str:
-    """Форматирует словарь этап→секунды в короткую строку."""
-    order = ["load_csv", "search", "cards_update", "digest", "telegram", "save", "total"]
-    seen = set(order)
+    """Форматирует словарь этап→секунды в короткую строку.
+
+    Этапы — в порядке конвейера прогона (а не вставки в dict), total — всегда
+    последним: так строка читается как хронология.
+    """
+    order = [
+        "load_csv", "load_json",              # загрузка (legacy CSV / JSON)
+        "search", "appeal_new", "first_instance",   # поиск новых дел
+        "cards_update", "appeal_update", "fi_update",  # обновление карточек
+        "cassation", "cassation_refresh",
+        "digest", "telegram", "save",
+    ]
+    seen = set(order) | {"total"}
     known = [(k, timings[k]) for k in order if k in timings]
     extra = [(k, v) for k, v in timings.items() if k not in seen]
-    return " | ".join(f"{k} {v:.1f}s" for k, v in known + extra)
+    tail = [("total", timings["total"])] if "total" in timings else []
+    return " | ".join(f"{k} {v:.1f}s" for k, v in known + extra + tail)
+
+
+# Русские подписи для ключей extras итоговой сводки. Сами ключи в коде
+# вызывающих (runs.py) не трогаем — они исторические; переводим при печати.
+# Неизвестный ключ печатается как есть.
+_EXTRAS_RU = {
+    "FI courts": "Судов 1 инст.",
+    "FI new": "Новых 1 инст.",
+    "FI updated": "Обновлено 1 инст.",
+    "FI changes": "Изменений 1 инст.",
+    "FI parse": "Парсинг 1 инст.",
+    "FI skip": "Пропусков 1 инст.",
+    "FI force": "Форс-парс 1 инст.",
+    "Stage transitions": "Переходов стадий",
+    "Appeal new": "Новых апел.",
+    "Appeal changes": "Изменений апел.",
+    "Appeal parse": "Парсинг апел.",
+    "Appeal skip": "Пропусков апел.",
+    "Appeal force": "Форс-парс апел.",
+    "Cassation parse": "Парсинг касс.",
+    "Cassation skip": "Пропусков касс.",
+    "Cassation force": "Форс-парс касс.",
+    "JSON total": "Всего дел в JSON",
+    # legacy main() (CSV-режим апелляции)
+    "Cases checked": "Проверено дел",
+    "New": "Новых",
+    "Changes": "Изменений",
+    "Active after": "Активных после",
+    "Archived moved": "В архив",
+}
 
 
 def log_run_summary(
@@ -718,27 +761,30 @@ def log_run_summary(
     """
     extras = extras or {}
     req_line = (
-        f"Requests: {config.METRICS['requests_ok']} ok / "
-        f"{config.METRICS['requests_failed']} failed"
+        f"Запросы: {config.METRICS['requests_ok']} ок / "
+        f"{config.METRICS['requests_failed']} сбоев"
     )
     if config.METRICS["requests_retried"]:
-        req_line += f" ({config.METRICS['requests_retried']} retried)"
+        req_line += f" ({config.METRICS['requests_retried']} с повтором)"
     tg_line = (
-        f"Telegram: {config.METRICS['telegram_sent']} sent"
-        + (f", {config.METRICS['telegram_failed']} failed" if config.METRICS['telegram_failed'] else "")
+        f"Telegram: отправлено {config.METRICS['telegram_sent']}"
+        + (f", не доставлено {config.METRICS['telegram_failed']}"
+           if config.METRICS['telegram_failed'] else "")
     )
     lines = [
         "=" * 60,
-        f"Run summary ({mode})",
+        f"Сводка прогона ({mode})",
         "=" * 60,
     ]
     if extras:
-        # Превращаем extras в "k=v | k=v" в том порядке, в котором их передали
-        lines.append(" | ".join(f"{k}: {v}" for k, v in extras.items()))
+        # Превращаем extras в "k: v | k: v" в том порядке, в котором их передали
+        lines.append(" | ".join(
+            f"{_EXTRAS_RU.get(k, k)}: {v}" for k, v in extras.items()
+        ))
     lines.append(req_line)
     lines.append(tg_line)
     if timings:
-        lines.append(f"Timing: {_format_timings(timings)}")
+        lines.append(f"Тайминги: {_format_timings(timings)}")
     lines.append("=" * 60)
 
     for line in lines:
@@ -750,19 +796,19 @@ def log_run_summary(
     if summary_path:
         try:
             md_lines = [
-                f"### Run summary ({mode})",
+                f"### Сводка прогона ({mode})",
                 "",
             ]
             if extras:
                 md_lines.append("| Метрика | Значение |")
                 md_lines.append("| --- | --- |")
                 for k, v in extras.items():
-                    md_lines.append(f"| {k} | {v} |")
+                    md_lines.append(f"| {_EXTRAS_RU.get(k, k)} | {v} |")
                 md_lines.append("")
             md_lines.append(f"- {req_line}")
             md_lines.append(f"- {tg_line}")
             if timings:
-                md_lines.append(f"- Timing: `{_format_timings(timings)}`")
+                md_lines.append(f"- Тайминги: `{_format_timings(timings)}`")
             md_lines.append("")
             with open(summary_path, "a", encoding="utf-8") as f:
                 f.write("\n".join(md_lines))

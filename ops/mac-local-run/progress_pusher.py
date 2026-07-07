@@ -24,9 +24,12 @@ URL = "https://court-monitor-trigger.7selivanov-a.workers.dev/run-progress"
 TOKEN_FILE = os.path.expanduser("~/.config/court-monitor/progress_token")
 
 # Вехи, которые интересно видеть в админке (не весь сырой лог).
+# «— \[» — фазовые заголовки log_phase («— [3/9] …»), «1 инст:» — строки
+# прогресса/агрегатов цикла 1-й инстанции (см. runs.py).
 KEY_RE = re.compile(
     r"Старт|Апелляция:|суд: |Итого|Кассац|7kas|Обновляю|Карточка"
     r"|WARNING|ERROR|Запушено|Изменений нет|Готово|Пропуск"
+    r"|— \[|1 инст:"
 )
 # Финал прогона — шлём done=true и выходим.
 END_RE = re.compile(r"Готово$|ERROR: |Изменений нет")

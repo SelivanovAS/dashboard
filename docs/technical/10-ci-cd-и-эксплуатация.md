@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([996](../../scripts/court_monitor/runs.py#L996)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([505](../../scripts/court_monitor/runs.py#L505)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([3106](../../scripts/court_monitor/runs.py#L3106)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([2791](../../scripts/court_monitor/runs.py#L2791)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([2967](../../scripts/court_monitor/runs.py#L2967)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([754](../../scripts/court_monitor/runs.py#L754)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([1030](../../scripts/court_monitor/runs.py#L1030)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([540](../../scripts/court_monitor/runs.py#L540)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([3202](../../scripts/court_monitor/runs.py#L3202)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([2887](../../scripts/court_monitor/runs.py#L2887)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3063](../../scripts/court_monitor/runs.py#L3063)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([788](../../scripts/court_monitor/runs.py#L788)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -48,12 +48,13 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `LLM_PROVIDER` | `claude` (по умолч.) / `gigachat`. |
 | `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
 | `SKIP_NON_WORKING_DAYS` | `1` → smart-skip (передаёт крон). |
+| `LOG_LEVEL` | Уровень логов (`DEBUG`/`INFO`/`WARNING`/`ERROR`, по умолч. `INFO`). `DEBUG` включает пер-кейсовые skip-строки, «без изменений», полные списки не-HMAO судов и диагностику нераспарсенных дат. |
 | `JSON_PATH`, `CSV_PATH`, `DIGESTED_ACTS_PATH`, `CASSATION_ACTS_PATH`, `PARSE_HEALTH_PATH`, … | Переопределение путей к файлам данных. |
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([464](../../scripts/court_monitor/runs.py#L464)) проверяет
-наличие ключей на старте; `check_court_available` ([493](../../scripts/court_monitor/runs.py#L493))
+`validate_environment` ([498](../../scripts/court_monitor/runs.py#L498)) проверяет
+наличие ключей на старте; `check_court_available` ([527](../../scripts/court_monitor/runs.py#L527))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -176,10 +177,10 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([710](../../scripts/court_monitor/delivery.py#L710)) — итоговая
+- `log_run_summary` ([753](../../scripts/court_monitor/delivery.py#L753)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, отправленные сообщения,
   карточки-«огрызки»).
-- `send_crash_alert` ([775](../../scripts/court_monitor/delivery.py#L775)) — падение
+- `send_crash_alert` ([821](../../scripts/court_monitor/delivery.py#L821)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в

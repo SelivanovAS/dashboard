@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 import time
+from urllib.parse import urlsplit
 
 import requests
 
@@ -44,8 +45,16 @@ def fetch_page(url: str) -> str:
             return r.content.decode("windows-1251", errors="replace")
         except requests.RequestException as e:
             if attempt < config.FETCH_MAX_RETRIES:
+                # Промежуточная попытка: хост + класс ошибки, без простыни
+                # с полным URL (он уйдёт в финальный ERROR, если все попытки
+                # исчерпаются). Какое дело грузилось — видно по следующей
+                # строке вызывающего кода («…не удалось загрузить карточку»).
                 wait = attempt * 5
-                log.warning(f"Попытка {attempt}/{config.FETCH_MAX_RETRIES} не удалась для {url}: {e}. Повтор через {wait}с...")
+                host = urlsplit(url).netloc or url
+                log.warning(
+                    f"Попытка {attempt}/{config.FETCH_MAX_RETRIES}: {host} — "
+                    f"{type(e).__name__}, повтор через {wait}с..."
+                )
                 time.sleep(wait)
             else:
                 config.METRICS["requests_failed"] += 1
