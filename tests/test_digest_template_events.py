@@ -1104,8 +1104,9 @@ class AllEventTypesTest(unittest.TestCase):
             os.path.join(cls._tmp.name, "нет.json"),
         )
         cls._patcher.start()
-        # Синтетический контекст «всё сразу» длиннее лимита Telegram — тут
-        # проверяем ПОЛНОТУ рендера, а не обрезку (её тестирует TruncationTest).
+        # Синтетический контекст «всё сразу» длиннее одного сообщения Telegram —
+        # тут проверяем ПОЛНОТУ рендера; что большой дайджест не обрезается,
+        # тестирует LargeDigestTest.
         cls._limit_patcher = patch.object(
             cm_config, "TELEGRAM_MSG_LIMIT", 30000
         )
@@ -1288,10 +1289,14 @@ class AllEventTypesTest(unittest.TestCase):
             self.assertIn(token, summary_line)
 
 
-# ── Обрезка больших дайджестов ──────────────────────────────────────────────
+# ── Большие дайджесты не обрезаются ─────────────────────────────────────────
 
-class TruncationTest(unittest.TestCase):
-    def test_huge_context_truncated_cleanly(self):
+class LargeDigestTest(unittest.TestCase):
+    def test_huge_context_not_truncated(self):
+        # HTML дайджест НЕ обрезаем даже на многособытийном дне: рендерим
+        # целиком, а Telegram-доставка (send_telegram → split_message) сама
+        # режет его на сообщения. Проверяем, что ни одно дело не потеряно и
+        # маркер обрезки не появился.
         many = [
             make_fi_new_case(case=f"2-{7000 + i}/2026") for i in range(80)
         ]
@@ -1299,10 +1304,49 @@ class TruncationTest(unittest.TestCase):
             c["plaintiff"] = "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО"
             c["defendant"] = "Общество с ограниченной ответственностью «Очень длинное название»"
         html = render(fi_new_cases=many, total_active_fi=80)
-        self.assertLessEqual(len(html), uc.TELEGRAM_MSG_LIMIT * 2)
-        self.assertIn("сообщение обрезано", html)
-        # Теги после обрезки закрыты.
+        self.assertNotIn("сообщение обрезано", html)
+        # Все 80 номеров дошли до дайджеста.
+        for i in range(80):
+            self.assertIn(f"2-{7000 + i}/2026", html)
+        # Теги сбалансированы.
         self.assertEqual(cm_post._close_open_tags(html), html)
+        # Боевая нарезка Telegram кладёт каждую часть в лимит без потерь.
+        for part in uc.split_message(html, cm_config.TELEGRAM_MSG_LIMIT):
+            self.assertLessEqual(len(part), cm_config.TELEGRAM_MSG_LIMIT)
+
+
+# ── Telegram-копия: полный HTML на дашборд, короткая версия в Telegram ───────
+
+class TelegramDigestCapTest(unittest.TestCase):
+    def _big_digest(self) -> str:
+        many = [make_fi_new_case(case=f"2-{7000 + i}/2026") for i in range(80)]
+        for c in many:
+            c["plaintiff"] = "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО"
+            c["defendant"] = "Общество с ограниченной ответственностью «Очень длинное название»"
+        return render(fi_new_cases=many, total_active_fi=80)
+
+    def test_big_digest_capped_to_two_messages_with_dashboard_link(self):
+        full = self._big_digest()
+        tg = cm_post.truncate_digest_for_telegram(full)
+        # Telegram-копия короче полной и умещается в ≤2 сообщения.
+        self.assertLess(len(tg), len(full))
+        parts = uc.split_message(tg, cm_config.TELEGRAM_MSG_LIMIT)
+        self.assertLessEqual(len(parts), 2)
+        for p in parts:
+            self.assertLessEqual(len(p), cm_config.TELEGRAM_MSG_LIMIT)
+            self.assertEqual(cm_post._close_open_tags(p), p)
+        # Ссылка на дашборд сохранена (обычный truncate её срезал бы вместе
+        # с футером) + заметка «не все дела».
+        self.assertIn(cm_config.DASHBOARD_URL, tg)
+        self.assertIn("показаны не все дела", tg)
+        self.assertEqual(cm_post._close_open_tags(tg), tg)
+
+    def test_small_digest_goes_to_telegram_whole(self):
+        # Короткий дайджест уходит целиком, без заметки об обрезке.
+        small = render(fi_new_cases=[make_fi_new_case()])
+        tg = cm_post.truncate_digest_for_telegram(small)
+        self.assertEqual(tg, cm_post._close_open_tags(small))
+        self.assertNotIn("показаны не все дела", tg)
 
 
 # ── Тихий день ──────────────────────────────────────────────────────────────

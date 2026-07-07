@@ -29,7 +29,7 @@ from court_monitor.digest.postprocess import (
     _replace_summary_block, _renumber_section_headers,
     _warn_misplaced_appeal_cases, _shorten_categories_in_html,
     _strip_section_numbering, _purge_3_6_without_act_text,
-    _close_open_tags, _strip_orphan_close_tags, truncate_html_message,
+    _close_open_tags, _strip_orphan_close_tags,
     _wrap_all_bare_case_numbers, _DIGEST_HEADER_RE,
 )
 from court_monitor.digest.template import (
@@ -1451,7 +1451,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
-        return truncate_html_message(text, config.TELEGRAM_MSG_LIMIT * 2)
+        # HTML не обрезаем — см. generate_template_digest: дашборд показывает
+        # дайджест целиком, а send_telegram сам режет его на сообщения.
+        return _close_open_tags(text)
 
     try:
         r = requests.post(
@@ -1531,8 +1533,9 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
         )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
-        # До двух сообщений: лимит 2×4096; split_message в send_telegram разобьёт
-        return truncate_html_message(text, config.TELEGRAM_MSG_LIMIT * 2)
+        # HTML не обрезаем — дашборд показывает дайджест целиком, а send_telegram
+        # сам режет его на сообщения по лимиту Telegram через split_message.
+        return _close_open_tags(text)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""

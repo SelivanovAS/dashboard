@@ -1371,16 +1371,21 @@ def _strip_orphan_close_tags(html: str) -> str:
     return "".join(result_parts)
 
 
-def truncate_html_message(text: str, limit: int = 4096) -> str:
+_TRUNCATED_SUFFIX = "\n\n…<i>сообщение обрезано</i>"
+
+
+def truncate_html_message(text: str, limit: int = 4096, *,
+                          suffix: str = _TRUNCATED_SUFFIX) -> str:
     """
     Обрезать HTML-сообщение до лимита Telegram, не ломая теги.
-    Добавляет '…' в конце если обрезано.
+    Добавляет `suffix` в конце, если пришлось резать (по умолчанию —
+    «…сообщение обрезано»).
     """
     if len(text) <= limit:
         return _close_open_tags(text)
 
-    # Обрезаем с запасом для закрытия тегов и '…'
-    cut = text[:limit - 100]
+    # Обрезаем с запасом под suffix и закрытие тегов.
+    cut = text[:limit - len(suffix) - 20]
 
     # Убираем незакрытые теги в конце
     last_close = cut.rfind(">")
@@ -1393,7 +1398,31 @@ def truncate_html_message(text: str, limit: int = 4096) -> str:
     if last_nl > len(cut) - 200:
         cut = cut[:last_nl]
 
-    cut += "\n\n…<i>сообщение обрезано</i>"
+    cut = cut.rstrip() + suffix
     cut = _close_open_tags(cut)
 
     return cut
+
+
+def truncate_digest_for_telegram(html: str, limit: int | None = None) -> str:
+    """Компактная версия дайджеста для Telegram.
+
+    Полный HTML уходит на дашборд (`save_last_digest`) без обрезки, а в
+    Telegram шлём короткую версию: если дайджест не влезает в `limit`
+    (по умолчанию 2 сообщения = 2×TELEGRAM_MSG_LIMIT), режем и в конце
+    ставим заметку + рабочую ссылку на дашборд. Обычный
+    `truncate_html_message` срезал бы финальный футер с этой ссылкой
+    вместе с хвостом дел, оставив юриста без входа в полный текст.
+    """
+    if limit is None:
+        # Не ровно 2×4096: split_message режет по границам \n\n с запасом ~50,
+        # поэтому «под завязку» 8192 разложились бы на 3 сообщения (хвост-
+        # огрызок). Берём ~7600 — надёжно умещается в 2 сообщения.
+        limit = config.TELEGRAM_MSG_LIMIT * 2 - 600
+    if len(html) <= limit:
+        return _close_open_tags(html)
+    suffix = (
+        "\n\n…<i>дайджест длинный — здесь показаны не все дела.</i>\n"
+        f'<a href="{config.DASHBOARD_URL}">📊 Полный дайджест в дашборде</a>'
+    )
+    return truncate_html_message(html, limit, suffix=suffix)

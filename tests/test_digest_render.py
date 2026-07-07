@@ -71,9 +71,13 @@ class TemplateDigestBaselineTest(unittest.TestCase):
         # разбор акта.
         self.assertRegex(self.html, r"<a[^>]*><b>[^<]+</b></a>")
 
-    def test_telegram_length_limit(self):
-        # truncate_html_message режет до 2*4096 — не должны превысить.
-        self.assertLessEqual(len(self.html), uc.TELEGRAM_MSG_LIMIT * 2)
+    def test_telegram_split_parts_fit_limit(self):
+        # HTML дайджест больше не обрезаем: send_telegram раскладывает его на
+        # сообщения через split_message — каждая часть обязана влезать в лимит,
+        # и маркер обрезки не должен появляться.
+        self.assertNotIn("сообщение обрезано", self.html)
+        for part in uc.split_message(self.html, uc.TELEGRAM_MSG_LIMIT):
+            self.assertLessEqual(len(part), uc.TELEGRAM_MSG_LIMIT)
 
     def test_idempotent(self):
         html2 = uc.generate_template_digest(**self.kwargs)
@@ -114,9 +118,8 @@ class TemplateDigestBaselineTest(unittest.TestCase):
         missing = [alts for alts in expected
                    if not any(n in self.html for n in alts)]
         # После фиксов покрытия (голый status_change, «ложный» new_result)
-        # на реальных объёмах дайджест обязан нести ВСЕ номера. Если
-        # когда-нибудь сработает truncate_html_message — тест честно
-        # покажет, что дайджест перестал влезать в 2×4096.
+        # на реальных объёмах дайджест обязан нести ВСЕ номера. HTML больше
+        # не обрезаем — потеря номера означала бы дефект рендера, а не лимит.
         self.assertFalse(
             missing,
             f"Потеряны номера ({len(missing)}/{len(expected)}): {missing}",

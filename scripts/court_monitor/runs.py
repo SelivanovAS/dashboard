@@ -32,7 +32,9 @@ from court_monitor.delivery import (
     canonicalize_kv_watchlists, log_run_summary, send_telegram, send_web_push,
 )
 from court_monitor.digest import llm
-from court_monitor.digest.postprocess import summarize_digest_counters
+from court_monitor.digest.postprocess import (
+    summarize_digest_counters, truncate_digest_for_telegram,
+)
 from court_monitor.digest.core import (
     attach_act_analyses, _dedupe_existing_act_analyses, generate_digest,
     save_digest_context, save_last_digest,
@@ -621,7 +623,9 @@ def main():
 
     # 8. Отправляем в Telegram
     t0 = time.perf_counter()
-    send_telegram(digest)
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
+    # полный HTML идёт на дашборд через save_last_digest ниже.
+    send_telegram(truncate_digest_for_telegram(digest))
     save_last_digest(
         digest,
         summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
@@ -2572,7 +2576,9 @@ def main_json():
     timings["digest"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    send_telegram(digest)
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
+    # полный HTML идёт на дашборд через save_last_digest ниже.
+    send_telegram(truncate_digest_for_telegram(digest))
     timings["telegram"] = time.perf_counter() - t0
 
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
@@ -2763,7 +2769,9 @@ def main_replay_last(push_all: bool = False):
         cass_discovered=ctx.get("cass_discovered", []),
     )
 
-    send_telegram(digest)
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
+    # полный HTML идёт на дашборд через save_last_digest ниже.
+    send_telegram(truncate_digest_for_telegram(digest))
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
     _lint_digest_and_alert(
         digest,
@@ -3012,7 +3020,9 @@ def main_digest_only():
         total_active_cassation=total_active_cassation,
     )
 
-    send_telegram(digest)
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
+    # полный HTML идёт на дашборд через save_last_digest ниже.
+    send_telegram(truncate_digest_for_telegram(digest))
     send_web_push(
         title="Мониторинг дел — проверка",
         body="Дайджест по текущим данным",
