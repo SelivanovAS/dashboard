@@ -586,6 +586,146 @@ class TestShouldParseFiCard:
         assert not uc.should_parse_fi_card(self._c("cassation_watch", {}))
 
 
+class TestUpstreamCardLinked:
+    """Предикаты appeal_card_linked / cassation_card_linked — гейт эхо-событий
+    fi_appeal_filed / fi_cassation_filed / fi_sent_to_cassation в дайджесте
+    (ТЗ юриста 07.07: если вышестоящая карточка уже связана, сигнал о жалобе
+    из карточки 1-й инст. в дайджест не шлём)."""
+
+    def test_appeal_not_linked_variants(self):
+        # Пустое дело / appeal=None / stub-блок без case_number
+        # (например, от _apply_fi_appellant) — связки нет.
+        assert not uc.appeal_card_linked({})
+        assert not uc.appeal_card_linked({"appeal": None})
+        assert not uc.appeal_card_linked({"appeal": {}})
+        assert not uc.appeal_card_linked(
+            {"appeal": {"appellant": "Иванов И.И.", "case_number": "  "}}
+        )
+
+    def test_appeal_linked(self):
+        assert uc.appeal_card_linked(
+            {"appeal": {"case_number": "33-3611/2026", "court": "Суд ХМАО-Югры"}}
+        )
+
+    def test_cassation_not_linked_variants(self):
+        # Пред-заполненный блок cassation только с appellant_* (создаётся из
+        # карточки 1-й инст. ДО появления карточки 7kas) — связкой не считается.
+        assert not uc.cassation_card_linked({})
+        assert not uc.cassation_card_linked({"cassation": None})
+        assert not uc.cassation_card_linked(
+            {"cassation": {"appellant": "Сбербанк", "appellant_is_bank": True,
+                           "appellant_status": "Истец",
+                           "discovered_via_cassation": False}}
+        )
+
+    def test_cassation_linked(self):
+        assert uc.cassation_card_linked(
+            {"cassation": {"case_number": "8Г-6846/2026"}}
+        )
+
+    def test_round_two_after_snapshot_not_linked(self):
+        # После cassation_remanded блоки уходят в history и обнуляются —
+        # новая жалоба нового круга НЕ должна глушиться.
+        case = {
+            "current_stage": "awaiting_relink",
+            "round": 1,
+            "first_instance": {"case_number": "2-1/2025"},
+            "appeal": {"case_number": "33-100/2026"},
+            "cassation": {"case_number": "8Г-500/2026"},
+        }
+        assert uc.appeal_card_linked(case)
+        assert uc.cassation_card_linked(case)
+        uc._snapshot_round_to_history(case, "cassation_remanded_to_fi")
+        assert not uc.appeal_card_linked(case)
+        assert not uc.cassation_card_linked(case)
+        assert case["round"] == 2
+
+
+class TestSuppressFiEchoEvents:
+    """Центральный эхо-фильтр дайджеста: для дел со связанной вышестоящей
+    карточкой «догоняющие» события 1-й инст. не идут в fi_changes (паводок
+    07.07.2026: 60 карточек «с апелляции» → 272 события → дайджест 48 КБ)."""
+
+    APPEAL_LINKED = {"appeal": {"case_number": "33-100/2026"}}
+    CASS_LINKED = {"cassation": {"case_number": "8Г-500/2026"}}
+
+    def _change(self, types, details=None):
+        return {"case": "2-1/2025", "type": list(types),
+                "details": dict(details or {})}
+
+    def test_appeal_linked_drops_appeal_echo_and_catchup(self):
+        ch = self._change(
+            ["fi_resolved", "fi_status_change", "fi_appeal_filed",
+             "fi_act_published", "fi_act_text_published"],
+            {"act_text": "мотивировка...", "appellant_role": "Ответчик"},
+        )
+        removed = uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch)
+        assert ch["type"] == []
+        assert sorted(removed) == sorted(
+            ["fi_resolved", "fi_status_change", "fi_appeal_filed",
+             "fi_act_published", "fi_act_text_published"]
+        )
+        # Тяжёлый текст акта вычищен из details (не разбухает context-снимок).
+        assert "act_text" not in ch["details"]
+
+    def test_appeal_linked_keeps_live_events(self):
+        # Заседания/возвраты — живые события, глушить нельзя.
+        ch = self._change(["fi_hearing_new", "fi_resolved"])
+        removed = uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch)
+        assert ch["type"] == ["fi_hearing_new"]
+        assert removed == ["fi_resolved"]
+
+    def test_cassation_linked_drops_cassation_and_appeal_echo(self):
+        # Для дела в кассации апел. жалоба — тоже древняя история
+        # (discovered_via_cassation может не иметь апел. блока).
+        ch = self._change(
+            ["fi_appeal_filed", "fi_cassation_filed", "fi_sent_to_cassation"]
+        )
+        removed = uc.suppress_fi_echo_events(self.CASS_LINKED, ch)
+        assert ch["type"] == []
+        assert len(removed) == 3
+
+    def test_appeal_linked_keeps_cassation_signals(self):
+        # Дело в cassation_watch (апелляция связана, 7kas ещё нет):
+        # касс. жалоба и направление в касс. суд — ЖИВЫЕ события.
+        ch = self._change(["fi_cassation_filed", "fi_sent_to_cassation"])
+        removed = uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch)
+        assert ch["type"] == ["fi_cassation_filed", "fi_sent_to_cassation"]
+        assert removed == []
+
+    def test_unlinked_case_untouched(self):
+        ch = self._change(["fi_resolved", "fi_appeal_filed"])
+        removed = uc.suppress_fi_echo_events(
+            {"appeal": {"appellant": "stub"}}, ch
+        )
+        assert removed == []
+        assert ch["type"] == ["fi_resolved", "fi_appeal_filed"]
+
+    def test_act_dup_collapsed_even_without_link(self):
+        # «Решение изготовлено» + «текст опубликован» в одном прогоне —
+        # одна новость: остаётся только текст. Дубль давал двойной счётчик
+        # сводки («40 решений изготовлено · 40 текстов решений»).
+        ch = self._change(
+            ["fi_act_published", "fi_act_text_published"],
+            {"act_text": "мотивировка..."},
+        )
+        removed = uc.suppress_fi_echo_events({}, ch)
+        assert removed == []  # это дедуп, не эхо
+        assert ch["type"] == ["fi_act_text_published"]
+        assert ch["details"]["act_text"] == "мотивировка..."  # текст цел
+
+    def test_act_published_alone_survives(self):
+        # Мотивировка изготовлена, текст ещё не спарсили — строка нужна.
+        ch = self._change(["fi_act_published"])
+        assert uc.suppress_fi_echo_events({}, ch) == []
+        assert ch["type"] == ["fi_act_published"]
+
+    def test_empty_change_noop(self):
+        ch = self._change([])
+        assert uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch) == []
+        assert ch["type"] == []
+
+
 class TestIsCaseArchived:
     def test_fi_resolved_overdue_no_appeal_is_archived(self):
         case = {"current_stage": "first_instance",

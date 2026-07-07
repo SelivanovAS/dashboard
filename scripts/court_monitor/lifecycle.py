@@ -295,6 +295,80 @@ def should_parse_fi_card(case: dict) -> bool:
     return False
 
 
+def appeal_card_linked(case: dict) -> bool:
+    """True, если апел. карточка уже связана с делом (link_cases нашёл её
+    или дело заведено «с апелляции»). Используется, чтобы не дублировать
+    в дайджест эхо-событие fi_appeal_filed из карточки 1-й инст.: юрист
+    уже знает об апелляции из самой апел. карточки. Stub-блоки appeal без
+    case_number (например, от _apply_fi_appellant) связкой не считаются.
+    На 2-м круге после remanded блок обнулён (_snapshot_round_to_history) —
+    новая жалоба нового круга не глушится."""
+    ap = case.get("appeal") or {}
+    return bool((ap.get("case_number") or "").strip())
+
+
+def cassation_card_linked(case: dict) -> bool:
+    """True, если карточка 7kas уже связана (link_cassation_cases или
+    discovery). Аналог appeal_card_linked для кассации: глушит эхо-события
+    fi_cassation_filed / fi_sent_to_cassation в дайджесте. Пред-заполненный
+    блок cassation только с appellant_* (без case_number) связкой не считается."""
+    cs = case.get("cassation") or {}
+    return bool((cs.get("case_number") or "").strip())
+
+
+# «Догоняющий» класс событий 1-й инст.: для дела с уже связанной вышестоящей
+# карточкой это пересказ давно известного (решение, на которое подана жалоба;
+# его акт; служебные статусы). Паводок 07.07.2026: первый парс 60 карточек
+# «с апелляции» дал 272 таких события и дайджест на 48 КБ.
+FI_ECHO_CATCHUP_TYPES = (
+    "fi_resolved", "fi_act_published", "fi_act_text_published",
+    "fi_motivirovka_emitted", "fi_final_event", "fi_status_change",
+)
+
+
+def suppress_fi_echo_events(case: dict, change: dict) -> list[str]:
+    """Убрать из change["type"] эхо-события, если вышестоящая карточка уже
+    связана с делом (ТЗ юриста 07.07.2026). Глушится ТОЛЬКО доставка в
+    дайджест/push: флаги и данные в first_instance к этому моменту уже
+    записаны и питают state machine / бейджи / drawer как обычно.
+
+    - апелляция связана → эхо: fi_appeal_filed + весь FI_ECHO_CATCHUP_TYPES;
+    - кассация связана → эхо: fi_cassation_filed, fi_sent_to_cassation,
+      fi_appeal_filed (апел. жалоба — древняя история для дела в кассации)
+      + FI_ECHO_CATCHUP_TYPES.
+    Живые события (заседания, возвраты, смена роли банка) не трогаем.
+
+    Отдельно (независимо от связки) схлопывает дубль об одном акте в одном
+    прогоне: fi_act_published + fi_act_text_published → остаётся только
+    текст (строку «изготовлено» рендер и так прятал, но счётчик сводки
+    считал оба — «40 решений изготовлено · 40 текстов решений»).
+
+    Возвращает список убранных ЭХО-типов (для лога); схлопывание дубля в
+    него не входит. Тяжёлый details["act_text"] вычищается вместе с
+    подавленным fi_act_text_published, чтобы не разбухал context-снимок.
+    """
+    types = change.get("type") or []
+    if not types:
+        return []
+    drop: set[str] = set()
+    ap_linked = appeal_card_linked(case)
+    cs_linked = cassation_card_linked(case)
+    if ap_linked or cs_linked:
+        drop.add("fi_appeal_filed")
+        drop.update(FI_ECHO_CATCHUP_TYPES)
+    if cs_linked:
+        drop.update(("fi_cassation_filed", "fi_sent_to_cassation"))
+    removed = [t for t in types if t in drop]
+    if removed:
+        change["type"] = [t for t in types if t not in drop]
+        if "fi_act_text_published" in removed:
+            (change.get("details") or {}).pop("act_text", None)
+    ts = change["type"]
+    if "fi_act_published" in ts and "fi_act_text_published" in ts:
+        ts.remove("fi_act_published")
+    return removed
+
+
 def advance_case_stage(case: dict) -> str | None:
     """Выполнить возможный переход стадии для дела. Возвращает имя предыдущей
     стадии, если переход произошёл, иначе None.

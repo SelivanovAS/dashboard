@@ -59,7 +59,7 @@
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:87](scripts/court_monitor/config.py:87) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:443](scripts/court_monitor/lifecycle.py:443) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:517](scripts/court_monitor/lifecycle.py:517) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:350](scripts/court_monitor/linking.py:350) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:912](scripts/court_monitor/linking.py:912) |
@@ -71,8 +71,8 @@
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:207](scripts/court_monitor/linking.py:207) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:496](scripts/court_monitor/linking.py:496) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:85](scripts/court_monitor/runs.py:85) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:939](scripts/court_monitor/runs.py:939) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:87](scripts/court_monitor/runs.py:87) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:943](scripts/court_monitor/runs.py:943) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |
@@ -211,6 +211,16 @@
 кассацию/апелляцию» и промежуточные события), а как дело ушло наверх — ждём
 только появления карточки в вышестоящем суде (`link_cases`/`link_cassation_cases`).
 Этот же предикат гейтит `backfill_fi_links`.
+**Эхо-фильтр дайджеста (`suppress_fi_echo_events`, lifecycle.py):** если
+вышестоящая карточка уже связана (`appeal_card_linked`/`cassation_card_linked`),
+«догоняющие» события FI-карточки НЕ идут в дайджест: жалобы (`fi_appeal_filed`,
+`fi_cassation_filed`, `fi_sent_to_cassation`) + весь catch-up класс
+(`fi_resolved`, `fi_act_published`, `fi_act_text_published`,
+`fi_motivirovka_emitted`, `fi_final_event`, `fi_status_change`) — юрист всё
+это знает из апел./касс. карточки (паводок 07.07: 60 первых парсов дали
+272 события и 48 КБ). Флаги в JSON ставятся как обычно — state machine,
+бейджи и drawer не затронуты. Там же схлопывается дубль «решение
+изготовлено»+«текст опубликован» об одном акте в одном прогоне.
 
 Константы в [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,

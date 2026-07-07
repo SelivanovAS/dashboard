@@ -45,14 +45,14 @@
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 580](../../scripts/court_monitor/digest/template.py#L580). Собирает весь HTML дайджеста
+[Строка 604](../../scripts/court_monitor/digest/template.py#L604). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([552](../../scripts/court_monitor/digest/template.py#L552)).
+([576](../../scripts/court_monitor/digest/template.py#L576)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
@@ -72,7 +72,7 @@ LLM реально «думает». Алгоритм:
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
-   [498](../../scripts/court_monitor/digest/template.py#L498)).
+   [522](../../scripts/court_monitor/digest/template.py#L522)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
@@ -115,7 +115,7 @@ LLM реально «думает». Алгоритм:
 | `_shorten_categories_in_html` ([1114](../../scripts/court_monitor/digest/postprocess.py#L1114)) | Сокращение длинных категорий. |
 | `_purge_3_6_without_act_text` ([1200](../../scripts/court_monitor/digest/postprocess.py#L1200)) | Чистка раздела без текста акта. |
 | `_ensure_footer` ([558](../../scripts/court_monitor/digest/postprocess.py#L558)) | Футер со ссылкой на дашборд. |
-| `_close_open_tags` ([1334](../../scripts/court_monitor/digest/postprocess.py#L1334)) / `_strip_orphan_close_tags` ([1350](../../scripts/court_monitor/digest/postprocess.py#L1350)) / `truncate_html_message` ([1374](../../scripts/court_monitor/digest/postprocess.py#L1374)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
+| `_close_open_tags` ([1334](../../scripts/court_monitor/digest/postprocess.py#L1334)) / `_strip_orphan_close_tags` ([1350](../../scripts/court_monitor/digest/postprocess.py#L1350)) / `truncate_html_message` ([1377](../../scripts/court_monitor/digest/postprocess.py#L1377)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
 
 ## Структура дайджеста
 
@@ -128,7 +128,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([190](../../scripts/court_monitor/config.py#L190)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([191](../../scripts/court_monitor/config.py#L191)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
