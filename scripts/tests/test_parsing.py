@@ -1809,7 +1809,8 @@ class TestTemplateDigestDefaults:
         assert "апеллянт:" not in out
 
     def test_filled_appellant_is_rendered(self):
-        """Если роль и имя заполнены — они попадают в строку."""
+        """Имя апеллянта попадает в строку — по наименованию, без слова-роли
+        (просьба 07.07.2026: «указывать не статус, а наименование лица»)."""
         fi_changes = [{
             "case": "2-208/2026",
             "type": ["fi_appeal_filed"],
@@ -1827,7 +1828,8 @@ class TestTemplateDigestDefaults:
             fi_changes=fi_changes,
             total_active_appeal=0, total_active_fi=1,
         )
-        assert "апеллянт: Истец Шамов Д.С." in out
+        assert "апеллянт: Шамов Д.С." in out
+        assert "апеллянт: Истец" not in out
 
 
 # ── determine_bank_role_from_participants ───────────────────────────────────

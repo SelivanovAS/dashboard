@@ -2060,8 +2060,20 @@ def main_json():
             cass_date = card_info.get("_fi_cassation_filed_date", "")
             if cass_date:
                 fi["cassation_filed_date"] = cass_date
+            # Кто подал кассацию — из «Заявитель жалобы»/«Заявитель» касс.
+            # вкладки карточки 1-й инст. (_fi_cassator_raw). Классифицируем
+            # тем же классификатором, что и апеллянта; слово-роль резолвится
+            # в наименование стороны на рендере (_fi_appellant_display).
+            cassator_raw = (card_info.get("_fi_cassator_raw") or "").strip()
+            cs_role, cs_name = classify_appellant_role(
+                cassator_raw,
+                case_j.get("plaintiff", ""),
+                case_j.get("defendant", ""),
+            )
             change["type"].append("fi_cassation_filed")
             change["details"]["cassation_filed_date"] = cass_date
+            change["details"]["cassator_role"] = cs_role
+            change["details"]["cassator_name"] = cs_name
             changed = True
 
         # Предварительное заполнение cassation.appellant_* из 1-й инст. карточки
