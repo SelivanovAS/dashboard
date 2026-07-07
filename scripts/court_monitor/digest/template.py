@@ -457,8 +457,15 @@ def short_category_chain(cat: str) -> str:
     return parts[-1] if parts else cat
 
 
-def category_short(cat: str) -> str:
-    """Сокращённое название категории для компактного вывода."""
+def category_short(cat: str, *, truncate: bool = True) -> str:
+    """Сокращённое название категории для компактного вывода.
+
+    truncate=False — НЕ резать незнакомую категорию по ~20 символам с «…»:
+    вернуть последний сегмент целиком (для секций, где есть место на полную
+    формулировку — просьба юриста 07.07.2026: «об освобождении…» терял смысл).
+    Маппинг известных категорий в короткую форму («кредит») работает в обоих
+    режимах — на вход всегда подаётся уже вычлененный последний сегмент.
+    """
     cat_lower = cat.lower().strip()
     mapping = {
         "кредитные правоотношения": "кредит",
@@ -472,6 +479,8 @@ def category_short(cat: str) -> str:
     for key, short in mapping.items():
         if key in cat_lower:
             return short
+    if not truncate:
+        return cat
     # Если не нашли — обрезаем по границе слова (~20 символов), чтобы не
     # получать обрывки вида «иные, связанные с на…».
     if len(cat) > 22:
@@ -1063,7 +1072,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
             verdict = escape_html(d.get("verdict_label", ""))
             dec_date = escape_html(d.get("decision_date", ""))
-            cat = escape_html(category_short(short_category_chain(d.get("category", ""))))
+            # Категория ЦЕЛИКОМ (truncate=False): в двухстрочной вёрстке 3.5
+            # место есть, «об освобождении…» с обрезкой юриста не устраивал.
+            cat = escape_html(
+                category_short(
+                    short_category_chain(d.get("category", "")), truncate=False
+                )
+            )
             bank_role = escape_html(ch.get("bank_role", ""))
             bank_out = escape_html(d.get("bank_outcome", ""))
             # Двухстрочная вёрстка (просьба юриста 07.07.2026): строка 1 —
