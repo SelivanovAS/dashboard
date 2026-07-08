@@ -137,9 +137,26 @@ def update_active_cases(
         and not (skip_apel_nums and c.get("Номер дела", "").strip() in skip_apel_nums)
     )
     past_stage = active_total - planned_total
+    # План smart-skip до старта цикла (то же решение, что внутри цикла,
+    # но без HTTP) — чтобы «сколько из скольких будет спарсено» было видно
+    # в логе сразу, а не только в итоговой сводке.
+    plan_skip = 0
+    for _c in cases:
+        if is_archived(_c):
+            continue
+        _num = _c.get("Номер дела", "").strip()
+        if skip_apel_nums and _num in skip_apel_nums:
+            continue
+        _ap_d = (json_appeal_by_num or {}).get(_num)
+        if _ap_d is not None and should_skip_case(
+                {"current_stage": "appeal", "appeal": _ap_d}, today)[0]:
+            plan_skip += 1
     log.info(
-        f"Обновляю {planned_total} активных дел апелляции"
-        + (f" (ещё {past_stage} уже прошли апелляцию — карточки не парсим)"
+        f"Обновляю дела апелляции: парсим {planned_total - plan_skip} "
+        f"из {planned_total}"
+        + (f" (smart-skip {plan_skip} с известной будущей датой)"
+           if plan_skip else "")
+        + (f"; ещё {past_stage} уже прошли апелляцию — карточки не парсим"
            if past_stage else "")
     )
 
@@ -1380,7 +1397,6 @@ def main_json():
     # should_parse_fi_card и ТЗ юриста «продолжаем парсить до направления в
     # кассацию/апелляцию либо появления карточки в вышестоящем суде»).
     fi_active = [c for c in cases if should_parse_fi_card(c)]
-    log.info(f"Обновляю {len(fi_active)} активных дел 1 инстанции")
     # Нормализация: снимаем ложный «Решено» там, где назначено будущее
     # заседание (карточка такого дела часто скипается smart-skip'ом, поэтому
     # чиним по сохранённым данным до цикла обновления).
@@ -1388,6 +1404,28 @@ def main_json():
     if repaired_fi:
         log.info(f"Снято ложных «Решено» (будущее заседание): {repaired_fi}")
     fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
+    # План очереди до старта долгого цикла: те же проверки, что и в цикле
+    # ниже (суд из реестра + ссылка на карточку + smart-skip), но без HTTP —
+    # чтобы сразу было видно, сколько карточек реально пойдёт в парс.
+    fi_plan_skip = 0
+    fi_plan_no_card = 0
+    for _c in fi_active:
+        _fi_b = _c.get("first_instance", {})
+        if (_fi_b.get("court_domain", "") not in fi_court_map
+                or not re.match(r'^(\d+)\|([a-f0-9-]+)$', _fi_b.get("link", "") or "")):
+            fi_plan_no_card += 1
+        elif should_skip_case(_c, today)[0]:
+            fi_plan_skip += 1
+    fi_plan_parse = len(fi_active) - fi_plan_skip - fi_plan_no_card
+    _plan_notes = []
+    if fi_plan_skip:
+        _plan_notes.append(f"smart-skip {fi_plan_skip} с известной будущей датой")
+    if fi_plan_no_card:
+        _plan_notes.append(f"{fi_plan_no_card} без ссылки/суда")
+    log.info(
+        f"Обновляю дела 1-й инстанции: парсим {fi_plan_parse} из {len(fi_active)}"
+        + (f" ({'; '.join(_plan_notes)})" if _plan_notes else "")
+    )
     fi_update_count = 0
     fi_changes: list[dict] = []
     # Smart-skip счётчики
@@ -2415,6 +2453,29 @@ def main_json():
         today_for_refresh = date.today()
         today_iso = today_for_refresh.isoformat()
         cass_refresh_finds: list[dict] = []
+        # План очереди до старта цикла: без HTTP, те же условия, что ниже.
+        _plan_total = 0
+        _plan_skip = 0
+        _plan_fresh = 0
+        for _c in cases:
+            if _c.get("current_stage") != "cassation":
+                continue
+            _cb = _c.get("cassation") or {}
+            if _cb.get("last_checked_at") == today_iso:
+                _plan_fresh += 1
+                continue
+            _cid, _cuid = case_id_uid((_cb.get("link") or "").strip())
+            if not _cid or not _cuid:
+                continue
+            _plan_total += 1
+            if should_skip_case(_c, today_for_refresh)[0]:
+                _plan_skip += 1
+        log.info(
+            f"7kas refresh: парсим {_plan_total - _plan_skip} из {_plan_total}"
+            + (f" (smart-skip {_plan_skip} с известной будущей датой)"
+               if _plan_skip else "")
+            + (f"; {_plan_fresh} уже свежие" if _plan_fresh else "")
+        )
         for case in cases:
             if case.get("current_stage") != "cassation":
                 continue
