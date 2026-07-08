@@ -1238,12 +1238,16 @@ def should_skip_case(
 ) -> tuple[bool, str]:
     """Решает, можно ли пропустить парсинг карточки.
 
+    0. config.SMART_SKIP_CASES=False (ручной прогон без галки smart_skip) —
+       ничего не скипаем: полный прогон всех активных карточек.
     1. По current_stage выбирает блок first_instance / appeal.
     2. Force-parse: если last_checked_at нет или ≥ force_parse_days дней назад
        → не скипать (страховка от тихой отмены/переноса заседания).
     3. Иначе get_next_planned_date(events). Если planned >= today (включая
        сам день N) → skip. Парсим строго с N+1.
     """
+    if not config.SMART_SKIP_CASES:
+        return False, ""
     stage = case_dict.get("current_stage", "")
     if stage in ("first_instance", "cassation_watch"):
         block = case_dict.get("first_instance") or {}
@@ -1281,17 +1285,16 @@ def should_skip_case(
     # Кассация: явные поля hearing_date / suspended_until в блоке (DD.MM.YYYY).
     # events карточки 7kas хранят текст в поле name (не text), поэтому
     # get_next_planned_date по ним не сработает — читаем явные поля.
-    # Строгое «>», а не «>=»: день заседания парсим всегда. Касс. суд при
-    # «Единоличном рассмотрении без проведения заседания» публикует акт в день
-    # N, и пропуск самого N оставляет окно «hd=сегодня, outcome ещё пуст» —
-    # дайджест уезжает с вводящей «📅 Назначено заседание» на сегодняшнюю дату.
+    # «>=», как и у 1-й инст./апелляции: день N скипаем, парсим с N+1
+    # (решение юриста 08.07.2026). Акт «единоличного рассмотрения»,
+    # опубликованный в сам день N, подхватится на следующем прогоне.
     if stage == "cassation":
         hd_raw = (block.get("hearing_date") or "").strip()
         m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
         if m_hd:
             try:
                 hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
-                if hd > today:
+                if hd >= today:
                     return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
             except ValueError:
                 log.debug(

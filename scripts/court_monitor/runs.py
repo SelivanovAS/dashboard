@@ -1061,6 +1061,12 @@ def main_json():
     if smart_skip_mode and not is_russian_working_day(today):
         log.info(f"{today.isoformat()} — нерабочий день РФ, парсинг пропущен.")
         return
+    # Пер-кейсовый smart-skip (should_skip_case) подчиняется тому же флагу:
+    # крон всегда передаёт smart_skip=true, ручной запуск без галки —
+    # полный прогон всех активных карточек (как и обещает описание галки).
+    config.SMART_SKIP_CASES = smart_skip_mode
+    if not smart_skip_mode:
+        log.info("Smart-skip выключен: полный прогон — парсим все активные карточки")
 
     _metrics_reset()
     validate_environment()

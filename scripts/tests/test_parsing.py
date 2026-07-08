@@ -2151,6 +2151,64 @@ class TestShouldSkipMaterialGuard:
         assert reason.startswith("future_hearing")
 
 
+# ── should_skip_case: глобальный выключатель SMART_SKIP_CASES ─────────────────
+
+class TestSmartSkipSwitch:
+    """Ручной прогон без галки smart_skip (config.SMART_SKIP_CASES=False)
+    не скипает ничего — полный прогон всех активных карточек."""
+
+    def test_future_hearing_parsed_when_disabled(self, monkeypatch):
+        from court_monitor import config
+        case, today = TestShouldSkipMaterialGuard._case("2-1401/2026")
+        monkeypatch.setattr(config, "SMART_SKIP_CASES", False)
+        skip, reason = uc.should_skip_case(case, today)
+        assert skip is False
+        assert reason == ""
+
+    def test_default_enabled(self):
+        """Дефолт флага — True: вне main_json (CSV-ветка, тесты) поведение
+        прежнее — skip по будущей дате работает."""
+        from court_monitor import config
+        assert config.SMART_SKIP_CASES is True
+        case, today = TestShouldSkipMaterialGuard._case("2-1401/2026")
+        assert uc.should_skip_case(case, today)[0] is True
+
+
+# ── should_skip_case: кассация — день заседания N тоже скипается ──────────────
+
+class TestCassationHearingDaySkip:
+    """С 08.07.2026 (решение юриста): день касс. заседания N скипается,
+    парсим с N+1 — как у 1-й инст./апелляции. Акт «единоличного рассмотрения»,
+    опубликованный в сам день N, подхватится на следующем прогоне."""
+
+    @staticmethod
+    def _case(hearing: str, today):
+        from datetime import timedelta
+        return {
+            "current_stage": "cassation",
+            "id": "2-100/2026",
+            "cassation": {
+                "case_number": "8Г-100/2026",
+                "last_checked_at": (today - timedelta(days=1)).isoformat(),
+                "hearing_date": hearing,
+            },
+        }
+
+    def test_hearing_today_skipped(self):
+        from datetime import date
+        today = date(2026, 7, 8)
+        case = self._case("08.07.2026", today)
+        skip, reason = uc.should_skip_case(case, today)
+        assert skip is True
+        assert reason == "future_hearing(08.07.2026)"
+
+    def test_hearing_yesterday_parsed(self):
+        from datetime import date
+        today = date(2026, 7, 8)
+        case = self._case("07.07.2026", today)
+        assert uc.should_skip_case(case, today)[0] is False
+
+
 # ── match_hmao_first_instance: фильтр HMAO на 7kas (ё/е-рассинхрон) ───────────
 
 class TestMatchHmaoFirstInstance:

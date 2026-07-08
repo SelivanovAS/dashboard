@@ -128,7 +128,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([191](../../scripts/court_monitor/config.py#L191)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([197](../../scripts/court_monitor/config.py#L197)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
