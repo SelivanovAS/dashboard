@@ -72,7 +72,7 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:98](scripts/court_monitor/runs.py:98) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1030](scripts/court_monitor/runs.py:1030) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1047](scripts/court_monitor/runs.py:1047) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |
@@ -228,7 +228,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:913](scripts/court_monitor/runs.py:913):
+Константы в [scripts/court_monitor/runs.py:930](scripts/court_monitor/runs.py:930):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
