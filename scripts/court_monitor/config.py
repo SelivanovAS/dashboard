@@ -125,6 +125,12 @@ COLD_ARCHIVE_DAYS = 365
 LEGACY_CSV_ARCHIVE_DAYS = 30
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
 FETCH_MAX_RETRIES = 3   # Кол-во попыток загрузки страницы
+# Пер-кейсовый smart-skip (should_skip_case): пропуск карточек с известной
+# будущей датой (заседание / «без движения»). Выставляется в main_json из
+# флага --smart-skip / env SKIP_NON_WORKING_DAYS: крон передаёт его всегда,
+# ручной запуск без галки — полный прогон всех активных карточек.
+# Дефолт True — для прочих режимов (CSV-ветка, тесты) поведение прежнее.
+SMART_SKIP_CASES = True
 DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
