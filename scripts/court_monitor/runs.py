@@ -82,7 +82,7 @@ from court_monitor.textutil import (
     parse_date, escape_html, case_id_uid, _bare_case_number,
     extract_motive_part, shorten_party_name, shorten_court_name,
     classify_appellant_role, is_russian_working_day, plural_ru,
-    _strip_html, _TIME_RE, _FI_CASE_NUM_RE, _CASE_NUM_RE,
+    _strip_html, _norm_party_tokens, _TIME_RE, _FI_CASE_NUM_RE, _CASE_NUM_RE,
 )
 
 
@@ -979,6 +979,27 @@ def _filter_ctx_fi_changes_echo(
     return kept
 
 
+# «Грязные» значения имени апеллянта — пустое или слово-роль вместо
+# настоящего имени. Такие записи перезаписываются на каждом прогоне,
+# поэтому is_bank для «голой» роли самовосстанавливается при изменении
+# логики без миграции данных.
+_DIRTY_APPELLANT_NAMES = ("", "истец", "ответчик", "третье лицо", "иное лицо", "банк")
+
+
+def _bank_sole_role_holder(case_j: dict, role: str) -> bool:
+    """True, если банк — единственная сторона данной роли в деле.
+
+    Сторона разбирается готовым _norm_party_tokens: филиальные запятые
+    Сбера склеиваются («ПАО Сбербанк в лице филиала — Югорское отделение
+    №5940» остаётся одним токеном), а имя с «настоящими» внутренними
+    запятыми (МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО)
+    распадается на несколько токенов и даёт консервативное False.
+    """
+    party = case_j.get("plaintiff" if role == "Истец" else "defendant", "")
+    tokens = _norm_party_tokens(party)
+    return len(tokens) == 1 and any(p in tokens[0] for p in config.SBER_PATTERNS)
+
+
 def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     """Проставить апеллянта из карточки 1-й инстанции.
 
@@ -1001,25 +1022,37 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
         raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
     )
     raw_lc = raw.lower()
-    # Слово-роль само по себе не содержит признаков банка: банк — апеллянт
-    # тогда, когда роль подателя совпадает с ролью банка. Именной вход
-    # определяем по SBER_PATTERNS, как раньше.
+    # Слово-роль само по себе не содержит признаков банка. Банк — апеллянт,
+    # только когда роль подателя совпадает с ролью банка И банк — единственная
+    # сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
+    # из них → is_bank=None («знаем, что определить нельзя» — фронт не выводит
+    # ни 'bank', ни 'other'). Именной вход определяем по SBER_PATTERNS, как раньше.
     if raw_lc in ("истец", "ответчик", "третье лицо", "иное лицо"):
-        is_bank = role in ("Истец", "Ответчик") and role == case_j.get("bank_role", "")
+        if role in ("Истец", "Ответчик"):
+            if role != case_j.get("bank_role", ""):
+                is_bank = False
+            elif _bank_sole_role_holder(case_j, role):
+                is_bank = True
+            else:
+                is_bank = None
+        else:
+            is_bank = None if case_j.get("bank_role") == "Третье лицо" else False
     else:
         is_bank = any(p in raw_lc for p in config.SBER_PATTERNS)
 
     changed = False
+    # Сентинел отличает «ключа нет» от «записан null»: is_bank=None должен
+    # ЯВНО попасть в JSON (null «знаем, что неопределимо» блокирует на фронте
+    # legacy-вывод 'other' из слова-роли; отсутствие ключа — не блокирует).
+    _missing = object()
 
     # first_instance — источник для бейджа в раннем окне.
     old_fi_name = (fi.get("appeal_appellant") or "").strip()
-    if old_fi_name.lower() in (
-        "", "истец", "ответчик", "третье лицо", "иное лицо", "банк",
-    ):
+    if old_fi_name.lower() in _DIRTY_APPELLANT_NAMES:
         if short and short != old_fi_name:
             fi["appeal_appellant"] = short
             changed = True
-        if fi.get("appeal_appellant_is_bank") != is_bank:
+        if fi.get("appeal_appellant_is_bank", _missing) != is_bank:
             fi["appeal_appellant_is_bank"] = is_bank
             changed = True
         if role and fi.get("appeal_appellant_status") != role:
@@ -1030,11 +1063,11 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     appeal_block = case_j.get("appeal")
     if appeal_block:
         old_app_name = (appeal_block.get("appellant") or "").strip()
-        if old_app_name.lower() in ("", "истец", "ответчик", "иное лицо", "банк"):
+        if old_app_name.lower() in _DIRTY_APPELLANT_NAMES:
             if short and short != old_app_name:
                 appeal_block["appellant"] = short
                 changed = True
-            if appeal_block.get("appellant_is_bank") != is_bank:
+            if appeal_block.get("appellant_is_bank", _missing) != is_bank:
                 appeal_block["appellant_is_bank"] = is_bank
                 changed = True
             if role and appeal_block.get("appellant_status") != role:

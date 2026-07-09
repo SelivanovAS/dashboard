@@ -157,6 +157,19 @@ function normalizeResult(raw){
   if(/отменен/i.test(s))return 'reversed';
   return 'pending';
 }
+// «Исковый» словарь результата: текст говорит о судьбе ИСКА («ИСК (заявление)
+// УДОВЛЕТВОРЕН ЧАСТИЧНО», «ОТКАЗАНО в удовлетворении иска»), а не обжалуемого
+// решения («оставлено без изменения» / «изменено» / «отменено»). Такой текст
+// встречается и на апелляционных карточках — трактовать его надо по роли
+// банка, а не по апеллянту. Критерий сознательно строгий (обязательное
+// «иск|заявлен»): «голое» «удовлетворено» на апел. карточке — это судьба
+// частной ЖАЛОБЫ, для неё верна апелляционная семантика.
+function isClaimResultWording(raw){
+  const s=(raw||'').toLowerCase();
+  if(!s)return false;
+  if(/оставлен|изменен|отменен/.test(s))return false;
+  return /иск|заявлен/.test(s)&&/удовлетворен|отказано/.test(s);
+}
 // Извлекает вердикт 1-й инст. из last_event, когда колонка «Результат»
 // в карточке суда ещё пуста (мотивировка не опубликована). На карточке
 // sudrf формулировки строго формализованы: «Иск (заявление, жалоба)
@@ -404,7 +417,7 @@ function rowToCase(h,row){
   }
   const baseStatus=STATUS_MAP[sl]||sl||'active';
   const hearingTime=g(['время заседания']);
-  const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),firstInstanceJudge:g(['судья 1 инстанции','судья первой','судья 1']),appellateJudge:g(['судья-докладчик','судья докладчик','докладчик']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
+  const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),firstInstanceJudge:g(['судья 1 инстанции','судья первой','судья 1']),appellateJudge:g(['судья-докладчик','судья докладчик','докладчик']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,resultSource:'appeal',link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
   // Compute detailed status for active cases
   caseObj.detailedStatus=computeDetailedStatus(caseObj);
   // Предвычисленные поля — считаются один раз при загрузке, чтобы
@@ -537,26 +550,38 @@ function jsonToCase(j){
       rs=fiEnding;
     }
   }
+  // Источник результата: favor и словарь лейблов зависят от того, ЧЬЁ это
+  // решение (1-я инст. / апелляция / кассация), а не от current_stage —
+  // в awaiting_appeal/awaiting_relink результат всё ещё от 1-й инстанции.
+  // Апелляционная карточка с «исковым» словарём («ИСК УДОВЛЕТВОРЕН…»)
+  // говорит о судьбе иска, а не жалобы — читается по роли банка, как 1-я инст.
+  let resultSource=isCass?'cassation':(isAppeal?'appeal':'fi');
+  if(resultSource==='appeal'&&isClaimResultWording(rs))resultSource='fi';
   // Appellant. Источники в порядке приоритета:
   // 1) ap.appellant_is_bank / appellant_status — новый формат от парсера 1-й
   //    инст. (Этап «Кассатор»): имя в appellant, метаданные в отдельных полях.
   // 2) ap.appellant как роль ("Истец"/"Ответчик"/"Иное лицо") через APPELLANT_MAP —
-  //    legacy-формат до 2026-05.
+  //    legacy-формат до 2026-05. Только когда ключа appellant_is_bank нет
+  //    ВОВСЕ (undefined): JSON null = «парсер знает, что определить нельзя»
+  //    (роль апеллянта совпала с ролью банка при нескольких соответчиках) —
+  //    из такой записи выводить 'other' нельзя.
   // 3) Regex по last_event — самый старый fallback (CSV-only данные).
   let appellant='';
   if(ap.appellant_is_bank===true)appellant='bank';
   else if(ap.appellant_is_bank===false&&(ap.appellant||ap.appellant_status))appellant='other';
-  if(!appellant){
+  if(!appellant&&ap.appellant_is_bank===undefined){
     const apellRaw=(ap.appellant||'').toLowerCase();
     appellant=APPELLANT_MAP[apellRaw]||'';
   }
   // 2.5) Апеллянт из карточки 1-й инст. (fi.appeal_appellant_*) — источник
   //      для раннего окна first_instance/awaiting_appeal, когда блока appeal
   //      ещё нет. Бейдж не ставим для третьего/иного лица, чтобы он не
-  //      «уехал» на неверную главную сторону.
+  //      «уехал» на неверную главную сторону, и не ставим при
+  //      неопределённом is_bank (null/undefined) — 'other' только когда
+  //      парсер явно сказал «не банк».
   if(!appellant){
     if(fi.appeal_appellant_is_bank===true)appellant='bank';
-    else if(fi.appeal_appellant_status&&fi.appeal_appellant_status!=='Иное лицо'&&fi.appeal_appellant_status!=='Третье лицо')appellant='other';
+    else if(fi.appeal_appellant_is_bank===false&&fi.appeal_appellant_status&&fi.appeal_appellant_status!=='Иное лицо'&&fi.appeal_appellant_status!=='Третье лицо')appellant='other';
   }
   if(!appellant&&evText){
     if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
@@ -688,6 +713,7 @@ function jsonToCase(j){
     actDate:parseDate(primary.act_date||''),
     result:normalizeResult(rs),
     resultRaw:rs,
+    resultSource:resultSource,
     link:link,
     notes:j.notes||'',
     appellant:appellant,
@@ -783,11 +809,14 @@ function extractPauseReason(ev){
 }
 
 /* Determine if result is favorable for the bank.
-   В апелляции favor ведёт АПЕЛЛЯНТ (не номинальная роль банка): даже если
-   Сбер — третье лицо, его успешная жалоба = favorable. Жалоба, не достигшая
-   цели (возвращено/прекращено/снято), — unfavorable для апеллянта и
-   favorable для противоположной стороны (предыдущее решение устояло).
-   В 1-й инстанции апеллянта ещё нет — favor решается ролью банка и исходом.
+   Ветвление — по ИСТОЧНИКУ результата (c.resultSource), а не по стадии:
+   в awaiting_appeal результат всё ещё от 1-й инстанции, а current_stage уже
+   не 'first_instance'. Результат 1-й инст. (и «исковый» словарь на апел.
+   карточке) читается по роли банка и исходу иска. В апелляции/кассации favor
+   ведёт АПЕЛЛЯНТ (не номинальная роль банка): даже если Сбер — третье лицо,
+   его успешная жалоба = favorable. Жалоба, не достигшая цели
+   (возвращено/прекращено/снято), — unfavorable для апеллянта и favorable
+   для противоположной стороны (предыдущее решение устояло).
 */
 function getResultFavor(c){
   if(!c.result||c.result==='pending')return 'neutral';
@@ -799,7 +828,8 @@ function getResultFavor(c){
     if(c.result==='upheld')return 'unfavorable';
     return 'neutral';
   }
-  if(c.stage==='first_instance'){
+  // Защитный дефолт 'appeal' — для legacy-объектов без resultSource.
+  if((c.resultSource||'appeal')==='fi'){
     if(c.sberbankRole==='plaintiff'){
       if(c.result==='reversed'||c.result==='partial')return 'favorable';
       if(c.result==='upheld')return 'unfavorable';
@@ -1527,11 +1557,12 @@ function prepareCaseViewModel(c){
   const isFutureHearing=!!(c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today);
   const resultPresent=!!(c.result&&c.result!=='pending');
   const resultIcon=RESULT_ICONS[c.result]||'';
-  // Для 1-й инст. — собственный набор лейблов («Удовлетворено», «Отказано»,
-  // «Удовлетворено частично»), который повторяет язык карточки суда.
-  // Окраска favorable/unfavorable (зелёный/красный) считается отдельно
-  // в getResultFavor с учётом роли банка.
-  const resultLabel=(c.stage==='first_instance'&&resultPresent)
+  // Для результата 1-й инстанции (resultSource='fi': сама 1-я инст.,
+  // awaiting_appeal, «исковый» словарь на апел. карточке) — собственный
+  // набор лейблов («Удовлетворено», «Отказано», «Удовлетворено частично»),
+  // который повторяет язык карточки суда. Окраска favorable/unfavorable
+  // (зелёный/красный) считается отдельно в getResultFavor.
+  const resultLabel=((c.resultSource||'appeal')==='fi'&&resultPresent)
     ?(FI_RESULT_LABELS[c.result]||c.result||'')
     :(RESULT_LABELS[c.result]||c.result||'');
   const resultBadgeCls=getResultBadgeClass(c);

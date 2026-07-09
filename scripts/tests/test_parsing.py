@@ -2577,3 +2577,79 @@ class TestApplyFiAppellant:
         assert self._apply(fi, cj, "ОТВЕТЧИК") is True
         assert cj["appeal"]["appellant_status"] == "Ответчик"
         assert cj["appeal"]["appellant_is_bank"] is True
+
+    def test_co_defendants_is_bank_unknown(self):
+        """Соответчики: жалоба «ОТВЕТЧИКА» неатрибутируема → is_bank=None.
+
+        Кейс 2-2798/2026: пять ответчиков, включая Сбер — жалобу мог подать
+        любой из них, приписывать её банку нельзя."""
+        fi = {}
+        cj = {"plaintiff": "Бийбулатова Зарипат Исламалиевна",
+              "defendant": "АО Альфа-Банк, АО Т Банк, Бийбулатов Кортмас "
+                           "Бийбулатович, ПАО Сбербанк, ПАО Совкомбанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert fi["appeal_appellant_status"] == "Ответчик"
+        assert fi["appeal_appellant_is_bank"] is None
+
+    def test_branch_comma_still_sole_holder(self):
+        """Филиальная запятая Сбера («, Югорское отделение …») склеивается
+        _norm_party_tokens — банк остаётся единственным истцом → is_bank=True."""
+        fi = {}
+        cj = {"plaintiff": "ПАО Сбербанк, Югорское отделение № 5940",
+              "defendant": "Иванов Иван Иванович", "bank_role": "Истец"}
+        assert self._apply(fi, cj, "ИСТЕЦ") is True
+        assert fi["appeal_appellant_is_bank"] is True
+
+    def test_mtu_internal_commas_conservative(self):
+        """«Настоящие» запятые внутри имени соответчика (МТУ Росимущества)
+        распадаются на несколько токенов → консервативный None, не True."""
+        fi = {}
+        cj = {"plaintiff": "УФССП по ХМАО-Югре",
+              "defendant": "МТУ Росимущества в Тюменской области, ХМАО-Югре, "
+                           "ЯНАО, ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert fi["appeal_appellant_is_bank"] is None
+
+    def test_bare_third_party_role(self):
+        """«ТРЕТЬЕ ЛИЦО»: при банке-стороне — точно не банк (False);
+        при банке-третьем-лице — неопределимо (None)."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ТРЕТЬЕ ЛИЦО") is True
+        assert fi["appeal_appellant_is_bank"] is False
+
+        fi2 = {}
+        cj2 = {"plaintiff": "Иванов", "defendant": "Петров",
+               "bank_role": "Третье лицо"}
+        assert self._apply(fi2, cj2, "ТРЕТЬЕ ЛИЦО") is True
+        assert fi2["appeal_appellant_is_bank"] is None
+
+    def test_self_heal_stale_true(self):
+        """Записанный старой логикой is_bank=True при соответчиках
+        пересчитывается на следующем прогоне (имя-роль в «грязном» списке)."""
+        fi = {"appeal_appellant": "Ответчик",
+              "appeal_appellant_is_bank": True,
+              "appeal_appellant_status": "Ответчик"}
+        cj = {"plaintiff": "Иванов",
+              "defendant": "ПАО Сбербанк, ПАО Совкомбанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert fi["appeal_appellant_is_bank"] is None
+
+    def test_appeal_block_third_party_name_is_dirty(self):
+        """«Третье лицо» в appeal.appellant — «грязное» имя: гард appeal-блока
+        выровнен с fi-гардом и перезаписывает его."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик",
+              "appeal": {"case_number": "33-1/2026",
+                         "appellant": "Третье лицо",
+                         "appellant_is_bank": False,
+                         "appellant_status": "Иное лицо"}}
+        assert self._apply(fi, cj, "ОТВЕТЧИК") is True
+        assert cj["appeal"]["appellant"] == "Ответчик"
+        assert cj["appeal"]["appellant_is_bank"] is True
+        assert cj["appeal"]["appellant_status"] == "Ответчик"
