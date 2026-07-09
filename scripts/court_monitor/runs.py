@@ -1000,6 +1000,27 @@ def _bank_sole_role_holder(case_j: dict, role: str) -> bool:
     return len(tokens) == 1 and any(p in tokens[0] for p in config.SBER_PATTERNS)
 
 
+def _appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
+    """is_bank подателя жалобы (апеллянта/кассатора) по сырому «Заявителю».
+
+    Слово-роль само по себе не содержит признаков банка. Банк — податель,
+    только когда роль подателя совпадает с ролью банка И банк — единственная
+    сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
+    из них → None («знаем, что определить нельзя» — фронт не выводит ни
+    'bank', ни 'other'). Именной вход определяем по SBER_PATTERNS, как раньше.
+    """
+    raw_lc = raw.lower()
+    if raw_lc in ("истец", "ответчик", "третье лицо", "иное лицо"):
+        if role in ("Истец", "Ответчик"):
+            if role != case_j.get("bank_role", ""):
+                return False
+            if _bank_sole_role_holder(case_j, role):
+                return True
+            return None
+        return None if case_j.get("bank_role") == "Третье лицо" else False
+    return any(p in raw_lc for p in config.SBER_PATTERNS)
+
+
 def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     """Проставить апеллянта из карточки 1-й инстанции.
 
@@ -1021,24 +1042,7 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     role, short = classify_appellant_role(
         raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
     )
-    raw_lc = raw.lower()
-    # Слово-роль само по себе не содержит признаков банка. Банк — апеллянт,
-    # только когда роль подателя совпадает с ролью банка И банк — единственная
-    # сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
-    # из них → is_bank=None («знаем, что определить нельзя» — фронт не выводит
-    # ни 'bank', ни 'other'). Именной вход определяем по SBER_PATTERNS, как раньше.
-    if raw_lc in ("истец", "ответчик", "третье лицо", "иное лицо"):
-        if role in ("Истец", "Ответчик"):
-            if role != case_j.get("bank_role", ""):
-                is_bank = False
-            elif _bank_sole_role_holder(case_j, role):
-                is_bank = True
-            else:
-                is_bank = None
-        else:
-            is_bank = None if case_j.get("bank_role") == "Третье лицо" else False
-    else:
-        is_bank = any(p in raw_lc for p in config.SBER_PATTERNS)
+    is_bank = _appellant_is_bank(raw, role, case_j)
 
     changed = False
     # Сентинел отличает «ключа нет» от «записан null»: is_bank=None должен
@@ -1074,6 +1078,56 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
                 appeal_block["appellant_status"] = role
                 changed = True
 
+    return changed
+
+
+def _apply_fi_cassator(case_j: dict, card_info: dict) -> bool:
+    """Предзаполнить cassation.appellant_* из касс. вкладки карточки 1-й инст.
+
+    Источник — `card_info["_fi_cassator_raw"]` («Заявитель жалобы»/«Заявитель»;
+    бывает слово-роль «ИСТЕЦ»/«ОТВЕТЧИК» или ФИО). Работает в стадиях
+    cassation_watch/cassation_pending, ПОКА карточки на 7kas нет — при её
+    появлении все поля канонически перезапишет _cassation_card_to_block.
+    is_bank считается по тем же правилам, что у апеллянта
+    (_appellant_is_bank): слово-роль даёт True, только когда банк —
+    единственная сторона роли; при соответчиках — явный None. «Грязное»
+    имя-роль перезаписывается на каждом прогоне — значения
+    самовосстанавливаются при изменении логики без миграции данных.
+
+    Возвращает True, если что-то изменилось (для флага `changed`).
+    """
+    raw = (card_info.get("_fi_cassator_raw") or "").strip()
+    if not raw or cassation_card_linked(case_j):
+        return False
+    role, short = classify_appellant_role(
+        raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
+    )
+    is_bank = _appellant_is_bank(raw, role, case_j)
+    if not case_j.get("cassation"):
+        case_j["cassation"] = {
+            "appellant": short,
+            "appellant_is_bank": is_bank,
+            "appellant_status": role,
+            "discovered_via_cassation": False,
+        }
+        return True
+
+    changed = False
+    # Сентинел — как в _apply_fi_appellant: is_bank=None должен ЯВНО попасть
+    # в JSON, а совпадающий None не должен давать фантомный changed.
+    _missing = object()
+    cs_block = case_j["cassation"]
+    old_name = (cs_block.get("appellant") or "").strip()
+    if old_name.lower() in _DIRTY_APPELLANT_NAMES:
+        if short and short != old_name:
+            cs_block["appellant"] = short
+            changed = True
+        if cs_block.get("appellant_is_bank", _missing) != is_bank:
+            cs_block["appellant_is_bank"] = is_bank
+            changed = True
+        if role and cs_block.get("appellant_status") != role:
+            cs_block["appellant_status"] = role
+            changed = True
     return changed
 
 
@@ -2222,36 +2276,9 @@ def main_json():
         # для стадий cassation_watch/cassation_pending. Карточка 7kas каноническая —
         # пишем ТОЛЬКО когда её ещё нет (cs.case_number пуст). При появлении
         # карточки на 7kas все поля перезапишутся в _cassation_card_to_block.
-        fi_cassator_raw = card_info.get("_fi_cassator_raw", "").strip()
-        cs_has_card = cassation_card_linked(case_j)
-        if fi_cassator_raw and not cs_has_card:
-            cs_role, cs_short = classify_appellant_role(
-                fi_cassator_raw,
-                case_j.get("plaintiff", ""),
-                case_j.get("defendant", ""),
-            )
-            cs_is_bank = any(
-                p in fi_cassator_raw.lower() for p in config.SBER_PATTERNS
-            )
-            if not case_j.get("cassation"):
-                case_j["cassation"] = {
-                    "appellant": cs_short,
-                    "appellant_is_bank": cs_is_bank,
-                    "appellant_status": cs_role,
-                    "discovered_via_cassation": False,
-                }
-                changed = True
-            else:
-                cs_block = case_j["cassation"]
-                if cs_short and not (cs_block.get("appellant") or "").strip():
-                    cs_block["appellant"] = cs_short
-                    changed = True
-                if cs_block.get("appellant_is_bank") is None:
-                    cs_block["appellant_is_bank"] = cs_is_bank
-                    changed = True
-                if cs_role and not (cs_block.get("appellant_status") or "").strip():
-                    cs_block["appellant_status"] = cs_role
-                    changed = True
+        # Правила is_bank — общие с апеллянтом. См. _apply_fi_cassator.
+        if _apply_fi_cassator(case_j, card_info):
+            changed = True
 
         # Дело направлено в кассационный суд — идемпотентный флаг + событие.
         new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
