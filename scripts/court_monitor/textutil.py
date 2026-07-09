@@ -204,6 +204,11 @@ _MTU_RE = re.compile(
 _FIO_RE = re.compile(
     r'^([А-ЯЁа-яё-]+)\s+([А-ЯЁа-яё])[а-яё]+\s+([А-ЯЁа-яё])[а-яё]+$'
 )
+# То же ФИО, но с ПОЛНЫМ захватом имени (группа 2) — для разведения коллизии
+# инициалов: «Фамилия Имя О.» вместо «Фамилия И.О.».
+_FIO_FULL_RE = re.compile(
+    r'^([А-ЯЁа-яё-]+)\s+([А-ЯЁа-яё][а-яё]+)\s+([А-ЯЁа-яё])[а-яё]+$'
+)
 _FIN_OMBUD_RE = re.compile(
     r'^Финансовый уполномоченный.*$', re.IGNORECASE,
 )
@@ -239,8 +244,14 @@ _ORG_FORM_ABBRS = (
 )
 
 
-def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
-    """Сокращение одного наименования (без запятых)."""
+def _shorten_single(name: str, *, keep_fio_full: bool = False,
+                    fio_mode: str = "initials") -> str:
+    """Сокращение одного наименования (без запятых).
+
+    fio_mode="first_full" — ФИО сокращать как «Фамилия Имя О.» (имя целиком),
+    а не «Фамилия И.О.»: используется для разведения коллизии инициалов у
+    однофамильцев (см. `_resolve_initial_collisions`).
+    """
     name = name.strip()
     if not name:
         return name
@@ -267,12 +278,40 @@ def _shorten_single(name: str, *, keep_fio_full: bool = False) -> str:
     name = _CITY_RE.sub('г.', name)
     # «наследственное имущество умершего заемщика ФИО» → «насл. имущество ФИО»
     name = _HERITAGE_RE.sub('насл. имущество ', name)
-    # ФИО → Фамилия И.О.
+    # ФИО → Фамилия И.О. (или Фамилия Имя О. при разведении коллизии инициалов)
     if not keep_fio_full:
-        m = _FIO_RE.match(name)
-        if m:
-            name = f"{m.group(1)} {m.group(2).upper()}.{m.group(3).upper()}."
+        if fio_mode == "first_full":
+            m = _FIO_FULL_RE.match(name)
+            if m:
+                name = f"{m.group(1)} {m.group(2)} {m.group(3).upper()}."
+        else:
+            m = _FIO_RE.match(name)
+            if m:
+                name = f"{m.group(1)} {m.group(2).upper()}.{m.group(3).upper()}."
     return name
+
+
+def _resolve_initial_collisions(parts: list[str], shortened: list[str]) -> None:
+    """На месте разводит одинаковые «Фамилия И.О.» от РАЗНЫХ полных ФИО.
+
+    Частый случай — однофамильцы с совпавшими инициалами (напр. ответчики
+    «Бундюк Денис Олегович» и «Бундюк Диана Олеговна» → оба «Бундюк Д.О.»).
+    Такие разводим, разворачивая имя до полного: «Бундюк Денис О.» /
+    «Бундюк Диана О.». Один и тот же человек, перечисленный дважды
+    (одинаковое полное имя), не трогаем — это настоящий дубль.
+    """
+    by_short: dict[str, list[int]] = {}
+    for i, sh in enumerate(shortened):
+        by_short.setdefault(sh, []).append(i)
+    for idxs in by_short.values():
+        if len(idxs) < 2:
+            continue
+        if len({parts[i].strip() for i in idxs}) < 2:
+            continue  # одно и то же полное имя — не разводим
+        for i in idxs:
+            expanded = _shorten_single(parts[i], fio_mode="first_full")
+            if expanded:
+                shortened[i] = expanded
 
 
 def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
@@ -280,6 +319,7 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
 
     Если в поле несколько сторон через запятую — сокращает каждую отдельно.
     keep_fio_full=True — не сокращать ФИО физлиц (для секции «Новые дела»).
+    Совпавшие инициалы однофамильцев разводятся (`_resolve_initial_collisions`).
     """
     if not name or not name.strip():
         return name
@@ -294,6 +334,8 @@ def shorten_party_name(name: str, *, keep_fio_full: bool = False) -> str:
     name = _BRANCH_COMMA_RE.sub(r'\1', name)
     parts = name.split(",")
     shortened = [_shorten_single(p, keep_fio_full=keep_fio_full) for p in parts]
+    if not keep_fio_full:
+        _resolve_initial_collisions(parts, shortened)
     return ", ".join(s for s in shortened if s)
 
 
