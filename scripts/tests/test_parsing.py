@@ -2653,3 +2653,110 @@ class TestApplyFiAppellant:
         assert cj["appeal"]["appellant"] == "Ответчик"
         assert cj["appeal"]["appellant_is_bank"] is True
         assert cj["appeal"]["appellant_status"] == "Ответчик"
+
+
+class TestApplyFiCassator:
+    """Кассатор из касс. вкладки карточки 1-й инст. предзаполняет
+    cassation.appellant_* (пока нет карточки 7kas). is_bank «голой» роли —
+    по тем же правилам, что у апеллянта (см. TestApplyFiAppellant)."""
+
+    def _apply(self, case_j, raw):
+        from court_monitor.runs import _apply_fi_cassator
+        return _apply_fi_cassator(case_j, {"_fi_cassator_raw": raw})
+
+    def test_bank_defendant_files_cassation(self):
+        """Банк — единственный ответчик, жалоба «ОТВЕТЧИКА» → банк-кассатор."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ОТВЕТЧИК") is True
+        assert cj["cassation"]["appellant_status"] == "Ответчик"
+        assert cj["cassation"]["appellant_is_bank"] is True
+
+    def test_opponent_files_cassation(self):
+        """Банк — ответчик, жалобу подал истец → не банк-кассатор."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ИСТЕЦ") is True
+        assert cj["cassation"]["appellant_status"] == "Истец"
+        assert cj["cassation"]["appellant_is_bank"] is False
+
+    def test_co_defendants_is_bank_unknown(self):
+        """Соответчики: жалоба «ОТВЕТЧИКА» неатрибутируема → is_bank=None,
+        причём null пишется в JSON явно (ключ присутствует)."""
+        cj = {"plaintiff": "Бийбулатова Зарипат Исламалиевна",
+              "defendant": "АО Альфа-Банк, АО Т Банк, Бийбулатов Кортмас "
+                           "Бийбулатович, ПАО Сбербанк, ПАО Совкомбанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ОТВЕТЧИК") is True
+        assert "appellant_is_bank" in cj["cassation"]
+        assert cj["cassation"]["appellant_is_bank"] is None
+
+    def test_named_cassator_bank(self):
+        """Именной вход определяется по SBER_PATTERNS, как раньше."""
+        cj = {"plaintiff": "Иванов",
+              "defendant": "ПАО Сбербанк, ПАО Совкомбанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ПАО Сбербанк") is True
+        assert cj["cassation"]["appellant_is_bank"] is True
+
+    def test_no_raw_noop(self):
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "") is False
+        assert "cassation" not in cj
+
+    def test_linked_card_untouched(self):
+        """Карточка 7kas каноническая: связанный блок не трогаем."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик",
+              "cassation": {"case_number": "8Г-1/2026",
+                            "appellant": "Иванов",
+                            "appellant_is_bank": False}}
+        assert self._apply(cj, "ОТВЕТЧИК") is False
+        assert cj["cassation"]["appellant_is_bank"] is False
+
+    def test_idempotent(self):
+        """Повторный прогон с теми же данными не даёт фантомный changed —
+        в т.ч. когда is_bank=None (сентинел, а не «is None»-гейт)."""
+        cj = {"plaintiff": "Иванов",
+              "defendant": "ПАО Сбербанк, ПАО Совкомбанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ОТВЕТЧИК") is True
+        assert cj["cassation"]["appellant_is_bank"] is None
+        assert self._apply(cj, "ОТВЕТЧИК") is False  # ничего не поменялось
+
+    def test_self_heal_stale_false(self):
+        """Записанный старой логикой is_bank=False для «голой» роли банка
+        пересчитывается на следующем прогоне (имя-роль в «грязном» списке)."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик",
+              "cassation": {"appellant": "Ответчик",
+                            "appellant_is_bank": False,
+                            "appellant_status": "Ответчик"}}
+        assert self._apply(cj, "ОТВЕТЧИК") is True
+        assert cj["cassation"]["appellant_is_bank"] is True
+
+    def test_real_name_not_overwritten(self):
+        """Настоящее имя в предзаполненном блоке — не «грязное», роль-слово
+        из карточки его не затирает."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик",
+              "cassation": {"appellant": "Иванов И.И.",
+                            "appellant_is_bank": False,
+                            "appellant_status": "Истец"}}
+        assert self._apply(cj, "ОТВЕТЧИК") is False
+        assert cj["cassation"]["appellant"] == "Иванов И.И."
+        assert cj["cassation"]["appellant_is_bank"] is False
+
+    def test_bare_third_party_role(self):
+        """«ТРЕТЬЕ ЛИЦО»: при банке-стороне — точно не банк (False);
+        при банке-третьем-лице — неопределимо (None)."""
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(cj, "ТРЕТЬЕ ЛИЦО") is True
+        assert cj["cassation"]["appellant_is_bank"] is False
+
+        cj2 = {"plaintiff": "Иванов", "defendant": "Петров",
+               "bank_role": "Третье лицо"}
+        assert self._apply(cj2, "ТРЕТЬЕ ЛИЦО") is True
+        assert cj2["cassation"]["appellant_is_bank"] is None
