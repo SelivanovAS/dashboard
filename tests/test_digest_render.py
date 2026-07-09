@@ -976,7 +976,7 @@ class RecessAndRestartGuardTest(unittest.TestCase):
             total_active_fi=1,
         )
         self.assertIn(
-            "в заседании объявлен перерыв до <b>25.06.2026 09:45</b>", html
+            "в заседании объявлен перерыв до <b>25.06.2026 в 09:45</b>", html
         )
         self.assertNotIn("отложено на <b>25.06.2026", html)
         self.assertNotIn("рассмотрение начато с начала", html)

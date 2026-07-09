@@ -491,6 +491,17 @@ def category_short(cat: str, *, truncate: bool = True) -> str:
     return cat
 
 
+def _fmt_hearing_dt(date: str, time: str) -> str:
+    """Дата+время заседания: «ДД.ММ.ГГГГ в ЧЧ:ММ» (предлог «в» перед временем,
+    просьба юриста 09.07.2026, единообразие со всеми секциями; в кассации так
+    уже было). Без времени — только дата. Не экранирует (это делают вызовы)."""
+    date = (date or "").strip()
+    time = (time or "").strip()
+    if not date:
+        return ""
+    return f"{date} в {time}" if time else date
+
+
 # ── Основная логика обновления ───────────────────────────────────────────────
 
 def _act_summary_or_excerpt_with_kind(
@@ -799,7 +810,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi = c.get("first_instance", {})
             court = escape_html(shorten_court_name(fi.get("court", "")))
             role = c.get("bank_role", "")
-            cat = category_short(short_category_chain(c.get("category", "")))
+            cat = category_short(
+                short_category_chain(c.get("category", "")), truncate=False
+            )
             pl_raw = c.get("plaintiff", "")
             df_raw = c.get("defendant", "")
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
@@ -891,32 +904,37 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         hd = escape_html(d.get("hearing_date", ""))
                         ht = escape_html(d.get("hearing_time", ""))
                         htype = escape_html(d.get("hearing_type", "заседание"))
-                        hp = hd + (f" {ht}" if ht else "")
+                        hp = _fmt_hearing_dt(hd, ht)
                         # «назначено» перед типом заседания (просьба юриста
                         # 07.07.2026): «📅 заседание 04.08.2026» →
-                        # «📅 назначено заседание 04.08.2026».
+                        # «📅 назначено заседание 04.08.2026». Предлог «на»
+                        # перед датой (просьба 09.07.2026): «назначено
+                        # заседание на 04.08.2026 в 10:30».
                         ev_list.append(
-                            f"📅 назначено {htype} <b>{hp}</b>"
+                            f"📅 назначено {htype} на <b>{hp}</b>"
                             if hp else f"📅 назначено {htype}"
                         )
                 elif t == "fi_hearing_next":
                     new_p = escape_html(
-                        d.get("hearing_date", "")
-                        + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
+                        _fmt_hearing_dt(
+                            d.get("hearing_date", ""), d.get("hearing_time", "")
+                        )
                     )
                     ev_list.append(f"📅 заседание назначено на <b>{new_p}</b>")
                 elif t == "fi_hearing_postponed":
                     new_p = escape_html(
-                        d.get("hearing_date", "")
-                        + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
+                        _fmt_hearing_dt(
+                            d.get("hearing_date", ""), d.get("hearing_time", "")
+                        )
                     )
                     # Только новая дата (старую больше не показываем —
                     # по запросу пользователя).
                     ev_list.append(f"🔁 заседание отложено на <b>{new_p}</b>")
                 elif t == "fi_hearing_recess":
                     new_p = escape_html(
-                        d.get("hearing_date", "")
-                        + (f" {d['hearing_time']}" if d.get("hearing_time") else "")
+                        _fmt_hearing_dt(
+                            d.get("hearing_date", ""), d.get("hearing_time", "")
+                        )
                     )
                     ev_list.append(
                         f"🔁 в заседании объявлен перерыв до <b>{new_p}</b>"
@@ -971,7 +989,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         )
                         sh_parsed = parse_date(sh_d) if sh_d else None
                         if sh_parsed and sh_parsed.date() >= datetime.now().date():
-                            sh_p = sh_d + (f" {sh_t}" if sh_t else "")
+                            sh_p = _fmt_hearing_dt(sh_d, sh_t)
                             ev_list.append(
                                 f"📅 заседание назначено на <b>{sh_p}</b>"
                             )
@@ -1016,7 +1034,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     nht = escape_html(d.get("next_hearing_time", ""))
                     part = "🔄 рассмотрение начато с начала" + (f" ({rd})" if rd else "")
                     if nhd:
-                        nhp = nhd + (f" {nht}" if nht else "")
+                        nhp = _fmt_hearing_dt(nhd, nht)
                         part += f"; след. заседание <b>{nhp}</b>"
                     ev_list.append(part)
                 elif t == "fi_bank_role_changed":
@@ -1184,7 +1202,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         for c in new_cases:
             link = case_link_html(c)
             role = c.get("Роль банка", "")
-            cat = category_short(short_category_chain(c.get("Категория", "")))
+            cat = category_short(
+                short_category_chain(c.get("Категория", "")), truncate=False
+            )
             pl_raw = c.get('Истец', '')
             df_raw = c.get('Ответчик', '')
             pl = escape_html(shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL))
@@ -1276,7 +1296,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     if url else f'<b>{case_num}</b>')
             plaintiff = escape_html(shorten_party_name(d.get("plaintiff", "")))
             defendant = escape_html(shorten_party_name(d.get("defendant", "")))
-            cat = category_short(short_category_chain(d.get("category", "")))
+            cat = category_short(
+                short_category_chain(d.get("category", "")), truncate=False
+            )
             is_postponed = "hearing_postponed" in ch["type"]
             # Дата+время заседания. Для отложений — new_hearing_*; для
             # назначений: new_hearing_* → ПОЛЯ КАРТОЧКИ hearing_date/time →
@@ -1300,7 +1322,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         hd = escape_html(ps)
                     elif re.match(r'^\d{1,2}:\d{2}$', ps) and not ht:
                         ht = escape_html(ps)
-            hp = hd + (f" {ht}" if ht else "")
+            hp = _fmt_hearing_dt(hd, ht)
             # Строка 1: «номер — стороны | категория» (суд не показываем —
             # для апелляции это всегда Суд ХМАО-Югры).
             line1 = link
@@ -1383,22 +1405,44 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             link = f'<a href="{url}"><b>{case_num}</b></a>' if url else f'<b>{case_num}</b>'
             result_text = escape_html(d.get("result", ""))
             role = d.get("role", "")
-            # БАНК В ХВОСТЕ: показываем «(банк — роль)» только когда банк не в сторонах.
-            if role and not _bank_in_parties(
-                    d.get("plaintiff", ""), d.get("defendant", "")):
-                role_note = f" (банк — {escape_html(role.lower())})"
-            else:
-                role_note = ""
-            hearing_dt = d.get("hearing_date", "")
-            date_note = f". Определение от {escape_html(hearing_dt)}" if hearing_dt else ""
-            cat = category_short(short_category_chain(d.get("category", "")))
-            cat_note = f" | {escape_html(cat)}" if cat else ""
-            # Строка «Причина: <last_event>» убрана: last_event обычно дублирует
-            # уже сказанное в этой же строке (result_text повторяет «Вынесено
-            # решение …»), а в Claude-варианте такой строки не было.
-            appeal_block.append(
-                f"{link}: {result_text}{cat_note}{role_note}{date_note}"
+            pl_raw = d.get("plaintiff", "")
+            df_raw = d.get("defendant", "")
+            pl = escape_html(
+                shorten_party_name(pl_raw, keep_fio_full=_DIGEST_FIO_FULL)
             )
+            df = escape_html(
+                shorten_party_name(df_raw, keep_fio_full=_DIGEST_FIO_FULL)
+            )
+            cat = escape_html(
+                category_short(
+                    short_category_chain(d.get("category", "")), truncate=False
+                )
+            )
+            hearing_dt = escape_html(d.get("hearing_date", ""))
+            # Двухстрочная вёрстка (просьба юриста 09.07.2026): строка 1 —
+            # стороны + категория (+ роль банка, если банк не в сторонах);
+            # строка 2 — «{дата} вынесено определение — {результат}».
+            head_extras: list[str] = []
+            if cat:
+                head_extras.append(f"категория: {cat}")
+            # БАНК В ХВОСТЕ: «банк — роль» только когда банк не в сторонах.
+            if role and not _bank_in_parties(pl_raw, df_raw):
+                head_extras.append(f"банк — {escape_html(role.lower())}")
+            head_tail = (" | " + " | ".join(head_extras)) if head_extras else ""
+            line1 = link
+            if pl and df:
+                line1 += f" — {pl} vs {df}"
+            line1 += head_tail
+            appeal_block.append(line1)
+            # Строка 2: дата вынесения определения + результат.
+            appeal_block.append(
+                f"{hearing_dt} вынесено определение — {result_text}"
+                if hearing_dt else f"Вынесено определение — {result_text}"
+            )
+            # Пустая строка между делами (двухстрочные карточки иначе слипаются).
+            appeal_block.append("")
+        if appeal_block and appeal_block[-1] == "":
+            appeal_block.pop()
 
     if acts:
         _section_break(appeal_block)

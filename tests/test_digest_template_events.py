@@ -391,7 +391,7 @@ class FiEventMatrixTest(unittest.TestCase):
         # Даты предстоящих заседаний — жирным (просьба юриста 06.07.2026);
         # «назначено» перед типом заседания (просьба 07.07.2026).
         self.assert_in_changes_section(
-            html, "📅 назначено заседание <b>15.08.2026 10:30</b>"
+            html, "📅 назначено заседание на <b>15.08.2026 в 10:30</b>"
         )
 
     def test_fi_hearing_new_unpublished(self):
@@ -407,13 +407,13 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_hearing_next(self):
         html = self._one(["fi_hearing_next"])
         self.assert_in_changes_section(
-            html, "📅 заседание назначено на <b>15.08.2026 10:30</b>"
+            html, "📅 заседание назначено на <b>15.08.2026 в 10:30</b>"
         )
 
     def test_fi_hearing_postponed_shows_only_new_date(self):
         html = self._one(["fi_hearing_postponed"])
         self.assert_in_changes_section(
-            html, "🔁 заседание отложено на <b>20.09.2026 12:00</b>"
+            html, "🔁 заседание отложено на <b>20.09.2026 в 12:00</b>"
         )
         # Старую дату юрист просил не показывать.
         self.assertNotIn("15.07.2026", html)
@@ -421,7 +421,7 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_hearing_recess(self):
         html = self._one(["fi_hearing_recess"])
         self.assert_in_changes_section(
-            html, "🔁 в заседании объявлен перерыв до <b>21.08.2026 11:00</b>"
+            html, "🔁 в заседании объявлен перерыв до <b>21.08.2026 в 11:00</b>"
         )
 
     def test_fi_status_change_alone(self):
@@ -447,7 +447,7 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_final_event_regular_with_scheduled_date(self):
         html = self._one(["fi_final_event"])
         self.assert_in_changes_section(html, "⚖️ Подготовка дела (собеседование)")
-        self.assertIn("📅 заседание назначено на <b>25.08.2026 09:00</b>", html)
+        self.assertIn("📅 заседание назначено на <b>25.08.2026 в 09:00</b>", html)
 
     def test_fi_final_event_motivirovka_normalized(self):
         # Фраза «Изготовлено мотивированное решение…» нормализуется под
@@ -557,7 +557,7 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assert_in_changes_section(
             html,
             "🔄 рассмотрение начато с начала (10.06.2026); "
-            "след. заседание <b>20.08.2026 10:00</b>",
+            "след. заседание <b>20.08.2026 в 10:00</b>",
         )
 
     def test_fi_bank_role_changed(self):
@@ -673,7 +673,7 @@ class FiComboTest(unittest.TestCase):
             make_fi_change(["fi_resolved", "fi_hearing_postponed"])
         ])
         self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn("🔁 заседание отложено на <b>20.09.2026 12:00</b>", html)
+        self.assertIn("🔁 заседание отложено на <b>20.09.2026 в 12:00</b>", html)
         self.assertEqual(anchors(html).count("2-100/2026"), 2)
 
 
@@ -691,12 +691,12 @@ class AppealEventMatrixTest(unittest.TestCase):
     def test_hearing_new(self):
         html = render(changes=[make_appeal_change(["hearing_new"])])
         self.assertIn("📅 <b>Изменения (1):</b>", html)
-        self.assertIn("📅 Заседание назначено на <b>05.08.2026 11:30</b>", html)
+        self.assertIn("📅 Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_hearing_postponed(self):
         html = render(changes=[make_appeal_change(["hearing_postponed"])])
-        self.assertIn("🔁 Заседание отложено на <b>05.08.2026 11:30</b>", html)
+        self.assertIn("🔁 Заседание отложено на <b>05.08.2026 в 11:30</b>", html)
         self.assertNotIn("15.07.2026", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
@@ -704,7 +704,7 @@ class AppealEventMatrixTest(unittest.TestCase):
         # new_hearing_date нет — дата и время берутся из полей карточки
         # (hearing_date/hearing_time), текст события — только fallback.
         html = render(changes=[make_appeal_change(["new_event"])])
-        self.assertIn("📅 Заседание назначено на <b>03.08.2026 11:30</b>", html)
+        self.assertIn("📅 Заседание назначено на <b>03.08.2026 в 11:30</b>", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_new_event_prefers_card_fields_over_text_tail(self):
@@ -717,7 +717,7 @@ class AppealEventMatrixTest(unittest.TestCase):
              "event_date": "14.07.2026",
              "hearing_date": "14.07.2026", "hearing_time": "14:30"},
         )])
-        self.assertIn("📅 Заседание назначено на <b>14.07.2026 14:30</b>", html)
+        self.assertIn("📅 Заседание назначено на <b>14.07.2026 в 14:30</b>", html)
         self.assertNotIn("03.07.2026 14:30", html)
 
     def test_suspension_interpreted_not_quoted(self):
@@ -762,7 +762,7 @@ class AppealEventMatrixTest(unittest.TestCase):
         )])
         self.assertIn(
             "▶️ Производство по делу возобновлено (01.09.2026); "
-            "заседание <b>20.09.2026 11:00</b>", html,
+            "заседание <b>20.09.2026 в 11:00</b>", html,
         )
 
     def test_new_event_informative_shown_as_text(self):
@@ -782,10 +782,17 @@ class AppealEventMatrixTest(unittest.TestCase):
     def test_new_result_in_acts_section(self):
         html = render(changes=[make_appeal_change(["new_result"])])
         self.assertIn("⚖️ <b>Вынесенные акты (1):</b>", html)
-        self.assertIn("ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ", html)
-        self.assertIn("Определение от 28.07.2026", html)
-        # Банк не в сторонах, роль «Третье лицо» → хвост «(банк — третье лицо)».
-        self.assertIn("(банк — третье лицо)", html)
+        # Двухстрочная вёрстка (просьба 09.07.2026): строка 1 — стороны +
+        # категория + роль банка (в хвосте через «| », без скобок).
+        self.assertIn("Смирнова А.В. vs УК Комфорт", html)
+        self.assertIn("категория: жилищн. спор", html)
+        self.assertIn("банк — третье лицо", html)
+        # Строка 2: «{дата} вынесено определение — {результат}».
+        self.assertIn(
+            "28.07.2026 вынесено определение — "
+            "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            html,
+        )
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_new_act_in_published_texts_section(self):
@@ -861,7 +868,7 @@ class AppealComboTest(unittest.TestCase):
         )])
         self.assertNotIn("Вынесенные акты", html)
         self.assertIn("📅 <b>Изменения (1):</b>", html)
-        self.assertIn("Заседание назначено на <b>05.08.2026 11:30</b>", html)
+        self.assertIn("Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_event_plus_act_only_in_published_texts(self):
