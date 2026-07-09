@@ -228,12 +228,12 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
 
 ### GitHub Actions
 
-#### Update Court Cases (`update_cases.yml`)
+#### 📊 Основной прогон: парсинг + дайджест (`update_cases.yml`)
 
 - **Триггер:** `workflow_dispatch` (через Cloudflare Worker или вручную)
 - **Действия:** Парсинг сайта суда → обновление CSV → дайджест → Telegram → коммит в репозиторий
 
-#### Test Digest (`test_digest.yml`)
+#### 🧪 Тест дайджеста (`test_digest.yml`)
 
 - **Триггер:** Только ручной запуск (`workflow_dispatch`)
 - **Действия:** Replay последнего сохранённого контекста (`data/last_digest_context.json`) через LLM с актуальным промптом → Telegram → PWA push → коммит свежего `data/last_digest.json`.

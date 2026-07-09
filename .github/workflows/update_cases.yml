@@ -1,4 +1,6 @@
-name: Update Court Cases
+# Имя файла (update_cases.yml) не менять: Cloudflare Worker дёргает
+# workflow_dispatch по нему (cloudflare-worker/worker.js, scheduled).
+name: "📊 Основной прогон: парсинг + дайджест"
 
 on:
   # Автозапуск (с 05.07.2026 возвращён в облако): Cloudflare Worker по крону
@@ -88,8 +90,9 @@ jobs:
           # вынесенные из горячего архива ротацией (rotate_cold_archive). Фронт
           # их не грузит, но без коммита новые файлы теряются между прогонами.
           git add data/cases_archive_*.json 2>/dev/null || true
-          # Контекст дайджеста нужен workflow `Digest Only` (--replay-last).
-          # Без коммита каждый следующий запуск видит пустой checkout и падает.
+          # Контекст дайджеста нужен workflow «🧪 Тест дайджеста» (test_digest.yml,
+          # --replay-last). Без коммита каждый следующий запуск видит пустой
+          # checkout и падает.
           if [ -f data/last_digest_context.json ]; then
             git add data/last_digest_context.json
           fi

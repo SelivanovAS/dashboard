@@ -38,7 +38,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | Переменная | Назначение |
 |------------|-----------|
 | `ANTHROPIC_API_KEY` | Claude (генерация/пересказ). |
-| `GIGACHAT_CREDENTIALS` / `GIGACHAT_*` | GigaChat (альтернативный LLM). |
+| `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | GigaChat (альтернативный LLM, `LLM_PROVIDER=gigachat`). |
 | `TELEGRAM_BOT_TOKEN` | Токен бота. |
 | `TELEGRAM_CHAT_ID` | Корпоративная группа (только при `to_group=true`). |
 | `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель. |
@@ -129,12 +129,10 @@ Python 3.12 → установка зависимостей → `python scripts/
 ### `test_digest.yml` — ручной тест
 [Файл](../../.github/workflows/test_digest.yml). Не парсит — переигрывает
 последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
-иначе только владельцу), `polish_html` (`DIGEST_POLISH=1`), `full_llm`
-(`DIGEST_FULL_LLM=1`, перебивает `polish_html`). Коммитит свежий `last_digest.json`.
-
-### `digest_only_gigachat.yml` — дайджест через GigaChat
-[Файл](../../.github/workflows/digest_only_gigachat.yml). Альтернативный LLM.
-Входы: `replay_last`, `to_group`, `model` (выбор модели GigaChat).
+иначе только владельцу), `full_llm` (`DIGEST_FULL_LLM=1` — старый полный
+LLM-вариант вместо гибрида). Коммитит свежий `last_digest.json`.
+(Workflow `digest_only_gigachat.yml` удалён 09.07.2026 — GigaChat остаётся
+доступен через `LLM_PROVIDER=gigachat` + `GIGACHAT_AUTH_KEY`.)
 
 ### Деплой Cloudflare Worker
 Не через Actions, а вручную: `cd cloudflare-worker && wrangler deploy`. См.
@@ -210,7 +208,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 | **Утром нет дайджеста (нет и 🚨)** | Скорее всего Mac спал/выключен или не в сети Сбера — прогон не состоялся (best-effort). Открыть Mac в офисной сети: LaunchAgent догонит при входе, либо запустить руками `launchctl start com.court-monitor.parse`. Проверить лог/уведомления macOS. |
 | **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |
 | **Блок «🛰 Парсинг» в админке молчит** | Нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: парсинг работает и без вех. |
-| **Прогон был, а дайджест не пришёл** | Смотреть Actions → `Replay digest on push` (стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
+| **Прогон был, а дайджест не пришёл** | Смотреть Actions → «💤 Резерв D2: дайджест на push» (`replay_on_push.yml`; стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
 | **Автозапуск через Worker (если вернули cron)** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday`, логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
 
 ## Чего НЕ делать
