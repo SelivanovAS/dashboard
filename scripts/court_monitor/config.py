@@ -144,9 +144,10 @@ PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 
 # Переключатель провайдера LLM: "claude" (по умолчанию) или "gigachat".
-# Задаётся в workflow digest_only_gigachat.yml для отдельного прогона
-# дайджеста через GigaChat. Основной мониторинг (update_cases.yml) остаётся
-# на Claude и ничего не знает про этот флаг.
+# Отдельного workflow под GigaChat больше нет (digest_only_gigachat.yml
+# удалён 09.07.2026) — при необходимости выставить LLM_PROVIDER=gigachat
+# вручную. Основной мониторинг (update_cases.yml) остаётся на Claude и
+# ничего не знает про этот флаг.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
 
 # Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).

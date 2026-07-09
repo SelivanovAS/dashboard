@@ -1,4 +1,4 @@
-name: Replay digest on push
+name: "💤 Резерв D2: дайджест на push (усыплён)"
 
 # Вторая половина автозапуска (вариант D2). Парсинг судов делает Mac юриста
 # (ops/mac-local-run/) и пушит свежий data/last_digest_context.json. Этот

@@ -1,9 +1,10 @@
-name: Test Digest
+name: 🧪 Тест дайджеста (replay)
 
 # Объединённый тестовый прогон. Парсинга не делает — переигрывает
-# последний продовый дайджест из data/last_digest_context.json через LLM
-# с актуальным промптом. Telegram: личный по умолчанию, группа по галке.
-# PWA push: владельцу по умолчанию, всем подписчикам по галке.
+# последний продовый дайджест из data/last_digest_context.json (гибрид:
+# программный шаблон + Claude на пересказ мотивировок; галка full_llm —
+# откат на старый полный LLM-вариант). Telegram: личный по умолчанию,
+# группа по галке. PWA push: владельцу по умолчанию, всем — по галке.
 # Перезаписывает data/last_digest.json и коммитит обратно в репо.
 
 on:
@@ -19,13 +20,8 @@ on:
         required: false
         type: boolean
         default: false
-      polish_html:
-        description: 'Включить LLM-полировщик HTML (DIGEST_POLISH=1) — косметика поверх программного шаблона. Без галки — чистый шаблон.'
-        required: false
-        type: boolean
-        default: false
       full_llm:
-        description: 'Старый Claude-вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом. Перебивает polish_html.'
+        description: 'Старый Claude-вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом вместо программного шаблона.'
         required: false
         type: boolean
         default: false
@@ -53,17 +49,14 @@ jobs:
       - name: Replay last digest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GIGACHAT_CREDENTIALS: ${{ secrets.GIGACHAT_CREDENTIALS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          # Управление архитектурой дайджеста для тестирования.
-          # full_llm перебивает polish_html — старый Claude-вариант
-          # игнорирует флаг полировщика.
+          # Управление архитектурой дайджеста для тестирования:
+          # без галки — боевой гибрид, с галкой — старый полный LLM.
           DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
-          DIGEST_POLISH: ${{ inputs.polish_html && '1' || '' }}
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"
@@ -72,10 +65,8 @@ jobs:
           fi
           if [ "${{ inputs.full_llm }}" = "true" ]; then
             echo "🤖 FULL LLM: старый Claude-вариант (DIGEST_FULL_LLM=1)"
-          elif [ "${{ inputs.polish_html }}" = "true" ]; then
-            echo "✨ HYBRID + POLISH: программный шаблон + LLM-полировщик (DIGEST_POLISH=1)"
           else
-            echo "🏗 HYBRID: программный шаблон без полировщика"
+            echo "🏗 HYBRID: программный шаблон + LLM-пересказы актов"
           fi
           if [ "${{ inputs.push_all }}" = "true" ]; then
             echo "📣 ALL DEVICES: PWA push to every subscriber"
