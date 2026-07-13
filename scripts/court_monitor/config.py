@@ -136,6 +136,12 @@ DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# Личный чат юриста. Нужен, чтобы отличить «дайджест идёт мне» от «дайджест
+# идёт в корпоративную группу»: сервисная приписка о LLM-модели добавляется
+# к Telegram-версии дайджеста только при совпадении TELEGRAM_CHAT_ID с этим
+# значением (см. _telegram_digest_text в runs.py). Workflow'ы передают сюда
+# secrets.TELEGRAM_CHAT_ID_TEST; если переменная не задана — приписки нет.
+TELEGRAM_CHAT_ID_PERSONAL = os.environ.get("TELEGRAM_CHAT_ID_PERSONAL", "")
 
 # Web Push (PWA-уведомления)
 PUSH_WORKER_URL = os.environ.get("PUSH_WORKER_URL", "").rstrip("/")

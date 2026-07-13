@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1137](../../scripts/court_monitor/runs.py#L1137)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| `--json` | `main_json` ([1164](../../scripts/court_monitor/runs.py#L1164)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([560](../../scripts/court_monitor/runs.py#L560)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([3332](../../scripts/court_monitor/runs.py#L3332)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([3017](../../scripts/court_monitor/runs.py#L3017)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3193](../../scripts/court_monitor/runs.py#L3193)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([808](../../scripts/court_monitor/runs.py#L808)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--digest-only` | `main_digest_only` ([3361](../../scripts/court_monitor/runs.py#L3361)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([3045](../../scripts/court_monitor/runs.py#L3045)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3222](../../scripts/court_monitor/runs.py#L3222)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([809](../../scripts/court_monitor/runs.py#L809)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -43,6 +43,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `TELEGRAM_BOT_TOKEN` | Токен бота. |
 | `TELEGRAM_CHAT_ID` | Корпоративная группа (только при `to_group=true`). |
 | `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель. |
+| `TELEGRAM_CHAT_ID_PERSONAL` | Личный чат юриста (workflow'ы передают тот же `TELEGRAM_CHAT_ID_TEST`): при совпадении с `TELEGRAM_CHAT_ID` к Telegram-дайджесту добавляется приписка «🤖 LLM: …» — какая модель делала дайджест. В группу приписка не уходит. |
 | `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` | Web Push для PWA. |
 | `OWNER_SECRET` | Секрет Worker'а для `/mark-owner` и админки. |
 | `GITHUB_PAT` | В secrets Worker'а — для `workflow_dispatch`. |
