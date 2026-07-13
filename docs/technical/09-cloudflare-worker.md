@@ -7,26 +7,27 @@ Cloudflare Worker — это маленький серверный скрипт,
 1. **Хранит push-подписки и watchlist** пользователей PWA и отдаёт **админку**
    подписчиков — потому что у дашборда (статика на GitHub Pages) нет своего
    бэкенда, а где-то хранить подписки нужно.
-2. **Показывает онлайн-статус парсинга** (блок «🛰 Парсинг» в админке): Mac
-   шлёт вехи прогона на `/run-progress`, админка автообновляется — ход парсинга
-   видно из браузера и с телефона.
-3. ~~Запускает обновление точно по расписанию~~ — **отключено 03.07.2026**
-   (`crons = []`): суды режут иностранные IP, и запускаемый Worker'ом
-   `update_cases.yml` перестал добираться до судов. Расписание переехало в
-   LaunchAgent на Mac юриста (см. [01. Обзор](01-обзор-и-архитектура.md) и
+2. **Показывает живой лог прогона** (блок лога в админке): облачный прогон
+   GitHub Actions шлёт весь свой stdout через
+   [`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py)
+   (`source:"github"` + ссылка на run), Mac-резерв — вехи через
+   `ops/mac-local-run/progress_pusher.py` (без `source`); оба — батчами на
+   `POST /run-progress`. Админка автообновляется — ход парсинга видно из
+   браузера и с телефона, лог хранится 14 дней (текущий + предыдущий прогон).
+3. **Запускает обновление по расписанию** — cron возвращён в облако
+   **05.07.2026** (суды снова пускают иностранные IP; история раскола D2 — в
+   [01. Обзор](01-обзор-и-архитектура.md)). LaunchAgent на Mac усыплён и
+   оставлен спящим резервом (см.
    [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md)).
-   Это **временная схема** — в будущем парсинг переедет на сервер (RU VPS),
-   тогда расписание вернётся в инфраструктуру.
 
 Код — [`cloudflare-worker/worker.js`](../../cloudflare-worker/worker.js),
 конфигурация — [`cloudflare-worker/wrangler.toml`](../../cloudflare-worker/wrangler.toml).
 Деплой: `cd cloudflare-worker && wrangler deploy`.
 
-> ⚠️ cron-job.org и аналоги не добавлять по-прежнему. Сейчас расписание —
-> LaunchAgent на Mac (`~/Library/LaunchAgents/com.court-monitor.parse.plist`);
-> вернуть Worker-cron — раскомментировать `crons` в `wrangler.toml` + деплой.
+> ⚠️ cron-job.org и аналоги не добавлять по-прежнему. Расписание — только
+> Worker-cron (`crons` в `wrangler.toml` + деплой).
 
-## Автозапуск (cron) — ОТКЛЮЧЁН, оставлено как справка
+## Автозапуск (cron)
 
 `scheduled(event, env)` ([worker.js:1006](../../cloudflare-worker/worker.js#L1006)):
 
@@ -38,18 +39,19 @@ Cloudflare Worker — это маленький серверный скрипт,
    `…/actions/workflows/update_cases.yml/dispatches` с `ref: "main"` и входом
    `inputs: { smart_skip: "true" }`. Авторизация — `Bearer ${env.GITHUB_PAT}`.
 
-Расписание в `wrangler.toml`: сейчас `crons = []` (отключено); прежнее значение
-`"45 3 * * mon-fri"` = **06:45 МСК, пн-пт** — закомментировано рядом. Код
-`scheduled()` из worker.js не удалён: при возврате расписания достаточно
-раскомментировать cron и задеплоить.
+Расписание в `wrangler.toml`: `crons = ["45 3 * * mon-fri"]` = **06:45 МСК,
+пн-пт** (применяется только после `wrangler deploy`). Отключить (флип на
+Mac-резерв) — вернуть `crons = []` и задеплоить.
 
 > ⚠️ Cloudflare Cron Triggers нумерует дни недели **1=Sun..7=Sat** (не как POSIX).
 > Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье, поэтому
 > используется буквенный `mon-fri`. `isHoliday()` — дополнительная страховка.
 
 Cron всегда передаёт `smart_skip=true` (парсер пропускает нерабочие дни и дела с
-известной будущей датой — экономит запросы к ГАС «Правосудие»). Ручной запуск из
-UI идёт без этого input и парсит всё.
+известной будущей датой — экономит запросы к ГАС «Правосудие»). Ручной запуск —
+из GitHub UI (галка) или из админки: кнопка «Полный прогон» шлёт
+`smart_skip:"false"` (парсит всё), «Стандартный прогон» — `smart_skip:"true"`
+(как крон).
 
 ## HTTP API (управление подписками)
 
@@ -65,8 +67,8 @@ UI идёт без этого input и парсит всё.
 | `/unsubscribe` | POST | `handleUnsubscribe` ([234](../../cloudflare-worker/worker.js#L234)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
 | `/subscriptions` | GET | `handleListSubscriptions` ([262](../../cloudflare-worker/worker.js#L262)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
 | `/mark-owner` | POST | `handleMarkOwner` ([292](../../cloudflare-worker/worker.js#L292)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/run-progress` | POST | `handleRunProgress` ([343](../../cloudflare-worker/worker.js#L343)) | `PROGRESS_SECRET` (Bearer) | Принять батч вех парсинга с Mac (`progress_pusher.py`). KV `progress:current`/`progress:prev`, cap 300 строк, TTL 14 дн. |
-| `/admin/run-progress` | GET | `handleAdminRunProgress` ([385](../../cloudflare-worker/worker.js#L385)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона для блока «🛰 Парсинг». |
+| `/run-progress` | POST | `handleRunProgress` ([345](../../cloudflare-worker/worker.js#L345)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([385](../../cloudflare-worker/worker.js#L385)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона для блока живого лога. |
 | `/admin` | GET | `handleAdmin` ([455](../../cloudflare-worker/worker.js#L455)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
 | `/admin/data` | GET | `handleAdminData` ([414](../../cloudflare-worker/worker.js#L414)) | `OWNER_SECRET` | JSON-данные для админки. |
 | `/admin/label` | POST | `handleAdminLabel` ([508](../../cloudflare-worker/worker.js#L508)) | `OWNER_SECRET` | Задать имя подписке. |
@@ -97,23 +99,32 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 `last_personal_pushes.json`). Действия: ✏ имя, 📋 редактировать watchlist,
 🗑 удалить.
 
-Вверху страницы — блок **«🛰 Парсинг»** (`loadProgress`,
-[797](../../cloudflare-worker/worker.js#L797)): статус текущего прогона на Mac
-(⏳ идёт / ✅ завершён + давность), вехи по каждому суду, автообновление каждые
-5 с, пока прогон не завершён; предыдущий прогон — под спойлером. Источник —
-`GET /admin/run-progress`; вехи заливает Mac
-([`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py)).
+В карточке «Прогоны GitHub Actions» — блок **живого лога прогона**
+(`loadProgress` в `admin_page.js`): статус текущего прогона (идёт / завершён +
+давность), заголовок по источнику — «Прогон (GitHub Actions)» со ссылкой на run
+или «Парсинг на Mac (резерв)», автообновление каждые 5 с, пока прогон не
+завершён; предыдущий прогон — под спойлером, завершённый старше суток —
+свёрнутый details. Лог сворачивается по фазам «— [N/9] …» (`renderLogGroups`):
+у фаз счётчик строк и бейджи ⚠/✖, вручную открытые фазы переживают ререндер,
+финальная «Сводка прогона» видна без разворачивания. Источник данных —
+`GET /admin/run-progress`; лог заливает облачный workflow
+([`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py), весь
+stdout) или Mac-резерв
+([`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py),
+только вехи).
 
 ## Секреты Worker'а
 
 Задаются через `wrangler secret put <NAME>`:
 
-- `GITHUB_PAT` — токен для `workflow_dispatch` (нужен только если вернуть
-  Worker-cron; сейчас не используется).
+- `GITHUB_PAT` — токен GitHub API: `workflow_dispatch` (cron и
+  `/admin/dispatch`) и чтение прогонов (`/admin/gh-runs`).
 - `PUSH_SECRET` — авторизация служебных эндпоинтов рассылки (`/subscriptions`,
-  `/unsubscribe`), общий с бэкендом.
+  `/unsubscribe`), общий с бэкендом; принимается и на `POST /run-progress`
+  (им пушит лог облачный workflow, пока в GitHub secrets нет отдельного
+  `PROGRESS_SECRET`).
 - `OWNER_SECRET` — авторизация `/mark-owner` и админки.
-- `PROGRESS_SECRET` — авторизация `POST /run-progress` (вехи парсинга с Mac).
+- `PROGRESS_SECRET` — авторизация `POST /run-progress` (живой лог прогона).
   Низкопривилегированный: умеет только дописывать строки прогресса. То же
   значение лежит на Mac в `~/.config/court-monitor/progress_token` (chmod 600,
   вне публичного репозитория).
