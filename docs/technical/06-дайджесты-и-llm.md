@@ -36,9 +36,17 @@
 аномалии шлёт сервисный 🩺-алерт «Дайджест-линтер» в Telegram (по образцу
 детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
 
-Провайдер LLM выбирается переменной `LLM_PROVIDER` (`claude` по умолчанию или
-`gigachat`, [строка 144](../../scripts/court_monitor/config.py#L144)). Основной мониторинг
-работает на Claude; GigaChat включается отдельным workflow.
+Провайдер LLM выбирается переменной `LLM_PROVIDER`
+([строка 150](../../scripts/court_monitor/config.py#L150)): `claude` по
+умолчанию, `gigachat` или `openrouter`.
+Основной мониторинг работает на Claude; GigaChat и OpenRouter доступны из
+тестового workflow `test_digest.yml` (inputs `llm_provider` + `llm_model`).
+Модель OpenRouter при пустом `OPENROUTER_MODEL` резолвится автоматически:
+«модель дня» с `https://shir-man.com/api/free-llm/top-models` (`models[0].id`,
+`_resolve_openrouter_model` с мемоизацией на прогон), при недоступности —
+fallback-маршрут `openrouter/free`. Вызовы OpenRouter OpenAI-совместимы
+(`_call_openrouter_chat`: Bearer `OPENROUTER_API_KEY`, штатная проверка TLS —
+в отличие от GigaChat без `verify=False`).
 
 **Модель Claude:** `claude-haiku-4-5-20251001`
 ([_current_digest_model_name, 6191](../../scripts/court_monitor/digest/llm.py#L612)).
@@ -56,19 +64,23 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 491](../../scripts/court_monitor/digest/llm.py#L491). Единственное место, где
+[Строка 637](../../scripts/court_monitor/digest/llm.py#L637). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
    [72](../../scripts/court_monitor/textutil.py#L72)). Слишком короткий текст
    (<100 символов) не пересказывается.
-2. Считается ключ кэша `sha1(act_text + "|v2-ratio")[:16]`. Если пересказ уже
-   в кэше `.act_summaries.json` — возвращается он (повторно LLM не оплачивается,
-   кэш переживает `--replay-last`).
+2. Считается ключ кэша (`_act_cache_key`): для Claude — прежний
+   `sha1(act_text + "|v2-ratio")[:16]`, для gigachat/openrouter в ключ
+   дополнительно входит `провайдер:модель` — тестовый прогон другого
+   провайдера не подхватит пересказ Claude и не перезапишет боевой кэш.
+   Если пересказ уже в кэше `.act_summaries.json` — возвращается он
+   (повторно LLM не оплачивается, кэш переживает `--replay-last`).
 3. Иначе строится промпт (`_build_act_summary_prompt`,
-   [328](../../scripts/court_monitor/digest/llm.py#L328)) и вызывается
-   `_call_claude_simple` ([387](../../scripts/court_monitor/digest/llm.py#L387)) или
-   `_call_gigachat_simple` ([431](../../scripts/court_monitor/digest/llm.py#L431)).
+   [456](../../scripts/court_monitor/digest/llm.py#L456)) и вызывается
+   `_call_claude_simple` ([515](../../scripts/court_monitor/digest/llm.py#L515)),
+   `_call_gigachat_simple` ([559](../../scripts/court_monitor/digest/llm.py#L559)) или
+   `_call_openrouter_simple` (по `LLM_PROVIDER`).
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
 5. При любой ошибке/пустом ответе → `None`, и вызывающий код откатывается на
    сырой excerpt мотивировки (`_render_act_summary_or_excerpt`,
@@ -89,12 +101,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 693](../../scripts/court_monitor/digest/llm.py#L693). При `DIGEST_POLISH=1`
+[Строка 838](../../scripts/court_monitor/digest/llm.py#L838). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([552](../../scripts/court_monitor/digest/llm.py#L552)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([697](../../scripts/court_monitor/digest/llm.py#L697)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([649](../../scripts/court_monitor/digest/llm.py#L649)): проверяется контракт
+([794](../../scripts/court_monitor/digest/llm.py#L794)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -128,7 +140,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([197](../../scripts/court_monitor/config.py#L197)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([210](../../scripts/court_monitor/config.py#L210)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
@@ -146,7 +158,7 @@ LLM реально «думает». Алгоритм:
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
 [94](../../scripts/court_monitor/digest/core.py#L94)) для блока «Последний дайджест» на фронте.
 
-> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [73](../../scripts/court_monitor/digest/llm.py#L73),
+> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [75](../../scripts/court_monitor/digest/llm.py#L75),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались
 > вручную. Менять их структуру — только осознанно и с предупреждением; см.
 > «Чего НЕ делать» в [`CLAUDE.md`](../../CLAUDE.md).

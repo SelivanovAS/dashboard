@@ -447,6 +447,19 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
+    elif config.LLM_PROVIDER == "openrouter":
+        if not config.OPENROUTER_API_KEY:
+            log.warning("OPENROUTER_API_KEY не задан, дайджест будет шаблонным")
+            return generate_template_digest(
+                new_cases, changes, cases=cases,
+                fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
+                fi_changes=fi_changes,
+                total_active_appeal=total_active_appeal,
+                total_active_fi=total_active_fi,
+                total_active_cassation=total_active_cassation,
+                cass_changes=cass_changes,
+                cass_discovered=cass_discovered,
+            )
     elif not config.ANTHROPIC_API_KEY:
         log.warning("ANTHROPIC_API_KEY не задан, дайджест будет шаблонным")
         return generate_template_digest(
@@ -1405,9 +1418,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
 Данные:
 {chr(10).join(context_parts)}"""
 
-    if config.LLM_PROVIDER == "gigachat":
-        log.info(f"LLM: GigaChat (model={config.GIGACHAT_MODEL}, scope={config.GIGACHAT_SCOPE})")
-        text = llm._call_gigachat(prompt)
+    if config.LLM_PROVIDER in ("gigachat", "openrouter"):
+        if config.LLM_PROVIDER == "gigachat":
+            log.info(f"LLM: GigaChat (model={config.GIGACHAT_MODEL}, scope={config.GIGACHAT_SCOPE})")
+            text = llm._call_gigachat(prompt)
+        else:
+            log.info(f"LLM: OpenRouter (model={llm._resolve_openrouter_model()})")
+            text = llm._call_openrouter_digest(prompt)
         if not text:
             return generate_template_digest(
                 new_cases, changes, cases=cases,

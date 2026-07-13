@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1134](../../scripts/court_monitor/runs.py#L1134)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([557](../../scripts/court_monitor/runs.py#L557)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([3329](../../scripts/court_monitor/runs.py#L3329)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([3014](../../scripts/court_monitor/runs.py#L3014)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3190](../../scripts/court_monitor/runs.py#L3190)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([805](../../scripts/court_monitor/runs.py#L805)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([1137](../../scripts/court_monitor/runs.py#L1137)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([560](../../scripts/court_monitor/runs.py#L560)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([3332](../../scripts/court_monitor/runs.py#L3332)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([3017](../../scripts/court_monitor/runs.py#L3017)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3193](../../scripts/court_monitor/runs.py#L3193)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([808](../../scripts/court_monitor/runs.py#L808)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -39,6 +39,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 |------------|-----------|
 | `ANTHROPIC_API_KEY` | Claude (генерация/пересказ). |
 | `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | GigaChat (альтернативный LLM, `LLM_PROVIDER=gigachat`). |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter (`LLM_PROVIDER=openrouter`); пустая модель = «модель дня» с shir-man.com, fallback `openrouter/free`. |
 | `TELEGRAM_BOT_TOKEN` | Токен бота. |
 | `TELEGRAM_CHAT_ID` | Корпоративная группа (только при `to_group=true`). |
 | `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель. |
@@ -54,7 +55,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
 `validate_environment` ([515](../../scripts/court_monitor/runs.py#L515)) проверяет
-наличие ключей на старте; `check_court_available` ([544](../../scripts/court_monitor/runs.py#L544))
+наличие ключей на старте; `check_court_available` ([547](../../scripts/court_monitor/runs.py#L547))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -130,9 +131,13 @@ Python 3.12 → установка зависимостей → `python scripts/
 [Файл](../../.github/workflows/test_digest.yml). Не парсит — переигрывает
 последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
 иначе только владельцу), `full_llm` (`DIGEST_FULL_LLM=1` — старый полный
-LLM-вариант вместо гибрида). Коммитит свежий `last_digest.json`.
-(Workflow `digest_only_gigachat.yml` удалён 09.07.2026 — GigaChat остаётся
-доступен через `LLM_PROVIDER=gigachat` + `GIGACHAT_AUTH_KEY`.)
+LLM-вариант вместо гибрида), `llm_provider` (выпадающий список
+claude/gigachat/openrouter) и `llm_model` (текстом; пусто = дефолт провайдера,
+для openrouter — «модель дня» с shir-man.com). Общее поле `llm_model` уходит
+и в `GIGACHAT_MODEL`, и в `OPENROUTER_MODEL` — читает только активный
+провайдер. Коммитит свежий `last_digest.json`.
+(Workflow `digest_only_gigachat.yml` удалён 09.07.2026 — его роль теперь
+выполняет выбор провайдера здесь.)
 
 ### Деплой Cloudflare Worker
 Не через Actions, а вручную: `cd cloudflare-worker && wrangler deploy`. См.

@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""LLM-слой дайджеста: Claude и GigaChat (простые вызовы и полировщик),
-пересказ мотивировок судебных актов (summarize_act_motivation) с кэшем,
-LLM-полировка готового HTML (polish_digest_html) с валидатором контракта.
+"""LLM-слой дайджеста: Claude, GigaChat и OpenRouter (простые вызовы и
+полировщик), пересказ мотивировок судебных актов (summarize_act_motivation)
+с кэшем, LLM-полировка готового HTML (polish_digest_html) с валидатором
+контракта.
 
 ⚠ Тексты промптов (GIGACHAT_SYSTEM_PROMPT, _build_act_summary_prompt,
 _DIGEST_POLISH_SYSTEM_PROMPT) юрист настраивал долго — не менять ни на символ.
 
 Патчабельные тестами функции (_call_claude_simple, _call_claude_polish,
+_call_openrouter_simple, _call_openrouter_polish, _call_openrouter_digest,
 polish_digest_html, summarize_act_motivation) из других модулей вызываются
 только как llm.X(...) — патч этого модуля ловит все пути вызова.
 """
@@ -312,6 +314,132 @@ def _call_gigachat(prompt: str) -> str | None:
         return None
 
 
+# ── OpenRouter API — третий провайдер (тестовый контур) ──────────────────────
+# API OpenAI-совместимый, как у GigaChat, но без OAuth (Bearer-ключ) и со
+# штатной проверкой TLS. Функции зеркальны gigachat-парам, чтобы не трогать
+# патч-цели существующих тестов.
+
+# Мемо резолва «модели дня» на процесс: один HTTP-запрос на прогон,
+# мемоизируется и fallback (иначе дайджест с N актами сделал бы N
+# неудачных запросов к shir-man.com).
+_openrouter_resolved_model: str | None = None
+
+
+def _resolve_openrouter_model() -> str:
+    """Определить модель OpenRouter для текущего прогона.
+
+    Приоритет: config.OPENROUTER_MODEL из env → «модель дня» с
+    config.OPENROUTER_TOP_MODELS_URL (models[0].id, ежедневный рейтинг
+    бесплатных моделей) → config.OPENROUTER_FALLBACK_MODEL (маршрут
+    openrouter/free, OpenRouter сам подбирает живую бесплатную модель).
+    """
+    global _openrouter_resolved_model
+    if config.OPENROUTER_MODEL:
+        return config.OPENROUTER_MODEL
+    if _openrouter_resolved_model:
+        return _openrouter_resolved_model
+    try:
+        r = requests.get(config.OPENROUTER_TOP_MODELS_URL, timeout=15)
+        r.raise_for_status()
+        models = r.json().get("models") or []
+        model_id = ((models[0] or {}).get("id") or "").strip() if models else ""
+        if not model_id:
+            raise ValueError("пустой список models / пустой id")
+        log.info(f"OpenRouter: модель дня — {model_id}")
+        _openrouter_resolved_model = model_id
+    except (requests.RequestException, KeyError, ValueError, IndexError,
+            json.JSONDecodeError) as e:
+        log.warning(
+            f"OpenRouter: не удалось получить модель дня ({e}), "
+            f"fallback {config.OPENROUTER_FALLBACK_MODEL}"
+        )
+        _openrouter_resolved_model = config.OPENROUTER_FALLBACK_MODEL
+    return _openrouter_resolved_model
+
+
+def _call_openrouter_chat(
+    messages: list[dict], *, max_tokens: int, temperature: float
+) -> str | None:
+    """Низкоуровневый chat/completions-вызов OpenRouter.
+
+    Возвращает текст ответа или None при любой ошибке — вызывающая сторона
+    откатывается так же, как при ошибке Claude/GigaChat.
+    """
+    if not config.OPENROUTER_API_KEY:
+        log.warning("OPENROUTER_API_KEY не задан")
+        return None
+    try:
+        r = requests.post(
+            config.OPENROUTER_API_URL,
+            headers={
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": _resolve_openrouter_model(),
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        data = r.json()
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
+        return text or None
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        body = (e.response.text or "")[:500] if e.response is not None else ""
+        log.warning(f"OpenRouter API HTTP {status}: {body}")
+        return None
+    except (requests.RequestException, KeyError, ValueError,
+            json.JSONDecodeError) as e:
+        log.warning(f"OpenRouter API: {e}")
+        return None
+
+
+def _call_openrouter_simple(prompt: str) -> str | None:
+    """Минимальный вызов OpenRouter для пересказа акта — без system-промпта
+    (зеркально _call_gigachat_simple)."""
+    return _call_openrouter_chat(
+        [{"role": "user", "content": prompt}],
+        max_tokens=400, temperature=0.2,
+    )
+
+
+def _call_openrouter_polish(system_prompt: str, user_prompt: str) -> str | None:
+    """Вызов OpenRouter для полировщика."""
+    return _call_openrouter_chat(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_tokens=4096, temperature=0.1,
+    )
+
+
+def _call_openrouter_digest(prompt: str) -> str | None:
+    """Полный дайджест через OpenRouter (ветка DIGEST_FULL_LLM=1).
+
+    System — тот же GIGACHAT_SYSTEM_PROMPT: он написан именно против
+    сползания в Markdown, чем free-модели OpenRouter страдают так же,
+    как GigaChat. Ответ прогоняется через нормализацию Markdown-артефактов.
+    """
+    text = _call_openrouter_chat(
+        [
+            {"role": "system", "content": GIGACHAT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=4096, temperature=0.2,
+    )
+    if not text:
+        return None
+    return _normalize_markdown_to_telegram_html(text) or None
+
+
 # ── LLM-пересказ мотивировки судебного акта (микро-вызов) ───────────────────
 # Используется программным рендером дайджеста (этап 3b плана миграции):
 # вместо сырого 500-символьного excerpt'а мотивировки в секциях 5.5/3.6/касс.
@@ -488,6 +616,24 @@ def _clean_summary(text: str) -> str:
     return s.strip()
 
 
+def _act_cache_key(act: str) -> str:
+    """Ключ кэша пересказов (.act_summaries.json) для текста акта.
+
+    Версия "v2-ratio" в ключе: новый промпт (май 2026) требует одно
+    предложение ratio без «Для банка»; старые многословные пересказы из
+    кэша не должны возвращаться.
+
+    Для Claude ключ побайтово прежний (существующий кэш не инвалидируется).
+    Для gigachat/openrouter в ключ входит провайдер:модель — иначе тестовый
+    прогон молча вернул бы кэшированный пересказ Claude, а его результат
+    попал бы в боевой Claude-кэш.
+    """
+    base = act + "|v2-ratio"
+    if config.LLM_PROVIDER in ("gigachat", "openrouter"):
+        base += "|" + _current_digest_model_name()
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
+
+
 def summarize_act_motivation(
     act_text: str,
     *,
@@ -513,10 +659,7 @@ def summarize_act_motivation(
     if not act or len(act) < 100:
         return None
 
-    # Версия "v2-ratio" в ключе: новый промпт (май 2026) требует одно
-    # предложение ratio без «Для банка»; старые многословные пересказы из
-    # кэша не должны возвращаться.
-    key = hashlib.sha1((act + "|v2-ratio").encode("utf-8")).hexdigest()[:16]
+    key = _act_cache_key(act)
     cache = _load_act_summaries() if use_cache else {}
     if use_cache and key in cache:
         cached_summary = (cache[key] or {}).get("summary")
@@ -526,6 +669,8 @@ def summarize_act_motivation(
     prompt = _build_act_summary_prompt(act, case_meta)
     if config.LLM_PROVIDER == "gigachat":
         raw = _call_gigachat_simple(prompt)
+    elif config.LLM_PROVIDER == "openrouter":
+        raw = _call_openrouter_simple(prompt)
     else:
         raw = _call_claude_simple(prompt)
     if not raw:
@@ -716,6 +861,10 @@ def polish_digest_html(
         polished = _call_gigachat_polish(
             _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
         )
+    elif config.LLM_PROVIDER == "openrouter":
+        polished = _call_openrouter_polish(
+            _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
+        )
     else:
         polished = _call_claude_polish(
             _DIGEST_POLISH_SYSTEM_PROMPT, user_prompt
@@ -835,4 +984,6 @@ def _current_digest_model_name() -> str:
     `generate_digest()`."""
     if config.LLM_PROVIDER == "gigachat":
         return f"gigachat:{config.GIGACHAT_MODEL}"
+    if config.LLM_PROVIDER == "openrouter":
+        return f"openrouter:{_resolve_openrouter_model()}"
     return "claude-haiku-4-5-20251001"
