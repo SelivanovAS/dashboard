@@ -262,11 +262,26 @@ def is_archived(case: dict) -> bool:
 #                       подцепит дело по номеру (бессрочно).
 # Архив — через is_case_archived.
 
+def bank_is_third_party(case: dict) -> bool:
+    """True, если роль банка в деле — «Третье лицо» (регистронезависимо).
+
+    Пустая или нераспознанная роль → False: такие дела продолжаем парсить,
+    правило «не следим за третьими лицами в cassation_watch» применяется
+    только при явной роли.
+    """
+    return (case.get("bank_role") or "").strip().lower() == "третье лицо"
+
+
 def should_parse_fi_card(case: dict) -> bool:
     """Нужно ли на этом прогоне парсить карточку 1-й инстанции по делу.
 
     - `first_instance`   — да (мониторинг дела + ловим апел. жалобу).
-    - `cassation_watch`  — да (после апелляции ловим касс. жалобу в 1-й инст.).
+    - `cassation_watch`  — да (после апелляции ловим касс. жалобу в 1-й инст.),
+      КРОМЕ дел, где банк — третье лицо: их карточку не парсим, кассацию по
+      ним обнаружит поиск 7kas по имени банка (`link_cassation_cases` —
+      «догоняем» из cassation_watch либо воскрешение из архива). Решение
+      юриста 13.07.2026: раннее предупреждение fi_cassation_filed для третьих
+      лиц не стоит ежедневного парсинга 120-дневного окна.
     - `awaiting_appeal`  — да, ПОКА дело не направлено в апелляцию: продолжаем
       следить за карточкой 1-й инст. (промежуточные события, «направлено в
       вышестоящую инстанцию»). После `sent_to_appeal` — ждём только появления
@@ -274,7 +289,8 @@ def should_parse_fi_card(case: dict) -> bool:
     - `cassation_pending`— да, ПОКА дело не направлено в кассацию: следим за
       карточкой 1-й инст. до «направлено в кассационный суд». После
       `sent_to_cassation` — ждём только появления карточки на 7kas
-      (её найдёт `link_cassation_cases`).
+      (её найдёт `link_cassation_cases`). Роль банка здесь не проверяем:
+      жалоба уже подана, парсить осталось недолго.
     - прочие стадии (`appeal`/`cassation`/`awaiting_relink`) — нет: там либо
       парсим карточку вышестоящего суда, либо ждём появления дела по номеру.
 
@@ -286,7 +302,10 @@ def should_parse_fi_card(case: dict) -> bool:
     fi = case.get("first_instance") or {}
     if not fi.get("case_number"):
         return False
-    if stage in ("first_instance", "cassation_watch"):
+    if stage == "cassation_watch":
+        # Пустая/неизвестная роль → парсим (безопасный дефолт).
+        return not bank_is_third_party(case)
+    if stage == "first_instance":
         return True
     if stage == "awaiting_appeal":
         return not (fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date"))

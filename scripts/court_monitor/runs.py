@@ -46,7 +46,8 @@ from court_monitor.health import (
 )
 from court_monitor.lifecycle import (
     advance_case_stage, is_archived, is_case_archived, migrate_stages,
-    should_parse_fi_card, cassation_card_linked, suppress_fi_echo_events,
+    should_parse_fi_card, bank_is_third_party, cassation_card_linked,
+    suppress_fi_echo_events,
     suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
@@ -1520,6 +1521,24 @@ def main_json():
     # should_parse_fi_card и ТЗ юриста «продолжаем парсить до направления в
     # кассацию/апелляцию либо появления карточки в вышестоящем суде»).
     fi_active = [c for c in cases if should_parse_fi_card(c)]
+    # Дела «третье лицо» в cassation_watch исключены предикатом — без этой
+    # строки они выпадали бы из очереди молча, а их треть группы.
+    fi_third_party_watch = [
+        c for c in cases
+        if c.get("current_stage") == "cassation_watch"
+        and (c.get("first_instance") or {}).get("case_number")
+        and bank_is_third_party(c)
+    ]
+    if fi_third_party_watch:
+        log.info(
+            f"1 инст: {len(fi_third_party_watch)} дел «третье лицо» в "
+            f"cassation_watch не парсим — ждём кассацию на 7kas"
+        )
+        for _c in fi_third_party_watch:
+            log.debug(
+                f"  без FI-парса (третье лицо): "
+                f"{(_c.get('first_instance') or {}).get('case_number', '?')}"
+            )
     # Нормализация: снимаем ложный «Решено» там, где назначено будущее
     # заседание (карточка такого дела часто скипается smart-skip'ом, поэтому
     # чиним по сохранённым данным до цикла обновления).

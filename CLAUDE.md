@@ -58,7 +58,7 @@
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:87](scripts/court_monitor/config.py:87) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:594](scripts/court_monitor/lifecycle.py:594) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:613](scripts/court_monitor/lifecycle.py:613) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:350](scripts/court_monitor/linking.py:350) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:916](scripts/court_monitor/linking.py:916) |
@@ -70,8 +70,8 @@
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:207](scripts/court_monitor/linking.py:207) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:98](scripts/court_monitor/runs.py:98) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1164](scripts/court_monitor/runs.py:1164) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:99](scripts/court_monitor/runs.py:99) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1165](scripts/court_monitor/runs.py:1165) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:668](scripts/court_monitor/digest/llm.py:668) |
@@ -197,7 +197,7 @@
 | `first_instance` | карточка 1-й инст. | подана апел. жалоба → `awaiting_appeal` · 60 дней от hearing_date без жалобы → архив (с возможностью реактивации при появлении жалобы) |
 | `awaiting_appeal` | карточка 1-й инст. — ПОКА не `sent_to_appeal` (потом ничего, ждём карточку в апел. суде) | link_cases находит апел. карточку → `appeal` · бессрочно, не архивируется |
 | `appeal` | карточка апел. суда | опубликован акт ИЛИ 30 дней от апел. заседания без акта → `cassation_watch` · не архивируется по времени |
-| `cassation_watch` | карточка 1-й инст. (ищем касс. жалобу) | касс. жалоба или направление в кассац. суд → `cassation_pending` · 120 дней от апел. заседания → архив |
+| `cassation_watch` | карточка 1-й инст. (ищем касс. жалобу) — КРОМЕ дел, где банк «Третье лицо»: их не парсим, ждём дело на 7kas | касс. жалоба или направление в кассац. суд → `cassation_pending` · 120 дней от апел. заседания → архив |
 | `cassation_pending` | карточка 1-й инст. — ПОКА не `sent_to_cassation` (потом ничего, ждём карточку на 7kas) | link_cassation_cases находит карточку → `cassation` · не архивируется |
 | `cassation` | карточка 7kas (гражданская кассация) | `outcome=cassation_remanded` → `awaiting_relink` (re-link при появлении новой карточки в нижестоящей) · `act_published` + 30 дней / `decision_date` + 45 дней без акта → архив (для финальных исходов, кроме remanded) |
 | `awaiting_relink` | ничего (ждём карточку в нижестоящей инст.) | парсер 1-й инст. находит дело → `first_instance` (round +1, прошлые блоки в `history`) ИЛИ парсер апел. → `appeal` · бессрочно, не архивируется |
@@ -209,7 +209,10 @@
 жалобы продолжаем следить за карточкой 1-й инст. (ловим «направлено в
 кассацию/апелляцию» и промежуточные события), а как дело ушло наверх — ждём
 только появления карточки в вышестоящем суде (`link_cases`/`link_cassation_cases`).
-Этот же предикат гейтит `backfill_fi_links`.
+Этот же предикат гейтит `backfill_fi_links`. Исключение (13.07.2026): в
+`cassation_watch` дела с ролью банка «Третье лицо» НЕ парсим — кассацию по ним
+обнаружит поиск 7kas по имени банка (`link_cassation_cases` догонит активное
+дело или воскресит архивное); теряется только раннее `fi_cassation_filed`.
 **Эхо-фильтр дайджеста (`suppress_fi_echo_events`, lifecycle.py):** если
 вышестоящая карточка уже связана (`appeal_card_linked`/`cassation_card_linked`),
 «догоняющие» события FI-карточки НЕ идут в дайджест: жалобы (`fi_appeal_filed`,
@@ -227,7 +230,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:960](scripts/court_monitor/runs.py:960):
+Константы в [scripts/court_monitor/runs.py:961](scripts/court_monitor/runs.py:961):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
