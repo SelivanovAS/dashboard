@@ -66,6 +66,16 @@ jobs:
           # (court_monitor/ghlog.py). Явный флаг, а не GITHUB_ACTIONS:
           # pytest-прогоны tests.yml не должны плодить аннотации.
           LOG_GH_ANNOTATIONS: "1"
+          # Живой лог прогона в админке Worker (блок «Прогон (GitHub Actions)»):
+          # pass-through-пушер шлёт строки stdout батчами на POST /run-progress.
+          # Без секретов пушер работает как cat — прогон не страдает.
+          # Токен: отдельный PROGRESS_SECRET, а при его отсутствии в GitHub
+          # secrets подходит и PUSH_SECRET (Worker принимает оба).
+          PROGRESS_URL: ${{ secrets.PUSH_WORKER_URL }}/run-progress
+          PROGRESS_TOKEN: ${{ secrets.PROGRESS_SECRET || secrets.PUSH_SECRET }}
+          # Логи и так флашатся построчно (StreamHandler/ghlog); это страховка
+          # для «голых» print из зависимостей под pipe-буферизацией.
+          PYTHONUNBUFFERED: "1"
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"
@@ -75,7 +85,11 @@ jobs:
           if [ "${{ inputs.smart_skip }}" = "true" ]; then
             echo "🧠 SMART-SKIP: skip-нерабочих-дней + skip-будущих-заседаний"
           fi
-          python scripts/update_cases.py --json
+          # pipefail обязателен: дефолтный shell GitHub (bash -e) его НЕ
+          # включает — без него пушер маскировал бы падение парсера, и
+          # failure-алерт ниже ослеп бы.
+          set -o pipefail
+          python scripts/update_cases.py --json 2>&1 | python -u scripts/gh_progress_pusher.py
 
       - name: Commit updated data
         id: commit

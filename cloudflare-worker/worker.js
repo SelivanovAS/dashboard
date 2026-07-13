@@ -336,15 +336,23 @@ async function handleMarkOwner(request, env) {
   }
 }
 
-// ── Прогресс парсинга с Mac ──────────────────────────────────────────────────
-// Mac-обёртка (ops/mac-local-run/parse_and_push.sh → progress_pusher.py) шлёт
-// вехи парсинга батчами. Auth — отдельный низкопривилегированный
-// PROGRESS_SECRET: умеет ТОЛЬКО дописывать строки прогресса, доступа к
-// подпискам/делам не даёт. Ключи progress:* не пересекаются с подписками —
-// все выборки подписок идут по префиксу "sub:".
+// ── Живой лог прогона ────────────────────────────────────────────────────────
+// Канал общий для двух отправителей (одновременно они не работают — Mac спит;
+// если бы работали, current/prev пинг-понговали бы ротацией по run_id):
+// - GitHub Actions (scripts/gh_progress_pusher.py, source="github") — весь
+//   лог основного прогона update_cases.yml, батчами;
+// - Mac-резерв (ops/mac-local-run/parse_and_push.sh → progress_pusher.py,
+//   без source) — только вехи парсинга.
+// Auth — низкопривилегированный PROGRESS_SECRET (умеет ТОЛЬКО дописывать
+// строки прогресса, доступа к подпискам/делам не даёт) ИЛИ PUSH_SECRET (он
+// уже есть в GitHub secrets и привилегированнее — ничего не ослабляет).
+// Ключи progress:* не пересекаются с подписками — все выборки подписок идут
+// по префиксу "sub:".
 async function handleRunProgress(request, env) {
   const auth = request.headers.get("Authorization") || "";
-  if (!env.PROGRESS_SECRET || auth !== `Bearer ${env.PROGRESS_SECRET}`) {
+  const okProgress = env.PROGRESS_SECRET && auth === `Bearer ${env.PROGRESS_SECRET}`;
+  const okPush = env.PUSH_SECRET && auth === `Bearer ${env.PUSH_SECRET}`;
+  if (!okProgress && !okPush) {
     return new Response("Unauthorized", { status: 401 });
   }
   try {
@@ -354,6 +362,12 @@ async function handleRunProgress(request, env) {
       ? body.lines.map(String).slice(0, 100)
       : [];
     if (!runId) return new Response("Bad Request", { status: 400 });
+    // Источник прогона: старый Mac-пушер поля не шлёт → "mac" (обратная
+    // совместимость), gh_progress_pusher.py шлёт "github" + link на run.
+    const source = body.source === "github" ? "github" : "mac";
+    const link = (typeof body.link === "string" && /^https:\/\//.test(body.link))
+      ? body.link.slice(0, 300)
+      : "";
 
     const now = new Date().toISOString();
     const raw = await env.PUSH_SUBSCRIPTIONS.get("progress:current");
@@ -367,8 +381,11 @@ async function handleRunProgress(request, env) {
       });
       cur = null;
     }
-    if (!cur) cur = { run_id: runId, started_at: now, lines: [] };
-    cur.lines = cur.lines.concat(newLines).slice(-300);
+    if (!cur) cur = { run_id: runId, started_at: now, lines: [], source };
+    if (link && !cur.link) cur.link = link;
+    // Cap 1000 (было 300): облачный прогон шлёт весь лог (~350 строк INFO);
+    // DEBUG-прогон срежет ранние строки — админка мягко деградирует.
+    cur.lines = cur.lines.concat(newLines).slice(-1000);
     cur.updated_at = now;
     if (body.done === true) cur.done = true;
     await env.PUSH_SUBSCRIPTIONS.put("progress:current", JSON.stringify(cur), {
