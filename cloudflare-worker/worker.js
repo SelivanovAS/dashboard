@@ -741,6 +741,13 @@ details { margin-top:10px; }
 details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
                     user-select:none; }
 details > summary:hover { color:var(--fg); }
+.llm-top { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
+           padding:2px 14px 10px; margin:0 0 14px; }
+.llm-top > summary { font-weight:600; color:var(--fg); font-size:13.5px; }
+.llm-row { padding:3px 0; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+.llm-row b { display:inline-block; min-width:52px; }
+.llm-meta { color:var(--fg-3); font-size:12px; margin-top:8px; }
+.llm-meta a { color:var(--accent); }
 .cases { margin-top:6px; padding-left:8px; border-left:2px solid var(--border); display:flex;
          flex-direction:column; gap:4px; }
 .case-row { display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; padding:4px 0;
@@ -779,6 +786,10 @@ details > summary:hover { color:var(--fg); }
     <pre class="progress-log" id="progress-prev-log"></pre>
   </details>
 </div>
+<details class="llm-top" id="llm-top">
+  <summary>🧠 Топ бесплатных LLM OpenRouter — что скрывается за «топ-N» в тесте дайджеста</summary>
+  <div id="llm-top-body" class="loading">Загрузка…</div>
+</details>
 <div id="root" class="loading">Загрузка…</div>
 <script>
 const SECRET = ${JSON.stringify(secret)};
@@ -822,6 +833,39 @@ async function loadProgress() {
   } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
 }
 loadProgress();
+
+// ── Блок «🧠 Топ бесплатных LLM»: рейтинг shir-man, чтобы видеть, какая
+// модель стоит за пунктами «топ-N» формы теста дайджеста, ДО запуска.
+// Грузим лениво — при первом раскрытии details (API отдаёт CORS *).
+let llmTopLoaded = false;
+async function loadLlmTop() {
+  if (llmTopLoaded) return;
+  llmTopLoaded = true;
+  const el = document.getElementById("llm-top-body");
+  try {
+    const r = await fetch("https://shir-man.com/api/free-llm/top-models");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    const models = (d.models || []).slice(0, 5);
+    if (!models.length) { el.textContent = "Рейтинг пуст."; el.className = ""; return; }
+    el.className = "";
+    el.innerHTML = models.map(function (m, i) {
+      return '<div class="llm-row"><b>топ-' + (i + 1) + '</b> · ' + escHtml(m.id || "?")
+        + (m.contextLength ? ' <span style="color:var(--fg-3)">(' + Math.round(m.contextLength / 1024) + 'k контекст)</span>' : '')
+        + '</div>';
+    }).join("")
+      + '<div class="llm-meta">Рейтинг обновлён: '
+      + (d.updatedAt ? new Date(d.updatedAt).toLocaleString("ru-RU") : "?")
+      + ' · в форме теста выбирайте место «топ-N» — модель подставится сама · '
+      + '<a href="https://github.com/SelivanovAS/dashboard/actions/workflows/test_digest.yml" target="_blank">запустить тест дайджеста</a></div>';
+  } catch (e) {
+    el.textContent = "Не удалось загрузить рейтинг: " + e;
+    llmTopLoaded = false; // при следующем раскрытии попробуем ещё раз
+  }
+}
+document.getElementById("llm-top").addEventListener("toggle", function () {
+  if (this.open) loadLlmTop();
+});
 
 function bareCaseNumber(n) {
   return String(n || "").trim().split(/[\\s(]/)[0];
