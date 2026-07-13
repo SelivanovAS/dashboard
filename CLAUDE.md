@@ -40,7 +40,7 @@
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
 - [data/sberbank_cases.csv](data/sberbank_cases.csv) + архив — legacy CSV (UTF-8 с BOM), всё ещё коммитится для совместимости.
 - [app.js](app.js) + [sberbank_dashboard.html](sberbank_dashboard.html) + [styles.css](styles.css) — SPA-фронт (GitHub Pages).
-- [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
+- [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск, push-подписки, админ-эндпоинты; [cloudflare-worker/admin_page.js](cloudflare-worker/admin_page.js) — HTML/JS страницы админки (см. «Админка подписчиков»).
 - [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit). При падении любого шага шлёт 🚨-алерт в личный Telegram (шаг `if: failure()`, curl без Python).
 - [.github/workflows/tests.yml](.github/workflows/tests.yml) — pytest на каждый push (кроме правок только .md/docs).
 - [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), выбор LLM-провайдера (`llm_provider`: claude/gigachat/openrouter) и модели: списки `gigachat_model` (GigaChat-2-Pro/2/2-Max) и `openrouter_model` (место в рейтинге shir-man: «модель дня (топ-1)»…«топ-5», id резолвится на прогоне — список не протухает), текстовое `llm_model` перебивает оба. Публикация результатов (`last_digest.json`, `cases.json`, кэш пересказов) и PWA push — только по галке `commit_results` (по умолчанию ВЫКЛ: тестовый дайджест не попадает на дашборд, пуш не уходит — он вёл бы на старый дайджест; без галки прогон шлёт только Telegram).
@@ -320,24 +320,27 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 ## Админка подписчиков
 
-URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`. Открывается в браузере (мобильно тоже). Endpoint реализован в [cloudflare-worker/worker.js](cloudflare-worker/worker.js): `handleAdmin` рендерит HTML, JS внутри тянет `/admin/data?secret=...` (защищён OWNER_SECRET) и `cases.json` с GitHub Pages.
+URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`. Открывается в браузере (мобильно тоже, тёмная тема есть). HTML-страница вынесена в [cloudflare-worker/admin_page.js](cloudflare-worker/admin_page.js) (`renderAdminHtml`, wrangler бандлит импорт сам); серверные эндпоинты — в [cloudflare-worker/worker.js](cloudflare-worker/worker.js). ⚠️ Вся страница — один template literal: внутренний JS пишется без backtick'ов и `${`, backslash удваивается. Naive-таймстампы из data/*.json (Python на UTC-раннере пишет без «Z») страница парсит как UTC (`parseIso`).
 
-Вверху страницы — раскрываемый блок «🧠 Топ бесплатных LLM OpenRouter»: текущий топ-5 рейтинга shir-man (тянется браузером напрямую, CORS `*`), чтобы видеть, какая модель стоит за пунктами «топ-N» формы теста дайджеста ДО запуска; там же ссылка на запуск workflow.
+Блоки страницы сверху вниз:
+- **«🚀 Прогоны GitHub Actions»** — последние 8 runs (✅/❌/⏳, время, длительность, ссылка) через GET `/admin/gh-runs` (Worker проксирует GitHub API, PAT остаётся на сервере; отдаёт и `next_cron_at` — ближайший запуск cron'а с учётом праздников). Кнопка «▶ Полный прогон» → POST `/admin/dispatch` (workflow_dispatch `update_cases.yml`, `smart_skip=false`). Пока есть живой run — автообновление каждые 15 с.
+- **«🛰 Парсинг на Mac»** — вехи прогона с Mac (резерв D2). Живой/свежий прогон — большая карточка с автообновлением; завершённый старше суток сворачивается в details «Резерв: …».
+- **«📨 Последний дайджест»** — из [data/last_digest.json](data/last_digest.json): когда, сводка, агрегат последней push-рассылки (N personal / M general / K skip), ссылка на дашборд.
+- **«🩺 Здоровье парсеров»** — details из [data/parse_health.json](data/parse_health.json): 22 источника, светофор (🔴 fail_streak≥3/alerted_zero; 🟡 fail_streak≥1 или ноль при медиане≥1), спарклайн истории, серии нулей/фейлов. Имена судов — статичная карта `COURT_NAMES` в admin_page.js (синхронизировать при правке `FIRST_INSTANCE_COURTS`).
+- **«🧠 Топ бесплатных LLM OpenRouter + запуск теста дайджеста»** — топ-5 рейтинга shir-man (браузером напрямую, CORS `*`) + мини-форма запуска `test_digest.yml` через POST `/admin/dispatch`: провайдер, модель (подписи «топ-N» обогащаются загруженным рейтингом), галки to_group/push_all/full_llm/commit_results (по умолчанию ВЫКЛ — безопасный прогон в личный чат; при опасных галках — confirm).
+- **Карточки подписок** — имя, устройство (из user_agent), флаг owner, бейдж «⏳ истекает» (нет входа в PWA 45+ дней — KV-TTL 60 дней), даты создания/входа/обновления watchlist, раскрываемые «🪞 Последний push» (из [data/last_personal_pushes.json](data/last_personal_pushes.json); skip = «нет событий по watchlist») и список отслеживаемых дел со сторонами из `cases.json`.
 
-Что показывает по каждой push-подписке: имя (если задано), устройство (парсится из user_agent), флаг owner, дата создания, последний вход в PWA, дата последнего обновления watchlist, размер watchlist и раскрываемый список дел со сторонами (Истец vs Ответчик · Суд) — стороны подтягиваются из `cases.json` по номеру.
-
-Действия по каждой подписке (3 кнопки):
+Действия по каждой подписке (4 кнопки):
 - **✏ Имя** → POST `/admin/label` `{endpoint, label}`. Сохраняет произвольное имя («Иван», «iPhone Дани»).
-- **📋 Ред. watchlist** → POST `/admin/watchlist` `{endpoint, watchlist}`. Перезаписывает watchlist чужой подписки (когда коллега не разобралась со звёздочками).
+- **📋 Ред. watchlist** → модалка с чекбоксами по активным делам из `cases.json` (поиск по номеру/сторонам/суду, ручное добавление номеров не из списка) → POST `/admin/watchlist` `{endpoint, watchlist}` (сервер канонизирует алиасы).
+- **📨 Тест push** → POST `/admin/test-push` `{endpoint}`. Требует Worker-секрет `VAPID_PRIVATE_KEY` (`wrangler secret put VAPID_PRIVATE_KEY`, тот же PEM, что в GitHub secret) — без него кнопка отдаёт понятную ошибку 503. Мёртвый endpoint (404/410) заодно вычищается из KV.
 - **🗑 Удалить** → POST `/admin/unsubscribe` `{endpoint}`. Принудительно убирает подписку из KV.
 
-Все админ-эндпоинты авторизуются через `?secret=<OWNER_SECRET>` в URL (для удобства открытия из браузера).
+Все админ-эндпоинты авторизуются через `?secret=<OWNER_SECRET>` в URL (для удобства открытия из браузера); `<meta name="referrer" content="no-referrer">` — чтобы секрет не утекал по внешним ссылкам. POST `/admin/dispatch` принимает только workflow из белого списка `DISPATCH_WORKFLOWS` (worker.js) и только разрешённые inputs-строки.
 
 Метаданные в KV: `created_at` (один раз), `last_seen_at` (на каждом `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`, `label`. Старые подписки заполняют поля при следующем `/subscribe`.
 
-**Тестовый push отложен** — эндпоинт `/admin/test-push` и VAPID-utility в `worker.js` готовы, но кнопка из UI убрана: для активации нужен `VAPID_PRIVATE_KEY` в Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`), которого сейчас нет. Чтобы вернуть фичу — положить PEM и добавить кнопку обратно в `renderCard`.
-
-**Журнал последней push-рассылки** — на каждой карточке раскрываемый блок «🪞 Последний push для этой подписки». Показывает variant (personal/general/skip/broadcast), title, body, click_url, timestamp. Источник — [data/last_personal_pushes.json](data/last_personal_pushes.json), перезаписывается каждый прогон `send_web_push` в `court_monitor/delivery.py`. Если по подписке уход push'а в этом прогоне был skipped (нет событий по watchlist) — блок показывает «Push не отправлен — нет событий по watchlist».
+Локальная отладка админки: `wrangler dev --config cloudflare-worker/wrangler.toml --port 8787` + `cloudflare-worker/.dev.vars` (gitignored) с `OWNER_SECRET=localtest123` → `http://localhost:8787/admin?secret=localtest123`. KV локальный пустой, GitHub API отвечает 401 (нет PAT) — это ожидаемо.
 
 ## Подписки на дела (watchlist) на фронте
 

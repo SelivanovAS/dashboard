@@ -1,3 +1,5 @@
+import { renderAdminHtml } from "./admin_page.js";
+
 // Нерабочие праздничные дни РФ на 2026 год (производственный календарь).
 // Постановление Правительства РФ от 24.09.2025 N 1466.
 // Обновлять ежегодно после публикации нового постановления.
@@ -664,516 +666,157 @@ async function handleAdminTestPush(request, env) {
   }
 }
 
-function renderAdminHtml(secret) {
-  return `<!doctype html><html lang="ru"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Подписчики · мониторинг дел</title>
-<style>
-:root {
-  color-scheme: light dark;
-  --fg: #14181f; --fg-2: #4a5160; --fg-3: #707788;
-  --bg: #f7f9fb; --bg-1: #fff; --bg-2: #eef1f5;
-  --border: #e0e4eb; --accent: #21a038; --amber: #f59e0b;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --fg:#e8ecf2; --fg-2:#aab1bf; --fg-3:#7a8090; --bg:#0e1116; --bg-1:#161b22; --bg-2:#1f252e; --border:#2a313c; }
-}
-* { box-sizing: border-box; }
-body { margin:0; padding:16px; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;
-       background:var(--bg); color:var(--fg); font-size:14px; line-height:1.5; }
-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
-         margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
-h1 { margin:0; font-size:18px; font-weight:600; }
-.refresh { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px;
-           font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
-.refresh:hover { opacity:0.92; }
-.summary { color:var(--fg-3); font-size:13px; }
-.subs { display:flex; flex-direction:column; gap:10px; }
-.sub-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
-.sub-row { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:baseline; }
-.sub-device { font-weight:600; }
-.badge-owner { display:inline-block; background:rgba(245,158,11,0.14); color:var(--amber);
-               padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; }
-.kv { color:var(--fg-3); font-size:12px; }
-.kv b { color:var(--fg-2); font-weight:500; }
-.endpoint { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:11px;
-            overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
-.actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-.btn { background:var(--bg-2); color:var(--fg-2); border:1px solid var(--border); padding:5px 10px;
-       border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; line-height:1.2; }
-.btn:hover { background:var(--bg-1); color:var(--fg); }
-.btn-danger:hover { color:#dc2626; border-color:#dc2626; }
-.label-name { color:var(--fg); font-weight:600; }
-.label-empty { color:var(--fg-3); font-style:italic; font-weight:400; }
-.action-flash { font-size:11px; color:var(--fg-3); margin-left:6px; }
-.action-flash.ok { color:var(--accent); }
-.action-flash.err { color:#dc2626; }
-.last-push { margin-top:8px; padding:10px 12px; background:var(--bg-2); border-radius:8px;
-             border-left:3px solid var(--accent); font-size:13px; }
-.last-push.broadcast { border-left-color:#3b82f6; }
-.last-push.general { border-left-color:#f59e0b; }
-.last-push.skip { border-left-color:#94a3b8; opacity:0.7; }
-.last-push-head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:4px; }
-.last-push-variant { font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
-                     padding:1px 8px; border-radius:999px; background:rgba(33,168,92,0.16); color:var(--accent); }
-.last-push.broadcast .last-push-variant { background:rgba(59,130,246,0.16); color:#3b82f6; }
-.last-push.general .last-push-variant { background:rgba(245,158,11,0.16); color:#b45309; }
-.last-push.skip .last-push-variant { background:rgba(148,163,184,0.18); color:var(--fg-3); }
-.last-push-title { font-weight:600; color:var(--fg); }
-.last-push-body { color:var(--fg-2); margin-top:2px; }
-.last-push-meta { color:var(--fg-3); font-size:12px; margin-top:4px; }
-.last-push-meta a { color:var(--accent); text-decoration:none; word-break:break-all; }
-.last-push-meta a:hover { text-decoration:underline; }
-.last-push-empty { color:var(--fg-3); font-style:italic; padding:6px 0 0; font-size:12px; }
-.progress-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
-                 padding:12px 14px; margin-bottom:14px; }
-.progress-head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
-.progress-title { font-weight:600; }
-.progress-state { font-weight:700; }
-.progress-state.running { color:var(--amber); }
-.progress-state.done { color:var(--accent); }
-.progress-meta { color:var(--fg-3); font-size:12px; }
-.progress-log { margin:8px 0 0; padding:10px 12px; background:var(--bg-2); border-radius:8px;
-                font-family:ui-monospace,Menlo,monospace; font-size:11.5px; line-height:1.55;
-                max-height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
-details { margin-top:10px; }
-details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
-                    user-select:none; }
-details > summary:hover { color:var(--fg); }
-.llm-top { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
-           padding:2px 14px 10px; margin:0 0 14px; }
-.llm-top > summary { font-weight:600; color:var(--fg); font-size:13.5px; }
-.llm-row { padding:3px 0; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
-.llm-row b { display:inline-block; min-width:52px; }
-.llm-meta { color:var(--fg-3); font-size:12px; margin-top:8px; }
-.llm-meta a { color:var(--accent); }
-.cases { margin-top:6px; padding-left:8px; border-left:2px solid var(--border); display:flex;
-         flex-direction:column; gap:4px; }
-.case-row { display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; padding:4px 0;
-            border-bottom:1px dashed var(--border); }
-.case-row:last-child { border-bottom:0; }
-.case-num { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--accent); min-width:140px; }
-.case-parties { color:var(--fg-2); }
-.case-meta { color:var(--fg-3); font-size:12px; }
-.case-alias { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:12px;
-              background:rgba(127,127,127,0.10); padding:1px 6px; border-radius:4px; }
-.empty { color:var(--fg-3); font-style:italic; padding:6px 0; }
-.error { color:#dc2626; padding:12px; background:rgba(220,38,38,0.08); border-radius:8px; }
-.loading { color:var(--fg-3); padding:24px; text-align:center; }
-@media (max-width: 600px) {
-  .endpoint { max-width:100%; white-space:normal; word-break:break-all; }
-  .case-num { min-width:auto; }
-}
-</style>
-</head><body>
-<header>
-  <h1>📡 Подписчики · мониторинг дел Сбера</h1>
-  <div style="display:flex;gap:8px;align-items:center;">
-    <span class="summary" id="summary">…</span>
-    <button class="refresh" onclick="render(true)">Обновить</button>
-  </div>
-</header>
-<div class="progress-card" id="progress-card" style="display:none;">
-  <div class="progress-head">
-    <span class="progress-title">🛰 Парсинг на Mac</span>
-    <span class="progress-state" id="progress-state"></span>
-    <span class="progress-meta" id="progress-meta"></span>
-  </div>
-  <pre class="progress-log" id="progress-log"></pre>
-  <details id="progress-prev" style="display:none;">
-    <summary>Предыдущий прогон</summary>
-    <pre class="progress-log" id="progress-prev-log"></pre>
-  </details>
-</div>
-<details class="llm-top" id="llm-top">
-  <summary>🧠 Топ бесплатных LLM OpenRouter — что скрывается за «топ-N» в тесте дайджеста</summary>
-  <div id="llm-top-body" class="loading">Загрузка…</div>
-</details>
-<div id="root" class="loading">Загрузка…</div>
-<script>
-const SECRET = ${JSON.stringify(secret)};
-const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
-const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_pushes.json";
+// ── Прогоны GitHub Actions для админки ──────────────────────────────────────
 
-// ── Блок «🛰 Парсинг»: вехи прогона с Mac, автообновление пока прогон идёт ──
-function progressAgo(iso) {
-  if (!iso) return "";
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 90) return Math.round(s) + " сек назад";
-  if (s < 5400) return Math.round(s / 60) + " мин назад";
-  return new Date(iso).toLocaleString("ru-RU");
-}
-let progressTimer = null;
-async function loadProgress() {
-  try {
-    const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
-    if (!r.ok) return;
-    const d = await r.json();
-    const card = document.getElementById("progress-card");
-    const cur = d.current;
-    if (!cur) { card.style.display = "none"; return; }
-    card.style.display = "";
-    const running = cur.done !== true;
-    const st = document.getElementById("progress-state");
-    st.textContent = running ? "⏳ идёт" : "✅ завершён";
-    st.className = "progress-state " + (running ? "running" : "done");
-    document.getElementById("progress-meta").textContent =
-      "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
-    const logEl = document.getElementById("progress-log");
-    const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-    logEl.textContent = (cur.lines || []).join("\\n");
-    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
-    if (d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length) {
-      document.getElementById("progress-prev").style.display = "";
-      document.getElementById("progress-prev-log").textContent = d.prev.lines.join("\\n");
-    }
-    clearTimeout(progressTimer);
-    if (running) progressTimer = setTimeout(loadProgress, 5000);
-  } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
-}
-loadProgress();
+const GH_REPO_API = "https://api.github.com/repos/SelivanovAS/dashboard";
 
-// ── Блок «🧠 Топ бесплатных LLM»: рейтинг shir-man, чтобы видеть, какая
-// модель стоит за пунктами «топ-N» формы теста дайджеста, ДО запуска.
-// Грузим лениво — при первом раскрытии details (API отдаёт CORS *).
-let llmTopLoaded = false;
-async function loadLlmTop() {
-  if (llmTopLoaded) return;
-  llmTopLoaded = true;
-  const el = document.getElementById("llm-top-body");
-  try {
-    const r = await fetch("https://shir-man.com/api/free-llm/top-models");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    const models = (d.models || []).slice(0, 5);
-    if (!models.length) { el.textContent = "Рейтинг пуст."; el.className = ""; return; }
-    el.className = "";
-    el.innerHTML = models.map(function (m, i) {
-      return '<div class="llm-row"><b>топ-' + (i + 1) + '</b> · ' + escHtml(m.id || "?")
-        + (m.contextLength ? ' <span style="color:var(--fg-3)">(' + Math.round(m.contextLength / 1024) + 'k контекст)</span>' : '')
-        + '</div>';
-    }).join("")
-      + '<div class="llm-meta">Рейтинг обновлён: '
-      + (d.updatedAt ? new Date(d.updatedAt).toLocaleString("ru-RU") : "?")
-      + ' · в форме теста выбирайте место «топ-N» — модель подставится сама · '
-      + '<a href="https://github.com/SelivanovAS/dashboard/actions/workflows/test_digest.yml" target="_blank">запустить тест дайджеста</a></div>';
-  } catch (e) {
-    el.textContent = "Не удалось загрузить рейтинг: " + e;
-    llmTopLoaded = false; // при следующем раскрытии попробуем ещё раз
+// Ближайший запуск cron'а Worker'а (45 3 * * mon-fri UTC) с учётом праздников
+// РФ — зеркалит scheduled(): день оценивается по МСК (UTC+3).
+function nextCronAt() {
+  const now = new Date();
+  for (let i = 0; i < 30; i++) {
+    const day = new Date(now.getTime() + i * 86400000);
+    const fire = new Date(Date.UTC(
+      day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 3, 45, 0
+    ));
+    if (fire.getTime() <= now.getTime()) continue;
+    const msk = new Date(fire.getTime() + 3 * 3600 * 1000);
+    if (isHoliday(msk)) continue;
+    return fire.toISOString();
   }
-}
-document.getElementById("llm-top").addEventListener("toggle", function () {
-  if (this.open) loadLlmTop();
-});
-
-function bareCaseNumber(n) {
-  return String(n || "").trim().split(/[\\s(]/)[0];
-}
-// Достаёт номера из скобок hybrid-ID. Пример:
-// "2-208/2026 (2-1148/2025;)" → ["2-1148/2025"].
-function extractParenNumbers(s) {
-  const m = String(s || "").match(/\\(([^)]+)\\)/);
-  if (!m) return [];
-  return m[1].split(/[;,]/).map((x) => bareCaseNumber(x)).filter(Boolean);
-}
-// Кладёт алиас в карту, не перезатирая уже существующий ключ —
-// первое добавление становится канонической записью для алиаса.
-function addAlias(map, key, payload) {
-  const bare = bareCaseNumber(key);
-  if (bare && !map.has(bare)) map.set(bare, payload);
-}
-function detectDevice(ua) {
-  if (!ua) return "—";
-  const s = ua;
-  let os = "?", browser = "?";
-  if (/iPhone|iPad|iPod/.test(s)) os = /iPad/.test(s) ? "iPad" : "iPhone";
-  else if (/Android/.test(s)) os = "Android";
-  else if (/Macintosh/.test(s)) os = "macOS";
-  else if (/Windows/.test(s)) os = "Windows";
-  else if (/Linux/.test(s)) os = "Linux";
-  if (/Edg\\//.test(s)) browser = "Edge";
-  else if (/OPR\\/|Opera/.test(s)) browser = "Opera";
-  else if (/YaBrowser/.test(s)) browser = "Yandex";
-  else if (/Firefox/.test(s)) browser = "Firefox";
-  else if (/Chrome/.test(s)) browser = "Chrome";
-  else if (/Safari/.test(s)) browser = "Safari";
-  return os + " · " + browser;
-}
-function relTime(iso) {
-  if (!iso) return "—";
-  const t = new Date(iso).getTime();
-  if (isNaN(t)) return "—";
-  const diff = Math.round((Date.now() - t) / 1000);
-  if (diff < 60) return "только что";
-  if (diff < 3600) return Math.floor(diff/60) + " мин назад";
-  if (diff < 86400) return Math.floor(diff/3600) + " ч назад";
-  if (diff < 86400*2) return "вчера в " + new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
-  if (diff < 86400*30) return Math.floor(diff/86400) + " дн назад";
-  return new Date(iso).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"});
-}
-function fullDate(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-}
-function escHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  return null;
 }
 
-async function fetchAll() {
-  const subsRes = await fetch("/admin/data?secret=" + encodeURIComponent(SECRET));
-  if (!subsRes.ok) throw new Error("HTTP " + subsRes.status + " /admin/data");
-  const subs = await subsRes.json();
-  let casesMap = new Map();
+// JSON для блока «🚀 Прогоны»: последние runs GitHub Actions. PAT остаётся
+// на сервере — страница ходит сюда со своим OWNER_SECRET.
+async function handleAdminGhRuns(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
   try {
-    const casesRes = await fetch(CASES_URL, { cache: "no-cache" });
-    if (casesRes.ok) {
-      const casesJson = await casesRes.json();
-      const list = Array.isArray(casesJson?.cases) ? casesJson.cases : [];
-      for (const c of list) {
-        // Канонический bare-id — приоритетный ключ карты. Если его нет
-        // (теоретически невозможно), пропускаем запись целиком.
-        const canonical = bareCaseNumber(c.id);
-        if (!canonical) continue;
-        const payload = {
-          plaintiff: c.plaintiff || "",
-          defendant: c.defendant || "",
-          court: c.first_instance?.court || c.appeal?.court || "",
-          stage: c.current_stage || "",
-          canonical_id: canonical,
-        };
-        // Канонический ID — первым (он же дефолт для алиаса).
-        addAlias(casesMap, c.id, payload);
-        // Алиасы: FI / апелл. / касс. (касс. бывает в двух полях —
-        // case_number и cassation_number, заполняем оба варианта).
-        // material_number — М-предок дела (Этап 3): когда юрист звёздит
-        // материал, а парсер потом промоутит его в 2-XXX, эта связь
-        // сохраняется и звезда не теряется.
-        addAlias(casesMap, c.first_instance?.case_number, payload);
-        addAlias(casesMap, c.first_instance?.material_number, payload);
-        addAlias(casesMap, c.appeal?.case_number, payload);
-        addAlias(casesMap, c.cassation?.case_number, payload);
-        addAlias(casesMap, c.cassation?.cassation_number, payload);
-        // Предыдущие номера из hybrid-ID '2-208/2026 (2-1148/2025;)'.
-        for (const prev of extractParenNumbers(c.id)) {
-          addAlias(casesMap, prev, payload);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("cases.json не загружен:", e);
-  }
-  // Журнал последней push-рассылки. Собираем карту endpoint → запись;
-  // если файла нет (старый деплой / только что чистый репо) — пустая карта.
-  let pushesMap = new Map();
-  let pushesGeneratedAt = "";
-  try {
-    const r = await fetch(PUSHES_URL, { cache: "no-cache" });
-    if (r.ok) {
-      const j = await r.json();
-      pushesGeneratedAt = j?.generated_at || "";
-      for (const item of (j?.items || [])) {
-        if (item?.endpoint) pushesMap.set(item.endpoint, item);
-      }
-    }
-  } catch (e) {
-    console.warn("last_personal_pushes.json не загружен:", e);
-  }
-  return { subs, casesMap, pushesMap, pushesGeneratedAt };
-}
-
-function renderLastPush(item, generatedAt) {
-  if (!item) {
-    return generatedAt
-      ? '<div class="last-push-empty">Нет записи в журнале последней рассылки (' + escHtml(relTime(generatedAt)) + ')</div>'
-      : '<div class="last-push-empty">Журнал push-рассылок пока пуст</div>';
-  }
-  const labels = {
-    personal: "personal",
-    general: "general",
-    skip: "skip",
-    broadcast: "broadcast",
-  };
-  const v = labels[item.variant] || item.variant || "—";
-  const skipped = item.variant === "skip";
-  const headTitle = skipped
-    ? '<span class="last-push-title">Push не отправлен — нет событий по watchlist</span>'
-    : '<span class="last-push-title">' + escHtml(item.title || "—") + '</span>';
-  const body = !skipped && item.body
-    ? '<div class="last-push-body">' + escHtml(item.body) + '</div>'
-    : "";
-  const click = !skipped && item.click_url
-    ? '<div class="last-push-meta">click_url: <a href="https://selivanovas.github.io/dashboard'
-        + escHtml(item.click_url) + '" target="_blank" rel="noopener">'
-        + escHtml(item.click_url) + '</a></div>'
-    : "";
-  const ts = generatedAt
-    ? '<div class="last-push-meta">Рассылка: ' + escHtml(relTime(generatedAt)) + '</div>'
-    : "";
-  return '<div class="last-push ' + escHtml(item.variant || "") + '">'
-    + '<div class="last-push-head">'
-    +   '<span class="last-push-variant">' + escHtml(v) + '</span>'
-    +   headTitle
-    + '</div>'
-    + body + click + ts
-    + '</div>';
-}
-
-function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
-  const dev = escHtml(detectDevice(sub.user_agent));
-  const owner = sub.is_owner ? '<span class="badge-owner">★ owner</span>' : "";
-  const ep = escHtml((sub.endpoint || "").slice(-48));
-  const epAttr = escHtml(sub.endpoint || "");
-  const wl = Array.isArray(sub.watchlist) ? sub.watchlist : [];
-  const labelHtml = sub.label
-    ? '<span class="label-name">'+escHtml(sub.label)+'</span>'
-    : '<span class="label-empty">без имени</span>';
-  const cases = wl.length
-    ? wl.map((num) => {
-        const bare = bareCaseNumber(num);
-        const c = casesMap.get(bare);
-        if (c) {
-          const parties = (c.plaintiff && c.defendant)
-            ? escHtml(c.plaintiff) + ' <span style="color:var(--fg-3)">vs</span> ' + escHtml(c.defendant)
-            : escHtml(c.plaintiff || c.defendant || "");
-          // Алиас-плашка: ★ стоит на номере, который отличается от
-          // канонического ID дела (звезда выставлена по апел./касс./
-          // hybrid-предку, а дело хранится под номером 1-й инст.).
-          const aliasNote = (c.canonical_id && c.canonical_id !== bare)
-            ? '<span class="case-alias">→ '+escHtml(c.canonical_id)+'</span>'
-            : '';
-          return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
-                 + aliasNote
-                 + '<span class="case-parties">'+parties+'</span>'
-                 + (c.court ? '<span class="case-meta">· '+escHtml(c.court)+'</span>' : '')
-                 + '</div>';
-        }
-        return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
-               + '<span class="case-meta">· нет в cases.json</span></div>';
-      }).join("")
-    : '<div class="empty">Юрист не отслеживает ни одно дело</div>';
-  return '<div class="sub-card" data-endpoint="'+epAttr+'">'
-    + '<div class="sub-row">'
-    +   labelHtml
-    +   '<span class="sub-device">'+dev+'</span>'
-    +   owner
-    +   '<span class="kv"><b>Создана:</b> '+escHtml(relTime(sub.created_at))+'</span>'
-    +   '<span class="kv"><b>Последний вход:</b> '+escHtml(relTime(sub.last_seen_at))+' <span style="color:var(--fg-3)">('+escHtml(fullDate(sub.last_seen_at))+')</span></span>'
-    +   '<span class="kv"><b>Watchlist обновлён:</b> '+escHtml(relTime(sub.last_watchlist_update_at))+'</span>'
-    +   '<span class="kv"><b>Дел:</b> '+wl.length+'</span>'
-    + '</div>'
-    + '<div class="kv endpoint" title="'+ep+'">…'+ep+'</div>'
-    + '<div class="actions">'
-    +   '<button class="btn" data-action="rename">✏ Имя</button>'
-    +   '<button class="btn" data-action="watchlist">📋 Ред. watchlist</button>'
-    +   '<button class="btn btn-danger" data-action="delete">🗑 Удалить</button>'
-    +   '<span class="action-flash"></span>'
-    + '</div>'
-    + '<details>'
-    +   '<summary>🪞 Последний push для этой подписки</summary>'
-    +   renderLastPush(lastPush, pushesGeneratedAt)
-    + '</details>'
-    + '<details'+(wl.length<=10 ? ' open' : '')+'>'
-    +   '<summary>Список отслеживаемых дел ('+wl.length+')</summary>'
-    +   '<div class="cases">'+cases+'</div>'
-    + '</details>'
-    + '</div>';
-}
-
-async function postAdmin(path, body) {
-  const r = await fetch(path + "?secret=" + encodeURIComponent(SECRET), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  let data = null;
-  try { data = await r.json(); } catch (_) {}
-  return { ok: r.ok, status: r.status, data };
-}
-
-function flash(card, text, kind) {
-  const el = card.querySelector(".action-flash");
-  if (!el) return;
-  el.className = "action-flash " + (kind || "");
-  el.textContent = text;
-  setTimeout(() => { el.textContent = ""; el.className = "action-flash"; }, 3500);
-}
-
-async function handleAction(card, action, currentSub) {
-  const endpoint = card.getAttribute("data-endpoint");
-  if (!endpoint) return;
-  if (action === "rename") {
-    const cur = currentSub.label || "";
-    const next = prompt("Имя для подписки (Иван, рабочий iPhone и т.п.). Пусто — снять имя.", cur);
-    if (next === null) return;
-    flash(card, "сохраняю…", "");
-    const res = await postAdmin("/admin/label", { endpoint, label: next });
-    if (res.ok) { flash(card, "✓ сохранено", "ok"); render(true); }
-    else { flash(card, "× ошибка", "err"); }
-  } else if (action === "delete") {
-    const lbl = currentSub.label ? '"' + currentSub.label + '"' : detectDevice(currentSub.user_agent);
-    if (!confirm("Удалить подписку " + lbl + " из KV? Юрист потеряет push до следующего входа в PWA.")) return;
-    flash(card, "удаляю…", "");
-    const res = await postAdmin("/admin/unsubscribe", { endpoint });
-    if (res.ok) { render(true); }
-    else { flash(card, "× ошибка", "err"); }
-  } else if (action === "watchlist") {
-    const cur = (currentSub.watchlist || []).join(", ");
-    const next = prompt("Watchlist через запятую. Пусто — очистить.", cur);
-    if (next === null) return;
-    const list = next.split(",").map((x) => x.trim()).filter(Boolean);
-    flash(card, "сохраняю…", "");
-    const res = await postAdmin("/admin/watchlist", { endpoint, watchlist: list });
-    if (res.ok) { flash(card, "✓ " + (res.data?.count ?? 0) + " дел", "ok"); render(true); }
-    else { flash(card, "× ошибка", "err"); }
-  }
-}
-
-async function render(force) {
-  const root = document.getElementById("root");
-  if (force) root.className = "loading", root.textContent = "Загрузка…";
-  try {
-    const { subs, casesMap, pushesMap, pushesGeneratedAt } = await fetchAll();
-    const owners = subs.filter((s) => s.is_owner).length;
-    const totalWl = subs.reduce((a, s) => a + (s.watchlist?.length || 0), 0);
-    const pushTime = pushesGeneratedAt ? " · последний push: " + relTime(pushesGeneratedAt) : "";
-    document.getElementById("summary").textContent =
-      subs.length + " подписок · " + owners + " owner · " + totalWl + " дел в watchlist'ах" + pushTime;
-    // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
-    subs.sort((a, b) => {
-      if (a.is_owner !== b.is_owner) return a.is_owner ? -1 : 1;
-      const ta = new Date(a.last_seen_at || 0).getTime();
-      const tb = new Date(b.last_seen_at || 0).getTime();
-      return tb - ta;
+    const r = await fetch(GH_REPO_API + "/actions/runs?per_page=20", {
+      headers: {
+        Authorization: `Bearer ${env.GITHUB_PAT}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "CloudflareWorker",
+      },
     });
-    root.className = "subs";
-    root.innerHTML = subs.map((s) => renderCard(s, casesMap, pushesMap.get(s.endpoint), pushesGeneratedAt)).join("");
-    if (subs.length === 0) {
-      root.innerHTML = '<div class="empty">Подписок нет.</div>';
+    if (!r.ok) {
+      const text = await r.text().catch(() => "");
+      return new Response(
+        JSON.stringify({
+          error: `GitHub ${r.status}`,
+          detail: text.slice(0, 200),
+          next_cron_at: nextCronAt(),
+        }),
+        { status: 502, headers: { "Content-Type": "application/json; charset=utf-8" } }
+      );
     }
-    // Делегированный клик по кнопкам действий: ищем data-action на кнопке,
-    // ближайший .sub-card — карточка, по data-endpoint находим текущую sub.
-    const subsByEp = new Map(subs.map((s) => [s.endpoint, s]));
-    root.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-action]");
-      if (!btn) return;
-      const card = btn.closest(".sub-card");
-      if (!card) return;
-      const sub = subsByEp.get(card.getAttribute("data-endpoint"));
-      if (!sub) return;
-      handleAction(card, btn.getAttribute("data-action"), sub);
+    const j = await r.json();
+    const runs = (j.workflow_runs || []).map((run) => ({
+      name: run.name || "",
+      path: run.path || "",
+      status: run.status || "",
+      conclusion: run.conclusion || "",
+      run_started_at: run.run_started_at || "",
+      updated_at: run.updated_at || "",
+      html_url: run.html_url || "",
+      run_number: run.run_number || 0,
+      event: run.event || "",
+    }));
+    return new Response(JSON.stringify({ runs, next_cron_at: nextCronAt() }), {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
     });
   } catch (e) {
-    root.className = "error";
-    root.textContent = "Ошибка: " + e.message;
+    console.error("admin/gh-runs error:", e);
+    return new Response(
+      JSON.stringify({ error: String(e).slice(0, 200), next_cron_at: null }),
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
+    );
   }
 }
 
-render();
-</script>
-</body></html>`;
+// Белый список запуска workflow из админки: только эти файлы и только эти
+// inputs. Значения — строки («true»/«false» для булевых — так требует
+// GitHub REST API, тип из workflow_dispatch он приводит сам).
+const DISPATCH_WORKFLOWS = {
+  "update_cases.yml": new Set(["to_group", "smart_skip"]),
+  "test_digest.yml": new Set([
+    "to_group", "push_all", "full_llm", "llm_provider",
+    "gigachat_model", "openrouter_model", "llm_model", "commit_results",
+  ]),
+};
+
+// Запуск workflow по кнопке из админки (workflow_dispatch, ветка main).
+async function handleAdminDispatch(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return new Response("Bad JSON", { status: 400 });
+  }
+  const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
+  const workflow = String((body && body.workflow) || "");
+  const allowed = DISPATCH_WORKFLOWS[workflow];
+  if (!allowed) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `workflow не в белом списке: ${workflow}` }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const inputs = {};
+  const src = body.inputs && typeof body.inputs === "object" ? body.inputs : {};
+  for (const [k, v] of Object.entries(src)) {
+    if (!allowed.has(k)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `input не разрешён: ${k}` }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    if (typeof v !== "string" || v.length > 100) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `input ${k}: ожидается строка ≤100 символов` }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    inputs[k] = v;
+  }
+  try {
+    const r = await fetch(
+      `${GH_REPO_API}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_PAT}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "CloudflareWorker",
+        },
+        body: JSON.stringify({ ref: "main", inputs }),
+      }
+    );
+    if (r.status === 204) {
+      console.log(`admin dispatch ok: ${workflow} ${JSON.stringify(inputs)}`);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
+    }
+    const text = await r.text().catch(() => "");
+    return new Response(
+      JSON.stringify({ ok: false, error: `GitHub ${r.status}`, detail: text.slice(0, 200) }),
+      { status: 502, headers: jsonHeaders }
+    );
+  } catch (e) {
+    console.error("admin/dispatch error:", e);
+    return new Response(
+      JSON.stringify({ ok: false, error: String(e).slice(0, 200) }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
 }
 
 // ── Экспорт ───────────────────────────────────────────────────────────────────
@@ -1281,6 +924,14 @@ export default {
 
     if (url.pathname === "/admin/test-push" && request.method === "POST") {
       return handleAdminTestPush(request, env);
+    }
+
+    if (url.pathname === "/admin/gh-runs" && request.method === "GET") {
+      return handleAdminGhRuns(request, env);
+    }
+
+    if (url.pathname === "/admin/dispatch" && request.method === "POST") {
+      return handleAdminDispatch(request, env);
     }
 
     return new Response("Not Found", { status: 404 });
