@@ -243,6 +243,7 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
   - `full_llm` — старый полный LLM-вызов вместо гибрида (`DIGEST_FULL_LLM=1`).
   - `llm_provider` — LLM-провайдер: `claude` (по умолчанию) / `gigachat` / `openrouter`.
   - `llm_model` — модель (пусто = дефолт: claude — haiku, gigachat — GigaChat, openrouter — «модель дня» с shir-man.com, fallback `openrouter/free`).
+  - `commit_results` — закоммитить результаты в репо (тестовый дайджест попадёт на дашборд). По умолчанию выключена — только Telegram/push.
 
 ---
 

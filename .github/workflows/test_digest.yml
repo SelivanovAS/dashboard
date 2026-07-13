@@ -8,7 +8,8 @@ name: 🧪 Тест дайджеста (replay)
 # (пусто = дефолт провайдера; для openrouter — «модель дня» с shir-man.com).
 # Telegram: личный по умолчанию, группа по галке. PWA push: владельцу
 # по умолчанию, всем — по галке.
-# Перезаписывает data/last_digest.json и коммитит обратно в репо.
+# Коммит результатов (last_digest.json, cases.json, кэш пересказов) — только
+# по галке commit_results: без неё тестовый дайджест НЕ попадает на дашборд.
 
 on:
   workflow_dispatch:
@@ -42,6 +43,11 @@ on:
         required: false
         type: string
         default: ''
+      commit_results:
+        description: 'Закоммитить результаты в репо (тестовый дайджест попадёт на дашборд: last_digest.json, cases.json, кэш пересказов). Без галки — только Telegram/push.'
+        required: false
+        type: boolean
+        default: false
 
 # Коммит обновлённого last_digest.json — нужен contents: write.
 permissions:
@@ -104,6 +110,9 @@ jobs:
           fi
 
       - name: Commit refreshed data
+        # Без галки commit_results результаты теста живут только в логе
+        # прогона и в Telegram/push — сайт (GitHub Pages) не меняется.
+        if: ${{ inputs.commit_results }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

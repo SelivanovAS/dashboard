@@ -135,7 +135,9 @@ LLM-вариант вместо гибрида), `llm_provider` (выпадаю�
 claude/gigachat/openrouter) и `llm_model` (текстом; пусто = дефолт провайдера,
 для openrouter — «модель дня» с shir-man.com). Общее поле `llm_model` уходит
 и в `GIGACHAT_MODEL`, и в `OPENROUTER_MODEL` — читает только активный
-провайдер. Коммитит свежий `last_digest.json`.
+провайдер. Коммит результатов (`last_digest.json`, `cases.json`, кэш
+пересказов) — только по галке `commit_results` (по умолчанию выключена:
+тестовый прогон не публикует ничего на дашборд, только Telegram/push).
 (Workflow `digest_only_gigachat.yml` удалён 09.07.2026 — его роль теперь
 выполняет выбор провайдера здесь.)
 
