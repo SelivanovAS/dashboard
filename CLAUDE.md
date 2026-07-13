@@ -322,6 +322,8 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`. Открывается в браузере (мобильно тоже). Endpoint реализован в [cloudflare-worker/worker.js](cloudflare-worker/worker.js): `handleAdmin` рендерит HTML, JS внутри тянет `/admin/data?secret=...` (защищён OWNER_SECRET) и `cases.json` с GitHub Pages.
 
+Вверху страницы — раскрываемый блок «🧠 Топ бесплатных LLM OpenRouter»: текущий топ-5 рейтинга shir-man (тянется браузером напрямую, CORS `*`), чтобы видеть, какая модель стоит за пунктами «топ-N» формы теста дайджеста ДО запуска; там же ссылка на запуск workflow.
+
 Что показывает по каждой push-подписке: имя (если задано), устройство (парсится из user_agent), флаг owner, дата создания, последний вход в PWA, дата последнего обновления watchlist, размер watchlist и раскрываемый список дел со сторонами (Истец vs Ответчик · Суд) — стороны подтягиваются из `cases.json` по номеру.
 
 Действия по каждой подписке (3 кнопки):
