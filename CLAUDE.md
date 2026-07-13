@@ -15,9 +15,10 @@
 
 - [scripts/update_cases.py](scripts/update_cases.py) — **тонкий фасад CLI** (~220 строк): разбор argv + ре-экспорт прежних имён. Весь код — в пакете `scripts/court_monitor/` (распил монолита, см. [docs/Распил_монолита_контекст.md](docs/Распил_монолита_контекст.md)).
 - `scripts/court_monitor/` — **пакет модулей** (читать только нужный):
-  - [config.py](scripts/court_monitor/config.py) — env-константы, пути данных, окна state-machine, `log`, `METRICS`. Патчабельные константы код читает ТОЛЬКО как `config.X` — тесты патчат `monkeypatch.setattr(config, ...)`.
+  - [config.py](scripts/court_monitor/config.py) — env-константы, пути данных, окна state-machine, `log` (пишет в **stdout**), `METRICS`. Патчабельные константы код читает ТОЛЬКО как `config.X` — тесты патчат `monkeypatch.setattr(config, ...)`.
+  - [ghlog.py](scripts/court_monitor/ghlog.py) — GitHub Actions: сворачиваемые группы фаз (`::group::`) и аннотации `::warning::`/`::error::`. Включается только env `LOG_GH_ANNOTATIONS=1` (ставят боевые workflow; pytest в CI не должен плодить аннотации), без него всё no-op.
   - [textutil.py](scripts/court_monitor/textutil.py) — даты, HTML-очистка, экранирование, сокращение имён сторон/судов, производственный календарь.
-  - [netutil.py](scripts/court_monitor/netutil.py) — `session`, `fetch_page` (ретраи, win-1251), `polite_delay`.
+  - [netutil.py](scripts/court_monitor/netutil.py) — `session`, `fetch_page` (ретраи, win-1251; `context=` — номер дела/суд в WARNING/ERROR), `polite_delay`.
   - [courts.py](scripts/court_monitor/courts.py) — `CourtConfig`, реестры судов (апелляция, 20 судов 1-й инст., 7kas), матчер ХМАО, URL карточек.
   - [storage.py](scripts/court_monitor/storage.py) — cases.json/CSV, `.digested_acts`, `.cassation_acts`, кэш пересказов.
   - [health.py](scripts/court_monitor/health.py) — журнал здоровья парсеров + детектор молчаливой поломки.
@@ -55,7 +56,7 @@
 | массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:118](scripts/court_monitor/courts.py:118) |
 | `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:145](scripts/court_monitor/courts.py:145) |
 | `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:161](scripts/court_monitor/courts.py:161) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:87](scripts/court_monitor/config.py:87) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:90](scripts/court_monitor/config.py:90) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:613](scripts/court_monitor/lifecycle.py:613) |
@@ -63,23 +64,23 @@
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:916](scripts/court_monitor/linking.py:916) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:113](scripts/court_monitor/parsing/cards.py:113) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:118](scripts/court_monitor/parsing/cards.py:118) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:207](scripts/court_monitor/linking.py:207) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:99](scripts/court_monitor/runs.py:99) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1165](scripts/court_monitor/runs.py:1165) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:118](scripts/court_monitor/runs.py:118) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1186](scripts/court_monitor/runs.py:1186) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:668](scripts/court_monitor/digest/llm.py:668) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:869](scripts/court_monitor/digest/llm.py:869) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1012](scripts/court_monitor/digest/llm.py:1012) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1014](scripts/court_monitor/digest/llm.py:1014) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
-| доставка: `send_telegram` | [scripts/court_monitor/delivery.py:615](scripts/court_monitor/delivery.py:615) |
+| доставка: `send_telegram` | [scripts/court_monitor/delivery.py:617](scripts/court_monitor/delivery.py:617) |
 | PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:430](scripts/court_monitor/delivery.py:430) |
 | персонализация push: `_make_per_sub_callback` | [scripts/court_monitor/delivery.py:305](scripts/court_monitor/delivery.py:305) |
 | фильтр по watchlist: `_filter_events_by_watchlist` | [scripts/court_monitor/delivery.py:111](scripts/court_monitor/delivery.py:111) |
@@ -230,7 +231,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:961](scripts/court_monitor/runs.py:961):
+Константы в [scripts/court_monitor/runs.py:982](scripts/court_monitor/runs.py:982):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.

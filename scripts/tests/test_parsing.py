@@ -2403,7 +2403,7 @@ class TestBackfillFiLinks:
     def test_fills_link_and_domain(self, monkeypatch):
         fetched_urls = []
 
-        def fake_fetch(url):
+        def fake_fetch(url, **kw):
             fetched_urls.append(url)
             return _fi_number_search_html(
                 "2-716/2025 (2-9422/2024;) ~ М-7693/2024"
@@ -2421,14 +2421,14 @@ class TestBackfillFiLinks:
     def test_eyo_court_name_matches_registry(self, monkeypatch):
         monkeypatch.setattr(
             cm_linking, "fetch_page",
-            lambda url: _fi_number_search_html("2-18/2026"),
+            lambda url, **kw: _fi_number_search_html("2-18/2026"),
         )
         cases = [self._case(num="2-18/2026", court="Березовский районный суд")]
         assert cm_linking.backfill_fi_links(cases) == 1
         assert cases[0]["first_instance"]["court_domain"] == "berezovo--hmao.sudrf.ru"
 
     def test_existing_link_untouched_no_fetch(self, monkeypatch):
-        def boom(url):
+        def boom(url, **kw):
             raise AssertionError("fetch_page не должен вызываться")
 
         monkeypatch.setattr(cm_linking, "fetch_page", boom)
@@ -2437,7 +2437,7 @@ class TestBackfillFiLinks:
         assert cases[0]["first_instance"]["link"] == "111|aaa-bbb"
 
     def test_unknown_court_skipped_no_fetch(self, monkeypatch):
-        def boom(url):
+        def boom(url, **kw):
             raise AssertionError("fetch_page не должен вызываться")
 
         monkeypatch.setattr(cm_linking, "fetch_page", boom)
@@ -2447,7 +2447,7 @@ class TestBackfillFiLinks:
     def test_inactive_stage_skipped(self, monkeypatch):
         """appeal — парсим карточку апел. суда, карточка 1-й инст. не нужна:
         не тратим запросы (дозаполнится при переходе в cassation_watch)."""
-        def boom(url):
+        def boom(url, **kw):
             raise AssertionError("fetch_page не должен вызываться")
 
         monkeypatch.setattr(cm_linking, "fetch_page", boom)
@@ -2459,7 +2459,7 @@ class TestBackfillFiLinks:
         карточкой 1-й инст., значит и ссылку достраиваем."""
         monkeypatch.setattr(
             cm_linking, "fetch_page",
-            lambda url: _fi_number_search_html("2-716/2025"),
+            lambda url, **kw: _fi_number_search_html("2-716/2025"),
         )
         cases = [self._case(stage="cassation_pending")]
         assert cm_linking.backfill_fi_links(cases) == 1
@@ -2468,7 +2468,7 @@ class TestBackfillFiLinks:
     def test_cassation_pending_sent_skipped_no_fetch(self, monkeypatch):
         """После «направлено в кассацию» карточку 1-й инст. больше не парсим —
         и ссылку не достраиваем."""
-        def boom(url):
+        def boom(url, **kw):
             raise AssertionError("fetch_page не должен вызываться")
 
         monkeypatch.setattr(cm_linking, "fetch_page", boom)
@@ -2479,7 +2479,7 @@ class TestBackfillFiLinks:
     def test_awaiting_appeal_backfilled_until_sent(self, monkeypatch):
         monkeypatch.setattr(
             cm_linking, "fetch_page",
-            lambda url: _fi_number_search_html("2-716/2025"),
+            lambda url, **kw: _fi_number_search_html("2-716/2025"),
         )
         cases = [self._case(stage="awaiting_appeal")]
         assert cm_linking.backfill_fi_links(cases) == 1
@@ -2488,14 +2488,14 @@ class TestBackfillFiLinks:
         # После направления в апелляцию — fetch не нужен (гейт закрыт).
         monkeypatch.setattr(
             cm_linking, "fetch_page",
-            lambda url: (_ for _ in ()).throw(AssertionError("не должен вызываться")),
+            lambda url, **kw: (_ for _ in ()).throw(AssertionError("не должен вызываться")),
         )
         assert cm_linking.backfill_fi_links(cases2) == 0
 
     def test_not_found_in_results_leaves_empty(self, monkeypatch, caplog):
         monkeypatch.setattr(
             cm_linking, "fetch_page",
-            lambda url: _fi_number_search_html("2-9999/2025"),
+            lambda url, **kw: _fi_number_search_html("2-9999/2025"),
         )
         cases = [self._case()]
         with caplog.at_level(logging.WARNING, logger="court-monitor"):
@@ -2506,7 +2506,7 @@ class TestBackfillFiLinks:
     def test_cap_limits_requests_per_run(self, monkeypatch):
         fetched = []
 
-        def fake_fetch(url):
+        def fake_fetch(url, **kw):
             fetched.append(url)
             return _fi_number_search_html("2-1/2025")
 

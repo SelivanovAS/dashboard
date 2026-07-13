@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config
+from court_monitor import config, ghlog
 from court_monitor.config import log, _metrics_reset, cold_archive_glob, cold_archive_path
 from court_monitor.courts import (
     APPEAL_COURT, CASSATION_COURT, CourtConfig, FIRST_INSTANCE_COURTS,
@@ -93,7 +93,26 @@ def log_phase(num: int, total: int, title: str) -> None:
     Формат «— [» ловится MILESTONE_RE в ops/mac-local-run/progress_pusher.py
     (онлайн-вехи в админке) — менять согласованно.
     """
+    # В GitHub Actions каждая фаза — сворачиваемая группа; строка-веха
+    # остаётся внутри группы без изменений (контракт progress_pusher).
+    ghlog.start_group(f"— [{num}/{total}] {title} —")
     log.info(f"— [{num}/{total}] {title} —")
+
+
+def _format_slow_courts(
+    seconds: dict[str, float],
+    counts: dict[str, int],
+    top: int = 3,
+) -> str:
+    """Топ судов по времени обхода: «Сургутский горсуд 41.2s (12 карт.); …».
+
+    Пустой словарь → пустая строка (вызывающий строку не печатает).
+    """
+    slowest = sorted(seconds.items(), key=lambda kv: kv[1], reverse=True)[:top]
+    return "; ".join(
+        f"{shorten_court_name(name)} {sec:.1f}s ({counts.get(name, 0)} карт.)"
+        for name, sec in slowest
+    )
 
 
 def update_active_cases(
@@ -197,7 +216,7 @@ def update_active_cases(
 
         url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
         polite_delay()
-        html = fetch_page(url)
+        html = fetch_page(url, context=case["Номер дела"])
         if not html:
             log.warning(f"Не удалось загрузить карточку {case['Номер дела']}")
             continue
@@ -300,7 +319,9 @@ def update_active_cases(
         # Новый акт
         act_text = card_info.get("act_text", "")
         if not act_text and card_info.get("_act_url"):
-            act_text = fetch_act_text(card_info["_act_url"])
+            act_text = fetch_act_text(
+                card_info["_act_url"], context=case["Номер дела"]
+            )
         # Снимок итога на момент публикации акта: результат обычно уже давно
         # стоит в карточке (акт публикуется через 14+ дней после заседания).
         # verdict_label в JSON не сохраняется — переклассифицируем из сырого
@@ -600,7 +621,7 @@ def main():
     # 3. Поиск новых дел (первая страница)
     t0 = time.perf_counter()
     log.info("Загружаю первую страницу поиска...")
-    search_html = fetch_page(SEARCH_URL)
+    search_html = fetch_page(SEARCH_URL, context="поиск апелляции")
     new_cases = []
     if search_html:
         search_cases = parse_search_page(search_html)
@@ -627,7 +648,7 @@ def main():
             if cid and cuid:
                 polite_delay()
                 url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
-                card_html = fetch_page(url)
+                card_html = fetch_page(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html)
                     _warn_if_card_degraded(card_info, nc["Номер дела"])
@@ -853,7 +874,7 @@ def main_backfill_appeal_anchors():
             if not cid or not cuid:
                 continue
             polite_delay()
-            html = fetch_page(APPEAL_COURT.card_url(cid, cuid))
+            html = fetch_page(APPEAL_COURT.card_url(cid, cuid), context=c.get("id", "?"))
             if not html:
                 log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
                 continue
@@ -1299,7 +1320,7 @@ def main_json():
     health_labels: dict = {}
 
     log.info("Загружаю страницу поиска апелляции...")
-    search_html = fetch_page(APPEAL_COURT.search_url())
+    search_html = fetch_page(APPEAL_COURT.search_url(), context="поиск апелляции")
     appeal_new_cases_csv: list[dict] = []
     appeal_fi_numbers: dict[str, str] = {}
 
@@ -1331,7 +1352,7 @@ def main_json():
             if cid and cuid:
                 polite_delay()
                 url = APPEAL_COURT.card_url(cid, cuid)
-                card_html = fetch_page(url)
+                card_html = fetch_page(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html, APPEAL_COURT.base_url)
                     _warn_if_card_degraded(card_info, nc["Номер дела"])
@@ -1380,10 +1401,16 @@ def main_json():
         court_tag = f"[{court_idx}/{len(enabled_courts)}]"
         health_labels[f"fi:{court.domain}"] = court.name
         polite_delay()
-        search_html = fetch_page(court.search_url())
+        # Тайминг суда — после polite_delay, чтобы случайная задержка
+        # не зашумляла метрику «какой суд тормозит».
+        _t_court = time.perf_counter()
+        search_html = fetch_page(court.search_url(), context=shorten_court_name(court.name))
         if not search_html:
             health_obs[f"fi:{court.domain}"] = None
-            log.warning(f"  {court_tag} {court.name}: не удалось загрузить поиск")
+            log.warning(
+                f"  {court_tag} {court.name}: не удалось загрузить поиск"
+                f" ({time.perf_counter() - _t_court:.1f}s)"
+            )
             continue
 
         fi_results = parse_first_instance_search(search_html, court)
@@ -1438,6 +1465,7 @@ def main_json():
                 f"{plural_ru(len(fi_results), 'дело', 'дела', 'дел')}, "
                 f"{len(fresh)} новых"
                 + (f", {len(stale)} завершённых-старых" if stale else "")
+                + f" ({time.perf_counter() - _t_court:.1f}s)"
             )
             for fi in fresh:
                 json_case = _fi_search_to_json_case(fi)
@@ -1456,6 +1484,7 @@ def main_json():
             log.info(
                 f"  {court_tag} {court.name}: {len(fi_results)} "
                 f"{plural_ru(len(fi_results), 'дело', 'дела', 'дел')}, новых нет"
+                f" ({time.perf_counter() - _t_court:.1f}s)"
             )
 
     # Re-link дел, вернувшихся из кассации в 1-ю инст. (awaiting_relink →
@@ -1585,6 +1614,11 @@ def main_json():
     # осмысленные данные и не поднимать ложные события в дайджесте.
     _garbage_result_markers = ("Дата размещения", "Информация о размещении")
 
+    # Пер-судовые тайминги обхода карточек: {имя суда: секунды/карточки}.
+    # Пофазный timings["fi_update"] говорит «фаза долгая», но не «кто виноват».
+    fi_court_seconds: dict[str, float] = {}
+    fi_court_cards: dict[str, int] = {}
+
     for fi_idx, case_j in enumerate(fi_active, 1):
         if fi_idx % 20 == 0:
             log.info(
@@ -1630,12 +1664,29 @@ def main_json():
 
         polite_delay()
         url = court_cfg.card_url(cid, cuid)
-        html = fetch_page(url)
-        if not html:
-            log.warning(f"  {fi['case_number']}: не удалось загрузить карточку")
-            continue
-        card_info = parse_case_card(html, court_cfg.base_url)
-        _warn_if_card_degraded(card_info, fi["case_number"], case_block=fi)
+        _short_court = shorten_court_name(court_cfg.name)
+        # Время на карточку копим по судам (после polite_delay, чтобы
+        # случайная задержка не зашумляла), включая неудачные загрузки:
+        # ретраи fetch_page — главный сигнал «какой суд тормозит».
+        _t_card = time.perf_counter()
+        try:
+            html = fetch_page(url, context=f"{fi['case_number']}, {_short_court}")
+            if not html:
+                log.warning(
+                    f"  {fi['case_number']} ({_short_court}): "
+                    f"не удалось загрузить карточку"
+                )
+                continue
+            card_info = parse_case_card(html, court_cfg.base_url)
+        finally:
+            _dt_card = time.perf_counter() - _t_card
+            fi_court_seconds[court_cfg.name] = (
+                fi_court_seconds.get(court_cfg.name, 0.0) + _dt_card
+            )
+            fi_court_cards[court_cfg.name] = fi_court_cards.get(court_cfg.name, 0) + 1
+        _warn_if_card_degraded(
+            card_info, fi["case_number"], case_block=fi, court=_short_court
+        )
 
         # Промоушен материала по карточке: М-XXXX → постоянный 2-XXXX.
         # Комбо-промоушен в списке поиска (выше) срабатывает только когда суд
@@ -2046,7 +2097,9 @@ def main_json():
         if new_act and not old_act_text:
             act_text_fi = (card_info.get("act_text") or "").strip()
             if not act_text_fi and card_info.get("_act_url"):
-                fetched = fetch_act_text(card_info["_act_url"])
+                fetched = fetch_act_text(
+                    card_info["_act_url"], context=fi["case_number"]
+                )
                 act_text_fi = (fetched or "").strip()
             if act_text_fi:
                 # Обрезаем как у апелляции: 8000 символов в JSON,
@@ -2382,6 +2435,13 @@ def main_json():
         f"{fi_skipped_suspended} без движения, {fi_no_card} без ссылки/суда; "
         f"форс-парс {fi_force_parsed})"
     )
+    if fi_court_seconds:
+        # Префикс «1 инст:» — в KEY_RE progress_pusher'а: строка уедет
+        # вехой в блок «🛰 Парсинг» админки.
+        log.info(
+            "1 инст: медленные суды — "
+            + _format_slow_courts(fi_court_seconds, fi_court_cards)
+        )
     ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
     log.info(
         f"Апелляция: спарсено {ap_skip_stats['parsed']}/{ap_skip_stats['total']} "
@@ -2421,7 +2481,7 @@ def main_json():
     try:
         log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
         polite_delay()
-        cass_search_html = fetch_page(CASSATION_COURT.search_url())
+        cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
         if not cass_search_html:
             health_obs["cassation:7kas:total"] = None
         if cass_search_html:
@@ -2498,7 +2558,9 @@ def main_json():
                         continue
                 polite_delay()
                 card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
-                card_html = fetch_page(card_url)
+                card_html = fetch_page(
+                    card_url, context=r["cassation_internal_number"]
+                )
                 if not card_html:
                     log.warning(
                         f"  7kas: не удалось загрузить карточку "
@@ -2628,7 +2690,9 @@ def main_json():
             polite_delay()
             try:
                 card_url = CASSATION_COURT.card_url(cid, cuid)
-                card_html = fetch_page(card_url)
+                card_html = fetch_page(
+                    card_url, context=cass.get("case_number") or "?"
+                )
             except Exception as exc:
                 log.warning(
                     f"  7kas refresh: ошибка загрузки "

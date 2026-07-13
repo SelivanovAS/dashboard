@@ -126,6 +126,8 @@ jobs:
           GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ inputs.llm_model || inputs.openrouter_model }}
+          # Группы фаз и аннотации WARNING/ERROR в UI Actions (ghlog.py).
+          LOG_GH_ANNOTATIONS: "1"
         run: |
           if [ -n "${{ inputs.llm_model }}" ]; then
             echo "🧠 Провайдер: ${{ inputs.llm_provider }}, модель (текстом): ${{ inputs.llm_model }}"

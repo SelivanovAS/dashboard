@@ -62,6 +62,10 @@ jobs:
           # Smart-skip: при автозапуске Worker передаёт smart_skip=true →
           # парсер пропускает нерабочие дни и дела с известной будущей датой.
           SKIP_NON_WORKING_DAYS: ${{ inputs.smart_skip && '1' || '' }}
+          # Группы фаз (::group::) и аннотации WARNING/ERROR в UI Actions
+          # (court_monitor/ghlog.py). Явный флаг, а не GITHUB_ACTIONS:
+          # pytest-прогоны tests.yml не должны плодить аннотации.
+          LOG_GH_ANNOTATIONS: "1"
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"

@@ -237,7 +237,7 @@ def main() -> None:
 
         polite_delay()
         search_url = build_case_number_search_url(court, case_num)
-        html = fetch_page(search_url)
+        html = fetch_page(search_url, context=case_num)
         if not html:
             log.warning("  [FETCH FAIL] поисковая страница")
             stats["fetch_fail"] += 1
@@ -283,7 +283,7 @@ def main() -> None:
 
         polite_delay()
         card_url = court.card_url(cid, cuid)
-        card_html = fetch_page(card_url)
+        card_html = fetch_page(card_url, context=case_num)
         if not card_html:
             log.warning("  [FETCH FAIL] карточка дела")
             stats["fetch_fail"] += 1
