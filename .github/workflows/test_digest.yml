@@ -6,10 +6,15 @@ name: 🧪 Тест дайджеста (replay)
 # откат на старый полный LLM-вариант). LLM-провайдер выбирается списком
 # llm_provider (claude / gigachat / openrouter), модель — полем llm_model
 # (пусто = дефолт провайдера; для openrouter — «модель дня» с shir-man.com).
-# Telegram: личный по умолчанию, группа по галке. PWA push: владельцу
-# по умолчанию, всем — по галке.
-# Коммит результатов (last_digest.json, cases.json, кэш пересказов) — только
-# по галке commit_results: без неё тестовый дайджест НЕ попадает на дашборд.
+# Telegram: личный по умолчанию, группа по галке.
+# Публикация результатов (last_digest.json, cases.json, кэш пересказов) —
+# только по галке commit_results: без неё тестовый дайджест НЕ попадает на
+# дашборд, и PWA push тоже не отправляется (пуш ведёт на дашборд — без
+# публикации он показал бы старый дайджест). push_all регулирует круг
+# получателей пуша при включённой публикации.
+# Имена inputs (commit_results и др.) — латиницей: GitHub не допускает
+# кириллицу в идентификаторах; русский текст — в description (его и видно
+# в форме Run workflow).
 
 on:
   workflow_dispatch:
@@ -20,7 +25,7 @@ on:
         type: boolean
         default: false
       push_all:
-        description: 'PWA push на ВСЕ устройства (включая коллег). Снять галку — только владельцу.'
+        description: 'PWA push на ВСЕ устройства (включая коллег). Снять галку — только владельцу. Работает только вместе с галкой «опубликовать».'
         required: false
         type: boolean
         default: false
@@ -44,7 +49,7 @@ on:
         type: string
         default: ''
       commit_results:
-        description: 'Закоммитить результаты в репо (тестовый дайджест попадёт на дашборд: last_digest.json, cases.json, кэш пересказов). Без галки — только Telegram/push.'
+        description: 'Опубликовать результаты: дайджест попадёт на дашборд (last_digest.json, cases.json, кэш пересказов) и уйдёт PWA push. Без галки — только Telegram.'
         required: false
         type: boolean
         default: false
@@ -58,25 +63,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Клонирование репозитория
         uses: actions/checkout@v5
 
-      - name: Set up Python
+      - name: Установка Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Установка зависимостей
         run: pip install -r scripts/requirements.txt
 
-      - name: Replay last digest
+      - name: Переигровка последнего дайджеста
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
-          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
-          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
-          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # PWA push уходит только вместе с публикацией: без commit_results
+          # PUSH-переменные пустые, и send_web_push тихо пропускает отправку
+          # («Web Push: переменные не настроены, пропуск»).
+          PUSH_WORKER_URL: ${{ inputs.commit_results && secrets.PUSH_WORKER_URL || '' }}
+          PUSH_SECRET: ${{ inputs.commit_results && secrets.PUSH_SECRET || '' }}
+          VAPID_PRIVATE_KEY: ${{ inputs.commit_results && secrets.VAPID_PRIVATE_KEY || '' }}
           # Управление архитектурой дайджеста для тестирования:
           # без галки — боевой гибрид, с галкой — старый полный LLM.
           DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
@@ -90,28 +98,31 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ inputs.llm_model }}
         run: |
-          echo "🧠 PROVIDER: ${{ inputs.llm_provider }}, model: ${{ inputs.llm_model || '(дефолт / модель дня)' }}"
+          echo "🧠 Провайдер: ${{ inputs.llm_provider }}, модель: ${{ inputs.llm_model || '(дефолт / модель дня)' }}"
           if [ "${{ inputs.to_group }}" = "true" ]; then
-            echo "📢 GROUP CHAT: digest will go to corporate group"
+            echo "📢 Дайджест уйдёт в корпоративную группу Telegram"
           else
-            echo "📱 PERSONAL CHAT: digest will go to personal chat"
+            echo "📱 Дайджест уйдёт в личный чат Telegram"
           fi
           if [ "${{ inputs.full_llm }}" = "true" ]; then
-            echo "🤖 FULL LLM: старый Claude-вариант (DIGEST_FULL_LLM=1)"
+            echo "🤖 Полный LLM-вызов (DIGEST_FULL_LLM=1) вместо гибрида"
           else
-            echo "🏗 HYBRID: программный шаблон + LLM-пересказы актов"
+            echo "🏗 Гибрид: программный шаблон + LLM-пересказы актов"
           fi
-          if [ "${{ inputs.push_all }}" = "true" ]; then
-            echo "📣 ALL DEVICES: PWA push to every subscriber"
+          if [ "${{ inputs.commit_results }}" != "true" ]; then
+            echo "🔕 Без публикации на дашборд — PWA push пропускается"
+            python scripts/update_cases.py --replay-last
+          elif [ "${{ inputs.push_all }}" = "true" ]; then
+            echo "📣 PWA push на все устройства (включая коллег)"
             python scripts/update_cases.py --replay-last --push-all
           else
-            echo "👤 OWNER ONLY: PWA push to owner devices"
+            echo "👤 PWA push только устройствам владельца"
             python scripts/update_cases.py --replay-last
           fi
 
-      - name: Commit refreshed data
+      - name: Публикация результатов на дашборд
         # Без галки commit_results результаты теста живут только в логе
-        # прогона и в Telegram/push — сайт (GitHub Pages) не меняется.
+        # прогона и в Telegram — сайт (GitHub Pages) не меняется.
         if: ${{ inputs.commit_results }}
         run: |
           git config user.name "github-actions[bot]"
@@ -137,7 +148,7 @@ jobs:
             echo "Нет изменений — нечего коммитить"
             exit 0
           fi
-          git commit -m "🔁 Test Digest: переигран дайджест через LLM"
+          git commit -m "🔁 Тест дайджеста: результаты опубликованы на дашборд"
           git pull --rebase origin main || {
             echo "⚠ rebase не удался — пропускаю коммит (дайджест уже отправлен)"
             exit 0

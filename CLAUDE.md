@@ -43,7 +43,7 @@
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
 - [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit). При падении любого шага шлёт 🚨-алерт в личный Telegram (шаг `if: failure()`, curl без Python).
 - [.github/workflows/tests.yml](.github/workflows/tests.yml) — pytest на каждый push (кроме правок только .md/docs).
-- [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), выбор LLM-провайдера (`llm_provider`: claude/gigachat/openrouter + `llm_model`, пусто = дефолт/«модель дня»). Коммит результатов (`last_digest.json`, `cases.json`, кэш пересказов) — только по галке `commit_results` (по умолчанию ВЫКЛ: тестовый дайджест не попадает на дашборд).
+- [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), выбор LLM-провайдера (`llm_provider`: claude/gigachat/openrouter + `llm_model`, пусто = дефолт/«модель дня»). Публикация результатов (`last_digest.json`, `cases.json`, кэш пересказов) и PWA push — только по галке `commit_results` (по умолчанию ВЫКЛ: тестовый дайджест не попадает на дашборд, пуш не уходит — он вёл бы на старый дайджест; без галки прогон шлёт только Telegram).
 - [README.md](README.md) — подробная документация на русском (дублирует часть этого файла).
 
 ## Ключевые точки в пакете court_monitor
