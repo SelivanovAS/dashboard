@@ -71,7 +71,7 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:98](scripts/court_monitor/runs.py:98) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1137](scripts/court_monitor/runs.py:1137) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1164](scripts/court_monitor/runs.py:1164) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:637](scripts/court_monitor/digest/llm.py:637) |
@@ -227,7 +227,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:933](scripts/court_monitor/runs.py:933):
+Константы в [scripts/court_monitor/runs.py:960](scripts/court_monitor/runs.py:960):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
@@ -305,6 +305,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 - `TELEGRAM_BOT_TOKEN` — токен бота.
 - `TELEGRAM_CHAT_ID` — корпоративная группа (используется только при `to_group=true`).
 - `TELEGRAM_CHAT_ID_TEST` — личный чат, дефолтный получатель дайджеста.
+- `TELEGRAM_CHAT_ID_PERSONAL` — личный чат юриста (workflow'ы передают тот же `TELEGRAM_CHAT_ID_TEST`): при совпадении с `TELEGRAM_CHAT_ID` к Telegram-версии дайджеста добавляется сервисная приписка «🤖 LLM: модель (режим)» — в группу и на дашборд не попадает (`_telegram_digest_text` в runs.py).
 - `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` — Web Push для PWA.
 - `OWNER_SECRET` — секрет Worker'а для `POST /mark-owner` (пометка устройства владельцем).
 - `GITHUB_PAT` — в secrets Worker'а, для `workflow_dispatch`.

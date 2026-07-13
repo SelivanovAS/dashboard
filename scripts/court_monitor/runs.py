@@ -678,9 +678,10 @@ def main():
 
     # 8. Отправляем в Telegram
     t0 = time.perf_counter()
-    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
-    # полный HTML идёт на дашборд через save_last_digest ниже.
-    send_telegram(truncate_digest_for_telegram(digest))
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
+    # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
+    # через save_last_digest ниже.
+    send_telegram(_telegram_digest_text(digest))
     save_last_digest(
         digest,
         summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
@@ -892,6 +893,32 @@ def main_backfill_appeal_anchors():
     data["cases"] = cases
     save_json(data, config.JSON_PATH)
     log.info("Готово.")
+
+
+def _llm_digest_note() -> str:
+    """Однострочная сервисная приписка «какая LLM делала дайджест»."""
+    mode = (
+        "полный LLM-дайджест" if config.DIGEST_FULL_LLM
+        else "гибрид, LLM только на пересказах актов"
+    )
+    return f"🤖 LLM: {llm._current_digest_model_name()} ({mode})"
+
+
+def _telegram_digest_text(digest: str) -> str:
+    """Telegram-версия дайджеста: компактная обрезка + сервисная приписка
+    о LLM-модели.
+
+    Приписка добавляется ТОЛЬКО когда получатель — личный чат юриста
+    (TELEGRAM_CHAT_ID совпадает с TELEGRAM_CHAT_ID_PERSONAL): служебная
+    информация не должна уходить в корпоративную группу. Без заданной
+    TELEGRAM_CHAT_ID_PERSONAL (локальный запуск, Mac-резерв) приписки нет.
+    На дашборд (save_last_digest) идёт полный HTML без приписки.
+    """
+    text = truncate_digest_for_telegram(digest)
+    if (config.TELEGRAM_CHAT_ID_PERSONAL
+            and config.TELEGRAM_CHAT_ID == config.TELEGRAM_CHAT_ID_PERSONAL):
+        text += f"\n\n<i>{_llm_digest_note()}</i>"
+    return text
 
 
 def _lint_digest_and_alert(digest_html: str, *,
@@ -2899,9 +2926,10 @@ def main_json():
     timings["digest"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
-    # полный HTML идёт на дашборд через save_last_digest ниже.
-    send_telegram(truncate_digest_for_telegram(digest))
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
+    # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
+    # через save_last_digest ниже.
+    send_telegram(_telegram_digest_text(digest))
     timings["telegram"] = time.perf_counter() - t0
 
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
@@ -3108,9 +3136,10 @@ def main_replay_last(push_all: bool = False):
         cass_discovered=ctx.get("cass_discovered", []),
     )
 
-    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
-    # полный HTML идёт на дашборд через save_last_digest ниже.
-    send_telegram(truncate_digest_for_telegram(digest))
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
+    # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
+    # через save_last_digest ниже.
+    send_telegram(_telegram_digest_text(digest))
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
     _lint_digest_and_alert(
         digest,
@@ -3371,9 +3400,10 @@ def main_digest_only():
         total_active_cassation=total_active_cassation,
     )
 
-    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд;
-    # полный HTML идёт на дашборд через save_last_digest ниже.
-    send_telegram(truncate_digest_for_telegram(digest))
+    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
+    # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
+    # через save_last_digest ниже.
+    send_telegram(_telegram_digest_text(digest))
     send_web_push(
         title="Мониторинг дел — проверка",
         body="Дайджест по текущим данным",

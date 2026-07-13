@@ -51,6 +51,10 @@ jobs:
           # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.
           # Чтобы продублировать в корпоративную группу — поставить галку to_group в UI.
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Личный чат: по нему скрипт понимает, что дайджест идёт юристу,
+          # и добавляет сервисную приписку «какая LLM делала дайджест»
+          # (в корпоративную группу приписка не уходит).
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           # Web Push PWA-уведомления (опционально — если не заданы, пропускаются).
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
