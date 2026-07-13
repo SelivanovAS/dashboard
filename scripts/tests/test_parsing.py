@@ -559,6 +559,28 @@ class TestShouldParseFiCard:
         assert uc.should_parse_fi_card(self._c("first_instance", {"case_number": "2-1/2025"}))
         assert uc.should_parse_fi_card(self._c("cassation_watch", {"case_number": "2-1/2025"}))
 
+    def test_cassation_watch_third_party_not_parsed(self):
+        """Дела «третье лицо» в cassation_watch не парсим: кассацию по ним
+        обнаружит поиск 7kas по имени банка (решение юриста 13.07.2026)."""
+        def _c_role(stage, role):
+            case = self._c(stage, {"case_number": "2-1/2025"})
+            if role is not None:
+                case["bank_role"] = role
+            return case
+
+        assert not uc.should_parse_fi_card(_c_role("cassation_watch", "Третье лицо"))
+        # Регистронезависимость и пробелы
+        assert not uc.should_parse_fi_card(_c_role("cassation_watch", "третье лицо "))
+        # Истец/ответчик/нет роли — парсим как раньше
+        assert uc.should_parse_fi_card(_c_role("cassation_watch", "Истец"))
+        assert uc.should_parse_fi_card(_c_role("cassation_watch", "Ответчик"))
+        assert uc.should_parse_fi_card(_c_role("cassation_watch", None))
+        assert uc.should_parse_fi_card(_c_role("cassation_watch", ""))
+        # Правило только для cassation_watch: в first_instance третье лицо
+        # мониторится (следим за существом дела)
+        assert uc.should_parse_fi_card(_c_role("first_instance", "Третье лицо"))
+        assert uc.should_parse_fi_card(_c_role("cassation_pending", "Третье лицо"))
+
     def test_awaiting_appeal_parsed_until_sent(self):
         assert uc.should_parse_fi_card(self._c("awaiting_appeal", {"case_number": "2-1/2025"}))
         assert not uc.should_parse_fi_card(
