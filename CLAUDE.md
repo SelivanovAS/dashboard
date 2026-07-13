@@ -24,7 +24,7 @@
   - [lifecycle.py](scripts/court_monitor/lifecycle.py) — классификация событий карточки, state machine стадий, дедуп, архив.
   - [parsing/](scripts/court_monitor/parsing/__init__.py) — `tables.py` (TableExtractor), `search.py` (поисковая выдача), `cards.py` (карточки дел), `cassation.py` (7kas).
   - [linking.py](scripts/court_monitor/linking.py) — связка FI ↔ апелляция ↔ кассация, discovery, реактивация, ротация архива.
-  - [digest/](scripts/court_monitor/digest/__init__.py) — `llm.py` (Claude/GigaChat, промпты — патч-цели тестов живут тут), `postprocess.py` (валидация/чистка HTML), `template.py` (программный рендер — **боевой путь с 03.07.2026**, компакт-вёрстка без отступов), `core.py` (диспетчер `generate_digest`), `lint.py` (программный линтер готового HTML после отправки: полнота номеров, счётчики (N), теги, футер → 🩺-алерт; `DIGEST_LINT=0` — выключатель). Прод — гибрид: события рендерит код, LLM только пересказывает мотивировки актов; `DIGEST_FULL_LLM=1` — откат на полный LLM-дайджест.
+  - [digest/](scripts/court_monitor/digest/__init__.py) — `llm.py` (Claude/GigaChat/OpenRouter — выбор через `LLM_PROVIDER`; промпты — патч-цели тестов живут тут), `postprocess.py` (валидация/чистка HTML), `template.py` (программный рендер — **боевой путь с 03.07.2026**, компакт-вёрстка без отступов), `core.py` (диспетчер `generate_digest`), `lint.py` (программный линтер готового HTML после отправки: полнота номеров, счётчики (N), теги, футер → 🩺-алерт; `DIGEST_LINT=0` — выключатель). Прод — гибрид: события рендерит код, LLM только пересказывает мотивировки актов; `DIGEST_FULL_LLM=1` — откат на полный LLM-дайджест.
   - [delivery.py](scripts/court_monitor/delivery.py) — Telegram, Web Push с watchlist-персонализацией, алерты.
   - [runs.py](scripts/court_monitor/runs.py) — `main_json` и остальные режимы прогона, `update_active_cases`.
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
@@ -43,7 +43,7 @@
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск.
 - [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml) — основной workflow (парсинг + дайджест + commit). При падении любого шага шлёт 🚨-алерт в личный Telegram (шаг `if: failure()`, curl без Python).
 - [.github/workflows/tests.yml](.github/workflows/tests.yml) — pytest на каждый push (кроме правок только .md/docs).
-- [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), коммит свежего `data/last_digest.json`.
+- [.github/workflows/test_digest.yml](.github/workflows/test_digest.yml) — единый ручной тест: replay последнего дайджеста, Telegram (личный/группа по галке), PWA push (владельцу/всем по галке), выбор LLM-провайдера (`llm_provider`: claude/gigachat/openrouter + `llm_model`, пусто = дефолт/«модель дня»), коммит свежего `data/last_digest.json`.
 - [README.md](README.md) — подробная документация на русском (дублирует часть этого файла).
 
 ## Ключевые точки в пакете court_monitor
@@ -71,13 +71,13 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:98](scripts/court_monitor/runs.py:98) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1134](scripts/court_monitor/runs.py:1134) |
-| `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:73](scripts/court_monitor/digest/llm.py:73) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1137](scripts/court_monitor/runs.py:1137) |
+| `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
-| `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:491](scripts/court_monitor/digest/llm.py:491) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:693](scripts/court_monitor/digest/llm.py:693) |
+| `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:637](scripts/court_monitor/digest/llm.py:637) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:838](scripts/court_monitor/digest/llm.py:838) |
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:832](scripts/court_monitor/digest/llm.py:832) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:981](scripts/court_monitor/digest/llm.py:981) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
 | доставка: `send_telegram` | [scripts/court_monitor/delivery.py:615](scripts/court_monitor/delivery.py:615) |
 | PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:430](scripts/court_monitor/delivery.py:430) |
@@ -227,7 +227,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:930](scripts/court_monitor/runs.py:930):
+Константы в [scripts/court_monitor/runs.py:933](scripts/court_monitor/runs.py:933):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
@@ -300,7 +300,8 @@ GitHub Actions workflows запускаются из UI репозитория (
 ## Переменные окружения
 
 - `ANTHROPIC_API_KEY` — Claude.
-- `GIGACHAT_AUTH_KEY` (+ `GIGACHAT_SCOPE`, `GIGACHAT_MODEL`) — GigaChat, альтернативный LLM; включается `LLM_PROVIDER=gigachat` (отдельный workflow удалён 09.07.2026).
+- `GIGACHAT_AUTH_KEY` (+ `GIGACHAT_SCOPE`, `GIGACHAT_MODEL`) — GigaChat, альтернативный LLM; включается `LLM_PROVIDER=gigachat` (отдельный workflow удалён 09.07.2026, теперь выбор провайдера — input `llm_provider` в test_digest.yml).
+- `OPENROUTER_API_KEY` (+ `OPENROUTER_MODEL`) — OpenRouter, третий LLM (тестовый контур); включается `LLM_PROVIDER=openrouter`. Пустая модель = «модель дня» с `shir-man.com/api/free-llm/top-models`, fallback `openrouter/free`. Кэш пересказов для gigachat/openrouter неймспейсится по `провайдер:модель` (`_act_cache_key`), Claude-ключи прежние.
 - `TELEGRAM_BOT_TOKEN` — токен бота.
 - `TELEGRAM_CHAT_ID` — корпоративная группа (используется только при `to_group=true`).
 - `TELEGRAM_CHAT_ID_TEST` — личный чат, дефолтный получатель дайджеста.

@@ -143,11 +143,10 @@ PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
 # Приватный VAPID-ключ в PEM-формате; хранится только в GitHub Secrets.
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 
-# Переключатель провайдера LLM: "claude" (по умолчанию) или "gigachat".
-# Отдельного workflow под GigaChat больше нет (digest_only_gigachat.yml
-# удалён 09.07.2026) — при необходимости выставить LLM_PROVIDER=gigachat
-# вручную. Основной мониторинг (update_cases.yml) остаётся на Claude и
-# ничего не знает про этот флаг.
+# Переключатель провайдера LLM: "claude" (по умолчанию), "gigachat"
+# или "openrouter". Тестовый workflow (test_digest.yml) пробрасывает выбор
+# провайдера/модели из inputs; основной мониторинг (update_cases.yml)
+# остаётся на Claude и ничего не знает про этот флаг.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
 
 # Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
@@ -182,9 +181,22 @@ DIGEST_LINT = (
 )
 GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
 GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "GigaChat")
+# `or "GigaChat"` — workflow передаёт общий input llm_model и в GIGACHAT_MODEL,
+# и в OPENROUTER_MODEL; пустая строка из env должна означать «дефолт модели».
+GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "").strip() or "GigaChat"
 GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+
+# OpenRouter — третий провайдер (только тестовый контур, см. test_digest.yml).
+# Пустой OPENROUTER_MODEL = «модель дня»: llm._resolve_openrouter_model()
+# берёт models[0].id с OPENROUTER_TOP_MODELS_URL (рейтинг бесплатных моделей
+# shir-man.com/free-llm), при недоступности — OPENROUTER_FALLBACK_MODEL
+# (маршрут openrouter/free: OpenRouter сам выбирает живую бесплатную модель).
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip()
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
+OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096

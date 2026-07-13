@@ -2,9 +2,12 @@ name: 🧪 Тест дайджеста (replay)
 
 # Объединённый тестовый прогон. Парсинга не делает — переигрывает
 # последний продовый дайджест из data/last_digest_context.json (гибрид:
-# программный шаблон + Claude на пересказ мотивировок; галка full_llm —
-# откат на старый полный LLM-вариант). Telegram: личный по умолчанию,
-# группа по галке. PWA push: владельцу по умолчанию, всем — по галке.
+# программный шаблон + LLM на пересказ мотивировок; галка full_llm —
+# откат на старый полный LLM-вариант). LLM-провайдер выбирается списком
+# llm_provider (claude / gigachat / openrouter), модель — полем llm_model
+# (пусто = дефолт провайдера; для openrouter — «модель дня» с shir-man.com).
+# Telegram: личный по умолчанию, группа по галке. PWA push: владельцу
+# по умолчанию, всем — по галке.
 # Перезаписывает data/last_digest.json и коммитит обратно в репо.
 
 on:
@@ -21,10 +24,24 @@ on:
         type: boolean
         default: false
       full_llm:
-        description: 'Старый Claude-вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом вместо программного шаблона.'
+        description: 'Старый вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом вместо программного шаблона.'
         required: false
         type: boolean
         default: false
+      llm_provider:
+        description: 'LLM-провайдер дайджеста.'
+        required: false
+        type: choice
+        options:
+          - claude
+          - gigachat
+          - openrouter
+        default: claude
+      llm_model:
+        description: 'Модель. Пусто = дефолт: claude — haiku, gigachat — GigaChat, openrouter — «модель дня» с shir-man.com (fallback openrouter/free).'
+        required: false
+        type: string
+        default: ''
 
 # Коммит обновлённого last_digest.json — нужен contents: write.
 permissions:
@@ -57,7 +74,17 @@ jobs:
           # Управление архитектурой дайджеста для тестирования:
           # без галки — боевой гибрид, с галкой — старый полный LLM.
           DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
+          # Выбор LLM-провайдера и модели. Общее поле llm_model уходит и в
+          # GIGACHAT_MODEL, и в OPENROUTER_MODEL — читает только активный
+          # провайдер, пустая строка означает дефолт (гарды в config.py).
+          LLM_PROVIDER: ${{ inputs.llm_provider }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: GIGACHAT_API_PERS
+          GIGACHAT_MODEL: ${{ inputs.llm_model }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ inputs.llm_model }}
         run: |
+          echo "🧠 PROVIDER: ${{ inputs.llm_provider }}, model: ${{ inputs.llm_model || '(дефолт / модель дня)' }}"
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"
           else

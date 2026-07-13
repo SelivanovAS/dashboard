@@ -240,6 +240,9 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
 - **Галки:**
   - `to_group` — слать в корпоративную группу (по умолчанию — личный чат).
   - `push_all` — PWA push на все устройства (по умолчанию — только владельцу).
+  - `full_llm` — старый полный LLM-вызов вместо гибрида (`DIGEST_FULL_LLM=1`).
+  - `llm_provider` — LLM-провайдер: `claude` (по умолчанию) / `gigachat` / `openrouter`.
+  - `llm_model` — модель (пусто = дефолт: claude — haiku, gigachat — GigaChat, openrouter — «модель дня» с shir-man.com, fallback `openrouter/free`).
 
 ---
 
@@ -248,6 +251,8 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
 | Переменная | Описание | Где используется |
 |------------|----------|------------------|
 | `ANTHROPIC_API_KEY` | API-ключ Anthropic (Claude) | Генерация дайджестов |
+| `GIGACHAT_AUTH_KEY` (+ `GIGACHAT_SCOPE`, `GIGACHAT_MODEL`) | GigaChat — альтернативный LLM (`LLM_PROVIDER=gigachat`) | Тест дайджеста |
+| `OPENROUTER_API_KEY` (+ `OPENROUTER_MODEL`) | OpenRouter — третий LLM (`LLM_PROVIDER=openrouter`); пустая модель = «модель дня» | Тест дайджеста |
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота | Отправка уведомлений |
 | `TELEGRAM_CHAT_ID` | ID чата/канала Telegram | Отправка уведомлений |
 | `CSV_PATH` | Путь к активному CSV (по умолчанию `data/sberbank_cases.csv`) | Скрипт обновления |

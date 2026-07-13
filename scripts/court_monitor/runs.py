@@ -524,6 +524,9 @@ def validate_environment(require_anthropic: bool = True) -> None:
         if config.LLM_PROVIDER == "gigachat":
             if not config.GIGACHAT_AUTH_KEY:
                 missing.append("GIGACHAT_AUTH_KEY")
+        elif config.LLM_PROVIDER == "openrouter":
+            if not config.OPENROUTER_API_KEY:
+                missing.append("OPENROUTER_API_KEY")
         elif not config.ANTHROPIC_API_KEY:
             missing.append("ANTHROPIC_API_KEY")
     if not config.TELEGRAM_BOT_TOKEN:
