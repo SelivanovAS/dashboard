@@ -269,14 +269,16 @@ a { color: var(--accent); }
 /* Кнопки */
 .btn-primary { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; background:var(--accent);
   color:#fff; border:none; border-radius:var(--radius); font-size:var(--fs-sm); font-weight:var(--fw-semibold);
-  cursor:pointer; font-family:var(--font-sans); transition:background 120ms var(--ease-out); }
+  cursor:pointer; font-family:var(--font-sans); transition:background 120ms var(--ease-out);
+  white-space:nowrap; }
 .btn-primary:hover { background:var(--accent-hover); }
 .btn-primary:active { background:var(--accent-active); transform:scale(0.98); }
 .btn-primary:disabled { opacity:0.6; cursor:default; }
 .btn-primary svg { width:13px; height:13px; }
 .btn-outline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-1);
   border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm); cursor:pointer;
-  color:var(--fg-1); font-weight:var(--fw-semibold); font-family:var(--font-sans); transition:all 120ms var(--ease-out); }
+  color:var(--fg-1); font-weight:var(--fw-semibold); font-family:var(--font-sans); transition:all 120ms var(--ease-out);
+  white-space:nowrap; }
 .btn-outline:hover { border-color:var(--border-strong); background:var(--bg-3); }
 .btn-outline:disabled { opacity:0.6; cursor:default; }
 .btn-outline.btn-danger { color:var(--danger-fg); }
@@ -364,6 +366,21 @@ details.fold > summary:hover { color:var(--fg-1); }
 .mac-live-state { font-weight:var(--fw-bold); font-size:var(--fs-sm); }
 .mac-live-state.running { color:var(--warning-fg); }
 .mac-live-state.done { color:var(--accent); }
+
+/* Лог прогона: свёртка по фазам «— [N/9] …» (renderLogGroups) */
+.log-groups { max-height:340px; overflow:auto; background:var(--bg-2);
+  border-radius:var(--radius-md); padding:6px 10px; }
+.log-groups .log-pre { max-height:none; overflow:visible; background:transparent;
+  padding:2px 0 6px 14px; }
+.log-groups details.fold { margin-top:2px; }
+.log-groups .fold-body { padding:0; }
+.log-phase-n { color:var(--fg-4); font-weight:var(--fw-bold);
+  font-family:var(--font-code); font-size:var(--fs-2xs); }
+.log-warn-badge { color:var(--warning-fg); font-size:var(--fs-2xs); }
+.log-err-badge { color:var(--danger-fg); font-size:var(--fs-2xs); }
+.log-line-warn { color:var(--warning-fg); }
+.log-line-err { color:var(--danger-fg); }
+.log-summary { border-top:1px dashed var(--divider); margin-top:6px; }
 
 /* LLM */
 .llm-row { display:flex; align-items:baseline; gap:10px; padding:5px 0; font-size:var(--fs-sm);
@@ -550,24 +567,29 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
             Полный прогон
           </button>
+          <button class="btn-outline" id="btn-run-std" title="Как ежедневный автозапуск: smart-skip — пропуск дел с известной будущей датой и нерабочих дней">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            Стандартный прогон
+          </button>
           <span class="action-flash" id="runs-flash"></span>
         </div>
         <div id="runs-list" class="loading">Загрузка…</div>
         <div class="mac-live" id="mac-live" style="display:none;">
           <div class="mac-live-head">
-            <span class="mac-live-title">Парсинг на Mac (резерв)</span>
+            <span class="mac-live-title" id="mac-live-title">Прогон</span>
             <span class="mac-live-state" id="mac-live-state"></span>
             <span class="run-meta" id="mac-live-meta"></span>
+            <a class="run-ext" id="mac-live-link" target="_blank" rel="noopener noreferrer" style="display:none;" title="Открыть прогон на GitHub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
           </div>
-          <pre class="log-pre" id="mac-live-log"></pre>
+          <div class="log-groups" id="mac-live-log"></div>
           <details class="fold" id="mac-prev" style="display:none;">
-            <summary>Предыдущий прогон Mac</summary>
-            <div class="fold-body"><pre class="log-pre" id="mac-prev-log"></pre></div>
+            <summary id="mac-prev-sum">Предыдущий прогон</summary>
+            <div class="fold-body"><div class="log-groups" id="mac-prev-log"></div></div>
           </details>
         </div>
         <details class="fold" id="mac-stale" style="display:none;">
-          <summary id="mac-stale-sum">Резерв: парсинг на Mac</summary>
-          <div class="fold-body"><pre class="log-pre" id="mac-stale-log"></pre></div>
+          <summary id="mac-stale-sum">Последний прогон</summary>
+          <div class="fold-body"><div class="log-groups" id="mac-stale-log"></div></div>
         </details>
       </div>
       <div class="card">
@@ -912,8 +934,12 @@ document.getElementById("btn-run-main").addEventListener("click", function () {
   if (!confirm("Запустить полный прогон сейчас?\\n\\nПарсинг всех судов + дайджест + Telegram + push подписчикам — как ручной запуск из GitHub UI (без smart-skip).")) return;
   dispatchWorkflow("update_cases.yml", { smart_skip: "false" }, document.getElementById("runs-flash"));
 });
+document.getElementById("btn-run-std").addEventListener("click", function () {
+  if (!confirm("Запустить стандартный прогон (как ежедневный автозапуск)?\\n\\nSmart-skip: пропуск дел с известной будущей датой и нерабочих дней РФ. В выходной/праздник прогон сразу завершится строкой «нерабочий день РФ, парсинг пропущен» — это ожидаемо.")) return;
+  dispatchWorkflow("update_cases.yml", { smart_skip: "true" }, document.getElementById("runs-flash"));
+});
 
-// ── «Парсинг на Mac» (резерв): живой прогон крупно, старый — свёрнуто ────────
+// ── Живой лог прогона (GitHub Actions / Mac-резерв): живой крупно, старый — свёрнуто
 function progressAgo(iso) {
   const t = parseIso(iso);
   if (isNaN(t)) return "";
@@ -922,7 +948,78 @@ function progressAgo(iso) {
   if (s < 5400) return Math.round(s / 60) + " мин назад";
   return new Date(t).toLocaleString("ru-RU");
 }
+// Свёртка лога по фазам. Маркер — строка log_phase (runs.py):
+// «HH:MM:SS [INFO] — [3/9] Заголовок —». Формат — контракт: его же ловит
+// Mac-пушер (KEY_RE) и фиксирует тест scripts/tests/test_gh_progress_pusher.py.
+var LOG_PHASE_RE = /— \\[(\\d+)\\/(\\d+)\\] (.+?) —\\s*$/;
+function splitLogPhases(lines) {
+  var out = { pre: [], phases: [], summary: [] };
+  var list = (lines || []).map(function (x) { return String(x); });
+  // Финальную сводку (log_run_summary, рамка «====») выносим наружу —
+  // итог прогона виден без разворачивания фаз.
+  var si = -1;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].indexOf("Сводка прогона") >= 0) { si = i; break; }
+  }
+  if (si >= 0) {
+    var start = (si > 0 && list[si - 1].indexOf("====") >= 0) ? si - 1 : si;
+    out.summary = list.slice(start);
+    list = list.slice(0, start);
+  }
+  var cur = null;
+  list.forEach(function (line) {
+    var m = line.match(LOG_PHASE_RE);
+    if (m) {
+      cur = { num: m[1], total: m[2], title: m[3], lines: [], warns: 0, errs: 0 };
+      out.phases.push(cur);
+      return;
+    }
+    if (!cur) { out.pre.push(line); return; }
+    cur.lines.push(line);
+    if (line.indexOf("[ERROR]") >= 0) cur.errs++;
+    else if (line.indexOf("[WARNING]") >= 0) cur.warns++;
+  });
+  return out;
+}
+function logLineHtml(line) {
+  var esc = escHtml(line);
+  if (line.indexOf("[ERROR]") >= 0) return '<span class="log-line-err">' + esc + '</span>';
+  if (line.indexOf("[WARNING]") >= 0) return '<span class="log-line-warn">' + esc + '</span>';
+  return esc;
+}
+function renderLogGroups(el, lines, live) {
+  var g = splitLogPhases(lines);
+  // Открытые ВРУЧНУЮ фазы переживают 5-секундный ререндер; автооткрытая
+  // последняя (data-auto) не переносится — иначе к концу прогона остались бы
+  // открытыми все фазы, по которым прошёл «курсор» живого прогона.
+  var openSet = {};
+  el.querySelectorAll("details[data-phase]").forEach(function (d) {
+    if (d.open && !d.hasAttribute("data-auto")) openSet[d.getAttribute("data-phase")] = true;
+  });
+  var html = "";
+  if (g.pre.length) html += '<pre class="log-pre">' + g.pre.map(logLineHtml).join("\\n") + '</pre>';
+  g.phases.forEach(function (ph, idx) {
+    var autoOpen = live && idx === g.phases.length - 1;
+    var open = openSet[ph.num] || autoOpen;
+    var badges = (ph.errs ? ' <span class="log-err-badge">✖ ' + ph.errs + '</span>' : '')
+      + (ph.warns ? ' <span class="log-warn-badge">⚠ ' + ph.warns + '</span>' : '');
+    html += '<details class="fold" data-phase="' + escHtml(ph.num) + '"'
+      + (autoOpen && !openSet[ph.num] ? ' data-auto="1"' : '') + (open ? ' open' : '')
+      + '><summary><span class="log-phase-n">[' + escHtml(ph.num) + '/' + escHtml(ph.total) + ']</span> '
+      + escHtml(ph.title) + ' <span class="run-meta">' + ph.lines.length + ' стр.</span>' + badges + '</summary>'
+      + '<div class="fold-body"><pre class="log-pre">' + ph.lines.map(logLineHtml).join("\\n") + '</pre></div>'
+      + '</details>';
+  });
+  if (g.summary.length) html += '<pre class="log-pre log-summary">' + g.summary.map(logLineHtml).join("\\n") + '</pre>';
+  el.innerHTML = html || '<pre class="log-pre">…</pre>';
+}
+function progressSourceTitle(rec) {
+  // Старые записи Mac-пушера поля source не имеют → ветка Mac.
+  return rec && rec.source === "github" ? "Прогон (GitHub Actions)" : "Парсинг на Mac (резерв)";
+}
 let progressTimer = null;
+var lastProgressRenderKey = "";
+var lastPrevRenderKey = "";
 async function loadProgress() {
   try {
     const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
@@ -940,12 +1037,16 @@ async function loadProgress() {
       live.style.display = "none";
       stale.style.display = "";
       document.getElementById("mac-stale-sum").textContent =
-        "Резерв: парсинг на Mac — последний прогон " + fullDate(cur.updated_at);
-      document.getElementById("mac-stale-log").textContent = (cur.lines || []).join("\\n");
+        progressSourceTitle(cur) + " — завершён " + fullDate(cur.updated_at);
+      renderLogGroups(document.getElementById("mac-stale-log"), cur.lines || [], false);
       return;
     }
     stale.style.display = "none";
     live.style.display = "";
+    document.getElementById("mac-live-title").textContent = progressSourceTitle(cur);
+    var lk = document.getElementById("mac-live-link");
+    if (cur.link) { lk.href = cur.link; lk.style.display = ""; }
+    else { lk.style.display = "none"; }
     const st = document.getElementById("mac-live-state");
     st.textContent = running ? "идёт" : "завершён";
     st.className = "mac-live-state " + (running ? "running" : "done");
@@ -953,11 +1054,23 @@ async function loadProgress() {
       "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
     const logEl = document.getElementById("mac-live-log");
     const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-    logEl.textContent = (cur.lines || []).join("\\n");
-    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    // Ререндер только при новых строках/смене прогона: открытые details и
+    // скролл не дёргаются впустую (мета «обновлено…» обновляется всегда).
+    var renderKey = String(cur.run_id) + ":" + (cur.lines || []).length + ":" + running;
+    if (renderKey !== lastProgressRenderKey) {
+      lastProgressRenderKey = renderKey;
+      renderLogGroups(logEl, cur.lines || [], running);
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    }
     if (d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length) {
       document.getElementById("mac-prev").style.display = "";
-      document.getElementById("mac-prev-log").textContent = d.prev.lines.join("\\n");
+      document.getElementById("mac-prev-sum").textContent =
+        "Предыдущий прогон" + (d.prev.source === "github" ? " (GitHub Actions)" : " (Mac)");
+      var prevKey = String(d.prev.run_id) + ":" + d.prev.lines.length;
+      if (prevKey !== lastPrevRenderKey) {
+        lastPrevRenderKey = prevKey;
+        renderLogGroups(document.getElementById("mac-prev-log"), d.prev.lines, false);
+      }
     }
     clearTimeout(progressTimer);
     if (running) progressTimer = setTimeout(loadProgress, 5000);
