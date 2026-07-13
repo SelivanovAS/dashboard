@@ -851,7 +851,9 @@ async function loadGhRuns() {
         + '</div>';
     }).join("");
     // Плитка «Последний прогон» — по последнему запуску основного workflow.
-    const main = (d.runs || []).find(function (run) {
+    // Сервер отдаёт его отдельным полем main_run (в общем списке его могут
+    // вытеснить пары «Тесты+Pages»); фолбэк — поиск по списку.
+    const main = d.main_run || (d.runs || []).find(function (run) {
       return String(run.path || "").indexOf("update_cases.yml") >= 0;
     });
     if (main) {
