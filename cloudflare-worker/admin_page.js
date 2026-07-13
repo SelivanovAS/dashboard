@@ -1,6 +1,10 @@
 // Страница админки подписчиков (/admin) — отдельный модуль, чтобы не раздувать
 // worker.js. `wrangler deploy` бандлит импорт сам (esbuild).
 //
+// Дизайн v2 (13.07.2026, согласованный мокап): визуальный язык дашборда
+// (токены styles.css, IBM Plex, бейджи-пилюли, glass-шапка, 3-режимная тема),
+// IA — «пульт» из 4 плиток + секции #system / #llm / #subs с чипами-якорями.
+//
 // ⚠️ Экранирование: всё содержимое — ОДИН внешний template literal. Внутренний
 // JS страницы пишется БЕЗ template literals и без `${` (только конкатенация),
 // а backslash в его регексах/строках удваивается (`\\d`, `\\n`). Единственная
@@ -9,251 +13,666 @@
 export function renderAdminHtml(secret) {
   return `<!doctype html><html lang="ru"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>Подписчики · мониторинг дел</title>
+<title>Админка · мониторинг дел Сбера</title>
+<meta name="theme-color" content="#21a038">
+<script>
+  // Тема: 3 состояния — 'auto' | 'light' | 'dark' (паттерн дашборда, анти-FOUC).
+  (function(){
+    var ROOT = document.documentElement;
+    var MQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var listener = null;
+    function readPref(){
+      try { return localStorage.getItem('admin_theme') || 'auto'; } catch(e){ return 'auto'; }
+    }
+    function applyResolved(pref){
+      var resolved = (pref === 'auto') ? (MQ.matches ? 'dark' : 'light') : pref;
+      ROOT.setAttribute('data-theme', resolved);
+      ROOT.setAttribute('data-theme-pref', pref);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0f1217' : '#21a038');
+    }
+    function bindAuto(pref){
+      if (listener) {
+        if (MQ.removeEventListener) MQ.removeEventListener('change', listener);
+        else MQ.removeListener(listener);
+        listener = null;
+      }
+      if (pref === 'auto') {
+        listener = function(){ applyResolved('auto'); };
+        if (MQ.addEventListener) MQ.addEventListener('change', listener);
+        else MQ.addListener(listener);
+      }
+    }
+    function setTheme(pref){
+      try { localStorage.setItem('admin_theme', pref); } catch(e){}
+      applyResolved(pref);
+      bindAuto(pref);
+    }
+    window.toggleTheme = function(){
+      var order = ['auto', 'light', 'dark'];
+      var cur = readPref();
+      var next = order[(order.indexOf(cur) + 1) % order.length];
+      setTheme(next);
+    };
+    var initial = readPref();
+    applyResolved(initial);
+    bindAuto(initial);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
 <style>
+/* ═══ Токены — перенос из styles.css дашборда ═══ */
 :root {
-  color-scheme: light dark;
-  --fg: #14181f; --fg-2: #4a5160; --fg-3: #707788;
-  --bg: #f7f9fb; --bg-1: #fff; --bg-2: #eef1f5;
-  --border: #e0e4eb; --accent: #21a038; --amber: #f59e0b;
+  --sber-green-700: #157f3a;
+  --sber-green-600: #1a9f29;
+  --sber-green-500: #21a038;
+  --sber-green-100: #e1f5e5;
+  --sber-green-50:  #f1faf3;
+
+  --gray-900: #14181f; --gray-700: #2d333d; --gray-600: #4a5160;
+  --gray-500: #6b7280; --gray-400: #9aa0ac; --gray-300: #c8ccd4;
+  --gray-200: #e4e7eb; --gray-150: #eef0f3; --gray-100: #f4f6f8;
+  --white: #ffffff;
+
+  --blue-700: #1e4dbb; --blue-500: #3b82f6; --blue-100: #dbeafe;
+  --amber-700: #92400e; --amber-600: #d97706; --amber-500: #f59e0b; --amber-100: #fef3c7;
+  --red-700: #991b1b; --red-600: #dc2626; --red-500: #ef4444; --red-100: #fee2e2;
+  --violet-700: #6d28d9; --violet-100: #ede9fe;
+  --teal-800: #115e59; --teal-100: #ccfbf1;
+  --indigo-700: #3730a3; --indigo-100: #e0e7ff;
+  --green-favorable-fg: #065f46; --green-favorable-bg: #d1fae5;
+
+  --fg-1: var(--gray-900); --fg-2: var(--gray-700); --fg-3: var(--gray-600); --fg-4: var(--gray-500);
+  --bg-1: var(--white); --bg-2: #eceef2; --bg-3: var(--gray-100); --bg-4: var(--gray-150);
+  --border: var(--gray-200); --border-strong: var(--gray-300); --divider: var(--gray-150);
+
+  --accent: var(--sber-green-500);
+  --accent-hover: var(--sber-green-600);
+  --accent-active: var(--sber-green-700);
+  --accent-bg-soft: var(--sber-green-50);
+  --accent-bg-strong: var(--sber-green-100);
+  --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
+
+  --stage-fi-fg: var(--teal-800);       --stage-fi-bg: var(--teal-100);
+  --stage-appeal-fg: var(--indigo-700); --stage-appeal-bg: var(--indigo-100);
+  --stage-cass-fg: var(--violet-700);   --stage-cass-bg: var(--violet-100);
+
+  --success-bg: var(--green-favorable-bg); --success-fg: var(--green-favorable-fg);
+  --warning-bg: var(--amber-100); --warning-fg: var(--amber-700);
+  --danger-bg: var(--red-100); --danger-fg: var(--red-700);
+  --info-bg: var(--blue-100); --info-fg: var(--blue-700);
+
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px;
+  --fs-lg: 16px; --fs-xl: 18px; --fs-2xl: 22px; --fs-3xl: 28px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+  --radius-xs: 4px; --radius-sm: 6px; --radius: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+
+  --shadow-1: 0 1px 2px rgba(13,17,22,0.04);
+  --shadow-md: 0 2px 6px rgba(13,17,22,0.06), 0 1px 2px rgba(13,17,22,0.04);
+  --shadow-lg: 0 8px 24px rgba(13,17,22,0.08), 0 2px 6px rgba(13,17,22,0.04);
+
+  --glass-bg: rgba(236, 238, 242, 0.72);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-blur: saturate(180%) blur(24px);
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms; --dur-base: 180ms;
+
+  --content-max: 1140px;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fg-1: #ecedef; --fg-2: #c5c8cf; --fg-3: #a8aeba; --fg-4: #80868f;
+  --bg-1: #181c22; --bg-2: #0f1217; --bg-3: #232830; --bg-4: #2c333d;
+  --border: #2a2f38; --border-strong: #3a414c; --divider: #232830;
+  --accent: #2fbf4a; --accent-hover: #3fd05c; --accent-active: #2aa540;
+  --accent-bg-soft: rgba(47,191,74,0.10); --accent-bg-strong: rgba(47,191,74,0.20);
+  --focus-ring: 0 0 0 3px rgba(47,191,74,0.40);
+  --stage-fi-fg: #5eead4;     --stage-fi-bg: rgba(20,184,166,0.16);
+  --stage-appeal-fg: #c7d2fe; --stage-appeal-bg: rgba(99,102,241,0.18);
+  --stage-cass-fg: #c4b5fd;   --stage-cass-bg: rgba(139,92,246,0.20);
+  --success-bg: rgba(47,191,74,0.18); --success-fg: #86efac;
+  --warning-bg: rgba(245,158,11,0.18); --warning-fg: #f4c97c;
+  --danger-bg: rgba(239,68,68,0.18); --danger-fg: #fca5a5;
+  --info-bg: rgba(59,130,246,0.18); --info-fg: #8ab4ff;
+  --amber-100: rgba(245,158,11,0.18); --amber-700: #f4c97c;
+  --red-100: rgba(239,68,68,0.18); --red-700: #fca5a5;
+  --blue-100: rgba(59,130,246,0.18); --blue-700: #8ab4ff;
+  --green-favorable-bg: rgba(47,191,74,0.18); --green-favorable-fg: #86efac;
+  --glass-bg: rgba(15, 18, 23, 0.66);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.40), 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.30);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --fg:#e8ecf2; --fg-2:#aab1bf; --fg-3:#7a8090; --bg:#0e1116; --bg-1:#161b22; --bg-2:#1f252e; --border:#2a313c; }
+  :root:not([data-theme="light"]):not([data-theme="dark"]) { color-scheme: dark; }
 }
-* { box-sizing: border-box; }
-body { margin:0; padding:16px; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;
-       background:var(--bg); color:var(--fg); font-size:14px; line-height:1.5; }
-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
-         margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
-h1 { margin:0; font-size:18px; font-weight:600; }
-.refresh { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px;
-           font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
-.refresh:hover { opacity:0.92; }
-.refresh:disabled { opacity:0.6; cursor:default; }
-.summary { color:var(--fg-3); font-size:13px; }
-.subs { display:flex; flex-direction:column; gap:10px; }
-.sub-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
-.sub-row { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:baseline; }
-.sub-device { font-weight:600; }
-.badge-owner { display:inline-block; background:rgba(245,158,11,0.14); color:var(--amber);
-               padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; }
-.badge-expiry { display:inline-block; background:rgba(245,158,11,0.14); color:var(--amber);
-                padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-.kv { color:var(--fg-3); font-size:12px; }
-.kv b { color:var(--fg-2); font-weight:500; }
-.endpoint { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:11px;
-            overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
-.actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-.btn { background:var(--bg-2); color:var(--fg-2); border:1px solid var(--border); padding:5px 10px;
-       border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; line-height:1.2; }
-.btn:hover { background:var(--bg-1); color:var(--fg); }
-.btn:disabled { opacity:0.55; cursor:default; }
-.btn-danger:hover { color:#dc2626; border-color:#dc2626; }
-.label-name { color:var(--fg); font-weight:600; }
-.label-empty { color:var(--fg-3); font-style:italic; font-weight:400; }
-.action-flash { font-size:11px; color:var(--fg-3); margin-left:6px; }
-.action-flash.ok { color:var(--accent); }
-.action-flash.err { color:#dc2626; }
-.last-push { margin-top:8px; padding:10px 12px; background:var(--bg-2); border-radius:8px;
-             border-left:3px solid var(--accent); font-size:13px; }
-.last-push.broadcast { border-left-color:#3b82f6; }
-.last-push.general { border-left-color:#f59e0b; }
-.last-push.skip { border-left-color:#94a3b8; opacity:0.7; }
-.last-push-head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:4px; }
-.last-push-variant { font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
-                     padding:1px 8px; border-radius:999px; background:rgba(33,168,92,0.16); color:var(--accent); }
-.last-push.broadcast .last-push-variant { background:rgba(59,130,246,0.16); color:#3b82f6; }
-.last-push.general .last-push-variant { background:rgba(245,158,11,0.16); color:#b45309; }
-.last-push.skip .last-push-variant { background:rgba(148,163,184,0.18); color:var(--fg-3); }
-.last-push-title { font-weight:600; color:var(--fg); }
-.last-push-body { color:var(--fg-2); margin-top:2px; }
-.last-push-meta { color:var(--fg-3); font-size:12px; margin-top:4px; }
-.last-push-meta a { color:var(--accent); text-decoration:none; word-break:break-all; }
-.last-push-meta a:hover { text-decoration:underline; }
-.last-push-empty { color:var(--fg-3); font-style:italic; padding:6px 0 0; font-size:12px; }
-.progress-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
-                 padding:12px 14px; margin-bottom:14px; }
-.progress-head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
-.progress-title { font-weight:600; }
-.progress-state { font-weight:700; }
-.progress-state.running { color:var(--amber); }
-.progress-state.done { color:var(--accent); }
-.progress-meta { color:var(--fg-3); font-size:12px; }
-.progress-log { margin:8px 0 0; padding:10px 12px; background:var(--bg-2); border-radius:8px;
-                font-family:ui-monospace,Menlo,monospace; font-size:11.5px; line-height:1.55;
-                max-height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
-.runs-list { margin-top:8px; display:flex; flex-direction:column; }
-.run-row { display:flex; gap:8px; align-items:baseline; padding:4px 0; flex-wrap:wrap;
-           border-bottom:1px dashed var(--border); }
+html { transition: background-color 200ms var(--ease-out); }
+body, .app-header, .card, .stat-card, .chip-btn, .badge, .btn-refresh, .theme-toggle, .sub-card {
+  transition: background-color 200ms var(--ease-out), border-color 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+
+/* ═══ База ═══ */
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { overflow-x:hidden; max-width:100%; }
+body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--fg-1);
+  background: var(--bg-2);
+  font-variant-numeric: tabular-nums;
+}
+a { color: var(--accent); }
+
+/* ═══ Шапка ═══ */
+.app-header { position:sticky; top:0; z-index:100; background:var(--glass-bg);
+  -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+  border-bottom:1px solid var(--glass-border); padding:0 20px; }
+@supports not (backdrop-filter: blur(1px)) { .app-header { background:var(--bg-2); } }
+.header-inner { max-width:var(--content-max); margin:0 auto; display:flex; align-items:center;
+  gap:16px; padding:10px 0; min-height:56px; flex-wrap:wrap; }
+.header-brand { display:flex; align-items:center; gap:10px; margin-right:4px; }
+.header-logo { width:32px; height:32px; flex-shrink:0; display:inline-flex; align-items:center;
+  justify-content:center; border-radius:8px; background:var(--accent); color:#fff; }
+.header-logo svg { width:18px; height:18px; }
+.header-title { font-size:var(--fs-xl); font-weight:var(--fw-bold); letter-spacing:-0.01em; line-height:1.2; white-space:nowrap; }
+.header-sub { font-size:var(--fs-2xs); color:var(--fg-3); line-height:1.2; }
+.header-nav { display:flex; gap:6px; align-items:center; flex:1; min-width:0; overflow-x:auto;
+  scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.header-nav::-webkit-scrollbar { display:none; }
+.header-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.header-meta { font-size:var(--fs-xs); color:var(--fg-3); text-align:right; line-height:1.35; white-space:nowrap; }
+.header-meta b { color:var(--fg-1); font-weight:var(--fw-semibold); }
+
+.chip-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border);
+  border-radius:var(--radius-pill); background:var(--bg-1); color:var(--fg-2); font-size:var(--fs-sm);
+  font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out);
+  font-family:var(--font-sans); white-space:nowrap; line-height:1.3; text-decoration:none; }
+.chip-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.chip-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px;
+  padding:0 5px; border-radius:8px; background:var(--bg-3); color:var(--fg-3); font-size:10px; font-weight:var(--fw-bold); }
+.chip-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
+
+.theme-toggle { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px;
+  padding:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2);
+  border-radius:var(--radius); cursor:pointer; transition:all 120ms var(--ease-out); flex-shrink:0; }
+.theme-toggle:hover { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
+.theme-toggle:active { transform:scale(0.94); }
+.theme-toggle svg { width:17px; height:17px; }
+.theme-toggle .icon-moon, .theme-toggle .icon-sun, .theme-toggle .icon-auto { display:none; }
+:root[data-theme-pref="auto"]  .theme-toggle .icon-auto { display:inline; }
+:root[data-theme-pref="light"] .theme-toggle .icon-sun  { display:inline; }
+:root[data-theme-pref="dark"]  .theme-toggle .icon-moon { display:inline; }
+
+.btn-refresh { display:inline-flex; align-items:center; gap:7px; padding:8px 14px; background:var(--bg-1);
+  color:var(--fg-1); border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm);
+  font-weight:var(--fw-semibold); font-family:var(--font-sans); cursor:pointer; transition:all 120ms var(--ease-out); flex-shrink:0; }
+.btn-refresh:hover { background:var(--bg-3); border-color:var(--border-strong); }
+.btn-refresh:active { transform:scale(0.97); }
+.btn-refresh svg { width:15px; height:15px; }
+
+/* ═══ Контент ═══ */
+.app-main { max-width:var(--content-max); margin:0 auto; padding:20px 20px 48px; }
+
+/* Пульт */
+.pult { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:26px; }
+.stat-card { background:var(--bg-1); border-radius:var(--radius-md); padding:12px 14px;
+  box-shadow:var(--shadow-1); border-left:3px solid var(--border-strong);
+  transition:box-shadow 150ms var(--ease-out); cursor:pointer; text-align:left;
+  border-top:0; border-right:0; border-bottom:0; font-family:var(--font-sans);
+  display:block; width:100%; min-width:0; }
+.stat-card:hover { box-shadow:var(--shadow-md); }
+.stat-card[data-accent="green"] { border-left-color:var(--accent); }
+.stat-card[data-accent="red"]   { border-left-color:var(--red-500); }
+.stat-card[data-accent="amber"] { border-left-color:var(--amber-500); }
+.stat-card[data-accent="blue"]  { border-left-color:var(--blue-500); }
+.stat-card[data-accent="gray"]  { border-left-color:var(--border-strong); }
+.stat-label { font-size:var(--fs-2xs); color:var(--fg-3); font-weight:var(--fw-semibold);
+  text-transform:uppercase; letter-spacing:0.05em; }
+.stat-value { font-size:var(--fs-2xl); font-weight:var(--fw-bold); letter-spacing:-0.02em;
+  line-height:1.15; color:var(--fg-1); margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.stat-sub { font-size:var(--fs-xs); color:var(--fg-3); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Секции */
+.section { margin-bottom:30px; scroll-margin-top:76px; }
+.section-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.section-icon { width:30px; height:30px; border-radius:var(--radius-md); background:var(--accent-bg-strong);
+  color:var(--accent-active); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+:root[data-theme="dark"] .section-icon { color:var(--accent); }
+.section-icon svg { width:16px; height:16px; }
+.section-title { font-size:var(--fs-lg); font-weight:var(--fw-bold); letter-spacing:-0.01em; }
+.section-counter { display:inline-block; padding:2px 10px; border-radius:var(--radius-pill);
+  background:var(--bg-4); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); }
+.section-head .spacer { flex:1; }
+
+.card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-1); padding:14px 16px; }
+.card-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+.card-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); }
+.card-head .spacer { flex:1; }
+
+.system-grid { display:grid; grid-template-columns:7fr 5fr; gap:14px; align-items:start; }
+
+/* Кнопки */
+.btn-primary { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; background:var(--accent);
+  color:#fff; border:none; border-radius:var(--radius); font-size:var(--fs-sm); font-weight:var(--fw-semibold);
+  cursor:pointer; font-family:var(--font-sans); transition:background 120ms var(--ease-out); }
+.btn-primary:hover { background:var(--accent-hover); }
+.btn-primary:active { background:var(--accent-active); transform:scale(0.98); }
+.btn-primary:disabled { opacity:0.6; cursor:default; }
+.btn-primary svg { width:13px; height:13px; }
+.btn-outline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-1);
+  border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm); cursor:pointer;
+  color:var(--fg-1); font-weight:var(--fw-semibold); font-family:var(--font-sans); transition:all 120ms var(--ease-out); }
+.btn-outline:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.btn-outline:disabled { opacity:0.6; cursor:default; }
+.btn-outline.btn-danger { color:var(--danger-fg); }
+.btn-outline.btn-danger:hover { border-color:var(--red-500); background:var(--danger-bg); }
+.btn-icon { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px;
+  padding:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-3);
+  border-radius:var(--radius); cursor:pointer; transition:all 120ms var(--ease-out); }
+.btn-icon:hover { background:var(--bg-3); color:var(--fg-1); border-color:var(--border-strong); }
+.btn-icon svg { width:14px; height:14px; }
+
+/* Бейджи */
+.badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:var(--radius-pill);
+  font-size:var(--fs-2xs); font-weight:var(--fw-semibold); white-space:nowrap; line-height:1.3; }
+.badge-owner { background:var(--warning-bg); color:var(--warning-fg); font-weight:var(--fw-bold);
+  letter-spacing:0.03em; text-transform:uppercase; }
+.badge-expiry { background:var(--warning-bg); color:var(--warning-fg); }
+.badge-device { background:var(--bg-3); color:var(--fg-2); font-weight:var(--fw-medium); }
+.badge-ok   { background:var(--success-bg); color:var(--success-fg); }
+.badge-fail { background:var(--danger-bg); color:var(--danger-fg); }
+.badge-run  { background:var(--warning-bg); color:var(--warning-fg); }
+.badge-skip { background:var(--bg-4); color:var(--fg-3); }
+.badge-fi        { background:var(--stage-fi-bg); color:var(--stage-fi-fg); font-weight:var(--fw-bold); letter-spacing:0.02em; }
+.badge-appeal    { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); font-weight:var(--fw-bold); letter-spacing:0.02em; }
+.badge-cassation { background:var(--stage-cass-bg); color:var(--stage-cass-fg); font-weight:var(--fw-bold); letter-spacing:0.02em; }
+.badge-watch     { background:var(--info-bg); color:var(--info-fg); }
+
+/* Статусные точки */
+.dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.dot-green { background:var(--accent); }
+.dot-red   { background:var(--red-500); }
+.dot-amber { background:var(--amber-500); }
+.dot-gray  { background:var(--gray-400); }
+.dot-pulse { animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+@media (prefers-reduced-motion: reduce) { .dot-pulse { animation:none; } }
+
+/* Прогоны */
+.run-row { display:flex; align-items:baseline; gap:10px; padding:7px 0; border-bottom:1px solid var(--divider); }
 .run-row:last-child { border-bottom:0; }
-.run-name { font-weight:600; color:var(--fg); text-decoration:none; }
+.run-row .dot { align-self:center; }
+.run-name { font-weight:var(--fw-semibold); color:var(--fg-1); text-decoration:none; font-size:var(--fs-sm); }
 .run-name:hover { color:var(--accent); }
-.run-meta { color:var(--fg-3); font-size:12px; }
-.digest-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
-               padding:10px 14px; margin-bottom:14px; font-size:13px; color:var(--fg-2);
-               display:flex; gap:4px 10px; flex-wrap:wrap; align-items:baseline; }
-.digest-card a { color:var(--accent); text-decoration:none; }
-.digest-card a:hover { text-decoration:underline; }
-.dot { color:var(--fg-3); }
-.health-row { display:flex; gap:10px; align-items:baseline; padding:3px 0; font-size:12.5px; flex-wrap:wrap; }
-.health-name { min-width:230px; }
-.health-spark { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); letter-spacing:1px; }
-.health-meta { color:var(--fg-3); font-size:12px; }
-details { margin-top:10px; }
-details > summary { cursor:pointer; color:var(--fg-2); font-size:13px; padding:6px 0; outline:none;
-                    user-select:none; }
-details > summary:hover { color:var(--fg); }
-.llm-top { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
-           padding:2px 14px 10px; margin:0 0 14px; }
-.llm-top > summary { font-weight:600; color:var(--fg); font-size:13.5px; }
-.llm-row { padding:3px 0; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
-.llm-row b { display:inline-block; min-width:52px; }
-.llm-meta { color:var(--fg-3); font-size:12px; margin-top:8px; }
-.llm-meta a { color:var(--accent); }
-.tf { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);
-      display:flex; flex-direction:column; gap:8px; }
-.tf-row { display:flex; gap:8px 16px; flex-wrap:wrap; align-items:center; font-size:13px; }
-.tf-row label { display:flex; gap:6px; align-items:center; color:var(--fg-2); }
-.tf select, .tf input[type=text] { font-family:inherit; font-size:13px; padding:4px 8px;
-      border-radius:6px; border:1px solid var(--border); background:var(--bg-2); color:var(--fg); }
-.tf input[type=text] { min-width:220px; }
-.cases { margin-top:6px; padding-left:8px; border-left:2px solid var(--border); display:flex;
-         flex-direction:column; gap:4px; }
-.case-row { display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; padding:4px 0;
-            border-bottom:1px dashed var(--border); }
+.run-meta { color:var(--fg-3); font-size:var(--fs-xs); }
+.run-ext { margin-left:auto; color:var(--fg-4); flex-shrink:0; align-self:center; display:inline-flex; }
+.run-ext svg { width:13px; height:13px; }
+.run-ext:hover { color:var(--accent); }
+.action-flash { font-size:var(--fs-2xs); color:var(--fg-3); }
+.action-flash.ok { color:var(--accent); }
+.action-flash.err { color:var(--red-600); }
+:root[data-theme="dark"] .action-flash.err { color:var(--danger-fg); }
+
+/* Здоровье */
+.health-row { display:flex; align-items:baseline; gap:9px; padding:5px 0; font-size:var(--fs-sm);
+  border-bottom:1px solid var(--divider); }
+.health-row:last-child { border-bottom:0; }
+.health-row .dot { align-self:center; width:8px; height:8px; }
+.health-name { color:var(--fg-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.health-spark { font-family:var(--font-code); color:var(--fg-4); font-size:var(--fs-xs);
+  letter-spacing:1px; margin-left:auto; flex-shrink:0; }
+.health-count { color:var(--fg-1); font-weight:var(--fw-semibold); font-size:var(--fs-xs);
+  min-width:22px; text-align:right; flex-shrink:0; }
+.health-note { color:var(--warning-fg); font-size:var(--fs-2xs); flex-shrink:0; }
+.health-more { color:var(--fg-3); font-size:var(--fs-xs); padding-top:8px; }
+
+/* Details-свёртки */
+details.fold { margin-top:8px; }
+details.fold > summary { cursor:pointer; color:var(--fg-3); font-size:var(--fs-sm);
+  font-weight:var(--fw-medium); padding:5px 0; user-select:none; list-style:none;
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+details.fold > summary::-webkit-details-marker { display:none; }
+details.fold > summary::before { content:''; width:0; height:0; border-left:5px solid var(--fg-4);
+  border-top:4px solid transparent; border-bottom:4px solid transparent; transition:transform 120ms var(--ease-out); flex-shrink:0; }
+details.fold[open] > summary::before { transform:rotate(90deg); }
+details.fold > summary:hover { color:var(--fg-1); }
+.fold-body { padding:6px 0 2px 14px; }
+.log-pre { padding:10px 12px; background:var(--bg-2); border-radius:var(--radius-md);
+  font-family:var(--font-code); font-size:var(--fs-2xs); line-height:1.55; max-height:300px;
+  overflow:auto; white-space:pre-wrap; word-break:break-word; color:var(--fg-2); }
+
+/* Живой Mac-прогон */
+.mac-live { margin-top:10px; padding-top:10px; border-top:1px solid var(--divider); }
+.mac-live-head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
+.mac-live-title { font-weight:var(--fw-semibold); font-size:var(--fs-sm); }
+.mac-live-state { font-weight:var(--fw-bold); font-size:var(--fs-sm); }
+.mac-live-state.running { color:var(--warning-fg); }
+.mac-live-state.done { color:var(--accent); }
+
+/* LLM */
+.llm-row { display:flex; align-items:baseline; gap:10px; padding:5px 0; font-size:var(--fs-sm);
+  border-bottom:1px solid var(--divider); flex-wrap:wrap; }
+.llm-row:last-child { border-bottom:0; }
+.llm-rank { min-width:44px; color:var(--fg-3); font-weight:var(--fw-bold); font-size:var(--fs-xs); }
+.llm-id { font-family:var(--font-code); font-size:var(--fs-xs); color:var(--fg-1); word-break:break-all; }
+.llm-ctx { color:var(--fg-4); font-size:var(--fs-2xs); }
+.llm-updated { color:var(--fg-3); font-size:var(--fs-xs); margin-top:8px; }
+
+.tform { margin-top:12px; padding-top:12px; border-top:1px solid var(--divider);
+  display:flex; flex-direction:column; gap:10px; }
+.tform-row { display:flex; gap:8px 18px; flex-wrap:wrap; align-items:center; font-size:var(--fs-sm); }
+.tform-row label { display:flex; gap:7px; align-items:center; color:var(--fg-2); font-weight:var(--fw-medium); }
+.tform select, .tform input[type=text] { font-family:var(--font-sans); font-size:var(--fs-sm);
+  padding:6px 10px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--bg-1); color:var(--fg-1); font-weight:var(--fw-medium); }
+.tform select:focus, .tform input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.tform input[type=text] { min-width:220px; }
+.tform input[type=checkbox] { accent-color:var(--accent); width:15px; height:15px; }
+.tform-hint { font-size:var(--fs-xs); color:var(--fg-3); }
+.warn-mark { color:var(--amber-600); font-weight:var(--fw-bold); }
+
+/* Поиск подписчиков */
+.search-box { display:flex; align-items:center; gap:8px; padding:7px 14px; background:var(--bg-1);
+  border:1px solid var(--border); border-radius:var(--radius-pill); min-width:230px; }
+.search-box:focus-within { border-color:var(--accent); box-shadow:var(--focus-ring); }
+.search-box svg { width:14px; height:14px; color:var(--fg-4); flex-shrink:0; }
+.search-input { border:none; outline:none; background:transparent; font-size:var(--fs-sm);
+  color:var(--fg-1); flex:1; font-family:var(--font-sans); font-weight:var(--fw-medium); min-width:0; }
+.search-input::placeholder { color:var(--fg-4); }
+
+/* Карточки подписчиков v2 */
+.subs { display:flex; flex-direction:column; gap:10px; }
+.sub-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-1); padding:12px 16px; }
+.sub-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sub-name { font-size:var(--fs-lg); font-weight:var(--fw-semibold); }
+.sub-name.unnamed { color:var(--fg-4); font-style:italic; font-weight:var(--fw-medium); }
+.sub-actions { display:flex; gap:6px; margin-left:auto; align-items:center; flex-wrap:wrap; }
+.sub-kv { display:flex; gap:4px 14px; flex-wrap:wrap; font-size:var(--fs-xs); color:var(--fg-3); margin-top:5px; }
+.sub-kv b { color:var(--fg-2); font-weight:var(--fw-medium); }
+
+.case-row { display:flex; gap:8px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--divider);
+  flex-wrap:wrap; font-size:var(--fs-sm); }
 .case-row:last-child { border-bottom:0; }
-.case-num { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--accent); min-width:140px; }
+.case-num { font-family:var(--font-code); font-weight:var(--fw-semibold); font-size:var(--fs-xs); color:var(--fg-1); white-space:nowrap; }
+.case-alias { font-family:var(--font-code); color:var(--fg-4); font-size:var(--fs-2xs);
+  background:var(--bg-3); padding:1px 6px; border-radius:var(--radius-xs); white-space:nowrap; }
 .case-parties { color:var(--fg-2); }
-.case-meta { color:var(--fg-3); font-size:12px; }
-.case-alias { font-family:ui-monospace,Menlo,monospace; color:var(--fg-3); font-size:12px;
-              background:rgba(127,127,127,0.10); padding:1px 6px; border-radius:4px; }
-dialog.wl { border:1px solid var(--border); border-radius:12px; background:var(--bg-1); color:var(--fg);
-            padding:16px; width:min(560px, calc(100vw - 32px)); max-height:88vh; }
-dialog.wl::backdrop { background:rgba(0,0,0,0.45); }
-.wl-head { font-weight:600; margin-bottom:10px; }
-.wl-search { width:100%; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
-             background:var(--bg-2); color:var(--fg); font-family:inherit; font-size:13px; margin-bottom:8px; }
-.wl-list { max-height:42vh; overflow:auto; display:flex; flex-direction:column;
-           border:1px solid var(--border); border-radius:8px; padding:4px 10px; }
-.wl-row { display:flex; gap:8px; align-items:baseline; padding:5px 0; font-size:13px;
-          border-bottom:1px dashed var(--border); cursor:pointer; }
-.wl-row:last-child { border-bottom:0; }
-.wl-row input { margin:0; flex-shrink:0; position:relative; top:2px; }
-.wl-num { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--accent); }
-.wl-parties { color:var(--fg-2); font-size:12.5px; }
-.wl-manual { display:flex; gap:6px; margin-top:8px; }
-.wl-manual input { flex:1; padding:6px 10px; border-radius:6px; border:1px solid var(--border);
-                   background:var(--bg-2); color:var(--fg); font-family:inherit; font-size:13px; }
-.wl-foot { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
-.wl-count { color:var(--fg-3); font-size:12px; margin-right:auto; }
-.empty { color:var(--fg-3); font-style:italic; padding:6px 0; }
-.error { color:#dc2626; padding:12px; background:rgba(220,38,38,0.08); border-radius:8px; }
+.case-court { color:var(--fg-4); font-size:var(--fs-xs); }
+.push-box { margin-top:6px; padding:9px 12px; background:var(--bg-2); border-radius:var(--radius-md);
+  border-left:3px solid var(--accent); font-size:var(--fs-sm); }
+.push-box.skip { border-left-color:var(--gray-400); opacity:0.75; }
+.push-box.general { border-left-color:var(--amber-500); }
+.push-box.broadcast { border-left-color:var(--blue-500); }
+.push-title { font-weight:var(--fw-semibold); }
+.push-body { color:var(--fg-2); margin-top:2px; font-size:var(--fs-xs); }
+.push-meta { color:var(--fg-3); font-size:var(--fs-2xs); margin-top:4px; word-break:break-all; }
+.push-meta a { color:var(--accent); text-decoration:none; }
+.push-meta a:hover { text-decoration:underline; }
+
+.empty { color:var(--fg-4); font-style:italic; font-size:var(--fs-sm); padding:4px 0; }
+.error { color:var(--danger-fg); padding:12px; background:var(--danger-bg); border-radius:var(--radius-md); }
 .loading { color:var(--fg-3); padding:24px; text-align:center; }
-@media (max-width: 600px) {
-  .endpoint { max-width:100%; white-space:normal; word-break:break-all; }
-  .case-num { min-width:auto; }
-  .health-name { min-width:0; }
+
+/* Модалка watchlist */
+dialog.wl { border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-1);
+  color:var(--fg-1); padding:18px; width:min(560px, calc(100vw - 32px)); max-height:86vh;
+  box-shadow:var(--shadow-lg); }
+dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
+.wl-head { font-weight:var(--fw-semibold); font-size:var(--fs-lg); margin-bottom:12px; }
+.wl-search { width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1px solid var(--border);
+  background:var(--bg-2); color:var(--fg-1); font-family:var(--font-sans); font-size:var(--fs-sm); margin-bottom:10px; }
+.wl-search:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.wl-list { max-height:40vh; overflow:auto; display:flex; flex-direction:column;
+  border:1px solid var(--border); border-radius:var(--radius-md); padding:4px 12px; }
+.wl-row { display:flex; gap:9px; align-items:baseline; padding:7px 0; font-size:var(--fs-sm);
+  border-bottom:1px solid var(--divider); cursor:pointer; flex-wrap:wrap; }
+.wl-row:last-child { border-bottom:0; }
+.wl-row input { flex-shrink:0; position:relative; top:2px; accent-color:var(--accent); }
+.wl-parties { color:var(--fg-2); font-size:var(--fs-xs); }
+.wl-manual { display:flex; gap:6px; margin-top:10px; }
+.wl-manual input { flex:1; padding:7px 11px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--bg-2); color:var(--fg-1); font-family:var(--font-sans); font-size:var(--fs-sm); min-width:0; }
+.wl-manual input:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.wl-foot { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:14px; }
+.wl-count { color:var(--fg-3); font-size:var(--fs-xs); margin-right:auto; }
+
+/* ═══ Мобильная раскладка ═══ */
+@media (max-width: 768px) {
+  .app-header { padding:0 14px; }
+  .header-inner { row-gap:4px; padding:8px 0 10px; }
+  .header-meta { display:none; }
+  .btn-refresh span { display:none; }
+  .btn-refresh { padding:8px 10px; }
+  .header-nav { order:10; flex-basis:100%; }
+  .app-main { padding:14px 14px 40px; }
+  .pult { grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:22px; }
+  .stat-card { padding:10px 12px; }
+  .stat-value { font-size:var(--fs-xl); }
+  .system-grid { grid-template-columns:1fr; }
+  .section { scroll-margin-top:104px; }
+  .sub-actions { margin-left:0; flex-basis:100%; margin-top:8px; }
+  .health-name { max-width:44vw; }
+  .tform input[type=text] { min-width:0; flex:1; }
+  .search-box { min-width:0; flex:1; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  .system-grid { grid-template-columns:1fr; }
 }
 </style>
 </head><body>
-<header>
-  <h1>📡 Подписчики · мониторинг дел Сбера</h1>
-  <div style="display:flex;gap:8px;align-items:center;">
-    <span class="summary" id="summary">…</span>
-    <button class="refresh" onclick="refreshAll()">Обновить</button>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <span class="header-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>
+      </span>
+      <div>
+        <div class="header-title">Админка</div>
+        <div class="header-sub">мониторинг дел Сбера</div>
+      </div>
+    </div>
+    <nav class="header-nav" id="nav">
+      <a class="chip-btn active" href="#system">Система</a>
+      <a class="chip-btn" href="#llm">LLM</a>
+      <a class="chip-btn" href="#subs">Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
+    </nav>
+    <div class="header-actions">
+      <div class="header-meta" id="summary">…</div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="btn-refresh" onclick="refreshAll()" title="Обновить данные">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        <span>Обновить</span>
+      </button>
+    </div>
   </div>
 </header>
-<div class="progress-card" id="runs-card">
-  <div class="progress-head">
-    <span class="progress-title">🚀 Прогоны GitHub Actions</span>
-    <span class="progress-meta" id="runs-next"></span>
-    <button class="btn" id="btn-run-main" style="margin-left:auto;">▶ Полный прогон</button>
-    <span class="action-flash" id="runs-flash"></span>
+
+<main class="app-main">
+
+  <div class="pult">
+    <button class="stat-card" data-accent="gray" data-goto="#system">
+      <div class="stat-label">Последний прогон</div>
+      <div class="stat-value" id="tile-run-value">…</div>
+      <div class="stat-sub" id="tile-run-sub"></div>
+    </button>
+    <button class="stat-card" data-accent="blue" data-goto="#system">
+      <div class="stat-label">Дайджест</div>
+      <div class="stat-value" id="tile-digest-value">…</div>
+      <div class="stat-sub" id="tile-digest-sub"></div>
+    </button>
+    <button class="stat-card" data-accent="gray" data-goto="#system">
+      <div class="stat-label">Парсеры</div>
+      <div class="stat-value" id="tile-health-value">…</div>
+      <div class="stat-sub" id="tile-health-sub"></div>
+    </button>
+    <button class="stat-card" data-accent="gray" data-goto="#system">
+      <div class="stat-label">Автозапуск</div>
+      <div class="stat-value" id="tile-cron-value">…</div>
+      <div class="stat-sub" id="tile-cron-sub"></div>
+    </button>
   </div>
-  <div class="runs-list" id="runs-list">Загрузка…</div>
-</div>
-<div class="progress-card" id="progress-card" style="display:none;">
-  <div class="progress-head">
-    <span class="progress-title">🛰 Парсинг на Mac</span>
-    <span class="progress-state" id="progress-state"></span>
-    <span class="progress-meta" id="progress-meta"></span>
-  </div>
-  <pre class="progress-log" id="progress-log"></pre>
-  <details id="progress-prev" style="display:none;">
-    <summary>Предыдущий прогон</summary>
-    <pre class="progress-log" id="progress-prev-log"></pre>
-  </details>
-</div>
-<details class="llm-top" id="progress-stale" style="display:none;">
-  <summary id="progress-stale-sum">🛰 Резерв: парсинг на Mac</summary>
-  <pre class="progress-log" id="progress-stale-log"></pre>
-</details>
-<div class="digest-card" id="digest-card" style="display:none;"></div>
-<details class="llm-top" id="health-top">
-  <summary id="health-sum">🩺 Здоровье парсеров</summary>
-  <div id="health-body" class="loading">Загрузка…</div>
-</details>
-<details class="llm-top" id="llm-top">
-  <summary>🧠 Топ бесплатных LLM OpenRouter + запуск теста дайджеста</summary>
-  <div id="llm-top-body" class="loading">Загрузка…</div>
-  <div class="tf" id="tf">
-    <div class="tf-row">
-      <label>Провайдер
-        <select id="tf-provider">
-          <option value="claude" selected>claude</option>
-          <option value="gigachat">gigachat</option>
-          <option value="openrouter">openrouter</option>
-        </select>
-      </label>
-      <label id="tf-giga-wrap" style="display:none;">Модель
-        <select id="tf-giga">
-          <option value="GigaChat-2-Pro" selected>GigaChat-2-Pro</option>
-          <option value="GigaChat-2">GigaChat-2</option>
-          <option value="GigaChat-2-Max">GigaChat-2-Max</option>
-        </select>
-      </label>
-      <label id="tf-or-wrap" style="display:none;">Модель
-        <select id="tf-or">
-          <option value="модель дня (топ-1)" selected>модель дня (топ-1)</option>
-          <option value="топ-2">топ-2</option>
-          <option value="топ-3">топ-3</option>
-          <option value="топ-4">топ-4</option>
-          <option value="топ-5">топ-5</option>
-        </select>
-      </label>
-      <label>Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
+
+  <section class="section" id="system">
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </span>
+      <h2 class="section-title">Система</h2>
     </div>
-    <div class="tf-row">
-      <label><input type="checkbox" id="tf-to-group"> в корп. группу ⚠️</label>
-      <label><input type="checkbox" id="tf-push-all"> push всем ⚠️</label>
-      <label><input type="checkbox" id="tf-full-llm"> полный LLM (старый режим)</label>
-      <label><input type="checkbox" id="tf-commit"> опубликовать результаты</label>
+    <div class="system-grid">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Прогоны GitHub Actions</span>
+          <span class="run-meta" id="runs-next"></span>
+          <span class="spacer"></span>
+          <button class="btn-primary" id="btn-run-main">
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            Полный прогон
+          </button>
+          <span class="action-flash" id="runs-flash"></span>
+        </div>
+        <div id="runs-list" class="loading">Загрузка…</div>
+        <div class="mac-live" id="mac-live" style="display:none;">
+          <div class="mac-live-head">
+            <span class="mac-live-title">Парсинг на Mac (резерв)</span>
+            <span class="mac-live-state" id="mac-live-state"></span>
+            <span class="run-meta" id="mac-live-meta"></span>
+          </div>
+          <pre class="log-pre" id="mac-live-log"></pre>
+          <details class="fold" id="mac-prev" style="display:none;">
+            <summary>Предыдущий прогон Mac</summary>
+            <div class="fold-body"><pre class="log-pre" id="mac-prev-log"></pre></div>
+          </details>
+        </div>
+        <details class="fold" id="mac-stale" style="display:none;">
+          <summary id="mac-stale-sum">Резерв: парсинг на Mac</summary>
+          <div class="fold-body"><pre class="log-pre" id="mac-stale-log"></pre></div>
+        </details>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Здоровье парсеров</span>
+          <span class="spacer"></span>
+          <span id="health-badges"></span>
+        </div>
+        <div id="health-list" class="loading">Загрузка…</div>
+        <div class="health-more" id="health-updated"></div>
+      </div>
     </div>
-    <div class="tf-row">
-      <button class="btn" id="tf-run">▶ Запустить тест дайджеста</button>
-      <span class="action-flash" id="tf-flash"></span>
+  </section>
+
+  <section class="section" id="llm">
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+      </span>
+      <h2 class="section-title">LLM · тест дайджеста</h2>
     </div>
-    <div class="llm-meta">Без галок безопасно: Telegram только в личный чат, без публикации на дашборд и без push. «Push всем» работает только вместе с «опубликовать».</div>
-  </div>
-</details>
-<div id="root" class="loading">Загрузка…</div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Топ бесплатных моделей OpenRouter — что стоит за «топ-N»</span>
+      </div>
+      <div id="llm-top-body" class="loading">Загрузка…</div>
+      <div class="llm-updated" id="llm-updated"></div>
+      <div class="tform" id="tf">
+        <div class="tform-row">
+          <label>Провайдер
+            <select id="tf-provider">
+              <option value="claude" selected>claude</option>
+              <option value="gigachat">gigachat</option>
+              <option value="openrouter">openrouter</option>
+            </select>
+          </label>
+          <label id="tf-giga-wrap" style="display:none;">Модель
+            <select id="tf-giga">
+              <option value="GigaChat-2-Pro" selected>GigaChat-2-Pro</option>
+              <option value="GigaChat-2">GigaChat-2</option>
+              <option value="GigaChat-2-Max">GigaChat-2-Max</option>
+            </select>
+          </label>
+          <label id="tf-or-wrap" style="display:none;">Модель
+            <select id="tf-or">
+              <option value="модель дня (топ-1)" selected>модель дня (топ-1)</option>
+              <option value="топ-2">топ-2</option>
+              <option value="топ-3">топ-3</option>
+              <option value="топ-4">топ-4</option>
+              <option value="топ-5">топ-5</option>
+            </select>
+          </label>
+          <label>Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
+        </div>
+        <div class="tform-row">
+          <label><input type="checkbox" id="tf-to-group"> в корп. группу <span class="warn-mark">⚠︎</span></label>
+          <label><input type="checkbox" id="tf-push-all"> push всем <span class="warn-mark">⚠︎</span></label>
+          <label><input type="checkbox" id="tf-full-llm"> полный LLM (старый режим)</label>
+          <label><input type="checkbox" id="tf-commit"> опубликовать результаты</label>
+        </div>
+        <div class="tform-row">
+          <button class="btn-primary" id="tf-run">
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            Запустить тест дайджеста
+          </button>
+          <span class="action-flash" id="tf-flash"></span>
+        </div>
+        <div class="tform-hint">Без галок безопасно: Telegram только в личный чат, без публикации на дашборд и без push. «Push всем» работает только вместе с «опубликовать».</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="subs">
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
+      <h2 class="section-title">Подписчики</h2>
+      <span class="section-counter" id="subs-count">…</span>
+      <span class="spacer"></span>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" id="subs-search" placeholder="Имя, устройство или дело…">
+      </div>
+    </div>
+    <div id="root" class="loading">Загрузка…</div>
+  </section>
+
+</main>
+
 <dialog class="wl" id="wl-modal">
-  <div class="wl-head">📋 Watchlist: <span id="wl-who"></span></div>
+  <div class="wl-head">Watchlist: <span id="wl-who"></span></div>
   <input class="wl-search" id="wl-search" type="text" placeholder="Поиск: номер дела, сторона или суд…">
   <div class="wl-list" id="wl-list"></div>
   <div id="wl-extras"></div>
   <div class="wl-manual">
     <input type="text" id="wl-manual-input" placeholder="Добавить номер вручную (напр. 2-123/2026)">
-    <button class="btn" type="button" id="wl-manual-add">＋ Добавить</button>
+    <button class="btn-outline" type="button" id="wl-manual-add">Добавить</button>
   </div>
   <div class="wl-foot">
     <span class="wl-count" id="wl-count"></span>
-    <button class="btn" type="button" id="wl-cancel">Отмена</button>
-    <button class="refresh" type="button" id="wl-save">💾 Сохранить</button>
+    <button class="btn-outline" type="button" id="wl-cancel">Отмена</button>
+    <button class="btn-primary" type="button" id="wl-save">Сохранить</button>
   </div>
 </dialog>
+
 <script>
 const SECRET = ${JSON.stringify(secret)};
 const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
@@ -261,6 +680,9 @@ const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_p
 const DIGEST_URL = "https://selivanovas.github.io/dashboard/data/last_digest.json";
 const HEALTH_URL = "https://selivanovas.github.io/dashboard/data/parse_health.json";
 const DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html";
+
+const SVG_EXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+const SVG_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
 // ── Общие хелперы ────────────────────────────────────────────────────────────
 // Python на GitHub-раннере пишет naive-таймстампы в UTC без «Z»
@@ -325,13 +747,34 @@ function detectDevice(ua) {
   else if (/Safari/.test(s)) browser = "Safari";
   return os + " · " + browser;
 }
+// Бейдж стадии — та же семантика, что stageBadgeHtml на дашборде (app.js):
+// переходные стадии показываются как та инстанция, куда дело движется.
+function stageBadge(stage) {
+  if (stage === "first_instance") return '<span class="badge badge-fi">1 инст.</span>';
+  if (stage === "appeal" || stage === "awaiting_appeal" || stage === "cassation_watch" || stage === "cassation_pending")
+    return '<span class="badge badge-appeal">Апелляция</span>';
+  if (stage === "cassation" || stage === "awaiting_relink")
+    return '<span class="badge badge-cassation">Кассация</span>';
+  return "";
+}
+// Плитка пульта: значение/подпись/акцент. valueHtml приходит из наших же
+// рендеров (не из сырых данных) — вставляется как HTML.
+function setTile(name, accent, valueHtml, subHtml) {
+  const v = document.getElementById("tile-" + name + "-value");
+  const s = document.getElementById("tile-" + name + "-sub");
+  if (v) { v.innerHTML = valueHtml; v.closest(".stat-card").setAttribute("data-accent", accent); }
+  if (s) s.innerHTML = subHtml || "";
+}
 
 // Состояние, разделяемое между блоками (обновляется в render()).
 let casesMapGlobal = new Map();
 let activeCasesGlobal = [];
 let subsByEp = new Map();
+let allSubs = [];
+let lastPushesMap = new Map();
+let lastPushesGeneratedAt = "";
 
-// ── Блок «🚀 Прогоны GitHub Actions» ─────────────────────────────────────────
+// ── Секция «Система»: прогоны GitHub Actions ─────────────────────────────────
 const WF_NAMES = {
   "update_cases.yml": "Основной прогон",
   "test_digest.yml": "Тест дайджеста",
@@ -344,12 +787,12 @@ function wfShortName(run) {
   const base = String(run.path || "").split("/").pop();
   return WF_NAMES[base] || run.name || base || "?";
 }
-function runIcon(run) {
-  if (run.status !== "completed") return "⏳";
-  if (run.conclusion === "success") return "✅";
+function runDot(run) {
+  if (run.status !== "completed") return '<span class="dot dot-amber dot-pulse"></span>';
+  if (run.conclusion === "success") return '<span class="dot dot-green"></span>';
   if (run.conclusion === "failure" || run.conclusion === "startup_failure"
-      || run.conclusion === "timed_out") return "❌";
-  return "⚪";
+      || run.conclusion === "timed_out") return '<span class="dot dot-red"></span>';
+  return '<span class="dot dot-gray"></span>';
 }
 function fmtDur(startIso, endIso) {
   const a = parseIso(startIso);
@@ -370,21 +813,26 @@ async function loadGhRuns() {
     if (d.next_cron_at) {
       const t = parseIso(d.next_cron_at);
       if (!isNaN(t)) {
-        document.getElementById("runs-next").textContent = "⏰ автозапуск: "
-          + new Date(t).toLocaleString("ru-RU",
-              { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        const txt = new Date(t).toLocaleString("ru-RU",
+          { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        document.getElementById("runs-next").textContent = "автозапуск: " + txt;
+        setTile("cron", "gray", escHtml(txt), document.getElementById("tile-cron-sub").innerHTML);
       }
     }
     if (!r.ok) {
       const txt = String(d.error || "") + " " + String(d.detail || "");
       const hint = txt.indexOf("403") >= 0 ? " — похоже, у GITHUB_PAT нет прав actions:read" : "";
+      listEl.className = "";
       listEl.innerHTML = '<div class="empty">GitHub API недоступен: '
         + escHtml(d.error || ("HTTP " + r.status)) + escHtml(hint) + '</div>';
+      setTile("run", "gray", "—", "GitHub недоступен");
       return;
     }
     const runs = (d.runs || []).slice(0, 8);
+    listEl.className = "";
     if (!runs.length) {
       listEl.innerHTML = '<div class="empty">Прогонов пока нет</div>';
+      setTile("run", "gray", "—", "");
       return;
     }
     let hasActive = false;
@@ -392,17 +840,40 @@ async function loadGhRuns() {
       const active = run.status !== "completed";
       if (active) hasActive = true;
       const dur = fmtDur(run.run_started_at, active ? null : run.updated_at);
-      return '<div class="run-row">' + runIcon(run)
-        + ' <a class="run-name" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer">'
+      return '<div class="run-row">' + runDot(run)
+        + '<a class="run-name" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer">'
         + escHtml(wfShortName(run)) + '</a>'
         + '<span class="run-meta">#' + escHtml(String(run.run_number || "?"))
         + ' · ' + escHtml(relTime(run.run_started_at))
         + (dur ? " · " + escHtml(dur) + (active ? " (идёт)" : "") : "")
-        + '</span></div>';
+        + '</span>'
+        + '<a class="run-ext" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer" title="Открыть в GitHub">' + SVG_EXT + '</a>'
+        + '</div>';
     }).join("");
-    // Пока есть живой прогон — обновляемся сами, чтобы видеть ✅/❌ без F5.
+    // Плитка «Последний прогон» — по последнему запуску основного workflow.
+    const main = (d.runs || []).find(function (run) {
+      return String(run.path || "").indexOf("update_cases.yml") >= 0;
+    });
+    if (main) {
+      const active = main.status !== "completed";
+      const dur = fmtDur(main.run_started_at, active ? null : main.updated_at);
+      if (active) {
+        setTile("run", "amber", '<span class="dot dot-amber dot-pulse"></span>идёт · ' + escHtml(dur),
+          "старт " + escHtml(relTime(main.run_started_at)));
+      } else if (main.conclusion === "success") {
+        setTile("run", "green", '<span class="dot dot-green"></span>ok · ' + escHtml(dur),
+          escHtml(relTime(main.run_started_at)) + " · #" + escHtml(String(main.run_number || "")));
+      } else {
+        setTile("run", "red", '<span class="dot dot-red"></span>' + escHtml(main.conclusion || "сбой"),
+          escHtml(relTime(main.run_started_at)) + " · #" + escHtml(String(main.run_number || "")));
+      }
+    } else {
+      setTile("run", "gray", "—", "основной прогон не найден");
+    }
+    // Пока есть живой прогон — обновляемся сами, чтобы видеть исход без F5.
     if (hasActive) ghTimer = setTimeout(loadGhRuns, 15000);
   } catch (e) {
+    listEl.className = "";
     listEl.innerHTML = '<div class="empty">Ошибка: ' + escHtml(String(e)) + '</div>';
   }
 }
@@ -437,7 +908,7 @@ document.getElementById("btn-run-main").addEventListener("click", function () {
   dispatchWorkflow("update_cases.yml", { smart_skip: "false" }, document.getElementById("runs-flash"));
 });
 
-// ── Блок «🛰 Парсинг на Mac» (резерв): вехи прогона, автообновление ──────────
+// ── «Парсинг на Mac» (резерв): живой прогон крупно, старый — свёрнуто ────────
 function progressAgo(iso) {
   const t = parseIso(iso);
   if (isNaN(t)) return "";
@@ -452,43 +923,43 @@ async function loadProgress() {
     const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
     if (!r.ok) return;
     const d = await r.json();
-    const card = document.getElementById("progress-card");
-    const stale = document.getElementById("progress-stale");
+    const live = document.getElementById("mac-live");
+    const stale = document.getElementById("mac-stale");
     const cur = d.current;
-    if (!cur) { card.style.display = "none"; stale.style.display = "none"; return; }
+    if (!cur) { live.style.display = "none"; stale.style.display = "none"; return; }
     const running = cur.done !== true;
     // Mac — спящий резерв: завершённый прогон старше суток не заслуживает
-    // большой карточки, сворачиваем в details-строку.
+    // большого блока, сворачиваем в details-строку.
     const isStale = !running && (Date.now() - parseIso(cur.updated_at)) > 24 * 3600 * 1000;
     if (isStale) {
-      card.style.display = "none";
+      live.style.display = "none";
       stale.style.display = "";
-      document.getElementById("progress-stale-sum").textContent =
-        "🛰 Резерв: парсинг на Mac — последний прогон " + fullDate(cur.updated_at);
-      document.getElementById("progress-stale-log").textContent = (cur.lines || []).join("\\n");
+      document.getElementById("mac-stale-sum").textContent =
+        "Резерв: парсинг на Mac — последний прогон " + fullDate(cur.updated_at);
+      document.getElementById("mac-stale-log").textContent = (cur.lines || []).join("\\n");
       return;
     }
     stale.style.display = "none";
-    card.style.display = "";
-    const st = document.getElementById("progress-state");
-    st.textContent = running ? "⏳ идёт" : "✅ завершён";
-    st.className = "progress-state " + (running ? "running" : "done");
-    document.getElementById("progress-meta").textContent =
+    live.style.display = "";
+    const st = document.getElementById("mac-live-state");
+    st.textContent = running ? "идёт" : "завершён";
+    st.className = "mac-live-state " + (running ? "running" : "done");
+    document.getElementById("mac-live-meta").textContent =
       "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
-    const logEl = document.getElementById("progress-log");
+    const logEl = document.getElementById("mac-live-log");
     const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
     logEl.textContent = (cur.lines || []).join("\\n");
     if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     if (d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length) {
-      document.getElementById("progress-prev").style.display = "";
-      document.getElementById("progress-prev-log").textContent = d.prev.lines.join("\\n");
+      document.getElementById("mac-prev").style.display = "";
+      document.getElementById("mac-prev-log").textContent = d.prev.lines.join("\\n");
     }
     clearTimeout(progressTimer);
     if (running) progressTimer = setTimeout(loadProgress, 5000);
   } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
 }
 
-// ── Блок «🩺 Здоровье парсеров» (parse_health.json с GitHub Pages) ───────────
+// ── Секция «Система»: здоровье парсеров (parse_health.json) ──────────────────
 const COURT_NAMES = {
   "appeal:oblsud": "Суд ХМАО-Югры (апелляция)",
   "cassation:7kas:total": "7 КСОЮ — весь поиск",
@@ -520,7 +991,7 @@ function healthMedian(arr) {
   return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
 }
 function healthSpark(counts) {
-  const last = (counts || []).slice(-12);
+  const last = (counts || []).slice(-10);
   if (!last.length) return "";
   const max = Math.max.apply(null, last);
   const blocks = "▁▂▃▄▅▆▇█";
@@ -531,55 +1002,88 @@ function healthSpark(counts) {
 }
 // Светофор зеркалит семантику health.py: тревожен ноль там, где обычно
 // что-то находится (медиана ≥1), и серия HTTP-фейлов.
-function healthColor(s) {
-  const med = healthMedian(s.counts);
-  if ((s.fail_streak || 0) >= 3 || s.alerted_zero) return "🔴";
-  if ((s.fail_streak || 0) >= 1 || ((s.zero_streak || 0) >= 1 && med >= 1)) return "🟡";
-  return "🟢";
+// 2 = красный, 1 = жёлтый, 0 = зелёный.
+function healthLevel(s) {
+  if ((s.fail_streak || 0) >= 3 || s.alerted_zero) return 2;
+  if ((s.fail_streak || 0) >= 1 || ((s.zero_streak || 0) >= 1 && healthMedian(s.counts) >= 1)) return 1;
+  return 0;
+}
+function healthNote(s) {
+  const parts = [];
+  if ((s.fail_streak || 0) > 0) parts.push("HTTP-фейл ×" + s.fail_streak);
+  if ((s.zero_streak || 0) > 0 && healthMedian(s.counts) >= 1) parts.push("нулей подряд: " + s.zero_streak);
+  return parts.join(" · ");
 }
 async function loadHealth() {
-  const body = document.getElementById("health-body");
-  const sum = document.getElementById("health-sum");
+  const listEl = document.getElementById("health-list");
   try {
     const r = await fetch(HEALTH_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     const sources = d.sources || {};
-    const keys = Object.keys(sources);
-    if (!keys.length) { body.className = ""; body.innerHTML = '<div class="empty">Журнал пуст</div>'; return; }
-    let nRed = 0, nYellow = 0;
-    const rows = keys.map(function (k) {
+    const items = Object.keys(sources).map(function (k) {
       const s = sources[k] || {};
-      const color = healthColor(s);
-      if (color === "🔴") nRed++;
-      else if (color === "🟡") nYellow++;
-      const streaks = [];
-      if ((s.zero_streak || 0) > 0) streaks.push("нулей подряд: " + s.zero_streak);
-      if ((s.fail_streak || 0) > 0) streaks.push("HTTP-фейлов подряд: " + s.fail_streak);
-      return '<div class="health-row">' + color
-        + ' <span class="health-name">' + escHtml(COURT_NAMES[k] || k) + '</span>'
-        + '<span class="health-spark">' + healthSpark(s.counts) + '</span>'
-        + '<span class="health-meta">посл.: ' + escHtml(String(s.last_count ?? "—"))
-        + (streaks.length ? " · " + escHtml(streaks.join(" · ")) : "") + '</span>'
-        + '</div>';
+      return { key: k, s: s, level: healthLevel(s), name: COURT_NAMES[k] || k };
     });
-    body.className = "";
-    body.innerHTML = rows.join("")
-      + '<div class="llm-meta">Число результатов поиска по прогонам (история справа новее) · обновлено '
-      + escHtml(relTime(d.updated_at)) + '</div>';
-    const green = keys.length - nRed - nYellow;
-    sum.textContent = "🩺 Здоровье парсеров — " + keys.length + " источников · "
-      + (nRed || nYellow
-          ? (nRed ? nRed + " 🔴 · " : "") + (nYellow ? nYellow + " 🟡 · " : "") + green + " 🟢"
-          : "всё 🟢");
+    if (!items.length) {
+      listEl.className = "";
+      listEl.innerHTML = '<div class="empty">Журнал пуст</div>';
+      return;
+    }
+    // Проблемные вверх, дальше — по числу результатов (живые источники выше).
+    items.sort(function (a, b) {
+      if (a.level !== b.level) return b.level - a.level;
+      return (b.s.last_count || 0) - (a.s.last_count || 0);
+    });
+    const nRed = items.filter(function (x) { return x.level === 2; }).length;
+    const nYellow = items.filter(function (x) { return x.level === 1; }).length;
+    const nGreen = items.length - nRed - nYellow;
+    function rowHtml(x) {
+      const dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
+      const note = x.level > 0 ? healthNote(x.s) : "";
+      return '<div class="health-row"><span class="dot ' + dotCls + '"></span>'
+        + '<span class="health-name">' + escHtml(x.name) + '</span>'
+        + (note ? '<span class="health-note">' + escHtml(note) + '</span>' : '')
+        + '<span class="health-spark">' + healthSpark(x.s.counts) + '</span>'
+        + '<span class="health-count">' + escHtml(String(x.s.last_count ?? "—")) + '</span>'
+        + '</div>';
+    }
+    const VISIBLE = 8;
+    const head = items.slice(0, VISIBLE).map(rowHtml).join("");
+    const rest = items.slice(VISIBLE);
+    const restHtml = rest.length
+      ? '<details class="fold"><summary>Остальные ' + rest.length + ' источников'
+        + (nRed + nYellow === 0 || rest.every(function (x) { return x.level === 0; }) ? " — все ok" : "")
+        + '</summary><div class="fold-body">' + rest.map(rowHtml).join("") + '</div></details>'
+      : "";
+    listEl.className = "";
+    listEl.innerHTML = head + restHtml;
+    document.getElementById("health-badges").innerHTML =
+      (nRed ? '<span class="badge badge-fail">' + nRed + ' сбой</span> ' : "")
+      + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
+      + '<span class="badge badge-ok">' + nGreen + ' ok</span>';
+    document.getElementById("health-updated").textContent =
+      "число результатов поиска по прогонам · обновлено " + relTime(d.updated_at);
+    // Плитка «Парсеры».
+    if (nRed) {
+      setTile("health", "red", nRed + ' <span class="warn-mark">✕</span> из ' + items.length,
+        escHtml(items[0].name + (healthNote(items[0].s) ? " · " + healthNote(items[0].s) : "")));
+    } else if (nYellow) {
+      setTile("health", "amber", nYellow + ' <span class="warn-mark">⚠︎</span> из ' + items.length,
+        escHtml(items[0].name + (healthNote(items[0].s) ? " · " + healthNote(items[0].s) : "")));
+    } else {
+      setTile("health", "green", '<span class="dot dot-green"></span>все ' + items.length + " ok",
+        "обновлено " + escHtml(relTime(d.updated_at)));
+    }
   } catch (e) {
-    body.className = "";
-    body.innerHTML = '<div class="empty">Не удалось загрузить parse_health.json: ' + escHtml(String(e)) + '</div>';
+    listEl.className = "";
+    listEl.innerHTML = '<div class="empty">Не удалось загрузить parse_health.json: ' + escHtml(String(e)) + '</div>';
+    setTile("health", "gray", "—", "нет данных");
   }
 }
 
-// ── Блок «🧠 Топ бесплатных LLM»: рейтинг shir-man + мини-форма теста ────────
-// Рейтинг грузим лениво — при первом раскрытии details (API отдаёт CORS *).
+// ── Секция «LLM»: рейтинг shir-man + мини-форма теста ────────────────────────
+// Рейтинг грузим сразу (секция всегда развёрнута в новой вёрстке).
 let llmTopLoaded = false;
 async function loadLlmTop() {
   if (llmTopLoaded) return;
@@ -593,14 +1097,14 @@ async function loadLlmTop() {
     if (!models.length) { el.textContent = "Рейтинг пуст."; el.className = ""; return; }
     el.className = "";
     el.innerHTML = models.map(function (m, i) {
-      return '<div class="llm-row"><b>топ-' + (i + 1) + '</b> · ' + escHtml(m.id || "?")
-        + (m.contextLength ? ' <span style="color:var(--fg-3)">(' + Math.round(m.contextLength / 1024) + 'k контекст)</span>' : '')
+      return '<div class="llm-row"><span class="llm-rank">топ-' + (i + 1) + '</span>'
+        + '<span class="llm-id">' + escHtml(m.id || "?") + '</span>'
+        + (m.contextLength ? '<span class="llm-ctx">' + Math.round(m.contextLength / 1024) + 'k контекст' + (i === 0 ? " · модель дня" : "") + '</span>' : '')
         + '</div>';
-    }).join("")
-      + '<div class="llm-meta">Рейтинг обновлён: '
-      + (d.updatedAt ? new Date(d.updatedAt).toLocaleString("ru-RU") : "?")
-      + ' · «топ-N» в форме ниже — это место в этом рейтинге · '
-      + '<a href="https://github.com/SelivanovAS/dashboard/actions/workflows/test_digest.yml" target="_blank" rel="noopener noreferrer">форма в GitHub UI</a></div>';
+    }).join("");
+    document.getElementById("llm-updated").innerHTML = 'Рейтинг shir-man обновлён '
+      + (d.updatedAt ? escHtml(relTime(d.updatedAt)) : "?")
+      + ' · <a href="https://github.com/SelivanovAS/dashboard/actions/workflows/test_digest.yml" target="_blank" rel="noopener noreferrer">форма в GitHub UI</a>';
     // Подписи «топ-N» в селекте обогащаем конкретными моделями (value не трогаем).
     const orSel = document.getElementById("tf-or");
     models.forEach(function (m, i) {
@@ -609,13 +1113,11 @@ async function loadLlmTop() {
       }
     });
   } catch (e) {
+    el.className = "";
     el.textContent = "Не удалось загрузить рейтинг: " + e;
-    llmTopLoaded = false; // при следующем раскрытии попробуем ещё раз
+    llmTopLoaded = false; // повторная попытка при следующем refreshAll
   }
 }
-document.getElementById("llm-top").addEventListener("toggle", function () {
-  if (this.open) loadLlmTop();
-});
 document.getElementById("tf-provider").addEventListener("change", function () {
   document.getElementById("tf-giga-wrap").style.display = this.value === "gigachat" ? "" : "none";
   document.getElementById("tf-or-wrap").style.display = this.value === "openrouter" ? "" : "none";
@@ -644,7 +1146,7 @@ document.getElementById("tf-run").addEventListener("click", function () {
   dispatchWorkflow("test_digest.yml", inputs, document.getElementById("tf-flash"));
 });
 
-// ── Данные подписок + карточки ───────────────────────────────────────────────
+// ── Данные подписок ──────────────────────────────────────────────────────────
 async function fetchAll() {
   const results = await Promise.all([
     fetch("/admin/data?secret=" + encodeURIComponent(SECRET)),
@@ -679,6 +1181,7 @@ async function fetchAll() {
           plaintiff: payload.plaintiff,
           defendant: payload.defendant,
           court: payload.court,
+          stage: payload.stage,
         });
         // Канонический ID — первым (он же дефолт для алиаса).
         addAlias(casesMap, c.id, payload);
@@ -701,8 +1204,7 @@ async function fetchAll() {
   } catch (e) {
     console.warn("cases.json не загружен:", e);
   }
-  // Журнал последней push-рассылки. Собираем карту endpoint → запись;
-  // если файла нет (старый деплой / только что чистый репо) — пустая карта.
+  // Журнал последней push-рассылки: endpoint → запись.
   const pushesMap = new Map();
   let pushesGeneratedAt = "";
   try {
@@ -727,69 +1229,65 @@ async function fetchAll() {
   return { subs, casesMap, activeCases, pushesMap, pushesGeneratedAt, digest };
 }
 
-// Тонкая карточка «📨 Последний дайджест» + агрегат последней push-рассылки.
-function renderDigestCard(digest, pushesMap, pushesGeneratedAt) {
-  const el = document.getElementById("digest-card");
-  if (!digest || !digest.generated_at) { el.style.display = "none"; return; }
+// Плитка «Дайджест» + push-агрегат в плитке «Автозапуск».
+function renderDigestTile(digest, pushesMap, pushesGeneratedAt) {
+  if (digest && digest.generated_at) {
+    const m = String(digest.summary || "").match(/\\d+/);
+    const value = digest.is_empty ? "пусто" : (m ? m[0] + " изменений" : escHtml(digest.summary || "—"));
+    setTile("digest", "blue", value,
+      escHtml(relTime(digest.generated_at))
+      + ' · <a href="' + DASHBOARD_URL + '?digest=open" target="_blank" rel="noopener noreferrer">на дашборд</a>');
+  } else {
+    setTile("digest", "gray", "—", "last_digest.json недоступен");
+  }
   const stats = {};
   pushesMap.forEach(function (item) {
     const v = item.variant || "?";
     stats[v] = (stats[v] || 0) + 1;
   });
-  const pushParts = ["personal", "general", "broadcast", "skip"]
+  const parts = ["personal", "general", "broadcast", "skip"]
     .filter(function (k) { return stats[k]; })
     .map(function (k) { return stats[k] + " " + k; });
-  let html = '<span>📨 <b>Последний дайджест:</b> ' + escHtml(relTime(digest.generated_at))
-    + ' <span class="dot">(' + escHtml(fullDate(digest.generated_at)) + ')</span></span>';
-  const sum = digest.is_empty ? "изменений не было" : (digest.summary || "");
-  if (sum) html += '<span class="dot">·</span><span>' + escHtml(sum) + '</span>';
-  if (pushParts.length) {
-    html += '<span class="dot">·</span><span>push: ' + escHtml(pushParts.join(" / "))
-      + (pushesGeneratedAt ? ' <span class="dot">(' + escHtml(relTime(pushesGeneratedAt)) + ')</span>' : '')
-      + '</span>';
-  }
-  html += '<span class="dot">·</span><a href="' + DASHBOARD_URL + '?digest=open" target="_blank" rel="noopener noreferrer">открыть на дашборде</a>';
-  el.innerHTML = html;
-  el.style.display = "";
+  const sub = parts.length
+    ? "push: " + parts.join(" · ") + (pushesGeneratedAt ? " (" + relTime(pushesGeneratedAt) + ")" : "")
+    : "";
+  document.getElementById("tile-cron-sub").textContent = sub;
 }
 
+// ── Карточки подписчиков v2 ──────────────────────────────────────────────────
 function renderLastPush(item, generatedAt) {
   if (!item) {
     return generatedAt
-      ? '<div class="last-push-empty">Нет записи в журнале последней рассылки (' + escHtml(relTime(generatedAt)) + ')</div>'
-      : '<div class="last-push-empty">Журнал push-рассылок пока пуст</div>';
+      ? '<div class="empty">Нет записи в журнале последней рассылки (' + escHtml(relTime(generatedAt)) + ')</div>'
+      : '<div class="empty">Журнал push-рассылок пока пуст</div>';
   }
-  const labels = {
-    personal: "personal",
-    general: "general",
-    skip: "skip",
-    broadcast: "broadcast",
-  };
-  const v = labels[item.variant] || item.variant || "—";
   const skipped = item.variant === "skip";
-  const headTitle = skipped
-    ? '<span class="last-push-title">Push не отправлен — нет событий по watchlist</span>'
-    : '<span class="last-push-title">' + escHtml(item.title || "—") + '</span>';
+  const title = skipped
+    ? "Push не отправлен — нет событий по watchlist"
+    : (item.title || "—");
   const body = !skipped && item.body
-    ? '<div class="last-push-body">' + escHtml(item.body) + '</div>'
+    ? '<div class="push-body">' + escHtml(item.body) + '</div>'
     : "";
   const click = !skipped && item.click_url
-    ? '<div class="last-push-meta">click_url: <a href="https://selivanovas.github.io/dashboard'
+    ? '<div class="push-meta">click_url: <a href="https://selivanovas.github.io/dashboard'
         + escHtml(item.click_url) + '" target="_blank" rel="noopener noreferrer">'
         + escHtml(item.click_url) + '</a></div>'
     : "";
   const ts = generatedAt
-    ? '<div class="last-push-meta">Рассылка: ' + escHtml(relTime(generatedAt)) + '</div>'
+    ? '<div class="push-meta">Рассылка: ' + escHtml(relTime(generatedAt)) + '</div>'
     : "";
-  return '<div class="last-push ' + escHtml(item.variant || "") + '">'
-    + '<div class="last-push-head">'
-    +   '<span class="last-push-variant">' + escHtml(v) + '</span>'
-    +   headTitle
-    + '</div>'
+  return '<div class="push-box ' + escHtml(item.variant || "") + '">'
+    + '<div class="push-title">' + escHtml(title) + '</div>'
     + body + click + ts
     + '</div>';
 }
-
+function pushVariantBadge(item) {
+  if (!item) return "";
+  const v = item.variant || "?";
+  const cls = v === "personal" ? "badge-ok" : v === "skip" ? "badge-skip"
+    : v === "general" ? "badge-run" : "badge-watch";
+  return '<span class="badge ' + cls + '">' + escHtml(v) + '</span>';
+}
 // KV-TTL подписки — 60 дней от последней записи; last_seen_at обновляется на
 // каждый вход в PWA. Долгое отсутствие входа = подписка тихо истечёт и юрист
 // перестанет получать push. Предупреждаем заранее.
@@ -800,68 +1298,67 @@ function expiryBadge(sub) {
   if (days < 45) return "";
   const left = Math.round(60 - days);
   const txt = left > 0 ? "истекает ≈ через " + left + " дн — нужен вход в PWA" : "могла истечь — нужен вход в PWA";
-  return '<span class="badge-expiry">⏳ ' + txt + '</span>';
+  return '<span class="badge badge-expiry">⏳ ' + txt + '</span>';
 }
-
+function caseRowHtml(num, casesMap) {
+  const bare = bareCaseNumber(num);
+  const c = casesMap.get(bare);
+  if (!c) {
+    return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
+      + '<span class="badge badge-watch">нет в cases.json</span></div>';
+  }
+  const parties = (c.plaintiff && c.defendant)
+    ? escHtml(c.plaintiff) + ' — ' + escHtml(c.defendant)
+    : escHtml(c.plaintiff || c.defendant || "");
+  // Алиас-плашка: ★ стоит на номере, который отличается от канонического ID
+  // дела (звезда выставлена по апел./касс./hybrid-предку).
+  const aliasNote = (c.canonical_id && c.canonical_id !== bare)
+    ? '<span class="case-alias">→ ' + escHtml(c.canonical_id) + '</span>'
+    : '';
+  return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
+    + aliasNote
+    + stageBadge(c.stage)
+    + '<span class="case-parties">' + parties + '</span>'
+    + (c.court ? '<span class="case-court">' + escHtml(c.court) + '</span>' : '')
+    + '</div>';
+}
 function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
-  const dev = escHtml(detectDevice(sub.user_agent));
-  const owner = sub.is_owner ? '<span class="badge-owner">★ owner</span>' : "";
-  const ep = escHtml((sub.endpoint || "").slice(-48));
   const epAttr = escHtml(sub.endpoint || "");
   const wl = Array.isArray(sub.watchlist) ? sub.watchlist : [];
-  const labelHtml = sub.label
-    ? '<span class="label-name">'+escHtml(sub.label)+'</span>'
-    : '<span class="label-empty">без имени</span>';
+  const nameHtml = sub.label
+    ? '<span class="sub-name">' + escHtml(sub.label) + '</span>'
+    : '<span class="sub-name unnamed">без имени</span>';
   const cases = wl.length
-    ? wl.map((num) => {
-        const bare = bareCaseNumber(num);
-        const c = casesMap.get(bare);
-        if (c) {
-          const parties = (c.plaintiff && c.defendant)
-            ? escHtml(c.plaintiff) + ' <span style="color:var(--fg-3)">vs</span> ' + escHtml(c.defendant)
-            : escHtml(c.plaintiff || c.defendant || "");
-          // Алиас-плашка: ★ стоит на номере, который отличается от
-          // канонического ID дела (звезда выставлена по апел./касс./
-          // hybrid-предку, а дело хранится под номером 1-й инст.).
-          const aliasNote = (c.canonical_id && c.canonical_id !== bare)
-            ? '<span class="case-alias">→ '+escHtml(c.canonical_id)+'</span>'
-            : '';
-          return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
-                 + aliasNote
-                 + '<span class="case-parties">'+parties+'</span>'
-                 + (c.court ? '<span class="case-meta">· '+escHtml(c.court)+'</span>' : '')
-                 + '</div>';
-        }
-        return '<div class="case-row"><span class="case-num">'+escHtml(num)+'</span>'
-               + '<span class="case-meta">· нет в cases.json</span></div>';
-      }).join("")
+    ? wl.map(function (num) { return caseRowHtml(num, casesMap); }).join("")
     : '<div class="empty">Юрист не отслеживает ни одно дело</div>';
-  return '<div class="sub-card" data-endpoint="'+epAttr+'">'
-    + '<div class="sub-row">'
-    +   labelHtml
-    +   '<span class="sub-device">'+dev+'</span>'
-    +   owner
+  return '<div class="sub-card" data-endpoint="' + epAttr + '">'
+    + '<div class="sub-head">'
+    +   nameHtml
+    +   '<span class="badge badge-device">' + escHtml(detectDevice(sub.user_agent)) + '</span>'
+    +   (sub.is_owner ? '<span class="badge badge-owner">★ owner</span>' : "")
     +   expiryBadge(sub)
-    +   '<span class="kv"><b>Создана:</b> '+escHtml(relTime(sub.created_at))+'</span>'
-    +   '<span class="kv"><b>Последний вход:</b> '+escHtml(relTime(sub.last_seen_at))+' <span style="color:var(--fg-3)">('+escHtml(fullDate(sub.last_seen_at))+')</span></span>'
-    +   '<span class="kv"><b>Watchlist обновлён:</b> '+escHtml(relTime(sub.last_watchlist_update_at))+'</span>'
-    +   '<span class="kv"><b>Дел:</b> '+wl.length+'</span>'
+    +   '<div class="sub-actions">'
+    +     '<button class="btn-outline" data-action="rename">✏ Имя</button>'
+    +     '<button class="btn-outline" data-action="watchlist">Watchlist</button>'
+    +     '<button class="btn-outline" data-action="testpush">Тест push</button>'
+    +     '<button class="btn-icon" data-action="copyep" title="Копировать endpoint (…' + escHtml((sub.endpoint || "").slice(-24)) + ')">' + SVG_COPY + '</button>'
+    +     '<button class="btn-outline btn-danger" data-action="delete">Удалить</button>'
+    +     '<span class="action-flash"></span>'
+    +   '</div>'
     + '</div>'
-    + '<div class="kv endpoint" title="'+ep+'">…'+ep+'</div>'
-    + '<div class="actions">'
-    +   '<button class="btn" data-action="rename">✏ Имя</button>'
-    +   '<button class="btn" data-action="watchlist">📋 Ред. watchlist</button>'
-    +   '<button class="btn" data-action="testpush">📨 Тест push</button>'
-    +   '<button class="btn btn-danger" data-action="delete">🗑 Удалить</button>'
-    +   '<span class="action-flash"></span>'
+    + '<div class="sub-kv">'
+    +   '<span>Создана <b>' + escHtml(relTime(sub.created_at)) + '</b></span>'
+    +   '<span>Вход <b>' + escHtml(relTime(sub.last_seen_at)) + '</b> <span title="' + escHtml(fullDate(sub.last_seen_at)) + '"></span></span>'
+    +   '<span>Watchlist <b>' + escHtml(relTime(sub.last_watchlist_update_at)) + '</b></span>'
+    +   '<span>Дел: <b>' + wl.length + '</b></span>'
     + '</div>'
-    + '<details>'
-    +   '<summary>🪞 Последний push для этой подписки</summary>'
-    +   renderLastPush(lastPush, pushesGeneratedAt)
+    + '<details class="fold">'
+    +   '<summary>Последний push ' + pushVariantBadge(lastPush) + '</summary>'
+    +   '<div class="fold-body">' + renderLastPush(lastPush, pushesGeneratedAt) + '</div>'
     + '</details>'
-    + '<details'+(wl.length<=10 ? ' open' : '')+'>'
-    +   '<summary>Список отслеживаемых дел ('+wl.length+')</summary>'
-    +   '<div class="cases">'+cases+'</div>'
+    + '<details class="fold"' + (wl.length && wl.length <= 10 ? " open" : "") + '>'
+    +   '<summary>Дела (' + wl.length + ')</summary>'
+    +   '<div class="fold-body">' + cases + '</div>'
     + '</details>'
     + '</div>';
 }
@@ -886,8 +1383,6 @@ function flash(card, text, kind) {
 }
 
 // ── Модалка редактирования watchlist ─────────────────────────────────────────
-// Заменяет prompt() со списком через запятую: чекбоксы по активным делам из
-// cases.json + ручное добавление номеров, которых в активных делах нет.
 let wlState = null; // { endpoint, selected:Set, extras:[], card }
 function openWlModal(card, sub) {
   const selected = new Set();
@@ -914,13 +1409,14 @@ function buildWlList(query) {
     return (c.id + " " + c.plaintiff + " " + c.defendant + " " + c.court).toLowerCase().indexOf(q) >= 0;
   }).map(function (c) {
     const parties = (c.plaintiff && c.defendant)
-      ? c.plaintiff + " vs " + c.defendant
+      ? c.plaintiff + " — " + c.defendant
       : (c.plaintiff || c.defendant || "");
     return '<label class="wl-row"><input type="checkbox" data-case-id="' + escHtml(c.id) + '"'
       + (wlState.selected.has(c.id) ? " checked" : "") + '>'
-      + '<span class="wl-num">' + escHtml(c.id) + '</span>'
+      + '<span class="case-num">' + escHtml(c.id) + '</span>'
+      + stageBadge(c.stage)
       + '<span class="wl-parties">' + escHtml(parties)
-      + (c.court ? ' <span class="dot">·</span> ' + escHtml(c.court) : '') + '</span>'
+      + (c.court ? ' · ' + escHtml(c.court) : '') + '</span>'
       + '</label>';
   });
   document.getElementById("wl-list").innerHTML =
@@ -929,10 +1425,10 @@ function buildWlList(query) {
 function renderWlExtras() {
   const el = document.getElementById("wl-extras");
   if (!wlState || !wlState.extras.length) { el.innerHTML = ""; return; }
-  el.innerHTML = '<div class="llm-meta" style="margin-top:8px;">Номера не из активных дел (уйдут как есть):</div>'
+  el.innerHTML = '<div class="wl-count" style="margin-top:8px;">Номера не из активных дел (уйдут как есть):</div>'
     + wlState.extras.map(function (n) {
-      return '<div class="wl-row" style="cursor:default;"><span class="wl-num">' + escHtml(n) + '</span>'
-        + '<button class="btn" type="button" data-extra-del="' + escHtml(n) + '">✕</button></div>';
+      return '<div class="case-row"><span class="case-num">' + escHtml(n) + '</span>'
+        + '<button class="btn-icon" type="button" data-extra-del="' + escHtml(n) + '" title="Убрать">✕</button></div>';
     }).join("");
 }
 function updateWlCount() {
@@ -965,7 +1461,7 @@ async function saveWlModal() {
   btn.textContent = "Сохраняю…";
   const res = await postAdmin("/admin/watchlist", { endpoint: wlState.endpoint, watchlist: list });
   btn.disabled = false;
-  btn.textContent = "💾 Сохранить";
+  btn.textContent = "Сохранить";
   if (res.ok) {
     const card = wlState.card;
     document.getElementById("wl-modal").close();
@@ -1038,23 +1534,59 @@ async function handleAction(card, action, currentSub) {
     } else {
       flash(card, "× " + String(d.error || ("HTTP " + res.status)).slice(0, 120), "err");
     }
+  } else if (action === "copyep") {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      flash(card, "✓ endpoint скопирован", "ok");
+    } catch (e) {
+      flash(card, "× буфер обмена недоступен", "err");
+    }
   }
+}
+
+// Поиск по подпискам: имя, устройство, номера дел и стороны из watchlist.
+function subMatches(sub, q) {
+  if (!q) return true;
+  let hay = (sub.label || "") + " " + detectDevice(sub.user_agent) + " " + (sub.endpoint || "").slice(-32);
+  for (const num of (Array.isArray(sub.watchlist) ? sub.watchlist : [])) {
+    hay += " " + num;
+    const c = casesMapGlobal.get(bareCaseNumber(num));
+    if (c) hay += " " + c.plaintiff + " " + c.defendant + " " + c.court;
+  }
+  return hay.toLowerCase().indexOf(q) >= 0;
+}
+function renderSubsList() {
+  const root = document.getElementById("root");
+  const q = document.getElementById("subs-search").value.trim().toLowerCase();
+  const visible = allSubs.filter(function (s) { return subMatches(s, q); });
+  root.className = "subs";
+  root.innerHTML = visible.map(function (s) {
+    return renderCard(s, casesMapGlobal, lastPushesMap.get(s.endpoint), lastPushesGeneratedAt);
+  }).join("");
+  if (!visible.length) {
+    root.innerHTML = '<div class="empty">' + (q ? "Ничего не найдено по запросу" : "Подписок нет.") + '</div>';
+  }
+  document.getElementById("subs-count").textContent =
+    q ? visible.length + " из " + allSubs.length : String(allSubs.length);
 }
 
 async function render(force) {
   const root = document.getElementById("root");
-  if (force) { root.className = "loading"; root.textContent = "Загрузка…"; }
+  if (force && !allSubs.length) { root.className = "loading"; root.textContent = "Загрузка…"; }
   try {
     const all = await fetchAll();
-    const subs = all.subs;
     casesMapGlobal = all.casesMap;
     activeCasesGlobal = all.activeCases;
-    renderDigestCard(all.digest, all.pushesMap, all.pushesGeneratedAt);
+    lastPushesMap = all.pushesMap;
+    lastPushesGeneratedAt = all.pushesGeneratedAt;
+    renderDigestTile(all.digest, all.pushesMap, all.pushesGeneratedAt);
+    const subs = all.subs;
     const owners = subs.filter((s) => s.is_owner).length;
     const totalWl = subs.reduce((a, s) => a + (s.watchlist?.length || 0), 0);
-    const pushTime = all.pushesGeneratedAt ? " · последний push: " + relTime(all.pushesGeneratedAt) : "";
-    document.getElementById("summary").textContent =
-      subs.length + " подписок · " + owners + " owner · " + totalWl + " дел в watchlist'ах" + pushTime;
+    document.getElementById("summary").innerHTML =
+      "<b>" + subs.length + "</b> подписок · <b>" + owners + "</b> owner<br>"
+      + totalWl + " дел в watchlist'ах";
+    document.getElementById("nav-subs-count").textContent = String(subs.length);
     // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
     subs.sort((a, b) => {
       if (a.is_owner !== b.is_owner) return a.is_owner ? -1 : 1;
@@ -1062,21 +1594,17 @@ async function render(force) {
       const tb = parseIso(b.last_seen_at) || 0;
       return tb - ta;
     });
-    root.className = "subs";
-    root.innerHTML = subs.map((s) => renderCard(s, all.casesMap, all.pushesMap.get(s.endpoint), all.pushesGeneratedAt)).join("");
-    if (subs.length === 0) {
-      root.innerHTML = '<div class="empty">Подписок нет.</div>';
-    }
+    allSubs = subs;
     subsByEp = new Map(subs.map((s) => [s.endpoint, s]));
+    renderSubsList();
   } catch (e) {
     root.className = "error";
     root.textContent = "Ошибка: " + e.message;
   }
 }
 
-// Делегированный клик по кнопкам действий — вешается ОДИН раз (раньше висел
-// внутри render() и после каждого обновления обработчики множились: prompt
-// выскакивал по 2-3 раза).
+// Делегированный клик по кнопкам действий — вешается ОДИН раз (иначе
+// обработчики множатся после каждого обновления списка).
 document.getElementById("root").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
@@ -1086,17 +1614,56 @@ document.getElementById("root").addEventListener("click", (e) => {
   if (!sub) return;
   handleAction(card, btn.getAttribute("data-action"), sub);
 });
+document.getElementById("subs-search").addEventListener("input", renderSubsList);
+
+// ── Чипы-якоря и плитки: прокрутка + подсветка активной секции ───────────────
+(function () {
+  const chips = Array.prototype.slice.call(document.querySelectorAll("#nav .chip-btn"));
+  function setActive(id) {
+    chips.forEach(function (c) {
+      c.classList.toggle("active", c.getAttribute("href") === "#" + id);
+    });
+  }
+  chips.forEach(function (c) {
+    c.addEventListener("click", function (e) {
+      e.preventDefault();
+      const el = document.querySelector(c.getAttribute("href"));
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActive(c.getAttribute("href").slice(1));
+    });
+  });
+  const sections = Array.prototype.slice.call(document.querySelectorAll("main .section"));
+  if ("IntersectionObserver" in window) {
+    const visible = {};
+    const io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { visible[en.target.id] = en.isIntersecting; });
+      for (let i = 0; i < sections.length; i++) {
+        if (visible[sections[i].id]) { setActive(sections[i].id); break; }
+      }
+    }, { rootMargin: "-90px 0px -55% 0px", threshold: 0 });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+  document.querySelectorAll(".stat-card[data-goto]").forEach(function (t) {
+    t.addEventListener("click", function () {
+      const el = document.querySelector(t.getAttribute("data-goto"));
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+})();
 
 function refreshAll() {
   render(true);
   loadGhRuns();
   loadHealth();
   loadProgress();
+  llmTopLoaded = false;
+  loadLlmTop();
 }
 
 loadProgress();
 loadGhRuns();
 loadHealth();
+loadLlmTop();
 render();
 </script>
 </body></html>`;
