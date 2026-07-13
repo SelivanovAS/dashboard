@@ -319,38 +319,69 @@ def _call_gigachat(prompt: str) -> str | None:
 # штатной проверкой TLS. Функции зеркальны gigachat-парам, чтобы не трогать
 # патч-цели существующих тестов.
 
-# Мемо резолва «модели дня» на процесс: один HTTP-запрос на прогон,
+# Мемо резолва модели по рейтингу на процесс: один HTTP-запрос на прогон,
 # мемоизируется и fallback (иначе дайджест с N актами сделал бы N
 # неудачных запросов к shir-man.com).
 _openrouter_resolved_model: str | None = None
+
+# «Топ-N рейтинга» в OPENROUTER_MODEL (значения выпадающего списка
+# test_digest.yml): конкретная модель подставляется на прогоне из свежего
+# рейтинга — список в форме GitHub статичен и иначе протухал бы.
+_OPENROUTER_RANK_RE = re.compile(r"^топ[\s-]*(\d+)", re.IGNORECASE)
+
+
+def _openrouter_requested_rank() -> int | None:
+    """Разобрать config.OPENROUTER_MODEL как место в рейтинге бесплатных
+    моделей: пусто / «модель дня…» / «авто…» → 1, «топ-N…» → N.
+    Любая другая строка — буквальный id модели → None.
+    """
+    raw = (config.OPENROUTER_MODEL or "").strip().lower()
+    if not raw or raw.startswith("модель дня") or raw.startswith("авто"):
+        return 1
+    m = _OPENROUTER_RANK_RE.match(raw)
+    if m:
+        return max(1, int(m.group(1)))
+    return None
 
 
 def _resolve_openrouter_model() -> str:
     """Определить модель OpenRouter для текущего прогона.
 
-    Приоритет: config.OPENROUTER_MODEL из env → «модель дня» с
-    config.OPENROUTER_TOP_MODELS_URL (models[0].id, ежедневный рейтинг
-    бесплатных моделей) → config.OPENROUTER_FALLBACK_MODEL (маршрут
-    openrouter/free, OpenRouter сам подбирает живую бесплатную модель).
+    config.OPENROUTER_MODEL может быть: буквальным id модели (из текстового
+    поля llm_model) — возвращается как есть; местом в рейтинге («модель дня
+    (топ-1)», «топ-3» — значения выпадающего списка) или пустым (= топ-1) —
+    тогда конкретный id берётся из свежего рейтинга бесплатных моделей
+    config.OPENROUTER_TOP_MODELS_URL (models[N-1].id; если в рейтинге меньше
+    N строк — последняя доступная). При недоступности рейтинга —
+    config.OPENROUTER_FALLBACK_MODEL (маршрут openrouter/free, OpenRouter
+    сам подбирает живую бесплатную модель).
     """
     global _openrouter_resolved_model
-    if config.OPENROUTER_MODEL:
+    rank = _openrouter_requested_rank()
+    if rank is None:
         return config.OPENROUTER_MODEL
     if _openrouter_resolved_model:
         return _openrouter_resolved_model
     try:
         r = requests.get(config.OPENROUTER_TOP_MODELS_URL, timeout=15)
         r.raise_for_status()
-        models = r.json().get("models") or []
-        model_id = ((models[0] or {}).get("id") or "").strip() if models else ""
+        models = [m for m in (r.json().get("models") or []) if m]
+        if not models:
+            raise ValueError("пустой список models")
+        if rank > len(models):
+            log.warning(
+                f"OpenRouter: в рейтинге только {len(models)} моделей, "
+                f"топ-{rank} недоступен — беру последнюю"
+            )
+        model_id = (models[min(rank, len(models)) - 1].get("id") or "").strip()
         if not model_id:
-            raise ValueError("пустой список models / пустой id")
-        log.info(f"OpenRouter: модель дня — {model_id}")
+            raise ValueError("пустой id модели в рейтинге")
+        log.info(f"OpenRouter: топ-{rank} рейтинга — {model_id}")
         _openrouter_resolved_model = model_id
     except (requests.RequestException, KeyError, ValueError, IndexError,
             json.JSONDecodeError) as e:
         log.warning(
-            f"OpenRouter: не удалось получить модель дня ({e}), "
+            f"OpenRouter: не удалось получить рейтинг моделей ({e}), "
             f"fallback {config.OPENROUTER_FALLBACK_MODEL}"
         )
         _openrouter_resolved_model = config.OPENROUTER_FALLBACK_MODEL

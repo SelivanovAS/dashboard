@@ -194,8 +194,10 @@ GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 # OpenRouter — третий провайдер (только тестовый контур, см. test_digest.yml).
-# Пустой OPENROUTER_MODEL = «модель дня»: llm._resolve_openrouter_model()
-# берёт models[0].id с OPENROUTER_TOP_MODELS_URL (рейтинг бесплатных моделей
+# OPENROUTER_MODEL: буквальный id модели ИЛИ место в рейтинге бесплатных
+# моделей («модель дня (топ-1)», «топ-3» — значения выпадающего списка
+# workflow; пусто = топ-1). Место резолвится на прогоне
+# (llm._resolve_openrouter_model) из OPENROUTER_TOP_MODELS_URL (рейтинг
 # shir-man.com/free-llm), при недоступности — OPENROUTER_FALLBACK_MODEL
 # (маршрут openrouter/free: OpenRouter сам выбирает живую бесплатную модель).
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")

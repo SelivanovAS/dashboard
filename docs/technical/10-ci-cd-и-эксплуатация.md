@@ -133,10 +133,13 @@ Python 3.12 → установка зависимостей → `python scripts/
 последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
 иначе только владельцу), `full_llm` (`DIGEST_FULL_LLM=1` — старый полный
 LLM-вариант вместо гибрида), `llm_provider` (выпадающий список
-claude/gigachat/openrouter) и `llm_model` (текстом; пусто = дефолт провайдера,
-для openrouter — «модель дня» с shir-man.com). Общее поле `llm_model` уходит
-и в `GIGACHAT_MODEL`, и в `OPENROUTER_MODEL` — читает только активный
-провайдер. Публикация результатов (`last_digest.json`, `cases.json`, кэш
+claude/gigachat/openrouter), `gigachat_model` (GigaChat-2-Pro (дефолт) /
+GigaChat-2 / GigaChat-2-Max), `openrouter_model` (место в рейтинге бесплатных
+моделей shir-man.com: «модель дня (топ-1)» (дефолт) … «топ-5» — конкретный id
+резолвится на прогоне из свежего рейтинга, статичный список в YAML не
+протухает) и `llm_model` (произвольный id текстом — перебивает оба списка).
+Модельная переменная уходит в `GIGACHAT_MODEL`/`OPENROUTER_MODEL` — читает
+только активный провайдер. Публикация результатов (`last_digest.json`, `cases.json`, кэш
 пересказов) и PWA push — только по галке `commit_results` (по умолчанию
 выключена: тестовый прогон не публикует ничего на дашборд и не шлёт пуш —
 пуш вёл бы на неопубликованный дайджест; остаётся только Telegram).
