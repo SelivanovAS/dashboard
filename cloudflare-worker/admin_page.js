@@ -302,6 +302,7 @@ a { color: var(--accent); }
 .badge-appeal    { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); font-weight:var(--fw-bold); letter-spacing:0.02em; }
 .badge-cassation { background:var(--stage-cass-bg); color:var(--stage-cass-fg); font-weight:var(--fw-bold); letter-spacing:0.02em; }
 .badge-watch     { background:var(--info-bg); color:var(--info-fg); }
+.badge-archive   { background:var(--bg-4); color:var(--fg-3); }
 
 /* Статусные точки */
 .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; }
@@ -677,6 +678,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
 <script>
 const SECRET = ${JSON.stringify(secret)};
 const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
+const ARCHIVE_URL = "https://selivanovas.github.io/dashboard/data/cases_archive.json";
 const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_pushes.json";
 const DIGEST_URL = "https://selivanovas.github.io/dashboard/data/last_digest.json";
 const HEALTH_URL = "https://selivanovas.github.io/dashboard/data/parse_health.json";
@@ -1163,12 +1165,31 @@ async function fetchAll() {
     fetch(CASES_URL, { cache: "no-cache" }).catch(function () { return null; }),
     fetch(PUSHES_URL, { cache: "no-cache" }).catch(function () { return null; }),
     fetch(DIGEST_URL, { cache: "no-cache" }).catch(function () { return null; }),
+    fetch(ARCHIVE_URL, { cache: "no-cache" }).catch(function () { return null; }),
   ]);
   const subsRes = results[0];
   if (!subsRes.ok) throw new Error("HTTP " + subsRes.status + " /admin/data");
   const subs = await subsRes.json();
   const casesMap = new Map();
   const activeCases = [];
+  // Все номера дела — под один payload: канонический ID первым (он же дефолт
+  // для алиаса), затем FI / апелл. / касс. (касс. бывает в двух полях —
+  // case_number и cassation_number), material_number — М-предок дела (Этап 3:
+  // когда юрист звёздит материал, а парсер потом промоутит его в 2-XXX, эта
+  // связь сохраняется и звезда не теряется), плюс предыдущие номера из
+  // hybrid-ID '2-208/2026 (2-1148/2025;)'. addAlias не перезатирает ключи,
+  // поэтому порядок добавления = приоритет.
+  function addCaseAliases(c, payload) {
+    addAlias(casesMap, c.id, payload);
+    addAlias(casesMap, c.first_instance?.case_number, payload);
+    addAlias(casesMap, c.first_instance?.material_number, payload);
+    addAlias(casesMap, c.appeal?.case_number, payload);
+    addAlias(casesMap, c.cassation?.case_number, payload);
+    addAlias(casesMap, c.cassation?.cassation_number, payload);
+    for (const prev of extractParenNumbers(c.id)) {
+      addAlias(casesMap, prev, payload);
+    }
+  }
   try {
     const casesRes = results[1];
     if (casesRes && casesRes.ok) {
@@ -1193,26 +1214,36 @@ async function fetchAll() {
           court: payload.court,
           stage: payload.stage,
         });
-        // Канонический ID — первым (он же дефолт для алиаса).
-        addAlias(casesMap, c.id, payload);
-        // Алиасы: FI / апелл. / касс. (касс. бывает в двух полях —
-        // case_number и cassation_number, заполняем оба варианта).
-        // material_number — М-предок дела (Этап 3): когда юрист звёздит
-        // материал, а парсер потом промоутит его в 2-XXX, эта связь
-        // сохраняется и звезда не теряется.
-        addAlias(casesMap, c.first_instance?.case_number, payload);
-        addAlias(casesMap, c.first_instance?.material_number, payload);
-        addAlias(casesMap, c.appeal?.case_number, payload);
-        addAlias(casesMap, c.cassation?.case_number, payload);
-        addAlias(casesMap, c.cassation?.cassation_number, payload);
-        // Предыдущие номера из hybrid-ID '2-208/2026 (2-1148/2025;)'.
-        for (const prev of extractParenNumbers(c.id)) {
-          addAlias(casesMap, prev, payload);
-        }
+        addCaseAliases(c, payload);
       }
     }
   } catch (e) {
     console.warn("cases.json не загружен:", e);
+  }
+  // Горячий архив — те же алиасы, но с пометкой archived: звезда на
+  // завершённом деле показывается со сторонами и бейджем «в архиве», а не
+  // «пустой» строкой (дашборд архив грузит, админка раньше — нет). Архив
+  // добавляется ПОСЛЕ активных дел: при коллизии номера активное побеждает.
+  try {
+    const archRes = results[4];
+    if (archRes && archRes.ok) {
+      const archJson = await archRes.json();
+      const list = Array.isArray(archJson?.cases) ? archJson.cases : [];
+      for (const c of list) {
+        if (!bareCaseNumber(c.id)) continue;
+        addCaseAliases(c, {
+          plaintiff: c.plaintiff || "",
+          defendant: c.defendant || "",
+          court: c.first_instance?.court || c.appeal?.court || "",
+          stage: c.current_stage || "",
+          canonical_id: bareCaseNumber(c.id),
+          archived: true,
+          archived_at: c.archived_at || "",
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("cases_archive.json не загружен:", e);
   }
   // Журнал последней push-рассылки: endpoint → запись.
   const pushesMap = new Map();
@@ -1314,8 +1345,13 @@ function caseRowHtml(num, casesMap) {
   const bare = bareCaseNumber(num);
   const c = casesMap.get(bare);
   if (!c) {
+    // Номер-сирота: дела нет ни в активных, ни в архиве (удалено вручную или
+    // переименовано до Этапа 3, когда М-алиасы ещё не сохранялись). Держать
+    // его в watchlist бессмысленно — даём убрать прямо из карточки.
     return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
-      + '<span class="badge badge-watch">нет в cases.json</span></div>';
+      + '<span class="badge badge-run" title="Дело удалено или переименовано без алиаса — push по этому номеру никогда не сработает">нигде не найдено</span>'
+      + '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist">✕</button>'
+      + '</div>';
   }
   const parties = (c.plaintiff && c.defendant)
     ? escHtml(c.plaintiff) + ' — ' + escHtml(c.defendant)
@@ -1325,9 +1361,13 @@ function caseRowHtml(num, casesMap) {
   const aliasNote = (c.canonical_id && c.canonical_id !== bare)
     ? '<span class="case-alias">→ ' + escHtml(c.canonical_id) + '</span>'
     : '';
+  const archNote = c.archived
+    ? '<span class="badge badge-archive" title="Дело завершено и лежит в cases_archive.json' + (c.archived_at ? ' с ' + escHtml(c.archived_at) : '') + '. Звезда снова заработает при реактивации.">в архиве</span>'
+    : '';
   return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
     + aliasNote
     + stageBadge(c.stage)
+    + archNote
     + '<span class="case-parties">' + parties + '</span>'
     + (c.court ? '<span class="case-court">' + escHtml(c.court) + '</span>' : '')
     + '</div>';
@@ -1429,8 +1469,27 @@ function buildWlList(query) {
       + (c.court ? ' · ' + escHtml(c.court) : '') + '</span>'
       + '</label>';
   });
+  // Архивные звёзды: дело уже в cases_archive.json, в списке активных его
+  // нет — но галку надо показать, иначе такую звезду в модалке не видно и
+  // снять её нечем (при этом в selected она не теряется и уходит при
+  // сохранении как есть).
+  const archRows = [];
+  wlState.selected.forEach(function (id) {
+    const c = casesMapGlobal.get(bareCaseNumber(id));
+    if (!c || !c.archived) return;
+    if (q && (id + " " + c.plaintiff + " " + c.defendant + " " + c.court).toLowerCase().indexOf(q) < 0) return;
+    const parties = (c.plaintiff && c.defendant)
+      ? c.plaintiff + " — " + c.defendant
+      : (c.plaintiff || c.defendant || "");
+    archRows.push('<label class="wl-row"><input type="checkbox" data-case-id="' + escHtml(id) + '" checked>'
+      + '<span class="case-num">' + escHtml(id) + '</span>'
+      + '<span class="badge badge-archive">в архиве</span>'
+      + '<span class="wl-parties">' + escHtml(parties)
+      + (c.court ? ' · ' + escHtml(c.court) : '') + '</span>'
+      + '</label>');
+  });
   document.getElementById("wl-list").innerHTML =
-    rows.join("") || '<div class="empty">Ничего не найдено</div>';
+    rows.concat(archRows).join("") || '<div class="empty">Ничего не найдено</div>';
 }
 function renderWlExtras() {
   const el = document.getElementById("wl-extras");
@@ -1510,9 +1569,22 @@ document.getElementById("wl-cancel").addEventListener("click", function () {
 document.getElementById("wl-save").addEventListener("click", saveWlModal);
 
 // ── Действия на карточках подписок ───────────────────────────────────────────
-async function handleAction(card, action, currentSub) {
+async function handleAction(card, action, currentSub, btn) {
   const endpoint = card.getAttribute("data-endpoint");
   if (!endpoint) return;
+  if (action === "wldel") {
+    // Убрать из watchlist номер-сироту (нет ни в активных, ни в архиве).
+    const num = btn ? (btn.getAttribute("data-wl-num") || "") : "";
+    if (!num) return;
+    if (!confirm("Убрать «" + num + "» из watchlist? Такого дела нет ни в активных, ни в архиве — push по нему никогда не сработает.")) return;
+    flash(card, "убираю…", "");
+    const wl = (Array.isArray(currentSub.watchlist) ? currentSub.watchlist : [])
+      .filter(function (x) { return x !== num; });
+    const res = await postAdmin("/admin/watchlist", { endpoint, watchlist: wl });
+    if (res.ok) { flash(card, "✓ убрано", "ok"); render(true); }
+    else { flash(card, "× ошибка", "err"); }
+    return;
+  }
   if (action === "rename") {
     const cur = currentSub.label || "";
     const next = prompt("Имя для подписки (Иван, рабочий iPhone и т.п.). Пусто — снять имя.", cur);
@@ -1593,9 +1665,18 @@ async function render(force) {
     const subs = all.subs;
     const owners = subs.filter((s) => s.is_owner).length;
     const totalWl = subs.reduce((a, s) => a + (s.watchlist?.length || 0), 0);
+    // Сироты: номера, которых нет ни в активных делах, ни в архиве —
+    // сигнал, что watchlist пора почистить (крестик в строке дела).
+    let orphanWl = 0;
+    for (const s of subs) {
+      for (const n of (Array.isArray(s.watchlist) ? s.watchlist : [])) {
+        if (!casesMapGlobal.get(bareCaseNumber(n))) orphanWl++;
+      }
+    }
     document.getElementById("summary").innerHTML =
       "<b>" + subs.length + "</b> подписок · <b>" + owners + "</b> owner<br>"
-      + totalWl + " дел в watchlist'ах";
+      + totalWl + " дел в watchlist'ах"
+      + (orphanWl ? " · <b>⚠ " + orphanWl + " нигде не найдено</b>" : "");
     document.getElementById("nav-subs-count").textContent = String(subs.length);
     // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
     subs.sort((a, b) => {
@@ -1622,7 +1703,7 @@ document.getElementById("root").addEventListener("click", (e) => {
   if (!card) return;
   const sub = subsByEp.get(card.getAttribute("data-endpoint"));
   if (!sub) return;
-  handleAction(card, btn.getAttribute("data-action"), sub);
+  handleAction(card, btn.getAttribute("data-action"), sub, btn);
 });
 document.getElementById("subs-search").addEventListener("input", renderSubsList);
 
