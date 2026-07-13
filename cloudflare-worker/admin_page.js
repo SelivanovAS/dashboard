@@ -619,7 +619,8 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
               <option value="топ-5">топ-5</option>
             </select>
           </label>
-          <label>Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
+          <label id="tf-model-wrap" style="display:none;">Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
+          <span class="tform-hint" id="tf-claude-note">модель фиксирована: claude-haiku-4-5 — боевой эталон дайджеста</span>
         </div>
         <div class="tform-row">
           <label><input type="checkbox" id="tf-to-group"> в корп. группу <span class="warn-mark">⚠︎</span></label>
@@ -1121,8 +1122,13 @@ async function loadLlmTop() {
   }
 }
 document.getElementById("tf-provider").addEventListener("change", function () {
+  // У Claude модель зашита в llm.py (боевой эталон, общий кэш пересказов) —
+  // llm_model на неё не действует, поэтому поле прячем и честно пишем почему.
+  const isClaude = this.value === "claude";
   document.getElementById("tf-giga-wrap").style.display = this.value === "gigachat" ? "" : "none";
   document.getElementById("tf-or-wrap").style.display = this.value === "openrouter" ? "" : "none";
+  document.getElementById("tf-model-wrap").style.display = isClaude ? "none" : "";
+  document.getElementById("tf-claude-note").style.display = isClaude ? "" : "none";
 });
 document.getElementById("tf-run").addEventListener("click", function () {
   const provider = document.getElementById("tf-provider").value;
@@ -1137,8 +1143,10 @@ document.getElementById("tf-run").addEventListener("click", function () {
   };
   if (provider === "gigachat") inputs.gigachat_model = document.getElementById("tf-giga").value;
   if (provider === "openrouter") inputs.openrouter_model = document.getElementById("tf-or").value;
+  // llm_model перебивает только списки GigaChat/OpenRouter — ветка Claude
+  // его не читает, не шлём мусорный input.
   const manual = document.getElementById("tf-model").value.trim();
-  if (manual) inputs.llm_model = manual;
+  if (manual && provider !== "claude") inputs.llm_model = manual;
   if (toGroup || pushAll) {
     const parts = [];
     if (toGroup) parts.push("дайджест уйдёт в КОРПОРАТИВНУЮ ГРУППУ");
