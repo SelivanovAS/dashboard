@@ -4,8 +4,11 @@ name: 🧪 Тест дайджеста (replay)
 # последний продовый дайджест из data/last_digest_context.json (гибрид:
 # программный шаблон + LLM на пересказ мотивировок; галка full_llm —
 # откат на старый полный LLM-вариант). LLM-провайдер выбирается списком
-# llm_provider (claude / gigachat / openrouter), модель — полем llm_model
-# (пусто = дефолт провайдера; для openrouter — «модель дня» с shir-man.com).
+# llm_provider (claude / gigachat / openrouter); модель — выпадающим списком
+# своего провайдера: gigachat_model (имена моделей GigaChat) или
+# openrouter_model (место в рейтинге бесплатных моделей shir-man.com —
+# конкретный id резолвится на прогоне, чтобы список не протухал).
+# Текстовое поле llm_model перебивает оба списка (произвольный id).
 # Telegram: личный по умолчанию, группа по галке.
 # Публикация результатов (last_digest.json, cases.json, кэш пересказов) —
 # только по галке commit_results: без неё тестовый дайджест НЕ попадает на
@@ -43,8 +46,28 @@ on:
           - gigachat
           - openrouter
         default: claude
+      gigachat_model:
+        description: 'Модель GigaChat (действует при провайдере gigachat).'
+        required: false
+        type: choice
+        options:
+          - GigaChat-2-Pro
+          - GigaChat-2
+          - GigaChat-2-Max
+        default: GigaChat-2-Pro
+      openrouter_model:
+        description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга, какая именно — видно в приписке «🤖 LLM» и в логе.'
+        required: false
+        type: choice
+        options:
+          - модель дня (топ-1)
+          - топ-2
+          - топ-3
+          - топ-4
+          - топ-5
+        default: модель дня (топ-1)
       llm_model:
-        description: 'Модель. Пусто = дефолт: claude — haiku, gigachat — GigaChat, openrouter — «модель дня» с shir-man.com (fallback openrouter/free).'
+        description: 'Другая модель (текстом) — перебивает оба списка. Например, свежая free-модель OpenRouter, которой нет в рейтинге, или GigaChat-Max.'
         required: false
         type: string
         default: ''
@@ -92,17 +115,27 @@ jobs:
           # Управление архитектурой дайджеста для тестирования:
           # без галки — боевой гибрид, с галкой — старый полный LLM.
           DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
-          # Выбор LLM-провайдера и модели. Общее поле llm_model уходит и в
-          # GIGACHAT_MODEL, и в OPENROUTER_MODEL — читает только активный
-          # провайдер, пустая строка означает дефолт (гарды в config.py).
+          # Выбор LLM-провайдера и модели. Модель берётся из выпадающего
+          # списка своего провайдера; текстовое поле llm_model (если
+          # заполнено) перебивает оба списка. Читает переменную только
+          # активный провайдер. «Топ-N» в OPENROUTER_MODEL резолвится в
+          # конкретную модель на прогоне (llm._resolve_openrouter_model).
           LLM_PROVIDER: ${{ inputs.llm_provider }}
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
-          GIGACHAT_MODEL: ${{ inputs.llm_model }}
+          GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL: ${{ inputs.llm_model }}
+          OPENROUTER_MODEL: ${{ inputs.llm_model || inputs.openrouter_model }}
         run: |
-          echo "🧠 Провайдер: ${{ inputs.llm_provider }}, модель: ${{ inputs.llm_model || '(дефолт / модель дня)' }}"
+          if [ -n "${{ inputs.llm_model }}" ]; then
+            echo "🧠 Провайдер: ${{ inputs.llm_provider }}, модель (текстом): ${{ inputs.llm_model }}"
+          elif [ "${{ inputs.llm_provider }}" = "gigachat" ]; then
+            echo "🧠 Провайдер: gigachat, модель: ${{ inputs.gigachat_model }}"
+          elif [ "${{ inputs.llm_provider }}" = "openrouter" ]; then
+            echo "🧠 Провайдер: openrouter, модель: ${{ inputs.openrouter_model }} — конкретный id см. ниже в логе"
+          else
+            echo "🧠 Провайдер: claude (haiku)"
+          fi
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 Дайджест уйдёт в корпоративную группу Telegram"
           else

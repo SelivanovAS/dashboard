@@ -101,6 +101,47 @@ class ResolveOpenrouterModelTest(_OpenRouterTestBase):
                     f"payload={payload}",
                 )
 
+    def test_rank_parsing(self):
+        cases = {
+            "": 1,
+            "модель дня (топ-1)": 1,
+            "Модель дня": 1,
+            "авто": 1,
+            "топ-2": 2,
+            "топ-5": 5,
+            "Топ 3": 3,
+            "qwen/qwen3:free": None,     # буквальный id
+            "GigaChat-2-Max": None,
+        }
+        for raw, expected in cases.items():
+            with patch.object(cm_config, "OPENROUTER_MODEL", raw):
+                self.assertEqual(
+                    cm_llm._openrouter_requested_rank(), expected,
+                    f"raw={raw!r}",
+                )
+
+    def test_rank_picks_nth_model(self):
+        payload = {"models": [
+            {"id": "first/model:free"},
+            {"id": "second/model:free"},
+            {"id": "third/model:free"},
+        ]}
+        with patch.object(cm_config, "OPENROUTER_MODEL", "топ-2"), \
+             patch.object(cm_llm.requests, "get") as mget:
+            mget.return_value = _fake_response(payload)
+            self.assertEqual(
+                cm_llm._resolve_openrouter_model(), "second/model:free"
+            )
+
+    def test_rank_beyond_list_takes_last(self):
+        payload = {"models": [{"id": "only/model:free"}]}
+        with patch.object(cm_config, "OPENROUTER_MODEL", "топ-5"), \
+             patch.object(cm_llm.requests, "get") as mget:
+            mget.return_value = _fake_response(payload)
+            self.assertEqual(
+                cm_llm._resolve_openrouter_model(), "only/model:free"
+            )
+
 
 class CallOpenrouterChatTest(_OpenRouterTestBase):
     def test_request_shape_and_parsing(self):

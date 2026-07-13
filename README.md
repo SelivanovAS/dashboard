@@ -242,7 +242,9 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
   - `push_all` — PWA push на все устройства (по умолчанию — только владельцу).
   - `full_llm` — старый полный LLM-вызов вместо гибрида (`DIGEST_FULL_LLM=1`).
   - `llm_provider` — LLM-провайдер: `claude` (по умолчанию) / `gigachat` / `openrouter`.
-  - `llm_model` — модель (пусто = дефолт: claude — haiku, gigachat — GigaChat, openrouter — «модель дня» с shir-man.com, fallback `openrouter/free`).
+  - `gigachat_model` — выпадающий список моделей GigaChat: GigaChat-2-Pro (дефолт) / GigaChat-2 / GigaChat-2-Max.
+  - `openrouter_model` — выпадающий список мест в рейтинге бесплатных моделей shir-man.com: «модель дня (топ-1)» (дефолт) … «топ-5»; конкретная модель подставляется на прогоне из свежего рейтинга.
+  - `llm_model` — другая модель текстом, перебивает оба списка.
   - `commit_results` — опубликовать результаты (дайджест попадёт на дашборд + уйдёт PWA push). По умолчанию выключена — только Telegram, без пуша и без изменений на сайте.
 
 ---
