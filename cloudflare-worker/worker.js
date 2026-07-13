@@ -695,14 +695,31 @@ async function handleAdminGhRuns(request, env) {
   if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
     return new Response("Unauthorized", { status: 401 });
   }
+  const ghHeaders = {
+    Authorization: `Bearer ${env.GITHUB_PAT}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "CloudflareWorker",
+  };
+  const mapRun = (run) => ({
+    name: run.name || "",
+    path: run.path || "",
+    status: run.status || "",
+    conclusion: run.conclusion || "",
+    run_started_at: run.run_started_at || "",
+    updated_at: run.updated_at || "",
+    html_url: run.html_url || "",
+    run_number: run.run_number || 0,
+    event: run.event || "",
+  });
   try {
-    const r = await fetch(GH_REPO_API + "/actions/runs?per_page=20", {
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_PAT}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "CloudflareWorker",
-      },
-    });
+    // Общий список + отдельно последний запуск основного workflow: пары
+    // «Тесты+Pages» от частых пушей вытесняют его из первых 20 runs, а
+    // плитке «Последний прогон» нужен именно он.
+    const [r, rMain] = await Promise.all([
+      fetch(GH_REPO_API + "/actions/runs?per_page=20", { headers: ghHeaders }),
+      fetch(GH_REPO_API + "/actions/workflows/update_cases.yml/runs?per_page=1", { headers: ghHeaders })
+        .catch(() => null),
+    ]);
     if (!r.ok) {
       const text = await r.text().catch(() => "");
       return new Response(
@@ -715,20 +732,18 @@ async function handleAdminGhRuns(request, env) {
       );
     }
     const j = await r.json();
-    const runs = (j.workflow_runs || []).map((run) => ({
-      name: run.name || "",
-      path: run.path || "",
-      status: run.status || "",
-      conclusion: run.conclusion || "",
-      run_started_at: run.run_started_at || "",
-      updated_at: run.updated_at || "",
-      html_url: run.html_url || "",
-      run_number: run.run_number || 0,
-      event: run.event || "",
-    }));
-    return new Response(JSON.stringify({ runs, next_cron_at: nextCronAt() }), {
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+    const runs = (j.workflow_runs || []).map(mapRun);
+    let mainRun = null;
+    if (rMain && rMain.ok) {
+      const jm = await rMain.json().catch(() => null);
+      if (jm && Array.isArray(jm.workflow_runs) && jm.workflow_runs.length) {
+        mainRun = mapRun(jm.workflow_runs[0]);
+      }
+    }
+    return new Response(
+      JSON.stringify({ runs, main_run: mainRun, next_cron_at: nextCronAt() }),
+      { headers: { "Content-Type": "application/json; charset=utf-8" } }
+    );
   } catch (e) {
     console.error("admin/gh-runs error:", e);
     return new Response(
