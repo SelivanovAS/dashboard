@@ -20,6 +20,8 @@ data/orphan_watchlist_report.md
 
 # Node / Cloudflare Worker
 node_modules/
+.dev.vars
+.wrangler/
 
 # macOS
 .DS_Store
