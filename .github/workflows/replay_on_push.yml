@@ -64,6 +64,8 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Группы фаз и аннотации WARNING/ERROR в UI Actions (ghlog.py).
+          LOG_GH_ANNOTATIONS: "1"
         # --push-all: рассылка всем PWA-подписчикам (как продовый крон),
         # а не только владельцу.
         run: python scripts/update_cases.py --replay-last --push-all

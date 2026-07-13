@@ -324,7 +324,7 @@ def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
             break
         attempted += 1
         polite_delay()
-        html = fetch_page(court.search_by_number_url(num))
+        html = fetch_page(court.search_by_number_url(num), context=f"{num} ({court.name})")
         if not html:
             log.warning(
                 f"  backfill_fi_links: {num} ({court.name}) — поиск по номеру "

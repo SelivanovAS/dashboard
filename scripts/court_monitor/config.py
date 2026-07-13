@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+
+from court_monitor import ghlog
 
 CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
 CSV_ARCHIVE_PATH = os.environ.get(
@@ -244,12 +247,18 @@ CSV_COLUMNS = [
 _LOG_LEVEL_RAW = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
 if _LOG_LEVEL_RAW not in ("DEBUG", "INFO", "WARNING", "ERROR"):
     _LOG_LEVEL_RAW = "INFO"
+# stdout, а не дефолтный stderr: workflow-команды GitHub (::group::,
+# ::warning:: из ghlog) читаются из stdout — два потока перепутали бы
+# порядок строк. Mac-обёртка пишет `>>"$LOG" 2>&1` — ей без разницы,
+# а StreamHandler флашит каждую запись, так что буферизация не страшна.
 logging.basicConfig(
     level=getattr(logging, _LOG_LEVEL_RAW),
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
+    stream=sys.stdout,
 )
 log = logging.getLogger("court-monitor")
+ghlog.install(log)
 # ── Метрики прогона ──────────────────────────────────────────────────────────
 
 # Глобальные счётчики прогона — собираются по ходу выполнения,
@@ -261,6 +270,10 @@ METRICS: dict[str, int] = {
     "telegram_sent": 0,      # успешно отправленных сообщений (после split)
     "telegram_failed": 0,    # полностью не отправленных частей
     "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
+    "push_sent": 0,          # Web Push: доставлено подписчикам
+    "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
+    "llm_summary_calls": 0,       # пересказы актов: реальные вызовы LLM
+    "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
 }
 
 

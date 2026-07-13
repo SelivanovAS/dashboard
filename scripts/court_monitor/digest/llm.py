@@ -695,8 +695,10 @@ def summarize_act_motivation(
     if use_cache and key in cache:
         cached_summary = (cache[key] or {}).get("summary")
         if cached_summary:
+            config.METRICS["llm_summary_cache_hits"] += 1
             return cached_summary
 
+    config.METRICS["llm_summary_calls"] += 1
     prompt = _build_act_summary_prompt(act, case_meta)
     if config.LLM_PROVIDER == "gigachat":
         raw = _call_gigachat_simple(prompt)

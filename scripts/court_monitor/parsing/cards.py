@@ -82,6 +82,7 @@ def _warn_if_card_degraded(
     card_info: dict,
     case_number: str,
     case_block: dict | None = None,
+    court: str = "",
 ) -> None:
     """Логируем обрезанную карточку только если из неё не удалось
     выдернуть ни одного события (иначе компактный шаблон — это норма).
@@ -89,13 +90,17 @@ def _warn_if_card_degraded(
     Если у дела последний сохранённый event — «без движения», обрезанная
     карточка ожидаема (sudrf отдаёт огрызок, smart-skip парсит раз в 7
     дней). Понижаем до debug, чтобы не шуметь в логе каждую неделю.
+
+    court — короткое имя суда для обхода 1-й инстанции (20 судов, по
+    номеру дела суд не восстановить); апелляция/кассация не передают.
     """
     if card_info.get("_table_count", 0) >= 6:
         return
     if card_info.get("_events"):
         return
+    court_tag = f" ({court})" if court else ""
     msg = (
-        f"  {case_number}: карточка обрезана "
+        f"  {case_number}{court_tag}: карточка обрезана "
         f"({card_info.get('_table_count', 0)} таблиц), "
         f"движение не распозналось"
     )
@@ -777,10 +782,10 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     return info
 
 
-def fetch_act_text(act_url: str) -> str:
-    """Скачать текст судебного акта по URL."""
+def fetch_act_text(act_url: str, *, context: str | None = None) -> str:
+    """Скачать текст судебного акта по URL (context — номер дела для логов)."""
     polite_delay()
-    html = fetch_page(act_url)
+    html = fetch_page(act_url, context=context)
     if not html:
         return ""
     # Убираем script/style + теги, схлопываем пробелы

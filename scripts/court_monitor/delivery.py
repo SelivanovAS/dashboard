@@ -21,7 +21,7 @@ from html import escape as html_escape
 
 import requests
 
-from court_monitor import config
+from court_monitor import config, ghlog
 from court_monitor.config import log
 from court_monitor.digest.postprocess import (
     _close_open_tags, _strip_orphan_close_tags,
@@ -579,7 +579,9 @@ def send_web_push(
                                 # пока устройство не выйдет в сеть
                 )
                 ok_count += 1
+                config.METRICS["push_sent"] += 1
             except WebPushException as exc:
+                config.METRICS["push_failed"] += 1
                 ep_full = sub.get("endpoint") or ""
                 ep_short = ep_full[:60] or "?"
                 log.warning(f"Web Push: ошибка для {ep_short}: {exc}")
@@ -759,6 +761,9 @@ def log_run_summary(
     Печатает итоговый блок метрик в лог и (если переменная установлена)
     в $GITHUB_STEP_SUMMARY — так он виден прямо в UI GitHub Actions.
     """
+    # Закрыть группу последней фазы (log_phase в runs.py), чтобы сводка
+    # была видна развёрнутой; вне GitHub Actions / вне группы — no-op.
+    ghlog.end_group()
     extras = extras or {}
     req_line = (
         f"Запросы: {config.METRICS['requests_ok']} ок / "
@@ -771,6 +776,22 @@ def log_run_summary(
         + (f", не доставлено {config.METRICS['telegram_failed']}"
            if config.METRICS['telegram_failed'] else "")
     )
+    # Опциональные строки — только при ненулевых счётчиках, чтобы сводка
+    # прогона без push/LLM/огрызков не обрастала нулями.
+    opt_lines: list[str] = []
+    if config.METRICS["cards_degraded"]:
+        opt_lines.append(f"Карточек-огрызков: {config.METRICS['cards_degraded']}")
+    if config.METRICS["push_sent"] or config.METRICS["push_failed"]:
+        opt_lines.append(
+            f"Web Push: отправлено {config.METRICS['push_sent']}"
+            + (f", сбоев {config.METRICS['push_failed']}"
+               if config.METRICS["push_failed"] else "")
+        )
+    if config.METRICS["llm_summary_calls"] or config.METRICS["llm_summary_cache_hits"]:
+        opt_lines.append(
+            f"LLM-пересказы актов: вызовов {config.METRICS['llm_summary_calls']}, "
+            f"из кэша {config.METRICS['llm_summary_cache_hits']}"
+        )
     lines = [
         "=" * 60,
         f"Сводка прогона ({mode})",
@@ -783,6 +804,7 @@ def log_run_summary(
         ))
     lines.append(req_line)
     lines.append(tg_line)
+    lines.extend(opt_lines)
     if timings:
         lines.append(f"Тайминги: {_format_timings(timings)}")
     lines.append("=" * 60)
@@ -807,6 +829,8 @@ def log_run_summary(
                 md_lines.append("")
             md_lines.append(f"- {req_line}")
             md_lines.append(f"- {tg_line}")
+            for opt in opt_lines:
+                md_lines.append(f"- {opt}")
             if timings:
                 md_lines.append(f"- Тайминги: `{_format_timings(timings)}`")
             md_lines.append("")
