@@ -145,6 +145,13 @@
   Плановый прогон идёт со `smart_skip=true` (пропуск нерабочих дней РФ и дел с
   известной будущей датой); ручной — по галке. Падение шага → 🚨-алерт в личный
   Telegram (шаг `if: failure()`, curl без Python).
+- **Живой лог прогона (с 13.07.2026):** stdout прогона идёт через pass-through-пушер
+  [scripts/gh_progress_pusher.py](scripts/gh_progress_pusher.py) (`… --json 2>&1 |
+  python -u …`, `set -o pipefail`) → батчи на `POST /run-progress` Worker'а →
+  блок «Прогон (GitHub Actions)» в админке (свёртка по фазам «— [N/9]»), лог
+  хранится в KV 14 дней (current + prev, cap 1000 строк). Токен —
+  `secrets.PROGRESS_SECRET || secrets.PUSH_SECRET` (Worker принимает оба);
+  без секретов пушер — чистый cat, прогон не страдает.
 - **Секреты** уже в repo secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_*`, `PUSH_*`) —
   новых не нужно.
 - **Планировщик — Cloudflare Worker cron** (`crons = ["45 3 * * mon-fri"]` в
@@ -172,9 +179,11 @@
   вернуть `if: github.actor != 'github-actions[bot]'`. (Push облачного крона и
   так идёт через GITHUB_TOKEN и его бы не триггерил.)
 - **Живой просмотр парсинга (для резерва):** ярлык `ops/mac-local-run/Парсинг судов.command`
-  + блок «🛰 Парсинг» в админке Worker (`progress_pusher.py` → `POST /run-progress`,
+  + блок живого лога в админке Worker (`progress_pusher.py` → `POST /run-progress`,
   auth — Worker-секрет `PROGRESS_SECRET`, токен на Mac в
-  `~/.config/court-monitor/progress_token` вне репо).
+  `~/.config/court-monitor/progress_token` вне репо). Канал `/run-progress`
+  общий с облачным пушером (`scripts/gh_progress_pusher.py`, `source:"github"`);
+  записи Mac-пушера без `source` админка подписывает «Парсинг на Mac (резерв)».
 
 ### Процедура флипа обратно на Mac (если блок вернётся)
 
@@ -329,7 +338,7 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 **Дизайн v2 (13.07.2026)** — визуальный язык дашборда: токены цветов/шрифтов скопированы из [styles.css](styles.css) (IBM Plex с Google Fonts, сберовский зелёный, бейджи-пилюли, цвета стадий teal/indigo/violet — карта `stageBadge` зеркалит `stageBadgeHtml` из app.js), 3-режимная тема авто/свет/тьма (localStorage `admin_theme`, инлайн-скрипт в head), статусы — цветные точки/пилюли вместо эмодзи, иконки — inline-SVG. При смене палитры дашборда токены админки синхронизировать вручную.
 
 Компоновка: липкая glass-шапка (лого · чипы-якоря «Система/LLM/Подписчики» с подсветкой активной секции через IntersectionObserver · сводка · тоггл темы · Обновить) → **пульт из 4 кликабельных stat-плиток** (Последний прогон ok/сбой/идёт из gh-runs · Дайджест N изменений · Парсеры «все 22 ok»/«N ⚠» · Автозапуск + push-агрегат) → секции:
-- **#system** (грид 2 колонки на десктопе): карточка «Прогоны GitHub Actions» — последние 8 runs (точки-статусы, живой пульсирует и автообновляется каждые 15 с, ссылки на GitHub) через GET `/admin/gh-runs` (Worker проксирует GitHub API, PAT на сервере; отдаёт и `next_cron_at` с учётом праздников), кнопка «▶ Полный прогон» → POST `/admin/dispatch`; внутри же — Mac-резерв (живой прогон разворачивается блоком с автообновлением, завершённый старше суток — свёрнутый details) | карточка «Здоровье парсеров» из [data/parse_health.json](data/parse_health.json): светофор-точки (красный fail_streak≥3/alerted_zero; жёлтый fail_streak≥1 или ноль при медиане≥1), спарклайны, проблемные вверху, первые 8 + свёрток; имена судов — карта `COURT_NAMES` (синхронизировать при правке `FIRST_INSTANCE_COURTS`).
+- **#system** (грид 2 колонки на десктопе): карточка «Прогоны GitHub Actions» — последние 8 runs (точки-статусы, живой пульсирует и автообновляется каждые 15 с, ссылки на GitHub) через GET `/admin/gh-runs` (Worker проксирует GitHub API, PAT на сервере; отдаёт и `next_cron_at` с учётом праздников), кнопки «▶ Полный прогон» (`smart_skip:"false"`) и «Стандартный прогон» (`smart_skip:"true"`, как ежедневный крон; в выходной сразу завершится «нерабочий день») → POST `/admin/dispatch`; внутри же — блок живого лога прогона (данные `GET /admin/run-progress`, поллинг 5 с пока идёт; заголовок по `source`: «Прогон (GitHub Actions)» с ссылкой на run / «Парсинг на Mac (резерв)»; лог сворачивается по фазам «— [N/9]» — `renderLogGroups`, вручную открытые фазы переживают ререндер, у фаз бейджи ⚠/✖, финальная «Сводка прогона» видна без разворачивания; завершённый старше суток — свёрнутый details, предыдущий прогон — вложенный details) | карточка «Здоровье парсеров» из [data/parse_health.json](data/parse_health.json): светофор-точки (красный fail_streak≥3/alerted_zero; жёлтый fail_streak≥1 или ноль при медиане≥1), спарклайны, проблемные вверху, первые 8 + свёрток; имена судов — карта `COURT_NAMES` (синхронизировать при правке `FIRST_INSTANCE_COURTS`).
 - **#llm**: топ-5 рейтинга shir-man (браузером напрямую, CORS `*`) + мини-форма запуска `test_digest.yml` через POST `/admin/dispatch`: провайдер, модель (подписи «топ-N» обогащаются рейтингом), галки to_group/push_all/full_llm/commit_results (по умолчанию ВЫКЛ — безопасный прогон в личку; при опасных галках — confirm). Для claude выбора модели нет намеренно: она зашита в llm.py (haiku 4.5 — боевой эталон, общий кэш пересказов), workflow-поле `llm_model` перебивает только списки GigaChat/OpenRouter — форма при claude прячет «Точную модель» и показывает подпись об этом.
 - **#subs**: счётчик + **поиск по подпискам** (имя/устройство/номера и стороны дел watchlist) + карточки: имя, пилюля устройства, бейджи owner/«⏳ истекает» (нет входа 45+ дней — KV-TTL 60), kv-строка дат, свёртки «Последний push» (бейдж варианта; из [data/last_personal_pushes.json](data/last_personal_pushes.json); skip = «нет событий по watchlist») и «Дела» с бейджами стадий, сторонами и судом. Карта дел строится из cases.json **и cases_archive.json** (с 13.07): звезда на завершённом деле — бейдж «в архиве» (в модалке Watchlist такая строка видна с галкой, снять можно; при реактивации дела звезда оживает), номер-сирота (нет ни в активных, ни в архиве — дело удалено вручную или переименовано до Этапа 3) — бейдж «нигде не найдено» + крестик-удаление прямо в строке; счётчик «⚠ N нигде не найдено» — в сводке шапки. Периодический read-only аудит — [scripts/audit_watchlists.py](scripts/audit_watchlists.py). Данные плитки «Дайджест» — из [data/last_digest.json](data/last_digest.json).
 
