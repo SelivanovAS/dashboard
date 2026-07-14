@@ -1,0 +1,52 @@
+name: 🔐 Проба проверочного кода (CAPTCHA) на суде
+
+# Диагностический workflow. Проверяет для конкретного суда, закрыт ли поиск
+# проверочным кодом (картинка на форме name_op=sf) и можно ли пройти БЕЗ
+# разгадки кода — только установкой сессии (session priming). Печатает вердикт
+# A/B/C (см. scripts/probe_captcha.py). НИЧЕГО не парсит, не коммитит, не шлёт
+# дайджест. Проба только классифицирует — код не читает и не решает.
+#
+# Гоняется с US-IP раннера GitHub. Тот же скрипт запускают на Mac (RU-IP), и
+# вердикты сравнивают: код у sudrf часто включается по репутации IP, поэтому
+# с российского адреса его может не быть вовсе.
+# Запуск вручную: Actions → этот workflow → Run workflow (можно задать домен).
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Домен суда (например surggor--hmao.sudrf.ru)"
+        required: false
+        default: "akademicheskiy--svd.sudrf.ru"
+      delo_id:
+        description: "delo_id (1540005 = 1-я инст. гражданская)"
+        required: false
+        default: "1540005"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сырой curl — TLS-хендшейк и HTTP-код (подпись блока)
+        run: |
+          host="${{ github.event.inputs.domain }}"
+          echo "=== $host ==="
+          curl -sS -o /dev/null \
+            --connect-timeout 12 --max-time 25 \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -w "  code=%{http_code}  time_connect(TCP)=%{time_connect}s  time_appconnect(TLS)=%{time_appconnect}s  time_total=%{time_total}s\n" \
+            "https://$host/" || echo "  curl ВЕРНУЛ ОШИБКУ (код 000 = TLS/таймаут — вероятен блок IP)"
+
+      - name: Python — проба проверочного кода (вердикт A/B/C)
+        run: |
+          python3 -m pip install --quiet requests
+          python3 scripts/probe_captcha.py \
+            --domain "${{ github.event.inputs.domain }}" \
+            --delo-id "${{ github.event.inputs.delo_id }}"
+          echo
+          echo ">>> A — код только на форме, парсер уже работает: добавляем суд как есть."
+          echo ">>> B — помогает приминг сессии: включаем session priming (вар. 2)."
+          echo ">>> C — код реально нужен: только ввод человеком (вар. 3), автоматом НЕ обходим."
