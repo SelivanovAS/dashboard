@@ -2827,3 +2827,49 @@ class TestApplyFiCassator:
                "bank_role": "Третье лицо"}
         assert self._apply(cj2, "ТРЕТЬЕ ЛИЦО") is True
         assert cj2["cassation"]["appellant_is_bank"] is None
+
+
+# ── detect_captcha_challenge ─────────────────────────────────────────────────
+
+class TestDetectCaptchaChallenge:
+    """Детект страницы поиска, закрытой проверочным кодом (CAPTCHA).
+
+    READ-ONLY классификация: код не читаем/не решаем — только отличаем
+    код-страницу от нормальной выдачи и от легитимно пустого «нет данных».
+    """
+
+    def test_captcha_page_true(self):
+        """Реальная разметка капчи (img captcha.php + input + фраза) → True."""
+        html = _read_fixture("search_captcha_challenge.html")
+        assert uc.detect_captcha_challenge(html) is True
+
+    def test_normal_results_page_false(self):
+        """Нормальная выдача с таблицей дел → False (нет маркеров кода)."""
+        html = _read_fixture("search_page_normal.html")
+        assert uc.detect_captcha_challenge(html) is False
+
+    def test_no_data_page_false(self):
+        """Легитимно пустая выдача «Данных по запросу не обнаружено» → False."""
+        html = (
+            "<html><body><div id='modSudDelo'>"
+            "Данных по запросу не обнаружено.</div></body></html>"
+        )
+        assert uc.detect_captcha_challenge(html) is False
+
+    def test_empty_string_false(self):
+        """Пустая строка (страница не загрузилась) → False."""
+        assert uc.detect_captcha_challenge("") is False
+
+    def test_no_data_wins_over_stray_captcha_token(self):
+        """«Нет данных» + случайный токен captcha → False (защита выигрывает,
+        фиксирует порядок проверок: пустая выдача важнее слабого совпадения)."""
+        html = (
+            "<html><body>Данных по запросу не обнаружено."
+            "<!-- captcha.php --></body></html>"
+        )
+        assert uc.detect_captcha_challenge(html) is False
+
+    def test_text_phrase_alone_true(self):
+        """Только текстовая подсказка «проверочный код» без img → True."""
+        html = "<html><body><p>Введите проверочный код для поиска</p></body></html>"
+        assert uc.detect_captcha_challenge(html) is True

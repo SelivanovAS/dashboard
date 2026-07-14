@@ -74,6 +74,7 @@ from court_monitor.parsing import (
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
     _warn_if_card_degraded, is_subsidiary_only_case,
     determine_bank_role_from_participants, classify_cassation_outcome,
+    detect_captcha_challenge,
 )
 from court_monitor.storage import (
     load_csv, save_csv, load_json, save_json,
@@ -1318,6 +1319,10 @@ def main_json():
     # {ключ источника: сколько строк дал поиск; None — страница не загрузилась}.
     health_obs: dict = {}
     health_labels: dict = {}
+    # Суды 1-й инст., чья страница поиска пришла как проверочный код (CAPTCHA):
+    # {domain: court.name}. Отдельный 🩺-алерт в блоке 4e, чтобы код не читался
+    # молча как «дел нет» (см. detect_captcha_challenge).
+    fi_challenge: dict = {}
 
     log.info("Загружаю страницу поиска апелляции...")
     search_html = fetch_page(APPEAL_COURT.search_url(), context="поиск апелляции")
@@ -1415,6 +1420,9 @@ def main_json():
 
         fi_results = parse_first_instance_search(search_html, court)
         health_obs[f"fi:{court.domain}"] = len(fi_results)
+        # 0 строк + маркеры проверочного кода → суд закрыт CAPTCHA, а не «нет дел».
+        if not fi_results and detect_captcha_challenge(search_html):
+            fi_challenge[court.domain] = court.name
         fi_results_by_court.append((court, fi_results))
 
         # Промоушен материала → 2-XXX до фильтра new_fi.
@@ -2775,6 +2783,10 @@ def main_json():
             health_alerts.append(
                 f"карточек-«огрызков» без событий за прогон: "
                 f"{config.METRICS['cards_degraded']} (возможна смена вёрстки карточек)"
+            )
+        for _dom, _name in fi_challenge.items():
+            health_alerts.append(
+                f"{_name}: требует ввод проверочного кода — проверить вручную"
             )
         if health_alerts:
             log.warning(
