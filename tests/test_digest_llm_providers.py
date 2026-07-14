@@ -200,9 +200,9 @@ class CallOpenrouterChatTest(_OpenRouterTestBase):
 
 class SummaryTokenBudgetTest(_OpenRouterTestBase):
     """Лимиты max_tokens микро-вызовов пересказа: 700 у Claude/GigaChat
-    (2-3 предложения ≈ 250-350 токенов кириллицы + запас), 1200 у
+    (2-3 предложения ≈ 250-350 токенов кириллицы + запас), 4096 у
     OpenRouter (reasoning-модели тратят бюджет на размышления в content
-    и с маленьким лимитом обрезаются до пустого ответа)."""
+    и с маленьким лимитом обрезаются посреди <think>)."""
 
     def test_openrouter_simple_budget(self):
         captured = {}
@@ -213,7 +213,7 @@ class SummaryTokenBudgetTest(_OpenRouterTestBase):
 
         with patch.object(cm_llm, "_call_openrouter_chat", fake_chat):
             self.assertEqual(cm_llm._call_openrouter_simple("тест"), "ок")
-        self.assertEqual(captured["max_tokens"], 1200)
+        self.assertEqual(captured["max_tokens"], 4096)
 
     def test_claude_simple_budget(self):
         with patch.object(cm_config, "ANTHROPIC_API_KEY", "k"), \
@@ -260,6 +260,56 @@ class SummarizeDispatchTest(_OpenRouterTestBase):
             )
         self.assertEqual(out, "Пересказ.")
         self.assertEqual(called, {"openrouter": 1, "claude": 0, "gigachat": 0})
+
+
+class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
+    """Ретрай пересказа для openrouter: free-модели капризны (обрыв
+    reasoning, пустой content), вторая попытка часто уходит на другой
+    бэкенд и спасает пересказ. У Claude/GigaChat ретрая нет."""
+
+    ACT = "Мотивировочная часть акта. " * 10
+
+    def _summarize(self):
+        return cm_llm.summarize_act_motivation(
+            self.ACT, case_meta={"stage": "appeal"}, use_cache=False,
+        )
+
+    def test_retry_saves_summary(self):
+        answers = ["<think>обрыв размышлений посреди", "Иск удовлетворён."]
+        calls = []
+
+        def fake(prompt):
+            calls.append(prompt)
+            return answers[len(calls) - 1]
+
+        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
+             patch.object(cm_llm, "_call_openrouter_simple", fake):
+            self.assertEqual(self._summarize(), "Иск удовлетворён.")
+        self.assertEqual(len(calls), 2)
+
+    def test_both_attempts_junk_fall_back_to_none(self):
+        calls = []
+
+        def fake(prompt):
+            calls.append(prompt)
+            return "<think>обрыв"
+
+        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
+             patch.object(cm_llm, "_call_openrouter_simple", fake):
+            self.assertIsNone(self._summarize())
+        self.assertEqual(len(calls), 2)
+
+    def test_claude_has_no_retry(self):
+        calls = []
+
+        def fake(prompt, **kw):
+            calls.append(prompt)
+            return None
+
+        with patch.object(cm_config, "LLM_PROVIDER", "claude"), \
+             patch.object(cm_llm, "_call_claude_simple", fake):
+            self.assertIsNone(self._summarize())
+        self.assertEqual(len(calls), 1)
 
 
 class ActCacheKeyNamespaceTest(_OpenRouterTestBase):
