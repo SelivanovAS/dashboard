@@ -26,6 +26,18 @@ Actions (workflow .github/workflows/probe_captcha.yml). Возможно, с Mac
     python3 scripts/probe_captcha.py
     python3 scripts/probe_captcha.py --domain surggor--hmao.sudrf.ru
     python3 scripts/probe_captcha.py --dump /tmp/probe   # сохранить сырой HTML
+
+Диагностика переиспособления cookie (для вердикта C — можно ли решить код ОДИН
+раз человеком, а дальше ходить сессией). Юрист решает код у себя в браузере,
+делает поиск, копирует Cookie (DevTools → вкладка Network → заголовок Cookie
+запроса, ЛИБО Application → Cookies — НЕ `document.cookie`: серверная сессия
+обычно HttpOnly и в document.cookie не видна) и передаёт пробе:
+
+    python3 scripts/probe_captcha.py --cookie "имя1=знач1; имя2=знач2"
+
+Проба проверит, пускает ли name_op=r с этим cookie БЕЗ повторного кода. Повторный
+запуск через N часов измеряет срок жизни cookie. Разгадку это НЕ автоматизирует —
+код решает человек; проба только измеряет переиспользуемость сессии.
 """
 
 from __future__ import annotations
@@ -68,11 +80,24 @@ def _form_url(court: CourtConfig) -> str:
     )
 
 
-def _probe(sess: requests.Session, url: str, referer: str | None = None) -> dict:
+def _parse_cookie_header(raw: str) -> dict:
+    """"k=v; k2=v2" → {k: v}. Cookie решённой человеком сессии из браузера."""
+    jar: dict = {}
+    for part in raw.split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        jar[k.strip()] = v.strip()
+    return jar
+
+
+def _probe(sess: requests.Session, url: str, referer: str | None = None,
+           cookies: dict | None = None) -> dict:
     """Один GET + классификация ответа. Код не читаем/не решаем."""
     headers = {"Referer": referer} if referer else None
     try:
-        resp = sess.get(url, timeout=30, headers=headers)
+        resp = sess.get(url, timeout=30, headers=headers, cookies=cookies)
     except requests.RequestException as exc:
         return {"error": f"{type(exc).__name__}: {exc}"}
     html = _decode(resp)
@@ -123,6 +148,32 @@ def _print_egress_hint() -> None:
     print("Внешний IP пробы: (не определён)")
 
 
+def _cookie_reuse_test(court: CourtConfig, r_url: str, f_url: str, cookie_raw: str) -> None:
+    """Пускает ли name_op=r с cookie решённой человеком сессии — БЕЗ повторного
+    кода. Разгадку не автоматизирует: код решил человек, здесь только замер."""
+    jar = _parse_cookie_header(cookie_raw)
+    print(f"Тест переиспользования cookie (код РЕШИЛ ЧЕЛОВЕК в браузере):")
+    print(f"  передано cookie-ключей: {len(jar)} ({', '.join(sorted(jar)) or '—'})")
+    baseline = _probe(_fresh_session(), r_url)
+    print("  без cookie (контроль):")
+    print(_line("baseline", baseline))
+    withck = _probe(_fresh_session(), r_url, referer=f_url, cookies=jar)
+    print("  с cookie:")
+    print(_line("cookie", withck))
+    print()
+    if _ok_results(withck):
+        print("COOKIE РАБОТАЕТ — name_op=r отдаёт данные без повторного кода.")
+        print(">>> Повторите ЭТОТ ЖЕ вызов через 1 / 3 / 6 / 24 ч — измерить срок жизни cookie.")
+        print(">>> Живёт долго → есть смысл строить вар. 3a (парсер переиспользует cookie).")
+    elif withck.get("challenge"):
+        print("COOKIE НЕ ПОМОГАЕТ — снова проверочный код.")
+        print(">>> Вероятно, гейт на каждый поиск, либо cookie протух / скопирован не тот")
+        print(">>> (проверьте, что взяли серверную сессию из DevTools, а не document.cookie).")
+        print(">>> Если подтвердится — автоматизировать нечего: детект+алерт + ручная проверка.")
+    else:
+        print("НЕОДНОЗНАЧНО — не код, но и не выдача (см. строку 'cookie' выше).")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Проба проверочного кода на суде sudrf")
     ap.add_argument("--domain", default="akademicheskiy--svd.sudrf.ru",
@@ -132,6 +183,8 @@ def main() -> None:
     ap.add_argument("--srv-num", type=int, default=1)
     ap.add_argument("--dump", metavar="DIR", default=None,
                     help="сохранить сырой HTML вариантов в каталог (для тюнинга маркеров)")
+    ap.add_argument("--cookie", metavar="STR", default=None,
+                    help="Cookie решённой человеком сессии (\"k=v; k2=v2\") — тест переиспользования")
     args = ap.parse_args()
 
     court = CourtConfig(
@@ -146,6 +199,11 @@ def main() -> None:
     print(f"name_op=r:  {r_url}")
     print(f"name_op=sf: {f_url}")
     print()
+
+    # Режим замера cookie: код уже решён человеком, проверяем переиспользование.
+    if args.cookie:
+        _cookie_reuse_test(court, r_url, f_url, args.cookie)
+        return
 
     # Вариант A: прямой запрос свежей сессией — ровно как боевой парсер.
     direct = _probe(_fresh_session(), r_url)
