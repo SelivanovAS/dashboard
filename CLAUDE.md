@@ -35,7 +35,7 @@
 - `data/cases_archive_YYYY.json` — «холодные» годовые архивы: дела старше года, вынесенные ротацией (`rotate_cold_archive`). **Фронт их не грузит** (чтобы вес не рос безгранично), но скрипт читает их в индекс дедупликации. Холодные дела «заморожены»: не реактивируются автоматически.
 - `data/.digested_acts` — дедуп уже обработанных судебных актов (скрытый файл).
 - `data/.cassation_acts` — дедуп кассационных определений: ключи «8Г-номер|дата акта», чьи `new_act` уже уходили в дайджест. Гасит повторный `new_act` при «мигании» `act_published` (сбойный парс 7kas). Ведётся в `link_cassation_cases`.
-- `data/.act_summaries.json` — кэш LLM-пересказов мотивировок актов (ключ `sha1(act_text+"|v2-ratio")[:16]`). Пополняется на GitHub-replay (на Mac ключа Anthropic нет), коммитится workflow'ами — без коммита каждый replay заново оплачивал бы пересказ тех же актов.
+- `data/.act_summaries.json` — кэш LLM-пересказов мотивировок актов (ключ `sha1(act_text+"|v3-detailed")[:16]`; маркер стиля бампается только при смене формата пересказа — с 14.07.2026 это 2-3 предложения ≤450 симв.). Пополняется на GitHub-replay (на Mac ключа Anthropic нет), коммитится workflow'ами — без коммита каждый replay заново оплачивал бы пересказ тех же актов.
 - `data/parse_health.json` — журнал здоровья парсеров: пер-источник история количества результатов поиска (20 судов 1-й инст., апелляция, 7kas до/после HMAO-фильтра). Детектор «молчаливой поломки» (`update_parse_health`, блок 4e в `main_json`) шлёт сервисный 🩺-алерт в Telegram: суд с медианой ≥1 вернул 0 (на 1-м и 3-м нулевом прогоне + сообщение о восстановлении), HTTP-фейл 3 прогона подряд, все источники разом по нулям, ≥5 карточек-«огрызков» за прогон.
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
@@ -75,10 +75,10 @@
 | `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1186](scripts/court_monitor/runs.py:1186) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
-| `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:668](scripts/court_monitor/digest/llm.py:668) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
+| `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:753](scripts/court_monitor/digest/llm.py:753) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:956](scripts/court_monitor/digest/llm.py:956) |
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1014](scripts/court_monitor/digest/llm.py:1014) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1099](scripts/court_monitor/digest/llm.py:1099) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
 | доставка: `send_telegram` | [scripts/court_monitor/delivery.py:617](scripts/court_monitor/delivery.py:617) |
 | PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:430](scripts/court_monitor/delivery.py:430) |
