@@ -1480,16 +1480,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
-            json={
-                "model": config.CLAUDE_MODEL,
-                "max_tokens": 4096,
-                # Низкая температура: дайджест требует дословного цитирования
-                # ИТОГа и категории — креативность модели тут вредит. Стабильность
-                # формата важнее разнообразия формулировок.
-                "temperature": 0.2,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=60,
+            # Низкая температура: дайджест требует дословного цитирования
+            # ИТОГа и категории — креативность модели тут вредит. Для моделей
+            # нового поколения (opus 4.8/sonnet 5) temperature удалён из API —
+            # пейлоад собирает llm._claude_payload (adaptive-мышление + effort).
+            json=llm._claude_payload(
+                max_tokens=4096, temperature=0.2,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=llm._claude_timeout(60),
         )
         r.raise_for_status()
         data = r.json()

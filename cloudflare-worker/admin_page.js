@@ -633,6 +633,16 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
               <option value="opus">Opus 4.8</option>
             </select>
           </label>
+          <label id="tf-effort-wrap" style="display:none;">Усилия
+            <select id="tf-effort">
+              <option value="default" selected>по умолчанию (high)</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="xhigh">xhigh</option>
+              <option value="max">max</option>
+            </select>
+          </label>
           <label id="tf-giga-wrap" style="display:none;">Модель
             <select id="tf-giga">
               <option value="GigaChat-2-Pro" selected>GigaChat-2-Pro</option>
@@ -650,7 +660,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
             </select>
           </label>
           <label id="tf-model-wrap">Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
-          <span class="tform-hint" id="tf-claude-note">haiku — боевой эталон дайджеста; sonnet/opus дороже, только для сравнения</span>
+          <span class="tform-hint" id="tf-claude-note">haiku — боевой эталон дайджеста; sonnet/opus дороже, только для сравнения. Усилия (глубина размышлений) — только у sonnet/opus</span>
         </div>
         <div class="tform-row">
           <label><input type="checkbox" id="tf-to-group"> в корп. группу <span class="warn-mark">⚠︎</span></label>
@@ -1243,6 +1253,15 @@ async function loadLlmTop() {
     llmTopLoaded = false; // повторная попытка при следующем refreshAll
   }
 }
+function tfUpdateEffortVisibility() {
+  // Селектор усилий (output_config.effort) есть только у моделей нового
+  // поколения — sonnet/opus. Для haiku (боевой эталон) API его не принимает,
+  // бэкенд значение игнорирует — прячем, чтобы не путать.
+  const isClaude = document.getElementById("tf-provider").value === "claude";
+  const model = document.getElementById("tf-claude").value;
+  const show = isClaude && model !== "haiku";
+  document.getElementById("tf-effort-wrap").style.display = show ? "" : "none";
+}
 document.getElementById("tf-provider").addEventListener("change", function () {
   // Каждый провайдер показывает свой список моделей; «Точную модель» (llm_model)
   // оставляем видимой для всех — она перебивает список. У Claude заметка про
@@ -1252,7 +1271,9 @@ document.getElementById("tf-provider").addEventListener("change", function () {
   document.getElementById("tf-giga-wrap").style.display = this.value === "gigachat" ? "" : "none";
   document.getElementById("tf-or-wrap").style.display = this.value === "openrouter" ? "" : "none";
   document.getElementById("tf-claude-note").style.display = isClaude ? "" : "none";
+  tfUpdateEffortVisibility();
 });
+document.getElementById("tf-claude").addEventListener("change", tfUpdateEffortVisibility);
 document.getElementById("tf-run").addEventListener("click", function () {
   const provider = document.getElementById("tf-provider").value;
   const toGroup = document.getElementById("tf-to-group").checked;
@@ -1264,7 +1285,15 @@ document.getElementById("tf-run").addEventListener("click", function () {
     full_llm: document.getElementById("tf-full-llm").checked ? "true" : "false",
     commit_results: document.getElementById("tf-commit").checked ? "true" : "false",
   };
-  if (provider === "claude") inputs.claude_model = document.getElementById("tf-claude").value;
+  if (provider === "claude") {
+    inputs.claude_model = document.getElementById("tf-claude").value;
+    // Усилия шлём только для sonnet/opus и только если выбрано не «default»
+    // (haiku эффорт не поддерживает; default = не отправлять параметр).
+    const effort = document.getElementById("tf-effort").value;
+    if (inputs.claude_model !== "haiku" && effort !== "default") {
+      inputs.claude_effort = effort;
+    }
+  }
   if (provider === "gigachat") inputs.gigachat_model = document.getElementById("tf-giga").value;
   if (provider === "openrouter") inputs.openrouter_model = document.getElementById("tf-or").value;
   // «Точная модель» (llm_model) перебивает список любого провайдера, включая

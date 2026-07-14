@@ -555,6 +555,59 @@ def _build_act_summary_prompt(act_text: str, case_meta: dict) -> str:
     )
 
 
+# ── Anthropic API: пейлоад с учётом поколения модели ─────────────────────────
+# У Claude нового поколения (Opus 4.7+/Sonnet 5/Fable/Mythos) сэмплинг-параметры
+# удалены из API: запрос с temperature получает 400 «`temperature` is
+# deprecated for this model» (наблюдалось на opus 4.8 в тест-прогоне 14.07).
+# Там же появились adaptive-мышление и output_config.effort (low/medium/high/
+# xhigh/max). Боевой haiku-путь неизменен: temperature как раньше, без
+# thinking/effort — haiku их не поддерживает (API вернёт ошибку).
+_CLAUDE_MODERN_PREFIXES = (
+    "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-5",
+    "claude-fable", "claude-mythos",
+)
+
+
+def _claude_is_modern(model: str) -> bool:
+    """True для моделей Claude без сэмплинг-параметров (с effort/adaptive)."""
+    return model.startswith(_CLAUDE_MODERN_PREFIXES)
+
+
+def _claude_payload(*, max_tokens: int, temperature: float,
+                    messages: list[dict],
+                    system: str | None = None) -> dict:
+    """Собрать тело запроса /v1/messages под текущую config.CLAUDE_MODEL.
+
+    Для «современных» моделей temperature не отправляется, включается
+    adaptive-мышление (рекомендация Anthropic: с выключенным мышлением
+    opus пишет рассуждения прямо в видимый ответ), а глубину задаёт
+    config.CLAUDE_EFFORT (пусто = дефолт API, high). max_tokens при этом
+    расширяется: токены размышлений считаются в лимит вывода, и боевые
+    700 токенов пересказа opus сжёг бы на одно мышление.
+    """
+    payload: dict = {
+        "model": config.CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "messages": messages,
+    }
+    if system is not None:
+        payload["system"] = system
+    if _claude_is_modern(config.CLAUDE_MODEL):
+        payload["thinking"] = {"type": "adaptive"}
+        payload["max_tokens"] = max(max_tokens * 4, 8000)
+        if config.CLAUDE_EFFORT:
+            payload["output_config"] = {"effort": config.CLAUDE_EFFORT}
+    else:
+        payload["temperature"] = temperature
+    return payload
+
+
+def _claude_timeout(base: int) -> int:
+    """HTTP-таймаут вызова Claude: adaptive-мышление opus/sonnet может
+    занимать заметно дольше мгновенного haiku."""
+    return 180 if _claude_is_modern(config.CLAUDE_MODEL) else base
+
+
 def _call_claude_simple(
     prompt: str, *, max_tokens: int = 700, temperature: float = 0.2
 ) -> str | None:
@@ -573,13 +626,11 @@ def _call_claude_simple(
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
-            json={
-                "model": config.CLAUDE_MODEL,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=30,
+            json=_claude_payload(
+                max_tokens=max_tokens, temperature=temperature,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=_claude_timeout(30),
         )
         r.raise_for_status()
         data = r.json()
@@ -757,6 +808,11 @@ def _act_cache_key(act: str) -> str:
         and config.CLAUDE_MODEL != config.DEFAULT_CLAUDE_MODEL
     ):
         base += "|" + config.CLAUDE_MODEL
+        # Эффорт меняет результат пересказа — сравнение уровней не должно
+        # молча читать кэш другого уровня. Для эталонной haiku эффорт не
+        # отправляется вовсе, её ключи не трогаем.
+        if config.CLAUDE_EFFORT:
+            base += "|effort=" + config.CLAUDE_EFFORT
     return hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
 
 
@@ -1062,14 +1118,12 @@ def _call_claude_polish(system_prompt: str, user_prompt: str) -> str | None:
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
-            json={
-                "model": config.CLAUDE_MODEL,
-                "max_tokens": 4096,
-                "temperature": 0.1,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": user_prompt}],
-            },
-            timeout=60,
+            json=_claude_payload(
+                max_tokens=4096, temperature=0.1,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            ),
+            timeout=_claude_timeout(60),
         )
         r.raise_for_status()
         data = r.json()

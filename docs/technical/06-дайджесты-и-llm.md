@@ -50,8 +50,16 @@ fallback-маршрут `openrouter/free`. Вызовы OpenRouter OpenAI-сов
 (`_call_openrouter_chat`: Bearer `OPENROUTER_API_KEY`, штатная проверка TLS —
 в отличие от GigaChat без `verify=False`).
 
-**Модель Claude:** `claude-haiku-4-5-20251001`
-([_current_digest_model_name, 6191](../../scripts/court_monitor/digest/llm.py#L612)).
+**Модель Claude:** по умолчанию боевой эталон `claude-haiku-4-5-20251001`;
+тестовый workflow может выбрать Sonnet 5 / Opus 4.8 (env `CLAUDE_MODEL`,
+алиасы резолвит `config.resolve_claude_model`) и уровень усилий (env
+`CLAUDE_EFFORT` → `output_config.effort`, `low`…`max`; пусто = дефолт API
+high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5) `temperature`
+удалён из API (400 «deprecated for this model») — тело запроса собирает
+`llm._claude_payload`: для них adaptive-мышление + effort вместо
+температуры, расширенные max_tokens (размышления считаются в лимит вывода)
+и таймаут (`_claude_timeout`); haiku-путь неизменен. Кэш пересказов
+не-haiku моделей неймспейсится по модели и эффорту (`_act_cache_key`).
 
 ## Программный рендер — `generate_template_digest`
 
@@ -66,7 +74,7 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 755](../../scripts/court_monitor/digest/llm.py#L755). Единственное место, где
+[Строка 819](../../scripts/court_monitor/digest/llm.py#L819). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
@@ -86,8 +94,8 @@ LLM реально «думает». Алгоритм:
    всех трёх провайдеров (единственное user-сообщение: роль, задача,
    позитивные правила формулировок, ХОРОШО/ПЛОХО-примеры, текст акта и
    якорь «Ответ (2-3 предложения):» в конце) — и вызывается
-   `_call_claude_simple` ([558](../../scripts/court_monitor/digest/llm.py#L558)),
-   `_call_gigachat_simple` ([602](../../scripts/court_monitor/digest/llm.py#L602)) или
+   `_call_claude_simple` ([611](../../scripts/court_monitor/digest/llm.py#L611)),
+   `_call_gigachat_simple` ([653](../../scripts/court_monitor/digest/llm.py#L653)) или
    `_call_openrouter_simple` (по `LLM_PROVIDER`). max_tokens: 700 у
    Claude/GigaChat, 4096 у OpenRouter — free reasoning-модели (DeepSeek R1,
    Nemotron и т.п.) тратят бюджет на размышления прямо в content и с
@@ -123,12 +131,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 981](../../scripts/court_monitor/digest/llm.py#L981). При `DIGEST_POLISH=1`
+[Строка 1045](../../scripts/court_monitor/digest/llm.py#L1045). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([840](../../scripts/court_monitor/digest/llm.py#L840)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([904](../../scripts/court_monitor/digest/llm.py#L904)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([937](../../scripts/court_monitor/digest/llm.py#L937)): проверяется контракт
+([1001](../../scripts/court_monitor/digest/llm.py#L1001)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -162,7 +170,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([221](../../scripts/court_monitor/config.py#L221)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([264](../../scripts/court_monitor/config.py#L264)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
