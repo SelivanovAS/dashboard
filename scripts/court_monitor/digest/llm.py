@@ -434,13 +434,15 @@ def _call_openrouter_chat(
 
 def _call_openrouter_simple(prompt: str) -> str | None:
     """Минимальный вызов OpenRouter для пересказа акта — без system-промпта
-    (зеркально _call_gigachat_simple). Лимит токенов выше, чем у
-    Claude/GigaChat: reasoning-модели (DeepSeek R1 и т.п.) тратят бюджет
-    на размышления в content и с маленьким лимитом обрезаются до пустого
-    ответа; модели бесплатные, удорожания нет."""
+    (зеркально _call_gigachat_simple). Лимит токенов сильно выше, чем у
+    Claude/GigaChat: reasoning-модели (DeepSeek R1, Nemotron и т.п.) тратят
+    бюджет на размышления в content и с маленьким лимитом обрезаются
+    посреди <think> — до финального ответа дело не доходит (наблюдалось
+    на nemotron-3-super при 1200). Модели бесплатные, удорожания нет;
+    4096 — как у полных digest/polish-вызовов OpenRouter."""
     return _call_openrouter_chat(
         [{"role": "user", "content": prompt}],
-        max_tokens=1200, temperature=0.2,
+        max_tokens=4096, temperature=0.2,
     )
 
 
@@ -783,18 +785,41 @@ def summarize_act_motivation(
             config.METRICS["llm_summary_cache_hits"] += 1
             return cached_summary
 
-    config.METRICS["llm_summary_calls"] += 1
     prompt = _build_act_summary_prompt(act, case_meta)
-    if config.LLM_PROVIDER == "gigachat":
-        raw = _call_gigachat_simple(prompt)
-    elif config.LLM_PROVIDER == "openrouter":
-        raw = _call_openrouter_simple(prompt)
-    else:
-        raw = _call_claude_simple(prompt)
-    if not raw:
-        return None
-    summary = _clean_summary(raw)
+
+    def _call_once() -> str | None:
+        if config.LLM_PROVIDER == "gigachat":
+            return _call_gigachat_simple(prompt)
+        if config.LLM_PROVIDER == "openrouter":
+            return _call_openrouter_simple(prompt)
+        return _call_claude_simple(prompt)
+
+    pl = (case_meta.get("plaintiff") or "").strip()
+    df = (case_meta.get("defendant") or "").strip()
+    who = f" ({pl} vs {df})" if (pl or df) else ""
+
+    config.METRICS["llm_summary_calls"] += 1
+    raw = _call_once()
+    summary = _clean_summary(raw) if raw else ""
+    if not summary and config.LLM_PROVIDER == "openrouter":
+        # Free-модели OpenRouter капризны (обрыв reasoning посреди <think>,
+        # пустой content); ретрай часто уходит на другой бэкенд провайдера
+        # и спасает пересказ. Модели бесплатные — вторая попытка ничего
+        # не стоит.
+        log.warning(f"Пересказ акта{who}: попытка 1 не дала текста — ретрай")
+        config.METRICS["llm_summary_calls"] += 1
+        raw = _call_once()
+        summary = _clean_summary(raw) if raw else ""
     if not summary:
+        if raw:
+            log.warning(
+                f"Пересказ акта{who}: ответ LLM отбракован чисткой, откат "
+                f"на excerpt; голова ответа: {raw[:160]!r}"
+            )
+        else:
+            log.warning(
+                f"Пересказ акта{who}: пустой ответ LLM, откат на excerpt"
+            )
         return None
 
     if use_cache:

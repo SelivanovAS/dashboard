@@ -66,7 +66,7 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 753](../../scripts/court_monitor/digest/llm.py#L753). Единственное место, где
+[Строка 755](../../scripts/court_monitor/digest/llm.py#L755). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
@@ -82,16 +82,20 @@ LLM реально «думает». Алгоритм:
    Если пересказ уже в кэше `.act_summaries.json` — возвращается он
    (повторно LLM не оплачивается, кэш переживает `--replay-last`).
 3. Иначе строится промпт (`_build_act_summary_prompt`,
-   [491](../../scripts/court_monitor/digest/llm.py#L491)) — один и тот же для
+   [493](../../scripts/court_monitor/digest/llm.py#L493)) — один и тот же для
    всех трёх провайдеров (единственное user-сообщение: роль, задача,
    позитивные правила формулировок, ХОРОШО/ПЛОХО-примеры, текст акта и
    якорь «Ответ (2-3 предложения):» в конце) — и вызывается
-   `_call_claude_simple` ([556](../../scripts/court_monitor/digest/llm.py#L556)),
-   `_call_gigachat_simple` ([600](../../scripts/court_monitor/digest/llm.py#L600)) или
+   `_call_claude_simple` ([558](../../scripts/court_monitor/digest/llm.py#L558)),
+   `_call_gigachat_simple` ([602](../../scripts/court_monitor/digest/llm.py#L602)) или
    `_call_openrouter_simple` (по `LLM_PROVIDER`). max_tokens: 700 у
-   Claude/GigaChat, 1200 у OpenRouter — free reasoning-модели (DeepSeek R1
-   и т.п.) тратят бюджет на размышления прямо в content и с маленьким
-   лимитом обрезаются до пустого ответа.
+   Claude/GigaChat, 4096 у OpenRouter — free reasoning-модели (DeepSeek R1,
+   Nemotron и т.п.) тратят бюджет на размышления прямо в content и с
+   маленьким лимитом обрезаются посреди `<think>`, не дойдя до ответа
+   (наблюдалось на nemotron-3-super при 1200). Для openrouter при пустом
+   или отбракованном ответе делается ОДИН ретрай (часто уходит на другой
+   бэкенд провайдера и спасает пересказ); пустой ответ и отбраковка
+   чисткой логируются WARNING'ом с головой сырого ответа.
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
    Чистка рассчитана на free-модели OpenRouter: вырезаются reasoning-блоки
    `<think>…</think>` (в т.ч. незакрытые и осиротевшие), code-fence,
@@ -119,12 +123,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 956](../../scripts/court_monitor/digest/llm.py#L956). При `DIGEST_POLISH=1`
+[Строка 981](../../scripts/court_monitor/digest/llm.py#L981). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([815](../../scripts/court_monitor/digest/llm.py#L815)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([840](../../scripts/court_monitor/digest/llm.py#L840)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([912](../../scripts/court_monitor/digest/llm.py#L912)): проверяется контракт
+([937](../../scripts/court_monitor/digest/llm.py#L937)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
