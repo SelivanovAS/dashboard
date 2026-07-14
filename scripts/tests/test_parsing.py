@@ -258,6 +258,51 @@ class TestParseCaseCard:
         assert info["_table_count"] < 6
         assert info["_fi_appeal_filed"] is True
 
+    def test_appeal_tab_marker_survives_banner_tables(self):
+        """Баннеры sudrf в шапке (14.07.2026: «График заседаний Президиума»,
+        «График работы», QR-код) сдвигают таблицу с маркером «обжалование
+        решений, определений» за пределы прежней жёсткой границы tables[:3].
+        Детект маркера — полный проход, флаг не должен теряться."""
+        html = _read_fixture("case_card_fi_with_appeal.html")
+        banners = (
+            "<table><tr><td>График заседаний Президиума суда на 2026 год"
+            "</td></tr><tr><td>Июль</td><td>31</td></tr></table>"
+            "<table><tr><td>График работы</td></tr>"
+            "<tr><td>Понедельник</td><td>9:00 - 18:15</td></tr></table>"
+            "<table><tr><td>QR-код ВКонтакте</td></tr></table>"
+            "<table><tr><td></td></tr></table>"
+        )
+        html = html.replace("<body>", "<body>" + banners)
+        info = uc.parse_case_card(html)
+        assert info["_table_count"] >= 7
+        assert info["_fi_appeal_filed"] is True
+        assert info["_fi_appeal_filed_date"] == "15.04.2026"
+
+    def test_lower_court_review_rows_do_not_fake_appeal_marker(self):
+        """Апелляционная карточка: строки «Результат обжалования решения…»
+        из «РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ» НЕ считаются маркером вкладки
+        обжалования — иначе полный проход по таблицам вместе с полем
+        «Заявитель жалобы» ложно ставил бы _fi_appeal_filed на карточке
+        апелляции. Маркер требует полного названия вкладки («…решений,
+        определений»); «решения (определения)» со скобкой — не маркер."""
+        html = (
+            "<html><body>"
+            "<table><tr><td>График заседаний Президиума</td></tr></table>"
+            "<table><tr><td><b>Уникальный идентификатор дела</b></td>"
+            "<td>86RS0021-01-2025-001198-79</td></tr></table>"
+            "<table><tr><th colspan=2>РАССМОТРЕНИЕ В НИЖЕСТОЯЩЕМ СУДЕ</th></tr>"
+            "<tr><td><b>Заявитель жалобы</b></td><td>Иванов Иван Иванович</td></tr>"
+            "<tr><td><b>Результат обжалования решения</b></td>"
+            "<td>Оставить решение (определение) БЕЗ ИЗМЕНЕНИЯ</td></tr>"
+            "<tr><td><b>Результат обжалования</b></td>"
+            "<td>решения (определения) отменено</td></tr>"
+            "</table>"
+            "</body></html>"
+        )
+        info = uc.parse_case_card(html)
+        assert info["_fi_appeal_filed"] is False
+        assert info["_fi_appeal_filed_date"] == ""
+
     def test_full_card_after_fallback_detects_appeal(self):
         """Полная карточка (≥6 таблиц) с событием «Поступила апелляционная
         жалоба от …» в движении: детектится и событие, и апеллянт, и дата."""
