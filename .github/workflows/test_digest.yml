@@ -46,6 +46,15 @@ on:
           - gigachat
           - openrouter
         default: claude
+      claude_model:
+        description: 'Модель Claude (действует при провайдере claude). haiku — боевой эталон; sonnet/opus дороже, для сравнения.'
+        required: false
+        type: choice
+        options:
+          - haiku
+          - sonnet
+          - opus
+        default: haiku
       gigachat_model:
         description: 'Модель GigaChat (действует при провайдере gigachat).'
         required: false
@@ -67,7 +76,7 @@ on:
           - топ-5
         default: модель дня (топ-1)
       llm_model:
-        description: 'Другая модель (текстом) — перебивает оба списка. Например, свежая free-модель OpenRouter, которой нет в рейтинге, или GigaChat-Max.'
+        description: 'Другая модель (текстом) — перебивает все списки. Например, свежая free-модель OpenRouter, которой нет в рейтинге, GigaChat-Max или точный id Claude.'
         required: false
         type: string
         default: ''
@@ -121,6 +130,9 @@ jobs:
           # активный провайдер. «Топ-N» в OPENROUTER_MODEL резолвится в
           # конкретную модель на прогоне (llm._resolve_openrouter_model).
           LLM_PROVIDER: ${{ inputs.llm_provider }}
+          # Модель Claude: короткое имя из списка (haiku/sonnet/opus) или точный
+          # id из llm_model; config.py резолвит алиасы и держит haiku дефолтом.
+          CLAUDE_MODEL: ${{ inputs.llm_model || inputs.claude_model }}
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
           GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
@@ -136,7 +148,7 @@ jobs:
           elif [ "${{ inputs.llm_provider }}" = "openrouter" ]; then
             echo "🧠 Провайдер: openrouter, модель: ${{ inputs.openrouter_model }} — конкретный id см. ниже в логе"
           else
-            echo "🧠 Провайдер: claude (haiku)"
+            echo "🧠 Провайдер: claude, модель: ${{ inputs.claude_model }}"
           fi
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 Дайджест уйдёт в корпоративную группу Telegram"

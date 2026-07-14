@@ -626,6 +626,13 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
               <option value="openrouter">openrouter</option>
             </select>
           </label>
+          <label id="tf-claude-wrap">Модель
+            <select id="tf-claude">
+              <option value="haiku" selected>Haiku 4.5 (эталон)</option>
+              <option value="sonnet">Sonnet 5</option>
+              <option value="opus">Opus 4.8</option>
+            </select>
+          </label>
           <label id="tf-giga-wrap" style="display:none;">Модель
             <select id="tf-giga">
               <option value="GigaChat-2-Pro" selected>GigaChat-2-Pro</option>
@@ -642,8 +649,8 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
               <option value="топ-5">топ-5</option>
             </select>
           </label>
-          <label id="tf-model-wrap" style="display:none;">Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
-          <span class="tform-hint" id="tf-claude-note">модель фиксирована: claude-haiku-4-5 — боевой эталон дайджеста</span>
+          <label id="tf-model-wrap">Точная модель <input type="text" id="tf-model" placeholder="пусто = по выбору выше"></label>
+          <span class="tform-hint" id="tf-claude-note">haiku — боевой эталон дайджеста; sonnet/opus дороже, только для сравнения</span>
         </div>
         <div class="tform-row">
           <label><input type="checkbox" id="tf-to-group"> в корп. группу <span class="warn-mark">⚠︎</span></label>
@@ -1237,12 +1244,13 @@ async function loadLlmTop() {
   }
 }
 document.getElementById("tf-provider").addEventListener("change", function () {
-  // У Claude модель зашита в llm.py (боевой эталон, общий кэш пересказов) —
-  // llm_model на неё не действует, поэтому поле прячем и честно пишем почему.
+  // Каждый провайдер показывает свой список моделей; «Точную модель» (llm_model)
+  // оставляем видимой для всех — она перебивает список. У Claude заметка про
+  // эталон/цену показывается только в его ветке.
   const isClaude = this.value === "claude";
+  document.getElementById("tf-claude-wrap").style.display = isClaude ? "" : "none";
   document.getElementById("tf-giga-wrap").style.display = this.value === "gigachat" ? "" : "none";
   document.getElementById("tf-or-wrap").style.display = this.value === "openrouter" ? "" : "none";
-  document.getElementById("tf-model-wrap").style.display = isClaude ? "none" : "";
   document.getElementById("tf-claude-note").style.display = isClaude ? "" : "none";
 });
 document.getElementById("tf-run").addEventListener("click", function () {
@@ -1256,12 +1264,13 @@ document.getElementById("tf-run").addEventListener("click", function () {
     full_llm: document.getElementById("tf-full-llm").checked ? "true" : "false",
     commit_results: document.getElementById("tf-commit").checked ? "true" : "false",
   };
+  if (provider === "claude") inputs.claude_model = document.getElementById("tf-claude").value;
   if (provider === "gigachat") inputs.gigachat_model = document.getElementById("tf-giga").value;
   if (provider === "openrouter") inputs.openrouter_model = document.getElementById("tf-or").value;
-  // llm_model перебивает только списки GigaChat/OpenRouter — ветка Claude
-  // его не читает, не шлём мусорный input.
+  // «Точная модель» (llm_model) перебивает список любого провайдера, включая
+  // Claude (точный id вроде claude-opus-4-8 пройдёт через config-резолвер).
   const manual = document.getElementById("tf-model").value.trim();
-  if (manual && provider !== "claude") inputs.llm_model = manual;
+  if (manual) inputs.llm_model = manual;
   if (toGroup || pushAll) {
     const parts = [];
     if (toGroup) parts.push("дайджест уйдёт в КОРПОРАТИВНУЮ ГРУППУ");
