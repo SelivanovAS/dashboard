@@ -55,6 +55,18 @@ on:
           - sonnet
           - opus
         default: haiku
+      claude_effort:
+        description: 'Уровень усилий Claude (только sonnet/opus — haiku не поддерживает, значение игнорируется). default = не отправлять, у API это high.'
+        required: false
+        type: choice
+        options:
+          - default
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+        default: default
       gigachat_model:
         description: 'Модель GigaChat (действует при провайдере gigachat).'
         required: false
@@ -133,6 +145,9 @@ jobs:
           # Модель Claude: короткое имя из списка (haiku/sonnet/opus) или точный
           # id из llm_model; config.py резолвит алиасы и держит haiku дефолтом.
           CLAUDE_MODEL: ${{ inputs.llm_model || inputs.claude_model }}
+          # Уровень усилий (output_config.effort) для sonnet/opus; «default»
+          # config.py резолвит в пусто = параметр не отправляется (API: high).
+          CLAUDE_EFFORT: ${{ inputs.claude_effort }}
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: GIGACHAT_API_PERS
           GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
@@ -148,7 +163,7 @@ jobs:
           elif [ "${{ inputs.llm_provider }}" = "openrouter" ]; then
             echo "🧠 Провайдер: openrouter, модель: ${{ inputs.openrouter_model }} — конкретный id см. ниже в логе"
           else
-            echo "🧠 Провайдер: claude, модель: ${{ inputs.claude_model }}"
+            echo "🧠 Провайдер: claude, модель: ${{ inputs.claude_model }}, усилия: ${{ inputs.claude_effort }}"
           fi
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 Дайджест уйдёт в корпоративную группу Telegram"

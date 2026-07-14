@@ -184,6 +184,23 @@ def resolve_claude_model(raw: str) -> str:
 
 CLAUDE_MODEL = resolve_claude_model(os.environ.get("CLAUDE_MODEL", ""))
 
+# Уровень усилий (output_config.effort в API) для моделей Claude нового
+# поколения (Opus 4.7+/Sonnet 5): управляет глубиной adaptive-размышлений и
+# расходом токенов. Пусто = параметр не отправляется (дефолт API — high).
+# Haiku эффорт не поддерживает (API вернёт ошибку) — для неё значение
+# игнорируется на уровне сборки пейлоада (llm._claude_payload).
+_CLAUDE_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def resolve_claude_effort(raw: str) -> str:
+    """Нормализовать уровень усилий: неизвестное значение (в т.ч. «default»
+    из селектора админки) → пусто, т.е. дефолт API. Регистр не важен."""
+    val = (raw or "").strip().lower()
+    return val if val in _CLAUDE_EFFORT_LEVELS else ""
+
+
+CLAUDE_EFFORT = resolve_claude_effort(os.environ.get("CLAUDE_EFFORT", ""))
+
 # Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
 # По умолчанию используется гибридный путь: программный рендер
 # (generate_template_digest) + LLM-микро-вызов только на пересказ
