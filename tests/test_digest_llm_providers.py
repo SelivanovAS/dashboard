@@ -5,7 +5,7 @@
 fallback, низкоуровневый вызов _call_openrouter_chat (Bearer, без verify=False),
 диспетчеризацию по config.LLM_PROVIDER в summarize_act_motivation /
 polish_digest_html / generate_digest (полная LLM-ветка), неймспейс ключа
-кэша .act_summaries.json (claude-ключ побайтово прежний) и
+кэша .act_summaries.json (маркер стиля + провайдер:модель) и
 validate_environment для openrouter.
 
 Запуск: `python3 -m pytest tests/test_digest_llm_providers.py` из корня репо.
@@ -198,6 +198,44 @@ class CallOpenrouterChatTest(_OpenRouterTestBase):
             )
 
 
+class SummaryTokenBudgetTest(_OpenRouterTestBase):
+    """Лимиты max_tokens микро-вызовов пересказа: 700 у Claude/GigaChat
+    (2-3 предложения ≈ 250-350 токенов кириллицы + запас), 1200 у
+    OpenRouter (reasoning-модели тратят бюджет на размышления в content
+    и с маленьким лимитом обрезаются до пустого ответа)."""
+
+    def test_openrouter_simple_budget(self):
+        captured = {}
+
+        def fake_chat(messages, *, max_tokens, temperature):
+            captured.update(max_tokens=max_tokens, temperature=temperature)
+            return "ок"
+
+        with patch.object(cm_llm, "_call_openrouter_chat", fake_chat):
+            self.assertEqual(cm_llm._call_openrouter_simple("тест"), "ок")
+        self.assertEqual(captured["max_tokens"], 1200)
+
+    def test_claude_simple_budget(self):
+        with patch.object(cm_config, "ANTHROPIC_API_KEY", "k"), \
+             patch.object(cm_llm.requests, "post") as mpost:
+            mpost.return_value = _fake_response(
+                {"content": [{"type": "text", "text": "ок"}]}
+            )
+            self.assertEqual(cm_llm._call_claude_simple("тест"), "ок")
+            _, kwargs = mpost.call_args
+            self.assertEqual(kwargs["json"]["max_tokens"], 700)
+
+    def test_gigachat_simple_budget(self):
+        with patch.object(cm_llm, "_gigachat_access_token", lambda: "tok"), \
+             patch.object(cm_llm.requests, "post") as mpost:
+            mpost.return_value = _fake_response(
+                {"choices": [{"message": {"content": "ок"}}]}
+            )
+            self.assertEqual(cm_llm._call_gigachat_simple("тест"), "ок")
+            _, kwargs = mpost.call_args
+            self.assertEqual(kwargs["json"]["max_tokens"], 700)
+
+
 class SummarizeDispatchTest(_OpenRouterTestBase):
     def test_openrouter_branch_called(self):
         called = {"openrouter": 0, "claude": 0, "gigachat": 0}
@@ -239,11 +277,14 @@ class ActCacheKeyNamespaceTest(_OpenRouterTestBase):
             for p in patches:
                 p.stop()
 
-    def test_claude_key_is_byte_identical_to_legacy(self):
-        legacy = hashlib.sha1(
-            (self.ACT + "|v2-ratio").encode("utf-8")
+    def test_claude_key_matches_current_style_marker(self):
+        # Маркер "v3-detailed" (июль 2026, пересказ в 2-3 предложения) —
+        # смена маркера инвалидирует кэш НАМЕРЕННО и только при смене
+        # стиля результата; правки надёжности промпта ключ не трогают.
+        expected = hashlib.sha1(
+            (self.ACT + "|v3-detailed").encode("utf-8")
         ).hexdigest()[:16]
-        self.assertEqual(self._key("claude"), legacy)
+        self.assertEqual(self._key("claude"), expected)
 
     def test_providers_and_models_do_not_collide(self):
         claude = self._key("claude")

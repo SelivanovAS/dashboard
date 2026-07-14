@@ -229,6 +229,22 @@ class BuildActSummaryPromptTest(unittest.TestCase):
         )
         self.assertIn("кассационное определение", prompt)
 
+    def test_detailed_format_and_language(self):
+        # Контракт «v3-detailed»: 2-3 предложения, лимит 450, русский язык.
+        prompt = uc._build_act_summary_prompt("Текст. " * 30, {})
+        self.assertIn("2-3 предложениями", prompt)
+        self.assertIn("450", prompt)
+        self.assertIn("на русском языке", prompt)
+
+    def test_answer_anchor_is_last_after_act_text(self):
+        # Якорь формата — последняя строка промпта, ПОСЛЕ текста акта
+        # (слабые модели следуют ближайшей инструкции).
+        act = "Уникальный текст акта для проверки якоря. " * 5
+        prompt = uc._build_act_summary_prompt(act, {})
+        self.assertTrue(prompt.endswith("Ответ (2-3 предложения):"))
+        self.assertLess(prompt.rfind(act.strip()),
+                        prompt.rfind("Ответ (2-3 предложения):"))
+
 
 class CleanSummaryTest(unittest.TestCase):
     def test_strips_quotes(self):
@@ -239,6 +255,23 @@ class CleanSummaryTest(unittest.TestCase):
         self.assertEqual(uc._clean_summary("Кратко: текст."), "текст.")
         self.assertEqual(uc._clean_summary("Резюме — суть."), "суть.")
         self.assertEqual(uc._clean_summary("Итого: вывод"), "вывод")
+
+    def test_strips_answer_anchor_echo(self):
+        # Эхо якоря промпта «Ответ (2-3 предложения):» и голое «Ответ:».
+        self.assertEqual(
+            uc._clean_summary("Ответ (2-3 предложения): Иск удовлетворён."),
+            "Иск удовлетворён.",
+        )
+        self.assertEqual(
+            uc._clean_summary("Ответ: Иск удовлетворён."),
+            "Иск удовлетворён.",
+        )
+
+    def test_strips_vot_preamble_same_line(self):
+        self.assertEqual(
+            uc._clean_summary("Вот краткий пересказ: Иск удовлетворён."),
+            "Иск удовлетворён.",
+        )
 
     def test_keeps_word_when_not_prefix(self):
         # «Резюме текста.» без двоеточия — это часть осмысленного
@@ -256,6 +289,69 @@ class CleanSummaryTest(unittest.TestCase):
             uc._clean_summary("Суд отказал в удовлетворении иска."),
             "Суд отказал в удовлетворении иска.",
         )
+
+    def test_strips_closed_think_block(self):
+        # Reasoning-модели OpenRouter (DeepSeek R1): размышления в content.
+        self.assertEqual(
+            uc._clean_summary(
+                "<think>Надо посмотреть, кто выиграл...</think>"
+                "Иск удовлетворён, доводы ответчика отклонены."
+            ),
+            "Иск удовлетворён, доводы ответчика отклонены.",
+        )
+
+    def test_unclosed_think_block_is_garbage(self):
+        # Обрыв по лимиту токенов посреди размышлений → мусор → откат.
+        self.assertEqual(
+            uc._clean_summary("<think>Так, сначала посмотрим на дело"),
+            "",
+        )
+
+    def test_orphan_close_tag_takes_tail(self):
+        # Провайдер срезал открывающий тег: «размышления…</think>ответ».
+        self.assertEqual(
+            uc._clean_summary(
+                "Кто тут прав? Посмотрим.</think>Иск удовлетворён."
+            ),
+            "Иск удовлетворён.",
+        )
+
+    def test_unwraps_markdown(self):
+        self.assertEqual(
+            uc._clean_summary(
+                "**Иск удовлетворён**, доводы *ответчика* отклонены, "
+                "`расчёт` верен."
+            ),
+            "Иск удовлетворён, доводы ответчика отклонены, расчёт верен.",
+        )
+
+    def test_multiline_preamble_and_join(self):
+        # Преамбула отдельной строкой отбрасывается, переносы склеиваются.
+        self.assertEqual(
+            uc._clean_summary(
+                "Вот пересказ мотивировки:\n"
+                "Иск удовлетворён.\nДоводы ответчика отклонены."
+            ),
+            "Иск удовлетворён. Доводы ответчика отклонены.",
+        )
+
+    def test_non_russian_answer_is_garbage(self):
+        self.assertEqual(
+            uc._clean_summary(
+                "The court dismissed the claim because the plaintiff "
+                "failed to prove ownership."
+            ),
+            "",
+        )
+
+    def test_overlong_trimmed_at_sentence_boundary(self):
+        sent = "Довод ответчика о пропуске срока исковой давности отклонён. "
+        cleaned = uc._clean_summary(sent * 20)  # ~1200 символов
+        self.assertLessEqual(len(cleaned), cm_llm._SUMMARY_HARD_LIMIT)
+        self.assertTrue(cleaned.endswith("отклонён."))
+
+    def test_overlong_without_boundary_is_garbage(self):
+        self.assertEqual(uc._clean_summary("а" * 700), "")
 
 
 class SummarizeActMotivationTest(unittest.TestCase):
