@@ -574,7 +574,7 @@ def _call_claude_simple(
                 "anthropic-version": "2023-06-01",
             },
             json={
-                "model": "claude-haiku-4-5-20251001",
+                "model": config.CLAUDE_MODEL,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "messages": [{"role": "user", "content": prompt}],
@@ -744,11 +744,19 @@ def _act_cache_key(act: str) -> str:
 
     Для gigachat/openrouter в ключ входит провайдер:модель — иначе тестовый
     прогон молча вернул бы кэшированный пересказ Claude, а его результат
-    попал бы в боевой Claude-кэш.
+    попал бы в боевой Claude-кэш. То же для НЕэталонной модели Claude
+    (sonnet/opus в тестовом контуре): свой неймспейс, чтобы не читать
+    haiku-кэш и не засорять боевой. Ключи эталонной haiku-модели остаются
+    байт-в-байт прежними — боевой .act_summaries.json не переиндексируется.
     """
     base = act + "|v3-detailed"
     if config.LLM_PROVIDER in ("gigachat", "openrouter"):
         base += "|" + _current_digest_model_name()
+    elif (
+        config.LLM_PROVIDER == "claude"
+        and config.CLAUDE_MODEL != config.DEFAULT_CLAUDE_MODEL
+    ):
+        base += "|" + config.CLAUDE_MODEL
     return hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
 
 
@@ -1055,7 +1063,7 @@ def _call_claude_polish(system_prompt: str, user_prompt: str) -> str | None:
                 "anthropic-version": "2023-06-01",
             },
             json={
-                "model": "claude-haiku-4-5-20251001",
+                "model": config.CLAUDE_MODEL,
                 "max_tokens": 4096,
                 "temperature": 0.1,
                 "system": system_prompt,
@@ -1129,4 +1137,4 @@ def _current_digest_model_name() -> str:
         return f"gigachat:{config.GIGACHAT_MODEL}"
     if config.LLM_PROVIDER == "openrouter":
         return f"openrouter:{_resolve_openrouter_model()}"
-    return "claude-haiku-4-5-20251001"
+    return config.CLAUDE_MODEL

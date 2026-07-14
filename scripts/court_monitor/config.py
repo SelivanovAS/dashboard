@@ -158,6 +158,32 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 # остаётся на Claude и ничего не знает про этот флаг.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
 
+# Модель Claude для дайджеста. По умолчанию — боевой эталон haiku (общий кэш
+# пересказов). Тестовый workflow (test_digest.yml) может выбрать sonnet/opus
+# через input claude_model → env CLAUDE_MODEL; короткие имена из админки
+# резолвятся в полный id API, точный id (из «Точной модели») проходит как есть.
+# Основной мониторинг (update_cases.yml) env CLAUDE_MODEL не ставит → остаётся
+# на haiku. Код читает только config.CLAUDE_MODEL — тесты патчат его напрямую.
+DEFAULT_CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+_CLAUDE_MODEL_ALIASES = {
+    "haiku": DEFAULT_CLAUDE_MODEL,
+    "sonnet": "claude-sonnet-5",
+    "opus": "claude-opus-4-8",
+}
+
+
+def resolve_claude_model(raw: str) -> str:
+    """Короткое имя (haiku/sonnet/opus) → полный id модели Claude.
+
+    Пусто → эталон haiku. Неизвестное значение (точный id из «Точной модели»)
+    проходит как есть. Регистр короткого имени не важен.
+    """
+    val = (raw or "").strip()
+    return _CLAUDE_MODEL_ALIASES.get(val.lower(), val) or DEFAULT_CLAUDE_MODEL
+
+
+CLAUDE_MODEL = resolve_claude_model(os.environ.get("CLAUDE_MODEL", ""))
+
 # Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
 # По умолчанию используется гибридный путь: программный рендер
 # (generate_template_digest) + LLM-микро-вызов только на пересказ

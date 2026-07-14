@@ -777,7 +777,8 @@ const DISPATCH_WORKFLOWS = {
   "update_cases.yml": new Set(["to_group", "smart_skip"]),
   "test_digest.yml": new Set([
     "to_group", "push_all", "full_llm", "llm_provider",
-    "gigachat_model", "openrouter_model", "llm_model", "commit_results",
+    "claude_model", "gigachat_model", "openrouter_model", "llm_model",
+    "commit_results",
   ]),
 };
 
