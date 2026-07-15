@@ -265,6 +265,10 @@ GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
 GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "").strip() or "GigaChat"
 GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+# Модели 3-го поколения (GigaChat-3-Ultra, freemium для физлиц) живут на
+# отдельном базовом адресе — стандартный gigachat.devices.sberbank.ru их
+# не принимает. Выбор URL по модели — llm._gigachat_api_url.
+GIGACHAT_V3_API_URL = "https://api.giga.chat/v1/chat/completions"
 
 # OpenRouter — третий провайдер (только тестовый контур, см. test_digest.yml).
 # OPENROUTER_MODEL: буквальный id модели ИЛИ место в рейтинге бесплатных

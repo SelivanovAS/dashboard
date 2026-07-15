@@ -75,6 +75,7 @@ on:
           - GigaChat-2-Pro
           - GigaChat-2
           - GigaChat-2-Max
+          - GigaChat-3-Ultra
         default: GigaChat-2-Pro
       openrouter_model:
         description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга, какая именно — видно в приписке «🤖 LLM» и в логе.'
