@@ -164,6 +164,13 @@ class RegionConfig:
     # выступающий 1-й инстанцией для отдельных категорий. Матчер возвращает
     # соответствующий CourtConfig из appeal_courts.
     appeal_long_markers: tuple[tuple[str, str], ...] = ()
+    # Родительный падеж имени региона для текстов («дела судов {name_gen}»);
+    # пусто → используется name как есть.
+    name_gen: str = ""
+    # Regex «суд ПОХОЖ на наш регион, но не сматчился с реестром» — для
+    # WARNING-строки в разборе выдачи КСОЮ (ловит рассинхрон названий, класс
+    # бага «Берёзовский» ё/е). Шире fi_region_markers: включает словоформы.
+    fi_suspect_regex: str = ""
     dashboard_url: str = ""                     # дефолт; env DASHBOARD_URL перекрывает
     tz_offset_hours: int = 5                    # локальное время территории (админка)
     pwa_name: str = ""                          # имя PWA (manifest форка)
