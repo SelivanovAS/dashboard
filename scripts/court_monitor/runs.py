@@ -100,6 +100,19 @@ def log_phase(num: int, total: int, title: str) -> None:
     log.info(f"— [{num}/{total}] {title} —")
 
 
+def _format_queue_balance(subject: str, total: int, to_parse: int,
+                          parts: list[str]) -> str:
+    """Строка-баланс очереди парсинга: «<субъект> N → парсим X (a; b; c)».
+
+    Инвариант читаемости: X + слагаемые в скобках = N, нулевые слагаемые
+    вызывающий в parts не кладёт (пустой список → строка без скобок).
+    """
+    return (
+        f"{subject} {total} → парсим {to_parse}"
+        + (f" ({'; '.join(parts)})" if parts else "")
+    )
+
+
 def _format_slow_courts(
     seconds: dict[str, float],
     counts: dict[str, int],
@@ -172,14 +185,16 @@ def update_active_cases(
         if _ap_d is not None and should_skip_case(
                 {"current_stage": "appeal", "appeal": _ap_d}, today)[0]:
             plan_skip += 1
-    log.info(
-        f"Обновляю дела апелляции: парсим {planned_total - plan_skip} "
-        f"из {planned_total}"
-        + (f" (smart-skip {plan_skip} с известной будущей датой)"
-           if plan_skip else "")
-        + (f"; ещё {past_stage} уже прошли апелляцию — карточки не парсим"
-           if past_stage else "")
-    )
+    # Баланс одной строкой: «парсим» + слагаемые в скобках = «активных дел».
+    _plan_parts = []
+    if plan_skip:
+        _plan_parts.append(f"{plan_skip} отложено — заседание в будущем")
+    if past_stage:
+        _plan_parts.append(f"{past_stage} не парсим — апелляция уже пройдена")
+    log.info(_format_queue_balance(
+        "Апелляция: активных дел", active_total,
+        planned_total - plan_skip, _plan_parts,
+    ))
 
     for case in cases:
         if is_archived(case):
@@ -189,7 +204,7 @@ def update_active_cases(
         eligible_total += 1
         if eligible_total % 20 == 0:
             log.info(
-                f"Апелляция: обработано {eligible_total}/{planned_total} "
+                f"Апелляция: проверено {eligible_total} из {planned_total} "
                 f"(изменений {len(changes)})"
             )
 
@@ -519,7 +534,7 @@ def update_active_cases(
             _digested_acts.add(case["Номер дела"])
 
         # «Без изменений» — фоновый шум (100+ строк за прогон), уводим в DEBUG;
-        # прогресс по очереди виден по строкам «Апелляция: обработано X/Y».
+        # прогресс по очереди виден по строкам «Апелляция: проверено X из Y».
         if change["type"]:
             log.info(f"  {case['Номер дела']}: {' → '.join(change['type'])}")
         else:
@@ -668,7 +683,8 @@ def main():
         log.warning("Не удалось загрузить страницу поиска")
     timings["search"] = time.perf_counter() - t0
 
-    # 4. Обновляем активные дела (строку «Обновляю N …» печатает сама функция)
+    # 4. Обновляем активные дела (строку-баланс «Апелляция: активных дел N →
+    #    парсим X …» печатает сама функция)
     t0 = time.perf_counter()
     cases, changes, _skip_stats = update_active_cases(cases)
     timings["cards_update"] = time.perf_counter() - t0
@@ -1571,10 +1587,8 @@ def main_json():
         and bank_is_third_party(c)
     ]
     if fi_third_party_watch:
-        log.info(
-            f"1 инст: {len(fi_third_party_watch)} дел «третье лицо» в "
-            f"cassation_watch не парсим — ждём кассацию на 7kas"
-        )
+        # В сводную строку-баланс ниже они входят слагаемым «третье лицо»;
+        # здесь — только пер-кейсовая диагностика на DEBUG.
         for _c in fi_third_party_watch:
             log.debug(
                 f"  без FI-парса (третье лицо): "
@@ -1600,15 +1614,27 @@ def main_json():
         elif should_skip_case(_c, today)[0]:
             fi_plan_skip += 1
     fi_plan_parse = len(fi_active) - fi_plan_skip - fi_plan_no_card
+    # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
+    # «Всего» включает и дела «третье лицо» в cassation_watch — предикат
+    # should_parse_fi_card их не пускает в очередь, но юристу они видны
+    # как часть общей арифметики, а не отдельной строкой.
+    fi_plan_total = len(fi_active) + len(fi_third_party_watch)
     _plan_notes = []
     if fi_plan_skip:
-        _plan_notes.append(f"smart-skip {fi_plan_skip} с известной будущей датой")
+        _plan_notes.append(f"{fi_plan_skip} отложено — заседание в будущем")
     if fi_plan_no_card:
-        _plan_notes.append(f"{fi_plan_no_card} без ссылки/суда")
-    log.info(
-        f"Обновляю дела 1-й инстанции: парсим {fi_plan_parse} из {len(fi_active)}"
-        + (f" ({'; '.join(_plan_notes)})" if _plan_notes else "")
-    )
+        _plan_notes.append(
+            f"{fi_plan_no_card} без ссылки на карточку — пропустим"
+        )
+    if fi_third_party_watch:
+        _plan_notes.append(
+            f"{len(fi_third_party_watch)} «третье лицо» не парсим — "
+            f"ждём кассацию на 7kas"
+        )
+    log.info(_format_queue_balance(
+        "1 инст: дел со стадией 1-й инстанции", fi_plan_total,
+        fi_plan_parse, _plan_notes,
+    ))
     fi_update_count = 0
     fi_changes: list[dict] = []
     # Smart-skip счётчики
@@ -1634,7 +1660,7 @@ def main_json():
     for fi_idx, case_j in enumerate(fi_active, 1):
         if fi_idx % 20 == 0:
             log.info(
-                f"1 инст: обработано {fi_idx}/{len(fi_active)} "
+                f"1 инст: проверено {fi_idx} из {len(fi_active)} "
                 f"(изменений {len(fi_changes)})"
             )
         fi = case_j.get("first_instance", {})
@@ -2430,7 +2456,7 @@ def main_json():
         if change["type"]:
             fi_changes.append(change)
 
-        # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: обработано X/Y».
+        # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: проверено X из Y».
         if change["type"]:
             log.info(f"  {fi['case_number']}: {' → '.join(change['type'])}")
         elif changed:
@@ -2441,11 +2467,18 @@ def main_json():
     timings["fi_update"] = time.perf_counter() - t0
     fi_total = len(fi_active)
     fi_skip_total = fi_skipped_future + fi_skipped_suspended
+    _fi_sum_parts = []
+    if fi_skipped_future:
+        _fi_sum_parts.append(f"{fi_skipped_future} отложено — заседание в будущем")
+    if fi_skipped_suspended:
+        _fi_sum_parts.append(f"{fi_skipped_suspended} без движения")
+    if fi_no_card:
+        _fi_sum_parts.append(f"{fi_no_card} без ссылки/суда")
+    if fi_force_parsed:
+        _fi_sum_parts.append(f"форс-парс {fi_force_parsed}")
     log.info(
-        f"1 инст: спарсено {fi_parsed}/{fi_total} карточек "
-        f"(пропуски: {fi_skipped_future} заседание впереди, "
-        f"{fi_skipped_suspended} без движения, {fi_no_card} без ссылки/суда; "
-        f"форс-парс {fi_force_parsed})"
+        f"1 инст: спарсено {fi_parsed} из {fi_total} карточек"
+        + (f" ({'; '.join(_fi_sum_parts)})" if _fi_sum_parts else "")
     )
     if fi_court_seconds:
         # Префикс «1 инст:» — в KEY_RE progress_pusher'а: строка уедет
@@ -2455,11 +2488,19 @@ def main_json():
             + _format_slow_courts(fi_court_seconds, fi_court_cards)
         )
     ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
+    _ap_sum_parts = []
+    if ap_skip_stats["skipped_future"]:
+        _ap_sum_parts.append(
+            f"{ap_skip_stats['skipped_future']} отложено — заседание в будущем"
+        )
+    if ap_skip_stats["skipped_suspended"]:
+        _ap_sum_parts.append(f"{ap_skip_stats['skipped_suspended']} без движения")
+    if ap_skip_stats["force_parsed"]:
+        _ap_sum_parts.append(f"форс-парс {ap_skip_stats['force_parsed']}")
     log.info(
-        f"Апелляция: спарсено {ap_skip_stats['parsed']}/{ap_skip_stats['total']} "
-        f"карточек (пропуски: {ap_skip_stats['skipped_future']} заседание впереди, "
-        f"{ap_skip_stats['skipped_suspended']} без движения; "
-        f"форс-парс {ap_skip_stats['force_parsed']})"
+        f"Апелляция: спарсено {ap_skip_stats['parsed']} "
+        f"из {ap_skip_stats['total']} карточек"
+        + (f" ({'; '.join(_ap_sum_parts)})" if _ap_sum_parts else "")
     )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
@@ -2491,7 +2532,10 @@ def main_json():
     health_labels["cassation:7kas:total"] = "Кассация 7kas (вся выдача)"
     health_labels["cassation:7kas:hmao"] = "Кассация 7kas (HMAO-фильтр)"
     try:
-        log.info("⚖️ Поиск дел Сбербанка на 7kas.sudrf.ru...")
+        log.info(
+            "Кассация, шаг 1/2 — поиск по имени банка "
+            "(первая страница выдачи 7kas)"
+        )
         polite_delay()
         cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
         if not cass_search_html:
@@ -2504,9 +2548,10 @@ def main_json():
             health_obs["cassation:7kas:total"] = len(cass_search_results)
             health_obs["cassation:7kas:hmao"] = len(hmao_results)
             log.info(
-                f"  7kas: всего {len(cass_search_results)} дел, "
-                f"HMAO {len(hmao_results)}, не-HMAO отброшено "
-                f"{len(cass_search_results) - len(hmao_results)}"
+                f"  7kas: в выдаче {len(cass_search_results)} дел, "
+                f"из них {len(hmao_results)} по судам ХМАО "
+                f"({len(cass_search_results) - len(hmao_results)} "
+                f"чужих регионов отброшено)"
             )
             # Отброшенные суды нужны в логе, чтобы рассинхрон названия (ё/е,
             # переименование, новый суд) был виден, а не исчезал в счётчике —
@@ -2617,10 +2662,14 @@ def main_json():
         # Кассация — третий парсер, его падение не должно ронять весь прогон.
         # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
         log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
+    _cass_sum_parts = []
+    if cass_skipped_future:
+        _cass_sum_parts.append(f"{cass_skipped_future} отложено — заседание в будущем")
+    if cass_skipped_suspended:
+        _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
     log.info(
-        f"Кассация: спарсено {cass_parsed}/{cass_eligible} карточек "
-        f"(пропуски: {cass_skipped_future} заседание впереди, "
-        f"{cass_skipped_suspended} без движения)"
+        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек ХМАО"
+        + (f" ({'; '.join(_cass_sum_parts)})" if _cass_sum_parts else "")
     )
     timings["cassation"] = time.perf_counter() - t0
 
@@ -2638,6 +2687,10 @@ def main_json():
     cass_refresh_fresh = 0
     cass_refresh_parsed = 0
     cass_refresh_force_parsed = 0
+    log.info(
+        "Кассация, шаг 2/2 — обход своих дел, "
+        "ушедших с первой страницы выдачи"
+    )
     try:
         today_for_refresh = date.today()
         today_iso = today_for_refresh.isoformat()
@@ -2646,6 +2699,7 @@ def main_json():
         _plan_total = 0
         _plan_skip = 0
         _plan_fresh = 0
+        _plan_no_link = 0
         for _c in cases:
             if _c.get("current_stage") != "cassation":
                 continue
@@ -2655,16 +2709,26 @@ def main_json():
                 continue
             _cid, _cuid = case_id_uid((_cb.get("link") or "").strip())
             if not _cid or not _cuid:
+                _plan_no_link += 1
                 continue
             _plan_total += 1
             if should_skip_case(_c, today_for_refresh)[0]:
                 _plan_skip += 1
-        log.info(
-            f"7kas refresh: парсим {_plan_total - _plan_skip} из {_plan_total}"
-            + (f" (smart-skip {_plan_skip} с известной будущей датой)"
-               if _plan_skip else "")
-            + (f"; {_plan_fresh} уже свежие" if _plan_fresh else "")
-        )
+        # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
+        _plan_parts = []
+        if _plan_fresh:
+            _plan_parts.append(f"{_plan_fresh} уже обновлены шагом 1")
+        if _plan_skip:
+            _plan_parts.append(f"{_plan_skip} отложено — заседание в будущем")
+        if _plan_no_link:
+            _plan_parts.append(
+                f"{_plan_no_link} без ссылки на карточку — пропустим"
+            )
+        log.info(_format_queue_balance(
+            "7kas refresh: дел в стадии кассации",
+            _plan_total + _plan_fresh + _plan_no_link,
+            _plan_total - _plan_skip, _plan_parts,
+        ))
         for case in cases:
             if case.get("current_stage") != "cassation":
                 continue
@@ -2743,12 +2807,21 @@ def main_json():
             cass_changes.extend(more_changes)
     except Exception as exc:
         log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
+    _refresh_sum_parts = []
+    if cass_refresh_skipped_future:
+        _refresh_sum_parts.append(
+            f"{cass_refresh_skipped_future} отложено — заседание в будущем"
+        )
+    if cass_refresh_skipped_suspended:
+        _refresh_sum_parts.append(f"{cass_refresh_skipped_suspended} без движения")
+    if cass_refresh_force_parsed:
+        _refresh_sum_parts.append(f"форс-парс {cass_refresh_force_parsed}")
+    if cass_refresh_fresh:
+        _refresh_sum_parts.append(f"{cass_refresh_fresh} уже обновлены шагом 1")
     log.info(
-        f"7kas refresh: спарсено {cass_refresh_parsed}/{cass_refresh_total} карточек "
-        f"(пропуски: {cass_refresh_skipped_future} заседание впереди, "
-        f"{cass_refresh_skipped_suspended} без движения; "
-        f"форс-парс {cass_refresh_force_parsed}; "
-        f"{cass_refresh_fresh} уже свежие)"
+        f"7kas refresh: спарсено {cass_refresh_parsed} "
+        f"из {cass_refresh_total} карточек"
+        + (f" ({'; '.join(_refresh_sum_parts)})" if _refresh_sum_parts else "")
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
 
