@@ -38,11 +38,24 @@ Actions (workflow .github/workflows/probe_captcha.yml). Возможно, с Mac
 Проба проверит, пускает ли name_op=r с этим cookie БЕЗ повторного кода. Повторный
 запуск через N часов измеряет срок жизни cookie. Разгадку это НЕ автоматизирует —
 код решает человек; проба только измеряет переиспользуемость сессии.
+
+Режим карточки (--card): решающий тест «гейтит ли капча-суд саму карточку
+name_op=case, или только поиск name_op=r». Юрист ОДИН раз решает код на форме
+name_op=sf, в выдаче правой кнопкой копирует ссылку на номере дела и вынимает из
+неё seed "cid|cuid" (case_id= → cid, case_uid= → cuid). Проба свежей сессией
+берёт card_url и печатает: КАРТОЧКА открыта | ЗАКРЫТА кодом | НЕОДНОЗНАЧНО.
+
+    python3 scripts/probe_captcha.py --card "12345|1a2b3c4d-5e6f-7a8b-9c0d-112233445566"
+
+Сид ДОЛЖЕН быть из того же суда, что --domain/--delo-id/--srv-num (card_url зашивает
+delo_id/new/srv_num). Капча включается по репутации IP, поэтому решающий вантаж —
+US-IP GitHub (там закрыт поиск): вход card_seed в .github/workflows/probe_captcha.yml.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -53,9 +66,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from court_monitor import netutil  # noqa: E402
 from court_monitor.courts import CourtConfig  # noqa: E402
+from court_monitor.textutil import case_id_uid  # noqa: E402
 from court_monitor.parsing import (  # noqa: E402
     detect_captcha_challenge,
     extract_tables,
+    parse_case_card,
     _find_results_table,
 )
 
@@ -174,6 +189,105 @@ def _cookie_reuse_test(court: CourtConfig, r_url: str, f_url: str, cookie_raw: s
         print("НЕОДНОЗНАЧНО — не код, но и не выдача (см. строку 'cookie' выше).")
 
 
+def _parse_seed(seed: str) -> tuple[str, str]:
+    """"cid|cuid" → (cid, cuid) с валидацией. Пустой кортеж, если сид битый.
+
+    case_id_uid() режет только по числу частей, НЕ валидирует формат и НЕ срезает
+    пробелы вокруг '|'. Страхуемся: cid ∈ \\d+, cuid ∈ [a-f0-9-]+ — те же классы,
+    что _CASE_ID_RE / _CASE_UID_RE, которыми парсер тянет cid/cuid из href выдачи."""
+    cid, cuid = case_id_uid(seed)
+    cid, cuid = cid.strip(), cuid.strip()
+    if not (cid and cuid):
+        return "", ""
+    if not re.fullmatch(r"\d+", cid) or not re.fullmatch(r"[a-f0-9\-]+", cuid):
+        return "", ""
+    return cid, cuid
+
+
+def _maybe_dump(dumps: dict, dump_dir: str | None) -> None:
+    """Сохранить сырой HTML вариантов в каталог (как в основном режиме A/B/C)."""
+    if not dump_dir:
+        return
+    out = Path(dump_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, r in dumps.items():
+        if r and not r.get("error"):
+            (out / f"{name}.html").write_text(r["html"], encoding="utf-8")
+    print(f"Сырой HTML сохранён в {out}/ (для тюнинга маркеров детекта).")
+
+
+def _card_probe_test(court: CourtConfig, seed: str, dump_dir: str | None) -> None:
+    """Гейтит ли суд карточку (name_op=case) кодом — или только поиск (name_op=r).
+
+    Сид "cid|cuid" юрист берёт из ОДНОЙ ручной разгадки: форма name_op=sf →
+    «Сбербанк» → решает код → в выдаче правой кнопкой «Копировать ссылку» на
+    номере дела; из href case_id= → cid, case_uid= → cuid. Сид ДОЛЖЕН быть из того
+    же суда, что --domain/--delo-id/--srv-num — card_url зашивает delo_id/new/srv_num.
+
+    Проба ТОЛЬКО классифицирует: код не читаем, не декодируем, не решаем."""
+    cid, cuid = _parse_seed(seed)
+    if not (cid and cuid):
+        print("СИД БИТЫЙ — жду \"cid|cuid\": cid = case_id= (только цифры),")
+        print("cuid = case_uid= (hex+дефисы), ровно один '|', без пробелов вокруг.")
+        print(f"  получено: {seed!r}")
+        return
+
+    url = court.card_url(cid, cuid)
+    print("Проба карточки: гейтит ли name_op=case (а не только поиск name_op=r)?")
+    print(f"name_op=case: {url}")
+    r = _probe(_fresh_session(), url)
+    print(_line("card", r))
+    print()
+
+    if r.get("error"):
+        print("НЕОДНОЗНАЧНО — сетевая ошибка запроса (см. строку 'card').")
+    elif r["challenge"]:
+        print("КАРТОЧКА: ЗАКРЫТА кодом — name_op=case под капчей, как и поиск.")
+        print(">>> Модель «разгадать код 1 раз → мониторить карточки» НЕ работает.")
+        print(">>> Остаётся детект+алерт+ручная проверка / легитимный канал.")
+    else:
+        info = None
+        try:
+            info = parse_case_card(r["html"], court.base_url)
+        except Exception as exc:  # noqa: BLE001 — диагностика: любой сбой → неоднозначно
+            print(f"НЕОДНОЗНАЧНО — карточка не распарсилась ({type(exc).__name__}: {exc}).")
+        if info is not None:
+            has_events = bool(info.get("_events"))       # .get(): без «ДВИЖЕНИЯ» ключа нет
+            has_uid = bool(info["УИД"])                   # эти три ключа всегда в info
+            has_num = bool(info["Номер дела (карточка)"])
+            if has_events or has_uid or has_num:
+                sig = []
+                if has_events:
+                    sig.append(f"_events={len(info['_events'])}")
+                if has_uid:
+                    sig.append("УИД")
+                if has_num:
+                    sig.append("Номер(карточка)")
+                print("КАРТОЧКА: открыта — name_op=case отдаёт данные БЕЗ кода.")
+                print(f"  сигналы:           {', '.join(sig)}")
+                print(f"  УИД:               {info['УИД'] or '—'}")
+                print(f"  Номер (карточка):  {info['Номер дела (карточка)'] or '—'}")
+                print(f"  Последнее событие: {info['Последнее событие'] or '—'} "
+                      f"({info['Дата события'] or '—'})")
+                print(f"  таблиц в карточке: {info['_table_count']}")
+                print()
+                print(">>> ЖИВА модель: разгадать код 1 раз на форме name_op=sf → собрать")
+                print(">>> cid|cuid → мониторить карточки name_op=case автоматически.")
+                print(">>> ПЕРЕД боевым включением обмотать карточный fetch в")
+                print(">>> detect_captcha_challenge (см. заметку в плане).")
+            else:
+                print("КАРТОЧКА: НЕОДНОЗНАЧНО — не код, но и не распознанная карточка.")
+                print(f"  таблиц: {info['_table_count']}, движения нет, УИД/номер не найдены.")
+                if r["no_data"]:
+                    print("  страница = «данных по запросу не обнаружено» → сид почти")
+                    print("  наверняка устарел или из другого суда (cid+cuid не сматчились).")
+                print("  Причины: (1) сид устарел / не из этого суда — сверь domain/")
+                print("  delo_id/srv_num; (2) «огрызок» (_table_count<6); (3) иной блок")
+                print("  (WAF/гео/лимит). Сравни RU-IP vs US-IP; сохрани --dump.")
+
+    _maybe_dump({"card": r}, dump_dir)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Проба проверочного кода на суде sudrf")
     ap.add_argument("--domain", default="akademicheskiy--svd.sudrf.ru",
@@ -183,8 +297,14 @@ def main() -> None:
     ap.add_argument("--srv-num", type=int, default=1)
     ap.add_argument("--dump", metavar="DIR", default=None,
                     help="сохранить сырой HTML вариантов в каталог (для тюнинга маркеров)")
-    ap.add_argument("--cookie", metavar="STR", default=None,
-                    help="Cookie решённой человеком сессии (\"k=v; k2=v2\") — тест переиспользования")
+    # --cookie и --card — взаимоисключающие режимы замера (иначе при обоих флагах
+    # молча победил бы cookie: его ветка в main() идёт первой).
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--cookie", metavar="STR", default=None,
+                      help="Cookie решённой человеком сессии (\"k=v; k2=v2\") — тест переиспользования")
+    mode.add_argument("--card", metavar="CID|CUID", default=None,
+                      help="сид \"cid|cuid\" из ОДНОЙ ручной разгадки — гейтится ли карточка "
+                           "(name_op=case), а не только поиск (name_op=r)")
     args = ap.parse_args()
 
     court = CourtConfig(
@@ -203,6 +323,12 @@ def main() -> None:
     # Режим замера cookie: код уже решён человеком, проверяем переиспользование.
     if args.cookie:
         _cookie_reuse_test(court, r_url, f_url, args.cookie)
+        return
+
+    # Режим карточки: гейтит ли суд name_op=case — или только поиск name_op=r.
+    # Код уже решён человеком ОДИН раз ради seed cid|cuid; здесь только замер.
+    if args.card:
+        _card_probe_test(court, args.card, args.dump)
         return
 
     # Вариант A: прямой запрос свежей сессией — ровно как боевой парсер.
