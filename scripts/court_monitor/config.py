@@ -16,6 +16,12 @@ import sys
 
 from court_monitor import ghlog
 
+# Активный регион мониторинга (реестры судов — scripts/court_monitor/regions/).
+# Форк территории задаёт REGION в GitHub Actions Variables; эталон/ХМАО живёт
+# на дефолте. Резолвится в RegionConfig через regions.get_region() — тот читает
+# config.REGION на каждый вызов (тесты патчат monkeypatch.setattr(config, ...)).
+REGION = (os.environ.get("REGION", "") or "hmao").strip().lower()
+
 CSV_PATH = os.environ.get("CSV_PATH", "data/sberbank_cases.csv")
 CSV_ARCHIVE_PATH = os.environ.get(
     "CSV_ARCHIVE_PATH",
