@@ -13,7 +13,7 @@ from court_monitor.parsing.search import (  # noqa: F401
     is_subsidiary_only_case, is_insurance_only_case, _is_real_sberbank,
     determine_bank_role_from_participants,
     parse_search_page, _find_results_table, parse_first_instance_search,
-    find_fi_case_link, detect_captcha_challenge,
+    find_fi_case_link, detect_captcha_challenge, detect_captcha_challenge_card,
 )
 from court_monitor.parsing.cards import (  # noqa: F401
     _extract_act_text, _warn_if_card_degraded, parse_case_card, fetch_act_text,

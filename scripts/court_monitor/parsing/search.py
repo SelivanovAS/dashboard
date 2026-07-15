@@ -278,6 +278,22 @@ _CAPTCHA_PHRASES = (
 # Признак легитимно пустой выдачи — это НЕ код.
 _NO_DATA_MARK = "данных по запросу не обнаружено"
 
+# Фразы для КАРТОЧКИ дела — строгое подмножество _CAPTCHA_PHRASES плюс текст
+# страницы-ошибки. Генерические «проверочный код»/«введите код» сюда НЕ входят:
+# карточка содержит полные тексты актов, а сбер-споры о мошенничестве дословно
+# цитируют СМС («ввела проверочный код», «введите код из сообщения») — на
+# карточках такие фразы дают ложняк и дело выпало бы из мониторинга навсегда.
+# Оставшиеся фразы привязаны к картинке/роботам — в текстах актов не встречаются.
+_CAPTCHA_CARD_PHRASES = (
+    "неверно указан проверочный код",  # страница-ошибка name_op=* без кода
+    "код с картинки",
+    "код с изображения",
+    "изображённый на картинке",
+    "изображенный на картинке",
+    "защита от автоматических запросов",
+    "проверка на робот",
+)
+
 
 def detect_captcha_challenge(html: str) -> bool:
     """READ-ONLY: True, только если html — страница с проверочным кодом.
@@ -299,6 +315,24 @@ def detect_captcha_challenge(html: str) -> bool:
     if any(m in low for m in _CAPTCHA_STRONG_MARKERS):
         return True
     return any(p in low for p in _CAPTCHA_PHRASES)
+
+
+def detect_captcha_challenge_card(html: str) -> bool:
+    """READ-ONLY: True, если вместо КАРТОЧКИ дела пришла страница с кодом.
+
+    Отличается от detect_captcha_challenge (поиск) набором фраз: карточка
+    содержит полные тексты судебных актов, где генерические фразы
+    («проверочный код», «введите код») встречаются в цитатах СМС по делам
+    о мошенничестве — см. _CAPTCHA_CARD_PHRASES. Маркеры разметки капчи
+    (_CAPTCHA_STRONG_MARKERS) остаются в силе: легитимная карточка
+    формы капчи не содержит.
+    """
+    if not html:
+        return False
+    low = html.lower()
+    if any(m in low for m in _CAPTCHA_STRONG_MARKERS):
+        return True
+    return any(p in low for p in _CAPTCHA_CARD_PHRASES)
 
 
 def find_fi_case_link(html: str, case_number: str) -> str:

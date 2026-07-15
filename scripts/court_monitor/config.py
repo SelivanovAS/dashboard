@@ -313,6 +313,7 @@ METRICS: dict[str, int] = {
     "telegram_sent": 0,      # успешно отправленных сообщений (после split)
     "telegram_failed": 0,    # полностью не отправленных частей
     "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
+    "cards_captcha": 0,      # карточек, закрытых проверочным кодом (fetch_card_checked)
     "push_sent": 0,          # Web Push: доставлено подписчикам
     "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
     "llm_summary_calls": 0,       # пересказы актов: реальные вызовы LLM

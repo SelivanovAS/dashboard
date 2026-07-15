@@ -17,7 +17,7 @@ from court_monitor.lifecycle import (
     _SUSPENDED_RX, _TERMINAL_FI_EVENT_RX, extract_result_from_event,
 )
 from court_monitor.courts import BASE_URL
-from court_monitor.netutil import fetch_page, polite_delay
+from court_monitor.netutil import fetch_card_checked, polite_delay
 from court_monitor.parsing.search import determine_bank_role_from_participants
 from court_monitor.parsing.tables import extract_tables, cell_text, cell_href
 from court_monitor.textutil import (
@@ -794,9 +794,15 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
 
 
 def fetch_act_text(act_url: str, *, context: str | None = None) -> str:
-    """Скачать текст судебного акта по URL (context — номер дела для логов)."""
+    """Скачать текст судебного акта по URL (context — номер дела для логов).
+
+    Через fetch_card_checked: если страницу акта закроют проверочным кодом,
+    _strip_html превратил бы её в «текст акта»-мусор, который ушёл бы в
+    LLM-пересказ и дайджест. Карточный детектор здесь безопасен — генерические
+    фразы («проверочный код» из СМС-цитат в актах о мошенничестве) он не матчит.
+    """
     polite_delay()
-    html = fetch_page(act_url, context=context)
+    html = fetch_card_checked(act_url, context=context)
     if not html:
         return ""
     # Убираем script/style + теги, схлопываем пробелы

@@ -41,7 +41,7 @@ from court_monitor.config import (  # noqa: E402
     log,
 )
 from court_monitor.courts import FIRST_INSTANCE_COURTS  # noqa: E402
-from court_monitor.netutil import fetch_page, polite_delay  # noqa: E402
+from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay  # noqa: E402
 from court_monitor.parsing import (  # noqa: E402
     _find_results_table,
     _parse_combined_cell,
@@ -283,7 +283,7 @@ def main() -> None:
 
         polite_delay()
         card_url = court.card_url(cid, cuid)
-        card_html = fetch_page(card_url, context=case_num)
+        card_html = fetch_card_checked(card_url, context=case_num)
         if not card_html:
             log.warning("  [FETCH FAIL] карточка дела")
             stats["fetch_fail"] += 1

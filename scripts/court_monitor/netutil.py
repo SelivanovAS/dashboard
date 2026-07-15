@@ -68,3 +68,30 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
                     f"после {config.FETCH_MAX_RETRIES} попыток: {e}"
                 )
     return ""
+
+
+def fetch_card_checked(url: str, *, context: str | None = None) -> str:
+    """Скачать КАРТОЧКУ дела с проверкой «а не проверочный ли это код».
+
+    Поиск суды закрывают кодом (Свердловск, замер 15.07.2026), карточки пока
+    открыты — но если код появится и на карточках, parse_case_card молча
+    распарсил бы страницу-заглушку как пустой «огрызок» (ложное «дело без
+    движения»). Обёртка классифицирует такой ответ: WARNING + счётчик
+    METRICS["cards_captcha"] (уходит в сводку прогона и 🩺-алерт) + "" —
+    дело пропускается этим прогоном, его данные не портятся.
+
+    READ-ONLY: код не читаем и не решаем — только распознаём страницу
+    (см. detect_captcha_challenge_card).
+    """
+    html = fetch_page(url, context=context)
+    if not html:
+        return ""
+    # Ленивый импорт: netutil — низкоуровневый слой, тащить parsing (courts,
+    # tables) на уровень модуля значило бы завязать сеть на парсеры.
+    from court_monitor.parsing.search import detect_captcha_challenge_card
+    if detect_captcha_challenge_card(html):
+        config.METRICS["cards_captcha"] += 1
+        ctx = f" ({context})" if context else ""
+        log.warning(f"Карточка закрыта проверочным кодом{ctx}: {url}")
+        return ""
+    return html

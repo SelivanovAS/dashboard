@@ -781,6 +781,10 @@ def log_run_summary(
     opt_lines: list[str] = []
     if config.METRICS["cards_degraded"]:
         opt_lines.append(f"Карточек-огрызков: {config.METRICS['cards_degraded']}")
+    if config.METRICS["cards_captcha"]:
+        opt_lines.append(
+            f"Карточек под проверочным кодом: {config.METRICS['cards_captcha']}"
+        )
     if config.METRICS["push_sent"] or config.METRICS["push_failed"]:
         opt_lines.append(
             f"Web Push: отправлено {config.METRICS['push_sent']}"

@@ -68,7 +68,7 @@ from court_monitor.linking import (
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
 )
-from court_monitor.netutil import fetch_page, polite_delay, session
+from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay, session
 from court_monitor.parsing import (
     parse_case_card, parse_search_page, parse_first_instance_search,
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
@@ -232,7 +232,7 @@ def update_active_cases(
 
         url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
         polite_delay()
-        html = fetch_page(url, context=case["Номер дела"])
+        html = fetch_card_checked(url, context=case["Номер дела"])
         if not html:
             log.warning(f"Не удалось загрузить карточку {case['Номер дела']}")
             continue
@@ -664,7 +664,7 @@ def main():
             if cid and cuid:
                 polite_delay()
                 url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
-                card_html = fetch_page(url, context=nc["Номер дела"])
+                card_html = fetch_card_checked(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html)
                     _warn_if_card_degraded(card_info, nc["Номер дела"])
@@ -891,7 +891,9 @@ def main_backfill_appeal_anchors():
             if not cid or not cuid:
                 continue
             polite_delay()
-            html = fetch_page(APPEAL_COURT.card_url(cid, cuid), context=c.get("id", "?"))
+            html = fetch_card_checked(
+                APPEAL_COURT.card_url(cid, cuid), context=c.get("id", "?")
+            )
             if not html:
                 log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
                 continue
@@ -1351,6 +1353,10 @@ def main_json():
     if search_html:
         search_cases = parse_search_page(search_html)
         health_obs["appeal:oblsud"] = len(search_cases)
+        # 0 дел + маркеры проверочного кода → поиск апелляции закрыт CAPTCHA,
+        # а не «дел нет» (симметрично детекту по судам 1-й инст. ниже).
+        if not search_cases and detect_captcha_challenge(search_html):
+            fi_challenge[APPEAL_COURT.domain] = f"Апелляция ({APPEAL_COURT.name})"
         log.info(
             f"Апелляция: {len(search_cases)} "
             f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
@@ -1373,7 +1379,7 @@ def main_json():
             if cid and cuid:
                 polite_delay()
                 url = APPEAL_COURT.card_url(cid, cuid)
-                card_html = fetch_page(url, context=nc["Номер дела"])
+                card_html = fetch_card_checked(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html, APPEAL_COURT.base_url)
                     _warn_if_card_degraded(card_info, nc["Номер дела"])
@@ -1708,7 +1714,7 @@ def main_json():
         # ретраи fetch_page — главный сигнал «какой суд тормозит».
         _t_card = time.perf_counter()
         try:
-            html = fetch_page(url, context=f"{fi['case_number']}, {_short_court}")
+            html = fetch_card_checked(url, context=f"{fi['case_number']}, {_short_court}")
             if not html:
                 log.warning(
                     f"  {fi['case_number']} ({_short_court}): "
@@ -2542,6 +2548,11 @@ def main_json():
             health_obs["cassation:7kas:total"] = None
         if cass_search_html:
             cass_search_results = parse_cassation_search_page(cass_search_html)
+            # 0 строк + маркеры проверочного кода → поиск 7kas закрыт CAPTCHA.
+            if not cass_search_results and detect_captcha_challenge(cass_search_html):
+                fi_challenge[CASSATION_COURT.domain] = (
+                    f"Кассация ({CASSATION_COURT.name})"
+                )
             hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
             # Отдельные источники: total ловит поломку парсера выдачи 7kas,
             # hmao — слетевший матчер судов (класс бага «Берёзовский», ё/е).
@@ -2615,7 +2626,7 @@ def main_json():
                         continue
                 polite_delay()
                 card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
-                card_html = fetch_page(
+                card_html = fetch_card_checked(
                     card_url, context=r["cassation_internal_number"]
                 )
                 if not card_html:
@@ -2766,7 +2777,7 @@ def main_json():
             polite_delay()
             try:
                 card_url = CASSATION_COURT.card_url(cid, cuid)
-                card_html = fetch_page(
+                card_html = fetch_card_checked(
                     card_url, context=cass.get("case_number") or "?"
                 )
             except Exception as exc:
@@ -2864,6 +2875,12 @@ def main_json():
         for _dom, _name in fi_challenge.items():
             health_alerts.append(
                 f"{_name}: требует ввод проверочного кода — проверить вручную"
+            )
+        if config.METRICS.get("cards_captcha", 0):
+            health_alerts.append(
+                f"карточек, закрытых проверочным кодом: "
+                f"{config.METRICS['cards_captcha']} — суд закрыл кодом и карточки "
+                f"(см. WARNING'и прогона)"
             )
         if health_alerts:
             log.warning(

@@ -2957,6 +2957,82 @@ class TestDetectCaptchaChallenge:
         assert uc.detect_captcha_challenge(html) is True
 
 
+# ── detect_captcha_challenge_card + fetch_card_checked ──────────────────────
+
+class TestDetectCaptchaChallengeCard:
+    """Карточный детект кода — строже поискового.
+
+    Карточка содержит полные тексты актов, а сбер-споры о мошенничестве
+    дословно цитируют СМС («ввела проверочный код») — поисковый набор фраз
+    на карточках дал бы ложняк, и дело выпало бы из мониторинга навсегда.
+    """
+
+    def test_captcha_markup_true(self):
+        """Реальная разметка капчи (fixture) → True и у карточного детекта."""
+        html = _read_fixture("search_captcha_challenge.html")
+        assert uc.detect_captcha_challenge_card(html) is True
+
+    def test_act_text_quoting_sms_code_false(self):
+        """КЛЮЧЕВОЙ: текст акта с цитатой СМС («проверочный код», «введите
+        код») — НЕ капча. Поисковый детект здесь ложнит (документируем),
+        карточный — нет."""
+        html = (
+            "<html><body><div id='cont1'>Заёмщик сообщила мошенникам "
+            "проверочный код из СМС-сообщения банка; на предложение "
+            "«введите код» ответила вводом кода.</div></body></html>"
+        )
+        assert uc.detect_captcha_challenge(html) is True  # ложняк поискового
+        assert uc.detect_captcha_challenge_card(html) is False
+
+    def test_wrong_code_error_page_true(self):
+        """Страница-ошибка «Неверно указан проверочный код с картинки» → True."""
+        html = "<html><body>Неверно указан проверочный код с картинки</body></html>"
+        assert uc.detect_captcha_challenge_card(html) is True
+
+    def test_normal_card_false(self):
+        html = _read_fixture("case_card_with_act.html")
+        assert uc.detect_captcha_challenge_card(html) is False
+
+    def test_empty_false(self):
+        assert uc.detect_captcha_challenge_card("") is False
+
+
+class TestFetchCardChecked:
+    """fetch_card_checked: карточка-капча → "" + METRICS, обычная — как есть."""
+
+    def _patch_fetch(self, monkeypatch, html):
+        from court_monitor import netutil
+        monkeypatch.setattr(
+            netutil, "fetch_page", lambda url, context=None: html
+        )
+        return netutil
+
+    def test_captcha_card_blocked(self, monkeypatch, caplog):
+        netutil = self._patch_fetch(
+            monkeypatch, _read_fixture("search_captcha_challenge.html")
+        )
+        monkeypatch.setitem(cm_config.METRICS, "cards_captcha", 0)
+        with caplog.at_level(logging.WARNING):
+            out = netutil.fetch_card_checked("http://x/card", context="2-1/2026")
+        assert out == ""
+        assert cm_config.METRICS["cards_captcha"] == 1
+        assert any("проверочным кодом" in r.message for r in caplog.records)
+
+    def test_normal_card_passthrough(self, monkeypatch):
+        card_html = _read_fixture("case_card_with_act.html")
+        netutil = self._patch_fetch(monkeypatch, card_html)
+        monkeypatch.setitem(cm_config.METRICS, "cards_captcha", 0)
+        assert netutil.fetch_card_checked("http://x/card") == card_html
+        assert cm_config.METRICS["cards_captcha"] == 0
+
+    def test_fetch_fail_no_metric(self, monkeypatch):
+        """Сетевой сбой (пустой ответ) — не капча: метрика не растёт."""
+        netutil = self._patch_fetch(monkeypatch, "")
+        monkeypatch.setitem(cm_config.METRICS, "cards_captcha", 0)
+        assert netutil.fetch_card_checked("http://x/card") == ""
+        assert cm_config.METRICS["cards_captcha"] == 0
+
+
 # ── parse_first_instance_search: stats["sber_rows"] (здоровье парсера) ────────
 
 class TestFirstInstanceSearchStats:
