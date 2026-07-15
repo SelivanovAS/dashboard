@@ -140,7 +140,15 @@ FETCH_MAX_RETRIES = 3   # Кол-во попыток загрузки стран
 # ручной запуск без галки — полный прогон всех активных карточек.
 # Дефолт True — для прочих режимов (CSV-ветка, тесты) поведение прежнее.
 SMART_SKIP_CASES = True
-DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html"
+# URL дашборда территории: env DASHBOARD_URL (Actions Variable форка) →
+# дефолт региона (regions/<code>.py). Ленивый импорт не нужен: regions/__init__
+# на уровне модуля тянет только stdlib+base, цикла с config нет (get_region
+# читает config уже из функции).
+from court_monitor.regions import get_region as _get_region  # noqa: E402
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "") or _get_region().dashboard_url
+
+# Контакт в VAPID-claims Web Push (sub) — свой у каждой территории.
+VAPID_SUB_EMAIL = os.environ.get("VAPID_SUB_EMAIL", "mailto:7selivanov.a@gmail.com")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")

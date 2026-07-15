@@ -43,8 +43,16 @@ function isAppealStage(c){
 function isCassationStage(c){
   return (c&&c.stage)==='cassation';
 }
+// Кассация территории — из блока region в cases.json (ХМАО-фолбэк для
+// данных без блока). У Башкирии будет 6-й КСОЮ — фронт не правится.
+function regionCassation(){
+  return (window.REGION_INFO&&window.REGION_INFO.cassation)||null;
+}
 function courtLabel(c){
-  if(isCassationStage(c))return 'Седьмой КСОЮ';
+  if(isCassationStage(c)){
+    const ks=regionCassation();
+    return ks?String(ks.name).replace(/кассационный суд общей юрисдикции/i,'КСОЮ'):'Седьмой КСОЮ';
+  }
   // Имя апел-суда — из данных (appeal.court): в регионе их может быть
   // несколько (Свердловский облсуд + Суд ЯНАО). ХМАО-фолбэк — для записей
   // без поля (до миграции court_domain).
@@ -52,7 +60,10 @@ function courtLabel(c){
   return shortCourt(c.firstInstanceCourt||'');
 }
 function courtTitle(c){
-  if(isCassationStage(c))return 'Седьмой кассационный суд общей юрисдикции';
+  if(isCassationStage(c)){
+    const ks=regionCassation();
+    return ks?ks.name:'Седьмой кассационный суд общей юрисдикции';
+  }
   if(isAppealStage(c))return c.appealCourt||'Суд Ханты-Мансийского автономного округа - Югры';
   return c.firstInstanceCourt||'';
 }
@@ -509,7 +520,10 @@ function jsonToCase(j){
   // fallback для записей до миграции); первая инстанция — на свой.
   let link='';
   if(isCass){
-    link=buildCourtLink(cs.link,'7kas.sudrf.ru',2800001,1,2800001);
+    const ks=regionCassation();
+    link=ks
+      ?buildCourtLink(cs.link,ks.domain,ks.delo_id,1,ks.new)
+      :buildCourtLink(cs.link,'7kas.sudrf.ru',2800001,1,2800001);
   }else if(isAppeal){
     link=buildCourtLink(ap.link,ap.court_domain||'oblsud--hmao.sudrf.ru',ap.delo_id||5);
   }else{
@@ -940,6 +954,9 @@ async function fetchCsvCases(url){
 async function fetchJsonCases(url){
   const r=await fetchWithTimeout(url,FETCH_TIMEOUT_MS);
   const data=await r.json();
+  // Блок region пишет бэкенд только в основной cases.json (не в архив):
+  // из него строятся подписи судов и ссылки апелляции/кассации территории.
+  if(data.region)window.REGION_INFO=data.region;
   const cases=data.cases||[];
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
@@ -2584,13 +2601,19 @@ window.addEventListener('scroll', () => {
 
 // ── PWA: Service Worker + Web Push ───────────────────────────────────────────
 
+// Пер-инстансные значения (Worker URL + VAPID public key) живут в
+// region_front.js (window.REGION_FRONT) — форк территории правит ТОЛЬКО его,
+// app.js остаётся общим и merge из эталона не конфликтует. Значения ниже —
+// фолбэк ХМАО-инстанса (если region_front.js не подключён/не загрузился).
+const _RF = (typeof window !== 'undefined' && window.REGION_FRONT) || {};
+
 // VAPID-публичный ключ (открытый, не секретный — встраивается в клиент).
 // Приватный ключ хранится только в GitHub Secrets (VAPID_PRIVATE_KEY).
-const VAPID_PUBLIC_KEY = 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU';
+const VAPID_PUBLIC_KEY = _RF.VAPID_PUBLIC_KEY || 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU';
 
 // URL Cloudflare Worker — задаётся после деплоя.
 // Формат: https://court-monitor-trigger.<аккаунт>.workers.dev
-const PUSH_WORKER_URL = 'https://court-monitor-trigger.7selivanov-a.workers.dev';
+const PUSH_WORKER_URL = _RF.PUSH_WORKER_URL || 'https://court-monitor-trigger.7selivanov-a.workers.dev';
 
 // ── Watchlist: персональный набор отслеживаемых дел ────────────────────────
 // Хранится локально (Set в памяти + localStorage) и синхронизируется с

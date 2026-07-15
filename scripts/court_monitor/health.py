@@ -75,6 +75,11 @@ def update_parse_health(
             "alerted_zero": False,
         })
         name = labels.get(key, key)
+        # Человекочитаемое имя источника пишем в журнал: админка читает его
+        # отсюда (s.label) вместо ручной карты COURT_NAMES — реестры регионов
+        # больше не нужно синхронизировать с admin_page.js вручную.
+        if key in labels:
+            src["label"] = labels[key]
         if count is None:
             src["fail_streak"] = int(src.get("fail_streak", 0)) + 1
             src["last_run_at"] = now_iso

@@ -119,6 +119,11 @@ def save_json(data: dict, path: str):
     """Сохранить JSON-базу дел атомарно (temp + os.replace)."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    # Публичный блок региона — только в основной cases.json (фронт строит из
+    # него подписи судов и ссылки; архивы фронт грузит без этого блока).
+    if path == config.JSON_PATH:
+        from court_monitor.regions import get_region  # ленивый: без цикла импортов
+        data["region"] = get_region().public_info()
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

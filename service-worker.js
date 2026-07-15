@@ -22,6 +22,7 @@ const APP_SHELL = [
   './sberbank_dashboard.html',
   './styles.css',
   './app.js',
+  './region_front.js',
   './manifest.json',
   './icon-180.png',
   './icon-192.png',

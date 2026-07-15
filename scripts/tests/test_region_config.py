@@ -56,6 +56,35 @@ class TestRegionConfigDerived:
         assert len(uc.FIRST_INSTANCE_COURTS) == len(r.first_instance_courts)
         assert uc.CASSATION_COURT.domain == r.cassation_court.domain
 
+    def test_public_info_shape(self):
+        """Блок region в cases.json — контракт фронта (app.js: подписи судов
+        и ссылки апелляции/кассации)."""
+        info = get_region("hmao").public_info()
+        assert info["code"] == "hmao"
+        assert info["appeal_courts"] == [
+            {"name": "Суд ХМАО-Югры", "domain": "oblsud--hmao.sudrf.ru",
+             "delo_id": 5},
+        ]
+        assert info["cassation"]["domain"] == "7kas.sudrf.ru"
+        assert info["cassation"]["new"] == 2800001
+        # Внутренние поля (маркеры, health-ключи) наружу не отдаём.
+        assert "fi_region_markers" not in info
+
+    def test_save_json_stamps_region_only_for_main(self, monkeypatch, tmp_path):
+        """save_json пишет блок region в основной cases.json и НЕ пишет в
+        архивы (фронт грузит архив без блока)."""
+        import json
+        from court_monitor import storage
+        main_p = str(tmp_path / "cases.json")
+        arch_p = str(tmp_path / "cases_archive.json")
+        monkeypatch.setattr(cm_config, "JSON_PATH", main_p)
+        storage.save_json({"version": 1, "cases": []}, main_p)
+        storage.save_json({"version": 1, "cases": []}, arch_p)
+        with open(main_p, encoding="utf-8") as f:
+            assert json.load(f)["region"]["code"] == "hmao"
+        with open(arch_p, encoding="utf-8") as f:
+            assert "region" not in json.load(f)
+
 
 class TestDigestHeaderFromRegion:
     # Пустой контекст уводит рендер в путь «изменений не было» (другой

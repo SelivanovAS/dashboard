@@ -42,6 +42,11 @@ jobs:
 
       - name: Run court monitor
         env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          # Форк задаёт REGION и DASHBOARD_URL в Settings → Variables — код
+          # общий для всех территорий.
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер + Claude
           # только на пересказ мотивировок актов. Откат на полный
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
