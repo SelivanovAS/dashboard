@@ -28,6 +28,7 @@ from court_monitor.courts import (
     appeal_court_by_domain, case_card_url, fi_card_url,
     match_hmao_first_instance,
 )
+from court_monitor.regions import get_region
 from court_monitor.delivery import (
     _build_watchlist_alias_indexes, _filter_events_by_watchlist,
     _make_per_sub_callback,
@@ -2595,8 +2596,13 @@ def main_json():
     cass_skipped_future = 0
     cass_skipped_suspended = 0
     cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
-    health_labels["cassation:7kas:total"] = "Кассация 7kas (вся выдача)"
-    health_labels["cassation:7kas:hmao"] = "Кассация 7kas (HMAO-фильтр)"
+    # Ключи здоровья кассации — из региона (для ХМАО совпадают с историческими
+    # "cassation:7kas:total"/"cassation:7kas:hmao", медианы не обнуляются).
+    _region = get_region()
+    _ck_total, _ck_matched = _region.health_cassation_keys()
+    _kas_short = CASSATION_COURT.domain.split(".")[0]
+    health_labels[_ck_total] = f"Кассация {_kas_short} (вся выдача)"
+    health_labels[_ck_matched] = f"Кассация {_kas_short} (фильтр региона)"
     try:
         log.info(
             "Кассация, шаг 1/2 — поиск по имени банка "
@@ -2605,7 +2611,7 @@ def main_json():
         polite_delay()
         cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
         if not cass_search_html:
-            health_obs["cassation:7kas:total"] = None
+            health_obs[_ck_total] = None
         if cass_search_html:
             cass_search_results = parse_cassation_search_page(cass_search_html)
             # 0 строк + маркеры проверочного кода → поиск 7kas закрыт CAPTCHA.
@@ -2613,14 +2619,17 @@ def main_json():
                 fi_challenge[CASSATION_COURT.domain] = (
                     f"Кассация ({CASSATION_COURT.name})"
                 )
+            # «Наши» строки выдачи = сматчились с FI-реестром активного региона
+            # (fi_court_config ставит parse_cassation_search_page через
+            # match_hmao_first_instance — легаси-имя, матчер регион-зависимый).
             hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
-            # Отдельные источники: total ловит поломку парсера выдачи 7kas,
-            # hmao — слетевший матчер судов (класс бага «Берёзовский», ё/е).
-            health_obs["cassation:7kas:total"] = len(cass_search_results)
-            health_obs["cassation:7kas:hmao"] = len(hmao_results)
+            # Отдельные источники: total ловит поломку парсера выдачи КСОЮ,
+            # matched — слетевший матчер судов (класс бага «Берёзовский», ё/е).
+            health_obs[_ck_total] = len(cass_search_results)
+            health_obs[_ck_matched] = len(hmao_results)
             log.info(
                 f"  7kas: в выдаче {len(cass_search_results)} дел, "
-                f"из них {len(hmao_results)} по судам ХМАО "
+                f"из них {len(hmao_results)} по судам региона ({_region.name}) "
                 f"({len(cass_search_results) - len(hmao_results)} "
                 f"чужих регионов отброшено)"
             )
@@ -2635,25 +2644,29 @@ def main_json():
                 for r in cass_search_results if not r["fi_court_config"]
             } - {""})
             if dropped_courts:
+                # Regex «похож на наш регион» — из RegionConfig (шире маркеров
+                # матчера: включает словоформы, у ХМАО — Югор/Югр и т.п.).
+                _sus_rx = _region.fi_suspect_regex
                 suspicious = [
                     c for c in dropped_courts
-                    if re.search(r"Ханты-Манс|Югор|Югр|ХМАО", c, re.IGNORECASE)
+                    if _sus_rx and re.search(_sus_rx, c, re.IGNORECASE)
                 ]
                 for s in suspicious:
                     log.warning(
-                        f"  7kas: суд похож на ХМАО, но не сматчился с реестром "
-                        f"(возможен рассинхрон названия, класс бага «ё/е»): {s}"
+                        f"  7kas: суд похож на регион ({_region.name}), но не "
+                        f"сматчился с реестром (возможен рассинхрон названия, "
+                        f"класс бага «ё/е»): {s}"
                     )
                 others = [c for c in dropped_courts if c not in suspicious]
                 shown = others[:5]
                 rest = len(others) - len(shown)
                 if shown:
                     log.info(
-                        "  7kas: отброшено как не-HMAO: " + "; ".join(shown)
+                        "  7kas: отброшено как чужой регион: " + "; ".join(shown)
                         + (f" — и ещё {rest} (полный список на DEBUG)" if rest else "")
                     )
                 log.debug(
-                    "  7kas: отброшено как не-HMAO (полный список): "
+                    "  7kas: отброшено как чужой регион (полный список): "
                     + "; ".join(dropped_courts)
                 )
 
@@ -2739,7 +2752,7 @@ def main_json():
     if cass_skipped_suspended:
         _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
     log.info(
-        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек ХМАО"
+        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек региона"
         + (f" ({'; '.join(_cass_sum_parts)})" if _cass_sum_parts else "")
     )
     timings["cassation"] = time.perf_counter() - t0

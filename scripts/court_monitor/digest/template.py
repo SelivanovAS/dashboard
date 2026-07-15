@@ -19,6 +19,7 @@ from court_monitor.config import log
 from court_monitor.courts import (
     CASSATION_COURT, case_card_url, case_link_html, fi_card_url,
 )
+from court_monitor.regions import get_region
 from court_monitor.digest.postprocess import _close_open_tags
 from court_monitor.lifecycle import (
     bank_side_outcome, bank_side_outcome_fi,
@@ -1543,8 +1544,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # юриста 06.07.2026). Строка счётчиков начинается с 📥/📅/… + цифра —
     # под _DIGEST_HEADER_RE (нужен <b>+буква) не попадает, за заголовок не
     # примут.
+    # Заголовок дайджеста — из активного региона (для ХМАО digest_title даёт
+    # прежнюю строку байт-в-байт; форк территории получает свой заголовок
+    # без правки кода).
     lines = [
-        f"📊 <b>Мониторинг дел Сбербанка ХМАО-Югра — {today}</b>",
+        f"📊 <b>{get_region().digest_title} — {today}</b>",
         "📋 <b>Сводка</b>",
         escape_html(summary),
     ]
