@@ -34,6 +34,8 @@ class CourtConfig:
     court_type: str    # "appeal" | "first_instance" | "cassation"
     enabled: bool = True
     srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
+    source: str = "sudrf"  # "sudrf" (скрейп) | "casebook" (API-адаптер). Дискриминатор
+                           # диспетчера в runs.py; sudrf-URL-методы на не-sudrf падают (M3).
 
     @property
     def base_url(self) -> str:
@@ -69,7 +71,18 @@ class CourtConfig:
             return 2800001
         return 0
 
+    def _require_sudrf(self, method: str) -> None:
+        """M3: sudrf-URL нельзя строить для источника != "sudrf" — иначе битый
+        URL молча уйдёт в fetch_page. Casebook-суды берут данные через адаптер
+        (sources/casebook.py), минуя эти методы."""
+        if self.source != "sudrf":
+            raise ValueError(
+                f"{method}() вызван на суде с source={self.source!r} "
+                f"({self.name}) — sudrf-URL для не-sudrf источника не строится"
+            )
+
     def search_url(self, party_name_encoded: str = SBER_NAME_WIN1251) -> str:
+        self._require_sudrf("search_url")
         return (
             f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
             f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
@@ -85,6 +98,7 @@ class CourtConfig:
         Сервер ищет подстрокой — точную границу номера проверяет клиентская
         сторона (см. find_fi_case_link). Остальные параметры — как в search_url.
         """
+        self._require_sudrf("search_by_number_url")
         if self.court_type != "first_instance":
             raise ValueError(
                 f"search_by_number_url поддерживает только суды 1-й инстанции, "
@@ -99,6 +113,7 @@ class CourtConfig:
         )
 
     def card_url(self, case_id: str, case_uid: str) -> str:
+        self._require_sudrf("card_url")
         return (
             f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
             f"&case_id={case_id}&case_uid={case_uid}"
