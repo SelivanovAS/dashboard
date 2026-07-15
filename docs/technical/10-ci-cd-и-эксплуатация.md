@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1205](../../scripts/court_monitor/runs.py#L1205)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([598](../../scripts/court_monitor/runs.py#L598)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([3550](../../scripts/court_monitor/runs.py#L3550)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([3234](../../scripts/court_monitor/runs.py#L3234)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3411](../../scripts/court_monitor/runs.py#L3411)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([848](../../scripts/court_monitor/runs.py#L848)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([1243](../../scripts/court_monitor/runs.py#L1243)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([626](../../scripts/court_monitor/runs.py#L626)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([3623](../../scripts/court_monitor/runs.py#L3623)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([3307](../../scripts/court_monitor/runs.py#L3307)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3484](../../scripts/court_monitor/runs.py#L3484)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([885](../../scripts/court_monitor/runs.py#L885)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -55,8 +55,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([553](../../scripts/court_monitor/runs.py#L553)) проверяет
-наличие ключей на старте; `check_court_available` ([585](../../scripts/court_monitor/runs.py#L585))
+`validate_environment` ([581](../../scripts/court_monitor/runs.py#L581)) проверяет
+наличие ключей на старте; `check_court_available` ([613](../../scripts/court_monitor/runs.py#L613))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)

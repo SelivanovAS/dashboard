@@ -86,6 +86,60 @@ class TestRegionConfigDerived:
             assert "region" not in json.load(f)
 
 
+class TestMatchRegionFirstInstance:
+    """Смоук «регион переключается»: матчер работает по ЯВНО переданному
+    региону (не по активному) — включая регион с ДВУМЯ апелляциями."""
+
+    FAKE = RegionConfig(
+        code="fake2",
+        name="Тестовия",
+        digest_title="Мониторинг дел Сбербанка Тестовия",
+        appeal_courts=(
+            CourtConfig("Тестовский областной суд", "oblsud--fk1.sudrf.ru", 5, "appeal"),
+            CourtConfig("Суд Фейского АО", "oblsud--fk2.sudrf.ru", 5, "appeal"),
+        ),
+        first_instance_courts=(
+            CourtConfig("Октябрьский районный суд", "oktb--fk.sudrf.ru", 777, "first_instance"),
+        ),
+        cassation_court=CourtConfig("Седьмой КСОЮ", "7kas.sudrf.ru", 2800001, "cassation"),
+        fi_region_markers=("тестовской области", "фейского автономного округа"),
+        appeal_long_markers=(
+            ("тестовский областной суд", "oblsud--fk1.sudrf.ru"),
+            ("суд фейского автономного округа", "oblsud--fk2.sudrf.ru"),
+        ),
+    )
+
+    def test_fi_court_matched_by_region_marker(self):
+        got = uc.match_region_first_instance(
+            "Октябрьский районный суд г. Тестова Тестовской области", self.FAKE
+        )
+        assert got is self.FAKE.first_instance_courts[0]
+
+    def test_each_appeal_court_matched_by_its_marker(self):
+        got1 = uc.match_region_first_instance("Тестовский областной суд", self.FAKE)
+        got2 = uc.match_region_first_instance(
+            "Суд Фейского автономного округа", self.FAKE
+        )
+        assert got1 is self.FAKE.appeal_courts[0]
+        assert got2 is self.FAKE.appeal_courts[1]
+
+    def test_foreign_region_rejected(self):
+        """Одноимённый суд чужого региона (ХМАО) не матчится в фейк-регион."""
+        assert uc.match_region_first_instance(
+            "Октябрьский районный суд Ханты-Мансийского автономного округа-Югры",
+            self.FAKE,
+        ) is None
+
+    def test_hmao_registry_via_explicit_region(self):
+        """Тот же вызов с явным ХМАО — прежняя семантика match_hmao_*."""
+        hmao = get_region("hmao")
+        got = uc.match_region_first_instance(
+            "Урайский городской суд Ханты-Мансийского автономного округа-Югры",
+            hmao,
+        )
+        assert got is not None and got.name == "Урайский городской суд"
+
+
 class TestDigestHeaderFromRegion:
     # Пустой контекст уводит рендер в путь «изменений не было» (другой
     # заголовок + подклейка прошлого дайджеста из data/last_digest.json) —
