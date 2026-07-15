@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Реестр судов: CourtConfig, апелляция (Суд ХМАО-Югры), 20 судов первой
-инстанции ХМАО, кассация (7-й КСОЮ), матчер длинных названий судов и
-построение URL карточек дел.
+"""Фасад реестра судов активного региона + матчеры и построение URL карточек.
+
+Типы (CourtConfig, RegionConfig) живут в regions/base.py, реестры судов —
+в модулях регионов (regions/hmao.py и т.д.); активный регион выбирается env
+REGION (config.REGION, дефолт "hmao"). Этот модуль ре-экспортирует прежние
+имена (APPEAL_COURT, FIRST_INSTANCE_COURTS, CASSATION_COURT, CourtConfig,
+SBER_NAME_WIN1251, _eyo) — существующие импорты работают без правок.
 
 ⚠ Параметры 7kas (delo_id=2800001, delo_table=g33_case, new=2800001)
 подобраны эмпирически — не менять без ручной проверки на 7kas.sudrf.ru.
@@ -10,229 +14,99 @@
 from __future__ import annotations
 
 import re
-import urllib.parse
-from dataclasses import dataclass
 
+from court_monitor.regions import get_region
+from court_monitor.regions.base import (  # noqa: F401 — ре-экспорт прежних имён
+    CourtConfig, RegionConfig, SBER_NAME_WIN1251, _eyo,
+)
 from court_monitor.textutil import case_id_uid, escape_html
 
-# ── Конфигурация судов ───────────────────────────────────────────────────────
+# ── Фасад активного региона ──────────────────────────────────────────────────
+# Реестры собираются ОДИН раз на импорт из активного региона. Форк территории
+# не меняет код — он задаёт REGION=<код> в GitHub Actions Variables. Для явной
+# работы с произвольным регионом (тесты, мульти-региональные утилиты) —
+# get_region(code) и match_region_first_instance(name, region).
 
-# Параметры URL для разных типов судопроизводства на sudrf.ru:
-#   delo_id=5, delo_table=g2_case — апелляция (гражданские дела)
-#   delo_id=1, delo_table=g_case  — первая инстанция (гражданские дела)
-# Поле поиска по имени стороны также различается:
-#   G2_PARTS__NAMESS — апелляция, G1_PARTS__NAMESS — первая инстанция
+ACTIVE_REGION: RegionConfig = get_region()
 
-SBER_NAME_WIN1251 = "%D1%E1%E5%F0%E1%E0%ED%EA"  # «Сбербанк» в Windows-1251 URL-encoded
+# Апелляционные суды региона. У ХМАО один; у Свердловской обл.+ЯНАО их ДВА —
+# новый код должен итерироваться по APPEAL_COURTS, легаси-алиас APPEAL_COURT
+# остаётся для существующих однo-апелляционных путей (уходит в шаге 0.5).
+APPEAL_COURTS: tuple[CourtConfig, ...] = ACTIVE_REGION.appeal_courts
+APPEAL_COURT: CourtConfig = APPEAL_COURTS[0]
 
+FIRST_INSTANCE_COURTS: list[CourtConfig] = list(ACTIVE_REGION.first_instance_courts)
 
-@dataclass
-class CourtConfig:
-    name: str          # «Суд ХМАО-Югры» / «Сургутский городской суд»
-    domain: str        # oblsud--hmao.sudrf.ru
-    delo_id: int       # 5 = апелляция, 1540005 = 1 инст. (гражд.), 2800001 = касс. (гражд.)
-    court_type: str    # "appeal" | "first_instance" | "cassation"
-    enabled: bool = True
-    srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
-    source: str = "sudrf"  # "sudrf" (скрейп) | "casebook" (API-адаптер). Дискриминатор
-                           # диспетчера в runs.py; sudrf-URL-методы на не-sudrf падают (M3).
-    # Переопределения URL-параметров для судов, чьи значения отличаются от
-    # дефолтов типа (None → дефолт по court_type). Нужны для кассаций вне
-    # 7-го КСОЮ (напр. 6kas у Башкирии): их delo_table/new подбираются
-    # эмпирически так же, как когда-то для 7kas.
-    delo_table: str | None = None
-    name_field: str | None = None
-    new_param: int | None = None
-
-    @property
-    def base_url(self) -> str:
-        return f"https://{self.domain}"
-
-    @property
-    def _delo_table(self) -> str:
-        if self.delo_table is not None:
-            return self.delo_table
-        if self.court_type == "appeal":
-            return "g2_case"
-        if self.court_type == "cassation":
-            # 7kas.sudrf.ru, гражданская кассация. Эмпирически найдено в форме
-            # поиска (name_op=sf): таблица называется g33_case, не ka1_case.
-            return "g33_case"
-        return "g1_case"
-
-    @property
-    def _name_field(self) -> str:
-        """Имя поля для фильтрации по стороне (зависит от типа суда)."""
-        if self.name_field is not None:
-            return self.name_field
-        if self.court_type == "appeal":
-            return "G2_PARTS__NAMESS"
-        if self.court_type == "cassation":
-            return "G33_PARTS__NAMESS"
-        return "G1_PARTS__NAMESS"
-
-    @property
-    def _new_param(self) -> int:
-        """Параметр &new= : 0 для 1-й инст.; для апелляции и кассации совпадает
-        с delo_id (эмпирика по обоим известным судам: Суд ХМАО 5/5, 7kas
-        2800001/2800001; при new=0 кассационный поиск возвращает «Данных по
-        запросу не обнаружено»)."""
-        if self.new_param is not None:
-            return self.new_param
-        if self.court_type in ("appeal", "cassation"):
-            return self.delo_id
-        return 0
-
-    def _require_sudrf(self, method: str) -> None:
-        """M3: sudrf-URL нельзя строить для источника != "sudrf" — иначе битый
-        URL молча уйдёт в fetch_page. Casebook-суды берут данные через адаптер
-        (sources/casebook.py), минуя эти методы."""
-        if self.source != "sudrf":
-            raise ValueError(
-                f"{method}() вызван на суде с source={self.source!r} "
-                f"({self.name}) — sudrf-URL для не-sudrf источника не строится"
-            )
-
-    def search_url(self, party_name_encoded: str = SBER_NAME_WIN1251) -> str:
-        self._require_sudrf("search_url")
-        return (
-            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
-            f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
-            f"&{self._name_field}={party_name_encoded}"
-            f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
-        )
-
-    def search_by_number_url(self, case_number: str) -> str:
-        """URL целевого поиска по номеру дела (только 1-я инстанция, g1_case).
-
-        Поле G1_CASE__CASE_NUMBERSS проверено вживую на surggor--hmao.sudrf.ru
-        (06.07.2026): «2-716/2025» вернул ровно одну строку с href карточки.
-        Сервер ищет подстрокой — точную границу номера проверяет клиентская
-        сторона (см. find_fi_case_link). Остальные параметры — как в search_url.
-        """
-        self._require_sudrf("search_by_number_url")
-        if self.court_type != "first_instance":
-            raise ValueError(
-                f"search_by_number_url поддерживает только суды 1-й инстанции, "
-                f"получен {self.court_type} ({self.name})"
-            )
-        num_enc = urllib.parse.quote(case_number, safe="")
-        return (
-            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
-            f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
-            f"&G1_CASE__CASE_NUMBERSS={num_enc}"
-            f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
-        )
-
-    def card_url(self, case_id: str, case_uid: str) -> str:
-        self._require_sudrf("card_url")
-        return (
-            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=case"
-            f"&case_id={case_id}&case_uid={case_uid}"
-            f"&delo_id={self.delo_id}&new={self._new_param}"
-        )
+CASSATION_COURT: CourtConfig = ACTIVE_REGION.cassation_court
 
 
-# Апелляционный суд (текущий — единственный источник данных)
-APPEAL_COURT = CourtConfig(
-    name="Суд ХМАО-Югры",
-    domain="oblsud--hmao.sudrf.ru",
-    delo_id=5,
-    court_type="appeal",
-)
+def match_region_first_instance(
+    long_court_name: str, region: RegionConfig
+) -> CourtConfig | None:
+    """Сопоставить длинное имя суда из карточки КСОЮ с судом 1-й инст. региона.
 
-# Реестр судов первой инстанции ХМАО-Югры (delo_id=1540005 — гражданские дела 1 инст.)
-FIRST_INSTANCE_COURTS: list[CourtConfig] = [
-    CourtConfig("Сургутский городской суд",       "surggor--hmao.sudrf.ru",   1540005, "first_instance"),
-    CourtConfig("Сургутский районный суд",         "surgray--hmao.sudrf.ru",   1540005, "first_instance"),
-    CourtConfig("Нижневартовский городской суд",   "vartovgor--hmao.sudrf.ru", 1540005, "first_instance"),
-    CourtConfig("Нижневартовский районный суд",    "vartovray--hmao.sudrf.ru", 1540005, "first_instance"),
-    CourtConfig("Нижневартовский районный суд (г. Покачи)", "vartovray--hmao.sudrf.ru", 1540005, "first_instance", srv_num=2),
-    CourtConfig("Ханты-Мансийский районный суд",   "hmray--hmao.sudrf.ru",     1540005, "first_instance"),
-    CourtConfig("Урайский городской суд",          "uray--hmao.sudrf.ru",      1540005, "first_instance"),
-    CourtConfig("Няганский городской суд",         "nyagan--hmao.sudrf.ru",    1540005, "first_instance"),
-    CourtConfig("Нефтеюганский районный суд",      "uganskray--hmao.sudrf.ru", 1540005, "first_instance"),
-    CourtConfig("Когалымский городской суд",       "kogalym--hmao.sudrf.ru",   1540005, "first_instance"),
-    CourtConfig("Кондинский районный суд",         "kondinsk--hmao.sudrf.ru",  1540005, "first_instance"),
-    CourtConfig("Лангепасский городской суд",      "langepas--hmao.sudrf.ru",  1540005, "first_instance"),
-    CourtConfig("Мегионский городской суд",        "megion--hmao.sudrf.ru",    1540005, "first_instance"),
-    CourtConfig("Советский районный суд",          "sovetsk--hmao.sudrf.ru",   1540005, "first_instance"),
-    CourtConfig("Югорский районный суд",           "ugorsk--hmao.sudrf.ru",    1540005, "first_instance"),
-    CourtConfig("Белоярский городской суд",        "bel--hmao.sudrf.ru",       1540005, "first_instance"),
-    CourtConfig("Пыть-Яхский городской суд",      "pth--hmao.sudrf.ru",       1540005, "first_instance"),
-    CourtConfig("Берёзовский районный суд",        "berezovo--hmao.sudrf.ru",  1540005, "first_instance"),
-    CourtConfig("Радужнинский городской суд",      "rdj--hmao.sudrf.ru",       1540005, "first_instance"),
-    CourtConfig("Октябрьский районный суд",        "oktb--hmao.sudrf.ru",      1540005, "first_instance"),
-]
-
-# Седьмой кассационный суд общей юрисдикции (гражданские дела, delo_id=2800001).
-# Покрывает 7 регионов (Свердловск, Челябинск, Курган, Пермь, Тюмень,
-# Башкортостан, ХМАО, Оренбург, ЯНАО). Мы фильтруем по 1-й инст. ХМАО
-# (см. match_hmao_first_instance), поэтому видим только «свои» дела.
-CASSATION_COURT = CourtConfig(
-    name="Седьмой кассационный суд общей юрисдикции",
-    domain="7kas.sudrf.ru",
-    delo_id=2800001,
-    court_type="cassation",
-)
-
-
-def _eyo(s: str) -> str:
-    """Нормализация ё→е для матчинга названий судов. ГАС «Правосудие»/7kas
-    пишут букву ё непоследовательно (напр. «Березовский» через е, тогда как
-    в нашем реестре — «Берёзовский» через ё). Буквальный substring-match
-    без этой нормализации молча отсекает такие суды как «не-ХМАО»."""
-    return s.replace("ё", "е").replace("Ё", "Е")
-
-
-def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
-    """Сопоставить длинное имя суда из карточки 7kas с одним из наших ХМАО-судов.
-
-    На 7kas суд 1-й инстанции пишется в развёрнутой форме, например:
+    На КСОЮ суд 1-й инстанции пишется в развёрнутой форме, например:
         «Урайский городской суд Ханты-Мансийского автономного округа-Югры»
-    Внутри проекта мы храним короткие имена («Урайский городской суд»). Эта
-    функция ищет короткое имя как подстроку в длинном.
+    Внутри проекта мы храним короткие имена («Урайский городской суд») — ищем
+    короткое имя как подстроку в длинном.
 
-    Особый случай: «Суд Ханты-Мансийского автономного округа - Югры» —
-    окружной суд, иногда служит 1-й инстанцией для отдельных категорий.
-    Возвращает APPEAL_COURT (это та же сущность по domain).
+    Особый случай: областной/окружной суд региона иногда служит 1-й инстанцией
+    для отдельных категорий — распознаётся по region.appeal_long_markers и
+    возвращается соответствующий CourtConfig из region.appeal_courts.
 
-    None — если суд не из ХМАО (фильтр на уровне поиска).
+    None — суд не из этого региона (фильтр выдачи КСОЮ на уровне поиска).
     """
     if not long_court_name:
         return None
     name_norm = _eyo(long_court_name.strip().lower())
-    # Окружной суд ХМАО-Югры — может быть 1-й инстанцией для админ. дел и т.п.
-    if "суд ханты-мансийского автономного округа" in name_norm:
-        # Отсекаем районные/городские, у них суффикс «округа-Югры» в конце,
-        # а тут именно «Суд ХМАО» в начале (без префикса города/района).
-        if not any(
+    # Областной/окружной суд региона как 1-я инстанция: маркер длинной формы
+    # без городского/районного префикса (у районных маркер региона — суффикс).
+    for marker, appeal_domain in region.appeal_long_markers:
+        if _eyo(marker) in name_norm and not any(
             kw in name_norm
             for kw in ("городской", "районный", "межрайонный", "мировой")
         ):
-            return APPEAL_COURT
-    # Жёсткий guard: длинная форма на 7kas всегда содержит явный маркер региона.
+            for ac in region.appeal_courts:
+                if ac.domain == appeal_domain:
+                    return ac
+    # Жёсткий guard: длинная форма на КСОЮ всегда содержит явный маркер региона.
     # Без него «Октябрьский районный суд» матчится в свердловском «Октябрьский
     # районный суд г. Екатеринбурга Свердловской области» (одноимённые суды
     # есть в десятках регионов: Октябрьский, Советский, Центральный и т.п.).
-    if not any(kw in name_norm for kw in ("ханты-мансийск", "хмао", "югры")):
+    if not any(_eyo(kw) in name_norm for kw in region.fi_region_markers):
         return None
-    # Перебираем 20 районных/городских судов — ищем короткое имя подстрокой.
+    # Перебираем суды 1-й инст. региона — ищем короткое имя подстрокой.
     # Дедуп по domain: Покачи дублирует Нижневартовский районный (один domain).
-    for cfg in FIRST_INSTANCE_COURTS:
+    for cfg in region.first_instance_courts:
         short = _eyo(cfg.name.lower())
-        # Покачи: name содержит круглые скобки, его не матчим как «Нижневартовский
-        # районный суд» внутри длинной формы — он отделён скобками.
+        # Вторые площадки: name содержит круглые скобки («… (г. Покачи)») —
+        # внутри длинной формы такой суд отдельно не пишется, пропускаем.
         if "(" in short:
             continue
         if short in name_norm:
             return cfg
     return None
+
+
+def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
+    """Legacy-обёртка: матчер по АКТИВНОМУ региону (config.REGION).
+
+    Имя историческое (система начиналась с ХМАО), сохранено для совместимости
+    импортов (parsing/cassation.py, linking.py); новый код зовёт
+    match_region_first_instance(name, region) явно.
+    """
+    return match_region_first_instance(long_court_name, get_region())
+
+
+# Legacy-глобали апелляции (эпоха единственного апел-суда). Используются
+# CSV-путём и парой карточных билдеров; мульти-апелляционный код должен
+# строить URL через CourtConfig конкретного суда.
 BASE_URL = APPEAL_COURT.base_url
 SEARCH_URL = APPEAL_COURT.search_url()
 CARD_URL_TPL = (
     f"{BASE_URL}/modules.php?name=sud_delo&srv_num=1&name_op=case"
-    "&case_id={case_id}&case_uid={case_uid}&delo_id=5&new=5"
+    "&case_id={case_id}&case_uid={case_uid}"
+    f"&delo_id={APPEAL_COURT.delo_id}&new={APPEAL_COURT._new_param}"
 )
 
 # Уникальный идентификатор дела (УИД), напр. 86RS0020-01-2025-000203-13.
@@ -296,10 +170,13 @@ def fi_card_url(fi_or_details: dict) -> str:
         return court.card_url(cid, cuid)
     if not domain:
         return ""
-    # Fallback: домен есть, но в реестре не нашёлся — собираем по дефолтным параметрам.
+    # Fallback: домен есть, но в реестре не нашёлся — собираем по дефолтным
+    # параметрам региона (delo_id гражданских дел 1-й инст. различается по
+    # субъектам — см. RegionConfig.fi_default_delo_id).
     return (
         f"https://{domain}/modules.php?name=sud_delo&srv_num=1&name_op=case"
-        f"&case_id={cid}&case_uid={cuid}&delo_id=1540005&new=0"
+        f"&case_id={cid}&case_uid={cuid}"
+        f"&delo_id={ACTIVE_REGION.fi_default_delo_id}&new=0"
     )
 
 

@@ -51,12 +51,12 @@
 
 | Что | Где |
 |-----|-----|
-| dataclass конфига суда: `CourtConfig` | [scripts/court_monitor/courts.py:30](scripts/court_monitor/courts.py:30) |
-| `APPEAL_COURT` (конфиг апелляции) | [scripts/court_monitor/courts.py:110](scripts/court_monitor/courts.py:110) |
-| массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:118](scripts/court_monitor/courts.py:118) |
-| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:145](scripts/court_monitor/courts.py:145) |
-| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:161](scripts/court_monitor/courts.py:161) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:90](scripts/court_monitor/config.py:90) |
+| dataclass конфига суда: `CourtConfig` | [scripts/court_monitor/regions/base.py:32](scripts/court_monitor/regions/base.py:32) |
+| `APPEAL_COURT` (конфиг апелляции) | [scripts/court_monitor/courts.py:36](scripts/court_monitor/courts.py:36) |
+| массив 20 судов: `FIRST_INSTANCE_COURTS` | [scripts/court_monitor/courts.py:38](scripts/court_monitor/courts.py:38) |
+| `CASSATION_COURT` (7kas.sudrf.ru, гражданская кассация) | [scripts/court_monitor/courts.py:40](scripts/court_monitor/courts.py:40) |
+| `match_hmao_first_instance` (длинная форма → CourtConfig) | [scripts/court_monitor/courts.py:91](scripts/court_monitor/courts.py:91) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:96](scripts/court_monitor/config.py:96) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:613](scripts/court_monitor/lifecycle.py:613) |
@@ -72,7 +72,7 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:50](scripts/court_monitor/linking.py:50) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:500](scripts/court_monitor/linking.py:500) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:132](scripts/court_monitor/runs.py:132) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1203](scripts/court_monitor/runs.py:1203) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1205](scripts/court_monitor/runs.py:1205) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:75](scripts/court_monitor/digest/llm.py:75) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:819](scripts/court_monitor/digest/llm.py:819) |
@@ -240,7 +240,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:999](scripts/court_monitor/runs.py:999):
+Константы в [scripts/court_monitor/runs.py:1001](scripts/court_monitor/runs.py:1001):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
