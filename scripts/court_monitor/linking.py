@@ -47,13 +47,18 @@ def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict
 
 # ── Связка дел первой инстанции ↔ апелляция ────────────────────────────────
 
-def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dict]:
+def link_cases(
+    cases: list[dict], appeal_fi_numbers: dict[tuple[str, str], str]
+) -> list[dict]:
     """Связать дела первой инстанции с апелляцией.
 
     Args:
         cases: список JSON-объектов дел (формат cases.json)
-        appeal_fi_numbers: маппинг {номер_апелляции: номер_дела_1_инстанции},
-            полученный из parse_case_card → info["Номер дела 1 инстанции"]
+        appeal_fi_numbers: маппинг {(домен_апел_суда, номер_апелляции):
+            номер_дела_1_инстанции}, полученный из parse_case_card →
+            info["Номер дела 1 инстанции"]. Ключ составной: в регионе может
+            быть НЕСКОЛЬКО апел-судов (Свердловский облсуд + Суд ЯНАО), а
+            номера 33-…/YYYY между ними не уникальны.
 
     Логика:
     - Для каждого апелляционного дела с известным номером 1 инстанции:
@@ -77,8 +82,17 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
         if base and base != key:
             idx_map.setdefault(base, i)
 
+    def _put_idx_ap(idx_map: dict, dom: str, num: str, i: int) -> None:
+        """Апел-индекс: ключ (домен, номер) + (домен, bare-номер)."""
+        if not num:
+            return
+        idx_map.setdefault((dom, num), i)
+        base = _bare_case_number(num)
+        if base and base != num:
+            idx_map.setdefault((dom, base), i)
+
     fi_index: dict[str, int] = {}   # номер_1_инст → индекс в cases
-    appeal_index: dict[str, int] = {}  # номер_апелляции → индекс в cases
+    appeal_index: dict = {}  # (домен_апел_суда, номер_апелляции) → индекс в cases
     # fi_index строим в два прохода: сначала записи с реальными FI-данными,
     # потом stub-записи. Без приоритета сирота-апелляция со stub-FI и коротким
     # id `2-208/2026`, оказавшаяся в `cases` раньше хозяина с гибридным id
@@ -95,21 +109,30 @@ def link_cases(cases: list[dict], appeal_fi_numbers: dict[str, str]) -> list[dic
         # Также индексируем по id (который может быть номером 1 инст. или апелляции)
         _put_idx(fi_index, cid, i)
     # appeal_index — однопроходно: у апелляций нет конфликта orphan vs real.
+    # Блок без court_domain (не мигрирован) индексируется под пустым доменом —
+    # lookup ниже пробует и его.
     for i, c in enumerate(cases):
         appeal = c.get("appeal")
         if appeal and appeal.get("case_number"):
-            _put_idx(appeal_index, appeal["case_number"], i)
+            dom = (appeal.get("court_domain") or "").strip()
+            _put_idx_ap(appeal_index, dom, appeal["case_number"], i)
 
     linked_count = 0
     to_remove: set[int] = set()
 
-    for appeal_num, fi_num in appeal_fi_numbers.items():
+    for (ap_domain, appeal_num), fi_num in appeal_fi_numbers.items():
         if not fi_num:
             continue
 
-        appeal_idx = appeal_index.get(appeal_num)
+        appeal_idx = appeal_index.get((ap_domain, appeal_num))
         if appeal_idx is None:
-            appeal_idx = appeal_index.get(_bare_case_number(appeal_num))
+            appeal_idx = appeal_index.get((ap_domain, _bare_case_number(appeal_num)))
+        if appeal_idx is None:
+            # Совместимость: блок appeal ещё без court_domain (данные до
+            # миграции) — пробуем пустой домен.
+            appeal_idx = appeal_index.get(("", appeal_num))
+        if appeal_idx is None:
+            appeal_idx = appeal_index.get(("", _bare_case_number(appeal_num)))
         fi_idx = fi_index.get(fi_num)
         if fi_idx is None:
             fi_idx = fi_index.get(_bare_case_number(fi_num))

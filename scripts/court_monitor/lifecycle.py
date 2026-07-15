@@ -610,6 +610,36 @@ def is_case_archived(case: dict) -> bool:
     return False
 
 
+def migrate_appeal_court_fields(cases: list[dict], default_court) -> int:
+    """Идемпотентный бэкфилл суда в блоках `appeal`: court_domain / court /
+    delo_id. Записи эпохи единственной апелляции суда не хранили — URL всегда
+    пересобирался из глобального APPEAL_COURT. С мульти-апелляцией (Свердловская
+    обл. + ЯНАО = два апел-суда) домен обязателен: по нему строятся ссылки
+    (courts.appeal_court_by_domain) и составной ключ связки link_cases.
+
+    default_court — CourtConfig апел-суда для бэкфилла (для существующих данных
+    региона он один — исторический). Возвращает число дополненных блоков.
+    """
+    migrated = 0
+    for case in cases:
+        ap = case.get("appeal")
+        if not isinstance(ap, dict) or not ap:
+            continue
+        changed = False
+        if not (ap.get("court_domain") or "").strip():
+            ap["court_domain"] = default_court.domain
+            changed = True
+        if not (ap.get("court") or "").strip():
+            ap["court"] = default_court.name
+            changed = True
+        if not ap.get("delo_id"):
+            ap["delo_id"] = default_court.delo_id
+            changed = True
+        if changed:
+            migrated += 1
+    return migrated
+
+
 def migrate_stages(cases: list[dict]) -> int:
     """Идемпотентная миграция существующих дел под новую state-machine:
     - first_instance + appeal_filed_date → awaiting_appeal

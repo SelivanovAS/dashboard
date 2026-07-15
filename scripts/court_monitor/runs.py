@@ -22,9 +22,11 @@ from datetime import datetime, timedelta, date
 from court_monitor import config, ghlog
 from court_monitor.config import log, _metrics_reset, cold_archive_glob, cold_archive_path
 from court_monitor.courts import (
-    APPEAL_COURT, CASSATION_COURT, CourtConfig, FIRST_INSTANCE_COURTS,
+    APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
+    FIRST_INSTANCE_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL,
-    case_card_url, fi_card_url, match_hmao_first_instance,
+    appeal_court_by_domain, case_card_url, fi_card_url,
+    match_hmao_first_instance,
 )
 from court_monitor.delivery import (
     _build_watchlist_alias_indexes, _filter_events_by_watchlist,
@@ -45,7 +47,8 @@ from court_monitor.health import (
     load_parse_health, save_parse_health, update_parse_health,
 )
 from court_monitor.lifecycle import (
-    advance_case_stage, is_archived, is_case_archived, migrate_stages,
+    advance_case_stage, is_archived, is_case_archived,
+    migrate_appeal_court_fields, migrate_stages,
     should_parse_fi_card, bank_is_third_party, cassation_card_linked,
     suppress_fi_echo_events,
     suppress_stale_fi_events, dedupe_fi_changes,
@@ -127,6 +130,19 @@ def _format_slow_courts(
         f"{shorten_court_name(name)} {sec:.1f}s ({counts.get(name, 0)} карт.)"
         for name, sec in slowest
     )
+
+
+def _appeal_health_key(court: CourtConfig) -> str:
+    """Ключ источника апелляции в журнале здоровья парсеров.
+
+    Исторический ключ единственной апелляции — "appeal:oblsud" (вся история
+    ХМАО в parse_health.json записана под ним): при одном апел-суде сохраняем
+    его, чтобы не обнулять медианы детектора. При нескольких судах ключ — по
+    домену (домены уникальны, короткие имена — нет).
+    """
+    if len(APPEAL_COURTS) == 1:
+        return "appeal:oblsud"
+    return f"appeal:{court.domain}"
 
 
 def update_active_cases(
@@ -230,14 +246,20 @@ def update_active_cases(
         if not cid or not cuid:
             continue
 
-        url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
+        # Суд апелляции этого дела: домен из JSON-двойника (court_domain после
+        # миграции) или из сервисного ключа CSV-строки; без обоих — первый
+        # апел-суд региона (эпоха единственной апелляции, для ХМАО байт-в-байт).
+        _ap_court = appeal_court_by_domain(
+            (ap_dict_skip or {}).get("court_domain") or case.get("_appeal_domain")
+        )
+        url = _ap_court.card_url(cid, cuid)
         polite_delay()
         html = fetch_card_checked(url, context=case["Номер дела"])
         if not html:
             log.warning(f"Не удалось загрузить карточку {case['Номер дела']}")
             continue
 
-        card_info = parse_case_card(html)
+        card_info = parse_case_card(html, _ap_court.base_url)
         _warn_if_card_degraded(card_info, case["Номер дела"])
         parsed += 1
 
@@ -508,7 +530,12 @@ def update_active_cases(
             change["details"]["appellant_name"] = appellant_name
             change["details"]["appellant_role"] = appellant_role
             change["details"]["_appellant_raw"] = appellant_raw
-            change["details"]["case_url"] = case_card_url(case)
+            change["details"]["case_url"] = case_card_url(case, _ap_court)
+            # Имя апел-суда — только при нескольких апелляциях в регионе
+            # (дайджест покажет его в строке дела; у ХМАО суд один — рендер
+            # байт-в-байт прежний, ключ не пишется вовсе).
+            if len(APPEAL_COURTS) > 1:
+                change["details"]["appeal_court"] = shorten_court_name(_ap_court.name)
             # bank_outcome считаем, когда есть нормализованный verdict_label
             # (new_result) или act_verdict_label (new_act — мотивировка в 5.5).
             # Без этого в 5.5 LLM видел только «роль банка» в общем блоке и
@@ -609,7 +636,7 @@ def main():
 
     # 1. Проверяем доступность суда
     if not check_court_available():
-        msg = "⚠️ Сайт суда oblsud--hmao.sudrf.ru недоступен. Обновление отложено."
+        msg = f"⚠️ Сайт суда {APPEAL_COURT.domain} недоступен. Обновление отложено."
         log.error(msg)
         send_telegram(msg)
         sys.exit(1)
@@ -782,24 +809,31 @@ def _discovered_already_resolved_old(fi: dict, now: datetime | None = None) -> b
 
 def _apel_csv_row_to_json_case(
     row: dict,
-    fi_number_lookup: dict[str, str] | None = None,
+    fi_number_lookup: dict[tuple[str, str], str] | None = None,
 ) -> dict:
     """Конвертировать CSV-строку апел. дела (после обогащения parse_case_card)
     в JSON-структуру для cases.json. Без этой конверсии новое апел. дело
     оседает только в CSV: link_cases ищет апел. в существующем JSON-индексе
     и молча пропускает то, чего там ещё нет.
 
-    fi_number_lookup — словарь {номер_апелляции → номер_1_инст}, который
-    main_json собирает по результатам парсинга апел. карточек. Если запись
-    есть, кладём её в first_instance.case_number сразу, чтобы новое дело
-    с самого начала имело корректный якорь для link_cassation_cases (иначе
-    кассация на 7kas не находит существующее дело по `fi_case_number` и
-    создаёт двойник через discovery — см. кейс 33-1643/2026 ↔ 8Г-7248/2026).
-    Без словаря — поведение прежнее (`""`)."""
+    fi_number_lookup — словарь {(домен_апел_суда, номер_апелляции) →
+    номер_1_инст}, который main_json собирает по результатам парсинга апел.
+    карточек (ключ составной: номера 33-… между двумя апел-судами региона не
+    уникальны). Если запись есть, кладём её в first_instance.case_number сразу,
+    чтобы новое дело с самого начала имело корректный якорь для
+    link_cassation_cases (иначе кассация на 7kas не находит существующее дело
+    по `fi_case_number` и создаёт двойник через discovery — см. кейс
+    33-1643/2026 ↔ 8Г-7248/2026). Без словаря — поведение прежнее (`""`).
+
+    Суд апелляции — из сервисного ключа строки `_appeal_domain` (проставляет
+    поиск апелляции); без него — первый апел-суд региона (legacy)."""
     case_num = (row.get("Номер дела") or "").strip()
+    ap_court = appeal_court_by_domain(row.get("_appeal_domain"))
     fi_case_number = ""
     if fi_number_lookup and case_num:
-        fi_case_number = (fi_number_lookup.get(case_num) or "").strip()
+        fi_case_number = (
+            fi_number_lookup.get((ap_court.domain, case_num)) or ""
+        ).strip()
     return {
         "id": case_num,
         "current_stage": "appeal",
@@ -827,7 +861,9 @@ def _apel_csv_row_to_json_case(
         },
         "appeal": {
             "case_number": case_num,
-            "court": APPEAL_COURT.name,
+            "court": ap_court.name,
+            "court_domain": ap_court.domain,
+            "delo_id": ap_court.delo_id,
             "judge_reporter": row.get("Судья-докладчик", ""),
             "filing_date": row.get("Дата поступления", ""),
             "status": row.get("Статус", "В производстве"),
@@ -890,15 +926,16 @@ def main_backfill_appeal_anchors():
             cid, cuid = case_id_uid(ap.get("link", ""))
             if not cid or not cuid:
                 continue
+            _ap_court = appeal_court_by_domain(ap.get("court_domain"))
             polite_delay()
             html = fetch_card_checked(
-                APPEAL_COURT.card_url(cid, cuid), context=c.get("id", "?")
+                _ap_court.card_url(cid, cuid), context=c.get("id", "?")
             )
             if not html:
                 log.warning(f"  {c.get('id', '?')}: карточка апелляции не загрузилась")
                 continue
             fetched += 1
-            card_info = parse_case_card(html, APPEAL_COURT.base_url)
+            card_info = parse_case_card(html, _ap_court.base_url)
             fi = c.get("first_instance")
             if not isinstance(fi, dict):
                 fi = {}
@@ -1289,6 +1326,14 @@ def main_json():
             f"{plural_ru(migrated, 'переход', 'перехода', 'переходов')} при загрузке"
         )
 
+    # Бэкфилл суда в блоках appeal (court_domain/court/delo_id): записи эпохи
+    # единственной апелляции домена не хранили, а связка и ссылки мульти-
+    # апелляционного кода ключуются по нему. Для существующих данных региона
+    # исторический апел-суд — первый в реестре.
+    ap_migrated = migrate_appeal_court_fields(cases, APPEAL_COURTS[0])
+    if ap_migrated:
+        log.info(f"Апелляция: дополнен суд у {ap_migrated} блоков appeal (миграция)")
+
     # Реактивация архивных дел 1-й инст. с потенциалом поздней жалобы.
     # Подмешиваем их в cases ДО парсинга карточек, чтобы fi_active включил
     # их в обычный цикл обновления. Если жалоба не найдётся — split в конце
@@ -1342,46 +1387,60 @@ def main_json():
     # молча как «дел нет» (см. detect_captcha_challenge).
     fi_challenge: dict = {}
 
-    log.info("Загружаю страницу поиска апелляции...")
-    search_html = fetch_page(APPEAL_COURT.search_url(), context="поиск апелляции")
     appeal_new_cases_csv: list[dict] = []
-    appeal_fi_numbers: dict[str, str] = {}
+    # Составной ключ (домен апел-суда, номер апелляции): номера 33-…/YYYY между
+    # двумя апел-судами региона (Свердловский облсуд + Суд ЯНАО) НЕ уникальны —
+    # голый номер дал бы коллизию связки (link_cases).
+    appeal_fi_numbers: dict[tuple[str, str], str] = {}
 
-    health_labels["appeal:oblsud"] = f"Апелляция ({APPEAL_COURT.name})"
-    if not search_html:
-        health_obs["appeal:oblsud"] = None
-    if search_html:
+    for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
+        _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
+        log.info(f"Загружаю страницу поиска апелляции {_ap_tag}({_ap_court.name})...")
+        search_html = fetch_page(
+            _ap_court.search_url(),
+            context=f"поиск апелляции ({shorten_court_name(_ap_court.name)})",
+        )
+        hk = _appeal_health_key(_ap_court)
+        health_labels[hk] = f"Апелляция ({_ap_court.name})"
+        if not search_html:
+            health_obs[hk] = None
+            continue
+
         search_cases = parse_search_page(search_html)
-        health_obs["appeal:oblsud"] = len(search_cases)
+        health_obs[hk] = len(search_cases)
         # 0 дел + маркеры проверочного кода → поиск апелляции закрыт CAPTCHA,
         # а не «дел нет» (симметрично детекту по судам 1-й инст. ниже).
         if not search_cases and detect_captcha_challenge(search_html):
-            fi_challenge[APPEAL_COURT.domain] = f"Апелляция ({APPEAL_COURT.name})"
+            fi_challenge[_ap_court.domain] = f"Апелляция ({_ap_court.name})"
         log.info(
-            f"Апелляция: {len(search_cases)} "
+            f"Апелляция ({shorten_court_name(_ap_court.name)}): {len(search_cases)} "
             f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
         )
 
         if not search_cases and csv_active_count > 0:
             warn = (
-                "⚠️ Парсинг апелляции вернул 0 дел, "
+                f"⚠️ Парсинг апелляции ({_ap_court.name}) вернул 0 дел, "
                 f"но в CSV {csv_active_count} активных."
             )
             log.warning(warn)
             send_telegram(warn)
 
-        appeal_new_cases_csv = find_new_cases(search_cases, csv_existing)
-        log.info(f"Апелляция: {len(appeal_new_cases_csv)} новых")
+        new_for_court = find_new_cases(search_cases, csv_existing)
+        log.info(f"Апелляция ({shorten_court_name(_ap_court.name)}): {len(new_for_court)} новых")
 
         # Для новых дел загружаем карточки и извлекаем номер 1 инстанции
-        for nc in appeal_new_cases_csv:
+        for nc in new_for_court:
+            # Сервисный ключ строки: из какого апел-суда пришло дело. В CSV не
+            # попадает (save_csv: extrasaction="ignore"); нужен конвертеру в
+            # JSON и ссылкам (case_card_url).
+            nc["_appeal_domain"] = _ap_court.domain
             cid, cuid = case_id_uid(nc.get("Ссылка", ""))
             if cid and cuid:
                 polite_delay()
-                url = APPEAL_COURT.card_url(cid, cuid)
+                url = _ap_court.card_url(cid, cuid)
                 card_html = fetch_card_checked(url, context=nc["Номер дела"])
                 if card_html:
-                    card_info = parse_case_card(card_html, APPEAL_COURT.base_url)
+                    card_info = parse_case_card(card_html, _ap_court.base_url)
                     _warn_if_card_degraded(card_info, nc["Номер дела"])
                     nc["Последнее событие"] = card_info.get("Последнее событие", "")
                     nc["Дата события"] = card_info.get("Дата события", "")
@@ -1395,8 +1454,9 @@ def main_json():
                         nc["Судья-докладчик"] = card_info["Судья-докладчик"]
                     fi_num = card_info.get("Номер дела 1 инстанции", "")
                     if fi_num:
-                        appeal_fi_numbers[nc["Номер дела"]] = fi_num
+                        appeal_fi_numbers[(_ap_court.domain, nc["Номер дела"])] = fi_num
                     log.info(f"  Карточка {nc['Номер дела']}: OK (1 инст: {fi_num or '?'})")
+        appeal_new_cases_csv.extend(new_for_court)
 
     timings["appeal_new"] = time.perf_counter() - t0
 

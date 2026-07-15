@@ -1293,12 +1293,19 @@ def _orphan_appeal_case(ap_num: str = "33-999/2026", **ap_over) -> dict:
     }
 
 
+# Домен апел-суда для составных ключей appeal_fi_numbers (см. link_cases:
+# номера 33-… между двумя апел-судами региона не уникальны).
+_AP_DOM = "oblsud--hmao.sudrf.ru"
+
+
 class TestLinkCases:
     def test_merge_appeal_into_fi_case(self):
         fi_case = _fi_case_for_link()
         orphan = _orphan_appeal_case()
         cases = [orphan, fi_case]
-        out = uc.link_cases(cases, {"33-999/2026": "2-100/2025"})
+        # Блок appeal сироты БЕЗ court_domain (данные до миграции) — заодно
+        # проверяем fallback-поиск по пустому домену.
+        out = uc.link_cases(cases, {(_AP_DOM, "33-999/2026"): "2-100/2025"})
         assert len(out) == 1
         merged = out[0]
         assert merged["id"] == "2-100/2025"
@@ -1316,7 +1323,7 @@ class TestLinkCases:
         )
         orphan = _orphan_appeal_case("33-999/2026")
         cases = [orphan, fi_case]
-        out = uc.link_cases(cases, {"33-999/2026": "2-100/2025"})
+        out = uc.link_cases(cases, {(_AP_DOM, "33-999/2026"): "2-100/2025"})
         merged = [c for c in out if c.get("id") == "2-100/2025"][0]
         assert merged["appeal"]["case_number"] == "33-100/2026"
         assert merged["current_stage"] == "cassation_watch"
@@ -1333,7 +1340,7 @@ class TestLinkCases:
                                 "outcome": "cassation_remanded"}
         orphan = _orphan_appeal_case("33-2000/2026")
         cases = [orphan, fi_case]
-        out = uc.link_cases(cases, {"33-2000/2026": "2-100/2025"})
+        out = uc.link_cases(cases, {(_AP_DOM, "33-2000/2026"): "2-100/2025"})
         assert len(out) == 1
         merged = out[0]
         assert merged["current_stage"] == "appeal"
