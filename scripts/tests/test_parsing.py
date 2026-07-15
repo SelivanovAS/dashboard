@@ -1593,6 +1593,88 @@ class TestCardUrl:
         assert "new=5" not in url
 
 
+# ── Снапшоты боевых URL ──────────────────────────────────────────────────────
+
+class TestCourtUrlSnapshots:
+    """Байт-в-байт снапшоты URL всех трёх типов судов.
+
+    Параметры sudrf (delo_id/delo_table/name_field/new) подобраны эмпирически;
+    неверное значение даёт «Данных по запросу не обнаружено» БЕЗ явной ошибки
+    (см. запрет в CLAUDE.md). Эти тесты — страховка любых рефакторингов
+    CourtConfig: если собранный URL изменился хоть на символ — тест падает.
+    """
+
+    def test_appeal_search_url(self):
+        assert uc.APPEAL_COURT.search_url() == (
+            "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=r&delo_id=5&case_type=0&new=5"
+            "&G2_PARTS__NAMESS=%D1%E1%E5%F0%E1%E0%ED%EA"
+            "&delo_table=g2_case&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def test_first_instance_search_url(self):
+        assert uc.FIRST_INSTANCE_COURTS[0].search_url() == (
+            "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=r&delo_id=1540005&case_type=0&new=0"
+            "&G1_PARTS__NAMESS=%D1%E1%E5%F0%E1%E0%ED%EA"
+            "&delo_table=g1_case&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def test_first_instance_srv_num_2(self):
+        """Покачи — вторая площадка Нижневартовского районного (srv_num=2)."""
+        pokachi = next(c for c in uc.FIRST_INSTANCE_COURTS if c.srv_num == 2)
+        assert "srv_num=2" in pokachi.search_url()
+        assert "srv_num=2" in pokachi.card_url("1", "2")
+
+    def test_first_instance_search_by_number_url(self):
+        assert uc.FIRST_INSTANCE_COURTS[0].search_by_number_url("2-716/2025") == (
+            "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=r&delo_id=1540005&case_type=0&new=0"
+            "&G1_CASE__CASE_NUMBERSS=2-716%2F2025"
+            "&delo_table=g1_case&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def test_cassation_search_url(self):
+        assert uc.CASSATION_COURT.search_url() == (
+            "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=r&delo_id=2800001&case_type=0&new=2800001"
+            "&G33_PARTS__NAMESS=%D1%E1%E5%F0%E1%E0%ED%EA"
+            "&delo_table=g33_case&Submit=%CD%E0%E9%F2%E8"
+        )
+
+    def test_card_urls(self):
+        assert uc.APPEAL_COURT.card_url("111", "222-uid") == (
+            "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=case&case_id=111&case_uid=222-uid&delo_id=5&new=5"
+        )
+        assert uc.FIRST_INSTANCE_COURTS[0].card_url("111", "222-uid") == (
+            "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=case&case_id=111&case_uid=222-uid&delo_id=1540005&new=0"
+        )
+        assert uc.CASSATION_COURT.card_url("111", "222-uid") == (
+            "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1"
+            "&name_op=case&case_id=111&case_uid=222-uid&delo_id=2800001&new=2800001"
+        )
+
+    def test_override_fields(self):
+        """Кассация вне 7-го КСОЮ (напр. 6kas Башкирии) задаёт свои параметры
+        override-полями — без новой ветки if в свойствах."""
+        kas6 = uc.CourtConfig(
+            "Шестой КСОЮ (проба)", "6kas.sudrf.ru", 999001, "cassation",
+            delo_table="g99_case", name_field="G99_PARTS__NAMESS", new_param=42,
+        )
+        url = kas6.search_url()
+        assert "delo_id=999001" in url
+        assert "delo_table=g99_case" in url
+        assert "G99_PARTS__NAMESS=" in url
+        assert "new=42" in url
+
+    def test_cassation_new_defaults_to_delo_id(self):
+        """Без override new у кассации совпадает с delo_id (эмпирика 7kas)."""
+        kas = uc.CourtConfig("КСОЮ", "xkas.sudrf.ru", 123456, "cassation")
+        assert "new=123456" in kas.search_url()
+
+
 # ── extract_motive_part ──────────────────────────────────────────────────────
 
 class TestExtractMotivePart:
