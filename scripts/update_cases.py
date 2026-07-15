@@ -107,7 +107,7 @@ from court_monitor.parsing import (  # noqa: F401 — ре-экспорт для
     is_subsidiary_only_case, is_insurance_only_case, _is_real_sberbank,
     determine_bank_role_from_participants,
     parse_search_page, _find_results_table, parse_first_instance_search,
-    detect_captcha_challenge,
+    detect_captcha_challenge, detect_captcha_challenge_card,
     _extract_act_text, _warn_if_card_degraded, parse_case_card, fetch_act_text,
     _CASS_CATEGORY_RE, _CASS_CASSATOR_RE, _CASS_FI_COURT_RE,
     _CASS_FI_CASE_NUM_RE, _CASS_INTERNAL_NUM_RE,
