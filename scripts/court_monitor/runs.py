@@ -1418,8 +1418,12 @@ def main_json():
             )
             continue
 
-        fi_results = parse_first_instance_search(search_html, court)
-        health_obs[f"fi:{court.domain}"] = len(fi_results)
+        # Здоровье меряем по сберовским строкам ДО фильтра «банк-ответчик»:
+        # вал исков самого банка выталкивает ответчик-дела со страницы 1,
+        # и len(fi_results)=0 выглядел бы поломкой (Октябрьский р/с, 14.07.2026).
+        search_stats: dict = {}
+        fi_results = parse_first_instance_search(search_html, court, stats=search_stats)
+        health_obs[f"fi:{court.domain}"] = search_stats.get("sber_rows", 0)
         # 0 строк + маркеры проверочного кода → суд закрыт CAPTCHA, а не «нет дел».
         if not fi_results and detect_captcha_challenge(search_html):
             fi_challenge[court.domain] = court.name

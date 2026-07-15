@@ -2873,3 +2873,79 @@ class TestDetectCaptchaChallenge:
         """Только текстовая подсказка «проверочный код» без img → True."""
         html = "<html><body><p>Введите проверочный код для поиска</p></body></html>"
         assert uc.detect_captcha_challenge(html) is True
+
+
+# ── parse_first_instance_search: stats["sber_rows"] (здоровье парсера) ────────
+
+class TestFirstInstanceSearchStats:
+    """Счётчик здоровья считает сберовские строки ДО фильтра «банк-ответчик».
+
+    Инцидент 14.07.2026 (Октябрьский р/с): вал исков самого банка вытеснил
+    единственное ответчик-дело на страницу 2 → len(результата)=0 → ложный
+    🩺-алерт «поиск вернул 0». stats["sber_rows"] при этом остаётся >0.
+    """
+
+    @staticmethod
+    def _search_html(rows: list[tuple[str, str, str]]) -> str:
+        """Собрать страницу поиска: rows = [(номер, истец, ответчик), ...]."""
+        tr = []
+        for num, plaintiff, defendant in rows:
+            combined = (
+                "КАТЕГОРИЯ: Иски о взыскании сумм по договору займа "
+                f"ИСТЕЦ (ЗАЯВИТЕЛЬ): {plaintiff} ОТВЕТЧИК: {defendant}"
+            )
+            tr.append(
+                f"<tr><td><a href='modules.php?name=sud_delo&case_id=1&case_uid=u1'>{num}</a></td>"
+                f"<td>01.07.2026</td><td>{combined}</td><td>Иванова И.И.</td>"
+                "<td></td><td></td></tr>"
+            )
+        return (
+            "<html><body><table>"
+            "<tr><td>№ дела</td><td>Дата поступления</td>"
+            "<td>Категория / Стороны</td><td>Судья</td>"
+            "<td>Дата решения</td><td>Решение</td></tr>"
+            + "".join(tr) + "</table></body></html>"
+        )
+
+    def _court(self):
+        return uc.FIRST_INSTANCE_COURTS[0]
+
+    def test_plaintiff_flood_zero_results_but_positive_stats(self):
+        """Все строки — банк-истец: результат пуст, но sber_rows считает их."""
+        html = self._search_html([
+            ("2-100/2026", "ПАО Сбербанк", "Петров Пётр Петрович"),
+            ("М-341/2026", "ПАО Сбербанк в лице филиала", "Шульга Н.Л."),
+        ])
+        stats: dict = {}
+        results = uc.parse_first_instance_search(html, self._court(), stats=stats)
+        assert results == []
+        assert stats["sber_rows"] == 2
+
+    def test_defendant_row_counted_in_both(self):
+        html = self._search_html([
+            ("2-100/2026", "ПАО Сбербанк", "Петров Пётр Петрович"),
+            ("2-122/2026", "Зименкова С.Н.", "Брылянт Е.А., ПАО Сбербанк"),
+        ])
+        stats: dict = {}
+        results = uc.parse_first_instance_search(html, self._court(), stats=stats)
+        assert [r["case_number"] for r in results] == ["2-122/2026"]
+        assert stats["sber_rows"] == 2
+
+    def test_subsidiary_only_row_not_counted(self):
+        """Дочка (Сбербанк страхование) не считается сберовской строкой."""
+        html = self._search_html([
+            ("2-100/2026", "Иванов И.И.",
+             "ООО СК «Сбербанк страхование жизни»"),
+        ])
+        stats: dict = {}
+        results = uc.parse_first_instance_search(html, self._court(), stats=stats)
+        assert results == []
+        assert stats["sber_rows"] == 0
+
+    def test_stats_optional(self):
+        """Без stats поведение прежнее — API обратно совместим."""
+        html = self._search_html([
+            ("2-122/2026", "Зименкова С.Н.", "Брылянт Е.А., ПАО Сбербанк"),
+        ])
+        results = uc.parse_first_instance_search(html, self._court())
+        assert len(results) == 1

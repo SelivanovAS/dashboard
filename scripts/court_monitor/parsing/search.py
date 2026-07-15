@@ -334,7 +334,9 @@ def find_fi_case_link(html: str, case_number: str) -> str:
     return ""
 
 
-def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
+def parse_first_instance_search(
+    html: str, court: CourtConfig, stats: dict | None = None
+) -> list[dict]:
     """Парсит страницу поиска суда первой инстанции.
 
     Отличия от parse_search_page (апелляция):
@@ -342,7 +344,14 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
     - 8 столбцов: № дела | Дата | Категория/Стороны | Судья | Дата решения | Решение | ...
     - Фильтр: только дела, где Сбербанк — ответчик
     - Номер дела может содержать '~' (материал) — берём первую часть
+
+    stats: если передан dict, в него пишется stats["sber_rows"] — число строк
+    «настоящего Сбербанка» ДО фильтра роли. Это сигнал здоровья парсера:
+    вал исков самого банка вытесняет ответчик-дела со страницы 1 и обнуляет
+    len(результата) без всякой поломки (Октябрьский р/с, 14.07.2026).
     """
+    if stats is not None:
+        stats["sber_rows"] = 0
     tables = extract_tables(html)
     results_table = _find_results_table(tables)
     if not results_table:
@@ -403,6 +412,12 @@ def parse_first_instance_search(html: str, court: CourtConfig) -> list[dict]:
         # Пропускаем дела, где «Сбербанк» — только дочерняя структура (страхование, НПФ и т.п.)
         if is_subsidiary_only_case(plaintiff, defendant):
             continue
+
+        # Строка «настоящего Сбербанка» (не дочки) до фильтра роли — метрика
+        # здоровья. «сбербанк» в объединённой ячейке, а не только в сторонах:
+        # банк может фигурировать третьим лицом вне И:/О:.
+        if stats is not None and "сбербанк" in combined.lower():
+            stats["sber_rows"] += 1
 
         # Определяем роль банка
         role = "Третье лицо"
