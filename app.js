@@ -496,9 +496,9 @@ function jsonToCase(j){
   const isAppeal=(stage==='appeal'||stage==='cassation_watch'||stage==='cassation_pending')&&ap.case_number;
   const primary=isCass?cs:(isAppeal?ap:fi);
   // Для дел в кассации основной ID карточки — 8Г-XXX (cassation.case_number).
-  // Номер 1-й инстанции (j.id) сохраняется в caseObj.fiCaseNumber и
-  // используется как alias в watchlist (см. expandWatchlistAliases),
-  // чтобы существующие звёздочки по старому номеру не «осиротели».
+  // Исходный j.id сохраняется в caseObj.rawId: bare(rawId) — канонический
+  // ключ watchlist (см. buildWatchCanonMap), к которому звезда сводит любую
+  // форму номера, чтобы не «осиротеть» при смене caseNumber.
   const caseNumber=isCass?cs.case_number:(isAppeal?ap.case_number:j.id);
   // Link — кассация уезжает на 7kas (delo_id=2800001, new=2800001 — отдельная
   // ветка API КСОЮ); апелляция — на oblsud-домен; первая инстанция — на свой.
@@ -694,6 +694,9 @@ function jsonToCase(j){
   const roleLow=(j.bank_role||'Ответчик').toLowerCase();
   const caseObj={
     caseNumber:caseNumber,
+    // Исходный id из cases.json — канон watchlist: bare(rawId) == форме,
+    // которую Worker кладёт в KV (см. buildWatchCanonMap/canonCaseNumber).
+    rawId:j.id||'',
     stage:stage,
     fiCaseNumber:fi.case_number||'',
     materialNumber:fi.material_number||'',
@@ -1018,11 +1021,11 @@ function showToast(msg,opts){
 
 /* ========== Render All ========== */
 function renderAll(){
-  // Watchlist alias-расширение: для дел в кассации обеспечиваем инвариант
-  // «оба ID (8Г-XXX и номер 1-й инст.) либо есть, либо отсутствуют».
-  // Без этого существующие звёздочки по c.id осиротеют после смены
-  // c.caseNumber на 8Г-XXX. Идемпотентно: повторный вызов ничего не делает.
-  try{expandWatchlistAliases();}catch(_){}
+  // Канонизация watchlist: пересобираем карту алиасов по свежим данным и
+  // приводим сохранённые номера к канону bare(id) — звезда переживает смену
+  // номера дела (переход стадии, скобка-двойник, промоушен М→2).
+  // Идемпотентно: повторный вызов ничего не делает.
+  try{buildWatchCanonMap();canonicalizeWatchlistSet();}catch(_){}
   const knownRaw=localStorage.getItem(KNOWN_CASES_KEY);
   const knownSet=knownRaw?new Set(JSON.parse(knownRaw)):new Set();
   const currentNumbers=allCases.map(c=>c.caseNumber);
@@ -1138,13 +1141,12 @@ function renderAnalytics(){
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate);
 
-  // Mine-режим (тоггл «★ Мой» в шапке дайджеста нажат и есть watchlist) —
-  // блок «Ближайшие заседания» показывает только дела из watchlist. Без
-  // звёзд или с отжатым тогглом — все ближайшие.
-  const mineMode = (typeof _digestViewMode !== 'undefined') && _digestViewMode === 'mine' && watchlist.size > 0;
+  // Mine-режим (чип «★ Мои» нажат и есть watchlist) — блок «Ближайшие
+  // заседания» показывает только дела из watchlist. Источник истины —
+  // filterMineActive (единый для таблицы, дайджеста и этого блока).
+  const mineMode = filterMineActive && watchlist.size > 0;
   if (mineMode) {
-    const mineSet = new Set([...watchlist].map(bareCaseNumber));
-    allUpcoming = allUpcoming.filter(c => mineSet.has(bareCaseNumber(c.caseNumber)));
+    allUpcoming = allUpcoming.filter(c => isWatched(c.caseNumber));
   }
 
   // Take up to 10 of each stage, then merge by date — cap at 12 total.
@@ -1421,13 +1423,13 @@ function renderChipBar(){
     {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0},
   ];
   let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
-  // Чип «★ Мои» — единый mine-режим (фильтр + дайджест), как у мобильной
-  // кнопки #toolbar-mine-btn. Виден только при непустом watchlist. Состояние —
-  // из _digestViewMode (см. комментарий у toggleMobileMine), класс
-  // mine-toggle-btn включает чип в синхронизацию setDigestView/
-  // refreshDigestModeVisibility (флип .active через querySelectorAll).
+  // Чип «★ Мои» — единый mine-режим (фильтр + дайджест + «Ближайшие»), как
+  // у мобильной кнопки #toolbar-mine-btn. Виден только при непустом
+  // watchlist. Источник истины — filterMineActive (тот же предикат, что в
+  // applyFilters); _digestViewMode — производное. Класс mine-toggle-btn
+  // включает чип в синхронизацию setDigestView (флип .active).
   if(watchlist.size>0){
-    const mineOn=(typeof _digestViewMode!=='undefined')&&_digestViewMode==='mine';
+    const mineOn=filterMineActive;
     const nMine=allCases.filter(c=>isWatched(c.caseNumber)&&!(c.computed?c.computed.archived:isArchived(c))).length;
     quickHtml+=`<button class="chip-btn chip-mine mine-toggle-btn ${mineOn?'active':''}" aria-pressed="${mineOn?'true':'false'}" onclick="toggleMobileMine()">★ Мои<span class="chip-count">${nMine}</span></button>`;
   }
@@ -1483,12 +1485,13 @@ function setMineFilter(v){
   applyFilters();
 }
 window.setMineFilter=setMineFilter;
-// ★-кнопка мобильного тулбара = единый toggle: фильтр + дайджест + upcoming.
-// Опираемся только на _digestViewMode (тот же сигнал, по которому setDigestView
-// флипает класс .active на всех .mine-toggle-btn) — иначе после push-driven
-// setDigestView('mine') без флипа filterMineActive пользователь тапает дважды.
+// ★-кнопка тулбара/чипа = единый toggle: фильтр + дайджест + upcoming.
+// Источник истины — filterMineActive; setDigestView лишь отражает его.
+// До v98 чип читал _digestViewMode, а фильтр — filterMineActive, и они
+// разъезжались: чип горел при неотфильтрованной таблице, а клик по нему
+// лишь гасил подсветку (для фильтрации нужен был второй клик).
 function toggleMobileMine(){
-  const next=(_digestViewMode!=='mine');
+  const next=!filterMineActive;
   setMineFilter(next);
   setDigestView(next?'mine':'general');
 }
@@ -2595,7 +2598,13 @@ const WATCHLIST_HINT_KEY = 'watchlist_hint_shown';
 const FILTER_MINE_KEY = 'filter_mine_v1';
 let watchlist = new Set();
 try {
-  watchlist = new Set(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]'));
+  // bare-нормализация на чтении: до v98 в ключе могли лежать сырые формы
+  // («2-193/2026 (2-1133/2025;)»). Полная канонизация по карте алиасов —
+  // после загрузки данных (canonicalizeWatchlistSet в renderAll).
+  watchlist = new Set(
+    (JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]') || [])
+      .map(bareCaseNumber).filter(Boolean)
+  );
 } catch (_) { watchlist = new Set(); }
 let filterMineActive = false;
 try {
@@ -2603,8 +2612,16 @@ try {
   // при подписке на несколько дел подряд фильтр не должен срезать
   // таблицу — иначе юрист, поставивший первую звезду, не видит дальше
   // остальные дела для подписки.
-  const stored = localStorage.getItem(FILTER_MINE_KEY) === 'true';
-  if (stored && watchlist.size === 0) {
+  let stored = localStorage.getItem(FILTER_MINE_KEY);
+  // Миграция с расщеплённого состояния (до v98): явный выбор «Мой» жил в
+  // digest_view_v1, а filter_mine_v1 мог отсутствовать — переносим один раз
+  // (ключ digest_view_v1 больше нигде не читается и не пишется).
+  if (stored === null && localStorage.getItem('digest_view_v1') === 'mine') {
+    stored = 'true';
+    localStorage.setItem(FILTER_MINE_KEY, 'true');
+  }
+  const on = stored === 'true';
+  if (on && watchlist.size === 0) {
     // Stale: при пустом watchlist чип «★ Мои» скрыт и фильтр маскируется
     // (mineOn = filterMineActive && watchlist.size>0). Юрист не видит,
     // что флаг включён, и первая же поставленная звезда «внезапно» режет
@@ -2613,7 +2630,7 @@ try {
     try { localStorage.removeItem(FILTER_MINE_KEY); } catch (_) {}
     filterMineActive = false;
   } else {
-    filterMineActive = stored;
+    filterMineActive = on;
   }
 } catch (_) { filterMineActive = false; }
 
@@ -2625,8 +2642,64 @@ function maybeAutoEnableMineFilter() { /* no-op */ }
 
 let watchlistSyncTimer = null;
 
+// ── Канонизация номеров дел (зеркало wnBuildAliasToCanonical в worker.js) ──
+// Watchlist хранит ТОЛЬКО канонические bare-id: bare(rawId) — ту же форму,
+// к которой Worker приводит POST /watchlist (bare от id из cases.json).
+// Любой номер, который видит UI (сырой со скобкой-двойником, апелляционный
+// 33-…, кассационный 8Г-…, материал М-…), сводится к канону через карту
+// алиасов. До v98 watchlist хранил сырой c.caseNumber, который меняется при
+// переходе стадии: звезда «слетала», а канонический id из KV было нечем
+// удалить (не отписаться); алиас-дубли в наборе гоняли sync по кругу.
+let watchCanonMap = new Map();
+
+function extractParenNumbers(s) {
+  const m = String(s || '').match(/\(([^)]+)\)/);
+  if (!m) return [];
+  return m[1].split(/[;,]/).map(bareCaseNumber).filter(Boolean);
+}
+
+function buildWatchCanonMap() {
+  const map = new Map();
+  for (const c of (Array.isArray(allCases) ? allCases : [])) {
+    const canonical = bareCaseNumber(c.rawId || c.caseNumber);
+    if (!canonical) continue;
+    const candidates = [
+      c.rawId, c.caseNumber, c.fiCaseNumber, c.materialNumber,
+      c.appealCaseNumber, c.cassationCaseNumber,
+      ...extractParenNumbers(c.rawId),
+    ];
+    for (const raw of candidates) {
+      const bare = bareCaseNumber(raw);
+      if (bare && !map.has(bare)) map.set(bare, canonical);
+    }
+  }
+  watchCanonMap = map;
+}
+
+// Канонический bare-id для любого известного номера дела. Незнакомый номер
+// (архивное дело, руками добавленный) — просто bare-форма: не теряем.
+function canonCaseNumber(num) {
+  const bare = bareCaseNumber(num);
+  return watchCanonMap.get(bare) || bare;
+}
+
+// Приводит watchlist к канону по свежей карте алиасов. Вызывается после
+// каждой загрузки данных: подхватывает legacy-формы из localStorage и смену
+// номера дела между прогонами (М-XXXX → 2-XXXX, переход стадии). Sync с
+// Worker отсюда НЕ планируем: сервер и так канонизирует на своей стороне,
+// а самозапуск sync из этой точки давал вечный цикл POST каждые ~600 мс
+// (затирка ответом → ре-экспанд алиасов → новый sync — баг до v98).
+function canonicalizeWatchlistSet() {
+  if (watchlist.size === 0) return;
+  const next = new Set([...watchlist].map(canonCaseNumber));
+  const same = next.size === watchlist.size && [...next].every((x) => watchlist.has(x));
+  if (same) return;
+  watchlist = next;
+  try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (_) {}
+}
+
 function isWatched(caseNumber) {
-  return watchlist.has(caseNumber);
+  return watchlist.has(canonCaseNumber(caseNumber));
 }
 
 function watchBtnHtml(caseNumber) {
@@ -2641,86 +2714,15 @@ function watchBtnHtml(caseNumber) {
     + `</button>`;
 }
 
-// Для дела в стадии cassation возвращает второй ID (alias). Если
-// caseNumber = 8Г-XXX → вернёт номер 1-й инст. (нормализованный
-// bareCaseNumber'ом, без скобок-двойников). И наоборот. Иначе — null.
-// Используется в toggleWatch, чтобы синкать обе подписки одним кликом.
-function watchAliasFor(caseNumber) {
-  if (!Array.isArray(allCases) || allCases.length === 0) return null;
-  const bare = bareCaseNumber(caseNumber);
-  for (const c of allCases) {
-    if (c.stage !== 'cassation') continue;
-    const cs = bareCaseNumber(c.caseNumber);
-    const fi = bareCaseNumber(c.fiCaseNumber);
-    if (!cs || !fi || cs === fi) continue;
-    if (bare === cs || caseNumber === c.caseNumber) return fi;
-    if (bare === fi || caseNumber === c.fiCaseNumber) return cs;
-  }
-  // 1-я инстанция: материал М-XXXX подменён постоянным 2-XXXX (промоушен на
-  // бэке). material_number хранит старый М-номер — ★ должна синкаться по обоим,
-  // иначе звезда юриста на материале осиротеет после подмены номера.
-  for (const c of allCases) {
-    if (!c.materialNumber) continue;
-    const mat = bareCaseNumber(c.materialNumber);
-    const cur = bareCaseNumber(c.caseNumber);
-    if (!mat || !cur || mat === cur) continue;
-    if (bare === cur || caseNumber === c.caseNumber) return c.materialNumber;
-    if (bare === mat || caseNumber === c.materialNumber) return c.caseNumber;
-  }
-  return null;
-}
-
-// Проходим allCases и для дел в кассации синхронизируем ОБА ID в watchlist:
-// оба должны быть либо в watchlist, либо нет. Раньше watchlist хранил только
-// номер 1-й инст. (c.id), и при переключении c.caseNumber на 8Г-XXX
-// существующие звёздочки осиротели бы. Идемпотентно — повторный вызов ничего не даст.
-function expandWatchlistAliases() {
-  if (!Array.isArray(allCases) || allCases.length === 0) return;
-  let dirty = false;
-  for (const c of allCases) {
-    if (c.stage !== 'cassation') continue;
-    const cs = bareCaseNumber(c.caseNumber);
-    const fi = bareCaseNumber(c.fiCaseNumber);
-    if (!cs || !fi || cs === fi) continue;
-    const hasCs = watchlist.has(cs);
-    const hasFi = watchlist.has(fi);
-    if (hasFi && !hasCs) { watchlist.add(cs); dirty = true; }
-    if (hasCs && !hasFi) { watchlist.add(fi); dirty = true; }
-  }
-  // То же для подмены номера материала (М-XXXX → 2-XXXX): синкаем ★ по
-  // material_number и текущему id, чтобы звезда не осиротела после промоушена.
-  for (const c of allCases) {
-    if (!c.materialNumber) continue;
-    const mat = bareCaseNumber(c.materialNumber);
-    const cur = bareCaseNumber(c.caseNumber);
-    if (!mat || !cur || mat === cur) continue;
-    const hasMat = watchlist.has(mat);
-    const hasCur = watchlist.has(cur);
-    if (hasMat && !hasCur) { watchlist.add(cur); dirty = true; }
-    if (hasCur && !hasMat) { watchlist.add(mat); dirty = true; }
-  }
-  if (dirty) {
-    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (_) {}
-    scheduleWatchlistSync();
-  }
-}
-
 function toggleWatch(caseNumber, btn) {
-  if (watchlist.has(caseNumber)) {
-    watchlist.delete(caseNumber);
+  // Работаем с каноном: у одного дела на странице сосуществуют разные формы
+  // номера (сырой со скобкой, 33-…, 8Г-…) — звезда одна на всех, и снятие
+  // удаляет именно ту запись, по которой Worker шлёт push.
+  const canon = canonCaseNumber(caseNumber);
+  if (watchlist.has(canon)) {
+    watchlist.delete(canon);
   } else {
-    watchlist.add(caseNumber);
-  }
-  // Кассация: синкаем оба ID (см. watchAliasFor). Без этого юрист,
-  // снимая звезду в drawer'е (где caseNumber = 8Г-XXX), оставит alias по
-  // номеру 1-й инст. в watchlist'е, и push продолжит приходить.
-  const alias = watchAliasFor(caseNumber);
-  if (alias) {
-    if (watchlist.has(caseNumber)) {
-      watchlist.add(alias);
-    } else {
-      watchlist.delete(alias);
-    }
+    watchlist.add(canon);
   }
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
@@ -2737,8 +2739,7 @@ function toggleWatch(caseNumber, btn) {
   // Перерисовываем chip-bar и пересчитываем filteredCases — chip появляется
   // или исчезает в зависимости от размера watchlist, а фильтр пересчитывается.
   // Авто-включение фильтра «Мои дела» НЕ делаем: пользователь сам решает,
-  // включать ли фильтр после постановки звезды (см. maybeAutoEnableMineFilter
-  // — оно срабатывает только при инициализации страницы или гидратации с KV).
+  // включать ли фильтр после постановки звезды (чипом «★ Мои»).
   if (typeof applyFilters === 'function') {
     try { applyFilters(); } catch (_) {}
   } else if (typeof renderChipBar === 'function') {
@@ -2757,23 +2758,17 @@ function toggleWatch(caseNumber, btn) {
     btn.setAttribute('aria-label', on ? 'Снять отслеживание' : 'Отслеживать дело');
   }
   // Все остальные копии этой же звёздочки (карточка + строка таблицы +
-  // drawer-шапка могут сосуществовать) — обновляем синхронно по селектору.
-  // Для дел в кассации — также копии звёздочки по alias-номеру (старый
-  // номер 1-й инст. в карточке таблицы / mobile-card, если фронт его где-то
-  // ещё показывает; в текущей реализации основной caseNumber — 8Г-XXX,
-  // но синк не помешает на случай миграции).
-  const ids = alias ? [caseNumber, alias] : [caseNumber];
-  for (const id of ids) {
-    document.querySelectorAll(
-      `.watch-btn[onclick*="toggleWatch('${String(id).replace(/'/g, "\\'")}'"]`
-    ).forEach((el) => {
-      if (el === btn) return;
-      const on = isWatched(id);
-      el.classList.toggle('on', on);
-      el.textContent = on ? '★' : '☆';
-      el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
+  // drawer-шапка могут сосуществовать; все передают один и тот же сырой
+  // caseNumber) — обновляем синхронно по селектору.
+  document.querySelectorAll(
+    `.watch-btn[onclick*="toggleWatch('${String(caseNumber).replace(/'/g, "\\'")}'"]`
+  ).forEach((el) => {
+    if (el === btn) return;
+    const on = isWatched(caseNumber);
+    el.classList.toggle('on', on);
+    el.textContent = on ? '★' : '☆';
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   // Тоггл «Общий ⇄ Мой» в шапке дайджеста: появляется при первой звезде,
   // прячется при снятии последней; в режиме «Мой» пересобирает тело по
   // новому составу watchlist.
@@ -2782,7 +2777,7 @@ function toggleWatch(caseNumber, btn) {
   }
   // В mine-режиме блок «Ближайшие заседания» тоже фильтруется по watchlist
   // — пересоберём при изменении состава звёзд.
-  if (_digestViewMode === 'mine' && typeof renderAnalytics === 'function') {
+  if (filterMineActive && typeof renderAnalytics === 'function') {
     try { renderAnalytics(); } catch (_) {}
   }
   scheduleWatchlistSync();
@@ -2819,21 +2814,20 @@ async function syncWatchlistToWorker() {
       body: JSON.stringify({ endpoint: sub.endpoint, watchlist: [...watchlist] }),
     });
     if (!r.ok) return;
-    // Worker канонизирует входящие апел./касс./hybrid алиасы в FI-ID
-    // (Этап 4c). Если ответ отличается от того, что мы отправили —
-    // принимаем серверную версию, иначе localStorage будет вечно держать
-    // алиасы, а KV — канон. ID, и при каждом sync будет лишний трафик.
+    // Worker канонизирует номера по своему свежему cases.json. Локальный
+    // набор уже канонический (см. canonCaseNumber), поэтому обычно ответ
+    // совпадает и мы выходим. Расхождение возможно, если данные Worker'а
+    // новее наших (номер дела сменился между прогонами) — принимаем
+    // серверную версию. Новый sync отсюда НЕ планируем: до v98 связка
+    // «затирка ответом → ре-экспанд алиасов → новый sync» крутила
+    // POST /watchlist бесконечно.
     let data = null;
     try { data = await r.json(); } catch (_) {}
     if (!data || !Array.isArray(data.canonical)) return;
     const local = [...watchlist].sort().join('|');
-    const server = [...data.canonical].sort().join('|');
+    const server = [...data.canonical].map(canonCaseNumber).sort().join('|');
     if (local === server) return;
-    watchlist = new Set(data.canonical);
-    // Локальное расширение алиасов оставляем — UI должен показать звёзды
-    // на всех известных номерах дела (FI/апел./касс.), а не только на
-    // канон.: фронт берёт alias-карту из window.casesData.
-    try { expandWatchlistAliases(); } catch (_) {}
+    watchlist = new Set([...data.canonical].map(canonCaseNumber));
     try {
       localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
     } catch (_) {}
@@ -2864,11 +2858,9 @@ function reconcileWatchlistWithServer(serverList) {
   );
   // Случай 1: локальный пуст → берём с сервера.
   if (watchlist.size === 0 && server.size > 0) {
-    watchlist = server;
-    // Гидратация с Worker'а: серверный watchlist мог содержать только
-    // старые номера 1-й инст. (8Г-XXX появились на фронте только сейчас).
-    // Расширяем alias, чтобы карточка кассации сразу подсвечивала звезду.
-    try { expandWatchlistAliases(); } catch (_) {}
+    // Гидратация с Worker'а: в KV могут лежать номера из прошлых эпох
+    // (сырые формы, старый канон) — приводим к текущему канону фронта.
+    watchlist = new Set([...server].map(canonCaseNumber).filter(Boolean));
     try {
       localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
     } catch (_) {}
@@ -2885,15 +2877,14 @@ function reconcileWatchlistWithServer(serverList) {
     }
     return;
   }
-  // Случай 2 и 3: локальный непуст. Сверим, есть ли локальные звёздочки,
-  // которых нет на сервере — если да, отправим текущий локальный watchlist.
+  // Случай 2 и 3: локальный непуст. Сверим по каноническим формам, есть ли
+  // локальные звёздочки, которых нет на сервере — если да, отправим текущий
+  // локальный watchlist. Сравнение сырыми строками здесь давало ложный
+  // needsPush на каждой загрузке (локальные алиасы vs канон KV).
+  const serverCanon = new Set([...server].map(canonCaseNumber));
   let needsPush = false;
-  if (watchlist.size > server.size) {
-    needsPush = true;
-  } else {
-    for (const x of watchlist) {
-      if (!server.has(x)) { needsPush = true; break; }
-    }
+  for (const x of watchlist) {
+    if (!serverCanon.has(x)) { needsPush = true; break; }
   }
   if (needsPush) {
     // Дёрнем существующий sync — он уже обрабатывает push-подписку и
@@ -3128,7 +3119,9 @@ const DIGEST_LAST_SEEN_KEY = 'digest_last_seen_at';
 // Выбранный пользователем вид блока «Дайджест»: 'general' | 'mine'.
 // Тоггл «Общий ⇄ Мой» в шапке блока. URL ?mine=1 (из click_url push'а)
 // устанавливает начальное значение, дальше — управляется кнопкой.
-const DIGEST_VIEW_KEY = 'digest_view_v1';
+// Ключ 'digest_view_v1' упразднён в v98: режим «★ Мои» един для таблицы и
+// дайджеста и живёт в filter_mine_v1 (см. миграцию при инициализации
+// filterMineActive).
 // generated_at уже показанного дайджеста — для записи в localStorage в момент показа.
 let currentDigestGeneratedAt = null;
 let digestLoaded = false;
@@ -3284,26 +3277,24 @@ async function loadLastDigest() {
     currentDigestGeneratedAt = data.generated_at || null;
     digestLoaded = true;
 
-    // Стартовый режим: ?mine=1 (push-click_url) → 'mine'; иначе —
-    // последний выбор пользователя; иначе при наличии watchlist 'mine'
-    // по умолчанию (юрист поставил звёзды → ожидает персональный вид),
-    // при пустом watchlist фолбэк на 'general' (тоггл всё равно скрыт).
+    // Стартовый режим: ?mine=1 (push-click_url) → 'mine'; иначе — из
+    // filterMineActive (единый источник истины, ключ filter_mine_v1).
+    // Дефолт свежего устройства — «общий»; выбор юриста помнится. До v98
+    // дефолт был 'mine' по отдельному ключу digest_view_v1, из-за чего чип
+    // «★ Мои» горел при неотфильтрованной таблице.
     const urlMine = new URL(window.location.href);
     let initialMode = 'general';
     if (watchlist.size > 0) {
       if (urlMine.searchParams.has('mine')) {
         initialMode = 'mine';
-        try { localStorage.setItem(DIGEST_VIEW_KEY, 'mine'); } catch (_) {}
         // ?mine=1 (push-click_url, PWA-shortcut) включает единый mine-режим:
         // не только дайджест, но и фильтр таблицы — консистентно с кнопкой ★.
         setMineFilter(true);
       } else {
-        let saved = null;
-        try { saved = localStorage.getItem(DIGEST_VIEW_KEY); } catch (_) {}
-        initialMode = (saved === 'mine' || saved === 'general') ? saved : 'mine';
+        initialMode = filterMineActive ? 'mine' : 'general';
       }
     }
-    await setDigestView(initialMode, { persist: false });
+    await setDigestView(initialMode);
     refreshDigestModeVisibility();
 
     // Делегированный клик по номерам дел внутри #digest-body.
@@ -3411,7 +3402,7 @@ function casesInFragment(html) {
 // после него встретился хотя бы один mine-блок (иначе заголовок-сирота
 // «📅 Изменения (2):» без содержимого мусорит на странице).
 function filterGeneralHtmlByMine(html, mineSet) {
-  const inMine = (num) => mineSet.has(bareCaseNumber(num));
+  const inMine = (num) => mineSet.has(canonCaseNumber(num));
   const paragraphs = String(html).split(/\n{2,}/);
   const kept = [];
   // Состояние секции: 'none' | 'new' (общесистемная — оставляем) |
@@ -3515,11 +3506,14 @@ function buildMineHtml(generalHtml, ctx) {
       found: 0,
     };
   }
+  // mineSet — в канонических bare-id (watchlist уже канон; номера новых дел
+  // и номера из HTML дайджеста приводим через canonCaseNumber, иначе строка
+  // с «8Г-…»/«33-…» не сматчится с каноном дела).
   const mineSet = new Set();
-  for (const w of watchlist) mineSet.add(bareCaseNumber(w));
-  for (const n of collectNewCaseNumbers(ctx)) mineSet.add(bareCaseNumber(n));
+  for (const w of watchlist) mineSet.add(canonCaseNumber(w));
+  for (const n of collectNewCaseNumbers(ctx)) mineSet.add(canonCaseNumber(n));
   const filtered = filterGeneralHtmlByMine(generalHtml, mineSet);
-  const cases = casesInFragment(filtered).filter((n) => mineSet.has(n));
+  const cases = casesInFragment(filtered).filter((n) => mineSet.has(canonCaseNumber(n)));
   if (cases.length === 0) {
     return {
       html: generalHtml,
@@ -3537,17 +3531,15 @@ function buildMineHtml(generalHtml, ctx) {
 // Переключатель «★ Мой» в шапке блока дайджеста. Одна кнопка-toggle:
 // нажата — показываем mine-версию (только дела из watchlist + новые),
 // отжата — общий дайджест (как в Telegram). Перерисовывает тело без
-// перезагрузки. Принимает opts.persist=false для инициализации (когда не
-// нужно записывать выбор в localStorage).
-async function setDigestView(mode, opts) {
+// перезагрузки. Своего состояния не персистит: единственный источник
+// истины — filterMineActive (ключ filter_mine_v1, пишет setMineFilter);
+// _digestViewMode — производная от него проекция на вид дайджеста.
+async function setDigestView(mode) {
   const body = document.getElementById('digest-body');
   const titleEl = document.getElementById('digest-title');
   if (!body) return;
   const next = (mode === 'mine' && watchlist.size > 0) ? 'mine' : 'general';
   _digestViewMode = next;
-  if (!opts || opts.persist !== false) {
-    try { localStorage.setItem(DIGEST_VIEW_KEY, next); } catch (_) {}
-  }
   // Обновляем состояние всех кнопок-тогглов «★ Мои дела» (в шапке
   // дайджеста и в шапке «Ближайшие заседания»).
   const on = next === 'mine';
@@ -3608,36 +3600,26 @@ function escapeHtml(s) {
 }
 
 // Видимость тоггла «Общий ⇄ Мой» зависит от размера watchlist: при пустом
-// watchlist mine-режим не имеет смысла. Если watchlist опустел в режиме
-// «Мой» — откатываем на «Общий», но сохранённый выбор в localStorage не
-// перетираем: при появлении новой звёзды вернёмся обратно в mine. Если в
-// режиме «Мой» состав watchlist поменялся — пересобираем тело (mineSet
-// изменился). Вызываем при изменении watchlist (toggleWatch,
+// watchlist mine-режим не имеет смысла. Целевой режим считаем от
+// filterMineActive (единый источник истины): опустел watchlist — откат на
+// «Общий» (сам флаг сбрасывает toggleWatch); состав watchlist в режиме
+// «Мой» поменялся — пересобираем тело (mineSet изменился). До v98 здесь был
+// дефолт «Мой», из-за которого первая же звезда зажигала чип «★ Мои» без
+// фильтрации таблицы. Вызываем при изменении watchlist (toggleWatch,
 // reconcileWatchlistWithServer) и при загрузке дайджеста.
 function refreshDigestModeVisibility() {
   const visible = watchlist.size > 0;
   document.querySelectorAll('.mine-toggle-btn').forEach((el) => {
     el.hidden = !visible;
   });
-  if (!visible) {
-    if (_digestViewMode === 'mine') {
-      setDigestView('general', { persist: false });
-    }
-    return;
-  }
-  if (_digestViewMode === 'mine' && _digestGeneralHtml) {
-    setDigestView('mine', { persist: false });
-    return;
-  }
-  // Появилась первая звезда (или гидратация watchlist с сервера) — если
-  // последний явный выбор юриста был «Мой» (или ничего не сохранено —
-  // дефолт «Мой» при наличии подписок), переключаемся на mine. Если он
-  // явно выбрал «Общий» при наличии звёзд — выбор уважается.
-  let saved = null;
-  try { saved = localStorage.getItem(DIGEST_VIEW_KEY); } catch (_) {}
-  const want = (saved === 'general') ? 'general' : 'mine';
-  if (want === 'mine' && _digestViewMode !== 'mine' && _digestGeneralHtml) {
-    setDigestView('mine', { persist: false });
+  const want = (visible && filterMineActive) ? 'mine' : 'general';
+  if (_digestViewMode !== want) {
+    // Смена режима: в 'mine' переключаемся только при загруженном общем
+    // HTML (иначе нечего фильтровать), в 'general' — безусловно.
+    if (want === 'general' || _digestGeneralHtml) setDigestView(want);
+  } else if (want === 'mine' && _digestGeneralHtml) {
+    // Режим не сменился, но состав watchlist мог — пересобираем mine-тело.
+    setDigestView('mine');
   }
 }
 window.refreshDigestModeVisibility = refreshDigestModeVisibility;
