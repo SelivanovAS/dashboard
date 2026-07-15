@@ -45,12 +45,15 @@ function isCassationStage(c){
 }
 function courtLabel(c){
   if(isCassationStage(c))return 'Седьмой КСОЮ';
-  if(isAppealStage(c))return 'Суд ХМАО-Югры';
+  // Имя апел-суда — из данных (appeal.court): в регионе их может быть
+  // несколько (Свердловский облсуд + Суд ЯНАО). ХМАО-фолбэк — для записей
+  // без поля (до миграции court_domain).
+  if(isAppealStage(c))return shortCourt(c.appealCourt||'')||'Суд ХМАО-Югры';
   return shortCourt(c.firstInstanceCourt||'');
 }
 function courtTitle(c){
   if(isCassationStage(c))return 'Седьмой кассационный суд общей юрисдикции';
-  if(isAppealStage(c))return 'Суд Ханты-Мансийского автономного округа - Югры';
+  if(isAppealStage(c))return c.appealCourt||'Суд Ханты-Мансийского автономного округа - Югры';
   return c.firstInstanceCourt||'';
 }
 function cleanEvent(s){
@@ -501,12 +504,14 @@ function jsonToCase(j){
   // форму номера, чтобы не «осиротеть» при смене caseNumber.
   const caseNumber=isCass?cs.case_number:(isAppeal?ap.case_number:j.id);
   // Link — кассация уезжает на 7kas (delo_id=2800001, new=2800001 — отдельная
-  // ветка API КСОЮ); апелляция — на oblsud-домен; первая инстанция — на свой.
+  // ветка API КСОЮ); апелляция — на суд из appeal.court_domain (в регионе их
+  // может быть несколько: Свердловский облсуд + Суд ЯНАО; ХМАО-домен —
+  // fallback для записей до миграции); первая инстанция — на свой.
   let link='';
   if(isCass){
     link=buildCourtLink(cs.link,'7kas.sudrf.ru',2800001,1,2800001);
   }else if(isAppeal){
-    link=buildCourtLink(ap.link,'oblsud--hmao.sudrf.ru',5);
+    link=buildCourtLink(ap.link,ap.court_domain||'oblsud--hmao.sudrf.ru',ap.delo_id||5);
   }else{
     link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id||1540005,fi.srv_num||1);
   }
@@ -707,6 +712,7 @@ function jsonToCase(j){
     category:(j.category||'').split('→').pop().trim(),
     firstInstanceCourt:fi.court||'',
     firstInstanceJudge:fi.judge||'',
+    appealCourt:ap.court||'',
     appellateJudge:ap.judge_reporter||'',
     sberbankRole:ROLE_MAP[roleLow]||roleLow||'defendant',
     status:baseStatus,

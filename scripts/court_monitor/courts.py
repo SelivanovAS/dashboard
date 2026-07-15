@@ -114,13 +114,35 @@ CARD_URL_TPL = (
 # поэтому служит надёжным мостом для связки апелляции с кассацией на 7kas.
 JUDICIAL_UID_RE = re.compile(r"\d{2}[A-ZА-Я]{2}\d{4}-\d{2}-\d{4}-\d+-\d{2}")
 
+def appeal_court_by_domain(domain: str | None) -> CourtConfig:
+    """CourtConfig апелляции по домену из `appeal.court_domain`.
+
+    Пустой/неизвестный домен → первый апел-суд региона: совместимость с
+    записями эпохи единственной апелляции (до миграции court_domain) и с
+    CSV-строками, у которых домена нет. У ХМАО апел-суд один — поведение
+    прежнее байт-в-байт.
+    """
+    d = (domain or "").strip()
+    if d:
+        for ac in APPEAL_COURTS:
+            if ac.domain == d:
+                return ac
+    return APPEAL_COURTS[0]
+
+
 def case_card_url(case: dict, court: CourtConfig | None = None) -> str:
-    """Построить полный URL карточки дела."""
+    """Построить полный URL карточки дела (CSV-строка апелляции).
+
+    Без явного `court` суд берётся из сервисного ключа строки
+    `_appeal_domain` (проставляется поиском апелляции в main_json; в CSV не
+    пишется — save_csv игнорирует лишние ключи), а при его отсутствии —
+    первый апел-суд региона (legacy-поведение единственной апелляции).
+    """
     cid, cuid = case_id_uid(case.get("Ссылка", ""))
     if cid and cuid:
-        if court:
-            return court.card_url(cid, cuid)
-        return CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
+        if court is None:
+            court = appeal_court_by_domain(case.get("_appeal_domain"))
+        return court.card_url(cid, cuid)
     return ""
 
 

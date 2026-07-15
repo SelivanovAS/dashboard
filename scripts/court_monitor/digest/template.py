@@ -1323,13 +1323,18 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     elif re.match(r'^\d{1,2}:\d{2}$', ps) and not ht:
                         ht = escape_html(ps)
             hp = _fmt_hearing_dt(hd, ht)
-            # Строка 1: «номер — стороны | категория» (суд не показываем —
-            # для апелляции это всегда Суд ХМАО-Югры).
+            # Строка 1: «номер — стороны | категория». Суд показываем только
+            # когда в регионе НЕСКОЛЬКО апел-судов (details["appeal_court"]
+            # пишет runs.py лишь при len(APPEAL_COURTS)>1; у ХМАО суд один —
+            # ключа нет, рендер прежний байт-в-байт).
+            ap_court_note = escape_html(d.get("appeal_court", ""))
             line1 = link
             if plaintiff and defendant:
                 line1 += f" — {plaintiff} vs {defendant}"
             if cat:
                 line1 += f" | категория: {escape_html(cat)}"
+            if ap_court_note:
+                line1 += f" | {ap_court_note}"
             appeal_block.append(line1)
             # Строка 2: 🔁 отложено / 📅 назначено / 📌 текст события /
             # статус. Содержательное событие (исход, приостановление,
