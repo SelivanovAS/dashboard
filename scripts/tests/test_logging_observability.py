@@ -211,6 +211,70 @@ class TestFormatSlowCourts:
         assert "Урайск" not in out
 
 
+# ── строки-балансы очередей парсинга ─────────────────────────────────────────
+
+class TestQueueBalanceLines:
+    """Баланс одной строкой: «<субъект> N → парсим X (a; b)», X + слагаемые = N.
+
+    Формат введён 15.07.2026 после вопросов юриста «входят ли 18 в 39?» —
+    все группы очереди теперь видны в одной строке, нулевые не печатаются.
+    """
+
+    # Мини-якорь KEY_RE из ops/mac-local-run/progress_pusher.py: строка-баланс
+    # должна содержать триггер, иначе выпадет из вех «🛰 Парсинг» админки.
+    PUSHER_KEY_ANCHOR = re.compile(r"Апелляция: |1 инст: |Кассац|7kas")
+
+    def test_no_parts_no_parens(self):
+        out = cm_runs._format_queue_balance("Апелляция: активных дел", 5, 5, [])
+        assert out == "Апелляция: активных дел 5 → парсим 5"
+
+    def test_parts_joined_semicolon(self):
+        out = cm_runs._format_queue_balance(
+            "1 инст: дел со стадией 1-й инстанции", 109, 70,
+            ["20 отложено — заседание в будущем",
+             "19 «третье лицо» не парсим — ждём кассацию на 7kas"],
+        )
+        assert out == (
+            "1 инст: дел со стадией 1-й инстанции 109 → парсим 70 "
+            "(20 отложено — заседание в будущем; "
+            "19 «третье лицо» не парсим — ждём кассацию на 7kas)"
+        )
+        assert self.PUSHER_KEY_ANCHOR.search(out)
+
+    def test_appeal_balance_arithmetic(self, monkeypatch, caplog):
+        # 3 активных дела: 1 парсим + 1 отложено (будущее заседание)
+        # + 1 уже прошло апелляцию (skip_apel_nums) = 3.
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "fetch_page", lambda *a, **k: "")
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: set())
+        # Без этого тест перезапишет боевой data/.digested_acts —
+        # update_active_cases сохраняет дедуп-набор в конце прогона.
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(
+            cm_runs, "should_skip_case",
+            lambda shim, today, **kw: (
+                (True, "future_hearing_31.12.2099")
+                if (shim.get("appeal") or {}).get("_skip") else (False, "")
+            ),
+        )
+        cases = [
+            {"Номер дела": "33-1/2026", "Ссылка": ""},
+            {"Номер дела": "33-2/2026", "Ссылка": ""},
+            {"Номер дела": "33-3/2026", "Ссылка": ""},
+        ]
+        with caplog.at_level(logging.INFO, logger="court-monitor"):
+            cm_runs.update_active_cases(
+                cases,
+                json_appeal_by_num={"33-2/2026": {"_skip": True}},
+                skip_apel_nums={"33-3/2026"},
+            )
+        assert (
+            "Апелляция: активных дел 3 → парсим 1 "
+            "(1 отложено — заседание в будущем; "
+            "1 не парсим — апелляция уже пройдена)"
+        ) in caplog.text
+
+
 # ── log_run_summary: опциональные строки ─────────────────────────────────────
 
 class TestRunSummaryOptionalLines:
