@@ -36,6 +36,13 @@ class CourtConfig:
     srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
     source: str = "sudrf"  # "sudrf" (скрейп) | "casebook" (API-адаптер). Дискриминатор
                            # диспетчера в runs.py; sudrf-URL-методы на не-sudrf падают (M3).
+    # Переопределения URL-параметров для судов, чьи значения отличаются от
+    # дефолтов типа (None → дефолт по court_type). Нужны для кассаций вне
+    # 7-го КСОЮ (напр. 6kas у Башкирии): их delo_table/new подбираются
+    # эмпирически так же, как когда-то для 7kas.
+    delo_table: str | None = None
+    name_field: str | None = None
+    new_param: int | None = None
 
     @property
     def base_url(self) -> str:
@@ -43,9 +50,11 @@ class CourtConfig:
 
     @property
     def _delo_table(self) -> str:
-        if self.delo_id == 5:
+        if self.delo_table is not None:
+            return self.delo_table
+        if self.court_type == "appeal":
             return "g2_case"
-        if self.delo_id == 2800001:
+        if self.court_type == "cassation":
             # 7kas.sudrf.ru, гражданская кассация. Эмпирически найдено в форме
             # поиска (name_op=sf): таблица называется g33_case, не ka1_case.
             return "g33_case"
@@ -54,21 +63,24 @@ class CourtConfig:
     @property
     def _name_field(self) -> str:
         """Имя поля для фильтрации по стороне (зависит от типа суда)."""
-        if self.delo_id == 5:
+        if self.name_field is not None:
+            return self.name_field
+        if self.court_type == "appeal":
             return "G2_PARTS__NAMESS"
-        if self.delo_id == 2800001:
+        if self.court_type == "cassation":
             return "G33_PARTS__NAMESS"
         return "G1_PARTS__NAMESS"
 
     @property
     def _new_param(self) -> int:
-        """Параметр &new= : 5 для апелляции, 0 для 1 инст., 2800001 для касс.
-        (для кассации значение совпадает с delo_id — нестандарт, но эмпирически
-        проверено: при new=0 поиск возвращает «Данных по запросу не обнаружено»)."""
-        if self.delo_id == 5:
-            return 5
-        if self.delo_id == 2800001:
-            return 2800001
+        """Параметр &new= : 0 для 1-й инст.; для апелляции и кассации совпадает
+        с delo_id (эмпирика по обоим известным судам: Суд ХМАО 5/5, 7kas
+        2800001/2800001; при new=0 кассационный поиск возвращает «Данных по
+        запросу не обнаружено»)."""
+        if self.new_param is not None:
+            return self.new_param
+        if self.court_type in ("appeal", "cassation"):
+            return self.delo_id
         return 0
 
     def _require_sudrf(self, method: str) -> None:
