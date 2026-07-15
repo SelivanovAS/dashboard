@@ -48,6 +48,17 @@ function isCassationStage(c){
 function regionCassation(){
   return (window.REGION_INFO&&window.REGION_INFO.cassation)||null;
 }
+// Бейдж региона в шапке: чей это дашборд («ХМАО-Югра», «ЕКБ + ЯНАО»).
+// Приоритет: блок region из cases.json → REGION_FRONT.REGION_LABEL (файл
+// территории — данные свежего форка ещё пусты) → ХМАО (легаси-данные).
+function updateRegionBadge(){
+  const el=document.getElementById('header-region');
+  if(!el)return;
+  const ri=window.REGION_INFO;
+  const rf=window.REGION_FRONT||{};
+  el.textContent=(ri&&(ri.name_short||ri.name))||rf.REGION_LABEL||'ХМАО-Югра';
+  el.title=(ri&&ri.name)||'';
+}
 function courtLabel(c){
   if(isCassationStage(c)){
     const ks=regionCassation();
@@ -955,8 +966,9 @@ async function fetchJsonCases(url){
   const r=await fetchWithTimeout(url,FETCH_TIMEOUT_MS);
   const data=await r.json();
   // Блок region пишет бэкенд только в основной cases.json (не в архив):
-  // из него строятся подписи судов и ссылки апелляции/кассации территории.
-  if(data.region)window.REGION_INFO=data.region;
+  // из него строятся подписи судов, ссылки апелляции/кассации и бейдж
+  // региона в шапке.
+  if(data.region){window.REGION_INFO=data.region;updateRegionBadge();}
   const cases=data.cases||[];
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
@@ -2619,6 +2631,10 @@ const VAPID_PUBLIC_KEY = _RF.VAPID_PUBLIC_KEY || 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhF
 const PUSH_WORKER_URL = ('PUSH_WORKER_URL' in _RF)
   ? (_RF.PUSH_WORKER_URL || '')
   : 'https://court-monitor-trigger.7selivanov-a.workers.dev';
+
+// Бейдж региона — сразу при загрузке (по REGION_FRONT/фолбэку), не дожидаясь
+// cases.json: у свежего форка данные пусты, а регион в шапке уже нужен.
+updateRegionBadge();
 
 // ── Watchlist: персональный набор отслеживаемых дел ────────────────────────
 // Хранится локально (Set в памяти + localStorage) и синхронизируется с

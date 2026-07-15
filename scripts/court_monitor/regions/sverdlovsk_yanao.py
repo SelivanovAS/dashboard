@@ -76,6 +76,7 @@ REGION = RegionConfig(
         ("суд ямало-ненецкого автономного округа", "oblsud--ynao.sudrf.ru"),
     ),
     name_gen="Свердловской области и ЯНАО",
+    name_short="ЕКБ + ЯНАО",
     fi_suspect_regex="Ямало-Ненецк|ЯНАО",
     # URL дашборда территории; при создании форка перекрывается Actions
     # Variable DASHBOARD_URL (имя репозитория может отличаться).

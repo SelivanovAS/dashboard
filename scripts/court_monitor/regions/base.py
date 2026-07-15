@@ -167,6 +167,9 @@ class RegionConfig:
     # Родительный падеж имени региона для текстов («дела судов {name_gen}»);
     # пусто → используется name как есть.
     name_gen: str = ""
+    # Короткое имя для бейджа в шапке дашборда («ХМАО-Югра», «ЕКБ + ЯНАО»);
+    # пусто → name.
+    name_short: str = ""
     # Regex «суд ПОХОЖ на наш регион, но не сматчился с реестром» — для
     # WARNING-строки в разборе выдачи КСОЮ (ловит рассинхрон названий, класс
     # бага «Берёзовский» ё/е). Шире fi_region_markers: включает словоформы.
@@ -191,6 +194,7 @@ class RegionConfig:
         return {
             "code": self.code,
             "name": self.name,
+            "name_short": self.name_short or self.name,
             "digest_title": self.digest_title,
             "appeal_courts": [
                 {"name": c.name, "domain": c.domain, "delo_id": c.delo_id}

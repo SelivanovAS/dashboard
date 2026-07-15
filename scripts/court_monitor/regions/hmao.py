@@ -71,6 +71,7 @@ REGION = RegionConfig(
         ("суд ханты-мансийского автономного округа", "oblsud--hmao.sudrf.ru"),
     ),
     name_gen="ХМАО-Югры",
+    name_short="ХМАО-Югра",
     fi_suspect_regex="Ханты-Манс|Югор|Югр|ХМАО",
     dashboard_url="https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
     tz_offset_hours=5,
