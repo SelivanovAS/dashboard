@@ -2613,7 +2613,12 @@ const VAPID_PUBLIC_KEY = _RF.VAPID_PUBLIC_KEY || 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhF
 
 // URL Cloudflare Worker — задаётся после деплоя.
 // Формат: https://court-monitor-trigger.<аккаунт>.workers.dev
-const PUSH_WORKER_URL = _RF.PUSH_WORKER_URL || 'https://court-monitor-trigger.7selivanov-a.workers.dev';
+// Если region_front.js задаёт ПУСТОЙ PUSH_WORKER_URL — push у территории
+// сознательно отключён (Worker ещё не создан): нельзя фолбэчить на ХМАО-Worker,
+// иначе подписчики форка перемешаются с ХМАО-подписками в чужом KV.
+const PUSH_WORKER_URL = ('PUSH_WORKER_URL' in _RF)
+  ? (_RF.PUSH_WORKER_URL || '')
+  : 'https://court-monitor-trigger.7selivanov-a.workers.dev';
 
 // ── Watchlist: персональный набор отслеживаемых дел ────────────────────────
 // Хранится локально (Set в памяти + localStorage) и синхронизируется с
@@ -2832,6 +2837,7 @@ function scheduleWatchlistSync() {
 
 async function syncWatchlistToWorker() {
   watchlistSyncTimer = null;
+  if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -2956,6 +2962,7 @@ function urlBase64ToUint8(b64) {
 const OWNER_SECRET_KEY = 'owner_secret';
 
 async function markAsOwner(reg) {
+  if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
   // Помечает текущую подписку как «владельческую» — тестовые пуши
   // (digest_only / force_postponement) полетят только сюда.
   // Источники секрета (приоритет сверху вниз):
@@ -3019,6 +3026,7 @@ async function markAsOwner(reg) {
 }
 
 async function subscribeToPush(reg) {
+  if (!PUSH_WORKER_URL) return false; // push у территории отключён (нет Worker'а)
   // Подписка ВСЕГДА после клика пользователя — иначе iOS глушит запрос разрешения.
   try {
     const perm = await Notification.requestPermission();
@@ -3073,6 +3081,7 @@ function injectPushButton(reg) {
 }
 
 async function setupPushNotifications(reg) {
+  if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
   if (!('PushManager' in window)) return; // Safari < 16.4
   if (Notification.permission === 'denied') return;
 
