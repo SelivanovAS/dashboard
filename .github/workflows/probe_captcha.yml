@@ -22,6 +22,10 @@ on:
         description: "delo_id (1540005 = 1-я инст. гражданская)"
         required: false
         default: "1540005"
+      card_seed:
+        description: "сид cid|cuid из ручной разгадки (пусто = обычный вердикт A/B/C)"
+        required: false
+        default: ""
 
 jobs:
   probe:
@@ -41,6 +45,7 @@ jobs:
             "https://$host/" || echo "  curl ВЕРНУЛ ОШИБКУ (код 000 = TLS/таймаут — вероятен блок IP)"
 
       - name: Python — проба проверочного кода (вердикт A/B/C)
+        if: github.event.inputs.card_seed == ''
         run: |
           python3 -m pip install --quiet requests
           python3 scripts/probe_captcha.py \
@@ -50,3 +55,16 @@ jobs:
           echo ">>> A — код только на форме, парсер уже работает: добавляем суд как есть."
           echo ">>> B — помогает приминг сессии: включаем session priming (вар. 2)."
           echo ">>> C — код реально нужен: только ввод человеком (вар. 3), автоматом НЕ обходим."
+
+      - name: Python — проба карточки (гейтит ли name_op=case)
+        if: github.event.inputs.card_seed != ''
+        run: |
+          python3 -m pip install --quiet requests
+          python3 scripts/probe_captcha.py \
+            --domain "${{ github.event.inputs.domain }}" \
+            --delo-id "${{ github.event.inputs.delo_id }}" \
+            --card "${{ github.event.inputs.card_seed }}"
+          echo
+          echo ">>> открыта      — карточка отдаётся без кода: жива модель «разгадать 1 раз → мониторить карточки»."
+          echo ">>> ЗАКРЫТА кодом — карточка под капчей: модель не работает, остаётся детект+алерт / легитимный канал."
+          echo ">>> НЕОДНОЗНАЧНО  — не код, но и не карточка: сверь сид/суд, сохрани --dump, сравни RU-IP vs US-IP."
