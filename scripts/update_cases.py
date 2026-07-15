@@ -66,6 +66,7 @@ from court_monitor.netutil import (  # noqa: F401 — ре-экспорт для
 from court_monitor.courts import (  # noqa: F401 — ре-экспорт для совместимости
     SBER_NAME_WIN1251, CourtConfig, APPEAL_COURT, FIRST_INSTANCE_COURTS,
     CASSATION_COURT, _eyo, match_hmao_first_instance,
+    match_region_first_instance, appeal_court_by_domain, APPEAL_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL, JUDICIAL_UID_RE,
     case_card_url, _FI_COURTS_BY_DOMAIN, fi_card_url, case_link_html,
 )
