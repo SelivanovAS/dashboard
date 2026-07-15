@@ -15,8 +15,19 @@ const HOLIDAYS_2026 = new Set([
   "12-31", // перенос с 04.01 (вс)
 ]);
 
+// ── Пер-инстансные настройки (форк территории меняет ТОЛЬКО wrangler.toml) ──
+// Значения берутся из [vars] wrangler.toml (env), фолбэки — боевые значения
+// ХМАО-инстанса: воркер работает и до деплоя с vars. env недоступен на уровне
+// модуля (только в хендлерах), поэтому fetch/scheduled кладут его в RUNTIME_ENV.
+let RUNTIME_ENV = {};
+function cfgVar(name, fallback) {
+  const v = RUNTIME_ENV && RUNTIME_ENV[name];
+  return (v === undefined || v === null || v === "") ? fallback : v;
+}
+
 // GitHub Pages URL для CORS
-const ALLOWED_ORIGIN = "https://selivanovas.github.io";
+const ALLOWED_ORIGIN_DEFAULT = "https://selivanovas.github.io";
+function allowedOrigin() { return cfgVar("ALLOWED_ORIGIN", ALLOWED_ORIGIN_DEFAULT); }
 
 function isHoliday(date) {
   // Второй щит: суббота/воскресенье — нерабочие дни. Защищает от сюрпризов
@@ -34,7 +45,7 @@ function isHoliday(date) {
 }
 
 function corsHeaders(origin) {
-  const allowed = origin === ALLOWED_ORIGIN || origin === "http://localhost:8081";
+  const allowed = origin === allowedOrigin() || origin === "http://localhost:8081";
   return {
     "Access-Control-Allow-Origin": allowed ? origin : "",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -56,7 +67,8 @@ function endpointToKey(endpoint) {
 // alias-карту от текущего cases.json. ★ на апел./касс./hybrid → канон. FI-ID.
 // Идея зеркальная Этапу 4a (Python) и Этапу 1 (inline-JS админки).
 
-const CASES_DATA_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
+const CASES_DATA_URL_DEFAULT = "https://selivanovas.github.io/dashboard/data/cases.json";
+function casesDataUrl() { return cfgVar("CASES_DATA_URL", CASES_DATA_URL_DEFAULT); }
 
 function wnBareCaseNumber(n) {
   return String(n || "").trim().split(/[\s(]/)[0];
@@ -95,7 +107,7 @@ function wnBuildAliasToCanonical(cases) {
 // пропускается и в KV ложится то, что отправил клиент.
 async function getAliasMapCached() {
   try {
-    const r = await fetch(CASES_DATA_URL, {
+    const r = await fetch(casesDataUrl(), {
       cf: { cacheTtl: 300, cacheEverything: true },
     });
     if (!r.ok) return null;
@@ -685,7 +697,9 @@ async function handleAdminTestPush(request, env) {
 
 // ── Прогоны GitHub Actions для админки ──────────────────────────────────────
 
-const GH_REPO_API = "https://api.github.com/repos/SelivanovAS/dashboard";
+// Репозиторий инстанса (форк задаёт GH_REPO в [vars] wrangler.toml).
+const GH_REPO_DEFAULT = "SelivanovAS/dashboard";
+function ghRepoApi() { return "https://api.github.com/repos/" + cfgVar("GH_REPO", GH_REPO_DEFAULT); }
 
 // Ближайший запуск cron'а Worker'а (45 3 * * mon-fri UTC) с учётом праздников
 // РФ — зеркалит scheduled(): день оценивается по МСК (UTC+3).
@@ -733,8 +747,8 @@ async function handleAdminGhRuns(request, env) {
     // «Тесты+Pages» от частых пушей вытесняют его из первых 20 runs, а
     // плитке «Последний прогон» нужен именно он.
     const [r, rMain] = await Promise.all([
-      fetch(GH_REPO_API + "/actions/runs?per_page=20", { headers: ghHeaders }),
-      fetch(GH_REPO_API + "/actions/workflows/update_cases.yml/runs?per_page=1", { headers: ghHeaders })
+      fetch(ghRepoApi() + "/actions/runs?per_page=20", { headers: ghHeaders }),
+      fetch(ghRepoApi() + "/actions/workflows/update_cases.yml/runs?per_page=1", { headers: ghHeaders })
         .catch(() => null),
     ]);
     if (!r.ok) {
@@ -823,7 +837,7 @@ async function handleAdminDispatch(request, env) {
   }
   try {
     const r = await fetch(
-      `${GH_REPO_API}/actions/workflows/${workflow}/dispatches`,
+      `${ghRepoApi()}/actions/workflows/${workflow}/dispatches`,
       {
         method: "POST",
         headers: {
@@ -857,6 +871,7 @@ async function handleAdminDispatch(request, env) {
 export default {
   // ── Cron-триггер: запуск GitHub Actions ─────────────────────────────────
   async scheduled(event, env) {
+    RUNTIME_ENV = env; // [vars] wrangler.toml → cfgVar()
     // Текущая дата по МСК (UTC+3)
     const now = new Date(Date.now() + 3 * 3600 * 1000);
 
@@ -866,7 +881,7 @@ export default {
     }
 
     const response = await fetch(
-      "https://api.github.com/repos/SelivanovAS/dashboard/actions/workflows/update_cases.yml/dispatches",
+      ghRepoApi() + "/actions/workflows/update_cases.yml/dispatches",
       {
         method: "POST",
         headers: {
@@ -899,6 +914,7 @@ export default {
 
   // ── HTTP-обработчик: управление push-подписками ──────────────────────────
   async fetch(request, env) {
+    RUNTIME_ENV = env; // [vars] wrangler.toml → cfgVar()
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
 

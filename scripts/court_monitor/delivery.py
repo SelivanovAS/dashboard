@@ -574,7 +574,7 @@ def send_web_push(
                     subscription_info=sub,
                     data=payload,
                     vapid_private_key=vapid,
-                    vapid_claims={"sub": "mailto:7selivanov.a@gmail.com"},
+                    vapid_claims={"sub": config.VAPID_SUB_EMAIL},
                     ttl=43200,  # 12 часов: push-сервис держит сообщение,
                                 # пока устройство не выйдет в сеть
                 )

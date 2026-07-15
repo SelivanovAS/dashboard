@@ -184,6 +184,26 @@ class RegionConfig:
             return self.first_instance_courts[0].delo_id
         return 1540005
 
+    def public_info(self) -> dict:
+        """Публичный блок `region` для cases.json — фронт строит из него
+        подписи судов и ссылки (courtLabel/buildCourtLink) вместо констант.
+        Только то, что нужно app.js: без маркеров матчера и health-ключей."""
+        return {
+            "code": self.code,
+            "name": self.name,
+            "digest_title": self.digest_title,
+            "appeal_courts": [
+                {"name": c.name, "domain": c.domain, "delo_id": c.delo_id}
+                for c in self.appeal_courts
+            ],
+            "cassation": {
+                "name": self.cassation_court.name,
+                "domain": self.cassation_court.domain,
+                "delo_id": self.cassation_court.delo_id,
+                "new": self.cassation_court._new_param,
+            },
+        }
+
     def health_cassation_keys(self) -> tuple[str, str]:
         """Ключи журнала здоровья кассации: (вся выдача, после регион-фильтра).
 

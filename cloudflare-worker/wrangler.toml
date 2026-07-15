@@ -13,6 +13,16 @@ compatibility_date = "2024-01-01"
 # Выключить автозапуск обратно — вернуть `crons = []` и `wrangler deploy`.
 crons = ["45 3 * * mon-fri"]
 
+# ── Пер-инстансные настройки территории ─────────────────────────────────────
+# Форк территории меняет ТОЛЬКО этот файл: name воркера, значения [vars],
+# id KV namespace и сдвиг крона (не бить sudrf одновременно с ХМАО-инстансом).
+# Пустое/отсутствующее значение → worker.js использует фолбэк ХМАО-инстанса
+# (см. cfgVar), поэтому существующий деплой работает и без [vars].
+[vars]
+ALLOWED_ORIGIN = "https://selivanovas.github.io"
+CASES_DATA_URL = "https://selivanovas.github.io/dashboard/data/cases.json"
+GH_REPO = "SelivanovAS/dashboard"
+
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS
 # Вставить полученный id в поле id ниже, затем wrangler deploy.

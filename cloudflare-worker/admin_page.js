@@ -1158,7 +1158,10 @@ async function loadHealth() {
     const sources = d.sources || {};
     const items = Object.keys(sources).map(function (k) {
       const s = sources[k] || {};
-      return { key: k, s: s, level: healthLevel(s), name: COURT_NAMES[k] || k };
+      // Имя источника — из самого журнала (label пишет health.py с 15.07.2026);
+      // COURT_NAMES — фолбэк для записей до появления label (удалить, когда
+      // все источники обзаведутся label после пары прогонов).
+      return { key: k, s: s, level: healthLevel(s), name: s.label || COURT_NAMES[k] || k };
     });
     if (!items.length) {
       listEl.className = "";
