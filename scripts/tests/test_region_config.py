@@ -140,6 +140,73 @@ class TestMatchRegionFirstInstance:
         assert got is not None and got.name == "Урайский городской суд"
 
 
+class TestSverdlovskYanaoRegion:
+    """Регион этапа 1: 12 судов ЯНАО + ДВА апел-суда (Свердловский облсуд +
+    Суд ЯНАО), кассация — тот же 7-й КСОЮ."""
+
+    def test_loads_with_two_appeal_courts(self):
+        r = get_region("sverdlovsk_yanao")
+        assert [c.domain for c in r.appeal_courts] == [
+            "oblsud--svd.sudrf.ru", "oblsud--ynao.sudrf.ru",
+        ]
+        assert len(r.first_instance_courts) == 12
+        assert r.cassation_court.domain == "7kas.sudrf.ru"
+        assert r.health_cassation_keys() == (
+            "cassation:7kas:total", "cassation:7kas:sverdlovsk_yanao",
+        )
+
+    def test_ynao_fi_court_matches(self):
+        r = get_region("sverdlovsk_yanao")
+        got = uc.match_region_first_instance(
+            "Пуровский районный суд Ямало-Ненецкого автономного округа", r
+        )
+        assert got is not None and got.domain == "purovsky--ynao.sudrf.ru"
+
+    def test_appeal_courts_as_first_instance(self):
+        """Облсуд/окружной суд как 1-я инстанция → соответствующий апел-суд."""
+        r = get_region("sverdlovsk_yanao")
+        got_svd = uc.match_region_first_instance("Свердловский областной суд", r)
+        got_ynao = uc.match_region_first_instance(
+            "Суд Ямало-Ненецкого автономного округа", r
+        )
+        assert got_svd is not None and got_svd.domain == "oblsud--svd.sudrf.ru"
+        assert got_ynao is not None and got_ynao.domain == "oblsud--ynao.sudrf.ru"
+
+    def test_sverdlovsk_district_not_matched_yet(self):
+        """Свердловские районные суды ещё НЕ в реестре (капча на поиске) —
+        их дела с 7kas не матчатся, пока не добавим суды + маркеры."""
+        r = get_region("sverdlovsk_yanao")
+        assert uc.match_region_first_instance(
+            "Октябрьский районный суд г. Екатеринбурга Свердловской области", r
+        ) is None
+
+    def test_cross_region_matrix(self):
+        """Матрица «длинное имя → ровно один регион»: реестры ХМАО и
+        Свердловск+ЯНАО не перехватывают чужие суды (одноимённые районные
+        есть в обоих субъектах)."""
+        hmao = get_region("hmao")
+        svd = get_region("sverdlovsk_yanao")
+        cases = {
+            "Октябрьский районный суд Ханты-Мансийского автономного округа-Югры":
+                ("hmao", "oktb--hmao.sudrf.ru"),
+            "Салехардский городской суд Ямало-Ненецкого автономного округа":
+                ("sverdlovsk_yanao", "salehardsky--ynao.sudrf.ru"),
+            "Суд Ханты-Мансийского автономного округа - Югры":
+                ("hmao", "oblsud--hmao.sudrf.ru"),
+            "Суд Ямало-Ненецкого автономного округа":
+                ("sverdlovsk_yanao", "oblsud--ynao.sudrf.ru"),
+        }
+        for long_name, (owner, domain) in cases.items():
+            got_h = uc.match_region_first_instance(long_name, hmao)
+            got_s = uc.match_region_first_instance(long_name, svd)
+            if owner == "hmao":
+                assert got_h is not None and got_h.domain == domain, long_name
+                assert got_s is None, f"svd_yanao перехватил: {long_name}"
+            else:
+                assert got_s is not None and got_s.domain == domain, long_name
+                assert got_h is None, f"hmao перехватил: {long_name}"
+
+
 class TestDigestHeaderFromRegion:
     # Пустой контекст уводит рендер в путь «изменений не было» (другой
     # заголовок + подклейка прошлого дайджеста из data/last_digest.json) —
