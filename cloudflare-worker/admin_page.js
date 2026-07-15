@@ -648,6 +648,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
               <option value="GigaChat-2-Pro" selected>GigaChat-2-Pro</option>
               <option value="GigaChat-2">GigaChat-2</option>
               <option value="GigaChat-2-Max">GigaChat-2-Max</option>
+              <option value="GigaChat-3-Ultra">GigaChat-3-Ultra (freemium)</option>
             </select>
           </label>
           <label id="tf-or-wrap" style="display:none;">Модель

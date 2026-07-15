@@ -260,6 +260,18 @@ def _drop_empty_count_sections(text: str) -> str:
     return "\n".join(cleaned)
 
 
+def _gigachat_api_url() -> str:
+    """URL chat/completions под текущую модель GigaChat.
+
+    Модели 3-го поколения (GigaChat-3-Ultra) доступны только на базовом
+    адресе api.giga.chat; остальные — на gigachat.devices.sberbank.ru.
+    Токен OAuth общий (ngw.devices.sberbank.ru, scope GIGACHAT_API_PERS).
+    """
+    if config.GIGACHAT_MODEL.strip().lower().startswith("gigachat-3"):
+        return config.GIGACHAT_V3_API_URL
+    return config.GIGACHAT_API_URL
+
+
 def _call_gigachat(prompt: str) -> str | None:
     """Отправить prompt в GigaChat, вернуть HTML-текст дайджеста.
 
@@ -273,7 +285,7 @@ def _call_gigachat(prompt: str) -> str | None:
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         r = requests.post(
-            config.GIGACHAT_API_URL,
+            _gigachat_api_url(),
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -662,7 +674,7 @@ def _call_gigachat_simple(prompt: str) -> str | None:
         import urllib3  # noqa: PLC0415
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         r = requests.post(
-            config.GIGACHAT_API_URL,
+            _gigachat_api_url(),
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -1152,7 +1164,7 @@ def _call_gigachat_polish(system_prompt: str, user_prompt: str) -> str | None:
         import urllib3  # noqa: PLC0415
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         r = requests.post(
-            config.GIGACHAT_API_URL,
+            _gigachat_api_url(),
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",

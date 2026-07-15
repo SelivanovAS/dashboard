@@ -345,6 +345,26 @@ class ActCacheKeyNamespaceTest(_OpenRouterTestBase):
         self.assertEqual(len(keys), 4, f"коллизия ключей: {keys}")
 
 
+class GigachatApiUrlTest(_OpenRouterTestBase):
+    """Выбор базового адреса GigaChat по модели: 3-е поколение
+    (GigaChat-3-Ultra) живёт на api.giga.chat, остальные — на
+    стандартном gigachat.devices.sberbank.ru."""
+
+    def test_ultra_uses_v3_url(self):
+        with patch.object(cm_config, "GIGACHAT_MODEL", "GigaChat-3-Ultra"):
+            self.assertEqual(
+                cm_llm._gigachat_api_url(), cm_config.GIGACHAT_V3_API_URL
+            )
+
+    def test_gen2_and_default_use_standard_url(self):
+        for model in ("GigaChat", "GigaChat-2", "GigaChat-2-Pro",
+                      "GigaChat-2-Max"):
+            with patch.object(cm_config, "GIGACHAT_MODEL", model):
+                self.assertEqual(
+                    cm_llm._gigachat_api_url(), cm_config.GIGACHAT_API_URL
+                )
+
+
 class CurrentModelNameTest(_OpenRouterTestBase):
     def test_openrouter_label(self):
         with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
