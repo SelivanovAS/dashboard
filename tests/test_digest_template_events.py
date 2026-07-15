@@ -26,6 +26,7 @@ import re
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -36,6 +37,7 @@ import update_cases as uc  # noqa: E402
 # см. docs/Распил_монолита_контекст.md.
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.digest import postprocess as cm_post  # noqa: E402
+from court_monitor.digest import template as cm_template  # noqa: E402
 
 # Контракт фронта и attach_act_analyses: номер дела в <a ...><b>номер</b></a>.
 ANCHOR_RE = re.compile(r"<a[^>]*><b>([^<]+)</b></a>")
@@ -46,8 +48,31 @@ def anchors(html: str) -> list[str]:
     return ANCHOR_RE.findall(html)
 
 
+# «Сегодня» для рендера заморожено: живой datetime.now() попадает в шапку
+# дайджеста («Мониторинг дел … — ДД.ММ.ГГГГ») и рано или поздно совпадает с
+# фикстурной датой — 15.07.2026 assertNotIn("15.07.2026") ловил шапку вместо
+# старой даты заседания. Заодно фиксируется фильтр будущих заседаний
+# (scheduled_hearing_date >= сегодня в template.py) — без заморозки тест
+# про «25.08.2026» сам стал бы тыквой после этой даты. 24.06.2026 (среда)
+# в фикстурах не встречается и раньше всех фикстурных дат заседаний.
+FROZEN_TODAY = datetime(2026, 6, 24, 12, 0, 0)
+
+
+class _FrozenDatetime(datetime):
+    """datetime с фиксированным now(); остальные методы — родные."""
+
+    @classmethod
+    def now(cls, tz=None):  # template.py зовёт now() без tz
+        return FROZEN_TODAY
+
+
 def render(**overrides) -> str:
-    """generate_template_digest с пустыми дефолтами — единая точка вызова."""
+    """generate_template_digest с пустыми дефолтами — единая точка вызова.
+
+    Рендер идёт с замороженным «сегодня» (см. FROZEN_TODAY) — все тесты
+    файла обязаны звать render(), а не generate_template_digest напрямую,
+    иначе вернётся зависимость от календаря.
+    """
     kwargs = {
         "new_cases": [],
         "changes": [],
@@ -60,7 +85,8 @@ def render(**overrides) -> str:
         "total_active_cassation": 1,
     }
     kwargs.update(overrides)
-    return uc.generate_template_digest(**kwargs)
+    with patch.object(cm_template, "datetime", _FrozenDatetime):
+        return uc.generate_template_digest(**kwargs)
 
 
 # ── Фабрики: 1-я инстанция ───────────────────────────────────────────────────
