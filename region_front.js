@@ -7,4 +7,7 @@
 window.REGION_FRONT = {
   PUSH_WORKER_URL: 'https://court-monitor-trigger.7selivanov-a.workers.dev',
   VAPID_PUBLIC_KEY: 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU',
+  // Подпись региона в шапке до загрузки данных (данные перекрывают её
+  // значением name_short из блока region).
+  REGION_LABEL: 'ХМАО-Югра',
 };

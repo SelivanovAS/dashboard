@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=100">
+<link rel="stylesheet" href="styles.css?v=101">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -130,6 +130,9 @@
         </div>
         <div>
           <div class="header-title">Сбер Юрист</div>
+          <!-- Регион территории: заполняет app.js (updateRegionBadge) из блока
+               region в cases.json / REGION_FRONT.REGION_LABEL -->
+          <div class="header-sub header-region" id="header-region"></div>
         </div>
       </div>
       <div class="header-actions">
@@ -274,7 +277,7 @@
   </aside>
 </div>
 
-<script src="region_front.js?v=1"></script>
-<script src="app.js?v=100" defer></script>
+<script src="region_front.js?v=2"></script>
+<script src="app.js?v=101" defer></script>
 </body>
 </html>
