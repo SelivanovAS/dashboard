@@ -142,8 +142,18 @@ class TemplateDigestBaselineTest(unittest.TestCase):
 
 
 class EmptyContextTest(unittest.TestCase):
-    def test_empty_renders_quiet(self):
-        html = uc.generate_template_digest(
+    """Ветка «за день изменений не было» (render_no_changes_digest).
+
+    Тест обязан быть независим от data/last_digest.json: это файл ДАННЫХ, и в
+    форке территории там лежит её дайджест со своей ссылкой на дашборд. Раньше
+    тест читал его молча: в эталоне проходил случайно (ссылку давал приклеенный
+    ХМАО-дайджест, а не сама «тихая» ветка), а в форке Урала падал — conftest
+    прибивает тесты к hmao, и ХМАО-ссылка в уральском дайджесте не находилась.
+    Поэтому обе ветки проверяем на своей LAST_DIGEST_PATH.
+    """
+
+    def _render(self):
+        return uc.generate_template_digest(
             new_cases=[], changes=[],
             fi_new_cases=[], fi_changes=[],
             cass_changes=[], cass_discovered=[],
@@ -151,8 +161,34 @@ class EmptyContextTest(unittest.TestCase):
             total_active_fi=20,
             total_active_cassation=2,
         )
+
+    def test_empty_renders_quiet(self):
+        # Прошлого дайджеста нет → «тихая» ветка даёт СВОЮ ссылку на дашборд.
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = os.path.join(tmp, "last_digest.json")
+            with patch.object(cm_config, "LAST_DIGEST_PATH", missing):
+                html = self._render()
         self.assertIn("изменений не было", html)
-        self.assertIn(uc.DASHBOARD_URL, html)
+        self.assertIn(cm_config.DASHBOARD_URL, html)
+
+    def test_empty_attaches_previous_digest(self):
+        # Прошлый дайджест есть → приклеивается блоком «Предыдущий дайджест».
+        # Эту ветку раньше покрывал случайный вывод из data/last_digest.json.
+        prev = {
+            "generated_at": "2026-07-15T03:45:00",
+            "html": "<b>ПРОШЛЫЙ ДАЙДЖЕСТ</b>",
+            "is_empty": False,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "last_digest.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(prev, f, ensure_ascii=False)
+            with patch.object(cm_config, "LAST_DIGEST_PATH", path):
+                html = self._render()
+        self.assertIn("изменений не было", html)
+        self.assertIn("Предыдущий дайджест", html)
+        self.assertIn("15.07.2026", html)
+        self.assertIn("<b>ПРОШЛЫЙ ДАЙДЖЕСТ</b>", html)
 
 
 class FiNewCaseSyntheticTest(unittest.TestCase):
