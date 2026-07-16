@@ -25,17 +25,17 @@ function shortCourt(name){
   return String(name)
     .replace(/\s+городской\s+суд/i,' гор. суд')
     .replace(/\s+районный\s+суд/i,' р-ный суд')
+    .replace(/кассационный\s+суд\s+общей\s+юрисдикции/i,'КСОЮ')
     .replace(/Ханты-Мансийского\s+автономного\s+округа\s*-?\s*Югры/i,'ХМАО-Югры')
     .replace(/автономного\s+округа\s*-?\s*Югры/i,'АО-Югры');
 }
-// Дело привязано к апел. суду на всех пост-1-инст. стадиях:
-// appeal — рассматривается, cassation_watch / cassation_pending — апелляция
-// уже прошла, ждём кассацию, но фокус карточки всё ещё на Суде ХМАО-Югры,
-// а не на 1-й инстанции. Без этого карточка апел. дела показывала имя
-// 1-инст. суда без подписи, что путало пользователя.
+// Реквизиты какой инстанции показывать на карточке (суд, судья).
+// Не совпадает со стадией: в cassation_watch/cassation_pending апелляция
+// уже отработала и дело вернулось в 1-ю инстанцию — там оно физически
+// лежит и туда подаётся касс. жалоба (ст. 377 ГПК), её суд юристу и нужен.
+// Решение юриста 16.07.2026; прежде эти стадии подписывались облсудом.
 function isAppealStage(c){
-  const s=c.stage;
-  return s==='appeal'||s==='cassation_watch'||s==='cassation_pending';
+  return (c&&c.stage)==='appeal';
 }
 // На стадии cassation фокус карточки уезжает на 7kas (Седьмой КСОЮ):
 // номер дела — 8Г-XXX, ссылка — на 7kas.sudrf.ru. На других кассац.
@@ -60,9 +60,11 @@ function updateRegionBadge(){
   el.title=(ri&&ri.name)||'';
 }
 function courtLabel(c){
+  // Имя касс. суда — из данных дела (cassation.court, снято парсером с
+  // карточки 7kas); конфиг региона — средняя ступень, ХМАО — фолбэк.
   if(isCassationStage(c)){
     const ks=regionCassation();
-    return ks?String(ks.name).replace(/кассационный суд общей юрисдикции/i,'КСОЮ'):'Седьмой КСОЮ';
+    return shortCourt(c.cassationCourt||(ks&&ks.name)||'Седьмой кассационный суд общей юрисдикции');
   }
   // Имя апел-суда — из данных (appeal.court): в регионе их может быть
   // несколько (Свердловский облсуд + Суд ЯНАО). ХМАО-фолбэк — для записей
@@ -73,10 +75,18 @@ function courtLabel(c){
 function courtTitle(c){
   if(isCassationStage(c)){
     const ks=regionCassation();
-    return ks?ks.name:'Седьмой кассационный суд общей юрисдикции';
+    return c.cassationCourt||(ks&&ks.name)||'Седьмой кассационный суд общей юрисдикции';
   }
   if(isAppealStage(c))return c.appealCourt||'Суд Ханты-Мансийского автономного округа - Югры';
   return c.firstInstanceCourt||'';
+}
+// Судья по стадии — парная к courtLabel: имя суда и имя судьи обязаны
+// быть из одной инстанции. Без неё под именем апел-суда встал бы судья
+// 1-й инстанции (37 из 38 дел стадии appeal имеют оба поля).
+function courtJudge(c){
+  if(isCassationStage(c))return c.cassationJudge||'';
+  if(isAppealStage(c))return c.appellateJudge||'';
+  return c.firstInstanceJudge||'';
 }
 function cleanEvent(s){
   if(!s)return '';
@@ -764,6 +774,7 @@ function jsonToCase(j){
     cassationCaseNumber:cs.case_number||'',
     cassationOutcome:cs.outcome||'',
     cassationCourt:cs.court||'',
+    cassationJudge:cs.judge||'',
     appellantIsBank:!!cs.appellant_is_bank,
     discoveredViaCassation:!!j.discovered_via_cassation,
     // Флаги жалоб с 1-й инст. — нужны фронту, чтобы НЕ архивировать
@@ -1245,13 +1256,19 @@ function renderAnalytics(){
         const upChips=c.appealToFirstInstanceRules
           ?'<span class="badge badge-to-fi badge-compact">⚠</span>'
           :'';
-        // Для апелляции и кассации суд всегда один (Суд ХМАО / 7-й КСОЮ) —
-        // не дублируем подпись, бейдж стадии и так это сообщает.
-        // Для 1 инст. — суд + судья.
-        const showCourt=c.stage==='first_instance';
-        const court=showCourt?courtLabel(c):'';
-        const judge=showCourt&&c.firstInstanceJudge?' · '+shortName(c.firstInstanceJudge):'';
-        const courtHtml=court?`<div class="up-court">${escHtml(court)}${escHtml(judge)}</div>`:'';
+        // Суд + судья на всех стадиях — как в таблице и мобильной карточке.
+        // Прежде подпись рисовалась только для 1-й инст.: считалось, что
+        // апелляция в регионе одна и бейдж «Апелл.» её и называет. Для
+        // территорий с несколькими апел-судами (Свердловский облсуд + Суд
+        // ЯНАО) это неверно, да и судью-докладчика по бейджу не угадать.
+        const court=courtLabel(c);
+        const judgeFull=courtJudge(c);
+        const judge=judgeFull?' · '+shortName(judgeFull):'';
+        // Тултип — расшифровка сокращений при наведении на десктопе
+        // («Седьмой КСОЮ», «ХМАО-Югры», инициалы). filter(Boolean) — против
+        // висячего « · » у касс. дел без судьи-докладчика (4 из 15).
+        const courtTip=[courtTitle(c),judgeFull].filter(Boolean).join(' · ');
+        const courtHtml=court?`<div class="up-court" title="${escHtml(courtTip)}">${escHtml(court)}${escHtml(judge)}</div>`:'';
         const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
         // В «Ближайших» показываем только основной номер — старые номера
         // в скобках (после remand'а или объединения дел) перегружают строку.
@@ -2187,6 +2204,9 @@ function renderDrawer(c){
     const ap=stageData;
     let grid=`<div class="kv-grid">`;
     if(ap.case_number)grid+=`<div class="kv-k">Номер дела</div><div class="kv-v kv-mono">${escHtml(ap.case_number)}</div>`;
+    // Строка «Суд» — как на вкладках 1-й инст. и кассации (полное имя из
+    // данных, без сокращения). Апелляция была единственной вкладкой без неё.
+    if(ap.court)grid+=`<div class="kv-k">Суд</div><div class="kv-v">${escHtml(ap.court)}</div>`;
     if(ap.judge_reporter)grid+=`<div class="kv-k">Судья-докл.</div><div class="kv-v">${escHtml(ap.judge_reporter)}</div>`;
     if(ap.status){
       // В апелляции «Решено» корректнее называть «Рассмотрено»
@@ -2405,7 +2425,13 @@ function renderMobileCards(){
       +(vm.defendantIsAppellant?appBadge:'')
       +(vm.defendantIsCassator?cassBadge:'');
 
+    // Суд + судья той же инстанции — как в «Ближайших заседаниях».
+    // Тултип — полные имена (метка сжата shortCourt'ом и инициалами);
+    // filter(Boolean) — против висячего « · » у дел без судьи.
     const courtLine=courtLabel(c);
+    const courtJudgeFull=courtJudge(c);
+    const courtJudgeShort=courtJudgeFull?' · '+shortName(courtJudgeFull):'';
+    const courtTip=[courtTitle(c),courtJudgeFull].filter(Boolean).join(' · ');
     const hearingHtml=buildHearingHtml(c,vm,{compact:true});
     const stateHtml=buildStateHtml(c,vm);
 
@@ -2418,7 +2444,7 @@ function renderMobileCards(){
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
         <span class="mc-badges">${stageBadge}${pendingBadge}${newBadge}${archived}</span>
       </div>
-      ${courtLine&&!isAppealStage(c)&&!isCassationStage(c)?`<div class="mc-court-label" title="${escHtml(courtTitle(c))}">${escHtml(courtLine)}</div>`:''}
+      ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
       <div class="mc-parties">
         <div class="mc-party"><span class="mc-party-tag">и:</span><span class="mc-party-name">${plHtml}</span></div>
