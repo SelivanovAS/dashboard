@@ -1240,6 +1240,25 @@ def _apply_fi_cassator(case_j: dict, card_info: dict) -> bool:
     return changed
 
 
+def announce_imported_cases(cases: list[dict]) -> list[dict]:
+    """Импортированные дела, ещё не объявленные в дайджесте, → к анонсу.
+
+    Дела капчёвых судов заводит импортёр дампов (scripts/import_search_dump.py)
+    МЕЖДУ прогонами: на прогоне они уже в cases и в fi_new_cases автопоиска не
+    попадают. Возвращает такие дела для добавления в контекст дайджеста
+    (структура у них та же — _fi_search_to_json_case) и ставит
+    import.announced=True — флаг уедет в cases.json тем же save_json, повторный
+    анонс не случится. Дела уже в cases — в списки добавления НЕ включать.
+    """
+    to_announce: list[dict] = []
+    for c in cases:
+        imp = c.get("import")
+        if isinstance(imp, dict) and not imp.get("announced"):
+            imp["announced"] = True
+            to_announce.append(c)
+    return to_announce
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -2979,6 +2998,21 @@ def main_json():
             f"Добавлено {len(fi_new_cases)} новых + "
             f"{len(fi_discovered_resolved)} завершённых-старых дел 1 инстанции в JSON"
         )
+
+    # ── 6a. Анонс импортированных дел (капчёвые суды) ──
+    # Дела, заведённые импортёром дампов между прогонами, уже лежат в cases —
+    # в fi_new_cases автопоиска они не попадают (дедуп по existing_ids) и без
+    # этого блока заходили бы «тихо». Объявляем их новыми исками в ближайшем
+    # дайджесте/пуше РОВНО один раз (import.announced; решение юриста
+    # 16.07.2026). В cases повторно не добавляем — только в контекст дайджеста.
+    fi_imported_new = announce_imported_cases(cases)
+    if fi_imported_new:
+        log.info(
+            f"Импортированные дела к анонсу в дайджесте: {len(fi_imported_new)} "
+            f"({', '.join(c['id'] for c in fi_imported_new[:5])}"
+            f"{'…' if len(fi_imported_new) > 5 else ''})"
+        )
+        fi_new_cases = fi_new_cases + fi_imported_new
 
     # ── 6b. Новые апел. дела → JSON. Без этого link_cases ниже их не увидит
     # (он индексирует только существующий cases) и дело осядет только в CSV.
