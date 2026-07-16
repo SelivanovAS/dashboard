@@ -1,0 +1,143 @@
+# Импорт дел капчёвого суда из дампа выдачи, который оператор сдал в админку
+# Worker'а (POST /admin/import-dump → KV → workflow_dispatch сюда).
+# Поток: забрать дамп с Worker'а (Bearer PUSH_SECRET, свой User-Agent — урок
+# бана Python-urllib 13–16.07.2026) → scripts/import_search_dump.py (офлайн,
+# суды не трогает) → commit cases.json → POST /import-result (итог оператору
+# в админку). Карточки добавленных дел дозаполнит ближайший основной прогон.
+#
+# ⚠ Все inputs и строки отчёта передаются через env/файлы, НЕ через ${{ }} в
+# run: — имя оператора и содержимое дампа произвольны, интерполяция в shell
+# была бы инъекцией.
+name: "📥 Импорт дел (дамп капчёвого суда)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      dump_key:
+        description: 'KV-ключ дампа (import:dump:<uuid>) — выдаёт Worker при приёме дампа'
+        required: true
+        type: string
+      court_domain:
+        description: 'Домен суда, напр. akademicheskiy--svd.sudrf.ru'
+        required: true
+        type: string
+      operator:
+        description: 'Имя оператора (журнал импортов)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+# Общая группа записи в data/ с основным прогоном (update_cases.yml):
+# параллельный импорт уронил бы его push non-fast-forward'ом, а rebase
+# ночного прогона затёр бы импортированные дела. cancel-in-progress
+# выключен — импорт ждёт очередь, не убивая прогон.
+concurrency:
+  group: cases-data-write
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Inputs — только через env (см. предупреждение в шапке).
+      DUMP_KEY: ${{ inputs.dump_key }}
+      COURT_DOMAIN: ${{ inputs.court_domain }}
+      OPERATOR: ${{ inputs.operator }}
+      PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+      PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # workers.dev режет пустой/дефолтный UA некоторых клиентов (ошибка 1010,
+      # инцидент живого лога 13–16.07.2026) — представляемся явно.
+      UA: court-monitor-import/1.0
+      IMPORT_SUMMARY_PATH: /tmp/import_summary.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: POST started (журнал импортов в админке)
+        run: |
+          jq -n --arg dk "$DUMP_KEY" --arg ru "$RUN_URL" \
+            '{dump_key:$dk, status:"started", run_url:$ru}' \
+          | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
+              -H "Authorization: Bearer $PUSH_SECRET" \
+              -H "Content-Type: application/json" \
+              --data @- || true
+
+      - name: Скачать дамп с Worker'а
+        run: |
+          curl -f -s -m 60 -A "$UA" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            "$PUSH_WORKER_URL/import-dump?key=$(python3 -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["DUMP_KEY"]))')" \
+            -o /tmp/dump.html
+          SIZE=$(wc -c < /tmp/dump.html)
+          echo "Дамп: $SIZE байт"
+          if [ "$SIZE" -lt 512 ]; then
+            echo "::error::Дамп подозрительно мал ($SIZE байт) — вероятно истёк TTL 24 ч"
+            exit 1
+          fi
+
+      - name: Импорт дел из дампа
+        id: import
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          REGION: ${{ vars.REGION }}
+        run: |
+          python3 scripts/import_search_dump.py /tmp/dump.html \
+            --court-domain "$COURT_DOMAIN" \
+            --operator "$OPERATOR"
+
+      - name: Commit cases.json
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add data/cases.json
+          if git diff --cached --quiet; then
+            echo "Изменений нет (добавлено 0 дел) — коммит не нужен"
+            exit 0
+          fi
+          ADDED=$(jq -r '.added // 0' "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
+          COURT=$(jq -r '.court // .court_domain // "?"' "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
+          git commit -m "📥 Импорт: ${COURT} +${ADDED} (${OPERATOR:-без имени})"
+          # Ретраи: чужой push мог проскочить между checkout и push.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
+
+      - name: POST итога в журнал импортов
+        if: always()
+        env:
+          IMPORT_OUTCOME: ${{ steps.import.outcome }}
+        run: |
+          STATUS=$([ "$IMPORT_OUTCOME" = "success" ] && echo done || echo failed)
+          if [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{dump_key:$dk, status:$st, run_url:$ru,
+                added:(.added // 0), already:(.already // 0),
+                no_link:(.no_link // 0), subsidiary:(.subsidiary // 0),
+                rows:(.rows // 0), lines:(.lines // [])}
+               + (if .error then {error:.error} else {} end)' \
+              "$IMPORT_SUMMARY_PATH")
+          else
+            BODY=$(jq -n -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{dump_key:$dk, status:$st, run_url:$ru,
+                error:"прогон упал до разбора дампа (скачивание/зависимости) — детали в run_url"}')
+          fi
+          printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \
+            -X POST "$PUSH_WORKER_URL/import-result" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @- || true

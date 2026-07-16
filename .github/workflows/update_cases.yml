@@ -24,6 +24,13 @@ permissions:
   contents: write
   deployments: read   # читать статус github-pages деплоя (страховка публикации)
 
+# Сериализация записи в data/ с импортом дампов (import_cases.yml): у прогона
+# push без rebase — параллельный импорт уронил бы его non-fast-forward'ом,
+# а rebase прогона затёр бы только что импортированные дела.
+concurrency:
+  group: cases-data-write
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
