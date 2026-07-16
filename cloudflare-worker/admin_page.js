@@ -692,6 +692,13 @@ html[data-role="operator"] .run-ext { display:none !important; }
         </div>
         <div class="imp-report" id="imp-report"></div>
       </div>
+      <details class="fold" id="imp-fresh-fold">
+        <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
+        <div class="fold-body">
+          <div class="imp-hint" style="margin-bottom:6px;">Регламент — импорт каждого суда раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху.</div>
+          <div id="imp-freshness" class="empty">Загрузка…</div>
+        </div>
+      </details>
       <details class="fold" id="imp-hist-fold">
         <summary>История импортов <span class="run-meta" id="imp-hist-count"></span></summary>
         <div class="fold-body"><div id="imp-history" class="empty">Загрузка…</div></div>
@@ -2056,6 +2063,7 @@ function impStatusBadge(status) {
 function impResultText(item) {
   if (item.status === "done") {
     var parts = ["+" + (item.added || 0) + " добавлено"];
+    if (item.promoted) parts.push(item.promoted + " материалов стали делами");
     if (item.already) parts.push(item.already + " уже в базе");
     if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
     if (item.no_link) parts.push(item.no_link + " без ссылки");
@@ -2091,8 +2099,63 @@ async function loadImportLog() {
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
     renderImportHistory(items);
+    renderImportFreshness(items, d.last || {});
     return items;
   } catch (e) { return null; }
+}
+// Светофор свежести: когда каждый капчёвый суд импортировался в последний
+// раз. Основной источник — карта last (вечные ключи import:last:<домен> на
+// Worker'е); журнал (последние 50) подмешивается как фолбэк для импортов,
+// прошедших до появления карты. Регламент — раз в неделю.
+var IMP_FRESH_WARN_DAYS = 7;
+var IMP_FRESH_STALE_DAYS = 14;
+function renderImportFreshness(items, lastMap) {
+  var el = document.getElementById("imp-freshness");
+  if (!el || !impCourts.length) return;
+  var byDomain = {};
+  Object.keys(lastMap || {}).forEach(function (d) {
+    var e = lastMap[d];
+    var t = parseIso(e && e.ts);
+    if (!isNaN(t)) byDomain[d] = { ts: t, operator: e.operator || "", added: e.added || 0 };
+  });
+  (items || []).forEach(function (it) {
+    if (it.status !== "done" || !it.court_domain) return;
+    var t = parseIso(it.updated_at || it.ts);
+    if (isNaN(t)) return;
+    if (!byDomain[it.court_domain] || byDomain[it.court_domain].ts < t) {
+      byDomain[it.court_domain] = { ts: t, operator: it.operator || "", added: it.added || 0 };
+    }
+  });
+  var rows = impCourts.map(function (c) {
+    var e = byDomain[c.domain];
+    var days = e ? (Date.now() - e.ts) / 86400000 : Infinity;
+    var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
+    return { court: c, e: e, days: days, level: level };
+  });
+  // Просроченные и «ни разу» сверху, внутри уровня — самые давние первыми.
+  rows.sort(function (a, b) {
+    if (a.level !== b.level) return b.level - a.level;
+    return b.days - a.days;
+  });
+  var nRed = rows.filter(function (x) { return x.level === 2; }).length;
+  var nYellow = rows.filter(function (x) { return x.level === 1; }).length;
+  document.getElementById("imp-fresh-badges").innerHTML =
+    (nRed ? '<span class="badge badge-fail">' + nRed + ' давно/ни разу</span> ' : "")
+    + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
+    + '<span class="badge badge-ok">' + (rows.length - nRed - nYellow) + ' ok</span>';
+  el.className = "";
+  el.innerHTML = rows.map(function (x) {
+    var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
+    var note = x.e
+      ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "")
+        + (x.e.added ? " · +" + x.e.added : "")
+      : "ни разу не импортировался";
+    return '<div class="health-row"><span class="dot ' + dotCls + '"></span>'
+      + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
+      + '<span class="health-spark"></span>'
+      + '<span class="run-meta">' + note + '</span>'
+      + '</div>';
+  }).join("");
 }
 function impSetStatus(html) {
   document.getElementById("imp-status").innerHTML = html;

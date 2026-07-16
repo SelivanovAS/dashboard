@@ -235,6 +235,42 @@ class TestImporterE2E:
         s = _read_summary(import_env["gh_out"])
         assert "Таблица результатов не найдена" in s["error"]
 
+    def test_material_promoted_to_case(self, import_env):
+        """Комбо-номер «2-1006 ~ М-500» при уже отслеживаемом материале
+        М-500/2026: запись переименовывается (зеркало промоушена main_json),
+        дубль не создаётся, ссылка/сервер обновляются из дампа."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "М-500/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Ответчик",
+                "plaintiff": "New Wave Group AB",
+                "defendant": "ПАО Сбербанк",
+                "import": {"operator": "Прошлый", "at": "2026-07-10T10:00:00",
+                           "source": "dump", "announced": True},
+                "first_instance": {"case_number": "М-500/2026",
+                                   "link": "1|aaaa-0000", "srv_num": 1},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        ids = [c["id"] for c in data["cases"]]
+        assert "М-500/2026" not in ids
+        assert ids.count("2-1006/2026") == 1  # переименована, не задвоена
+        by_id = {c["id"]: c for c in data["cases"]}
+        fi = by_id["2-1006/2026"]["first_instance"]
+        assert fi["case_number"] == "2-1006/2026"
+        assert fi["material_number"] == "М-500/2026"  # ★ на материале живёт
+        assert fi["link"] == "666|ffff-6666"
+        assert fi["srv_num"] == 2
+        assert fi["accepted_pending_emit"] is True  # событие эмитит прогон
+        s = _read_summary(import_env["gh_out"])
+        assert s["promoted"] == 1
+        assert s["added"] == 1  # только 2-1001 (2-1006 не добавлялось заново)
+        assert any("[PROMOTED] М-500/2026 → 2-1006/2026" in l for l in s["lines"])
+
     def test_imported_case_announced_once(self, import_env):
         """Импортированное дело объявляется новым в ближайшем дайджесте РОВНО
         один раз (runs.announce_imported_cases + import.announced)."""
