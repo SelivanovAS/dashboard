@@ -54,10 +54,20 @@ jobs:
           # общий для всех территорий.
           REGION: ${{ vars.REGION }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
-          # Гибрид — дефолт кода (с 03.07.2026): программный рендер + Claude
+          # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM
           # только на пересказ мотивировок актов. Откат на полный
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # LLM боевого дайджеста: с 16.07.2026 дефолт — OpenRouter
+          # «модель дня» (бесплатный контур, решение юриста; пустая
+          # OPENROUTER_MODEL = топ-1 рейтинга shir-man на момент прогона).
+          # Вернуть Claude БЕЗ правки кода: Actions Variable
+          # LLM_PROVIDER=claude (Settings → Variables; так же может
+          # отличаться территория). ⚠ Секрет OPENROUTER_API_KEY обязателен:
+          # без него validate_environment уронит прогон на старте.
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # По умолчанию шлём в личный чат (TELEGRAM_CHAT_ID_TEST). Cloudflare Worker
           # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.

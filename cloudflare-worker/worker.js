@@ -630,10 +630,13 @@ async function handleAdminWatchlist(request, env) {
 
 // ── VAPID JWT для тестового push (RFC 8292) ──────────────────────────────────
 
-// VAPID public key захардкожен — он публичный (известен Service Worker'у через
-// applicationServerKey) и не секретный. Приватный должен быть в secret
-// `VAPID_PRIVATE_KEY` (PEM от py_vapid). Без него тест push возвращает 503.
-const VAPID_PUBLIC_KEY = "BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU";
+// VAPID public key — публичный (известен Service Worker'у через
+// applicationServerKey), не секретный. У каждой территории СВОЯ пара:
+// public задаётся в [vars] wrangler.toml форка (VAPID_PUBLIC_KEY) и обязан
+// совпадать с region_front.js фронта; фолбэк — ключ ХМАО-инстанса.
+// Приватный — в secret `VAPID_PRIVATE_KEY` (PEM). Без него тест push → 503.
+const VAPID_PUBLIC_KEY_DEFAULT = "BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU";
+function vapidPublicKey() { return cfgVar("VAPID_PUBLIC_KEY", VAPID_PUBLIC_KEY_DEFAULT); }
 const VAPID_SUB = "mailto:7selivanov.a@gmail.com";
 
 function pemToArrayBuffer(pem) {
@@ -680,7 +683,7 @@ async function buildVapidAuth(env, audience) {
     data
   );
   const jwt = header + "." + claims + "." + b64urlBytes(new Uint8Array(sig));
-  return { jwt, header: `vapid t=${jwt}, k=${VAPID_PUBLIC_KEY}` };
+  return { jwt, header: `vapid t=${jwt}, k=${vapidPublicKey()}` };
 }
 
 // 5) Тестовый push конкретной подписке. Без encryption: SW сам покажет
