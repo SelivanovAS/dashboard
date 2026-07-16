@@ -161,9 +161,12 @@ class TestSverdlovskYanaoRegion:
         """Свердловские суды: все за капчей (search_gated), delo_id стандартный,
         ЯНАО — полный автопоиск; Академический — первый проверочный."""
         r = get_region("sverdlovsk_yanao")
-        svd = [c for c in r.first_instance_courts if "--svd." in c.domain]
+        # Свердловские — всё, что не ЯНАО: у Кировградского домен --cvd
+        # (не --svd; подтверждено пробой 16.07.2026).
+        svd = [c for c in r.first_instance_courts if "--ynao." not in c.domain]
         ynao = [c for c in r.first_instance_courts if "--ynao." in c.domain]
         assert len(svd) == 54 and len(ynao) == 12
+        assert any(c.domain == "kirovgradsky--cvd.sudrf.ru" for c in svd)
         assert all(c.search_gated for c in svd)
         assert not any(c.search_gated for c in ynao)
         assert all(c.delo_id == 1540005 for c in svd)
