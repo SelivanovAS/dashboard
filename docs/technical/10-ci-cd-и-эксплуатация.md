@@ -105,8 +105,12 @@ scripts/gh_progress_pusher.py` (pass-through-пушер живого лога в
 батчи на `POST /run-progress` Worker'а; `set -o pipefail`, чтобы падение
 парсера не маскировалось пайпом; env `PROGRESS_URL` =
 `secrets.PUSH_WORKER_URL + "/run-progress"`, `PROGRESS_TOKEN` =
-`secrets.PROGRESS_SECRET || secrets.PUSH_SECRET` — без секретов пушер
-работает как cat) → коммит данных → (при падении любого шага) 🚨-алерт в
+`secrets.PUSH_SECRET || secrets.PROGRESS_SECRET` — без секретов пушер
+работает как cat, но с 16.07.2026 объявляет об этом одной строкой в логе
+рана; первый сбой POST тоже печатает одну ⚠️-строку с HTTP-кодом. Пушер шлёт
+собственный `User-Agent` — дефолтный `Python-urllib/…` Cloudflare банит на
+workers.dev (ошибка 1010 → 403 до Worker'а), из-за чего канал молчал
+13–16.07.2026) → коммит данных → (при падении любого шага) 🚨-алерт в
 личный Telegram.
 
 Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
@@ -243,7 +247,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 | **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
 | **Утром нет дайджеста (нет и 🚨)** | Проверить, был ли run `update_cases.yml` в Actions (и в плитке «Последний прогон» админки). Не было — смотреть cron Worker'а (`wrangler.toml`, логи Worker'а, `isHoliday`); был, но упал до алерта — лог run'а. Если активен Mac-резерв: Mac спал/не в сети Сбера — LaunchAgent догонит при входе, либо `launchctl start com.court-monitor.parse`. |
 | **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |
-| **Блок живого лога в админке молчит** | Для облачного прогона: в GitHub secrets нет ни `PROGRESS_SECRET`, ни `PUSH_SECRET`, либо `PUSH_WORKER_URL` пуст (пушер тогда работает как cat). Для Mac-резерва: нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: прогон работает и без лога. |
+| **Блок живого лога в админке молчит** | Первым делом — лог рана в Actions: с 16.07.2026 пушер сам печатает одну строку `⚠️ Живой лог админки: POST … (HTTP код)` при первом сбое или `🛰 …выключен` при пустых секретах. 403 = Cloudflare-бан User-Agent (ошибка 1010, лечится `USER_AGENT` пушера — так канал молчал 13–16.07.2026), 401 = секреты (в GitHub нет ни `PUSH_SECRET`, ни `PROGRESS_SECRET`, или не совпадают с Worker'ом), 404 = кривой `PUSH_WORKER_URL`. Для Mac-резерва: нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: прогон работает и без лога. |
 | **Прогон был, а дайджест не пришёл** | Смотреть Actions → «💤 Резерв D2: дайджест на push» (`replay_on_push.yml`; стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
 | **Автозапуск через Worker (если вернули cron)** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday`, логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
 

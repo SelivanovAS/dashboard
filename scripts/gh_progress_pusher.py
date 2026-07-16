@@ -16,18 +16,25 @@ Pass-through-фильтр stdin→stdout: update_cases.yml запускает п
 - payload дополнен source="github" и link на страницу прогона.
 
 Функция некритичная: нет PROGRESS_URL/PROGRESS_TOKEN или сеть упала — скрипт
-остаётся чистым pass-through (cat), прогон не страдает. И наоборот, умерший
-пушер уронил бы весь прогон через SIGPIPE у парсера — поэтому любая обработка,
-кроме самой записи в stdout, завёрнута в try/except: «cat важнее вех».
+остаётся pass-through (cat), прогон не страдает. Но молчать о поломке нельзя
+(инцидент 13–16.07.2026: Cloudflare резал дефолтный UA «Python-urllib/…» —
+ошибка 1010, POST тихо получал 403, канал считали живым три дня),
+поэтому первый неудавшийся POST печатает ОДНУ диагностическую строку в stdout
+прогона, а выключенный канал в боевом workflow (LOG_GH_ANNOTATIONS=1)
+объявляет о себе одной строкой на старте. Всё прочее по-прежнему в
+try/except: «cat важнее вех» — умерший пушер уронил бы весь прогон через
+SIGPIPE у парсера.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 
 # Интервал отправки батчей: каждый POST = 1 read + 1 write в Cloudflare KV,
@@ -37,11 +44,34 @@ SEND_EVERY = float(os.environ.get("PROGRESS_SEND_EVERY", "10"))
 CHUNK = 100     # контракт worker.js handleRunProgress: lines.slice(0, 100) на POST
 LINE_MAX = 500  # страховка от строк-простыней в KV (лог не режет длину, ghlog режет только аннотации)
 TIMEOUT = 10
+# Cloudflare на workers.dev банит сигнатуру «Python-urllib/…» (Browser
+# Integrity Check, ошибка 1010 → HTTP 403 ДО Worker'а) — из-за этого канал
+# молчал 13–16.07.2026. python-requests и curl проходят; представляемся
+# собственным честным UA. Проверено вживую 16.07.2026.
+USER_AGENT = "court-monitor-progress-pusher/1.0"
+
+# Диагностика и pass-through пишут в один stdout из разных потоков (тикер
+# может флашить, пока главный поток льёт строки) — лок против интерливинга.
+_STDOUT_LOCK = threading.Lock()
+
+
+def say(text: str) -> None:
+    """Одна диагностическая строка в stdout прогона; сбой печати глотаем."""
+    try:
+        with _STDOUT_LOCK:
+            sys.stdout.buffer.write((text + "\n").encode("utf-8"))
+            sys.stdout.buffer.flush()
+    except Exception:
+        pass
 
 
 def build_config() -> dict:
     """Конфиг из env раннера; без URL/токена отправка выключена (чистый cat)."""
     url = os.environ.get("PROGRESS_URL", "").strip()
+    # PROGRESS_URL склеен в workflow как «secrets.PUSH_WORKER_URL + /run-progress»:
+    # секрет с хвостовым «/» дал бы «//run-progress», а Worker матчит pathname
+    # строго — молчаливый 404. Схлопываем дубли слэшей везде, кроме «://».
+    url = re.sub(r"(?<!:)/{2,}", "/", url)
     token = os.environ.get("PROGRESS_TOKEN", "").strip()
     gh_run = os.environ.get("GITHUB_RUN_ID", "").strip()
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "").strip()
@@ -61,8 +91,12 @@ def build_config() -> dict:
     }
 
 
-def send_batch(cfg: dict, lines: list, done: bool) -> None:
-    """Один POST на Worker; любые ошибки глотаем — pass-through важнее вех."""
+def send_batch(cfg: dict, lines: list, done: bool) -> str | None:
+    """Один POST на Worker; ошибки не поднимаем — возвращаем описание (или None).
+
+    Описание нужно вызывающему для одноразовой диагностики: HTTP-код сразу
+    называет виновника (401 — секреты, 404 — URL/роут, 5xx — Worker).
+    """
     payload = {"run_id": cfg["run_id"], "lines": lines, "done": done, "source": "github"}
     if cfg["link"]:
         payload["link"] = cfg["link"]
@@ -72,12 +106,16 @@ def send_batch(cfg: dict, lines: list, done: bool) -> None:
         headers={
             "Authorization": "Bearer " + cfg["token"],
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,  # дефолтный Python-urllib/… CF режет (1010)
         },
     )
     try:
         urllib.request.urlopen(req, timeout=TIMEOUT).read()
-    except Exception:
-        pass
+        return None
+    except urllib.error.HTTPError as e:
+        return f"HTTP {e.code} {e.reason}"
+    except Exception as e:
+        return f"{type(e).__name__}: {e}"
 
 
 def chunked(lines: list, n: int = CHUNK) -> list:
@@ -93,6 +131,7 @@ class BatchSender:
         self.buf: list = []
         self._buf_lock = threading.Lock()
         self._send_lock = threading.Lock()
+        self._diag_said = False  # первый сбой POST объявляем один раз за прогон
 
     def add(self, line: str) -> None:
         with self._buf_lock:
@@ -106,12 +145,27 @@ class BatchSender:
                 return
             chunks = chunked(pending)
             for i, chunk in enumerate(chunks):
-                send_batch(self.cfg, chunk, done and i == len(chunks) - 1)
+                err = send_batch(self.cfg, chunk, done and i == len(chunks) - 1)
+                if err and not self._diag_said:
+                    # _send_lock уже держим — гонки за флаг нет.
+                    self._diag_said = True
+                    say(
+                        f"⚠️ Живой лог админки: POST {self.cfg['url']} не прошёл ({err}) — "
+                        "блок «Прогон» не обновится. Проверь secrets PUSH_SECRET/PROGRESS_SECRET "
+                        "и PUSH_WORKER_URL (сообщаю один раз, прогон не страдает)."
+                    )
 
 
 def main() -> None:
     cfg = build_config()
     sender = BatchSender(cfg) if cfg["enabled"] else None
+    if sender is None and os.environ.get("LOG_GH_ANNOTATIONS") == "1":
+        # Боевой workflow (LOG_GH_ANNOTATIONS ставят только update_cases.yml и
+        # ко) без URL/токена — деградация в cat задумана, но должна быть видна.
+        say(
+            "🛰 Живой лог админки выключен: не заданы PROGRESS_URL/PROGRESS_TOKEN "
+            "(secrets PUSH_WORKER_URL и PUSH_SECRET/PROGRESS_SECRET)."
+        )
     stop = threading.Event()
     if sender is not None:
         def ticker() -> None:
@@ -128,8 +182,9 @@ def main() -> None:
     stdout = sys.stdout.buffer
     try:
         for raw in stdin:
-            stdout.write(raw)  # pass-through — раньше и надёжнее всего остального
-            stdout.flush()
+            with _STDOUT_LOCK:  # диагностика тикера не режет строку пополам
+                stdout.write(raw)  # pass-through — раньше и надёжнее всего остального
+                stdout.flush()
             if sender is None:
                 continue
             try:

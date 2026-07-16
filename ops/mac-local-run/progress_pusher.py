@@ -44,6 +44,9 @@ def send(token: str, run_id: str, lines: list, done: bool) -> None:
     req = urllib.request.Request(URL, data=data, headers={
         "Authorization": "Bearer " + token,
         "Content-Type": "application/json",
+        # Cloudflare банит дефолтный UA «Python-urllib/…» (ошибка 1010 →
+        # HTTP 403 до Worker'а) — инцидент живого лога 13–16.07.2026.
+        "User-Agent": "court-monitor-progress-pusher/1.0",
     })
     try:
         urllib.request.urlopen(req, timeout=10).read()

@@ -287,7 +287,7 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
 | `TELEGRAM_CHAT_ID` | ID корпоративной группы (используется при `to_group=true`) | Отправка уведомлений |
 | `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель дайджеста | Отправка уведомлений |
 | `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` | Web Push для PWA через Worker | PWA-уведомления |
-| `PROGRESS_URL`, `PROGRESS_TOKEN` | Живой лог прогона в админку (`gh_progress_pusher.py`); workflow собирает их из `PUSH_WORKER_URL` и `PROGRESS_SECRET \|\| PUSH_SECRET` — без них пушер работает как cat | Живой лог |
+| `PROGRESS_URL`, `PROGRESS_TOKEN` | Живой лог прогона в админку (`gh_progress_pusher.py`); workflow собирает их из `PUSH_WORKER_URL` и `PUSH_SECRET \|\| PROGRESS_SECRET` — без них пушер работает как cat (и говорит об этом одной строкой в логе рана; первый сбой POST — одна ⚠️-строка с HTTP-кодом) | Живой лог |
 | `SKIP_NON_WORKING_DAYS` | `1` = smart-skip (нерабочие дни + дела с будущей датой) | Скрипт обновления |
 | `LOG_LEVEL` | Уровень логов прогона (`DEBUG`/`INFO`/…, дефолт `INFO`) | Скрипт обновления |
 | `DIGEST_FULL_LLM` | `1` = откат на полный LLM-дайджест вместо гибрида | Дайджест |
