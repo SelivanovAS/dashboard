@@ -139,15 +139,16 @@ def _run(env, *extra) -> int:
 
 
 class TestImporterE2E:
-    def test_import_adds_all_roles_and_writes_service_block(self, import_env):
+    def test_import_keeps_only_bank_defendant(self, import_env):
+        """Только «банк-ответчик» — решение юриста 16.07.2026 (в 1-й инст.
+        дела истца/третьего лица не отслеживаем, как и в автопоиске)."""
         rc = _run(import_env)
         assert rc == isd.EXIT_OK
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         ids = [c["id"] for c in data["cases"]]
-        # 4 добавлено (у 2-1005 нет ссылки на карточку — немониторимо)
-        assert sorted(ids) == [
-            "2-1001/2026", "2-1002/2026", "2-1004/2026", "2-1006/2026",
-        ]
+        # 2 добавлено: ответчики со ссылкой. 2-1002 (истец) и 2-1004 (третье
+        # лицо) — [SKIPPED ROLE]; 2-1005 — ответчик без ссылки ([NO LINK]).
+        assert sorted(ids) == ["2-1001/2026", "2-1006/2026"]
         by_id = {c["id"]: c for c in data["cases"]}
         c1 = by_id["2-1001/2026"]
         assert c1["current_stage"] == "first_instance"
@@ -158,26 +159,27 @@ class TestImporterE2E:
         assert c1["import"]["operator"] == "Творонович Ю.А."
         assert c1["import"]["source"] == "dump"
         assert c1["import"]["at"]
-        assert by_id["2-1002/2026"]["bank_role"] == "Истец"
-        assert by_id["2-1004/2026"]["bank_role"] == "Третье лицо"
 
     def test_srv_num_from_href_overrides_config(self, import_env):
         """Дело со srv_num=2 в href получает сервер 2, хоть конфиг суда — 1."""
         _run(import_env)
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         by_id = {c["id"]: c for c in data["cases"]}
-        assert by_id["2-1002/2026"]["first_instance"]["srv_num"] == 2
+        assert by_id["2-1006/2026"]["first_instance"]["srv_num"] == 2
         assert by_id["2-1001/2026"]["first_instance"]["srv_num"] == 1
 
     def test_summary_in_github_output(self, import_env):
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
-        assert s["added"] == 4
+        assert s["added"] == 2
         assert s["already"] == 0
+        assert s["skipped_role"] == 2
         assert s["no_link"] == 1
         assert s["subsidiary"] == 1
         assert s["court"] == "Академический районный суд г. Екатеринбурга"
         assert s["operator"] == "Творонович Ю.А."
+        assert any("[SKIPPED ROLE] 2-1002/2026" in l for l in s["lines"])
+        assert any("[SKIPPED ROLE] 2-1004/2026" in l for l in s["lines"])
         assert any("[NO LINK] 2-1005/2026" in l for l in s["lines"])
         assert any("[SUBSIDIARY] 2-1003/2026" in l for l in s["lines"])
 
@@ -187,9 +189,10 @@ class TestImporterE2E:
         assert rc == isd.EXIT_OK
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 0
-        assert s["already"] == 4
+        assert s["already"] == 2
+        assert s["skipped_role"] == 2  # пропуски ролей стабильны на повторе
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
-        assert len(data["cases"]) == 4  # дублей нет
+        assert len(data["cases"]) == 2  # дублей нет
 
     def test_dedup_against_archive(self, import_env):
         """Дело из горячего архива не всплывает как новое."""
@@ -198,7 +201,7 @@ class TestImporterE2E:
         }, ensure_ascii=False), encoding="utf-8")
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
-        assert s["added"] == 3
+        assert s["added"] == 1
         assert s["already"] == 1
 
     def test_dry_run_leaves_json_untouched(self, import_env):
@@ -206,7 +209,7 @@ class TestImporterE2E:
         assert rc == isd.EXIT_OK
         assert not import_env["json"].exists()
         s = _read_summary(import_env["gh_out"])
-        assert s["added"] == 4 and s["dry_run"] is True
+        assert s["added"] == 2 and s["dry_run"] is True
 
     def test_captcha_dump_rejected(self, import_env):
         import_env["dump"].write_text(
@@ -247,14 +250,18 @@ class TestImporterE2E:
         import_env["dump"].write_bytes(raw)
         rc = _run(import_env)
         assert rc == isd.EXIT_OK
-        assert _read_summary(import_env["gh_out"])["added"] == 4
+        assert _read_summary(import_env["gh_out"])["added"] == 2
 
     def test_pretty_dump_end_to_end(self, import_env):
-        """Pretty-print дамп: нормализация внутри импортёра, стороны на месте."""
+        """Pretty-print дамп: нормализация внутри импортёра, стороны на месте
+        (без неё 2-1001 потерял бы истца, а роль 2-1002 распозналась бы
+        неверно и дело НЕ отсеялось бы фильтром ролей)."""
         import_env["dump"].write_text(
             _fixture("search_fi_all_roles_pretty.html"), encoding="utf-8")
         _run(import_env)
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         by_id = {c["id"]: c for c in data["cases"]}
-        assert by_id["2-1002/2026"]["bank_role"] == "Истец"
+        assert list(by_id) == ["2-1001/2026"]  # истец 2-1002 отсеян
         assert by_id["2-1001/2026"]["plaintiff"] == "Петров Пётр Петрович"
+        s = _read_summary(import_env["gh_out"])
+        assert s["skipped_role"] == 1

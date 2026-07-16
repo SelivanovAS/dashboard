@@ -127,6 +127,7 @@ jobs:
             BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
               '{dump_key:$dk, status:$st, run_url:$ru,
                 added:(.added // 0), already:(.already // 0),
+                skipped_role:(.skipped_role // 0),
                 no_link:(.no_link // 0), subsidiary:(.subsidiary // 0),
                 rows:(.rows // 0), lines:(.lines // [])}
                + (if .error then {error:.error} else {} end)' \

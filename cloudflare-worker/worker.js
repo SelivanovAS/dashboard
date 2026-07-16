@@ -1058,7 +1058,7 @@ async function handleImportResult(request, env) {
   try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
   record.status = status;
   record.updated_at = new Date().toISOString();
-  for (const num of ["added", "already", "no_link", "subsidiary", "rows"]) {
+  for (const num of ["added", "already", "skipped_role", "no_link", "subsidiary", "rows"]) {
     if (typeof body[num] === "number") record[num] = body[num];
   }
   if (Array.isArray(body.lines)) {

@@ -2057,6 +2057,7 @@ function impResultText(item) {
   if (item.status === "done") {
     var parts = ["+" + (item.added || 0) + " добавлено"];
     if (item.already) parts.push(item.already + " уже в базе");
+    if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
     if (item.no_link) parts.push(item.no_link + " без ссылки");
     if (item.subsidiary) parts.push(item.subsidiary + " дочки");
     return parts.join(" · ");
