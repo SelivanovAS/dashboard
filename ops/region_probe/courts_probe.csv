@@ -1,0 +1,57 @@
+# Проба реестра Свердловской области (этап 1 тиражирования):
+# delo_id гражданских дел 1-й инст. + классификация поиска (ожидаем CAPTCHA у всех).
+# Формат: тип;Название;URL — читает scripts/build_region_registry.py.
+fi;Академический районный суд г. Екатеринбурга;https://akademicheskiy--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Алапаевский городской суд;https://alapaevsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Артемовский городской суд;https://artemovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Артинский районный суд;https://artinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Асбестовский городской суд;https://asbestovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Белоярский районный суд;https://beloyarsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Березовский городской суд;https://berezovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Богдановичский городской суд;https://bogdanovichsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Верх-Исетский районный суд г. Екатеринбурга;https://verhisetsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Верхнепышминский городской суд;https://verhnepyshminsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Верхнесалдинский районный суд;https://verhnesaldinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Верхотурский районный суд;https://verhotursky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Городской суд г. Лесного;https://lesnoy--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Дзержинский районный суд г. Нижний Тагил;https://dzerzhinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Железнодорожный районный суд г. Екатеринбурга;https://zheleznodorozhny--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Ивдельский городской суд;https://ivdelsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Ирбитский районный суд;https://irbitsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Каменский районный суд;https://kamensky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Камышловский районный суд;https://kamyshlovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Карпинский городской суд;https://karpinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Качканарский городской суд;https://kachkanarsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Кировградский городской суд;https://kirovgradsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Кировский районный суд г. Екатеринбурга;https://kirovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Красногорский районный суд г. Каменск-Уральского;https://krasnogorsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Краснотурьинский городской суд;https://krasnoturinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Красноуральский городской суд;https://krasnouralsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Красноуфимский районный суд;https://krasnoufimsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Кушвинский городской суд;https://kushvinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Ленинский районный суд г. Екатеринбурга;https://leninskyeka--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Ленинский районный суд г. Нижний Тагил;https://leninskytag--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Невьянский городской суд;https://neviansky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Нижнесергинский районный суд;https://nizhneserginsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Нижнетуринский городской суд;https://nizhneturinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Новоуральский городской суд;https://novouralsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Октябрьский районный суд г. Екатеринбурга;https://oktiabrsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Орджоникидзевский районный суд г. Екатеринбурга;https://ordzhonikidzevsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Первоуральский городской суд;https://pervouralsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Полевской городской суд;https://polevskoy--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Пригородный районный суд;https://prigorodny--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Ревдинский городской суд;https://revdinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Режевской городской суд;https://rezhevskoy--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Североуральский городской суд;https://severouralsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Серовский районный суд;https://serovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Синарский районный суд г. Каменск-Уральского;https://sinarsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Сухоложский городской суд;https://suholozhsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Сысертский районный суд;https://sysertsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Тавдинский районный суд;https://tavdinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Тагилстроевский районный суд г. Нижний Тагил;https://tagilstroevsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Талицкий районный суд;https://talicky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Туринский районный суд;https://turinsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Чкаловский районный суд г. Екатеринбурга;https://chkalovsky--svd.sudrf.ru/modules.php?name=sud_delo
+fi;Шалинский районный суд;https://shalinsky--svd.sudrf.ru/modules.php?name=sud_delo
+# Вариант домена из списка юриста (проверка опечатки cvd/svd):
+fi;Кировградский городской суд (вариант cvd);https://kirovgradsky--cvd.sudrf.ru/modules.php?name=sud_delo

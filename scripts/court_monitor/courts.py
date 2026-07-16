@@ -40,6 +40,21 @@ FIRST_INSTANCE_COURTS: list[CourtConfig] = list(ACTIVE_REGION.first_instance_cou
 CASSATION_COURT: CourtConfig = ACTIVE_REGION.cassation_court
 
 
+def courts_for_search(
+    courts: list[CourtConfig] | None = None,
+) -> list[CourtConfig]:
+    """Суды 1-й инст., по которым идёт автопоиск новых дел.
+
+    Исключаются выключенные (enabled=False) и закрытые проверочным кодом
+    (search_gated=True — их поиск бессмыслен: страница-капча читалась бы как
+    «дел нет»). ⚠ Карточки дел gated-судов при этом МОНИТОРЯТСЯ как обычно:
+    fi_court_map в runs.py фильтрует только по enabled — не менять его на
+    этот хелпер.
+    """
+    src = FIRST_INSTANCE_COURTS if courts is None else courts
+    return [c for c in src if c.enabled and not c.search_gated]
+
+
 def match_region_first_instance(
     long_court_name: str, region: RegionConfig
 ) -> CourtConfig | None:

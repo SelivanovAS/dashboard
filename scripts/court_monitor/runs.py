@@ -25,7 +25,7 @@ from court_monitor.courts import (
     APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
     FIRST_INSTANCE_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL,
-    appeal_court_by_domain, case_card_url, fi_card_url,
+    appeal_court_by_domain, case_card_url, courts_for_search, fi_card_url,
     match_hmao_first_instance,
 )
 from court_monitor.regions import get_region
@@ -68,7 +68,7 @@ from court_monitor.lifecycle import (
     _TERMINAL_FI_EVENT_RX, SERVICE_EVENT_PATTERNS,
 )
 from court_monitor.linking import (
-    find_new_cases, link_cases, link_cassation_cases,
+    collect_existing_ids, find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
 )
@@ -1291,24 +1291,10 @@ def main_json():
     timings["load_json"] = time.perf_counter() - t0
 
     # Индексы для быстрого поиска по всем номерам дел (включая холодный архив —
-    # только для дедупликации, см. выше).
-    existing_ids = set()
-    for c in cases + archived_cases + cold_archived_cases:
-        cid = (c.get("id") or "").strip()
-        if cid:
-            existing_ids.add(cid)
-            # Старые дела архивируются с переномерованием в id, например
-            # «2-122/2026 (2-535/2025;)» — добавляем ещё и «голую» часть,
-            # т.к. поиск суда возвращает только текущий номер.
-            bare = cid.split("(")[0].strip()
-            if bare and bare != cid:
-                existing_ids.add(bare)
-        fi = c.get("first_instance")
-        if fi and fi.get("case_number"):
-            existing_ids.add(fi["case_number"].strip())
-        ap = c.get("appeal")
-        if ap and ap.get("case_number"):
-            existing_ids.add(ap["case_number"].strip())
+    # только для дедупликации, см. выше). Хелпер общий с импортёром дампов.
+    existing_ids = collect_existing_ids(
+        cases + archived_cases + cold_archived_cases
+    )
 
     log.info(
         f"Загружено {len(cases)} {plural_ru(len(cases), 'дело', 'дела', 'дел')} "
@@ -1469,7 +1455,9 @@ def main_json():
     # персистим, но в дайджест/push не отдаём, дальше split_archived_json
     # отправит их в архив этим же прогоном.
     fi_discovered_resolved: list[dict] = []
-    enabled_courts = [c for c in FIRST_INSTANCE_COURTS if c.enabled]
+    # Автопоиск — только по судам без капчи (search_gated=True исключаются:
+    # их дела заводит импортёр, карточки мониторятся ниже через fi_court_map).
+    enabled_courts = courts_for_search()
     log_phase(3, 9, f"Поиск новых дел: {len(enabled_courts)} судов 1-й инстанции")
 
     # Индекс существующих cases по id — нужен для промоушена М-записей

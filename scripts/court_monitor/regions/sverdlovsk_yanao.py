@@ -2,22 +2,21 @@
 """Регион «Свердловская область + ЯНАО» (отделение Уральского банка) — этап 1
 тиражирования.
 
-Состав на старте (список юриста от 15.07.2026, у всех капчи НЕТ):
-- 12 судов 1-й инстанции ЯНАО — полный автопоиск, как в ХМАО;
+Состав:
+- 12 судов 1-й инстанции ЯНАО (список юриста от 15.07.2026, капчи нет) —
+  полный автопоиск, как в ХМАО;
+- 52 суда 1-й инстанции Свердловской области (список юриста от 16.07.2026;
+  две вторые площадки → 54 записи) — у ВСЕХ поиск закрыт проверочным кодом,
+  поэтому search_gated=True: автопоиск выключен, дела заводит импортёр
+  дампов (scripts/import_search_dump.py, секция «Импорт» в админке Worker'а),
+  карточки заведённых дел мониторятся как обычно;
 - ДВА апелляционных суда: Свердловский областной суд + Суд ЯНАО
   (мульти-апелляция: appeal.court_domain, составной ключ связки);
 - кассация — тот же 7-й КСОЮ, фильтр по судам этого реестра.
 
-⚠ Суды 1-й инстанции СВЕРДЛОВСКОЙ области сюда ещё НЕ добавлены: их поиск
-закрыт проверочным кодом (замер 15.07.2026, Академический р/с). Они появятся
-вместе с механизмом discovery «разгадка 1 раз» (шаги 1.2–1.3 плана); тогда же
-в fi_region_markers/fi_suspect_regex добавятся свердловские маркеры — раньше
-нельзя: фильтр 7kas начал бы жаловаться «суд похож на регион, но не в реестре»
-на каждое свердловское дело банка.
-
-Апелляции Свердловского облсуда при этом мониторятся УЖЕ СЕЙЧАС (у облсуда
-капчи нет): дела приходят «сверху» через поиск апелляции, как исторически
-было в ХМАО до Этапа 1.
+Апелляции Свердловского облсуда мониторятся полностью (у облсуда капчи
+нет): дела приходят «сверху» через поиск апелляции, как исторически было
+в ХМАО до Этапа 1.
 """
 
 from __future__ import annotations
@@ -36,9 +35,77 @@ APPEAL_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Суд Ямало-Ненецкого автономного округа", "oblsud--ynao.sudrf.ru", 5, "appeal"),
 )
 
+# Суды первой инстанции Свердловской области (список юриста от 16.07.2026,
+# 52 суда; Камышловский и Красноуфимский имеют по 2 сервера на одном домене —
+# итого 54 записи). У ВСЕХ поиск закрыт проверочным кодом → search_gated=True
+# (см. CourtConfig.search_gated: карточки мониторятся, автопоиск выключен).
+# delo_id=1540005 — стандартный id «Гражданские дела 1 инст.» ГАС «Правосудие»
+# (совпадает у всех 33 проверенных судов ХМАО/ЯНАО; у Академического
+# подтверждён живой пробой 15.07.2026); выверка остальных — workflow
+# probe_region_registry.yml. Академический — первый проверочный суд импорта.
+SVERDLOVSK_FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
+    CourtConfig("Академический районный суд г. Екатеринбурга", "akademicheskiy--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Алапаевский городской суд",       "alapaevsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Артемовский городской суд",       "artemovsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Артинский районный суд",          "artinsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Асбестовский городской суд",      "asbestovsky--svd.sudrf.ru",      1540005, "first_instance", search_gated=True),
+    CourtConfig("Белоярский районный суд",         "beloyarsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Березовский городской суд",       "berezovsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Богдановичский городской суд",    "bogdanovichsky--svd.sudrf.ru",   1540005, "first_instance", search_gated=True),
+    CourtConfig("Верх-Исетский районный суд г. Екатеринбурга", "verhisetsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Верхнепышминский городской суд",  "verhnepyshminsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Верхнесалдинский районный суд",   "verhnesaldinsky--svd.sudrf.ru",  1540005, "first_instance", search_gated=True),
+    CourtConfig("Верхотурский районный суд",       "verhotursky--svd.sudrf.ru",      1540005, "first_instance", search_gated=True),
+    CourtConfig("Городской суд г. Лесного",        "lesnoy--svd.sudrf.ru",           1540005, "first_instance", search_gated=True),
+    CourtConfig("Дзержинский районный суд г. Нижний Тагил", "dzerzhinsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Железнодорожный районный суд г. Екатеринбурга", "zheleznodorozhny--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
+    CourtConfig("Ивдельский городской суд",        "ivdelsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Ирбитский районный суд",          "irbitsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Каменский районный суд",          "kamensky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Камышловский районный суд",       "kamyshlovsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
+    CourtConfig("Камышловский районный суд (сервер 2)", "kamyshlovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
+    CourtConfig("Карпинский городской суд",        "karpinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Качканарский городской суд",      "kachkanarsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
+    # ⚠ В списке юриста домен «kirovgradsky--cvd» — почти наверняка опечатка
+    # («свд» латиницей); оба поддомена резолвятся (wildcard DNS). Проверка —
+    # probe_region_registry.yml; до неё используем каноничный --svd.
+    CourtConfig("Кировградский городской суд",     "kirovgradsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
+    CourtConfig("Кировский районный суд г. Екатеринбурга", "kirovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Красногорский районный суд г. Каменск-Уральского", "krasnogorsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Краснотурьинский городской суд",  "krasnoturinsky--svd.sudrf.ru",   1540005, "first_instance", search_gated=True),
+    CourtConfig("Красноуральский городской суд",   "krasnouralsky--svd.sudrf.ru",    1540005, "first_instance", search_gated=True),
+    CourtConfig("Красноуфимский районный суд",     "krasnoufimsky--svd.sudrf.ru",    1540005, "first_instance", search_gated=True),
+    CourtConfig("Красноуфимский районный суд (сервер 2)", "krasnoufimsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
+    CourtConfig("Кушвинский городской суд",        "kushvinsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Ленинский районный суд г. Екатеринбурга", "leninskyeka--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Ленинский районный суд г. Нижний Тагил", "leninskytag--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Невьянский городской суд",        "neviansky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Нижнесергинский районный суд",    "nizhneserginsky--svd.sudrf.ru",  1540005, "first_instance", search_gated=True),
+    CourtConfig("Нижнетуринский городской суд",    "nizhneturinsky--svd.sudrf.ru",   1540005, "first_instance", search_gated=True),
+    CourtConfig("Новоуральский городской суд",     "novouralsky--svd.sudrf.ru",      1540005, "first_instance", search_gated=True),
+    CourtConfig("Октябрьский районный суд г. Екатеринбурга", "oktiabrsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Орджоникидзевский районный суд г. Екатеринбурга", "ordzhonikidzevsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Первоуральский городской суд",    "pervouralsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
+    CourtConfig("Полевской городской суд",         "polevskoy--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Пригородный районный суд",        "prigorodny--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Ревдинский городской суд",        "revdinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Режевской городской суд",         "rezhevskoy--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
+    CourtConfig("Североуральский городской суд",   "severouralsky--svd.sudrf.ru",    1540005, "first_instance", search_gated=True),
+    CourtConfig("Серовский районный суд",          "serovsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Синарский районный суд г. Каменск-Уральского", "sinarsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Сухоложский городской суд",       "suholozhsky--svd.sudrf.ru",      1540005, "first_instance", search_gated=True),
+    CourtConfig("Сысертский районный суд",         "sysertsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Тавдинский районный суд",         "tavdinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+    CourtConfig("Тагилстроевский районный суд г. Нижний Тагил", "tagilstroevsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Талицкий районный суд",           "talicky--svd.sudrf.ru",          1540005, "first_instance", search_gated=True),
+    CourtConfig("Туринский районный суд",          "turinsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
+    CourtConfig("Чкаловский районный суд г. Екатеринбурга", "chkalovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    CourtConfig("Шалинский районный суд",          "shalinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
+)
+
 # Суды первой инстанции ЯНАО (delo_id=1540005 — гражданские дела 1 инст.;
 # подтверждено пробой build_region_registry.py 15.07.2026).
-FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
+YANAO_FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Губкинский районный суд",       "gubkinskiy--ynao.sudrf.ru",      1540005, "first_instance"),
     CourtConfig("Красноселькупский районный суд", "krasnoselkupsky--ynao.sudrf.ru", 1540005, "first_instance"),
     CourtConfig("Лабытнангский городской суд",   "labytnangsky--ynao.sudrf.ru",    1540005, "first_instance"),
@@ -51,6 +118,13 @@ FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Тазовский районный суд",        "tazovsky--ynao.sudrf.ru",        1540005, "first_instance"),
     CourtConfig("Шурышкарский районный суд",     "shuryshkarsky--ynao.sudrf.ru",   1540005, "first_instance"),
     CourtConfig("Ямальский районный суд",        "yamalsky--ynao.sudrf.ru",        1540005, "first_instance"),
+)
+
+# Полный реестр 1-й инстанции региона: Свердловская область (капчёвые,
+# search_gated) + ЯНАО (полный автопоиск). Порядок блоков = порядок
+# dropdown'а импорта в админке; courts_for_search() его сохраняет.
+FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
+    SVERDLOVSK_FIRST_INSTANCE_COURTS + YANAO_FIRST_INSTANCE_COURTS
 )
 
 # Кассация — 7-й КСОЮ, как у ХМАО (оба субъекта в его юрисдикции).
@@ -68,16 +142,20 @@ REGION = RegionConfig(
     appeal_courts=APPEAL_COURTS,
     first_instance_courts=FIRST_INSTANCE_COURTS,
     cassation_court=CASSATION_COURT,
-    # Пока в реестре только ЯНАО-суды 1-й инст. — и маркеры только ямальские
-    # (см. предупреждение в докстринге про свердловские).
-    fi_region_markers=("ямало-ненецк", "янао"),
+    # Длинная форма имени суда 1-й инст. на 7kas содержит явный маркер
+    # субъекта («…Свердловской области» / «…Ямало-Ненецкого автономного
+    # округа») — guard от одноимённых судов чужих регионов.
+    fi_region_markers=("ямало-ненецк", "янао", "свердловск"),
     appeal_long_markers=(
         ("свердловский областной суд", "oblsud--svd.sudrf.ru"),
         ("суд ямало-ненецкого автономного округа", "oblsud--ynao.sudrf.ru"),
     ),
     name_gen="Свердловской области и ЯНАО",
     name_short="ЕКБ + ЯНАО",
-    fi_suspect_regex="Ямало-Ненецк|ЯНАО",
+    # WARNING-детектор рассинхрона названий (класс бага «Берёзовский» ё/е и
+    # склонения городов: «г. Нижний Тагил» против «г. Нижнего Тагила») —
+    # шире маркеров: включает словоформы и города региона.
+    fi_suspect_regex="Ямало-Ненецк|ЯНАО|Свердловск|Екатеринбург|Нижн\\w+ Тагил",
     # URL дашборда территории; при создании форка перекрывается Actions
     # Variable DASHBOARD_URL (имя репозитория может отличаться).
     dashboard_url="https://selivanovas.github.io/dashboard-ural/sberbank_dashboard.html",

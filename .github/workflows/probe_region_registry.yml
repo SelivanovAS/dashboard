@@ -1,0 +1,56 @@
+# Проба реестра судов новой территории с GitHub-раннера (US-egress видит
+# sudrf с 05.07.2026; Mac юриста — за VPN, sudrf режет иностранный IP).
+# Прогоняет scripts/build_region_registry.py по ops/region_probe/courts_probe.csv:
+# для каждого суда проверяет наличие ожидаемого delo_id (1540005 у 1-й инст.)
+# и классифицирует боевой поиск (RESULTS/EMPTY/CAPTCHA/FAIL). Отчёт коммитится
+# в ops/region_probe/report.txt — читать его локально через git pull.
+# НИЧЕГО не парсит в данные, не шлёт дайджест.
+name: "🔬 Проба реестра региона (delo_id + капча)"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ops/region_probe/courts_probe.csv"
+      - ".github/workflows/probe_region_registry.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Не толкаться пушами с ночным прогоном/импортом.
+    concurrency:
+      group: region-probe
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Проба судов (2 вежливых запроса на суд)
+        run: |
+          python3 scripts/build_region_registry.py \
+            --input ops/region_probe/courts_probe.csv 2>&1 \
+            | tee ops/region_probe/report.txt
+
+      - name: Commit report
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add ops/region_probe/report.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "🔬 Отчёт пробы реестра региона ($(date -u +'%d.%m.%Y %H:%M') UTC)"
+          # Ретраи на случай параллельного пуша другого workflow.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
