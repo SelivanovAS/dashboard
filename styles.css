@@ -1205,7 +1205,10 @@ tr.detail-row { display:none; }
   .badge { font-size:var(--fs-sm); }
   .badge-cat { font-size:var(--fs-sm); }
   .mc-case { font-size:17px; }
-  .mc-court-label { font-size:var(--fs-sm); }
+  /* Суд + судья не влезают в строку на узких экранах (на 320px обрезалось
+     20% карточек, причём резало хвост с фамилией судьи). Переносим, как
+     это уже сделано для .up-court в «Ближайших». */
+  .mc-court-label { font-size:var(--fs-sm); overflow-wrap:anywhere; white-space:normal; }
   .mc-parties { font-size:var(--fs-lg); }
   .mc-bottom .badge { font-size:var(--fs-md); }
   .mc-hearing .hearing-primary { font-size:var(--fs-sm); }
