@@ -61,7 +61,7 @@ if _HERE not in sys.path:
 from court_monitor import config  # noqa: E402
 from court_monitor.config import cold_archive_glob, log  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
-    _fi_search_to_json_case, collect_existing_ids,
+    _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
 )
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
@@ -127,12 +127,21 @@ def import_rows(
         if os.path.abspath(cold_path) == os.path.abspath(config.JSON_ARCHIVE_PATH):
             continue
         cold.extend(load_json(cold_path).get("cases", []))
-    existing_ids = collect_existing_ids(cases + archived + cold)
-    # Индекс активных дел по id — для промоушена М→2 (материал из прошлого
-    # импорта возбуждён в гражданское дело; зеркало блока 3 main_json).
-    case_by_id: dict[str, dict] = {
-        (c.get("id") or "").strip(): c for c in cases
-    }
+    # Дедуп — с УЧЁТОМ суда: номера дел не уникальны между судами, глобальный
+    # индекс по номеру давал бы ложное «уже отслеживается» при совпадении
+    # номера с делом другого суда (вопрос юриста 16.07.2026). Хелпер общий
+    # с фильтром новых дел main_json.
+    dedup_exact, dedup_wildcard = collect_fi_dedup_index(cases + archived + cold)
+    # Индекс активных дел по (домен, id) — для промоушена М→2 (материал из
+    # прошлого импорта возбуждён в дело; зеркало блока 3 main_json). Домен в
+    # ключе: М-номера тоже не уникальны, чужой суд запись не переименовывает.
+    case_by_id: dict[tuple[str, str], dict] = {}
+    for c in cases:
+        dom = ((c.get("first_instance") or {})
+               .get("court_domain") or "").strip().lower()
+        cid = (c.get("id") or "").strip()
+        if dom and cid:
+            case_by_id[(dom, cid)] = c
 
     lines: list[str] = []
     counters = {
@@ -146,15 +155,16 @@ def import_rows(
     for r in rows:
         num = r["case_number"]
         bare = num.split("(")[0].strip()
+        domain = (r.get("court_domain") or "").strip().lower()
         parties = " — ".join(x for x in (r.get("plaintiff"), r.get("defendant")) if x)
         # Промоушен материала → 2-XXX ДО дедупа и фильтра ролей: строка с
-        # комбо-номером «2-X ~ М-Y» при уже отслеживаемой М-записи означает
-        # «наш материал возбуждён в дело» — запись переименовывается, а не
-        # дублируется. Роль записи не трогаем (это то же самое дело).
+        # комбо-номером «2-X ~ М-Y» при уже отслеживаемой М-записи ЭТОГО ЖЕ
+        # суда означает «наш материал возбуждён в дело» — запись
+        # переименовывается, а не дублируется. Роль записи не трогаем.
         mat = (r.get("material_number") or "").strip()
         if (mat and mat != num
-                and num not in existing_ids and bare not in existing_ids):
-            old = case_by_id.get(mat)
+                and not is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard)):
+            old = case_by_id.get((domain, mat))
             if old is not None:
                 counters["promoted"] += 1
                 promoted_any = True
@@ -177,16 +187,16 @@ def import_rows(
                 # — эмитит ближайший прогон (как при промоушене автопоиска).
                 if not fi_block.get("accepted_emitted"):
                     fi_block["accepted_pending_emit"] = True
-                case_by_id.pop(mat, None)
-                case_by_id[num] = old
-                existing_ids.discard(mat)
-                existing_ids.add(num)
+                case_by_id.pop((domain, mat), None)
+                case_by_id[(domain, num)] = old
+                dedup_exact.discard((domain, mat))
+                dedup_exact.add((domain, num))
                 if bare != num:
-                    existing_ids.add(bare)
+                    dedup_exact.add((domain, bare))
                 continue
-        if num in existing_ids or bare in existing_ids:
+        if is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard):
             counters["already"] += 1
-            lines.append(f"[ALREADY] {num} — уже отслеживается")
+            lines.append(f"[ALREADY] {num} — уже отслеживается в этом суде")
             continue
         # Только «банк-ответчик» — зеркало фильтра боевого автопоиска
         # (parse_first_instance_search без keep_all_roles). Парсим-то мы все
@@ -218,9 +228,9 @@ def import_rows(
         # «импортировано» на фронте — задел).
         entry["import"] = {"operator": operator, "at": now_iso, "source": "dump"}
         new_entries.append(entry)
-        existing_ids.add(num)
+        dedup_exact.add((domain, num))
         if bare != num:
-            existing_ids.add(bare)
+            dedup_exact.add((domain, bare))
         counters["added"] += 1
         lines.append(f"[ADDED] {num} · {r.get('bank_role', '?')} · {parties}")
 

@@ -235,6 +235,81 @@ class TestImporterE2E:
         s = _read_summary(import_env["gh_out"])
         assert "Таблица результатов не найдена" in s["error"]
 
+    def test_same_number_in_other_court_is_not_duplicate(self, import_env):
+        """Номера дел не уникальны между судами: «2-1001/2026» другого суда
+        не должен блокировать добавление дела Академического (вопрос юриста
+        16.07.2026 — дедуп с учётом суда)."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "2-1001/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Ответчик",
+                "first_instance": {"case_number": "2-1001/2026",
+                                   "court": "Алапаевский городской суд",
+                                   "court_domain": "alapaevsky--svd.sudrf.ru"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 2      # 2-1001 Академического добавлен, не ALREADY
+        assert s["already"] == 0
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        same_num = [c for c in data["cases"] if c["id"] == "2-1001/2026"]
+        assert len(same_num) == 2   # по одному на каждый суд
+        assert {(c["first_instance"]["court_domain"]) for c in same_num} == {
+            "alapaevsky--svd.sudrf.ru", "akademicheskiy--svd.sudrf.ru",
+        }
+
+    def test_same_number_same_court_is_duplicate(self, import_env):
+        """А в ТОМ ЖЕ суде совпадение номера — честный дубль → ALREADY."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "2-1001/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Ответчик",
+                "first_instance": {"case_number": "2-1001/2026",
+                                   "court_domain": "akademicheskiy--svd.sudrf.ru"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 1 and s["already"] == 1
+
+    def test_record_without_domain_blocks_everywhere(self, import_env):
+        """Запись без court_domain (легаси/«с апелляции») — wildcard:
+        консервативно блокирует номер во всех судах (лучше пропуск, чем дубль).
+        Так же работает архивный дедуп (архив в test_dedup_against_archive)."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{"id": "2-1001/2026", "current_stage": "appeal"}],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 1 and s["already"] == 1
+
+    def test_material_in_other_court_not_promoted(self, import_env):
+        """М-500/2026 ДРУГОГО суда не переименовывается комбо-строкой
+        Академического — дело добавляется как новое."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "М-500/2026",
+                "current_stage": "first_instance",
+                "bank_role": "Ответчик",
+                "first_instance": {"case_number": "М-500/2026",
+                                   "court_domain": "alapaevsky--svd.sudrf.ru"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["promoted"] == 0
+        assert s["added"] == 2  # 2-1006 добавлен новым делом
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        ids = [c["id"] for c in data["cases"]]
+        assert "М-500/2026" in ids  # чужая запись не тронута
+
     def test_material_promoted_to_case(self, import_env):
         """Комбо-номер «2-1006 ~ М-500» при уже отслеживаемом материале
         М-500/2026: запись переименовывается (зеркало промоушена main_json),
@@ -250,6 +325,7 @@ class TestImporterE2E:
                 "import": {"operator": "Прошлый", "at": "2026-07-10T10:00:00",
                            "source": "dump", "announced": True},
                 "first_instance": {"case_number": "М-500/2026",
+                                   "court_domain": "akademicheskiy--svd.sudrf.ru",
                                    "link": "1|aaaa-0000", "srv_num": 1},
             }],
         }, ensure_ascii=False), encoding="utf-8")
