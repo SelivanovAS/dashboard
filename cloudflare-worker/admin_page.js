@@ -536,9 +536,11 @@ html[data-role="operator"] .run-ext { display:none !important; }
 .imp-status { font-size:var(--fs-sm); }
 .imp-status .badge { vertical-align:baseline; }
 .imp-report { margin-top:6px; }
+.imp-hist-item { border-bottom:1px solid var(--divider); }
+.imp-hist-item:last-child { border-bottom:0; }
+.imp-hist-item > details.fold { margin:0 0 6px; }
 .imp-hist-row { display:flex; gap:8px; align-items:baseline; padding:6px 0;
-  border-bottom:1px solid var(--divider); font-size:var(--fs-sm); flex-wrap:wrap; }
-.imp-hist-row:last-child { border-bottom:0; }
+  font-size:var(--fs-sm); flex-wrap:wrap; }
 .imp-hist-court { color:var(--fg-2); }
 .imp-hist-meta { color:var(--fg-3); font-size:var(--fs-xs); }
 </style>
@@ -2084,12 +2086,20 @@ function renderImportHistory(items) {
   el.className = "";
   el.innerHTML = items.slice(0, 20).map(function (it) {
     const court = impCourtNameByDomain[it.court_domain] || it.court_domain || "?";
-    return '<div class="imp-hist-row">' + impStatusBadge(it.status)
+    // Построчный отчёт импортёра ([ADDED]/[ALREADY]/[SKIPPED ROLE]/…) хранится
+    // в записи журнала — показываем свёрткой, как в live-блоке после отправки.
+    var linesHtml = "";
+    if (Array.isArray(it.lines) && it.lines.length) {
+      linesHtml = '<details class="fold"><summary>Отчёт построчно ('
+        + it.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
+        + it.lines.map(escHtml).join("\\n") + '</pre></div></details>';
+    }
+    return '<div class="imp-hist-item"><div class="imp-hist-row">' + impStatusBadge(it.status)
       + '<span class="imp-hist-court"><b>' + escHtml(court) + '</b></span>'
       + '<span>' + escHtml(it.operator || "без имени") + '</span>'
       + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
-      + '</div>';
+      + '</div>' + linesHtml + '</div>';
   }).join("");
 }
 async function loadImportLog() {
