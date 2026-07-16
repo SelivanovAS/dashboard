@@ -277,13 +277,53 @@ class TestImporterE2E:
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 1 and s["already"] == 1
 
-    def test_record_without_domain_blocks_everywhere(self, import_env):
-        """Запись без court_domain (легаси/«с апелляции») — wildcard:
-        консервативно блокирует номер во всех судах (лучше пропуск, чем дубль).
+    def test_record_without_court_blocks_everywhere(self, import_env):
+        """Запись без домена И без имени суда — wildcard: консервативно
+        блокирует номер во всех судах (лучше пропуск, чем дубль).
         Так же работает архивный дедуп (архив в test_dedup_against_archive)."""
         import_env["json"].write_text(json.dumps({
             "version": 1,
             "cases": [{"id": "2-1001/2026", "current_stage": "appeal"}],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 1 and s["already"] == 1
+
+    def test_appeal_record_other_court_by_name_not_blocking(self, import_env):
+        """Сценарий Ивделя (16.07.2026): дело «с апелляции» без court_domain,
+        но с именем суда — домен резолвится по имени, и номер НЕ блокирует
+        одноимённое дело другого суда (11 ложных [ALREADY] на первых живых
+        импортах: 2-114/2026 Ивдельского отброшено из-за Пуровского и т.п.)."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "33-999/2026",
+                "current_stage": "appeal",
+                "first_instance": {"case_number": "2-1001/2026",
+                                   "court": "Алапаевский городской суд"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 2 and s["already"] == 0
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        same_num = [c for c in data["cases"]
+                    if (c.get("first_instance") or {}).get("case_number") == "2-1001/2026"]
+        assert len(same_num) == 2   # алапаевское «с апелляции» + академическое из дампа
+
+    def test_appeal_record_same_court_by_name_is_duplicate(self, import_env):
+        """А если имя суда записи «с апелляции» — суд самого дампа,
+        совпадение номера остаётся честным дублем → ALREADY."""
+        import_env["json"].write_text(json.dumps({
+            "version": 1,
+            "cases": [{
+                "id": "33-999/2026",
+                "current_stage": "appeal",
+                "first_instance": {
+                    "case_number": "2-1001/2026",
+                    "court": "Академический районный суд г. Екатеринбурга",
+                },
+            }],
         }, ensure_ascii=False), encoding="utf-8")
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
