@@ -69,6 +69,26 @@ function endpointToKey(endpoint) {
 
 const CASES_DATA_URL_DEFAULT = "https://selivanovas.github.io/dashboard/data/cases.json";
 function casesDataUrl() { return cfgVar("CASES_DATA_URL", CASES_DATA_URL_DEFAULT); }
+// Производные URL территории — ВСЕ данные страницы админки выводятся из
+// CASES_DATA_URL (wrangler.toml форка), а не хардкодятся: иначе админка
+// Урала показывала бы дела и здоровье парсеров ХМАО.
+function siteBaseUrl() {
+  // "https://…/dashboard/data/cases.json" → "https://…/dashboard"
+  return casesDataUrl().replace(/\/data\/cases\.json$/, "");
+}
+function adminPageConfig() {
+  const base = siteBaseUrl();
+  return {
+    casesUrl: base + "/data/cases.json",
+    archiveUrl: base + "/data/cases_archive.json",
+    pushesUrl: base + "/data/last_personal_pushes.json",
+    digestUrl: base + "/data/last_digest.json",
+    healthUrl: base + "/data/parse_health.json",
+    dashboardUrl: base + "/sberbank_dashboard.html",
+    siteBase: base,
+    ghRepo: cfgVar("GH_REPO", GH_REPO_DEFAULT),
+  };
+}
 
 function wnBareCaseNumber(n) {
   return String(n || "").trim().split(/[\s(]/)[0];
@@ -413,12 +433,10 @@ async function handleRunProgress(request, env) {
 }
 
 // JSON для блока «🛰 Парсинг» в админке: текущий и предыдущий прогон.
+// Доступен и оператору: живой лог импорт-прогона — его обратная связь.
 async function handleAdminRunProgress(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
   try {
     const [curRaw, prevRaw] = await Promise.all([
       env.PUSH_SUBSCRIPTIONS.get("progress:current"),
@@ -439,15 +457,38 @@ async function handleAdminRunProgress(request, env) {
 
 // ── Админка подписчиков ───────────────────────────────────────────────────────
 
+// Роли админки (с 16.07.2026, тиражирование): owner — юрист-владелец
+// (OWNER_SECRET, всё как раньше), operator — сопровождающий капчёвого суда
+// (общий OPERATOR_SECRET на ~14 человек; имя оператора — поле формы импорта,
+// доверительное, не аутентификация). Оператор видит статус/здоровье/живой
+// лог/импорт; подписчики и запуски прогонов закрыты И на сервере (не только
+// в UI). OPERATOR_SECRET не задан (ХМАО-инстанс) → роль неактивна.
+function resolveAdminRole(request, env) {
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret") || "";
+  if (!secret) return null;
+  if (env.OWNER_SECRET && secret === env.OWNER_SECRET) return "owner";
+  if (env.OPERATOR_SECRET && String(env.OPERATOR_SECRET).length > 0
+      && secret === env.OPERATOR_SECRET) return "operator";
+  return null;
+}
+// Общий гейт: чужой/пустой секрет → 401, валидный секрет без нужной роли
+// (оператор на owner-эндпоинте) → 403. Возвращает {role} либо {error}.
+function requireAdminRole(request, env, roles) {
+  const role = resolveAdminRole(request, env);
+  if (role && roles.includes(role)) return { role };
+  return {
+    error: new Response(role ? "Forbidden" : "Unauthorized",
+      { status: role ? 403 : 401 }),
+  };
+}
+
 // Возвращает JSON со всеми подписками (как /subscriptions, но авторизация
 // через ?secret=<OWNER_SECRET> в URL — чтобы HTML-страница могла дёрнуть
 // данные без хранения PUSH_SECRET в JS-коде в браузере).
 async function handleAdminData(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const gate = requireAdminRole(request, env, ["owner"]);
+  if (gate.error) return gate.error;
   try {
     const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
     const subs = await Promise.all(
@@ -481,31 +522,30 @@ async function handleAdminData(request, env) {
 }
 
 // HTML-страница админки. Открывается напрямую в браузере по URL
-// `/admin?secret=<OWNER_SECRET>`. Содержит inline-стили и JS, который
-// тянет /admin/data (с тем же secret) и cases.json с GitHub Pages.
+// `/admin?secret=<OWNER_SECRET|OPERATOR_SECRET>`. Содержит inline-стили и JS,
+// который тянет /admin/data (с тем же secret) и cases.json с GitHub Pages.
+// Роль вшивается в страницу (ROLE) — операторский рендер прячет owner-блоки,
+// но реальный запрет — на эндпоинтах (requireAdminRole).
 async function handleAdmin(request, env) {
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
   const url = new URL(request.url);
   const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
-  }
   // Embed secret в HTML, чтобы JS мог дёрнуть /admin/data. Secret уже в URL,
   // дополнительная утечка минимальна, но всё равно экранируем кавычки.
   const safeSecret = secret.replace(/[<>"&']/g, "");
-  const html = renderAdminHtml(safeSecret);
+  const html = renderAdminHtml(safeSecret, gate.role, adminPageConfig());
   return new Response(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
 }
 
-// Утилиты для всех /admin/<action> endpoints: проверка secret + загрузка
-// существующей подписки по endpoint.
+// Утилиты для /admin/<action> endpoints ПОДПИСОК: проверка secret + загрузка
+// существующей подписки по endpoint. Только owner: label/watchlist/unsubscribe/
+// test-push оперируют чужими push-подписками — оператору они закрыты.
 async function adminAuthAndLoad(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return { error: new Response("Unauthorized", { status: 401 }) };
-  }
+  const gate = requireAdminRole(request, env, ["owner"]);
+  if (gate.error) return { error: gate.error };
   let body;
   try {
     body = await request.json();
@@ -719,13 +759,11 @@ function nextCronAt() {
 }
 
 // JSON для блока «🚀 Прогоны»: последние runs GitHub Actions. PAT остаётся
-// на сервере — страница ходит сюда со своим OWNER_SECRET.
+// на сервере — страница ходит сюда со своим секретом. Оператору тоже
+// доступен: плитка «Последний прогон» и статус импорт-прогона.
 async function handleAdminGhRuns(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
   const ghHeaders = {
     Authorization: `Bearer ${env.GITHUB_PAT}`,
     Accept: "application/vnd.github+json",
@@ -784,25 +822,63 @@ async function handleAdminGhRuns(request, env) {
   }
 }
 
-// Белый список запуска workflow из админки: только эти файлы и только эти
-// inputs. Значения — строки («true»/«false» для булевых — так требует
-// GitHub REST API, тип из workflow_dispatch он приводит сам).
+// Белый список запуска workflow из админки: только эти файлы, только эти
+// inputs и только этим ролям. Значения inputs — строки («true»/«false» для
+// булевых — так требует GitHub REST API, тип из workflow_dispatch он
+// приводит сам). Проверка roles здесь — РЕАЛЬНЫЙ запрет (оператор не может
+// запустить полный прогон или Claude-дайджест), скрытие кнопок в UI — лишь UX.
 const DISPATCH_WORKFLOWS = {
-  "update_cases.yml": new Set(["to_group", "smart_skip"]),
-  "test_digest.yml": new Set([
-    "to_group", "push_all", "full_llm", "llm_provider",
-    "claude_model", "claude_effort", "gigachat_model", "openrouter_model",
-    "llm_model", "commit_results",
-  ]),
+  "update_cases.yml": {
+    inputs: new Set(["to_group", "smart_skip"]),
+    roles: ["owner"],
+  },
+  "test_digest.yml": {
+    inputs: new Set([
+      "to_group", "push_all", "full_llm", "llm_provider",
+      "claude_model", "claude_effort", "gigachat_model", "openrouter_model",
+      "llm_model", "commit_results",
+    ]),
+    roles: ["owner"],
+  },
+  "import_cases.yml": {
+    inputs: new Set(["dump_key", "court_domain", "operator"]),
+    roles: ["owner", "operator"],
+  },
 };
+
+// Один POST workflow_dispatch на GitHub API (ветка main). Общий для кнопок
+// админки (handleAdminDispatch) и внутреннего диспатча импорта
+// (handleAdminImportDump). Возвращает {ok} | {ok:false, error, detail}.
+async function dispatchWorkflowOnGitHub(env, workflow, inputs) {
+  try {
+    const r = await fetch(
+      `${ghRepoApi()}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_PAT}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "CloudflareWorker",
+        },
+        body: JSON.stringify({ ref: "main", inputs }),
+      }
+    );
+    if (r.status === 204) {
+      console.log(`dispatch ok: ${workflow} ${JSON.stringify(inputs)}`);
+      return { ok: true };
+    }
+    const text = await r.text().catch(() => "");
+    return { ok: false, error: `GitHub ${r.status}`, detail: text.slice(0, 200) };
+  } catch (e) {
+    console.error(`dispatch ${workflow} error:`, e);
+    return { ok: false, error: String(e).slice(0, 200) };
+  }
+}
 
 // Запуск workflow по кнопке из админки (workflow_dispatch, ветка main).
 async function handleAdminDispatch(request, env) {
-  const url = new URL(request.url);
-  const secret = url.searchParams.get("secret") || "";
-  if (!env.OWNER_SECRET || secret !== env.OWNER_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
   let body;
   try {
     body = await request.json();
@@ -818,10 +894,16 @@ async function handleAdminDispatch(request, env) {
       { status: 400, headers: jsonHeaders }
     );
   }
+  if (!allowed.roles.includes(gate.role)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `роль ${gate.role} не может запускать ${workflow}` }),
+      { status: 403, headers: jsonHeaders }
+    );
+  }
   const inputs = {};
   const src = body.inputs && typeof body.inputs === "object" ? body.inputs : {};
   for (const [k, v] of Object.entries(src)) {
-    if (!allowed.has(k)) {
+    if (!allowed.inputs.has(k)) {
       return new Response(
         JSON.stringify({ ok: false, error: `input не разрешён: ${k}` }),
         { status: 400, headers: jsonHeaders }
@@ -835,34 +917,185 @@ async function handleAdminDispatch(request, env) {
     }
     inputs[k] = v;
   }
+  const res = await dispatchWorkflowOnGitHub(env, workflow, inputs);
+  if (res.ok) {
+    return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
+  }
+  return new Response(JSON.stringify(res), {
+    status: res.error && res.error.startsWith("GitHub") ? 502 : 500,
+    headers: jsonHeaders,
+  });
+}
+
+// ── Импорт дел капчёвых судов ────────────────────────────────────────────────
+// Поток: оператор решает код на сайте суда → вставляет дамп выдачи в админку →
+// POST /admin/import-dump кладёт дамп в KV (import:dump:<uuid>, TTL 24 ч),
+// заводит запись журнала (import:log:<ts>|<uuid>, TTL 90 дн — пер-ключевой
+// журнал, без гонок read-modify-write) и диспатчит import_cases.yml →
+// Action забирает дамп GET /import-dump (Bearer PUSH_SECRET), гонит
+// import_search_dump.py, коммитит cases.json и постит итог POST /import-result
+// → страница поллит GET /admin/import-log и показывает оператору «+N».
+
+const IMPORT_DUMP_TTL = 24 * 3600;        // дамп нужен только ближайшему прогону
+const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в админке
+const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
+const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
+
+// Приём дампа от оператора/владельца: валидация → KV → журнал → dispatch.
+async function handleAdminImportDump(request, env) {
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
+  const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
+  let body;
   try {
-    const r = await fetch(
-      `${ghRepoApi()}/actions/workflows/${workflow}/dispatches`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.GITHUB_PAT}`,
-          Accept: "application/vnd.github+json",
-          "User-Agent": "CloudflareWorker",
-        },
-        body: JSON.stringify({ ref: "main", inputs }),
-      }
-    );
-    if (r.status === 204) {
-      console.log(`admin dispatch ok: ${workflow} ${JSON.stringify(inputs)}`);
-      return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
-    }
-    const text = await r.text().catch(() => "");
+    body = await request.json();
+  } catch (_) {
+    return new Response("Bad JSON", { status: 400 });
+  }
+  const courtDomain = String((body && body.court_domain) || "").trim().toLowerCase();
+  const operator = String((body && body.operator) || "").trim().slice(0, 60);
+  const html = typeof (body && body.html) === "string" ? body.html : "";
+  if (!/^[a-z0-9][a-z0-9.-]*\.sudrf\.ru$/.test(courtDomain)) {
     return new Response(
-      JSON.stringify({ ok: false, error: `GitHub ${r.status}`, detail: text.slice(0, 200) }),
-      { status: 502, headers: jsonHeaders }
+      JSON.stringify({ ok: false, error: "court_domain не похож на домен sudrf.ru" }),
+      { status: 400, headers: jsonHeaders }
     );
+  }
+  if (html.length < IMPORT_HTML_MIN) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "дамп слишком короткий — вставьте страницу выдачи целиком (копией выделения или файлом «только HTML»)" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  if (html.length > IMPORT_HTML_MAX) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "дамп больше 2 МБ — это не страница выдачи; сохраните «только HTML», без картинок" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const uuid = crypto.randomUUID();
+  const dumpKey = `import:dump:${uuid}`;
+  const ts = new Date().toISOString();
+  const logKey = `import:log:${ts}|${uuid}`;
+  const record = {
+    uuid, court_domain: courtDomain, operator, ts,
+    status: "dispatched", updated_at: ts,
+  };
+  await env.PUSH_SUBSCRIPTIONS.put(dumpKey, html, { expirationTtl: IMPORT_DUMP_TTL });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+    expirationTtl: IMPORT_LOG_TTL,
+  });
+  const res = await dispatchWorkflowOnGitHub(env, "import_cases.yml", {
+    dump_key: dumpKey, court_domain: courtDomain, operator,
+  });
+  if (!res.ok) {
+    // Диспатч не прошёл — фиксируем в журнале, оператор увидит «failed»
+    // сразу, а не по таймауту поллинга.
+    record.status = "failed";
+    record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
+    record.updated_at = new Date().toISOString();
+    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+      expirationTtl: IMPORT_LOG_TTL,
+    });
+    return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
+      status: 502, headers: jsonHeaders,
+    });
+  }
+  console.log(`import dump принят: ${dumpKey} (${courtDomain}, ${operator || "без имени"}, ${html.length} байт)`);
+  return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
+}
+
+// Выдача сырого дампа GitHub Action'у (Bearer PUSH_SECRET — он уже есть в
+// GH secrets; шаблон /subscriptions).
+async function handleImportDumpGet(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const url = new URL(request.url);
+  const key = url.searchParams.get("key") || "";
+  if (!/^import:dump:[0-9a-f-]{36}$/.test(key)) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const html = await env.PUSH_SUBSCRIPTIONS.get(key);
+  if (html === null) {
+    return new Response("Not Found (дамп истёк — TTL 24 ч — или не существовал)", { status: 404 });
+  }
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+// Итог импорта от Action'а: started/done/failed + числа + строки отчёта.
+// Обновляет запись журнала по uuid из dump_key.
+async function handleImportResult(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return new Response("Bad JSON", { status: 400 });
+  }
+  const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""));
+  const status = String(body.status || "");
+  if (!m || !["started", "done", "failed"].includes(status)) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const uuid = m[1];
+  // Пер-ключевой журнал: ищем запись по суффиксу |uuid. Записей ≤ сотни
+  // (TTL 90 дн), list по префиксу дешёвый.
+  const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:" });
+  const entry = list.keys.find((k) => k.name.endsWith(`|${uuid}`));
+  if (!entry) {
+    return new Response(JSON.stringify({ ok: false, error: "запись журнала не найдена" }), {
+      status: 404, headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+  let record = {};
+  try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
+  record.status = status;
+  record.updated_at = new Date().toISOString();
+  for (const num of ["added", "already", "no_link", "subsidiary", "rows"]) {
+    if (typeof body[num] === "number") record[num] = body[num];
+  }
+  if (Array.isArray(body.lines)) {
+    record.lines = body.lines.map(String).slice(0, 100);
+  }
+  if (typeof body.run_url === "string" && /^https:\/\//.test(body.run_url)) {
+    record.run_url = body.run_url.slice(0, 300);
+  }
+  if (typeof body.error === "string" && body.error) {
+    record.error = body.error.slice(0, 500);
+  }
+  await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
+    expirationTtl: IMPORT_LOG_TTL,
+  });
+  return new Response(JSON.stringify({ ok: true }), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+// Журнал импортов для админки (обе роли): последние 50, свежие первыми.
+async function handleAdminImportLog(request, env) {
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
+  try {
+    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:" });
+    // Ключ начинается с ISO-времени → лексикографический порядок = хронология.
+    const keys = list.keys.map((k) => k.name).sort().reverse().slice(0, 50);
+    const items = (await Promise.all(keys.map(async (name) => {
+      try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(name)); }
+      catch (_) { return null; }
+    }))).filter(Boolean);
+    return new Response(JSON.stringify({ items }), {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
   } catch (e) {
-    console.error("admin/dispatch error:", e);
-    return new Response(
-      JSON.stringify({ ok: false, error: String(e).slice(0, 200) }),
-      { status: 500, headers: jsonHeaders }
-    );
+    console.error("admin/import-log error:", e);
+    return new Response("Error", { status: 500 });
   }
 }
 
@@ -981,6 +1214,22 @@ export default {
 
     if (url.pathname === "/admin/dispatch" && request.method === "POST") {
       return handleAdminDispatch(request, env);
+    }
+
+    if (url.pathname === "/admin/import-dump" && request.method === "POST") {
+      return handleAdminImportDump(request, env);
+    }
+
+    if (url.pathname === "/import-dump" && request.method === "GET") {
+      return handleImportDumpGet(request, env);
+    }
+
+    if (url.pathname === "/import-result" && request.method === "POST") {
+      return handleImportResult(request, env);
+    }
+
+    if (url.pathname === "/admin/import-log" && request.method === "GET") {
+      return handleAdminImportLog(request, env);
     }
 
     return new Response("Not Found", { status: 404 });

@@ -174,16 +174,26 @@ def import_rows(
 
 
 def write_github_output(summary: dict) -> None:
-    """JSON-сводка одной строкой в $GITHUB_OUTPUT (ключ summary) — её
-    import_cases.yml постит на Worker (/import-result) для оператора."""
+    """JSON-сводка для import_cases.yml: одной строкой в $GITHUB_OUTPUT (ключ
+    summary) и файлом $IMPORT_SUMMARY_PATH. Файл — основной канал: workflow
+    читает его jq'ом и постит на Worker (/import-result) БЕЗ интерполяции
+    ${{ }} в shell (строки отчёта содержат произвольный текст из дампа —
+    инъекция в команду недопустима)."""
+    payload = json.dumps(summary, ensure_ascii=False)
     out_path = os.environ.get("GITHUB_OUTPUT", "").strip()
-    if not out_path:
-        return
-    try:
-        with open(out_path, "a", encoding="utf-8") as f:
-            f.write("summary=" + json.dumps(summary, ensure_ascii=False) + "\n")
-    except OSError as e:
-        log.warning(f"GITHUB_OUTPUT недоступен: {e}")
+    if out_path:
+        try:
+            with open(out_path, "a", encoding="utf-8") as f:
+                f.write("summary=" + payload + "\n")
+        except OSError as e:
+            log.warning(f"GITHUB_OUTPUT недоступен: {e}")
+    file_path = os.environ.get("IMPORT_SUMMARY_PATH", "").strip()
+    if file_path:
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(payload + "\n")
+        except OSError as e:
+            log.warning(f"IMPORT_SUMMARY_PATH недоступен: {e}")
 
 
 def main(argv: list[str] | None = None) -> int:

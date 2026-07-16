@@ -7,11 +7,31 @@
 //
 // ⚠️ Экранирование: всё содержимое — ОДИН внешний template literal. Внутренний
 // JS страницы пишется БЕЗ template literals и без `${` (только конкатенация),
-// а backslash в его регексах/строках удваивается (`\\d`, `\\n`). Единственная
-// интерполяция внешнего литерала — SECRET.
+// а backslash в его регексах/строках удваивается (`\\d`, `\\n`). Интерполяции
+// внешнего литерала — только значения из аргументов (SECRET/ROLE/CFG) и
+// модульные хелперы-константы; всё интерполируемое проходит JSON.stringify.
+//
+// Роли (16.07.2026): owner — всё как раньше; operator (сопровождающие
+// капчёвых судов) — статус, здоровье, живой лог и «Импорт дел». Owner-блоки
+// скрываются атрибутом data-owner-only + html[data-role] (реальный запрет —
+// на эндпоинтах Worker'а: /admin/data и др. отдают оператору 403).
 
-export function renderAdminHtml(secret) {
-  return `<!doctype html><html lang="ru"><head>
+export function renderAdminHtml(secret, role, cfg) {
+  role = role === "operator" ? "operator" : "owner";
+  // Производные URL территории: приходят из worker.js (adminPageConfig()).
+  // Фолбэки — боевые значения ХМАО-инстанса (деплой без [vars] работает).
+  const base = (cfg && cfg.siteBase) || "https://selivanovas.github.io/dashboard";
+  const CFG = {
+    casesUrl: (cfg && cfg.casesUrl) || base + "/data/cases.json",
+    archiveUrl: (cfg && cfg.archiveUrl) || base + "/data/cases_archive.json",
+    pushesUrl: (cfg && cfg.pushesUrl) || base + "/data/last_personal_pushes.json",
+    digestUrl: (cfg && cfg.digestUrl) || base + "/data/last_digest.json",
+    healthUrl: (cfg && cfg.healthUrl) || base + "/data/parse_health.json",
+    dashboardUrl: (cfg && cfg.dashboardUrl) || base + "/sberbank_dashboard.html",
+    siteBase: base,
+    ghRepo: (cfg && cfg.ghRepo) || "SelivanovAS/dashboard",
+  };
+  return `<!doctype html><html lang="ru" data-role="${role}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
@@ -491,6 +511,36 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
 @media (min-width: 769px) and (max-width: 1024px) {
   .system-grid { grid-template-columns:1fr; }
 }
+
+/* ═══ Роли: operator не видит owner-блоки (реальный запрет — 403 на API) ═══ */
+html[data-role="operator"] [data-owner-only] { display:none !important; }
+html[data-role="operator"] .run-ext { display:none !important; }
+
+/* ═══ Импорт дел (капчёвые суды) ═══ */
+/* Секция скрыта inline-атрибутом style (не CSS-правилом: JS показывает её
+   через style.display="", что снимает именно inline-стиль). */
+.imp-form { display:flex; flex-direction:column; gap:12px; }
+.imp-row { display:flex; gap:8px 18px; flex-wrap:wrap; align-items:center; font-size:var(--fs-sm); }
+.imp-row label { display:flex; gap:7px; align-items:center; color:var(--fg-2); font-weight:var(--fw-medium); }
+.imp-row select, .imp-row input[type=text] { font-family:var(--font-sans); font-size:var(--fs-sm);
+  padding:6px 10px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--bg-1); color:var(--fg-1); font-weight:var(--fw-medium); max-width:100%; }
+.imp-row select:focus, .imp-row input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.imp-paste { min-height:110px; max-height:260px; overflow:auto; padding:10px 12px;
+  border:1.5px dashed var(--border-strong); border-radius:var(--radius-md);
+  background:var(--bg-2); font-size:var(--fs-xs); color:var(--fg-2); }
+.imp-paste:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.imp-paste:empty::before { content:attr(data-placeholder); color:var(--fg-4); font-style:italic; }
+.imp-paste table { max-width:100%; font-size:var(--fs-2xs); }
+.imp-hint { font-size:var(--fs-xs); color:var(--fg-3); }
+.imp-status { font-size:var(--fs-sm); }
+.imp-status .badge { vertical-align:baseline; }
+.imp-report { margin-top:6px; }
+.imp-hist-row { display:flex; gap:8px; align-items:baseline; padding:6px 0;
+  border-bottom:1px solid var(--divider); font-size:var(--fs-sm); flex-wrap:wrap; }
+.imp-hist-row:last-child { border-bottom:0; }
+.imp-hist-court { color:var(--fg-2); }
+.imp-hist-meta { color:var(--fg-3); font-size:var(--fs-xs); }
 </style>
 </head><body>
 
@@ -507,11 +557,12 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
     </div>
     <nav class="header-nav" id="nav">
       <a class="chip-btn active" href="#system">Система</a>
-      <a class="chip-btn" href="#llm">LLM</a>
-      <a class="chip-btn" href="#subs">Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
+      <a class="chip-btn" href="#import" id="nav-import" style="display:none;">Импорт</a>
+      <a class="chip-btn" href="#llm" data-owner-only>LLM</a>
+      <a class="chip-btn" href="#subs" data-owner-only>Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
     </nav>
     <div class="header-actions">
-      <div class="header-meta" id="summary">…</div>
+      <div class="header-meta" id="summary" data-owner-only>…</div>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -563,11 +614,11 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
           <span class="card-title">Прогоны GitHub Actions</span>
           <span class="run-meta" id="runs-next"></span>
           <span class="spacer"></span>
-          <button class="btn-primary" id="btn-run-main">
+          <button class="btn-primary" id="btn-run-main" data-owner-only>
             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
             Полный прогон
           </button>
-          <button class="btn-outline" id="btn-run-std" title="Как ежедневный автозапуск: smart-skip — пропуск дел с известной будущей датой и нерабочих дней">
+          <button class="btn-outline" id="btn-run-std" data-owner-only title="Как ежедневный автозапуск: smart-skip — пропуск дел с известной будущей датой и нерабочих дней">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
             Стандартный прогон
           </button>
@@ -604,7 +655,51 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
     </div>
   </section>
 
-  <section class="section" id="llm">
+  <section class="section" id="import" style="display:none;">
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </span>
+      <h2 class="section-title">Импорт дел</h2>
+      <span class="section-counter" id="imp-court-count"></span>
+    </div>
+    <div class="card">
+      <div class="imp-form">
+        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную:
+          решите код на сайте суда, найдите дела по слову «Сбербанк», <b>скопируйте выделение страницы
+          результатов</b> (или сохраните её как «только HTML» и приложите файл) и вставьте ниже.
+          Вставка простым текстом не годится — теряются ссылки на карточки дел.</div>
+        <div class="imp-row">
+          <label>Суд
+            <select id="imp-court"></select>
+          </label>
+          <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть сайт суда</a>
+          <label>Ваше имя
+            <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
+          </label>
+        </div>
+        <div class="imp-paste" id="imp-paste" contenteditable="true"
+          data-placeholder="Вставьте сюда скопированную страницу выдачи (Ctrl+V / ⌘V)…"></div>
+        <div class="imp-row">
+          <label class="imp-hint">или файл «только HTML»: <input type="file" id="imp-file" accept=".html,.htm,text/html"></label>
+        </div>
+        <div class="imp-row">
+          <button class="btn-primary" id="imp-send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Отправить на импорт
+          </button>
+          <span class="imp-status" id="imp-status"></span>
+        </div>
+        <div class="imp-report" id="imp-report"></div>
+      </div>
+      <details class="fold" id="imp-hist-fold">
+        <summary>История импортов <span class="run-meta" id="imp-hist-count"></span></summary>
+        <div class="fold-body"><div id="imp-history" class="empty">Загрузка…</div></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="section" id="llm" data-owner-only>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
@@ -681,7 +776,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
     </div>
   </section>
 
-  <section class="section" id="subs">
+  <section class="section" id="subs" data-owner-only>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -699,7 +794,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
 
 </main>
 
-<dialog class="wl" id="wl-modal">
+<dialog class="wl" id="wl-modal" data-owner-only>
   <div class="wl-head">Watchlist: <span id="wl-who"></span></div>
   <input class="wl-search" id="wl-search" type="text" placeholder="Поиск: номер дела, сторона или суд…">
   <div class="wl-list" id="wl-list"></div>
@@ -717,12 +812,20 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
 
 <script>
 const SECRET = ${JSON.stringify(secret)};
-const CASES_URL = "https://selivanovas.github.io/dashboard/data/cases.json";
-const ARCHIVE_URL = "https://selivanovas.github.io/dashboard/data/cases_archive.json";
-const PUSHES_URL = "https://selivanovas.github.io/dashboard/data/last_personal_pushes.json";
-const DIGEST_URL = "https://selivanovas.github.io/dashboard/data/last_digest.json";
-const HEALTH_URL = "https://selivanovas.github.io/dashboard/data/parse_health.json";
-const DASHBOARD_URL = "https://selivanovas.github.io/dashboard/sberbank_dashboard.html";
+// Роль страницы: "owner" | "operator". Скрытие блоков — UX; реальный запрет
+// operator-роли — на эндпоинтах Worker'а (403).
+const ROLE = ${JSON.stringify(role)};
+const IS_OWNER = ROLE === "owner";
+// URL данных территории — из wrangler.toml форка (CASES_DATA_URL), не хардкод:
+// иначе админка Урала показывала бы дела и здоровье ХМАО.
+const CASES_URL = ${JSON.stringify(CFG.casesUrl)};
+const ARCHIVE_URL = ${JSON.stringify(CFG.archiveUrl)};
+const PUSHES_URL = ${JSON.stringify(CFG.pushesUrl)};
+const DIGEST_URL = ${JSON.stringify(CFG.digestUrl)};
+const HEALTH_URL = ${JSON.stringify(CFG.healthUrl)};
+const DASHBOARD_URL = ${JSON.stringify(CFG.dashboardUrl)};
+const SITE_BASE = ${JSON.stringify(CFG.siteBase)};
+const GH_REPO = ${JSON.stringify(CFG.ghRepo)};
 
 const SVG_EXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 const SVG_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
@@ -883,9 +986,13 @@ async function loadGhRuns() {
       const active = run.status !== "completed";
       if (active) hasActive = true;
       const dur = fmtDur(run.run_started_at, active ? null : run.updated_at);
+      // Оператору ссылки на GitHub-run'ы не показываем (только статусы).
+      const nameHtml = IS_OWNER
+        ? '<a class="run-name" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer">'
+          + escHtml(wfShortName(run)) + '</a>'
+        : '<span class="run-name">' + escHtml(wfShortName(run)) + '</span>';
       return '<div class="run-row">' + runDot(run)
-        + '<a class="run-name" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer">'
-        + escHtml(wfShortName(run)) + '</a>'
+        + nameHtml
         + '<span class="run-meta">#' + escHtml(String(run.run_number || "?"))
         + ' · ' + escHtml(relTime(run.run_started_at))
         + (dur ? " · " + escHtml(dur) + (active ? " (идёт)" : "") : "")
@@ -1243,7 +1350,7 @@ async function loadLlmTop() {
     }).join("");
     document.getElementById("llm-updated").innerHTML = 'Рейтинг shir-man обновлён '
       + (d.updatedAt ? escHtml(relTime(d.updatedAt)) : "?")
-      + ' · <a href="https://github.com/SelivanovAS/dashboard/actions/workflows/test_digest.yml" target="_blank" rel="noopener noreferrer">форма в GitHub UI</a>';
+      + ' · <a href="https://github.com/' + escHtml(GH_REPO) + '/actions/workflows/test_digest.yml" target="_blank" rel="noopener noreferrer">форма в GitHub UI</a>';
     // Подписи «топ-N» в селекте обогащаем конкретными моделями (value не трогаем).
     const orSel = document.getElementById("tf-or");
     models.forEach(function (m, i) {
@@ -1465,7 +1572,7 @@ function renderLastPush(item, generatedAt) {
     ? '<div class="push-body">' + escHtml(item.body) + '</div>'
     : "";
   const click = !skipped && item.click_url
-    ? '<div class="push-meta">click_url: <a href="https://selivanovas.github.io/dashboard'
+    ? '<div class="push-meta">click_url: <a href="' + escHtml(SITE_BASE)
         + escHtml(item.click_url) + '" target="_blank" rel="noopener noreferrer">'
         + escHtml(item.click_url) + '</a></div>'
     : "";
@@ -1897,20 +2004,220 @@ document.getElementById("subs-search").addEventListener("input", renderSubsList)
   });
 })();
 
+// ── Секция «Импорт дел» (капчёвые суды; обе роли) ────────────────────────────
+// Источник dropdown'а — region.fi_courts из cases.json (search_gated=True).
+// Секция скрыта, если gated-судов в регионе нет (у ХМАО прячется сама).
+var impCourts = [];            // [{name, domain, search_gated, srv_num}]
+var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
+var impPollTimer = null;
+function impCourtLink(domain) {
+  return "https://" + domain + "/modules.php?name=sud_delo";
+}
+async function loadImportCourts() {
+  try {
+    const r = await fetch(CASES_URL, { cache: "no-cache" });
+    if (!r.ok) return;
+    const j = await r.json();
+    const fi = (j && j.region && Array.isArray(j.region.fi_courts)) ? j.region.fi_courts : [];
+    const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
+    fi.forEach(function (c) {
+      if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
+    });
+    if (!gated.length) return; // регион без капчёвых судов — секция не нужна
+    // Дедуп по домену: вторые площадки («сервер 2») делят домен с первой,
+    // а фактический сервер дела импортёр берёт из href дампа.
+    const seen = {};
+    impCourts = gated.filter(function (c) {
+      if (seen[c.domain]) return false;
+      seen[c.domain] = true;
+      return true;
+    });
+    const sel = document.getElementById("imp-court");
+    sel.innerHTML = impCourts.map(function (c) {
+      return '<option value="' + escHtml(c.domain) + '">' + escHtml(c.name) + '</option>';
+    }).join("");
+    document.getElementById("imp-court-count").textContent = String(impCourts.length);
+    function syncLink() {
+      document.getElementById("imp-court-link").href = impCourtLink(sel.value);
+    }
+    sel.addEventListener("change", syncLink);
+    syncLink();
+    document.getElementById("import").style.display = "";
+    document.getElementById("nav-import").style.display = "";
+    loadImportLog();
+  } catch (e) { /* cases.json недоступен — секция остаётся скрытой */ }
+}
+function impStatusBadge(status) {
+  if (status === "done") return '<span class="badge badge-ok">готово</span>';
+  if (status === "failed") return '<span class="badge badge-fail">сбой</span>';
+  if (status === "started") return '<span class="badge badge-run">выполняется</span>';
+  return '<span class="badge badge-skip">отправлено</span>';
+}
+function impResultText(item) {
+  if (item.status === "done") {
+    var parts = ["+" + (item.added || 0) + " добавлено"];
+    if (item.already) parts.push(item.already + " уже в базе");
+    if (item.no_link) parts.push(item.no_link + " без ссылки");
+    if (item.subsidiary) parts.push(item.subsidiary + " дочки");
+    return parts.join(" · ");
+  }
+  if (item.status === "failed") return item.error || "ошибка — детали в журнале";
+  return "";
+}
+function renderImportHistory(items) {
+  const el = document.getElementById("imp-history");
+  document.getElementById("imp-hist-count").textContent = items.length ? "(" + items.length + ")" : "";
+  if (!items.length) {
+    el.className = "empty";
+    el.textContent = "Импортов ещё не было";
+    return;
+  }
+  el.className = "";
+  el.innerHTML = items.slice(0, 20).map(function (it) {
+    const court = impCourtNameByDomain[it.court_domain] || it.court_domain || "?";
+    return '<div class="imp-hist-row">' + impStatusBadge(it.status)
+      + '<span class="imp-hist-court"><b>' + escHtml(court) + '</b></span>'
+      + '<span>' + escHtml(it.operator || "без имени") + '</span>'
+      + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
+      + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
+      + '</div>';
+  }).join("");
+}
+async function loadImportLog() {
+  try {
+    const r = await fetch("/admin/import-log?secret=" + encodeURIComponent(SECRET));
+    if (!r.ok) return null;
+    const d = await r.json();
+    const items = Array.isArray(d.items) ? d.items : [];
+    renderImportHistory(items);
+    return items;
+  } catch (e) { return null; }
+}
+function impSetStatus(html) {
+  document.getElementById("imp-status").innerHTML = html;
+}
+// Поллинг журнала по key дампа: «отправлено → выполняется → +N добавлено».
+// Таймаут ~5 мин: очередь GitHub держит 1 running + 1 pending — третий запуск
+// вытесняет ожидающий, дамп при этом живёт в KV 24 ч (можно повторить).
+function impPollResult(key, startedAt) {
+  clearTimeout(impPollTimer);
+  impPollTimer = setTimeout(async function () {
+    const items = await loadImportLog();
+    const mine = (items || []).find(function (it) { return it.uuid === key; });
+    if (mine && (mine.status === "done" || mine.status === "failed")) {
+      impSetStatus(impStatusBadge(mine.status) + " " + escHtml(impResultText(mine)));
+      const rep = document.getElementById("imp-report");
+      if (Array.isArray(mine.lines) && mine.lines.length) {
+        rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
+          + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
+          + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
+      }
+      document.getElementById("imp-send").disabled = false;
+      return;
+    }
+    if (Date.now() - startedAt > 5 * 60 * 1000) {
+      impSetStatus('<span class="badge badge-fail">нет ответа ~5 мин</span> '
+        + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.');
+      document.getElementById("imp-send").disabled = false;
+      return;
+    }
+    if (mine && mine.status === "started") impSetStatus(impStatusBadge("started") + " импорт запущен…");
+    impPollResult(key, startedAt);
+  }, 5000);
+}
+async function impReadFile(file) {
+  // Файл «только HTML» с sudrf — win-1251; вставки/другие файлы — utf-8.
+  const buf = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch (e) {
+    return new TextDecoder("windows-1251").decode(buf);
+  }
+}
+async function impSend() {
+  const domain = document.getElementById("imp-court").value;
+  const name = document.getElementById("imp-name").value.trim();
+  try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
+  const fileEl = document.getElementById("imp-file");
+  let html = "";
+  if (fileEl.files && fileEl.files.length) {
+    html = await impReadFile(fileEl.files[0]);
+  } else {
+    html = document.getElementById("imp-paste").innerHTML || "";
+  }
+  if (!domain) { impSetStatus('<span class="badge badge-fail">выберите суд</span>'); return; }
+  if (!name) { impSetStatus('<span class="badge badge-fail">укажите ваше имя</span>'); return; }
+  if (html.length < 1024) {
+    impSetStatus('<span class="badge badge-fail">дамп пуст или слишком короткий</span> '
+      + 'Скопируйте страницу выдачи целиком или приложите файл «только HTML».');
+    return;
+  }
+  document.getElementById("imp-send").disabled = true;
+  document.getElementById("imp-report").innerHTML = "";
+  impSetStatus("отправляю дамп…");
+  try {
+    const r = await fetch("/admin/import-dump?secret=" + encodeURIComponent(SECRET), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ court_domain: domain, operator: name, html: html }),
+    });
+    const d = await r.json().catch(function () { return {}; });
+    if (r.ok && d.ok) {
+      impSetStatus(impStatusBadge("dispatched") + " дамп принят, импорт в очереди…");
+      loadImportLog();
+      impPollResult(d.key, Date.now());
+    } else {
+      impSetStatus('<span class="badge badge-fail">✕</span> ' + escHtml(d.error || ("HTTP " + r.status)));
+      document.getElementById("imp-send").disabled = false;
+    }
+  } catch (e) {
+    impSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
+    document.getElementById("imp-send").disabled = false;
+  }
+}
+document.getElementById("imp-send").addEventListener("click", impSend);
+try {
+  document.getElementById("imp-name").value = localStorage.getItem("admin_operator_name") || "";
+} catch (e) {}
+
+// Плитка «Дайджест» для оператора: полный render() ему недоступен
+// (/admin/data → 403), а last_digest.json публичный.
+async function loadDigestTileLite() {
+  try {
+    const r = await fetch(DIGEST_URL, { cache: "no-cache" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    renderDigestTile(await r.json(), new Map(), "");
+  } catch (e) {
+    setTile("digest", "gray", "—", "last_digest.json недоступен");
+  }
+}
+
 function refreshAll() {
-  render(true);
   loadGhRuns();
   loadHealth();
   loadProgress();
-  llmTopLoaded = false;
-  loadLlmTop();
+  loadImportLog();
+  if (IS_OWNER) {
+    render(true);
+    llmTopLoaded = false;
+    loadLlmTop();
+  } else {
+    loadDigestTileLite();
+  }
 }
 
 loadProgress();
 loadGhRuns();
 loadHealth();
-loadLlmTop();
-render();
+loadImportCourts();
+// Owner-данные (подписки, LLM-рейтинг) оператору не грузим: эндпоинты всё
+// равно ответят 403, а секции скрыты.
+if (IS_OWNER) {
+  loadLlmTop();
+  render();
+} else {
+  loadDigestTileLite();
+}
 </script>
 </body></html>`;
 }
