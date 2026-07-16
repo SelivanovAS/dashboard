@@ -14,13 +14,20 @@
 Скрипт полностью ОФЛАЙН — сайты судов не трогает (у них капча). Всё берётся
 из дампа: стороны, судья, дата, ссылка на карточку (case_id|case_uid из href).
 
+Импортируются ТОЛЬКО дела «банк-ответчик» — как в боевом автопоиске
+(решение юриста 16.07.2026 после первого живого импорта: в 1-й инстанции
+дела, где банк истец или третье лицо, не отслеживаем). Прочие роли видны
+в построчном отчёте как [SKIPPED ROLE] — оператору не нужно ничего
+фильтровать руками.
+
 Построчный отчёт:
-    [ADDED]      — дело добавлено в cases.json
-    [ALREADY]    — уже отслеживается (активные + горячий и холодный архивы)
-    [NO LINK]    — в дампе нет ссылки на карточку (cid|cuid) — дело
-                   немониторимо, пропуск. Обычно это вставка «как текст»:
-                   копируйте выделение страницы или сохраняйте «только HTML».
-    [SUBSIDIARY] — сторона только дочка Сбера (страхование, НПФ…), пропуск
+    [ADDED]        — дело добавлено в cases.json
+    [ALREADY]      — уже отслеживается (активные + горячий и холодный архивы)
+    [SKIPPED ROLE] — банк истец/третье лицо, в 1-й инст. не отслеживаем
+    [NO LINK]      — в дампе нет ссылки на карточку (cid|cuid) — дело
+                     немониторимо, пропуск. Обычно это вставка «как текст»:
+                     копируйте выделение страницы или сохраняйте «только HTML».
+    [SUBSIDIARY]   — сторона только дочка Сбера (страхование, НПФ…), пропуск
 
 JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import_cases.yml
 возвращает её оператору через POST /import-result Worker'а.
@@ -120,7 +127,10 @@ def import_rows(
     existing_ids = collect_existing_ids(cases + archived + cold)
 
     lines: list[str] = []
-    counters = {"added": 0, "already": 0, "no_link": 0, "subsidiary": 0}
+    counters = {
+        "added": 0, "already": 0, "skipped_role": 0,
+        "no_link": 0, "subsidiary": 0,
+    }
     new_entries: list[dict] = []
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -131,6 +141,17 @@ def import_rows(
         if num in existing_ids or bare in existing_ids:
             counters["already"] += 1
             lines.append(f"[ALREADY] {num} — уже отслеживается")
+            continue
+        # Только «банк-ответчик» — зеркало фильтра боевого автопоиска
+        # (parse_first_instance_search без keep_all_roles). Парсим-то мы все
+        # роли, чтобы оператор видел в отчёте, что строка не потерялась,
+        # а осознанно пропущена.
+        if r.get("bank_role") != "Ответчик":
+            counters["skipped_role"] += 1
+            lines.append(
+                f"[SKIPPED ROLE] {num} — банк {r.get('bank_role', '?').lower()}: "
+                "в 1-й инстанции отслеживаем только «банк-ответчик», пропуск"
+            )
             continue
         if not r.get("link"):
             # Без case_id|case_uid карточку дела не открыть — авто-обновление
@@ -214,7 +235,8 @@ def main(argv: list[str] | None = None) -> int:
         "operator": operator,
         "dry_run": bool(args.dry_run),
         "region": region.code,
-        "added": 0, "already": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
+        "added": 0, "already": 0, "skipped_role": 0,
+        "no_link": 0, "subsidiary": 0, "rows": 0,
         "lines": [],
     }
 
@@ -273,9 +295,9 @@ def main(argv: list[str] | None = None) -> int:
     log.info("=" * 60)
     log.info(
         "Импорт (%s, оператор %s): +%d новых | %d уже в базе | "
-        "%d без ссылки | %d дочки%s",
+        "%d не наша роль | %d без ссылки | %d дочки%s",
         court.name, operator or "—",
-        summary["added"], summary["already"],
+        summary["added"], summary["already"], summary["skipped_role"],
         summary["no_link"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
