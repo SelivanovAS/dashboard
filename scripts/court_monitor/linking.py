@@ -18,6 +18,8 @@ from court_monitor.courts import (
     CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
     match_fi_court_by_short_name,
 )
+from court_monitor.regions import get_region
+from court_monitor.regions.base import _eyo
 from court_monitor.lifecycle import (
     _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
     _infer_archived_at, _parse_iso_date, should_parse_fi_card,
@@ -1042,17 +1044,33 @@ def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
     Возвращает (exact, wildcard):
       exact    — {(домен суда 1-й инст., номер)}: полный id, его «голая»
                  часть до скобки, fi.case_number и М-алиас записей с
-                 известным first_instance.court_domain;
-      wildcard — те же номера записей БЕЗ домена (легаси, дела «с апелляции»
-                 до бэкфилла суда) — консервативно блокируют номер во ВСЕХ
-                 судах (лучше ложный пропуск, чем дубль).
+                 известным first_instance.court_domain. Пустой домен при
+                 непустом fi.court резолвится по короткому имени
+                 (match_fi_court_by_short_name): у дел «с апелляции» домен
+                 не заполнен, но суд известен — иначе их номера блокировали
+                 бы одноимённые дела во всех судах региона (11 ложных
+                 [ALREADY] на импортах 16.07.2026, инцидент 2-114/2026
+                 Ивдельский/Пуровский);
+      wildcard — номера записей, у которых нет ни домена, ни распознаваемого
+                 имени суда — консервативно блокируют номер во ВСЕХ судах
+                 (лучше ложный пропуск, чем дубль).
     Проверка — is_fi_number_tracked().
     """
     exact: set[tuple[str, str]] = set()
     wildcard: set[str] = set()
+    # Карта «короткое имя → домен» активного региона НА ВЫЗОВ (config.X-
+    # инвариант): статический реестр courts.py снят при импорте модуля и
+    # не видит monkeypatch региона в тестах. setdefault — как в courts.py
+    # (вторые площадки делят домен, первый суд имени побеждает).
+    name_to_domain: dict[str, str] = {}
+    for cfg in get_region().first_instance_courts:
+        name_to_domain.setdefault(_eyo(cfg.name.lower()), cfg.domain.lower())
     for c in all_cases:
         fi = c.get("first_instance") or {}
         domain = (fi.get("court_domain") or "").strip().lower()
+        if not domain:
+            court_name = (fi.get("court") or "").strip().lower()
+            domain = name_to_domain.get(_eyo(court_name), "")
         nums: set[str] = set()
         cid = (c.get("id") or "").strip()
         if cid:
