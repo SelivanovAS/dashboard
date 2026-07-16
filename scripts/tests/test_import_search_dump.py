@@ -235,6 +235,22 @@ class TestImporterE2E:
         s = _read_summary(import_env["gh_out"])
         assert "Таблица результатов не найдена" in s["error"]
 
+    def test_imported_case_announced_once(self, import_env):
+        """Импортированное дело объявляется новым в ближайшем дайджесте РОВНО
+        один раз (runs.announce_imported_cases + import.announced)."""
+        import update_cases as uc
+        _run(import_env)
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        cases = data["cases"]
+        first = uc.announce_imported_cases(cases)
+        assert sorted(c["id"] for c in first) == ["2-1001/2026", "2-1006/2026"]
+        assert all(c["import"]["announced"] is True for c in first)
+        # Повторный прогон (флаг уже в данных) — анонса нет.
+        assert uc.announce_imported_cases(cases) == []
+        # Дело без блока import (автопоиск) анонс не трогает.
+        cases.append({"id": "2-9999/2026"})
+        assert uc.announce_imported_cases(cases) == []
+
     def test_legit_empty_result_is_ok(self, import_env):
         import_env["dump"].write_text(
             "<html><body>Данных по запросу не обнаружено</body></html>",

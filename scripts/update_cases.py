@@ -181,7 +181,7 @@ from court_monitor.delivery import (  # noqa: F401 — ре-экспорт дл�
 from court_monitor.runs import (  # noqa: F401 — ре-экспорт для совместимости
     update_active_cases, validate_environment, check_court_available,
     main, _discovered_already_resolved_old, _apel_csv_row_to_json_case,
-    main_backfill_appeal_anchors, main_json,
+    main_backfill_appeal_anchors, main_json, announce_imported_cases,
     main_replay_last, main_push_last_digest, main_digest_only,
 )
 
