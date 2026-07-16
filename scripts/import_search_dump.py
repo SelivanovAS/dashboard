@@ -22,6 +22,9 @@
 
 Построчный отчёт:
     [ADDED]        — дело добавлено в cases.json
+    [PROMOTED]     — материал (М-…) из прошлого импорта возбуждён в дело:
+                     существующая запись переименована (зеркало промоушена
+                     main_json), дубль не создаётся
     [ALREADY]      — уже отслеживается (активные + горячий и холодный архивы)
     [SKIPPED ROLE] — банк истец/третье лицо, в 1-й инст. не отслеживаем
     [NO LINK]      — в дампе нет ссылки на карточку (cid|cuid) — дело
@@ -125,19 +128,62 @@ def import_rows(
             continue
         cold.extend(load_json(cold_path).get("cases", []))
     existing_ids = collect_existing_ids(cases + archived + cold)
+    # Индекс активных дел по id — для промоушена М→2 (материал из прошлого
+    # импорта возбуждён в гражданское дело; зеркало блока 3 main_json).
+    case_by_id: dict[str, dict] = {
+        (c.get("id") or "").strip(): c for c in cases
+    }
 
     lines: list[str] = []
     counters = {
-        "added": 0, "already": 0, "skipped_role": 0,
+        "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "no_link": 0, "subsidiary": 0,
     }
     new_entries: list[dict] = []
+    promoted_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     for r in rows:
         num = r["case_number"]
         bare = num.split("(")[0].strip()
         parties = " — ".join(x for x in (r.get("plaintiff"), r.get("defendant")) if x)
+        # Промоушен материала → 2-XXX ДО дедупа и фильтра ролей: строка с
+        # комбо-номером «2-X ~ М-Y» при уже отслеживаемой М-записи означает
+        # «наш материал возбуждён в дело» — запись переименовывается, а не
+        # дублируется. Роль записи не трогаем (это то же самое дело).
+        mat = (r.get("material_number") or "").strip()
+        if (mat and mat != num
+                and num not in existing_ids and bare not in existing_ids):
+            old = case_by_id.get(mat)
+            if old is not None:
+                counters["promoted"] += 1
+                promoted_any = True
+                lines.append(f"[PROMOTED] {mat} → {num} — материал возбуждён в дело, запись переименована")
+                old["id"] = num
+                fi_block = old.setdefault("first_instance", {})
+                fi_block["case_number"] = num
+                # М-номер остаётся алиасом — ★ юриста на материале не теряется.
+                if not fi_block.get("material_number"):
+                    fi_block["material_number"] = mat
+                if r.get("judge"):
+                    fi_block["judge"] = r["judge"]
+                if r.get("link"):
+                    fi_block["link"] = r["link"]
+                if r.get("href_srv_num"):
+                    fi_block["srv_num"] = r["href_srv_num"]
+                if r.get("status"):
+                    fi_block["status"] = r["status"]
+                # Флаг события «принято к производству, заседание не назначено»
+                # — эмитит ближайший прогон (как при промоушене автопоиска).
+                if not fi_block.get("accepted_emitted"):
+                    fi_block["accepted_pending_emit"] = True
+                case_by_id.pop(mat, None)
+                case_by_id[num] = old
+                existing_ids.discard(mat)
+                existing_ids.add(num)
+                if bare != num:
+                    existing_ids.add(bare)
+                continue
         if num in existing_ids or bare in existing_ids:
             counters["already"] += 1
             lines.append(f"[ALREADY] {num} — уже отслеживается")
@@ -185,7 +231,9 @@ def import_rows(
     for line in lines:
         log.info(line)
 
-    if new_entries and not dry_run:
+    if (new_entries or promoted_any) and not dry_run:
+        # Промоушен правит существующие записи cases по ссылке — сохранить
+        # надо и когда новых дел нет.
         data["cases"] = new_entries + cases
         save_json(data, config.JSON_PATH)
     elif dry_run:
@@ -235,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         "operator": operator,
         "dry_run": bool(args.dry_run),
         "region": region.code,
-        "added": 0, "already": 0, "skipped_role": 0,
+        "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "no_link": 0, "subsidiary": 0, "rows": 0,
         "lines": [],
     }
@@ -294,11 +342,11 @@ def main(argv: list[str] | None = None) -> int:
 
     log.info("=" * 60)
     log.info(
-        "Импорт (%s, оператор %s): +%d новых | %d уже в базе | "
-        "%d не наша роль | %d без ссылки | %d дочки%s",
+        "Импорт (%s, оператор %s): +%d новых | %d промоушенов М→2 | "
+        "%d уже в базе | %d не наша роль | %d без ссылки | %d дочки%s",
         court.name, operator or "—",
-        summary["added"], summary["already"], summary["skipped_role"],
-        summary["no_link"], summary["subsidiary"],
+        summary["added"], summary["promoted"], summary["already"],
+        summary["skipped_role"], summary["no_link"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
     write_github_output(summary)

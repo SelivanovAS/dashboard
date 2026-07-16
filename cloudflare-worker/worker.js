@@ -1061,7 +1061,7 @@ async function handleImportResult(request, env) {
   try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
   record.status = status;
   record.updated_at = new Date().toISOString();
-  for (const num of ["added", "already", "skipped_role", "no_link", "subsidiary", "rows"]) {
+  for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows"]) {
     if (typeof body[num] === "number") record[num] = body[num];
   }
   if (Array.isArray(body.lines)) {
@@ -1076,12 +1076,29 @@ async function handleImportResult(request, env) {
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,
   });
+  // Свежесть по суду (светофор в админке): последний УСПЕШНЫЙ импорт домена.
+  // Отдельный вечный ключ (без TTL): журнал живёт 90 дней и отдаётся
+  // последними 50 записями — при ~52 судах с еженедельным регламентом
+  // окна журнала на «когда суд импортировался в последний раз» не хватает.
+  if (status === "done" && record.court_domain) {
+    await env.PUSH_SUBSCRIPTIONS.put(
+      `import:last:${record.court_domain}`,
+      JSON.stringify({
+        court_domain: record.court_domain,
+        ts: record.updated_at,
+        operator: record.operator || "",
+        added: record.added || 0,
+        promoted: record.promoted || 0,
+      })
+    );
+  }
   return new Response(JSON.stringify({ ok: true }), {
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
 }
 
-// Журнал импортов для админки (обе роли): последние 50, свежие первыми.
+// Журнал импортов для админки (обе роли): последние 50, свежие первыми,
+// + карта «последний успешный импорт по домену» (светофор свежести).
 async function handleAdminImportLog(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
   if (gate.error) return gate.error;
@@ -1093,7 +1110,15 @@ async function handleAdminImportLog(request, env) {
       try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(name)); }
       catch (_) { return null; }
     }))).filter(Boolean);
-    return new Response(JSON.stringify({ items }), {
+    const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
+    const last = {};
+    (await Promise.all(lastList.keys.map(async (k) => {
+      try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)); }
+      catch (_) { return null; }
+    }))).filter(Boolean).forEach((e) => {
+      if (e.court_domain) last[e.court_domain] = e;
+    });
+    return new Response(JSON.stringify({ items, last }), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
   } catch (e) {
