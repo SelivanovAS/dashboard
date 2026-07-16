@@ -160,8 +160,13 @@
   python -u …`, `set -o pipefail`) → батчи на `POST /run-progress` Worker'а →
   блок «Прогон (GitHub Actions)» в админке (свёртка по фазам «— [N/9]»), лог
   хранится в KV 14 дней (current + prev, cap 1000 строк). Токен —
-  `secrets.PROGRESS_SECRET || secrets.PUSH_SECRET` (Worker принимает оба);
-  без секретов пушер — чистый cat, прогон не страдает.
+  `secrets.PUSH_SECRET || secrets.PROGRESS_SECRET` (Worker принимает оба;
+  PUSH_SECRET первым — им же ходит пуш-доставка, он проверяемо совпадает);
+  без секретов пушер — чистый cat, прогон не страдает, но объявляет об этом
+  одной строкой в логе рана, а первый сбой POST печатает одну ⚠️-строку с
+  HTTP-кодом. ⚠️ Пушер обязан слать свой `User-Agent` (константа
+  `USER_AGENT`): дефолтный `Python-urllib/…` Cloudflare режет на workers.dev
+  (ошибка 1010 → 403 до Worker'а) — так канал молчал 13–16.07.2026.
 - **Секреты** уже в repo secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_*`, `PUSH_*`) —
   новых не нужно.
 - **Планировщик — Cloudflare Worker cron** (`crons = ["45 3 * * mon-fri"]` в

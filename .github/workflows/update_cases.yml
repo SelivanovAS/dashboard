@@ -73,11 +73,14 @@ jobs:
           LOG_GH_ANNOTATIONS: "1"
           # Живой лог прогона в админке Worker (блок «Прогон (GitHub Actions)»):
           # pass-through-пушер шлёт строки stdout батчами на POST /run-progress.
-          # Без секретов пушер работает как cat — прогон не страдает.
-          # Токен: отдельный PROGRESS_SECRET, а при его отсутствии в GitHub
-          # secrets подходит и PUSH_SECRET (Worker принимает оба).
+          # Без секретов пушер работает как cat — прогон не страдает (но с
+          # 16.07.2026 объявляет о сбое/выключении одной строкой в логе).
+          # Токен: PUSH_SECRET первым — им же ходит пуш-доставка этого же шага,
+          # поэтому он проверяемо совпадает с Worker'ом; PROGRESS_SECRET — лишь
+          # запасной. (Причиной мёртвого канала 13–16.07.2026 были не секреты,
+          # а Cloudflare-бан UA Python-urllib — см. USER_AGENT в пушере.)
           PROGRESS_URL: ${{ secrets.PUSH_WORKER_URL }}/run-progress
-          PROGRESS_TOKEN: ${{ secrets.PROGRESS_SECRET || secrets.PUSH_SECRET }}
+          PROGRESS_TOKEN: ${{ secrets.PUSH_SECRET || secrets.PROGRESS_SECRET }}
           # Логи и так флашатся построчно (StreamHandler/ghlog); это страховка
           # для «голых» print из зависимостей под pipe-буферизацией.
           PYTHONUNBUFFERED: "1"

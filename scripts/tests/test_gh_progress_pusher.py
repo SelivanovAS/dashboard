@@ -11,6 +11,11 @@
 - фильтр «::…»   — workflow-команды GitHub не уходят в Worker;
 - обрезка строк  — LINE_MAX против строк-простыней в KV;
 - сетевые ошибки — глотаются, прогон не страдает;
+- диагностика    — первый сбой POST печатает ровно одну строку в stdout
+  (инцидент 13–16.07.2026: 401 молчал две недели), выключенный канал в
+  боевом workflow (LOG_GH_ANNOTATIONS=1) объявляет о себе на старте;
+- нормализация URL — «//run-progress» от хвостового «/» в PUSH_WORKER_URL
+  схлопывается (Worker матчит pathname строго — это был бы тихий 404);
 - run_id/link    — из стандартных env раннера, re-run получает суффикс;
 - якорь контракта — regex фаз админки ловит строку log_phase.
 
@@ -75,6 +80,9 @@ def _enable(monkeypatch, run_id="12345"):
 def _disable(monkeypatch):
     monkeypatch.delenv("PROGRESS_URL", raising=False)
     monkeypatch.delenv("PROGRESS_TOKEN", raising=False)
+    # Гейт стартовой строки «канал выключен» — в тестах по умолчанию закрыт
+    # (в CI tests.yml переменной нет, но локальный env бывает грязный).
+    monkeypatch.delenv("LOG_GH_ANNOTATIONS", raising=False)
 
 
 # ── pass-through ─────────────────────────────────────────────────────────────
@@ -168,7 +176,8 @@ class TestBatches:
         assert len(lines[0]) == gpp.LINE_MAX
 
     def test_network_error_swallowed(self, monkeypatch, io_pipe):
-        """urlopen падает → main() завершается штатно, stdout цел."""
+        """urlopen падает → main() завершается штатно, pass-through цел,
+        плюс ровно одна диагностическая строка о сбое."""
         _enable(monkeypatch)
 
         def boom(*a, **kw):  # noqa: ANN002, ANN003
@@ -179,6 +188,91 @@ class TestBatches:
         data = "[INFO] строка\n".encode("utf-8")
         feed(data)
         gpp.main()  # не должно кинуть
+        text = out.getvalue().decode("utf-8")
+        assert text.startswith(data.decode("utf-8"))  # pass-through первым и целиком
+        diag = [l for l in text.splitlines() if l.startswith("⚠️")]
+        assert len(diag) == 1
+        assert "OSError" in diag[0] and "сеть мигнула" in diag[0]
+
+
+# ── диагностика сбоев отправки ───────────────────────────────────────────────
+
+class TestDiagnostics:
+    def test_http_401_named_in_diag(self, monkeypatch, io_pipe):
+        """401 от Worker (неверный секрет) виден в логе прогона по коду."""
+        _enable(monkeypatch)
+
+        def unauthorized(req, timeout=None):  # noqa: ANN001
+            raise gpp.urllib.error.HTTPError(
+                req.full_url, 401, "Unauthorized", None, None
+            )
+
+        monkeypatch.setattr(gpp.urllib.request, "urlopen", unauthorized)
+        feed, out = io_pipe
+        feed("[INFO] строка\n".encode("utf-8"))
+        gpp.main()
+        text = out.getvalue().decode("utf-8")
+        assert "HTTP 401" in text and "PUSH_SECRET" in text
+
+    def test_diag_printed_once_for_many_chunks(self, monkeypatch, io_pipe):
+        """250 строк → 3 неудачных POST, но диагностическая строка одна."""
+        _enable(monkeypatch)
+
+        def boom(*a, **kw):  # noqa: ANN002, ANN003
+            raise OSError("совсем упало")
+
+        monkeypatch.setattr(gpp.urllib.request, "urlopen", boom)
+        feed, out = io_pipe
+        lines = [f"[INFO] строка {i}" for i in range(250)]
+        feed(("\n".join(lines) + "\n").encode("utf-8"))
+        gpp.main()
+        text = out.getvalue().decode("utf-8")
+        assert sum(1 for l in text.splitlines() if l.startswith("⚠️")) == 1
+
+    def test_disabled_notice_in_live_workflow(self, monkeypatch, io_pipe):
+        """Боевой workflow (LOG_GH_ANNOTATIONS=1) без секретов — одна строка
+        «выключен» на старте, дальше чистый cat без сети."""
+        _disable(monkeypatch)
+        monkeypatch.setenv("LOG_GH_ANNOTATIONS", "1")
+
+        def boom(*a, **kw):  # noqa: ANN002, ANN003
+            raise AssertionError("urlopen не должен вызываться без env")
+
+        monkeypatch.setattr(gpp.urllib.request, "urlopen", boom)
+        feed, out = io_pipe
+        data = "[INFO] строка\n".encode("utf-8")
+        feed(data)
+        gpp.main()
+        text = out.getvalue().decode("utf-8")
+        first, rest = text.split("\n", 1)
+        assert first.startswith("🛰") and "выключен" in first
+        assert rest.encode("utf-8") == data
+
+    def test_user_agent_evades_cf_signature_ban(self, monkeypatch, io_pipe):
+        """Cloudflare банит дефолтный «Python-urllib/…» (ошибка 1010 → 403 до
+        Worker'а, инцидент 13–16.07.2026) — пушер представляется своим UA."""
+        _enable(monkeypatch)
+        seen = []
+        monkeypatch.setattr(
+            gpp.urllib.request,
+            "urlopen",
+            lambda req, timeout=None: seen.append(req) or io.BytesIO(b"{}"),
+        )
+        feed, _ = io_pipe
+        feed("[INFO] строка\n".encode("utf-8"))
+        gpp.main()
+        assert seen
+        assert all(r.get_header("User-agent") == gpp.USER_AGENT for r in seen)
+        assert not gpp.USER_AGENT.lower().startswith("python")
+
+    def test_disabled_silent_outside_workflow(self, monkeypatch, io_pipe):
+        """Без LOG_GH_ANNOTATIONS выключенный канал молчит — байт-в-байт cat
+        (локальные запуски и pytest не зашумляются)."""
+        _disable(monkeypatch)
+        feed, out = io_pipe
+        data = "[INFO] строка\n".encode("utf-8")
+        feed(data)
+        gpp.main()
         assert out.getvalue() == data
 
 
@@ -213,6 +307,17 @@ class TestBuildConfig:
         _enable(monkeypatch)
         monkeypatch.setenv("PROGRESS_URL", "/run-progress")
         assert gpp.build_config()["enabled"] is False
+
+    def test_double_slash_normalized(self, monkeypatch):
+        """PUSH_WORKER_URL с хвостовым «/» → «//run-progress» → тихий 404
+        (Worker матчит pathname строго); build_config схлопывает дубли."""
+        _enable(monkeypatch)
+        monkeypatch.setenv("PROGRESS_URL", "https://worker.test//run-progress")
+        assert gpp.build_config()["url"] == "https://worker.test/run-progress"
+
+    def test_clean_url_untouched(self, monkeypatch):
+        _enable(monkeypatch)
+        assert gpp.build_config()["url"] == "https://worker.test/run-progress"
 
 
 # ── якорь контракта с админкой ───────────────────────────────────────────────
