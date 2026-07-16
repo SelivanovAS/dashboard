@@ -1031,6 +1031,62 @@ def collect_existing_ids(all_cases) -> set[str]:
     return existing_ids
 
 
+def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
+    """Судо-зависимый индекс дедупа новых дел 1-й инстанции.
+
+    Номера дел НЕ уникальны между судами: «2-500/2026» есть в десятках судов
+    региона. Глобальный индекс по номеру (collect_existing_ids) на фильтре
+    новых FI-дел давал бы ложное «уже отслеживается» и терял новое дело суда Б
+    при совпадении номера с делом суда А (вопрос юриста 16.07.2026).
+
+    Возвращает (exact, wildcard):
+      exact    — {(домен суда 1-й инст., номер)}: полный id, его «голая»
+                 часть до скобки, fi.case_number и М-алиас записей с
+                 известным first_instance.court_domain;
+      wildcard — те же номера записей БЕЗ домена (легаси, дела «с апелляции»
+                 до бэкфилла суда) — консервативно блокируют номер во ВСЕХ
+                 судах (лучше ложный пропуск, чем дубль).
+    Проверка — is_fi_number_tracked().
+    """
+    exact: set[tuple[str, str]] = set()
+    wildcard: set[str] = set()
+    for c in all_cases:
+        fi = c.get("first_instance") or {}
+        domain = (fi.get("court_domain") or "").strip().lower()
+        nums: set[str] = set()
+        cid = (c.get("id") or "").strip()
+        if cid:
+            nums.add(cid)
+            nums.add(cid.split("(")[0].strip())
+        num = (fi.get("case_number") or "").strip()
+        if num:
+            nums.add(num)
+            nums.add(num.split("(")[0].strip())
+        mat = (fi.get("material_number") or "").strip()
+        if mat:
+            nums.add(mat)
+        nums.discard("")
+        if domain:
+            for n in nums:
+                exact.add((domain, n))
+        else:
+            wildcard |= nums
+    return exact, wildcard
+
+
+def is_fi_number_tracked(
+    number: str, court_domain: str, exact: set, wildcard: set
+) -> bool:
+    """Отслеживается ли номер дела в ЭТОМ суде (индекс collect_fi_dedup_index)."""
+    number = (number or "").strip()
+    bare = number.split("(")[0].strip()
+    d = (court_domain or "").strip().lower()
+    return (
+        (d, number) in exact or (d, bare) in exact
+        or number in wildcard or bare in wildcard
+    )
+
+
 def _fi_search_to_json_case(fi: dict) -> dict:
     """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
     initial_role = fi.get("bank_role", "Ответчик")

@@ -68,7 +68,8 @@ from court_monitor.lifecycle import (
     _TERMINAL_FI_EVENT_RX, SERVICE_EVENT_PATTERNS,
 )
 from court_monitor.linking import (
-    collect_existing_ids, find_new_cases, link_cases, link_cassation_cases,
+    collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
+    find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
 )
@@ -1314,6 +1315,12 @@ def main_json():
     existing_ids = collect_existing_ids(
         cases + archived_cases + cold_archived_cases
     )
+    # Судо-зависимый индекс для фильтра НОВЫХ FI-дел: номера не уникальны
+    # между судами — глобальный existing_ids терял бы новое дело суда Б при
+    # совпадении номера с делом суда А (общий хелпер с импортёром дампов).
+    fi_dedup_exact, fi_dedup_wildcard = collect_fi_dedup_index(
+        cases + archived_cases + cold_archived_cases
+    )
 
     log.info(
         f"Загружено {len(cases)} {plural_ru(len(cases), 'дело', 'дела', 'дел')} "
@@ -1527,6 +1534,12 @@ def main_json():
             old = case_by_id.get(mat)
             if old is None:
                 continue
+            # М-номера тоже не уникальны между судами: чужому суду запись
+            # не переименовываем (см. collect_fi_dedup_index).
+            old_dom = ((old.get("first_instance") or {})
+                       .get("court_domain") or "").strip().lower()
+            if old_dom != court.domain:
+                continue
             new_id = r["case_number"]
             log.info(f"  Промоушен материала: {mat} → {new_id}")
             old["id"] = new_id
@@ -1553,11 +1566,20 @@ def main_json():
             case_by_id[new_id] = old
             existing_ids.discard(mat)
             existing_ids.add(new_id)
+            fi_dedup_exact.discard((court.domain, mat))
+            fi_dedup_exact.add((court.domain, new_id))
+            _bare_new = new_id.split("(")[0].strip()
+            if _bare_new != new_id:
+                fi_dedup_exact.add((court.domain, _bare_new))
 
-        # Фильтр: только новые дела (первая страница поиска)
+        # Фильтр: только новые дела (первая страница поиска). Дедуп — с
+        # учётом суда: одинаковые номера в разных судах — разные дела.
         new_fi = [
             r for r in fi_results
-            if r["case_number"] not in existing_ids
+            if not is_fi_number_tracked(
+                r["case_number"], court.domain,
+                fi_dedup_exact, fi_dedup_wildcard,
+            )
         ]
         if new_fi:
             fresh = [r for r in new_fi if not _discovered_already_resolved_old(r)]
@@ -1573,6 +1595,7 @@ def main_json():
                 json_case = _fi_search_to_json_case(fi)
                 fi_new_cases.append(json_case)
                 existing_ids.add(fi["case_number"])
+                fi_dedup_exact.add((court.domain, fi["case_number"]))
             for fi in stale:
                 json_case = _fi_search_to_json_case(fi)
                 # Якорь архивации: дата решения (= hearing_date в схеме).
@@ -1582,6 +1605,7 @@ def main_json():
                 )
                 fi_discovered_resolved.append(json_case)
                 existing_ids.add(fi["case_number"])
+                fi_dedup_exact.add((court.domain, fi["case_number"]))
         else:
             log.info(
                 f"  {court_tag} {court.name}: {len(fi_results)} "

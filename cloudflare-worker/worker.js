@@ -744,14 +744,24 @@ async function handleAdminTestPush(request, env) {
 const GH_REPO_DEFAULT = "SelivanovAS/dashboard";
 function ghRepoApi() { return "https://api.github.com/repos/" + cfgVar("GH_REPO", GH_REPO_DEFAULT); }
 
-// Ближайший запуск cron'а Worker'а (45 3 * * mon-fri UTC) с учётом праздников
-// РФ — зеркалит scheduled(): день оценивается по МСК (UTC+3).
+// Время крона инстанса (UTC, "Ч:ММ") — из [vars] wrangler.toml территории
+// (CRON_UTC), держать в синхроне с [triggers].crons! Плитка «Автозапуск»
+// в админке раньше врала: время было захардкожено (03:45 — расписание
+// ХМАО до 15.07.2026). Фолбэк — текущий крон ХМАО-инстанса (03:30).
+function cronUtcParts() {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(cfgVar("CRON_UTC", "3:30")).trim());
+  return m ? [Number(m[1]), Number(m[2])] : [3, 30];
+}
+
+// Ближайший запуск cron'а Worker'а с учётом праздников РФ — зеркалит
+// scheduled(): день оценивается по МСК (UTC+3).
 function nextCronAt() {
   const now = new Date();
+  const [cronH, cronM] = cronUtcParts();
   for (let i = 0; i < 30; i++) {
     const day = new Date(now.getTime() + i * 86400000);
     const fire = new Date(Date.UTC(
-      day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 3, 45, 0
+      day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), cronH, cronM, 0
     ));
     if (fire.getTime() <= now.getTime()) continue;
     const msk = new Date(fire.getTime() + 3 * 3600 * 1000);

@@ -23,6 +23,9 @@ crons = ["30 3 * * mon-fri"]
 ALLOWED_ORIGIN = "https://selivanovas.github.io"
 CASES_DATA_URL = "https://selivanovas.github.io/dashboard/data/cases.json"
 GH_REPO = "SelivanovAS/dashboard"
+# Время крона (UTC, "Ч:ММ") — ДЕРЖАТЬ В СИНХРОНЕ с [triggers].crons выше:
+# из него админка считает плитку «Автозапуск» (worker.js cronUtcParts).
+CRON_UTC = "3:30"
 
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS
