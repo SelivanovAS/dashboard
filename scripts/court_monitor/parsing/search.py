@@ -242,6 +242,9 @@ def _find_results_table(tables: list) -> list | None:
     return None
 
 
+_SRV_NUM_RE = re.compile(r"srv_num=(\d+)")
+
+
 # ── Детект страницы с проверочным кодом (CAPTCHA) ────────────────────────────
 # Некоторые суды sudrf.ru закрывают поиск проверочным кодом (картинка на форме
 # name_op=sf). Парсер бьёт напрямую в name_op=r, минуя форму, поэтому такая
@@ -369,7 +372,8 @@ def find_fi_case_link(html: str, case_number: str) -> str:
 
 
 def parse_first_instance_search(
-    html: str, court: CourtConfig, stats: dict | None = None
+    html: str, court: CourtConfig, stats: dict | None = None,
+    keep_all_roles: bool = False,
 ) -> list[dict]:
     """Парсит страницу поиска суда первой инстанции.
 
@@ -383,9 +387,19 @@ def parse_first_instance_search(
     «настоящего Сбербанка» ДО фильтра роли. Это сигнал здоровья парсера:
     вал исков самого банка вытесняет ответчик-дела со страницы 1 и обнуляет
     len(результата) без всякой поломки (Октябрьский р/с, 14.07.2026).
+    Там же stats["subsidiary_rows"] — сколько строк отсеяно как «только дочка
+    Сбера» (страхование, НПФ и т.п.), и stats["subsidiary_cases"] — их номера
+    (импортёр показывает их оператору построчно).
+
+    keep_all_roles=True — вернуть дела ВСЕХ ролей банка (истец/ответчик/третье
+    лицо), а не только «банк-ответчик». Режим импортёра дампов
+    (scripts/import_search_dump.py): оператор капчёвого суда заводит все
+    сберовские дела из выдачи. Отсев дочек действует в обоих режимах.
     """
     if stats is not None:
         stats["sber_rows"] = 0
+        stats["subsidiary_rows"] = 0
+        stats["subsidiary_cases"] = []
     tables = extract_tables(html)
     results_table = _find_results_table(tables)
     if not results_table:
@@ -445,6 +459,9 @@ def parse_first_instance_search(
 
         # Пропускаем дела, где «Сбербанк» — только дочерняя структура (страхование, НПФ и т.п.)
         if is_subsidiary_only_case(plaintiff, defendant):
+            if stats is not None:
+                stats["subsidiary_rows"] += 1
+                stats["subsidiary_cases"].append(case_number)
             continue
 
         # Строка «настоящего Сбербанка» (не дочки) до фильтра роли — метрика
@@ -462,11 +479,22 @@ def parse_first_instance_search(
         elif any(p in defendant_lower for p in config.SBER_PATTERNS):
             role = "Ответчик"
 
-        # Фильтр: только банк-ответчик
-        if role != "Ответчик":
+        # Фильтр: только банк-ответчик (боевой автопоиск). Импортёр дампов
+        # (keep_all_roles=True) берёт все сберовские роли.
+        if not keep_all_roles and role != "Ответчик":
             continue
 
         link = f"{cid}|{cuid}" if cid and cuid else ""
+
+        # srv_num из href самого суда — авторитетнее конфига для двухсерверных
+        # судов (Камышловский/Красноуфимский: два сервера на одном домене,
+        # резолв CourtConfig по домену даёт первый). Пишется отдельным ключом:
+        # боевой путь продолжает брать court.srv_num, использует его импортёр.
+        href_srv = None
+        if href:
+            m_srv = _SRV_NUM_RE.search(href)
+            if m_srv:
+                href_srv = int(m_srv.group(1))
 
         # Статус: если есть результат — решено
         status = "Решено" if result else "В производстве"
@@ -482,6 +510,7 @@ def parse_first_instance_search(
             "court_domain": court.domain,
             "court_delo_id": court.delo_id,
             "court_srv_num": court.srv_num,
+            "href_srv_num": href_srv,
             "judge": judge,
             "bank_role": role,
             "status": status,

@@ -1004,6 +1004,33 @@ def rotate_cold_archive(hot_archive: list[dict]) -> list[dict]:
     return keep_hot
 
 
+def collect_existing_ids(all_cases) -> set[str]:
+    """Индекс дедупликации по всем известным номерам дел.
+
+    Паттерн main_json (runs.py, блок 1), вынесен для переиспользования
+    импортёром дампов (scripts/import_search_dump.py). На вход — активные
+    дела + горячий архив + холодные годовые архивы одним iterable. В индекс
+    попадают: полный id, его «голая» часть до скобки (архив переномеровывает:
+    «2-122/2026 (2-535/2025;)», а поиск суда возвращает только текущий номер),
+    fi.case_number и appeal.case_number.
+    """
+    existing_ids: set[str] = set()
+    for c in all_cases:
+        cid = (c.get("id") or "").strip()
+        if cid:
+            existing_ids.add(cid)
+            bare = cid.split("(")[0].strip()
+            if bare and bare != cid:
+                existing_ids.add(bare)
+        fi = c.get("first_instance")
+        if fi and fi.get("case_number"):
+            existing_ids.add(fi["case_number"].strip())
+        ap = c.get("appeal")
+        if ap and ap.get("case_number"):
+            existing_ids.add(ap["case_number"].strip())
+    return existing_ids
+
+
 def _fi_search_to_json_case(fi: dict) -> dict:
     """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
     initial_role = fi.get("bank_role", "Ответчик")

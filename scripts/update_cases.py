@@ -69,6 +69,7 @@ from court_monitor.courts import (  # noqa: F401 — ре-экспорт для 
     match_region_first_instance, appeal_court_by_domain, APPEAL_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL, JUDICIAL_UID_RE,
     case_card_url, _FI_COURTS_BY_DOMAIN, fi_card_url, case_link_html,
+    courts_for_search,
 )
 from court_monitor.storage import (  # noqa: F401 — ре-экспорт для совместимости
     load_digested_acts, save_digested_acts,
@@ -122,6 +123,7 @@ from court_monitor.linking import (  # noqa: F401 — ре-экспорт для
     find_new_cases, link_cases, relink_awaiting_relink_first_instance,
     reactivate_archived_first_instance, _cassation_card_to_block,
     link_cassation_cases, rotate_cold_archive, _fi_search_to_json_case,
+    collect_existing_ids,
 )
 # Патчабельные LLM-функции код фасада вызывает ТОЛЬКО как llm.X(...) —
 # тесты патчат court_monitor.digest.llm, патч виден во всех путях вызова.

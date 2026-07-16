@@ -35,6 +35,13 @@ class CourtConfig:
     delo_id: int       # 5 = апелляция, 1540005 = 1 инст. (гражд.), 2800001 = касс. (гражд.)
     court_type: str    # "appeal" | "first_instance" | "cassation"
     enabled: bool = True
+    # Поиск закрыт проверочным кодом (капча): автопоиск по суду выключен,
+    # но КАРТОЧКИ дел продолжают мониториться (enabled=False не годится —
+    # он глушит и карточки). Дела таких судов попадают в систему через
+    # импортёр дампов выдачи (scripts/import_search_dump.py, секция «Импорт»
+    # в админке Worker'а) — оператор решает код руками, парсер дальше ведёт
+    # дело по карточке. См. courts.courts_for_search().
+    search_gated: bool = False
     srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
     source: str = "sudrf"  # "sudrf" (скрейп) | "casebook" (API-адаптер). Дискриминатор
                            # диспетчера в runs.py; sudrf-URL-методы на не-sudrf падают (M3).
@@ -199,6 +206,20 @@ class RegionConfig:
             "appeal_courts": [
                 {"name": c.name, "domain": c.domain, "delo_id": c.delo_id}
                 for c in self.appeal_courts
+            ],
+            # Суды 1-й инст. — источник dropdown'а секции «Импорт дел» в
+            # админке Worker'а: search_gated=True помечает капчёвые суды,
+            # чьи дела заводятся импортёром. srv_num нужен для различения
+            # вторых площадок (Камышловский/Красноуфимский: два сервера
+            # на одном домене).
+            "fi_courts": [
+                {
+                    "name": c.name,
+                    "domain": c.domain,
+                    "search_gated": c.search_gated,
+                    "srv_num": c.srv_num,
+                }
+                for c in self.first_instance_courts
             ],
             "cassation": {
                 "name": self.cassation_court.name,

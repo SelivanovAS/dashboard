@@ -141,19 +141,73 @@ class TestMatchRegionFirstInstance:
 
 
 class TestSverdlovskYanaoRegion:
-    """Регион этапа 1: 12 судов ЯНАО + ДВА апел-суда (Свердловский облсуд +
-    Суд ЯНАО), кассация — тот же 7-й КСОЮ."""
+    """Регион этапа 1: 54 записи судов Свердловской области (52 суда, две
+    вторые площадки; все search_gated — поиск за капчей) + 12 судов ЯНАО
+    (автопоиск) + ДВА апел-суда (Свердловский облсуд + Суд ЯНАО), кассация —
+    тот же 7-й КСОЮ."""
 
     def test_loads_with_two_appeal_courts(self):
         r = get_region("sverdlovsk_yanao")
         assert [c.domain for c in r.appeal_courts] == [
             "oblsud--svd.sudrf.ru", "oblsud--ynao.sudrf.ru",
         ]
-        assert len(r.first_instance_courts) == 12
+        assert len(r.first_instance_courts) == 54 + 12
         assert r.cassation_court.domain == "7kas.sudrf.ru"
         assert r.health_cassation_keys() == (
             "cassation:7kas:total", "cassation:7kas:sverdlovsk_yanao",
         )
+
+    def test_sverdlovsk_registry_shape(self):
+        """Свердловские суды: все за капчей (search_gated), delo_id стандартный,
+        ЯНАО — полный автопоиск; Академический — первый проверочный."""
+        r = get_region("sverdlovsk_yanao")
+        svd = [c for c in r.first_instance_courts if "--svd." in c.domain]
+        ynao = [c for c in r.first_instance_courts if "--ynao." in c.domain]
+        assert len(svd) == 54 and len(ynao) == 12
+        assert all(c.search_gated for c in svd)
+        assert not any(c.search_gated for c in ynao)
+        assert all(c.delo_id == 1540005 for c in svd)
+        assert svd[0].domain == "akademicheskiy--svd.sudrf.ru"
+        # Две вторые площадки на общих доменах: Камышловский и Красноуфимский.
+        two_srv = sorted(c.domain for c in svd if c.srv_num == 2)
+        assert two_srv == [
+            "kamyshlovsky--svd.sudrf.ru",
+            "krasnoufimsky--svd.sudrf.ru",
+            "zheleznodorozhny--svd.sudrf.ru",  # единственная площадка на srv 2
+        ]
+
+    def test_courts_for_search_excludes_gated(self):
+        """Автопоиск региона — только 12 ЯНАО-судов; капчёвые исключены,
+        порядок сохраняется."""
+        r = get_region("sverdlovsk_yanao")
+        searchable = uc.courts_for_search(list(r.first_instance_courts))
+        assert [c.domain for c in searchable] == [
+            c.domain for c in r.first_instance_courts if "--ynao." in c.domain
+        ]
+
+    def test_courts_for_search_excludes_disabled(self):
+        c_on = CourtConfig("А", "a.sudrf.ru", 1540005, "first_instance")
+        c_off = CourtConfig("Б", "b.sudrf.ru", 1540005, "first_instance", enabled=False)
+        c_gated = CourtConfig("В", "c.sudrf.ru", 1540005, "first_instance", search_gated=True)
+        assert uc.courts_for_search([c_off, c_on, c_gated]) == [c_on]
+
+    def test_fi_courts_in_public_info(self):
+        """Блок fi_courts (dropdown импорта в админке): имя, домен, срв,
+        флаг капчи; у ХМАО gated-судов нет — секция импорта прячется."""
+        info = get_region("sverdlovsk_yanao").public_info()
+        fi = info["fi_courts"]
+        assert len(fi) == 66
+        akadem = fi[0]
+        assert akadem == {
+            "name": "Академический районный суд г. Екатеринбурга",
+            "domain": "akademicheskiy--svd.sudrf.ru",
+            "search_gated": True,
+            "srv_num": 1,
+        }
+        assert any(not c["search_gated"] for c in fi)  # ЯНАО ищется
+        hmao_fi = get_region("hmao").public_info()["fi_courts"]
+        assert len(hmao_fi) == 20
+        assert not any(c["search_gated"] for c in hmao_fi)
 
     def test_ynao_fi_court_matches(self):
         r = get_region("sverdlovsk_yanao")
@@ -172,13 +226,33 @@ class TestSverdlovskYanaoRegion:
         assert got_svd is not None and got_svd.domain == "oblsud--svd.sudrf.ru"
         assert got_ynao is not None and got_ynao.domain == "oblsud--ynao.sudrf.ru"
 
-    def test_sverdlovsk_district_not_matched_yet(self):
-        """Свердловские районные суды ещё НЕ в реестре (капча на поиске) —
-        их дела с 7kas не матчатся, пока не добавим суды + маркеры."""
+    def test_sverdlovsk_fi_courts_match(self):
+        """Свердловские суды в реестре: длинная форма 7kas матчится в свой
+        CourtConfig; одноимённые суды двух городов не путаются."""
         r = get_region("sverdlovsk_yanao")
-        assert uc.match_region_first_instance(
-            "Октябрьский районный суд г. Екатеринбурга Свердловской области", r
-        ) is None
+        cases = {
+            "Октябрьский районный суд г. Екатеринбурга Свердловской области":
+                "oktiabrsky--svd.sudrf.ru",
+            "Ленинский районный суд г. Екатеринбурга Свердловской области":
+                "leninskyeka--svd.sudrf.ru",
+            "Ленинский районный суд г. Нижний Тагил Свердловской области":
+                "leninskytag--svd.sudrf.ru",
+            "Алапаевский городской суд Свердловской области":
+                "alapaevsky--svd.sudrf.ru",
+        }
+        for long_name, domain in cases.items():
+            got = uc.match_region_first_instance(long_name, r)
+            assert got is not None and got.domain == domain, long_name
+
+    def test_second_server_entries_not_matched_by_long_name(self):
+        """Вторые площадки («(сервер 2)») в длинной форме 7kas отдельно не
+        пишутся — матчер отдаёт запись первого сервера."""
+        r = get_region("sverdlovsk_yanao")
+        got = uc.match_region_first_instance(
+            "Камышловский районный суд Свердловской области", r
+        )
+        assert got is not None
+        assert got.domain == "kamyshlovsky--svd.sudrf.ru" and got.srv_num == 1
 
     def test_cross_region_matrix(self):
         """Матрица «длинное имя → ровно один регион»: реестры ХМАО и
