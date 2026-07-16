@@ -66,10 +66,10 @@ SVERDLOVSK_FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Камышловский районный суд (сервер 2)", "kamyshlovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
     CourtConfig("Карпинский городской суд",        "karpinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
     CourtConfig("Качканарский городской суд",      "kachkanarsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
-    # ⚠ В списке юриста домен «kirovgradsky--cvd» — почти наверняка опечатка
-    # («свд» латиницей); оба поддомена резолвятся (wildcard DNS). Проверка —
-    # probe_region_registry.yml; до неё используем каноничный --svd.
-    CourtConfig("Кировградский городской суд",     "kirovgradsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
+    # ⚠ Домен действительно «--cvd» (не svd!): проба probe_region_registry.yml
+    # 16.07.2026 подтвердила — cvd отдаёт delo_id=1540005, а svd-вариант
+    # возвращает заглушку. Список юриста был точен.
+    CourtConfig("Кировградский городской суд",     "kirovgradsky--cvd.sudrf.ru",     1540005, "first_instance", search_gated=True),
     CourtConfig("Кировский районный суд г. Екатеринбурга", "kirovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
     CourtConfig("Красногорский районный суд г. Каменск-Уральского", "krasnogorsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
     CourtConfig("Краснотурьинский городской суд",  "krasnoturinsky--svd.sudrf.ru",   1540005, "first_instance", search_gated=True),
