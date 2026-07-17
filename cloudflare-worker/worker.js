@@ -992,13 +992,13 @@ async function handleAdminImportDump(request, env) {
   }
   if (html.length < IMPORT_HTML_MIN) {
     return new Response(
-      JSON.stringify({ ok: false, error: "дамп слишком короткий — вставьте страницу выдачи целиком (копией выделения или файлом «только HTML»)" }),
+      JSON.stringify({ ok: false, error: "страница слишком короткая — скопируйте страницу результатов целиком (выделением) или приложите файл «только HTML»" }),
       { status: 400, headers: jsonHeaders }
     );
   }
   if (html.length > IMPORT_HTML_MAX) {
     return new Response(
-      JSON.stringify({ ok: false, error: "дамп больше 2 МБ — это не страница выдачи; сохраните «только HTML», без картинок" }),
+      JSON.stringify({ ok: false, error: "файл больше 2 МБ — это не страница результатов; сохраните её как «только HTML», без картинок" }),
       { status: 400, headers: jsonHeaders }
     );
   }

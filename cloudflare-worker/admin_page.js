@@ -15,6 +15,12 @@
 // капчёвых судов) — статус, здоровье, живой лог и «Импорт дел». Owner-блоки
 // скрываются атрибутом data-owner-only + html[data-role] (реальный запрет —
 // на эндпоинтах Worker'а: /admin/data и др. отдают оператору 403).
+//
+// Операторский UX (17.07.2026): секция «Импорт дел» вынесена в константу
+// IMPORT_SECTION и вставляется в main по роли — оператору ПЕРВОЙ (его рабочий
+// инструмент, видна сразу, без ожидания cases.json), owner'у — после
+// «Системы» и скрытой до загрузки списка капчёвых судов. Перестановка
+// серверная (в разметке), чтобы скроллспай и tab-порядок работали без правок.
 
 export function renderAdminHtml(secret, role, cfg) {
   role = role === "operator" ? "operator" : "owner";
@@ -31,6 +37,73 @@ export function renderAdminHtml(secret, role, cfg) {
     siteBase: base,
     ghRepo: (cfg && cfg.ghRepo) || "SelivanovAS/dashboard",
   };
+  const isOperator = role === "operator";
+  // Чип «Импорт» в nav: оператору — первым и активным сразу (его стартовая
+  // секция), owner'у — скрытым до загрузки списка капчёвых судов (у ХМАО
+  // их нет — чип так и не появится).
+  const IMPORT_CHIP = isOperator
+    ? '<a class="chip-btn active" href="#import" id="nav-import">Импорт</a>'
+    : '<a class="chip-btn" href="#import" id="nav-import" style="display:none;">Импорт</a>';
+  // Секция «Импорт дел»: одна разметка на обе роли, в main вставляется по
+  // роли (оператору — первой, owner'у — после «Системы», см. шапку файла).
+  const IMPORT_SECTION = `<section class="section" id="import"${isOperator ? "" : ' style="display:none;"'}>
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </span>
+      <h2 class="section-title">Импорт дел</h2>
+      <span class="section-counter" id="imp-court-count"></span>
+    </div>
+    <div class="card">
+      <div class="imp-alert" id="imp-alert" style="display:none;"></div>
+      <div class="imp-form">
+        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную:</div>
+        <ol class="imp-steps">
+          <li>выберите суд из списка;</li>
+          <li>нажмите «Открыть сайт суда»;</li>
+          <li>на сайте решите проверочный код и найдите дела по слову «Сбербанк»;</li>
+          <li>выделите страницу результатов и скопируйте её;</li>
+          <li>вставьте скопированное в поле ниже (Ctrl+V / ⌘V) — простой текст не годится, теряются
+            ссылки на дела; вместо вставки можно приложить файл «только HTML»;</li>
+          <li>нажмите «Отправить на импорт».</li>
+        </ol>
+        <div class="imp-row">
+          <label>Суд
+            <select id="imp-court"><option value="">загружается…</option></select>
+          </label>
+          <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть сайт суда</a>
+          <label>Ваше имя
+            <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
+          </label>
+        </div>
+        <div class="imp-paste" id="imp-paste" contenteditable="true"
+          data-placeholder="Вставьте сюда скопированную страницу результатов (Ctrl+V / ⌘V) или перетащите файл «только HTML»…"></div>
+        <div class="imp-selection" id="imp-selection"></div>
+        <div class="imp-row">
+          <label class="imp-hint">или файл «только HTML»: <input type="file" id="imp-file" accept=".html,.htm,text/html"></label>
+        </div>
+        <div class="imp-row">
+          <button class="btn-primary" id="imp-send" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Отправить на импорт
+          </button>
+          <span class="imp-status" id="imp-status"></span>
+        </div>
+        <div class="imp-report" id="imp-report"></div>
+      </div>
+      <details class="fold" id="imp-fresh-fold" open>
+        <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
+        <div class="fold-body">
+          <div class="imp-hint" style="margin-bottom:6px;">Регламент — импорт каждого суда раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху; клик по суду выбирает его в форме.</div>
+          <div id="imp-freshness" class="empty">Загрузка…</div>
+        </div>
+      </details>
+      <details class="fold" id="imp-hist-fold">
+        <summary>История импортов <span class="run-meta" id="imp-hist-count"></span></summary>
+        <div class="fold-body"><div id="imp-history" class="empty">Загрузка…</div></div>
+      </details>
+    </div>
+  </section>`;
   return `<!doctype html><html lang="ru" data-role="${role}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -250,6 +323,7 @@ a { color: var(--accent); }
 
 /* Пульт */
 .pult { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:26px; }
+.pult.has-import { grid-template-columns:repeat(5, 1fr); } /* с плиткой «Импорты» (капчёвые суды) */
 .stat-card { background:var(--bg-1); border-radius:var(--radius-md); padding:12px 14px;
   box-shadow:var(--shadow-1); border-left:3px solid var(--border-strong);
   transition:box-shadow 150ms var(--ease-out); cursor:pointer; text-align:left;
@@ -499,6 +573,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   .header-nav { order:10; flex-basis:100%; }
   .app-main { padding:14px 14px 40px; }
   .pult { grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:22px; }
+  .pult.has-import { grid-template-columns:repeat(2, 1fr); } /* специфичность: иначе десктопные 5 колонок победят */
   .stat-card { padding:10px 12px; }
   .stat-value { font-size:var(--fs-xl); }
   .system-grid { grid-template-columns:1fr; }
@@ -507,9 +582,12 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   .health-name { max-width:44vw; }
   .tform input[type=text] { min-width:0; flex:1; }
   .search-box { min-width:0; flex:1; }
+  #imp-freshness .health-name { max-width:none; white-space:normal; }
+  #imp-freshness .imp-fresh-meta { flex-basis:100%; margin-left:17px; } /* мета под именем, отступ = точка+gap */
 }
 @media (min-width: 769px) and (max-width: 1024px) {
   .system-grid { grid-template-columns:1fr; }
+  .pult.has-import { grid-template-columns:repeat(3, 1fr); }
 }
 
 /* ═══ Роли: operator не видит owner-блоки (реальный запрет — 403 на API) ═══ */
@@ -543,6 +621,31 @@ html[data-role="operator"] .run-ext { display:none !important; }
   font-size:var(--fs-sm); flex-wrap:wrap; }
 .imp-hist-court { color:var(--fg-2); }
 .imp-hist-meta { color:var(--fg-3); font-size:var(--fs-xs); }
+.imp-steps { margin:0; padding-left:20px; font-size:var(--fs-xs); color:var(--fg-3);
+  display:flex; flex-direction:column; gap:3px; }
+.imp-alert { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 12px;
+  border-radius:var(--radius-md); background:var(--warning-bg); color:var(--warning-fg);
+  font-size:var(--fs-sm); margin-bottom:12px; }
+.imp-paste.imp-dragover { border-style:solid; border-color:var(--accent); background:var(--accent-bg-soft); }
+.imp-selection { font-size:var(--fs-xs); color:var(--fg-3); display:flex; gap:8px;
+  align-items:center; flex-wrap:wrap; }
+.imp-selection:empty { display:none; }
+.imp-file-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 10px;
+  border-radius:var(--radius-pill); background:var(--info-bg); color:var(--info-fg);
+  font-weight:var(--fw-medium); }
+.imp-file-clear { border:0; background:none; color:inherit; cursor:pointer; font-size:inherit;
+  padding:0 2px; line-height:1; }
+/* Вспышка формы после клика по суду в светофоре. */
+.imp-flash { animation:impFlash 1.6s var(--ease-out) 1; border-radius:var(--radius-md); }
+@keyframes impFlash { 0% { box-shadow:var(--focus-ring); } 100% { box-shadow:0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .imp-flash { animation:none; } }
+/* Светофор свежести: строки-кнопки (клик = выбрать суд в форме). */
+#imp-freshness .health-row { cursor:pointer; flex-wrap:wrap; }
+#imp-freshness .health-row:hover .health-name { color:var(--accent); }
+#imp-freshness .health-row:focus-visible { outline:2px solid var(--accent); outline-offset:-2px;
+  border-radius:var(--radius); }
+#imp-freshness .health-name { flex:1 1 auto; min-width:0; }
+.imp-fresh-meta { margin-left:auto; flex-shrink:0; } /* распорка вместо пустого health-spark */
 </style>
 </head><body>
 
@@ -558,8 +661,9 @@ html[data-role="operator"] .run-ext { display:none !important; }
       </div>
     </div>
     <nav class="header-nav" id="nav">
-      <a class="chip-btn active" href="#system">Система</a>
-      <a class="chip-btn" href="#import" id="nav-import" style="display:none;">Импорт</a>
+      ${isOperator ? IMPORT_CHIP : ""}
+      <a class="chip-btn${isOperator ? "" : " active"}" href="#system">Система</a>
+      ${isOperator ? "" : IMPORT_CHIP}
       <a class="chip-btn" href="#llm" data-owner-only>LLM</a>
       <a class="chip-btn" href="#subs" data-owner-only>Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
     </nav>
@@ -579,6 +683,7 @@ html[data-role="operator"] .run-ext { display:none !important; }
 </header>
 
 <main class="app-main">
+${isOperator ? IMPORT_SECTION : ""}
 
   <div class="pult">
     <button class="stat-card" data-accent="gray" data-goto="#system">
@@ -600,6 +705,11 @@ html[data-role="operator"] .run-ext { display:none !important; }
       <div class="stat-label">Автозапуск</div>
       <div class="stat-value" id="tile-cron-value">…</div>
       <div class="stat-sub" id="tile-cron-sub"></div>
+    </button>
+    <button class="stat-card" data-accent="gray" data-goto="#import" id="tile-import-card" style="display:none;">
+      <div class="stat-label">Импорты</div>
+      <div class="stat-value" id="tile-import-value">…</div>
+      <div class="stat-sub" id="tile-import-sub"></div>
     </button>
   </div>
 
@@ -657,56 +767,7 @@ html[data-role="operator"] .run-ext { display:none !important; }
     </div>
   </section>
 
-  <section class="section" id="import" style="display:none;">
-    <div class="section-head">
-      <span class="section-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      </span>
-      <h2 class="section-title">Импорт дел</h2>
-      <span class="section-counter" id="imp-court-count"></span>
-    </div>
-    <div class="card">
-      <div class="imp-form">
-        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную:
-          решите код на сайте суда, найдите дела по слову «Сбербанк», <b>скопируйте выделение страницы
-          результатов</b> (или сохраните её как «только HTML» и приложите файл) и вставьте ниже.
-          Вставка простым текстом не годится — теряются ссылки на карточки дел.</div>
-        <div class="imp-row">
-          <label>Суд
-            <select id="imp-court"></select>
-          </label>
-          <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть сайт суда</a>
-          <label>Ваше имя
-            <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
-          </label>
-        </div>
-        <div class="imp-paste" id="imp-paste" contenteditable="true"
-          data-placeholder="Вставьте сюда скопированную страницу выдачи (Ctrl+V / ⌘V)…"></div>
-        <div class="imp-row">
-          <label class="imp-hint">или файл «только HTML»: <input type="file" id="imp-file" accept=".html,.htm,text/html"></label>
-        </div>
-        <div class="imp-row">
-          <button class="btn-primary" id="imp-send">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            Отправить на импорт
-          </button>
-          <span class="imp-status" id="imp-status"></span>
-        </div>
-        <div class="imp-report" id="imp-report"></div>
-      </div>
-      <details class="fold" id="imp-fresh-fold">
-        <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
-        <div class="fold-body">
-          <div class="imp-hint" style="margin-bottom:6px;">Регламент — импорт каждого суда раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху.</div>
-          <div id="imp-freshness" class="empty">Загрузка…</div>
-        </div>
-      </details>
-      <details class="fold" id="imp-hist-fold">
-        <summary>История импортов <span class="run-meta" id="imp-hist-count"></span></summary>
-        <div class="fold-body"><div id="imp-history" class="empty">Загрузка…</div></div>
-      </details>
-    </div>
-  </section>
+${isOperator ? "" : IMPORT_SECTION}
 
   <section class="section" id="llm" data-owner-only>
     <div class="section-head">
@@ -2021,20 +2082,49 @@ document.getElementById("subs-search").addEventListener("input", renderSubsList)
 var impCourts = [];            // [{name, domain, search_gated, srv_num}]
 var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
 var impPollTimer = null;
+var impSelectedFile = null;    // файл на отправку (из input или drag-n-drop)
+var impSending = false;        // идёт отправка/импорт — кнопка заблокирована
 function impCourtLink(domain) {
   return "https://" + domain + "/modules.php?name=sud_delo";
 }
+// Синхронизация ссылки «Открыть сайт суда» с выбранным судом. На верхнем
+// уровне, а не внутри loadImportCourts: её зовут change селекта, клик по
+// светофору и «Повторить», а слушатель вешается один раз в init-блоке ниже
+// (иначе каждый retry плодил бы дубликаты подписок).
+function syncImportCourtLink() {
+  var sel = document.getElementById("imp-court");
+  if (sel.value) document.getElementById("imp-court-link").href = impCourtLink(sel.value);
+}
+function impShowAlert(html) {
+  var el = document.getElementById("imp-alert");
+  el.innerHTML = html;
+  el.style.display = "";
+}
+function impHideAlert() {
+  document.getElementById("imp-alert").style.display = "none";
+}
 async function loadImportCourts() {
   try {
+    impHideAlert();
     const r = await fetch(CASES_URL, { cache: "no-cache" });
-    if (!r.ok) return;
+    if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     const fi = (j && j.region && Array.isArray(j.region.fi_courts)) ? j.region.fi_courts : [];
     const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
     fi.forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
     });
-    if (!gated.length) return; // регион без капчёвых судов — секция не нужна
+    if (!gated.length) {
+      // Регион без капчёвых судов: owner'у секция не нужна (ХМАО), а оператор
+      // видит её всегда — честно объясняем, почему форма недоступна.
+      if (!IS_OWNER) {
+        impShowAlert("В регионе нет судов с ручным импортом — уточните у владельца.");
+        document.querySelector("#import .imp-form").style.display = "none";
+        document.getElementById("imp-fresh-fold").style.display = "none";
+        document.getElementById("imp-hist-fold").style.display = "none";
+      }
+      return;
+    }
     // Дедуп по домену: вторые площадки («сервер 2») делят домен с первой,
     // а фактический сервер дела импортёр берёт из href дампа.
     const seen = {};
@@ -2048,15 +2138,21 @@ async function loadImportCourts() {
       return '<option value="' + escHtml(c.domain) + '">' + escHtml(c.name) + '</option>';
     }).join("");
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
-    function syncLink() {
-      document.getElementById("imp-court-link").href = impCourtLink(sel.value);
-    }
-    sel.addEventListener("change", syncLink);
-    syncLink();
+    syncImportCourtLink();
     document.getElementById("import").style.display = "";
     document.getElementById("nav-import").style.display = "";
+    document.getElementById("tile-import-card").style.display = "";
+    document.querySelector(".pult").classList.add("has-import");
     loadImportLog();
-  } catch (e) { /* cases.json недоступен — секция остаётся скрытой */ }
+  } catch (e) {
+    // cases.json недоступен: оператору — ошибка с «Повторить» (иначе секция
+    // молча пуста и выглядит поломкой), owner'у — тихо, как раньше (на ХМАО
+    // gated-судов нет вовсе, алерт вытаскивал бы ненужную секцию).
+    if (!IS_OWNER) {
+      impShowAlert('Не удалось загрузить список судов (cases.json). '
+        + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
+    }
+  }
 }
 function impStatusBadge(status) {
   if (status === "done") return '<span class="badge badge-ok">готово</span>';
@@ -2155,6 +2251,14 @@ function renderImportFreshness(items, lastMap) {
     (nRed ? '<span class="badge badge-fail">' + nRed + ' давно/ни разу</span> ' : "")
     + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
     + '<span class="badge badge-ok">' + (rows.length - nRed - nYellow) + ' ok</span>';
+  // Плитка «Импорты» в пульте — из тех же подсчётов, без лишних запросов.
+  if (nRed) {
+    setTile("import", "red", nRed + " просрочено", "из " + rows.length + " судов · регламент раз в неделю");
+  } else if (nYellow) {
+    setTile("import", "amber", nYellow + " скоро срок", "из " + rows.length + " судов · жёлтый — 8–14 дней");
+  } else {
+    setTile("import", "green", '<span class="dot dot-green"></span>всё свежо', "все " + rows.length + " судов моложе 7 дней");
+  }
   el.className = "";
   el.innerHTML = rows.map(function (x) {
     var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
@@ -2162,12 +2266,28 @@ function renderImportFreshness(items, lastMap) {
       ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "")
         + (x.e.added ? " · +" + x.e.added : "")
       : "ни разу не импортировался";
-    return '<div class="health-row"><span class="dot ' + dotCls + '"></span>'
+    return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
+      + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.court.domain) + '">'
+      + '<span class="dot ' + dotCls + '"></span>'
       + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
-      + '<span class="health-spark"></span>'
-      + '<span class="run-meta">' + note + '</span>'
+      + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
       + '</div>';
   }).join("");
+}
+// Клик по строке светофора = выбрать суд в форме импорта: светофор работает
+// рабочей очередью («какой суд пора обновить — тот и импортирую»). Слушатели —
+// делегированием в init-блоке ниже (список ререндерится на каждом поллинге).
+function impPickCourt(domain) {
+  if (!domain) return;
+  var sel = document.getElementById("imp-court");
+  sel.value = domain;
+  syncImportCourtLink();
+  var row = sel.closest(".imp-row");
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.remove("imp-flash");
+  void row.offsetWidth; // рестарт CSS-анимации при повторном клике
+  row.classList.add("imp-flash");
+  setTimeout(function () { row.classList.remove("imp-flash"); }, 1700);
 }
 function impSetStatus(html) {
   document.getElementById("imp-status").innerHTML = html;
@@ -2177,6 +2297,11 @@ function impSetStatus(html) {
 // вытесняет ожидающий, дамп при этом живёт в KV 24 ч (можно повторить).
 // Интервал 15 с: каждый GET /admin/import-log = 2 KV-lists + пачка reads,
 // а лимит lists free-tier — 1000/день на аккаунт (инцидент 17.07.2026).
+function impElapsedText(startedAt) {
+  var s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  var m = Math.floor(s / 60);
+  return m ? m + " мин " + (s % 60) + " с" : s + " с";
+}
 function impPollResult(key, startedAt) {
   clearTimeout(impPollTimer);
   impPollTimer = setTimeout(async function () {
@@ -2190,16 +2315,22 @@ function impPollResult(key, startedAt) {
           + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
           + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
       }
-      document.getElementById("imp-send").disabled = false;
+      impSending = false;
+      impUpdateSendState();
       return;
     }
     if (Date.now() - startedAt > 5 * 60 * 1000) {
       impSetStatus('<span class="badge badge-fail">нет ответа ~5 мин</span> '
         + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.');
-      document.getElementById("imp-send").disabled = false;
+      impSending = false;
+      impUpdateSendState();
       return;
     }
-    if (mine && mine.status === "started") impSetStatus(impStatusBadge("started") + " импорт запущен…");
+    // Ожидание до 5 минут: живой статус с прошедшим временем (обновляется
+    // на тике 15 с), чтобы не выглядеть зависшим.
+    var st = (mine && mine.status === "started") ? "started" : "dispatched";
+    impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
+      + (st === "started" ? "выполняется" : "в очереди") + " · " + impElapsedText(startedAt));
     impPollResult(key, startedAt);
   }, 15000);
 }
@@ -2212,27 +2343,70 @@ async function impReadFile(file) {
     return new TextDecoder("windows-1251").decode(buf);
   }
 }
+// «Что уйдёт на импорт»: единый источник — impSelectedFile (файл из input
+// или drag-n-drop побеждает вставку), индикатор под полем говорит об этом.
+function impFmtSize(n) {
+  if (n >= 1024 * 1024) return (Math.round(n / 1024 / 1024 * 10) / 10) + " МБ";
+  return Math.max(1, Math.round(n / 1024)) + " КБ";
+}
+function impSetFile(f) {
+  impSelectedFile = f || null;
+  if (!impSelectedFile) {
+    try { document.getElementById("imp-file").value = ""; } catch (e) {}
+  }
+  impRenderSelection();
+}
+function impRenderSelection() {
+  var el = document.getElementById("imp-selection");
+  var paste = document.getElementById("imp-paste");
+  if (impSelectedFile) {
+    el.innerHTML = '<span class="imp-file-chip">файл: ' + escHtml(impSelectedFile.name)
+      + " (" + impFmtSize(impSelectedFile.size)
+      + ') <button class="imp-file-clear" type="button" id="imp-file-clear" title="Убрать файл">✕</button></span>'
+      + '<span>отправится файл — вставленное в поле не используется</span>';
+  } else if (paste.innerHTML.length) {
+    var k = paste.querySelectorAll("a[href]").length;
+    el.innerHTML = "вставлено " + paste.innerHTML.length + " симв. · ссылок на дела: "
+      + (k ? String(k) : '<b>0 — похоже, простой текст, скопируйте страницу заново</b>');
+  } else {
+    el.innerHTML = "";
+  }
+  impUpdateSendState();
+}
+function impUpdateSendState() {
+  var has = !!impSelectedFile || document.getElementById("imp-paste").innerHTML.length > 0;
+  document.getElementById("imp-send").disabled = impSending || !has;
+}
 async function impSend() {
   const domain = document.getElementById("imp-court").value;
   const name = document.getElementById("imp-name").value.trim();
   try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
-  const fileEl = document.getElementById("imp-file");
   let html = "";
-  if (fileEl.files && fileEl.files.length) {
-    html = await impReadFile(fileEl.files[0]);
+  if (impSelectedFile) {
+    // Файл (input или drag-n-drop) побеждает вставку — об этом честно
+    // говорит индикатор impRenderSelection под полем.
+    html = await impReadFile(impSelectedFile);
   } else {
     html = document.getElementById("imp-paste").innerHTML || "";
   }
   if (!domain) { impSetStatus('<span class="badge badge-fail">выберите суд</span>'); return; }
   if (!name) { impSetStatus('<span class="badge badge-fail">укажите ваше имя</span>'); return; }
   if (html.length < 1024) {
-    impSetStatus('<span class="badge badge-fail">дамп пуст или слишком короткий</span> '
-      + 'Скопируйте страницу выдачи целиком или приложите файл «только HTML».');
+    impSetStatus('<span class="badge badge-fail">страница не вставлена или слишком короткая</span> '
+      + 'Скопируйте страницу результатов целиком или приложите файл «только HTML».');
     return;
   }
-  document.getElementById("imp-send").disabled = true;
+  // Главная ошибка операторов — вставка простым текстом: ссылки на карточки
+  // дел теряются, импортёру нечего забирать. Ловим до отправки.
+  if (!/<a[\\s>]/i.test(html)) {
+    impSetStatus('<span class="badge badge-fail">нет ссылок на дела</span> '
+      + 'Похоже, вставился простой текст. Скопируйте страницу заново (выделением) или приложите файл «только HTML».');
+    return;
+  }
+  impSending = true;
+  impUpdateSendState();
   document.getElementById("imp-report").innerHTML = "";
-  impSetStatus("отправляю дамп…");
+  impSetStatus("отправляю страницу…");
   try {
     const r = await fetch("/admin/import-dump?secret=" + encodeURIComponent(SECRET), {
       method: "POST",
@@ -2241,19 +2415,66 @@ async function impSend() {
     });
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok) {
-      impSetStatus(impStatusBadge("dispatched") + " дамп принят, импорт в очереди…");
+      impSetStatus(impStatusBadge("dispatched") + " страница принята, импорт в очереди…");
       loadImportLog();
       impPollResult(d.key, Date.now());
     } else {
       impSetStatus('<span class="badge badge-fail">✕</span> ' + escHtml(d.error || ("HTTP " + r.status)));
-      document.getElementById("imp-send").disabled = false;
+      impSending = false;
+      impUpdateSendState();
     }
   } catch (e) {
     impSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
-    document.getElementById("imp-send").disabled = false;
+    impSending = false;
+    impUpdateSendState();
   }
 }
+// Одноразовая инициализация секции импорта. Всё содержимое, которое
+// ререндерится (светофор, индикатор выбора), слушается ТОЛЬКО делегированием
+// на постоянные контейнеры — прямые слушатели не пережили бы поллинг.
 document.getElementById("imp-send").addEventListener("click", impSend);
+document.getElementById("imp-court").addEventListener("change", syncImportCourtLink);
+(function () {
+  var fresh = document.getElementById("imp-freshness");
+  fresh.addEventListener("click", function (e) {
+    var row = e.target.closest(".imp-fresh-row");
+    if (row) impPickCourt(row.getAttribute("data-domain"));
+  });
+  fresh.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var row = e.target.closest(".imp-fresh-row");
+    if (row) { e.preventDefault(); impPickCourt(row.getAttribute("data-domain")); }
+  });
+  var paste = document.getElementById("imp-paste");
+  paste.addEventListener("input", impRenderSelection);
+  paste.addEventListener("dragover", function (e) {
+    // preventDefault только для файлов: перетаскивание выделенного текста
+    // в contenteditable должно остаться штатным поведением браузера.
+    var t = e.dataTransfer && e.dataTransfer.types;
+    if (t && Array.prototype.indexOf.call(t, "Files") !== -1) {
+      e.preventDefault();
+      paste.classList.add("imp-dragover");
+    }
+  });
+  paste.addEventListener("dragleave", function () { paste.classList.remove("imp-dragover"); });
+  paste.addEventListener("drop", function (e) {
+    paste.classList.remove("imp-dragover");
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      e.preventDefault();
+      impSetFile(e.dataTransfer.files[0]);
+    }
+  });
+  document.getElementById("imp-file").addEventListener("change", function () {
+    impSetFile(this.files && this.files.length ? this.files[0] : null);
+  });
+  document.getElementById("imp-selection").addEventListener("click", function (e) {
+    if (e.target.closest("#imp-file-clear")) impSetFile(null);
+  });
+  document.getElementById("imp-alert").addEventListener("click", function (e) {
+    if (e.target.closest("#imp-retry")) loadImportCourts();
+  });
+})();
+impUpdateSendState();
 try {
   document.getElementById("imp-name").value = localStorage.getItem("admin_operator_name") || "";
 } catch (e) {}
@@ -2275,6 +2496,9 @@ function refreshAll() {
   loadHealth();
   loadProgress();
   loadImportLog();
+  // «Обновить» чинит неудачную первую загрузку списка судов (для региона
+  // без капчёвых судов это лишний fetch cases.json — безвредно).
+  if (!impCourts.length) loadImportCourts();
   if (IS_OWNER) {
     render(true);
     llmTopLoaded = false;
