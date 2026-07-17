@@ -791,10 +791,16 @@ def log_run_summary(
             + (f", сбоев {config.METRICS['push_failed']}"
                if config.METRICS["push_failed"] else "")
         )
-    if config.METRICS["llm_summary_calls"] or config.METRICS["llm_summary_cache_hits"]:
+    if (config.METRICS["llm_summary_calls"]
+            or config.METRICS["llm_summary_cache_hits"]
+            or config.METRICS["llm_summary_failed"]):
         opt_lines.append(
             f"LLM-пересказы актов: вызовов {config.METRICS['llm_summary_calls']}, "
             f"из кэша {config.METRICS['llm_summary_cache_hits']}"
+            + (f", спасено фолбэком {config.METRICS['llm_summary_fallback_saved']}"
+               if config.METRICS["llm_summary_fallback_saved"] else "")
+            + (f", сбоев {config.METRICS['llm_summary_failed']} (откат на excerpt)"
+               if config.METRICS["llm_summary_failed"] else "")
         )
     lines = [
         "=" * 60,

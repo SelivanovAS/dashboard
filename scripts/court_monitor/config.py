@@ -283,6 +283,18 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
 OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 
+# Ретраи LLM-пересказов актов через OpenRouter: перегруженный free-пул отдаёт
+# 429 мгновенно, и немедленный повтор упирается в ту же стену — между
+# попытками нужна пауза (нарастающая, attempt * DELAY: 5с, 10с — как у
+# fetch_page). Если основная модель так и не ответила — фолбэк-роутер
+# OPENROUTER_FALLBACK_MODEL (openrouter/free: OpenRouter сам подбирает живую
+# бесплатную модель), тоже с ретраем. Худший случай на безнадёжный акт:
+# 3+2 вызова и ~20 с пауз. Инцидент 17.07.2026 (Урал): два хвостовых акта
+# из шести ушли в дайджест сырой мотивировкой вместо «Почему:».
+OPENROUTER_SUMMARY_RETRIES = 3           # попыток на основной модели
+OPENROUTER_SUMMARY_FALLBACK_RETRIES = 2  # попыток на фолбэк-модели
+OPENROUTER_SUMMARY_RETRY_DELAY = 5       # база паузы между попытками (сек)
+
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096
 # Целевой лимит длины дайджеста (передаётся в промпт). Должен быть ЗАМЕТНО
@@ -349,6 +361,8 @@ METRICS: dict[str, int] = {
     "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
     "llm_summary_calls": 0,       # пересказы актов: реальные вызовы LLM
     "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
+    "llm_summary_failed": 0,          # пересказы актов: все попытки исчерпаны → откат на excerpt
+    "llm_summary_fallback_saved": 0,  # пересказы актов: спасены фолбэк-моделью OpenRouter
 }
 
 

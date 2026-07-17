@@ -197,6 +197,58 @@ class CallOpenrouterChatTest(_OpenRouterTestBase):
                 )
             )
 
+    def test_empty_choices_and_content_log_warning(self):
+        # Раньше пустой ответ возвращался молча — в логе прогона сбой был
+        # неотличим от «модель ответила пусто» уровнем выше.
+        with patch.object(cm_config, "OPENROUTER_API_KEY", "k"), \
+             patch.object(cm_config, "OPENROUTER_MODEL", "test/model"), \
+             patch.object(cm_llm.requests, "post") as mpost:
+            mpost.return_value = _fake_response({"choices": []})
+            with self.assertLogs("court-monitor", level="WARNING") as logs:
+                self.assertIsNone(
+                    cm_llm._call_openrouter_chat(
+                        [{"role": "user", "content": "x"}],
+                        max_tokens=10, temperature=0.0,
+                    )
+                )
+            self.assertTrue(
+                any("пустой список choices" in m for m in logs.output),
+                logs.output,
+            )
+            mpost.return_value = _fake_response(
+                {"choices": [{"message": {"content": "   "}}]}
+            )
+            with self.assertLogs("court-monitor", level="WARNING") as logs:
+                self.assertIsNone(
+                    cm_llm._call_openrouter_chat(
+                        [{"role": "user", "content": "x"}],
+                        max_tokens=10, temperature=0.0,
+                    )
+                )
+            self.assertTrue(
+                any("пустой content" in m for m in logs.output), logs.output
+            )
+
+    def test_model_override_goes_to_payload_without_resolve(self):
+        # Явная модель (фолбэк-контур пересказов) кладётся в payload и не
+        # трогает резолв «модели дня» — даже когда тот потребовал бы HTTP.
+        with patch.object(cm_config, "OPENROUTER_API_KEY", "k"), \
+             patch.object(cm_config, "OPENROUTER_MODEL", ""), \
+             patch.object(cm_llm.requests, "get") as mget, \
+             patch.object(cm_llm.requests, "post") as mpost:
+            mpost.return_value = _fake_response(
+                {"choices": [{"message": {"content": "ок"}}]}
+            )
+            out = cm_llm._call_openrouter_chat(
+                [{"role": "user", "content": "x"}],
+                max_tokens=10, temperature=0.0,
+                model="openrouter/free",
+            )
+            self.assertEqual(out, "ок")
+            _, kwargs = mpost.call_args
+            self.assertEqual(kwargs["json"]["model"], "openrouter/free")
+        mget.assert_not_called()
+
 
 class SummaryTokenBudgetTest(_OpenRouterTestBase):
     """Лимиты max_tokens микро-вызовов пересказа: 700 у Claude/GigaChat
@@ -207,7 +259,7 @@ class SummaryTokenBudgetTest(_OpenRouterTestBase):
     def test_openrouter_simple_budget(self):
         captured = {}
 
-        def fake_chat(messages, *, max_tokens, temperature):
+        def fake_chat(messages, *, max_tokens, temperature, model=None):
             captured.update(max_tokens=max_tokens, temperature=temperature)
             return "ок"
 
@@ -241,8 +293,9 @@ class SummarizeDispatchTest(_OpenRouterTestBase):
         called = {"openrouter": 0, "claude": 0, "gigachat": 0}
 
         with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
+             patch.object(cm_config, "OPENROUTER_MODEL", "test/model"), \
              patch.object(cm_llm, "_call_openrouter_simple",
-                          lambda p: called.__setitem__(
+                          lambda p, **kw: called.__setitem__(
                               "openrouter", called["openrouter"] + 1
                           ) or "Пересказ."), \
              patch.object(cm_llm, "_call_claude_simple",
@@ -263,41 +316,132 @@ class SummarizeDispatchTest(_OpenRouterTestBase):
 
 
 class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
-    """Ретрай пересказа для openrouter: free-модели капризны (обрыв
-    reasoning, пустой content), вторая попытка часто уходит на другой
-    бэкенд и спасает пересказ. У Claude/GigaChat ретрая нет."""
+    """Ретраи пересказа для openrouter: перегруженный free-пул отдаёт 429
+    мгновенно, поэтому попытки на основной модели идут с нарастающей
+    паузой (attempt * OPENROUTER_SUMMARY_RETRY_DELAY), а после них
+    подключается фолбэк-модель OPENROUTER_FALLBACK_MODEL. У Claude/
+    GigaChat ретрая нет."""
 
     ACT = "Мотивировочная часть акта. " * 10
+    PRIMARY = "primary/model:free"
 
-    def _summarize(self):
-        return cm_llm.summarize_act_motivation(
-            self.ACT, case_meta={"stage": "appeal"}, use_cache=False,
-        )
+    def setUp(self):
+        super().setUp()
+        for k in ("llm_summary_calls", "llm_summary_cache_hits",
+                  "llm_summary_failed", "llm_summary_fallback_saved"):
+            cm_config.METRICS[k] = 0
+        self.sleeps = []
+        for p in (
+            patch.object(cm_config, "LLM_PROVIDER", "openrouter"),
+            patch.object(cm_config, "OPENROUTER_MODEL", self.PRIMARY),
+            patch.object(cm_config, "OPENROUTER_SUMMARY_RETRIES", 3),
+            patch.object(cm_config, "OPENROUTER_SUMMARY_FALLBACK_RETRIES", 2),
+            patch.object(cm_config, "OPENROUTER_SUMMARY_RETRY_DELAY", 5),
+            patch.object(cm_llm.time, "sleep", self.sleeps.append),
+        ):
+            p.start()
+            self.addCleanup(p.stop)
 
-    def test_retry_saves_summary(self):
-        answers = ["<think>обрыв размышлений посреди", "Иск удовлетворён."]
+    def _summarize(self, fake, use_cache=False):
+        with patch.object(cm_llm, "_call_openrouter_simple", fake):
+            return cm_llm.summarize_act_motivation(
+                self.ACT, case_meta={"stage": "appeal"}, use_cache=use_cache,
+            )
+
+    def test_retry_with_pause_saves_summary(self):
+        answers = ["<think>обрыв размышлений посреди", None,
+                   "Иск удовлетворён."]
         calls = []
 
-        def fake(prompt):
-            calls.append(prompt)
+        def fake(prompt, *, model=None):
+            calls.append(model)
             return answers[len(calls) - 1]
 
-        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
-             patch.object(cm_llm, "_call_openrouter_simple", fake):
-            self.assertEqual(self._summarize(), "Иск удовлетворён.")
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(self._summarize(fake), "Иск удовлетворён.")
+        # Все три попытки — на основной модели, паузы нарастают: 5с, 10с.
+        self.assertEqual(calls, [self.PRIMARY] * 3)
+        self.assertEqual(self.sleeps, [5, 10])
+        self.assertEqual(cm_config.METRICS["llm_summary_calls"], 3)
+        self.assertEqual(cm_config.METRICS["llm_summary_fallback_saved"], 0)
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 0)
 
-    def test_both_attempts_junk_fall_back_to_none(self):
+    def test_fallback_model_rescues(self):
         calls = []
 
-        def fake(prompt):
-            calls.append(prompt)
+        def fake(prompt, *, model=None):
+            calls.append(model)
+            if model == cm_config.OPENROUTER_FALLBACK_MODEL:
+                return "Иск удовлетворён."
             return "<think>обрыв"
 
-        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
-             patch.object(cm_llm, "_call_openrouter_simple", fake):
-            self.assertIsNone(self._summarize())
-        self.assertEqual(len(calls), 2)
+        with self.assertLogs("court-monitor", level="INFO") as logs:
+            self.assertEqual(self._summarize(fake), "Иск удовлетворён.")
+        self.assertEqual(
+            calls,
+            [self.PRIMARY] * 3 + [cm_config.OPENROUTER_FALLBACK_MODEL],
+        )
+        self.assertEqual(cm_config.METRICS["llm_summary_fallback_saved"], 1)
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 0)
+        self.assertTrue(
+            any("выручила фолбэк-модель" in m for m in logs.output),
+            logs.output,
+        )
+
+    def test_fallback_success_cached_under_primary_key(self):
+        saved = {}
+
+        def fake(prompt, *, model=None):
+            if model == cm_config.OPENROUTER_FALLBACK_MODEL:
+                return "Иск удовлетворён."
+            return None
+
+        with patch.object(cm_llm, "_load_act_summaries", lambda: {}), \
+             patch.object(cm_llm, "_save_act_summaries", saved.update):
+            self.assertEqual(
+                self._summarize(fake, use_cache=True), "Иск удовлетворён."
+            )
+        # Ключ — в неймспейсе ОСНОВНОЙ модели прогона (следующий прогон
+        # его найдёт), а поле model честно называет фактического автора.
+        key = cm_llm._act_cache_key(self.ACT.strip())
+        self.assertIn(key, saved)
+        self.assertEqual(saved[key]["model"], "openrouter:openrouter/free")
+
+    def test_no_duplicate_attempts_when_primary_is_fallback(self):
+        calls = []
+
+        def fake(prompt, *, model=None):
+            calls.append(model)
+            return None
+
+        with patch.object(cm_config, "OPENROUTER_MODEL",
+                          cm_config.OPENROUTER_FALLBACK_MODEL):
+            cm_llm._openrouter_resolved_model = None  # перечитать модель
+            self.assertIsNone(self._summarize(fake))
+        # Фолбэк-этап пропущен: основная модель и так openrouter/free.
+        self.assertEqual(calls, [cm_config.OPENROUTER_FALLBACK_MODEL] * 3)
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 1)
+
+    def test_all_attempts_dead_return_none_and_count_failure(self):
+        calls = []
+
+        def fake(prompt, *, model=None):
+            calls.append(model)
+            return "<think>обрыв"
+
+        with self.assertLogs("court-monitor", level="WARNING") as logs:
+            self.assertIsNone(self._summarize(fake))
+        self.assertEqual(
+            calls,
+            [self.PRIMARY] * 3 + [cm_config.OPENROUTER_FALLBACK_MODEL] * 2,
+        )
+        # Паузы: 5с, 10с на основной + 5с внутри фолбэк-этапа.
+        self.assertEqual(self.sleeps, [5, 10, 5])
+        self.assertEqual(cm_config.METRICS["llm_summary_calls"], 5)
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 1)
+        self.assertEqual(cm_config.METRICS["llm_summary_fallback_saved"], 0)
+        self.assertTrue(
+            any("отбракован чисткой" in m for m in logs.output), logs.output
+        )
 
     def test_claude_has_no_retry(self):
         calls = []
@@ -308,8 +452,11 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
 
         with patch.object(cm_config, "LLM_PROVIDER", "claude"), \
              patch.object(cm_llm, "_call_claude_simple", fake):
-            self.assertIsNone(self._summarize())
+            self.assertIsNone(cm_llm.summarize_act_motivation(
+                self.ACT, case_meta={"stage": "appeal"}, use_cache=False,
+            ))
         self.assertEqual(len(calls), 1)
+        self.assertEqual(self.sleeps, [])
 
 
 class ActCacheKeyNamespaceTest(_OpenRouterTestBase):
