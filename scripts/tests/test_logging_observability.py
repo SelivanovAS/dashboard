@@ -313,6 +313,18 @@ class TestRunSummaryOptionalLines:
         assert "Web Push: отправлено 4" in caplog.text
         assert "Web Push: отправлено 4, сбоев" not in caplog.text
 
+    def test_llm_line_failed_and_fallback_suffixes(self, caplog):
+        # Сбои пересказов и спасения фолбэк-моделью видны в сводке прогона
+        # (единственный агрегированный след инцидента «сырая мотивировка
+        # вместо „Почему:“» — отдельного алерта нет).
+        cm_config.METRICS["llm_summary_calls"] = 5
+        cm_config.METRICS["llm_summary_fallback_saved"] = 1
+        cm_config.METRICS["llm_summary_failed"] = 2
+        with caplog.at_level(logging.INFO, logger="court-monitor"):
+            cm_delivery.log_run_summary("test", {})
+        assert ("LLM-пересказы актов: вызовов 5, из кэша 0, "
+                "спасено фолбэком 1, сбоев 2 (откат на excerpt)") in caplog.text
+
 
 # ── METRICS: инкременты LLM-пересказов ───────────────────────────────────────
 

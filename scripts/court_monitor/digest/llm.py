@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from datetime import datetime
 
 import requests
@@ -401,9 +402,13 @@ def _resolve_openrouter_model() -> str:
 
 
 def _call_openrouter_chat(
-    messages: list[dict], *, max_tokens: int, temperature: float
+    messages: list[dict], *, max_tokens: int, temperature: float,
+    model: str | None = None,
 ) -> str | None:
     """Низкоуровневый chat/completions-вызов OpenRouter.
+
+    model — переопределение модели (фолбэк-контур пересказов);
+    None → _resolve_openrouter_model().
 
     Возвращает текст ответа или None при любой ошибке — вызывающая сторона
     откатывается так же, как при ошибке Claude/GigaChat.
@@ -411,6 +416,7 @@ def _call_openrouter_chat(
     if not config.OPENROUTER_API_KEY:
         log.warning("OPENROUTER_API_KEY не задан")
         return None
+    model_id = model or _resolve_openrouter_model()
     try:
         r = requests.post(
             config.OPENROUTER_API_URL,
@@ -419,7 +425,7 @@ def _call_openrouter_chat(
                 "Content-Type": "application/json",
             },
             json={
-                "model": _resolve_openrouter_model(),
+                "model": model_id,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "messages": messages,
@@ -430,9 +436,15 @@ def _call_openrouter_chat(
         data = r.json()
         choices = data.get("choices") or []
         if not choices:
+            # Молчать нельзя: без лога такой сбой в прогоне неотличим от
+            # «модель ответила пусто» уровнем выше.
+            log.warning(f"OpenRouter API ({model_id}): пустой список choices в ответе")
             return None
         text = (choices[0].get("message", {}) or {}).get("content", "").strip()
-        return text or None
+        if not text:
+            log.warning(f"OpenRouter API ({model_id}): пустой content в ответе модели")
+            return None
+        return text
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
@@ -444,7 +456,7 @@ def _call_openrouter_chat(
         return None
 
 
-def _call_openrouter_simple(prompt: str) -> str | None:
+def _call_openrouter_simple(prompt: str, *, model: str | None = None) -> str | None:
     """Минимальный вызов OpenRouter для пересказа акта — без system-промпта
     (зеркально _call_gigachat_simple). Лимит токенов сильно выше, чем у
     Claude/GigaChat: reasoning-модели (DeepSeek R1, Nemotron и т.п.) тратят
@@ -454,7 +466,7 @@ def _call_openrouter_simple(prompt: str) -> str | None:
     4096 — как у полных digest/polish-вызовов OpenRouter."""
     return _call_openrouter_chat(
         [{"role": "user", "content": prompt}],
-        max_tokens=4096, temperature=0.2,
+        max_tokens=4096, temperature=0.2, model=model,
     )
 
 
@@ -828,6 +840,34 @@ def _act_cache_key(act: str) -> str:
     return hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
 
 
+def _openrouter_summary_attempts(
+    prompt: str, model: str, attempts: int, who: str,
+) -> tuple[str, str | None]:
+    """До `attempts` вызовов модели `model` с нарастающей паузой между
+    попытками (attempt * config.OPENROUTER_SUMMARY_RETRY_DELAY — как у
+    fetch_page): перегруженный free-пул отдаёт 429 мгновенно, немедленный
+    повтор упирается в ту же стену.
+
+    Возвращает (summary, raw последней попытки); summary == "" — все
+    попытки пусты или отбракованы чисткой.
+    """
+    raw: str | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        config.METRICS["llm_summary_calls"] += 1
+        raw = _call_openrouter_simple(prompt, model=model)
+        summary = _clean_summary(raw) if raw else ""
+        if summary:
+            return summary, raw
+        if attempt < attempts:
+            wait = attempt * config.OPENROUTER_SUMMARY_RETRY_DELAY
+            log.warning(
+                f"Пересказ акта{who}: попытка {attempt}/{attempts} "
+                f"({model}) не дала текста — повтор через {wait}с..."
+            )
+            time.sleep(wait)
+    return "", raw
+
+
 def summarize_act_motivation(
     act_text: str,
     *,
@@ -848,6 +888,12 @@ def summarize_act_motivation(
       Plain-text строка без HTML/Markdown или None при любой ошибке/пустом
       ответе. Вызывающая сторона при None должна откатиться на сырой
       excerpt мотивировки.
+
+    Для провайдера openrouter сбой не финален сразу: до
+    config.OPENROUTER_SUMMARY_RETRIES попыток на основной модели с
+    нарастающей паузой, затем фолбэк-модель OPENROUTER_FALLBACK_MODEL
+    (openrouter/free) с config.OPENROUTER_SUMMARY_FALLBACK_RETRIES
+    попытками — и только потом None.
     """
     act = (act_text or "").strip()
     if not act or len(act) < 100:
@@ -866,27 +912,36 @@ def summarize_act_motivation(
     def _call_once() -> str | None:
         if config.LLM_PROVIDER == "gigachat":
             return _call_gigachat_simple(prompt)
-        if config.LLM_PROVIDER == "openrouter":
-            return _call_openrouter_simple(prompt)
         return _call_claude_simple(prompt)
 
     pl = (case_meta.get("plaintiff") or "").strip()
     df = (case_meta.get("defendant") or "").strip()
     who = f" ({pl} vs {df})" if (pl or df) else ""
 
-    config.METRICS["llm_summary_calls"] += 1
-    raw = _call_once()
-    summary = _clean_summary(raw) if raw else ""
-    if not summary and config.LLM_PROVIDER == "openrouter":
-        # Free-модели OpenRouter капризны (обрыв reasoning посреди <think>,
-        # пустой content); ретрай часто уходит на другой бэкенд провайдера
-        # и спасает пересказ. Модели бесплатные — вторая попытка ничего
-        # не стоит.
-        log.warning(f"Пересказ акта{who}: попытка 1 не дала текста — ретрай")
+    model_label: str | None = None  # фактическая модель для записи кэша (фолбэк)
+    if config.LLM_PROVIDER == "openrouter":
+        # Free-модели капризны (обрыв reasoning посреди <think>, пустой
+        # content, мгновенный 429 перегруженного пула): до N попыток с
+        # паузами на основной модели, затем фолбэк-роутер openrouter/free.
+        primary = _resolve_openrouter_model()
+        summary, raw = _openrouter_summary_attempts(
+            prompt, primary, config.OPENROUTER_SUMMARY_RETRIES, who)
+        fallback = config.OPENROUTER_FALLBACK_MODEL
+        # Гард fallback != primary: рейтинг shir-man упал (primary уже
+        # openrouter/free) или её задали явно — не дублировать попытки.
+        if not summary and fallback and fallback != primary:
+            summary, raw = _openrouter_summary_attempts(
+                prompt, fallback, config.OPENROUTER_SUMMARY_FALLBACK_RETRIES, who)
+            if summary:
+                config.METRICS["llm_summary_fallback_saved"] += 1
+                log.info(f"Пересказ акта{who}: выручила фолбэк-модель {fallback}")
+                model_label = f"openrouter:{fallback}"
+    else:
         config.METRICS["llm_summary_calls"] += 1
         raw = _call_once()
         summary = _clean_summary(raw) if raw else ""
     if not summary:
+        config.METRICS["llm_summary_failed"] += 1
         if raw:
             log.warning(
                 f"Пересказ акта{who}: ответ LLM отбракован чисткой, откат "
@@ -901,7 +956,9 @@ def summarize_act_motivation(
     if use_cache:
         cache[key] = {
             "summary": summary,
-            "model": _current_digest_model_name(),
+            # Ключ остаётся в неймспейсе основной модели прогона (вычислен
+            # выше), но поле model честно указывает фактического автора.
+            "model": model_label or _current_digest_model_name(),
             "stage": (case_meta.get("stage") or ""),
             "generated_at": datetime.now().isoformat(timespec="seconds"),
         }

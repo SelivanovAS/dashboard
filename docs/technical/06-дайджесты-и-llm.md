@@ -74,7 +74,7 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 831](../../scripts/court_monitor/digest/llm.py#L831). Единственное место, где
+[Строка 871](../../scripts/court_monitor/digest/llm.py#L871). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
@@ -90,20 +90,30 @@ LLM реально «думает». Алгоритм:
    Если пересказ уже в кэше `.act_summaries.json` — возвращается он
    (повторно LLM не оплачивается, кэш переживает `--replay-last`).
 3. Иначе строится промпт (`_build_act_summary_prompt`,
-   [505](../../scripts/court_monitor/digest/llm.py#L505)) — один и тот же для
+   [517](../../scripts/court_monitor/digest/llm.py#L517)) — один и тот же для
    всех трёх провайдеров (единственное user-сообщение: роль, задача,
    позитивные правила формулировок, ХОРОШО/ПЛОХО-примеры, текст акта и
    якорь «Ответ (2-3 предложения):» в конце) — и вызывается
-   `_call_claude_simple` ([623](../../scripts/court_monitor/digest/llm.py#L623)),
-   `_call_gigachat_simple` ([665](../../scripts/court_monitor/digest/llm.py#L665)) или
+   `_call_claude_simple` ([635](../../scripts/court_monitor/digest/llm.py#L635)),
+   `_call_gigachat_simple` ([677](../../scripts/court_monitor/digest/llm.py#L677)) или
    `_call_openrouter_simple` (по `LLM_PROVIDER`). max_tokens: 700 у
    Claude/GigaChat, 4096 у OpenRouter — free reasoning-модели (DeepSeek R1,
    Nemotron и т.п.) тратят бюджет на размышления прямо в content и с
    маленьким лимитом обрезаются посреди `<think>`, не дойдя до ответа
    (наблюдалось на nemotron-3-super при 1200). Для openrouter при пустом
-   или отбракованном ответе делается ОДИН ретрай (часто уходит на другой
-   бэкенд провайдера и спасает пересказ); пустой ответ и отбраковка
-   чисткой логируются WARNING'ом с головой сырого ответа.
+   или отбракованном ответе — ретраи с нарастающей паузой
+   (`_openrouter_summary_attempts`: до `OPENROUTER_SUMMARY_RETRIES`
+   попыток на основной модели, пауза `attempt × OPENROUTER_SUMMARY_RETRY_DELAY`
+   — перегруженный free-пул отдаёт 429 мгновенно, и немедленный повтор
+   упирался в ту же стену: инцидент 17.07.2026, два акта ушли в дайджест
+   сырой мотивировкой), затем фолбэк-модель `OPENROUTER_FALLBACK_MODEL`
+   (openrouter/free, сам подбирает живую бесплатную модель) с
+   `OPENROUTER_SUMMARY_FALLBACK_RETRIES` попытками; спасение фолбэком
+   считается в `METRICS["llm_summary_fallback_saved"]` и логируется INFO.
+   Финальный сбой инкрементит `METRICS["llm_summary_failed"]`; пустой
+   ответ и отбраковка чисткой логируются WARNING'ом с головой сырого
+   ответа, счётчики видны в сводке прогона («LLM-пересказы актов: …,
+   спасено фолбэком N, сбоев N (откат на excerpt)»).
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
    Чистка рассчитана на free-модели OpenRouter: вырезаются reasoning-блоки
    `<think>…</think>` (в т.ч. незакрытые и осиротевшие), code-fence,
@@ -131,12 +141,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 1057](../../scripts/court_monitor/digest/llm.py#L1057). При `DIGEST_POLISH=1`
+[Строка 1114](../../scripts/court_monitor/digest/llm.py#L1114). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([916](../../scripts/court_monitor/digest/llm.py#L916)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([973](../../scripts/court_monitor/digest/llm.py#L973)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([1013](../../scripts/court_monitor/digest/llm.py#L1013)): проверяется контракт
+([1070](../../scripts/court_monitor/digest/llm.py#L1070)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -170,7 +180,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([295](../../scripts/court_monitor/config.py#L295)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([307](../../scripts/court_monitor/config.py#L307)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
@@ -188,7 +198,7 @@ LLM реально «думает». Алгоритм:
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
 [95](../../scripts/court_monitor/digest/core.py#L95)) для блока «Последний дайджест» на фронте.
 
-> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [75](../../scripts/court_monitor/digest/llm.py#L75),
+> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [76](../../scripts/court_monitor/digest/llm.py#L76),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались
 > вручную. Менять их структуру — только осознанно и с предупреждением; см.
 > «Чего НЕ делать» в [`CLAUDE.md`](../../CLAUDE.md).
