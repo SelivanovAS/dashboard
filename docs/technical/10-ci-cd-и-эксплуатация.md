@@ -102,7 +102,8 @@ workflow.
 прогон»). Шаги: checkout → Python 3.12 → установка зависимостей →
 `python scripts/update_cases.py --json 2>&1 | python -u
 scripts/gh_progress_pusher.py` (pass-through-пушер живого лога в админку:
-батчи на `POST /run-progress` Worker'а; `set -o pipefail`, чтобы падение
+батчи раз в ~60 с на `POST /run-progress` Worker'а — каждый POST = 1 KV-write,
+free-tier 1000/день на аккаунт; `set -o pipefail`, чтобы падение
 парсера не маскировалось пайпом; env `PROGRESS_URL` =
 `secrets.PUSH_WORKER_URL + "/run-progress"`, `PROGRESS_TOKEN` =
 `secrets.PUSH_SECRET || secrets.PROGRESS_SECRET` — без секретов пушер

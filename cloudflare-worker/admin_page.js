@@ -1207,7 +1207,9 @@ async function loadProgress() {
       }
     }
     clearTimeout(progressTimer);
-    if (running) progressTimer = setTimeout(loadProgress, 5000);
+    // 15 с: пушер шлёт батчи раз в ~60 с, чаще поллить бессмысленно
+    // (каждый GET /admin/run-progress = 2 KV-reads).
+    if (running) progressTimer = setTimeout(loadProgress, 15000);
   } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
 }
 
@@ -2173,6 +2175,8 @@ function impSetStatus(html) {
 // Поллинг журнала по key дампа: «отправлено → выполняется → +N добавлено».
 // Таймаут ~5 мин: очередь GitHub держит 1 running + 1 pending — третий запуск
 // вытесняет ожидающий, дамп при этом живёт в KV 24 ч (можно повторить).
+// Интервал 15 с: каждый GET /admin/import-log = 2 KV-lists + пачка reads,
+// а лимит lists free-tier — 1000/день на аккаунт (инцидент 17.07.2026).
 function impPollResult(key, startedAt) {
   clearTimeout(impPollTimer);
   impPollTimer = setTimeout(async function () {
@@ -2197,7 +2201,7 @@ function impPollResult(key, startedAt) {
     }
     if (mine && mine.status === "started") impSetStatus(impStatusBadge("started") + " импорт запущен…");
     impPollResult(key, startedAt);
-  }, 5000);
+  }, 15000);
 }
 async function impReadFile(file) {
   // Файл «только HTML» с sudrf — win-1251; вставки/другие файлы — utf-8.

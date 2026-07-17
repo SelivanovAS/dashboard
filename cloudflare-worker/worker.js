@@ -187,6 +187,22 @@ async function handleSubscribe(request, env) {
     // раз заходил юрист в PWA. created_at ставим только при первом субскрайбе,
     // last_seen_at обновляем на каждом /subscribe (PWA дёргает его при открытии).
     sub.user_agent = request.headers.get("User-Agent") || "";
+    // Экономия KV writes (free-tier 1000/день на аккаунт, инцидент 17.07.2026):
+    // если подписка не изменилась и last_seen_at свежее 12 часов — put
+    // пропускаем. Гранулярность 12 ч безвредна: бейдж «⏳ истекает» смотрит
+    // на 45 дней, KV-TTL 60 дней освежится первым же открытием после окна.
+    if (prev && prev.endpoint === sub.endpoint
+        && JSON.stringify(prev.keys || null) === JSON.stringify(sub.keys || null)
+        && prev.user_agent === sub.user_agent
+        && prev.last_seen_at
+        && Date.now() - Date.parse(prev.last_seen_at) < 12 * 3600 * 1000) {
+      return new Response(JSON.stringify({
+        ok: true,
+        watchlist: Array.isArray(prev.watchlist) ? prev.watchlist : [],
+      }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+      });
+    }
     if (!sub.created_at) sub.created_at = new Date().toISOString();
     sub.last_seen_at = new Date().toISOString();
     // TTL 60 дней — браузер обновит подписку сам при следующем открытии
