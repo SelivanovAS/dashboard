@@ -8,9 +8,16 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v106';
-const CACHE_NAME = `sber-jurist-${CACHE_VERSION}`;
-const FONTS_CACHE = `sber-jurist-fonts-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v107';
+// Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
+// живут на одном origin github.io, а Cache Storage общий на весь origin —
+// без суффикса activate-очистка одной территории сносила бы кэши другой при
+// каждом расхождении версий (эталон и форк обновляются не синхронно).
+// Каталог, из которого зарегистрирован SW ('/dashboard/service-worker.js' →
+// 'dashboard'); в корне (локальная отладка) — 'root'.
+const SCOPE_NS = self.location.pathname.split('/').slice(0, -1).filter(Boolean).join('-') || 'root';
+const CACHE_NAME = `sber-jurist-${SCOPE_NS}-${CACHE_VERSION}`;
+const FONTS_CACHE = `sber-jurist-fonts-${SCOPE_NS}-${CACHE_VERSION}`;
 
 // App shell — то, без чего страница не запустится. Все пути относительные:
 // SW регистрируется на /dashboard/service-worker.js, scope = /dashboard/.
@@ -59,10 +66,22 @@ self.addEventListener('install', (event) => {
 // ---------- activate: чистим старые кэши ----------
 self.addEventListener('activate', (event) => {
   const allowed = new Set([CACHE_NAME, FONTS_CACHE]);
+  // Удаляем только кэши СВОЕЙ территории + легаси-имена без территории
+  // (формат до v107, одноразово). Сносить «всё не своё» нельзя — на общем
+  // origin это живые кэши соседней территории. Проверка остатка через
+  // /^v\d+$/ обязательна: префикс 'sber-jurist-dashboard-' — надстрока
+  // имени 'sber-jurist-dashboard-ural-v107', голый startsWith снёс бы соседа.
+  const ownVersion = (k) => {
+    const prefixes = [`sber-jurist-${SCOPE_NS}-`, `sber-jurist-fonts-${SCOPE_NS}-`];
+    return prefixes.some((p) => k.startsWith(p) && /^v\d+$/.test(k.slice(p.length)));
+  };
+  const legacy = (k) => /^sber-jurist-(fonts-)?v\d+$/.test(k);
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((k) => !allowed.has(k)).map((k) => caches.delete(k))
+        keys
+          .filter((k) => !allowed.has(k) && (ownVersion(k) || legacy(k)))
+          .map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   );
