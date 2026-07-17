@@ -38,9 +38,11 @@ import urllib.error
 import urllib.request
 
 # Интервал отправки батчей: каждый POST = 1 read + 1 write в Cloudflare KV,
-# free-tier даёт 1000 write/день — ниже 5 секунд не опускать.
+# free-tier даёт 1000 write/день НА АККАУНТ (пул общий с Worker'ами территорий).
+# 60 с ≈ 25–60 writes на часовой прогон; при 10 с крон съедал до трети лимита
+# (письмо Cloudflare о 50% 17.07.2026) — ниже 30 секунд не опускать.
 # Env-переопределение нужно тестам (600 = тикер молчит, всё уходит на EOF).
-SEND_EVERY = float(os.environ.get("PROGRESS_SEND_EVERY", "10"))
+SEND_EVERY = float(os.environ.get("PROGRESS_SEND_EVERY", "60"))
 CHUNK = 100     # контракт worker.js handleRunProgress: lines.slice(0, 100) на POST
 LINE_MAX = 500  # страховка от строк-простыней в KV (лог не режет длину, ghlog режет только аннотации)
 TIMEOUT = 10

@@ -35,7 +35,8 @@ KEY_RE = re.compile(
 END_RE = re.compile(r"Готово$|ERROR: |Изменений нет")
 
 MAX_SECONDS = 90 * 60      # самоликвидация, если прогон завис/убит
-SEND_EVERY = 5             # секунд между батчами
+SEND_EVERY = 60            # секунд между батчами: каждый POST = 1 write в KV,
+                           # free-tier 1000 write/день на аккаунт (инцидент 17.07.2026)
 BATCH_LIMIT = 40           # строк в батче максимум
 
 
