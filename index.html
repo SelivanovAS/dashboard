@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Корень сайта: мгновенный редирект на дашборд.
+     Файл обязателен: без него GitHub Pages отдаёт 404 на './', а './' входит
+     в APP_SHELL service-worker.js — атомарный cache.addAll падал на 404, SW
+     не устанавливался вовсе (нет пуша/офлайна/колокольчика; Chromium валит
+     install строго по спеке, инцидент вскрыт на Урале 17.07.2026). -->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url=./sberbank_dashboard.html">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сбер Юрист — мониторинг судебных дел</title>
+  <link rel="canonical" href="./sberbank_dashboard.html">
+</head>
+<body>
+  <p>Открывается дашборд… Если не открылся —
+    <a href="./sberbank_dashboard.html">перейти вручную</a>.</p>
+</body>
+</html>

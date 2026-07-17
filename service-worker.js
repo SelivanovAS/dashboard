@@ -8,7 +8,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v107';
+const CACHE_VERSION = 'v108';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -55,10 +55,19 @@ const OFFLINE_HTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"
 </div></body></html>`;
 
 // ---------- install: pre-cache app shell ----------
+// ⚠️ НЕ cache.addAll: он атомарный — один 404 отклоняет install целиком, SW
+// становится redundant, serviceWorker.ready не резолвится → нет пуша,
+// офлайна и колокольчика ВООБЩЕ. Так «./» без index.html молча убивал SW
+// у всех новых устройств в Chromium (инцидент Урала 17.07.2026; iOS-парк
+// выжил только благодаря снисходительности WebKit). Кэшируем поэлементно:
+// битый файл — warning в консоль и пропуск, недостающее докэширует
+// cacheFirst при первом обращении.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => Promise.all(APP_SHELL.map(
+        (u) => cache.add(u).catch((e) => console.warn('SW pre-cache пропуск:', u, e && e.message))
+      )))
       .then(() => self.skipWaiting())
   );
 });
