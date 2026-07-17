@@ -25,8 +25,9 @@ from court_monitor.courts import (
     APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
     FIRST_INSTANCE_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL,
-    appeal_court_by_domain, case_card_url, courts_for_search, fi_card_url,
-    match_hmao_first_instance,
+    appeal_court_by_domain, appeal_court_for_fi_domain, case_card_url,
+    courts_for_search, fi_card_url,
+    match_hmao_first_instance, _eyo,
 )
 from court_monitor.regions import get_region
 from court_monitor.delivery import (
@@ -79,7 +80,7 @@ from court_monitor.parsing import (
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
     _warn_if_card_degraded, is_subsidiary_only_case,
     determine_bank_role_from_participants, classify_cassation_outcome,
-    detect_captcha_challenge,
+    detect_captcha_challenge, is_no_data_page,
 )
 from court_monitor.storage import (
     load_csv, save_csv, load_json, save_json,
@@ -145,6 +146,153 @@ def _appeal_health_key(court: CourtConfig) -> str:
     if len(APPEAL_COURTS) == 1:
         return "appeal:oblsud"
     return f"appeal:{court.domain}"
+
+
+def _enrich_appeal_row_from_card(nc: dict, card_info: dict) -> str:
+    """Обогатить CSV-строку апел. дела данными его карточки (parse_case_card).
+
+    Общий код поиска апелляции и целевого дослинка (relink_awaiting_appeal).
+    Возвращает «Номер дела 1 инстанции» с карточки ("" — суд ещё не проставил).
+    """
+    _warn_if_card_degraded(card_info, nc["Номер дела"])
+    nc["Последнее событие"] = card_info.get("Последнее событие", "")
+    nc["Дата события"] = card_info.get("Дата события", "")
+    nc["Время заседания"] = card_info.get("Время заседания", "")
+    nc["Статус"] = card_info.get("Статус", "В производстве")
+    nc["Результат"] = card_info.get("Результат", "")
+    nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
+    if card_info.get("Судья 1 инстанции"):
+        nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
+    if card_info.get("Судья-докладчик"):
+        nc["Судья-докладчик"] = card_info["Судья-докладчик"]
+    return card_info.get("Номер дела 1 инстанции", "")
+
+
+def _courts_look_same(fi_court: str, row_court: str) -> bool:
+    """Мягкая сверка суда 1-й инст. дела с судом из строки выдачи апелляции.
+
+    Выдача пишет суд в произвольной форме («Сургутский городской суд
+    (Ханты-Мансийский автономный округ-Югра)») — сверяем взаимным вхождением
+    нормализованных имён (ё→е, lower). Пустое имя с любой стороны → True:
+    сверка возможна только когда оба имени известны (guard, не фильтр)."""
+    a = _eyo((fi_court or "").strip().lower())
+    b = _eyo((row_court or "").strip().lower())
+    if not a or not b:
+        return True
+    return a in b or b in a
+
+
+def relink_awaiting_appeal(
+    cases: list[dict],
+    csv_existing: set,
+    appeal_new_cases_csv: list[dict],
+    appeal_fi_numbers: dict[tuple[str, str], str],
+) -> int:
+    """Целевой дослинк «застрявших» awaiting_appeal с апелляцией.
+
+    Поиск апелляции по «Сбербанк» видит только первую страницу выдачи —
+    дела, зарегистрированные в апел-суде ДО появления в нашей базе (типовой
+    случай: заведены импортёром дампов капчёвых судов уже после подачи
+    жалобы), на стр. 1 не попадают никогда и связка не происходит
+    (три дела Урала, дослинкованные вручную 17.07.2026).
+
+    Для каждого дела в awaiting_appeal с first_instance.sent_to_appeal=True
+    и без апел. карточки делаем точечный запрос к апел-суду региона по полю
+    «Номер дела в первой инстанции» (CourtConfig.search_by_fi_number_url,
+    G2_CASE__CASE_NUMBER_ISS). Сервер ищет подстрокой, поэтому кандидатов
+    сверяем по карточке: «Номер дела 1 инстанции» через _bare_case_number
+    (+ мягкая сверка имени суда — номера 2-… не уникальны между судами
+    одного субъекта). Апел-суд выбирается по домену суда 1-й инст.
+    (appeal_court_for_fi_domain — в регионе апелляций может быть несколько).
+
+    Найденные дела вливаются ШТАТНЫМ путём: строка → appeal_new_cases_csv,
+    номер 1-й инст. → appeal_fi_numbers — дальше их подхватят
+    _apel_csv_row_to_json_case и link_cases, как дела из обычного поиска.
+    Возвращает число дослинкованных дел.
+    """
+    candidates = []
+    for c in cases:
+        if c.get("current_stage") != "awaiting_appeal":
+            continue
+        fi = c.get("first_instance") or {}
+        if not fi.get("sent_to_appeal"):
+            continue
+        if ((c.get("appeal") or {}).get("case_number") or "").strip():
+            continue
+        candidates.append(c)
+    if not candidates:
+        return 0
+
+    # Апелляции, уже найденные обычным поиском ЭТОГО прогона (в csv_existing
+    # их ещё нет — оно пополняется только из CSV): не задваиваем.
+    already_found = {
+        (r.get("_appeal_domain"), r.get("Номер дела"))
+        for r in appeal_new_cases_csv
+    }
+    log.info(
+        f"Дослинк апелляции: {len(candidates)} "
+        f"{plural_ru(len(candidates), 'дело', 'дела', 'дел')} "
+        f"направлено в апел. суд, но карточка апелляции ещё не найдена"
+    )
+    found = 0
+    for c in candidates:
+        fi = c.get("first_instance") or {}
+        fi_num = _bare_case_number(c.get("id") or "")
+        if not fi_num:
+            continue
+        ap_court = appeal_court_for_fi_domain(fi.get("court_domain") or "")
+        polite_delay()
+        html = fetch_page(
+            ap_court.search_by_fi_number_url(fi_num),
+            context=f"дослинк апелляции {fi_num}",
+        )
+        if not html:
+            continue
+        if is_no_data_page(html):
+            log.info(
+                f"  {fi_num}: апелляция в {shorten_court_name(ap_court.name)} "
+                f"ещё не зарегистрирована"
+            )
+            continue
+        for nc in parse_search_page(html):
+            ap_num = nc.get("Номер дела", "")
+            if not ap_num or ap_num in csv_existing:
+                continue  # уже отслеживается — свяжет обычный link_cases
+            if (ap_court.domain, ap_num) in already_found:
+                continue  # только что найдено обычным поиском апелляции
+            if not _courts_look_same(fi.get("court"), nc.get("Суд 1 инстанции")):
+                continue
+            cid, cuid = case_id_uid(nc.get("Ссылка", ""))
+            if not (cid and cuid):
+                continue
+            polite_delay()
+            card_html = fetch_card_checked(
+                ap_court.card_url(cid, cuid), context=ap_num
+            )
+            if not card_html:
+                continue
+            card_info = parse_case_card(card_html, ap_court.base_url)
+            card_fi = _enrich_appeal_row_from_card(nc, card_info)
+            # Поиск по номеру — подстрокой: «2-71/2026» матчит и «2-716/2026»,
+            # поэтому точную границу сверяем по карточке.
+            if _bare_case_number(card_fi) != fi_num:
+                continue
+            nc["_appeal_domain"] = ap_court.domain
+            appeal_fi_numbers[(ap_court.domain, ap_num)] = card_fi
+            appeal_new_cases_csv.append(nc)
+            csv_existing.add(ap_num)
+            found += 1
+            log.info(
+                f"  {fi_num} → {ap_num} "
+                f"({shorten_court_name(ap_court.name)}): дослинковано"
+            )
+            break
+    if found:
+        log.info(
+            f"Дослинк апелляции: найдено {found} "
+            f"{plural_ru(found, 'дело', 'дела', 'дел')}"
+        )
+    return found
 
 
 def update_active_cases(
@@ -1454,22 +1602,20 @@ def main_json():
                 card_html = fetch_card_checked(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html, _ap_court.base_url)
-                    _warn_if_card_degraded(card_info, nc["Номер дела"])
-                    nc["Последнее событие"] = card_info.get("Последнее событие", "")
-                    nc["Дата события"] = card_info.get("Дата события", "")
-                    nc["Время заседания"] = card_info.get("Время заседания", "")
-                    nc["Статус"] = card_info.get("Статус", "В производстве")
-                    nc["Результат"] = card_info.get("Результат", "")
-                    nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
-                    if card_info.get("Судья 1 инстанции"):
-                        nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
-                    if card_info.get("Судья-докладчик"):
-                        nc["Судья-докладчик"] = card_info["Судья-докладчик"]
-                    fi_num = card_info.get("Номер дела 1 инстанции", "")
+                    fi_num = _enrich_appeal_row_from_card(nc, card_info)
                     if fi_num:
                         appeal_fi_numbers[(_ap_court.domain, nc["Номер дела"])] = fi_num
                     log.info(f"  Карточка {nc['Номер дела']}: OK (1 инст: {fi_num or '?'})")
         appeal_new_cases_csv.extend(new_for_court)
+
+    # Целевой дослинк: дела awaiting_appeal, направленные в апел. суд, но не
+    # попавшие на стр. 1 поиска по «Сбербанк» (типовой случай — заведены
+    # импортёром уже после регистрации апелляции). Точечный запрос по номеру
+    # 1-й инст. → результат вливается в appeal_new_cases_csv/appeal_fi_numbers
+    # и дальше идёт штатным путём link_cases.
+    relink_awaiting_appeal(
+        cases, csv_existing, appeal_new_cases_csv, appeal_fi_numbers
+    )
 
     timings["appeal_new"] = time.perf_counter() - t0
 

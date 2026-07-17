@@ -133,6 +133,30 @@ class CourtConfig:
             f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
         )
 
+    def search_by_fi_number_url(self, fi_case_number: str) -> str:
+        """URL целевого поиска АПЕЛЛЯЦИИ по номеру дела 1-й инстанции.
+
+        Поле G2_CASE__CASE_NUMBER_ISS («Номер дела в первой инстанции») снято
+        с живой формы поиска sudrf (name_op=sf) и проверено 17.07.2026 на
+        oblsud--hmao и oblsud--svd. Сервер ищет подстрокой — точное совпадение
+        номера проверяет вызывающий код по карточке (relink_awaiting_appeal
+        в runs.py сверяет «Номер дела 1 инстанции» через _bare_case_number).
+        Остальные параметры — как в search_url.
+        """
+        self._require_sudrf("search_by_fi_number_url")
+        if self.court_type != "appeal":
+            raise ValueError(
+                f"search_by_fi_number_url поддерживает только апелляционные "
+                f"суды, получен {self.court_type} ({self.name})"
+            )
+        num_enc = urllib.parse.quote(fi_case_number, safe="")
+        return (
+            f"{self.base_url}/modules.php?name=sud_delo&srv_num={self.srv_num}&name_op=r"
+            f"&delo_id={self.delo_id}&case_type=0&new={self._new_param}"
+            f"&G2_CASE__CASE_NUMBER_ISS={num_enc}"
+            f"&delo_table={self._delo_table}&Submit=%CD%E0%E9%F2%E8"
+        )
+
     def card_url(self, case_id: str, case_uid: str) -> str:
         self._require_sudrf("card_url")
         return (
