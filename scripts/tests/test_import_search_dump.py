@@ -433,3 +433,97 @@ class TestImporterE2E:
         assert by_id["2-1001/2026"]["plaintiff"] == "Петров Пётр Петрович"
         s = _read_summary(import_env["gh_out"])
         assert s["skipped_role"] == 1
+
+
+# ── Защита «выбран суд А, вставлен дамп суда Б» ──────────────────────────────
+
+def _absolutize(html: str, host: str) -> str:
+    """Абсолютизировать href карточек, как это делает rich-paste браузера."""
+    return html.replace('href="modules.php', 'href="https://' + host + '/modules.php')
+
+
+class TestWrongCourtGuard:
+    def test_foreign_host_rejected(self, import_env):
+        """Абсолютные ссылки чужого суда → EXIT_WRONG_COURT, база не тронута."""
+        import_env["dump"].write_text(
+            _absolutize(_fixture("search_fi_all_roles.html"), "alapaevsky--svd.sudrf.ru"),
+            encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_WRONG_COURT
+        s = _read_summary(import_env["gh_out"])
+        assert "alapaevsky--svd.sudrf.ru" in s["error"]
+        assert "akademicheskiy--svd.sudrf.ru" in s["error"]
+        assert s["dump_hosts"] == ["alapaevsky--svd.sudrf.ru"]
+        assert not import_env["json"].exists()
+
+    def test_matching_host_accepted(self, import_env):
+        """Абсолютные ссылки ВЫБРАННОГО суда — штатный импорт."""
+        import_env["dump"].write_text(
+            _absolutize(_fixture("search_fi_all_roles.html"), "akademicheskiy--svd.sudrf.ru"),
+            encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        assert _read_summary(import_env["gh_out"])["added"] == 2
+
+    def test_relative_hrefs_pass(self, import_env):
+        """Относительные href (файл «только HTML» без хостов) — проверка
+        молчит, обратная совместимость со всеми прежними дампами."""
+        rc = _run(import_env)  # фикстура как есть
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 2 and "error" not in s
+
+    def test_saved_from_marker_rejected(self, import_env):
+        """Файл Chrome «только HTML»: href относительные, но маркер
+        «saved from url=…» выдаёт настоящий суд."""
+        html = ("<!-- saved from url=(0074)https://alapaevsky--svd.sudrf.ru"
+                "/modules.php?name=sud_delo&name_op=r -->\n"
+                + _fixture("search_fi_all_roles.html"))
+        import_env["dump"].write_text(html, encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_WRONG_COURT
+        assert "alapaevsky--svd.sudrf.ru" in _read_summary(import_env["gh_out"])["error"]
+
+    def test_saved_from_marker_matching_passes(self, import_env):
+        """Маркер выбранного суда — не мешает импорту."""
+        html = ("<!-- saved from url=(0078)https://akademicheskiy--svd.sudrf.ru"
+                "/modules.php?name=sud_delo&name_op=r -->\n"
+                + _fixture("search_fi_all_roles.html"))
+        import_env["dump"].write_text(html, encoding="utf-8")
+        assert _run(import_env) == isd.EXIT_OK
+
+    def test_mixed_hosts_rejected(self, import_env):
+        """Ссылки двух разных судов в одном дампе — блок, даже если выбранный
+        среди них (склейка двух выдач — не то, что ждёт импортёр)."""
+        html = (_absolutize(_fixture("search_fi_all_roles.html"),
+                            "akademicheskiy--svd.sudrf.ru")
+                + '<a href="https://alapaevsky--svd.sudrf.ru/modules.php?'
+                  'name=sud_delo&name_op=case&case_id=9">2-9/2026</a>')
+        import_env["dump"].write_text(html, encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_WRONG_COURT
+        s = _read_summary(import_env["gh_out"])
+        assert sorted(s["dump_hosts"]) == [
+            "akademicheskiy--svd.sudrf.ru", "alapaevsky--svd.sudrf.ru",
+        ]
+
+    def test_wrong_section_delo_id_rejected(self, import_env):
+        """Выдача другого раздела (delo_id≠1540005 в href карточек) ловится
+        и при относительных href — хостов в них нет."""
+        html = _fixture("search_fi_all_roles.html").replace(
+            "delo_id=1540005", "delo_id=5")
+        import_env["dump"].write_text(html, encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_WRONG_COURT
+        s = _read_summary(import_env["gh_out"])
+        assert "раздела" in s["error"] and "delo_id=5" in s["error"]
+        assert not import_env["json"].exists()
+
+    def test_detect_dump_hosts_amp_entities(self):
+        """innerHTML вставки сериализует &amp; в href — хост и delo_id
+        карточки всё равно извлекаются."""
+        html = ('<a href="https://revdinsky--svd.sudrf.ru/modules.php?'
+                'name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=7'
+                '&amp;case_uid=aaaa-7777&amp;delo_id=1540005">2-7/2026</a>')
+        assert isd.detect_dump_hosts(html) == {"revdinsky--svd.sudrf.ru"}
+        assert isd.detect_card_delo_ids(html) == {"1540005"}

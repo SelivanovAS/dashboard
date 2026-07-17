@@ -970,6 +970,20 @@ const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в 
 const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
 const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
 
+// Sudrf-хосты дампа: абсолютные ссылки карточек (rich-paste абсолютизирует
+// href «https://<суд>/modules.php?…name=sud_delo…») + маркер Chrome
+// «saved from url=…» из файла «только HTML». Пустой массив = хостов в дампе
+// нет (относительные href) — сверять нечего, финальная проверка в импортёре.
+function detectDumpSudrfHosts(html) {
+  const hosts = new Set();
+  const cardRe = /https?:\/\/([a-z0-9][a-z0-9.-]*\.sudrf\.ru)\/modules\.php\?[^"'\s<>]*name=sud_delo/gi;
+  let m;
+  while ((m = cardRe.exec(html)) !== null) hosts.add(m[1].toLowerCase());
+  m = /saved from url=\(\d+\)https?:\/\/([a-z0-9][a-z0-9.-]*\.sudrf\.ru)(?=[/\s])/i.exec(html);
+  if (m) hosts.add(m[1].toLowerCase());
+  return Array.from(hosts).sort();
+}
+
 // Приём дампа от оператора/владельца: валидация → KV → журнал → dispatch.
 async function handleAdminImportDump(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
@@ -999,6 +1013,19 @@ async function handleAdminImportDump(request, env) {
   if (html.length > IMPORT_HTML_MAX) {
     return new Response(
       JSON.stringify({ ok: false, error: "файл больше 2 МБ — это не страница результатов; сохраните её как «только HTML», без картинок" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  // Дамп чужого суда: хост из ссылок карточек обязан совпадать с выбранным
+  // судом (страховка от обхода клиентской проверки; импортёр перепроверит).
+  const dumpHosts = detectDumpSudrfHosts(html);
+  if (dumpHosts.length && (dumpHosts.length > 1 || dumpHosts[0] !== courtDomain)) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "в странице ссылки суда " + dumpHosts.join(", ")
+          + ", а выбран " + courtDomain + " — проверьте выбор суда",
+      }),
       { status: 400, headers: jsonHeaders }
     );
   }

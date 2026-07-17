@@ -42,7 +42,8 @@ JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import
 
 Коды выхода: 0 — ок (даже если добавлено 0); 2 — дамп оказался страницей
 проверочного кода; 3 — таблица результатов не найдена (битый дамп);
-4 — суд не найден в реестре региона (env REGION).
+4 — суд не найден в реестре региона (env REGION); 5 — дамп не от выбранного
+суда (хост в ссылках карточек / delo_id раздела не совпали с судом импорта).
 """
 from __future__ import annotations
 
@@ -77,6 +78,7 @@ EXIT_OK = 0
 EXIT_CAPTCHA = 2
 EXIT_NO_TABLE = 3
 EXIT_UNKNOWN_COURT = 4
+EXIT_WRONG_COURT = 5
 
 
 def read_dump(path: str) -> str:
@@ -102,6 +104,47 @@ def normalize_dump(html: str) -> str:
     """
     html = html.replace("\r\n", "\n").replace("\r", "\n")
     return re.sub(r"[ \t]*\n[ \t]*", " ", html)
+
+
+# Защита от ошибки оператора «выбран суд А, вставлена выдача суда Б»: суд
+# записи берётся из --court-domain, а идентификаторы карточек — из href дампа,
+# и при несовпадении дело выйдет немониторимым (ссылка на карточку — домен А
+# с case_id/case_uid суда Б). Хост настоящего суда виден в дампе двумя путями:
+# rich-paste абсолютизирует href карточек («https://<суд>/modules.php?…
+# name=sud_delo…»), а «Сохранить как HTML» в Chrome дописывает маркер
+# «saved from url=(NNNN)https://<суд>/…». Относительные href (файл из Firefox)
+# хоста не несут — тогда множество пусто и проверка молчит.
+_CARD_HOST_RE = re.compile(
+    r"https?://([a-z0-9][a-z0-9.\-]*\.sudrf\.ru)/modules\.php\?[^\"'\s<>]*name=sud_delo",
+    re.IGNORECASE,
+)
+_SAVED_FROM_RE = re.compile(
+    r"saved from url=\(\d+\)https?://([a-z0-9][a-z0-9.\-]*\.sudrf\.ru)(?=[/\s])",
+    re.IGNORECASE,
+)
+# delo_id из href КАРТОЧЕК (после case_id): вкладки разделов «Судебного
+# делопроизводства» ссылок с case_id не имеют и в проверку не попадают —
+# иначе их delo_id всех разделов глушили бы сверку. У судов 1-й инст. региона
+# delo_id общий (1540005), суды он не различает, зато ловит вставку выдачи
+# другого раздела (апелляция=5, кассация=2800001) даже при относительных href.
+_CARD_DELO_ID_RE = re.compile(
+    r"case_id=\d+[^\"'\s<>]*?&(?:amp;)?delo_id=(\d+)",
+    re.IGNORECASE,
+)
+
+
+def detect_dump_hosts(html: str) -> set[str]:
+    """Sudrf-хосты дампа: абсолютные href карточек + маркер Chrome."""
+    hosts = {h.lower() for h in _CARD_HOST_RE.findall(html)}
+    m = _SAVED_FROM_RE.search(html)
+    if m:
+        hosts.add(m.group(1).lower())
+    return hosts
+
+
+def detect_card_delo_ids(html: str) -> set[str]:
+    """delo_id из href карточек дампа (только ссылки с case_id)."""
+    return set(_CARD_DELO_ID_RE.findall(html))
 
 
 def resolve_court(court_domain: str) -> CourtConfig | None:
@@ -323,6 +366,38 @@ def main(argv: list[str] | None = None) -> int:
         summary["error"] = msg
         write_github_output(summary)
         return EXIT_CAPTCHA
+
+    # Дамп чужого суда: хост из ссылок карточек обязан совпадать с выбранным
+    # судом. Требуем ровно один хост — легитимная выдача содержит
+    # name=sud_delo-ссылки только своего суда.
+    dump_hosts = detect_dump_hosts(html)
+    if dump_hosts and (len(dump_hosts) > 1 or court.domain.lower() not in dump_hosts):
+        found = ", ".join(sorted(dump_hosts))
+        msg = (
+            f"Ссылки в дампе ведут на {found}, а выбран суд {court.name} "
+            f"({court.domain}). Похоже, вставлена выдача другого суда — "
+            "проверьте выбор суда и повторите."
+        )
+        log.error(msg)
+        summary["error"] = msg
+        summary["dump_hosts"] = sorted(dump_hosts)
+        write_github_output(summary)
+        return EXIT_WRONG_COURT
+
+    # Выдача не того раздела (например, апелляция или уголовные дела):
+    # ловится по delo_id карточек даже когда href относительные и хостов нет.
+    card_delo_ids = detect_card_delo_ids(html)
+    if card_delo_ids and str(court.delo_id) not in card_delo_ids:
+        found = ", ".join(sorted(card_delo_ids))
+        msg = (
+            f"Дамп похож на выдачу другого раздела (в ссылках карточек "
+            f"delo_id={found}, у выбранного суда {court.delo_id}) — откройте "
+            "раздел гражданских дел 1-й инстанции и повторите поиск."
+        )
+        log.error(msg)
+        summary["error"] = msg
+        write_github_output(summary)
+        return EXIT_WRONG_COURT
 
     stats: dict = {}
     rows = parse_first_instance_search(html, court, stats=stats, keep_all_roles=True)
