@@ -1,13 +1,49 @@
-const STORAGE_KEY='sber-court-sheet-url';
+// ── Неймспейс localStorage территории ───────────────────────────────────────
+// Оба фронта (ХМАО /dashboard/ и Урал /dashboard-ural/) живут на одном
+// origin github.io, и localStorage у них общий: без префикса звёзды
+// watchlist, заметки и owner-секрет перетекали между территориями в одном
+// браузерном профиле (на iPhone-PWA хранилища изолированы системой, там
+// эффекта не было). STORAGE_NS задаёт region_front.js — файл территории,
+// подключённый в HTML раньше app.js: эталон ХМАО NS не задаёт (ключи
+// исторические, без префикса — парк не мигрирует), форк задаёт 'ural' →
+// ключи вида 'ural:watchlist_v1'. Ключ 'theme' (инлайн в HTML) намеренно
+// общий: тема — предпочтение человека, не территории.
+const STORAGE_NS=(((typeof window!=='undefined'&&window.REGION_FRONT)||{}).STORAGE_NS)||'';
+function lsKey(name){return STORAGE_NS?STORAGE_NS+':'+name:name;}
+// Одноразовая миграция территории с непустым NS: значения исторических
+// bare-ключей копируются в неймспейс (bare-ключи не удаляем — на общем
+// домене это данные ХМАО). Маркер обязателен: пер-ключевая проверка «нет
+// ns-ключа → копируй» реанимировала бы осознанно удалённые ключи
+// (filter_mine_v1 удаляется при снятии последней звезды). owner_secret не
+// копируем — секрет территориален, у соседней территории он всё равно
+// получил бы 401 и сбросился.
+(function(){
+  if(!STORAGE_NS)return;
+  const MARKER=lsKey('ls_migrated_v1');
+  try{
+    if(localStorage.getItem(MARKER))return;
+    ['sber-court-sheet-url','sber-court-last-visit','sber-court-known-cases',
+     'sber-court-read-cases','sber-court-notes','sber-court-sort',
+     'watchlist_v1','watchlist_hint_shown','filter_mine_v1',
+     'digest_collapsed','digest_last_seen_at','digest_view_v1'
+    ].forEach((name)=>{
+      const v=localStorage.getItem(name);
+      if(v!==null&&localStorage.getItem(lsKey(name))===null)localStorage.setItem(lsKey(name),v);
+    });
+    localStorage.setItem(MARKER,'1');
+  }catch(_){}
+})();
+
+const STORAGE_KEY=lsKey('sber-court-sheet-url');
 const DEFAULT_SHEET_URL='data/cases.json';
 const DEFAULT_CSV_URL='data/sberbank_cases.csv';
 const FETCH_TIMEOUT_MS=10000;
 const LEGACY_URL_PATTERNS=[/^https?:\/\/raw\.githubusercontent\.com\/SelivanovAS\/dashboard\//i];
-const LAST_VISIT_KEY='sber-court-last-visit';
-const KNOWN_CASES_KEY='sber-court-known-cases';
-const READ_CASES_KEY='sber-court-read-cases';
-const NOTES_KEY='sber-court-notes';
-const SORT_PREF_KEY='sber-court-sort';
+const LAST_VISIT_KEY=lsKey('sber-court-last-visit');
+const KNOWN_CASES_KEY=lsKey('sber-court-known-cases');
+const READ_CASES_KEY=lsKey('sber-court-read-cases');
+const NOTES_KEY=lsKey('sber-court-notes');
+const SORT_PREF_KEY=lsKey('sber-court-sort');
 const ARCHIVE_DAYS=60;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
@@ -2671,12 +2707,12 @@ updateRegionBadge();
 // Хранится локально (Set в памяти + localStorage) и синхронизируется с
 // записью push-подписки в Cloudflare KV. Используется на бэке, чтобы слать
 // push только по делам, отмеченным юристом. Пустой watchlist = «всё подряд».
-const WATCHLIST_KEY = 'watchlist_v1';
-const WATCHLIST_HINT_KEY = 'watchlist_hint_shown';
+const WATCHLIST_KEY = lsKey('watchlist_v1');
+const WATCHLIST_HINT_KEY = lsKey('watchlist_hint_shown');
 // Фильтр «Только мои дела»: показывать только отслеживаемые (★) + новые.
 // Дефолт: включён при первой звёздочке. При пустом watchlist чип скрывается
 // и фильтр не применяется (нечего фильтровать).
-const FILTER_MINE_KEY = 'filter_mine_v1';
+const FILTER_MINE_KEY = lsKey('filter_mine_v1');
 let watchlist = new Set();
 try {
   // bare-нормализация на чтении: до v98 в ключе могли лежать сырые формы
@@ -2697,7 +2733,7 @@ try {
   // Миграция с расщеплённого состояния (до v98): явный выбор «Мой» жил в
   // digest_view_v1, а filter_mine_v1 мог отсутствовать — переносим один раз
   // (ключ digest_view_v1 больше нигде не читается и не пишется).
-  if (stored === null && localStorage.getItem('digest_view_v1') === 'mine') {
+  if (stored === null && localStorage.getItem(lsKey('digest_view_v1')) === 'mine') {
     stored = 'true';
     localStorage.setItem(FILTER_MINE_KEY, 'true');
   }
@@ -3006,7 +3042,7 @@ function urlBase64ToUint8(b64) {
 // первой пометки устройства владельцем. Нужен для автопометки при
 // переподписке (FCM/Mozilla периодически выдают новый endpoint, и без
 // сохранённого секрета пришлось бы каждый раз заходить с ?owner=...).
-const OWNER_SECRET_KEY = 'owner_secret';
+const OWNER_SECRET_KEY = lsKey('owner_secret');
 
 async function markAsOwner(reg) {
   if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
@@ -3105,32 +3141,68 @@ async function subscribeToPush(reg) {
   }
 }
 
-function injectPushButton(reg) {
-  // Кнопка появляется в шапке рядом с переключателем темы;
-  // пропадает после успешной подписки или отказа.
+// Колокольчик в шапке — видимый индикатор состояния push на ЭТОМ устройстве.
+// Раньше кнопка исчезала после подписки, а там, где подписка невозможна
+// (iOS Safari без установки на «Домой», запрещённые уведомления), не
+// появлялась вовсе — юрист не мог понять, подписан ли он (вопрос 17.07.2026).
+// Состояния: 'ready' — можно подписаться (клик = подписка); 'on' — подписка
+// активна; 'ios-install' — нужен ярлык на «Домой»; 'denied' — уведомления
+// запрещены для сайта в браузере.
+function injectPushBell(state, onReadyClick) {
   const actions = document.querySelector('.header-actions');
-  if (!actions || document.getElementById('btn-push')) return;
-  const btn = document.createElement('button');
-  btn.id = 'btn-push';
-  btn.className = 'theme-toggle';
-  btn.title = 'Включить push-уведомления';
-  btn.setAttribute('aria-label', 'Включить уведомления');
-  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-  btn.onclick = async () => {
-    btn.disabled = true;
-    const ok = await subscribeToPush(reg);
-    if (ok) btn.remove();
-    else btn.disabled = false;
+  if (!actions) return null;
+  let btn = document.getElementById('btn-push');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'btn-push';
+    btn.className = 'theme-toggle';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    // Вставляем перед .theme-toggle
+    const themeBtn = actions.querySelector('.theme-toggle');
+    actions.insertBefore(btn, themeBtn);
+  }
+  btn.classList.toggle('on', state === 'on');
+  btn.classList.toggle('off', state === 'ios-install' || state === 'denied');
+  btn.disabled = false;
+  const titles = {
+    'ready': 'Включить push-уведомления',
+    'on': 'Push включён на этом устройстве',
+    'ios-install': 'Push доступен после установки на экран «Домой»',
+    'denied': 'Уведомления запрещены для сайта',
   };
-  // Вставляем перед .theme-toggle
-  const themeBtn = actions.querySelector('.theme-toggle');
-  actions.insertBefore(btn, themeBtn);
+  btn.title = titles[state] || titles['ready'];
+  btn.setAttribute('aria-label', btn.title);
+  if (state === 'ready') {
+    btn.onclick = onReadyClick || null;
+  } else if (state === 'on') {
+    btn.onclick = () => showToast('🔔 Push включён на этом устройстве. Отписка — удалить приложение или запретить уведомления для сайта.', { type: 'success', duration: 6000 });
+  } else if (state === 'ios-install') {
+    btn.onclick = () => showToast('Push на iPhone работает из установленного приложения: Поделиться → На экран «Домой», затем открыть с иконки и нажать колокольчик.', { duration: 8000 });
+  } else if (state === 'denied') {
+    btn.onclick = () => showToast('Уведомления для сайта запрещены — разрешите их в настройках браузера и обновите страницу.', { duration: 8000 });
+  }
+  return btn;
 }
 
 async function setupPushNotifications(reg) {
   if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
-  if (!('PushManager' in window)) return; // Safari < 16.4
-  if (Notification.permission === 'denied') return;
+  if (!('PushManager' in window)) {
+    // iOS Safari даёт Push API только установленным на «Домой» приложениям —
+    // в обычной вкладке молчание выглядело как «подписки нет и не будет».
+    // Показываем подсказку-колокольчик. Прочие браузеры без Push API
+    // (старые Safari < 16.4) — как раньше, без кнопки.
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua)
+      || (ua.indexOf('Macintosh') !== -1 && 'ontouchend' in document);
+    const standalone = window.navigator.standalone === true
+      || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (isIOS && !standalone) injectPushBell('ios-install');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    injectPushBell('denied');
+    return;
+  }
 
   // Если подписка уже есть — освежаем её на Worker (TTL мог истечь)
   const existing = await reg.pushManager.getSubscription();
@@ -3145,6 +3217,7 @@ async function setupPushNotifications(reg) {
       .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
     markAsOwner(reg);
+    injectPushBell('on');
     return;
   }
 
@@ -3157,7 +3230,13 @@ async function setupPushNotifications(reg) {
   // браузер потерял подписку, для восстановления тоже нужен клик — колокольчик
   // просто появится снова. При уже выданном разрешении клик проходит без
   // системного диалога.
-  injectPushButton(reg);
+  injectPushBell('ready', async () => {
+    const btn = document.getElementById('btn-push');
+    if (btn) btn.disabled = true;
+    const ok = await subscribeToPush(reg);
+    if (ok) injectPushBell('on');
+    else if (btn) btn.disabled = false;
+  });
 }
 
 if ('serviceWorker' in navigator) {
@@ -3201,8 +3280,8 @@ if ('serviceWorker' in navigator) {
 
 /* ========== Последний дайджест (свёртываемый блок + beacon) ========== */
 
-const DIGEST_COLLAPSED_KEY = 'digest_collapsed';
-const DIGEST_LAST_SEEN_KEY = 'digest_last_seen_at';
+const DIGEST_COLLAPSED_KEY = lsKey('digest_collapsed');
+const DIGEST_LAST_SEEN_KEY = lsKey('digest_last_seen_at');
 // Выбранный пользователем вид блока «Дайджест»: 'general' | 'mine'.
 // Тоггл «Общий ⇄ Мой» в шапке блока. URL ?mine=1 (из click_url push'а)
 // устанавливает начальное значение, дальше — управляется кнопкой.

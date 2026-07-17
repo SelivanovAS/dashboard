@@ -399,6 +399,12 @@ body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
 .theme-toggle:hover { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
 .theme-toggle:active { transform:scale(0.94); }
 .theme-toggle svg { width:18px; height:18px; }
+/* Колокольчик push (#btn-push): 'on' — подписка активна, 'off' — подписка
+   недоступна (iOS без установки на «Домой» / уведомления запрещены);
+   кнопка остаётся кликабельной — клик показывает toast с пояснением. */
+#btn-push.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
+#btn-push.on:hover { color:var(--sber-green-700); }
+#btn-push.off { opacity:.45; }
 .theme-toggle .icon-moon,
 .theme-toggle .icon-sun,
 .theme-toggle .icon-auto { display:none; }
