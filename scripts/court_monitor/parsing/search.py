@@ -298,6 +298,15 @@ _CAPTCHA_CARD_PHRASES = (
 )
 
 
+def is_no_data_page(html: str) -> bool:
+    """True, если страница — легитимно пустая выдача sudrf («Данных по
+    запросу не обнаружено»). Для целевых запросов (дослинк апелляции по
+    номеру 1-й инст.) это штатный ответ «апелляция ещё не зарегистрирована» —
+    вызывающий код не гоняет такую страницу через parse_search_page, чтобы
+    не плодить WARNING «таблица результатов не найдена»."""
+    return bool(html) and _NO_DATA_MARK in html.lower()
+
+
 def detect_captcha_challenge(html: str) -> bool:
     """READ-ONLY: True, только если html — страница с проверочным кодом.
 

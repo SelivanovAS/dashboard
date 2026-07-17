@@ -145,6 +145,34 @@ def appeal_court_by_domain(domain: str | None) -> CourtConfig:
     return APPEAL_COURTS[0]
 
 
+# Суффикс субъекта в домене sudrf: «surggor--hmao.sudrf.ru» → «hmao»,
+# «oblsud--svd.sudrf.ru» → «svd». По нему апел-суд региона сопоставляется
+# суду 1-й инстанции (в регионе апелляций может быть несколько).
+_SUDRF_SUBJECT_RE = re.compile(r"--([a-z0-9]+)\.sudrf\.ru$")
+
+
+def _sudrf_subject(domain: str) -> str:
+    m = _SUDRF_SUBJECT_RE.search((domain or "").strip().lower())
+    return m.group(1) if m else ""
+
+
+def appeal_court_for_fi_domain(fi_domain: str) -> CourtConfig:
+    """Апелляционный суд региона для суда 1-й инст. по его домену.
+
+    Сопоставление — по суффиксу субъекта в домене sudrf: «…--ynao.sudrf.ru»
+    → Суд ЯНАО («oblsud--ynao.sudrf.ru»), «…--svd» → Свердловский облсуд.
+    Пустой/нестандартный суффикс (Кировградский «--cvd» — опечатка самого
+    ГАС «Правосудие») → первый апел-суд региона: у Свердловской обл. это
+    облсуд (верно для cvd), у одно-апелляционных регионов выбора нет.
+    """
+    subj = _sudrf_subject(fi_domain)
+    if subj:
+        for ac in APPEAL_COURTS:
+            if _sudrf_subject(ac.domain) == subj:
+                return ac
+    return APPEAL_COURTS[0]
+
+
 def case_card_url(case: dict, court: CourtConfig | None = None) -> str:
     """Построить полный URL карточки дела (CSV-строка апелляции).
 
