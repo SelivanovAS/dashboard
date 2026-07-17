@@ -11,6 +11,7 @@ Markdown-артефактов.
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -138,7 +139,16 @@ class TemplateDigestBaselineTest(unittest.TestCase):
             )
 
     def test_no_double_asterisks(self):
-        self.assertNotIn("**", self.html)
+        # Ловим руны РОВНО из двух звёздочек — Markdown-жирность (**текст**),
+        # которой в Telegram-HTML быть не должно. Более длинные руны (****) —
+        # обезличивание персональных данных самим судом в текстах актов; они
+        # легитимно попадают в дайджест с сырыми excerpt'ами мотивировок и
+        # Markdown'ом не являются (падение CI Урала 17.07.2026: 34 «****»
+        # в last_digest_context.json).
+        m = re.search(r"(?<!\*)\*\*(?!\*)", self.html)
+        if m:
+            frag = self.html[max(0, m.start() - 40):m.start() + 42]
+            self.fail(f"Markdown «**» в дайджесте: …{frag!r}…")
 
 
 class EmptyContextTest(unittest.TestCase):
