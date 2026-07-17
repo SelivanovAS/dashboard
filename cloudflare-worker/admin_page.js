@@ -2084,6 +2084,9 @@ var impCourtNameByDomain = {}; // домен → короткое имя (для
 var impPollTimer = null;
 var impSelectedFile = null;    // файл на отправку (из input или drag-n-drop)
 var impSending = false;        // идёт отправка/импорт — кнопка заблокирована
+var impDetectedHosts = [];     // sudrf-хосты текущей вставки/файла (автоопределение суда)
+var impDetectSeq = 0;          // защита от гонки async-чтения файла
+var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
 function impCourtLink(domain) {
   return "https://" + domain + "/modules.php?name=sud_delo";
 }
@@ -2282,6 +2285,7 @@ function impPickCourt(domain) {
   var sel = document.getElementById("imp-court");
   sel.value = domain;
   syncImportCourtLink();
+  impRenderSelection(); // заметка автоопределения зависит от выбранного суда
   var row = sel.closest(".imp-row");
   row.scrollIntoView({ behavior: "smooth", block: "center" });
   row.classList.remove("imp-flash");
@@ -2354,20 +2358,83 @@ function impSetFile(f) {
   if (!impSelectedFile) {
     try { document.getElementById("imp-file").value = ""; } catch (e) {}
   }
+  impRenderSelection(); // чип файла сразу, автоопределение догонит async
+  impRunDetect();
+}
+// ── Автоопределение суда по вставке/файлу ───────────────────────────────────
+// Rich-paste абсолютизирует href карточек (https://<суд>/modules.php?…
+// name=sud_delo…), файл «только HTML» из Chrome несёт маркер «saved from
+// url=…». Относительные ссылки хоста не несут — тогда список пуст и
+// автоопределение молчит (серверные проверки Worker'а и импортёра — финальные).
+function impDetectDomains(html) {
+  var hosts = [];
+  function add(h) { h = h.toLowerCase(); if (hosts.indexOf(h) === -1) hosts.push(h); }
+  var re = /https?:\\/\\/([a-z0-9][a-z0-9.-]*\\.sudrf\\.ru)\\/modules\\.php\\?[^"'\\s<>]*name=sud_delo/gi;
+  var m;
+  while ((m = re.exec(html)) !== null) add(m[1]);
+  m = /saved from url=\\(\\d+\\)https?:\\/\\/([a-z0-9][a-z0-9.-]*\\.sudrf\\.ru)(?=[\\/\\s])/i.exec(html);
+  if (m) add(m[1]);
+  hosts.sort();
+  return hosts;
+}
+function impCourtInDropdown(domain) {
+  return impCourts.some(function (c) { return c.domain === domain; });
+}
+async function impRunDetect() {
+  var seq = ++impDetectSeq;
+  var html = "";
+  if (impSelectedFile) {
+    try { html = await impReadFile(impSelectedFile); } catch (e) { html = ""; }
+  } else {
+    html = document.getElementById("imp-paste").innerHTML || "";
+  }
+  if (seq !== impDetectSeq) return; // источник сменился, пока читали файл
+  impDetectedHosts = html ? impDetectDomains(html) : [];
+  // Ровно один суд из списка импорта: подставляем сами, пока оператор не
+  // выбирал вручную — ловит главный сценарий «оставил суд по умолчанию,
+  // вставил выдачу другого». Ручной выбор автоматика не перебивает.
+  if (impDetectedHosts.length === 1 && impCourtInDropdown(impDetectedHosts[0])
+      && !impCourtTouched
+      && document.getElementById("imp-court").value !== impDetectedHosts[0]) {
+    impPickCourt(impDetectedHosts[0]);
+  }
   impRenderSelection();
+}
+// Заметка под полем: что автоопределение думает о вставке. Кнопка «выбрать
+// этот суд» слушается делегированием на #imp-selection (init-блок ниже).
+function impDetectNote() {
+  if (!impDetectedHosts.length) return "";
+  if (impDetectedHosts.length > 1) {
+    return "<b>⚠ в странице ссылки нескольких судов (" + escHtml(impDetectedHosts.join(", "))
+      + ") — вставьте выдачу одного суда</b>";
+  }
+  var h = impDetectedHosts[0];
+  var name = impCourtNameByDomain[h] || h;
+  if (!impCourtInDropdown(h)) {
+    return "<b>⚠ ссылки ведут в «" + escHtml(name) + "» (" + escHtml(h)
+      + ") — этого суда нет в списке импортируемых</b>";
+  }
+  if (document.getElementById("imp-court").value === h) {
+    return "определён суд: <b>" + escHtml(name) + "</b>";
+  }
+  return "<b>⚠ ссылки ведут в «" + escHtml(name) + "», а выбран другой суд</b> "
+    + '<button class="btn-refresh" type="button" id="imp-detected-pick">выбрать этот суд</button>';
 }
 function impRenderSelection() {
   var el = document.getElementById("imp-selection");
   var paste = document.getElementById("imp-paste");
+  var det = impDetectNote();
   if (impSelectedFile) {
     el.innerHTML = '<span class="imp-file-chip">файл: ' + escHtml(impSelectedFile.name)
       + " (" + impFmtSize(impSelectedFile.size)
       + ') <button class="imp-file-clear" type="button" id="imp-file-clear" title="Убрать файл">✕</button></span>'
-      + '<span>отправится файл — вставленное в поле не используется</span>';
+      + '<span>отправится файл — вставленное в поле не используется</span>'
+      + (det ? "<span>" + det + "</span>" : "");
   } else if (paste.innerHTML.length) {
     var k = paste.querySelectorAll("a[href]").length;
     el.innerHTML = "вставлено " + paste.innerHTML.length + " симв. · ссылок на дела: "
-      + (k ? String(k) : '<b>0 — похоже, простой текст, скопируйте страницу заново</b>');
+      + (k ? String(k) : '<b>0 — похоже, простой текст, скопируйте страницу заново</b>')
+      + (det ? "<span>" + det + "</span>" : "");
   } else {
     el.innerHTML = "";
   }
@@ -2403,6 +2470,18 @@ async function impSend() {
       + 'Похоже, вставился простой текст. Скопируйте страницу заново (выделением) или приложите файл «только HTML».');
     return;
   }
+  // Дамп чужого суда: хост в абсолютных ссылках карточек обязан совпадать с
+  // выбранным судом (Worker и импортёр перепроверяют то же серверно; при
+  // относительных ссылках хостов нет — проверка молчит).
+  const dumpHosts = impDetectDomains(html);
+  if (dumpHosts.length && (dumpHosts.length > 1 || dumpHosts[0] !== domain)) {
+    const foundNames = dumpHosts.map(function (h) { return impCourtNameByDomain[h] || h; }).join(", ");
+    impSetStatus('<span class="badge badge-fail">страница другого суда</span> '
+      + "Ссылки ведут в «" + escHtml(foundNames) + "», а выбран «"
+      + escHtml(impCourtNameByDomain[domain] || domain)
+      + "». Выберите суд по ссылкам или вставьте выдачу выбранного суда.");
+    return;
+  }
   impSending = true;
   impUpdateSendState();
   document.getElementById("imp-report").innerHTML = "";
@@ -2433,20 +2512,24 @@ async function impSend() {
 // ререндерится (светофор, индикатор выбора), слушается ТОЛЬКО делегированием
 // на постоянные контейнеры — прямые слушатели не пережили бы поллинг.
 document.getElementById("imp-send").addEventListener("click", impSend);
-document.getElementById("imp-court").addEventListener("change", syncImportCourtLink);
+document.getElementById("imp-court").addEventListener("change", function () {
+  impCourtTouched = true; // ручной выбор — автоопределение его не перебивает
+  syncImportCourtLink();
+  impRenderSelection();   // заметка «а выбран другой суд» зависит от выбора
+});
 (function () {
   var fresh = document.getElementById("imp-freshness");
   fresh.addEventListener("click", function (e) {
     var row = e.target.closest(".imp-fresh-row");
-    if (row) impPickCourt(row.getAttribute("data-domain"));
+    if (row) { impCourtTouched = true; impPickCourt(row.getAttribute("data-domain")); }
   });
   fresh.addEventListener("keydown", function (e) {
     if (e.key !== "Enter" && e.key !== " ") return;
     var row = e.target.closest(".imp-fresh-row");
-    if (row) { e.preventDefault(); impPickCourt(row.getAttribute("data-domain")); }
+    if (row) { e.preventDefault(); impCourtTouched = true; impPickCourt(row.getAttribute("data-domain")); }
   });
   var paste = document.getElementById("imp-paste");
-  paste.addEventListener("input", impRenderSelection);
+  paste.addEventListener("input", impRunDetect);
   paste.addEventListener("dragover", function (e) {
     // preventDefault только для файлов: перетаскивание выделенного текста
     // в contenteditable должно остаться штатным поведением браузера.
@@ -2469,6 +2552,10 @@ document.getElementById("imp-court").addEventListener("change", syncImportCourtL
   });
   document.getElementById("imp-selection").addEventListener("click", function (e) {
     if (e.target.closest("#imp-file-clear")) impSetFile(null);
+    if (e.target.closest("#imp-detected-pick") && impDetectedHosts.length === 1) {
+      impCourtTouched = true; // осознанный клик «выбрать этот суд»
+      impPickCourt(impDetectedHosts[0]);
+    }
   });
   document.getElementById("imp-alert").addEventListener("click", function (e) {
     if (e.target.closest("#imp-retry")) loadImportCourts();
