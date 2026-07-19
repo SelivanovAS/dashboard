@@ -1156,6 +1156,11 @@ async function handleAdminImportLog(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
   if (gate.error) return gate.error;
   try {
+    // ?logonly=1 — горячий поллинг ожидания импорта: клиенту нужен только
+    // журнал (найти свою запись по uuid). Пропускаем блок import:last:* —
+    // это второй KV-list + get по всем доменам, а lists-лимит free-tier
+    // всего 1000/день (инцидент 17.07.2026: отладка импорта сожгла 50%).
+    const logOnly = new URL(request.url).searchParams.get("logonly") === "1";
     const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:" });
     // Ключ начинается с ISO-времени → лексикографический порядок = хронология.
     const keys = list.keys.map((k) => k.name).sort().reverse().slice(0, 50);
@@ -1163,14 +1168,16 @@ async function handleAdminImportLog(request, env) {
       try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(name)); }
       catch (_) { return null; }
     }))).filter(Boolean);
-    const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
     const last = {};
-    (await Promise.all(lastList.keys.map(async (k) => {
-      try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)); }
-      catch (_) { return null; }
-    }))).filter(Boolean).forEach((e) => {
-      if (e.court_domain) last[e.court_domain] = e;
-    });
+    if (!logOnly) {
+      const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
+      (await Promise.all(lastList.keys.map(async (k) => {
+        try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)); }
+        catch (_) { return null; }
+      }))).filter(Boolean).forEach((e) => {
+        if (e.court_domain) last[e.court_domain] = e;
+      });
+    }
     return new Response(JSON.stringify({ items, last }), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
