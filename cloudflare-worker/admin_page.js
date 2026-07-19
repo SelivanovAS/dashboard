@@ -1093,7 +1093,7 @@ async function loadGhRuns() {
       setTile("run", "gray", "—", "основной прогон не найден");
     }
     // Пока есть живой прогон — обновляемся сами, чтобы видеть исход без F5.
-    if (hasActive) ghTimer = setTimeout(loadGhRuns, 15000);
+    if (hasActive && !document.hidden) ghTimer = setTimeout(loadGhRuns, 15000);
   } catch (e) {
     listEl.className = "";
     listEl.innerHTML = '<div class="empty">Ошибка: ' + escHtml(String(e)) + '</div>';
@@ -1225,6 +1225,11 @@ async function loadProgress() {
     const cur = d.current;
     if (!cur) { live.style.display = "none"; stale.style.display = "none"; return; }
     const running = cur.done !== true;
+    // Незавершённый прогон, молчащий >10 мин, считаем оборванным: живой
+    // облачный прогон батчит раз в ~60 с и идёт ~10-15 мин — реальный так
+    // долго не молчит. Иначе застрявшая запись (done не дослан) крутила бы
+    // поллинг до TTL записи = 14 суток (worker.js progress:current).
+    const stalled = running && (Date.now() - parseIso(cur.updated_at)) > 10 * 60 * 1000;
     // Mac — спящий резерв: завершённый прогон старше суток не заслуживает
     // большого блока, сворачиваем в details-строку.
     const isStale = !running && (Date.now() - parseIso(cur.updated_at)) > 24 * 3600 * 1000;
@@ -1243,8 +1248,8 @@ async function loadProgress() {
     if (cur.link) { lk.href = cur.link; lk.style.display = ""; }
     else { lk.style.display = "none"; }
     const st = document.getElementById("mac-live-state");
-    st.textContent = running ? "идёт" : "завершён";
-    st.className = "mac-live-state " + (running ? "running" : "done");
+    st.textContent = !running ? "завершён" : stalled ? "оборван" : "идёт";
+    st.className = "mac-live-state " + (running && !stalled ? "running" : "done");
     document.getElementById("mac-live-meta").textContent =
       "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
     const logEl = document.getElementById("mac-live-log");
@@ -1269,8 +1274,10 @@ async function loadProgress() {
     }
     clearTimeout(progressTimer);
     // 15 с: пушер шлёт батчи раз в ~60 с, чаще поллить бессмысленно
-    // (каждый GET /admin/run-progress = 2 KV-reads).
-    if (running) progressTimer = setTimeout(loadProgress, 15000);
+    // (каждый GET /admin/run-progress = 2 KV-reads). Не ре-армим оборванный
+    // прогон (stalled) и свёрнутую вкладку (document.hidden) — иначе забытая
+    // админка тихо жгла бы reads до TTL записи = 14 суток.
+    if (running && !stalled && !document.hidden) progressTimer = setTimeout(loadProgress, 15000);
   } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
 }
 
@@ -2203,14 +2210,19 @@ function renderImportHistory(items) {
       + '</div>' + linesHtml + '</div>';
   }).join("");
 }
-async function loadImportLog() {
+async function loadImportLog(logOnly) {
   try {
-    const r = await fetch("/admin/import-log?secret=" + encodeURIComponent(SECRET));
+    // logOnly (горячий поллинг ожидания импорта): просим только журнал —
+    // Worker пропускает второй KV-list по import:last:*. Светофор свежести
+    // при этом НЕ перерисовываем (d.last пуст), он остаётся с прошлого
+    // полного обновления — экономим KV lists+reads на каждом тике.
+    const r = await fetch("/admin/import-log?secret=" + encodeURIComponent(SECRET)
+      + (logOnly ? "&logonly=1" : ""));
     if (!r.ok) return null;
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
     renderImportHistory(items);
-    renderImportFreshness(items, d.last || {});
+    if (!logOnly) renderImportFreshness(items, d.last || {});
     return items;
   } catch (e) { return null; }
 }
@@ -2299,8 +2311,9 @@ function impSetStatus(html) {
 // Поллинг журнала по key дампа: «отправлено → выполняется → +N добавлено».
 // Таймаут ~5 мин: очередь GitHub держит 1 running + 1 pending — третий запуск
 // вытесняет ожидающий, дамп при этом живёт в KV 24 ч (можно повторить).
-// Интервал 15 с: каждый GET /admin/import-log = 2 KV-lists + пачка reads,
-// а лимит lists free-tier — 1000/день на аккаунт (инцидент 17.07.2026).
+// Интервал 30 с + ?logonly=1 (только журнал, 1 KV-list вместо 2): каждый тик
+// стоит KV-операций, а лимит lists free-tier — 1000/день на аккаунт
+// (инцидент 17.07.2026: отладка импорта сожгла 50% дневного лимита).
 function impElapsedText(startedAt) {
   var s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
   var m = Math.floor(s / 60);
@@ -2309,7 +2322,7 @@ function impElapsedText(startedAt) {
 function impPollResult(key, startedAt) {
   clearTimeout(impPollTimer);
   impPollTimer = setTimeout(async function () {
-    const items = await loadImportLog();
+    const items = await loadImportLog(true);
     const mine = (items || []).find(function (it) { return it.uuid === key; });
     if (mine && (mine.status === "done" || mine.status === "failed")) {
       impSetStatus(impStatusBadge(mine.status) + " " + escHtml(impResultText(mine)));
@@ -2331,12 +2344,12 @@ function impPollResult(key, startedAt) {
       return;
     }
     // Ожидание до 5 минут: живой статус с прошедшим временем (обновляется
-    // на тике 15 с), чтобы не выглядеть зависшим.
+    // на тике 30 с), чтобы не выглядеть зависшим.
     var st = (mine && mine.status === "started") ? "started" : "dispatched";
     impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
       + (st === "started" ? "выполняется" : "в очереди") + " · " + impElapsedText(startedAt));
     impPollResult(key, startedAt);
-  }, 15000);
+  }, 30000);
 }
 async function impReadFile(file) {
   // Файл «только HTML» с sudrf — win-1251; вставки/другие файлы — utf-8.
@@ -2607,6 +2620,19 @@ if (IS_OWNER) {
 } else {
   loadDigestTileLite();
 }
+// Свёрнутая/фоновая вкладка не должна поллить: гасим оба самоперевзводящихся
+// поллера при уходе со вкладки, будим при возврате. Забытая открытая админка
+// иначе тихо жгла бы KV-reads (run-progress) и Worker-инвокации/GitHub PAT
+// (gh-runs) сутками. Браузер такие setTimeout лишь троттлит, но не гасит.
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) {
+    clearTimeout(progressTimer);
+    clearTimeout(ghTimer);
+  } else {
+    loadProgress();
+    loadGhRuns();
+  }
+});
 </script>
 </body></html>`;
 }
