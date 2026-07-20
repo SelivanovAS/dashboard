@@ -2641,7 +2641,11 @@ def main_json():
         ):
             new_events = card_info.get(key) or []
             old_events = fi.get(json_field) or []
-            if new_events != old_events:
+            # Пустой список = вкладка «Обжалование» не распарсилась (обрезанная
+            # карточка, сбой) — данные не теряем. У движения дела такой гард
+            # есть с самого начала, здесь его не было: перепарс огрызка молча
+            # затирал историю жалобы в [].
+            if new_events and new_events != old_events:
                 fi[json_field] = new_events
                 changed = True
 

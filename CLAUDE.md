@@ -81,7 +81,7 @@
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:941](scripts/court_monitor/linking.py:941) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:128](scripts/court_monitor/parsing/cards.py:128) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:206](scripts/court_monitor/parsing/cards.py:206) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
@@ -119,6 +119,13 @@
       "bank_role": "Истец|Ответчик|Третье лицо",
       "category": "...", "notes": "...",
       "first_instance": {
+         // events[] — событие «Движения дела». Базовые поля {date, time, text}
+         // + колонки карточки, если шапка распозналась: name, place,
+         // result_event, ground, note, posted_at (имена зеркалят парсер
+         // кассации — фронт рендерит все три инстанции одним кодом).
+         // ⚠ text — склейка всех ячеек через ". " — НЕ МЕНЯТЬ: по паре
+         // (date, text) дедуплицирует _events_newly_match, смена формата
+         // объявит всю историю дел новой (дайджест-паводок).
          "court", "judge", "status", "events": [], "resolved_emitted": bool,
          "hearing_date",           // дата резолютивки, якорь 45-дневного окна
          "act_date",               // дата публикации мотивировки (когда есть)

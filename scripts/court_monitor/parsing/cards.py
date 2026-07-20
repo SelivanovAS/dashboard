@@ -125,6 +125,84 @@ def card_is_empty_shell(card_info: dict) -> bool:
     return card_info.get("_table_count", 0) == 0
 
 
+# Заголовки колонок таблиц «Движение дела» и «Движение жалобы» → ключи
+# события. Проверяются по префиксу и в порядке убывания длины, поэтому
+# «дата размещения» забирает свою колонку раньше, чем до неё доберётся
+# «дата», а «основание для выбранного результата события» — раньше, чем
+# «результат». В шапке к тексту заголовка бывает приклеена подсказка
+# («Дата размещения\xa0Информация о размещении…»), отсюда префикс, а не
+# точное равенство.
+# Ключи col_date/col_time намеренно НЕ называются date/time: базовые date и
+# time вычисляются прежней логикой (первая ячейка-дата, регексп времени),
+# и перезапись их сырым текстом ячейки каскадом сломала бы _SESSION_START_RX
+# → «Дата/Время заседания» → самоизлечение фантомной hearing_date.
+_ЗАГОЛОВКИ_КОЛОНОК = (
+    ("основание для выбранного результата события", "ground"),
+    ("наименование события", "name"),
+    ("дата размещения", "posted_at"),
+    ("место проведения", "place"),
+    ("результат события", "result_event"),
+    ("примечание", "note"),
+    ("основание", "ground"),
+    ("результат", "result_event"),
+    ("событие", "name"),
+    ("время", "col_time"),
+    ("дата", "col_date"),
+)
+
+
+def _карта_колонок(row: list) -> dict:
+    """Карта {ключ: индекс ячейки} по строке-шапке таблицы."""
+    карта: dict[str, int] = {}
+    for idx, cell in enumerate(row):
+        текст = " ".join(cell_text(cell).replace("\xa0", " ").lower().split())
+        if not текст:
+            continue
+        for префикс, ключ in _ЗАГОЛОВКИ_КОЛОНОК:
+            if текст.startswith(префикс):
+                карта.setdefault(ключ, idx)
+                break
+    return карта
+
+
+def _найти_шапку_колонок(tbl: list, обязательные: set) -> tuple:
+    """Индекс строки-шапки колонок и её карта.
+
+    Шапка — НЕ нулевая строка таблицы: tbl[0] это заголовок («ДВИЖЕНИЕ ДЕЛА»),
+    по которому таблица и опознаётся, а настоящая шапка идёт следом и до сих
+    пор оседала в `_events` мусорным событием с пустой датой (по одному на
+    каждую карточку с событиями). Ищем по содержимому в первых трёх строках.
+    """
+    for idx in range(min(3, len(tbl))):
+        карта = _карта_колонок(tbl[idx])
+        if обязательные <= set(карта):
+            return idx, карта
+    return -1, {}
+
+
+def _колонки_строки(row: list, карта: dict, ширина: int) -> dict:
+    """Разложить строку по карте колонок. Пустые ячейки не возвращаем.
+
+    Ширина строки обязана совпасть с шапкой: при расхождении раскладывать
+    наугад опаснее, чем не раскладывать вовсе (та же философия, что у
+    looks_like_non_card_page — честный отказ вместо тихой порчи). Тогда
+    событие остаётся только с legacy-полем text, и фронт корректно
+    откатывается на показ склеенной строки целиком.
+    """
+    if not карта or len(row) != ширина:
+        if карта:
+            config.METRICS["movement_odd_width"] += 1
+        return {}
+    колонки = {}
+    for ключ, idx in карта.items():
+        if ключ in ("col_date", "col_time") or idx >= len(row):
+            continue
+        значение = cell_text(row[idx]).strip()
+        if значение:
+            колонки[ключ] = значение
+    return колонки
+
+
 def parse_case_card(html: str, court_base_url: str = "") -> dict:
     """
     Парсит карточку дела. Извлекает:
@@ -310,9 +388,18 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                 break
 
     if movement_table and len(movement_table) > 1:
+        # Шапка колонок — отдельная строка внутри таблицы (не movement_table[0],
+        # там заголовок «ДВИЖЕНИЕ ДЕЛА»). Нужна для раскладки события по
+        # колонкам и чтобы саму шапку не записать в события.
+        шапка_idx, карта_колонок = _найти_шапку_колонок(
+            movement_table, {"name", "col_date"}
+        )
+        ширина_шапки = len(movement_table[шапка_idx]) if шапка_idx >= 0 else 0
         # Последняя строка данных = последнее событие
         events_data = []
-        for row in movement_table[1:]:  # Пропускаем заголовок
+        for row_idx, row in enumerate(movement_table[1:], start=1):
+            if row_idx == шапка_idx:
+                continue
             if len(row) >= 2:
                 event_text_parts = []
                 date_val = ""
@@ -331,15 +418,20 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                             event_text_parts.append(ct)
                 event_desc = ". ".join(event_text_parts).strip(". ")
                 if event_desc:
-                    events_data.append((date_val, time_val, event_desc))
+                    колонки = _колонки_строки(row, карта_колонок, ширина_шапки)
+                    events_data.append((date_val, time_val, event_desc, колонки))
 
         if events_data:
-            # Полный список событий для timeline (сохраняется в JSON как events[])
+            # Полный список событий для timeline (сохраняется в JSON как events[]).
+            # Поле text — прежняя склейка, БАЙТ-В-БАЙТ: по паре (date, text)
+            # события дедуплицирует _events_newly_match, и смена формата
+            # объявила бы всю историю каждого дела новой. Колонки только
+            # дописываются рядом, непустые.
             info["_events"] = [
-                {"date": d, "time": t, "text": desc}
-                for d, t, desc in events_data
+                {"date": d, "time": t, "text": desc, **cols}
+                for d, t, desc, cols in events_data
             ]
-            last_date, last_time, last_event = events_data[-1]
+            last_date, last_time, last_event, _ = events_data[-1]
             info["Последнее событие"] = last_event
             info["Дата события"] = last_date
             # Время заседания — только из session-событий (судебное заседание,
@@ -347,12 +439,12 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             # тут стоял naive `"заседани" in ev_desc`, но он не ловит
             # «Подготовка дела (собеседование)» — у дел 1-й инст. это часто
             # ПЕРВОЕ назначение, и без него парсер не находил будущую дату.
-            for ev_date, ev_time, ev_desc in reversed(events_data):
+            for ev_date, ev_time, ev_desc, _ in reversed(events_data):
                 if _SESSION_START_RX.search(ev_desc) and ev_time:
                     info["Время заседания"] = ev_time
                     break
             # Дата заседания — последнее session-событие.
-            for ev_date, ev_time, ev_desc in reversed(events_data):
+            for ev_date, ev_time, ev_desc, _ in reversed(events_data):
                 if _SESSION_START_RX.search(ev_desc) and ev_date:
                     info["Дата заседания"] = ev_date
                     break
@@ -361,7 +453,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             if not info.get("Дата заседания"):
                 decision_kw = ["определени", "снято", "прекращен", "возвращен",
                                "без изменени", "отменен", "изменен"]
-                for ev_date, ev_time, ev_desc in reversed(events_data):
+                for ev_date, ev_time, ev_desc, _ in reversed(events_data):
                     ev_low = ev_desc.lower()
                     if (ev_date and any(kw in ev_low for kw in decision_kw)
                             and not _INTERLOCUTORY_PREP_RX.search(ev_low)
@@ -524,6 +616,14 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             break
     current_kind: str | None = None  # "appeal" | "cassation"
     for tbl in tables:
+        # Карта колонок таблицы «ДВИЖЕНИЕ ЖАЛОБЫ» (Событие | Дата | Результат |
+        # Основание | Примечание | Дата размещения). Нужна, чтобы разложить
+        # событие жалобы так же, как событие движения дела. Существующий
+        # разбор ниже берёт примечание отрицательным индексом row[-2] и
+        # остаётся нетронутым: смешивать его с положительными индексами
+        # нельзя — якоря совпадают только при ровно ожидаемой ширине.
+        шапка_ж_idx, карта_ж = _найти_шапку_колонок(tbl, {"name", "col_date"})
+        ширина_ж = len(tbl[шапка_ж_idx]) if шапка_ж_idx >= 0 else 0
         for row in tbl:
             if len(row) < 1:
                 continue
@@ -628,7 +728,12 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
                 e.get("date") == effective_date and e.get("text", "").startswith(event_label)
                 for e in events_list
             ):
-                events_list.append({"date": effective_date, "text": event_text})
+                # Колонки — рядом с прежним text (он не меняется: по нему
+                # дедуплицирует условие выше и _events_newly_match).
+                колонки_ж = _колонки_строки(row, карта_ж, ширина_ж)
+                events_list.append(
+                    {"date": effective_date, "text": event_text, **колонки_ж}
+                )
 
             # Регистрация жалобы → дата подачи апел. или касс. жалобы.
             if re.search(r'регистрац\w*\s+жалоб', row_lc):
