@@ -17,9 +17,9 @@ Actions, какие есть вспомогательные скрипты и т
 |---------|---------|-----------|
 | `--json` | `main_json` ([1415](../../scripts/court_monitor/runs.py#L1415)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([779](../../scripts/court_monitor/runs.py#L779)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([3835](../../scripts/court_monitor/runs.py#L3835)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([3519](../../scripts/court_monitor/runs.py#L3519)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3696](../../scripts/court_monitor/runs.py#L3696)) | Повторно разослать уже сохранённый дайджест. |
+| `--digest-only` | `main_digest_only` ([3839](../../scripts/court_monitor/runs.py#L3839)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([3523](../../scripts/court_monitor/runs.py#L3523)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([3700](../../scripts/court_monitor/runs.py#L3700)) | Повторно разослать уже сохранённый дайджест. |
 | `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1038](../../scripts/court_monitor/runs.py#L1038)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
