@@ -63,8 +63,18 @@ jobs:
           python3 scripts/probe_captcha.py \
             --domain "${{ github.event.inputs.domain }}" \
             --delo-id "${{ github.event.inputs.delo_id }}" \
-            --card "${{ github.event.inputs.card_seed }}"
+            --card "${{ github.event.inputs.card_seed }}" \
+            --dump probe_dump
           echo
           echo ">>> открыта      — карточка отдаётся без кода: жива модель «разгадать 1 раз → мониторить карточки»."
           echo ">>> ЗАКРЫТА кодом — карточка под капчей: модель не работает, остаётся детект+алерт / легитимный канал."
-          echo ">>> НЕОДНОЗНАЧНО  — не код, но и не карточка: сверь сид/суд, сохрани --dump, сравни RU-IP vs US-IP."
+          echo ">>> НЕОДНОЗНАЧНО  — не код, но и не карточка: сверь сид/суд, изучи артефакт probe-card-html, сравни RU-IP vs US-IP."
+
+      - name: Артефакт — сырой HTML пробы карточки
+        if: github.event.inputs.card_seed != '' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-card-html
+          path: probe_dump/
+          if-no-files-found: ignore
+          retention-days: 14

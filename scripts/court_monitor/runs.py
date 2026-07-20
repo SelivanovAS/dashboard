@@ -78,7 +78,7 @@ from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay, 
 from court_monitor.parsing import (
     parse_case_card, parse_search_page, parse_first_instance_search,
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
-    _warn_if_card_degraded, is_subsidiary_only_case,
+    _warn_if_card_degraded, card_is_empty_shell, is_subsidiary_only_case,
     determine_bank_role_from_participants, classify_cassation_outcome,
     detect_captcha_challenge, is_no_data_page,
 )
@@ -411,6 +411,10 @@ def update_active_cases(
 
         card_info = parse_case_card(html, _ap_court.base_url)
         _warn_if_card_degraded(card_info, case["Номер дела"])
+        # Второй рубеж (как в FI-цикле): страница вовсе без таблиц — не
+        # карточка, успешной проверкой не считаем и last_checked_at не бумпаем.
+        if card_is_empty_shell(card_info):
+            continue
         parsed += 1
 
         # Параллельно обновляем JSON-представление appeal-дела (если передано).
@@ -1954,7 +1958,10 @@ def main_json():
         try:
             html = fetch_card_checked(url, context=f"{fi['case_number']}, {_short_court}")
             if not html:
-                log.warning(
+                # Причина уже в логе выше: ERROR fetch_page (сеть) либо WARNING
+                # fetch_card_checked (код/заглушка) — оба с номером дела. Дубль
+                # на WARNING двоил бы каждую строку при массовом аутейдже.
+                log.debug(
                     f"  {fi['case_number']} ({_short_court}): "
                     f"не удалось загрузить карточку"
                 )
@@ -2014,6 +2021,12 @@ def main_json():
                 # назначено» (см. search-time промоушен выше).
                 if not fi.get("accepted_emitted"):
                     fi["accepted_pending_emit"] = True
+
+        # Второй рубеж после fetch_card_checked: страница вовсе без таблиц —
+        # не карточка. Успешной проверкой не считаем и дату не бумпаем (см.
+        # card_is_empty_shell; аутейдж sudrf 20.07.2026).
+        if card_is_empty_shell(card_info):
+            continue
 
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
         # для force-parse раз в 21 день).
@@ -3120,7 +3133,8 @@ def main_json():
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
             health_alerts.append(
                 f"карточек-«огрызков» без событий за прогон: "
-                f"{config.METRICS['cards_degraded']} (возможна смена вёрстки карточек)"
+                f"{config.METRICS['cards_degraded']} (компактная карточка или "
+                f"неопознанная заглушка; при массовости см. счётчик заглушек)"
             )
         for _dom, _name in fi_challenge.items():
             health_alerts.append(
@@ -3131,6 +3145,12 @@ def main_json():
                 f"карточек, закрытых проверочным кодом: "
                 f"{config.METRICS['cards_captcha']} — суд закрыл кодом и карточки "
                 f"(см. WARNING'и прогона)"
+            )
+        if config.METRICS.get("cards_blocked", 0):
+            health_alerts.append(
+                f"карточек не прочитано: {config.METRICS['cards_blocked']} — "
+                f"портал временно недоступен (заглушка sudrf) / блок авто-сбора; "
+                f"дела перечитаются следующим прогоном"
             )
         if health_alerts:
             log.warning(

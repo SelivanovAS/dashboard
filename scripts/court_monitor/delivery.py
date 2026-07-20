@@ -785,6 +785,11 @@ def log_run_summary(
         opt_lines.append(
             f"Карточек под проверочным кодом: {config.METRICS['cards_captcha']}"
         )
+    if config.METRICS["cards_blocked"]:
+        opt_lines.append(
+            f"Карточек не прочитано (заглушка/блок портала): "
+            f"{config.METRICS['cards_blocked']}"
+        )
     if config.METRICS["push_sent"] or config.METRICS["push_failed"]:
         opt_lines.append(
             f"Web Push: отправлено {config.METRICS['push_sent']}"
