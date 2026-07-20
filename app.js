@@ -1906,14 +1906,22 @@ function openDrawer(caseNumber){
   if(!c)return;
   activeCaseNumber=caseNumber;
   markCaseRead(caseNumber);
-  // Вкладка по умолчанию: самая старшая открытая стадия. Для дел в кассации
-  // это «cs», иначе «ap» если есть карточка апелляции, иначе «fi». Если
-  // и того и другого нет (legacy CSV) — null, рендер тогда уйдёт в общий
-  // блок «Суд и состав».
+  // Вкладка по умолчанию — та инстанция, где по текущей стадии идёт движение,
+  // а НЕ самая старшая открытая. Раньше апелляция побеждала всегда, когда её
+  // карточка есть; с пер-инстанционной хронологией это прятало бы живые
+  // события: у 58 дел в cassation_watch/cassation_pending апелляция уже
+  // отработана, а касс. жалобу ждём в карточке 1-й инстанции
+  // (should_parse_fi_card). Если нужной карточки нет — откатываемся на любую
+  // имеющуюся; если нет вообще ничего (legacy CSV) — null, и рендер уйдёт
+  // в общий блок «Суд и состав».
   const hasFi=!!(c._fi&&c._fi.case_number);
   const hasAp=!!(c._ap&&c._ap.case_number);
   const hasCs=!!(c._cs&&c._cs.case_number);
-  drawerStage=(c.stage==='cassation'&&hasCs)?'cs':(hasAp?'ap':(hasFi?'fi':null));
+  const предпочтение=c.stage==='cassation'?['cs','ap','fi']
+    :c.stage==='appeal'?['ap','cs','fi']
+    :['fi','ap','cs'];
+  const естьВкладка={fi:hasFi,ap:hasAp,cs:hasCs};
+  drawerStage=предпочтение.find(s=>естьВкладка[s])||null;
   const idx=findCaseIdx(caseNumber);
   if(idx>=0)focusedRowIdx=idx;
   renderDrawer(c);
@@ -1947,8 +1955,36 @@ function setDrawerStage(s){
   if(c)renderDrawer(c);
 }
 
-/* Собрать события для timeline из stage-data */
-function buildTimeline(c){
+/* Единая нормализация события хронологии. В данных сосуществуют три формата,
+ * и это навсегда: карточки дел в стадиях appeal/cassation/awaiting_relink
+ * больше не перепарсиваются (should_parse_fi_card), а архив не парсится вовсе.
+ *   структурный {name,date,time,place,result_event,ground,note,posted_at}
+ *               — кассация 7kas уже сегодня, карточки 1-й инст./апелляции
+ *                 по мере перепарсивания;
+ *   legacy      {date,time,text} — все ячейки строки склеены через «. »;
+ *   урезанный   {date,text}      — «Движение жалобы», времени там нет в принципе.
+ * Различаем ПО НАЛИЧИЮ ключа name, а не по флагу версии: в одном drawer одного
+ * дела активная вкладка может быть структурной, а замороженная — legacy. */
+function normalizeTlEvent(e){
+  if(!e||!e.date)return null;   // отсекает и строки-шапки таблицы (у них пустая date)
+  if(e.name){
+    return {date:e.date,имя:e.name,время:e.time||'',место:e.place||'',
+            результат:e.result_event||'',основание:e.ground||'',
+            примечание:e.note||'',размещено:e.posted_at||'',legacy:false};
+  }
+  const текст=e.text||'';
+  if(!текст)return null;
+  // У legacy-события время лежит И в e.time, И внутри склеенного text. Выносить
+  // его в метастроку нельзя — вышло бы «10:00 · Судебное заседание. 10:00. Зал
+  // 437. 06.07.2026». Показываем text как есть: ни один символ не теряется.
+  return {date:e.date,имя:текст,время:'',место:'',результат:'',
+          основание:'',примечание:'',размещено:'',legacy:true};
+}
+
+/* Собрать события для timeline. `стадия` ('fi'|'ap'|'cs') ограничивает
+ * хронологию одной инстанцией; null — общий список по всем (дела без вкладок
+ * и legacy-CSV). */
+function buildTimeline(c,стадия){
   const items=[];
   const fi=c._fi||{};
   const ap=c._ap||{};
@@ -1959,87 +1995,75 @@ function buildTimeline(c){
     :/оставлен.{0,5}без.{0,5}движени|срок\s+для/i.test(t)?'pause'
     :/приостановлен/i.test(t)?'pause'
     :'info';
-  // Чистим текст события: парсер склеивает ячейки таблицы движения дела в
-  // формат «{тип}. {время}. {Зал N}. {дата}.» — все эти метаданные уже либо
-  // показаны в ключевых датах (дата и время заседания), либо избыточны в
-  // timeline (номер зала, дата занесения записи). Срезаем trailing
-  // фрагменты, пока они матчатся.
-  const cleanTimelineText=(s)=>{
-    if(!s)return s;
-    let out=String(s).trim();
-    // Сначала срезаем метаданные внутри строки: время, «Зал N», дата.
-    out=out.replace(/\s*\d{1,2}:\d{2}(?::\d{2})?\s*\.\s*/g,'. ');
-    out=out.replace(/\s*Зал(?:\s+судебного\s+заседания)?\s+\S+?\s*\.\s*/gi,'. ');
-    out=out.replace(/\s*\d{1,2}\.\d{1,2}\.\d{4}\s*\.\s*/g,'. ');
-    out=out.replace(/\.{2,}/g,'.').replace(/\s{2,}/g,' ');
-    const patterns=[
-      /\s*[.,]\s*\d{1,2}\.\d{1,2}\.\d{4}\s*\.?$/,              // trailing DD.MM.YYYY
-      /\s*[.,]\s*\d{1,2}:\d{2}(?::\d{2})?\s*\.?$/,              // trailing HH:MM
-      /\s*[.,]\s*зал(?:\s+[^.]+?)?\s*\.?$/i,                    // trailing «Зал 131» / «Зал судебного заседания 407»
-      /\s*[.,]\s*\d{1,3}\s*\.?$/,                               // trailing «204» (номер зала без слова; до 3 цифр, чтобы не съедать 4-значные годы DD.MM.YYYY)
-    ];
-    for(let i=0;i<6;i++){
-      const before=out;
-      patterns.forEach(p=>{out=out.replace(p,'');});
-      if(out===before)break;
+  // Событие хронологии. Префикс («Апел. жалоба» / «Касс. жалоба») попадает
+  // в имя, чтобы во вкладке 1-й инстанции было видно, к чему относится
+  // «Установлен срок для возражений» и т.п.
+  const pushEvents=(arr,префикс)=>{
+    if(!Array.isArray(arr))return;
+    arr.forEach(e=>{
+      const n=normalizeTlEvent(e);
+      if(!n)return;
+      // Окраску точки считаем от ВСЕХ смысловых полей: маркеры «отменено»,
+      // «удовлетворено», «приостановлено» лежат в колонках «Результат
+      // события» / «Основание», а не в наименовании. Классификация только
+      // по имени обесцветила бы весь таймлайн после разбора колонок.
+      const дляЦвета=[n.имя,n.результат,n.основание,n.примечание].filter(Boolean).join(' ');
+      items.push({date:parseDate(n.date),
+                  имя:(префикс?префикс+': ':'')+n.имя,
+                  время:n.время,место:n.место,результат:n.результат,
+                  основание:n.основание,примечание:n.примечание,
+                  размещено:n.размещено,
+                  kind:classifyKind(дляЦвета)});
+    });
+  };
+  // Веха — синтетическая строка без колонок (поступление, исход кассации).
+  const веха=(d,текст,kind)=>{
+    if(!d)return;
+    items.push({date:d,имя:текст,время:'',место:'',результат:'',
+                основание:'',примечание:'',размещено:'',kind:kind||'info'});
+  };
+  const нужна=(s)=>!стадия||стадия===s;
+
+  if(нужна('fi')){
+    // Предпочитаем полный список событий, иначе fallback на last_event
+    if(fi.events&&fi.events.length)pushEvents(fi.events);
+    else if(fi.event_date&&fi.last_event){
+      pushEvents([{date:fi.event_date,text:fi.last_event}]);
     }
-    return out.replace(/[.,\s]+$/,'').trim();
-  };
-  const pushEvents=(arr)=>{
-    if(!Array.isArray(arr))return;
-    arr.forEach(e=>{
-      if(!e||!e.date)return;
-      // FI/AP кладут текст события в поле .text. Парсер кассации 7kas
-      // использует .name (структура hearings из таблицы СЛУШАНИЯ) —
-      // fallback нужен, иначе события кассации не попадут в хронологию.
-      const raw=e.text||e.name||'';
-      if(!raw)return;
-      const cleaned=cleanTimelineText(raw);
-      const prefix=e.time?e.time+' · ':'';
-      items.push({date:parseDate(e.date),text:prefix+cleaned,kind:classifyKind(raw)});
-    });
-  };
-  // Предпочитаем полный список событий (правка 4), иначе fallback на last_event
-  if(fi.events&&fi.events.length)pushEvents(fi.events);
-  else if(fi.event_date&&fi.last_event){
-    items.push({date:parseDate(fi.event_date),text:cleanTimelineText(fi.last_event),kind:classifyKind(fi.last_event)});
+    веха(parseDate(fi.filing_date),'Поступление в 1-ю инстанцию');
+    // «Движение жалобы» с вкладки «Обжалование решений» — это события
+    // карточки 1-й инстанции, поэтому остаются здесь (решение юриста).
+    pushEvents(fi.appeal_events,'Апел. жалоба');
+    pushEvents(fi.cassation_events,'Касс. жалоба');
   }
-  if(fi.filing_date)items.push({date:parseDate(fi.filing_date),text:'Поступление в 1-ю инстанцию',kind:'info'});
-  // Все события «Движения жалобы» с вкладки «Обжалование решений» —
-  // с префиксом типа жалобы, чтобы в общей хронологии было видно, к чему
-  // относится «Установлен срок для возражений» / «Без движения» / т.п.
-  // Дедупликация по (date,text) ниже отфильтрует случайные дубли.
-  const pushAppealEvents=(arr,prefix)=>{
-    if(!Array.isArray(arr))return;
-    arr.forEach(e=>{
-      if(!e||!e.date||!e.text)return;
-      const txt=prefix+': '+e.text;
-      items.push({date:parseDate(e.date),text:txt,kind:classifyKind(txt)});
-    });
-  };
-  pushAppealEvents(fi.appeal_events,'Апел. жалоба');
-  pushAppealEvents(fi.cassation_events,'Касс. жалоба');
-  if(ap.events&&ap.events.length)pushEvents(ap.events);
-  else if(ap.event_date&&ap.last_event){
-    items.push({date:parseDate(ap.event_date),text:cleanTimelineText(ap.last_event),kind:classifyKind(ap.last_event)});
+  if(нужна('ap')){
+    if(ap.events&&ap.events.length)pushEvents(ap.events);
+    else if(ap.event_date&&ap.last_event){
+      pushEvents([{date:ap.event_date,text:ap.last_event}]);
+    }
+    веха(parseDate(ap.filing_date),'Поступление в апелляцию');
   }
-  if(ap.filing_date)items.push({date:parseDate(ap.filing_date),text:'Поступление в апелляцию',kind:'info'});
-  if(cs.events&&cs.events.length)pushEvents(cs.events);
-  if(cs.filing_date)items.push({date:parseDate(cs.filing_date),text:'Поступление в кассацию',kind:'info'});
-  if(cs.decision_date&&cs.outcome){
-    const outcomeLabel=CASS_RESULT_LABELS[cs.outcome]||'';
-    if(outcomeLabel)items.push({date:parseDate(cs.decision_date),text:'Кассация: '+outcomeLabel,kind:classifyKind(outcomeLabel)});
+  if(нужна('cs')){
+    if(cs.events&&cs.events.length)pushEvents(cs.events);
+    веха(parseDate(cs.filing_date),'Поступление в кассацию');
+    if(cs.decision_date&&cs.outcome){
+      const outcomeLabel=CASS_RESULT_LABELS[cs.outcome]||'';
+      if(outcomeLabel)веха(parseDate(cs.decision_date),'Кассация: '+outcomeLabel,classifyKind(outcomeLabel));
+    }
   }
-  // Legacy / top-level event
-  if(!items.length&&c.lastEvent){
-    items.push({date:c.lastEventDate,text:cleanTimelineText(c.lastEvent),kind:classifyKind(c.lastEvent)});
+  // Legacy / top-level event. Только в общем списке: c.lastEvent и
+  // c.dateReceived взяты из c.* и относятся к ТЕКУЩЕЙ стадии дела — в
+  // стадийных ветках они приписали бы, например, дату подачи в кассацию
+  // вкладке 1-й инстанции. Там своя веха «Поступление в …» из filing_date.
+  if(!стадия){
+    if(!items.length&&c.lastEvent)pushEvents([{date:c.lastEventDate,text:c.lastEvent}]);
+    if(c.dateReceived&&!items.find(x=>x.date===c.dateReceived))веха(c.dateReceived,'Дата поступления');
   }
-  if(c.dateReceived&&!items.find(x=>x.date===c.dateReceived))items.push({date:c.dateReceived,text:'Дата поступления',kind:'info'});
-  // Дедупликация по (date, text) и сортировка по убыванию даты
+  // Дедупликация по (дата, имя, результат) и сортировка по убыванию даты
   const seen=new Set();
   return items.filter(x=>{
     if(!x.date)return false;
-    const k=x.date+'|'+x.text;
+    const k=x.date+'|'+x.имя+'|'+x.результат;
     if(seen.has(k))return false;
     seen.add(k);
     return true;
@@ -2240,6 +2264,13 @@ function renderDrawer(c){
     if(fiStatusDisplay)grid+=`<div class="kv-k">Статус</div><div class="kv-v">${escHtml(fiStatusDisplay)}</div>`;
     if(fiResultDisplay)grid+=`<div class="kv-k">Результат</div><div class="kv-v">${escHtml(fiResultDisplay)}</div>`;
     grid+=`</div>`;
+    // Полный текст решения — свёрткой, как у кассации. Парсер режет акт по
+    // ACT_TEXT_LIMIT, и у большинства дел текст упирается ровно в потолок,
+    // поэтому обрезку помечаем явно: иначе юрист решит, что так написал суд.
+    if(fi.act_text){
+      const обрезан=fi.act_text.length>=8000;
+      grid+=`<details class="act-block"><summary>Текст решения (полный)</summary><pre class="act-pre">${escHtml(fi.act_text)}</pre>${обрезан?'<div class="act-note">Текст обрезан при загрузке — полная версия в карточке дела.</div>':''}</details>`;
+    }
     courtSection=grid;
   }else if(drawerStage==='ap'&&stageData){
     const ap=stageData;
@@ -2321,13 +2352,31 @@ function renderDrawer(c){
     courtSection=grid;
   }
 
-  // Timeline
-  const tl=buildTimeline(c);
+  // Timeline. Стадийность гейтим тем же условием, что и вкладки: без вкладок
+  // юристу нечем вернуться к остальным инстанциям, а данные хронологии
+  // (filing_date/last_event/events) живут в блоке независимо от case_number,
+  // на котором завязаны hasFi/hasAp/hasCs — иначе получили бы «Нет событий».
+  const tl=buildTimeline(c,(hasMultiStage&&stageData)?drawerStage:null);
+  const стадияПодпись=hasMultiStage?(drawerStage==='fi'?' — 1-я инстанция':drawerStage==='ap'?' — апелляция':drawerStage==='cs'?' — кассация':''):'';
   let timelineHtml='';
   if(tl.length){
-    timelineHtml='<div class="timeline">'+tl.map((it,i)=>`<div class="tl-item tl-${it.kind} ${i===0?'tl-recent':''}"><div class="tl-date">${formatDate(it.date)}</div><div class="tl-text">${escHtml(it.text)}</div></div>`).join('')+'</div>';
+    timelineHtml='<div class="timeline">'+tl.map((it,i)=>{
+      // Крупная строка: наименование события и его результат. Ниже —
+      // основание/примечание. Совсем мелким — метаданные карточки
+      // (время, зал, дата размещения). Пустые блоки не рендерим, чтобы
+      // legacy-события и события жалоб не выглядели дырявыми.
+      const шапка=[it.имя,it.результат].filter(Boolean).join(' — ');
+      const подробности=[it.основание,it.примечание].filter(Boolean).join(' · ');
+      const размещено=it.размещено?'размещено '+(parseDate(it.размещено)!==it.размещено?formatDate(parseDate(it.размещено)):it.размещено):'';
+      const мета=[it.время,it.место,размещено].filter(Boolean).join(' · ');
+      return `<div class="tl-item tl-${it.kind} ${i===0?'tl-recent':''}"><div class="tl-date">${formatDate(it.date)}</div>`
+        +`<div class="tl-text">${escHtml(шапка)}</div>`
+        +(подробности?`<div class="tl-detail">${escHtml(подробности)}</div>`:'')
+        +(мета?`<div class="tl-meta">${escHtml(мета)}</div>`:'')
+        +`</div>`;
+    }).join('')+'</div>';
   }else{
-    timelineHtml='<div class="tl-empty">Нет событий</div>';
+    timelineHtml=`<div class="tl-empty">${hasMultiStage?'Нет событий по этой инстанции':'Нет событий'}</div>`;
   }
 
   // Notes (локальные + исходные)
@@ -2385,7 +2434,7 @@ function renderDrawer(c){
       ${buildActAnalysisSectionHtml(c)}
 
       <div class="drawer-section">
-        <div class="drawer-section-title">Хронология</div>
+        <div class="drawer-section-title">Хронология${стадияПодпись}</div>
         ${timelineHtml}
       </div>
 

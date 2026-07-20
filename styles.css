@@ -788,6 +788,12 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .cass-act       { margin-top:var(--space-3); }
 .cass-act > summary { cursor:pointer; font-weight:var(--fw-semibold); color:var(--fg-2); padding:var(--space-2) 0; }
 .cass-act-pre   { margin-top:var(--space-2); padding:var(--space-3); background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-md); white-space:pre-wrap; font-family:inherit; font-size:var(--fs-xs); max-height:50vh; overflow:auto; }
+/* Текст акта 1-й инстанции — та же вёрстка, свой класс: на телефоне у него
+   снимается max-height (см. медиа-блок), у кассационного он остаётся. */
+.act-block      { margin-top:var(--space-3); }
+.act-block > summary { cursor:pointer; font-weight:var(--fw-semibold); color:var(--fg-2); padding:var(--space-2) 0; }
+.act-pre        { margin-top:var(--space-2); padding:var(--space-3); background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-md); white-space:pre-wrap; font-family:inherit; font-size:var(--fs-xs); max-height:50vh; overflow:auto; }
+.act-note       { margin-top:var(--space-2); font-size:var(--fs-2xs); color:var(--fg-4); }
 
 /* Hover-actions */
 .row-actions { display:inline-flex; gap:4px; margin-left:auto; opacity:0; transition:opacity 120ms var(--ease-out); vertical-align:middle; }
@@ -948,6 +954,11 @@ tr.detail-row { display:none; }
 .tl-item .tl-date { font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--fg-3); font-weight:var(--fw-semibold); }
 .tl-item .tl-text { font-size:var(--fs-sm); color:var(--fg-1); margin-top:2px; line-height:1.4; }
 .tl-item.tl-recent .tl-text { font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); }
+/* Второй и третий уровень события: основание/примечание из карточки и
+   метаданные (время · зал · дата размещения). Высоту не ограничиваем —
+   drawer должен показывать карточку суда целиком, когда сайты недоступны. */
+.tl-item .tl-detail { font-size:var(--fs-sm); color:var(--fg-2); margin-top:2px; line-height:1.4; }
+.tl-item .tl-meta { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; line-height:1.35; }
 
 .notes-edit { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--font-sans); font-size:var(--fs-sm); color:var(--fg-1); background:var(--bg-1); resize:vertical; min-height:70px; transition:all 120ms var(--ease-out); }
 .notes-edit:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
@@ -1232,6 +1243,11 @@ tr.detail-row { display:none; }
   .tl-item .tl-text { font-size:var(--fs-md); }
   .tl-item.tl-recent .tl-text { font-size:var(--fs-lg); }
   .tl-item .tl-date { font-size:var(--fs-xs); }
+  .tl-item .tl-detail { font-size:var(--fs-sm); }
+  .tl-item .tl-meta { font-size:var(--fs-xs); }
+  /* Текст решения на телефоне разворачиваем без внутреннего скролла —
+     вложенный скролл в drawer'е неудобен пальцем. */
+  .act-pre { max-height:none; }
   .drawer-tab { font-size:var(--fs-md); }
   /* На 375px две кнопки в одну строку: больше воздуха по вертикали для
      удобства тапа, без переноса. */
