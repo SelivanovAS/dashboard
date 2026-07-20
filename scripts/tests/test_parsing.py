@@ -3039,6 +3039,172 @@ class TestFetchCardChecked:
         assert netutil.fetch_card_checked("http://x/card") == ""
         assert cm_config.METRICS["cards_captcha"] == 0
 
+    def test_outage_card_blocked(self, monkeypatch, caplog):
+        """Заглушка «Информация временно недоступна» (аутейдж sudrf
+        20.07.2026) → "" + cards_blocked, БЕЗ cards_captcha."""
+        netutil = self._patch_fetch(
+            monkeypatch, _read_fixture("case_card_outage.html")
+        )
+        monkeypatch.setitem(cm_config.METRICS, "cards_blocked", 0)
+        monkeypatch.setitem(cm_config.METRICS, "cards_captcha", 0)
+        with caplog.at_level(logging.WARNING):
+            out = netutil.fetch_card_checked(
+                "https://x--svd.sudrf.ru/modules.php?name=sud_delo&name_op=case"
+                "&case_id=1&case_uid=a&delo_id=1540005&new=0",
+                context="2-1944/2026",
+            )
+        assert out == ""
+        assert cm_config.METRICS["cards_blocked"] == 1
+        assert cm_config.METRICS["cards_captcha"] == 0
+        assert any("заглушка" in r.message for r in caplog.records)
+
+
+# ── looks_like_non_card_page: заглушка недоступности / антибот-блок ──────────
+
+class TestLooksLikeNonCardPage:
+    """Детект «страница-не-карточка» — аутейдж sudrf 20.07.2026.
+
+    Суды отдавали HTTP 200 «Информация временно недоступна…» вместо карточек:
+    капча-детектор молчал (фраз кода на заглушке нет), parse_case_card видел
+    0 таблиц, FI-цикл бумпал last_checked_at — прогон отчитался «спарсено 47
+    из 75» при ~1 реально прочитанной карточке.
+    """
+
+    CARD_URL = (
+        "https://akademicheskiy--svd.sudrf.ru/modules.php?name=sud_delo"
+        "&srv_num=1&name_op=case&case_id=1&case_uid=a&delo_id=1540005&new=0"
+    )
+    # Страница текста акта — идёт тем же fetch_card_checked (fetch_act_text),
+    # но карточкой не является: структурный фолбэк на неё действовать НЕ должен.
+    ACT_URL = (
+        "https://akademicheskiy--svd.sudrf.ru/modules.php?name=sud_delo"
+        "&srv_num=1&name_op=doc&number=123&delo_id=1540005&new=0"
+    )
+
+    def test_outage_fixture_true(self):
+        """Заглушка ловится на любом URL (карточка, акт, без URL)."""
+        html = _read_fixture("case_card_outage.html")
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is True
+        assert uc.looks_like_non_card_page(html, self.ACT_URL) is True
+        assert uc.looks_like_non_card_page(html, "") is True
+
+    def test_outage_not_caught_by_captcha_detector(self):
+        """Документируем дыру, из-за которой аутейдж 20.07 прошёл молча:
+        карточный капча-детектор заглушку НЕ ловит — её ловит новый детектор."""
+        html = _read_fixture("case_card_outage.html")
+        assert uc.detect_captcha_challenge_card(html) is False
+
+    def test_rich_cards_false(self):
+        """Анти-регресс ХМАО: живые карточки — не заглушки."""
+        for fixture in (
+            "case_card_with_act.html",
+            "case_card_first_instance.html",
+            "case_card_fi_with_appeal.html",
+        ):
+            html = _read_fixture(fixture)
+            assert uc.looks_like_non_card_page(html, self.CARD_URL) is False, fixture
+
+    def test_truncated_card_false(self):
+        """Легитимный «огрызок» (4 таблицы + УИД, Сургутский шаблон) — НЕ блок:
+        остаётся в cards_degraded, граница cards_degraded/cards_blocked."""
+        html = _read_fixture("case_card_truncated.html")
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is False
+
+    def test_sms_code_quotes_false(self):
+        """Текст акта с СМС-цитатами («проверочный код») — не блок."""
+        html = (
+            "<html><body><table><tr><td>Уникальный идентификатор дела</td>"
+            "<td>86RS0004-01-2026-000111-22</td></tr></table>"
+            "<div>Заёмщик сообщила мошенникам проверочный код из СМС; "
+            "на предложение «введите код» ответила вводом.</div></body></html>"
+        )
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is False
+
+    def test_single_outage_phrase_with_uid_false(self):
+        """Одиночная цитата фразы заглушки в тексте акта при живом УИД —
+        не блок (правило «≥2 фраз ИЛИ 1 без УИД»)."""
+        html = (
+            "<html><body><table><tr><td>Уникальный идентификатор дела</td>"
+            "<td>86RS0004-01-2026-000111-22</td></tr></table>"
+            "<div>Суд разъяснил: за копией решения обратитесь непосредственно "
+            "в суд первой инстанции.</div></body></html>"
+        )
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is False
+
+    def test_single_outage_phrase_without_uid_card_url_only(self):
+        """Одиночная фраза заглушки без якоря-УИД → блок ТОЛЬКО на карточном
+        URL. На странице текста акта (нет УИД-лейбла по определению) одиночная
+        фраза — возможная цитата переписки банка («приносим свои извинения»):
+        блокировать нельзя, иначе акт потерян навсегда + ежедневный ложный
+        алерт."""
+        html = "<html><body><p>Информация временно недоступна</p></body></html>"
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is True
+        act_quote = (
+            "<html><body><div>Банк в ответе указал: «Приносим свои извинения "
+            "за доставленные неудобства»...</div></body></html>"
+        )
+        assert uc.looks_like_non_card_page(act_quote, self.ACT_URL) is False
+
+    def test_no_data_page_false(self):
+        """«Данных по запросу не обнаружено» — легитимный ответ sudrf
+        (на карточном URL = протухший сид), НЕ блок портала."""
+        html = (
+            "<html><body><p>Данных по запросу не обнаружено</p></body></html>"
+        )
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is False
+
+    def test_bare_page_card_url_true_act_url_false(self):
+        """Структурный фолбэк (почти нет таблиц, нет УИД) гейтится по URL:
+        карточка → блок; страница текста акта — НЕТ (иначе ложный
+        cards_blocked и навсегда потерянный текст акта)."""
+        html = (
+            "<html><body><div>Именем Российской Федерации... суд решил: "
+            "иск удовлетворить частично.</div></body></html>"
+        )
+        assert uc.looks_like_non_card_page(html, self.CARD_URL) is True
+        assert uc.looks_like_non_card_page(html, self.ACT_URL) is False
+
+    def test_antibot_markup_true(self):
+        """Инфраструктурные маркеры блокировщиков → блок на любом URL."""
+        html = "<html><head><script src='/ddos-guard/js.js'></script></head></html>"
+        assert uc.looks_like_non_card_page(html, self.ACT_URL) is True
+
+    def test_antibot_text_gated_by_uid_and_url(self):
+        """Текстовая антибот-фраза: блок только на карточном URL без УИД;
+        при живом УИД или на странице акта (цитата в тексте) — не блок."""
+        bare = "<html><body>Слишком много запросов. Повторите позже.</body></html>"
+        assert uc.looks_like_non_card_page(bare, self.CARD_URL) is True
+        assert uc.looks_like_non_card_page(bare, self.ACT_URL) is False
+        carded = (
+            "<html><body><table><tr><td>Уникальный идентификатор дела</td>"
+            "<td>86RS0004-01-2026-000111-22</td></tr></table>"
+            "<div>...ответчик направил слишком много запросов...</div></body></html>"
+        )
+        assert uc.looks_like_non_card_page(carded, self.CARD_URL) is False
+
+    def test_empty_false(self):
+        assert uc.looks_like_non_card_page("", self.CARD_URL) is False
+
+
+class TestCardIsEmptyShell:
+    """Второй рубеж FI-цикла: страница без единой таблицы не бумпает
+    last_checked_at (не пойманные детектором варианты заглушек)."""
+
+    def test_outage_fixture_is_shell(self):
+        info = uc.parse_case_card(_read_fixture("case_card_outage.html"))
+        assert info["_table_count"] == 0
+        assert uc.card_is_empty_shell(info) is True
+
+    def test_truncated_card_not_shell(self):
+        """Легитимный «огрызок» (4 таблицы) — карточка, бумп разрешён."""
+        info = uc.parse_case_card(_read_fixture("case_card_truncated.html"))
+        assert info["_table_count"] > 0
+        assert uc.card_is_empty_shell(info) is False
+
+    def test_rich_card_not_shell(self):
+        info = uc.parse_case_card(_read_fixture("case_card_with_act.html"))
+        assert uc.card_is_empty_shell(info) is False
+
 
 # ── parse_first_instance_search: stats["sber_rows"] (здоровье парсера) ────────
 

@@ -115,6 +115,16 @@ def _warn_if_card_degraded(
     log.warning(msg)
 
 
+def card_is_empty_shell(card_info: dict) -> bool:
+    """Страница вовсе без таблиц — не карточка (заглушка/блок, не пойманные
+    детектором маркеров looks_like_non_card_page): у настоящих карточек ≥4
+    таблиц даже у «огрызков». FI-цикл использует как второй рубеж после
+    fetch_card_checked — такую страницу не считать успешной проверкой и не
+    бумпать last_checked_at (аутейдж sudrf 20.07.2026 маскировался под
+    «проверено сегодня», сводка врала «спарсено 47 из 75»)."""
+    return card_info.get("_table_count", 0) == 0
+
+
 def parse_case_card(html: str, court_base_url: str = "") -> dict:
     """
     Парсит карточку дела. Извлекает:

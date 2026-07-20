@@ -73,6 +73,13 @@ from court_monitor.parsing import (  # noqa: E402
     parse_case_card,
     _find_results_table,
 )
+from court_monitor.parsing.search import (  # noqa: E402
+    _ANTIBOT_MARKUP_MARKERS,
+    _ANTIBOT_TEXT_MARKERS,
+    _CAPTCHA_PHRASES,
+    _OUTAGE_MARKERS,
+    looks_like_non_card_page,
+)
 
 # Те же заголовки, что у боевого парсера (netutil.session) — чтобы проба была
 # верна тому, что реально видит сервер на прогоне.
@@ -143,6 +150,35 @@ def _line(tag: str, r: dict) -> str:
         f"challenge={str(r['challenge']):5}  table={str(r['has_table']):5}  "
         f"нет-данных={str(r['no_data']):5}"
     )
+
+
+def _print_page_fingerprint(r: dict, url: str = "") -> None:
+    """Отпечаток страницы для классификации не-выдачи/не-карточки: <title>,
+    начало HTML одной строкой и флаги маркеров (аутейдж sudrf «Информация
+    временно недоступна», антибот-блокировщики, генерические капча-фразы,
+    которые карточный детектор намеренно НЕ ловит) + вердикт боевого
+    детектора заглушки looks_like_non_card_page. Классификация только —
+    код не читаем и не решаем."""
+    if r.get("error") or not r.get("html"):
+        return
+    html = r["html"]
+    low = html.lower()
+    tm = re.search(r"<title[^>]*>(.*?)</title>", html, re.DOTALL | re.IGNORECASE)
+    title = " ".join(tm.group(1).split()) if tm else "—"
+    preview = " ".join(html[:800].split())
+    hits = {
+        "outage": [m for m in _OUTAGE_MARKERS if m in low],
+        "antibot": [m for m in (_ANTIBOT_MARKUP_MARKERS + _ANTIBOT_TEXT_MARKERS)
+                    if m in low],
+        "captcha-фразы (генерич.)": [m for m in _CAPTCHA_PHRASES if m in low],
+    }
+    print(f"  <title>:   {title}")
+    print(f"  HTML[:800]: {preview}")
+    for name, found in hits.items():
+        mark = ", ".join(found) if found else "—"
+        print(f"  маркеры {name}: {mark}")
+    print(f"  боевой детектор заглушки (looks_like_non_card_page): "
+          f"{looks_like_non_card_page(html, url)}")
 
 
 def _ok_results(r: dict) -> bool:
@@ -237,6 +273,7 @@ def _card_probe_test(court: CourtConfig, seed: str, dump_dir: str | None) -> Non
     print(f"name_op=case: {url}")
     r = _probe(_fresh_session(), url)
     print(_line("card", r))
+    _print_page_fingerprint(r, url)
     print()
 
     if r.get("error"):
@@ -335,6 +372,8 @@ def main() -> None:
     direct = _probe(_fresh_session(), r_url)
     print("Прямой name_op=r (как парсер сейчас):")
     print(_line("direct", direct))
+    if not _ok_results(direct):
+        _print_page_fingerprint(direct, r_url)
 
     dumps = {"direct": direct}
     primed = None
@@ -350,6 +389,8 @@ def main() -> None:
         print("Приминг сессии (GET формы name_op=sf → GET name_op=r с Referer):")
         print(_line("form_sf", form))
         print(_line("primed", primed))
+        if not _ok_results(primed):
+            _print_page_fingerprint(primed, r_url)
         if _ok_results(primed):
             verdict = "B"
         elif direct.get("challenge") or primed.get("challenge"):

@@ -48,7 +48,13 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             config.METRICS["requests_ok"] += 1
             if attempt > 1:
                 config.METRICS["requests_retried"] += 1
-            return r.content.decode("windows-1251", errors="replace")
+            text = r.content.decode("windows-1251", errors="replace")
+            if not text:
+                # HTTP 200 с пустым телом — аномалия: без лога такой ответ
+                # исчезал бы бесследно (вызыватели молча скипают "").
+                host = urlsplit(url).netloc or url
+                log.warning(f"Пустой ответ (HTTP {r.status_code}): {host}{ctx}")
+            return text
         except requests.RequestException as e:
             if attempt < config.FETCH_MAX_RETRIES:
                 # Промежуточная попытка: хост + контекст + класс ошибки, без
@@ -71,27 +77,39 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
 
 
 def fetch_card_checked(url: str, *, context: str | None = None) -> str:
-    """Скачать КАРТОЧКУ дела с проверкой «а не проверочный ли это код».
+    """Скачать КАРТОЧКУ дела с проверкой «а не заглушка ли это вместо неё».
 
-    Поиск суды закрывают кодом (Свердловск, замер 15.07.2026), карточки пока
-    открыты — но если код появится и на карточках, parse_case_card молча
-    распарсил бы страницу-заглушку как пустой «огрызок» (ложное «дело без
-    движения»). Обёртка классифицирует такой ответ: WARNING + счётчик
-    METRICS["cards_captcha"] (уходит в сводку прогона и 🩺-алерт) + "" —
-    дело пропускается этим прогоном, его данные не портятся.
+    Два класса не-карточных ответов, оба с HTTP 200:
+    - проверочный код (Свердловск, замер 15.07.2026): WARNING + счётчик
+      METRICS["cards_captcha"];
+    - заглушка недоступности / антибот-блок (аутейдж sudrf 20.07.2026
+      «Информация временно недоступна…»): WARNING + METRICS["cards_blocked"].
+    Без классификации parse_case_card молча распарсил бы такую страницу как
+    пустой «огрызок», а FI-цикл засчитал бы её успешной проверкой (бумп
+    last_checked_at). Оба случая → "" — дело пропускается этим прогоном,
+    его данные не портятся, следующий прогон перечитает.
 
     READ-ONLY: код не читаем и не решаем — только распознаём страницу
-    (см. detect_captcha_challenge_card).
+    (см. detect_captcha_challenge_card / looks_like_non_card_page).
     """
     html = fetch_page(url, context=context)
     if not html:
         return ""
     # Ленивый импорт: netutil — низкоуровневый слой, тащить parsing (courts,
     # tables) на уровень модуля значило бы завязать сеть на парсеры.
-    from court_monitor.parsing.search import detect_captcha_challenge_card
+    from court_monitor.parsing.search import (
+        detect_captcha_challenge_card,
+        looks_like_non_card_page,
+    )
+    ctx = f" ({context})" if context else ""
     if detect_captcha_challenge_card(html):
         config.METRICS["cards_captcha"] += 1
-        ctx = f" ({context})" if context else ""
         log.warning(f"Карточка закрыта проверочным кодом{ctx}: {url}")
+        return ""
+    if looks_like_non_card_page(html, url):
+        config.METRICS["cards_blocked"] += 1
+        log.warning(
+            f"Карточка не получена — портал недоступен/заглушка{ctx}: {url}"
+        )
         return ""
     return html
