@@ -953,10 +953,45 @@ class TestIsCaseArchived:
         assert uc.is_case_archived(case) is False
 
     def test_fi_without_hearing_date_not_archived(self):
-        """Защита от пустых данных: без hearing_date — не архивируем."""
+        """Защита от пустых данных: без hearing_date и event_date — не архивируем."""
         case = {"current_stage": "first_instance",
                 "first_instance": {"status": "Решено"}}
         assert uc.is_case_archived(case) is False
+
+    def test_fi_returned_without_hearing_archived_by_event_date(self):
+        """Иск, возвращённый на стадии принятия: заседания не было, дату
+        решения парсер не берёт из строки о принятии (_ACCEPTANCE_RX) —
+        окно считаем от даты последнего события. Кейс 9-1012/2026."""
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Возвращено",
+                    "hearing_date": "",
+                    "event_date": _days_ago(uc.FI_ARCHIVE_DAYS + 5),
+                }}
+        assert uc.is_case_archived(case) is True
+
+    def test_fi_returned_recent_event_date_not_archived(self):
+        """Запасной якорь работает по тому же окну: свежий возврат остаётся
+        в активных — юрист должен увидеть его на дашборде."""
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Возвращено",
+                    "hearing_date": "",
+                    "event_date": _days_ago(uc.FI_ARCHIVE_DAYS - 5),
+                }}
+        assert uc.is_case_archived(case) is False
+
+    def test_fi_hearing_date_wins_over_event_date(self):
+        """event_date — только запасной якорь: у решённого дела свежее
+        служебное событие («передано в экспедицию») не должно продлевать
+        жизнь записи сверх окна от даты решения."""
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Решено",
+                    "hearing_date": _days_ago(uc.FI_ARCHIVE_DAYS + 5),
+                    "event_date": _days_ago(1),
+                }}
+        assert uc.is_case_archived(case) is True
 
     def test_awaiting_appeal_never_archived(self):
         case = {"current_stage": "awaiting_appeal",

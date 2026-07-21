@@ -567,8 +567,21 @@ def is_case_archived(case: dict) -> bool:
             return False
         if fi.get("status", "").strip() not in ("Решено", "Возвращено"):
             return False
-        hearing = parse_date(fi.get("hearing_date") or "")
-        if hearing and (now - hearing).days > config.FI_ARCHIVE_DAYS:
+        # Якорь окна — дата заседания, а если её нет, дата последнего события
+        # карточки. Запасной якорь нужен для исков, возвращённых на стадии
+        # принятия: заседания не было, а строку «Решение вопроса о принятии
+        # иска → Возвращение искового заявления» парсер намеренно не берёт за
+        # дату решения (_ACCEPTANCE_RX в cards.py — иначе у свежепринятых дел
+        # появлялась фантомная «дата заседания», кейс М-3524/2026). Без
+        # запасного якоря такое дело висело в активных вечно и опрашивалось
+        # каждый прогон — кейс 9-1012/2026, возвращён 08.06.2026, найден через
+        # 7 дней (мимо _discovered_already_resolved_old, который проставляет
+        # якорь делам старше FI_ARCHIVE_DAYS). То же правило уже действует на
+        # фронте — isArchived в app.js считает от lastEventDate.
+        # Обе даты пусты → не архивируем (защита от пустых данных прежняя).
+        anchor = (parse_date(fi.get("hearing_date") or "")
+                  or parse_date(fi.get("event_date") or ""))
+        if anchor and (now - anchor).days > config.FI_ARCHIVE_DAYS:
             return True
         return False
 
