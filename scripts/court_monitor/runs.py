@@ -70,7 +70,7 @@ from court_monitor.lifecycle import (
 )
 from court_monitor.linking import (
     collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
-    find_new_cases, link_cases, link_cassation_cases,
+    dedupe_new_archive_entries, find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
 )
@@ -3293,13 +3293,10 @@ def main_json():
     #   - появились новые архивные кандидаты (fi_newly_archived), ИЛИ
     #   - reactivate изъял хоть одно дело — иначе на диске останется дубль
     #     (дело и в активных, и в архиве).
-    existing_archive_ids = {
-        (c.get("id") or "").strip() for c in archived_cases
-    }
-    to_add = [
-        c for c in fi_newly_archived
-        if (c.get("id") or "").strip() not in existing_archive_ids
-    ]
+    # Дедуп с архивом — по (домен суда, id): по голому номеру дело суда Б
+    # терялось насовсем, если одноимённое дело суда А уже лежало в архиве
+    # (из активных его к этому моменту уже убрал split_archived_json).
+    to_add = dedupe_new_archive_entries(archived_cases, fi_newly_archived)
     # Штамп даты архивации для впервые архивируемых дел — якорь ротации
     # холодного архива (см. rotate_cold_archive). setdefault на случай, если
     # дело уже несло archived_at (например, после реактивации и повторного
