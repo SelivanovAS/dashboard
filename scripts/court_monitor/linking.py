@@ -406,7 +406,10 @@ def reactivate_archived_first_instance(
     if not archived_cases:
         return 0
     now = datetime.now()
-    active_ids = {(c.get("id") or "").strip() for c in cases if c.get("id")}
+    # Ключ — (домен суда, id), а не голый номер: одноимённое дело ДРУГОГО суда
+    # среди активных не должно блокировать реактивацию (см. case_court_key).
+    ntd = _fi_name_to_domain()
+    active_keys = {case_court_key(c, ntd) for c in cases if c.get("id")}
     moved: list[dict] = []
     keep: list[dict] = []
     for c in archived_cases:
@@ -418,7 +421,8 @@ def reactivate_archived_first_instance(
             keep.append(c)
             continue
         cid = (c.get("id") or "").strip()
-        if not cid or cid in active_ids:
+        key = case_court_key(c, ntd)
+        if not cid or key in active_keys:
             keep.append(c)
             continue
         hearing = parse_date(fi.get("hearing_date") or "")
@@ -430,7 +434,7 @@ def reactivate_archived_first_instance(
             keep.append(c)
             continue
         moved.append(c)
-        active_ids.add(cid)
+        active_keys.add(key)
     if not moved:
         return 0
     cases.extend(moved)
@@ -1058,13 +1062,9 @@ def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
     """
     exact: set[tuple[str, str]] = set()
     wildcard: set[str] = set()
-    # Карта «короткое имя → домен» активного региона НА ВЫЗОВ (config.X-
-    # инвариант): статический реестр courts.py снят при импорте модуля и
-    # не видит monkeypatch региона в тестах. setdefault — как в courts.py
-    # (вторые площадки делят домен, первый суд имени побеждает).
-    name_to_domain: dict[str, str] = {}
-    for cfg in get_region().first_instance_courts:
-        name_to_domain.setdefault(_eyo(cfg.name.lower()), cfg.domain.lower())
+    # Карта «короткое имя → домен» активного региона (setdefault — как в
+    # courts.py: вторые площадки делят домен, первый суд имени побеждает).
+    name_to_domain = _fi_name_to_domain()
     for c in all_cases:
         fi = c.get("first_instance") or {}
         domain = (fi.get("court_domain") or "").strip().lower()
@@ -1090,6 +1090,60 @@ def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
         else:
             wildcard |= nums
     return exact, wildcard
+
+
+def _fi_name_to_domain() -> dict[str, str]:
+    """Карта «короткое имя суда 1-й инст. → домен» активного региона.
+    Строится НА ВЫЗОВ (config.X-инвариант): статический реестр courts.py снят
+    при импорте модуля и не видит monkeypatch региона в тестах."""
+    name_to_domain: dict[str, str] = {}
+    for cfg in get_region().first_instance_courts:
+        name_to_domain.setdefault(_eyo(cfg.name.lower()), cfg.domain.lower())
+    return name_to_domain
+
+
+def case_court_key(case: dict, name_to_domain: dict[str, str] | None = None) -> tuple[str, str]:
+    """Судо-зависимый ключ дела: (домен суда 1-й инст., id).
+
+    Номера дел НЕ уникальны между судами — «9-44/2026» есть и в Невьянском, и
+    в Новоуральском городских судах (Урал, 21.07.2026). Везде, где записи
+    сопоставляются между активными и архивом, ключом должен быть этот кортеж,
+    а не голый id (тот же принцип, что в collect_fi_dedup_index для новых дел).
+
+    Домен берём из `first_instance.court_domain`, а если он пуст (дела «с
+    апелляции» заводятся без домена) — резолвим по короткому имени суда.
+    Не резолвился — домен пустой: такая запись сопоставляется только с
+    другими бездоменными, консервативно.
+    """
+    fi = case.get("first_instance") or {}
+    domain = (fi.get("court_domain") or "").strip().lower()
+    if not domain:
+        court_name = (fi.get("court") or "").strip().lower()
+        if court_name:
+            ntd = _fi_name_to_domain() if name_to_domain is None else name_to_domain
+            domain = ntd.get(_eyo(court_name), "")
+    return (domain, (case.get("id") or "").strip())
+
+
+def dedupe_new_archive_entries(
+    archived_cases: list[dict], newly_archived: list[dict]
+) -> list[dict]:
+    """Отобрать из `newly_archived` дела, которых ещё нет в горячем архиве.
+
+    Ключ — case_court_key, а не id: при дедупе по голому номеру дело суда Б
+    молча терялось, если одноимённое дело суда А уже лежало в архиве. Терялось
+    насовсем — split_archived_json к этому моменту уже убрал его из активных, а
+    в архив оно не попадало (инцидент не случился только потому, что оба
+    «9-44/2026» на Урале архивировались одним прогоном).
+
+    Порядок сохраняем; повторы внутри самого `newly_archived` не трогаем — их
+    там быть не может (одна запись = одно дело).
+    """
+    if not newly_archived:
+        return []
+    ntd = _fi_name_to_domain()
+    existing = {case_court_key(c, ntd) for c in archived_cases}
+    return [c for c in newly_archived if case_court_key(c, ntd) not in existing]
 
 
 def is_fi_number_tracked(

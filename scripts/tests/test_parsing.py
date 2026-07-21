@@ -1504,6 +1504,65 @@ class TestReactivateArchivedFirstInstance:
         assert moved == 0
         assert len(archived) == 1
 
+    def test_same_number_other_court_does_not_block(self):
+        """Одноимённое дело ДРУГОГО суда среди активных не мешает
+        реактивации: номера не уникальны между судами."""
+        arch = self._archived_fi("9-44/2026", 90)
+        arch["first_instance"]["court_domain"] = "neviansky--svd.sudrf.ru"
+        cases = [{
+            "id": "9-44/2026", "current_stage": "first_instance",
+            "first_instance": {"case_number": "9-44/2026",
+                               "court_domain": "novouralsky--svd.sudrf.ru"},
+        }]
+        moved = uc.reactivate_archived_first_instance(cases, arch and [arch])
+        assert moved == 1
+
+
+class TestArchiveDedup:
+    """Дедуп новых архивных записей — по (домен суда, id)."""
+
+    @staticmethod
+    def _case(cid: str, domain: str) -> dict:
+        return {"id": cid, "current_stage": "first_instance",
+                "first_instance": {"case_number": cid, "court_domain": domain}}
+
+    def test_same_number_other_court_is_added(self):
+        """Главный кейс: «9-44/2026» Новоуральского не теряется из-за
+        одноимённого дела Невьянского, уже лежащего в архиве."""
+        archived = [self._case("9-44/2026", "neviansky--svd.sudrf.ru")]
+        newly = [self._case("9-44/2026", "novouralsky--svd.sudrf.ru")]
+        to_add = uc.dedupe_new_archive_entries(archived, newly)
+        assert len(to_add) == 1
+        assert to_add[0]["first_instance"]["court_domain"] == "novouralsky--svd.sudrf.ru"
+
+    def test_same_number_same_court_is_skipped(self):
+        archived = [self._case("9-44/2026", "neviansky--svd.sudrf.ru")]
+        newly = [self._case("9-44/2026", "neviansky--svd.sudrf.ru")]
+        assert uc.dedupe_new_archive_entries(archived, newly) == []
+
+    def test_two_same_numbered_cases_in_one_run_both_added(self):
+        newly = [self._case("9-44/2026", "neviansky--svd.sudrf.ru"),
+                 self._case("9-44/2026", "novouralsky--svd.sudrf.ru")]
+        assert len(uc.dedupe_new_archive_entries([], newly)) == 2
+
+    def test_empty_domain_falls_back_to_number_match(self):
+        """Домен неизвестен и по имени суда не резолвится — ведём себя
+        консервативно, как раньше: считаем записи одним делом."""
+        archived = [{"id": "2-5/2026", "first_instance": {}}]
+        newly = [{"id": "2-5/2026", "first_instance": {}}]
+        assert uc.dedupe_new_archive_entries(archived, newly) == []
+
+    def test_domain_resolved_from_court_name(self):
+        """У дел «с апелляции» court_domain пуст — домен резолвится по
+        короткому имени суда, и дедуп остаётся судо-зависимым."""
+        from court_monitor.courts import FIRST_INSTANCE_COURTS
+        cfg = FIRST_INSTANCE_COURTS[0]
+        by_name = {"id": "2-6/2026", "first_instance": {"court": cfg.name}}
+        by_domain = {"id": "2-6/2026",
+                     "first_instance": {"court_domain": cfg.domain}}
+        assert uc.case_court_key(by_name) == uc.case_court_key(by_domain)
+        assert uc.dedupe_new_archive_entries([by_domain], [by_name]) == []
+
 
 class TestRotateColdArchive:
     def _with_tmp_archive(self, monkeypatch, tmp_path):
