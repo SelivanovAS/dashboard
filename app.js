@@ -307,6 +307,15 @@ const RESULT_LABELS={upheld:'Оставлено без изменения',rever
 const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',pending:'Ожидается'};
 const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',unconsidered:'⊘',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
+// Сторона по процессуальному статусу подателя жалобы: ИСТЕЦ→plaintiff
+// (соистец тоже), ОТВЕТЧИК→defendant; прокурор/заявитель/третье лицо
+// стороной не являются → ''. Нужна для дел «Сбер — 3-е лицо»: там обе
+// главные стороны не-банк и вычисление «не-Сбер сторона» не работает.
+function appellantSideFromStatus(st){
+  const s=(st||'').toUpperCase();
+  const p=s.includes('ИСТЕЦ'),d=s.includes('ОТВЕТЧИК');
+  return p&&!d?'plaintiff':d&&!p?'defendant':'';
+}
 // Маппинг enum'ов исхода кассации (см. classify_cassation_outcome
 // в scripts/update_cases.py) → читаемые формулировки. Пустая строка =
 // карточка ещё в производстве (исход не вынесен).
@@ -668,6 +677,17 @@ function jsonToCase(j){
     if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
     else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';
   }
+  // Сторона подателя апел. жалобы — для дел «Сбер — 3-е лицо» (в VM обе
+  // главные стороны не-банк, схема «бейдж на не-Сбер сторону» не работает).
+  // Цепочка приоритетов зеркалит appellant выше: новый формат (status при
+  // is_bank=false) → legacy-роль в ap.appellant → ранний источник из
+  // карточки 1-й инст. (fi.appeal_appellant_*, кейс 2-5405/2026 в
+  // awaiting_appeal, когда блока appeal ещё нет).
+  let appellantSide='';
+  if(ap.appellant_is_bank===false)appellantSide=appellantSideFromStatus(ap.appellant_status);
+  else if(ap.appellant_is_bank===undefined)appellantSide=appellantSideFromStatus(ap.appellant); // legacy-роль
+  if(!appellantSide&&fi.appeal_appellant_is_bank===false)appellantSide=appellantSideFromStatus(fi.appeal_appellant_status);
+  if(appellant==='bank')appellantSide='';
   // Next date extraction (same logic as rowToCase)
   let nextDate='',nextDateLabel='';
   const hearingDateRaw=primary.hearing_date||'';
@@ -810,13 +830,19 @@ function jsonToCase(j){
     appealToFirstInstanceRules:appealToFirstInstanceRules,
     hearingTime:hearingTime,
     // Кассация: код исхода (enum) + читаемый текст рассчитываются в drawer'е
-    // через CASS_RESULT_LABELS. appellantIsBank — флаг для бейджа «Банк-заявитель»
-    // в блоке кассации (отдельный от c.appellant — там апеллянт по апел. жалобе).
+    // через CASS_RESULT_LABELS. cassAppellant* — данные кассатора для бейджа
+    // «Кассатор» (отдельные от c.appellant — там апеллянт по апел. жалобе).
+    // Намеренно БЕЗ гейта на cs.case_number (в отличие от _cs): в
+    // cassation_pending карточки 7kas ещё нет, но кассатор уже предзаполнен
+    // парсером 1-й инст. — бейдж должен быть виден (кейс 2-208/2026).
     cassationCaseNumber:cs.case_number||'',
     cassationOutcome:cs.outcome||'',
     cassationCourt:cs.court||'',
     cassationJudge:cs.judge||'',
-    appellantIsBank:!!cs.appellant_is_bank,
+    cassAppellant:cs.appellant||'',
+    cassAppellantStatus:cs.appellant_status||'',
+    cassAppellantIsBank:!!cs.appellant_is_bank,
+    appellantSide:appellantSide,
     discoveredViaCassation:!!j.discovered_via_cassation,
     // Флаги жалоб с 1-й инст. — нужны фронту, чтобы НЕ архивировать
     // first_instance, когда апел./касс. жалоба уже подана, но дата ещё
@@ -1696,21 +1722,43 @@ function prepareCaseViewModel(c){
   // cassation_pending (где карточки 7kas ещё нет, но в 1-й инст. карточке
   // парсер мог уже найти кассатора и положить в cs.appellant_* предв.).
   const isCassStage=['cassation','cassation_watch','cassation_pending','awaiting_relink'].includes(c.stage);
-  const plaintiffIsAppellant=!isCassStage&&roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.plaintiff))||(c.appellant==='other'&&!isSberbank(c.plaintiff)));
-  const defendantIsAppellant=!isCassStage&&roleClass!=='third'&&((c.appellant==='bank'&&isSberbank(c.defendant))||(c.appellant==='other'&&!isSberbank(c.defendant)));
+  // Для дел «Сбер — 3-е лицо» обе главные стороны не-банк — сторону подателя
+  // жалобы определяем по процессуальному статусу (c.appellantSide/csSide),
+  // а не по схеме «не-Сбер сторона».
+  const plaintiffIsAppellant=!isCassStage&&(roleClass!=='third'
+    ?((c.appellant==='bank'&&isSberbank(c.plaintiff))||(c.appellant==='other'&&!isSberbank(c.plaintiff)))
+    :c.appellantSide==='plaintiff');
+  const defendantIsAppellant=!isCassStage&&(roleClass!=='third'
+    ?((c.appellant==='bank'&&isSberbank(c.defendant))||(c.appellant==='other'&&!isSberbank(c.defendant)))
+    :c.appellantSide==='defendant');
   // Кассатор: симметрично с appellant — клеим бейдж по схеме «банк vs не-банк».
-  // cs.appellant_is_bank=true → бейдж на стороне, где Сбер; false → на не-Сбер
-  // стороне. Без cs.appellant — бейджа нет (это покрывает cassation_watch без
+  // cassAppellantIsBank=true → бейдж на стороне, где Сбер; false → на не-Сбер
+  // стороне. Без cassAppellant — бейджа нет (это покрывает cassation_watch без
   // данных). Edge case 8Г-7520/2026: cs.appellant="МТУ Росимущества" (не Сбер,
   // статус "ИСТЕЦ" по 1-й инст., но Сбер тоже истец) — берём по is_bank, не по
   // статусу, чтобы бейдж не уехал на Сбер.
-  const cs=c._cs||{};
-  const csHasData=!!(cs.appellant||cs.appellant_status);
-  const csIsBank=cs.appellant_is_bank===true;
-  const plaintiffIsCassator=isCassStage&&roleClass!=='third'&&csHasData&&
-    ((csIsBank&&isSberbank(c.plaintiff))||(!csIsBank&&!isSberbank(c.plaintiff)));
-  const defendantIsCassator=isCassStage&&roleClass!=='third'&&csHasData&&
-    ((csIsBank&&isSberbank(c.defendant))||(!csIsBank&&!isSberbank(c.defendant)));
+  const csHasData=!!(c.cassAppellant||c.cassAppellantStatus);
+  const csIsBank=c.cassAppellantIsBank===true;
+  // Сторона кассатора: сперва статус (ИСТЕЦ/ОТВЕТЧИК), затем фолбэк «статус
+  // читается прямо в строке стороны» (прокурор перечислен среди истцов —
+  // кейс 33-30/2026). Не разрешился → '' (напр. «Третье лицо», 33-2022/2026).
+  let csSide=appellantSideFromStatus(c.cassAppellantStatus);
+  if(!csSide&&c.cassAppellantStatus){
+    const st=c.cassAppellantStatus.toLowerCase();
+    const inP=(c.plaintiff||'').toLowerCase().includes(st);
+    const inD=(c.defendant||'').toLowerCase().includes(st);
+    csSide=inP&&!inD?'plaintiff':inD&&!inP?'defendant':'';
+  }
+  // Не-third при кассаторе-не-банке: статус есть, но ни на сторону, ни в
+  // строках сторон не читается (прокурор/заявитель/третье лицо) — бейдж
+  // подавляем, иначе он ложно уедет на «не-Сбер» сторону (33-2022/2026).
+  const csSideKnown=!c.cassAppellantStatus||!!csSide;
+  const plaintiffIsCassator=isCassStage&&csHasData&&(roleClass!=='third'
+    ?((csIsBank&&isSberbank(c.plaintiff))||(!csIsBank&&csSideKnown&&!isSberbank(c.plaintiff)))
+    :(!csIsBank&&csSide==='plaintiff'));
+  const defendantIsCassator=isCassStage&&csHasData&&(roleClass!=='third'
+    ?((csIsBank&&isSberbank(c.defendant))||(!csIsBank&&csSideKnown&&!isSberbank(c.defendant)))
+    :(!csIsBank&&csSide==='defendant'));
   return{
     roleClass,ds,isFutureHearing,
     resultPresent,resultIcon,resultLabel,resultBadgeCls,favor,
@@ -1882,7 +1930,7 @@ function renderTable(){
     html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${caseNumEsc}" onclick="openDrawer('${caseNumEsc.replace(/'/g,'&#39;')}')">
       <td><div class="case-number">${watch}<div class="case-num-stack"><span class="case-row-top"><span class="case-main" title="${caseNumEsc}">${caseMainEsc}</span>${metaBadges}${topActions}</span>${subRow}</div></div></td>
       <td class="col-court"><div class="cell-court" title="${escHtml(courtTitle(c))}">${escHtml(courtLabel(c))||'<span class="cell-empty">—</span>'}</div></td>
-      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(vm.isCassStage?(c._cs&&c._cs.appellant_is_bank?cassBadge:''):(c.appellant==='bank'?appBadge:''))+'</span>':''}</div></td>
+      <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(vm.isCassStage?(c.cassAppellantIsBank?cassBadge:''):(c.appellant==='bank'?appBadge:''))+'</span>':''}</div></td>
       <td>${hearingHtml}</td>
       <td>${stateHtml}</td>
     </tr>`;
@@ -2501,8 +2549,9 @@ function renderMobileCards(){
     const pendingBadge=pendingAppealBadge(c);
     // Третье лицо: на кассац. стадии — «Кассатор» если Сбер кассатор; иначе
     // на других стадиях — «Апеллянт» если Сбер апеллянт (старая логика).
+    // Кассатор-не-банк вешается на строку стороны через vm.*IsCassator.
     const thirdSuffixBadge=vm.isCassStage
-      ?(c._cs&&c._cs.appellant_is_bank?' <span class="badge badge-cassator">Кассатор</span>':'')
+      ?(c.cassAppellantIsBank?' <span class="badge badge-cassator">Кассатор</span>':'')
       :(c.appellant==='bank'?' <span class="badge badge-appellant">Апеллянт</span>':'');
     const thirdBadge=rc==='third'?`<span class="badge badge-third">Сбер 3-е лицо</span>${thirdSuffixBadge}`:'';
 
