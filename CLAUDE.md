@@ -72,6 +72,7 @@
 | `appeal_court_for_fi_domain` (апел-суд по домену суда 1-й инст.) | [scripts/court_monitor/courts.py:159](scripts/court_monitor/courts.py:159) |
 | `CourtConfig.search_by_fi_number_url` (целевой поиск апелляции по номеру 1-й инст., G2_CASE__CASE_NUMBER_ISS) | [scripts/court_monitor/regions/base.py:114](scripts/court_monitor/regions/base.py:114) |
 | `relink_awaiting_appeal` (дослинк awaiting_appeal, не попавших на стр. 1 поиска апелляции) | [scripts/court_monitor/runs.py:150](scripts/court_monitor/runs.py:150) |
+| `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`) | [scripts/court_monitor/runs.py:314](scripts/court_monitor/runs.py:314) |
 | `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:626](scripts/court_monitor/lifecycle.py:626) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:79](scripts/court_monitor/netutil.py:79) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:109](scripts/court_monitor/config.py:109) |
@@ -89,8 +90,8 @@
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:232](scripts/court_monitor/linking.py:232) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:298](scripts/court_monitor/runs.py:298) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1415](scripts/court_monitor/runs.py:1415) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:457](scripts/court_monitor/runs.py:457) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1574](scripts/court_monitor/runs.py:1574) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -131,6 +132,8 @@
          "hearing_date",           // дата резолютивки, якорь 45-дневного окна
          "act_date",               // дата публикации мотивировки (когда есть)
          "appeal_filed", "appeal_filed_date",        // апел. жалоба в карточке 1-й инст.
+         "appeal_appellant", "appeal_appellant_is_bank", "appeal_appellant_status",
+         "appeal_appellant_checked_at",  // штамп тихого бэкфилла апеллянта (backfill_appeal_appellants)
          "cassation_filed", "cassation_filed_date",  // касс. жалоба (идёт через 1-ю инст.)
          "sent_to_cassation", "sent_to_cassation_date"
       },
@@ -271,7 +274,7 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-Константы в [scripts/court_monitor/runs.py:1192](scripts/court_monitor/runs.py:1192):
+Константы в [scripts/court_monitor/runs.py:1351](scripts/court_monitor/runs.py:1351):
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.

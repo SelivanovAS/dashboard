@@ -27,7 +27,7 @@ from court_monitor.courts import (
     BASE_URL, SEARCH_URL, CARD_URL_TPL,
     appeal_court_by_domain, appeal_court_for_fi_domain, case_card_url,
     courts_for_search, fi_card_url,
-    match_hmao_first_instance, _eyo,
+    match_fi_court_by_short_name, match_hmao_first_instance, _eyo,
 )
 from court_monitor.regions import get_region
 from court_monitor.delivery import (
@@ -80,7 +80,7 @@ from court_monitor.parsing import (
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
     _warn_if_card_degraded, card_is_empty_shell, is_subsidiary_only_case,
     determine_bank_role_from_participants, classify_cassation_outcome,
-    detect_captcha_challenge, is_no_data_page,
+    detect_captcha_challenge, find_fi_case_link, is_no_data_page,
 )
 from court_monitor.storage import (
     load_csv, save_csv, load_json, save_json,
@@ -293,6 +293,165 @@ def relink_awaiting_appeal(
             f"{plural_ru(found, 'дело', 'дела', 'дел')}"
         )
     return found
+
+
+def _appeal_appellant_missing(fi: dict, ap: dict) -> bool:
+    """True, если податель апел. жалобы неизвестен в ОБОИХ блоках (fi и appeal).
+
+    «Грязное» имя (пустое или слово-роль, _DIRTY_APPELLANT_NAMES) без ключа
+    `*_is_bank` — данных нет. Наличие ключа `*_is_bank` (даже null) означает,
+    что парсер заявителя уже разбирал: фронт либо рендерит бейдж, либо знает,
+    что определить нельзя — HTTP на такое дело не тратим.
+    """
+    return (
+        (fi.get("appeal_appellant") or "").strip().lower() in _DIRTY_APPELLANT_NAMES
+        and "appeal_appellant_is_bank" not in fi
+        and (ap.get("appellant") or "").strip().lower() in _DIRTY_APPELLANT_NAMES
+        and "appellant_is_bank" not in ap
+    )
+
+
+def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict:
+    """Тихий бэкфилл апеллянта для дел в стадии `appeal`.
+
+    Зачем: карточка апелляционного суда подателя жалобы НЕ публикует —
+    «Заявитель жалобы» виден только в карточке суда 1-й инстанции. Но в
+    стадии `appeal` карточка 1-й инст. не парсится (`should_parse_fi_card`),
+    а у дел, найденных поиском апелляции со стр. 1, fi-стаб вообще без
+    link/court_domain. Итог: у всех appeal-дел пусты `fi.appeal_appellant*`
+    и `appeal.appellant*` — фронт не показывает бейдж «Апеллянт».
+
+    Механика на кандидата (стадия appeal, апеллянт неизвестен, штампа нет):
+    1) если `fi.link` пуст — целевой поиск по bare-номеру дела на сайте суда
+       1-й инст. (`search_by_number_url`) и персист `fi.link`/`court_domain`
+       (зеркало backfill_fi_links из linking.py — правки синхронизировать);
+    2) fetch карточки 1-й инст. → parse_case_card → `_apply_fi_appellant`
+       (пишет `fi.appeal_appellant*` И зеркало `appeal.appellant*`);
+    3) штамп `fi.appeal_appellant_checked_at` — ставится после успешного
+       fetch+parse НЕЗАВИСИМО от находки: вкладка обжалования либо есть,
+       либо нет — второй раз не ходим. При сетевом фейле/капче/заглушке
+       штамп НЕ ставится — повтор на следующем прогоне.
+
+    ⚠️ Контракт «тихости» (защита от паводка 07.07: у appeal-дел fi.events
+    пуст, обычный дифф объявил бы всю историю «новой»): из card_info читается
+    ТОЛЬКО канал `_fi_appellant_raw`; события, статусы, даты, флаги жалоб,
+    `last_checked_at` — не трогаются; в дайджест ничего не эмитится;
+    advance_case_stage не вызывается. `_warn_if_card_degraded` не зовём,
+    чтобы не шуметь в METRICS/🩺-детекторе здоровья.
+
+    max_per_run — кэп ДЕЛ на прогон (каждое ≤2 HTTP); накопленный долг
+    (~40 дел) рассасывается за пару прогонов. Возвращает счётчики для
+    сводной строки лога.
+    """
+    stats = {
+        "candidates": 0, "no_number": 0, "no_court": 0,
+        "linked": 0, "checked": 0, "found": 0, "failed": 0,
+    }
+    attempted = 0
+    for case_j in cases:
+        if case_j.get("current_stage") != "appeal":
+            continue
+        fi = case_j.get("first_instance")
+        if not isinstance(fi, dict):
+            continue
+        if (fi.get("appeal_appellant_checked_at") or "").strip():
+            continue
+        ap = case_j.get("appeal") or {}
+        if not _appeal_appellant_missing(fi, ap):
+            continue
+        stats["candidates"] += 1
+        # Bare-форма обязательна: в стабе номер часто гибридный
+        # «2-193/2026 (2-1133/2025;)», а find_fi_case_link матчит границу
+        # номера в ячейке выдачи — поиск полной строкой не найдёт ничего.
+        num = _bare_case_number((fi.get("case_number") or "").strip())
+        if not num:
+            stats["no_number"] += 1
+            log.debug(
+                f"  апеллянт-бэкфилл: {ap.get('case_number', '?')} — номер "
+                f"1-й инст. ещё не известен, пропуск"
+            )
+            continue
+        if (fi.get("link") or "").strip():
+            court = None  # ссылка уже есть — поиск не нужен
+        else:
+            court = match_fi_court_by_short_name(fi.get("court") or "")
+            if court is None:
+                # Не из реестра — HTTP не тратим; самоизлечится в
+                # cassation_watch, где дело попадёт в обычный FI-цикл.
+                stats["no_court"] += 1
+                log.debug(
+                    f"  апеллянт-бэкфилл: {num} — суд «{fi.get('court', '')}» "
+                    f"не из реестра 1-й инст., пропуск"
+                )
+                continue
+        if attempted >= max_per_run:
+            log.info(
+                f"  апеллянт-бэкфилл: достигнут кэп {max_per_run} дел, "
+                f"остальные — на следующем прогоне"
+            )
+            break
+        attempted += 1
+        if court is not None:
+            # Шаг 1: достроить ссылку на карточку (зеркало backfill_fi_links).
+            polite_delay()
+            html = fetch_page(
+                court.search_by_number_url(num),
+                context=f"апеллянт {num} ({court.name})",
+            )
+            if not html:
+                stats["failed"] += 1
+                continue
+            if is_no_data_page(html):
+                log.info(
+                    f"  апеллянт-бэкфилл: {num} — в выдаче "
+                    f"{shorten_court_name(court.name)} нет данных"
+                )
+                stats["failed"] += 1
+                continue
+            link = find_fi_case_link(html, num)
+            if not link:
+                log.warning(
+                    f"  апеллянт-бэкфилл: {num} ({court.name}) — дело не "
+                    f"найдено в выдаче поиска по номеру"
+                )
+                stats["failed"] += 1
+                continue
+            fi["link"] = link
+            fi["court_domain"] = court.domain
+            stats["linked"] += 1
+        # Шаг 2: карточка 1-й инст. → только заявитель жалобы.
+        url = fi_card_url(fi)
+        if not url:
+            stats["failed"] += 1
+            continue
+        polite_delay()
+        card_html = fetch_card_checked(
+            url,
+            context=f"апеллянт {num}, {shorten_court_name(fi.get('court') or '')}",
+        )
+        if not card_html:
+            stats["failed"] += 1
+            continue
+        card_info = parse_case_card(card_html, f"https://{fi.get('court_domain', '')}")
+        if card_is_empty_shell(card_info):
+            stats["failed"] += 1
+            continue
+        fi["appeal_appellant_checked_at"] = date.today().isoformat()
+        stats["checked"] += 1
+        if _apply_fi_appellant(fi, case_j, card_info):
+            stats["found"] += 1
+            log.info(
+                f"  апеллянт-бэкфилл: {num} → "
+                f"{fi.get('appeal_appellant', '')}"
+                + (f" ({fi.get('appeal_appellant_status')})"
+                   if fi.get("appeal_appellant_status") else "")
+            )
+        else:
+            log.info(
+                f"  апеллянт-бэкфилл: {num} — заявитель жалобы на карточке "
+                f"не опубликован, помечено"
+            )
+    return stats
 
 
 def update_active_cases(
@@ -1820,6 +1979,17 @@ def main_json():
     backfilled = backfill_fi_links(cases)
     if backfilled:
         log.info(f"Достроено ссылок на карточку 1-й инст.: {backfilled}")
+    # Тихий бэкфилл апеллянта (стадия appeal): карточка апел. суда подателя
+    # жалобы не публикует, а карточка 1-й инст. в appeal не парсится
+    # (should_parse_fi_card) — разовый точечный заход ТОЛЬКО за полями
+    # appeal_appellant*/appellant*, без событий и дайджеста (см. функцию).
+    ap_bf = backfill_appeal_appellants(cases)
+    if ap_bf["candidates"]:
+        log.info(
+            f"Апеллянт (бэкфилл): кандидатов {ap_bf['candidates']}, проверено "
+            f"карточек {ap_bf['checked']}, найден апеллянт {ap_bf['found']}, "
+            f"ссылок достроено {ap_bf['linked']}, отложено {ap_bf['failed']}"
+        )
     # Парсим карточку 1-й инст. в first_instance/cassation_watch, а также в
     # awaiting_appeal/cassation_pending — ПОКА дело не направлено в вышестоящий
     # суд (продолжаем следить за карточкой 1-й инст. до sent_to_*; см.
