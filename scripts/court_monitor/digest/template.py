@@ -187,7 +187,8 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                        fi_changes: list[dict] | None = None,
                        *,
                        cass_changes: list[dict] | None = None,
-                       cass_discovered: list[dict] | None = None) -> str:
+                       cass_discovered: list[dict] | None = None,
+                       bank_changes: list[dict] | None = None) -> str:
     """Сводка-саммари одной строкой: N новых дел, M заседаний, K итогов.
 
     Формат 06.07.2026 (просьба юриста): слова вместо аббревиатур
@@ -437,6 +438,20 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 + plural_ru(cass_acts, 'касс. акт', 'касс. акта',
                             'касс. актов')
             )
+    # Трек «Иски банка» — одна агрегатная строка (детализация по типам
+    # раздула бы сводку: секция и так компактная, одна строка на дело).
+    if bank_changes:
+        n = len(bank_changes)
+        writs_n = sum(
+            1 for ch in bank_changes if "fi_writ_issued" in (ch.get("type") or [])
+        )
+        part = (
+            f"🏦 {n} " + plural_ru(n, "событие", "события", "событий")
+            + " по искам банка"
+        )
+        if writs_n:
+            part += f" (🧾 {writs_n} ИЛ)"
+        parts.append(part)
     return " · ".join(parts) if parts else "без изменений"
 
 
@@ -680,6 +695,91 @@ def _fi_appellant_display(role: str, name: str,
     return escape_html(name)
 
 
+# ── Секция «Иски банка» (лёгкий трек, банк — истец) ──────────────────────────
+# Компактный формат «одна строка на дело»: при масштабе пилота (сотни дел)
+# полная вёрстка секции 3.2 не влезла бы в Telegram-бюджет (~7600 симв.).
+# Секция рендерится ПОСЛЕДНЕЙ — при обрезке страдает первой, основная
+# повестка выживает. Короткие подписи типов без деталей; типы с датой/итогом
+# (заседания, решение, ИЛ) обогащаются в _bank_event_phrases.
+_BANK_TYPE_LABELS = {
+    "fi_hearing_recess": "⏸ перерыв в заседании",
+    "fi_hearing_restart": "🔄 рассмотрение с начала",
+    "fi_returned": "🔚 иск возвращён",
+    "fi_accepted_no_hearing": "📥 иск принят к производству",
+    "fi_act_published": "📄 решение изготовлено",
+    "fi_act_text_published": "📄 текст решения опубликован",
+    "fi_motivirovka_emitted": "📄 мотивировка изготовлена",
+    "fi_final_event": "⚖️ движение по делу",
+    "fi_status_change": "ℹ️ смена статуса",
+    "fi_appeal_filed": "📨 апел. жалоба ответчика — дело уходит в общий трек",
+    "fi_cassation_filed": "📨 касс. жалоба",
+    "fi_sent_to_cassation": "📤 направлено в касс. суд",
+    "fi_bank_role_changed": "ℹ️ роль банка изменилась",
+}
+
+
+def _bank_event_phrases(ch: dict) -> list[str]:
+    """Компактные фразы событий одного дела для секции «Иски банка»."""
+    d = ch.get("details") or {}
+    out: list[str] = []
+    for t in ch.get("type") or []:
+        if t == "fi_writ_issued":
+            for w in d.get("writs") or [{}]:
+                num = (w.get("electronic_id") or w.get("blank_number") or "").strip()
+                ph = "🧾 <b>выдан исполнительный лист</b>"
+                if w.get("issue_date"):
+                    ph += f" {escape_html(w['issue_date'])}"
+                if num:
+                    ph += f" ({escape_html(num)})"
+                rec = (w.get("recipient") or "").strip()
+                if rec:
+                    ph += f" → {escape_html(rec[:60])}"
+                out.append(ph)
+        elif t == "fi_writ_status_changed":
+            for w in d.get("writ_status_changes") or []:
+                out.append(
+                    "🧾 лист"
+                    + (f" {escape_html(w.get('issue_date', ''))}"
+                       if w.get("issue_date") else "")
+                    + f": {escape_html(w.get('old_status') or '?')}"
+                    + f" → <b>{escape_html(w.get('status') or '?')}</b>"
+                )
+        elif t == "fi_resolved":
+            v = (d.get("verdict_label") or "").strip()
+            out.append("⚖️ <b>вынесено решение</b>"
+                       + (f": {escape_html(v)}" if v else ""))
+        elif t in ("fi_hearing_new", "fi_hearing_next"):
+            hp = (d.get("hearing_date") or "").strip()
+            out.append("📅 заседание"
+                       + (f" <b>{escape_html(hp)}</b>" if hp else " назначено"))
+        elif t == "fi_hearing_postponed":
+            hp = (d.get("hearing_date") or "").strip()
+            out.append("🔁 отложено"
+                       + (f" на <b>{escape_html(hp)}</b>" if hp else ""))
+        else:
+            label = _BANK_TYPE_LABELS.get(t)
+            if label:
+                out.append(label)
+    return out
+
+
+def _bank_track_block(bank_changes: list[dict]) -> list[str]:
+    """Строки секции «Иски банка»: заголовок + одна строка на дело."""
+    block = [f"🏦 <b>ИСКИ БАНКА ({len(bank_changes)}):</b>", ""]
+    for ch in bank_changes:
+        num = escape_html(ch.get("case", ""))
+        court = escape_html(shorten_court_name(ch.get("court", "")))
+        df = escape_html(shorten_party_name(
+            ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL))
+        d = ch.get("details") or {}
+        url = fi_card_url(d)
+        link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
+        head = f"{link} ({court})" + (f" — {df}" if df else "")
+        phrases = _bank_event_phrases(ch)
+        block.append(f"{head}: {'; '.join(phrases)}" if phrases else head)
+    return block
+
+
 def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              cases: list[dict] | None = None,
                              fi_new_cases: list[dict] | None = None,
@@ -739,13 +839,26 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # чтобы счётчики сводки и содержимое секций считались по одному списку.
     fi_changes = _strip_archive_final_events(fi_changes)
 
+    # ── Трек «Иски банка» (банк — истец) ──
+    # Track-события приезжают в общем fi_changes с маркером change["track"]
+    # (сигнатуры/контекст/replay не трогаются — маркер едет в данных) и
+    # рендерятся отдельной компактной секцией; из основного списка убираются,
+    # чтобы не раздувать счётчики и подсекции 1-й инстанции.
+    bank_changes = [
+        ch for ch in fi_changes if ch.get("track") == "plaintiff_light"
+    ]
+    if bank_changes:
+        fi_changes = [
+            ch for ch in fi_changes if ch.get("track") != "plaintiff_light"
+        ]
+
     total_active = total_active_appeal + total_active_fi + total_active_cassation
 
     # ── Короткое сообщение если изменений нет ──
     # stage_transitions намеренно НЕ учитываем: мостик в дайджест больше
     # не выводится, прогон с одними переходами = пустой.
     if (not new_cases and not changes and not fi_new_cases
-            and not fi_changes
+            and not fi_changes and not bank_changes
             and not cass_changes and not cass_discovered):
         return render_no_changes_digest(
             today,
@@ -1539,6 +1652,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     summary = build_summary_line(
         new_cases, changes, fi_new_cases, stage_transitions, fi_changes,
         cass_changes=cass_changes, cass_discovered=cass_discovered,
+        bank_changes=bank_changes,
     )
     # Заголовок «📋 Сводка» отдельной строкой, счётчики — под ним (просьба
     # юриста 06.07.2026). Строка счётчиков начинается с 📥/📅/… + цифра —
@@ -1868,6 +1982,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         lines.append("⚖️🔬 <b>КАССАЦИЯ</b>")
         lines.append("")
         lines.extend(_air_after_subsection_headers(cass_block))
+
+    # ── Блок ИСКИ БАНКА — последним: при обрезке Telegram (~7600 симв.)
+    # страдает первым, основная повестка выживает.
+    if bank_changes:
+        lines.extend(["", ""])
+        lines.extend(_bank_track_block(bank_changes))
 
     lines.extend(["", ""])
     lines.append(

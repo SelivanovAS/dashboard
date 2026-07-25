@@ -3035,6 +3035,19 @@ def main_json():
             f"(дубли от записей одного FI-дела)"
         )
 
+    # Трек «Иски банка»: при BANK_DIGEST_ROUTINE=0 рутина track-дел
+    # (заседания, статусы, принятия) в дайджест не идёт — остаются решение,
+    # возврат, апел. жалоба и ИЛ. Фильтр стоит ДО save_digest_context, чтобы
+    # replay/push видели тот же список.
+    if not config.BANK_DIGEST_ROUTINE:
+        before_bank = len(fi_changes)
+        fi_changes = lifecycle.filter_bank_routine_events(fi_changes)
+        if len(fi_changes) != before_bank:
+            log.info(
+                f"Иски банка: рутина отфильтрована (BANK_DIGEST_ROUTINE=0): "
+                f"{before_bank} → {len(fi_changes)} записей fi_changes"
+            )
+
     # ── 4c. Кассация (7kas.sudrf.ru) ──
     # Поиск только первая страница (по решению пользователя). Фильтр HMAO —
     # внутри parse_cassation_search_page по match_hmao_first_instance.

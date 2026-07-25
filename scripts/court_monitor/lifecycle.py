@@ -365,6 +365,38 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     return bool(anchor) and (now - anchor).days > config.BANK_WRIT_WAIT_MAX_DAYS
 
 
+# Рутинные типы событий track-дел — гасятся в дайджесте при
+# config.BANK_DIGEST_ROUTINE=0 (рычаг масштабирования: при ~1000 исков банка
+# заседания затопили бы Telegram-лимит). Содержательные типы (решение, акт,
+# возврат, жалобы, ИЛ) не входят и доставляются всегда.
+BANK_ROUTINE_EVENT_TYPES = (
+    "fi_hearing_new", "fi_hearing_next", "fi_hearing_postponed",
+    "fi_hearing_recess", "fi_hearing_restart", "fi_status_change",
+    "fi_accepted_no_hearing", "fi_final_event",
+)
+
+
+def filter_bank_routine_events(fi_changes: list[dict]) -> list[dict]:
+    """Убрать рутину track-дел из fi_changes (при BANK_DIGEST_ROUTINE=0).
+
+    Обычные (не track) записи не трогаются. Track-запись, у которой после
+    фильтра не осталось типов, выпадает целиком. Применяется в main_json ДО
+    save_digest_context — replay и push видят тот же список.
+    """
+    kept: list[dict] = []
+    for ch in fi_changes:
+        if ch.get("track") != "plaintiff_light":
+            kept.append(ch)
+            continue
+        types = [
+            t for t in (ch.get("type") or [])
+            if t not in BANK_ROUTINE_EVENT_TYPES
+        ]
+        if types:
+            kept.append({**ch, "type": types})
+    return kept
+
+
 def should_parse_fi_card(case: dict) -> bool:
     """Нужно ли на этом прогоне парсить карточку 1-й инстанции по делу.
 
