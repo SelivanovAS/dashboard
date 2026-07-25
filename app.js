@@ -392,15 +392,23 @@ function dayDiff(dateStr){
   const today=new Date();today.setHours(0,0,0,0);
   return Math.round((d-today)/(1000*60*60*24));
 }
-function relativeDateText(dateStr){
-  const d=dayDiff(dateStr);
-  if(d===null)return '';
+/* Чистая часть relativeDateText: текст из числа дней, без Date и локали.
+ * Ветка «день недели» (7–14 дней) остаётся в relativeDateText — ей нужен
+ * Date. Исполняется в node поведенческим тестом (test_frontend_timeline). */
+function relTextFromDays(d){
+  if(d===null||d===undefined)return '';
   if(d===0)return 'сегодня';
   if(d===1)return 'завтра';
   if(d===-1)return 'вчера';
   if(d>1&&d<=6)return 'через '+d+(d<5?' дня':' дней');
   if(d<-1&&d>=-6)return d*-1+(d*-1<5?' дня':' дней')+' назад';
-  if(d>=7&&d<=14){const days=['вс','пн','вт','ср','чт','пт','сб'];const dd=new Date(dateStr+'T00:00:00');return days[dd.getDay()];}
+  return '';
+}
+function relativeDateText(dateStr){
+  const d=dayDiff(dateStr);
+  const t=relTextFromDays(d);
+  if(t)return t;
+  if(d!==null&&d>=7&&d<=14){const days=['вс','пн','вт','ср','чт','пт','сб'];const dd=new Date(dateStr+'T00:00:00');return days[dd.getDay()];}
   return '';
 }
 /* Возвращает accent-класс строки. Приоритет: new > today > soon > win > loss > archive */
@@ -2176,6 +2184,47 @@ function buildTimeline(c,стадия){
   }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 
+/* ===== Чистый вьюер строки хронологии =====
+ * item из buildTimeline + заранее вычисленный dayDiff → слоты для рендера.
+ * Никаких Date/DOM/toLocaleDateString: функция исполняется в node
+ * поведенческим тестом (test_frontend_timeline.py), как peelLegacyText.
+ * Правила (утверждены юристом):
+ *   заседание (classifyEvent(имя)!=null): время — В СТРОКЕ ДАТЫ
+ *     («27.07.2026 · 14:00»); у будущих — срочность today (0–1) / soon (2–7) /
+ *     future (>7) и бейдж «сегодня/завтра/через N дней» (с 7 дней бейдж пуст,
+ *     остаётся только цвет — как день недели у «Ключевых дат»);
+ *   служебное событие: время — тихий штамп в строке даты («31.03.2026, 13:22»);
+ *   место — всегда отдельная заметная строка (.tl-place);
+ *   «размещено DD.MM.YYYY» — всегда отдельная самая тихая строка (.tl-meta). */
+function tlItemView(it,дней){
+  const ddmm=(s)=>{ // детерминированное DD.MM.YYYY без Date (node-safe)
+    if(!s)return '—';
+    const iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso)return iso[3]+'.'+iso[2]+'.'+iso[1];
+    const ru=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if(ru)return ru[1].padStart(2,'0')+'.'+ru[2].padStart(2,'0')+'.'+ru[3];
+    return s;
+  };
+  const заседание=classifyEvent(it.имя)!==null;
+  const дата=ddmm(it.date);
+  const время=заседание?(it.время||''):'';
+  const штамп=заседание?'':(it.время||'');
+  const будущее=заседание&&дней!==null&&дней!==undefined&&дней>=0;
+  const срочность=будущее?(дней<=1?'today':дней<=7?'soon':'future'):'';
+  return {
+    дата:дата,
+    время:время,
+    штамп:штамп,
+    датаСтрока:дата+(время?' · '+время:'')+(штамп?', '+штамп:''),
+    бейдж:будущее?relTextFromDays(дней):'',
+    срочность:срочность,
+    шапка:[it.имя,it.результат].filter(Boolean).join(' — '),
+    подробности:[it.основание,it.примечание].filter(Boolean).join(' · '),
+    место:it.место||'',
+    размещено:it.размещено?'размещено '+ddmm(it.размещено):'',
+  };
+}
+
 /* AI анализ опубликованного акта (LLM-фрагмент дайджеста, привязанный
  * к делу в Python через attach_act_analyses). Если у активной стадии
  * (drawerStage) есть act_analysis — рисуем секцию с акцентным фоном.
@@ -2466,19 +2515,32 @@ function renderDrawer(c){
   const стадияПодпись=hasMultiStage?(drawerStage==='fi'?' — 1-я инстанция':drawerStage==='ap'?' — апелляция':drawerStage==='cs'?' — кассация':''):'';
   let timelineHtml='';
   if(tl.length){
+    // Водораздел «уже было»: индекс первого прошедшего события. Рисуем
+    // разделитель, только если выше него есть будущие события (индекс > 0).
+    // Считаем по дате, а не по «заседание/нет»: будущее любое событие —
+    // выше водораздела. null-даты findIndex пропускает.
+    const дниTl=tl.map(it=>dayDiff(it.date));
+    const водораздел=дниTl.findIndex(d=>d!==null&&d<0);
     timelineHtml='<div class="timeline">'+tl.map((it,i)=>{
-      // Крупная строка: наименование события и его результат. Ниже —
-      // основание/примечание. Совсем мелким — метаданные карточки
-      // (время, зал, дата размещения). Пустые блоки не рендерим, чтобы
-      // legacy-события и события жалоб не выглядели дырявыми.
-      const шапка=[it.имя,it.результат].filter(Boolean).join(' — ');
-      const подробности=[it.основание,it.примечание].filter(Boolean).join(' · ');
-      const размещено=it.размещено?'размещено '+(parseDate(it.размещено)!==it.размещено?formatDate(parseDate(it.размещено)):it.размещено):'';
-      const мета=[it.время,it.место,размещено].filter(Boolean).join(' · ');
-      return `<div class="tl-item tl-${it.kind} ${i===0?'tl-recent':''}"><div class="tl-date">${formatDate(it.date)}</div>`
-        +`<div class="tl-text">${escHtml(шапка)}</div>`
-        +(подробности?`<div class="tl-detail">${escHtml(подробности)}</div>`:'')
-        +(мета?`<div class="tl-meta">${escHtml(мета)}</div>`:'')
+      // Слоты строки собирает чистый tlItemView (исполняется в node тестом
+      // test_frontend_timeline.py) — здесь только HTML: escHtml + классы.
+      // Ничего не теряем: время — в строке даты, зал — .tl-place,
+      // «размещено» — отдельной самой тихой строкой .tl-meta.
+      const v=tlItemView(it,дниTl[i]);
+      const мод=v.срочность==='today'?' tl-upcoming-today'
+        :v.срочность==='soon'?' tl-upcoming-soon'
+        :v.срочность==='future'?' tl-upcoming':'';
+      return (i===водораздел&&водораздел>0?'<div class="tl-divider"><span>уже было</span></div>':'')
+        +`<div class="tl-item tl-${it.kind}${i===0?' tl-recent':''}${мод}">`
+        +`<div class="tl-date">${escHtml(v.дата)}`
+          +(v.время?`<span class="tl-time"> · ${escHtml(v.время)}</span>`:'')
+          +(v.штамп?`<span class="tl-stamp">, ${escHtml(v.штамп)}</span>`:'')
+          +(v.бейдж?` <span class="tl-rel">${escHtml(v.бейдж)}</span>`:'')
+        +`</div>`
+        +`<div class="tl-text">${escHtml(v.шапка)}</div>`
+        +(v.подробности?`<div class="tl-detail">${escHtml(v.подробности)}</div>`:'')
+        +(v.место?`<div class="tl-place">${escHtml(v.место)}</div>`:'')
+        +(v.размещено?`<div class="tl-meta">${escHtml(v.размещено)}</div>`:'')
         +`</div>`;
     }).join('')+'</div>';
   }else{
