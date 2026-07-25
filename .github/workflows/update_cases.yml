@@ -34,6 +34,11 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    # Страховка от молчаливого зависания: обычный прогон — 10-25 мин, с полным
+    # пулом исков банка — до ~1 ч; 2 часа хватает даже при массовых ретраях
+    # sudrf, а дефолтные 6 ч только оттягивали бы 🚨-алерт (шаг failure() при
+    # отсечке по таймауту не срабатывает — job отменяется, а не падает).
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -132,6 +137,14 @@ jobs:
           fi
           if [ -f data/cases_archive.json ]; then
             git add data/cases_archive.json
+          fi
+          # Трек «Иски банка» (банк — истец): отдельные файлы, прогон
+          # перекладывает их на каждом запуске (раскладка 7c в main_json).
+          if [ -f data/cases_bank.json ]; then
+            git add data/cases_bank.json
+          fi
+          if [ -f data/cases_bank_archive.json ]; then
+            git add data/cases_bank_archive.json
           fi
           # Холодные годовые архивы (cases_archive_YYYY.json) — дела старше года,
           # вынесенные из горячего архива ротацией (rotate_cold_archive). Фронт
