@@ -25,7 +25,6 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 from urllib.parse import quote
 
@@ -37,25 +36,22 @@ if _HERE not in sys.path:
 # update_cases.py распилен — см. docs/Распил_монолита_контекст.md).
 from court_monitor.config import (  # noqa: E402
     JSON_PATH,
-    SBER_PATTERNS,
     log,
 )
 from court_monitor.courts import FIRST_INSTANCE_COURTS  # noqa: E402
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay  # noqa: E402
 from court_monitor.parsing import (  # noqa: E402
-    _find_results_table,
-    _parse_combined_cell,
-    cell_href,
-    cell_text,
-    extract_tables,
     is_subsidiary_only_case,
     parse_case_card,
 )
 from court_monitor.storage import load_json, save_json  # noqa: E402
-from court_monitor.textutil import (  # noqa: E402
-    _CASE_ID_RE,
-    _CASE_NUM_RE,
-    _CASE_UID_RE,
+
+# Разбор поисковой строки и сборка записи вынесены в пакет (переиспользуются
+# импортёром реестра исков банка — scripts/import_bank_registry.py).
+from court_monitor.target_search import (  # noqa: E402,F401
+    build_json_entry,
+    determine_bank_role,
+    parse_search_row,
 )
 
 
@@ -89,108 +85,6 @@ def build_case_number_search_url(court, case_number: str) -> str:
         f"&G1_CASE__CASE_NUMBERSS={case_enc}"
         f"&delo_table=g1_case&Submit=%CD%E0%E9%F2%E8"
     )
-
-
-def parse_search_row(html: str, court, target_case_number: str) -> dict | None:
-    """Найти в поисковой выдаче строку с нужным case_number.
-
-    В отличие от parse_first_instance_search — без фильтра по bank_role, чтобы
-    не отбрасывать дела, где банк — истец или третье лицо.
-    """
-    tables = extract_tables(html)
-    results_table = _find_results_table(tables)
-    if not results_table:
-        return None
-
-    for row in results_table:
-        if len(row) < 3:
-            continue
-        case_number_raw = cell_text(row[0]).strip()
-        if not _CASE_NUM_RE.match(case_number_raw):
-            continue
-        # Номер может приходить в трёх форматах:
-        #   "2-583/2026"                              — обычный
-        #   "2-583/2026 ~ М-7442/2025"                — с материалом
-        #   "2-583/2026 (2-9702/2025;) ~ М-7442/2025" — после переномерования
-        # Сохраняем полный (без материала) как id, но матчим target по «голому».
-        case_number = case_number_raw.split("~")[0].strip()
-        case_bare = case_number.split("(")[0].strip()
-        if case_bare != target_case_number:
-            continue
-
-        href = cell_href(row[0])
-        cid = cuid = ""
-        if href:
-            m_id = _CASE_ID_RE.search(href)
-            m_uid = _CASE_UID_RE.search(href)
-            if m_id:
-                cid = m_id.group(1)
-            if m_uid:
-                cuid = m_uid.group(1)
-
-        date_received = cell_text(row[1]).strip() if len(row) > 1 else ""
-        combined = cell_text(row[2]) if len(row) > 2 else ""
-        parsed = _parse_combined_cell(combined)
-        judge = cell_text(row[3]).strip() if len(row) > 3 else ""
-        result = cell_text(row[5]).strip() if len(row) > 5 else ""
-
-        return {
-            "case_number": case_number,
-            "filing_date": date_received,
-            "plaintiff": parsed["plaintiff"],
-            "defendant": parsed["defendant"],
-            "category": parsed["category"],
-            "judge": judge,
-            "result": result,
-            "status": "Решено" if result else "В производстве",
-            "link": f"{cid}|{cuid}" if cid and cuid else "",
-            "court": court.name,
-            "court_domain": court.domain,
-        }
-    return None
-
-
-def determine_bank_role(plaintiff: str, defendant: str) -> str | None:
-    """Вернуть 'Истец'/'Ответчик' или None, если Сбербанк не упомянут в сторонах."""
-    p_low = plaintiff.lower()
-    d_low = defendant.lower()
-    if any(p in p_low for p in SBER_PATTERNS):
-        return "Истец"
-    if any(p in d_low for p in SBER_PATTERNS):
-        return "Ответчик"
-    return None
-
-
-def build_json_entry(fi_row: dict, card_info: dict) -> dict:
-    """Собрать JSON-запись для cases.json из поисковой строки + карточки."""
-    case_number = fi_row["case_number"]
-    return {
-        "id": case_number,
-        "current_stage": "first_instance",
-        "plaintiff": fi_row["plaintiff"],
-        "defendant": fi_row["defendant"],
-        "category": fi_row["category"],
-        "bank_role": fi_row["bank_role"],
-        "notes": "",
-        "first_instance": {
-            "case_number": case_number,
-            "court": fi_row["court"],
-            "court_domain": fi_row["court_domain"],
-            "judge": fi_row["judge"],
-            "filing_date": fi_row["filing_date"],
-            "status": card_info.get("Статус") or fi_row["status"],
-            "result": card_info.get("Результат") or fi_row["result"],
-            "last_event": card_info.get("Последнее событие", ""),
-            "event_date": card_info.get("Дата события", ""),
-            "hearing_date": card_info.get("Дата заседания", ""),
-            "hearing_time": card_info.get("Время заседания", ""),
-            "link": fi_row["link"],
-            "act_published": card_info.get("Акт опубликован") == "Да",
-            "act_date": card_info.get("Дата публикации акта", ""),
-            "events": card_info.get("_events", []),
-        },
-        "appeal": None,
-    }
 
 
 def main() -> None:
