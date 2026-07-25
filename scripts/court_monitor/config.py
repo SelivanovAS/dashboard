@@ -45,6 +45,17 @@ JSON_ARCHIVE_PATH = os.environ.get(
     "JSON_ARCHIVE_PATH",
     os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_archive.json")
 )
+# Трек «Иски банка» (банк — истец): отдельный файл, чтобы основной cases.json
+# не рос (фронт грузит его лениво, Worker не парсит вовсе). Схема записей —
+# та же, что в cases.json, плюс маркер track="plaintiff_light".
+JSON_BANK_PATH = os.environ.get(
+    "JSON_BANK_PATH",
+    os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_bank.json")
+)
+JSON_BANK_ARCHIVE_PATH = os.environ.get(
+    "JSON_BANK_ARCHIVE_PATH",
+    os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_bank_archive.json")
+)
 
 
 def cold_archive_path(year: int) -> str:
