@@ -8,7 +8,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v110';
+const CACHE_VERSION = 'v111';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -125,6 +125,18 @@ async function networkFirst(request, cacheName) {
   } catch (err) {
     const cached = await cache.match(request);
     if (cached) return cached;
+    const isNav = request.mode === 'navigate'
+      || (request.headers.get('accept') || '').includes('text/html');
+    if (isNav) {
+      // Пре-кэш хранит голый './sberbank_dashboard.html', а открытие по клику
+      // на push несёт query (?digest=open / ?mine=1) — точный match промахнётся.
+      const bare = await cache.match(request, { ignoreSearch: true });
+      if (bare) return bare;
+      return new Response(OFFLINE_HTML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
     return new Response('{}', {
       status: 503,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
