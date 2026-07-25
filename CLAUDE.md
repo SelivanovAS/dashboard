@@ -73,17 +73,17 @@
 | `CourtConfig.search_by_fi_number_url` (целевой поиск апелляции по номеру 1-й инст., G2_CASE__CASE_NUMBER_ISS) | [scripts/court_monitor/regions/base.py:114](scripts/court_monitor/regions/base.py:114) |
 | `relink_awaiting_appeal` (дослинк awaiting_appeal, не попавших на стр. 1 поиска апелляции) | [scripts/court_monitor/runs.py:150](scripts/court_monitor/runs.py:150) |
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`) | [scripts/court_monitor/runs.py:314](scripts/court_monitor/runs.py:314) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:626](scripts/court_monitor/lifecycle.py:626) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:755](scripts/court_monitor/lifecycle.py:755) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:79](scripts/court_monitor/netutil.py:79) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:109](scripts/court_monitor/config.py:109) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:120](scripts/court_monitor/config.py:120) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:656](scripts/court_monitor/lifecycle.py:656) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:785](scripts/court_monitor/lifecycle.py:785) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:945](scripts/court_monitor/linking.py:945) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:206](scripts/court_monitor/parsing/cards.py:206) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:260](scripts/court_monitor/parsing/cards.py:260) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
@@ -91,7 +91,7 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:457](scripts/court_monitor/runs.py:457) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1574](scripts/court_monitor/runs.py:1574) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1614](scripts/court_monitor/runs.py:1614) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -316,6 +316,53 @@ state-machine) под новую модель при каждом запуске
 
 Любые правки этих параметров — только после ручной проверки на 7kas, иначе
 поиск молча вернёт «Данных по запросу не обнаружено».
+
+## Трек «Иски банка» (банк — истец, с 25.07.2026)
+
+Лёгкий трек для исков самого банка (~1000 дел по ХМАО; пилот — Сургутский
+городской). Дела живут в **отдельном файле [data/cases_bank.json](data/cases_bank.json)**
+(+ `cases_bank_archive.json`) — схема записей та же + маркер
+`track: "plaintiff_light"`; основной cases.json не растёт, Worker и админка
+не затронуты. Главная ценность — **исполнительные листы**: вкладка
+«ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» карточки 1-й инст. подтверждена пробой
+([ops/writ_probe/report.txt](ops/writ_probe/report.txt), workflow
+[probe_writ_section.yml](.github/workflows/probe_writ_section.yml)) и
+парсится `_исполнительные_листы` (parsing/cards.py, `_writs` →
+`fi.writs`: issue_date/blank_number/electronic_id/status/recipient; статусы
+Выдан/Отозван/Возвращен, листов может быть несколько, вкладки нет — пустой
+список, таблица ищется по заголовку, не по индексу cont*).
+
+- **Ввод пула**: [scripts/import_bank_registry.py](scripts/import_bank_registry.py)
+  + workflow [import_bank_registry.yml](.github/workflows/import_bank_registry.yml) —
+  реестр `ops/bank_registry/registry.csv` («домен;номер»), целевой поиск по
+  номеру (общие функции — [scripts/court_monitor/target_search.py](scripts/court_monitor/target_search.py),
+  вынесены из add_cases_manually), только роль «Истец», порционно `--limit`,
+  идемпотентно; `import.announced=true` сразу и уже решённые получают
+  `resolved_emitted=True` — **иски банка в дайджесте не анонсируются**, и
+  старые решения задним числом не льются.
+- **Прогон**: main_json подмешивает bank-дела в общий FI-цикл (фаза 1) и
+  раскладывает обратно перед сохранением (`split_bank_track`, фаза 7c).
+  **Переезд**: подана апел. жалоба / стадия ушла выше → дело остаётся в
+  основном cases.json навсегда (`bank_case_left_track`, маркер → `track_origin`),
+  дальше живёт стандартным треком, как 57 истцовых дел «с апелляции».
+- **Ритм опроса** (`should_skip_case`): до решения — обычный smart-skip; после
+  решения — раз в `BANK_WRIT_CHECK_DAYS=7` дней (`writ_weekly`: до расчётного
+  вступления в силу ловит раннюю апел. жалобу, после — ИЛ). Расчётная дата —
+  `bank_legal_force_est` (мотивировка + 30 дн, производственный календарь).
+- **Архив** (`_is_bank_track_archived` — обычные 60 дн убивали бы ожидание
+  ИЛ): ИЛ выдан +14 дн → архив; без ИЛ — потолок 180 дн от вступления в силу;
+  возврат/прекращено +30 дн. Признак жалобы всегда держит в активных.
+- **Дайджест**: секция «🏦 ИСКИ БАНКА (N)» — компакт, одна строка на дело,
+  ПОСЛЕДНЕЙ (при обрезке Telegram страдает первой); события `fi_writ_issued`/
+  `fi_writ_status_changed` (НЕ в эхо/stale-фильтрах); маркер `change["track"]`
+  едет в данных fi_changes — сигнатуры/replay не тронуты. Рутина отключается
+  `BANK_DIGEST_ROUTINE=0` (`filter_bank_routine_events`; дефолт 1 — пилот
+  шлёт всё). Env `BANK_TRACK=0` — мастер-выключатель всего трека.
+- **Фронт**: чип «🏦 Иски банка» (виден только при существующем файле,
+  HEAD-проба) → ленивая загрузка датасета; бейдж «🧾 ИЛ»; звёзды/watchlist
+  в режиме банка скрыты (future work).
+- Тесты: [scripts/tests/test_bank_track.py](scripts/tests/test_bank_track.py),
+  [scripts/tests/test_import_bank_registry.py](scripts/tests/test_import_bank_registry.py).
 
 ## Команды
 
