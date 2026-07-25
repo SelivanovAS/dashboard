@@ -256,3 +256,94 @@ class TestSplitBankTrack:
         rest, bank_active, bank_arch, moved = split_bank_track([left])
         assert (bank_active, bank_arch, moved) == ([], [], 1)
         assert rest == [left]
+
+
+# ── Дайджест: секция «Иски банка» ────────────────────────────────────────────
+
+def _bank_change(types: list[str], details: dict | None = None) -> dict:
+    d = {"link": "111|aaaa-1111", "court_domain": "surggor--hmao.sudrf.ru"}
+    d.update(details or {})
+    return {
+        "case": "2-100/2026",
+        "court": "Сургутский городской суд",
+        "plaintiff": "ПАО Сбербанк",
+        "defendant": "Иванов Иван Иванович",
+        "bank_role": "Истец",
+        "category": "",
+        "type": types,
+        "details": d,
+        "track": "plaintiff_light",
+    }
+
+
+def _digest(fi_changes: list[dict]) -> str:
+    from court_monitor.digest.template import generate_template_digest
+    return generate_template_digest([], [], fi_changes=fi_changes)
+
+
+class TestBankDigestSection:
+    def test_writ_issued_rendered(self):
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": [{
+            "issue_date": "26.06.2026", "blank_number": "",
+            "electronic_id": "86RS0004#2-100/2026#1", "status": "Выдан",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+        }]})])
+        assert "ИСКИ БАНКА (1)" in html
+        assert "выдан исполнительный лист" in html
+        assert "2-100/2026" in html
+        assert "26.06.2026" in html
+        assert "86RS0004#2-100/2026#1" in html
+        assert "по искам банка (🧾 1 ИЛ)" in html
+
+    def test_writ_status_change_rendered(self):
+        html = _digest([_bank_change(["fi_writ_status_changed"],
+                                     {"writ_status_changes": [{
+                                         "issue_date": "26.06.2026",
+                                         "old_status": "Выдан",
+                                         "status": "Отозван",
+                                     }]})])
+        assert "Выдан" in html and "Отозван" in html
+
+    def test_resolved_with_verdict(self):
+        html = _digest([_bank_change(["fi_resolved"],
+                                     {"verdict_label": "удовлетворено"})])
+        assert "вынесено решение" in html and "удовлетворено" in html
+
+    def test_section_last_and_fi_counters_clean(self):
+        """Секция банка — последней; счётчики 1-й инст. track-делами
+        не раздуваются."""
+        ordinary = _bank_change(["fi_hearing_new"], {"hearing_date": "01.09.2026"})
+        ordinary.pop("track")
+        bank = _bank_change(["fi_hearing_new"], {"hearing_date": "02.09.2026"})
+        html = _digest([ordinary, bank])
+        assert html.index("ПЕРВАЯ ИНСТАНЦИЯ") < html.index("ИСКИ БАНКА")
+        assert html.index("ИСКИ БАНКА") < html.index("В производстве")
+        assert "📅 1 заседание в 1-й инст." in html
+        assert "1 событие по искам банка" in html
+
+    def test_only_bank_changes_not_empty_digest(self):
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": [
+            {"issue_date": "01.07.2026", "status": "Выдан"}]})])
+        assert "ИСКИ БАНКА" in html
+        assert "Изменений нет" not in html
+
+
+class TestBankRoutineFilter:
+    def test_routine_dropped_substance_kept(self):
+        from court_monitor.lifecycle import filter_bank_routine_events
+        mixed = _bank_change(["fi_hearing_new", "fi_resolved"])
+        routine_only = _bank_change(["fi_status_change"])
+        ordinary = _bank_change(["fi_hearing_new"])
+        ordinary.pop("track")
+        out = filter_bank_routine_events([mixed, routine_only, ordinary])
+        assert len(out) == 2
+        assert out[0]["type"] == ["fi_resolved"]
+        assert out[1] is ordinary
+
+    def test_writ_never_routine(self):
+        from court_monitor.lifecycle import (
+            BANK_ROUTINE_EVENT_TYPES, FI_ECHO_CATCHUP_TYPES,
+        )
+        assert "fi_writ_issued" not in BANK_ROUTINE_EVENT_TYPES
+        assert "fi_writ_issued" not in FI_ECHO_CATCHUP_TYPES
+        assert "fi_writ_status_changed" not in FI_ECHO_CATCHUP_TYPES
