@@ -203,6 +203,60 @@ def _колонки_строки(row: list, карта: dict, ширина: int)
     return колонки
 
 
+# Вкладка «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» карточки 1-й инст. (проба 25.07.2026,
+# ops/writ_probe/report.txt): первая строка таблицы — заголовок вкладки,
+# дальше строка колонок и данные. Электронный ИД — вида
+# «86RS0004#2-4440/2025#1», бумажный бланк — «ФС № 039166358»; статусы:
+# «Выдан» / «Отозван» / «Возвращен»; листов может быть несколько (Советский,
+# 2-37/2026: #1 Возвращен + #2 Выдан). Вкладки нет, пока листов нет — это
+# не ошибка, а пустой список. Индекс секции cont* плавает между судами,
+# поэтому таблица ищется по заголовку, не по позиции.
+_ЗАГОЛОВКИ_ИЛ = (
+    ("дата выдачи", "issue_date"),
+    ("серия, номер бланка", "blank_number"),
+    ("номер электронного ид", "electronic_id"),
+    ("кому выдан", "recipient"),
+    ("статус", "status"),
+)
+
+
+def _исполнительные_листы(tables: list) -> list[dict]:
+    """Записи вкладки «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» (или пустой список)."""
+    for tbl in tables:
+        if not tbl or not tbl[0]:
+            continue
+        if "ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ" not in cell_text(tbl[0][0]).upper():
+            continue
+        шапка_idx, карта = -1, {}
+        for idx in range(min(3, len(tbl))):
+            m: dict[str, int] = {}
+            for ci, cell in enumerate(tbl[idx]):
+                текст = " ".join(cell_text(cell).replace("\xa0", " ").lower().split())
+                for префикс, ключ in _ЗАГОЛОВКИ_ИЛ:
+                    if текст.startswith(префикс):
+                        m.setdefault(ключ, ci)
+                        break
+            if {"issue_date", "status"} <= set(m):
+                шапка_idx, карта = idx, m
+                break
+        if шапка_idx < 0:
+            return []
+        ширина = len(tbl[шапка_idx])
+        листы: list[dict] = []
+        for row in tbl[шапка_idx + 1:]:
+            # Расхождение ширины со строкой колонок — честный отказ от строки
+            # (та же философия, что _колонки_строки).
+            if len(row) != ширина:
+                continue
+            запись = {ключ: "" for _, ключ in _ЗАГОЛОВКИ_ИЛ}
+            for ключ, ci in карта.items():
+                запись[ключ] = cell_text(row[ci]).strip()
+            if any(запись.values()):
+                листы.append(запись)
+        return листы
+    return []
+
+
 def parse_case_card(html: str, court_base_url: str = "") -> dict:
     """
     Парсит карточку дела. Извлекает:
@@ -262,10 +316,15 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         # «Третье лицо» автоматически (см. determine_bank_role_from_participants).
         "participants": [],
         "bank_role_from_participants": "",
+        # Вкладка «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» (трек исков банка): список записей
+        # {issue_date, blank_number, electronic_id, status, recipient}.
+        # В fi["writs"] пишет только FI-цикл и только для track-дел.
+        "_writs": [],
     }
 
     tables = extract_tables(html)
     info["_table_count"] = len(tables)
+    info["_writs"] = _исполнительные_листы(tables)
 
     # Собственный номер дела из заголовка карточки «ДЕЛО № 2-XXXX/YYYY ~ М-NNNN/YYYY».
     # На карточке 1-й инстанции постоянный гражданский номер живёт ТОЛЬКО здесь

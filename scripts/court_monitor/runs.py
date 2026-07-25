@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog
+from court_monitor import config, ghlog, lifecycle
 from court_monitor.config import log, _metrics_reset, cold_archive_glob, cold_archive_path
 from court_monitor.courts import (
     APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
@@ -1564,11 +1564,51 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
     """
     to_announce: list[dict] = []
     for c in cases:
+        # Иски банка (лёгкий трек) не анонсируются никогда — решение юриста
+        # 25.07.2026. Импортёр реестра и так ставит announced=true, это ремень
+        # к подтяжкам на случай ручной правки файла.
+        if lifecycle.is_bank_plaintiff_track(c):
+            continue
         imp = c.get("import")
         if isinstance(imp, dict) and not imp.get("announced"):
             imp["announced"] = True
             to_announce.append(c)
     return to_announce
+
+
+def split_bank_track(
+    cases: list[dict],
+) -> tuple[list[dict], list[dict], list[dict], int]:
+    """Раскладка трека «Иски банка» перед сохранением (фаза 7c main_json).
+
+    Возвращает (основные, активные_трека, ново-архивные_трека, переехало):
+    - «переехавшие» (bank_case_left_track: подана апелляция / стадия ушла
+      выше) остаются в основном списке навсегда — маркер track снимается,
+      след остаётся в track_origin;
+    - остальные track-дела раскладываются на активные и архив по своим
+      окнам (_is_bank_track_archived через is_case_archived);
+    - не-track дела возвращаются в основной список как есть.
+    """
+    rest: list[dict] = []
+    bank_active: list[dict] = []
+    bank_newly_archived: list[dict] = []
+    moved = 0
+    for c in cases:
+        if not lifecycle.is_bank_plaintiff_track(c):
+            rest.append(c)
+            continue
+        if lifecycle.bank_case_left_track(c):
+            c.pop("track", None)
+            c["track_origin"] = "plaintiff_light"
+            moved += 1
+            rest.append(c)
+            continue
+        if lifecycle.is_case_archived(c):
+            c.setdefault("archived_at", date.today().isoformat())
+            bank_newly_archived.append(c)
+        else:
+            bank_active.append(c)
+    return rest, bank_active, bank_newly_archived, moved
 
 
 def main_json():
@@ -1606,10 +1646,26 @@ def main_json():
     t0 = time.perf_counter()
     data = load_json(config.JSON_PATH)
     cases = data.get("cases", [])
+    # Трек «Иски банка» (банк — истец): отдельный файл, на прогон дела
+    # подмешиваются в общий список и проходят обычный FI-цикл (skip-логика,
+    # эмиссия событий, link_cases, дедуп). Перед сохранением раскладываются
+    # обратно (_split_bank_track), «переехавшие» (подана апелляция) остаются
+    # в основном cases.json. Мастер-выключатель — env BANK_TRACK.
+    bank_track_count = 0
+    if config.BANK_TRACK and os.path.exists(config.JSON_BANK_PATH):
+        bank_cases = load_json(config.JSON_BANK_PATH).get("cases", [])
+        for bc in bank_cases:
+            bc.setdefault("track", "plaintiff_light")
+        bank_track_count = len(bank_cases)
+        cases = cases + bank_cases
     # Архив подмешиваем только в индекс дедупликации, чтобы дела, которые
     # юрист уже отправил в архив, не появлялись снова как «новые» в дайджесте.
     archive_data = load_json(config.JSON_ARCHIVE_PATH)
     archived_cases = archive_data.get("cases", [])
+    # Архив bank-трека — только в дедуп-индексы (по образцу холодных архивов).
+    bank_archived_cases: list[dict] = []
+    if config.BANK_TRACK and os.path.exists(config.JSON_BANK_ARCHIVE_PATH):
+        bank_archived_cases = load_json(config.JSON_BANK_ARCHIVE_PATH).get("cases", [])
     # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
     # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
     # задвоилось как «новое». В archived_cases их не добавляем: иначе при
@@ -1624,18 +1680,19 @@ def main_json():
     # Индексы для быстрого поиска по всем номерам дел (включая холодный архив —
     # только для дедупликации, см. выше). Хелпер общий с импортёром дампов.
     existing_ids = collect_existing_ids(
-        cases + archived_cases + cold_archived_cases
+        cases + archived_cases + cold_archived_cases + bank_archived_cases
     )
     # Судо-зависимый индекс для фильтра НОВЫХ FI-дел: номера не уникальны
     # между судами — глобальный existing_ids терял бы новое дело суда Б при
     # совпадении номера с делом суда А (общий хелпер с импортёром дампов).
     fi_dedup_exact, fi_dedup_wildcard = collect_fi_dedup_index(
-        cases + archived_cases + cold_archived_cases
+        cases + archived_cases + cold_archived_cases + bank_archived_cases
     )
 
     log.info(
         f"Загружено {len(cases)} {plural_ru(len(cases), 'дело', 'дела', 'дел')} "
-        f"из JSON (+{len(archived_cases)} в горячем архиве, "
+        f"из JSON (из них {bank_track_count} — трек исков банка; "
+        f"+{len(archived_cases)} в горячем архиве, "
         f"+{len(cold_archived_cases)} в холодном для дедупликации)"
     )
 
@@ -2385,6 +2442,38 @@ def main_json():
                 and bank_role_change_event["new_role"] == "Третье лицо"
             ):
                 change["details"]["reason_hint"] = "банк исключён из числа ответчиков"
+
+        # ── Исполнительные листы (трек «Иски банка») ──
+        # Вкладку «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» карточка отдаёт всем, но пишем и
+        # сравниваем только у track-дел: основному треку записи не нужны, а
+        # лишнее поле раздувало бы cases.json. Идемпотентность — по fi["writs"]:
+        # новая запись листа → fi_writ_issued, смена статуса существующей
+        # («Выдан» → «Отозван»/«Возвращен») → fi_writ_status_changed.
+        if lifecycle.is_bank_plaintiff_track(case_j):
+            change["track"] = "plaintiff_light"
+            new_writs = card_info.get("_writs") or []
+            if new_writs:
+                def _writ_key(w: dict) -> tuple:
+                    return (w.get("issue_date", ""), w.get("blank_number", ""),
+                            w.get("electronic_id", ""))
+                old_writs = {_writ_key(w): w for w in (fi.get("writs") or [])}
+                issued = [w for w in new_writs if _writ_key(w) not in old_writs]
+                restatused = [
+                    {**w, "old_status": old_writs[_writ_key(w)].get("status", "")}
+                    for w in new_writs
+                    if _writ_key(w) in old_writs
+                    and (w.get("status") or "")
+                    != (old_writs[_writ_key(w)].get("status") or "")
+                ]
+                if issued:
+                    change["type"].append("fi_writ_issued")
+                    change["details"]["writs"] = issued
+                if restatused:
+                    change["type"].append("fi_writ_status_changed")
+                    change["details"]["writ_status_changes"] = restatused
+                if fi.get("writs") != new_writs:
+                    fi["writs"] = new_writs
+                    changed = True
 
         # Guard «дело решено»: у дела со статусом «Решено» движение карточки —
         # служебные/ретроактивные правки суда, а не «дело идёт заново». Глушим
@@ -3452,6 +3541,37 @@ def main_json():
         log.info(f"State-machine переходов: {len(lifecycle_transitions)}")
         for t in lifecycle_transitions:
             log.info(f"  {t['case_id']}: {t['from']} → {t['to']}")
+
+    # ── 7c. Раскладка трека «Иски банка» ──
+    # Track-дела, подмешанные в фазе 1, возвращаются в свой файл
+    # (cases_bank.json) ДО общего архивирования — иначе split_archived_json
+    # унёс бы их в основной архив. «Переехавшие» (подана апелляция / стадия
+    # ушла выше) остаются в основном cases.json навсегда: маркер track
+    # снимается, след остаётся в track_origin. Архивация трека — свои окна
+    # (_is_bank_track_archived), свой файл cases_bank_archive.json.
+    if config.BANK_TRACK and bank_track_count:
+        cases, bank_active, bank_newly_archived, moved_to_main = split_bank_track(cases)
+        if moved_to_main:
+            log.info(
+                f"Иски банка: {moved_to_main} "
+                f"{plural_ru(moved_to_main, 'дело', 'дела', 'дел')} покинули "
+                f"лёгкий трек (апелляция) → основной cases.json"
+            )
+        if bank_newly_archived:
+            log.info(
+                f"Иски банка: {len(bank_newly_archived)} → архив трека "
+                f"(ИЛ выдан {config.BANK_WRIT_ARCHIVE_DAYS}д назад / потолок "
+                f"{config.BANK_WRIT_WAIT_MAX_DAYS}д без ИЛ / возврат)"
+            )
+            save_json(
+                {"version": 1, "track": "plaintiff_light",
+                 "cases": bank_archived_cases + bank_newly_archived},
+                config.JSON_BANK_ARCHIVE_PATH,
+            )
+        save_json(
+            {"version": 1, "track": "plaintiff_light", "cases": bank_active},
+            config.JSON_BANK_PATH,
+        )
 
     # ── 8. Архивирование JSON-дел по state-machine ──
     # is_case_archived выставляет архив только для стадий, прошедших полный
