@@ -718,6 +718,8 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* status (legacy class names → новые токены) */
 .badge-active    { background:var(--amber-100); color:var(--amber-700); }
 .badge-decided   { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+/* «🧾 ИЛ» — исполнительный лист выдан (трек исков банка) */
+.badge-writ      { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 .badge-scheduled { background:var(--blue-100); color:var(--blue-700); }
 .badge-prep      { background:var(--indigo-100); color:var(--indigo-700); }
 .badge-prelim    { background:var(--blue-100); color:var(--blue-700); }
