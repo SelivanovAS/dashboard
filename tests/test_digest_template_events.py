@@ -1143,6 +1143,76 @@ class CassationMatrixTest(unittest.TestCase):
         self.assertIn("<i>КАСС_ПЕРЕСКАЗ</i>", html)
         self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
 
+    def _write_cases_json(self, cases: list[dict]) -> None:
+        """Подменить data/cases.json (parent-lookup кассационного рендера)."""
+        path = os.path.join(self._tmp.name, "cases.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "cases": cases}, f, ensure_ascii=False)
+        patcher = patch.object(cm_config, "JSON_PATH", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_event_shows_parties_from_parent_case(self):
+        """Основной путь: стороны берутся из cases.json по номеру 1-й инст."""
+        self._write_cases_json([{
+            "id": "2-500/2025",
+            "plaintiff": "Голованов Геннадий Геннадьевич",
+            "defendant": "ПАО Сбербанк",
+            "bank_role": "Ответчик",
+            "first_instance": {"case_number": "2-500/2025",
+                               "court": "Сургутский городской суд"},
+        }])
+        html = render(cass_changes=[make_cass_change(
+            ["new_cassation"],
+            {"hearing_date": "20.08.2026", "hearing_time": "14:00"},
+        )])
+        self.assertIn("Голованов Г.Г. vs Сбербанк", html)
+        self.assertNotIn("заявитель:", html)
+
+    def test_event_without_parties_falls_back_to_appellant(self):
+        """Стороны у дела неизвестны (discovery с 7kas, роли участников не
+        свелись к истцу/ответчику) — вместо голого 8Г-номера показываем
+        заявителя жалобы (инцидент 24.07.2026, 8Г-12479/2026)."""
+        html = render(cass_changes=[make_cass_change(
+            ["new_cassation"],
+            {"hearing_date": "20.08.2026", "hearing_time": "14:00"},
+        )])
+        self.assertIn("заявитель: Иванов И.И. (ответчик)", html)
+        self.assertNotIn(" vs ", html)
+        self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
+
+    def test_event_without_parties_and_appellant_stays_bare(self):
+        """Нечего подставить — строка остаётся номером, без артефактов."""
+        html = render(cass_changes=[make_cass_change(
+            ["new_cassation"],
+            {"hearing_date": "20.08.2026", "hearing_time": "14:00",
+             "appellant": "", "appellant_status": ""},
+        )])
+        self.assertNotIn("заявитель:", html)
+        self.assertNotIn(" vs ", html)
+        self.assertNotIn("—  ", html)
+
+    def test_discovered_without_parties_has_no_empty_vs(self):
+        """У discovery-карточки с пустыми сторонами не должно быть « —  vs »;
+        заявителя показывает строка «поступила касс. жалоба от …»."""
+        disc = make_cass_discovered()
+        disc["plaintiff"] = ""
+        disc["defendant"] = ""
+        html = render(cass_discovered=[disc])
+        self.assertNotIn(" vs ", html)
+        self.assertIn("поступила касс. жалоба от истца Сидоров С.С.", html)
+        self.assertEqual(anchors(html).count("8Г-505/2026"), 1)
+
+    def test_discovered_without_parties_and_filing_shows_appellant(self):
+        """Ни сторон, ни даты поступления — заявитель уходит в строку 1."""
+        disc = make_cass_discovered()
+        disc["plaintiff"] = ""
+        disc["defendant"] = ""
+        disc["cassation"]["filing_date"] = ""
+        html = render(cass_discovered=[disc])
+        self.assertIn("заявитель: Сидоров С.С. (истец)", html)
+        self.assertNotIn(" vs ", html)
+
     def test_discovered_card_in_new_section(self):
         html = render(cass_discovered=[make_cass_discovered()])
         self.assertIn("📥 <b>Новые касс. дела (1):</b>", html)

@@ -1084,6 +1084,66 @@ class TestMigrateStages:
         assert cases[0]["current_stage"] == "awaiting_appeal"
 
 
+# ── parties_from_participants ────────────────────────────────────────────────
+
+class TestPartiesFromParticipants:
+    """Разбор таблицы УЧАСТНИКОВ в стороны дела (общий для карточек sudrf и
+    7kas). До 26.07.2026 понимались только ИСТЕЦ/ОТВЕТЧИК — у приказного и
+    особого производства стороны оставались пустыми."""
+
+    def test_classic_roles(self):
+        parts = [
+            {"role": "ИСТЕЦ", "name": "ПАО Сбербанк"},
+            {"role": "ОТВЕТЧИК", "name": "Иванов И.И."},
+        ]
+        assert uc.parties_from_participants(parts) == ("ПАО Сбербанк", "Иванов И.И.")
+
+    def test_synonym_roles(self):
+        """ЗАЯВИТЕЛЬ/ДОЛЖНИК — типичный состав «прочих» дел на 7kas."""
+        parts = [
+            {"role": "ЗАЯВИТЕЛЬ", "name": "ПАО Сбербанк"},
+            {"role": "ДОЛЖНИК", "name": "Петров П.П."},
+        ]
+        assert uc.parties_from_participants(parts) == ("ПАО Сбербанк", "Петров П.П.")
+
+    def test_vzyskatel_and_interested_person(self):
+        parts = [
+            {"role": "ВЗЫСКАТЕЛЬ", "name": "ПАО Сбербанк"},
+            {"role": "ЗАИНТЕРЕСОВАННОЕ ЛИЦО", "name": "Сидоров С.С."},
+        ]
+        assert uc.parties_from_participants(parts) == ("ПАО Сбербанк", "Сидоров С.С.")
+
+    def test_exact_role_wins_over_synonym(self):
+        """Заявитель кассации нередко продублирован в УЧАСТНИКАХ выше
+        настоящего истца — сторону по существу спора он перебивать не должен."""
+        parts = [
+            {"role": "ЗАЯВИТЕЛЬ", "name": "Кассатор К.К."},
+            {"role": "ИСТЕЦ", "name": "ПАО Сбербанк"},
+            {"role": "ОТВЕТЧИК", "name": "Иванов И.И."},
+        ]
+        assert uc.parties_from_participants(parts) == ("ПАО Сбербанк", "Иванов И.И.")
+
+    def test_service_roles_ignored(self):
+        parts = [
+            {"role": "ПРЕДСТАВИТЕЛЬ", "name": "Адвокат А.А."},
+            {"role": "ПРОКУРОР", "name": "Прокуратура"},
+            {"role": "ТРЕТЬЕ ЛИЦО", "name": "ООО Ромашка"},
+        ]
+        assert uc.parties_from_participants(parts) == ("", "")
+
+    def test_empty_and_nameless(self):
+        assert uc.parties_from_participants([]) == ("", "")
+        assert uc.parties_from_participants(None) == ("", "")
+        assert uc.parties_from_participants([{"role": "ИСТЕЦ", "name": ""}]) == ("", "")
+
+    def test_first_of_each_side_wins(self):
+        parts = [
+            {"role": "ОТВЕТЧИК", "name": "Первый О."},
+            {"role": "ОТВЕТЧИК", "name": "Второй О."},
+        ]
+        assert uc.parties_from_participants(parts) == ("", "Первый О.")
+
+
 # ── link_cassation_cases ─────────────────────────────────────────────────────
 
 def _cass_find(fi_num: str, cass_num: str = "8Г-111/2026", **over) -> dict:
@@ -1207,7 +1267,79 @@ class TestLinkCassationCases:
         assert nc["current_stage"] == "cassation"
         assert nc["discovered_via_cassation"] is True
         assert nc["cassation"]["case_number"] == "8Г-333/2026"
+        assert nc["id"] == "2-300/2025"
+        assert nc["first_instance"]["case_number"] == "2-300/2025"
         assert changes and "discovered_in_cassation" in changes[0]["type"]
+
+    def test_discovery_fills_parties_from_exotic_roles(self):
+        """Discovery по делу «прочей» категории: в УЧАСТНИКАХ 7kas роли
+        ЗАЯВИТЕЛЬ/ДОЛЖНИК. Раньше стороны оставались пустыми и запись в
+        дайджесте вырождалась в голый 8Г-номер (инцидент 24.07.2026)."""
+        find = _cass_find(
+            "2-301/2025",
+            cass_num="8Г-12479/2026",
+            participants=[
+                {"role": "ЗАЯВИТЕЛЬ", "name": "Голованов Г.Г."},
+                {"role": "ДОЛЖНИК", "name": "ПАО Сбербанк"},
+            ],
+        )
+        out, _changes, discovered = uc.link_cassation_cases([], [find])
+        assert len(discovered) == 1
+        assert out[0]["plaintiff"] == "Голованов Г.Г."
+        assert out[0]["defendant"] == "ПАО Сбербанк"
+
+    def test_existing_case_gets_parties_backfilled(self):
+        """Дело уже заведено (в т.ч. discovery'ем до фикса) с пустыми
+        сторонами — очередная карточка 7kas дозаполняет их."""
+        cases = [{
+            "id": "2-302/2025",
+            "current_stage": "cassation",
+            "plaintiff": "",
+            "defendant": "",
+            "bank_role": "",
+            "discovered_via_cassation": True,
+            "first_instance": {"case_number": "2-302/2025"},
+            "cassation": {"case_number": "8Г-777/2026"},
+        }]
+        find = _cass_find(
+            "2-302/2025",
+            cass_num="8Г-777/2026",
+            participants=[
+                {"role": "ЗАЯВИТЕЛЬ", "name": "Голованов Г.Г."},
+                {"role": "ЗАИНТЕРЕСОВАННОЕ ЛИЦО", "name": "ПАО Сбербанк"},
+            ],
+            bank_role="Третье лицо",
+        )
+        out, _changes, discovered = uc.link_cassation_cases(cases, [find])
+        assert discovered == []
+        assert out[0]["plaintiff"] == "Голованов Г.Г."
+        assert out[0]["defendant"] == "ПАО Сбербанк"
+        assert out[0]["bank_role"] == "Третье лицо"
+
+    def test_backfill_does_not_overwrite_known_parties(self):
+        """Стороны из карточки 1-й инстанции точнее — не перезаписываем."""
+        cases = [{
+            "id": "2-303/2025",
+            "current_stage": "cassation",
+            "plaintiff": "ПАО Сбербанк",
+            "defendant": "Иванов Иван Иванович",
+            "bank_role": "Истец",
+            "first_instance": {"case_number": "2-303/2025"},
+            "cassation": {"case_number": "8Г-888/2026"},
+        }]
+        find = _cass_find(
+            "2-303/2025",
+            cass_num="8Г-888/2026",
+            participants=[
+                {"role": "ИСТЕЦ", "name": "СБЕРБАНК ПАО"},
+                {"role": "ОТВЕТЧИК", "name": "ИВАНОВ И. И."},
+            ],
+            bank_role="Ответчик",
+        )
+        out, _changes, _discovered = uc.link_cassation_cases(cases, [find])
+        assert out[0]["plaintiff"] == "ПАО Сбербанк"
+        assert out[0]["defendant"] == "Иванов Иван Иванович"
+        assert out[0]["bank_role"] == "Истец"
 
     def test_archived_case_resurrected_instead_of_discovery(self):
         """Дело ушло в архив из cassation_watch (120 дней), касс. карточка
