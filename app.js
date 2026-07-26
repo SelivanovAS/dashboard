@@ -1683,6 +1683,35 @@ function caseArchived(c){
 function hasEnforcementWrit(c){
   return (c.writs||[]).some(w=>classifyWritKind(w,c)==='enforcement');
 }
+// Сколько дней дело ждёт исполнительный лист. Якорь — legal_force_est
+// (расчётная дата вступления решения в силу: мотивировка + 30 дн по
+// производственному календарю, считает bank_legal_force_est на бэкенде —
+// в JS календаря нет, поэтому поле приезжает готовым в cases_bank.json).
+// null — если ждать нечего: лист уже есть, дело не решено, даты нет.
+// Отрицательное значение (решение ещё не в силе) отдаём как есть — ожидание
+// формально не началось, бейдж его не показывает.
+function awaitingWritDays(c){
+  if(!c||!c._bankTrack||c.status!=='decided')return null;
+  if(hasEnforcementWrit(c))return null;
+  const est=parseDate((c._fi&&c._fi.legal_force_est)||'');
+  if(!est)return null;
+  return -dayDiff(est);
+}
+// Порог тревоги: реальная выдача листа — +40..55 дн от решения
+// (classify_writ_kind), потолок ожидания на бэкенде — BANK_WRIT_WAIT_MAX_DAYS
+// (180 дн). До 30 дн — норма, 30-60 — присмотреться, дольше — просрочено.
+function awaitingWritLevel(d){
+  return d===null||d<=0?'':d>60?'overdue':d>30?'watch':'normal';
+}
+// Бейдж «⏳ ждёт ИЛ N дн.» — в строке таблицы, мобильной карточке и hero
+// drawer'а. Плитка «Ждут ИЛ» даёт только счётчик, а юристу нужен приоритет
+// внутри очереди: 30 дел из 38 уже в силе, разброс ожидания — до 79 дней.
+function awaitingWritBadgeHtml(c){
+  const d=awaitingWritDays(c);
+  const lvl=awaitingWritLevel(d);
+  if(!lvl)return '';
+  return `<span class="badge badge-compact badge-await-writ aw-${lvl}" title="Решение вступило в силу ${escHtml(formatDate(parseDate(c._fi.legal_force_est)))} (расчётно), исполнительный лист не выдан">⏳ ждёт ИЛ ${d} дн.</span>`;
+}
 // Включён ли надкартотечный «★ Мои» (звёзды обеих картотек, один список).
 function mineModeOn(){return filterMineActive&&watchlist.size>0;}
 // Активный датасет: «★ Мои» объединяет обе картотеки, иначе — по сегменту.
@@ -1750,7 +1779,19 @@ function applyFilters(){
 
   // Таблица сортировки timestamp-полей → ключ в computed, если есть.
   const TS_FIELDS={dateReceived:'tsDateReceived',nextDate:'tsNextDate',lastEventDate:'tsLastEventDate'};
+  // Чип «Ждут ИЛ» — это очередь работы, а не список: при relevance-сортировке
+  // (дефолт) она вырождалась бы в «все рассмотренные вперемешку». Ставим
+  // дольше всех ждущих наверх; явную сортировку по колонке юрист не теряет.
+  const очередьИЛ=(document.getElementById('filter-status')||{}).value==='awaiting_writ';
   filteredCases.sort((a,b)=>{
+    if(очередьИЛ&&sortField==='relevance'){
+      const da=awaitingWritDays(a),db=awaitingWritDays(b);
+      if(da!==null||db!==null){
+        if(da===null)return 1;
+        if(db===null)return -1;
+        if(da!==db)return db-da;
+      }
+    }
     // Relevance sort: новые → с назначенной датой (ближайшая впереди) → поступили без даты → рассмотренные → архив
     if(sortField==='relevance'){
       const rankOf=x=>{
@@ -2302,7 +2343,7 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
-    const metaBadges = [stageBadge, pendingBadge, bankTrackBadge(c), writBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, bankTrackBadge(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -2584,6 +2625,35 @@ function buildTimeline(c,стадия){
     // карточки 1-й инстанции, поэтому остаются здесь (решение юриста).
     pushEvents(fi.appeal_events,'Апел. жалоба');
     pushEvents(fi.cassation_events,'Касс. жалоба');
+    // Исполнительные листы живут в отдельной вкладке карточки суда, а не в
+    // «Движениях дела», поэтому в ленту сами не попадали: после «решения»
+    // хронология обрывалась, хотя выдача листа — событие дела (в дайджесте
+    // оно событием и является: fi_writ_issued / fi_writ_status_changed).
+    // Секция выше остаётся реестром реквизитов, лента — историей.
+    // Листы одной даты с одинаковым типом и статусом схлопываем в один пункт
+    // со счётчиком: дедуп ленты по (дата, имя) убил бы их молча, а «выдан
+    // лист» вместо «выдано 2 листа» — потеря факта (2-3725/2026: два листа
+    // 16.07 в один ОСП).
+    const листыПоДате=new Map();
+    (fi.writs||[]).forEach(w=>{
+      const d=parseDate(w.issue_date||'');
+      if(!d)return;
+      const st=(w.status||'').trim();
+      const обеспечение=classifyWritKind(w,c)==='interim';
+      const ключ=[d,обеспечение?'i':'e',st].join('|');
+      const г=листыПоДате.get(ключ);
+      if(г)г.n++;
+      else листыПоДате.set(ключ,{d:d,обеспечение:обеспечение,st:st,n:1});
+    });
+    листыПоДате.forEach(г=>{
+      const имя=г.обеспечение?'Выдан обеспечительный лист (арест)':'Выдан исполнительный лист';
+      const отозван=!!г.st&&г.st!=='Выдан';
+      // Дату смены статуса суд не публикует (в таблице только дата выдачи) —
+      // текущий статус приписываем к той же вехе, а не выдумываем вторую.
+      веха(г.d,
+           имя+(г.n>1?` (${г.n} шт.)`:'')+(отозван?' — '+г.st:''),
+           отозван?'danger':'success');
+    });
   }
   if(нужна('ap')){
     if(ap.events&&ap.events.length)pushEvents(ap.events);
@@ -2726,7 +2796,8 @@ function buildWritsSectionHtml(c){
   const total=c.writs.length;
   const rows=c.writs.map((w,i)=>{
     const st=(w.status||'').trim();
-    const cls=st==='Выдан'?'writ-issued':'writ-inactive';
+    const активен=st==='Выдан';
+    const cls=активен?'writ-issued':'writ-inactive';
     const kind=classifyWritKind(w,c);
     // Для 'unknown' (нет даты выдачи) подпись не выводим: «тип не определён»
     // юристу ничего не даёт.
@@ -2745,7 +2816,7 @@ function buildWritsSectionHtml(c){
     // «Лист N из M» — при нескольких листах номер и статус читаются в паре:
     // в одном деле бывает «…#1 Возвращен» + «…#2 Выдан» с одной датой и одним
     // ОСП (Советский, 2-37/2026), и суффикс — единственный различитель.
-    return `<div class="writ-row">
+    return `<div class="writ-row${активен?'':' is-inactive'}">
       <div class="writ-row-top">
         ${total>1?`<span class="writ-count">Лист ${i+1} из ${total}</span>`:''}
         <b class="writ-date">${escHtml(w.issue_date||'дата не указана')}</b>
@@ -2756,8 +2827,17 @@ function buildWritsSectionHtml(c){
       ${w.recipient?`<div class="writ-recipient" title="${escHtml(w.recipient)}">→ ${escHtml(shortBailiff(w.recipient))}</div>`:''}
     </div>`;
   }).join('');
+  // Заголовок называет то, что внутри. «Исполнительные листы (4)» при четырёх
+  // обеспечительных (реальный кейс 2-3575/2026) юрист читает как «лист на
+  // исполнение есть» — а его нет, дело стоит в очереди «Ждут ИЛ».
+  const наИсполнение=c.writs.filter(w=>classifyWritKind(w,c)!=='interim').length;
+  const обеспечительных=total-наИсполнение;
+  const заголовок=наИсполнение
+    ?`Исполнительные листы (${наИсполнение})`
+      +(обеспечительных?` <span class="ws-extra">· обеспечительных ${обеспечительных}</span>`:'')
+    :`Обеспечительные листы (${total})`;
   return `<div class="drawer-section">
-    <div class="drawer-section-title">Исполнительные листы (${total})</div>
+    <div class="drawer-section-title">${заголовок}</div>
     <div class="writ-list">${rows}</div>
   </div>`;
 }
@@ -2899,6 +2979,17 @@ function renderDrawer(c){
     if(датыИЛ.length){
       const хвост=датыИЛ.length>1?` <span style="color:var(--slate-500);font-weight:500;">(листов: ${датыИЛ.length})</span>`:'';
       keyDates+=`<div class="kv-k">🧾 ИЛ выдан</div><div class="kv-v kv-mono">${formatDate(датыИЛ[датыИЛ.length-1])}${хвост}</div>`;
+    }else{
+      // Листа нет — показываем, с какого числа решение в силе и сколько дело
+      // уже ждёт. Дата расчётная (мотивировка + 30 дн), поэтому подписана.
+      const ожидание=awaitingWritDays(c);
+      const сила=parseDate((c._fi&&c._fi.legal_force_est)||'');
+      if(сила){
+        const lvl=awaitingWritLevel(ожидание);
+        const хвост=lvl?` <span class="kv-await aw-${lvl}">ждёт ИЛ ${ожидание} дн.</span>`
+                      :` <span style="color:var(--slate-500);font-weight:500;">(ещё не в силе)</span>`;
+        keyDates+=`<div class="kv-k">Вступило в силу</div><div class="kv-v kv-mono">${formatDate(сила)} <span style="color:var(--slate-500);font-weight:500;">(расч.)</span>${хвост}</div>`;
+      }
     }
   }
   keyDates+=`</div>`;
@@ -3084,7 +3175,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${bankTrackBadge(c)}${writBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${bankTrackBadge(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
@@ -3208,7 +3299,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${stageBadge}${pendingBadge}${bankTrackBadge(c)}${writBadgeHtml(c,true)}${newBadge}${archived}</span>
+        <span class="mc-badges">${stageBadge}${pendingBadge}${bankTrackBadge(c)}${writBadgeHtml(c,true)}${awaitingWritBadgeHtml(c)}${newBadge}${archived}</span>
       </div>
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}

@@ -1598,6 +1598,18 @@ def split_bank_track(
         if not lifecycle.is_bank_plaintiff_track(c):
             rest.append(c)
             continue
+        # Расчётная дата вступления решения в силу — единственный якорь для
+        # вопроса «сколько это дело уже ждёт исполнительный лист». Считалась
+        # она и раньше (ритм опроса, потолок архива), но жила только в памяти
+        # прогона; фронту её не воспроизвести — производственного календаря
+        # в JS нет. Штампуем до ветвлений: поле нужно и активным, и ново-
+        # архивным. Пусто (решения ещё нет) → ключ не пишем.
+        _fi = c.get("first_instance") or {}
+        _est = lifecycle.bank_legal_force_est(_fi)
+        if _est:
+            _fi["legal_force_est"] = _est.isoformat()
+        else:
+            _fi.pop("legal_force_est", None)
         if lifecycle.bank_case_left_track(c):
             c.pop("track", None)
             c["track_origin"] = "plaintiff_light"

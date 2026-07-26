@@ -30,8 +30,9 @@ from court_monitor.parsing import (
 )
 from court_monitor.storage import load_json
 from court_monitor.textutil import (
-    escape_html, shorten_party_name, shorten_court_name, _bare_case_number,
-    parties_short, parse_date, case_id_uid, ROLE_GENITIVE, plural_ru,
+    escape_html, shorten_party_name, shorten_court_name, shorten_bailiff_name,
+    _bare_case_number, parties_short, parse_date, case_id_uid, ROLE_GENITIVE,
+    plural_ru,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -731,6 +732,22 @@ _BANK_TYPE_LABELS = {
 }
 
 
+def _writ_numbers(writ: dict) -> str:
+    """Номер(а) исполнительного листа одной строкой.
+
+    Электронный ИД («86RS0004#2-7806/2026#1») и бумажный бланк
+    («ФС № 039166358») — РАЗНЫЕ реквизиты одного листа, а не фолбэк друг для
+    друга. Было `electronic_id or blank_number`: заполни суд обе колонки —
+    бумажный номер молча пропал бы из Telegram. Зеркало фронта
+    (buildWritsSectionHtml в app.js).
+    """
+    nums = [n for n in (
+        (writ.get("electronic_id") or "").strip(),
+        (writ.get("blank_number") or "").strip(),
+    ) if n]
+    return " · ".join(nums)
+
+
 def _bank_event_phrases(ch: dict) -> list[str]:
     """Компактные фразы событий одного дела для секции «Иски банка»."""
     d = ch.get("details") or {}
@@ -738,7 +755,6 @@ def _bank_event_phrases(ch: dict) -> list[str]:
     for t in ch.get("type") or []:
         if t == "fi_writ_issued":
             for w in d.get("writs") or [{}]:
-                num = (w.get("electronic_id") or w.get("blank_number") or "").strip()
                 # Тип листа различает дата выдачи (classify_writ_kind):
                 # обеспечительный (арест) выдаётся в начале дела, лист на
                 # исполнение — после вступления решения в силу.
@@ -748,18 +764,24 @@ def _bank_event_phrases(ch: dict) -> list[str]:
                     ph = "🧾 <b>выдан исполнительный лист</b>"
                 if w.get("issue_date"):
                     ph += f" {escape_html(w['issue_date'])}"
+                num = _writ_numbers(w)
                 if num:
                     ph += f" ({escape_html(num)})"
                 rec = (w.get("recipient") or "").strip()
                 if rec:
-                    ph += f" → {escape_html(rec[:60])}"
+                    ph += f" → {escape_html(shorten_bailiff_name(rec))}"
                 out.append(ph)
         elif t == "fi_writ_status_changed":
             for w in d.get("writ_status_changes") or []:
+                # Номер обязателен именно здесь: у дела бывает несколько листов
+                # одной даты в один ОСП, и без номера непонятно, КАКОЙ из них
+                # отозван (Советский, 2-37/2026: #1 Возвращен, #2 Выдан).
+                num = _writ_numbers(w)
                 out.append(
                     "🧾 лист"
-                    + (f" {escape_html(w.get('issue_date', ''))}"
-                       if w.get("issue_date") else "")
+                    + (f" {escape_html(num)}" if num
+                       else (f" {escape_html(w.get('issue_date', ''))}"
+                             if w.get("issue_date") else ""))
                     + f": {escape_html(w.get('old_status') or '?')}"
                     + f" → <b>{escape_html(w.get('status') or '?')}</b>"
                 )
