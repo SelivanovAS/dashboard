@@ -988,7 +988,13 @@ tr.detail-row { display:none; }
 .drawer-hero .hero-meta { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
 .drawer-hero .hero-parties { font-size:var(--fs-lg); line-height:1.5; color:var(--fg-1); margin-bottom:12px; }
 .drawer-hero .hero-parties .party-row { display:flex; gap:8px; align-items:baseline; margin-bottom:3px; }
-.drawer-hero .hero-parties .party-row .p-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; color:var(--fg-4); min-width:22px; }
+/* flex-shrink:0 обязателен: явный min-width ОТМЕНЯЕТ автоминимум flex-элемента
+   (min-width:auto), поэтому тег сжимался ниже своего содержимого — «ОТВЕТ.»
+   при 22px коробки требует 39px и наезжал на имя ответчика. У такого же тега
+   в таблице (.party-tag) flex-shrink:0 стоит с самого начала.
+   min-width в em, а не в px: держит обе метки в одной колонке (значения
+   выравниваются по вертикали) и переживает смену --fs-2xs и шрифта. */
+.drawer-hero .hero-parties .party-row .p-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; color:var(--fg-4); flex-shrink:0; min-width:4em; }
 .drawer-hero .hero-badges { display:flex; gap:6px; flex-wrap:wrap; }
 .drawer-hero .hero-category { font-size:var(--fs-sm); color:var(--fg-2); margin:0 0 10px; line-height:1.4; }
 .drawer-hero .hero-category .hc-label { color:var(--fg-4); font-weight:var(--fw-semibold); margin-right:4px; }
