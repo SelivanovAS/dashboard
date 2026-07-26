@@ -81,6 +81,8 @@ function adminPageConfig() {
   return {
     casesUrl: base + "/data/cases.json",
     archiveUrl: base + "/data/cases_archive.json",
+    bankUrl: base + "/data/cases_bank.json",
+    bankArchiveUrl: base + "/data/cases_bank_archive.json",
     pushesUrl: base + "/data/last_personal_pushes.json",
     digestUrl: base + "/data/last_digest.json",
     healthUrl: base + "/data/parse_health.json",
@@ -113,9 +115,17 @@ function wnBuildAliasToCanonical(cases) {
       ca.case_number, ca.cassation_number,
       ...wnExtractParenNumbers(c.id),
     ];
+    // Композитный алиас «домен|номер» — форма звёзд трека «Иски банка»
+    // (номера не уникальны между судами). Пока дело живёт в cases_bank.json,
+    // composite-запись проходит канонизацию без изменений (карта её не
+    // знает); когда дело переезжает в основной cases.json (апелляция) —
+    // запись отсюда резолвит composite в bare-канон, звезда «оживает».
+    const dom = String(fi.court_domain || "").trim();
     for (const raw of candidates) {
       const bare = wnBareCaseNumber(raw);
-      if (bare && !map.has(bare)) map.set(bare, canonical);
+      if (!bare) continue;
+      if (!map.has(bare)) map.set(bare, canonical);
+      if (dom && !map.has(dom + "|" + bare)) map.set(dom + "|" + bare, canonical);
     }
   }
   return map;
