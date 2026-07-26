@@ -27,6 +27,15 @@ on:
         type: boolean
         required: false
         default: false
+  # push-триггер: (1) регистрирует workflow в GitHub — dispatch-API отдаёт
+  # 404 для workflow, которых нет в дефолтной ветке и которые ни разу не
+  # срабатывали; (2) даёт свежий dry-run-отчёт после каждой правки сборщика.
+  # Запуск по push ВСЕГДА идёт в dry-run (см. шаг сбора) — боевая запись
+  # только руками через Run workflow.
+  push:
+    paths:
+      - "scripts/collect_bank_claims.py"
+      - ".github/workflows/collect_bank_claims.yml"
 
 permissions:
   contents: write
@@ -57,11 +66,18 @@ jobs:
           FETCH_MAX_RETRIES: "3"
         run: |
           mkdir -p ops/bank_registry
+          # push-запуск (регистрация/проверка после правок) — всегда dry-run;
+          # боевая запись — только ручной Run workflow без галки dry_run.
+          DRY_FLAG=""
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] \
+             || [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
           python3 scripts/collect_bank_claims.py \
             --court "${{ github.event.inputs.court_domain || 'surggor--hmao.sudrf.ru' }}" \
             --pages "${{ github.event.inputs.pages || '10' }}" \
             --limit "${{ github.event.inputs.limit || '0' }}" \
-            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} 2>&1 \
+            $DRY_FLAG 2>&1 \
             | tee ops/bank_registry/collect_report.txt
 
       - name: Commit data + report
