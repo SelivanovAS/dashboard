@@ -1006,10 +1006,14 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             if cass.get("cassation_number"):
                 line += f" [{cass['cassation_number']}]"
             line += f" (URL: {url_card or '—'}): "
-            line += (
-                f"{shorten_party_name(c.get('plaintiff', ''), keep_fio_full=True)} (истец) vs "
-                f"{shorten_party_name(c.get('defendant', ''), keep_fio_full=True)} (ответчик), "
-            )
+            # Стороны бывают неизвестны (дело заведено discovery'ем с 7kas, в
+            # карточке роли участников не свелись к истцу/ответчику). Пустой
+            # фрагмент «  (истец) vs  (ответчик)» LLM только путал — в этом
+            # случае дело опознаётся по заявителю (поле ниже).
+            _pl_llm = shorten_party_name(c.get('plaintiff', ''), keep_fio_full=True)
+            _df_llm = shorten_party_name(c.get('defendant', ''), keep_fio_full=True)
+            if _pl_llm or _df_llm:
+                line += f"{_pl_llm} (истец) vs {_df_llm} (ответчик), "
             line += f"роль банка: {c.get('bank_role', '?')}, "
             line += f"1-я инст. №: {c.get('id', '')}, "
             line += f"суд 1 инст.: {shorten_court_name(fi.get('court', '') or '?')}, "

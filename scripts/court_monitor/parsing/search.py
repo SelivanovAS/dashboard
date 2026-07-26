@@ -128,6 +128,52 @@ def determine_bank_role_from_participants(participants: list[dict]) -> str:
     return ""
 
 
+# Синонимы процессуальных ролей: приказное/особое/административное
+# производство подписывает стороны иначе, чем исковое. Без них у дел
+# категории «прочие» стороны оставались пустыми, и запись в дайджесте
+# схлопывалась до голого номера (инцидент 24.07.2026, 8Г-12479/2026 —
+# кассация Урала: в карточке 7kas роли были не ИСТЕЦ/ОТВЕТЧИК).
+# «АДМИНИСТРАТИВНЫЙ ИСТЕЦ/ОТВЕТЧИК» отдельно не перечисляем: подстроки
+# ИСТЕЦ/ОТВЕТЧИК ловит первый проход.
+_PLAINTIFF_ROLE_SYNONYMS = ("ЗАЯВИТЕЛЬ", "ВЗЫСКАТЕЛЬ")
+_DEFENDANT_ROLE_SYNONYMS = ("ЗАИНТЕРЕСОВАННОЕ ЛИЦО", "ДОЛЖНИК")
+
+
+def parties_from_participants(participants: list[dict]) -> tuple[str, str]:
+    """Вернуть (истцовая сторона, ответная сторона) по списку участников.
+
+    participants: список dict с ключами 'role' (вид участника) и 'name' —
+    в форме, которую отдают parse_case_card и parse_cassation_card.
+
+    Два прохода: сначала точные ИСТЕЦ/ОТВЕТЧИК, потом синонимы. Порядок
+    важен — «ЗАЯВИТЕЛЬ», стоящий в таблице выше настоящего ИСТЦА (типично
+    для карточек 7kas, где заявитель кассации попадает в УЧАСТНИКИ), не
+    должен перебивать сторону по существу спора.
+
+    Роли, которые сторонами не являются (ПРЕДСТАВИТЕЛЬ, ПРОКУРОР,
+    ТРЕТЬЕ ЛИЦО), не берём вовсе. Если ничего не распозналось — ("", "").
+    """
+    plaintiff = ""
+    defendant = ""
+    for exact_pass in (True, False):
+        for p in participants or []:
+            role_up = (p.get("role") or "").upper()
+            name = (p.get("name") or "").strip()
+            if not name:
+                continue
+            if exact_pass:
+                is_pl = "ИСТЕЦ" in role_up
+                is_df = "ОТВЕТЧИК" in role_up
+            else:
+                is_pl = any(s in role_up for s in _PLAINTIFF_ROLE_SYNONYMS)
+                is_df = any(s in role_up for s in _DEFENDANT_ROLE_SYNONYMS)
+            if is_pl and not plaintiff:
+                plaintiff = name
+            elif is_df and not defendant:
+                defendant = name
+    return plaintiff, defendant
+
+
 def parse_search_page(html: str) -> list[dict]:
     """
     Парсит страницу результатов поиска.
