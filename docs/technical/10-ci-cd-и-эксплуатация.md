@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1614](../../scripts/court_monitor/runs.py#L1614)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([938](../../scripts/court_monitor/runs.py#L938)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([4145](../../scripts/court_monitor/runs.py#L4145)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([3829](../../scripts/court_monitor/runs.py#L3829)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4006](../../scripts/court_monitor/runs.py#L4006)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1197](../../scripts/court_monitor/runs.py#L1197)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([1615](../../scripts/court_monitor/runs.py#L1615)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([939](../../scripts/court_monitor/runs.py#L939)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([4183](../../scripts/court_monitor/runs.py#L4183)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([3867](../../scripts/court_monitor/runs.py#L3867)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4044](../../scripts/court_monitor/runs.py#L4044)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1198](../../scripts/court_monitor/runs.py#L1198)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -55,8 +55,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([893](../../scripts/court_monitor/runs.py#L893)) проверяет
-наличие ключей на старте; `check_court_available` ([925](../../scripts/court_monitor/runs.py#L925))
+`validate_environment` ([894](../../scripts/court_monitor/runs.py#L894)) проверяет
+наличие ключей на старте; `check_court_available` ([926](../../scripts/court_monitor/runs.py#L926))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -199,7 +199,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([755](../../scripts/court_monitor/delivery.py#L755)) — итоговая
+- `log_run_summary` ([784](../../scripts/court_monitor/delivery.py#L784)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, Telegram, Web Push,
   LLM-пересказы актов (вызовы/из кэша), карточки-«огрызки»; нулевые строки
   опускаются) + markdown-таблица в `$GITHUB_STEP_SUMMARY`.
@@ -215,7 +215,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   Сургутский горсуд) — Timeout…»). **Пер-судовые тайминги:** фаза 3 пишет время
   каждого суда в пер-судовую строку, фаза 5 — строку «1 инст: медленные суды — …»
   (топ-3 по времени обхода карточек, включая ретраи).
-- `send_crash_alert` ([860](../../scripts/court_monitor/delivery.py#L860)) — падение
+- `send_crash_alert` ([889](../../scripts/court_monitor/delivery.py#L889)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в
