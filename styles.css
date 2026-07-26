@@ -727,12 +727,24 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* «🧾 ИЛ» — исполнительный лист выдан (трек исков банка) */
 .badge-writ      { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 /* Drawer: секция «Исполнительные листы» — реквизиты каждого листа явно
-   (title-тултип бейджа на телефоне не работает) */
+   (title-тултип бейджа на телефоне не работает). Герой карточки — НОМЕР
+   листа: им юрист оперирует, поэтому он крупнее всего остального, mono,
+   выделяется целиком долгим тапом и копируется кнопкой. */
 .writ-list { display:flex; flex-direction:column; gap:10px; }
-.writ-row { display:flex; flex-direction:column; gap:3px; padding:10px 12px; background:var(--bg-2); border-radius:10px; }
-.writ-row-top { display:flex; align-items:center; gap:8px; }
-.writ-num { font-size:var(--fs-2xs); color:var(--fg-2); word-break:break-all; }
-.writ-recipient { font-size:var(--fs-2xs); color:var(--fg-3); }
+.writ-row { display:flex; flex-direction:column; gap:6px; padding:10px 12px; background:var(--bg-2); border-radius:10px; }
+.writ-row-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.writ-row-top .badge { margin-left:auto; }
+.writ-count { font-size:var(--fs-2xs); font-weight:var(--fw-semibold); color:var(--fg-4); text-transform:uppercase; letter-spacing:0.04em; }
+.writ-date { font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--fg-2); letter-spacing:-0.01em; }
+.writ-id { display:flex; flex-direction:column; gap:1px; }
+.writ-id-row { display:flex; align-items:center; gap:6px; }
+/* user-select:all — долгий тап на телефоне выделяет номер целиком, а не по
+   слову; переносится только по «#» (<wbr> ставит writNumHtml). */
+.writ-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); letter-spacing:-0.01em; line-height:1.35; user-select:all; -webkit-user-select:all; min-width:0; }
+.writ-id-label { font-size:var(--fs-2xs); color:var(--fg-4); }
+.writ-copy { flex-shrink:0; }
+.writ-kind { font-size:var(--fs-xs); color:var(--fg-2); }
+.writ-recipient { font-size:var(--fs-sm); color:var(--fg-1); line-height:1.35; }
 .badge-writ-status.writ-issued { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 .badge-writ-status.writ-inactive { background:var(--amber-100); color:var(--amber-700); }
 /* «🛡 Обеспечение» — обеспечительный лист (арест); индиго, чтобы не путать
@@ -754,7 +766,6 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .show-more-btn:hover { background:var(--bg-3, var(--bg-2)); color:var(--fg-1); }
 /* Хроника bank-дела грузится отдельным файлом — мягкое ожидание */
 .tl-loading { opacity:.75; font-style:italic; }
-.writ-kind { font-size:var(--fs-2xs); color:var(--fg-3); }
 .badge-scheduled { background:var(--blue-100); color:var(--blue-700); }
 .badge-prep      { background:var(--indigo-100); color:var(--indigo-700); }
 .badge-prelim    { background:var(--blue-100); color:var(--blue-700); }
@@ -839,6 +850,12 @@ tbody tr:hover .row-actions, tbody tr.row-focus .row-actions { opacity:1; }
 .row-action-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
 .row-action-btn svg { width:12px; height:12px; }
 .row-action-btn.copied { border-color:var(--accent); color:var(--accent); }
+/* Кнопка «скопировать» вне hover-контекста таблицы (drawer): видна всегда —
+   в drawer'е hover'а нет, а на телефоне его нет нигде. */
+.copy-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-1); color:var(--fg-3); cursor:pointer; transition:all 120ms var(--ease-out); }
+.copy-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
+.copy-btn svg { width:13px; height:13px; }
+.copy-btn.copied { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
 
 /* Watchlist: звёздочка отслеживания дела (карточка/таблица/drawer) */
 .watch-btn {
@@ -1309,6 +1326,22 @@ tr.detail-row { display:none; }
   .tl-item.tl-upcoming .tl-date,
   .tl-item.tl-upcoming-soon .tl-date,
   .tl-item.tl-upcoming-today .tl-date { font-size:var(--fs-md); }
+  /* Исполнительные листы: секция единственная в drawer оставалась на
+     --fs-2xs (11px) и на телефоне, хотя все соседи выше подняты. Ни одна
+     строка здесь не должна остаться на 11px — тултипа на тач-экране нет,
+     это единственный канал для реквизитов. Номер — крупнее всего. */
+  .writ-row { padding:12px 14px; }
+  .writ-num { font-size:var(--fs-lg); }
+  .writ-recipient { font-size:var(--fs-lg); }
+  .writ-kind { font-size:var(--fs-sm); }
+  .writ-date { font-size:var(--fs-md); }
+  .writ-id-label, .writ-count { font-size:var(--fs-xs); }
+  /* Хитбокс под палец 44px, но без рамки и фона: коробка кнопки на 320px
+     тяжелее самого номера и спорит с ним за внимание. Обратка на нажатие
+     остаётся — `.copied` красит иконку в accent. */
+  .writ-copy { width:44px; height:44px; margin:-9px -10px -9px 0; border-color:transparent; background:transparent; }
+  .writ-copy svg { width:18px; height:18px; }
+  .writ-copy.copied { background:transparent; border-color:transparent; }
   /* Текст решения на телефоне разворачиваем без внутреннего скролла —
      вложенный скролл в drawer'е неудобен пальцем. */
   .act-pre { max-height:none; }

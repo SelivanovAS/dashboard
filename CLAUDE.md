@@ -420,9 +420,25 @@ drawer; номера не уникальны между судами — пот�
   датасете bank-список подтягивается фоном (`enhanceDigestCaseLinks`).
   PWA-shortcut «🏦 Иски банка» → `?bank=1`. Кнопка «Обновить» перезагружает
   и bank-датасет до достигнутого уровня цепочки.
+- **Секция «Исполнительные листы» в drawer** (`buildWritsSectionHtml`, только
+  вкладка 1-й инстанции — листы живут в `fi.writs`): герой карточки —
+  **НОМЕР листа**, им юрист оперирует (передача приставам, отзыв,
+  отслеживание ИП). Отсюда решения, которые нельзя откатывать «для
+  компактности»: электронный ИД и бумажный бланк выводятся ОБА с подписями
+  (это разные реквизиты одного листа, а не фолбэк друг для друга); номер —
+  крупный mono, `user-select:all`, кнопка копирования (`copyBtnHtml`),
+  перенос только по «#» (`writNumHtml`, без `word-break:break-all`);
+  «Лист N из M» при нескольких листах — одна дата/ОСП/статус на двух строках
+  различаются только суффиксом `#N`. Получатель сокращается `shortBailiff`
+  (полное имя — в `title`). Дата свежайшего enforcement-листа продублирована
+  строкой «🧾 ИЛ выдан» в «Ключевых датах», на мобильной карточке дата в
+  бейдже (`writBadgeHtml(c,true)` — тултипа на тач-экране нет).
+  Мобильные размеры секции — в блоке `@media (max-width:768px)`; держать их
+  наравне с соседями, на `--fs-2xs` (11px) не опускать.
 - Тесты: [scripts/tests/test_bank_track.py](scripts/tests/test_bank_track.py),
   [scripts/tests/test_import_bank_registry.py](scripts/tests/test_import_bank_registry.py),
-  [scripts/tests/test_bank_storage_split.py](scripts/tests/test_bank_storage_split.py)
+  [scripts/tests/test_bank_storage_split.py](scripts/tests/test_bank_storage_split.py),
+  [scripts/tests/test_frontend_writs.py](scripts/tests/test_frontend_writs.py)
   (split-хранение, ротация bank-архива, composite-матчинг push).
 
 ## Команды
