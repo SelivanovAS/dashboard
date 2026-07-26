@@ -392,7 +392,15 @@ drawer; номера не уникальны между судами — пот�
   `fi_writ_status_changed` (НЕ в эхо/stale-фильтрах); маркер `change["track"]`
   едет в данных fi_changes — сигнатуры/replay не тронуты. Рутина отключается
   `BANK_DIGEST_ROUTINE=0` (`filter_bank_routine_events`; дефолт 1 — пилот
-  шлёт всё). Env `BANK_TRACK=0` — мастер-выключатель всего трека.
+  шлёт всё).
+- **Выключатель `BANK_TRACK`** — Actions Variable территории (прокидывается в
+  [update_cases.yml](.github/workflows/update_cases.yml), фолбэк `'1'` = как
+  сейчас). ⚠️ Гасит только ПРОГОН: сегмент «🏦 Иски банка» на дашборде
+  прячется по отсутствию `data/cases_bank.json` (HEAD-проба `probeBankFile`),
+  про флаг фронт не знает — файл территории всё равно надо удалять, флаг его
+  не заменяет. Ручные `import_bank_registry`/`collect_bank_claims` флаг тоже
+  не спрашивают. До 26.07.2026 переменная не работала вовсе: код её читал, а
+  workflow не передавал — проводку стережёт `TestBankTrackWiring`.
 - **Push** (с 26.07.2026): общесистемный агрегат (подписчики без watchlist)
   track-события НЕ считает; персональные push по watchlist работают —
   `_filter_events_by_watchlist` матчит bank-изменения по composite
