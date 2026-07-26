@@ -726,6 +726,15 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-decided   { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 /* «🧾 ИЛ» — исполнительный лист выдан (трек исков банка) */
 .badge-writ      { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+/* Drawer: секция «Исполнительные листы» — реквизиты каждого листа явно
+   (title-тултип бейджа на телефоне не работает) */
+.writ-list { display:flex; flex-direction:column; gap:10px; }
+.writ-row { display:flex; flex-direction:column; gap:3px; padding:10px 12px; background:var(--bg-2); border-radius:10px; }
+.writ-row-top { display:flex; align-items:center; gap:8px; }
+.writ-num { font-size:var(--fs-2xs); color:var(--fg-2); word-break:break-all; }
+.writ-recipient { font-size:var(--fs-2xs); color:var(--fg-3); }
+.badge-writ-status.writ-issued { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+.badge-writ-status.writ-inactive { background:var(--amber-100); color:var(--amber-700); }
 .badge-scheduled { background:var(--blue-100); color:var(--blue-700); }
 .badge-prep      { background:var(--indigo-100); color:var(--indigo-700); }
 .badge-prelim    { background:var(--blue-100); color:var(--blue-700); }

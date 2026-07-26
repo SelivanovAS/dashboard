@@ -2064,8 +2064,16 @@ function copyCaseNumber(btn,num){
 /* ========== Drawer ========== */
 function findCaseIdx(num){return filteredCases.findIndex(x=>x.caseNumber===num);}
 
+// Поиск дела по номеру в активном датасете (bank-режим → иски банка),
+// с фолбэком на второй датасет — drawer работает в обоих режимах.
+function findCaseByNumber(num){
+  const primary=bankViewActive?bankCases:allCases;
+  const secondary=bankViewActive?allCases:bankCases;
+  return primary.find(x=>x.caseNumber===num)||secondary.find(x=>x.caseNumber===num);
+}
+
 function openDrawer(caseNumber){
-  const c=allCases.find(x=>x.caseNumber===caseNumber);
+  const c=findCaseByNumber(caseNumber);
   if(!c)return;
   activeCaseNumber=caseNumber;
   markCaseRead(caseNumber);
@@ -2114,7 +2122,7 @@ function drawerNav(dir){
 function setDrawerStage(s){
   if(drawerStage===s)return;
   drawerStage=s;
-  const c=allCases.find(x=>x.caseNumber===activeCaseNumber);
+  const c=findCaseByNumber(activeCaseNumber);
   if(c)renderDrawer(c);
 }
 
@@ -2378,6 +2386,27 @@ function stripActAnalysisHeader(html,caseNumber){
 function scrollToActAnalysis(){
   const el=document.getElementById('ai-act-analysis');
   if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// Секция «Исполнительные листы» в drawer (трек исков банка): реквизиты
+// каждого листа показываются явно — title-тултип бейджа «🧾 ИЛ» на
+// телефоне не работает вообще, а на десктопе требует задержки наведения.
+function buildWritsSectionHtml(c){
+  if(!c.writs||!c.writs.length)return '';
+  const rows=c.writs.map(w=>{
+    const num=w.electronic_id||w.blank_number||'';
+    const st=(w.status||'').trim();
+    const cls=st==='Выдан'?'writ-issued':'writ-inactive';
+    return `<div class="writ-row">
+      <div class="writ-row-top">🧾 <b>${escHtml(w.issue_date||'дата не указана')}</b><span class="badge badge-compact badge-writ-status ${cls}">${escHtml(st||'—')}</span></div>
+      ${num?`<div class="writ-num">${escHtml(num)}</div>`:''}
+      ${w.recipient?`<div class="writ-recipient">→ ${escHtml(w.recipient)}</div>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="drawer-section">
+    <div class="drawer-section-title">Исполнительные листы (${c.writs.length})</div>
+    <div class="writ-list">${rows}</div>
+  </div>`;
 }
 
 function renderDrawer(c){
@@ -2700,6 +2729,8 @@ function renderDrawer(c){
         <div class="drawer-section-title">Ключевые даты</div>
         ${keyDates}
       </div>
+
+      ${buildWritsSectionHtml(c)}
 
       <div class="drawer-section">
         <div class="drawer-section-title">${drawerStage==='fi'?'Первая инстанция':drawerStage==='ap'?'Апелляция':drawerStage==='cs'?'Кассация':'Суд и состав'}</div>
