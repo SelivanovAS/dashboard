@@ -323,6 +323,29 @@ def bank_legal_force_est(fi: dict) -> date | None:
     return est
 
 
+def classify_writ_kind(writ: dict, fi: dict) -> str:
+    """Тип исполнительного листа: "enforcement" | "interim" | "unknown".
+
+    Суд тип листа не публикует (в таблице «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» только
+    дата/номер/статус/получатель), но дата выдачи разделяет типы безошибочно
+    (данные пилота 26.07.2026, 24 листа: 16/8, зазор без пограничных):
+    - лист ДО даты резолютивки (реально — в первые дни после подачи иска,
+      за 27..163 дн до решения) — обеспечительные меры (арест имущества,
+      лист выдаётся сразу после определения об обеспечении, ст. 142 ГПК);
+    - лист ПОСЛЕ решения (реально +40..55 дн — вступление в силу +
+      изготовление) — принудительное исполнение решения.
+    Решения ещё нет → любой лист может быть только обеспечительным.
+    Нет даты выдачи → unknown (в архивных окнах не считается исполнением).
+    """
+    issue = parse_date(writ.get("issue_date") or "")
+    if not issue:
+        return "unknown"
+    hearing = parse_date(fi.get("hearing_date") or "")
+    if not hearing:
+        return "interim"
+    return "enforcement" if issue >= hearing else "interim"
+
+
 def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     """Архивные окна лёгкого трека исков банка (ветка is_case_archived).
 
@@ -350,9 +373,17 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
         return bool(anchor) and (now - anchor).days > config.BANK_RETURNED_ARCHIVE_DAYS
     if status != "Решено":
         return False
+    # Окно «лист выдан → архив» считается ТОЛЬКО по листам на исполнение
+    # решения: обеспечительный лист выдаётся в начале дела (задолго до
+    # решения), и без classify_writ_kind дело 2-6005 (решено, есть лишь
+    # обеспечительный лист) ушло бы в архив, не дождавшись листа на
+    # исполнение — вопрос юриста 26.07.2026.
     issue_dates = [
-        d for d in (parse_date(w.get("issue_date") or "")
-                    for w in (fi.get("writs") or []))
+        d for d in (
+            parse_date(w.get("issue_date") or "")
+            for w in (fi.get("writs") or [])
+            if classify_writ_kind(w, fi) == "enforcement"
+        )
         if d
     ]
     if issue_dates:

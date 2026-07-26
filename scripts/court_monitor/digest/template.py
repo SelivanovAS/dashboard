@@ -442,15 +442,28 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
     # раздула бы сводку: секция и так компактная, одна строка на дело).
     if bank_changes:
         n = len(bank_changes)
-        writs_n = sum(
-            1 for ch in bank_changes if "fi_writ_issued" in (ch.get("type") or [])
-        )
+        # ИЛ в сводке — раздельно по типам: «🧾 ИЛ» — на исполнение решения,
+        # «🛡» — обеспечительные (арест). kind в details ставит эмиссия.
+        enf_n = interim_n = 0
+        for ch in bank_changes:
+            if "fi_writ_issued" not in (ch.get("type") or []):
+                continue
+            writs = (ch.get("details") or {}).get("writs") or []
+            if any(w.get("kind") == "interim" for w in writs):
+                interim_n += 1
+            if any(w.get("kind") != "interim" for w in writs):
+                enf_n += 1
         part = (
             f"🏦 {n} " + plural_ru(n, "событие", "события", "событий")
             + " по искам банка"
         )
-        if writs_n:
-            part += f" (🧾 {writs_n} ИЛ)"
+        tails = []
+        if enf_n:
+            tails.append(f"🧾 {enf_n} ИЛ")
+        if interim_n:
+            tails.append(f"🛡 {interim_n} обеспечит.")
+        if tails:
+            part += f" ({', '.join(tails)})"
         parts.append(part)
     return " · ".join(parts) if parts else "без изменений"
 
@@ -726,7 +739,13 @@ def _bank_event_phrases(ch: dict) -> list[str]:
         if t == "fi_writ_issued":
             for w in d.get("writs") or [{}]:
                 num = (w.get("electronic_id") or w.get("blank_number") or "").strip()
-                ph = "🧾 <b>выдан исполнительный лист</b>"
+                # Тип листа различает дата выдачи (classify_writ_kind):
+                # обеспечительный (арест) выдаётся в начале дела, лист на
+                # исполнение — после вступления решения в силу.
+                if w.get("kind") == "interim":
+                    ph = "🛡 <b>выдан обеспечительный лист (арест)</b>"
+                else:
+                    ph = "🧾 <b>выдан исполнительный лист</b>"
                 if w.get("issue_date"):
                     ph += f" {escape_html(w['issue_date'])}"
                 if num:

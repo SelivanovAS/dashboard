@@ -1602,10 +1602,29 @@ function toggleSort(f){
 // Архивность для отображения: в bank-режиме — только по файлу-источнику
 // (см. loadBankDataset), у основной картотеки — прежняя isArchived.
 function viewArchived(c){return bankViewActive?!!c._bankArchived:isArchived(c);}
+// Тип исполнительного листа (зеркало classify_writ_kind из lifecycle.py):
+// суд тип не публикует, различает дата — лист ДО даты решения выдан на
+// обеспечительные меры (арест, первые дни после подачи иска), ПОСЛЕ — на
+// принудительное исполнение (реально +40..55 дн от решения).
+function classifyWritKind(w,c){
+  const issue=parseDate(w.issue_date||'');
+  if(!issue)return 'unknown';
+  const hearing=parseDate((c._fi&&c._fi.hearing_date)||'');
+  if(!hearing)return 'interim';
+  return issue>=hearing?'enforcement':'interim';
+}
+// Бейджи листов: «🧾 ИЛ» — есть лист на исполнение решения, «🛡 Обеспечение» —
+// есть обеспечительный (арест). Могут стоять одновременно.
 function writBadgeHtml(c){
   if(!c.writs||!c.writs.length)return '';
+  const kinds=c.writs.map(w=>classifyWritKind(w,c));
   const title=c.writs.map(w=>`${w.issue_date||''} ${w.status||''}`.trim()).filter(Boolean).join(', ');
-  return `<span class="badge badge-compact badge-writ" title="Исполнительные листы: ${escHtml(title)}">🧾 ИЛ</span>`;
+  let html='';
+  if(kinds.some(k=>k!=='interim'))
+    html+=`<span class="badge badge-compact badge-writ" title="Исполнительные листы: ${escHtml(title)}">🧾 ИЛ</span>`;
+  if(kinds.some(k=>k==='interim'))
+    html+=`<span class="badge badge-compact badge-writ-interim" title="Обеспечительные меры: ${escHtml(title)}">🛡 Обеспечение</span>`;
+  return html;
 }
 function countCasesByStatus(st){
   // Счётчики чипов считаются по активному датасету (основной / иски банка).
@@ -2397,8 +2416,10 @@ function buildWritsSectionHtml(c){
     const num=w.electronic_id||w.blank_number||'';
     const st=(w.status||'').trim();
     const cls=st==='Выдан'?'writ-issued':'writ-inactive';
+    const kind=classifyWritKind(w,c);
+    const kindLabel=kind==='interim'?'🛡 обеспечительные меры':kind==='enforcement'?'🧾 на исполнение решения':'🧾 тип не определён';
     return `<div class="writ-row">
-      <div class="writ-row-top">🧾 <b>${escHtml(w.issue_date||'дата не указана')}</b><span class="badge badge-compact badge-writ-status ${cls}">${escHtml(st||'—')}</span></div>
+      <div class="writ-row-top"><b>${escHtml(w.issue_date||'дата не указана')}</b><span class="writ-kind">${kindLabel}</span><span class="badge badge-compact badge-writ-status ${cls}">${escHtml(st||'—')}</span></div>
       ${num?`<div class="writ-num">${escHtml(num)}</div>`:''}
       ${w.recipient?`<div class="writ-recipient">→ ${escHtml(w.recipient)}</div>`:''}
     </div>`;
