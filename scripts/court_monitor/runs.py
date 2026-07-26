@@ -2457,9 +2457,15 @@ def main_json():
                     return (w.get("issue_date", ""), w.get("blank_number", ""),
                             w.get("electronic_id", ""))
                 old_writs = {_writ_key(w): w for w in (fi.get("writs") or [])}
-                issued = [w for w in new_writs if _writ_key(w) not in old_writs]
+                # kind — вычисляемый (в fi["writs"] не хранится): дайджест
+                # различает лист на исполнение решения и обеспечительный.
+                issued = [
+                    {**w, "kind": lifecycle.classify_writ_kind(w, fi)}
+                    for w in new_writs if _writ_key(w) not in old_writs
+                ]
                 restatused = [
-                    {**w, "old_status": old_writs[_writ_key(w)].get("status", "")}
+                    {**w, "old_status": old_writs[_writ_key(w)].get("status", ""),
+                     "kind": lifecycle.classify_writ_kind(w, fi)}
                     for w in new_writs
                     if _writ_key(w) in old_writs
                     and (w.get("status") or "")

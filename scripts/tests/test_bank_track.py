@@ -181,6 +181,29 @@ class TestBankTrackArchive:
         )
         assert self._archived(case) is True
 
+    def test_interim_only_writ_does_not_archive(self):
+        """Кейс 2-6005 (вопрос юриста 26.07.2026): решено, но лист только
+        обеспечительный (выдан ДО решения) — дело ждёт лист на исполнение."""
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(30),
+            act_date=self._dmy(25),
+            writs=[{"issue_date": self._dmy(60), "status": "Выдан"}],
+        )
+        assert self._archived(case) is False
+
+    def test_mixed_writs_archive_by_enforcement(self):
+        """Обеспечительный старый + исполнение свежее → окно по исполнению."""
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            writs=[
+                {"issue_date": self._dmy(150), "status": "Выдан"},  # interim
+                {"issue_date": self._dmy(5), "status": "Выдан"},    # enforcement
+            ],
+        )
+        assert self._archived(case) is False  # исполнение выдано 5 дн назад
+        case["first_instance"]["writs"][1]["issue_date"] = self._dmy(20)
+        assert self._archived(case) is True
+
     def test_writ_issued_recently_kept(self):
         case = _track_case(
             status="Решено", hearing_date=self._dmy(120),
@@ -221,6 +244,34 @@ class TestBankTrackArchive:
         case = _track_case(status="Решено", hearing_date=self._dmy(70))
         case.pop("track")
         assert self._archived(case) is True
+
+
+# ── classify_writ_kind: исполнение решения vs обеспечительные меры ───────────
+
+class TestClassifyWritKind:
+    """Датовая эвристика (кластеры пилота 26.07.2026): лист до резолютивки —
+    обеспечительный (арест), после — на исполнение решения."""
+
+    def test_before_hearing_interim(self):
+        # 2-6005/2026: подан 22.04, лист 23.04, решение 20.05.
+        fi = {"hearing_date": "20.05.2026"}
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "23.04.2026"}, fi) == "interim"
+
+    def test_after_hearing_enforcement(self):
+        # 2-4292/2026: решение 30.04, лист 22.06 (+53 дн).
+        fi = {"hearing_date": "30.04.2026"}
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "22.06.2026"}, fi) == "enforcement"
+
+    def test_no_hearing_interim(self):
+        """Решения нет — лист может быть только обеспечительным."""
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "01.07.2026"}, {}) == "interim"
+
+    def test_no_issue_date_unknown(self):
+        assert lifecycle.classify_writ_kind(
+            {}, {"hearing_date": "01.07.2026"}) == "unknown"
 
 
 # ── split_bank_track: раскладка перед сохранением (фаза 7c main_json) ────────
@@ -294,6 +345,16 @@ class TestBankDigestSection:
         assert "26.06.2026" in html
         assert "86RS0004#2-100/2026#1" in html
         assert "по искам банка (🧾 1 ИЛ)" in html
+
+    def test_interim_writ_rendered_with_mark(self):
+        """Обеспечительный лист — с пометкой и своим счётчиком в сводке."""
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": [{
+            "issue_date": "23.04.2026", "electronic_id": "86RS0004#2-100/2026#1",
+            "status": "Выдан", "kind": "interim",
+        }]})])
+        assert "выдан обеспечительный лист (арест)" in html
+        assert "🛡 1 обеспечит." in html
+        assert "1 ИЛ" not in html  # в счётчик «🧾 N ИЛ» interim не входит
 
     def test_writ_status_change_rendered(self):
         html = _digest([_bank_change(["fi_writ_status_changed"],
