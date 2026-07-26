@@ -1751,7 +1751,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             tail = "" if _bank_in_parties(pl_raw, df_raw) or not role \
                 else f", банк — {escape_html(role.lower())}"
             sber_flag = "🏦 " if cass.get("appellant_is_bank") else ""
-            cass_block.append(f"{sber_flag}{link} — {pl} vs {df}{tail}")
             # appellant — имя стороны-заявителя из карточки 7kas (например,
             # «МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО»).
             # Прогоняем через shorten_party_name — иначе строка «📥 поступила
@@ -1767,6 +1766,22 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             appellant_role = escape_html(
                 ROLE_GENITIVE.get(_role_title, _role_title.lower())
             ) if _role_title else ""
+            filing = escape_html(cass.get("filing_date", "") or "")
+            # Строка 1: касс. номер — стороны. Стороны могут быть неизвестны
+            # (в карточке 7kas роли участников не свелись к истцу/ответчику) —
+            # тогда фрагмент со сторонами не печатаем вовсе, иначе выходило
+            # « —  vs ». Заявителя в этом случае покажет строка «📥 поступила
+            # касс. жалоба от …» ниже; если и её нет (нет даты поступления) —
+            # выносим заявителя прямо в строку 1, чтобы дело было опознаваемо.
+            parties_str_d = f"{pl} vs {df}" if (pl and df) else (pl or df or "")
+            line1_disc = f"{sber_flag}{link}"
+            if parties_str_d:
+                line1_disc += f" — {parties_str_d}{tail}"
+            elif appellant and not filing:
+                line1_disc += f" — заявитель: {appellant}"
+                if appellant_status_raw:
+                    line1_disc += f" ({escape_html(appellant_status_raw.lower())})"
+            cass_block.append(line1_disc)
             # Строка 2: суд 1 инст. + категория. Без номера 1-й инст. и «заявитель».
             court_short = escape_html(
                 shorten_court_name(fi_b.get("court", "") or "")
@@ -1780,7 +1795,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line2_disc_parts.append(f"категория: {cat}")
             if line2_disc_parts:
                 cass_block.append(" | ".join(line2_disc_parts))
-            filing = escape_html(cass.get("filing_date", "") or "")
             if filing:
                 # Эмодзи 📥 ставим ПОСЛЕ <b>дата</b>, иначе строка попадёт
                 # под _DIGEST_HEADER_RE и будет принята за заголовок секции.
@@ -1890,6 +1904,24 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             line1_main = f"{sber_flag}{link_html}"
             if parties_str:
                 line1_main += f" — {parties_str}{role_tail_l1}"
+            else:
+                # Сторон у дела нет (типично для дел, заведённых discovery'ем
+                # с 7kas: в карточке роли участников не свелись к истцу/
+                # ответчику). Без фолбэка строка вырождалась в голый 8Г-номер
+                # — по такой записи юрист не понимал, о каком деле речь
+                # (инцидент 24.07.2026, 8Г-12479/2026). Показываем заявителя
+                # жалобы: он есть в details у любого касс. события.
+                appellant_raw = (d.get("appellant", "") or "").strip()
+                if appellant_raw:
+                    app_short = escape_html(
+                        shorten_party_name(appellant_raw, keep_fio_full=_DIGEST_FIO_FULL)
+                    )
+                    line1_main += f" — заявитель: {app_short}"
+                    st_raw = (d.get("appellant_status", "") or "").strip()
+                    if st_raw:
+                        line1_main += f" ({escape_html(st_raw.lower())})"
+                    if role_raw and not _bank_in_parties(appellant_raw, ""):
+                        line1_main += f", банк — {escape_html(role_raw.lower())}"
             cass_block.append(line1_main)
             # Строка 2: Суд 1 инст.: ... | категория: ... (без сторон/роли).
             fi_court_raw = (
