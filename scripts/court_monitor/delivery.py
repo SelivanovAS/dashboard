@@ -83,6 +83,15 @@ def _build_watchlist_alias_indexes(
                 aliases.add(bare)
         for prev in _extract_paren_numbers(c.get("id", "")):
             aliases.add(prev)
+        # Композитные алиасы «домен|номер» — форма звёзд трека «Иски банка»
+        # (номера не уникальны между судами). Когда bank-дело переезжает в
+        # основной cases.json (подана апелляция), его composite-звезда через
+        # эту запись резолвится в канонический bare-id и продолжает работать.
+        fi_domain = (fi.get("court_domain") or "").strip()
+        if fi_domain:
+            for a in list(aliases):
+                if "|" not in a:
+                    aliases.add(f"{fi_domain}|{a}")
         for a in aliases:
             # Первая встретившаяся канон. побеждает — как в worker.js.
             if a not in alias_to_canonical:
@@ -137,12 +146,23 @@ def _filter_events_by_watchlist(
     · cass_discovered       → c["id"]            (НЕ фильтруем, общесистемно)
     · stage_transitions     → fi_case_number ИЛИ appeal_case_number
       (юрист может отслеживать дело по любому из них).
+
+    Трек «Иски банка»: звезда bank-дела хранится композитом «домен|номер»
+    (номера не уникальны между судами), поэтому fi_changes дополнительно
+    сверяются по ключу details.court_domain + «|» + bare(case). Голый номер
+    (ручное добавление) остаётся мягким фолбэком.
     """
+    def _fi_change_matches(ch: dict) -> bool:
+        bare = _bare_case_number(ch.get("case"))
+        if bare in watchlist:
+            return True
+        dom = ((ch.get("details") or {}).get("court_domain") or "").strip()
+        return bool(dom and bare and f"{dom}|{bare}" in watchlist)
+
     return {
         "fi_new_cases": list(fi_new_cases or []),
         "fi_changes": [
-            ch for ch in (fi_changes or [])
-            if _bare_case_number(ch.get("case")) in watchlist
+            ch for ch in (fi_changes or []) if _fi_change_matches(ch)
         ],
         "stage_transitions": [
             t for t in (stage_transitions or [])
@@ -351,9 +371,18 @@ def _make_per_sub_callback(
 
         if not wl:
             # Пустой watchlist — общесистемный push при любых событиях.
+            # События трека «Иски банка» общесистемный агрегат НЕ считает:
+            # звёзд на них у такого подписчика нет по определению, а при
+            # ~1000 track-дел рутина давала бы push «об обновлении» каждый
+            # день без единого релевантного события (сами события остаются
+            # в Telegram-дайджесте и на дашборде).
+            fi_changes_global = [
+                ch for ch in fi_changes
+                if ch.get("track") != "plaintiff_light"
+            ]
             total_global = (
                 len(fi_new_cases) + len(appeal_new_cases_csv) + len(cass_discovered)
-                + len(fi_changes) + len(changes) + len(cass_changes)
+                + len(fi_changes_global) + len(changes) + len(cass_changes)
                 + len(stage_transitions)
             )
             if total_global == 0:

@@ -965,12 +965,17 @@ def link_cassation_cases(
     return cases, cass_changes, discovered
 
 
-def rotate_cold_archive(hot_archive: list[dict]) -> list[dict]:
+def rotate_cold_archive(hot_archive: list[dict], path_builder=None) -> list[dict]:
     """Ротация архива по годам: дела старше COLD_ARCHIVE_DAYS (по `archived_at`)
     уезжают из горячего cases_archive.json в холодные годовые файлы
     cases_archive_YYYY.json (фронт их не грузит). Возвращает урезанный горячий
     список (только дела свежее года), который вызывающий код записывает обратно
     в JSON_ARCHIVE_PATH.
+
+    path_builder(year) — билдер пути холодного файла; по умолчанию
+    cold_archive_path (основной трек). Трек «Иски банка» передаёт
+    config.bank_cold_archive_path: его холодные файлы хранят полные записи
+    с inline events (вызывающий код обязан отдать сюда СКЛЕЕННЫЕ записи).
 
     Бэкфилл: делам без `archived_at` штамп выводится из дат стадий
     (_infer_archived_at) и записывается обратно — считается один раз.
@@ -985,6 +990,8 @@ def rotate_cold_archive(hot_archive: list[dict]) -> list[dict]:
     вернуть вручную через add_cases_manually.py. Для гражданских дел такое после
     года практически не встречается.
     """
+    if path_builder is None:
+        path_builder = cold_archive_path
     now = datetime.now()
     keep_hot: list[dict] = []
     to_cold_by_year: dict[int, list[dict]] = {}
@@ -1003,27 +1010,42 @@ def rotate_cold_archive(hot_archive: list[dict]) -> list[dict]:
     if not to_cold_by_year:
         return keep_hot
 
+    def _numbers(c: dict) -> list[str]:
+        nums = [(c.get("id") or "").strip(),
+                ((c.get("first_instance") or {}).get("case_number") or "").strip()]
+        return [n for n in nums if n]
+
+    def _domain(c: dict) -> str:
+        return ((c.get("first_instance") or {}).get("court_domain") or "").strip()
+
     for year, moved in sorted(to_cold_by_year.items()):
-        path = cold_archive_path(year)
+        path = path_builder(year)
         cold = load_json(path)
         cold_cases = cold.get("cases", [])
-        seen = {(c.get("id") or "").strip() for c in cold_cases}
-        seen |= {
-            ((c.get("first_instance") or {}).get("case_number") or "").strip()
-            for c in cold_cases
-        }
-        seen.discard("")
+        seen = set()          # голые номера (legacy-поведение основного трека)
+        seen_comp = set()     # «домен|номер» — номера не уникальны между судами
+        for c in cold_cases:
+            dom = _domain(c)
+            for n in _numbers(c):
+                seen.add(n)
+                if dom:
+                    seen_comp.add(f"{dom}|{n}")
         added = 0
         for c in moved:
-            cid = (c.get("id") or "").strip()
-            fi_num = ((c.get("first_instance") or {}).get("case_number") or "").strip()
-            if cid in seen or (fi_num and fi_num in seen):
+            dom = _domain(c)
+            nums = _numbers(c)
+            if dom:
+                # у записи есть домен → сверяем строго по составному ключу,
+                # иначе дело из другого суда с тем же номером «прилипло» бы
+                if any(f"{dom}|{n}" in seen_comp for n in nums):
+                    continue
+            elif any(n in seen for n in nums):
                 continue
             cold_cases.append(c)
-            if cid:
-                seen.add(cid)
-            if fi_num:
-                seen.add(fi_num)
+            for n in nums:
+                seen.add(n)
+                if dom:
+                    seen_comp.add(f"{dom}|{n}")
             added += 1
         if added:
             cold["cases"] = cold_cases

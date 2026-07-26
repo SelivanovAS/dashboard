@@ -96,6 +96,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(tmp_path / "cases_bank.json"))
     monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_PATH",
                         str(tmp_path / "cases_bank_archive.json"))
+    monkeypatch.setattr(cm_config, "JSON_BANK_EVENTS_PATH",
+                        str(tmp_path / "cases_bank_events.json"))
+    monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_EVENTS_PATH",
+                        str(tmp_path / "cases_bank_archive_events.json"))
     monkeypatch.setattr(cbc, "polite_delay", lambda: None)
 
     def fake_fetch_page(url, context=None):

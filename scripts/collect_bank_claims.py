@@ -57,7 +57,7 @@ from court_monitor.parsing.search import (  # noqa: E402
     parse_first_instance_search,
 )
 from court_monitor.regions import get_region  # noqa: E402
-from court_monitor.storage import save_json  # noqa: E402
+from court_monitor.storage import save_bank_json  # noqa: E402
 from import_bank_registry import (  # noqa: E402
     load_all_tracked,
     load_bank_file,
@@ -249,7 +249,7 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
     if new_entries and not dry_run:
         bank = load_bank_file()
         bank["cases"] = new_entries + bank.get("cases", [])
-        save_json(bank, config.JSON_BANK_PATH)
+        save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     elif new_entries:
         log.info(f"DRY-RUN: {len(new_entries)} дел НЕ записаны (снимите --dry-run)")
 

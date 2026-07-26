@@ -146,6 +146,18 @@ jobs:
           if [ -f data/cases_bank_archive.json ]; then
             git add data/cases_bank_archive.json
           fi
+          # Split-хранение трека: events лежат отдельно от списков (фронт
+          # грузит их лениво); плюс холодные годовые cases_bank_archive_YYYY
+          # (glob цепляет и events-файл архива — это не страшно, add идемпотентен).
+          if [ -f data/cases_bank_events.json ]; then
+            git add data/cases_bank_events.json
+          fi
+          if [ -f data/cases_bank_archive_events.json ]; then
+            git add data/cases_bank_archive_events.json
+          fi
+          if compgen -G "data/cases_bank_archive_*.json" > /dev/null; then
+            git add data/cases_bank_archive_*.json
+          fi
           # Холодные годовые архивы (cases_archive_YYYY.json) — дела старше года,
           # вынесенные из горячего архива ротацией (rotate_cold_archive). Фронт
           # их не грузит, но без коммита новые файлы теряются между прогонами.

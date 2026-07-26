@@ -131,3 +131,68 @@ def save_json(data: dict, path: str):
     os.replace(tmp, path)
     count = len(data.get("cases", []))
     log.info(f"JSON сохранён: {path} ({count} дел)")
+
+
+def bank_events_key(case: dict) -> str:
+    """Композитный ключ мапы событий bank-дела: «домен|номер». Номера дел не
+    уникальны между судами (тот же принцип, что case_court_key в linking.py),
+    поэтому голый id ключом быть не может."""
+    fi = case.get("first_instance") or {}
+    domain = (fi.get("court_domain") or "").strip()
+    num = (case.get("id") or fi.get("case_number") or "").strip()
+    return f"{domain}|{num}"
+
+
+def load_bank_json(list_path: str, events_path: str) -> dict:
+    """Загрузить bank-базу «список + events» и вернуть СКЛЕЕННЫЕ записи —
+    как будто events всегда лежали в first_instance.events. Весь пайплайн
+    (детект изменений, state machine, дайджест) работает с полными записями
+    и о split-хранении не знает.
+
+    Обратная совместимость: старый монолитный файл (events inline, events-файла
+    нет) читается как есть; запись с непустыми inline events не перетирается
+    мапой (источник истины — то, что реально лежит в записи)."""
+    data = load_json(list_path)
+    events_map: dict = {}
+    if os.path.exists(events_path):
+        try:
+            with open(events_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            events_map = raw.get("events") or {}
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning(f"Не удалось прочитать events-файл {events_path}: {e}")
+    for case in data.get("cases", []):
+        fi = case.get("first_instance")
+        if not isinstance(fi, dict):
+            continue
+        if fi.get("events"):
+            continue  # inline events (старый монолит) — оставляем как есть
+        fi["events"] = events_map.get(bank_events_key(case), [])
+    return data
+
+
+def save_bank_json(data: dict, list_path: str, events_path: str):
+    """Сохранить bank-базу split-форматом: список БЕЗ events + отдельная мапа
+    «домен|номер» → events. Split недеструктивный — записи в data остаются
+    склеенными (пайплайн после сохранения продолжает видеть events).
+    Содержимое events не меняется ни на байт: по паре (date, text) идёт дедуп
+    событий (_events_newly_match), любая мутация = дайджест-паводок.
+
+    ⚠️ events-файл перезаписывается ЦЕЛИКОМ из переданных записей — перед
+    сохранением базу обязательно грузить через load_bank_json (склеенной),
+    иначе события дел, не тронутых текущим кодом, будут потеряны."""
+    events_map: dict = {}
+    slim_cases = []
+    for case in data.get("cases", []):
+        fi = case.get("first_instance")
+        if isinstance(fi, dict) and fi.get("events") is not None:
+            events_map[bank_events_key(case)] = fi.get("events") or []
+            slim_fi = {k: v for k, v in fi.items() if k != "events"}
+            case = {**case, "first_instance": slim_fi}
+        slim_cases.append(case)
+    slim_data = {k: v for k, v in data.items() if k != "cases"}
+    slim_data["cases"] = slim_cases
+    save_json(slim_data, list_path)
+    data["updated_at"] = slim_data["updated_at"]
+    save_json({"version": 1, "track": "plaintiff_light",
+               "events": events_map}, events_path)

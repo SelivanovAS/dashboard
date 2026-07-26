@@ -60,7 +60,9 @@ from court_monitor.linking import (  # noqa: E402
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay  # noqa: E402
 from court_monitor.parsing import is_subsidiary_only_case, parse_case_card  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
-from court_monitor.storage import load_json, save_json  # noqa: E402
+from court_monitor.storage import (  # noqa: E402
+    load_json, load_bank_json, save_bank_json,
+)
 from court_monitor.target_search import (  # noqa: E402
     build_json_entry,
     determine_bank_role,
@@ -93,9 +95,14 @@ def read_registry(path: str) -> list[tuple[str, str]]:
 
 def load_all_tracked() -> list[dict]:
     """Все известные дела для дедупа: активные + горячий и холодные архивы +
-    оба bank-файла. Паттерн main_json/import_search_dump."""
+    оба bank-файла. Паттерн main_json/import_search_dump. Для дедупа хватает
+    list-файлов (без events) — id и номера лежат в списке."""
     import glob
 
+    bank_cold = [
+        p for p in sorted(glob.glob(config.bank_cold_archive_glob()))
+        if config.is_bank_cold_archive_file(p)
+    ]
     tracked: list[dict] = []
     for path in (
         config.JSON_PATH,
@@ -103,6 +110,7 @@ def load_all_tracked() -> list[dict]:
         config.JSON_BANK_PATH,
         config.JSON_BANK_ARCHIVE_PATH,
         *sorted(glob.glob(config.cold_archive_glob())),
+        *bank_cold,
     ):
         if os.path.exists(path):
             tracked.extend(load_json(path).get("cases", []))
@@ -110,9 +118,12 @@ def load_all_tracked() -> list[dict]:
 
 
 def load_bank_file() -> dict:
-    """cases_bank.json (создаётся при первом импорте)."""
+    """cases_bank.json (создаётся при первом импорте). Грузим СКЛЕЕННЫМ
+    (события из cases_bank_events.json подставлены в записи): save_bank_json
+    перезаписывает events-файл целиком, и без склейки события существующих
+    дел потерялись бы при дозаписи новых."""
     if os.path.exists(config.JSON_BANK_PATH):
-        return load_json(config.JSON_BANK_PATH)
+        return load_bank_json(config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     return {"version": 1, "track": "plaintiff_light", "cases": []}
 
 
@@ -235,7 +246,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
     if new_entries:
         bank = load_bank_file()
         bank["cases"] = new_entries + bank.get("cases", [])
-        save_json(bank, config.JSON_BANK_PATH)
+        save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     else:
         log.info("Нечего добавлять — cases_bank.json не изменён")
 
