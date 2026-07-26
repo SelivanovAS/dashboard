@@ -75,12 +75,12 @@
 | `CourtConfig.search_by_fi_number_url` (целевой поиск апелляции по номеру 1-й инст., G2_CASE__CASE_NUMBER_ISS) | [scripts/court_monitor/regions/base.py:114](scripts/court_monitor/regions/base.py:114) |
 | `relink_awaiting_appeal` (дослинк awaiting_appeal, не попавших на стр. 1 поиска апелляции) | [scripts/court_monitor/runs.py:150](scripts/court_monitor/runs.py:150) |
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`) | [scripts/court_monitor/runs.py:314](scripts/court_monitor/runs.py:314) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:786](scripts/court_monitor/lifecycle.py:786) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:800](scripts/court_monitor/lifecycle.py:800) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:79](scripts/court_monitor/netutil.py:79) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:158](scripts/court_monitor/config.py:158) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:816](scripts/court_monitor/lifecycle.py:816) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:830](scripts/court_monitor/lifecycle.py:830) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:968](scripts/court_monitor/linking.py:968) |
@@ -88,13 +88,13 @@
 | `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:260](scripts/court_monitor/parsing/cards.py:260) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
-| `parse_cassation_card` + `_extract_cassation_act_text` (`cont_doc1`) | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
+| `_extract_cassation_act_text` (секция `cont_doc1`) + `parse_cassation_card` | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
 | `relink_awaiting_relink_first_instance` (re-link после remanded) | [scripts/court_monitor/linking.py:232](scripts/court_monitor/linking.py:232) |
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:458](scripts/court_monitor/runs.py:458) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1615](scripts/court_monitor/runs.py:1615) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1627](scripts/court_monitor/runs.py:1627) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -491,7 +491,8 @@ python3 scripts/add_cases_manually.py
 # Тесты (оба каталога одним прогоном, см. pytest.ini)
 python3 -m pytest
 
-# После правок модулей court_monitor: обновить якоря строк в docs/technical и CLAUDE.md
+# После правок кода (court_monitor, app.js, worker.js): обновить якоря строк
+# в docs/technical и CLAUDE.md. Протухание стережёт test_doc_anchors.py.
 python3 scripts/refresh_doc_anchors.py --write
 
 # Зависимости
