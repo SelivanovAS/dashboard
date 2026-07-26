@@ -1598,6 +1598,18 @@ def split_bank_track(
         if not lifecycle.is_bank_plaintiff_track(c):
             rest.append(c)
             continue
+        # Расчётная дата вступления решения в силу — единственный якорь для
+        # вопроса «сколько это дело уже ждёт исполнительный лист». Считалась
+        # она и раньше (ритм опроса, потолок архива), но жила только в памяти
+        # прогона; фронту её не воспроизвести — производственного календаря
+        # в JS нет. Штампуем до ветвлений: поле нужно и активным, и ново-
+        # архивным. Пусто (решения ещё нет) → ключ не пишем.
+        _fi = c.get("first_instance") or {}
+        _est = lifecycle.bank_legal_force_est(_fi)
+        if _est:
+            _fi["legal_force_est"] = _est.isoformat()
+        else:
+            _fi.pop("legal_force_est", None)
         if lifecycle.bank_case_left_track(c):
             c.pop("track", None)
             c["track_origin"] = "plaintiff_light"
@@ -2655,6 +2667,13 @@ def main_json():
                 change["details"]["decision_date"] = fi.get("hearing_date", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
                 change["details"]["category"] = case_j.get("category", "")
+                # Дата решения замораживается В ЗАПИСИ. hearing_date у решённого
+                # дела её держит, но перечитывается каждым прогоном (выше,
+                # безусловная запись new_hearing_date) и уедет вперёд, назначь
+                # суд заседание по судебным расходам / индексации / разъяснению.
+                # От неё зависят classify_writ_kind и bank_legal_force_est —
+                # лист на исполнение молча стал бы обеспечительным.
+                fi.setdefault("decision_date", fi.get("hearing_date", ""))
                 fi["resolved_emitted"] = True
                 changed = True
 

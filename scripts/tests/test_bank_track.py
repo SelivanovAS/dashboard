@@ -273,6 +273,62 @@ class TestClassifyWritKind:
         assert lifecycle.classify_writ_kind(
             {}, {"hearing_date": "01.07.2026"}) == "unknown"
 
+    def test_frozen_decision_date_wins_over_drifting_hearing(self):
+        """Пост-решенческое заседание НЕ переворачивает тип листа.
+
+        hearing_date перечитывается каждым прогоном из последнего
+        session-события карточки (parse_case_card → «Дата заседания», запись
+        без гарда в update_active_cases). Назначь суд по решённому делу
+        заседание о взыскании судебных расходов / индексации / разъяснении —
+        дата уедет вперёд, и лист на исполнение оказался бы «до заседания».
+        Якорь — замороженная decision_date.
+        """
+        лист = {"issue_date": "22.06.2026"}
+        решено = {"decision_date": "30.04.2026", "hearing_date": "30.04.2026"}
+        assert lifecycle.classify_writ_kind(лист, решено) == "enforcement"
+        # Суд назначил заседание по судебным расходам на 15.09 — hearing_date
+        # уехал, decision_date остался.
+        дрейф = {"decision_date": "30.04.2026", "hearing_date": "15.09.2026"}
+        assert lifecycle.classify_writ_kind(лист, дрейф) == "enforcement", (
+            "Тип листа поехал за hearing_date — вместе с ним перевернутся "
+            "бейдж, KPI «С ИЛ», заголовок секции и окно архива, причём "
+            "дайджест об этом промолчит (гард case_decided)."
+        )
+
+    def test_hearing_date_still_fallback(self):
+        """Архивные записи и воскрешённые дела без decision_date работают
+        по-старому — фолбэк остаётся навсегда."""
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "22.06.2026"}, {"hearing_date": "30.04.2026"}
+        ) == "enforcement"
+
+    def test_legal_force_est_anchored_on_decision_date(self):
+        """Часы ожидания ИЛ тоже не должны ехать за hearing_date.
+
+        act_date у всех 43 решённых дел пилота пуст, поэтому фолбэк — не
+        исключение, а единственный режим: одно поле держало и тип листа, и
+        отсчёт ожидания.
+        """
+        решено = {"act_date": "", "decision_date": "30.04.2026",
+                  "hearing_date": "30.04.2026"}
+        было = lifecycle.bank_legal_force_est(решено)
+        дрейф = dict(решено, hearing_date="15.09.2026")
+        assert lifecycle.bank_legal_force_est(дрейф) == было
+
+    def test_writ_archive_window_survives_drift(self):
+        """Дело с выданным ИЛ уходит в архив по своему окну и после дрейфа.
+
+        Иначе оно вываливается на потолок BANK_WRIT_WAIT_MAX_DAYS (180 дн) и
+        продолжает опрашиваться еженедельно ещё до полугода.
+        """
+        дата = (datetime.now() - timedelta(days=30)).strftime("%d.%m.%Y")
+        решение = (datetime.now() - timedelta(days=90)).strftime("%d.%m.%Y")
+        будущее = (datetime.now() + timedelta(days=40)).strftime("%d.%m.%Y")
+        case = _track_case(status="Решено", decision_date=решение,
+                           hearing_date=будущее,
+                           writs=[{"issue_date": дата, "status": "Выдан"}])
+        assert lifecycle.is_case_archived(case) is True
+
 
 # ── split_bank_track: раскладка перед сохранением (фаза 7c main_json) ────────
 
@@ -307,6 +363,42 @@ class TestSplitBankTrack:
         rest, bank_active, bank_arch, moved = split_bank_track([left])
         assert (bank_active, bank_arch, moved) == ([], [], 1)
         assert rest == [left]
+
+    def test_legal_force_est_stamped(self):
+        """Расчётная дата вступления в силу попадает В ЗАПИСЬ.
+
+        Она и раньше считалась (ритм опроса, потолок архива), но жила только
+        в памяти прогона — фронт её не воспроизведёт (производственного
+        календаря в JS нет), а без неё «Ждут ИЛ» остаётся счётчиком без
+        срока ожидания.
+        """
+        from court_monitor.runs import split_bank_track
+        from court_monitor.lifecycle import bank_legal_force_est
+        решено = _track_case(status="Решено", hearing_date=self._dmy(90))
+        _rest, bank_active, _arch, _moved = split_bank_track([решено])
+        est = bank_legal_force_est(решено["first_instance"])
+        assert est is not None
+        assert bank_active[0]["first_instance"]["legal_force_est"] == est.isoformat()
+
+    def test_legal_force_est_dropped_when_no_anchor(self):
+        """Решения ещё нет — ключа быть не должно (в т.ч. протухшего)."""
+        from court_monitor.runs import split_bank_track
+        дело = _track_case(status="В производстве")
+        дело["first_instance"]["hearing_date"] = ""
+        дело["first_instance"]["act_date"] = ""
+        дело["first_instance"]["legal_force_est"] = "2026-01-01"
+        _rest, bank_active, _arch, _moved = split_bank_track([дело])
+        assert "legal_force_est" not in bank_active[0]["first_instance"]
+
+    def test_legal_force_est_stamped_on_archived_too(self):
+        """Архивные записи тоже получают поле — иначе при реактивации дела
+        бейдж ожидания молча пропадёт."""
+        from court_monitor.runs import split_bank_track
+        arch = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            writs=[{"issue_date": self._dmy(30), "status": "Выдан"}])
+        _rest, _active, bank_arch, _moved = split_bank_track([arch])
+        assert bank_arch and bank_arch[0]["first_instance"].get("legal_force_est")
 
 
 # ── Дайджест: секция «Иски банка» ────────────────────────────────────────────
@@ -364,6 +456,46 @@ class TestBankDigestSection:
                                          "status": "Отозван",
                                      }]})])
         assert "Выдан" in html and "Отозван" in html
+
+    def test_writ_status_change_carries_number(self):
+        """У дела бывает несколько листов одной даты в один ОСП — без номера
+        непонятно, КАКОЙ отозван (Советский, 2-37/2026: #1 Возвращен, #2 Выдан)."""
+        html = _digest([_bank_change(["fi_writ_status_changed"],
+                                     {"writ_status_changes": [{
+                                         "issue_date": "24.06.2026",
+                                         "electronic_id": "86RS0017#2-37/2026#1",
+                                         "old_status": "Выдан",
+                                         "status": "Возвращен",
+                                     }]})])
+        assert "86RS0017#2-37/2026#1" in html, (
+            "Смена статуса листа отрендерена без номера — юрист не поймёт, "
+            "какой именно лист отозван."
+        )
+
+    def test_both_writ_numbers_rendered(self):
+        """Электронный ИД и бумажный бланк — разные реквизиты одного листа.
+
+        Было `electronic_id or blank_number`: заполни суд обе колонки —
+        бумажный «ФС №…» молча пропал бы из Telegram.
+        """
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": [{
+            "issue_date": "26.06.2026", "blank_number": "ФС № 039166358",
+            "electronic_id": "86RS0004#2-100/2026#1", "status": "Выдан",
+        }]})])
+        assert "86RS0004#2-100/2026#1" in html
+        assert "ФС № 039166358" in html
+
+    def test_long_bailiff_shortened_not_cut(self):
+        """Получатель сокращается осмысленно, а не режется по [:60]."""
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": [{
+            "issue_date": "26.06.2026", "electronic_id": "86RS0004#2-100/2026#1",
+            "status": "Выдан",
+            "recipient": ("Отделение судебных приставов по взысканию "
+                          "задолженности с юридических лиц по г. Тюмени "
+                          "и Тюменскому району"),
+        }]})])
+        assert "ОСП по взысканию задолж. с юрлиц по г. Тюмени и Тюменскому р-ну" in html
+        assert "юридиче " not in html and "юридиче<" not in html
 
     def test_resolved_with_verdict(self):
         html = _digest([_bank_change(["fi_resolved"],
