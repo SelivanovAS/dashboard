@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 
 from court_monitor import ghlog
@@ -56,6 +57,20 @@ JSON_BANK_ARCHIVE_PATH = os.environ.get(
     "JSON_BANK_ARCHIVE_PATH",
     os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_bank_archive.json")
 )
+# Хроника (events) bank-дел хранится отдельно от списка: events — ~64% веса
+# записи, а фронту они нужны только в drawer. Список (cases_bank.json) фронт
+# грузит при входе в картотеку банка, events-файл — лениво при первом
+# открытии карточки. Ключ мапы — «домен|номер» (номера дел не уникальны
+# между судами). Содержимое events не меняется — только место хранения.
+JSON_BANK_EVENTS_PATH = os.environ.get(
+    "JSON_BANK_EVENTS_PATH",
+    os.path.join(os.path.dirname(JSON_BANK_PATH) or "data", "cases_bank_events.json")
+)
+JSON_BANK_ARCHIVE_EVENTS_PATH = os.environ.get(
+    "JSON_BANK_ARCHIVE_EVENTS_PATH",
+    os.path.join(os.path.dirname(JSON_BANK_ARCHIVE_PATH) or "data",
+                 "cases_bank_archive_events.json")
+)
 
 
 def cold_archive_path(year: int) -> str:
@@ -71,6 +86,29 @@ def cold_archive_glob() -> str:
     в индекс дедупликации (см. main_json)."""
     base = os.path.dirname(JSON_ARCHIVE_PATH) or "data"
     return os.path.join(base, "cases_archive_*.json")
+
+
+def bank_cold_archive_path(year: int) -> str:
+    """Холодный годовой архив трека «Иски банка» cases_bank_archive_YYYY.json.
+    В отличие от горячих bank-файлов, холодные хранят ПОЛНЫЕ записи с inline
+    events (write-only: фронт их не грузит, прогон читает только в дедуп)."""
+    base = os.path.dirname(JSON_BANK_ARCHIVE_PATH) or "data"
+    return os.path.join(base, f"cases_bank_archive_{year}.json")
+
+
+def bank_cold_archive_glob() -> str:
+    """Glob холодных bank-архивов. ⚠️ Шаблон «cases_bank_archive_*.json»
+    матчит и events-файл горячего архива — потребители обязаны фильтровать
+    имена по годовому суффиксу через is_bank_cold_archive_file()."""
+    base = os.path.dirname(JSON_BANK_ARCHIVE_PATH) or "data"
+    return os.path.join(base, "cases_bank_archive_*.json")
+
+
+def is_bank_cold_archive_file(path: str) -> bool:
+    """True для cases_bank_archive_YYYY.json (и только для них): отсекает
+    cases_bank_archive_events.json, который тоже попадает под glob."""
+    name = os.path.basename(path)
+    return bool(re.fullmatch(r"cases_bank_archive_\d{4}\.json", name))
 DIGESTED_ACTS_PATH = os.environ.get(
     "DIGESTED_ACTS_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".digested_acts")

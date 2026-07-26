@@ -51,6 +51,9 @@ jobs:
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
           git add data/cases_bank.json
+          if [ -f data/cases_bank_events.json ]; then
+            git add data/cases_bank_events.json
+          fi
           git diff --cached --quiet && exit 0
           git commit -m "🏦 Импорт исков банка ($(date -u +'%d.%m.%Y %H:%M') UTC)"
           # Ретраи на случай параллельного пуша другого workflow.

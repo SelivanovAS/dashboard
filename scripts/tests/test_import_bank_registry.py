@@ -43,6 +43,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(tmp_path / "cases_bank.json"))
     monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_PATH",
                         str(tmp_path / "cases_bank_archive.json"))
+    monkeypatch.setattr(cm_config, "JSON_BANK_EVENTS_PATH",
+                        str(tmp_path / "cases_bank_events.json"))
+    monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_EVENTS_PATH",
+                        str(tmp_path / "cases_bank_archive_events.json"))
     monkeypatch.setattr(cm_config, "REGION", "sverdlovsk_yanao")
     monkeypatch.setattr(ibr, "polite_delay", lambda: None)
     monkeypatch.setattr(ibr, "fetch_page",

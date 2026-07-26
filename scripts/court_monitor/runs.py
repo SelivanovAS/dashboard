@@ -84,6 +84,7 @@ from court_monitor.parsing import (
 )
 from court_monitor.storage import (
     load_csv, save_csv, load_json, save_json,
+    load_bank_json, save_bank_json,
     load_digested_acts, save_digested_acts,
 )
 from court_monitor.textutil import (
@@ -1653,7 +1654,11 @@ def main_json():
     # в основном cases.json. Мастер-выключатель — env BANK_TRACK.
     bank_track_count = 0
     if config.BANK_TRACK and os.path.exists(config.JSON_BANK_PATH):
-        bank_cases = load_json(config.JSON_BANK_PATH).get("cases", [])
+        # Split-хранение: список + events отдельным файлом; load_bank_json
+        # отдаёт склеенные записи — дальше пайплайн работает как с монолитом.
+        bank_cases = load_bank_json(
+            config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH
+        ).get("cases", [])
         for bc in bank_cases:
             bc.setdefault("track", "plaintiff_light")
         bank_track_count = len(bank_cases)
@@ -1662,10 +1667,13 @@ def main_json():
     # юрист уже отправил в архив, не появлялись снова как «новые» в дайджесте.
     archive_data = load_json(config.JSON_ARCHIVE_PATH)
     archived_cases = archive_data.get("cases", [])
-    # Архив bank-трека — только в дедуп-индексы (по образцу холодных архивов).
+    # Горячий архив bank-трека: в дедуп-индексы + фаза 7c (ротация в холодные
+    # годовые требует склеенных записей — холодные хранят events inline).
     bank_archived_cases: list[dict] = []
     if config.BANK_TRACK and os.path.exists(config.JSON_BANK_ARCHIVE_PATH):
-        bank_archived_cases = load_json(config.JSON_BANK_ARCHIVE_PATH).get("cases", [])
+        bank_archived_cases = load_bank_json(
+            config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH
+        ).get("cases", [])
     # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
     # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
     # задвоилось как «новое». В archived_cases их не добавляем: иначе при
@@ -1675,6 +1683,13 @@ def main_json():
         if os.path.abspath(cold_path) == os.path.abspath(config.JSON_ARCHIVE_PATH):
             continue  # на всякий случай: не путать горячий файл с холодными
         cold_archived_cases.extend(load_json(cold_path).get("cases", []))
+    # Холодные bank-архивы — тоже только в дедуп (glob цепляет и events-файл
+    # горячего архива, поэтому фильтр по годовому суффиксу обязателен).
+    if config.BANK_TRACK:
+        for cold_path in glob.glob(config.bank_cold_archive_glob()):
+            if not config.is_bank_cold_archive_file(cold_path):
+                continue
+            cold_archived_cases.extend(load_json(cold_path).get("cases", []))
     timings["load_json"] = time.perf_counter() - t0
 
     # Индексы для быстрого поиска по всем номерам дел (включая холодный архив —
@@ -3582,14 +3597,37 @@ def main_json():
                 f"(ИЛ выдан {config.BANK_WRIT_ARCHIVE_DAYS}д назад / потолок "
                 f"{config.BANK_WRIT_WAIT_MAX_DAYS}д без ИЛ / возврат)"
             )
-            save_json(
+        # Ротация горячего bank-архива в холодные годовые (полные записи с
+        # inline events — bank_archived_cases загружены склеенными в фазе 1).
+        # Горячие файлы пишем split-форматом (список + events) всегда, когда
+        # архив непуст или пополнился: save_bank_json заодно мигрирует старый
+        # монолит на новый формат первым же прогоном.
+        bank_archived_all = bank_archived_cases + bank_newly_archived
+        bank_hot_before = len(bank_archived_all)
+        bank_archived_all = rotate_cold_archive(
+            bank_archived_all, path_builder=config.bank_cold_archive_path
+        )
+        # Пересохраняем архив только при реальных изменениях (новые архивные,
+        # ротация) либо для разовой миграции старого монолита на split-формат
+        # (архив есть, events-файла ещё нет) — иначе каждый прогон коммитил бы
+        # файл с одним лишь свежим updated_at.
+        bank_archive_needs_migration = (
+            bool(bank_archived_cases)
+            and os.path.exists(config.JSON_BANK_ARCHIVE_PATH)
+            and not os.path.exists(config.JSON_BANK_ARCHIVE_EVENTS_PATH)
+        )
+        if (bank_newly_archived or len(bank_archived_all) != bank_hot_before
+                or bank_archive_needs_migration):
+            save_bank_json(
                 {"version": 1, "track": "plaintiff_light",
-                 "cases": bank_archived_cases + bank_newly_archived},
+                 "cases": bank_archived_all},
                 config.JSON_BANK_ARCHIVE_PATH,
+                config.JSON_BANK_ARCHIVE_EVENTS_PATH,
             )
-        save_json(
+        save_bank_json(
             {"version": 1, "track": "plaintiff_light", "cases": bank_active},
             config.JSON_BANK_PATH,
+            config.JSON_BANK_EVENTS_PATH,
         )
 
     # ── 8. Архивирование JSON-дел по state-machine ──

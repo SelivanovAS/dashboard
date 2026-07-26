@@ -30,6 +30,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CASES_PATH = ROOT / "data" / "cases.json"
 ARCHIVE_PATH = ROOT / "data" / "cases_archive.json"
+# Трек «Иски банка»: звёзды на его делах хранятся composite-формой
+# «домен|номер» — без этих файлов аудит считал бы их сиротами.
+BANK_PATH = ROOT / "data" / "cases_bank.json"
+BANK_ARCHIVE_PATH = ROOT / "data" / "cases_bank_archive.json"
 REPORT_PATH = ROOT / "data" / "orphan_watchlist_report.md"
 
 DEFAULT_ADMIN_BASE = "https://court-monitor-trigger.7selivanov-a.workers.dev"
@@ -83,6 +87,14 @@ def build_alias_map(cases: list[dict]) -> dict[str, dict]:
         add_alias(amap, ca.get("cassation_number", ""), payload)
         for prev in extract_paren_numbers(c.get("id", "")):
             add_alias(amap, prev, payload)
+        # Composite-алиас «домен|номер» — форма звёзд трека «Иски банка»
+        # (и путь миграции звезды при переезде дела в основную картотеку).
+        dom = (fi.get("court_domain") or "").strip()
+        if dom:
+            for key in (c.get("id", ""), fi.get("case_number", "")):
+                b = bare_case_number(key)
+                if b:
+                    add_alias(amap, f"{dom}|{b}", payload)
     return amap
 
 
@@ -187,9 +199,9 @@ def main() -> int:
 
     base_url = os.environ.get("ADMIN_BASE_URL", DEFAULT_ADMIN_BASE).strip()
 
-    active = _load_json(CASES_PATH)
-    archive = _load_json(ARCHIVE_PATH)
-    print(f"Активных дел: {len(active)} · в архиве: {len(archive)}")
+    active = _load_json(CASES_PATH) + _load_json(BANK_PATH)
+    archive = _load_json(ARCHIVE_PATH) + _load_json(BANK_ARCHIVE_PATH)
+    print(f"Активных дел (с исками банка): {len(active)} · в архиве: {len(archive)}")
 
     active_map = build_alias_map(active)
     archive_map = build_alias_map(archive)

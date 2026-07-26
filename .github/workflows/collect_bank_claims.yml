@@ -88,6 +88,9 @@ jobs:
           if [ -f data/cases_bank.json ]; then
             git add data/cases_bank.json
           fi
+          if [ -f data/cases_bank_events.json ]; then
+            git add data/cases_bank_events.json
+          fi
           git diff --cached --quiet && exit 0
           git commit -m "🏦 Сбор исков банка с выдачи ($(date -u +'%d.%m.%Y %H:%M') UTC)"
           # Ретраи на случай параллельного пуша другого workflow.
