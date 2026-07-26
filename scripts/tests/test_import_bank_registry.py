@@ -128,6 +128,19 @@ class TestImport:
         assert case["first_instance"]["status"] == "Решено"
         assert case["first_instance"]["resolved_emitted"] is True
 
+    def test_existing_writs_stored_silently(self, env, monkeypatch):
+        """Уже выданные ИЛ переносятся в запись при импорте — первый прогон
+        не объявит их «новыми» (принцип resolved_emitted)."""
+        writ = {"issue_date": "01.06.2026", "blank_number": "",
+                "electronic_id": "86RS0004#2-1002/2026#1", "status": "Выдан",
+                "recipient": "ОСП"}
+        monkeypatch.setattr(ibr, "parse_case_card",
+                            lambda html, base_url: {"Статус": "Решено",
+                                                    "_writs": [writ]})
+        ibr.import_registry([(_domain(), "2-1002/2026")], 0, "тест")
+        (case,) = _bank_cases(env)
+        assert case["first_instance"]["writs"] == [writ]
+
     def test_active_case_no_resolved_flag(self, env, monkeypatch):
         monkeypatch.setattr(ibr, "parse_case_card",
                             lambda html, base_url: {"Статус": "В производстве"})
