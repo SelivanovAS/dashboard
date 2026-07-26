@@ -132,7 +132,14 @@
          // (date, text) дедуплицирует _events_newly_match, смена формата
          // объявит всю историю дел новой (дайджест-паводок).
          "court", "judge", "status", "events": [], "resolved_emitted": bool,
-         "hearing_date",           // дата резолютивки, якорь 45-дневного окна
+         "hearing_date",           // ПОСЛЕДНЕЕ session-событие карточки; у решённого
+                                   // дела обычно = дата резолютивки, якорь 45-дн. окна.
+                                   // ⚠️ ДРЕЙФУЕТ: перечитывается каждым прогоном, и
+                                   // пост-решенческое заседание (судебные расходы,
+                                   // индексация, разъяснение) уводит его вперёд
+         "decision_date",          // ЗАМОРОЖЕННАЯ дата решения — якорь classify_writ_kind
+                                   // и bank_legal_force_est. Пишется на эмите fi_resolved,
+                                   // старым делам бэкфиллится в migrate_stages
          "act_date",               // дата публикации мотивировки (когда есть)
          "appeal_filed", "appeal_filed_date",        // апел. жалоба в карточке 1-й инст.
          "appeal_appellant", "appeal_appellant_is_bank", "appeal_appellant_status",
@@ -451,6 +458,18 @@ drawer; номера не уникальны между судами — пот�
 - **Сокращение ОСП** — две реализации по необходимости (`shortBailiff` в
   app.js для фронта, `shorten_bailiff_name` в textutil.py для дайджеста);
   правила держать согласованными, общие фикстуры — в test_frontend_writs.py.
+- ⚠️ **Якорь типа листа — `fi.decision_date`, НЕ `hearing_date`.**
+  `classify_writ_kind` (и зеркало `classifyWritKind` в app.js) сравнивают дату
+  выдачи с замороженной датой решения. `hearing_date` перечитывается каждым
+  прогоном из последнего session-события карточки и уезжает вперёд, назначь
+  суд по решённому делу заседание (судебные расходы, индексация, разъяснение,
+  правопреемство, дубликат ИЛ) — лист на исполнение молча стал бы
+  обеспечительным, вместе с бейджем, KPI «С ИЛ», заголовком секции, бейджем
+  «⏳ ждёт ИЛ» и окном архива (дело зависло бы на потолке 180 дн и
+  опрашивалось бы еженедельно). Дайджест бы при этом промолчал: `kind` не
+  хранится в `fi.writs`, диффа нет, а гард `case_decided` глушит
+  hearing-события. На симуляции дрейфа по пилоту переворачивалось 6 листов из
+  6. Фолбэк на `hearing_date` оставлен для архивных записей.
 - Тесты: [scripts/tests/test_bank_track.py](scripts/tests/test_bank_track.py),
   [scripts/tests/test_import_bank_registry.py](scripts/tests/test_import_bank_registry.py),
   [scripts/tests/test_bank_storage_split.py](scripts/tests/test_bank_storage_split.py),

@@ -313,7 +313,11 @@ def bank_legal_force_est(fi: dict) -> date | None:
     """
     from court_monitor.textutil import is_russian_working_day
 
+    # decision_date — замороженная дата решения; hearing_date остаётся
+    # последним фолбэком для архивных записей (migrate_stages идёт только по
+    # активным) и дел, воскрешённых из архива.
     anchor = (parse_date(fi.get("act_date") or "")
+              or parse_date(fi.get("decision_date") or "")
               or parse_date(fi.get("hearing_date") or ""))
     if not anchor:
         return None
@@ -336,14 +340,24 @@ def classify_writ_kind(writ: dict, fi: dict) -> str:
       изготовление) — принудительное исполнение решения.
     Решения ещё нет → любой лист может быть только обеспечительным.
     Нет даты выдачи → unknown (в архивных окнах не считается исполнением).
+
+    ⚠️ Якорь — ЗАМОРОЖЕННАЯ decision_date, а не hearing_date. Последняя у
+    решённого дела держит дату решения, но перечитывается каждым прогоном из
+    последнего session-события карточки и уедет вперёд, назначь суд заседание
+    по судебным расходам / индексации / разъяснению решения. Лист на
+    исполнение тогда оказался бы «до заседания» и молча стал бы
+    обеспечительным — вместе с бейджем, KPI «С ИЛ» и окном архива, причём
+    дайджест бы об этом промолчал (гард case_decided). hearing_date остаётся
+    фолбэком для архивных записей и дел, воскрешённых из архива.
     """
     issue = parse_date(writ.get("issue_date") or "")
     if not issue:
         return "unknown"
-    hearing = parse_date(fi.get("hearing_date") or "")
-    if not hearing:
+    anchor = (parse_date(fi.get("decision_date") or "")
+              or parse_date(fi.get("hearing_date") or ""))
+    if not anchor:
         return "interim"
-    return "enforcement" if issue >= hearing else "interim"
+    return "enforcement" if issue >= anchor else "interim"
 
 
 def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
@@ -826,6 +840,19 @@ def migrate_stages(cases: list[dict]) -> int:
     for case in cases:
         if not case.get("initial_bank_role") and case.get("bank_role"):
             case["initial_bank_role"] = case["bank_role"]
+    # Идемпотентный бэкфилл замороженной даты решения. Ветка записи в
+    # update_active_cases срабатывает только на ЭМИТЕ fi_resolved, а дела,
+    # импортированные уже решёнными (import_bank_registry ставит
+    # resolved_emitted=True без эмита), через неё никогда не пройдут.
+    # Сегодня бэкфилл точен: hearing_date у решённых дел ещё равен настоящей
+    # дате решения (дрейфа ни в одном деле нет) — чем позже, тем хуже.
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        if fi.get("decision_date"):
+            continue
+        if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
+            if fi.get("hearing_date"):
+                fi["decision_date"] = fi["hearing_date"]
     migrated = 0
     for case in cases:
         changed = True

@@ -2667,6 +2667,13 @@ def main_json():
                 change["details"]["decision_date"] = fi.get("hearing_date", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
                 change["details"]["category"] = case_j.get("category", "")
+                # Дата решения замораживается В ЗАПИСИ. hearing_date у решённого
+                # дела её держит, но перечитывается каждым прогоном (выше,
+                # безусловная запись new_hearing_date) и уедет вперёд, назначь
+                # суд заседание по судебным расходам / индексации / разъяснению.
+                # От неё зависят classify_writ_kind и bank_legal_force_est —
+                # лист на исполнение молча стал бы обеспечительным.
+                fi.setdefault("decision_date", fi.get("hearing_date", ""))
                 fi["resolved_emitted"] = True
                 changed = True
 
