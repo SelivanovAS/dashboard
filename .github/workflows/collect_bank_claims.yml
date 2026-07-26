@@ -1,0 +1,82 @@
+# Разовый сбор исков банка (банк — истец) с выдачи поиска суда.
+# Проходит первые N страниц выдачи по «Сбербанк» (пилот — Сургутский
+# городской), заводит в data/cases_bank.json только иски банка-истца;
+# исключаются итоги «без рассмотрения» / «по подсудности» / «возвращено» /
+# «прекращено» (решение юриста 26.07.2026). Первый запуск — с галкой
+# dry_run: отчёт в ops/bank_registry/collect_report.txt (коммитится и в
+# dry-run), запись файла — только без галки.
+name: "🏦 Разовый сбор исков банка (выдача суда)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      court_domain:
+        description: "Домен суда 1-й инстанции"
+        required: false
+        default: "surggor--hmao.sudrf.ru"
+      pages:
+        description: "Сколько страниц выдачи обойти"
+        required: false
+        default: "10"
+      limit:
+        description: "Максимум добавлений (0 — без лимита)"
+        required: false
+        default: "0"
+      dry_run:
+        description: "Только отчёт, без записи cases_bank.json"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Один писатель data/* за раз — сериализация с основным прогоном
+    # и импортёрами.
+    concurrency:
+      group: cases-data-write
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Сбор выдачи (10 страниц + карточки истцовых дел)
+        env:
+          # Ручная операция: ретраи полезны — повтор запуска дороже
+          # (боевой дефолт FETCH_MAX_RETRIES=1).
+          FETCH_MAX_RETRIES: "3"
+        run: |
+          mkdir -p ops/bank_registry
+          python3 scripts/collect_bank_claims.py \
+            --court "${{ github.event.inputs.court_domain || 'surggor--hmao.sudrf.ru' }}" \
+            --pages "${{ github.event.inputs.pages || '10' }}" \
+            --limit "${{ github.event.inputs.limit || '0' }}" \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} 2>&1 \
+            | tee ops/bank_registry/collect_report.txt
+
+      - name: Commit data + report
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add ops/bank_registry/collect_report.txt
+          if [ -f data/cases_bank.json ]; then
+            git add data/cases_bank.json
+          fi
+          git diff --cached --quiet && exit 0
+          git commit -m "🏦 Сбор исков банка с выдачи ($(date -u +'%d.%m.%Y %H:%M') UTC)"
+          # Ретраи на случай параллельного пуша другого workflow.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
