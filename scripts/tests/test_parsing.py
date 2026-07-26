@@ -1083,6 +1083,41 @@ class TestMigrateStages:
         assert migrated == 0
         assert cases[0]["current_stage"] == "awaiting_appeal"
 
+    def test_decision_date_backfilled(self):
+        """Бэкфилл замороженной даты решения.
+
+        Ветка записи в update_active_cases срабатывает только на ЭМИТЕ
+        fi_resolved, а дела, импортированные уже решёнными
+        (import_bank_registry ставит resolved_emitted=True без эмита), через
+        неё никогда не пройдут — без бэкфилла у них навсегда остался бы
+        дрейфующий якорь.
+        """
+        cases = [
+            {"current_stage": "first_instance",
+             "first_instance": {"status": "Решено", "hearing_date": "30.04.2026"}},
+            {"current_stage": "first_instance",
+             "first_instance": {"status": "Возвращено", "hearing_date": "12.05.2026"}},
+        ]
+        uc.migrate_stages(cases)
+        assert cases[0]["first_instance"]["decision_date"] == "30.04.2026"
+        assert cases[1]["first_instance"]["decision_date"] == "12.05.2026"
+
+    def test_decision_date_backfill_skips_active_and_existing(self):
+        """Активные дела не трогаем (решения ещё нет), уже заполненные — тоже
+        (иначе бэкфилл затирал бы замороженное значение дрейфующим)."""
+        cases = [
+            {"current_stage": "first_instance",
+             "first_instance": {"status": "В производстве",
+                                "hearing_date": "01.09.2026"}},
+            {"current_stage": "first_instance",
+             "first_instance": {"status": "Решено",
+                                "decision_date": "30.04.2026",
+                                "hearing_date": "15.09.2026"}},
+        ]
+        uc.migrate_stages(cases)
+        assert "decision_date" not in cases[0]["first_instance"]
+        assert cases[1]["first_instance"]["decision_date"] == "30.04.2026"
+
 
 # ── parties_from_participants ────────────────────────────────────────────────
 

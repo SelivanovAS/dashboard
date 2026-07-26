@@ -1866,12 +1866,17 @@ function viewArchived(c){return caseArchived(c);}
 // суд тип не публикует, различает дата — лист ДО даты решения выдан на
 // обеспечительные меры (арест, первые дни после подачи иска), ПОСЛЕ — на
 // принудительное исполнение (реально +40..55 дн от решения).
+// ⚠️ Якорь — ЗАМОРОЖЕННАЯ decision_date, а не hearing_date: последняя
+// перечитывается каждым прогоном и уедет вперёд, назначь суд по решённому делу
+// заседание (судебные расходы, индексация, разъяснение) — лист на исполнение
+// молча стал бы обеспечительным. hearing_date — фолбэк для архивных записей.
 function classifyWritKind(w,c){
   const issue=parseDate(w.issue_date||'');
   if(!issue)return 'unknown';
-  const hearing=parseDate((c._fi&&c._fi.hearing_date)||'');
-  if(!hearing)return 'interim';
-  return issue>=hearing?'enforcement':'interim';
+  const fi=c._fi||{};
+  const anchor=parseDate(fi.decision_date||'')||parseDate(fi.hearing_date||'');
+  if(!anchor)return 'interim';
+  return issue>=anchor?'enforcement':'interim';
 }
 // Бейдж «🏦» — дело из картотеки «Иски банка», показывается там, где рядом
 // есть основные дела (объединённый «★ Мои» — независимо от выбранного

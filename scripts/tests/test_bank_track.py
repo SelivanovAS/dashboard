@@ -273,6 +273,62 @@ class TestClassifyWritKind:
         assert lifecycle.classify_writ_kind(
             {}, {"hearing_date": "01.07.2026"}) == "unknown"
 
+    def test_frozen_decision_date_wins_over_drifting_hearing(self):
+        """Пост-решенческое заседание НЕ переворачивает тип листа.
+
+        hearing_date перечитывается каждым прогоном из последнего
+        session-события карточки (parse_case_card → «Дата заседания», запись
+        без гарда в update_active_cases). Назначь суд по решённому делу
+        заседание о взыскании судебных расходов / индексации / разъяснении —
+        дата уедет вперёд, и лист на исполнение оказался бы «до заседания».
+        Якорь — замороженная decision_date.
+        """
+        лист = {"issue_date": "22.06.2026"}
+        решено = {"decision_date": "30.04.2026", "hearing_date": "30.04.2026"}
+        assert lifecycle.classify_writ_kind(лист, решено) == "enforcement"
+        # Суд назначил заседание по судебным расходам на 15.09 — hearing_date
+        # уехал, decision_date остался.
+        дрейф = {"decision_date": "30.04.2026", "hearing_date": "15.09.2026"}
+        assert lifecycle.classify_writ_kind(лист, дрейф) == "enforcement", (
+            "Тип листа поехал за hearing_date — вместе с ним перевернутся "
+            "бейдж, KPI «С ИЛ», заголовок секции и окно архива, причём "
+            "дайджест об этом промолчит (гард case_decided)."
+        )
+
+    def test_hearing_date_still_fallback(self):
+        """Архивные записи и воскрешённые дела без decision_date работают
+        по-старому — фолбэк остаётся навсегда."""
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "22.06.2026"}, {"hearing_date": "30.04.2026"}
+        ) == "enforcement"
+
+    def test_legal_force_est_anchored_on_decision_date(self):
+        """Часы ожидания ИЛ тоже не должны ехать за hearing_date.
+
+        act_date у всех 43 решённых дел пилота пуст, поэтому фолбэк — не
+        исключение, а единственный режим: одно поле держало и тип листа, и
+        отсчёт ожидания.
+        """
+        решено = {"act_date": "", "decision_date": "30.04.2026",
+                  "hearing_date": "30.04.2026"}
+        было = lifecycle.bank_legal_force_est(решено)
+        дрейф = dict(решено, hearing_date="15.09.2026")
+        assert lifecycle.bank_legal_force_est(дрейф) == было
+
+    def test_writ_archive_window_survives_drift(self):
+        """Дело с выданным ИЛ уходит в архив по своему окну и после дрейфа.
+
+        Иначе оно вываливается на потолок BANK_WRIT_WAIT_MAX_DAYS (180 дн) и
+        продолжает опрашиваться еженедельно ещё до полугода.
+        """
+        дата = (datetime.now() - timedelta(days=30)).strftime("%d.%m.%Y")
+        решение = (datetime.now() - timedelta(days=90)).strftime("%d.%m.%Y")
+        будущее = (datetime.now() + timedelta(days=40)).strftime("%d.%m.%Y")
+        case = _track_case(status="Решено", decision_date=решение,
+                           hearing_date=будущее,
+                           writs=[{"issue_date": дата, "status": "Выдан"}])
+        assert lifecycle.is_case_archived(case) is True
+
 
 # ── split_bank_track: раскладка перед сохранением (фаза 7c main_json) ────────
 

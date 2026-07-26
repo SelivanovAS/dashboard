@@ -307,6 +307,44 @@ def test_short_bailiff_python_mirrors_js():
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_classify_writ_kind_js_mirrors_python_on_drift():
+    """JS-зеркало classify_writ_kind тоже держится за decision_date.
+
+    Иначе фронт и бэкенд разойдутся в типе листа: бэкенд считает окно архива
+    от даты выдачи, а дашборд показывает «🛡 Обеспечение» и «⏳ ждёт ИЛ» на
+    деле, у которого лист уже есть.
+    """
+    from court_monitor import lifecycle
+    лист = {"issue_date": "22.06.2026"}
+    фикстуры = {
+        "решено": {"decision_date": "30.04.2026", "hearing_date": "30.04.2026"},
+        # Пост-решенческое заседание (судебные расходы) уводит hearing_date.
+        "дрейф": {"decision_date": "30.04.2026", "hearing_date": "15.09.2026"},
+        # Архивная запись без decision_date — работает по фолбэку.
+        "фолбэк": {"hearing_date": "30.04.2026"},
+        "решения_нет": {},
+    }
+    script = ("\n".join(_fn_src(n) for n in ("parseDate", "classifyWritKind"))
+              + "\nconst F=" + json.dumps(фикстуры, ensure_ascii=False)
+              + ";const W=" + json.dumps(лист, ensure_ascii=False)
+              + ";process.stdout.write(JSON.stringify(Object.fromEntries("
+                "Object.entries(F).map(([k,fi])=>[k,classifyWritKind(W,{_fi:fi})]))));")
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    js = json.loads(out.stdout)
+    assert js["дрейф"] == "enforcement", (
+        "JS classifyWritKind поехал за hearing_date — на дашборде лист "
+        "перевернётся в обеспечительный, хотя бэкенд считает его исполнением."
+    )
+    # Побайтовое совпадение с питоновской реализацией на всех фикстурах.
+    for имя, fi in фикстуры.items():
+        assert js[имя] == lifecycle.classify_writ_kind(лист, fi), (
+            f"Фикстура {имя!r}: JS={js[имя]!r}, "
+            f"Python={lifecycle.classify_writ_kind(лист, fi)!r} — зеркала "
+            "разъехались."
+        )
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
 def test_writ_num_html_escapes_and_breaks_only_on_hash():
     """<wbr> только после «#», экранирование сохранено."""
     script = (_fn_src("escHtml") + "\n" + _fn_src("writNumHtml")
