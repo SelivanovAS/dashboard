@@ -116,6 +116,29 @@ def load_bank_file() -> dict:
     return {"version": 1, "track": "plaintiff_light", "cases": []}
 
 
+def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
+                    now_iso: str, source: str = "bank_registry") -> dict:
+    """JSON-запись трека «Иски банка» из поисковой строки + карточки.
+
+    build_json_entry + маркеры трека: track="plaintiff_light",
+    import{announced:true} — иски банка в дайджесте не анонсируются
+    (решение юриста 25.07.2026); уже решённые получают resolved_emitted=True —
+    старые решения задним числом в дайджест не льются. Общая для импортёра
+    реестра и разового сборщика выдачи (scripts/collect_bank_claims.py).
+    """
+    entry = build_json_entry(fi_row, card_info)
+    entry["track"] = "plaintiff_light"
+    entry["initial_bank_role"] = fi_row.get("bank_role", "Истец")
+    entry["import"] = {
+        "operator": operator, "at": now_iso,
+        "source": source, "announced": True,
+    }
+    fi = entry["first_instance"]
+    if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
+        fi["resolved_emitted"] = True
+    return entry
+
+
 def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> dict:
     """Провести импорт, вернуть счётчики. Сохраняет cases_bank.json сам."""
     courts_by_domain = {c.domain: c for c in get_region().first_instance_courts}
@@ -191,21 +214,8 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
             continue
         card_info = parse_case_card(card_html, court.base_url)
 
-        entry = build_json_entry(fi_row, card_info)
-        entry["track"] = "plaintiff_light"
-        entry["initial_bank_role"] = role
-        # announced:true сразу — иски банка в дайджесте не анонсируются
-        # (в отличие от импортёра дампов, где анонс — часть контракта).
-        entry["import"] = {
-            "operator": operator, "at": now_iso,
-            "source": "bank_registry", "announced": True,
-        }
+        entry = make_bank_entry(fi_row, card_info, operator, now_iso)
         fi = entry["first_instance"]
-        if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
-            # Старое решение не событие: без флага первый же прогон объявил
-            # бы сотни «вынесено решение» задним числом.
-            fi["resolved_emitted"] = True
-
         new_entries.append(entry)
         dedup_exact.add((domain, case_num))
         counters["added"] += 1
