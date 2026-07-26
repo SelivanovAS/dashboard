@@ -63,14 +63,14 @@ high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 802](../../scripts/court_monitor/digest/template.py#L802). Собирает весь HTML дайджеста
+[Строка 824](../../scripts/court_monitor/digest/template.py#L824). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([625](../../scripts/court_monitor/digest/template.py#L625)).
+([626](../../scripts/court_monitor/digest/template.py#L626)).
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
@@ -124,7 +124,7 @@ LLM реально «думает». Алгоритм:
 5. При любой ошибке/пустом ответе (в т.ч. после гардов чистки) → `None`,
    и вызывающий код откатывается на сырой excerpt мотивировки
    (`_render_act_summary_or_excerpt`,
-   [571](../../scripts/court_monitor/digest/template.py#L571)).
+   [572](../../scripts/court_monitor/digest/template.py#L572)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
