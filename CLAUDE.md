@@ -434,7 +434,23 @@ drawer; номера не уникальны между судами — пот�
   строкой «🧾 ИЛ выдан» в «Ключевых датах», на мобильной карточке дата в
   бейдже (`writBadgeHtml(c,true)` — тултипа на тач-экране нет).
   Мобильные размеры секции — в блоке `@media (max-width:768px)`; держать их
-  наравне с соседями, на `--fs-2xs` (11px) не опускать.
+  наравне с соседями, на `--fs-2xs` (11px) не опускать. Заголовок называет
+  содержимое (`Обеспечительные листы (4)`, если листов на исполнение нет —
+  иначе юрист читает его как «ИЛ есть»), отозванные/возвращённые листы
+  приглушены (`.writ-row.is-inactive`), а выдача листа подмешивается в
+  хронологию drawer (`buildTimeline` → `веха`, листы одной даты схлопываются
+  со счётчиком «(N шт.)»).
+- **Ожидание ИЛ** (`legal_force_est`): `split_bank_track` штампует в
+  `first_instance.legal_force_est` расчётную дату вступления решения в силу
+  (`bank_legal_force_est`) — фронту её не посчитать, производственного
+  календаря в JS нет. Отсюда `awaitingWritDays`/`awaitingWritBadgeHtml`:
+  бейдж «⏳ ждёт ИЛ N дн.» в строке/карточке/hero, строка «Вступило в силу
+  (расч.)» в «Ключевых датах» и сортировка чипа «Ждут ИЛ» по убыванию
+  ожидания (очередь работы, а не алфавит). Пороги (30/60 дн) привязаны к
+  реальности выдачи (+40..55 дн от решения) и `BANK_WRIT_WAIT_MAX_DAYS`.
+- **Сокращение ОСП** — две реализации по необходимости (`shortBailiff` в
+  app.js для фронта, `shorten_bailiff_name` в textutil.py для дайджеста);
+  правила держать согласованными, общие фикстуры — в test_frontend_writs.py.
 - Тесты: [scripts/tests/test_bank_track.py](scripts/tests/test_bank_track.py),
   [scripts/tests/test_import_bank_registry.py](scripts/tests/test_import_bank_registry.py),
   [scripts/tests/test_bank_storage_split.py](scripts/tests/test_bank_storage_split.py),

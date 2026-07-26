@@ -28,11 +28,16 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(TESTS_DIR))
+SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
+ROOT = os.path.dirname(SCRIPTS_DIR)
+# Питоновское зеркало сокращения ОСП живёт в court_monitor.textutil — тот же
+# приём подключения пакета, что в test_bank_track.py.
+sys.path.insert(0, SCRIPTS_DIR)
 
 NODE = shutil.which("node")
 
@@ -153,38 +158,152 @@ def test_writs_section_behaviour():
         "Статусы «Возвращен» и «Выдан» должны различаться цветом — по ним "
         "юрист понимает, какой лист действующий."
     )
+    # Неактивный лист приглушается целиком, действующий — нет.
+    assert пара.count('class="writ-row is-inactive"') == 1, (
+        "Отозванный/возвращённый лист не приглушён — он шумит наравне с "
+        "действующим, хотя это история."
+    )
     # Сокращение получателя не должно терять полное имя.
     assert 'title="Отделение судебных приставов по Советскому району"' in пара
     assert "ОСП по Советскому р-ну" in пара
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
-def test_short_bailiff():
+def test_writs_section_title_matches_content():
+    """Заголовок называет то, что внутри.
+
+    «Исполнительные листы (4)» при четырёх обеспечительных (реальный кейс
+    2-3575/2026) юрист читает как «лист на исполнение есть» — а его нет, дело
+    стоит в очереди «Ждут ИЛ».
+    """
+    deps = "\n".join(_fn_src(n) for n in (
+        "escHtml", "parseDate", "classifyWritKind", "copyBtnHtml",
+        "writNumHtml", "shortBailiff", "buildWritsSectionHtml",
+    ))
+    лист = lambda d: {"issue_date": d, "electronic_id": f"86RS0004#2-1/2026#{d[:2]}",
+                      "blank_number": "", "status": "Выдан", "recipient": ""}
+    фикстуры = {
+        # hearing 01.06 → листы до неё обеспечительные, после — на исполнение.
+        "только_обеспечительные": {"_fi": {"hearing_date": "01.06.2026"},
+                                   "writs": [лист("01.02.2026"), лист("02.02.2026"),
+                                             лист("03.02.2026"), лист("04.02.2026")]},
+        "только_исполнение": {"_fi": {"hearing_date": "01.06.2026"},
+                              "writs": [лист("01.07.2026"), лист("02.07.2026")]},
+        "смешанные": {"_fi": {"hearing_date": "01.06.2026"},
+                      "writs": [лист("01.02.2026"), лист("01.07.2026"),
+                                лист("02.07.2026")]},
+    }
+    script = (deps + "\nconst F=" + json.dumps(фикстуры, ensure_ascii=False)
+              + ";process.stdout.write(JSON.stringify("
+                "Object.fromEntries(Object.entries(F).map("
+                "([k,v])=>[k,buildWritsSectionHtml(v)]))));")
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    html = json.loads(out.stdout)
+
+    assert "Обеспечительные листы (4)" in html["только_обеспечительные"], (
+        "Секция из одних обеспечительных листов не должна называться "
+        "«Исполнительные листы»."
+    )
+    assert "Исполнительные листы (2)" in html["только_исполнение"]
+    assert "обеспечительных" not in html["только_исполнение"], (
+        "Хвост «· обеспечительных N» не должен появляться, когда их нет."
+    )
+    assert "Исполнительные листы (2)" in html["смешанные"]
+    assert "обеспечительных 1" in html["смешанные"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_awaiting_writ_days_and_thresholds():
+    """«Ждут ИЛ» получает срок ожидания, а не только счётчик.
+
+    Якорь — legal_force_est, который считает бэкенд (в JS производственного
+    календаря нет). Пороги привязаны к реальности: выдача листа — +40..55 дн
+    от решения, потолок ожидания на бэкенде — 180 дн.
+    """
+    deps = "\n".join(_fn_src(n) for n in (
+        "parseDate", "dayDiff", "classifyWritKind", "hasEnforcementWrit",
+        "awaitingWritDays", "awaitingWritLevel",
+    ))
+    # Даты считаем от «сегодня» внутри node, чтобы тест не протухал.
+    script = deps + """
+const iso=d=>{const t=new Date();t.setHours(0,0,0,0);t.setDate(t.getDate()-d);
+  return t.toISOString().slice(0,10);};
+const дело=(days,extra)=>Object.assign(
+  {_bankTrack:true,status:'decided',writs:[],
+   _fi:{hearing_date:'01.01.2026',legal_force_est:iso(days)}},extra||{});
+const out={
+  ждёт79:awaitingWritDays(дело(79)),
+  ждёт27:awaitingWritDays(дело(27)),
+  ещё_не_в_силе:awaitingWritDays(дело(-5)),
+  // Лист на исполнение уже есть — ожидание закрыто.
+  с_листом:awaitingWritDays(дело(79,{writs:[{issue_date:'01.07.2026',status:'Выдан'}]})),
+  не_решено:awaitingWritDays(дело(79,{status:'active'})),
+  не_банк:awaitingWritDays(дело(79,{_bankTrack:false})),
+  без_даты:awaitingWritDays({_bankTrack:true,status:'decided',writs:[],_fi:{}}),
+  уровни:[awaitingWritLevel(10),awaitingWritLevel(45),awaitingWritLevel(79),
+          awaitingWritLevel(-3),awaitingWritLevel(null)],
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert r["ждёт79"] == 79 and r["ждёт27"] == 27
+    assert r["ещё_не_в_силе"] == -5, "Решение не в силе — ожидание не началось."
+    assert r["с_листом"] is None, (
+        "Дело с листом на исполнение не должно числиться ждущим."
+    )
+    assert r["не_решено"] is None and r["не_банк"] is None and r["без_даты"] is None
+    assert r["уровни"] == ["normal", "watch", "overdue", "", ""], (
+        "Пороги ожидания разъехались: до 30 дн — норма, 30-60 — присмотреться, "
+        "дольше — просрочено."
+    )
+
+
+# Фикстуры сокращения ОСП — общие для JS и Python: реализаций две (фронт и
+# дайджест), поведение обязано быть одним.
+BAILIFF_CASES = [
+    ("Отделение судебных приставов по г. Сургуту", "ОСП по г. Сургуту"),
+    ("Отделение судебных приставов по Советскому району", "ОСП по Советскому р-ну"),
+    ("Межрайонное отделение судебных приставов по г. Кургану", "МОСП по г. Кургану"),
+    ("Отделение судебных приставов по г. Нефтеюганску и Нефтеюганскому району",
+     "ОСП по г. Нефтеюганску и Нефтеюганскому р-ну"),
+    ("Отделение судебных приставов по взысканию задолженности с юридических "
+     "лиц по г. Тюмени и Тюменскому району",
+     "ОСП по взысканию задолж. с юрлиц по г. Тюмени и Тюменскому р-ну"),
+    # Не подразделение ФССП — не трогаем.
+    ("Взыскатель", "Взыскатель"),
+    ("", ""),
+]
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_short_bailiff_js():
     """Сокращение имени подразделения ФССП: экранное имя короче, смысл цел.
 
     \\b в JS считает словом только ASCII и с кириллицей не срабатывает —
     границы в shortBailiff заданы явно; фикстура «Советскому району» ловит
     именно этот регресс.
     """
-    случаи = [
-        ("Отделение судебных приставов по г. Сургуту", "ОСП по г. Сургуту"),
-        ("Отделение судебных приставов по Советскому району", "ОСП по Советскому р-ну"),
-        ("Межрайонное отделение судебных приставов по г. Кургану", "МОСП по г. Кургану"),
-        ("Отделение судебных приставов по г. Нефтеюганску и Нефтеюганскому району",
-         "ОСП по г. Нефтеюганску и Нефтеюганскому р-ну"),
-        ("Отделение судебных приставов по взысканию задолженности с юридических "
-         "лиц по г. Тюмени и Тюменскому району",
-         "ОСП по взысканию задолж. с юрлиц по г. Тюмени и Тюменскому р-ну"),
-        # Не подразделение ФССП — не трогаем.
-        ("Взыскатель", "Взыскатель"),
-        ("", ""),
-    ]
     script = (_fn_src("shortBailiff") + "\nconst V="
-              + json.dumps([x for x, _ in случаи], ensure_ascii=False)
+              + json.dumps([x for x, _ in BAILIFF_CASES], ensure_ascii=False)
               + ";process.stdout.write(JSON.stringify(V.map(shortBailiff)));")
     out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
-    for (исходник, ожидание), got in zip(случаи, json.loads(out.stdout)):
+    for (исходник, ожидание), got in zip(BAILIFF_CASES, json.loads(out.stdout)):
         assert got == ожидание, f"shortBailiff({исходник!r}) = {got!r} != {ожидание!r}"
+
+
+def test_short_bailiff_python_mirrors_js():
+    """Питоновское зеркало (дайджест) даёт то же, что фронт.
+
+    Реализации две по необходимости — дайджест рендерится на бэкенде, — но
+    юрист читает один и тот же ОСП в Telegram и в drawer'е.
+    """
+    from court_monitor.textutil import shorten_bailiff_name
+    for исходник, ожидание in BAILIFF_CASES:
+        got = shorten_bailiff_name(исходник)
+        assert got == ожидание, (
+            f"shorten_bailiff_name({исходник!r}) = {got!r} != {ожидание!r} — "
+            "питоновское сокращение разъехалось с shortBailiff из app.js."
+        )
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")

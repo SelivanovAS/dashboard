@@ -747,6 +747,27 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .writ-recipient { font-size:var(--fs-sm); color:var(--fg-1); line-height:1.35; }
 .badge-writ-status.writ-issued { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
 .badge-writ-status.writ-inactive { background:var(--amber-100); color:var(--amber-700); }
+/* Отозванный/возвращённый лист — история: приглушаем содержимое карточки,
+   чтобы глаз падал на действующий. Пилюля статуса из-под приглушения выведена
+   (она и есть сигнал «этот уже не работает»). */
+.writ-row.is-inactive .writ-num,
+.writ-row.is-inactive .writ-date,
+.writ-row.is-inactive .writ-kind,
+.writ-row.is-inactive .writ-recipient,
+.writ-row.is-inactive .writ-id-label,
+.writ-row.is-inactive .writ-count { opacity:.6; }
+/* Уточнение в заголовке секции: «Исполнительные листы (2) · обеспечительных 2» */
+.ws-extra { font-weight:var(--fw-normal); color:var(--fg-4); }
+/* «⏳ ждёт ИЛ N дн.» — приоритет внутри очереди «Ждут ИЛ». Пороги: до 30 дн
+   норма, 30-60 присмотреться, дольше — просрочено (реальная выдача листа —
+   +40..55 дн от решения, потолок ожидания на бэкенде 180 дн). */
+.badge-await-writ.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
+.badge-await-writ.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
+.badge-await-writ.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+.kv-await { font-weight:var(--fw-semibold); }
+.kv-await.aw-normal  { color:var(--urgency-far-fg); }
+.kv-await.aw-watch   { color:var(--urgency-tomorrow-fg); }
+.kv-await.aw-overdue { color:var(--urgency-today-fg); }
 /* «🛡 Обеспечение» — обеспечительный лист (арест); индиго, чтобы не путать
    с зелёным «🧾 ИЛ» на исполнение решения */
 .badge-writ-interim { background:var(--indigo-100); color:var(--indigo-700); }
