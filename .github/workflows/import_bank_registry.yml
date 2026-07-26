@@ -37,6 +37,10 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Импорт реестра
+        env:
+          # Операторский импорт: ретраи полезны — повтор запуска дороже
+          # (боевой дефолт FETCH_MAX_RETRIES=1).
+          FETCH_MAX_RETRIES: "3"
         run: |
           python3 scripts/import_bank_registry.py \
             --input ops/bank_registry/registry.csv \

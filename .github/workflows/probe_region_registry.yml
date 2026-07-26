@@ -36,6 +36,10 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Проба судов (2 вежливых запроса на суд)
+        env:
+          # Ручная проба: ретраи полезны — запросов мало, повтор запуска
+          # дороже (боевой дефолт FETCH_MAX_RETRIES=1).
+          FETCH_MAX_RETRIES: "3"
         run: |
           python3 scripts/build_region_registry.py \
             --input ops/region_probe/courts_probe.csv 2>&1 \

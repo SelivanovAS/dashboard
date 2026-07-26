@@ -43,6 +43,10 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Проба карточек (1 вежливый запрос на дело)
+        env:
+          # Ручная проба: ретраи полезны — запросов мало, повтор запуска
+          # дороже (боевой дефолт FETCH_MAX_RETRIES=1).
+          FETCH_MAX_RETRIES: "3"
         run: |
           mkdir -p ops/writ_probe
           python3 scripts/probe_writ_sections.py \

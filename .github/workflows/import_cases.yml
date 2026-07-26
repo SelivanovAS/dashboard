@@ -47,6 +47,9 @@ jobs:
       DUMP_KEY: ${{ inputs.dump_key }}
       COURT_DOMAIN: ${{ inputs.court_domain }}
       OPERATOR: ${{ inputs.operator }}
+      # Операторский импорт: ретраи полезны — запросов мало, повтор запуска
+      # дороже (боевой дефолт FETCH_MAX_RETRIES=1).
+      FETCH_MAX_RETRIES: "3"
       PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
       PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
       RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
