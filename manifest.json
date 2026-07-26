@@ -21,6 +21,11 @@
       "name": "★ Мои дела",
       "url": "./sberbank_dashboard.html?mine=1",
       "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "🏦 Иски банка",
+      "url": "./sberbank_dashboard.html?bank=1",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "icons": [

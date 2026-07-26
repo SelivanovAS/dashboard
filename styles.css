@@ -738,6 +738,22 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* «🛡 Обеспечение» — обеспечительный лист (арест); индиго, чтобы не путать
    с зелёным «🧾 ИЛ» на исполнение решения */
 .badge-writ-interim { background:var(--indigo-100); color:var(--indigo-700); }
+/* «🏦 Иск банка» — дело из картотеки банка ВНЕ bank-режима (объединённый
+   «★ Мои», drawer по ссылке из дайджеста) */
+.badge-bank-track { background:var(--amber-100); color:var(--amber-700); }
+/* Пагинация рендера: кнопка «Показать ещё N» под таблицей/карточками
+   (IntersectionObserver дорисовывает сам — кнопка видна на медленном скролле
+   и как фолбэк без observer'а) */
+.show-more-row td { text-align:center; padding:10px 0 14px; }
+.show-more-wrap { text-align:center; padding:10px 0 14px; }
+.show-more-btn {
+  border:1px solid var(--border-1); background:var(--bg-2); color:var(--fg-2);
+  border-radius:999px; padding:8px 18px; font:inherit; font-size:var(--fs-xs);
+  cursor:pointer;
+}
+.show-more-btn:hover { background:var(--bg-3, var(--bg-2)); color:var(--fg-1); }
+/* Хроника bank-дела грузится отдельным файлом — мягкое ожидание */
+.tl-loading { opacity:.75; font-style:italic; }
 .writ-kind { font-size:var(--fs-2xs); color:var(--fg-3); }
 .badge-scheduled { background:var(--blue-100); color:var(--blue-700); }
 .badge-prep      { background:var(--indigo-100); color:var(--indigo-700); }

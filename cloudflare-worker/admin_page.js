@@ -30,6 +30,8 @@ export function renderAdminHtml(secret, role, cfg) {
   const CFG = {
     casesUrl: (cfg && cfg.casesUrl) || base + "/data/cases.json",
     archiveUrl: (cfg && cfg.archiveUrl) || base + "/data/cases_archive.json",
+    bankUrl: (cfg && cfg.bankUrl) || base + "/data/cases_bank.json",
+    bankArchiveUrl: (cfg && cfg.bankArchiveUrl) || base + "/data/cases_bank_archive.json",
     pushesUrl: (cfg && cfg.pushesUrl) || base + "/data/last_personal_pushes.json",
     digestUrl: (cfg && cfg.digestUrl) || base + "/data/last_digest.json",
     healthUrl: (cfg && cfg.healthUrl) || base + "/data/parse_health.json",
@@ -890,6 +892,8 @@ const IS_OWNER = ROLE === "owner";
 // иначе админка Урала показывала бы дела и здоровье ХМАО.
 const CASES_URL = ${JSON.stringify(CFG.casesUrl)};
 const ARCHIVE_URL = ${JSON.stringify(CFG.archiveUrl)};
+const BANK_URL = ${JSON.stringify(CFG.bankUrl)};
+const BANK_ARCHIVE_URL = ${JSON.stringify(CFG.bankArchiveUrl)};
 const PUSHES_URL = ${JSON.stringify(CFG.pushesUrl)};
 const DIGEST_URL = ${JSON.stringify(CFG.digestUrl)};
 const HEALTH_URL = ${JSON.stringify(CFG.healthUrl)};
@@ -1507,6 +1511,11 @@ async function fetchAll() {
     fetch(PUSHES_URL, { cache: "no-cache" }).catch(function () { return null; }),
     fetch(DIGEST_URL, { cache: "no-cache" }).catch(function () { return null; }),
     fetch(ARCHIVE_URL, { cache: "no-cache" }).catch(function () { return null; }),
+    // Картотека «Иски банка»: composite-звёзды («домен|номер») без неё
+    // показывались бы как «нигде не найдено». До пилота файлов нет — 404
+    // глотается молча.
+    fetch(BANK_URL, { cache: "no-cache" }).catch(function () { return null; }),
+    fetch(BANK_ARCHIVE_URL, { cache: "no-cache" }).catch(function () { return null; }),
   ]);
   const subsRes = results[0];
   if (!subsRes.ok) throw new Error("HTTP " + subsRes.status + " /admin/data");
@@ -1586,6 +1595,35 @@ async function fetchAll() {
   } catch (e) {
     console.warn("cases_archive.json не загружен:", e);
   }
+  // Bank-дела (активные + горячий архив): канон в карте — composite
+  // «домен|номер» (номера не уникальны между судами, форма звёзд трека);
+  // голый номер добавляется алиасом — ручной ввод в watchlist тоже находится.
+  function addBankCases(res, archived) {
+    if (!res || !res.ok) return Promise.resolve();
+    return res.json().then(function (j) {
+      const list = Array.isArray(j && j.cases) ? j.cases : [];
+      for (const c of list) {
+        const bare = bareCaseNumber(c.id);
+        if (!bare) continue;
+        const dom = String((c.first_instance && c.first_instance.court_domain) || "").trim();
+        const comp = dom ? dom + "|" + bare : bare;
+        const payload = {
+          plaintiff: c.plaintiff || "",
+          defendant: c.defendant || "",
+          court: (c.first_instance && c.first_instance.court) || "",
+          stage: c.current_stage || "",
+          canonical_id: comp,
+          bank: true,
+        };
+        if (archived) { payload.archived = true; payload.archived_at = c.archived_at || ""; }
+        addAlias(casesMap, comp, payload);
+        addAlias(casesMap, bare, payload);
+        addAlias(casesMap, c.first_instance && c.first_instance.case_number, payload);
+      }
+    }).catch(function (e) { console.warn("cases_bank*.json не загружен:", e); });
+  }
+  await addBankCases(results[5], false);
+  await addBankCases(results[6], true);
   // Журнал последней push-рассылки: endpoint → запись.
   const pushesMap = new Map();
   let pushesGeneratedAt = "";
@@ -1685,11 +1723,15 @@ function expiryBadge(sub) {
 function caseRowHtml(num, casesMap) {
   const bare = bareCaseNumber(num);
   const c = casesMap.get(bare);
+  // Composite-запись трека «Иски банка» («домен|номер») показываем юристу
+  // номером, домен остаётся в тултипе — полная форма нужна только push'у.
+  const isComposite = String(num).indexOf('|') > -1;
+  const shownNum = isComposite ? String(num).split('|')[1] : num;
   if (!c) {
     // Номер-сирота: дела нет ни в активных, ни в архиве (удалено вручную или
     // переименовано до Этапа 3, когда М-алиасы ещё не сохранялись). Держать
     // его в watchlist бессмысленно — даём убрать прямо из карточки.
-    return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
+    return '<div class="case-row"><span class="case-num" title="' + escHtml(num) + '">' + escHtml(shownNum) + '</span>'
       + '<span class="badge badge-run" title="Дело удалено или переименовано без алиаса — push по этому номеру никогда не сработает">нигде не найдено</span>'
       + '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist">✕</button>'
       + '</div>';
@@ -1702,11 +1744,15 @@ function caseRowHtml(num, casesMap) {
   const aliasNote = (c.canonical_id && c.canonical_id !== bare)
     ? '<span class="case-alias">→ ' + escHtml(c.canonical_id) + '</span>'
     : '';
-  const archNote = c.archived
-    ? '<span class="badge badge-archive" title="Дело завершено и лежит в cases_archive.json' + (c.archived_at ? ' с ' + escHtml(c.archived_at) : '') + '. Звезда снова заработает при реактивации.">в архиве</span>'
+  const bankNote = c.bank
+    ? '<span class="badge badge-watch" title="Картотека «Иски банка» (cases_bank.json)">🏦</span>'
     : '';
-  return '<div class="case-row"><span class="case-num">' + escHtml(num) + '</span>'
+  const archNote = c.archived
+    ? '<span class="badge badge-archive" title="Дело завершено и лежит в ' + (c.bank ? 'cases_bank_archive.json' : 'cases_archive.json') + (c.archived_at ? ' с ' + escHtml(c.archived_at) : '') + '. Звезда снова заработает при реактивации.">в архиве</span>'
+    : '';
+  return '<div class="case-row"><span class="case-num" title="' + escHtml(num) + '">' + escHtml(shownNum) + '</span>'
     + aliasNote
+    + bankNote
     + stageBadge(c.stage)
     + archNote
     + '<span class="case-parties">' + parties + '</span>'
