@@ -540,3 +540,59 @@ class TestBankRoutineFilter:
         assert "fi_writ_issued" not in BANK_ROUTINE_EVENT_TYPES
         assert "fi_writ_issued" not in FI_ECHO_CATCHUP_TYPES
         assert "fi_writ_status_changed" not in FI_ECHO_CATCHUP_TYPES
+
+
+# ── Проводка мастер-выключателя ──────────────────────────────────────────────
+
+class TestBankTrackWiring:
+    """BANK_TRACK должен быть достижим из Actions Variables территории.
+
+    Выключатель читается кодом (config.BANK_TRACK), но пока его не прокидывает
+    workflow, переменная в Settings → Variables не делает НИЧЕГО — прогон её
+    не видит. Ровно так и было до 26.07.2026: флаг документировался как
+    «мастер-выключатель трека», а ни один workflow его не передавал.
+    """
+
+    @staticmethod
+    def _workflow() -> str:
+        root = os.path.dirname(SCRIPTS_DIR)
+        path = os.path.join(root, ".github", "workflows", "update_cases.yml")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_bank_track_forwarded_from_variables(self):
+        import re
+        m = re.search(r"^\s*BANK_TRACK:\s*(.+)$", self._workflow(), re.M)
+        assert m, (
+            "update_cases.yml не прокидывает BANK_TRACK — переменная "
+            "BANK_TRACK=0 в Settings → Variables территории молча не "
+            "сработает, трек останется включённым."
+        )
+        assert "vars.BANK_TRACK" in m.group(1), (
+            f"BANK_TRACK берётся не из Variables: {m.group(1).strip()!r}"
+        )
+
+    def test_default_keeps_current_behaviour(self):
+        """Без переменной поведение прежнее — фолбэк '1'.
+
+        Иначе одна эта строка выключила бы трек и на эталоне (пилот ХМАО), где
+        переменная не задана.
+        """
+        import re
+        m = re.search(r"^\s*BANK_TRACK:\s*(.+)$", self._workflow(), re.M)
+        assert m and re.search(r"\|\|\s*'1'", m.group(1)), (
+            "У проброса BANK_TRACK нет фолбэка '1' — территория без "
+            "переменной получит пустую строку и трек выключится."
+        )
+
+    def test_code_default_is_on(self):
+        """Фолбэк workflow и дефолт кода не должны разъезжаться."""
+        import importlib
+        os.environ.pop("BANK_TRACK", None)
+        importlib.reload(config)
+        assert config.BANK_TRACK is True
+        os.environ["BANK_TRACK"] = "0"
+        importlib.reload(config)
+        assert config.BANK_TRACK is False
+        os.environ.pop("BANK_TRACK", None)
+        importlib.reload(config)
