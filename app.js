@@ -1162,7 +1162,10 @@ async function loadBankDataset(){
     ]);
     if(!mainRes.ok)throw mainRes.e;
     const arch=archRes.ok?archRes.v:[];
-    arch.forEach(c=>{if(c.computed)c.computed.archived=true;});
+    // Архивность в bank-режиме определяет ТОЛЬКО файл-источник: у трека свои
+    // окна (ожидание ИЛ дольше фронтовых ARCHIVE_DAYS=60), давно решённое
+    // дело из активного файла прятать как «архив» нельзя — оно ждёт лист.
+    arch.forEach(c=>{if(c.computed)c.computed.archived=true;c._bankArchived=true;});
     const seen=new Set(mainRes.v.map(c=>c.caseNumber));
     bankCases=mainRes.v.concat(arch.filter(c=>!seen.has(c.caseNumber)));
     bankLoaded=true;
@@ -1512,7 +1515,7 @@ function applyFilters(){
   const mineOn=filterMineActive&&watchlist.size>0&&!bankViewActive;
 
   filteredCases=(bankViewActive?bankCases:allCases).filter(c=>{
-    const archived=c.computed?c.computed.archived:isArchived(c);
+    const archived=bankViewActive?!!c._bankArchived:(c.computed?c.computed.archived:isArchived(c));
     if(st==='archived'){if(!archived)return false;}
     else if(st==='new'){if(!isNewCase(c))return false;}
     else if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;if(archived||c.status!=='active'||d===null||d<0||d>1)return false;}
@@ -1596,6 +1599,9 @@ function toggleSort(f){
 // Бейдж «🧾 ИЛ» — по делу есть записи вкладки «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ»
 // (трек исков банка, fi.writs из cases_bank.json). Тултип перечисляет
 // дату/статус каждого листа. У дел основной базы поля нет — пусто.
+// Архивность для отображения: в bank-режиме — только по файлу-источнику
+// (см. loadBankDataset), у основной картотеки — прежняя isArchived.
+function viewArchived(c){return bankViewActive?!!c._bankArchived:isArchived(c);}
 function writBadgeHtml(c){
   if(!c.writs||!c.writs.length)return '';
   const title=c.writs.map(w=>`${w.issue_date||''} ${w.status||''}`.trim()).filter(Boolean).join(', ');
@@ -1604,7 +1610,7 @@ function writBadgeHtml(c){
 function countCasesByStatus(st){
   // Счётчики чипов считаются по активному датасету (основной / иски банка).
   return (bankViewActive?bankCases:allCases).filter(c=>{
-    const archived=c.computed?c.computed.archived:isArchived(c);
+    const archived=bankViewActive?!!c._bankArchived:(c.computed?c.computed.archived:isArchived(c));
     if(st==='all')return !archived;
     if(st==='new')return isNewCase(c);
     if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=1;}
@@ -1737,6 +1743,12 @@ function resetFilters(){
 
 /* ========== Counter ========== */
 function renderCounter(){
+  // В режиме «Иски банка» счётчик считает по активному датасету; «новых» и
+  // «в архиве» — атрибуты основной картотеки, в bank-режиме их не показываем.
+  if(bankViewActive){
+    document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${bankCases.length}</strong> исков банка`;
+    return;
+  }
   const archText=archivedCount>0?` · ${archivedCount} в архиве`:'';
   const newText=newCaseNumbers.size>0?` · ${newCaseNumbers.size} новых`:'';
   document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${allCases.length}</strong> дел${newText}${archText}`;
@@ -1996,7 +2008,7 @@ function renderTable(){
       +(vm.defendantIsCassator?cassBadge:'');
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
-    const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
+    const archived=viewArchived(c)?'<span class="badge-archived">Архив</span>':'';
     const stageBadge=stageBadgeHtml(c);
     const pendingBadge=pendingAppealBadge(c);
 
@@ -2674,7 +2686,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${writBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${isArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${writBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
@@ -2759,7 +2771,7 @@ function renderMobileCards(){
     const accent=rowAccent(c);
 
     const newBadge=isUnread?'<span class="badge-new">Новое</span>':'';
-    const archived=isArchived(c)?'<span class="badge-archived">Архив</span>':'';
+    const archived=viewArchived(c)?'<span class="badge-archived">Архив</span>':'';
     const stageBadge=stageBadgeHtml(c);
     const pendingBadge=pendingAppealBadge(c);
     // Третье лицо: на кассац. стадии — «Кассатор» если Сбер кассатор; иначе
