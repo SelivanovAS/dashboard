@@ -1018,6 +1018,16 @@ function init(){
     const sel=document.getElementById('filter-status');
     if(f&&sel&&[...sel.options].some(o=>o.value===f))sel.value=f;
   }catch(_){}
+  // Deep-link ?bank=1 — открыть сразу картотеку исков банка (ссылки из
+  // дайджеста/ярлыков). Датасет грузим, не дожидаясь HEAD-пробы; при сбое
+  // loadBankDataset сам откатит режим и покажет баннер.
+  try{
+    if(new URLSearchParams(window.location.search).get('bank')==='1'){
+      bankViewActive=true;
+      bankFileExists=true;
+      loadBankDataset().then(()=>applyFilters());
+    }
+  }catch(_){}
   loadFromSheet(resolveSheetUrl());
   probeBankFile();
 }
@@ -1138,35 +1148,55 @@ async function probeBankFile(){
   if(!url)return;
   try{
     const r=await fetch(url,{method:'HEAD',cache:'no-cache'});
-    bankFileExists=r.ok;
-  }catch(_){bankFileExists=false;}
-  if(bankFileExists)renderChipBar();
+    bankFileExists=bankFileExists||r.ok;
+  }catch(_){}
+  if(bankFileExists)renderDatasetSwitch();
 }
-async function toggleBankView(){
-  bankViewActive=!bankViewActive;
-  if(bankViewActive&&!bankLoaded){
-    try{
-      const mainUrl=bankJsonUrl();
-      const archUrl=mainUrl.replace('cases_bank.json','cases_bank_archive.json');
-      const [mainRes,archRes]=await Promise.all([
-        fetchJsonCases(mainUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
-        fetchJsonCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
-      ]);
-      if(!mainRes.ok)throw mainRes.e;
-      const arch=archRes.ok?archRes.v:[];
-      arch.forEach(c=>{if(c.computed)c.computed.archived=true;});
-      const seen=new Set(mainRes.v.map(c=>c.caseNumber));
-      bankCases=mainRes.v.concat(arch.filter(c=>!seen.has(c.caseNumber)));
-      bankLoaded=true;
-    }catch(e){
-      console.warn('Иски банка: датасет не загрузился:',e.message);
-      bankViewActive=false;
-      showError('Не удалось загрузить иски банка ('+e.message+')');
-    }
+async function loadBankDataset(){
+  try{
+    const mainUrl=bankJsonUrl();
+    const archUrl=mainUrl.replace('cases_bank.json','cases_bank_archive.json');
+    const [mainRes,archRes]=await Promise.all([
+      fetchJsonCases(mainUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
+      fetchJsonCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
+    ]);
+    if(!mainRes.ok)throw mainRes.e;
+    const arch=archRes.ok?archRes.v:[];
+    arch.forEach(c=>{if(c.computed)c.computed.archived=true;});
+    const seen=new Set(mainRes.v.map(c=>c.caseNumber));
+    bankCases=mainRes.v.concat(arch.filter(c=>!seen.has(c.caseNumber)));
+    bankLoaded=true;
+    bankFileExists=true;
+  }catch(e){
+    console.warn('Иски банка: датасет не загрузился:',e.message);
+    bankViewActive=false;
+    showError('Не удалось загрузить иски банка ('+e.message+')');
   }
+}
+async function setDatasetView(v){
+  const want=v==='bank';
+  if(want===bankViewActive){renderDatasetSwitch();return;}
+  bankViewActive=want;
+  if(bankViewActive&&!bankLoaded)await loadBankDataset();
   applyFilters();
 }
-window.toggleBankView=toggleBankView;
+window.setDatasetView=setDatasetView;
+// Сегмент-переключатель картотек «Основные | 🏦 Иски банка» (#dataset-switch
+// над таблицей). Скрыт, пока файла cases_bank.json нет (HEAD-проба
+// probeBankFile) — до пилотного импорта дашборд выглядит как раньше.
+// В отличие от чипов-фильтров виден и на мобильном (тулбар там — плавающая
+// капсула внизу, в шторку «Фильтры» переключатель картотеки не прячем).
+function renderDatasetSwitch(){
+  const box=document.getElementById('dataset-switch');
+  if(!box)return;
+  if(!bankFileExists){box.hidden=true;return;}
+  box.hidden=false;
+  const bankCount=bankLoaded?`<span class="chip-count">${bankCases.length}</span>`:'';
+  box.innerHTML=`<div class="seg-ctrl">
+    <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные</button>
+    <button class="seg-btn ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="setDatasetView('bank')">🏦 Иски банка${bankCount}</button>
+  </div>`;
+}
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.textContent='';const s=document.createElement('strong');s.textContent='Ошибка: ';e.appendChild(s);e.appendChild(document.createTextNode(m));}
 function hideError(){document.getElementById('error-banner').style.display='none';}
 
@@ -1552,7 +1582,7 @@ function applyFilters(){
 
   // Reset focus если вышел за границы
   if(focusedRowIdx>=filteredCases.length)focusedRowIdx=filteredCases.length-1;
-  renderChipBar();renderTable();renderMobileCards();renderCounter();
+  renderDatasetSwitch();renderChipBar();renderTable();renderMobileCards();renderCounter();
 }
 
 function toggleSort(f){
@@ -1622,12 +1652,9 @@ function renderChipBar(){
     const nMine=allCases.filter(c=>isWatched(c.caseNumber)&&!(c.computed?c.computed.archived:isArchived(c))).length;
     quickHtml+=`<button class="chip-btn chip-mine mine-toggle-btn ${mineOn?'active':''}" aria-pressed="${mineOn?'true':'false'}" onclick="toggleMobileMine()">★ Мои<span class="chip-count">${nMine}</span></button>`;
   }
-  // Чип «🏦 Иски банка» — переключатель на ленивый датасет трека
-  // (data/cases_bank.json). Виден только если файл существует (HEAD-проба
-  // probeBankFile). Счётчик появляется после первой загрузки датасета.
-  if(bankFileExists){
-    quickHtml+=`<button class="chip-btn chip-bank ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="toggleBankView()">🏦 Иски банка${bankLoaded?`<span class="chip-count">${bankCases.length}</span>`:''}</button>`;
-  }
+  // Переключатель картотек «Основные | Иски банка» живёт НЕ здесь, а в
+  // #dataset-switch над таблицей (renderDatasetSwitch): это смена картотеки,
+  // а не фильтр, и на мобильном он не должен прятаться в шторку «Фильтры».
   // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
   // в свой ряд тулбара на десктопе (.chip-bar-segments).
   let segmentsHtml=`<div class="seg-ctrl">

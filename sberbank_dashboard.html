@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=114">
+<link rel="stylesheet" href="styles.css?v=115">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -247,6 +247,12 @@
       </div>
     </div>
 
+    <!-- Переключатель картотек «Основные | 🏦 Иски банка» — рендерится JS
+         (renderDatasetSwitch), скрыт пока data/cases_bank.json не существует.
+         Живёт в потоке контента (не в тулбаре): на мобильном тулбар — плавающая
+         капсула внизу, а картотеку надо видеть над таблицей. -->
+    <div class="dataset-switch" id="dataset-switch" hidden></div>
+
     <!-- Table counter -->
     <div class="table-counter" id="table-counter"></div>
 
@@ -278,6 +284,6 @@
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=114" defer></script>
+<script src="app.js?v=115" defer></script>
 </body>
 </html>

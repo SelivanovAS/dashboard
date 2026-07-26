@@ -642,6 +642,12 @@ body {
 .btn-outline svg { width:14px; height:14px; }
 
 /* Table counter */
+/* Переключатель картотек «Основные | Иски банка» (#dataset-switch): свой ряд
+   над счётчиком таблицы, в потоке контента — виден и на мобильном (тулбар
+   там — плавающая капсула внизу). Сегмент — существующие .seg-ctrl/.seg-btn. */
+.dataset-switch { display:flex; align-items:center; margin-bottom:10px; }
+.dataset-switch[hidden] { display:none; }
+.dataset-switch .seg-ctrl { flex:0 0 auto; }
 .table-counter { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:8px; animation:fadeUp .55s var(--ease-out); }
 .table-counter strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
 
