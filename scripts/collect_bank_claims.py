@@ -224,6 +224,17 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             log.warning(f"[{i}/{len(rows)}] {num} — [FETCH FAIL] карточка")
             continue
         card_info = parse_case_card(card_html, court.base_url)
+        # Второй рубеж фильтра итогов: выдача отстаёт от карточки — у дела
+        # 2-8442/2026 (dry-run 26.07.2026) в выдаче итога ещё не было, а
+        # карточка уже знала «Передано по подсудности».
+        card_result = card_info.get("Результат") or ""
+        if _EXCLUDED_RESULT_RX.search(card_result):
+            counters["excluded_result"] += 1
+            log.info(
+                f"[{i}/{len(rows)}] {num} — [EXCLUDED RESULT] "
+                f"{card_result[:60]} (итог из карточки)"
+            )
+            continue
 
         entry = make_bank_entry(r, card_info, operator, now_iso, source="search_sweep")
         new_entries.append(entry)

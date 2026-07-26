@@ -159,6 +159,18 @@ class TestCollectE2E:
         assert counters["pages"] == 1
         assert counters["rows"] == 5
 
+    def test_card_result_second_filter(self, env, monkeypatch):
+        """Выдача отстаёт от карточки: исключаемый итог виден только в
+        карточке → дело не берём (кейс 2-8442/2026, dry-run 26.07.2026)."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {"Результат": "Дело передано ПО ПОДСУДНОСТИ"})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["added"] == 0
+        # 4 исключены по выдаче + 3 кандидата добиты итогом из карточки.
+        assert counters["excluded_result"] == 7
+        assert _bank_cases(env) == []
+
     def test_already_in_main_base_skipped(self, env):
         """Дело уже в основной базе (тот же суд) → [ALREADY]."""
         main = {"version": 1, "cases": [{
