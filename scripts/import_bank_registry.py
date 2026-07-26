@@ -136,6 +136,13 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
     fi = entry["first_instance"]
     if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
         fi["resolved_emitted"] = True
+    # Уже выданные листы переносим в запись сразу — тот же принцип, что
+    # resolved_emitted: первый прогон не должен объявить старые ИЛ «новыми»
+    # (без переноса FI-цикл эмитнул бы fi_writ_issued задним числом по всем
+    # решённым делам пула). События пойдут только на листы, появившиеся
+    # ПОСЛЕ постановки на мониторинг.
+    if card_info.get("_writs"):
+        fi["writs"] = card_info["_writs"]
     return entry
 
 
