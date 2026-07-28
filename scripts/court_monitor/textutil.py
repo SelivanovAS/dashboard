@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from html import escape as html_escape
 
 def parse_date(s: str) -> datetime | None:
@@ -140,6 +140,61 @@ def is_russian_working_day(d: date) -> bool:
     if d.weekday() >= 5:
         return False
     return d not in _RU_HOLIDAYS
+
+
+# ── Исчисление процессуальных сроков (гл. 9 ГПК) ─────────────────────────────
+# Три функции ниже — арифметика сроков для bank_legal_force_est (расчётная
+# дата вступления решения в силу). Правила ГПК, на которые они опираются:
+# ст. 107 ч. 3 — течение срока начинается на следующий день после якорной
+# даты, в сроки, исчисляемые днями, нерабочие дни не включаются;
+# ст. 108 — месячный срок истекает в соответствующее число последнего месяца,
+# последний день-нерабочий переносится на следующий рабочий.
+
+
+def next_working_day(d: date) -> date:
+    """Ближайший рабочий день, начиная с d (d рабочий → сам d).
+
+    Перенос последнего дня срока с нерабочего дня — ч. 2 ст. 108 ГПК.
+    """
+    while not is_russian_working_day(d):
+        d += timedelta(days=1)
+    return d
+
+
+def add_working_days(anchor: date, n: int) -> date:
+    """Последний день срока в n РАБОЧИХ дней от якорной даты.
+
+    Ст. 107 ГПК: течение начинается на СЛЕДУЮЩИЙ день после anchor, нерабочие
+    дни в срок не входят. Возвращает дату n-го рабочего дня (= последний день
+    срока; сам он рабочий по построению, переносить нечего).
+    """
+    cur = anchor
+    while n > 0:
+        cur += timedelta(days=1)
+        if is_russian_working_day(cur):
+            n -= 1
+    return cur
+
+
+def month_term_last_day(anchor: date) -> date:
+    """Последний день МЕСЯЧНОГО срока, текущего от якорной даты.
+
+    Ст. 108 ГПК + п. 16 ПП ВС №16 (2022): срок истекает в соответствующее
+    число следующего месяца (мотивировка 31.07 → последний день 31.08);
+    в следующем месяце нет такого числа → последний день этого месяца
+    (31.01 → 28/29.02); последний день нерабочий → следующий рабочий.
+    """
+    year, month = anchor.year, anchor.month + 1
+    if month > 12:
+        year, month = year + 1, 1
+    day = anchor.day
+    while True:
+        try:
+            last = date(year, month, day)
+            break
+        except ValueError:  # 31-е в месяце без 31-го → последний день месяца
+            day -= 1
+    return next_working_day(last)
 
 
 # ── Сокращение наименований сторон ────────────────────────────────────────────

@@ -258,6 +258,56 @@ process.stdout.write(JSON.stringify(out));"""
     )
 
 
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_default_judgment_badge():
+    """Бейдж «🌙 Заочное» — только у bank-дел с проштампованным
+    default_judgment; тултип различает «вручена» и «формула ВС»."""
+    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultJudgmentBadgeHtml"))
+    script = deps + """
+const out={
+  заочное:defaultJudgmentBadgeHtml(
+    {_bankTrack:true,_fi:{default_judgment:true}}),
+  вручена:defaultJudgmentBadgeHtml(
+    {_bankTrack:true,_fi:{default_judgment:true,default_copy_served_date:'26.06.2026'}}),
+  обычное:defaultJudgmentBadgeHtml({_bankTrack:true,_fi:{}}),
+  не_банк:defaultJudgmentBadgeHtml({_bankTrack:false,_fi:{default_judgment:true}}),
+  пусто:defaultJudgmentBadgeHtml(null),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert "🌙 Заочное" in r["заочное"] and "формуле ВС" in r["заочное"]
+    assert "26.06.2026" in r["вручена"] and "от вручения" in r["вручена"]
+    assert r["обычное"] == "" and r["не_банк"] == "" and r["пусто"] == ""
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_default_copy_kv_row():
+    """Строка «Копия ответчику» в «Ключевых датах»: юрист видит, по какой
+    ветке посчитана дата «Вступило в силу». Три варианта."""
+    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultCopyKvHtml"))
+    script = deps + """
+const out={
+  вручена:defaultCopyKvHtml(
+    {_fi:{default_judgment:true,default_copy_served_date:'26.06.2026'}}),
+  возврат:defaultCopyKvHtml(
+    {_fi:{default_judgment:true,default_copy_returned:true}}),
+  нет_сведений:defaultCopyKvHtml({_fi:{default_judgment:true}}),
+  обычное:defaultCopyKvHtml({_fi:{}}),
+  пусто:defaultCopyKvHtml(null),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert "26.06.2026" in r["вручена"] and "от вручения" in r["вручена"]
+    assert "возвратилась невручённой" in r["возврат"] and "формуле ВС" in r["возврат"]
+    assert "сведений о вручении нет" in r["нет_сведений"]
+    assert "формуле ВС" in r["нет_сведений"]
+    assert r["обычное"] == "" and r["пусто"] == "", (
+        "У обычного решения строки о копии быть не должно."
+    )
+
+
 # Фикстуры сокращения ОСП — общие для JS и Python: реализаций две (фронт и
 # дайджест), поведение обязано быть одним.
 BAILIFF_CASES = [

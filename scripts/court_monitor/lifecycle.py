@@ -303,28 +303,130 @@ def bank_case_left_track(case: dict) -> bool:
     )
 
 
+# Детект признаков заочного производства по текстам событий карточки.
+# Матчим по ev["text"] (склейка ячеек включает и name, и result_event) после
+# lower() + ё→е: суды пишут «невручённой» и «неврученной» вперемешку.
+_ANY_DECISION_RX = re.compile(r"вынесено\s+(заочное\s+)?решение")
+_MOTIVATED_DECISION_RX = re.compile(r"изготовлено\s+мотивированное\s+решение")
+_DEFAULT_COPY_RX = re.compile(r"копия\s+заочного\s+решения")
+_COPY_SERVED_RX = re.compile(r"вручена")
+_COPY_RETURNED_RX = re.compile(r"возвратилась\s+невручен")
+
+
+def bank_default_judgment_info(fi: dict) -> dict:
+    """Признаки заочного решения и мотивировки из событий 1-й инстанции.
+
+    Возвращает ровно те ключи, что штампуются в запись (split_bank_track):
+    - default_judgment: bool — «Вынесено заочное решение по делу» (ст. 233 ГПК);
+    - motivirovka_date: "ДД.ММ.ГГГГ"|"" — дата события «Изготовлено
+      мотивированное решение в окончательной форме» (последнего, если их
+      несколько); имя поля зеркалит details["motivirovka_date"] события
+      fi_motivirovka_emitted;
+    - default_copy_served_date: "ДД.ММ.ГГГГ"|"" — «Копия заочного решения
+      ответчику (истцу) вручена»;
+    - default_copy_returned: bool — «Копия заочного решения возвратилась
+      невручённой».
+
+    Событие «Отправка копии заочного решения» сознательно НЕ используется:
+    формула ВС (Обзор №2 (2015), в. 14) считает трёхдневный срок направления
+    от принятия решения, а не от фактической отправки.
+
+    events пуст (лёгкая запись без склейки, тест) → фолбэк на уже
+    проштампованные поля fi — самосогласованность при чтении архивных
+    записей вне пайплайна.
+    """
+    events = fi.get("events") or []
+    if not events:
+        return {
+            "default_judgment": bool(fi.get("default_judgment")),
+            "motivirovka_date": fi.get("motivirovka_date") or "",
+            "default_copy_served_date": fi.get("default_copy_served_date") or "",
+            "default_copy_returned": bool(fi.get("default_copy_returned")),
+        }
+    info = {
+        "default_judgment": False,
+        "motivirovka_date": "",
+        "default_copy_served_date": "",
+        "default_copy_returned": False,
+    }
+    for ev in events:
+        text = (ev.get("text") or "").lower().replace("ё", "е")
+        if not text:
+            continue
+        m = _ANY_DECISION_RX.search(text)
+        if m:
+            # Тип определяет ПОСЛЕДНЕЕ решение-событие: после отмены заочного
+            # (ст. 241 ГПК) и нового рассмотрения обычное решение снимает
+            # заочность — событие первого круга остаётся в истории навсегда.
+            info["default_judgment"] = bool(m.group(1))
+        if _MOTIVATED_DECISION_RX.search(text) and ev.get("date"):
+            info["motivirovka_date"] = ev["date"]  # последнее событие побеждает
+        if _DEFAULT_COPY_RX.search(text):
+            if _COPY_SERVED_RX.search(text) and ev.get("date"):
+                info["default_copy_served_date"] = ev["date"]
+            if _COPY_RETURNED_RX.search(text):
+                info["default_copy_returned"] = True
+    return info
+
+
 def bank_legal_force_est(fi: dict) -> date | None:
     """Расчётная дата вступления решения в силу (иск банка, без апелляции).
 
-    Мотивировка (act_date; фолбэк — hearing_date) + BANK_APPEAL_TERM_DAYS
-    (30 дн, ст. 321 ГПК) со сдвигом вперёд на ближайший рабочий день
-    производственного календаря. Обе даты пусты → None (решения ещё нет
-    или карточка без дат — потолок ожидания ИЛ считается от других якорей).
-    """
-    from court_monitor.textutil import is_russian_working_day
+    Возвращает ПЕРВЫЙ день, когда решение в силе (следующий календарный день
+    после последнего дня срока обжалования; без сдвига на рабочий — в силу
+    решение вступает и в выходной). Сроки — по ГПК: дни рабочие (ст. 107),
+    месяц календарный (ст. 108, month_term_last_day).
 
+    Обычное решение: мотивировка (act_date → событие «Изготовлено
+    мотивированное решение» → расчётно decision_date + 10 раб. дн, ст. 199)
+    + месяц на апелляцию (ст. 321).
+
+    Заочное решение (ст. 233-237, детект bank_default_judgment_info):
+    - копия вручена ответчику → вручение + 7 раб. дн (заявление об отмене)
+      + месяц на апелляцию от истечения этого срока;
+    - сведений о вручении нет / возвратилась невручённой → формула ВС
+      (Обзор №2 (2015), в. 14): якорь + 3 раб. дн + 7 раб. дн + месяц;
+      якорь — мотивировка, если она позже даты решения, иначе дата решения
+      (без добавки 10 раб. дн: копию суд высылает от принятия решения).
+
+    Все даты пусты → None (решения ещё нет или карточка без дат — потолок
+    ожидания ИЛ считается от других якорей).
+    """
+    from court_monitor.textutil import add_working_days, month_term_last_day
+
+    info = bank_default_judgment_info(fi)
     # decision_date — замороженная дата решения; hearing_date остаётся
     # последним фолбэком для архивных записей (migrate_stages идёт только по
     # активным) и дел, воскрешённых из архива.
-    anchor = (parse_date(fi.get("act_date") or "")
-              or parse_date(fi.get("decision_date") or "")
-              or parse_date(fi.get("hearing_date") or ""))
-    if not anchor:
-        return None
-    est = anchor.date() + timedelta(days=config.BANK_APPEAL_TERM_DAYS)
-    while not is_russian_working_day(est):
-        est += timedelta(days=1)
-    return est
+    base_dt = (parse_date(fi.get("decision_date") or "")
+               or parse_date(fi.get("hearing_date") or ""))
+    base = base_dt.date() if base_dt else None
+    motiv_dt = (parse_date(fi.get("act_date") or "")
+                or parse_date(info["motivirovka_date"]))
+    motiv = motiv_dt.date() if motiv_dt else None
+
+    if info["default_judgment"]:
+        served_dt = parse_date(info["default_copy_served_date"])
+        if served_dt:
+            cancel_last = add_working_days(
+                served_dt.date(), config.BANK_DEFAULT_CANCEL_WORKDAYS)
+            last = month_term_last_day(cancel_last)
+        else:
+            anchor = motiv if (motiv and base and motiv > base) else (base or motiv)
+            if not anchor:
+                return None
+            sent_last = add_working_days(
+                anchor, config.BANK_DEFAULT_COPY_SEND_WORKDAYS)
+            cancel_last = add_working_days(
+                sent_last, config.BANK_DEFAULT_CANCEL_WORKDAYS)
+            last = month_term_last_day(cancel_last)
+    else:
+        if not motiv and base:
+            motiv = add_working_days(base, config.BANK_MOTIVATION_TERM_WORKDAYS)
+        if not motiv:
+            return None
+        last = month_term_last_day(motiv)
+    return last + timedelta(days=1)
 
 
 def classify_writ_kind(writ: dict, fi: dict) -> str:
