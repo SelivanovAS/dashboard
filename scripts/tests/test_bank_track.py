@@ -141,27 +141,180 @@ class TestLeftTrack:
         assert lifecycle.bank_case_left_track(case) is False
 
 
+# ── Исчисление процессуальных сроков (гл. 9 ГПК, textutil) ──────────────────
+
+class TestCourtCalendar:
+    def test_add_working_days_starts_next_day(self):
+        """Ст. 107 ГПК: течение срока начинается на следующий день."""
+        from court_monitor.textutil import add_working_days
+        assert add_working_days(date(2026, 7, 1), 1) == date(2026, 7, 2)
+
+    def test_add_working_days_skips_holidays(self):
+        """Майские 2026: 09.05 (сб, праздник), 10.05 (вс), 11.05 (перенос)."""
+        from court_monitor.textutil import add_working_days
+        assert add_working_days(date(2026, 5, 8), 3) == date(2026, 5, 14)
+
+    def test_month_term_plenum_example(self):
+        """Пример п. 16 ПП ВС №16: мотивировка 31.07 → последний день 31.08."""
+        from court_monitor.textutil import month_term_last_day
+        assert month_term_last_day(date(2026, 7, 31)) == date(2026, 8, 31)
+
+    def test_month_term_no_such_day_and_weekend(self):
+        """31.01 → в феврале нет 31-го → 28.02 (сб) → перенос на 02.03 (пн)."""
+        from court_monitor.textutil import month_term_last_day
+        assert month_term_last_day(date(2026, 1, 31)) == date(2026, 3, 2)
+
+    def test_month_term_new_year_holidays(self):
+        """Конец срока в новогодние каникулы → первый рабочий день января."""
+        from court_monitor.textutil import month_term_last_day
+        assert month_term_last_day(date(2026, 12, 1)) == date(2027, 1, 11)
+
+    def test_next_working_day(self):
+        from court_monitor.textutil import next_working_day
+        assert next_working_day(date(2026, 7, 25)) == date(2026, 7, 27)  # сб → пн
+        assert next_working_day(date(2026, 7, 27)) == date(2026, 7, 27)  # пн — сам
+
+
 # ── bank_legal_force_est ─────────────────────────────────────────────────────
 
 class TestLegalForceEst:
-    def test_from_act_date_plus_30(self):
+    """Вступление в силу по ГПК: сроки в днях — рабочие (ст. 107), месяц —
+    календарный (ст. 108), результат — ПЕРВЫЙ день в силе (последний день
+    срока обжалования + 1 календарный, без сдвига на рабочий)."""
+
+    def test_ordinary_from_act_date(self):
+        """Обычное: act_date 02.02 → месяц → 02.03 (пн) → в силе 03.03."""
         est = lifecycle.bank_legal_force_est({"act_date": "02.02.2026"})
-        assert est == date(2026, 3, 4)
+        assert est == date(2026, 3, 3)
+
+    def test_ordinary_from_motivirovka_event(self):
+        """Дата мотивировки из события карточки: act_date у всех решённых дел
+        пилота пуст, событие «Изготовлено мотивированное решение» — у 25 из 39.
+        Контрольный кейс 2-6140/2026."""
+        fi = {"decision_date": "24.06.2026",
+              "events": [
+                  {"date": "24.06.2026", "text": "Вынесено решение по делу"},
+                  {"date": "24.06.2026",
+                   "text": "Изготовлено мотивированное решение в окончательной форме"}]}
+        # 24.06 + месяц = 24.07 (пт) → в силе 25.07 — суббота, и это НЕ
+        # сдвигается: в силу решение вступает и в выходной (переносится
+        # только последний день срока, ч. 2 ст. 108).
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 7, 25)
+
+    def test_ordinary_fallback_ten_workdays(self):
+        """Мотивировки нигде нет → decision_date + 10 раб. дн (ст. 199)."""
+        fi = {"decision_date": "24.06.2026",
+              "events": [{"date": "24.06.2026", "text": "Вынесено решение по делу"}]}
+        # 24.06 + 10 раб. дн = 08.07 → месяц → 08.08 (сб) → перенос 10.08 (пн)
+        # → в силе 11.08
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 8, 11)
 
     def test_fallback_to_hearing_date(self):
+        """Архивные записи без decision_date: якорь — hearing_date."""
         est = lifecycle.bank_legal_force_est({"hearing_date": "02.02.2026"})
-        assert est == date(2026, 3, 4)
+        # 02.02 + 10 раб. дн = 16.02 → месяц → 16.03 (пн) → в силе 17.03
+        assert est == date(2026, 3, 17)
 
-    def test_weekend_shifted_forward(self):
-        """+30 дн попало на выходной → сдвиг на ближайший рабочий."""
-        est = lifecycle.bank_legal_force_est({"act_date": "05.03.2026"})
-        assert est is not None
-        from court_monitor.textutil import is_russian_working_day
-        assert is_russian_working_day(est)
-        assert est >= date(2026, 4, 4)
+    def test_default_judgment_copy_served(self):
+        """Заочное, копия вручена: вручение + 7 раб. дн + месяц (ст. 237).
+        Контрольный кейс 2-5671/2026."""
+        fi = {"decision_date": "28.05.2026",
+              "events": [
+                  {"date": "28.05.2026", "text": "Вынесено заочное решение по делу"},
+                  {"date": "26.06.2026",
+                   "text": "Копия заочного решения ответчику (истцу) вручена"}]}
+        # 26.06 + 7 раб. дн = 07.07 → месяц → 07.08 (пт) → в силе 08.08
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 8, 8)
+
+    def test_default_judgment_vs_formula(self):
+        """Заочное без сведений о вручении → формула ВС (Обзор №2 (2015),
+        в. 14): решение + 3 раб. дн + 7 раб. дн + месяц."""
+        fi = {"decision_date": "28.05.2026",
+              "events": [{"date": "28.05.2026",
+                          "text": "Вынесено заочное решение по делу"}]}
+        # 28.05 + 3 раб = 02.06 → + 7 раб = 11.06 → месяц → 11.07 (сб) →
+        # перенос 13.07 (пн) → в силе 14.07
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 7, 14)
+
+    def test_default_judgment_returned_copy_vs_formula(self):
+        """«Возвратилась невручённой» — сведений о вручении нет, формула ВС."""
+        fi = {"decision_date": "28.05.2026",
+              "events": [
+                  {"date": "28.05.2026", "text": "Вынесено заочное решение по делу"},
+                  {"date": "15.06.2026",
+                   "text": "Копия заочного решения возвратилась невручённой"}]}
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 7, 14)
+
+    def test_default_judgment_late_motivirovka_anchor(self):
+        """Якорь заочного — мотивировка, если она ПОЗЖЕ даты решения
+        (копию суд физически высылает после изготовления полного текста);
+        добавка +10 раб. дн к заочному не применяется."""
+        fi = {"decision_date": "28.05.2026",
+              "events": [
+                  {"date": "28.05.2026", "text": "Вынесено заочное решение по делу"},
+                  {"date": "05.06.2026",
+                   "text": "Изготовлено мотивированное решение в окончательной форме"}]}
+        # 05.06 + 3 раб = 10.06 → + 7 раб (12.06 — праздник) = 22.06 →
+        # месяц → 22.07 (ср) → в силе 23.07
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 7, 23)
 
     def test_no_dates_none(self):
         assert lifecycle.bank_legal_force_est({}) is None
+
+
+# ── bank_default_judgment_info: детект заочного производства ─────────────────
+
+class TestDefaultJudgmentInfo:
+    def test_detects_all_fields(self):
+        fi = {"events": [
+            {"date": "28.05.2026",
+             "text": "Судебное заседание. 10:30. Вынесено заочное решение по делу. "
+                     "Иск (заявление, жалоба) УДОВЛЕТВОРЕН"},
+            {"date": "28.05.2026",
+             "text": "Изготовлено мотивированное решение в окончательной форме"},
+            {"date": "15.06.2026",
+             "text": "Копия заочного решения возвратилась невручённой"},
+            {"date": "26.06.2026",
+             "text": "Копия заочного решения ответчику (истцу) вручена"},
+        ]}
+        assert lifecycle.bank_default_judgment_info(fi) == {
+            "default_judgment": True,
+            "motivirovka_date": "28.05.2026",
+            "default_copy_served_date": "26.06.2026",
+            "default_copy_returned": True,
+        }
+
+    def test_last_decision_wins(self):
+        """Отмена заочного (ст. 241) → новое рассмотрение → обычное решение:
+        флаг заочности снимается, хотя событие первого круга в истории."""
+        fi = {"events": [
+            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
+            {"date": "20.03.2026", "text": "Рассмотрение дела начато с начала"},
+            {"date": "15.04.2026", "text": "Вынесено решение по делу. Иск УДОВЛЕТВОРЕН"},
+        ]}
+        assert lifecycle.bank_default_judgment_info(fi)["default_judgment"] is False
+
+    def test_ordinary_decision_empty_info(self):
+        fi = {"events": [{"date": "24.06.2026", "text": "Вынесено решение по делу"}]}
+        info = lifecycle.bank_default_judgment_info(fi)
+        assert info["default_judgment"] is False
+        assert info["default_copy_served_date"] == ""
+        assert info["default_copy_returned"] is False
+
+    def test_fallback_to_stamped_fields_without_events(self):
+        """Лёгкая запись без склейки events (архив вне пайплайна) — детектор
+        доверяет уже проштампованным полям."""
+        fi = {"default_judgment": True, "default_copy_served_date": "26.06.2026"}
+        info = lifecycle.bank_default_judgment_info(fi)
+        assert info["default_judgment"] is True
+        assert info["default_copy_served_date"] == "26.06.2026"
+
+    def test_yo_normalization(self):
+        """Суды пишут «невручённой» и «неврученной» вперемешку."""
+        for word in ("возвратилась невручённой", "возвратилась неврученной"):
+            fi = {"events": [
+                {"date": "01.06.2026", "text": f"Копия заочного решения {word}"}]}
+            assert lifecycle.bank_default_judgment_info(fi)["default_copy_returned"] is True
 
 
 # ── is_case_archived: архивные окна трека ────────────────────────────────────
@@ -218,8 +371,9 @@ class TestBankTrackArchive:
         assert self._archived(case) is False
 
     def test_resolved_without_writ_ceiling(self):
-        """Потолок: 180 дн от расчётного вступления в силу без ИЛ → архив."""
-        case = _track_case(status="Решено", act_date=self._dmy(30 + 180 + 40))
+        """Потолок: 180 дн от расчётного вступления в силу без ИЛ → архив.
+        Слагаемые запаса: ~месяц на апелляцию + 180 потолок + 40 сверху."""
+        case = _track_case(status="Решено", act_date=self._dmy(31 + 180 + 40))
         assert self._archived(case) is True
 
     def test_returned_after_window_archived(self):
@@ -399,6 +553,36 @@ class TestSplitBankTrack:
             writs=[{"issue_date": self._dmy(30), "status": "Выдан"}])
         _rest, _active, bank_arch, _moved = split_bank_track([arch])
         assert bank_arch and bank_arch[0]["first_instance"].get("legal_force_est")
+
+    def test_default_judgment_fields_stamped(self):
+        """Признаки заочного производства попадают в лёгкую запись: фронт
+        bank-картотеки events не грузит, бейджу «Заочное» и строке о вручении
+        нужны отдельные поля."""
+        from court_monitor.runs import split_bank_track
+        дело = _track_case(status="Решено", decision_date=self._dmy(30),
+                           hearing_date=self._dmy(30))
+        дело["first_instance"]["events"] = [
+            {"date": self._dmy(30), "text": "Вынесено заочное решение по делу"},
+            {"date": self._dmy(10),
+             "text": "Копия заочного решения ответчику (истцу) вручена"},
+        ]
+        _rest, bank_active, _arch, _moved = split_bank_track([дело])
+        fi = bank_active[0]["first_instance"]
+        assert fi["default_judgment"] is True
+        assert fi["default_copy_served_date"] == self._dmy(10)
+        assert "default_copy_returned" not in fi  # пустые значения не пишем
+
+    def test_stale_default_judgment_flag_removed(self):
+        """Самоисцеление: заочное отменено, новое решение обычное — протухший
+        флаг снимается на ближайшем прогоне."""
+        from court_monitor.runs import split_bank_track
+        дело = _track_case(status="Решено", decision_date=self._dmy(30),
+                           hearing_date=self._dmy(30))
+        дело["first_instance"]["default_judgment"] = True
+        дело["first_instance"]["events"] = [
+            {"date": self._dmy(30), "text": "Вынесено решение по делу"}]
+        _rest, bank_active, _arch, _moved = split_bank_track([дело])
+        assert "default_judgment" not in bank_active[0]["first_instance"]
 
 
 # ── Дайджест: секция «Иски банка» ────────────────────────────────────────────
