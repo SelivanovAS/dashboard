@@ -1330,7 +1330,7 @@ async function setDatasetView(v){
   applyFilters();
 }
 window.setDatasetView=setDatasetView;
-// Сегмент-переключатель картотек «Основные | 🏦 Иски банка» (#dataset-switch
+// Сегмент-переключатель картотек «Основные | Иски банка» (#dataset-switch
 // над таблицей). Скрыт, пока файла cases_bank.json нет (HEAD-проба
 // probeBankFile) — до пилотного импорта дашборд выглядит как раньше.
 // В отличие от чипов-фильтров виден и на мобильном (тулбар там — плавающая
@@ -1343,9 +1343,10 @@ function renderDatasetSwitch(){
   if(!bankFileExists||mineModeOn()){box.hidden=true;return;}
   box.hidden=false;
   const bankCount=bankLoaded?`<span class="chip-count">${bankCases.length}</span>`:'';
+  const mainCount=`<span class="chip-count">${allCases.length}</span>`;
   box.innerHTML=`<div class="seg-ctrl">
-    <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные</button>
-    <button class="seg-btn ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="setDatasetView('bank')">🏦 Иски банка${bankCount}</button>
+    <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные${mainCount}</button>
+    <button class="seg-btn ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="setDatasetView('bank')">Иски банка${bankCount}</button>
   </div>`;
 }
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.textContent='';const s=document.createElement('strong');s.textContent='Ошибка: ';e.appendChild(s);e.appendChild(document.createTextNode(m));}
@@ -1937,6 +1938,34 @@ function writBadgeHtml(c,withDate){
     html+=`<span class="badge badge-compact badge-writ-interim" title="Обеспечительные меры: ${escHtml(title)}">🛡 Обеспечение</span>`;
   return html;
 }
+// Мобильная карточка (перекомпоновка 28.07.2026, решение юриста): вместо кучи
+// пилюль в шапке — 🛡-иконка перед бейджем стадии + строка трека под чертой.
+// 🛡 без слова: обеспечительный лист — фоновый факт, слово «Обеспечение»
+// съедало место у номера дела. Подробности — в title (на тач-экране тултипа
+// нет, но полная секция листов есть в drawer).
+function writShieldIconHtml(c){
+  if(!c.writs||!c.writs.length)return '';
+  const interim=c.writs.filter(w=>classifyWritKind(w,c)==='interim');
+  if(!interim.length)return '';
+  const title=interim.map(w=>`${w.issue_date||''} ${w.status||''}`.trim()).filter(Boolean).join(', ');
+  return `<span class="mc-shield" title="Обеспечительные меры: ${escHtml(title)}">🛡</span>`;
+}
+// Строка трека под чертой мобильной карточки. Состояния взаимоисключающие:
+// лист на исполнение выдан → «🧾 ИЛ ДД.ММ», иначе решение в силе без листа →
+// «⏳ ждёт ИЛ N дн.». Пусто — подвал карточки не рендерится вовсе.
+function mcTrackLineHtml(c){
+  if(c.writs&&c.writs.some(w=>classifyWritKind(w,c)!=='interim')){
+    const даты=c.writs.filter(w=>classifyWritKind(w,c)!=='interim')
+      .map(w=>parseDate(w.issue_date||'')).filter(Boolean).sort();
+    const дата=даты.length?' '+formatDate(даты[даты.length-1]).replace(/\.\d{4}$/,''):'';
+    const title=c.writs.map(w=>`${w.issue_date||''} ${w.status||''}`.trim()).filter(Boolean).join(', ');
+    return `<span class="mc-track-writ" title="Исполнительные листы: ${escHtml(title)}">🧾 ИЛ${дата}</span>`;
+  }
+  const d=awaitingWritDays(c);
+  const lvl=awaitingWritLevel(d);
+  if(!lvl)return '';
+  return `<span class="mc-track-await aw-${lvl}" title="Решение вступило в силу ${escHtml(formatDate(parseDate(c._fi.legal_force_est)))} (расчётно), исполнительный лист не выдан">⏳ ждёт ИЛ ${d} дн.</span>`;
+}
 function countCasesByStatus(st){
   // Счётчики чипов считаются по активному датасету (основной / иски банка /
   // объединённый «★ Мои»).
@@ -2272,7 +2301,9 @@ function buildStateHtml(c,vm){
 }
 function buildHearingHtml(c,vm,opts){
   if(!(c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Без движения до'||c.nextDateLabel==='Рассмотрение'))){
-    return '<span class="cell-empty">—</span>';
+    // Прочерк — только в десктопной таблице (пустая ячейка колонки); в
+    // мобильной карточке он выглядел потерянным минусом справа от статуса.
+    return (opts&&opts.compact)?'':'<span class="cell-empty">—</span>';
   }
   const d=dayDiff(c.nextDate);
   let pCls='';
@@ -2294,13 +2325,15 @@ function buildHearingHtml(c,vm,opts){
   // юрист путается, см. дело 8Г-6864/2026). Для «Отложено до» оставляем без префикса.
   const prefix=c.nextDateLabel==='Без движения до'?'б/дв. до ':'';
   const compact=!!(opts&&opts.compact);
-  const relRow=rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:'';
   if(compact){
-    // Мобильная карточка: «<дата> в <время>» одной строкой, метка отдельно справа.
+    // Мобильная карточка: «<дата> в <время>» одной строкой, БЕЗ относительной
+    // метки («ср», «завтра», «через 2 дня») — решение юриста 28.07.2026:
+    // срочность и так видна цветом даты (hearing-today/soon).
     const dateLine=timeStr?`${dateStr} в ${timeStr}`:dateStr;
-    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateLine}</span>${relRow}</div>`;
+    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateLine}</span></div>`;
   }
   // Десктоп-таблица: три строки — дата, время, относительная метка справа.
+  const relRow=rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:'';
   const timeRow=timeStr?`<span class="hearing-time ${pCls}">${timeStr}</span>`:'';
   return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateStr}</span>${timeRow}${relRow}</div>`;
 }
@@ -2828,6 +2861,14 @@ function writNumHtml(v){
 function buildWritsSectionHtml(c){
   if(!c.writs||!c.writs.length)return '';
   const total=c.writs.length;
+  // Заголовок называет то, что внутри. «Исполнительные листы (4)» при четырёх
+  // обеспечительных (реальный кейс 2-3575/2026) юрист читает как «лист на
+  // исполнение есть» — а его нет, дело стоит в очереди «Ждут ИЛ».
+  const наИсполнение=c.writs.filter(w=>classifyWritKind(w,c)!=='interim').length;
+  const обеспечительных=total-наИсполнение;
+  // Тип листа в строке — только когда секция смешанная: в однородной он
+  // дословно повторял бы заголовок (решение юриста 28.07.2026).
+  const смешанная=наИсполнение>0&&обеспечительных>0;
   const rows=c.writs.map((w,i)=>{
     const st=(w.status||'').trim();
     const активен=st==='Выдан';
@@ -2835,18 +2876,17 @@ function buildWritsSectionHtml(c){
     const kind=classifyWritKind(w,c);
     // Для 'unknown' (нет даты выдачи) подпись не выводим: «тип не определён»
     // юристу ничего не даёт.
-    const kindLabel=kind==='interim'?'🛡 Обеспечительные меры':kind==='enforcement'?'🧾 На исполнение решения':'';
+    const kindLabel=!смешанная?'':kind==='interim'?'🛡 Обеспечительные меры':kind==='enforcement'?'🧾 На исполнение решения':'';
     // Электронный ИД и бумажный бланк — РАЗНЫЕ реквизиты одного листа, а не
     // взаимозаменяемые (в пробе есть и «86RS0004#2-4440/2025#1», и
     // «ФС № 039166358»). Было `electronic_id||blank_number` — бумажный номер
-    // молча пропадал бы, заполни суд обе колонки.
-    const ids=[['Электронный ИД',w.electronic_id],['Бланк',w.blank_number]]
-      .map(([подпись,v])=>[подпись,String(v||'').trim()])
-      .filter(([,v])=>v);
-    const idsHtml=ids.map(([подпись,v])=>`<div class="writ-id">
-      <div class="writ-id-row"><span class="writ-num">${writNumHtml(v)}</span>${copyBtnHtml(v,'Скопировать номер листа','writ-copy')}</div>
-      <div class="writ-id-label">${escHtml(подпись)}</div>
-    </div>`).join('');
+    // молча пропадал бы, заполни суд обе колонки. Текстовых подписей у
+    // реквизитов нет (убраны 28.07.2026): форматы самоописательны —
+    // бумажный бланк начинается с «ФС», электронный ИД собран через «#».
+    const ids=[w.electronic_id,w.blank_number]
+      .map(v=>String(v||'').trim())
+      .filter(Boolean);
+    const idsHtml=ids.map(v=>`<div class="writ-id-row"><span class="writ-num">${writNumHtml(v)}</span>${copyBtnHtml(v,'Скопировать номер листа','writ-copy')}</div>`).join('');
     // «Лист N из M» — при нескольких листах номер и статус читаются в паре:
     // в одном деле бывает «…#1 Возвращен» + «…#2 Выдан» с одной датой и одним
     // ОСП (Советский, 2-37/2026), и суффикс — единственный различитель.
@@ -2861,15 +2901,13 @@ function buildWritsSectionHtml(c){
       ${w.recipient?`<div class="writ-recipient" title="${escHtml(w.recipient)}">→ ${escHtml(shortBailiff(w.recipient))}</div>`:''}
     </div>`;
   }).join('');
-  // Заголовок называет то, что внутри. «Исполнительные листы (4)» при четырёх
-  // обеспечительных (реальный кейс 2-3575/2026) юрист читает как «лист на
-  // исполнение есть» — а его нет, дело стоит в очереди «Ждут ИЛ».
-  const наИсполнение=c.writs.filter(w=>classifyWritKind(w,c)!=='interim').length;
-  const обеспечительных=total-наИсполнение;
+  // Эмодзи в заголовке — те же, что у бейджей «🧾 ИЛ»/«🛡 Обеспечение»:
+  // обеспечительная секция считывается щитом с первого взгляда (решение
+  // юриста 28.07.2026).
   const заголовок=наИсполнение
-    ?`Исполнительные листы (${наИсполнение})`
+    ?`🧾 Исполнительные листы (${наИсполнение})`
       +(обеспечительных?` <span class="ws-extra">· обеспечительных ${обеспечительных}</span>`:'')
-    :`Обеспечительные листы (${total})`;
+    :`🛡 Обеспечительные листы (${total})`;
   return `<div class="drawer-section">
     <div class="drawer-section-title">${заголовок}</div>
     <div class="writ-list">${rows}</div>
@@ -2957,7 +2995,10 @@ function renderDrawer(c){
 
   // Hero — статус и публикация акта дублируются в подзаголовке и «Ключевых
   // датах», поэтому отдельный блок hero-badges не выводим.
-  const roleBadge=c.sberbankRole==='plaintiff'?'<span class="badge badge-plaintiff">Сбер — истец</span>':c.sberbankRole==='defendant'?'<span class="badge badge-defendant">Сбер — ответчик</span>':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
+  // Бейдж роли — только у третьего лица (решение юриста 28.07.2026): роли
+  // «истец»/«ответчик» и так видны из подсветки ПАО Сбербанк в строках
+  // сторон ниже, а третьего лица в этих строках нет.
+  const roleBadge=c.sberbankRole==='plaintiff'||c.sberbankRole==='defendant'?'':'<span class="badge badge-third">Сбер — 3-е лицо</span>';
 
   const plHtml=highlightSberbank(shortParty(c.plaintiff));
   const dfHtml=highlightSberbank(shortParty(c.defendant));
@@ -3327,6 +3368,7 @@ function renderMobileCards(){
     const courtTip=[courtTitle(c),courtJudgeFull].filter(Boolean).join(' · ');
     const hearingHtml=buildHearingHtml(c,vm,{compact:true});
     const stateHtml=buildStateHtml(c,vm);
+    const trackLine=mcTrackLineHtml(c);
 
     const cardClass=['mobile-card',isUnread?'card-new':'',accent].filter(Boolean).join(' ');
     const caseNumEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
@@ -3335,7 +3377,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${stageBadge}${pendingBadge}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c,true)}${awaitingWritBadgeHtml(c)}${newBadge}${archived}</span>
+        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${newBadge}${archived}</span>
       </div>
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
@@ -3345,7 +3387,7 @@ function renderMobileCards(){
       </div>
       <div class="mc-bottom">
         <div class="mc-state">${stateHtml}</div>
-        <div class="mc-hearing">${hearingHtml}</div>
+        <div class="mc-hearing">${hearingHtml}${trackLine?`<div class="mc-track">${trackLine}</div>`:''}</div>
       </div>
     </div>`;
     })();

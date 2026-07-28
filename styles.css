@@ -631,7 +631,10 @@ body {
      - в мобильном bottom-sheet — растягивается на всю ширину листа (.sheet-body .seg-ctrl). */
 .seg-ctrl { display:flex; border:1px solid var(--border); border-radius:var(--radius-pill); overflow:hidden; background:var(--bg-1); }
 .chip-bar-segments .seg-ctrl { flex:0 0 auto; min-width:280px; }
-.seg-btn { flex:1 1 0; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
+/* inline-flex + gap: счётчик .chip-count не липнет к подписи («Иски банка163»). */
+.seg-btn { flex:1 1 0; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
+/* На активном (заливка --accent) серый счётчик тонул — как у .chip-btn.active. */
+.seg-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
 .seg-btn:not(:last-child) { border-right:1px solid var(--border); }
 .seg-btn:hover:not(:disabled) { background:var(--bg-3); }
 .seg-btn.active { background:var(--accent); color:#fff; }
@@ -736,12 +739,10 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .writ-row-top .badge { margin-left:auto; }
 .writ-count { font-size:var(--fs-2xs); font-weight:var(--fw-semibold); color:var(--fg-4); text-transform:uppercase; letter-spacing:0.04em; }
 .writ-date { font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--fg-2); letter-spacing:-0.01em; }
-.writ-id { display:flex; flex-direction:column; gap:1px; }
 .writ-id-row { display:flex; align-items:center; gap:6px; }
 /* user-select:all — долгий тап на телефоне выделяет номер целиком, а не по
    слову; переносится только по «#» (<wbr> ставит writNumHtml). */
 .writ-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); letter-spacing:-0.01em; line-height:1.35; user-select:all; -webkit-user-select:all; min-width:0; }
-.writ-id-label { font-size:var(--fs-2xs); color:var(--fg-4); }
 .writ-copy { flex-shrink:0; }
 .writ-kind { font-size:var(--fs-xs); color:var(--fg-2); }
 .writ-recipient { font-size:var(--fs-sm); color:var(--fg-1); line-height:1.35; }
@@ -754,7 +755,6 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .writ-row.is-inactive .writ-date,
 .writ-row.is-inactive .writ-kind,
 .writ-row.is-inactive .writ-recipient,
-.writ-row.is-inactive .writ-id-label,
 .writ-row.is-inactive .writ-count { opacity:.6; }
 /* Уточнение в заголовке секции: «Исполнительные листы (2) · обеспечительных 2» */
 .ws-extra { font-weight:var(--fw-normal); color:var(--fg-4); }
@@ -805,7 +805,10 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .status-date { font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--fg-2); font-weight:var(--fw-semibold); }
 .status-date-prominent { font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--fg-1); }
 
-/* Роли */
+/* Роли. В hero drawer'а с 28.07.2026 остаётся только бейдж 3-го лица (роль
+   «истец»/«ответчик» видна из подсветки ПАО Сбербанк в строках сторон), но
+   в «Ближайших заседаниях» роль печатается всем — класс собирается
+   динамически (`badge-${rc}` в renderUpcoming), grep по литералу его не видит. */
 .badge-plaintiff { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); }
 .badge-defendant { background:var(--role-defendant-bg); color:var(--role-defendant-fg); }
 .badge-third     { background:var(--role-third-bg); color:var(--role-third-fg); }
@@ -1127,6 +1130,9 @@ tr.detail-row { display:none; }
 .mc-top .mc-badges { flex:0 0 auto; margin-left:auto; }
 .mc-case { font-family:var(--font-mono); font-size:var(--fs-lg); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; }
 .mc-badges { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+/* 🛡-иконка обеспечительного листа — перед бейджем стадии, без слова
+   (перекомпоновка 28.07.2026): фоновый факт, текст съедал место у номера. */
+.mc-shield { font-size:15px; line-height:1; }
 .mc-court-label { font-size:var(--fs-xs); color:var(--fg-3); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mc-third { margin-bottom:8px; }
 .mc-parties { font-size:var(--fs-md); color:var(--fg-2); margin-bottom:10px; line-height:1.4; display:flex; flex-direction:column; gap:3px; }
@@ -1137,10 +1143,22 @@ tr.detail-row { display:none; }
 .mc-recent-icon { flex:0 0 auto; line-height:1.4; opacity:0.7; }
 .mc-recent-rel { flex:0 0 auto; font-weight:var(--fw-semibold); color:var(--fg-3); white-space:nowrap; }
 .mc-recent-text { flex:1 1 auto; min-width:0; color:var(--fg-1); overflow:hidden; }
-.mc-bottom { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding-top:8px; border-top:1px solid var(--divider); }
+/* baseline: текст бейджа-результата и дата справа на одной линии (у бейджа
+   есть свой паддинг — flex-start спускал его текст ниже даты). */
+.mc-bottom { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding-top:8px; border-top:1px solid var(--divider); }
 .mc-state { min-width:0; flex-shrink:1; }
 .mc-hearing { text-align:right; flex-shrink:0; }
 .mc-hearing .cell-hearing { align-items:flex-end; }
+/* Строка трека ИЛ (28.07.2026): «🧾 ИЛ ДД.ММ» либо «⏳ ждёт ИЛ N дн.» тихим
+   текстом СРАЗУ ПОД ДАТОЙ — живёт внутри правой колонки .mc-hearing, а не
+   отдельным рядом карточки: отдельный ряд отбивала вниз высота левой колонки
+   (бейдж результата + «Акт опубликован»), и связь с датой терялась.
+   Без своей черты — вторая линия делала карточку полосатой. */
+.mc-track { display:flex; justify-content:flex-end; align-items:center; margin-top:3px; font-size:var(--fs-xs); }
+.mc-track-await { color:var(--fg-3); }
+.mc-track-await.aw-watch { color:var(--urgency-tomorrow-fg); font-weight:var(--fw-semibold); }
+.mc-track-await.aw-overdue { color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+.mc-track-writ { color:var(--green-favorable-fg); font-weight:var(--fw-semibold); }
 
 /* ========== Responsive ========== */
 @media (max-width: 1024px) {
@@ -1335,8 +1353,10 @@ tr.detail-row { display:none; }
   .mc-court-label { font-size:var(--fs-sm); overflow-wrap:anywhere; white-space:normal; }
   .mc-parties { font-size:var(--fs-lg); }
   .mc-bottom .badge { font-size:var(--fs-md); }
-  .mc-hearing .hearing-primary { font-size:var(--fs-sm); }
-  .mc-hearing .hearing-relative { font-size:var(--fs-xs); }
+  /* Дата заседания — наравне с бейджем «Назначено» слева (fs-md, как и
+     .mc-bottom .badge); относительной метки в compact-режиме больше нет. */
+  .mc-hearing .hearing-primary { font-size:var(--fs-md); }
+  .mc-track { font-size:var(--fs-sm); }
   .error-banner { font-size:var(--fs-lg); }
   .new-cases-banner { font-size:var(--fs-lg); }
   /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer.
@@ -1366,7 +1386,7 @@ tr.detail-row { display:none; }
   .writ-recipient { font-size:var(--fs-lg); }
   .writ-kind { font-size:var(--fs-sm); }
   .writ-date { font-size:var(--fs-md); }
-  .writ-id-label, .writ-count { font-size:var(--fs-xs); }
+  .writ-count { font-size:var(--fs-xs); }
   /* Хитбокс под палец 44px, но без рамки и фона: коробка кнопки на 320px
      тяжелее самого номера и спорит с ним за внимание. Обратка на нажатие
      остаётся — `.copied` красит иконку в accent. */
