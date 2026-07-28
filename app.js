@@ -1684,9 +1684,9 @@ function hasEnforcementWrit(c){
   return (c.writs||[]).some(w=>classifyWritKind(w,c)==='enforcement');
 }
 // Сколько дней дело ждёт исполнительный лист. Якорь — legal_force_est
-// (расчётная дата вступления решения в силу: мотивировка + 30 дн по
-// производственному календарю, считает bank_legal_force_est на бэкенде —
-// в JS календаря нет, поэтому поле приезжает готовым в cases_bank.json).
+// (расчётная дата вступления решения в силу по ГПК: мотивировка/вручение
+// копии + месяц, заочные — ст. 237/формула ВС; считает bank_legal_force_est
+// на бэкенде — в JS календаря нет, поле приезжает готовым в cases_bank.json).
 // null — если ждать нечего: лист уже есть, дело не решено, даты нет.
 // Отрицательное значение (решение ещё не в силе) отдаём как есть — ожидание
 // формально не началось, бейдж его не показывает.
@@ -1886,6 +1886,35 @@ function bankTrackBadge(c){
   return (c&&c._bankTrack&&(mineModeOn()||!bankViewActive))
     ?'<span class="badge badge-compact badge-bank-track" title="Картотека «Иски банка»">🏦 Иск банка</span>'
     :'';
+}
+// Бейдж «🌙 Заочное» — решение вынесено в заочном производстве (ст. 233 ГПК):
+// срок вступления в силу считается иначе (вручение копии + 7 раб. дн + месяц,
+// без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому тип
+// решения должен читаться рядом с «⏳ ждёт ИЛ». Поле default_judgment
+// штампует split_bank_track — events фронт не грузит.
+function defaultJudgmentBadgeHtml(c){
+  if(!c||!c._bankTrack||!(c._fi&&c._fi.default_judgment))return '';
+  const served=c._fi.default_copy_served_date||'';
+  const title=served
+    ?`Заочное решение; копия вручена ответчику ${served} — сроки отмены и апелляции идут от вручения`
+    :'Заочное решение; сведений о вручении копии нет — вступление в силу по формуле ВС (3 + 7 раб. дн + месяц)';
+  return `<span class="badge badge-compact badge-default-judgment" title="${escHtml(title)}">🌙 Заочное</span>`;
+}
+// Строка «Копия ответчику» в «Ключевых датах» drawer — только у заочных:
+// юристу важно видеть, по какой ветке посчитана дата «Вступило в силу».
+// Чистая функция — гоняется node-тестом (test_frontend_writs.py).
+function defaultCopyKvHtml(c){
+  const fi=(c&&c._fi)||{};
+  if(!fi.default_judgment)return '';
+  let v;
+  if(fi.default_copy_served_date){
+    v=`${escHtml(fi.default_copy_served_date)} <span style="color:var(--slate-500);font-weight:500;">(срок — от вручения)</span>`;
+  }else if(fi.default_copy_returned){
+    v=`возвратилась невручённой <span style="color:var(--slate-500);font-weight:500;">(расчёт по формуле ВС)</span>`;
+  }else{
+    v=`сведений о вручении нет <span style="color:var(--slate-500);font-weight:500;">(расчёт по формуле ВС)</span>`;
+  }
+  return `<div class="kv-k">🌙 Копия ответчику</div><div class="kv-v kv-mono">${v}</div>`;
 }
 // Бейджи листов: «🧾 ИЛ» — есть лист на исполнение решения, «🛡 Обеспечение» —
 // есть обеспечительный (арест). Могут стоять одновременно.
@@ -2348,7 +2377,7 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
-    const metaBadges = [stageBadge, pendingBadge, bankTrackBadge(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, bankTrackBadge(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -2986,7 +3015,8 @@ function renderDrawer(c){
       keyDates+=`<div class="kv-k">🧾 ИЛ выдан</div><div class="kv-v kv-mono">${formatDate(датыИЛ[датыИЛ.length-1])}${хвост}</div>`;
     }else{
       // Листа нет — показываем, с какого числа решение в силе и сколько дело
-      // уже ждёт. Дата расчётная (мотивировка + 30 дн), поэтому подписана.
+      // уже ждёт. Дата расчётная (по ГПК: мотивировка/вручение + месяц,
+      // заочные — ст. 237/формула ВС), поэтому подписана.
       const ожидание=awaitingWritDays(c);
       const сила=parseDate((c._fi&&c._fi.legal_force_est)||'');
       if(сила){
@@ -2996,6 +3026,7 @@ function renderDrawer(c){
         keyDates+=`<div class="kv-k">Вступило в силу</div><div class="kv-v kv-mono">${formatDate(сила)} <span style="color:var(--slate-500);font-weight:500;">(расч.)</span>${хвост}</div>`;
       }
     }
+    keyDates+=defaultCopyKvHtml(c);
   }
   keyDates+=`</div>`;
 
@@ -3180,7 +3211,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${bankTrackBadge(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
@@ -3304,7 +3335,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${stageBadge}${pendingBadge}${bankTrackBadge(c)}${writBadgeHtml(c,true)}${awaitingWritBadgeHtml(c)}${newBadge}${archived}</span>
+        <span class="mc-badges">${stageBadge}${pendingBadge}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c,true)}${awaitingWritBadgeHtml(c)}${newBadge}${archived}</span>
       </div>
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
