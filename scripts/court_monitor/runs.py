@@ -1610,6 +1610,17 @@ def split_bank_track(
             _fi["legal_force_est"] = _est.isoformat()
         else:
             _fi.pop("legal_force_est", None)
+        # Признаки заочного производства (заочность, вручение копии, дата
+        # мотивировки) — тоже в лёгкую запись: фронт bank-картотеки events
+        # не грузит (ленивая ensureBankEvents), а бейдж «Заочное» и строка
+        # о вручении нужны без них. Пустые значения снимаем — самоисцеление
+        # при отмене заочного/перечитанной карточке.
+        _info = lifecycle.bank_default_judgment_info(_fi)
+        for _k, _v in _info.items():
+            if _v:
+                _fi[_k] = _v
+            else:
+                _fi.pop(_k, None)
         if lifecycle.bank_case_left_track(c):
             c.pop("track", None)
             c["track_origin"] = "plaintiff_light"
