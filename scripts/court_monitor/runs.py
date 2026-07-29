@@ -20,6 +20,10 @@ import time
 from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle
+from court_monitor.bank_report import (
+    BankParseReport, classify_fetch_failure, metrics_snapshot,
+    save_bank_parse_report,
+)
 from court_monitor.config import log, _metrics_reset, cold_archive_glob, cold_archive_path
 from court_monitor.courts import (
     APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
@@ -2232,14 +2236,24 @@ def main_json():
     # чтобы сразу было видно, сколько карточек реально пойдёт в парс.
     fi_plan_skip = 0
     fi_plan_no_card = 0
+    fi_plan_writ_weekly = 0
     for _c in fi_active:
         _fi_b = _c.get("first_instance", {})
         if (_fi_b.get("court_domain", "") not in fi_court_map
                 or not re.match(r'^(\d+)\|([a-f0-9-]+)$', _fi_b.get("link", "") or "")):
             fi_plan_no_card += 1
-        elif should_skip_case(_c, today)[0]:
-            fi_plan_skip += 1
-    fi_plan_parse = len(fi_active) - fi_plan_skip - fi_plan_no_card
+            continue
+        _plan_skip, _plan_reason = should_skip_case(_c, today)
+        if _plan_skip:
+            # Недельный ритм решённых исков банка — отдельное слагаемое:
+            # раньше он сливался в «заседание в будущем», и юрист читал
+            # 39 отложенных writ_weekly-дел как отложенные по заседаниям.
+            if _plan_reason.startswith("writ_weekly"):
+                fi_plan_writ_weekly += 1
+            else:
+                fi_plan_skip += 1
+    fi_plan_parse = (len(fi_active) - fi_plan_skip - fi_plan_writ_weekly
+                     - fi_plan_no_card)
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
     # «Всего» включает и дела «третье лицо» в cassation_watch — предикат
     # should_parse_fi_card их не пускает в очередь, но юристу они видны
@@ -2248,6 +2262,10 @@ def main_json():
     _plan_notes = []
     if fi_plan_skip:
         _plan_notes.append(f"{fi_plan_skip} отложено — заседание в будущем")
+    if fi_plan_writ_weekly:
+        _plan_notes.append(
+            f"{fi_plan_writ_weekly} решённые иски банка — недельный ритм"
+        )
     if fi_plan_no_card:
         _plan_notes.append(
             f"{fi_plan_no_card} без ссылки на карточку — пропустим"
@@ -2266,8 +2284,20 @@ def main_json():
     # Smart-skip счётчики
     fi_skipped_future = 0
     fi_skipped_suspended = 0
+    fi_skipped_writ_weekly = 0
     fi_force_parsed = 0
     fi_parsed = 0
+    # Пер-кейсовый отчёт парсинга bank-трека: какой иск банка парсили /
+    # пропустили и почему → data/bank_parse_report.json (запись в фазе 7c) →
+    # карточка «Парсинг исков банка» в админке. Методы аккумулятора сами
+    # игнорируют дела не из трека, поэтому врезки ниже — без if. Дела, не
+    # попавшие в очередь fi_active (стадия ушла выше — переезд в 7c),
+    # получают исход not_in_queue прямо на сиде: этот класс раньше не
+    # логировался вовсе.
+    bank_report = BankParseReport()
+    _fi_active_ids = {id(_c) for _c in fi_active}
+    for _c in cases:
+        bank_report.seed(_c, in_queue=(id(_c) in _fi_active_ids))
     # Дела без карточки для запроса (нет ссылки/суд не из реестра) — раньше
     # выпадали из цикла молча, и разрыв «спарсено X из Y» был необъясним.
     fi_no_card = 0
@@ -2295,17 +2325,20 @@ def main_json():
         court_cfg = fi_court_map.get(court_domain)
         if not court_cfg:
             fi_no_card += 1
+            bank_report.record(case_j, "court_disabled")
             log.debug(f"  {fi_num_log}: суд не из реестра 1-й инст., карточку не парсим")
             continue
         link_raw = fi.get("link", "")
         if not link_raw:
             fi_no_card += 1
+            bank_report.record(case_j, "no_link")
             log.debug(f"  {fi_num_log}: нет ссылки на карточку (ждём backfill_fi_links)")
             continue
         # Извлекаем case_id и case_uid из ссылки
         pm = re.match(r'^(\d+)\|([a-f0-9-]+)$', link_raw)
         if not pm:
             fi_no_card += 1
+            bank_report.record(case_j, "bad_link")
             log.debug(f"  {fi_num_log}: ссылка на карточку не разобралась: {link_raw!r}")
             continue
         cid, cuid = pm.group(1), pm.group(2)
@@ -2316,8 +2349,14 @@ def main_json():
         if skip:
             if reason.startswith("future_hearing"):
                 fi_skipped_future += 1
+            elif reason.startswith("writ_weekly"):
+                # Недельный ритм решённых исков банка — не «без движения»
+                # (см. одноимённое слагаемое в плане очереди выше).
+                fi_skipped_writ_weekly += 1
             else:
                 fi_skipped_suspended += 1
+            bank_report.record(case_j, "skip", reason=reason,
+                               reason_ru=skip_reason_ru(reason))
             log.debug(f"  skip {fi.get('case_number','?')}: {skip_reason_ru(reason)}")
             continue
         # Force-parse счётчик: парсим, но planned_date в будущем — значит
@@ -2325,6 +2364,7 @@ def main_json():
         planned_fp, _kind_fp = get_next_planned_date(fi.get("events") or [])
         if planned_fp and planned_fp >= today:
             fi_force_parsed += 1
+            bank_report.mark_force_parsed(case_j)
 
         polite_delay()
         url = court_cfg.card_url(cid, cuid)
@@ -2333,9 +2373,14 @@ def main_json():
         # случайная задержка не зашумляла), включая неудачные загрузки:
         # ретраи fetch_page — главный сигнал «какой суд тормозит».
         _t_card = time.perf_counter()
+        # Снимок METRICS до единственного HTTP-запроса итерации: дельта
+        # капчи/блока/сетевого фейла атрибутирует неудачу к этому делу
+        # (classify_fetch_failure в bank_report).
+        _m_before = metrics_snapshot()
         try:
             html = fetch_card_checked(url, context=f"{fi['case_number']}, {_short_court}")
             if not html:
+                bank_report.record(case_j, classify_fetch_failure(_m_before))
                 # Причина уже в логе выше: ERROR fetch_page (сеть) либо WARNING
                 # fetch_card_checked (код/заглушка) — оба с номером дела. Дубль
                 # на WARNING двоил бы каждую строку при массовом аутейдже.
@@ -2351,9 +2396,10 @@ def main_json():
                 fi_court_seconds.get(court_cfg.name, 0.0) + _dt_card
             )
             fi_court_cards[court_cfg.name] = fi_court_cards.get(court_cfg.name, 0) + 1
-        _warn_if_card_degraded(
+        if _warn_if_card_degraded(
             card_info, fi["case_number"], case_block=fi, court=_short_court
-        )
+        ):
+            bank_report.mark_degraded(case_j)
 
         # Промоушен материала по карточке: М-XXXX → постоянный 2-XXXX.
         # Комбо-промоушен в списке поиска (выше) срабатывает только когда суд
@@ -2412,12 +2458,14 @@ def main_json():
         # не карточка. Успешной проверкой не считаем и дату не бумпаем (см.
         # card_is_empty_shell; аутейдж sudrf 20.07.2026).
         if card_is_empty_shell(card_info):
+            bank_report.record(case_j, "empty_shell")
             continue
 
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
         # для force-parse раз в 21 день).
         fi["last_checked_at"] = today.isoformat()
         fi_parsed += 1
+        bank_report.record(case_j, "parsed")
 
         # Снимок до обновления — нужен для diff и дайджеста
         old_event = fi.get("last_event", "")
@@ -3210,6 +3258,7 @@ def main_json():
 
         if change["type"]:
             fi_changes.append(change)
+        bank_report.mark_events(case_j, change["type"], changed)
 
         # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: проверено X из Y».
         if change["type"]:
@@ -3221,10 +3270,15 @@ def main_json():
 
     timings["fi_update"] = time.perf_counter() - t0
     fi_total = len(fi_active)
-    fi_skip_total = fi_skipped_future + fi_skipped_suspended
+    fi_skip_total = (fi_skipped_future + fi_skipped_suspended
+                     + fi_skipped_writ_weekly)
     _fi_sum_parts = []
     if fi_skipped_future:
         _fi_sum_parts.append(f"{fi_skipped_future} отложено — заседание в будущем")
+    if fi_skipped_writ_weekly:
+        _fi_sum_parts.append(
+            f"{fi_skipped_writ_weekly} решённых исков банка — недельный ритм"
+        )
     if fi_skipped_suspended:
         _fi_sum_parts.append(f"{fi_skipped_suspended} без движения")
     if fi_no_card:
@@ -3843,6 +3897,14 @@ def main_json():
             config.JSON_BANK_PATH,
             config.JSON_BANK_EVENTS_PATH,
         )
+        # Пер-кейсовый отчёт парсинга трека: финальные пометки (переезд в
+        # основной cases.json, уход в архив трека) — и запись файла для
+        # карточки «Парсинг исков банка» в админке. Обёртка глушит ошибки
+        # записи: сервисный канал не имеет права ронять прогон.
+        bank_report.mark_track_moves()
+        for _bc in bank_newly_archived:
+            bank_report.mark_archived(_bc)
+        save_bank_parse_report(bank_report, today, config.SMART_SKIP_CASES)
 
     # ── 8. Архивирование JSON-дел по state-machine ──
     # is_case_archived выставляет архив только для стадий, прошедших полный
@@ -4055,6 +4117,13 @@ def main_json():
 
     timings["total"] = time.perf_counter() - t_total_start
 
+    # Агрегат отчёта bank-трека для сводки (пер-кейсовая детализация —
+    # data/bank_parse_report.json, карточка «Парсинг исков банка» в админке).
+    bank_parse_extras = {}
+    if bank_track_count:
+        _bt = bank_report.totals()
+        bank_parse_extras["Bank parse"] = f"{_bt['parsed']}/{_bt['total']}"
+
     log_run_summary(
         mode="main-json",
         timings=timings,
@@ -4075,6 +4144,7 @@ def main_json():
             "Cassation parse": f"{cass_refresh_parsed}/{cass_refresh_total}",
             "Cassation skip": cass_refresh_skipped_future + cass_refresh_skipped_suspended,
             "Cassation force": cass_refresh_force_parsed,
+            **bank_parse_extras,
             "JSON total": len(cases),
         },
     )

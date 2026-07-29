@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1739](../../scripts/court_monitor/runs.py#L1739)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([956](../../scripts/court_monitor/runs.py#L956)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([4397](../../scripts/court_monitor/runs.py#L4397)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([4081](../../scripts/court_monitor/runs.py#L4081)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4258](../../scripts/court_monitor/runs.py#L4258)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1215](../../scripts/court_monitor/runs.py#L1215)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([1743](../../scripts/court_monitor/runs.py#L1743)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([960](../../scripts/court_monitor/runs.py#L960)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([4467](../../scripts/court_monitor/runs.py#L4467)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([4151](../../scripts/court_monitor/runs.py#L4151)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4328](../../scripts/court_monitor/runs.py#L4328)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1219](../../scripts/court_monitor/runs.py#L1219)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -55,8 +55,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([911](../../scripts/court_monitor/runs.py#L911)) проверяет
-наличие ключей на старте; `check_court_available` ([943](../../scripts/court_monitor/runs.py#L943))
+`validate_environment` ([915](../../scripts/court_monitor/runs.py#L915)) проверяет
+наличие ключей на старте; `check_court_available` ([947](../../scripts/court_monitor/runs.py#L947))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -101,8 +101,9 @@ workflow.
 вручную — GitHub UI или админка (кнопки «Полный прогон» / «Стандартный
 прогон»). Шаги: checkout → Python 3.12 → установка зависимостей →
 `python scripts/update_cases.py --json 2>&1 | python -u
-scripts/gh_progress_pusher.py` (pass-through-пушер живого лога в админку:
-батчи раз в ~60 с на `POST /run-progress` Worker'а — каждый POST = 1 KV-write,
+scripts/gh_progress_pusher.py` (pass-through-пушер лога в KV Worker'а —
+блок живого лога из админки удалён 29.07.2026, канал остался без
+UI-читателя: батчи раз в ~60 с на `POST /run-progress` — каждый POST = 1 KV-write,
 free-tier 1000/день на аккаунт; `set -o pipefail`, чтобы падение
 парсера не маскировалось пайпом; env `PROGRESS_URL` =
 `secrets.PUSH_WORKER_URL + "/run-progress"`, `PROGRESS_TOKEN` =
@@ -199,7 +200,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([784](../../scripts/court_monitor/delivery.py#L784)) — итоговая
+- `log_run_summary` ([785](../../scripts/court_monitor/delivery.py#L785)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, Telegram, Web Push,
   LLM-пересказы актов (вызовы/из кэша), карточки-«огрызки»; нулевые строки
   опускаются) + markdown-таблица в `$GITHUB_STEP_SUMMARY`.
@@ -215,7 +216,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   Сургутский горсуд) — Timeout…»). **Пер-судовые тайминги:** фаза 3 пишет время
   каждого суда в пер-судовую строку, фаза 5 — строку «1 инст: медленные суды — …»
   (топ-3 по времени обхода карточек, включая ретраи).
-- `send_crash_alert` ([889](../../scripts/court_monitor/delivery.py#L889)) — падение
+- `send_crash_alert` ([890](../../scripts/court_monitor/delivery.py#L890)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в
@@ -223,15 +224,15 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   дававший результаты, вернул 0; когда страница поиска не грузится 3 прогона
   подряд; когда все источники разом по нулям; когда за прогон ≥5
   карточек-«огрызков». См. [05](05-конвейер-обновления.md).
-- Логи прогона — во вкладке Actions соответствующего workflow, а для
-  основного (`update_cases.yml`) — ещё и **живой лог в админке Worker**
-  (пушер `scripts/gh_progress_pusher.py` → `POST /run-progress`; блок
-  «Прогон (GitHub Actions)»: свёртка по фазам, бейджи ⚠/✖, хранится 14 дней —
-  текущий + предыдущий прогон).
+- Логи прогона — во вкладке Actions соответствующего workflow. Пушер
+  `scripts/gh_progress_pusher.py` → `POST /run-progress` по-прежнему кладёт
+  лог основного прогона в KV Worker'а (14 дней, текущий + предыдущий), но
+  **блок живого лога из админки удалён 29.07.2026** — читателя у канала нет,
+  оставлен на случай возврата (данные — `GET /admin/run-progress` руками).
 - **Mac-парсинг (спящий резерв):** лог `ops/mac-local-run/parse_and_push.log`
   (ротация автоматическая) — живой просмотр двойным кликом по ярлыку
-  «Парсинг судов.command» (рабочий стол юриста); те же вехи — в том же блоке
-  живого лога админки (подпись «Парсинг на Mac (резерв)»). Уведомления macOS:
+  «Парсинг судов.command» (рабочий стол юриста); вехи Mac-пушера тоже уходят
+  в KV `/run-progress` (в админке больше не видны). Уведомления macOS:
   старт/готово/ошибка/пропуск.
 
 ## Рантбук (типичные инциденты)
@@ -248,7 +249,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 | **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
 | **Утром нет дайджеста (нет и 🚨)** | Проверить, был ли run `update_cases.yml` в Actions (и в плитке «Последний прогон» админки). Не было — смотреть cron Worker'а (`wrangler.toml`, логи Worker'а, `isHoliday`); был, но упал до алерта — лог run'а. Если активен Mac-резерв: Mac спал/не в сети Сбера — LaunchAgent догонит при входе, либо `launchctl start com.court-monitor.parse`. |
 | **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |
-| **Блок живого лога в админке молчит** | Первым делом — лог рана в Actions: с 16.07.2026 пушер сам печатает одну строку `⚠️ Живой лог админки: POST … (HTTP код)` при первом сбое или `🛰 …выключен` при пустых секретах. 403 = Cloudflare-бан User-Agent (ошибка 1010, лечится `USER_AGENT` пушера — так канал молчал 13–16.07.2026), 401 = секреты (в GitHub нет ни `PUSH_SECRET`, ни `PROGRESS_SECRET`, или не совпадают с Worker'ом), 404 = кривой `PUSH_WORKER_URL`. Для Mac-резерва: нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: прогон работает и без лога. |
+| **Канал `/run-progress` молчит** (блока в админке больше нет — проверяется `GET /admin/run-progress` руками) | Первым делом — лог рана в Actions: с 16.07.2026 пушер сам печатает одну строку `⚠️ Живой лог админки: POST … (HTTP код)` при первом сбое или `🛰 …выключен` при пустых секретах. 403 = Cloudflare-бан User-Agent (ошибка 1010, лечится `USER_AGENT` пушера — так канал молчал 13–16.07.2026), 401 = секреты (в GitHub нет ни `PUSH_SECRET`, ни `PROGRESS_SECRET`, или не совпадают с Worker'ом), 404 = кривой `PUSH_WORKER_URL`. Для Mac-резерва: нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: прогон работает и без лога. |
 | **Прогон был, а дайджест не пришёл** | Смотреть Actions → «💤 Резерв D2: дайджест на push» (`replay_on_push.yml`; стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
 | **Автозапуск через Worker (если вернули cron)** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday`, логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
 

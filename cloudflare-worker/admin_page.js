@@ -35,6 +35,7 @@ export function renderAdminHtml(secret, role, cfg) {
     pushesUrl: (cfg && cfg.pushesUrl) || base + "/data/last_personal_pushes.json",
     digestUrl: (cfg && cfg.digestUrl) || base + "/data/last_digest.json",
     healthUrl: (cfg && cfg.healthUrl) || base + "/data/parse_health.json",
+    bankParseUrl: (cfg && cfg.bankParseUrl) || base + "/data/bank_parse_report.json",
     dashboardUrl: (cfg && cfg.dashboardUrl) || base + "/sberbank_dashboard.html",
     siteBase: base,
     ghRepo: (cfg && cfg.ghRepo) || "SelivanovAS/dashboard",
@@ -412,16 +413,8 @@ a { color: var(--accent); }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
 @media (prefers-reduced-motion: reduce) { .dot-pulse { animation:none; } }
 
-/* Прогоны */
-.run-row { display:flex; align-items:baseline; gap:10px; padding:7px 0; border-bottom:1px solid var(--divider); }
-.run-row:last-child { border-bottom:0; }
-.run-row .dot { align-self:center; }
-.run-name { font-weight:var(--fw-semibold); color:var(--fg-1); text-decoration:none; font-size:var(--fs-sm); }
-.run-name:hover { color:var(--accent); }
+/* Запуск прогонов */
 .run-meta { color:var(--fg-3); font-size:var(--fs-xs); }
-.run-ext { margin-left:auto; color:var(--fg-4); flex-shrink:0; align-self:center; display:inline-flex; }
-.run-ext svg { width:13px; height:13px; }
-.run-ext:hover { color:var(--accent); }
 .action-flash { font-size:var(--fs-2xs); color:var(--fg-3); }
 .action-flash.ok { color:var(--accent); }
 .action-flash.err { color:var(--red-600); }
@@ -455,28 +448,19 @@ details.fold > summary:hover { color:var(--fg-1); }
   font-family:var(--font-code); font-size:var(--fs-2xs); line-height:1.55; max-height:300px;
   overflow:auto; white-space:pre-wrap; word-break:break-word; color:var(--fg-2); }
 
-/* Живой Mac-прогон */
-.mac-live { margin-top:10px; padding-top:10px; border-top:1px solid var(--divider); }
-.mac-live-head { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
-.mac-live-title { font-weight:var(--fw-semibold); font-size:var(--fs-sm); }
-.mac-live-state { font-weight:var(--fw-bold); font-size:var(--fs-sm); }
-.mac-live-state.running { color:var(--warning-fg); }
-.mac-live-state.done { color:var(--accent); }
-
-/* Лог прогона: свёртка по фазам «— [N/9] …» (renderLogGroups) */
-.log-groups { max-height:340px; overflow:auto; background:var(--bg-2);
-  border-radius:var(--radius-md); padding:6px 10px; }
-.log-groups .log-pre { max-height:none; overflow:visible; background:transparent;
-  padding:2px 0 6px 14px; }
-.log-groups details.fold { margin-top:2px; }
-.log-groups .fold-body { padding:0; }
-.log-phase-n { color:var(--fg-4); font-weight:var(--fw-bold);
-  font-family:var(--font-code); font-size:var(--fs-2xs); }
-.log-warn-badge { color:var(--warning-fg); font-size:var(--fs-2xs); }
-.log-err-badge { color:var(--danger-fg); font-size:var(--fs-2xs); }
-.log-line-warn { color:var(--warning-fg); }
-.log-line-err { color:var(--danger-fg); }
-.log-summary { border-top:1px dashed var(--divider); margin-top:6px; }
+/* Карточка «Запуск прогона» и отчёт парсинга исков банка */
+.run-launch-note { color:var(--fg-3); font-size:var(--fs-xs); }
+.bp-row { display:flex; align-items:baseline; gap:8px; padding:5px 0;
+  border-bottom:1px solid var(--divider); font-size:var(--fs-sm); flex-wrap:wrap; }
+.bp-row:last-child { border-bottom:0; }
+.bp-row .dot { align-self:center; flex-shrink:0; }
+.bp-num { font-weight:var(--fw-semibold); font-family:var(--font-code);
+  font-size:var(--fs-xs); flex-shrink:0; }
+.bp-court { color:var(--fg-3); font-size:var(--fs-2xs); flex-shrink:0; }
+.bp-why { color:var(--fg-2); font-size:var(--fs-2xs); }
+.bp-meta { color:var(--fg-4); font-size:var(--fs-2xs); margin-left:auto; flex-shrink:0; }
+.bp-group > summary .bp-group-n { color:var(--fg-4); font-size:var(--fs-2xs); }
+.bp-more { margin-top:6px; }
 
 /* LLM */
 .llm-row { display:flex; align-items:baseline; gap:10px; padding:5px 0; font-size:var(--fs-sm);
@@ -594,7 +578,6 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
 
 /* ═══ Роли: operator не видит owner-блоки (реальный запрет — 403 на API) ═══ */
 html[data-role="operator"] [data-owner-only] { display:none !important; }
-html[data-role="operator"] .run-ext { display:none !important; }
 
 /* ═══ Импорт дел (капчёвые суды) ═══ */
 /* Секция скрыта inline-атрибутом style (не CSS-правилом: JS показывает её
@@ -725,7 +708,7 @@ ${isOperator ? IMPORT_SECTION : ""}
     <div class="system-grid">
       <div class="card">
         <div class="card-head">
-          <span class="card-title">Прогоны GitHub Actions</span>
+          <span class="card-title">Запуск прогона</span>
           <span class="run-meta" id="runs-next"></span>
           <span class="spacer"></span>
           <button class="btn-primary" id="btn-run-main" data-owner-only>
@@ -738,24 +721,7 @@ ${isOperator ? IMPORT_SECTION : ""}
           </button>
           <span class="action-flash" id="runs-flash"></span>
         </div>
-        <div id="runs-list" class="loading">Загрузка…</div>
-        <div class="mac-live" id="mac-live" style="display:none;">
-          <div class="mac-live-head">
-            <span class="mac-live-title" id="mac-live-title">Прогон</span>
-            <span class="mac-live-state" id="mac-live-state"></span>
-            <span class="run-meta" id="mac-live-meta"></span>
-            <a class="run-ext" id="mac-live-link" target="_blank" rel="noopener noreferrer" style="display:none;" title="Открыть прогон на GitHub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
-          </div>
-          <div class="log-groups" id="mac-live-log"></div>
-          <details class="fold" id="mac-prev" style="display:none;">
-            <summary id="mac-prev-sum">Предыдущий прогон</summary>
-            <div class="fold-body"><div class="log-groups" id="mac-prev-log"></div></div>
-          </details>
-        </div>
-        <details class="fold" id="mac-stale" style="display:none;">
-          <summary id="mac-stale-sum">Последний прогон</summary>
-          <div class="fold-body"><div class="log-groups" id="mac-stale-log"></div></div>
-        </details>
+        <div class="run-launch-note">Статусы и логи прогонов — на вкладке Actions в GitHub; здесь остались только кнопки запуска. Плитка «Последний прогон» в пульте обновляется сама.</div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -765,6 +731,16 @@ ${isOperator ? IMPORT_SECTION : ""}
         </div>
         <div id="health-list" class="loading">Загрузка…</div>
         <div class="health-more" id="health-updated"></div>
+      </div>
+      <div class="card" id="bank-parse-card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">Парсинг исков банка</span>
+          <span class="run-meta" id="bank-parse-date"></span>
+          <span class="spacer"></span>
+          <span id="bank-parse-badges"></span>
+        </div>
+        <div id="bank-parse-list" class="loading">Загрузка…</div>
+        <div class="health-more" id="bank-parse-note"></div>
       </div>
     </div>
   </section>
@@ -897,11 +873,11 @@ const BANK_ARCHIVE_URL = ${JSON.stringify(CFG.bankArchiveUrl)};
 const PUSHES_URL = ${JSON.stringify(CFG.pushesUrl)};
 const DIGEST_URL = ${JSON.stringify(CFG.digestUrl)};
 const HEALTH_URL = ${JSON.stringify(CFG.healthUrl)};
+const BANK_PARSE_URL = ${JSON.stringify(CFG.bankParseUrl)};
 const DASHBOARD_URL = ${JSON.stringify(CFG.dashboardUrl)};
 const SITE_BASE = ${JSON.stringify(CFG.siteBase)};
 const GH_REPO = ${JSON.stringify(CFG.ghRepo)};
 
-const SVG_EXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 const SVG_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
 // ── Общие хелперы ────────────────────────────────────────────────────────────
@@ -994,26 +970,11 @@ let allSubs = [];
 let lastPushesMap = new Map();
 let lastPushesGeneratedAt = "";
 
-// ── Секция «Система»: прогоны GitHub Actions ─────────────────────────────────
-const WF_NAMES = {
-  "update_cases.yml": "Основной прогон",
-  "test_digest.yml": "Тест дайджеста",
-  "tests.yml": "Тесты (pytest)",
-  "probe_courts.yml": "Проба доступности судов",
-  "replay_on_push.yml": "Дайджест-на-push",
-  "pages-build-deployment": "Публикация Pages",
-};
-function wfShortName(run) {
-  const base = String(run.path || "").split("/").pop();
-  return WF_NAMES[base] || run.name || base || "?";
-}
-function runDot(run) {
-  if (run.status !== "completed") return '<span class="dot dot-amber dot-pulse"></span>';
-  if (run.conclusion === "success") return '<span class="dot dot-green"></span>';
-  if (run.conclusion === "failure" || run.conclusion === "startup_failure"
-      || run.conclusion === "timed_out") return '<span class="dot dot-red"></span>';
-  return '<span class="dot dot-gray"></span>';
-}
+// ── Секция «Система»: запуск прогонов GitHub Actions ─────────────────────────
+// Список последних прогонов и живой лог убраны из админки (29.07.2026,
+// решение юриста) — статусы и логи смотрятся на вкладке Actions в GitHub.
+// GET /admin/gh-runs остался: им питаются плитки пульта «Последний прогон»
+// и «Автозапуск» + метка следующего крона у кнопок запуска.
 function fmtDur(startIso, endIso) {
   const a = parseIso(startIso);
   const b = endIso ? parseIso(endIso) : Date.now();
@@ -1026,7 +987,6 @@ function fmtDur(startIso, endIso) {
 let ghTimer = null;
 async function loadGhRuns() {
   clearTimeout(ghTimer);
-  const listEl = document.getElementById("runs-list");
   try {
     const r = await fetch("/admin/gh-runs?secret=" + encodeURIComponent(SECRET));
     const d = await r.json().catch(function () { return {}; });
@@ -1040,46 +1000,16 @@ async function loadGhRuns() {
       }
     }
     if (!r.ok) {
-      const txt = String(d.error || "") + " " + String(d.detail || "");
-      const hint = txt.indexOf("403") >= 0 ? " — похоже, у GITHUB_PAT нет прав actions:read" : "";
-      listEl.className = "";
-      listEl.innerHTML = '<div class="empty">GitHub API недоступен: '
-        + escHtml(d.error || ("HTTP " + r.status)) + escHtml(hint) + '</div>';
       setTile("run", "gray", "—", "GitHub недоступен");
       return;
     }
-    const runs = (d.runs || []).slice(0, 8);
-    listEl.className = "";
-    if (!runs.length) {
-      listEl.innerHTML = '<div class="empty">Прогонов пока нет</div>';
-      setTile("run", "gray", "—", "");
-      return;
-    }
-    let hasActive = false;
-    listEl.innerHTML = runs.map(function (run) {
-      const active = run.status !== "completed";
-      if (active) hasActive = true;
-      const dur = fmtDur(run.run_started_at, active ? null : run.updated_at);
-      // Оператору ссылки на GitHub-run'ы не показываем (только статусы).
-      const nameHtml = IS_OWNER
-        ? '<a class="run-name" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer">'
-          + escHtml(wfShortName(run)) + '</a>'
-        : '<span class="run-name">' + escHtml(wfShortName(run)) + '</span>';
-      return '<div class="run-row">' + runDot(run)
-        + nameHtml
-        + '<span class="run-meta">#' + escHtml(String(run.run_number || "?"))
-        + ' · ' + escHtml(relTime(run.run_started_at))
-        + (dur ? " · " + escHtml(dur) + (active ? " (идёт)" : "") : "")
-        + '</span>'
-        + '<a class="run-ext" href="' + escHtml(run.html_url) + '" target="_blank" rel="noopener noreferrer" title="Открыть в GitHub">' + SVG_EXT + '</a>'
-        + '</div>';
-    }).join("");
     // Плитка «Последний прогон» — по последнему запуску основного workflow.
     // Сервер отдаёт его отдельным полем main_run (в общем списке его могут
     // вытеснить пары «Тесты+Pages»); фолбэк — поиск по списку.
     const main = d.main_run || (d.runs || []).find(function (run) {
       return String(run.path || "").indexOf("update_cases.yml") >= 0;
     });
+    let hasActive = (d.runs || []).some(function (run) { return run.status !== "completed"; });
     if (main) {
       const active = main.status !== "completed";
       const dur = fmtDur(main.run_started_at, active ? null : main.updated_at);
@@ -1096,12 +1026,10 @@ async function loadGhRuns() {
     } else {
       setTile("run", "gray", "—", "основной прогон не найден");
     }
-    // Пока есть живой прогон — обновляемся сами, чтобы видеть исход без F5.
+    // Пока есть живой прогон — обновляемся сами, чтобы плитка увидела исход
+    // без F5 (список прогонов из админки убран, плитка — единственный статус).
     if (hasActive && !document.hidden) ghTimer = setTimeout(loadGhRuns, 15000);
-  } catch (e) {
-    listEl.className = "";
-    listEl.innerHTML = '<div class="empty">Ошибка: ' + escHtml(String(e)) + '</div>';
-  }
+  } catch (e) { /* сеть мигнула — плитка обновится следующим заходом */ }
 }
 async function dispatchWorkflow(workflow, inputs, flashEl) {
   flashEl.className = "action-flash";
@@ -1115,7 +1043,7 @@ async function dispatchWorkflow(workflow, inputs, flashEl) {
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok) {
       flashEl.className = "action-flash ok";
-      flashEl.textContent = "✓ запущен — статус появится в списке";
+      flashEl.textContent = "✓ запущен — статус в плитке «Последний прогон»";
       // GitHub регистрирует run не мгновенно — обновим список дважды.
       setTimeout(loadGhRuns, 3000);
       setTimeout(loadGhRuns, 12000);
@@ -1138,152 +1066,6 @@ document.getElementById("btn-run-std").addEventListener("click", function () {
   dispatchWorkflow("update_cases.yml", { smart_skip: "true" }, document.getElementById("runs-flash"));
 });
 
-// ── Живой лог прогона (GitHub Actions / Mac-резерв): живой крупно, старый — свёрнуто
-function progressAgo(iso) {
-  const t = parseIso(iso);
-  if (isNaN(t)) return "";
-  const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 90) return Math.round(s) + " сек назад";
-  if (s < 5400) return Math.round(s / 60) + " мин назад";
-  return new Date(t).toLocaleString("ru-RU");
-}
-// Свёртка лога по фазам. Маркер — строка log_phase (runs.py):
-// «HH:MM:SS [INFO] — [3/9] Заголовок —». Формат — контракт: его же ловит
-// Mac-пушер (KEY_RE) и фиксирует тест scripts/tests/test_gh_progress_pusher.py.
-var LOG_PHASE_RE = /— \\[(\\d+)\\/(\\d+)\\] (.+?) —\\s*$/;
-function splitLogPhases(lines) {
-  var out = { pre: [], phases: [], summary: [] };
-  var list = (lines || []).map(function (x) { return String(x); });
-  // Финальную сводку (log_run_summary, рамка «====») выносим наружу —
-  // итог прогона виден без разворачивания фаз.
-  var si = -1;
-  for (var i = 0; i < list.length; i++) {
-    if (list[i].indexOf("Сводка прогона") >= 0) { si = i; break; }
-  }
-  if (si >= 0) {
-    var start = (si > 0 && list[si - 1].indexOf("====") >= 0) ? si - 1 : si;
-    out.summary = list.slice(start);
-    list = list.slice(0, start);
-  }
-  var cur = null;
-  list.forEach(function (line) {
-    var m = line.match(LOG_PHASE_RE);
-    if (m) {
-      cur = { num: m[1], total: m[2], title: m[3], lines: [], warns: 0, errs: 0 };
-      out.phases.push(cur);
-      return;
-    }
-    if (!cur) { out.pre.push(line); return; }
-    cur.lines.push(line);
-    if (line.indexOf("[ERROR]") >= 0) cur.errs++;
-    else if (line.indexOf("[WARNING]") >= 0) cur.warns++;
-  });
-  return out;
-}
-function logLineHtml(line) {
-  var esc = escHtml(line);
-  if (line.indexOf("[ERROR]") >= 0) return '<span class="log-line-err">' + esc + '</span>';
-  if (line.indexOf("[WARNING]") >= 0) return '<span class="log-line-warn">' + esc + '</span>';
-  return esc;
-}
-function renderLogGroups(el, lines, live) {
-  var g = splitLogPhases(lines);
-  // Открытые ВРУЧНУЮ фазы переживают 5-секундный ререндер; автооткрытая
-  // последняя (data-auto) не переносится — иначе к концу прогона остались бы
-  // открытыми все фазы, по которым прошёл «курсор» живого прогона.
-  var openSet = {};
-  el.querySelectorAll("details[data-phase]").forEach(function (d) {
-    if (d.open && !d.hasAttribute("data-auto")) openSet[d.getAttribute("data-phase")] = true;
-  });
-  var html = "";
-  if (g.pre.length) html += '<pre class="log-pre">' + g.pre.map(logLineHtml).join("\\n") + '</pre>';
-  g.phases.forEach(function (ph, idx) {
-    var autoOpen = live && idx === g.phases.length - 1;
-    var open = openSet[ph.num] || autoOpen;
-    var badges = (ph.errs ? ' <span class="log-err-badge">✖ ' + ph.errs + '</span>' : '')
-      + (ph.warns ? ' <span class="log-warn-badge">⚠ ' + ph.warns + '</span>' : '');
-    html += '<details class="fold" data-phase="' + escHtml(ph.num) + '"'
-      + (autoOpen && !openSet[ph.num] ? ' data-auto="1"' : '') + (open ? ' open' : '')
-      + '><summary><span class="log-phase-n">[' + escHtml(ph.num) + '/' + escHtml(ph.total) + ']</span> '
-      + escHtml(ph.title) + ' <span class="run-meta">' + ph.lines.length + ' стр.</span>' + badges + '</summary>'
-      + '<div class="fold-body"><pre class="log-pre">' + ph.lines.map(logLineHtml).join("\\n") + '</pre></div>'
-      + '</details>';
-  });
-  if (g.summary.length) html += '<pre class="log-pre log-summary">' + g.summary.map(logLineHtml).join("\\n") + '</pre>';
-  el.innerHTML = html || '<pre class="log-pre">…</pre>';
-}
-function progressSourceTitle(rec) {
-  // Старые записи Mac-пушера поля source не имеют → ветка Mac.
-  return rec && rec.source === "github" ? "Прогон (GitHub Actions)" : "Парсинг на Mac (резерв)";
-}
-let progressTimer = null;
-var lastProgressRenderKey = "";
-var lastPrevRenderKey = "";
-async function loadProgress() {
-  try {
-    const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
-    if (!r.ok) return;
-    const d = await r.json();
-    const live = document.getElementById("mac-live");
-    const stale = document.getElementById("mac-stale");
-    const cur = d.current;
-    if (!cur) { live.style.display = "none"; stale.style.display = "none"; return; }
-    const running = cur.done !== true;
-    // Незавершённый прогон, молчащий >10 мин, считаем оборванным: живой
-    // облачный прогон батчит раз в ~60 с и идёт ~10-15 мин — реальный так
-    // долго не молчит. Иначе застрявшая запись (done не дослан) крутила бы
-    // поллинг до TTL записи = 14 суток (worker.js progress:current).
-    const stalled = running && (Date.now() - parseIso(cur.updated_at)) > 10 * 60 * 1000;
-    // Mac — спящий резерв: завершённый прогон старше суток не заслуживает
-    // большого блока, сворачиваем в details-строку.
-    const isStale = !running && (Date.now() - parseIso(cur.updated_at)) > 24 * 3600 * 1000;
-    if (isStale) {
-      live.style.display = "none";
-      stale.style.display = "";
-      document.getElementById("mac-stale-sum").textContent =
-        progressSourceTitle(cur) + " — завершён " + fullDate(cur.updated_at);
-      renderLogGroups(document.getElementById("mac-stale-log"), cur.lines || [], false);
-      return;
-    }
-    stale.style.display = "none";
-    live.style.display = "";
-    document.getElementById("mac-live-title").textContent = progressSourceTitle(cur);
-    var lk = document.getElementById("mac-live-link");
-    if (cur.link) { lk.href = cur.link; lk.style.display = ""; }
-    else { lk.style.display = "none"; }
-    const st = document.getElementById("mac-live-state");
-    st.textContent = !running ? "завершён" : stalled ? "оборван" : "идёт";
-    st.className = "mac-live-state " + (running && !stalled ? "running" : "done");
-    document.getElementById("mac-live-meta").textContent =
-      "обновлено " + progressAgo(cur.updated_at) + " · старт " + progressAgo(cur.started_at);
-    const logEl = document.getElementById("mac-live-log");
-    const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-    // Ререндер только при новых строках/смене прогона: открытые details и
-    // скролл не дёргаются впустую (мета «обновлено…» обновляется всегда).
-    var renderKey = String(cur.run_id) + ":" + (cur.lines || []).length + ":" + running;
-    if (renderKey !== lastProgressRenderKey) {
-      lastProgressRenderKey = renderKey;
-      renderLogGroups(logEl, cur.lines || [], running);
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
-    }
-    if (d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length) {
-      document.getElementById("mac-prev").style.display = "";
-      document.getElementById("mac-prev-sum").textContent =
-        "Предыдущий прогон" + (d.prev.source === "github" ? " (GitHub Actions)" : " (Mac)");
-      var prevKey = String(d.prev.run_id) + ":" + d.prev.lines.length;
-      if (prevKey !== lastPrevRenderKey) {
-        lastPrevRenderKey = prevKey;
-        renderLogGroups(document.getElementById("mac-prev-log"), d.prev.lines, false);
-      }
-    }
-    clearTimeout(progressTimer);
-    // 15 с: пушер шлёт батчи раз в ~60 с, чаще поллить бессмысленно
-    // (каждый GET /admin/run-progress = 2 KV-reads). Не ре-армим оборванный
-    // прогон (stalled) и свёрнутую вкладку (document.hidden) — иначе забытая
-    // админка тихо жгла бы reads до TTL записи = 14 суток.
-    if (running && !stalled && !document.hidden) progressTimer = setTimeout(loadProgress, 15000);
-  } catch (e) { /* сеть мигнула — не мешаем остальной админке */ }
-}
 
 // ── Секция «Система»: здоровье парсеров (parse_health.json) ──────────────────
 const COURT_NAMES = {
@@ -1408,6 +1190,140 @@ async function loadHealth() {
     listEl.className = "";
     listEl.innerHTML = '<div class="empty">Не удалось загрузить parse_health.json: ' + escHtml(String(e)) + '</div>';
     setTile("health", "gray", "—", "нет данных");
+  }
+}
+
+// ── Секция «Система»: отчёт парсинга исков банка (bank_parse_report.json) ────
+// Пер-кейсовый итог последнего прогона по bank-треку: какие дела парсились,
+// какие пропущены и почему. Файл пишет BankParseReport (фаза 7c main_json);
+// нет файла (трек выключен / территория без bank-трека) — карточка скрыта.
+// Группы: проблемные раскрыты, рутинные свёрнуты; внутри группы рендерим
+// порциями по BP_CHUNK строк (на Урале дел будут тысячи — DOM не раздуваем).
+var BP_CHUNK = 30;
+var bpGroupsData = {};
+var BP_GROUPS = [
+  { key: "fail", title: "Ошибка загрузки карточки", dot: "dot-red", open: true },
+  { key: "nocard", title: "Без карточки: суд/ссылка", dot: "dot-amber", open: true },
+  { key: "queue", title: "Вне очереди 1-й инстанции", dot: "dot-gray", open: true },
+  { key: "parsed", title: "Спарсено", dot: "dot-green", open: false },
+  { key: "writ", title: "Пропуск: недельный ритм ИЛ (решённые)", dot: "dot-gray", open: false },
+  { key: "hearing", title: "Пропуск: заседание в будущем", dot: "dot-gray", open: false },
+  { key: "othskip", title: "Пропуск: прочее (без движения и др.)", dot: "dot-gray", open: false },
+];
+function bpGroupKey(row) {
+  var o = String(row.outcome || "");
+  if (o === "parsed") return "parsed";
+  if (o === "not_in_queue") return "queue";
+  if (o === "court_disabled" || o === "no_link" || o === "bad_link") return "nocard";
+  if (o === "skip") {
+    var reason = String(row.reason || "");
+    if (reason.indexOf("writ_weekly") === 0) return "writ";
+    if (reason.indexOf("future_hearing") === 0) return "hearing";
+    return "othskip";
+  }
+  return "fail"; // fetch_* / empty_shell / unknown
+}
+function bpShortDate(iso) {
+  // "2026-07-27" → "27.07"
+  var p = String(iso || "").split("-");
+  return p.length === 3 ? p[2] + "." + p[1] : String(iso || "");
+}
+function bpRowHtml(row, dotCls) {
+  var badges = "";
+  if (row.degraded) badges += ' <span class="badge badge-run">огрызок</span>';
+  if (row.force_parsed) badges += ' <span class="badge badge-run">форс-парс</span>';
+  if (row.left_track) badges += ' <span class="badge badge-appeal">переезд в основной трек</span>';
+  if (row.archived) badges += ' <span class="badge badge-run">в архив трека</span>';
+  if (row.events && row.events.length)
+    badges += ' <span class="badge badge-ok">' + row.events.length + ' соб.</span>';
+  else if (row.changed) badges += ' <span class="badge badge-ok">обновлено</span>';
+  var why = String(row.reason_ru || row.detail || "");
+  var checked = row.last_checked_at ? "провер. " + bpShortDate(row.last_checked_at) : "не проверялось";
+  return '<div class="bp-row"><span class="dot ' + dotCls + '"></span>'
+    + '<span class="bp-num">' + escHtml(String(row.number || row.key || "?")) + '</span>'
+    + '<span class="bp-court">' + escHtml(String(row.court || "")) + '</span>'
+    + (why ? '<span class="bp-why">' + escHtml(why) + '</span>' : '')
+    + badges
+    + '<span class="bp-meta">' + escHtml(checked) + '</span>'
+    + '</div>';
+}
+function bpAppendRows(gkey) {
+  var g = bpGroupsData[gkey];
+  var box = document.getElementById("bp-rows-" + gkey);
+  if (!g || !box) return;
+  var next = g.rows.slice(g.rendered, g.rendered + BP_CHUNK);
+  box.insertAdjacentHTML("beforeend", next.map(function (row) { return bpRowHtml(row, g.dot); }).join(""));
+  g.rendered += next.length;
+  var btn = document.getElementById("bp-more-" + gkey);
+  if (btn) {
+    if (g.rendered >= g.rows.length) btn.style.display = "none";
+    else btn.textContent = "Показать ещё (" + (g.rows.length - g.rendered) + ")";
+  }
+}
+async function loadBankParse() {
+  var card = document.getElementById("bank-parse-card");
+  var listEl = document.getElementById("bank-parse-list");
+  try {
+    var r = await fetch(BANK_PARSE_URL, { cache: "no-cache" });
+    if (!r.ok) { card.style.display = "none"; return; }
+    var d = await r.json();
+    var rows = d.cases || [];
+    var totals = d.totals || {};
+    card.style.display = "";
+    document.getElementById("bank-parse-date").textContent =
+      "прогон " + bpShortDate(d.run_date) + "." + String(d.run_date || "").slice(0, 4)
+      + (d.smart_skip === false ? " · полный (без smart-skip)" : "");
+    document.getElementById("bank-parse-badges").innerHTML =
+      (totals.failed ? '<span class="badge badge-fail">' + totals.failed + ' сбой</span> ' : "")
+      + (totals.no_card ? '<span class="badge badge-run">' + totals.no_card + ' без карточки</span> ' : "")
+      + '<span class="badge badge-ok">' + (totals.parsed || 0) + ' спарсено</span> '
+      + '<span class="badge badge-run">' + (totals.skip || 0) + ' пропуск</span>';
+    bpGroupsData = {};
+    var byGroup = {};
+    rows.forEach(function (row) {
+      var k = bpGroupKey(row);
+      (byGroup[k] = byGroup[k] || []).push(row);
+    });
+    var html = "";
+    BP_GROUPS.forEach(function (g) {
+      var items = byGroup[g.key] || [];
+      if (!items.length) return;
+      bpGroupsData[g.key] = { rows: items, rendered: 0, dot: g.dot };
+      html += '<details class="fold bp-group" data-bp="' + g.key + '"' + (g.open ? " open" : "") + '>'
+        + '<summary><span class="dot ' + g.dot + '"></span> ' + escHtml(g.title)
+        + ' <span class="bp-group-n">(' + items.length + ')</span></summary>'
+        + '<div class="fold-body"><div id="bp-rows-' + g.key + '"></div>'
+        + (items.length > BP_CHUNK
+          ? '<button class="btn-outline bp-more" id="bp-more-' + g.key + '" data-bp-more="' + g.key + '">Показать ещё</button>'
+          : '')
+        + '</div></details>';
+    });
+    listEl.className = "";
+    listEl.innerHTML = html || '<div class="empty">В отчёте нет дел</div>';
+    // Первая порция строк — только раскрытым группам; свёрнутые дорендерятся
+    // при первом открытии (toggle), «Показать ещё» — по клику (делегирование).
+    BP_GROUPS.forEach(function (g) {
+      if (g.open && bpGroupsData[g.key]) bpAppendRows(g.key);
+    });
+    listEl.querySelectorAll("details[data-bp]").forEach(function (det) {
+      det.addEventListener("toggle", function () {
+        var k = det.getAttribute("data-bp");
+        if (det.open && bpGroupsData[k] && !bpGroupsData[k].rendered) bpAppendRows(k);
+      });
+    });
+    // Свойство, не addEventListener: повторная загрузка (кнопка «Обновить»)
+    // не должна плодить дубли обработчика.
+    listEl.onclick = function (ev) {
+      var btn = ev.target.closest ? ev.target.closest("[data-bp-more]") : null;
+      if (btn) bpAppendRows(btn.getAttribute("data-bp-more"));
+    };
+    document.getElementById("bank-parse-note").textContent =
+      "иски банка (1-я инст.): " + (totals.total || rows.length) + " дел · обновлено "
+      + relTime(d.updated_at);
+  } catch (e) {
+    // Файл есть, но не распарсился/сеть мигнула — карточку не прячем зря.
+    listEl.className = "";
+    listEl.innerHTML = '<div class="empty">Не удалось загрузить bank_parse_report.json: ' + escHtml(String(e)) + '</div>';
   }
 }
 
@@ -2640,7 +2556,7 @@ async function loadDigestTileLite() {
 function refreshAll() {
   loadGhRuns();
   loadHealth();
-  loadProgress();
+  loadBankParse();
   loadImportLog();
   // «Обновить» чинит неудачную первую загрузку списка судов (для региона
   // без капчёвых судов это лишний fetch cases.json — безвредно).
@@ -2654,9 +2570,9 @@ function refreshAll() {
   }
 }
 
-loadProgress();
 loadGhRuns();
 loadHealth();
+loadBankParse();
 loadImportCourts();
 // Owner-данные (подписки, LLM-рейтинг) оператору не грузим: эндпоинты всё
 // равно ответят 403, а секции скрыты.
@@ -2666,16 +2582,14 @@ if (IS_OWNER) {
 } else {
   loadDigestTileLite();
 }
-// Свёрнутая/фоновая вкладка не должна поллить: гасим оба самоперевзводящихся
-// поллера при уходе со вкладки, будим при возврате. Забытая открытая админка
-// иначе тихо жгла бы KV-reads (run-progress) и Worker-инвокации/GitHub PAT
-// (gh-runs) сутками. Браузер такие setTimeout лишь троттлит, но не гасит.
+// Свёрнутая/фоновая вкладка не должна поллить: гасим самоперевзводящийся
+// поллер gh-runs при уходе со вкладки, будим при возврате. Забытая открытая
+// админка иначе тихо жгла бы Worker-инвокации/GitHub PAT сутками. Браузер
+// такие setTimeout лишь троттлит, но не гасит.
 document.addEventListener("visibilitychange", function () {
   if (document.hidden) {
-    clearTimeout(progressTimer);
     clearTimeout(ghTimer);
   } else {
-    loadProgress();
     loadGhRuns();
   }
 });

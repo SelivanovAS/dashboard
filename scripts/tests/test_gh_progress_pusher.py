@@ -323,9 +323,11 @@ class TestBuildConfig:
 # ── якорь контракта с админкой ───────────────────────────────────────────────
 
 class TestAdminPhaseContract:
-    # Литерал regex'а из cloudflare-worker/admin_page.js (LOG_PHASE_RE,
-    # свёртка лога по фазам): админка вне pytest, поэтому дублируем якорь
-    # здесь — тест сломается, если формат строки log_phase уедет.
+    # Якорь формата строки log_phase «— [N/9] … —»: его ловит MILESTONE_RE
+    # Mac-пушера (ops/mac-local-run/progress_pusher.py) для онлайн-вех.
+    # (Свёртка лога по фазам в админке удалена 29.07.2026 вместе с блоком
+    # живого лога, но контракт формата остаётся — тест сломается, если
+    # строка log_phase уедет.)
     ADMIN_PHASE_RE = re.compile(r"— \[(\d+)/(\d+)\] (.+?) —\s*$")
 
     def test_phase_line_matches_admin_regex(self):
