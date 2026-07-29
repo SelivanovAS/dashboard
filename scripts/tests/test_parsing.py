@@ -736,11 +736,25 @@ class TestSuppressFiEchoEvents:
         assert "act_text" not in ch["details"]
 
     def test_appeal_linked_keeps_live_events(self):
-        # Заседания/возвраты — живые события, глушить нельзя.
+        # Заседания — живые события, глушить нельзя.
         ch = self._change(["fi_hearing_new", "fi_resolved"])
         removed = uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch)
         assert ch["type"] == ["fi_hearing_new"]
         assert removed == ["fi_resolved"]
+
+    def test_appeal_linked_drops_returned_echo(self):
+        """fi_returned в эхо-классе с 29.07.2026: он несёт исход
+        (процессуальное завершение), и у дела «с апелляции» (частная
+        жалоба на возврат, апел. карточка связана) первый парс FI-карточки
+        объявлял бы полугодовой возврат новостью в дайджест/push."""
+        ch = self._change(
+            ["fi_returned"],
+            {"termination_kind": "returned",
+             "return_reason": "невыполнение указаний судьи"},
+        )
+        removed = uc.suppress_fi_echo_events(self.APPEAL_LINKED, ch)
+        assert ch["type"] == []
+        assert removed == ["fi_returned"]
 
     def test_cassation_linked_drops_cassation_and_appeal_echo(self):
         # Для дела в кассации апел. жалоба — тоже древняя история
@@ -3541,3 +3555,326 @@ class TestFirstInstanceSearchStats:
         ])
         results = uc.parse_first_instance_search(html, self._court())
         assert len(results) == 1
+
+
+class TestClassifyFiTermination:
+    """Классификатор процессуального завершения 1-й инстанции.
+
+    Строки взяты из боевых карточек (data/cases.json + инцидент 9-336/2026
+    на Урале 29.07.2026, из-за которого возврат иска печатался в дайджесте
+    ДВАЖДЫ — сырым событием в 3.2 и как «Итог: возвращено» в 3.5).
+    """
+
+    EV_9_336 = (
+        "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. "
+        "16:00. Возвращение иска (заявления, жалобы) заявления. "
+        "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 28.07.2026"
+    )
+
+    def test_incident_9_336_returned_with_reason(self):
+        kind, reason, ev = uc.classify_fi_termination(
+            "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+            self.EV_9_336, [],
+        )
+        assert kind == "returned"
+        assert reason == "дело не подсудно данному суду"
+        assert ev == self.EV_9_336
+
+    def test_reason_from_result_field_glued_head(self):
+        """sudrf клеит шапку с причиной без пробела; шапку срезаем целиком.
+
+        Регресс на жадный `\\w*` под IGNORECASE: он съедал заглавное начало
+        причины и оставлял огрызок «указаний судьи».
+        """
+        kind, reason, _ = uc.classify_fi_termination(
+            "Заявление ВОЗВРАЩЕНО заявителюНЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи",
+            "", [],
+        )
+        assert kind == "returned"
+        assert reason == "невыполнение указаний судьи"
+
+    def test_reason_from_result_multiword(self):
+        kind, reason, _ = uc.classify_fi_termination(
+            "Заявление ВОЗВРАЩЕНО заявителюИстцом НЕ СОБЛЮДЕН ПОРЯДОК "
+            "УРЕГУЛИРОВАНИЯ СПОРА",
+            "", [],
+        )
+        assert kind == "returned"
+        assert reason == "истцом не соблюден порядок урегулирования спора"
+
+    def test_transfer_by_jurisdiction(self):
+        kind, reason, _ = uc.classify_fi_termination(
+            "Передано по подсудности, подведомственности",
+            "Судебное заседание. 10:00. Дело передано на рассмотрение "
+            "другого суда. в Няганский городской суд. 12.05.2026", [],
+        )
+        assert kind == "transfer"
+        assert reason == "в няганский городской суд"
+
+    def test_transfer_target_without_preposition(self):
+        """Имя суда отдельным сегментом после «другого суда.» — вторая
+        реальная форма текста события, без предлога «в»."""
+        kind, reason, _ = uc.classify_fi_termination(
+            "Передано по подсудности, подведомственности",
+            "Судебное заседание. 10:00. Дело передано на рассмотрение "
+            "другого суда. Няганский городской суд. 12.05.2026", [],
+        )
+        assert kind == "transfer"
+        assert reason == "в няганский городской суд"
+
+    def test_transfer_without_target_has_no_reason(self):
+        """Без «куда» хвост пустой: строка «➡️ дело передано по
+        подсудности» уже всё сказала, дублировать нечего."""
+        kind, reason, _ = uc.classify_fi_termination(
+            "Передано по подсудности, подведомственности", "", [],
+        )
+        assert kind == "transfer"
+        assert reason == ""
+
+    def test_refusal_reason_is_last_segment(self):
+        """Причина отказа лежит в КОНЦЕ движения, перед датой публикации.
+        Первый сегмент — сама формулировка действия, она дублировала бы
+        ярлык строки. Заодно регресс на дату: её точки крошили сегменты,
+        и причиной становился «2026»."""
+        kind, reason, _ = uc.classify_fi_termination(
+            "", "Отказано в принятии заявления. 09:30. НЕ ПОДЛЕЖИТ "
+                "РАССМОТРЕНИЮ В ПОРЯДКЕ ГПК. 01.07.2026", [],
+        )
+        assert kind == "refusal"
+        assert reason == "не подлежит рассмотрению в порядке гпк"
+
+    def test_returned_from_events_when_result_empty(self):
+        """Фантомная дата заседания: «Результат» пуст, завершение видно
+        только в истории движения."""
+        events = [
+            {"date": "01.06.2026", "text": "Регистрация иска. 01.06.2026"},
+            {"date": "08.06.2026",
+             "text": "Решение вопроса о принятии. Возвращение иска "
+                     "(заявления, жалобы). ГОСПОШЛИНА НЕ ОПЛАЧЕНА. "
+                     "11.06.2026"},
+        ]
+        kind, reason, ev = uc.classify_fi_termination("", "", events)
+        assert kind == "returned"
+        assert reason == "госпошлина не оплачена"
+        assert "Возвращение иска" in ev
+
+    def test_materials_returned_keeps_legacy_wording(self):
+        kind, reason, _ = uc.classify_fi_termination(
+            "", "Материалы возвращены в связи с истечением срока, данного "
+                "для исправления недостатков. 15.06.2026", [],
+        )
+        assert kind == "returned"
+        assert reason.startswith("материалы возвращены в связи с истечением")
+
+    # ── Негативы: решения по существу завершением НЕ считаются ──
+
+    def test_refusal_on_merits_is_not_termination(self):
+        """«ОТКАЗАНО в удовлетворении иска» — решение по существу (3.5),
+        а не отказ в принятии."""
+        assert uc.classify_fi_termination(
+            "ОТКАЗАНО в удовлетворении иска",
+            "Вынесено решение по делу. ОТКАЗАНО в удовлетворении иска. "
+            "10.06.2026", [],
+        ) is None
+
+    def test_returned_state_duty_is_not_termination(self):
+        """«Госпошлина возвращена» в резолютивке по существу — не возврат
+        иска (потому возврат якорим существительным вплотную к «возвращ»)."""
+        assert uc.classify_fi_termination(
+            "Иск удовлетворён частично, госпошлина возвращена истцу",
+            "Вынесено решение по делу. 10.06.2026", [],
+        ) is None
+
+    def test_returned_state_duty_to_zayavitel_is_not_termination(self):
+        """Регресс ревью 29.07.2026: безъякорная альтернатива
+        «возвращ… заявител» классифицировала возврат ГОСПОШЛИНЫ заявителю
+        как возврат иска — ложное «🔚 иск возвращён» плюс навсегда закрытый
+        канал 3.5 для настоящего итога."""
+        assert uc.classify_fi_termination(
+            "Иск удовлетворён частично, госпошлина возвращена заявителю",
+            "", [],
+        ) is None
+
+    def test_merits_result_beats_old_return_in_history(self):
+        """Непустой «Результат» — единственный арбитр: решение по существу
+        не превращается в «возврат» из-за отменённого возврата в глубине
+        истории движения (ревью 29.07.2026: термин-блок перехватывал бы
+        настоящий итог и глушил fi_resolved навсегда)."""
+        events = [
+            {"date": "01.03.2026",
+             "text": "Решение вопроса о принятии иска (заявления, жалобы). "
+                     "Возвращение иска (заявления, жалобы). НЕВЫПОЛНЕНИЕ "
+                     "УКАЗАНИЙ судьи. 01.03.2026"},
+            {"date": "10.06.2026",
+             "text": "Судебное заседание. Вынесено решение по делу. "
+                     "10.06.2026"},
+        ]
+        assert uc.classify_fi_termination(
+            "Иск удовлетворён частично", "Судебное заседание. Вынесено "
+            "решение по делу. 10.06.2026", events,
+        ) is None
+
+    def test_counterclaim_events_are_not_termination(self):
+        """Определения по ВСТРЕЧНОМУ иску — промежуточные события живого
+        дела, основной иск рассматривается дальше."""
+        assert uc.classify_fi_termination(
+            "", "Отказано в принятии встречного искового заявления. "
+                "09:30. 01.07.2026", [],
+        ) is None
+        assert uc.classify_fi_termination(
+            "", "", [{"date": "01.07.2026",
+                      "text": "Возвращение встречного иска (заявления, "
+                              "жалобы). 01.07.2026"}],
+        ) is None
+
+    def test_empty_input(self):
+        assert uc.classify_fi_termination("", "", []) is None
+        assert uc.classify_fi_termination("", "", None) is None
+
+
+class TestFiTerminationDetails:
+    """Гейт эмиссии и сборка details для события fi_returned."""
+
+    RESULT = "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ"
+
+    def _fi(self, **extra):
+        # Статус «Решено» — реальное состояние карточки при возврате с
+        # заполненным «Результатом» (resolved_keywords в parsing/cards.py).
+        return {"result": self.RESULT, "last_event": "", "events": [],
+                "status": "Решено", **extra}
+
+    def test_details_for_defendant(self):
+        d = uc.fi_termination_details(self._fi(), "Ответчик")
+        assert d["termination_kind"] == "returned"
+        assert d["return_reason"] == "дело не подсудно данному суду"
+        assert d["bank_outcome"] == "в пользу банка"
+
+    def test_details_for_plaintiff(self):
+        d = uc.fi_termination_details(self._fi(), "Истец")
+        assert d["bank_outcome"] == "против банка"
+
+    def test_third_party_has_no_bank_outcome(self):
+        """У третьего лица знака исхода нет — роль показывается отдельно."""
+        d = uc.fi_termination_details(self._fi(), "Третье лицо")
+        assert d["bank_outcome"] == ""
+
+    def test_transfer_has_no_bank_outcome(self):
+        """Передача по подсудности — НЕ исход: дело живёт дальше в другом
+        суде, «в пользу банка» там было бы враньём."""
+        d = uc.fi_termination_details(
+            {"result": "Передано по подсудности, подведомственности",
+             "status": "Решено"},
+            "Ответчик",
+        )
+        assert d["termination_kind"] == "transfer"
+        assert d["bank_outcome"] == ""
+
+    def test_gate_live_case_with_old_return_in_history(self):
+        """Ревью 29.07.2026 (главная находка): у ЖИВОГО дела в истории
+        движения лежит отменённый частной жалобой возврат — без гейта по
+        статусу дайджест получал бы ложное «🔚 иск возвращён», а
+        resolved_emitted навсегда закрывал бы 3.5 для будущего решения."""
+        assert uc.fi_termination_details({
+            "status": "В производстве", "result": "", "last_event":
+                "Судебное заседание. Заседание отложено. 20.09.2026",
+            "events": [
+                {"date": "01.03.2026",
+                 "text": "Решение вопроса о принятии иска. Возвращение "
+                         "иска (заявления, жалобы). НЕВЫПОЛНЕНИЕ УКАЗАНИЙ "
+                         "судьи. 01.03.2026"},
+                {"date": "20.08.2026",
+                 "text": "Судебное заседание. Заседание отложено. "
+                         "20.09.2026"},
+            ],
+        }, "Ответчик") is None
+
+    def test_gate_resolved_without_result_not_termination(self):
+        """«Решено» без результата — служебный статус (экспедиция/архив);
+        завершение из одной истории движения не объявляем."""
+        assert uc.fi_termination_details({
+            "status": "Решено", "result": "",
+            "last_event": "Дело передано в экспедицию. 15:49. 19.06.2026",
+            "events": [
+                {"date": "08.06.2026",
+                 "text": "Решение вопроса о принятии. Возвращение иска "
+                         "(заявления, жалобы). 11.06.2026"},
+            ],
+        }, "Ответчик") is None
+
+    def test_vozvrasheno_status_emits_from_last_event(self):
+        """Статус «Возвращено» (терминальное событие, «Результат» пуст) —
+        легитимный путь эмита: вид и причина из last_event."""
+        d = uc.fi_termination_details({
+            "status": "Возвращено", "result": "",
+            "last_event": "Материалы возвращены в связи с истечением "
+                          "срока, данного для исправления недостатков. "
+                          "15.06.2026",
+            "events": [],
+        }, "Ответчик")
+        assert d["termination_kind"] == "returned"
+        assert d["bank_outcome"] == "в пользу банка"
+
+    def test_gate_resolved_emitted_blocks_retro_flood(self):
+        """Анти-паводок: на первом прогоне после деплоя нельзя объявить
+        возвратами дела, чей исход юрист уже получал строкой 3.5.
+        На 29.07.2026 под это правило попадали ВСЕ 6 терминальных дел
+        активного cases.json — новых событий было бы 0."""
+        assert uc.fi_termination_details(
+            self._fi(resolved_emitted=True), "Ответчик") is None
+
+    def test_gate_termination_emitted_is_idempotent(self):
+        assert uc.fi_termination_details(
+            self._fi(termination_emitted=True), "Ответчик") is None
+
+    def test_does_not_mutate_flags(self):
+        """Флаги ставит вызывающая сторона — строго при успешном эмите."""
+        fi = self._fi()
+        uc.fi_termination_details(fi, "Ответчик")
+        assert "termination_emitted" not in fi
+        assert "resolved_emitted" not in fi
+
+    def test_no_termination_returns_none(self):
+        assert uc.fi_termination_details(
+            {"result": "Иск удовлетворён", "status": "Решено",
+             "last_event": "Вынесено решение по делу. 10.06.2026"},
+            "Ответчик") is None
+
+
+class TestFiTerminationWiring:
+    """Проводка блока завершения в FI-цикле main_json.
+
+    Порядок блоков эмиссии load-bearing: завершение → hearing →
+    status_change → fi_resolved → fi_final_event — каждый следующий смотрит
+    на предыдущие. Переставь кто-нибудь блок завершения ниже fi_resolved
+    (или убери закрытие канала 3.5) — инцидент 9-336/2026 вернётся, а
+    рендер-тесты останутся зелёными: они проверяют уже готовую комбинацию
+    типов, которую сломанный конвейер просто не произведёт. По образцу
+    TestBankTrackWiring: unit-тест на исходник вместо тяжёлого e2e.
+    """
+
+    @staticmethod
+    def _runs_src():
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_emission_block_order(self):
+        src = self._runs_src()
+        i_term = src.index("Процессуальное завершение 1-й инстанции")
+        i_hearing = src.index("# Новое/перенесённое заседание")
+        i_resolved = src.index(
+            'if fi.get("status") == "Решено" '
+            'and not fi.get("resolved_emitted", False):'
+        )
+        i_final = src.index("notable_markers = (")
+        assert i_term < i_hearing < i_resolved < i_final
+
+    def test_termination_block_sets_both_flags(self):
+        """Эмит завершения обязан закрыть ОБА канала: termination_emitted
+        (идемпотентность) и resolved_emitted (дело не всплывёт в 3.5)."""
+        src = self._runs_src()
+        i_term = src.index("Процессуальное завершение 1-й инстанции")
+        i_hearing = src.index("# Новое/перенесённое заседание")
+        block = src[i_term:i_hearing]
+        assert 'fi["termination_emitted"] = True' in block
+        assert 'fi["resolved_emitted"] = True' in block
