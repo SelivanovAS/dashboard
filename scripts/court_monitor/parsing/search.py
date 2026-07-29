@@ -429,6 +429,28 @@ _ANTIBOT_TEXT_MARKERS = (
 _CARD_UID_ANCHOR = "уникальный идентификатор"
 
 
+def looks_like_outage_page(html: str) -> bool:
+    """READ-ONLY: строгая (URL-независимая) часть детекта заглушки/блока.
+
+    Правила 1-2 из looks_like_non_card_page: ≥2 фраз штатной страницы
+    недоступности sudrf ИЛИ маркеры РАЗМЕТКИ антибот-блокировщиков — оба
+    класса безопасны на ЛЮБОЙ странице (поиск, карточка, текст акта).
+    Применение сверх карточек — канарейка предохранителя: заглушка на
+    странице ПОИСКА суда (фаза 3 main_json идёт раньше обхода карточек)
+    пре-открывает предохранитель, не потратив ни одной карточки
+    (netutil.card_breaker_preopen). «Данных по запросу не обнаружено» —
+    легитимно пустая выдача, не заглушка.
+    """
+    if not html:
+        return False
+    low = html.lower()
+    if _NO_DATA_MARK in low:
+        return False
+    if sum(1 for m in _OUTAGE_MARKERS if m in low) >= 2:
+        return True
+    return any(m in low for m in _ANTIBOT_MARKUP_MARKERS)
+
+
 def looks_like_non_card_page(html: str, url: str = "") -> bool:
     """READ-ONLY: True, если вместо карточки пришла заглушка/блок-страница.
 
@@ -451,22 +473,20 @@ def looks_like_non_card_page(html: str, url: str = "") -> bool:
     Легитимная компактная карточка-«огрызок» (4 таблицы + УИД, напр.
     case_card_truncated.html) сюда тоже НЕ попадает — остаётся в cards_degraded.
     """
+    if looks_like_outage_page(html):
+        return True
     if not html:
         return False
     low = html.lower()
     if _NO_DATA_MARK in low:
         return False
-    outage_hits = sum(1 for m in _OUTAGE_MARKERS if m in low)
-    if outage_hits >= 2:
-        return True
-    if any(m in low for m in _ANTIBOT_MARKUP_MARKERS):
-        return True
     if "name_op=case" not in (url or ""):
         return False
     has_uid = _CARD_UID_ANCHOR in low
     if has_uid:
         return False
-    if outage_hits == 1:
+    # Одиночная фраза недоступности (≥2 уже поймал looks_like_outage_page).
+    if any(m in low for m in _OUTAGE_MARKERS):
         return True
     if any(m in low for m in _ANTIBOT_TEXT_MARKERS):
         return True
