@@ -64,6 +64,7 @@ from court_monitor.lifecycle import (
     _is_event_text_in_result_field,
     _events_newly_match, _is_latest_session_event,
     _has_held_prior_hearing, _has_held_prior_session,
+    fi_termination_details,
     _extract_return_reason, _RESTART_RE, _RECESS_RE, _SESSION_START_RX,
     _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
     _TERMINAL_FI_EVENT_RX, SERVICE_EVENT_PATTERNS,
@@ -2286,6 +2287,14 @@ def main_json():
                 # назначено» (см. search-time промоушен выше).
                 if not fi.get("accepted_emitted"):
                     fi["accepted_pending_emit"] = True
+                # Материал принят к производству ПОСЛЕ объявленного
+                # завершения (возврат/отказ в принятии) — определение
+                # отменено или пересилено, дело родилось заново: каналы
+                # исхода снова открываются, иначе будущее решение по
+                # существу молча гейтилось бы resolved_emitted.
+                if fi.get("termination_emitted"):
+                    fi["termination_emitted"] = False
+                    fi["resolved_emitted"] = False
 
         # Второй рубеж после fetch_card_checked: страница вовсе без таблиц —
         # не карточка. Успешной проверкой не считаем и дату не бумпаем (см.
@@ -2335,8 +2344,14 @@ def main_json():
             "hearing_date": new_hearing_date or fi.get("hearing_date", ""),
             "events": card_info.get("_events") or fi.get("events") or [],
         }
+        # «Возвращено» в old_status — с 29.07.2026: возврат, отменённый
+        # частной жалобой, оживляет ту же карточку (новые заседания), и без
+        # этой ветки статус с флагами termination_emitted/resolved_emitted
+        # залипали бы терминальными — настоящее решение по существу никогда
+        # не попало бы в дайджест (Гард 2 ниже не понижает статус сам).
         spurious_resolution = (
-            (new_status == "Решено" or old_status == "Решено")
+            (new_status == "Решено"
+             or old_status in ("Решено", "Возвращено"))
             and fi_resolution_contradicted_by_future_hearing(probe, today)
         )
         if spurious_resolution:
@@ -2396,6 +2411,9 @@ def main_json():
                 changed = True
             fi["result_date"] = ""
             fi["resolved_emitted"] = False
+            # Симметрично: ложное/отменённое процессуальное завершение тоже
+            # переобъявится, когда дело реально завершится.
+            fi["termination_emitted"] = False
         if card_info.get("Судья"):
             fi["judge"] = card_info["Судья"]
         if new_act:
@@ -2447,6 +2465,11 @@ def main_json():
                     and new_bank_role == "Третье лицо"
                 ):
                     fi["resolved_emitted"] = False
+                    # Процессуальное завершение (возврат/отказ в принятии)
+                    # несёт тот же знак «для банка» и по той же причине
+                    # должно переобъявиться с новой ролью — иначе строка
+                    # «(для банка: против банка)» осталась бы висеть.
+                    fi["termination_emitted"] = False
                     log.info(
                         f"  {case_j.get('id') or fi.get('case_number','?')}: "
                         f"сброс resolved_emitted из-за смены роли "
@@ -2530,6 +2553,33 @@ def main_json():
         # fi_act_published и т.п.) эмитятся независимо и guard'ом НЕ затрагиваются.
         case_decided = (fi.get("status") or "").strip() == "Решено"
 
+        # ── Процессуальное завершение 1-й инстанции ──────────────────────
+        # Возврат иска / отказ в принятии / передача по подсудности. Блок
+        # стоит ОТДЕЛЬНО от hearing-блока и ВЫШЕ него намеренно: когда суд
+        # заполнил поле «Результат», карточка ставит статус «Решено»
+        # (parsing/cards.py, resolved_keywords) → case_decided глушит весь
+        # hearing-блок, а fi_returned эмитился ТОЛЬКО внутри него, в ветке
+        # «фантомной даты заседания». Итог — инцидент 9-336/2026 (29.07.2026,
+        # Урал): возврат ушёл в дайджест ДВАЖДЫ — сырым текстом события в 3.2
+        # «Изменения» (fi_final_event) и как «Итог: возвращено» в 3.5
+        # «Вынесенные решения» (fi_resolved).
+        # Порядок блоков ниже — load-bearing: этот идёт до status_change,
+        # fi_resolved и fi_final_event, каждый из которых на него смотрит.
+        term_details = fi_termination_details(fi, case_j.get("bank_role", ""))
+        if term_details:
+            change["type"].append("fi_returned")
+            change["details"].update(term_details)
+            fi["termination_emitted"] = True
+            # Закрываем канал 3.5 навсегда: завершение уже рассказано строкой
+            # в «Изменениях», до-репорт исхода не нужен ни сейчас, ни когда
+            # статус догонит «Решено» служебным движением карточки (тот же
+            # приём, что и при захвате текста акта, см. ниже).
+            fi["resolved_emitted"] = True
+            # Дата решения замораживается по тем же причинам, что и в блоке
+            # fi_resolved: hearing_date перечитывается каждым прогоном.
+            fi.setdefault("decision_date", fi.get("hearing_date", ""))
+            changed = True
+
         # Новое/перенесённое заседание
         if (new_hearing_date and new_hearing_date != old_hearing_date
                 and not case_decided):
@@ -2549,9 +2599,11 @@ def main_json():
                 # Фантомная session-дата. Возможны два случая:
                 # (1) суд вернул иск / отказал в принятии / передал по
                 #     подсудности — на ту же «дату заседания» висит
-                #     терминальное событие. Эмитим fi_returned с короткой
-                #     причиной, чтобы дайджест сказал «иск возвращён: …»
-                #     вместо ложного «назначено первое заседание».
+                #     терминальное событие. Само событие уже отработал блок
+                #     процессуального завершения выше (он идемпотентен по
+                #     fi["termination_emitted"] и покрывает оба статуса —
+                #     и «Решено», и «Возвращено»); здесь только НЕ выдаём
+                #     ложное «назначено первое заседание» на дату определения.
                 # (2) обычная фантомная дата без терминального события —
                 #     старая ветка с пометкой «дата и время не опубликованы».
                 terminal_ev = next(
@@ -2560,12 +2612,8 @@ def main_json():
                      and _TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")),
                     None,
                 )
-                if terminal_ev:
-                    change["type"].append("fi_returned")
-                    change["details"]["event_text"] = terminal_ev.get("text", "")
-                    change["details"]["return_reason"] = _extract_return_reason(
-                        terminal_ev.get("text", "")
-                    )
+                if terminal_ev or "fi_returned" in change["type"]:
+                    pass
                 else:
                     change["type"].append("fi_hearing_new")
                     change["details"]["hearing_date_unpublished"] = True
@@ -2810,8 +2858,32 @@ def main_json():
                 is_preparation_event = any(
                     m in ev_l for m in preparation_markers
                 )
+                # Дедуп с процессуальным завершением. Два случая:
+                # (а) в этом же прогоне блок завершения уже сказал «иск
+                #     возвращён: причина» — сырой текст того же события
+                #     («⚖️ Решение вопроса о принятии иска… Возвращение
+                #     иска… ДЕЛО НЕ ПОДСУДНО…») дублировал бы его строкой
+                #     ниже, в той же секции 3.2 (инцидент 9-336/2026);
+                # (б) межпрогонно: о завершении отчитались раньше, а
+                #     last_event сменился на его текст только сегодня —
+                #     повторять нечего. Сюда же ретро-дела: исход показан
+                #     старым каналом 3.5 (resolved_emitted без
+                #     termination_emitted) — суд перепубликует строку
+                #     возврата с новым временем, пересказывать нечего
+                #     (решение юриста №4: у дела с показанным исходом
+                #     сырое терминальное событие не печатаем).
+                # Гард узкий, по _TERMINAL_FI_EVENT_RX: «Изготовлено
+                # мотивированное решение» ему не соответствует и выживает.
+                is_terminal_event = bool(_TERMINAL_FI_EVENT_RX.search(new_ev))
+                terminal_already_told = (
+                    "fi_returned" in change["type"]
+                    or fi.get("termination_emitted", False)
+                    or fi.get("resolved_emitted", False)
+                )
                 if already_has_hearing and is_preparation_event:
                     pass  # дубль — пропускаем
+                elif is_terminal_event and terminal_already_told:
+                    pass  # завершение уже рассказано строкой fi_returned
                 else:
                     change["type"].append("fi_final_event")
                     change["details"]["event"] = new_ev

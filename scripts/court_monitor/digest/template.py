@@ -310,9 +310,18 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_restarts = sum(
             1 for ch in fi_changes if "fi_hearing_restart" in ch["type"]
         )
-        fi_returns = sum(
-            1 for ch in fi_changes if "fi_returned" in ch["type"]
-        )
+        # Процессуальные завершения — по видам: «возвратов исков» не должно
+        # покрывать передачу по подсудности (это разные вещи для юриста).
+        fi_term_kinds: dict[str, int] = {}
+        for ch in fi_changes:
+            if "fi_returned" not in ch["type"]:
+                continue
+            kind = ((ch.get("details") or {}).get("termination_kind")
+                    or "returned")
+            fi_term_kinds[kind] = fi_term_kinds.get(kind, 0) + 1
+        fi_returns = fi_term_kinds.get("returned", 0)
+        fi_refusals = fi_term_kinds.get("refusal", 0)
+        fi_transfers = fi_term_kinds.get("transfer", 0)
         fi_cass_filed = sum(
             1 for ch in fi_changes if "fi_cassation_filed" in ch["type"]
         )
@@ -349,6 +358,19 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 f"🔚 {fi_returns} "
                 + plural_ru(fi_returns, 'возврат иска', 'возврата исков',
                             'возвратов исков')
+            )
+        if fi_refusals:
+            parts.append(
+                f"🔚 {fi_refusals} "
+                + plural_ru(fi_refusals, 'отказ в принятии иска',
+                            'отказа в принятии исков',
+                            'отказов в принятии исков')
+            )
+        if fi_transfers:
+            parts.append(
+                f"➡️ {fi_transfers} "
+                + plural_ru(fi_transfers, 'дело', 'дела', 'дел')
+                + " — по подсудности"
             )
         if fi_appeals_filed:
             parts.append(
@@ -681,6 +703,69 @@ def _strip_archive_final_events(fi_changes: list[dict]) -> list[dict]:
     return out
 
 
+def _is_motiv_event(ev: str) -> bool:
+    """Событие про мотивировку («Изготовлено мотивированное решение…»,
+    «Мотивированное решение изготовлено…», «Составлено мотивированное…»).
+
+    Исключение из _strip_echoed_terminal_events: такое событие — не пересказ
+    исхода, а самостоятельный факт (мотивировка готова, можно забирать).
+    Нарочно шире, чем нормализация в рендере (та требует слова
+    «изготовлено»): не распознанная рендером формулировка уйдёт сырой
+    ⚖️-строкой, но факт не потеряется. Проверка подстрокой без порядка
+    слов — как у остальных детекторов мотивировки (runs.py
+    final_already_covers_motiv, рендер fi_final_event); порядкозависимый
+    регексп здесь молча терял факт на «Мотивированное решение
+    изготовлено…» (ревью 29.07.2026)."""
+    return "мотивированн" in (ev or "").lower()
+
+
+def _strip_echoed_terminal_events(fi_changes: list[dict]) -> list[dict]:
+    """Убрать fi_final_event, который лишь пересказывает уже показанный исход.
+
+    Если у дела в одном прогоне есть исход — fi_resolved (уедет в 3.5
+    «Вынесенные решения») или fi_returned (строка «🔚 иск возвращён: …» в
+    3.2) — то сырая строка события карточки повторяет его другими словами, и
+    дело печатается дважды. Инцидент 9-336/2026 (29.07.2026, Урал): возврат
+    иска пришёл и как «⚖️ Решение вопроса о принятии иска… Возвращение
+    иска… ДЕЛО НЕ ПОДСУДНО…» в «Изменениях», и как «Итог: возвращено» в
+    «Вынесенных решениях». Решение юриста: гасить сырую строку.
+
+    Исключение — «Изготовлено мотивированное решение …»: рендер нормализует
+    её в отдельный полезный факт (мотивировка готова, можно идти забирать),
+    он остаётся рядом с решением.
+
+    Гасим ДО сводки и тела — как _strip_archive_final_events: сводка считает
+    fi_finals по этому же списку, и правка только в теле дала бы «🏁 1
+    финальное событие», под которым в секции ничего нет. Оригинальные dict'ы
+    не мутируем — контекст переиспользуется на replay.
+    """
+    out: list[dict] = []
+    for ch in fi_changes:
+        types = ch.get("type") or []
+        if "fi_final_event" in types and (
+            "fi_resolved" in types or "fi_returned" in types
+        ):
+            ev = (ch.get("details") or {}).get("event", "") or ""
+            if not _is_motiv_event(ev):
+                kept = [t for t in types if t != "fi_final_event"]
+                if not kept:
+                    continue
+                ch = {**ch, "type": kept}
+        out.append(ch)
+    return out
+
+
+# Виды процессуального завершения 1-й инстанции. Ключ — details
+# ["termination_kind"] (ставит lifecycle.fi_termination_details). Старые
+# контексты (--replay-last до 29.07.2026) ключа не несут — фолбэк на
+# «возврат», прежнюю формулировку.
+_FI_TERMINATION_LABELS = {
+    "returned": "🔚 иск возвращён",
+    "refusal": "🔚 отказано в принятии иска",
+    "transfer": "➡️ дело передано по подсудности",
+}
+
+
 # Слова-роли из карточки: вкладка «Обжалование» в поле «Заявитель» отдаёт
 # «ИСТЕЦ»/«ОТВЕТЧИК» вместо имени. В дайджесте показываем НАИМЕНОВАНИЕ лица,
 # а не статус (просьба юриста 07.07.2026: «апеллянт: Истец Истец» → имя лица).
@@ -718,6 +803,8 @@ def _fi_appellant_display(role: str, name: str,
 _BANK_TYPE_LABELS = {
     "fi_hearing_recess": "⏸ перерыв в заседании",
     "fi_hearing_restart": "🔄 рассмотрение с начала",
+    # fi_returned подписывается по виду завершения (_FI_TERMINATION_LABELS) —
+    # см. _bank_event_phrases; здесь только фолбэк формы.
     "fi_returned": "🔚 иск возвращён",
     "fi_accepted_no_hearing": "📥 иск принят к производству",
     "fi_act_published": "📄 решение изготовлено",
@@ -797,6 +884,12 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             hp = (d.get("hearing_date") or "").strip()
             out.append("🔁 отложено"
                        + (f" на <b>{escape_html(hp)}</b>" if hp else ""))
+        elif t == "fi_returned":
+            # Вид процессуального завершения; фолбэк — прежняя форма
+            # («возврат») для контекстов без termination_kind.
+            kind = (d.get("termination_kind") or "returned").strip()
+            out.append(_FI_TERMINATION_LABELS.get(
+                kind, _FI_TERMINATION_LABELS["returned"]))
         else:
             label = _BANK_TYPE_LABELS.get(t)
             if label:
@@ -879,6 +972,9 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Гасим административное «дело передано в архив» ДО сводки и тела —
     # чтобы счётчики сводки и содержимое секций считались по одному списку.
     fi_changes = _strip_archive_final_events(fi_changes)
+    # Там же — сырое событие карточки, пересказывающее уже показанный исход
+    # (инцидент 9-336/2026: одно событие в двух секциях).
+    fi_changes = _strip_echoed_terminal_events(fi_changes)
 
     # ── Трек «Иски банка» (банк — истец) ──
     # Track-события приезжают в общем fi_changes с маркером change["track"]
@@ -1100,10 +1196,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         f"{escape_html(d.get('new_status', ''))}"
                     )
                 elif t == "fi_returned":
-                    reason = escape_html(_fi_return_reason_for_render(d))
-                    ev_list.append(
-                        "🔚 иск возвращён" + (f": {reason}" if reason else "")
+                    # Процессуальное завершение: возврат иска / отказ в
+                    # принятии / передача по подсудности. Вид — из details,
+                    # фолбэк «возврат» для старых контекстов (--replay-last
+                    # до 29.07.2026 ключа termination_kind не несёт).
+                    kind = (d.get("termination_kind") or "returned").strip()
+                    label = _FI_TERMINATION_LABELS.get(
+                        kind, _FI_TERMINATION_LABELS["returned"]
                     )
+                    reason = (d.get("return_reason") or "").strip()
+                    if not reason and kind != "transfer":
+                        # Старый контекст: причины в details нет — достаём из
+                        # event_text прежним хелпером. Для передачи фолбэк НЕ
+                        # применяем: он отдал бы первый сегмент события
+                        # («судебное заседание»), а не «куда передано».
+                        reason = _fi_return_reason_for_render(d)
+                    part = escape_html(label)
+                    if reason:
+                        part += f": {escape_html(reason)}"
+                    bank_out = (d.get("bank_outcome") or "").strip()
+                    if bank_out:
+                        # Знак исхода для банка. Без него при переносе дела из
+                        # 3.5 в 3.2 эта информация терялась бы (решение юриста
+                        # 29.07.2026).
+                        part += f" (для банка: {escape_html(bank_out)})"
+                    ev_list.append(part)
                 elif t == "fi_act_published":
                     ad = escape_html(d.get("act_date", ""))
                     ev_list.append(

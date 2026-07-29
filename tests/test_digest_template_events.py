@@ -118,11 +118,13 @@ FI_TYPE_DETAILS: dict[str, dict] = {
     "fi_status_change": {
         "old_status": "В производстве", "new_status": "Приостановлено",
     },
-    # runs.py:1499-1503
+    # runs.py:1499-1503 (details собирает lifecycle.fi_termination_details)
     "fi_returned": {
         "event_text": "Возвращение иска (заявления, жалобы). 09:50. "
                       "Исковое заявление возвращено: дело неподсудно данному суду",
         "return_reason": "дело неподсудно данному суду",
+        "termination_kind": "returned",
+        "bank_outcome": "в пользу банка",
     },
     # runs.py:1622
     "fi_act_published": {"act_date": "10.06.2026"},
@@ -459,8 +461,48 @@ class FiEventMatrixTest(unittest.TestCase):
     def test_fi_returned(self):
         html = self._one(["fi_returned"])
         self.assert_in_changes_section(
-            html, "🔚 иск возвращён: дело неподсудно данному суду"
+            html,
+            "🔚 иск возвращён: дело неподсудно данному суду "
+            "(для банка: в пользу банка)",
         )
+
+    def test_fi_returned_refusal(self):
+        """Отказ в принятии — не «отказано» по существу (иначе строка
+        читается как победа банка). Решение юриста 29.07.2026."""
+        html = self._one(
+            ["fi_returned"],
+            {"termination_kind": "refusal",
+             "return_reason": "не подлежит рассмотрению в порядке гпк"},
+        )
+        self.assert_in_changes_section(
+            html,
+            "🔚 отказано в принятии иска: не подлежит рассмотрению "
+            "в порядке гпк (для банка: в пользу банка)",
+        )
+
+    def test_fi_returned_transfer(self):
+        """Передача по подсудности — не исход: дело живёт в другом суде,
+        знака «для банка» у неё нет."""
+        html = self._one(
+            ["fi_returned"],
+            {"termination_kind": "transfer",
+             "return_reason": "в няганский городской суд",
+             "bank_outcome": ""},
+        )
+        self.assert_in_changes_section(
+            html, "➡️ дело передано по подсудности: в няганский городской суд"
+        )
+        self.assertNotIn("для банка", html)
+
+    def test_fi_returned_legacy_context_without_kind(self):
+        """Старый контекст (--replay-last до 29.07.2026) ключа
+        termination_kind не несёт — фолбэк на прежнюю формулировку,
+        причина достаётся из event_text."""
+        html = self._one(
+            ["fi_returned"],
+            {"termination_kind": "", "return_reason": "", "bank_outcome": ""},
+        )
+        self.assert_in_changes_section(html, "🔚 иск возвращён: возвращение иска")
 
     def test_fi_act_published(self):
         html = self._one(["fi_act_published"])
@@ -691,6 +733,69 @@ class FiComboTest(unittest.TestCase):
         # Флаг публикации подавлен текстом (types_for_line, template.py:465-470).
         self.assertNotIn("полный текст не опубликован", html)
         self.assertEqual(anchors(html).count("2-100/2026"), 1)
+
+    def test_returned_plus_final_event_case_printed_once(self):
+        """Инцидент 9-336/2026 (Урал, 29.07.2026): возврат иска пришёл в
+        дайджест ДВАЖДЫ — сырым текстом события в 3.2 «Изменения»
+        (fi_final_event) и как «Итог: возвращено» в 3.5 «Вынесенные
+        решения» (fi_resolved). Теперь — одна строка в 3.2."""
+        ev = ("Решение вопроса о принятии иска (заявления, жалобы). 16:00. "
+              "Возвращение иска (заявления, жалобы) заявления. "
+              "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 28.07.2026")
+        html = render(fi_changes=[make_fi_change(
+            ["fi_returned", "fi_final_event"],
+            {"event": ev, "return_reason": "дело не подсудно данному суду",
+             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+            case="9-336/2026",
+        )])
+        self.assertIn(
+            "🔚 иск возвращён: дело не подсудно данному суду "
+            "(для банка: в пользу банка)", html)
+        self.assertNotIn("Вынесенные решения", html)
+        self.assertNotIn("⚖️ Решение вопроса о принятии иска", html)
+        self.assertEqual(anchors(html).count("9-336/2026"), 1)
+
+    def test_resolved_plus_final_event_raw_line_suppressed(self):
+        """Предохранитель: у дела с решением сырая строка события карточки
+        в 3.2 не печатается — исход уже рассказан в 3.5."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_resolved", "fi_final_event"],
+            {"event": "Дело сдано в отдел судебного делопроизводства. "
+                      "12.06.2026",
+             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+        )])
+        self.assertIn("Вынесенные решения (1)", html)
+        self.assertNotIn("⚖️ Дело сдано в отдел", html)
+        self.assertNotIn("📅 <b>Изменения", html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 1)
+
+    def test_resolved_plus_motivirovka_final_event_kept(self):
+        """Исключение из предохранителя: «Изготовлено мотивированное
+        решение» — отдельный полезный факт (можно идти забирать), он
+        остаётся рядом с решением."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_resolved", "fi_final_event"],
+            {"event": "Изготовлено мотивированное решение в окончательной "
+                      "форме 12.06.2026",
+             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+        )])
+        self.assertIn("Вынесенные решения (1)", html)
+        self.assertIn("📄 мотивированное решение изготовлено 12.06.2026", html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 2)
+
+    def test_resolved_plus_motivirovka_reversed_word_order_kept(self):
+        """Регресс ревью 29.07.2026: порядкозависимый регексп исключения
+        молча терял факт мотивировки на «Мотивированное решение
+        изготовлено…» — остальные детекторы (runs.py, рендер) порядок слов
+        не требуют, фильтр обязан совпадать с ними."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_resolved", "fi_final_event"],
+            {"event": "Мотивированное решение изготовлено 12.06.2026",
+             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+        )])
+        self.assertIn("Вынесенные решения (1)", html)
+        self.assertIn("📄 мотивированное решение изготовлено 12.06.2026", html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 2)
 
     def test_resolved_plus_side_hearing_event_in_both_sections(self):
         # Побочное hearing-событие того же дела остаётся в 3.2, решение — в 3.5.

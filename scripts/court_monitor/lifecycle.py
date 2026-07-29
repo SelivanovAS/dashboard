@@ -143,6 +143,67 @@ _TERMINAL_FI_EVENT_RX = re.compile(
 )
 
 
+# ── Процессуальное завершение 1-й инстанции ─────────────────────────────────
+# Возврат иска, отказ в принятии, передача по подсудности. Все три — НЕ решения
+# по существу, и в дайджесте живут строкой в 3.2 «Изменения», а не в 3.5
+# «Вынесенные решения» (решение юриста 29.07.2026 после инцидента 9-336/2026:
+# возврат печатался ДВАЖДЫ — сырым текстом события в 3.2 и как «Итог:
+# возвращено» в 3.5).
+FI_TERMINATION_RETURNED = "returned"
+FI_TERMINATION_REFUSAL = "refusal"
+FI_TERMINATION_TRANSFER = "transfer"
+
+# Поле «Результат» карточки — НЕ движение дела: sudrf пишет туда шапку с
+# причиной без пробела («Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО
+# ДАННОМУ СУДУ»), и _TERMINAL_FI_EVENT_RX (заточен под тексты движения,
+# «возвращени\S*\s+иск») такую строку НЕ матчит. Отсюда отдельный набор.
+# Возврат якорим существительным вплотную к «возвращ» — иначе «госпошлина
+# возвращена [заявителю]» в резолютивке по существу читалась бы как
+# процессуальный возврат: дело ушло бы в 3.2 с ложным «🔚 иск возвращён»,
+# а resolved_emitted закрыл бы канал 3.5 для настоящего итога (ревью
+# 29.07.2026: безъякорная альтернатива «возвращ… заявител» этот гард
+# обходила — убрана; все реальные шаблоны ГАС начинаются существительным).
+_FI_RESULT_TERMINATION_RX = (
+    (FI_TERMINATION_TRANSFER,
+     re.compile(r"передан\w*\s+по\s+(?:подсудност|подведомствен)", re.I)),
+    (FI_TERMINATION_REFUSAL,
+     re.compile(r"отказан\w*\s+в\s+принят", re.I)),
+    (FI_TERMINATION_RETURNED,
+     re.compile(r"(?:заявлени\w*|иск\w*|материал\w*)\s+возвращ", re.I)),
+)
+# Тексты движения дела. Порядок — от специфичного к общему (передача и отказ
+# в принятии проверяются до возврата: «отказано в принятии иска» содержит
+# и «иск», но возвратом не является).
+_FI_EVENT_TERMINATION_RX = (
+    (FI_TERMINATION_TRANSFER,
+     re.compile(r"передан\w*\s+по\s+подсудност"
+                r"|передан\w*\s+на\s+рассмотрение\s+другого\s+суда", re.I)),
+    (FI_TERMINATION_REFUSAL,
+     re.compile(r"отказан\w*\s+в\s+принят", re.I)),
+    (FI_TERMINATION_RETURNED,
+     re.compile(r"возвращени\w*\s+иск|возвращени\w*\s+заявлени"
+                r"|материал\w*\s+возвращ", re.I)),
+)
+# Шапка возврата в поле «Результат» — срезаем, остаток и есть причина.
+# ⚠️ Хвост шапки («заявителю») ловим ТОЛЬКО строчными буквами и БЕЗ re.I:
+# sudrf клеит шапку с причиной без пробела («…заявителюДЕЛО НЕ ПОДСУДНО…»),
+# а `\w*` под IGNORECASE сожрал бы и заглавное начало причины, оставив
+# огрызок («указаний судьи» вместо «невыполнение указаний судьи»).
+_FI_RESULT_RETURN_HEAD_RX = re.compile(
+    r"^\s*(?i:(?:заявлени|иск|материал)\w*\s+возвращ\w*)"
+    r"(?:\s*(?i:заявител)[а-яё]*)?"
+    r"|^\s*(?i:отказан\w*\s+в\s+принят\w*)(?:\s+[а-яё]+)?"
+)
+# Куда ушло дело при передаче по подсудности (kind=transfer). Две формы
+# текста события: с предлогом («…передано в Няганский городской суд») и
+# именем суда отдельным сегментом после точки («…на рассмотрение другого
+# суда. Няганский городской суд»).
+_FI_TRANSFER_TARGET_RX = re.compile(
+    r"\bв\s+([А-ЯЁ][^.;]{3,60}?суд\w*)"
+    r"|другого\s+суда\W+\s*([А-ЯЁ][^.;]{3,60}?суд\w*)"
+)
+
+
 def _extract_return_reason(text: str) -> str:
     """Вынуть короткую причину возврата иска из текста события 1-й инст.
 
@@ -187,6 +248,204 @@ def _fi_return_reason_for_render(d: dict) -> str:
     seg = re.split(r"[.;]", ev)[0].strip()
     seg = re.sub(r"\s*\d{1,2}:\d{2}\s*$", "", seg)   # прилипшее «09:50»
     return seg.lower()
+
+
+def _extract_termination_reason_from_result(result: str) -> str:
+    """Причина завершения из поля «Результат» карточки.
+
+    `_extract_return_reason` режет текст по точкам — в поле «Результат» точек
+    нет (sudrf клеит шапку и причину без разделителя), поэтому там он отдаёт
+    либо всю строку целиком («заявление возвращено заявителюдело не подсудно
+    данному суду»), либо пустоту. Здесь срезаем шапку — остаток и есть
+    причина: «дело не подсудно данному суду», «невыполнение указаний судьи».
+    """
+    text = (result or "").strip()
+    if not text:
+        return ""
+    cleaned = _FI_RESULT_RETURN_HEAD_RX.sub("", text, count=1).strip()
+    # Хвостовая дата и осиротевшие знаки после срезки шапки.
+    cleaned = re.sub(r"\s*\d{2}\.\d{2}\.\d{4}\s*$", "", cleaned)
+    cleaned = cleaned.strip(" ,.;:-—")
+    if not cleaned or cleaned.lower() == text.lower():
+        return ""
+    return cleaned.lower()
+
+
+def _last_reason_segment(text: str) -> str:
+    """Последний осмысленный сегмент текста события — фолбэк причины.
+
+    Карточка кладёт причину В КОНЕЦ строки движения, перед датой публикации:
+    «Отказано в принятии заявления. 09:30. НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ В ПОРЯДКЕ
+    ГПК. 01.07.2026» → «не подлежит рассмотрению в порядке гпк». Первый
+    сегмент (как в `_fi_return_reason_for_render`) для отказа/возврата — это
+    сама формулировка действия, она дублировала бы ярлык строки.
+    Служебные сегменты (голые время и дата) пропускаем.
+    """
+    # Хвостовую дату срезаем ДО разбиения: её собственные точки иначе
+    # раскрошили бы «01.07.2026» на сегменты и последним оказался бы «2026».
+    text = re.sub(r"\s*\d{2}\.\d{2}\.\d{4}\s*$", "", (text or "").strip())
+    for seg in reversed([s.strip() for s in re.split(r"[.;]", text)]):
+        if not seg or re.fullmatch(r"[\d:\s]+", seg):
+            continue
+        return seg.lower()
+    return ""
+
+
+def _match_termination_event(text: str) -> str:
+    """Вид завершения по тексту события движения, «» если не завершение.
+
+    События про ВСТРЕЧНЫЙ иск («Отказано в принятии встречного искового
+    заявления», «Возвращение встречного иска») — промежуточные определения
+    живого дела, а не его завершение: основной иск рассматривается дальше.
+    Без этого гарда дело получало бы ложное «🔚 отказано в принятии иска»
+    и навсегда закрытый канал 3.5 (ревью 29.07.2026).
+    """
+    if not text or "встречн" in text.lower():
+        return ""
+    return next(
+        (k for k, rx in _FI_EVENT_TERMINATION_RX if rx.search(text)), ""
+    )
+
+
+def classify_fi_termination(
+    result: str, last_event: str, events: list | None = None
+) -> tuple[str, str, str] | None:
+    """Вид процессуального завершения дела 1-й инстанции.
+
+    Возвращает `(kind, reason, event_text)` либо None, если завершения нет:
+      kind       — FI_TERMINATION_RETURNED / _REFUSAL / _TRANSFER;
+      reason     — короткая причина маленькими буквами («дело не подсудно
+                   данному суду»), «» если не распозналась;
+      event_text — сырой текст события движения (он же фолбэк причины на
+                   рендере старых контекстов), «» если завершение видно
+                   только по полю «Результат».
+
+    ВИД: непустой «Результат» — единственный арбитр, когда он есть: суд
+    заполнил исход, и если это НЕ завершение (решение по существу,
+    «Иск удовлетворён…») — возвращаем None, историю движения НЕ смотрим.
+    Иначе старый возврат/отказ в глубине events (отменённое определение,
+    возврат на стадии принятия прошлого круга) перехватывал бы настоящий
+    итог: эмитился бы ложный «🔚 иск возвращён», а канал 3.5 закрывался бы
+    навсегда (ревью 29.07.2026). Фолбэк по last_event/events — только при
+    пустом «Результате» (фантомная дата, статус карточки «Возвращено»).
+
+    ⚠️ Функция — чистый классификатор; гейт по СТАТУСУ карточки (не звать
+    для живых дел «В производстве») — на вызывающей стороне,
+    `fi_termination_details`.
+
+    ПРИЧИНУ, наоборот, сперва берём из ТЕКСТА СОБЫТИЯ — там она отделена
+    точкой и вынимается чисто; поле «Результат» идёт вторым номером через
+    `_extract_termination_reason_from_result`. Для передачи по подсудности
+    причина = «в … суд» из текста события, иначе пусто: строка «➡️ дело
+    передано по подсудности» уже всё сказала, дублировать нечего.
+    """
+    result = (result or "").strip()
+    last_event = (last_event or "").strip()
+
+    result_kind = ""
+    if result:
+        for k, rx in _FI_RESULT_TERMINATION_RX:
+            if rx.search(result):
+                result_kind = k
+                break
+        if not result_kind:
+            # Исход есть, и он не завершение — это решение по существу.
+            return None
+
+    # Текст события движения: сперва last_event, иначе свежайшее подходящее
+    # событие из истории (обратный обход — события идут по возрастанию даты).
+    event_text = ""
+    event_kind = _match_termination_event(last_event)
+    if event_kind:
+        event_text = last_event
+    else:
+        for ev in reversed(events or []):
+            text = (ev.get("text") or "") if isinstance(ev, dict) else ""
+            matched = _match_termination_event(text)
+            if matched:
+                event_text, event_kind = text, matched
+                break
+
+    # Событие другого вида, чем «Результат» (старый возврат в истории при
+    # передаче по подсудности и т.п.) — источником причины не считаем.
+    if result_kind and event_kind and event_kind != result_kind:
+        event_text = ""
+
+    kind = result_kind or event_kind
+    if not kind:
+        return None
+
+    if kind == FI_TERMINATION_TRANSFER:
+        m = _FI_TRANSFER_TARGET_RX.search(event_text)
+        target = (m.group(1) or m.group(2) or "").strip() if m else ""
+        reason = f"в {target}".lower() if target else ""
+    else:
+        reason = (
+            _extract_return_reason(event_text)
+            or _extract_termination_reason_from_result(result)
+            or _last_reason_segment(event_text)
+        )
+    return kind, reason, event_text
+
+
+def fi_termination_details(fi: dict, bank_role: str) -> dict | None:
+    """`details` события `fi_returned` для дайджеста — либо None.
+
+    None означает одно из четырёх: (а) завершения в карточке нет; (б) о нём
+    уже отчитались (`fi["termination_emitted"]`); (в) канал 3.5 по делу уже
+    отработал в прошлых прогонах (`fi["resolved_emitted"]`) — это защита от
+    ретро-паводка: на первом прогоне после деплоя нельзя объявить возвратами
+    все дела, чей исход юрист уже получил строкой «Вынесено решение»;
+    (г) статус карточки НЕ терминальный. Гейт по статусу обязателен:
+    у ЖИВОГО дела («В производстве») в истории движения может лежать
+    отменённый частной жалобой возврат или возврат прошлого круга —
+    классификатор нашёл бы его, дайджест получил бы ложное «🔚 иск
+    возвращён», а `resolved_emitted` навсегда закрыл бы 3.5 для будущего
+    настоящего решения (ревью 29.07.2026). Терминальные статусы: «Решено»
+    (возврат с заполненным «Результатом» — resolved_keywords карточки) и
+    «Возвращено» (терминальное событие при пустом «Результате»).
+
+    Флаги НЕ мутирует — их ставит вызывающая сторона строго при успешном
+    эмите (FI-цикл `main_json`, фаза 4b), по образцу `fi["resolved_emitted"]`
+    в блоке захвата текста акта.
+    """
+    fi = fi or {}
+    if fi.get("termination_emitted") or fi.get("resolved_emitted"):
+        return None
+    status = (fi.get("status") or "").strip()
+    if status not in ("Решено", "Возвращено"):
+        return None
+    result = (fi.get("result") or "").strip()
+    if status == "Решено" and not result:
+        # «Решено» без результата — служебный статус (экспедиция/архив);
+        # завершение из одной истории движения тут не объявляем, чтобы не
+        # реагировать на старые определения (см. гейт (г) выше).
+        return None
+    found = classify_fi_termination(
+        result, fi.get("last_event", ""), fi.get("events") or []
+    )
+    if not found:
+        return None
+    kind, reason, event_text = found
+    # Знак исхода для банка. Передача по подсудности — НЕ исход: дело живёт
+    # дальше в другом суде, «в пользу банка» там было бы враньём.
+    # classify_verdict_fi здесь не годится: на «Передано по подсудности» она
+    # возвращает сырую строку — это и есть источник жалобы юриста
+    # «Вынесено решение. Итог: Передано по подсудности».
+    verdict_for_bank = {
+        FI_TERMINATION_RETURNED: "возвращено",
+        FI_TERMINATION_REFUSAL: "отказано",
+    }.get(kind, "")
+    bank_outcome = (
+        bank_side_outcome_fi(bank_role, verdict_for_bank)
+        if verdict_for_bank else ""
+    )
+    return {
+        "termination_kind": kind,
+        "return_reason": reason,
+        "event_text": event_text,
+        "bank_outcome": bank_outcome,
+    }
 
 
 def _events_newly_match(
@@ -611,9 +870,15 @@ def cassation_card_linked(case: dict) -> bool:
 # карточкой это пересказ давно известного (решение, на которое подана жалоба;
 # его акт; служебные статусы). Паводок 07.07.2026: первый парс 60 карточек
 # «с апелляции» дал 272 таких события и дайджест на 48 КБ.
+# fi_returned здесь с 29.07.2026: раньше он был живым событием стадии
+# first_instance (ветка фантомной даты), теперь несёт ИСХОД (процессуальное
+# завершение, см. fi_termination_details) — у дела со связанной апелляцией
+# (частная жалоба на возврат) это тот же догоняющий пересказ: первый парс
+# FI-карточки дела «с апелляции» объявлял бы полугодовой возврат новостью.
 FI_ECHO_CATCHUP_TYPES = (
     "fi_resolved", "fi_act_published", "fi_act_text_published",
     "fi_motivirovka_emitted", "fi_final_event", "fi_status_change",
+    "fi_returned",
 )
 
 
@@ -627,7 +892,8 @@ def suppress_fi_echo_events(case: dict, change: dict) -> list[str]:
     - кассация связана → эхо: fi_cassation_filed, fi_sent_to_cassation,
       fi_appeal_filed (апел. жалоба — древняя история для дела в кассации)
       + FI_ECHO_CATCHUP_TYPES.
-    Живые события (заседания, возвраты, смена роли банка) не трогаем.
+    Живые события (заседания, касс. сигналы до связки 7kas, смена роли
+    банка) не трогаем.
 
     Отдельно (независимо от связки) схлопывает дубль об одном акте в одном
     прогоне: fi_act_published + fi_act_text_published → остаётся только
@@ -1762,23 +2028,35 @@ def fi_resolution_contradicted_by_future_hearing(fi: dict, today: date) -> bool:
 
 
 def repair_spurious_fi_resolutions(cases: list[dict], today: date) -> int:
-    """Чинит дела 1-й инст. с ложным «Решено» при назначенном будущем заседании
-    (см. fi_resolution_contradicted_by_future_hearing). Идемпотентно, как
-    migrate_stages: на повторных прогонах ничего не меняет. hearing_date НЕ
-    трогаем — фронт покажет предстоящее заседание."""
+    """Чинит дела 1-й инст. с ложным терминальным статусом при назначенном
+    будущем заседании (см. fi_resolution_contradicted_by_future_hearing).
+    Кроме «Решено» покрывает «Возвращено» (с 29.07.2026): возврат, отменённый
+    частной жалобой, оживляет ту же карточку — назначаются заседания, а
+    статус и флаги resolved_emitted/termination_emitted остались бы
+    терминальными, и настоящее решение по существу никогда не попало бы в
+    дайджест. Идемпотентно, как migrate_stages: на повторных прогонах ничего
+    не меняет. hearing_date НЕ трогаем — фронт покажет предстоящее заседание."""
     n = 0
     for case in cases:
         if case.get("current_stage") not in ("first_instance", "cassation_watch"):
             continue
         fi = case.get("first_instance") or {}
-        if fi_resolution_contradicted_by_future_hearing(fi, today):
+        status = (fi.get("status") or "").strip()
+        if status not in ("Решено", "Возвращено"):
+            continue
+        # Проба со статусом «Решено»: сама проверка противоречия
+        # (будущее session-событие без «Вынесено решение по делу»)
+        # одинакова для обоих терминальных статусов.
+        probe = dict(fi, status="Решено")
+        if fi_resolution_contradicted_by_future_hearing(probe, today):
             fi["status"] = "В производстве"
             fi["result"] = ""
             fi["result_date"] = ""
             fi["resolved_emitted"] = False
+            fi["termination_emitted"] = False
             n += 1
             log.info(
-                f"  {case.get('id', '?')}: снят ложный «Решено» "
+                f"  {case.get('id', '?')}: снят ложный «{status}» "
                 f"(назначено заседание {fi.get('hearing_date')})"
             )
     return n

@@ -85,6 +85,8 @@ from court_monitor.lifecycle import (  # noqa: F401 — ре-экспорт дл
     _RESTART_RE, _RECESS_RE, _SESSION_START_RX, _INTERLOCUTORY_PREP_RX,
     _ACCEPTANCE_RX, _TO_FI_RULES_RE, _TERMINAL_FI_EVENT_RX,
     _extract_return_reason, _fi_return_reason_for_render,
+    classify_fi_termination, fi_termination_details,
+    FI_TERMINATION_RETURNED, FI_TERMINATION_REFUSAL, FI_TERMINATION_TRANSFER,
     _events_newly_match, _is_latest_session_event,
     is_archived, advance_case_stage, is_case_archived, migrate_stages,
     should_parse_fi_card, appeal_card_linked, cassation_card_linked,
