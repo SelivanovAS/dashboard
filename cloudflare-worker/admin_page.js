@@ -1203,6 +1203,7 @@ var BP_CHUNK = 30;
 var bpGroupsData = {};
 var BP_GROUPS = [
   { key: "fail", title: "Ошибка загрузки карточки", dot: "dot-red", open: true },
+  { key: "breaker", title: "Суд снят с обхода (предохранитель)", dot: "dot-red", open: false },
   { key: "nocard", title: "Без карточки: суд/ссылка", dot: "dot-amber", open: true },
   { key: "queue", title: "Вне очереди 1-й инстанции", dot: "dot-gray", open: true },
   { key: "parsed", title: "Спарсено", dot: "dot-green", open: false },
@@ -1214,6 +1215,9 @@ function bpGroupKey(row) {
   var o = String(row.outcome || "");
   if (o === "parsed") return "parsed";
   if (o === "not_in_queue") return "queue";
+  // Дела суда, снятого с обхода предохранителем (аутейдж портала): их могут
+  // быть сотни разом — отдельная свёрнутая группа, чтобы не топить «fail».
+  if (o === "court_breaker") return "breaker";
   if (o === "court_disabled" || o === "no_link" || o === "bad_link") return "nocard";
   if (o === "skip") {
     var reason = String(row.reason || "");

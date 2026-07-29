@@ -14,7 +14,7 @@ from court_monitor.parsing.search import (  # noqa: F401
     determine_bank_role_from_participants, parties_from_participants,
     parse_search_page, _find_results_table, parse_first_instance_search,
     find_fi_case_link, detect_captcha_challenge, detect_captcha_challenge_card,
-    looks_like_non_card_page, is_no_data_page,
+    looks_like_non_card_page, looks_like_outage_page, is_no_data_page,
 )
 from court_monitor.parsing.cards import (  # noqa: F401
     _extract_act_text, _warn_if_card_degraded, card_is_empty_shell,
