@@ -34,6 +34,8 @@ _OUTCOME_RU = {
     "fetch_blocked": "портал суда отдал заглушку/блокировку вместо карточки",
     "fetch_http": "HTTP-ошибка при загрузке карточки",
     "fetch_empty": "пустой ответ сервера суда",
+    "court_breaker": "суд снят с обхода предохранителем — карточки не читаются "
+                     "(заглушка/код/сеть), дело перечитается следующим прогоном",
     "empty_shell": "карточка пришла без таблиц («пустая шелуха») — проверка не засчитана",
     "court_disabled": "суд не из реестра активных судов 1-й инстанции",
     "no_link": "нет ссылки на карточку (ждём backfill_fi_links)",
@@ -43,7 +45,10 @@ _OUTCOME_RU = {
 # Ключи METRICS, чья дельта вокруг единственного HTTP-запроса итерации
 # атрибутирует фейл fetch'а к конкретному делу (см. metrics_snapshot /
 # classify_fetch_failure).
-_FETCH_METRIC_KEYS = ("cards_captcha", "cards_blocked", "requests_failed")
+_FETCH_METRIC_KEYS = (
+    "cards_captcha", "cards_blocked", "requests_failed",
+    "cards_breaker_skipped",
+)
 
 
 def metrics_snapshot() -> dict:
@@ -67,6 +72,12 @@ def classify_fetch_failure(before: dict) -> str:
         return "fetch_blocked"
     if config.METRICS.get("requests_failed", 0) > before.get("requests_failed", 0):
         return "fetch_http"
+    # Предохранитель открылся между пре-чеком FI-цикла и самим fetch'ем
+    # (например, на тексте акта того же суда) — гейт внутри fetch_card_checked
+    # вернул "" без HTTP.
+    if (config.METRICS.get("cards_breaker_skipped", 0)
+            > before.get("cards_breaker_skipped", 0)):
+        return "court_breaker"
     return "fetch_empty"
 
 
@@ -202,7 +213,7 @@ class BankParseReport:
                 t["parsed"] += 1
             elif o == "skip":
                 t["skip"] += 1
-            elif o in FETCH_FAIL_OUTCOMES or o == "empty_shell":
+            elif o in FETCH_FAIL_OUTCOMES or o in ("empty_shell", "court_breaker"):
                 t["failed"] += 1
             elif o in NO_CARD_OUTCOMES:
                 t["no_card"] += 1
