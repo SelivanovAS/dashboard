@@ -58,7 +58,8 @@ from court_monitor.textutil import (  # noqa: F401 — ре-экспорт дл�
     ROLE_INSTRUMENTAL, _OPF_RE, _CITY_RE, _MTU_RE, _FIO_RE, _FIN_OMBUD_RE,
     _HERITAGE_RE, _QUOTES_RE, _V_LICE_RE, _BRANCH_DASH_RE, _BRANCH_COMMA_RE,
     _SBER_RU_RE, _shorten_single, shorten_party_name, shorten_court_name,
-    _norm_party_tokens, classify_appellant_role, _bare_case_number,
+    _norm_party_tokens, classify_appellant_role, appellant_role_words,
+    _bare_case_number,
 )
 from court_monitor.netutil import (  # noqa: F401 — ре-экспорт для совместимости
     session, polite_delay, fetch_page,

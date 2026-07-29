@@ -296,3 +296,190 @@ class TestBackfillAppealAppellants:
         ]
         stats = cm_runs.backfill_appeal_appellants(cases)
         assert stats["candidates"] == 0
+
+
+def _gated_court() -> "CourtConfig":
+    from court_monitor.regions.base import CourtConfig
+    return CourtConfig(
+        name="Алапаевский городской суд",
+        domain="alapaevsky--svd.sudrf.ru",
+        delo_id=1540005,
+        court_type="first_instance",
+        search_gated=True,
+    )
+
+
+@pytest.fixture
+def gated_registry(monkeypatch):
+    """Подмешивает в реестр капчёвый суд (у ХМАО таких нет — как на Урале):
+    матчер отдаёт его по имени, остальные имена идут в настоящий реестр."""
+    real = cm_runs.match_fi_court_by_short_name
+    gated = _gated_court()
+
+    def fake(short_name):
+        if (short_name or "").strip() == gated.name:
+            return gated
+        return real(short_name)
+
+    monkeypatch.setattr(cm_runs, "match_fi_court_by_short_name", fake)
+    return gated
+
+
+class TestBackfillGatedCourts:
+    """Суды с search_gated (поиск за капчей, Свердловская обл.): кандидат без
+    fi.link пропускается без HTTP и БЕЗ расхода кэпа — иначе на Урале 50+
+    вечных фейлов съедали весь max_per_run, и открытые ЯНАО-дела ниже по
+    списку никогда не достигались."""
+
+    def test_gated_without_link_skipped_no_http(self, boom_net, gated_registry):
+        case = _appeal_case(court=gated_registry.name)
+        stats = cm_runs.backfill_appeal_appellants([case])
+        assert stats["candidates"] == 1
+        assert stats["gated"] == 1
+        assert stats["failed"] == 0
+        # Не штампуем: появись fi.link (проспективный импорт дампа) —
+        # дожмётся веткой «ссылка уже есть».
+        assert "appeal_appellant_checked_at" not in case["first_instance"]
+
+    def test_gated_skip_does_not_consume_cap(self, net, gated_registry):
+        """Капчёвый кандидат стоит ПЕРВЫМ, кэп = 1: открытое дело за ним
+        всё равно обрабатывается."""
+        n = net(search_html=_fi_search_html("2-716/2025"))
+        gated_case = _appeal_case(fi_num="2-9/2026", court=gated_registry.name)
+        open_case = _appeal_case()
+        stats = cm_runs.backfill_appeal_appellants(
+            [gated_case, open_case], max_per_run=1
+        )
+        assert stats["gated"] == 1 and stats["checked"] == 1
+        assert len(n.card_urls) == 1
+        assert open_case["first_instance"]["appeal_appellant_checked_at"]
+        assert "appeal_appellant_checked_at" not in gated_case["first_instance"]
+
+    def test_gated_with_link_still_checked(self, net, gated_registry):
+        """fi.link есть (дело заведено импортёром дампа) — карточка капчёвого
+        суда мониторится как обычно, гейт не мешает."""
+        n = net()
+        case = _appeal_case(court=gated_registry.name,
+                            link=f"{_CASE_ID}|{_CASE_UID}",
+                            domain=gated_registry.domain)
+        stats = cm_runs.backfill_appeal_appellants([case])
+        assert stats["gated"] == 0 and stats["checked"] == 1
+        assert n.search_urls == [] and len(n.card_urls) == 1
+        assert case["first_instance"]["appeal_appellant_checked_at"]
+
+
+class TestReclassifyRolewordAppellants:
+    """Пересчёт сохранённых слов-ролей без HTTP: составные значения
+    («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») старый классификатор писал как
+    «Иное лицо»/is_bank=False — бейдж вставал на противника банка
+    (кейс 33-5089/2026), а записи со штампом сами не лечились."""
+
+    def _case_33_5089(self) -> dict:
+        return {
+            "id": "33-5089/2026",
+            "current_stage": "appeal",
+            "bank_role": "Истец",
+            "plaintiff": "ПАО Сбербанк России в лице Уральского банка "
+                         "ПАО Сбербанк",
+            "defendant": "Финансовый уполномоченный Савицкая Т.М.",
+            "first_instance": {
+                "case_number": "2-1035/2026",
+                "appeal_appellant": "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ",
+                "appeal_appellant_is_bank": False,
+                "appeal_appellant_status": "Иное лицо",
+                "appeal_appellant_checked_at": "2026-07-27",
+                "events": [],
+            },
+            "appeal": {
+                "case_number": "33-5089/2026",
+                "appellant": "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ",
+                "appellant_is_bank": False,
+                "appellant_status": "Иное лицо",
+                "events": [],
+            },
+        }
+
+    def test_composite_fixed_in_both_blocks(self):
+        case = self._case_33_5089()
+        assert cm_runs.reclassify_roleword_appellants([case]) == 1
+        fi, ap = case["first_instance"], case["appeal"]
+        assert fi["appeal_appellant"] == "Истец"
+        assert fi["appeal_appellant_is_bank"] is True
+        assert fi["appeal_appellant_status"] == "Истец"
+        assert ap["appellant"] == "Истец"
+        assert ap["appellant_is_bank"] is True
+        assert ap["appellant_status"] == "Истец"
+        # Штамп бэкфилла не тронут — HTTP-повтор не спровоцирован.
+        assert fi["appeal_appellant_checked_at"] == "2026-07-27"
+
+    def test_idempotent(self):
+        case = self._case_33_5089()
+        cm_runs.reclassify_roleword_appellants([case])
+        assert cm_runs.reclassify_roleword_appellants([case]) == 0
+
+    def test_bare_representative_becomes_none_and_status_dropped(self):
+        """«ПРЕДСТАВИТЕЛЬ» (чей — неизвестно): is_bank False → None, ложный
+        статус «Иное лицо» снимается — фронт прячет бейдж."""
+        case = self._case_33_5089()
+        for blk, name, bank, status in (
+            (case["first_instance"], "appeal_appellant",
+             "appeal_appellant_is_bank", "appeal_appellant_status"),
+            (case["appeal"], "appellant", "appellant_is_bank",
+             "appellant_status"),
+        ):
+            blk[name] = "ПРЕДСТАВИТЕЛЬ"
+            blk[bank] = False
+            blk[status] = "Иное лицо"
+        assert cm_runs.reclassify_roleword_appellants([case]) == 1
+        fi = case["first_instance"]
+        assert fi["appeal_appellant"] == "ПРЕДСТАВИТЕЛЬ"
+        assert fi["appeal_appellant_is_bank"] is None
+        assert "appeal_appellant_status" not in fi
+        assert case["appeal"]["appellant_is_bank"] is None
+        assert "appellant_status" not in case["appeal"]
+
+    def test_real_name_untouched(self):
+        """Настоящее имя (в т.ч. канонический кассатор с 7kas) не трогается."""
+        case = self._case_33_5089()
+        case["first_instance"]["appeal_appellant"] = "Савицкая Т.М."
+        case["appeal"]["appellant"] = "Савицкая Т.М."
+        case["cassation"] = {
+            "case_number": "8Г-1/2026",
+            "appellant": "МТУ Росимущества в Тюменской области",
+            "appellant_is_bank": False,
+            "appellant_status": "Иное лицо",
+        }
+        assert cm_runs.reclassify_roleword_appellants([case]) == 0
+        assert case["appeal"]["appellant"] == "Савицкая Т.М."
+        assert case["cassation"]["appellant_status"] == "Иное лицо"
+
+    def test_cassation_roleword_healed(self):
+        """Предзаполненный из FI-вкладки кассатор-слово-роль лечится так же."""
+        case = self._case_33_5089()
+        del case["first_instance"]["appeal_appellant"]
+        del case["appeal"]["appellant"]
+        case["cassation"] = {
+            "appellant": "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ",
+            "appellant_is_bank": False,
+            "appellant_status": "Иное лицо",
+        }
+        assert cm_runs.reclassify_roleword_appellants([case]) == 1
+        assert case["cassation"]["appellant"] == "Истец"
+        assert case["cassation"]["appellant_is_bank"] is True
+        assert case["cassation"]["appellant_status"] == "Истец"
+
+    def test_pure_role_word_is_bank_recomputed(self):
+        """Чистая роль «Ответчик» тоже пересчитывается (самовосстановление
+        is_bank при изменении логики — прежний контракт «грязных» имён)."""
+        case = self._case_33_5089()
+        fi = case["first_instance"]
+        fi["appeal_appellant"] = "Ответчик"
+        fi["appeal_appellant_is_bank"] = True  # ложное наследие
+        fi["appeal_appellant_status"] = "Ответчик"
+        case["appeal"]["appellant"] = "Ответчик"
+        case["appeal"]["appellant_is_bank"] = True
+        case["appeal"]["appellant_status"] = "Ответчик"
+        assert cm_runs.reclassify_roleword_appellants([case]) == 1
+        # Банк — истец, жалоба «ОТВЕТЧИКА» → точно не банк.
+        assert fi["appeal_appellant_is_bank"] is False
+        assert case["appeal"]["appellant_is_bank"] is False

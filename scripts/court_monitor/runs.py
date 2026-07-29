@@ -91,7 +91,8 @@ from court_monitor.storage import (
 from court_monitor.textutil import (
     parse_date, escape_html, case_id_uid, _bare_case_number,
     extract_motive_part, shorten_party_name, shorten_court_name,
-    classify_appellant_role, is_russian_working_day, plural_ru,
+    classify_appellant_role, appellant_role_words,
+    is_russian_working_day, plural_ru,
     _strip_html, _norm_party_tokens, _TIME_RE, _FI_CASE_NUM_RE, _CASE_NUM_RE,
 )
 
@@ -300,15 +301,15 @@ def relink_awaiting_appeal(
 def _appeal_appellant_missing(fi: dict, ap: dict) -> bool:
     """True, если податель апел. жалобы неизвестен в ОБОИХ блоках (fi и appeal).
 
-    «Грязное» имя (пустое или слово-роль, _DIRTY_APPELLANT_NAMES) без ключа
+    «Грязное» имя (пустое или слова-роли, _is_dirty_appellant_name) без ключа
     `*_is_bank` — данных нет. Наличие ключа `*_is_bank` (даже null) означает,
     что парсер заявителя уже разбирал: фронт либо рендерит бейдж, либо знает,
     что определить нельзя — HTTP на такое дело не тратим.
     """
     return (
-        (fi.get("appeal_appellant") or "").strip().lower() in _DIRTY_APPELLANT_NAMES
+        _is_dirty_appellant_name(fi.get("appeal_appellant"))
         and "appeal_appellant_is_bank" not in fi
-        and (ap.get("appellant") or "").strip().lower() in _DIRTY_APPELLANT_NAMES
+        and _is_dirty_appellant_name(ap.get("appellant"))
         and "appellant_is_bank" not in ap
     )
 
@@ -327,6 +328,8 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
     1) если `fi.link` пуст — целевой поиск по bare-номеру дела на сайте суда
        1-й инст. (`search_by_number_url`) и персист `fi.link`/`court_domain`
        (зеркало backfill_fi_links из linking.py — правки синхронизировать);
+       суды с `search_gated` (поиск за капчей — Свердловская обл.)
+       пропускаются без HTTP и без расхода кэпа (`stats["gated"]`);
     2) fetch карточки 1-й инст. → parse_case_card → `_apply_fi_appellant`
        (пишет `fi.appeal_appellant*` И зеркало `appeal.appellant*`);
     3) штамп `fi.appeal_appellant_checked_at` — ставится после успешного
@@ -346,7 +349,7 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
     сводной строки лога.
     """
     stats = {
-        "candidates": 0, "no_number": 0, "no_court": 0,
+        "candidates": 0, "no_number": 0, "no_court": 0, "gated": 0,
         "linked": 0, "checked": 0, "found": 0, "failed": 0,
     }
     attempted = 0
@@ -384,6 +387,19 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
                 log.debug(
                     f"  апеллянт-бэкфилл: {num} — суд «{fi.get('court', '')}» "
                     f"не из реестра 1-й инст., пропуск"
+                )
+                continue
+            if court.search_gated:
+                # Поиск капчёвого суда автоматике недоступен: без fi.link
+                # апеллянта не достать — HTTP не тратим и кэп не жжём (на
+                # Урале 50+ таких кандидатов вечно съедали весь max_per_run,
+                # и открытые ЯНАО-дела ниже по списку голодали). Не штампуем:
+                # появись у дела fi.link (проспективный импорт дампа до
+                # регистрации апелляции), дожмётся веткой «ссылка уже есть».
+                stats["gated"] += 1
+                log.debug(
+                    f"  апеллянт-бэкфилл: {num} — поиск "
+                    f"{shorten_court_name(court.name)} за капчей, пропуск"
                 )
                 continue
         if attempted >= max_per_run:
@@ -1405,8 +1421,23 @@ def _filter_ctx_fi_changes_echo(
 # «Грязные» значения имени апеллянта — пустое или слово-роль вместо
 # настоящего имени. Такие записи перезаписываются на каждом прогоне,
 # поэтому is_bank для «голой» роли самовосстанавливается при изменении
-# логики без миграции данных.
+# логики без миграции данных. Составные слова-роли («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ»)
+# ловит appellant_role_words — проверять через _is_dirty_appellant_name.
 _DIRTY_APPELLANT_NAMES = ("", "истец", "ответчик", "третье лицо", "иное лицо", "банк")
+
+
+def _is_dirty_appellant_name(name: str) -> bool:
+    """True, если сохранённое имя апеллянта — не настоящее имя.
+
+    «Грязное» = пустое, слово-роль из _DIRTY_APPELLANT_NAMES или набор
+    слов-ролей, включая составные («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ», «ПРЕДСТАВИТЕЛЬ»).
+    Такие значения безопасно перезаписывать пересчётом — настоящее
+    найденное имя не трогаем.
+    """
+    s = (name or "").strip()
+    if s.lower() in _DIRTY_APPELLANT_NAMES:
+        return True
+    return appellant_role_words(s) is not None
 
 
 def _bank_sole_role_holder(case_j: dict, role: str) -> bool:
@@ -1430,18 +1461,25 @@ def _appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
     только когда роль подателя совпадает с ролью банка И банк — единственная
     сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
     из них → None («знаем, что определить нельзя» — фронт не выводит ни
-    'bank', ни 'other'). Именной вход определяем по SBER_PATTERNS, как раньше.
+    'bank', ни 'other'). Составные слова-роли разбирает appellant_role_words:
+    одна сторона в составе («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») — считаем по ней; ноль
+    («ПРЕДСТАВИТЕЛЬ»: чей — неизвестно) или несколько («ИСТЕЦ, ТРЕТЬЕ ЛИЦО»)
+    → None, а не False — иначе фронт вешал бы бейдж на противника банка
+    (кейс 33-5089/2026). Именной вход определяем по SBER_PATTERNS, как раньше.
     """
-    raw_lc = raw.lower()
-    if raw_lc in ("истец", "ответчик", "третье лицо", "иное лицо"):
-        if role in ("Истец", "Ответчик"):
-            if role != case_j.get("bank_role", ""):
+    role_words = appellant_role_words(raw)
+    if role_words is not None:
+        if len(role_words) != 1:
+            return None  # податель по словам-ролям неопределим
+        side = role_words[0]
+        if side in ("Истец", "Ответчик"):
+            if side != case_j.get("bank_role", ""):
                 return False
-            if _bank_sole_role_holder(case_j, role):
+            if _bank_sole_role_holder(case_j, side):
                 return True
             return None
         return None if case_j.get("bank_role") == "Третье лицо" else False
-    return any(p in raw_lc for p in config.SBER_PATTERNS)
+    return any(p in raw.lower() for p in config.SBER_PATTERNS)
 
 
 def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
@@ -1475,7 +1513,7 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
 
     # first_instance — источник для бейджа в раннем окне.
     old_fi_name = (fi.get("appeal_appellant") or "").strip()
-    if old_fi_name.lower() in _DIRTY_APPELLANT_NAMES:
+    if _is_dirty_appellant_name(old_fi_name):
         if short and short != old_fi_name:
             fi["appeal_appellant"] = short
             changed = True
@@ -1490,7 +1528,7 @@ def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
     appeal_block = case_j.get("appeal")
     if appeal_block:
         old_app_name = (appeal_block.get("appellant") or "").strip()
-        if old_app_name.lower() in _DIRTY_APPELLANT_NAMES:
+        if _is_dirty_appellant_name(old_app_name):
             if short and short != old_app_name:
                 appeal_block["appellant"] = short
                 changed = True
@@ -1541,7 +1579,7 @@ def _apply_fi_cassator(case_j: dict, card_info: dict) -> bool:
     _missing = object()
     cs_block = case_j["cassation"]
     old_name = (cs_block.get("appellant") or "").strip()
-    if old_name.lower() in _DIRTY_APPELLANT_NAMES:
+    if _is_dirty_appellant_name(old_name):
         if short and short != old_name:
             cs_block["appellant"] = short
             changed = True
@@ -1552,6 +1590,68 @@ def _apply_fi_cassator(case_j: dict, card_info: dict) -> bool:
             cs_block["appellant_status"] = role
             changed = True
     return changed
+
+
+# Блоки, где живут поля подателя жалобы: (ключ блока, имя, is_bank, статус).
+_APPELLANT_FIELD_MAP = (
+    ("first_instance", "appeal_appellant", "appeal_appellant_is_bank",
+     "appeal_appellant_status"),
+    ("appeal", "appellant", "appellant_is_bank", "appellant_status"),
+    ("cassation", "appellant", "appellant_is_bank", "appellant_status"),
+)
+
+
+def reclassify_roleword_appellants(cases: list[dict]) -> int:
+    """Пересчитать сохранённые слова-роли подателя жалобы без HTTP.
+
+    Зачем: карточки отдают и СОСТАВНЫЕ слова-роли («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ»),
+    которые классификатор до 29.07.2026 не знал и писал «Иное лицо» +
+    is_bank=False — фронт вешал бейдж «Апеллянт» на процессуального
+    противника банка (кейс 33-5089/2026: жалоба истца-банка, бейдж — на
+    ответчике-финуполномоченном). Сами такие записи не самоизлечиваются:
+    карточка 1-й инст. в стадии appeal не парсится, а бэкфилл дела с ключом
+    `*_is_bank` повторно не трогает (штамп/ключ уже стоят). Здесь роль,
+    имя и is_bank пересчитываются прямо из сохранённого «грязного» имени —
+    оно и есть сырой «Заявитель» карточки.
+
+    Настоящие имена (не слова-роли) не трогаются; для неопределимого
+    подателя («ПРЕДСТАВИТЕЛЬ», «ИСТЕЦ, ТРЕТЬЕ ЛИЦО») роль снимается, а
+    is_bank становится None — фронт прячет бейдж. Идемпотентно, событий
+    в дайджест не эмитит (тот же контракт «тихости», что у бэкфилла).
+    Возвращает число дел, где что-то изменилось.
+    """
+    fixed_cases = 0
+    _missing = object()  # см. сентинел в _apply_fi_appellant
+    for case_j in cases:
+        case_changed = False
+        for block_key, name_key, bank_key, status_key in _APPELLANT_FIELD_MAP:
+            block = case_j.get(block_key)
+            if not isinstance(block, dict):
+                continue
+            raw = (block.get(name_key) or "").strip()
+            if not raw or appellant_role_words(raw) is None:
+                continue  # пусто или настоящее имя — не трогаем
+            role, short = classify_appellant_role(
+                raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
+            )
+            is_bank = _appellant_is_bank(raw, role, case_j)
+            if short and short != raw:
+                block[name_key] = short
+                case_changed = True
+            if block.get(bank_key, _missing) != is_bank:
+                block[bank_key] = is_bank
+                case_changed = True
+            if role:
+                if block.get(status_key) != role:
+                    block[status_key] = role
+                    case_changed = True
+            elif status_key in block:
+                # Сторона неопределима — ложный статус «Иное лицо» снимаем.
+                block.pop(status_key)
+                case_changed = True
+        if case_changed:
+            fixed_cases += 1
+    return fixed_cases
 
 
 def announce_imported_cases(cases: list[dict]) -> list[dict]:
@@ -2075,6 +2175,17 @@ def main_json():
     backfilled = backfill_fi_links(cases)
     if backfilled:
         log.info(f"Достроено ссылок на карточку 1-й инст.: {backfilled}")
+    # Переклассификация сохранённых слов-ролей апеллянта/кассатора (без HTTP):
+    # составные значения («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») старый классификатор писал
+    # как «Иное лицо»/is_bank=False — бейдж вставал на противника банка
+    # (кейс 33-5089/2026), а сами записи не самоизлечиваются (штамп/ключ
+    # уже стоят, карточка в appeal не парсится). См. функцию.
+    refixed = reclassify_roleword_appellants(cases)
+    if refixed:
+        log.info(
+            f"Апеллянт: слова-роли переклассифицированы в {refixed} "
+            f"{plural_ru(refixed, 'деле', 'делах', 'делах')}"
+        )
     # Тихий бэкфилл апеллянта (стадия appeal): карточка апел. суда подателя
     # жалобы не публикует, а карточка 1-й инст. в appeal не парсится
     # (should_parse_fi_card) — разовый точечный заход ТОЛЬКО за полями
@@ -2085,6 +2196,7 @@ def main_json():
             f"Апеллянт (бэкфилл): кандидатов {ap_bf['candidates']}, проверено "
             f"карточек {ap_bf['checked']}, найден апеллянт {ap_bf['found']}, "
             f"ссылок достроено {ap_bf['linked']}, отложено {ap_bf['failed']}"
+            + (f", за капчей {ap_bf['gated']}" if ap_bf["gated"] else "")
         )
     # Парсим карточку 1-й инст. в first_instance/cassation_watch, а также в
     # awaiting_appeal/cassation_pending — ПОКА дело не направлено в вышестоящий

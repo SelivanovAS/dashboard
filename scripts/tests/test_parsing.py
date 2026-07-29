@@ -2960,6 +2960,42 @@ class TestClassifyAppellantRole:
     def test_empty_returns_empty(self):
         assert uc.classify_appellant_role("", "Истец", "Ответчик") == ("", "")
 
+    def test_composite_role_with_representative(self):
+        """«ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» — жалоба стороны истца, подана
+        представителем (кейс 33-5089/2026: старый классификатор ронял её в
+        «Иное лицо», и бейдж «Апеллянт» вставал на противника банка)."""
+        assert uc.classify_appellant_role(
+            "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ", "ПАО Сбербанк", "Финансовый уполномоченный"
+        ) == ("Истец", "Истец")
+
+    def test_bare_representative_indeterminate(self):
+        """Голый «ПРЕДСТАВИТЕЛЬ»: чей — из строки не определить.
+        Роль пустая (не ложное «Иное лицо»), имя сохраняется как есть."""
+        assert uc.classify_appellant_role(
+            "ПРЕДСТАВИТЕЛЬ", "Иванов", "ПАО Сбербанк"
+        ) == ("", "ПРЕДСТАВИТЕЛЬ")
+
+    def test_multiple_roles_indeterminate(self):
+        """«ИСТЕЦ, ТРЕТЬЕ ЛИЦО» — жалобы разных участников, податель
+        неоднозначен → роль пустая."""
+        assert uc.classify_appellant_role(
+            "ИСТЕЦ, ТРЕТЬЕ ЛИЦО", "Иванов", "Петров"
+        ) == ("", "ИСТЕЦ, ТРЕТЬЕ ЛИЦО")
+
+    def test_appellant_role_words_helper(self):
+        """Разбор слов-ролей: None для настоящего имени, кортеж сторон для
+        ролевого входа (в т.ч. пустой для «ПРЕДСТАВИТЕЛЬ»)."""
+        assert uc.appellant_role_words("ИСТЕЦ") == ("Истец",)
+        assert uc.appellant_role_words("Истец, представитель") == ("Истец",)
+        assert uc.appellant_role_words("ПРЕДСТАВИТЕЛЬ") == ()
+        assert uc.appellant_role_words("ИСТЕЦ, ТРЕТЬЕ ЛИЦО") == (
+            "Истец", "Третье лицо")
+        assert uc.appellant_role_words("Иванов Иван Иванович") is None
+        assert uc.appellant_role_words("ПАО Сбербанк") is None
+        assert uc.appellant_role_words("") is None
+        # «Истец» в составе настоящего имени ролью не считается.
+        assert uc.appellant_role_words("Истец, ПАО Сбербанк") is None
+
 
 # ── _apply_fi_appellant: персист апеллянта в first_instance ──────────────────
 class TestApplyFiAppellant:
@@ -3084,6 +3120,54 @@ class TestApplyFiAppellant:
         assert cj["appeal"]["appellant"] == "Ответчик"
         assert cj["appeal"]["appellant_is_bank"] is True
         assert cj["appeal"]["appellant_status"] == "Ответчик"
+
+    def test_composite_role_bank_plaintiff(self):
+        """«ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» при банке-единственном-истце → жалоба
+        банка (кейс 33-5089/2026: раньше — «Иное лицо»/is_bank=False, и
+        бейдж «Апеллянт» вставал на ответчика-финуполномоченного)."""
+        fi = {}
+        cj = {"plaintiff": "ПАО Сбербанк России в лице Уральского банка "
+                           "ПАО Сбербанк",
+              "defendant": "Финансовый уполномоченный Савицкая Т.М.",
+              "bank_role": "Истец"}
+        assert self._apply(fi, cj, "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ") is True
+        assert fi["appeal_appellant"] == "Истец"
+        assert fi["appeal_appellant_status"] == "Истец"
+        assert fi["appeal_appellant_is_bank"] is True
+
+    def test_bare_representative_is_bank_none(self):
+        """Голый «ПРЕДСТАВИТЕЛЬ»: чей — неизвестно → is_bank=None (ключ
+        пишется явно, роль-статус не пишется) — фронт прячет бейдж, а не
+        вешает его на «не-Сбер» сторону."""
+        fi = {}
+        cj = {"plaintiff": "ПАО Сбербанк", "defendant": "Иванов",
+              "bank_role": "Истец"}
+        assert self._apply(fi, cj, "ПРЕДСТАВИТЕЛЬ") is True
+        assert fi["appeal_appellant"] == "ПРЕДСТАВИТЕЛЬ"
+        assert "appeal_appellant_is_bank" in fi
+        assert fi["appeal_appellant_is_bank"] is None
+        assert "appeal_appellant_status" not in fi
+
+    def test_multiple_roles_is_bank_none(self):
+        """«ИСТЕЦ, ТРЕТЬЕ ЛИЦО» — податель неоднозначен → is_bank=None."""
+        fi = {}
+        cj = {"plaintiff": "Иванов", "defendant": "ПАО Сбербанк",
+              "bank_role": "Ответчик"}
+        assert self._apply(fi, cj, "ИСТЕЦ, ТРЕТЬЕ ЛИЦО") is True
+        assert fi["appeal_appellant_is_bank"] is None
+
+    def test_composite_name_is_dirty_and_self_heals(self):
+        """Составное слово-роль, записанное старой логикой как имя, —
+        «грязное»: новый прогон карточки его перезаписывает."""
+        fi = {"appeal_appellant": "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ",
+              "appeal_appellant_is_bank": False,
+              "appeal_appellant_status": "Иное лицо"}
+        cj = {"plaintiff": "ПАО Сбербанк", "defendant": "Иванов",
+              "bank_role": "Истец"}
+        assert self._apply(fi, cj, "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ") is True
+        assert fi["appeal_appellant"] == "Истец"
+        assert fi["appeal_appellant_is_bank"] is True
+        assert fi["appeal_appellant_status"] == "Истец"
 
 
 class TestApplyFiCassator:
