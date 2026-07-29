@@ -86,6 +86,7 @@ function adminPageConfig() {
     pushesUrl: base + "/data/last_personal_pushes.json",
     digestUrl: base + "/data/last_digest.json",
     healthUrl: base + "/data/parse_health.json",
+    bankParseUrl: base + "/data/bank_parse_report.json",
     dashboardUrl: base + "/sberbank_dashboard.html",
     siteBase: base,
     ghRepo: cfgVar("GH_REPO", GH_REPO_DEFAULT),

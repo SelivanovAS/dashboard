@@ -7,13 +7,14 @@ Cloudflare Worker — это маленький серверный скрипт,
 1. **Хранит push-подписки и watchlist** пользователей PWA и отдаёт **админку**
    подписчиков — потому что у дашборда (статика на GitHub Pages) нет своего
    бэкенда, а где-то хранить подписки нужно.
-2. **Показывает живой лог прогона** (блок лога в админке): облачный прогон
+2. **Принимает лог прогона** (`POST /run-progress`): облачный прогон
    GitHub Actions шлёт весь свой stdout через
    [`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py)
    (`source:"github"` + ссылка на run), Mac-резерв — вехи через
-   `ops/mac-local-run/progress_pusher.py` (без `source`); оба — батчами на
-   `POST /run-progress`. Админка автообновляется — ход парсинга видно из
-   браузера и с телефона, лог хранится 14 дней (текущий + предыдущий прогон).
+   `ops/mac-local-run/progress_pusher.py` (без `source`); оба — батчами,
+   лог хранится в KV 14 дней (текущий + предыдущий прогон). ⚠️ Блок живого
+   лога из админки удалён 29.07.2026 (см. раздел «Админка» ниже) — канал
+   пишется без UI-читателя, логи смотрятся на вкладке Actions GitHub.
 3. **Запускает обновление по расписанию** — cron возвращён в облако
    **05.07.2026** (суды снова пускают иностранные IP; история раскола D2 — в
    [01. Обзор](01-обзор-и-архитектура.md)). LaunchAgent на Mac усыплён и
@@ -29,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:1204](../../cloudflare-worker/worker.js#L1204)):
+`scheduled(event, env)` ([worker.js:1205](../../cloudflare-worker/worker.js#L1205)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -55,26 +56,26 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([1247](../../cloudflare-worker/worker.js#L1247)).
+Маршрутизатор — `fetch(request, env)` ([1248](../../cloudflare-worker/worker.js#L1248)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
 
 | Маршрут | Метод | Обработчик | Авторизация | Назначение |
 |---------|-------|-----------|-------------|------------|
-| `/subscribe` | POST | `handleSubscribe` ([170](../../cloudflare-worker/worker.js#L170)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
-| `/watchlist` | POST | `handleSetWatchlist` ([238](../../cloudflare-worker/worker.js#L238)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
-| `/unsubscribe` | POST | `handleUnsubscribe` ([294](../../cloudflare-worker/worker.js#L294)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
-| `/subscriptions` | GET | `handleListSubscriptions` ([322](../../cloudflare-worker/worker.js#L322)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
-| `/mark-owner` | POST | `handleMarkOwner` ([352](../../cloudflare-worker/worker.js#L352)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/run-progress` | POST | `handleRunProgress` ([409](../../cloudflare-worker/worker.js#L409)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
-| `/admin/run-progress` | GET | `handleAdminRunProgress` ([463](../../cloudflare-worker/worker.js#L463)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона для блока живого лога. |
-| `/admin` | GET | `handleAdmin` ([555](../../cloudflare-worker/worker.js#L555)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
-| `/admin/data` | GET | `handleAdminData` ([515](../../cloudflare-worker/worker.js#L515)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([605](../../cloudflare-worker/worker.js#L605)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([630](../../cloudflare-worker/worker.js#L630)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([619](../../cloudflare-worker/worker.js#L619)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([718](../../cloudflare-worker/worker.js#L718)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/subscribe` | POST | `handleSubscribe` ([171](../../cloudflare-worker/worker.js#L171)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
+| `/watchlist` | POST | `handleSetWatchlist` ([239](../../cloudflare-worker/worker.js#L239)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
+| `/unsubscribe` | POST | `handleUnsubscribe` ([295](../../cloudflare-worker/worker.js#L295)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
+| `/subscriptions` | GET | `handleListSubscriptions` ([323](../../cloudflare-worker/worker.js#L323)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
+| `/mark-owner` | POST | `handleMarkOwner` ([353](../../cloudflare-worker/worker.js#L353)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
+| `/run-progress` | POST | `handleRunProgress` ([410](../../cloudflare-worker/worker.js#L410)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([464](../../cloudflare-worker/worker.js#L464)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
+| `/admin` | GET | `handleAdmin` ([556](../../cloudflare-worker/worker.js#L556)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
+| `/admin/data` | GET | `handleAdminData` ([516](../../cloudflare-worker/worker.js#L516)) | `OWNER_SECRET` | JSON-данные для админки. |
+| `/admin/label` | POST | `handleAdminLabel` ([606](../../cloudflare-worker/worker.js#L606)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([631](../../cloudflare-worker/worker.js#L631)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([620](../../cloudflare-worker/worker.js#L620)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([719](../../cloudflare-worker/worker.js#L719)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 
 CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (`corsHeaders`,
 [47](../../cloudflare-worker/worker.js#L47)).
@@ -84,14 +85,14 @@ CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (
 Каждая запись хранит: `created_at` (один раз), `last_seen_at` (на каждом
 `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`,
 `label`, `is_owner`, `watchlist`. Канонизация watchlist использует ту же логику,
-что и бэкенд (`wnBuildAliasToCanonical`, [103](../../cloudflare-worker/worker.js#L103),
-с кэшем `getAliasMapCached`, [138](../../cloudflare-worker/worker.js#L138), читающим
+что и бэкенд (`wnBuildAliasToCanonical`, [104](../../cloudflare-worker/worker.js#L104),
+с кэшем `getAliasMapCached`, [139](../../cloudflare-worker/worker.js#L139), читающим
 `cases.json` с GitHub Pages).
 
 ## Админка подписчиков
 
 URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`.
-`handleAdmin` ([555](../../cloudflare-worker/worker.js#L555)) рендерит HTML
+`handleAdmin` ([556](../../cloudflare-worker/worker.js#L556)) рендерит HTML
 (`renderAdminHtml`, [25](../../cloudflare-worker/admin_page.js#L25)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
 устройство, флаг owner, даты создания/входа/обновления watchlist, размер и
@@ -99,20 +100,28 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 `last_personal_pushes.json`). Действия: ✏ имя, 📋 редактировать watchlist,
 🗑 удалить.
 
-В карточке «Прогоны GitHub Actions» — блок **живого лога прогона**
-(`loadProgress` в `admin_page.js`): статус текущего прогона (идёт / завершён +
-давность), заголовок по источнику — «Прогон (GitHub Actions)» со ссылкой на run
-или «Парсинг на Mac (резерв)», автообновление каждые 15 с, пока прогон не
-завершён (батчи пушера уходят раз в ~60 с — экономия KV-writes free-tier,
-инцидент «50% лимита» 17.07.2026); предыдущий прогон — под спойлером, завершённый старше суток —
-свёрнутый details. Лог сворачивается по фазам «— [N/9] …» (`renderLogGroups`):
-у фаз счётчик строк и бейджи ⚠/✖, вручную открытые фазы переживают ререндер,
-финальная «Сводка прогона» видна без разворачивания. Источник данных —
-`GET /admin/run-progress`; лог заливает облачный workflow
-([`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py), весь
-stdout) или Mac-резерв
-([`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py),
-только вехи).
+⚠️ **С 29.07.2026 карточка «Прогоны GitHub Actions» урезана до «Запуск
+прогона»** (решение юриста): список последних 8 runs и блок живого лога из
+админки удалены — статусы и логи смотрятся на вкладке Actions GitHub.
+Остались кнопки запуска, метка следующего крона и плитки пульта «Последний
+прогон»/«Автозапуск» (их питает прежний `GET /admin/gh-runs`). Канал лога
+при этом жив целиком: `POST /run-progress` (заливает облачный workflow —
+[`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py), весь
+stdout — или Mac-резерв
+[`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py),
+только вехи) и `GET /admin/run-progress` работают, лог лежит в KV 14 дней —
+UI-читателя у него просто нет.
+
+Рядом — карточка **«Парсинг исков банка»** (с 29.07.2026, owner и operator):
+пер-кейсовый отчёт последнего прогона по bank-треку из
+`data/bank_parse_report.json` (пишет `BankParseReport`, фаза 7c `main_json`;
+URL — `bankParseUrl` из `adminPageConfig()`). Группы по исходам: ошибки
+загрузки (капча/блок/HTTP/пустая шелуха), «без карточки», «вне очереди» —
+раскрыты; «спарсено» и пропуски (недельный ритм ИЛ, будущее заседание,
+прочее) — свёрнуты. Внутри группы строки рендерятся порциями по 30
+(`BP_CHUNK`, кнопка «Показать ещё») — на Урале дел будут тысячи. Русские
+причины приходят готовыми из Python (`skip_reason_ru`, `_OUTCOME_RU`).
+Файла нет (404, трек выключен) → карточка скрыта.
 
 ## Секреты Worker'а
 

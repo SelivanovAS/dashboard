@@ -771,6 +771,7 @@ _EXTRAS_RU = {
     "Cassation parse": "Парсинг касс.",
     "Cassation skip": "Пропусков касс.",
     "Cassation force": "Форс-парс касс.",
+    "Bank parse": "Парсинг исков банка",
     "JSON total": "Всего дел в JSON",
     # legacy main() (CSV-режим апелляции)
     "Cases checked": "Проверено дел",

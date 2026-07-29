@@ -44,6 +44,7 @@
 - `data/parse_health.json` — журнал здоровья парсеров: пер-источник история количества результатов поиска (20 судов 1-й инст., апелляция, 7kas до/после HMAO-фильтра). Для судов 1-й инст. счётчик — сберовские строки ДО фильтра «банк-ответчик» (`stats["sber_rows"]` из `parse_first_instance_search`): вал исков самого банка вытесняет ответчик-дела со стр. 1 и обнулял бы метрику без поломки (ложный алерт по Октябрьскому р/с 14–15.07.2026). Детектор «молчаливой поломки» (`update_parse_health`, блок 4e в `main_json`) шлёт сервисный 🩺-алерт в Telegram: суд с медианой ≥1 вернул 0 (на 1-м и 3-м нулевом прогоне + сообщение о восстановлении), HTTP-фейл 3 прогона подряд, все источники разом по нулям, ≥5 карточек-«огрызков» за прогон.
 - [data/last_digest_context.json](data/last_digest_context.json) — снимок контекста для `--replay-last`.
 - [data/last_personal_pushes.json](data/last_personal_pushes.json) — журнал последней push-рассылки (что получила каждая подписка): variant, title, body, click_url. Перезаписывается на каждом прогоне `send_web_push`. Читается админкой подписчиков.
+- `data/bank_parse_report.json` — пер-кейсовый отчёт парсинга трека «Иски банка» за последний прогон: какое дело парсили / пропустили и почему (пишет `BankParseReport` из [scripts/court_monitor/bank_report.py](scripts/court_monitor/bank_report.py) в фазе 7c `main_json`; перезаписывается каждым прогоном, история — в git). Читает карточка «Парсинг исков банка» в админке; нет файла (трек выключен) — карточка скрыта.
 - [data/sberbank_cases.csv](data/sberbank_cases.csv) + архив — legacy CSV (UTF-8 с BOM), всё ещё коммитится для совместимости.
 - [app.js](app.js) + [sberbank_dashboard.html](sberbank_dashboard.html) + [styles.css](styles.css) — SPA-фронт (GitHub Pages).
 - [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml) + [cloudflare-worker/worker.js](cloudflare-worker/worker.js) — автозапуск, push-подписки, админ-эндпоинты; [cloudflare-worker/admin_page.js](cloudflare-worker/admin_page.js) — HTML/JS страницы админки (см. «Админка подписчиков»).
@@ -74,17 +75,12 @@
 | `appeal_court_for_fi_domain` (апел-суд по домену суда 1-й инст.) | [scripts/court_monitor/courts.py:159](scripts/court_monitor/courts.py:159) |
 | `CourtConfig.search_by_fi_number_url` (целевой поиск апелляции по номеру 1-й инст., G2_CASE__CASE_NUMBER_ISS) | [scripts/court_monitor/regions/base.py:114](scripts/court_monitor/regions/base.py:114) |
 | `relink_awaiting_appeal` (дослинк awaiting_appeal, не попавших на стр. 1 поиска апелляции) | [scripts/court_monitor/runs.py:150](scripts/court_monitor/runs.py:150) |
-<<<<<<< HEAD
-| `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`) | [scripts/court_monitor/runs.py:314](scripts/court_monitor/runs.py:314) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1168](scripts/court_monitor/lifecycle.py:1168) |
-=======
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
 | `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1168](scripts/court_monitor/lifecycle.py:1168) |
->>>>>>> claude/vibrant-cannon-namvk0
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:79](scripts/court_monitor/netutil.py:79) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:158](scripts/court_monitor/config.py:158) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:165](scripts/court_monitor/config.py:165) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1198](scripts/court_monitor/lifecycle.py:1198) |
@@ -92,7 +88,7 @@
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:968](scripts/court_monitor/linking.py:968) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:260](scripts/court_monitor/parsing/cards.py:260) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:265](scripts/court_monitor/parsing/cards.py:265) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `_extract_cassation_act_text` (секция `cont_doc1`) + `parse_cassation_card` | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
@@ -100,13 +96,8 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
-<<<<<<< HEAD
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:475](scripts/court_monitor/runs.py:475) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1739](scripts/court_monitor/runs.py:1739) |
-=======
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:475](scripts/court_monitor/runs.py:475) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1739](scripts/court_monitor/runs.py:1739) |
->>>>>>> claude/vibrant-cannon-namvk0
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:479](scripts/court_monitor/runs.py:479) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1743](scripts/court_monitor/runs.py:1743) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -211,9 +202,11 @@
   Telegram (шаг `if: failure()`, curl без Python).
 - **Живой лог прогона (с 13.07.2026):** stdout прогона идёт через pass-through-пушер
   [scripts/gh_progress_pusher.py](scripts/gh_progress_pusher.py) (`… --json 2>&1 |
-  python -u …`, `set -o pipefail`) → батчи на `POST /run-progress` Worker'а →
-  блок «Прогон (GitHub Actions)» в админке (свёртка по фазам «— [N/9]»), лог
-  хранится в KV 14 дней (current + prev, cap 1000 строк). Токен —
+  python -u …`, `set -o pipefail`) → батчи на `POST /run-progress` Worker'а; лог
+  хранится в KV 14 дней (current + prev, cap 1000 строк). ⚠️ С 29.07.2026 блок
+  живого лога из админки УДАЛЁН (решение юриста, вместе со списком последних
+  прогонов) — канал и эндпоинты `/run-progress`/`/admin/run-progress` живы, но
+  UI-читателя нет; смотреть логи — на вкладке Actions в GitHub. Токен —
   `secrets.PUSH_SECRET || secrets.PROGRESS_SECRET` (Worker принимает оба;
   PUSH_SECRET первым — им же ходит пуш-доставка, он проверяемо совпадает);
   без секретов пушер — чистый cat, прогон не страдает, но объявляет об этом
@@ -309,7 +302,6 @@
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
 
-<<<<<<< HEAD
 **Процессуальное завершение 1-й инст. (`classify_fi_termination` /
 `fi_termination_details`, lifecycle.py; с 29.07.2026):** возврат иска, отказ
 в принятии и передача по подсудности — НЕ решения по существу и живут ОДНОЙ
@@ -354,10 +346,7 @@ digest/template.py):** если у дела в прогоне есть исхо�
 «Изготовлено мотивированное решение…»: рендер нормализует её в отдельный
 полезный факт. Применяется в обоих путях (гибрид и `DIGEST_FULL_LLM=1`).
 
-Константы в [scripts/court_monitor/runs.py:1352](scripts/court_monitor/runs.py:1352):
-=======
 Константы в [scripts/court_monitor/runs.py:1368](scripts/court_monitor/runs.py:1368):
->>>>>>> claude/vibrant-cannon-namvk0
 `FI_ARCHIVE_DAYS=60`, `APPEAL_NO_ACT_GRACE_DAYS=30`,
 `CASSATION_WATCH_DAYS=120`, `CASSATION_ACT_ARCHIVE_DAYS=30`,
 `CASSATION_NO_ACT_PUBLISH_DAYS=45`, `COLD_ARCHIVE_DAYS=365`.
@@ -586,11 +575,27 @@ drawer; номера не уникальны между судами — пот�
   хранится в `fi.writs`, диффа нет, а гард `case_decided` глушит
   hearing-события. На симуляции дрейфа по пилоту переворачивалось 6 листов из
   6. Фолбэк на `hearing_date` оставлен для архивных записей.
+- **Отчёт парсинга (с 29.07.2026)**: аккумулятор `BankParseReport`
+  ([scripts/court_monitor/bank_report.py](scripts/court_monitor/bank_report.py))
+  собирает в FI-цикле пер-кейсовый исход каждого bank-дела (parsed /
+  skip+причина из `skip_reason_ru` / fetch_captcha·blocked·http·empty по
+  **дельте METRICS вокруг единственного HTTP-запроса итерации** /
+  empty_shell / no_link·bad_link·court_disabled / not_in_queue) + флаги
+  degraded/force_parsed/left_track/archived и типы событий дайджеста →
+  `data/bank_parse_report.json` в фазе 7c (обёртка `save_bank_parse_report`
+  глушит ошибки записи — сервисный канал не роняет прогон), коммитится
+  workflow'ом → карточка «Парсинг исков банка» в админке. Методы
+  аккумулятора сами игнорируют не-track дела; ключ — идентичность dict
+  (промоушен М→2 не рвёт запись). В сводке прогона — ключ `Bank parse`
+  (X/Y). Попутно `writ_weekly` выделен отдельным слагаемым в плане очереди
+  и итоге FI (раньше сливался в «без движения»/«заседание в будущем»).
 - Тесты: [scripts/tests/test_bank_track.py](scripts/tests/test_bank_track.py),
   [scripts/tests/test_import_bank_registry.py](scripts/tests/test_import_bank_registry.py),
   [scripts/tests/test_bank_storage_split.py](scripts/tests/test_bank_storage_split.py),
-  [scripts/tests/test_frontend_writs.py](scripts/tests/test_frontend_writs.py)
-  (split-хранение, ротация bank-архива, composite-матчинг push).
+  [scripts/tests/test_frontend_writs.py](scripts/tests/test_frontend_writs.py),
+  [scripts/tests/test_bank_report.py](scripts/tests/test_bank_report.py)
+  (split-хранение, ротация bank-архива, composite-матчинг push, отчёт
+  парсинга и его проводка).
 
 ## Команды
 
@@ -652,7 +657,7 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 **Дизайн v2 (13.07.2026)** — визуальный язык дашборда: токены цветов/шрифтов скопированы из [styles.css](styles.css) (IBM Plex с Google Fonts, сберовский зелёный, бейджи-пилюли, цвета стадий teal/indigo/violet — карта `stageBadge` зеркалит `stageBadgeHtml` из app.js), 3-режимная тема авто/свет/тьма (localStorage `admin_theme`, инлайн-скрипт в head), статусы — цветные точки/пилюли вместо эмодзи, иконки — inline-SVG. При смене палитры дашборда токены админки синхронизировать вручную.
 
 Компоновка: липкая glass-шапка (лого · чипы-якоря «Система/LLM/Подписчики» с подсветкой активной секции через IntersectionObserver · сводка · тоггл темы · Обновить) → **пульт из 4 кликабельных stat-плиток** (Последний прогон ok/сбой/идёт из gh-runs · Дайджест N изменений · Парсеры «все 22 ok»/«N ⚠» · Автозапуск + push-агрегат) → секции:
-- **#system** (грид 2 колонки на десктопе): карточка «Прогоны GitHub Actions» — последние 8 runs (точки-статусы, живой пульсирует и автообновляется каждые 15 с, ссылки на GitHub) через GET `/admin/gh-runs` (Worker проксирует GitHub API, PAT на сервере; отдаёт и `next_cron_at` с учётом праздников), кнопки «▶ Полный прогон» (`smart_skip:"false"`) и «Стандартный прогон» (`smart_skip:"true"`, как ежедневный крон; в выходной сразу завершится «нерабочий день») → POST `/admin/dispatch`; внутри же — блок живого лога прогона (данные `GET /admin/run-progress`, поллинг 15 с пока идёт — батчи пушера раз в ~60 с; заголовок по `source`: «Прогон (GitHub Actions)» с ссылкой на run / «Парсинг на Mac (резерв)»; лог сворачивается по фазам «— [N/9]» — `renderLogGroups`, вручную открытые фазы переживают ререндер, у фаз бейджи ⚠/✖, финальная «Сводка прогона» видна без разворачивания; завершённый старше суток — свёрнутый details, предыдущий прогон — вложенный details) | карточка «Здоровье парсеров» из [data/parse_health.json](data/parse_health.json): светофор-точки (красный fail_streak≥3/alerted_zero; жёлтый fail_streak≥1 или ноль при медиане≥1), спарклайны, проблемные вверху, первые 8 + свёрток; имена судов — карта `COURT_NAMES` (синхронизировать при правке `FIRST_INSTANCE_COURTS`).
+- **#system** (грид 2 колонки на десктопе): карточка «Запуск прогона» — кнопки «▶ Полный прогон» (`smart_skip:"false"`) и «Стандартный прогон» (`smart_skip:"true"`, как ежедневный крон; в выходной сразу завершится «нерабочий день») → POST `/admin/dispatch`, рядом метка следующего автозапуска. **Список последних 8 runs и блок живого лога УДАЛЕНЫ 29.07.2026** (решение юриста) — статусы/логи смотрятся на вкладке Actions GitHub; GET `/admin/gh-runs` (Worker проксирует GitHub API, PAT на сервере; отдаёт и `next_cron_at` с учётом праздников) остался — им питаются плитки пульта «Последний прогон» (автообновление каждые 15 с пока прогон идёт) и «Автозапуск» | карточка «Здоровье парсеров» из [data/parse_health.json](data/parse_health.json): светофор-точки (красный fail_streak≥3/alerted_zero; жёлтый fail_streak≥1 или ноль при медиане≥1), спарклайны, проблемные вверху, первые 8 + свёрток; имена судов — карта `COURT_NAMES` (синхронизировать при правке `FIRST_INSTANCE_COURTS`) | карточка «Парсинг исков банка» (с 29.07.2026, обе роли) из `data/bank_parse_report.json`: пер-кейсовый итог последнего прогона по bank-треку — группы по исходам (ошибки загрузки/без карточки/вне очереди раскрыты; спарсено и пропуски по ритму ИЛ / будущим заседаниям свёрнуты), внутри группы порции по 30 строк (`BP_CHUNK`, «Показать ещё» — на Урале дел тысячи), русские причины считает Python (`skip_reason_ru`/`_OUTCOME_RU` в bank_report.py), 404 файла → карточка скрыта (территория без трека).
 - **#llm**: топ-5 рейтинга shir-man (браузером напрямую, CORS `*`) + мини-форма запуска `test_digest.yml` через POST `/admin/dispatch`: провайдер, модель (подписи «топ-N» обогащаются рейтингом), галки to_group/push_all/full_llm/commit_results (по умолчанию ВЫКЛ — безопасный прогон в личку; при опасных галках — confirm). У claude — выбор модели (haiku эталон / Sonnet 5 / Opus 4.8, `CLAUDE_MODEL` через input `claude_model`; кэш пересказов не-haiku неймспейсится по модели) и уровня усилий (`claude_effort` → env `CLAUDE_EFFORT` → `output_config.effort`; селектор виден только для sonnet/opus — haiku эффорт не поддерживает). ⚠ Модели нового поколения (Opus 4.7+/Sonnet 5) не принимают `temperature` (400) — пейлоад собирает `llm._claude_payload`: adaptive-мышление + effort вместо температуры, расширенный max_tokens и таймаут; боевой haiku-путь байт-в-байт прежний.
 - **#subs**: счётчик + **поиск по подпискам** (имя/устройство/номера и стороны дел watchlist) + карточки: имя, пилюля устройства, бейджи owner/«⏳ истекает» (нет входа 45+ дней — KV-TTL 60), kv-строка дат, свёртки «Последний push» (бейдж варианта; из [data/last_personal_pushes.json](data/last_personal_pushes.json); skip = «нет событий по watchlist») и «Дела» с бейджами стадий, сторонами и судом. Карта дел строится из cases.json **и cases_archive.json** (с 13.07): звезда на завершённом деле — бейдж «в архиве» (в модалке Watchlist такая строка видна с галкой, снять можно; при реактивации дела звезда оживает), номер-сирота (нет ни в активных, ни в архиве — дело удалено вручную или переименовано до Этапа 3) — бейдж «нигде не найдено» + крестик-удаление прямо в строке; счётчик «⚠ N нигде не найдено» — в сводке шапки. Периодический read-only аудит — [scripts/audit_watchlists.py](scripts/audit_watchlists.py). Данные плитки «Дайджест» — из [data/last_digest.json](data/last_digest.json).
 

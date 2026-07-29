@@ -150,6 +150,13 @@ LAST_PERSONAL_PUSHES_PATH = os.environ.get(
     "LAST_PERSONAL_PUSHES_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_personal_pushes.json")
 )
+# Пер-кейсовый отчёт парсинга трека «Иски банка» за последний прогон: какие
+# дела парсились, какие пропущены и почему (пишет BankParseReport в фазе 7c
+# main_json, читает карточка «Парсинг исков банка» в админке Worker'а).
+BANK_PARSE_REPORT_PATH = os.environ.get(
+    "BANK_PARSE_REPORT_PATH",
+    os.path.join(os.path.dirname(CSV_PATH) or "data", "bank_parse_report.json")
+)
 # Журнал здоровья парсеров: пер-источник история количества результатов
 # поиска (суды 1-й инст., апелляция, 7kas). Детектор «молчаливой поломки»:
 # суд, стабильно дававший результаты, вдруг отдаёт 0 (смена вёрстки,
