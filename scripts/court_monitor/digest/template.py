@@ -811,6 +811,20 @@ _FI_TERMINATION_LABELS = {
 # а не статус (просьба юриста 07.07.2026: «апеллянт: Истец Истец» → имя лица).
 _BARE_ROLE_WORDS = {"Истец", "Ответчик", "Третье лицо", "Иное лицо"}
 
+# Настоящее имя/наименование: хотя бы одно слово из ≥2 букв ВНЕ скобок.
+# Поле «Заявитель» карточки иногда отдаёт обрывок разметки — «(жалобы)»
+# (дело 33-13721/2026, Свердловский облсуд): классификатор не считает это
+# словом-ролью и сохраняет как имя, а дайджест печатал «(жалоба иного лица
+# (жалобы))».
+_NAME_HAS_WORD_RE = re.compile(r"[А-ЯЁа-яёA-Za-z]{2,}")
+
+
+def _is_meaningful_appellant_name(name: str) -> bool:
+    """True, если строка похожа на имя/наименование, а не на служебный
+    обрывок карточки."""
+    outside = re.sub(r"\([^)]*\)", " ", name or "")
+    return bool(_NAME_HAS_WORD_RE.search(outside))
+
 
 def _fi_appellant_display(role: str, name: str,
                           pl_disp: str, df_disp: str) -> str:
@@ -849,11 +863,12 @@ def _appeal_complaint_suffix(d: dict, pl_disp: str, df_disp: str) -> str:
     role = (d.get("appellant_role") or "").strip()
     name = (d.get("appellant_name") or "").strip()
     resolved_from_role = False
-    if name and appellant_role_words(name) is not None:
+    if name and (appellant_role_words(name) is not None
+                 or not _is_meaningful_appellant_name(name)):
         # Слово-роль вместо имени (в т.ч. составное «ИСТЕЦ, ОТВЕТЧИК» или
         # голый «ПРЕДСТАВИТЕЛЬ» — classify_appellant_role сохраняет их в
-        # short_name как есть): это статус, а не наименование лица —
-        # печатать нельзя, резолвим только через роль.
+        # short_name как есть) либо служебный обрывок «(жалобы)»: это не
+        # наименование лица — печатать нельзя, резолвим только через роль.
         name = ""
     if not name:
         resolved_from_role = True

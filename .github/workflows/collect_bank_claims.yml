@@ -16,6 +16,10 @@ on:
         description: "Домен суда 1-й инстанции"
         required: false
         default: "surggor--hmao.sudrf.ru"
+      srv_num:
+        description: "Номер сервера суда (Покачи на vartovray — 2)"
+        required: false
+        default: "1"
       pages:
         description: "Сколько страниц выдачи обойти"
         required: false
@@ -77,6 +81,7 @@ jobs:
           fi
           python3 scripts/collect_bank_claims.py \
             --court "${{ github.event.inputs.court_domain || 'surggor--hmao.sudrf.ru' }}" \
+            --srv "${{ github.event.inputs.srv_num || '1' }}" \
             --pages "${{ github.event.inputs.pages || '10' }}" \
             --limit "${{ github.event.inputs.limit || '0' }}" \
             $DRY_FLAG 2>&1 \

@@ -53,6 +53,34 @@ class TestDiscoverPager:
         assert cbc.discover_page_urls(html, "https://x.sudrf.ru") == {}
 
 
+# ── resolve_court: пара (домен, srv_num) ─────────────────────────────────────
+
+class TestResolveCourt:
+    """На vartovray--hmao.sudrf.ru два суда: районный (srv 1) и постоянное
+    присутствие в Покачи (srv 2). Резолв по одному домену всегда отдавал
+    первый — Покачи собрать было нельзя."""
+
+    def test_default_server_gives_district_court(self):
+        court = cbc.resolve_court("vartovray--hmao.sudrf.ru", 1)
+        assert court is not None and court.name == "Нижневартовский районный суд"
+
+    def test_second_server_gives_pokachi(self):
+        court = cbc.resolve_court("vartovray--hmao.sudrf.ru", 2)
+        assert court is not None and court.srv_num == 2
+        assert "Покачи" in court.name
+
+    def test_domain_normalized(self):
+        court = cbc.resolve_court("  VARTOVRAY--HMAO.SUDRF.RU ", 2)
+        assert court is not None and "Покачи" in court.name
+
+    def test_missing_server_is_none(self):
+        """У обычного суда второго сервера нет — молча брать первый нельзя."""
+        assert cbc.resolve_court("megion--hmao.sudrf.ru", 2) is None
+
+    def test_unknown_domain_is_none(self):
+        assert cbc.resolve_court("nosuch--hmao.sudrf.ru", 1) is None
+
+
 # ── row_passes ───────────────────────────────────────────────────────────────
 
 class TestRowPasses:

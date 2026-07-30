@@ -3769,6 +3769,112 @@ class TestFirstInstanceSearchStats:
         assert len(results) == 1
 
 
+# ── Номера постоянных судебных присутствий (Покачи) ──────────────────────────
+
+class TestPermanentPresenceCaseNumbers:
+    """Трёхчастные номера постоянного судебного присутствия: «2-2-279/2026».
+
+    Покачи (вторая площадка Нижневартовского районного, srv_num=2) вставляет
+    в номер сегмент присутствия. Узкая регулярка `_FI_CASE_NUM_RE` такие строки
+    отбрасывала целиком: при 193 сберовских делах в выдаче парсер отдавал 0
+    строк (проверено вживую 30.07.2026), суд был невидим и сборщику исков
+    банка, и автопоиску ответчик-дел, а журнал здоровья по домену месяцами
+    показывал ноль.
+    """
+
+    _search_html = staticmethod(TestFirstInstanceSearchStats._search_html)
+
+    def _court(self):
+        """Покачи — единственный суд ХМАО со вторым сервером."""
+        return next(c for c in uc.FIRST_INSTANCE_COURTS if c.srv_num == 2)
+
+    def test_presence_number_parsed(self):
+        html = self._search_html([
+            ("2-2-279/2026", "ПАО Сбербанк", "Костинова Т.К."),
+        ])
+        rows = uc.parse_first_instance_search(html, self._court(),
+                                              keep_all_roles=True)
+        assert [r["case_number"] for r in rows] == ["2-2-279/2026"]
+        assert rows[0]["bank_role"] == "Истец"
+
+    def test_presence_material_combo_split(self):
+        """«9-2-65/2026 ~ М-2-309/2026»: номер и хвостовой материал разделены."""
+        html = self._search_html([
+            ("9-2-65/2026 ~ М-2-309/2026", "ПАО Сбербанк", "Кравец Б.В."),
+        ])
+        rows = uc.parse_first_instance_search(html, self._court(),
+                                              keep_all_roles=True)
+        assert rows[0]["case_number"] == "9-2-65/2026"
+        assert rows[0]["material_number"] == "М-2-309/2026"
+
+    def test_presence_defendant_row_visible_to_main_search(self):
+        """Боевой автопоиск (только банк-ответчик) тоже видит присутствие."""
+        html = self._search_html([
+            ("2-2-240/2025", "Магомедова А.М.", "ПАО Сбербанк"),
+        ])
+        rows = uc.parse_first_instance_search(html, self._court())
+        assert [r["case_number"] for r in rows] == ["2-2-240/2025"]
+
+    def test_plain_numbers_still_parsed(self):
+        """Обычные номера не сломаны широкой регуляркой."""
+        html = self._search_html([
+            ("2-100/2026", "ПАО Сбербанк", "Петров П.П."),
+            ("М-341/2026", "ПАО Сбербанк", "Шульга Н.Л."),
+        ])
+        rows = uc.parse_first_instance_search(html, self._court(),
+                                              keep_all_roles=True)
+        assert [r["case_number"] for r in rows] == ["2-100/2026", "М-341/2026"]
+
+    def test_non_case_row_still_skipped(self):
+        """Строка без номера дела по-прежнему не проходит."""
+        html = self._search_html([
+            ("Всего по запросу найдено — 193", "ПАО Сбербанк", "Петров П.П."),
+        ])
+        assert uc.parse_first_instance_search(html, self._court(),
+                                              keep_all_roles=True) == []
+
+    def test_target_search_finds_presence_number(self):
+        """Целевой поиск по номеру (add_cases_manually / импортёр реестра)
+        тоже должен видеть трёхчастный номер — иначе дело Покачи нельзя
+        завести вручную."""
+        from court_monitor.target_search import parse_search_row
+        html = _fi_number_search_html("2-2-279/2026")
+        row = parse_search_row(html, self._court(), "2-2-279/2026")
+        assert row is not None and row["case_number"] == "2-2-279/2026"
+
+    def test_target_search_keeps_number_boundary(self):
+        """Сервер ищет подстрокой: чужая строка не должна сойти за нужную."""
+        from court_monitor.target_search import parse_search_row
+        html = _fi_number_search_html("2-2-279/2026")
+        assert parse_search_row(html, self._court(), "2-2-27/2026") is None
+
+
+class TestFiHealthKey:
+    """Ключ журнала здоровья различает суды одного домена.
+
+    До 30.07.2026 ключом был голый домен: Покачи (srv 2) писал последним и
+    затирал наблюдение Нижневартовского районного (srv 1) — детектор молчаливой
+    поломки был слеп по обоим судам сразу.
+    """
+
+    def _courts(self):
+        pair = [c for c in uc.FIRST_INSTANCE_COURTS
+                if c.domain == "vartovray--hmao.sudrf.ru"]
+        return {c.srv_num: c for c in pair}
+
+    def test_keys_differ_within_domain(self):
+        from court_monitor import runs as cm_runs
+        courts = self._courts()
+        assert cm_runs.fi_health_key(courts[1]) != cm_runs.fi_health_key(courts[2])
+
+    def test_first_server_keeps_legacy_key(self):
+        """У srv 1 ключ прежний — накопленная история журнала не рвётся."""
+        from court_monitor import runs as cm_runs
+        courts = self._courts()
+        assert cm_runs.fi_health_key(courts[1]) == "fi:vartovray--hmao.sudrf.ru"
+        assert cm_runs.fi_health_key(courts[2]) == "fi:vartovray--hmao.sudrf.ru#2"
+
+
 class TestClassifyFiTermination:
     """Классификатор процессуального завершения 1-й инстанции.
 
