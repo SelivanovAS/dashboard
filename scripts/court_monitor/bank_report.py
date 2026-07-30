@@ -18,6 +18,8 @@ main_json); файл коммитится workflow'ом и рендерится 
 логику не дублирует, а только группирует по outcome.
 """
 
+from __future__ import annotations
+
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.lifecycle import is_bank_plaintiff_track
