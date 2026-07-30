@@ -8,6 +8,11 @@
 где банк — истец. Исключаются дела с итогами «оставлено без рассмотрения»,
 «передано по подсудности», «возвращено», «прекращено» (решение юриста
 26.07.2026; «отказано» вносится — по нему возможна апелляция банка).
+Также не берутся дела с признаком апелляции/кассации в карточке (первый же
+прогон увёл бы их из лёгкого трека в основной cases.json) и дела с уже
+выданным ИЛ на исполнение решения — цикл трека по ним пройден; обеспечительные
+листы не считаются (решение юриста 30.07.2026, сбор по Нижневартовскому
+городскому).
 
 Пагинация: формата пейджера sudrf в кодовой базе раньше не было — ссылки
 страниц ОБНАРУЖИВАЮТСЯ в HTML выдачи (href с sud_delo и page=N); если
@@ -23,6 +28,8 @@
 - [ALREADY]          — уже отслеживается (активные + архивы + bank-файлы)
 - [SKIPPED ROLE]     — банк в деле не истец
 - [EXCLUDED RESULT]  — итог из списка исключений юриста
+- [EXCLUDED APPEAL]  — жалоба/направление в апелляцию/кассацию — дело трек покинет
+- [EXCLUDED WRIT]    — выдан ИЛ на исполнение решения — цикл трека уже пройден
 - [NO LINK]          — в выдаче нет case_id|case_uid — карточку не открыть
 - [FETCH FAIL]       — сбой загрузки карточки
 
@@ -46,6 +53,7 @@ if _HERE not in sys.path:
 
 from court_monitor import config  # noqa: E402
 from court_monitor.config import log  # noqa: E402
+from court_monitor.lifecycle import classify_writ_kind  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
     is_fi_number_tracked,
@@ -187,7 +195,8 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
     rows, pages_done = fetch_search_rows(court, pages_limit)
     counters = {
         "pages": pages_done, "rows": len(rows), "added": 0, "already": 0,
-        "role": 0, "excluded_result": 0, "no_link": 0, "fetch_fail": 0,
+        "role": 0, "excluded_result": 0, "excluded_appeal": 0,
+        "excluded_writ": 0, "no_link": 0, "fetch_fail": 0,
     }
     if not rows:
         return counters
@@ -235,6 +244,35 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
                 f"{card_result[:60]} (итог из карточки)"
             )
             continue
+        # Дело уже ушло (или уходит) в апелляцию/кассацию — в лёгкий трек не
+        # берём: первый же прогон перевёл бы его в основной cases.json
+        # (bank_case_left_track), т.е. в треке оно побыло бы только мусорным
+        # транзитом (решение юриста 30.07.2026).
+        if (card_info.get("_fi_appeal_filed")
+                or card_info.get("_fi_sent_to_appeal")
+                or card_info.get("_fi_cassation_filed")
+                or card_info.get("_fi_sent_to_cassation")):
+            counters["excluded_appeal"] += 1
+            log.info(
+                f"[{i}/{len(rows)}] {num} — [EXCLUDED APPEAL] "
+                "жалоба/направление в вышестоящую инстанцию"
+            )
+            continue
+        # Уже выдан ИЛ на исполнение решения — жизненный цикл трека пройден,
+        # дело сразу ушло бы в bank-архив. Обеспечительные листы (выданы ДО
+        # решения) не считаются — такое дело ещё ждёт «настоящего» ИЛ. Статус
+        # листа не важен: «Отозван»/«Возвращен» — лист всё равно был выдан.
+        # decision_date на этапе сбора ещё нет — якорем classify_writ_kind
+        # служит «Дата заседания» карточки (его штатный фолбэк hearing_date).
+        fi_probe = {"hearing_date": card_info.get("Дата заседания", "")}
+        if any(classify_writ_kind(w, fi_probe) == "enforcement"
+               for w in card_info.get("_writs") or []):
+            counters["excluded_writ"] += 1
+            log.info(
+                f"[{i}/{len(rows)}] {num} — [EXCLUDED WRIT] "
+                "выдан ИЛ на исполнение решения"
+            )
+            continue
 
         entry = make_bank_entry(r, card_info, operator, now_iso, source="search_sweep")
         new_entries.append(entry)
@@ -259,6 +297,8 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
         f"+{counters['added']} добавлено{' (dry-run, без записи)' if dry_run else ''} | "
         f"{counters['already']} уже в базе | {counters['role']} не истец | "
         f"{counters['excluded_result']} исключено по итогу | "
+        f"{counters['excluded_appeal']} ушло в апелляцию/кассацию | "
+        f"{counters['excluded_writ']} с ИЛ на исполнение | "
         f"{counters['no_link']} без ссылки | {counters['fetch_fail']} сбоев карточек"
     )
     return counters

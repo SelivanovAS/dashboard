@@ -85,7 +85,7 @@
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:165](scripts/court_monitor/config.py:165) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1198](scripts/court_monitor/lifecycle.py:1198) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1199](scripts/court_monitor/lifecycle.py:1199) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:968](scripts/court_monitor/linking.py:968) |
@@ -437,7 +437,13 @@ drawer; номера не уникальны между судами — пот�
   выдачи уже несёт ссылку карточки → 1 HTTP на дело; исключаются итоги
   «без рассмотрения»/«по подсудности»/«возвращено»/«прекращено»
   (`_EXCLUDED_RESULT_RX`, решение юриста 26.07.2026; «отказано» вносится —
-  возможна апелляция банка). Общая сборка записи — `make_bank_entry`
+  возможна апелляция банка), а с 30.07.2026 (сбор по Нижневартовскому
+  городскому) — также дела с карточным признаком апелляции/кассации
+  (`_fi_appeal_filed`/`_fi_sent_to_appeal`/`_fi_cassation_filed`/
+  `_fi_sent_to_cassation` — дело покинуло бы трек первым прогоном) и дела с
+  уже выданным ИЛ на исполнение решения (`classify_writ_kind == "enforcement"`
+  с якорем «Дата заседания» карточки; обеспечительные листы не считаются,
+  статус листа не важен). Общая сборка записи — `make_bank_entry`
   (import_bank_registry.py).
 - **Прогон**: main_json подмешивает bank-дела в общий FI-цикл (фаза 1) и
   раскладывает обратно перед сохранением (`split_bank_track`, фаза 7c).
