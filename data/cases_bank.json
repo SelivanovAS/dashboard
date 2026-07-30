@@ -25,7 +25,7 @@
         "link": "279190496|6f8a3c5c-9fae-4e7a-8ade-c86d8991f5c4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28"
+        "last_checked_at": "2026-07-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -74,7 +74,7 @@
       }
     },
     {
-      "id": "М-6456/2026",
+      "id": "2-8631/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала Уральский Банк ПАО Сбербанк",
       "defendant": "Гаджиева Лейла Хандадаш кызы, Меликов Аждар Гурбан оглы, Меликов Садиг Новруз оглы",
@@ -82,21 +82,24 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-6456/2026",
+        "case_number": "2-8631/2026",
         "court": "Сургутский городской суд",
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Петухова Ольга Игоревна",
         "filing_date": "20.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 20:04. 21.07.2026",
-        "event_date": "21.07.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Судебное заседание. 16:50. Зал судебного заседания 234. 28.07.2026",
+        "event_date": "17.09.2026",
+        "hearing_date": "17.09.2026",
+        "hearing_time": "16:50",
         "link": "279002950|4a77e569-986a-4a89-8b56-83b055230886",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28"
+        "last_checked_at": "2026-07-30",
+        "material_number": "М-6456/2026",
+        "accepted_pending_emit": false,
+        "legal_force_est": "2026-11-03"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -275,7 +278,7 @@
         "link": "278819942|9b6a01e3-cbae-493b-8ecc-ef8947909f9c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28"
+        "last_checked_at": "2026-07-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -562,7 +565,7 @@
         "link": "278187824|e864fe82-caa0-42a7-9cbc-2c8539be9da5",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28"
+        "last_checked_at": "2026-07-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1209,7 +1212,7 @@
         "link": "277377140|81f7b8d0-f27b-4eb9-89ff-3d2275c0a601",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-08-29"
       },
       "appeal": null,
@@ -1630,7 +1633,7 @@
         "link": "277724256|5e2fba02-aa19-46ff-a4ea-c998e45ac859",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-08-18"
       },
       "appeal": null,
@@ -1846,7 +1849,7 @@
         "link": "274690524|2cf08432-9b49-4d22-8866-3899a2e6c766",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-15"
       },
       "appeal": null,
@@ -1947,15 +1950,15 @@
         "filing_date": "05.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 14:30. Зал судебного заседания 213. 11.06.2026",
-        "event_date": "16.07.2026",
-        "hearing_date": "16.07.2026",
-        "hearing_time": "14:30",
+        "last_event": "Предварительное судебное заседание. 09:40. Зал судебного заседания 213. 28.07.2026",
+        "event_date": "01.10.2026",
+        "hearing_date": "01.10.2026",
+        "hearing_time": "09:40",
         "link": "274167100|4279f33a-daf8-49e6-a256-0c81987a7073",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
-        "legal_force_est": "2026-09-01"
+        "last_checked_at": "2026-07-30",
+        "legal_force_est": "2026-11-17"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1983,15 +1986,15 @@
         "filing_date": "05.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 14:45. Зал судебного заседания 213. 11.06.2026",
-        "event_date": "16.07.2026",
-        "hearing_date": "16.07.2026",
-        "hearing_time": "14:45",
+        "last_event": "Предварительное судебное заседание. 09:30. Зал судебного заседания 213. 28.07.2026",
+        "event_date": "01.10.2026",
+        "hearing_date": "01.10.2026",
+        "hearing_time": "09:30",
         "link": "274167096|7e939815-110f-4302-93f3-ec62d207063d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
-        "legal_force_est": "2026-09-01"
+        "last_checked_at": "2026-07-30",
+        "legal_force_est": "2026-11-17"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2170,7 +2173,7 @@
         "link": "274018586|7f49cea7-d9b6-4a89-bd5b-038f58794113",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28"
+        "last_checked_at": "2026-07-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3003,7 +3006,7 @@
         "link": "270998492|4660b39e-a6f5-4715-b2b9-29a35ea5ecdd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-12"
       },
       "appeal": null,
@@ -3111,7 +3114,7 @@
         "link": "271150751|7eabe880-d1cb-46b0-b00f-71242971527d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-11"
       },
       "appeal": null,
@@ -3250,17 +3253,20 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Никитина Лейла Марселевна",
         "filing_date": "24.04.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 10:15. Зал судебного заседания 513. 03.07.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Судебное заседание. 10:15. Зал судебного заседания 513. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 03.07.2026",
         "event_date": "27.07.2026",
         "hearing_date": "27.07.2026",
         "hearing_time": "10:15",
         "link": "270446895|555e4eb0-c391-4d8e-a44c-587a08921b91",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
-        "legal_force_est": "2026-09-11"
+        "last_checked_at": "2026-07-30",
+        "legal_force_est": "2026-09-11",
+        "decision_date": "27.07.2026",
+        "resolved_emitted": true,
+        "default_judgment": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3631,7 +3637,7 @@
         "link": "269037374|6ed6a698-d112-4fcd-8955-2195b11ba552",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-15"
       },
       "appeal": null,
@@ -3839,8 +3845,7 @@
         ],
         "last_checked_at": "2026-07-27",
         "appeal_appellant": "ПРЕДСТАВИТЕЛЬ",
-        "appeal_appellant_is_bank": false,
-        "appeal_appellant_status": "Иное лицо",
+        "appeal_appellant_is_bank": null,
         "legal_force_est": "2026-10-20"
       },
       "appeal": null,
@@ -4441,7 +4446,7 @@
         "link": "267868874|e9e55449-f7a7-4a0b-b8c3-4ce16d1bff17",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-15"
       },
       "appeal": null,
@@ -4772,7 +4777,7 @@
         "link": "267274189|4cd6e570-be45-4419-9832-304cd787da08",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-15"
       },
       "appeal": null,
@@ -4844,7 +4849,7 @@
         "link": "267139393|888aa67b-386e-4d0a-90fc-ca6d478ee15c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-15"
       },
       "appeal": null,
@@ -4916,7 +4921,7 @@
         "link": "267023014|50c32b9e-0990-409d-8e90-07bb962f9702",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-28",
+        "last_checked_at": "2026-07-30",
         "legal_force_est": "2026-09-01"
       },
       "appeal": null,
@@ -6169,5 +6174,5 @@
       }
     }
   ],
-  "updated_at": "2026-07-29T03:53:52"
+  "updated_at": "2026-07-30T03:47:11"
 }
