@@ -20,7 +20,7 @@ from court_monitor.parsing import (
     cell_text,
     extract_tables,
 )
-from court_monitor.textutil import _CASE_ID_RE, _CASE_NUM_RE, _CASE_UID_RE
+from court_monitor.textutil import _CASE_ID_RE, _CASE_UID_RE, _FI_CASE_NUM_RE
 
 
 def parse_search_row(html: str, court, target_case_number: str) -> dict | None:
@@ -38,7 +38,12 @@ def parse_search_row(html: str, court, target_case_number: str) -> dict | None:
         if len(row) < 3:
             continue
         case_number_raw = cell_text(row[0]).strip()
-        if not _CASE_NUM_RE.match(case_number_raw):
+        # Регулярка та же, что у поиска 1-й инст. (_FI_CASE_NUM_RE): узкий
+        # «\d+-\d+/\d{4}» отбрасывал М-номера и трёхчастные номера постоянных
+        # присутствий («2-2-279/2026», Покачи) — целевой поиск по такому номеру
+        # никогда не находил дело. Границу номера всё равно стережёт сверка
+        # case_bare с target ниже.
+        if not _FI_CASE_NUM_RE.match(case_number_raw):
             continue
         # Номер может приходить в трёх форматах:
         #   "2-583/2026"                              — обычный

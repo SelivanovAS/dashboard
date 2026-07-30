@@ -1143,6 +1143,18 @@ class ActsAppellantSuffixTest(unittest.TestCase):
         )])
         self.assertIn("(жалоба ответчика Поповкин А.С.)", html)
 
+    def test_markup_scrap_not_printed_as_name(self):
+        # Поле «Заявитель» отдало обрывок разметки «(жалобы)» вместо имени
+        # (дело 33-13721/2026, Свердловский облсуд) — печаталось нелепое
+        # «(жалоба иного лица (жалобы))».
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Иное лицо", "appellant_role": "Иное лицо",
+             "appellant_name": "(жалобы)"},
+        )])
+        self.assertNotIn("(жалобы)", html)
+        self.assertIn("(жалоба иного лица)", html)
+
     def test_composite_role_word_not_printed_as_name(self):
         # Неразрешимый состав слов-ролей: classify_appellant_role отдаёт
         # role="" и СЫРОЕ слово-роль в short_name («ИСТЕЦ, ОТВЕТЧИК») —

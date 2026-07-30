@@ -63,7 +63,7 @@ high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 1015](../../scripts/court_monitor/digest/template.py#L1015). Собирает весь HTML дайджеста
+[Строка 1030](../../scripts/court_monitor/digest/template.py#L1030). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
@@ -120,7 +120,7 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
-   [72](../../scripts/court_monitor/textutil.py#L72)). Слишком короткий текст
+   [77](../../scripts/court_monitor/textutil.py#L77)). Слишком короткий текст
    (<100 символов) не пересказывается.
 2. Считается ключ кэша (`_act_cache_key`): для Claude —
    `sha1(act_text + "|v3-detailed")[:16]`, для gigachat/openrouter в ключ

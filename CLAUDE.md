@@ -65,6 +65,8 @@
 | `RegionConfig` (регион-конфиг: суды, маркеры, public_info) | [scripts/court_monitor/regions/base.py:170](scripts/court_monitor/regions/base.py:170) |
 | `CourtConfig.search_gated` (капча: поиск выкл., карточки мониторятся) | [scripts/court_monitor/regions/base.py:39](scripts/court_monitor/regions/base.py:39) |
 | `courts_for_search` (суды автопоиска: enabled и не gated) | [scripts/court_monitor/courts.py:43](scripts/court_monitor/courts.py:43) |
+| `_FI_CASE_NUM_RE` (номер дела 1-й инст.; средний сегмент — постоянное присутствие: Покачи «2-2-279/2026», без него суд невидим целиком) | [scripts/court_monitor/textutil.py:38](scripts/court_monitor/textutil.py:38) |
+| `fi_health_key` (ключ журнала здоровья; `#2` у второго сервера домена — иначе Покачи затирал наблюдение районного) | [scripts/court_monitor/runs.py:120](scripts/court_monitor/runs.py:120) |
 | `collect_existing_ids` (общий дедуп-индекс main_json/импортёра) | [scripts/court_monitor/linking.py:1058](scripts/court_monitor/linking.py:1058) |
 | `load_bank_json` / `save_bank_json` (split-хранение bank-трека: список + events) | [scripts/court_monitor/storage.py:174](scripts/court_monitor/storage.py:174) |
 | `bank_cold_archive_path` / `is_bank_cold_archive_file` (холодные bank-архивы) | [scripts/court_monitor/config.py:107](scripts/court_monitor/config.py:107) |
@@ -98,8 +100,8 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:511](scripts/court_monitor/runs.py:511) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1807](scripts/court_monitor/runs.py:1807) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:526](scripts/court_monitor/runs.py:526) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1822](scripts/court_monitor/runs.py:1822) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -444,7 +446,11 @@ drawer; номера не уникальны между судами — пот�
   уже выданным ИЛ на исполнение решения (`classify_writ_kind == "enforcement"`
   с якорем «Дата заседания» карточки; обеспечительные листы не считаются,
   статус листа не важен). Общая сборка записи — `make_bank_entry`
-  (import_bank_registry.py).
+  (import_bank_registry.py). Суд резолвится ПАРОЙ (домен, `--srv`, вход
+  `srv_num` в workflow; `resolve_court`): на одном домене может жить два суда —
+  Нижневартовский районный и его постоянное присутствие в Покачи
+  (vartovray--hmao.sudrf.ru, srv 1 и 2), — и прежний резолв по домену всегда
+  отдавал первый.
 - **Прогон**: main_json подмешивает bank-дела в общий FI-цикл (фаза 1) и
   раскладывает обратно перед сохранением (`split_bank_track`, фаза 7c).
   **Переезд**: подана апел. жалоба / стадия ушла выше → дело остаётся в

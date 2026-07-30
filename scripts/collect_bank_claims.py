@@ -38,6 +38,10 @@
 Запуск:
     python3 scripts/collect_bank_claims.py --court surggor--hmao.sudrf.ru \
         --pages 10 [--limit N] [--dry-run]
+
+Суд резолвится парой (домен, srv_num): на одном домене может жить два суда —
+Нижневартовский районный (srv 1) и его постоянное присутствие в Покачи (srv 2).
+Для второго обязателен --srv 2, иначе выберется первый суд домена.
 """
 
 from __future__ import annotations
@@ -330,10 +334,29 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
     return counters
 
 
+def resolve_court(domain: str, srv: int):
+    """CourtConfig суда 1-й инст. по паре (домен, srv_num); None — не нашёлся.
+
+    Пара, а не один домен: на vartovray--hmao.sudrf.ru живут два суда —
+    Нижневартовский районный (srv 1) и его постоянное присутствие в Покачи
+    (srv 2), — и резолв по домену всегда отдавал первый, т.е. Покачи собрать
+    было нельзя.
+    """
+    d = (domain or "").strip().lower()
+    return next(
+        (c for c in get_region().first_instance_courts
+         if c.domain == d and c.srv_num == srv),
+        None,
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Разовый сбор исков банка с выдачи суда")
     ap.add_argument("--court", default="surggor--hmao.sudrf.ru",
                     help="домен суда 1-й инстанции (default: Сургутский городской)")
+    ap.add_argument("--srv", type=int, default=1,
+                    help="номер сервера суда (двухсерверные домены: Покачи на "
+                         "vartovray--hmao.sudrf.ru — srv 2; default 1)")
     ap.add_argument("--pages", type=int, default=10,
                     help="сколько страниц выдачи обойти (default 10)")
     ap.add_argument("--limit", type=int, default=0,
@@ -343,17 +366,22 @@ def main() -> int:
     ap.add_argument("--operator", default=os.environ.get("GITHUB_ACTOR", "manual"))
     args = ap.parse_args()
 
-    court = next(
-        (c for c in get_region().first_instance_courts
-         if c.domain == args.court.strip().lower()),
-        None,
-    )
+    domain = args.court.strip().lower()
+    court = resolve_court(domain, args.srv)
     if not court:
-        log.error(f"Домен не из реестра судов региона: {args.court}")
+        same_domain = [c for c in get_region().first_instance_courts
+                       if c.domain == domain]
+        if same_domain:
+            log.error(
+                f"На домене {domain} нет суда с srv_num={args.srv}; "
+                f"доступны: {', '.join(f'{c.srv_num} — {c.name}' for c in same_domain)}"
+            )
+        else:
+            log.error(f"Домен не из реестра судов региона: {args.court}")
         return EXIT_NO_COURT
 
     log.info(
-        f"Сбор исков банка: {court.name}, страниц ≤{args.pages}, "
+        f"Сбор исков банка: {court.name} (srv {court.srv_num}), страниц ≤{args.pages}, "
         f"лимит {args.limit or 'нет'}{', DRY-RUN' if args.dry_run else ''}"
     )
     counters = collect(court, args.pages, args.limit, args.dry_run, args.operator)
