@@ -32,7 +32,7 @@ from court_monitor.storage import load_json
 from court_monitor.textutil import (
     escape_html, shorten_party_name, shorten_court_name, shorten_bailiff_name,
     _bare_case_number, parties_short, parse_date, case_id_uid, ROLE_GENITIVE,
-    plural_ru,
+    plural_ru, appellant_role_words,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -56,13 +56,18 @@ _DIGEST_FIO_FULL = False
 
 # Шумовые сегменты текста события (через «. »): тип сессии, время, зал,
 # даты. Всё, что остаётся сверх них, — содержательная часть события
-# (исход, приостановление, экспертиза и т.п.).
+# (исход, приостановление, экспертиза и т.п.). Зал бывает с этажом впереди
+# («3 этаж зал № 8», Свердловский облсуд), «единоличное рассмотрение
+# (без вызова лиц, участвующих в деле)» — апелляционный тип сессии оттуда же.
+# Голое число — остаток «каб. 12»: точка внутри ячейки режет её при split
+# на «каб» и «12».
 _EVENT_NOISE_SEGMENT_RE = re.compile(
     r"^(?:"
     r"судебное заседание|предварительное судебное заседание|"
+    r"единоличное рассмотрение(?:\s*\([^)]*\))?|"
     r"подготовка дела(?:\s*\(собеседование\))?|беседа|собеседование|"
-    r"зал\b.*|каб(?:инет)?\.?\s*№?\s*\d*|"
-    r"\d{1,2}:\d{2}|\d{2}\.\d{2}\.\d{4}"
+    r"(?:\d+\s*этаж[а-яё]*[.,]?\s*)?зал\b.*|каб(?:инет)?\.?\s*№?\s*\d*|"
+    r"\d{1,2}:\d{2}|\d{2}\.\d{2}\.\d{4}|\d+"
     r")$",
     re.IGNORECASE,
 )
@@ -83,6 +88,23 @@ _RESUMED_RE = re.compile(
     r"|возобновлен[а-яё]*[^.]*производств[а-яё]*",
     re.IGNORECASE,
 )
+# «Единоличное рассмотрение (без вызова лиц, участвующих в деле)» —
+# апелляционная форма без заседания (Свердловский облсуд): времени нет
+# (ГАС ставит 00:00), явка не нужна — рендерим особой строкой без времени.
+_SOLO_SESSION_RE = re.compile(r"^\s*единоличн\w*\s+рассмотрени", re.IGNORECASE)
+
+
+def _strip_noise_segments(event: str) -> list[str]:
+    """Содержательные сегменты склейки события: шум (тип сессии, время,
+    зал/этаж, даты — _EVENT_NOISE_SEGMENT_RE) отброшен. Общий код причины
+    приостановления и 📌-цитаты."""
+    segs: list[str] = []
+    for seg in (event or "").split(". "):
+        seg = seg.strip().rstrip(".").lstrip(". ")
+        if not seg or _EVENT_NOISE_SEGMENT_RE.match(seg):
+            continue
+        segs.append(seg)
+    return segs
 
 
 def _suspension_reason_from_event(event: str) -> str:
@@ -96,16 +118,30 @@ def _suspension_reason_from_event(event: str) -> str:
     m = _SUSPENDED_RE.search(event or "")
     if not m:
         return ""
-    segs: list[str] = []
-    for seg in (event or "")[m.end():].split(". "):
-        seg = seg.strip().rstrip(".").lstrip(". ")
-        if not seg or _EVENT_NOISE_SEGMENT_RE.match(seg):
-            continue
-        segs.append(seg)
-    reason = "; ".join(segs)
+    reason = "; ".join(_strip_noise_segments((event or "")[m.end():]))
     if reason and reason.isupper():
         reason = reason.lower()
     return reason
+
+
+def _event_quote(event: str, ev_date: str) -> str:
+    """Цитата события для «📌 …»: шумовые сегменты склейки (тип сессии,
+    время, зал, даты — в т.ч. хвостовая «Дата размещения», из-за которой
+    цитата врала датой) срезаны, дата события добавлена скобками из details.
+    Голый анонс (одни шумовые сегменты) → первый сегмент (тип сессии);
+    совсем пусто → сырой текст (fail-open). КРИЧАЩИЙ РЕГИСТР ГАС
+    опускается, первая буква — заглавная."""
+    segs = _strip_noise_segments(event)
+    if not segs:
+        head = (event or "").split(". ")[0].strip().rstrip(".")
+        segs = [head] if head else []
+    quote = "; ".join(segs)
+    if quote and quote.isupper():
+        quote = quote.lower()
+        quote = quote[:1].upper() + quote[1:]
+    if quote and ev_date and ev_date not in quote:
+        quote += f" ({ev_date})"
+    return quote or (event or "")
 
 
 def _event_text_is_informative(event: str) -> bool:
@@ -546,9 +582,13 @@ def category_short(cat: str, *, truncate: bool = True) -> str:
 def _fmt_hearing_dt(date: str, time: str) -> str:
     """Дата+время заседания: «ДД.ММ.ГГГГ в ЧЧ:ММ» (предлог «в» перед временем,
     просьба юриста 09.07.2026, единообразие со всеми секциями; в кассации так
-    уже было). Без времени — только дата. Не экранирует (это делают вызовы)."""
+    уже было). Без времени — только дата. «00:00» — заглушка ГАС «времени
+    нет» (единоличное рассмотрение без вызова лиц), скрываем: полуночных
+    заседаний не бывает. Не экранирует (это делают вызовы)."""
     date = (date or "").strip()
     time = (time or "").strip()
+    if time in ("00:00", "0:00"):
+        time = ""
     if not date:
         return ""
     return f"{date} в {time}" if time else date
@@ -794,6 +834,45 @@ def _fi_appellant_display(role: str, name: str,
     return escape_html(name)
 
 
+def _appeal_complaint_suffix(d: dict, pl_disp: str, df_disp: str) -> str:
+    """« (жалоба ответчика Русских А.В.)» для строки «Вынесенных актов».
+
+    Юристу важно, ПО ЧЬЕЙ жалобе рассмотрено дело (просьба 30.07.2026);
+    стиль «(жалоба {род.} {имя})» — как в строке «Итог» кассации. Бинарный
+    ярлык «Банк» — короткое «(жалоба банка)»; иначе роль + резолв имени
+    через _fi_appellant_display. Пустые поля апеллянта эмит добирает из
+    зеркала тихого бэкфилла (appeal.appellant*, см. runs.py) — апел.
+    карточка подателя жалобы не публикует. Пустая строка — апеллянт
+    неизвестен (старые контексты replay: все чтения через d.get())."""
+    if (d.get("appellant") or "").strip() == "Банк":
+        return " (жалоба банка)"
+    role = (d.get("appellant_role") or "").strip()
+    name = (d.get("appellant_name") or "").strip()
+    resolved_from_role = False
+    if name and appellant_role_words(name) is not None:
+        # Слово-роль вместо имени (в т.ч. составное «ИСТЕЦ, ОТВЕТЧИК» или
+        # голый «ПРЕДСТАВИТЕЛЬ» — classify_appellant_role сохраняет их в
+        # short_name как есть): это статус, а не наименование лица —
+        # печатать нельзя, резолвим только через роль.
+        name = ""
+    if not name:
+        resolved_from_role = True
+    who = _fi_appellant_display(role, name, pl_disp, df_disp)
+    if resolved_from_role and "," in who:
+        # Сторона — несколько лиц, а карточка дала лишь слово-роль: КТО из
+        # соответчиков подал жалобу, неизвестно. Перечислить всех — домысел
+        # (дело 33-5018/2026: три ответчика), печатаем одну роль.
+        who = ""
+    role_gen = ROLE_GENITIVE.get(role, "")
+    if who and role_gen:
+        return f" (жалоба {escape_html(role_gen)} {who})"
+    if who:
+        return f" (жалоба {who})"
+    if role_gen:
+        return f" (жалоба {escape_html(role_gen)})"
+    return ""
+
+
 # ── Секция «Иски банка» (лёгкий трек, банк — истец) ──────────────────────────
 # Компактный формат «одна строка на дело»: при масштабе пилота (сотни дел)
 # полная вёрстка секции 3.2 не влезла бы в Telegram-бюджет (~7600 симв.).
@@ -811,7 +890,8 @@ _BANK_TYPE_LABELS = {
     "fi_act_text_published": "📄 текст решения опубликован",
     "fi_motivirovka_emitted": "📄 мотивировка изготовлена",
     "fi_final_event": "⚖️ движение по делу",
-    "fi_status_change": "ℹ️ смена статуса",
+    # fi_status_change — спец-ветка в _bank_event_phrases: рядом с
+    # fi_resolved подавляется, одиночная выводится с деталями «X → Y».
     "fi_appeal_filed": "📨 апел. жалоба ответчика — дело уходит в общий трек",
     "fi_cassation_filed": "📨 касс. жалоба",
     "fi_sent_to_cassation": "📤 направлено в касс. суд",
@@ -890,6 +970,24 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             kind = (d.get("termination_kind") or "returned").strip()
             out.append(_FI_TERMINATION_LABELS.get(
                 kind, _FI_TERMINATION_LABELS["returned"]))
+        elif t == "fi_status_change":
+            # Рядом с исходом («⚖️ вынесено решение», «🔚 иск возвращён»)
+            # смена статуса — эхо того же факта (зеркало дедупа секции
+            # 3.2, см. types_for_line); одиночная — с деталями: голая
+            # подпись «смена статуса» юристу ничего не говорила
+            # (фидбэк 30.07.2026).
+            if any(x in (ch.get("type") or [])
+                   for x in ("fi_resolved", "fi_returned")):
+                continue
+            old_s = (d.get("old_status") or "").strip()
+            new_s = (d.get("new_status") or "").strip()
+            if old_s or new_s:
+                out.append(
+                    f"ℹ️ статус: {escape_html(old_s)} → {escape_html(new_s)}"
+                )
+            else:
+                # Старый контекст без деталей (--replay-last) — прежняя форма.
+                out.append("ℹ️ смена статуса")
         else:
             label = _BANK_TYPE_LABELS.get(t)
             if label:
@@ -1625,6 +1723,18 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             ev_date = escape_html(
                 d.get("event_date", "") or d.get("hearing_date", "")
             )
+            ev_date_raw = (
+                d.get("event_date", "") or d.get("hearing_date", "")
+            ).strip()
+            # Анонс с прошедшей датой (в т.ч. ложная «Дата размещения» из
+            # хвоста legacy-склейки — она всегда в прошлом) не выдаём за
+            # «назначено» — проваливаемся в 📌-цитату факта. Считаем от
+            # финального hd (details ИЛИ хвост склейки), чтобы гасить оба
+            # источника.
+            hd_dt = parse_date(hd)
+            hearing_past = (
+                hd_dt is not None and hd_dt.date() < datetime.now().date()
+            )
             if is_postponed and hp:
                 appeal_block.append(
                     f"🔁 Заседание отложено на <b>{hp}</b>"
@@ -1650,15 +1760,24 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 appeal_block.append(line_res)
             elif informative_event:
                 appeal_block.append(
-                    f"📌 {escape_html(event_raw)}"
+                    f"📌 {escape_html(_event_quote(event_raw, ev_date_raw))}"
                 )
-            elif hp:
-                appeal_block.append(
-                    f"📅 Заседание назначено на <b>{hp}</b>"
-                )
+            elif hp and not (hearing_past and is_new_event and event_raw):
+                if _SOLO_SESSION_RE.match(event_raw):
+                    # Утверждённый формат 30.07.2026: без времени (у ГАС
+                    # там заглушка 00:00) и с пометкой «без вызова лиц» —
+                    # юристу сразу видно, что являться не нужно.
+                    appeal_block.append(
+                        "📅 Единоличное рассмотрение (без вызова лиц) — "
+                        f"<b>{hd}</b>"
+                    )
+                else:
+                    appeal_block.append(
+                        f"📅 Заседание назначено на <b>{hp}</b>"
+                    )
             elif "new_event" in ch["type"] and event_raw:
                 appeal_block.append(
-                    f"📌 {escape_html(event_raw)}"
+                    f"📌 {escape_html(_event_quote(event_raw, ev_date_raw))}"
                 )
             elif "status_change" in ch["type"]:
                 appeal_block.append(
@@ -1711,10 +1830,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line1 += f" — {pl} vs {df}"
             line1 += head_tail
             appeal_block.append(line1)
-            # Строка 2: дата вынесения определения + результат.
+            # Строка 2: дата вынесения определения + результат + по чьей
+            # жалобе (просьба юриста 30.07.2026).
+            from_str = _appeal_complaint_suffix(d, pl, df)
             appeal_block.append(
-                f"{hearing_dt} вынесено определение — {result_text}"
-                if hearing_dt else f"Вынесено определение — {result_text}"
+                f"{hearing_dt} вынесено определение — {result_text}{from_str}"
+                if hearing_dt
+                else f"Вынесено определение — {result_text}{from_str}"
             )
             # Пустая строка между делами (двухстрочные карточки иначе слипаются).
             appeal_block.append("")
@@ -2085,10 +2207,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             ht = (d.get("hearing_time", "") or "").strip()
             outcome_present = bool((d.get("outcome", "") or "").strip())
             if hd and not outcome_present:
-                if ht:
-                    hearing_str = f"<b>{escape_html(hd)} в {escape_html(ht)}</b>"
-                else:
-                    hearing_str = f"<b>{escape_html(hd)}</b>"
+                # Через _fmt_hearing_dt: тот же формат «в ЧЧ:ММ» + скрытие
+                # заглушки 00:00 (единственное место, где дата+время
+                # клеились вручную).
+                hearing_str = f"<b>{escape_html(_fmt_hearing_dt(hd, ht))}</b>"
                 cass_block.append(
                     f"📅 Назначено судебное заседание на {hearing_str}"
                 )
