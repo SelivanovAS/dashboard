@@ -572,6 +572,23 @@ _COPY_SERVED_RX = re.compile(r"вручена")
 _COPY_RETURNED_RX = re.compile(r"возвратилась\s+невручен")
 
 
+def fi_decision_date_from_events(events) -> str:
+    """Дата ПОСЛЕДНЕГО события «Вынесено (заочное) решение» — «ДД.ММ.ГГГГ»|"".
+
+    Якорь classify_writ_kind до того, как `fi.decision_date` заморожена эмитом
+    fi_resolved: разовому сборщику исков банка запись взять неоткуда, а
+    карточка несёт событие решения с первого же парса. Последнее решение
+    побеждает — после отмены заочного (ст. 241 ГПК) и нового рассмотрения
+    якорем должно быть решение текущего круга.
+    """
+    found = ""
+    for ev in events or []:
+        text = (ev.get("text") or "").lower().replace("ё", "е")
+        if text and _ANY_DECISION_RX.search(text) and ev.get("date"):
+            found = ev["date"]
+    return found
+
+
 def bank_default_judgment_info(fi: dict) -> dict:
     """Признаки заочного решения и мотивировки из событий 1-й инстанции.
 
