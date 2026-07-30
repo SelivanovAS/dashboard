@@ -209,12 +209,15 @@ class TestCardLevelFilters:
 
     @pytest.mark.parametrize("status", ["Выдан", "Отозван", "Возвращен"])
     def test_enforcement_writ_skips_any_status(self, env, monkeypatch, status):
-        """Лист ПОСЛЕ заседания — на исполнение решения; «Отозван»/«Возвращен»
-        тоже пропускаются: лист всё равно был выдан."""
+        """Лист ПОСЛЕ решения — на исполнение; «Отозван»/«Возвращен» тоже
+        пропускаются: лист всё равно был выдан."""
         monkeypatch.setattr(
             cbc, "parse_case_card",
             lambda html, base_url: {
+                "Статус": "Решено",
                 "Дата заседания": "12.02.2026",
+                "_events": [{"date": "12.02.2026",
+                             "text": "Вынесено решение по делу. Иск удовлетворён"}],
                 "_writs": [{"issue_date": "20.04.2026", "status": status}]})
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["added"] == 0
@@ -222,11 +225,14 @@ class TestCardLevelFilters:
         assert _bank_cases(env) == []
 
     def test_interim_writ_not_skipped(self, env, monkeypatch):
-        """Обеспечительный лист (выдан ДО заседания) — дело ещё ждёт ИЛ."""
+        """Обеспечительный лист (выдан ДО решения) — дело ещё ждёт ИЛ."""
         monkeypatch.setattr(
             cbc, "parse_case_card",
             lambda html, base_url: {
+                "Статус": "Решено",
                 "Дата заседания": "12.02.2026",
+                "_events": [{"date": "12.02.2026",
+                             "text": "Вынесено решение по делу. Иск удовлетворён"}],
                 "_writs": [{"issue_date": "01.11.2025", "status": "Выдан"}]})
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["added"] == 3
@@ -235,12 +241,65 @@ class TestCardLevelFilters:
         assert all(c["first_instance"].get("writs") for c in _bank_cases(env))
 
     def test_writ_without_anchor_not_skipped(self, env, monkeypatch):
-        """Нет «Даты заседания» → classify_writ_kind даёт interim — не пропуск."""
+        """Нет ни решения, ни терминального статуса → interim, не пропуск."""
         monkeypatch.setattr(
             cbc, "parse_case_card",
             lambda html, base_url: {
                 "_writs": [{"issue_date": "20.04.2026", "status": "Выдан"}]})
         assert cbc.collect(_court(), 10, 0, False, "тест")["added"] == 3
+
+    def test_pending_case_interim_writ_after_last_hearing_kept(self, env, monkeypatch):
+        """Дело «В производстве»: обеспечительный лист выдан ПОЗЖЕ последнего
+        зарегистрированного заседания (меры приняты в ходе процесса, следующее
+        заседание ещё не опубликовано). Решения нет → лист может быть только
+        обеспечительным, дело обязано попасть в трек.
+
+        Регресс ревизии 30.07.2026: якорь «Дата заседания» давал здесь
+        enforcement, и живое дело молча терялось — строка отчёта была
+        неотличима от честного исключения."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "Статус": "В производстве",
+                "Дата заседания": "12.05.2026",
+                "_events": [{"date": "12.05.2026",
+                             "text": "Судебное заседание. Объявлен перерыв"},
+                            {"date": "15.05.2026",
+                             "text": "Заявление об обеспечении иска удовлетворено"}],
+                "_writs": [{"issue_date": "15.05.2026", "status": "Выдан"}]})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["excluded_writ"] == 0
+        assert counters["added"] == 3
+
+    def test_enforcement_writ_skipped_despite_post_decision_hearing(self, env, monkeypatch):
+        """Решённое дело с ПОСТ-решенческим заседанием (заявление об отмене
+        заочного, судебные расходы): «Дата заседания» уехала за дату выдачи
+        листа. Якорь — решение, поэтому лист остаётся enforcement и дело
+        исключается (регресс ревизии 30.07.2026)."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "Статус": "Решено",
+                "Дата заседания": "20.06.2026",
+                "_events": [{"date": "10.03.2026",
+                             "text": "Вынесено заочное решение по делу"},
+                            {"date": "20.06.2026",
+                             "text": "Судебное заседание. Заявление о судебных расходах"}],
+                "_writs": [{"issue_date": "05.05.2026", "status": "Выдан"}]})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["excluded_writ"] == 3
+        assert counters["added"] == 0
+
+    def test_decided_card_without_decision_event_falls_back_to_hearing(self, env, monkeypatch):
+        """Решённая карточка без события решения в истории движения → фолбэк
+        на «Дату заседания» (прежнее поведение)."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "Статус": "Решено",
+                "Дата заседания": "12.02.2026",
+                "_writs": [{"issue_date": "20.04.2026", "status": "Выдан"}]})
+        assert cbc.collect(_court(), 10, 0, False, "тест")["excluded_writ"] == 3
 
     def test_real_card_with_enforcement_writs_skipped(self, env, monkeypatch):
         """Сквозной путь через настоящий parse_case_card: заседание 19.01.2026,

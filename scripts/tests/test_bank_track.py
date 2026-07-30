@@ -262,6 +262,37 @@ class TestLegalForceEst:
         assert lifecycle.bank_legal_force_est({}) is None
 
 
+# ── fi_decision_date_from_events: якорь типа листа до заморозки decision_date ─
+
+class TestDecisionDateFromEvents:
+    def test_takes_decision_event_date(self):
+        assert lifecycle.fi_decision_date_from_events([
+            {"date": "10.02.2026", "text": "Судебное заседание. 10:30"},
+            {"date": "15.04.2026", "text": "Вынесено решение по делу. Иск УДОВЛЕТВОРЕН"},
+        ]) == "15.04.2026"
+
+    def test_default_judgment_counts(self):
+        assert lifecycle.fi_decision_date_from_events([
+            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
+        ]) == "01.03.2026"
+
+    def test_last_decision_wins(self):
+        """Отмена заочного (ст. 241 ГПК) → новый круг: якорь — решение
+        текущего круга, а не первого."""
+        assert lifecycle.fi_decision_date_from_events([
+            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
+            {"date": "15.04.2026", "text": "Вынесено решение по делу. Иск УДОВЛЕТВОРЕН"},
+        ]) == "15.04.2026"
+
+    def test_no_decision_returns_empty(self):
+        for events in (
+            None, [],
+            [{"date": "10.02.2026", "text": "Судебное заседание. Объявлен перерыв"}],
+            [{"date": "", "text": "Вынесено решение по делу"}],
+        ):
+            assert lifecycle.fi_decision_date_from_events(events) == "", events
+
+
 # ── bank_default_judgment_info: детект заочного производства ─────────────────
 
 class TestDefaultJudgmentInfo:

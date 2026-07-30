@@ -12,7 +12,9 @@
 прогон увёл бы их из лёгкого трека в основной cases.json) и дела с уже
 выданным ИЛ на исполнение решения — цикл трека по ним пройден; обеспечительные
 листы не считаются (решение юриста 30.07.2026, сбор по Нижневартовскому
-городскому).
+городскому). Тип листа якорится на дату РЕШЕНИЯ из событий карточки
+(fi_decision_date_from_events): «Дата заседания» промахивается в обе стороны —
+см. комментарий у фильтра.
 
 Пагинация: формата пейджера sudrf в кодовой базе раньше не было — ссылки
 страниц ОБНАРУЖИВАЮТСЯ в HTML выдачи (href с sud_delo и page=N); если
@@ -53,7 +55,10 @@ if _HERE not in sys.path:
 
 from court_monitor import config  # noqa: E402
 from court_monitor.config import log  # noqa: E402
-from court_monitor.lifecycle import classify_writ_kind  # noqa: E402
+from court_monitor.lifecycle import (  # noqa: E402
+    classify_writ_kind,
+    fi_decision_date_from_events,
+)
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
     is_fi_number_tracked,
@@ -262,9 +267,30 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
         # дело сразу ушло бы в bank-архив. Обеспечительные листы (выданы ДО
         # решения) не считаются — такое дело ещё ждёт «настоящего» ИЛ. Статус
         # листа не важен: «Отозван»/«Возвращен» — лист всё равно был выдан.
-        # decision_date на этапе сбора ещё нет — якорем classify_writ_kind
-        # служит «Дата заседания» карточки (его штатный фолбэк hearing_date).
-        fi_probe = {"hearing_date": card_info.get("Дата заседания", "")}
+        #
+        # ⚠️ Якорь — дата РЕШЕНИЯ из событий карточки, не «Дата заседания»
+        # (ревизия 30.07.2026). `fi.decision_date` записи на этапе сбора ещё
+        # нет, но фолбэк на hearing_date промахивается в обе стороны:
+        # • дело БЕЗ решения — «Дата заседания» непуста (последнее session-
+        #   событие), и обеспечительный лист, выданный ПОЗЖЕ последнего
+        #   заседания, читался бы как «на исполнение» → живое дело молча не
+        #   попало бы в трек, причём строка отчёта неотличима от честного
+        #   исключения (в боевом пайплайне такого не бывает: там у
+        #   нерешённого дела decision_date пуст → classify_writ_kind сразу
+        #   возвращает "interim");
+        # • дело С решением — «Дата заседания» уезжает вперёд, назначь суд
+        #   пост-решенческое заседание (отмена заочного по ст. 237 ГПК,
+        #   судебные расходы, индексация), и лист на исполнение стал бы
+        #   «обеспечительным» → дело с пройденным циклом попало бы в трек.
+        # Фолбэк на «Дату заседания» остаётся для решённой карточки без
+        # события решения в истории движения.
+        decision_date = fi_decision_date_from_events(card_info.get("_events"))
+        if decision_date:
+            fi_probe = {"decision_date": decision_date}
+        elif (card_info.get("Статус") or "").strip() in ("Решено", "Возвращено"):
+            fi_probe = {"hearing_date": card_info.get("Дата заседания", "")}
+        else:
+            fi_probe = {}
         if any(classify_writ_kind(w, fi_probe) == "enforcement"
                for w in card_info.get("_writs") or []):
             counters["excluded_writ"] += 1
