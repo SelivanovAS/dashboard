@@ -2194,6 +2194,36 @@ class TestTextShorteners:
             "Иванов Иван Иванович, Петров Пётр Петрович"
         ) == "Иванов И.И., Петров П.П."
 
+    def test_fio_suffix_kyzy_ogly_kept(self):
+        """Четырёхсловные ФИО с «кызы»/«оглы» тоже сокращаются, суффикс
+        сохраняется (решение юриста 30.07.2026; до фикса «Гаджиева Лейла
+        Хандадаш кызы» уходила в дайджест полной)."""
+        assert uc.shorten_party_name(
+            "Гаджиева Лейла Хандадаш кызы, Меликов Аждар Гурбан оглы"
+        ) == "Гаджиева Л.Х. кызы, Меликов А.Г. оглы"
+
+    def test_fio_ip_prefix_kept(self):
+        """«ИП Фамилия И.О.» — маркер предпринимателя сохраняем, ФИО
+        сокращаем (в реестре банка: «ИП Меликов Аждар Гурбан оглы»)."""
+        assert uc.shorten_party_name(
+            "ИП Меликов Аждар Гурбан оглы"
+        ) == "ИП Меликов А.Г. оглы"
+        assert uc.shorten_party_name(
+            "Индивидуальный предприниматель Иванов Иван Иванович"
+        ) == "ИП Иванов И.И."
+
+    def test_fio_suffix_collision_expands_first_name(self):
+        """Развод коллизии инициалов работает и для ФИО с суффиксом."""
+        assert uc.shorten_party_name(
+            "Меликов Аждар Гурбан оглы, Меликов Азер Гурбан оглы"
+        ) == "Меликов Аждар Г. оглы, Меликов Азер Г. оглы"
+
+    def test_fio_three_token_suffix_not_mangled(self):
+        """Трёхсловное тюркское имя без отчества («Фамилия Имя кызы») не
+        сокращаем: суффикс — не отчество, «Гаджиева Л.К.» было бы враньём."""
+        assert uc.shorten_party_name(
+            "Гаджиева Лейла кызы") == "Гаджиева Лейла кызы"
+
     def test_category_short_cuts_at_word_boundary(self):
         """Обрезка по границе слова: «иные, связанные с на…» → «…с…»."""
         cut = uc.category_short(
@@ -2626,6 +2656,104 @@ class TestSmartSkipSwitch:
         assert config.SMART_SKIP_CASES is True
         case, today = TestShouldSkipMaterialGuard._case("2-1401/2026")
         assert uc.should_skip_case(case, today)[0] is True
+
+
+# ── «Единоличное рассмотрение» (Свердловский облсуд) как session-событие ──────
+
+class TestSoloSessionMarkers:
+    """«Единоличное рассмотрение (без вызова лиц…)» — апелляционная форма
+    рассмотрения без заседания: с 30.07.2026 работает как session-событие
+    (даёт «Дату заседания», smart-skip, тип заседания). До фикса апелляции
+    Урала были «невидимы» как заседания — дайджест цитировал склейку."""
+
+    def test_session_start_rx(self):
+        from court_monitor.lifecycle import _SESSION_START_RX
+        assert _SESSION_START_RX.match(
+            "Единоличное рассмотрение (без вызова лиц, участвующих в деле)")
+        assert _SESSION_START_RX.match("Единоличное рассмотрение")
+        # Интерлокутив «Вынесено определение о …» — не сессия (якорь ^).
+        assert not _SESSION_START_RX.match(
+            "Вынесено определение о единоличном рассмотрении")
+
+    def test_classify_hearing_type(self):
+        from court_monitor.lifecycle import classify_hearing_type
+        assert classify_hearing_type(
+            "Единоличное рассмотрение (без вызова лиц, участвующих в деле). "
+            "00:00. 3 этаж зал № 8. 15.07.2026"
+        ) == "единоличное рассмотрение"
+
+    def test_next_planned_date_from_solo_session(self):
+        from datetime import date as _date
+        from court_monitor.lifecycle import get_next_planned_date
+        d, kind = get_next_planned_date([{
+            "date": "29.07.2026", "time": "00:00",
+            "text": "Единоличное рассмотрение (без вызова лиц, участвующих "
+                    "в деле). 00:00. 3 этаж зал № 8. 15.07.2026",
+        }])
+        assert d == _date(2026, 7, 29)
+        assert kind == "hearing"
+
+
+# ── Апелляционный change: добор апеллянта из зеркала бэкфилла ─────────────────
+
+class TestAppealChangeAppellantFromMirror:
+    """Карточка апел. суда подателя жалобы не публикует (_appellant_raw
+    пуст) — поля апеллянта в details апел. change добираются из
+    appeal.appellant* (зеркало backfill_appeal_appellants). Без добора
+    суффикс «(жалоба …)» в «Вынесенных актах» пуст у ВСЕХ дел
+    (инцидент 30.07.2026)."""
+
+    @staticmethod
+    def _run(monkeypatch, mirror):
+        from court_monitor import runs as cm_runs
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: set())
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(cm_runs, "should_skip_case",
+                            lambda shim, today, **kw: (False, ""))
+        monkeypatch.setattr(cm_runs, "card_breaker_allows", lambda dom: True)
+        monkeypatch.setattr(cm_runs, "fetch_card_checked",
+                            lambda url, **kw: "<html>карточка</html>")
+        card_info = {
+            "Последнее событие": "Судебное заседание. 10:00. 05.09.2099",
+            "Дата события": "05.09.2099",
+            "Статус": "В производстве",
+            "_appellant_raw": "",
+            "_events": [{"date": "05.09.2099", "time": "10:00",
+                         "text": "Судебное заседание. 10:00. 05.09.2099"}],
+        }
+        monkeypatch.setattr(cm_runs, "parse_case_card",
+                            lambda html, base: card_info)
+        monkeypatch.setattr(cm_runs, "card_is_empty_shell", lambda ci: False)
+        monkeypatch.setattr(cm_runs, "_warn_if_card_degraded",
+                            lambda ci, num: None)
+        case = {
+            "Номер дела": "33-100/2026", "Ссылка": "1|aaaa-bbbb",
+            "Истец": "ПАО Сбербанк",
+            "Ответчик": "Русских Алексей Владимирович",
+            "Последнее событие": "", "Статус": "В производстве",
+        }
+        _, changes, _ = cm_runs.update_active_cases(
+            [case], json_appeal_by_num={"33-100/2026": mirror})
+        assert changes and "new_event" in changes[0]["type"]
+        return changes[0]["details"]
+
+    def test_details_enriched_from_mirror(self, monkeypatch):
+        d = self._run(monkeypatch, {
+            "appellant": "Русских А.В.",
+            "appellant_status": "Ответчик",
+            "appellant_is_bank": False,
+        })
+        assert d["appellant_name"] == "Русских А.В."
+        assert d["appellant_role"] == "Ответчик"
+
+    def test_bank_mirror_sets_bank_label(self, monkeypatch):
+        d = self._run(monkeypatch, {
+            "appellant": "Сбербанк",
+            "appellant_status": "Истец",
+            "appellant_is_bank": True,
+        })
+        assert d["appellant"] == "Банк"
 
 
 # ── should_skip_case: кассация — день заседания N тоже скипается ──────────────

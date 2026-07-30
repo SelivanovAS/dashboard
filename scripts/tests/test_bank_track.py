@@ -717,6 +717,53 @@ class TestBankDigestSection:
                                      {"verdict_label": "удовлетворено"})])
         assert "вынесено решение" in html and "удовлетворено" in html
 
+    def test_status_change_suppressed_next_to_resolved(self):
+        """«смена статуса» рядом с «вынесено решение» — эхо того же факта
+        (зеркало дедупа секции 3.2; фидбэк юриста 30.07.2026)."""
+        html = _digest([_bank_change(
+            ["fi_resolved", "fi_status_change"],
+            {"verdict_label": "удовлетворено",
+             "old_status": "В производстве", "new_status": "Решено"},
+        )])
+        assert "вынесено решение" in html
+        assert "смена статуса" not in html
+        assert "статус:" not in html
+
+    def test_status_change_suppressed_next_to_returned(self):
+        """Возврат иска + смена статуса «→ Возвращено» — то же эхо."""
+        html = _digest([_bank_change(
+            ["fi_returned", "fi_status_change"],
+            {"old_status": "В производстве", "new_status": "Возвращено"},
+        )])
+        assert "иск возвращён" in html
+        assert "статус" not in html
+
+    def test_lone_status_change_carries_details(self):
+        """Одиночная смена статуса — с деталями «X → Y»: голая подпись
+        «смена статуса» юристу ничего не говорила."""
+        html = _digest([_bank_change(
+            ["fi_status_change"],
+            {"old_status": "В производстве",
+             "new_status": "Приостановлено"},
+        )])
+        assert "ℹ️ статус: В производстве → Приостановлено" in html
+
+    def test_lone_status_change_without_details_falls_back(self):
+        """Старый контекст (--replay-last) без old/new_status — прежняя
+        короткая форма."""
+        html = _digest([_bank_change(["fi_status_change"])])
+        assert "ℹ️ смена статуса" in html
+
+    def test_fio_suffix_shortened_in_bank_line(self):
+        """ФИО с «кызы»/«оглы» сокращаются и в bank-строке (до фикса
+        30.07.2026 уходили в дайджест полными)."""
+        ch = _bank_change(["fi_hearing_new"], {"hearing_date": "01.09.2026"})
+        ch["defendant"] = ("Гаджиева Лейла Хандадаш кызы, "
+                          "Меликов Аждар Гурбан оглы")
+        html = _digest([ch])
+        assert "Гаджиева Л.Х. кызы, Меликов А.Г. оглы" in html
+        assert "Лейла" not in html
+
     def test_section_last_and_fi_counters_clean(self):
         """Секция банка — последней; счётчики 1-й инст. track-делами
         не раздуваются."""

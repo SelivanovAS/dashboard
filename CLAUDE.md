@@ -78,14 +78,14 @@
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1185](scripts/court_monitor/lifecycle.py:1185) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1186](scripts/court_monitor/lifecycle.py:1186) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:182](scripts/court_monitor/netutil.py:182) |
 | `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:100](scripts/court_monitor/netutil.py:100) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:432](scripts/court_monitor/parsing/search.py:432) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:165](scripts/court_monitor/config.py:165) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1215](scripts/court_monitor/lifecycle.py:1215) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1216](scripts/court_monitor/lifecycle.py:1216) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:968](scripts/court_monitor/linking.py:968) |
@@ -99,7 +99,7 @@
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:511](scripts/court_monitor/runs.py:511) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1788](scripts/court_monitor/runs.py:1788) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1807](scripts/court_monitor/runs.py:1807) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -394,8 +394,7 @@ state-machine) под новую модель при каждом запуске
 ## Трек «Иски банка» (банк — истец, с 25.07.2026)
 
 Лёгкий трек для исков самого банка (~1000 дел по ХМАО, на Урале 2500–3500;
-собраны Сургутский городской — 163 дела и Нижневартовский городской — 103,
-по 10 страниц выдачи каждый). Дела живут в **отдельных файлах** — с 26.07.2026
+пилот — Сургутский городской). Дела живут в **отдельных файлах** — с 26.07.2026
 **split-хранение** ([storage.py](scripts/court_monitor/storage.py):
 `load_bank_json`/`save_bank_json`): [data/cases_bank.json](data/cases_bank.json) —
 лёгкий список записей **без `events`** (схема та же + маркер
@@ -442,21 +441,10 @@ drawer; номера не уникальны между судами — пот�
   городскому) — также дела с карточным признаком апелляции/кассации
   (`_fi_appeal_filed`/`_fi_sent_to_appeal`/`_fi_cassation_filed`/
   `_fi_sent_to_cassation` — дело покинуло бы трек первым прогоном) и дела с
-  уже выданным ИЛ на исполнение решения (`classify_writ_kind == "enforcement"`;
-  обеспечительные листы не считаются, статус листа не важен).
-  ⚠️ **Якорь типа листа — дата РЕШЕНИЯ из событий карточки**
-  (`fi_decision_date_from_events`, lifecycle.py; `fi.decision_date` записи на
-  этапе сбора ещё нет). Прежний фолбэк на «Дату заседания» промахивался в обе
-  стороны (ревизия 30.07.2026): у дела БЕЗ решения она непуста, и
-  обеспечительный лист позже последнего заседания читался как «на исполнение»
-  → живое дело молча не попадало в трек строкой, неотличимой от честного
-  исключения; у решённого — уезжала вперёд от пост-решенческого заседания
-  (отмена заочного, судебные расходы), и лист на исполнение становился
-  «обеспечительным». Нет решения → якоря нет → лист только обеспечительный;
-  «Дата заседания» осталась фолбэком для решённой карточки без события
-  решения. Глубина сбора — 10 страниц выдачи (решение юриста 30.07.2026,
-  глубже почти всё отсекает фильтр «ИЛ выдан»). Общая сборка записи —
-  `make_bank_entry` (import_bank_registry.py).
+  уже выданным ИЛ на исполнение решения (`classify_writ_kind == "enforcement"`
+  с якорем «Дата заседания» карточки; обеспечительные листы не считаются,
+  статус листа не важен). Общая сборка записи — `make_bank_entry`
+  (import_bank_registry.py).
 - **Прогон**: main_json подмешивает bank-дела в общий FI-цикл (фаза 1) и
   раскладывает обратно перед сохранением (`split_bank_track`, фаза 7c).
   **Переезд**: подана апел. жалоба / стадия ушла выше → дело остаётся в

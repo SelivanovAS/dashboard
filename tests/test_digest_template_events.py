@@ -899,6 +899,9 @@ class AppealEventMatrixTest(unittest.TestCase):
     def test_new_event_informative_shown_as_text(self):
         # Содержательное событие БЕЗ спец-обработки (не приостановление) —
         # показываем текстом, а не «Заседание назначено на <прошлое>».
+        # С 30.07.2026 цитата нормализуется (_event_quote): шум склейки
+        # (тип сессии, время, хвостовая дата размещения) срезан, дата
+        # события — скобками из details.
         html = render(changes=[make_appeal_change(
             ["new_event"],
             {"event": "Судебное заседание. 11:00. Заявлен отвод судье. "
@@ -906,8 +909,8 @@ class AppealEventMatrixTest(unittest.TestCase):
              "event_date": "01.07.2026",
              "hearing_date": "01.07.2026", "hearing_time": "11:00"},
         )])
-        self.assertIn("📌 Судебное заседание. 11:00. Заявлен отвод судье. "
-                      "01.07.2026", html)
+        self.assertIn("📌 Заявлен отвод судье (01.07.2026)", html)
+        self.assertNotIn("11:00", html)
         self.assertNotIn("Заседание назначено на", html)
 
     def test_new_result_in_acts_section(self):
@@ -918,10 +921,12 @@ class AppealEventMatrixTest(unittest.TestCase):
         self.assertIn("Смирнова А.В. vs УК Комфорт", html)
         self.assertIn("категория: жилищн. спор", html)
         self.assertIn("банк — третье лицо", html)
-        # Строка 2: «{дата} вынесено определение — {результат}».
+        # Строка 2: «{дата} вынесено определение — {результат} (жалоба …)»
+        # — суффикс апеллянта с 30.07.2026 («по чьей жалобе рассмотрено»).
         self.assertIn(
             "28.07.2026 вынесено определение — "
-            "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ "
+            "(жалоба истца Смирнова А.В.)",
             html,
         )
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
@@ -960,6 +965,195 @@ class AppealEventMatrixTest(unittest.TestCase):
         )])
         self.assertIn("📌 Ознакомление с материалами дела", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_solo_session_ural_format(self):
+        # Свердловский облсуд: «Единоличное рассмотрение (без вызова лиц,
+        # участвующих в деле)» + время-заглушка 00:00 + зал с этажом +
+        # хвостовая дата размещения в склейке. Формат утверждён юристом
+        # 30.07.2026: особая строка без времени и зала, дата — настоящая
+        # дата рассмотрения из полей карточки.
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Единоличное рассмотрение (без вызова лиц, "
+                      "участвующих в деле). 00:00. 3 этаж зал № 8. "
+                      "29.06.2026",
+             "event_date": "10.07.2026",
+             "hearing_date": "10.07.2026", "hearing_time": "00:00"},
+        )])
+        self.assertIn(
+            "📅 Единоличное рассмотрение (без вызова лиц) — "
+            "<b>10.07.2026</b>", html,
+        )
+        self.assertNotIn("00:00", html)
+        self.assertNotIn("зал №", html)
+        self.assertNotIn("29.06.2026", html)
+        self.assertNotIn("Заседание назначено", html)
+
+    def test_sverdlovsk_hall_bare_announce_uses_card_fields(self):
+        # «3 этаж зал № 8» — формат зала Свердловского облсуда: голый
+        # анонс не должен считаться содержательным (📌-цитатой); дата —
+        # из полей карточки, а не хвоста склейки (там дата размещения).
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 11:10. 3 этаж зал № 8. "
+                      "29.06.2026",
+             "event_date": "10.07.2026",
+             "hearing_date": "10.07.2026", "hearing_time": "11:10"},
+        )])
+        self.assertIn(
+            "📅 Заседание назначено на <b>10.07.2026 в 11:10</b>", html)
+        self.assertNotIn("3 этаж", html)
+        self.assertNotIn("29.06.2026", html)
+        self.assertNotIn("📌 Судебное заседание", html)
+
+    def test_new_event_plus_hearing_new_single_line(self):
+        # Составной change (текст события изменился И дата заседания
+        # сдвинулась) — одна 📅-строка по new_hearing_date, без 📌-цитаты.
+        html = render(changes=[make_appeal_change(
+            ["new_event", "hearing_new"])])
+        self.assertIn(
+            "📅 Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
+        self.assertNotIn("📌 Судебное заседание", html)
+
+    def test_past_hearing_not_announced(self):
+        # Гард 30.07.2026: «Заседание назначено на <прошедшую дату>» не
+        # выводим — факт показываем 📌-цитатой с датой события.
+        html = render(changes=[make_appeal_change(
+            ["new_event"],
+            {"event": "Судебное заседание. 09:40. 3 этаж зал № 12. "
+                      "10.06.2026",
+             "event_date": "20.06.2026",
+             "hearing_date": "20.06.2026", "hearing_time": "09:40"},
+        )])
+        self.assertNotIn("Заседание назначено", html)
+        self.assertIn("📌 Судебное заседание (20.06.2026)", html)
+
+
+# ── Апелляция: шумовой фильтр склейки и формат времени (юниты) ──────────────
+
+class EventNoiseUnitTest(unittest.TestCase):
+    def test_bare_announcements_not_informative(self):
+        # Голые анонсы (тип сессии + время + зал/этаж + даты) — не повод
+        # для 📌-цитаты, включая свердловские формы.
+        for ev in (
+            "Судебное заседание. 11:10. 3 этаж зал № 8. 29.06.2026",
+            "Единоличное рассмотрение (без вызова лиц, участвующих в "
+            "деле). 00:00. 3 этаж зал № 8. 29.06.2026",
+            "Судебное заседание. 14:30. Зал 131. 03.07.2026",
+            "Подготовка дела (собеседование). 10:00. каб. 12. 01.07.2026",
+        ):
+            self.assertFalse(
+                cm_template._event_text_is_informative(ev), ev)
+
+    def test_content_tail_is_informative(self):
+        self.assertTrue(cm_template._event_text_is_informative(
+            "Судебное заседание. 11:00. Заявлен отвод судье. 01.07.2026"))
+
+    def test_event_quote_strips_noise_and_dates(self):
+        self.assertEqual(
+            cm_template._event_quote(
+                "Судебное заседание. 11:00. Заявлен отвод судье. "
+                "01.07.2026", "01.07.2026"),
+            "Заявлен отвод судье (01.07.2026)",
+        )
+        # Голый анонс → первый сегмент (тип сессии) + дата события.
+        self.assertEqual(
+            cm_template._event_quote(
+                "Судебное заседание. 09:40. 3 этаж зал № 12. 10.06.2026",
+                "20.06.2026"),
+            "Судебное заседание (20.06.2026)",
+        )
+
+    def test_fmt_hearing_dt_hides_midnight(self):
+        # 00:00 — заглушка ГАС «времени нет» (единоличное рассмотрение).
+        self.assertEqual(
+            cm_template._fmt_hearing_dt("25.08.2026", "00:00"),
+            "25.08.2026")
+        self.assertEqual(
+            cm_template._fmt_hearing_dt("25.08.2026", "11:10"),
+            "25.08.2026 в 11:10")
+        self.assertEqual(cm_template._fmt_hearing_dt("", "10:00"), "")
+
+
+# ── Апелляция: суффикс апеллянта в «Вынесенных актах» ───────────────────────
+
+class ActsAppellantSuffixTest(unittest.TestCase):
+    def test_bank_appellant(self):
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Банк", "appellant_role": "",
+             "appellant_name": ""},
+        )])
+        self.assertIn("(жалоба банка)", html)
+
+    def test_role_word_resolved_to_party(self):
+        # Карточка дала слово-роль вместо имени → резолв в сторону дела
+        # (механизм _fi_appellant_display).
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Иное лицо", "appellant_role": "Ответчик",
+             "appellant_name": "Ответчик"},
+        )])
+        self.assertIn("(жалоба ответчика УК Комфорт)", html)
+
+    def test_name_without_role(self):
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Иное лицо", "appellant_role": "",
+             "appellant_name": "Петров П.П."},
+        )])
+        self.assertIn("(жалоба Петров П.П.)", html)
+
+    def test_role_without_name(self):
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Иное лицо", "appellant_role": "Третье лицо",
+             "appellant_name": ""},
+        )])
+        self.assertIn("(жалоба третьего лица)", html)
+
+    def test_unknown_appellant_no_suffix(self):
+        # Апеллянт неизвестен (старые контексты replay) — суффикса нет.
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "", "appellant_role": "", "appellant_name": ""},
+        )])
+        self.assertNotIn("(жалоба", html)
+
+    def test_role_word_with_multiple_parties_shows_role_only(self):
+        # Слово-роль + несколько соответчиков: КТО подал жалобу — неизвестно,
+        # перечислять всех троих было бы домыслом (дело 33-5018/2026).
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"defendant": "Гальченко О.А., Капутская Т.Н., Поповкин А.С.",
+             "appellant": "Иное лицо", "appellant_role": "Ответчик",
+             "appellant_name": "Ответчик"},
+        )])
+        self.assertIn("(жалоба ответчика)", html)
+        self.assertNotIn("(жалоба ответчика Гальченко", html)
+
+    def test_real_name_with_multiple_parties_kept(self):
+        # Контроль: карточка дала НАСТОЯЩЕЕ имя — печатаем его, даже если
+        # ответчиков несколько.
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"defendant": "Гальченко О.А., Капутская Т.Н., Поповкин А.С.",
+             "appellant": "Иное лицо", "appellant_role": "Ответчик",
+             "appellant_name": "Поповкин А.С."},
+        )])
+        self.assertIn("(жалоба ответчика Поповкин А.С.)", html)
+
+    def test_composite_role_word_not_printed_as_name(self):
+        # Неразрешимый состав слов-ролей: classify_appellant_role отдаёт
+        # role="" и СЫРОЕ слово-роль в short_name («ИСТЕЦ, ОТВЕТЧИК») —
+        # это статус, а не имя, печатать его в суффиксе нельзя.
+        html = render(changes=[make_appeal_change(
+            ["new_result"],
+            {"appellant": "Иное лицо", "appellant_role": "",
+             "appellant_name": "ИСТЕЦ, ОТВЕТЧИК"},
+        )])
+        self.assertNotIn("ИСТЕЦ, ОТВЕТЧИК", html)
+        self.assertNotIn("(жалоба", html)
 
 
 # ── Апелляция: комбо-дедупы ─────────────────────────────────────────────────

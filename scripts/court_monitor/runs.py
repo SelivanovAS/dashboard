@@ -645,9 +645,11 @@ def update_active_cases(
         # Параллельно обновляем JSON-представление appeal-дела (если передано).
         # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
         old_events_ap: list = []
+        ap_json: dict | None = None  # JSON-блок appeal — для добора апеллянта
         if json_appeal_by_num is not None:
             ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
             if ap is not None:
+                ap_json = ap
                 ap["last_checked_at"] = today.isoformat()
                 old_events_ap = list(ap.get("events") or [])
                 if card_info.get("_events"):
@@ -845,7 +847,10 @@ def update_active_cases(
                 change["details"]["old_hearing_time"] = old_hearing_time
                 change["details"]["new_hearing_date"] = new_hearing
                 change["details"]["new_hearing_time"] = new_hearing_time
-            else:
+            elif new_h_dt.date() >= today:
+                # Анонс прошедшего заседания — не новость (первый парс
+                # карточки после простоя): поля дела ниже обновятся, а в
+                # дайджест такой «hearing_new» не идёт.
                 change["type"].append("hearing_new")
                 change["details"]["new_hearing_date"] = new_hearing
                 change["details"]["new_hearing_time"] = new_hearing_time
@@ -909,6 +914,20 @@ def update_active_cases(
             change["details"]["appellant_name"] = appellant_name
             change["details"]["appellant_role"] = appellant_role
             change["details"]["_appellant_raw"] = appellant_raw
+            # Карточка апел. суда подателя жалобы НЕ публикует — при пустой
+            # карточке добираем зеркало тихого бэкфилла (appeal.appellant*,
+            # пишет _apply_fi_appellant из карточки 1-й инст.): без этого
+            # суффикс «(жалоба …)» в «Вынесенных актах» пуст у всех дел.
+            if not appellant_raw and ap_json is not None:
+                if (not change["details"]["appellant"]
+                        and ap_json.get("appellant_is_bank") is True):
+                    change["details"]["appellant"] = "Банк"
+                if not appellant_name:
+                    change["details"]["appellant_name"] = (
+                        ap_json.get("appellant") or "").strip()
+                if not appellant_role:
+                    change["details"]["appellant_role"] = (
+                        ap_json.get("appellant_status") or "").strip()
             change["details"]["case_url"] = case_card_url(case, _ap_court)
             # Имя апел-суда — только при нескольких апелляциях в регионе
             # (дайджест покажет его в строке дела; у ХМАО суд один — рендер
