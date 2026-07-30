@@ -187,3 +187,77 @@ class TestCollectE2E:
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["already"] == 1
         assert counters["added"] == 2
+
+
+class TestCardLevelFilters:
+    """Карточные фильтры: апелляция/кассация и ИЛ на исполнение решения
+    (решение юриста 30.07.2026, сбор по Нижневартовскому городскому).
+    До карточки в e2e-наборе доходят 3 кандидата — счётчики исключений = 3."""
+
+    @pytest.mark.parametrize("flag", [
+        "_fi_appeal_filed", "_fi_sent_to_appeal",
+        "_fi_cassation_filed", "_fi_sent_to_cassation",
+    ])
+    def test_appeal_flag_skips(self, env, monkeypatch, flag):
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {"Результат": "Иск УДОВЛЕТВОРЕН", flag: True})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["added"] == 0
+        assert counters["excluded_appeal"] == 3
+        assert _bank_cases(env) == []
+
+    @pytest.mark.parametrize("status", ["Выдан", "Отозван", "Возвращен"])
+    def test_enforcement_writ_skips_any_status(self, env, monkeypatch, status):
+        """Лист ПОСЛЕ заседания — на исполнение решения; «Отозван»/«Возвращен»
+        тоже пропускаются: лист всё равно был выдан."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "Дата заседания": "12.02.2026",
+                "_writs": [{"issue_date": "20.04.2026", "status": status}]})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["added"] == 0
+        assert counters["excluded_writ"] == 3
+        assert _bank_cases(env) == []
+
+    def test_interim_writ_not_skipped(self, env, monkeypatch):
+        """Обеспечительный лист (выдан ДО заседания) — дело ещё ждёт ИЛ."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "Дата заседания": "12.02.2026",
+                "_writs": [{"issue_date": "01.11.2025", "status": "Выдан"}]})
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["added"] == 3
+        assert counters["excluded_writ"] == 0
+        # Лист перенесён в запись (make_bank_entry), а не потерян.
+        assert all(c["first_instance"].get("writs") for c in _bank_cases(env))
+
+    def test_writ_without_anchor_not_skipped(self, env, monkeypatch):
+        """Нет «Даты заседания» → classify_writ_kind даёт interim — не пропуск."""
+        monkeypatch.setattr(
+            cbc, "parse_case_card",
+            lambda html, base_url: {
+                "_writs": [{"issue_date": "20.04.2026", "status": "Выдан"}]})
+        assert cbc.collect(_court(), 10, 0, False, "тест")["added"] == 3
+
+    def test_real_card_with_enforcement_writs_skipped(self, env, monkeypatch):
+        """Сквозной путь через настоящий parse_case_card: заседание 19.01.2026,
+        листы 24.06/26.06.2026 (enforcement) + 21.11.2023 (interim) → пропуск."""
+        monkeypatch.setattr(
+            cbc, "fetch_card_checked",
+            lambda url, context=None: _fixture("case_card_fi_writs.html"))
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["excluded_writ"] == 3
+        assert counters["added"] == 0
+
+    def test_real_short_card_with_appeal_skipped(self, env, monkeypatch):
+        """Короткая карточка вкладки обжалования (_fi_appeal_filed=True) →
+        пропуск через настоящий parse_case_card."""
+        monkeypatch.setattr(
+            cbc, "fetch_card_checked",
+            lambda url, context=None: _fixture("case_card_fi_with_appeal.html"))
+        counters = cbc.collect(_court(), 10, 0, False, "тест")
+        assert counters["excluded_appeal"] == 3
+        assert counters["added"] == 0
