@@ -1763,6 +1763,20 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
     return to_announce
 
 
+def bank_track_pending(cases: list[dict]) -> bool:
+    """Есть ли в списке дела трека «Иски банка» — гейт раскладки (фаза 7c).
+
+    Смотрим на САМИ ДАННЫЕ, а не на «сколько дел загрузилось из cases_bank.json
+    в фазе 1»: трек пополняется ещё и авто-подхватом прогона, и на территории,
+    где файла трека пока нет, счётчик загрузки равен нулю — при гейте по нему
+    свежезаведённые иски банка утекли бы в основной cases.json и в общий архив
+    (заметно стало бы только через FI_ARCHIVE_DAYS).
+    """
+    return bool(config.BANK_TRACK) and any(
+        lifecycle.is_bank_plaintiff_track(c) for c in cases
+    )
+
+
 def _backfill_court_ids(fi: dict) -> None:
     """Дописать delo_id/srv_num записи трека, заведённой до 31.07.2026.
 
@@ -4035,7 +4049,7 @@ def main_json():
     # вероятного приёмника. Подбору нужен весь список дел, поэтому он идёт
     # после FI-цикла, а не в нём; он же дописывает номер приёмника в уже
     # собранное событие дайджеста (эмит завершения одноразовый).
-    if config.BANK_TRACK and bank_track_count:
+    if bank_track_pending(cases):
         merged_resolved = resolve_bank_merged_targets(cases, fi_changes)
         if merged_resolved:
             log.info(
@@ -4049,7 +4063,7 @@ def main_json():
     # ушла выше) остаются в основном cases.json навсегда: маркер track
     # снимается, след остаётся в track_origin. Архивация трека — свои окна
     # (_is_bank_track_archived), свой файл cases_bank_archive.json.
-    if config.BANK_TRACK and bank_track_count:
+    if bank_track_pending(cases):
         cases, bank_active, bank_newly_archived, moved_to_main = split_bank_track(cases)
         if moved_to_main:
             log.info(
