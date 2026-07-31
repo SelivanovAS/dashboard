@@ -542,6 +542,21 @@ class TestSplitBankTrack:
         assert "track" not in left
         assert left["track_origin"] == "plaintiff_light"
 
+    def test_gate_follows_data_not_load_counter(self):
+        """Гейт раскладки смотрит на дела, а не на «сколько загрузилось из
+        cases_bank.json»: на территории без файла трека (и при авто-подхвате
+        прогоном) счётчик загрузки нулевой, и дела утекли бы в cases.json."""
+        from court_monitor.runs import bank_track_pending
+        ordinary = {"id": "2-1/2026", "first_instance": {}}
+        assert bank_track_pending([ordinary]) is False
+        assert bank_track_pending([ordinary, _track_case()]) is True
+
+    def test_gate_off_when_track_disabled(self, monkeypatch):
+        from court_monitor import config as cm_config
+        from court_monitor.runs import bank_track_pending
+        monkeypatch.setattr(cm_config, "BANK_TRACK", False)
+        assert bank_track_pending([_track_case()]) is False
+
     def test_court_ids_backfilled(self):
         """Записи ручных каналов заведены без delo_id/srv_num — ссылку «в суд»
         фронт собирал по фолбэку 1540005/1."""
