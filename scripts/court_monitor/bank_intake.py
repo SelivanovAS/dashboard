@@ -16,8 +16,13 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+from datetime import date, timedelta
 
+from court_monitor import config
+from court_monitor.config import log
 from court_monitor.lifecycle import (
     classify_writ_kind,
     fi_decision_date_from_events,
@@ -111,6 +116,70 @@ def card_rejects(card_info: dict, *, skip_appeal: bool = True) -> str:
     return ""
 
 
+# ── Негативный кэш отказников ────────────────────────────────────────────────
+# Причины, которые не изменятся сами: дело с таким итогом/листом трек не ждёт.
+# Сетевые сбои сюда НЕ пишем — их надо ретраить следующим прогоном.
+PERMANENT_REJECTIONS = ("excluded_result", "excluded_writ", "no_link")
+
+
+def seen_key(domain: str, case_number: str) -> str:
+    """Ключ негативного кэша: «домен|номер» — номера дел не уникальны между
+    судами (тот же принцип, что bank_events_key в storage.py)."""
+    return f"{(domain or '').strip()}|{(case_number or '').strip()}"
+
+
+def load_intake_seen(path: str | None = None) -> dict:
+    """Прочитать негативный кэш. Битый/отсутствующий файл — пустой кэш:
+    сервисные данные не должны ронять прогон."""
+    path = path or config.BANK_INTAKE_SEEN_PATH
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        seen = data.get("seen")
+        return seen if isinstance(seen, dict) else {}
+    except (json.JSONDecodeError, OSError, AttributeError) as e:
+        log.warning(f"Негативный кэш подхвата нечитаем ({e}) — считаем пустым")
+        return {}
+
+
+def remember_rejection(seen: dict, domain: str, case_number: str,
+                       reason: str, today: date | None = None) -> bool:
+    """Запомнить вечный отказ. True — записали (сетевые сбои не пишем)."""
+    if reason not in PERMANENT_REJECTIONS:
+        return False
+    today = today or date.today()
+    key = seen_key(domain, case_number)
+    rec = seen.get(key) or {}
+    rec["reason"] = reason
+    rec.setdefault("first_seen", today.isoformat())
+    rec["last_seen"] = today.isoformat()
+    seen[key] = rec
+    return True
+
+
+def prune_intake_seen(seen: dict, today: date | None = None) -> dict:
+    """Выкинуть записи, которых давно не видно в выдаче (строка уехала с
+    первой страницы) — иначе файл рос бы вечно."""
+    today = today or date.today()
+    edge = (today - timedelta(days=config.BANK_INTAKE_SEEN_TTL_DAYS)).isoformat()
+    return {k: v for k, v in seen.items()
+            if (v.get("last_seen") or v.get("first_seen") or "") >= edge}
+
+
+def save_intake_seen(seen: dict, path: str | None = None) -> None:
+    """Записать кэш (с прунингом). Ошибки записи гасим — сервисный канал не
+    имеет права уронить прогон."""
+    path = path or config.BANK_INTAKE_SEEN_PATH
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "seen": prune_intake_seen(seen)},
+                      f, ensure_ascii=False, indent=1)
+    except OSError as e:
+        log.warning(f"Негативный кэш подхвата не сохранён: {e}")
+
+
 def _stamp_court_ids(fi: dict, fi_row: dict, court=None) -> None:
     """Проставить delo_id/srv_num записи 1-й инстанции.
 
@@ -162,4 +231,29 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
     # ПОСЛЕ постановки на мониторинг.
     if card_info.get("_writs"):
         fi["writs"] = card_info["_writs"]
+    _stamp_appeal_flags(fi, card_info)
     return entry
+
+
+def _stamp_appeal_flags(fi: dict, card_info: dict) -> None:
+    """Перенести признаки жалобы/направления наверх из карточки в запись.
+
+    Нужно авто-подхвату (он такие дела берёт, skip_appeal=False): по этим
+    полям bank_case_left_track тем же прогоном переводит дело в основной
+    cases.json на полный мониторинг апелляции. Без переноса поля появились бы
+    только со следующим парсом карточки, а у решённого дела он через неделю
+    (writ_weekly) — дело неделю висело бы в лёгком треке, где апелляцию никто
+    не ищет. Ставим только поля: события эмитит FI-цикл, как обычно.
+    """
+    for card_key, fi_key in (
+        ("_fi_appeal_filed", "appeal_filed"),
+        ("_fi_appeal_filed_date", "appeal_filed_date"),
+        ("_fi_sent_to_appeal", "sent_to_appeal"),
+        ("_fi_sent_to_appeal_date", "sent_to_appeal_date"),
+        ("_fi_cassation_filed", "cassation_filed"),
+        ("_fi_cassation_filed_date", "cassation_filed_date"),
+        ("_fi_sent_to_cassation", "sent_to_cassation"),
+        ("_fi_sent_to_cassation_date", "sent_to_cassation_date"),
+    ):
+        if card_info.get(card_key):
+            fi[fi_key] = card_info[card_key]

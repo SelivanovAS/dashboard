@@ -185,14 +185,27 @@ class TestTotalsAndSave:
             rep.record(case, outcome, reason=reason)
         out_of_queue = _bank_case("2-6/2026", current_stage="appeal")
         rep.seed(out_of_queue, in_queue=False)
+        # Заведено авто-подхватом в этом же прогоне: в очередь обхода такое
+        # дело не попадало (записи ещё не существовало), карточку прочитал сам
+        # подхват — отдельный исход, не «спарсено».
+        rep.record(_bank_case("2-7/2026"), "intake_new")
         return rep
 
     def test_totals_sum(self):
         t = self._filled_report().totals()
-        assert t == {"total": 6, "parsed": 1, "skip": 1, "failed": 2,
-                     "no_card": 1, "not_in_queue": 1}
+        assert t == {"total": 7, "parsed": 1, "skip": 1, "failed": 2,
+                     "no_card": 1, "not_in_queue": 1, "intake_new": 1}
         assert (t["parsed"] + t["skip"] + t["failed"] + t["no_card"]
-                + t["not_in_queue"]) == t["total"]
+                + t["not_in_queue"] + t["intake_new"]) == t["total"]
+
+    def test_intake_row_has_russian_reason(self):
+        """Причины считает Python — JS админки логику не дублирует."""
+        rep = BankParseReport()
+        case = _bank_case("2-7/2026")
+        rep.record(case, "intake_new", detail="Сургутский городской суд")
+        (row,) = [r for r in rep.rows() if r["number"] == "2-7/2026"]
+        assert row["outcome"] == "intake_new"
+        assert "авто-подхват" in row["reason_ru"]
 
     def test_save_writes_schema(self, tmp_path):
         path = str(tmp_path / "bank_parse_report.json")
@@ -203,7 +216,7 @@ class TestTotalsAndSave:
         assert d["run_date"] == "2026-07-29"
         assert d["smart_skip"] is True
         assert d["updated_at"]
-        assert d["totals"]["total"] == len(d["cases"]) == 6
+        assert d["totals"]["total"] == len(d["cases"]) == 7
         row = next(r for r in d["cases"] if r["number"] == "2-2/2026")
         assert row["outcome"] == "skip"
         assert row["reason"] == "writ_weekly(3d/7d)"

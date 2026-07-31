@@ -1206,6 +1206,7 @@ var BP_GROUPS = [
   { key: "breaker", title: "Суд снят с обхода (предохранитель)", dot: "dot-red", open: false },
   { key: "nocard", title: "Без карточки: суд/ссылка", dot: "dot-amber", open: true },
   { key: "queue", title: "Вне очереди 1-й инстанции", dot: "dot-gray", open: true },
+  { key: "intake", title: "Заведено авто-подхватом с выдачи", dot: "dot-green", open: true },
   { key: "parsed", title: "Спарсено", dot: "dot-green", open: false },
   { key: "writ", title: "Пропуск: недельный ритм ИЛ (решённые)", dot: "dot-gray", open: false },
   { key: "hearing", title: "Пропуск: заседание в будущем", dot: "dot-gray", open: false },
@@ -1215,6 +1216,9 @@ function bpGroupKey(row) {
   var o = String(row.outcome || "");
   if (o === "parsed") return "parsed";
   if (o === "not_in_queue") return "queue";
+  // Дела, заведённые авто-подхватом в этом же прогоне: карточку они уже
+  // прочитали при приёме, в «спарсено» не попадают.
+  if (o === "intake_new") return "intake";
   // Дела суда, снятого с обхода предохранителем (аутейдж портала): их могут
   // быть сотни разом — отдельная свёрнутая группа, чтобы не топить «fail».
   if (o === "court_breaker") return "breaker";
@@ -1281,7 +1285,8 @@ async function loadBankParse() {
       (totals.failed ? '<span class="badge badge-fail">' + totals.failed + ' сбой</span> ' : "")
       + (totals.no_card ? '<span class="badge badge-run">' + totals.no_card + ' без карточки</span> ' : "")
       + '<span class="badge badge-ok">' + (totals.parsed || 0) + ' спарсено</span> '
-      + '<span class="badge badge-run">' + (totals.skip || 0) + ' пропуск</span>';
+      + '<span class="badge badge-run">' + (totals.skip || 0) + ' пропуск</span>'
+      + (totals.intake_new ? ' <span class="badge badge-ok">+' + totals.intake_new + ' подхвачено</span>' : "");
     bpGroupsData = {};
     var byGroup = {};
     rows.forEach(function (row) {

@@ -42,6 +42,8 @@ _OUTCOME_RU = {
     "court_disabled": "суд не из реестра активных судов 1-й инстанции",
     "no_link": "нет ссылки на карточку (ждём backfill_fi_links)",
     "bad_link": "ссылка на карточку не разобралась",
+    "intake_new": "дело заведено авто-подхватом с выдачи суда в этом прогоне "
+                  "(карточка прочитана при заведении)",
 }
 
 # Ключи METRICS, чья дельта вокруг единственного HTTP-запроса итерации
@@ -208,10 +210,15 @@ class BankParseReport:
     def totals(self, rows: list[dict] | None = None) -> dict:
         rows = self.rows() if rows is None else rows
         t = {"total": len(rows), "parsed": 0, "skip": 0, "failed": 0,
-             "no_card": 0, "not_in_queue": 0}
+             "no_card": 0, "not_in_queue": 0, "intake_new": 0}
         for r in rows:
             o = r["outcome"]
-            if o == "parsed":
+            if o == "intake_new":
+                # Заведённые в этом же прогоне карточку уже прочитали при
+                # приёме — в «спарсено» их не считаем, чтобы X/Y сводки
+                # оставался долей ОБХОДА существующего пула.
+                t["intake_new"] += 1
+            elif o == "parsed":
                 t["parsed"] += 1
             elif o == "skip":
                 t["skip"] += 1

@@ -18,6 +18,8 @@ SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
 from court_monitor import bank_intake  # noqa: E402
+from court_monitor import config as cm_config  # noqa: E402
+from court_monitor import runs  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
 
 
@@ -164,3 +166,222 @@ class TestCourtIds:
         assert entry["track"] == "plaintiff_light"
         assert entry["import"]["announced"] is True
         assert entry["initial_bank_role"] == "Истец"
+
+
+# ── Перенос признаков жалобы (решение №3: такие дела подхват берёт) ──────────
+
+class TestAppealFlagsCarried:
+    def test_flags_stamped_from_card(self):
+        """Без переноса bank_case_left_track увидел бы дело «чистым», и оно
+        неделю висело бы в лёгком треке (следующий парс — writ_weekly)."""
+        from court_monitor import lifecycle
+        entry = bank_intake.make_bank_entry(
+            TestCourtIds._row(), {"_fi_appeal_filed": True,
+                                  "_fi_appeal_filed_date": "20.07.2026"},
+            "auto", "now")
+        assert entry["first_instance"]["appeal_filed"] is True
+        assert entry["first_instance"]["appeal_filed_date"] == "20.07.2026"
+        # Тем же прогоном дело уезжает в основной cases.json.
+        assert lifecycle.bank_case_left_track(entry) is True
+
+    def test_clean_card_leaves_no_flags(self):
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(), {}, "auto", "now")["first_instance"]
+        assert "appeal_filed" not in fi and "sent_to_cassation" not in fi
+
+
+# ── Негативный кэш ───────────────────────────────────────────────────────────
+
+class TestIntakeSeenCache:
+    def test_permanent_reasons_remembered(self):
+        seen: dict = {}
+        assert bank_intake.remember_rejection(
+            seen, "x.sudrf.ru", "2-1/2026", "excluded_writ") is True
+        assert seen["x.sudrf.ru|2-1/2026"]["reason"] == "excluded_writ"
+
+    @pytest.mark.parametrize("reason", ["fetch_fail", "breaker", "role"])
+    def test_transient_reasons_not_remembered(self, reason):
+        """Сетевой сбой должен ретраиться следующим прогоном."""
+        seen: dict = {}
+        assert bank_intake.remember_rejection(
+            seen, "x.sudrf.ru", "2-1/2026", reason) is False
+        assert seen == {}
+
+    def test_prune_drops_stale(self):
+        from datetime import date, timedelta
+        today = date(2026, 8, 1)
+        old = (today - timedelta(days=cm_config.BANK_INTAKE_SEEN_TTL_DAYS + 5))
+        seen = {
+            "x|свежее": {"reason": "excluded_writ", "last_seen": today.isoformat()},
+            "x|старое": {"reason": "excluded_writ", "last_seen": old.isoformat()},
+        }
+        assert list(bank_intake.prune_intake_seen(seen, today)) == ["x|свежее"]
+
+    def test_roundtrip(self, tmp_path):
+        path = str(tmp_path / ".bank_intake_seen.json")
+        seen: dict = {}
+        bank_intake.remember_rejection(seen, "x.sudrf.ru", "2-1/2026", "no_link")
+        bank_intake.save_intake_seen(seen, path)
+        assert bank_intake.load_intake_seen(path) == seen
+
+    def test_missing_and_broken_file_read_as_empty(self, tmp_path):
+        """Сервисные данные не имеют права ронять прогон."""
+        missing = str(tmp_path / "нет.json")
+        assert bank_intake.load_intake_seen(missing) == {}
+        broken = tmp_path / "битый.json"
+        broken.write_text("{не json", encoding="utf-8")
+        assert bank_intake.load_intake_seen(str(broken)) == {}
+
+
+# ── intake_bank_rows: приём кандидатов в прогоне (блок 3b фазы 3) ───────────
+
+@pytest.fixture
+def net(monkeypatch):
+    """Сеть подхвата: карточка — «живое дело в производстве»."""
+    monkeypatch.setattr(runs, "polite_delay", lambda: None)
+    monkeypatch.setattr(runs, "fetch_card_checked",
+                        lambda url, context=None, breaker_gate=True: "<html/>")
+    monkeypatch.setattr(runs, "parse_case_card",
+                        lambda html, base_url=None: {"Статус": "В производстве"})
+    monkeypatch.setattr(cm_config, "BANK_INTAKE_DRY_RUN", False)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_THRESHOLD", 5)
+    cm_config.CARD_BREAKER.clear()
+    for k in ("bank_intake_candidates", "bank_intake_cards", "bank_intake_added"):
+        cm_config.METRICS[k] = 0
+
+
+def _row(num: str, role: str = "Истец", result: str = "", link: str = "1|a-1"):
+    return {"case_number": num, "bank_role": role, "result": result, "link": link,
+            "plaintiff": "ПАО Сбербанк", "defendant": "Иванов И.И.",
+            "category": "Кредит", "court": "Суд", "judge": "Судья",
+            "court_domain": "surggor--hmao.sudrf.ru", "filing_date": "01.07.2026",
+            "status": "В производстве", "court_delo_id": 1540005,
+            "court_srv_num": 1}
+
+
+def _intake(rows, *, seen=None, tracked=None, budget=30):
+    return runs.intake_bank_rows(
+        _court(), rows, dedup_exact=set(tracked or []), dedup_wildcard=set(),
+        seen=seen if seen is not None else {}, budget=budget)
+
+
+class TestIntakeBankRows:
+    def test_plaintiff_row_becomes_track_entry(self, net):
+        entries, c = _intake([_row("2-100/2026")])
+        assert c["added"] == 1 and c["cards"] == 1
+        assert entries[0]["track"] == "plaintiff_light"
+        assert entries[0]["import"]["source"] == "auto_search"
+        assert cm_config.METRICS["bank_intake_added"] == 1
+
+    @pytest.mark.parametrize("role", ["Ответчик", "Третье лицо"])
+    def test_other_roles_never_touched(self, net, role):
+        """Ответчик-дела ведёт основной трек, третьи лица не отслеживаются."""
+        entries, c = _intake([_row("2-100/2026", role=role)])
+        assert (entries, c["cards"], c["role"]) == ([], 0, 1)
+
+    def test_known_case_costs_no_http(self, net):
+        entries, c = _intake(
+            [_row("2-100/2026")],
+            tracked=[("surggor--hmao.sudrf.ru", "2-100/2026")])
+        assert (entries, c["already"], c["cards"]) == ([], 1, 0)
+
+    def test_card_rejection_cached_and_second_run_free(self, net, monkeypatch):
+        monkeypatch.setattr(
+            runs, "parse_case_card",
+            lambda html, base_url=None: {
+                "Статус": "Решено", "Дата заседания": "12.02.2026",
+                "_events": [{"date": "12.02.2026",
+                             "text": "Вынесено решение по делу"}],
+                "_writs": [{"issue_date": "20.04.2026", "status": "Выдан"}]})
+        seen: dict = {}
+        entries, c = _intake([_row("2-100/2026")], seen=seen)
+        assert (entries, c["excluded_writ"], c["cards"]) == ([], 1, 1)
+        # Второй прогон видит ту же строку — карточку уже не качает.
+        entries2, c2 = _intake([_row("2-100/2026")], seen=seen)
+        assert (entries2, c2["seen_cached"], c2["cards"]) == ([], 1, 0)
+
+    def test_excluded_result_needs_no_card(self, net):
+        entries, c = _intake([_row("2-100/2026", result="Дело передано ПО ПОДСУДНОСТИ")])
+        assert (entries, c["cards"], c["excluded_result"]) == ([], 0, 1)
+
+    def test_appeal_case_taken(self, net, monkeypatch):
+        """Решение юриста 31.07.2026 — обратное правилу ручного сборщика."""
+        monkeypatch.setattr(
+            runs, "parse_case_card",
+            lambda html, base_url=None: {"Статус": "Решено",
+                                         "_fi_appeal_filed": True})
+        entries, c = _intake([_row("2-100/2026")])
+        assert c["added"] == 1
+        assert entries[0]["first_instance"]["appeal_filed"] is True
+
+    def test_budget_caps_run(self, net):
+        rows = [_row(f"2-10{i}/2026") for i in range(5)]
+        entries, c = _intake(rows, budget=2)
+        assert (len(entries), c["capped"]) == (2, 3)
+
+    def test_per_court_card_cap(self, net, monkeypatch):
+        """Фаза 3 идёт раньше FI-цикла: пачка карточек одного суда не должна
+        в одиночку открывать предохранитель."""
+        monkeypatch.setattr(cm_config, "BANK_INTAKE_MAX_CARDS_PER_COURT", 2)
+        rows = [_row(f"2-10{i}/2026") for i in range(5)]
+        entries, c = _intake(rows)
+        assert (len(entries), c["cards"], c["capped"]) == (2, 2, 3)
+
+    def test_dry_run_makes_no_requests(self, net, monkeypatch):
+        monkeypatch.setattr(cm_config, "BANK_INTAKE_DRY_RUN", True)
+        entries, c = _intake([_row("2-100/2026")])
+        assert (entries, c["cards"], c["candidates"]) == ([], 0, 1)
+
+    def test_open_breaker_skips_without_http(self, net, monkeypatch):
+        def boom(*a, **kw):
+            raise AssertionError("карточка не должна качаться при открытом предохранителе")
+        monkeypatch.setattr(runs, "fetch_card_checked", boom)
+        cm_config.CARD_BREAKER["surggor--hmao.sudrf.ru"] = {
+            "fails": 5, "open": True, "reason": "заглушка", "skipped": 0,
+            "probes": 0}
+        monkeypatch.setattr(cm_config, "CARD_BREAKER_PROBE_EVERY", 0)
+        entries, c = _intake([_row("2-100/2026")])
+        assert (entries, c["breaker"]) == ([], 1)
+
+    def test_fetch_failure_not_cached(self, net, monkeypatch):
+        """Сбой сети — не приговор: следующий прогон попробует снова."""
+        monkeypatch.setattr(runs, "fetch_card_checked",
+                            lambda url, context=None, breaker_gate=True: "")
+        seen: dict = {}
+        entries, c = _intake([_row("2-100/2026")], seen=seen)
+        assert (entries, c["fetch_fail"], seen) == ([], 1, {})
+
+
+class TestIntakeWiring:
+    """Блок 3b должен быть подключён к фазе 3 и к раскладке 7c, а рубильник —
+    доезжать из Actions Variables (по образцу TestBankTrackWiring)."""
+
+    @staticmethod
+    def _src(rel: str) -> str:
+        root = os.path.dirname(SCRIPTS_DIR)
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_intake_called_in_run(self):
+        src = self._src("scripts/court_monitor/runs.py")
+        assert "intake_bank_rows(" in src
+        assert "cases = bank_new_cases + cases" in src, (
+            "подхваченные иски не вливаются в общий список — фаза 7c их не "
+            "разложит по файлам трека"
+        )
+
+    def test_auto_intake_forwarded_from_variables(self):
+        import re
+        wf = self._src(".github/workflows/update_cases.yml")
+        m = re.search(r"^\s*BANK_AUTO_INTAKE:\s*(.+)$", wf, re.M)
+        assert m and "vars.BANK_AUTO_INTAKE" in m.group(1), (
+            "BANK_AUTO_INTAKE не прокинут — переменная территории не сработает"
+        )
+        assert re.search(r"\|\|\s*'1'", m.group(1)), "нет фолбэка '1'"
+
+    def test_seen_cache_committed(self):
+        wf = self._src(".github/workflows/update_cases.yml")
+        assert "data/.bank_intake_seen.json" in wf, (
+            "негативный кэш не коммитится — отказники будут перекачиваться "
+            "каждым прогоном"
+        )
