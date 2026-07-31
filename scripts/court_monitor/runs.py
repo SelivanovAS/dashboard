@@ -60,6 +60,7 @@ from court_monitor.lifecycle import (
     suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
+    repair_cancelled_merges,
     split_archived, split_archived_json, should_skip_case, skip_reason_ru,
     get_next_planned_date, classify_verdict, classify_verdict_fi,
     extract_fi_verdict_from_events, extract_result_from_event,
@@ -71,13 +72,14 @@ from court_monitor.lifecycle import (
     fi_termination_details,
     _extract_return_reason, _RESTART_RE, _RECESS_RE, _SESSION_START_RX,
     _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
-    _TERMINAL_FI_EVENT_RX, SERVICE_EVENT_PATTERNS,
+    _TERMINAL_FI_EVENT_RX, _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
 )
 from court_monitor.linking import (
     collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
     dedupe_new_archive_entries, find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
+    resolve_bank_merged_targets,
 )
 from court_monitor.netutil import (
     card_breaker_allows, card_breaker_preopen,
@@ -1788,8 +1790,21 @@ def split_bank_track(
         # прогона; фронту её не воспроизвести — производственного календаря
         # в JS нет. Штампуем до ветвлений: поле нужно и активным, и ново-
         # архивным. Пусто (решения ещё нет) → ключ не пишем.
+        # Ждём ли по делу исполнительный лист. Штамп нужен фронту: он гасит
+        # бейдж «⏳ ждёт ИЛ» и KPI «Ждут ИЛ» там, где листа не будет никогда
+        # (в иске отказано, дело присоединено к другому). Пишем только False —
+        # «ждём» и есть дефолт, лишний ключ в 345 записях ни к чему.
         _fi = c.get("first_instance") or {}
-        _est = lifecycle.bank_legal_force_est(_fi)
+        _writ_expected = lifecycle.bank_writ_expected(_fi)
+        if _writ_expected:
+            _fi.pop("writ_expected", None)
+        else:
+            _fi["writ_expected"] = False
+        # Расчётная дата вступления в силу — только там, где ждём лист: у
+        # отказного дела эмит завершения уже заморозил decision_date, и без
+        # этого гарда drawer показал бы «Вступило в силу (расч.)» на деле,
+        # по которому исполнять нечего.
+        _est = lifecycle.bank_legal_force_est(_fi) if _writ_expected else None
         if _est:
             _fi["legal_force_est"] = _est.isoformat()
         else:
@@ -2321,6 +2336,12 @@ def main_json():
     repaired_fi = repair_spurious_fi_resolutions(cases, today)
     if repaired_fi:
         log.info(f"Снято ложных «Решено» (будущее заседание): {repaired_fi}")
+    # То же для присоединения к другому делу: свой ремонт нужен потому, что
+    # присоединённое дело держит статус «В производстве» и под гейт функции
+    # выше не попадает вовсе.
+    unmerged = repair_cancelled_merges(cases)
+    if unmerged:
+        log.info(f"Снято отменённых присоединений: {unmerged}")
     fi_court_map = {ct.domain: ct for ct in FIRST_INSTANCE_COURTS if ct.enabled}
     # План очереди до старта долгого цикла: те же проверки, что и в цикле
     # ниже (суд из реестра + ссылка на карточку + smart-skip), но без HTTP —
@@ -2336,10 +2357,11 @@ def main_json():
             continue
         _plan_skip, _plan_reason = should_skip_case(_c, today)
         if _plan_skip:
-            # Недельный ритм решённых исков банка — отдельное слагаемое:
+            # Недельный ритм исков банка (решённые ждут ИЛ/жалобу,
+            # присоединённые — отмену объединения) — отдельное слагаемое:
             # раньше он сливался в «заседание в будущем», и юрист читал
             # 39 отложенных writ_weekly-дел как отложенные по заседаниям.
-            if _plan_reason.startswith("writ_weekly"):
+            if _plan_reason.startswith(("writ_weekly", "merged_weekly")):
                 fi_plan_writ_weekly += 1
             else:
                 fi_plan_skip += 1
@@ -2355,7 +2377,7 @@ def main_json():
         _plan_notes.append(f"{fi_plan_skip} отложено — заседание в будущем")
     if fi_plan_writ_weekly:
         _plan_notes.append(
-            f"{fi_plan_writ_weekly} решённые иски банка — недельный ритм"
+            f"{fi_plan_writ_weekly} иски банка — недельный ритм"
         )
     if fi_plan_no_card:
         _plan_notes.append(
@@ -2441,8 +2463,8 @@ def main_json():
         if skip:
             if reason.startswith("future_hearing"):
                 fi_skipped_future += 1
-            elif reason.startswith("writ_weekly"):
-                # Недельный ритм решённых исков банка — не «без движения»
+            elif reason.startswith(("writ_weekly", "merged_weekly")):
+                # Недельный ритм исков банка — не «без движения»
                 # (см. одноимённое слагаемое в плане очереди выше).
                 fi_skipped_writ_weekly += 1
             else:
@@ -2874,7 +2896,8 @@ def main_json():
                 terminal_ev = next(
                     (ev for ev in events_fi
                      if ev.get("date") == new_hearing_date
-                     and _TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")),
+                     and (_TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")
+                          or _FI_MERGED_RX.search(ev.get("text") or ""))),
                     None,
                 )
                 if terminal_ev or "fi_returned" in change["type"]:
@@ -3382,7 +3405,7 @@ def main_json():
         _fi_sum_parts.append(f"{fi_skipped_future} отложено — заседание в будущем")
     if fi_skipped_writ_weekly:
         _fi_sum_parts.append(
-            f"{fi_skipped_writ_weekly} решённых исков банка — недельный ритм"
+            f"{fi_skipped_writ_weekly} исков банка — недельный ритм"
         )
     if fi_skipped_suspended:
         _fi_sum_parts.append(f"{fi_skipped_suspended} без движения")
@@ -3974,6 +3997,18 @@ def main_json():
             log.info(f"  {t['case_id']}: {t['from']} → {t['to']}")
 
     # ── 7c. Раскладка трека «Иски банка» ──
+    # Перед раскладкой — присоединённые к другим делам: штампы merged* и подбор
+    # вероятного приёмника. Подбору нужен весь список дел, поэтому он идёт
+    # после FI-цикла, а не в нём; он же дописывает номер приёмника в уже
+    # собранное событие дайджеста (эмит завершения одноразовый).
+    if config.BANK_TRACK and bank_track_count:
+        merged_resolved = resolve_bank_merged_targets(cases, fi_changes)
+        if merged_resolved:
+            log.info(
+                f"Иски банка: подобран вероятный приёмник для "
+                f"{merged_resolved} "
+                f"{plural_ru(merged_resolved, 'дела', 'дел', 'дел')}"
+            )
     # Track-дела, подмешанные в фазе 1, возвращаются в свой файл
     # (cases_bank.json) ДО общего архивирования — иначе split_archived_json
     # унёс бы их в основной архив. «Переехавшие» (подана апелляция / стадия

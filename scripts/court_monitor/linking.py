@@ -1191,6 +1191,154 @@ def dedupe_new_archive_entries(
     return [c for c in newly_archived if case_court_key(c, ntd) not in existing]
 
 
+# ── Присоединение дел (ст. 151 ГПК): подбор дела-приёмника ─────────────────
+# Суд НЕ публикует номер дела, к которому присоединил: в карточке только
+# «Дело присоединено к другому делу» и иногда основание («ИНЫЕ ПРИЧИНЫ»,
+# «Замена одного из судей»). Проверено на всех 9 присоединённых делах пилота
+# 31.07.2026 — ни в «Результате», ни в движении, ни в участниках номера нет.
+# Поэтому приёмник ищем сами по совпадению сторон, и результат ВСЕГДА помечен
+# предположением (merged_into_guess) — юрист должен видеть, что это догадка.
+_PATRONYMIC_SUFFIXES = ("вич", "вна", "ична", "кызы", "оглы")
+
+
+def _person_keys(parties: str) -> set[str]:
+    """ФИО-тройки («Фамилия Имя Отчество») из строки сторон карточки.
+
+    Ключ, а не отображаемое имя: сравниваются такие ключи между собой.
+    Юрлица сознательно НЕ попадают в набор — МТУ Росимущества стоит
+    соответчиком почти в каждом наследственном иске банка и склеил бы
+    несвязанные дела в один «приёмник». Отсюда обязательное отчество:
+    оно есть только у физлиц.
+
+    Тюркское отчество идёт двумя словами («Ариф Играр оглы»): окно ловит его
+    хвостом, и если перед окном есть ещё слово — это фамилия, добавляем её.
+    """
+    keys: set[str] = set()
+    for segment in re.split(r"[,;]", parties or ""):
+        tokens = re.findall(r"[А-ЯЁ][а-яё\-]+", segment)
+        for i in range(len(tokens) - 2):
+            window = tokens[i:i + 3]
+            if not window[2].lower().endswith(_PATRONYMIC_SUFFIXES):
+                continue
+            if window[2].lower() in ("оглы", "кызы") and i > 0:
+                window = tokens[i - 1:i + 3]
+            keys.add(" ".join(window))
+    return keys
+
+
+def _merged_event_date(fi: dict) -> str:
+    """Дата определения о присоединении — якорь 30-дневного архивного окна."""
+    from court_monitor.lifecycle import _FI_MERGED_RX
+    for ev in reversed(fi.get("events") or []):
+        if _FI_MERGED_RX.search(ev.get("text") or ""):
+            return ev.get("date") or ""
+    return fi.get("hearing_date") or fi.get("event_date") or ""
+
+
+def resolve_bank_merged_targets(
+    cases: list[dict], fi_changes: list[dict] | None = None
+) -> int:
+    """Проставить присоединённым делам трека штампы merged* и номер приёмника.
+
+    Возвращает число дел, которым номер подобран в этом прогоне.
+
+    Кандидат — дело того же суда, само не присоединённое, у которого совпадает
+    хотя бы одно ФИО ответчика. Выбираем по числу совпавших лиц, при равенстве —
+    поданное раньше (объединяют, как правило, в более раннее производство).
+    Ничья на первом месте — номер НЕ ставим: лучше пусто, чем неверный номер,
+    на который уедет звезда юриста.
+
+    Подбор идёт после FI-цикла (нужен весь список дел), а эмит завершения — в
+    нём, поэтому здесь же дописываем номер в готовое change["details"]: иначе
+    первый (и единственный, дальше termination_emitted) дайджест о присоединении
+    вышел бы без номера.
+    """
+    from court_monitor.lifecycle import (
+        is_bank_plaintiff_track, fi_is_merged, merged_target_reason,
+    )
+    merged_cases = [
+        c for c in cases
+        if is_bank_plaintiff_track(c) and fi_is_merged(c.get("first_instance") or {})
+    ]
+    if not merged_cases:
+        return 0
+
+    by_domain: dict[str, list[dict]] = {}
+    for c in cases:
+        fi = c.get("first_instance") or {}
+        if fi_is_merged(fi):
+            continue
+        dom = (fi.get("court_domain") or "").strip()
+        if dom:
+            by_domain.setdefault(dom, []).append(c)
+
+    resolved = 0
+    for case in merged_cases:
+        fi = case["first_instance"]
+        fi["merged"] = True
+        if not fi.get("merged_at"):
+            fi["merged_at"] = _merged_event_date(fi)
+        # Номер, once подобранный (или вписанный юристом), не пересматриваем.
+        if not fi.get("merged_into"):
+            keys = _person_keys(case.get("defendant") or "")
+            scored = []
+            if keys:
+                for other in by_domain.get(
+                    (fi.get("court_domain") or "").strip(), []
+                ):
+                    hits = keys & _person_keys(other.get("defendant") or "")
+                    if hits:
+                        ofi = other.get("first_instance") or {}
+                        scored.append((
+                            -len(hits),
+                            _sort_key_date(ofi.get("filing_date") or ""),
+                            other,
+                        ))
+            scored.sort(key=lambda t: (t[0], t[1]))
+            ambiguous = len(scored) > 1 and scored[0][0] == scored[1][0]
+            if scored and not ambiguous:
+                target = scored[0][2]
+                tfi = target.get("first_instance") or {}
+                fi["merged_into"] = target.get("id") or tfi.get("case_number") or ""
+                fi["merged_into_domain"] = (tfi.get("court_domain") or "").strip()
+                fi["merged_into_guess"] = True
+                resolved += 1
+                log.info(
+                    f"  {case.get('id', '?')}: присоединено — вероятный приёмник "
+                    f"{fi['merged_into']} (совпало лиц: {-scored[0][0]})"
+                )
+            elif ambiguous:
+                log.info(
+                    f"  {case.get('id', '?')}: присоединено — приёмник "
+                    f"неоднозначен ({len(scored)} кандидатов), номер не ставим"
+                )
+        # Дописать номер в уже собранное событие дайджеста этого прогона.
+        reason = merged_target_reason(fi)
+        if reason and fi_changes:
+            bare = (case.get("id") or "").strip()
+            dom = (fi.get("court_domain") or "").strip()
+            for ch in fi_changes:
+                if "fi_returned" not in (ch.get("type") or []):
+                    continue
+                d = ch.get("details") or {}
+                if d.get("termination_kind") != "merged":
+                    continue
+                if (ch.get("case") or "").strip() != bare:
+                    continue
+                if (d.get("court_domain") or "").strip() not in ("", dom):
+                    continue
+                d["return_reason"] = reason
+    return resolved
+
+
+def _sort_key_date(raw: str) -> tuple:
+    """ДД.ММ.ГГГГ → сортируемый ключ; пустая/битая дата уходит в конец."""
+    m = _DATE_DDMMYYYY_RX.match((raw or "").strip())
+    if not m:
+        return ("9999", "99", "99")
+    return (m.group(3), m.group(2), m.group(1))
+
+
 def is_fi_number_tracked(
     number: str, court_domain: str, exact: set, wildcard: set
 ) -> bool:

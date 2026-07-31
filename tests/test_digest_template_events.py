@@ -494,6 +494,37 @@ class FiEventMatrixTest(unittest.TestCase):
         )
         self.assertNotIn("для банка", html)
 
+    def test_fi_returned_merged(self):
+        """Присоединение к другому делу: номер приёмника — главное в строке,
+        знака «для банка» нет (дело живёт дальше под другим номером).
+        Номер всегда с пометкой: суд его не публикует, это подбор системы."""
+        html = self._one(
+            ["fi_returned"],
+            {"termination_kind": "merged",
+             "return_reason": "№ 2-191/2026 (предположительно)",
+             "bank_outcome": ""},
+        )
+        self.assert_in_changes_section(
+            html,
+            "🔗 дело присоединено к другому делу: "
+            "№ 2-191/2026 (предположительно)",
+        )
+        self.assertNotIn("для банка", html)
+
+    def test_fi_returned_merged_without_number(self):
+        """Приёмник не подобрался — только ярлык, без фолбэка на причину.
+
+        Фолбэк _fi_return_reason_for_render отдал бы первый сегмент события
+        («судебное заседание») вместо номера.
+        """
+        html = self._one(
+            ["fi_returned"],
+            {"termination_kind": "merged", "return_reason": "",
+             "bank_outcome": ""},
+        )
+        self.assert_in_changes_section(html, "🔗 дело присоединено к другому делу")
+        self.assertNotIn("судебное заседание", html.lower())
+
     def test_fi_returned_legacy_context_without_kind(self):
         """Старый контекст (--replay-last до 29.07.2026) ключа
         termination_kind не несёт — фолбэк на прежнюю формулировку,
