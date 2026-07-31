@@ -909,6 +909,10 @@ _BANK_TYPE_LABELS = {
     # см. _bank_event_phrases; здесь только фолбэк формы.
     "fi_returned": "🔚 иск возвращён",
     "fi_accepted_no_hearing": "📥 иск принят к производству",
+    # Дело заведено авто-подхватом с выдачи суда (блок 3b прогона). Раньше
+    # трек пополнялся только вручную и юрист сам знал, что добавил; теперь
+    # картотека растёт сама — молчать об этом нельзя.
+    "fi_bank_claim_registered": "🆕 иск банка взят на мониторинг",
     "fi_act_published": "📄 решение изготовлено",
     "fi_act_text_published": "📄 текст решения опубликован",
     "fi_motivirovka_emitted": "📄 мотивировка изготовлена",
@@ -1000,6 +1004,16 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             if kind == "merged" and reason:
                 label += f": {escape_html(reason)}"
             out.append(label)
+        elif t == "fi_bank_claim_registered":
+            ph = _BANK_TYPE_LABELS["fi_bank_claim_registered"]
+            filed = (d.get("filing_date") or "").strip()
+            if filed:
+                ph += f" (подан {escape_html(filed)})"
+            # Дело с уже поданной жалобой этим же прогоном уезжает в основную
+            # картотеку — иначе юрист ищет его в лёгком треке и не находит.
+            if d.get("left_track"):
+                ph += " — по делу подана жалоба, дело в общем треке"
+            out.append(ph)
         elif t == "fi_status_change":
             # Рядом с исходом («⚖️ вынесено решение», «🔚 иск возвращён»)
             # смена статуса — эхо того же факта (зеркало дедупа секции
