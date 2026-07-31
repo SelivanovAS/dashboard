@@ -2144,26 +2144,39 @@ def main_json():
             )
             continue
 
-        # Здоровье меряем по сберовским строкам ДО фильтра «банк-ответчик»:
-        # вал исков самого банка выталкивает ответчик-дела со страницы 1,
-        # и len(fi_results)=0 выглядел бы поломкой (Октябрьский р/с, 14.07.2026).
+        # Здоровье меряем по сберовским строкам ДО фильтра ролей: вал исков
+        # самого банка выталкивает ответчик-дела со страницы 1, и
+        # len(fi_results)=0 выглядел бы поломкой (Октябрьский р/с, 14.07.2026).
         search_stats: dict = {}
-        fi_results = parse_first_instance_search(search_html, court, stats=search_stats)
+        all_rows = parse_first_instance_search(
+            search_html, court, stats=search_stats, keep_all_roles=True
+        )
         health_obs[health_key] = search_stats.get("sber_rows", 0)
+        # Основной трек — строго «банк-ответчик»: тот же контракт, что отдавал
+        # сам парсер без keep_all_roles. Иски самого банка идут своим путём
+        # (блок 3b), «третье лицо» в 1-й инстанции не отслеживаем.
+        fi_results = [r for r in all_rows if r.get("bank_role") == "Ответчик"]
+        # Пустая страница считается по ВСЕМ ролям: суд, чья выдача целиком
+        # состоит из исков банка, не «молчит» — у него просто нет ответчик-дел
+        # на первой странице.
+        page_empty = not all_rows
         # 0 строк + маркеры проверочного кода → суд закрыт CAPTCHA, а не «нет дел».
-        if not fi_results and detect_captcha_challenge(search_html):
+        if page_empty and detect_captcha_challenge(search_html):
             fi_challenge[court.domain] = court.name
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности
         # (аутейдж портала) → карточки этого суда не запрашиваем — фаза
         # поиска идёт раньше FI-цикла, пре-открытие не тратит ни карточки.
         # ⚠️ Капча выше предохранитель НЕ открывает: у капчёвых судов поиск
         # закрыт штатно, а карточки живут и мониторятся (search_gated).
-        if not fi_results and looks_like_outage_page(search_html):
+        if page_empty and looks_like_outage_page(search_html):
             card_breaker_preopen(court.domain, "заглушка на странице поиска")
         fi_results_by_court.append((court, fi_results))
 
-        # Промоушен материала → 2-XXX до фильтра new_fi.
-        for r in fi_results:
+        # Промоушен материала → 2-XXX до фильтра new_fi. Идём по ВСЕМ ролям:
+        # материал банка-истца живёт в лёгком треке, и его строка «2-XXX ~ М-…»
+        # приходит истцовой — иначе трек получил бы дубль (М-номер навсегда) и
+        # новое дело под 2-номером.
+        for r in all_rows:
             mat = (r.get("material_number") or "").strip()
             if not mat or mat == r["case_number"]:
                 continue
