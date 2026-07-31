@@ -2228,7 +2228,40 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line2_parts.append(f"категория: {escape_html(cat_short)}")
             if line2_parts:
                 cass_block.append(" | ".join(line2_parts))
-            # Строка 3: «📅 Назначено судебное заседание на ДД.ММ.ГГГГ в ЧЧ:ММ».
+            # Строка 3: «<b>дата</b> — 📥 поступила касс. жалоба от Роль Имя» —
+            # ТОЛЬКО на первой линковке карточки 7kas. Единственное место в
+            # цикле, где читается ch["type"]: `filing_date` живёт в details у
+            # ВСЕХ типов (одна сборка из cass_block), и без гейта строка
+            # повторялась бы на каждом последующем событии дела — итоге,
+            # акте — как будто жалоба поступает заново. До 31.07.2026 строки
+            # не было вовсе: свежая карточка без заседания и итога выходила
+            # двумя нейтральными строками, ничего не сообщая (баг 09–31.07).
+            # Эмодзи 📥 — ПОСЛЕ <b>дата</b>, иначе строка попадёт под
+            # _DIGEST_HEADER_RE и будет принята за заголовок секции.
+            arrival_printed = False
+            filing_cs = (d.get("filing_date", "") or "").strip()
+            if filing_cs and "new_cassation" in (ch.get("type") or []):
+                ap_raw_cs = (d.get("appellant", "") or "").strip()
+                ap_short_cs = escape_html(
+                    shorten_party_name(ap_raw_cs, keep_fio_full=_DIGEST_FIO_FULL)
+                )
+                # Роль в родительный падеж — как в «Новых касс. делах»
+                # («от ответчика Иванова И.И.», не «от Ответчик …»).
+                st_title_cs = (d.get("appellant_status", "") or "").strip().capitalize()
+                ap_role_cs = escape_html(
+                    ROLE_GENITIVE.get(st_title_cs, st_title_cs.lower())
+                ) if st_title_cs else ""
+                from_cs = ""
+                if ap_role_cs and ap_short_cs:
+                    from_cs = f" от {ap_role_cs} {ap_short_cs}"
+                elif ap_short_cs:
+                    from_cs = f" от {ap_short_cs}"
+                cass_block.append(
+                    f"<b>{escape_html(filing_cs)}</b> — 📥 поступила касс. жалоба"
+                    + from_cs
+                )
+                arrival_printed = True
+            # Строка 4: «📅 Назначено судебное заседание на ДД.ММ.ГГГГ в ЧЧ:ММ».
             # Юрист просил полную русскую фразу вместо терсе «📅 Заседание: …».
             # Подавляем при готовом outcome: заседание уже состоялось, итог
             # важнее даты, а формулировка «Назначено …» в прошлом обманывает
@@ -2244,7 +2277,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 cass_block.append(
                     f"📅 Назначено судебное заседание на {hearing_str}"
                 )
-            # Строка 4: Итог — готовая подпись из CASSATION_OUTCOME_RU /
+            # Строка 5: Итог — готовая подпись из CASSATION_OUTCOME_RU /
             # cassation_review_label. + «от Роль Имя» из заявителя. Для
             # cassation_terminated раскрываем общую метку до конкретики
             # (возврат / прекращение / отзыв) + причина.
@@ -2262,8 +2295,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             label = outcome_label_ru or review_label_ru
             # Подавляем стадийный маркер «Принято к производству», если уже
             # есть строка с датой заседания — повторять «принято» избыточно,
-            # юрист и так видит, что заседание назначено.
-            if hd and label == "📥 Принято к производству":
+            # юрист и так видит, что заседание назначено. Строка поступления
+            # гасит его по той же причине: карточка часто приезжает сразу с
+            # «ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО…» (cassation_review_label),
+            # и вышли бы два «📥» подряд об одном и том же.
+            if (hd or arrival_printed) and label == "📥 Принято к производству":
                 label = ""
             if label:
                 # Сокращаем имя заявителя (та же причина, что и в секции
