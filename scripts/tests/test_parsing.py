@@ -3795,6 +3795,37 @@ class TestFirstInstanceSearchStats:
         assert [r["case_number"] for r in results] == ["2-122/2026"]
         assert stats["sber_rows"] == 2
 
+    def test_all_roles_mode_keeps_health_metric_identical(self):
+        """Прогон перешёл на keep_all_roles=True (нужны и иски банка), и
+        метрика здоровья от режима зависеть не должна: sber_rows считается
+        ДО фильтра ролей."""
+        html = self._search_html([
+            ("2-100/2026", "ПАО Сбербанк", "Петров Пётр Петрович"),
+            ("2-122/2026", "Зименкова С.Н.", "Брылянт Е.А., ПАО Сбербанк"),
+        ])
+        strict: dict = {}
+        loose: dict = {}
+        uc.parse_first_instance_search(html, self._court(), stats=strict)
+        uc.parse_first_instance_search(
+            html, self._court(), stats=loose, keep_all_roles=True)
+        assert strict["sber_rows"] == loose["sber_rows"] == 2
+
+    def test_role_split_reproduces_strict_mode(self):
+        """Контракт фазы 3: фильтр по «Ответчик» над keep_all_roles-выдачей
+        даёт ровно прежний список основного трека (и порядок строк)."""
+        html = self._search_html([
+            ("2-100/2026", "ПАО Сбербанк", "Петров Пётр Петрович"),
+            ("2-122/2026", "Зименкова С.Н.", "Брылянт Е.А., ПАО Сбербанк"),
+            ("2-133/2026", "Сидоров С.С.", "Иванов И.И."),
+        ])
+        strict = uc.parse_first_instance_search(html, self._court())
+        all_rows = uc.parse_first_instance_search(
+            html, self._court(), keep_all_roles=True)
+        assert [r for r in all_rows if r["bank_role"] == "Ответчик"] == strict
+        # Иски банка видны только в режиме всех ролей — их берёт блок 3b.
+        assert [r["case_number"] for r in all_rows if r["bank_role"] == "Истец"] \
+            == ["2-100/2026"]
+
     def test_subsidiary_only_row_not_counted(self):
         """Дочка (Сбербанк страхование) не считается сберовской строкой."""
         html = self._search_html([
