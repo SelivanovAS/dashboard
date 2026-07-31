@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-07-31T04:03:36",
+  "generated_at": "2026-07-31T09:27:32",
   "title_default": "Мониторинг дел — обновление",
-  "body_default": "🆕 Новых: 2 · 📋 Изменений: 36",
+  "body_default": "🆕 Новых: 4 · 📋 Изменений: 6",
   "owner_only": false,
   "items": [
     {
@@ -25,7 +25,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: М-550/2026, 2-9857/2025, 2-583/2026",
+      "body": "Изменения по 4 делам: М-6816/2026, 33-5494/2026, 33-5492/2026 и ещё 1",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -36,7 +36,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 2 · 📋 Изменений: 36",
+      "body": "🆕 Новых: 4 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -53,7 +53,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: М-550/2026, 2-9857/2025, 2-5609/2026",
+      "body": "Изменения по 4 делам: М-6816/2026, 33-5494/2026, 33-5492/2026 и ещё 1",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -79,7 +79,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: М-550/2026, 2-9857/2025, 2-2216/2026",
+      "body": "Изменения по 5 делам: М-6816/2026, 33-5494/2026, 33-5492/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -90,7 +90,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 2 · 📋 Изменений: 36",
+      "body": "🆕 Новых: 4 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -101,7 +101,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 2 · 📋 Изменений: 36",
+      "body": "🆕 Новых: 4 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -112,7 +112,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 2 · 📋 Изменений: 36",
+      "body": "🆕 Новых: 4 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -123,9 +123,9 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 2 · 📋 Изменений: 36",
+      "body": "🆕 Новых: 4 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-07-31T04:03:36"
+  "updated_at": "2026-07-31T09:27:32"
 }
