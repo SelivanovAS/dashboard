@@ -3666,6 +3666,30 @@ def main_json():
             f"(дубли от записей одного FI-дела)"
         )
 
+    # Иски банка, подхваченные фазой 3b, объявляем строкой в своей секции:
+    # раньше пул заводился руками и юрист знал, что добавил, — теперь
+    # картотека растёт сама, и молчаливое пополнение осталось бы незамеченным
+    # (решение юриста 31.07.2026). Врезка ПОСЛЕ dedupe_fi_changes (это не
+    # событие карточки, дедуплицировать нечего) и ДО фильтра рутины.
+    for _bc in bank_new_cases:
+        _bfi = _bc.get("first_instance") or {}
+        fi_changes.append({
+            "case": _bc.get("id", ""),
+            "court": _bfi.get("court", ""),
+            "plaintiff": _bc.get("plaintiff", ""),
+            "defendant": _bc.get("defendant", ""),
+            "track": "plaintiff_light",
+            "type": ["fi_bank_claim_registered"],
+            "details": {
+                "court_domain": _bfi.get("court_domain", ""),
+                "link": _bfi.get("link", ""),
+                "delo_id": _bfi.get("delo_id", 0),
+                "srv_num": _bfi.get("srv_num", 1),
+                "filing_date": _bfi.get("filing_date", ""),
+                "left_track": lifecycle.bank_case_left_track(_bc),
+            },
+        })
+
     # Трек «Иски банка»: при BANK_DIGEST_ROUTINE=0 рутина track-дел
     # (заседания, статусы, принятия) в дайджест не идёт — остаются решение,
     # возврат, апел. жалоба и ИЛ. Фильтр стоит ДО save_digest_context, чтобы
