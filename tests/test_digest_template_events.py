@@ -1425,6 +1425,43 @@ class CassationMatrixTest(unittest.TestCase):
         )
         self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
 
+    def test_new_cassation_arrival_line(self):
+        """Дело доехало до КСОЮ и получило 8Г-номер — главная новость записи.
+        До 31.07.2026 строки не было: карточка без заседания и итога выходила
+        двумя нейтральными строками, ничего не сообщая (8Г-13152/2026)."""
+        html = render(cass_changes=[make_cass_change(
+            ["new_cassation"],
+            {"filing_date": "29.07.2026", "appellant": "Шамов Д. С.",
+             "appellant_status": "истец"},
+        )])
+        self.assertIn(
+            "<b>29.07.2026</b> — 📥 поступила касс. жалоба от истца Шамов Д. С.",
+            html,
+        )
+
+    def test_arrival_line_only_on_new_cassation(self):
+        """`filing_date` лежит в details у ВСЕХ типов (одна сборка из
+        cass_block) — без гейта по типу строка повторялась бы на каждом
+        следующем событии дела, как будто жалоба поступает заново."""
+        html = render(cass_changes=[make_cass_change(
+            ["outcome_change"],
+            {"filing_date": "29.07.2026", "outcome": "cassation_upheld"},
+        )])
+        self.assertNotIn("поступила касс. жалоба", html)
+        self.assertIn("<b>Итог:</b> Оставлено без изменения", html)
+
+    def test_arrival_line_suppresses_accepted_label(self):
+        """Карточка часто приезжает сразу с «ВОЗБУЖДЕНО КАССАЦИОННОЕ
+        ПРОИЗВОДСТВО…» → метка «📥 Принято к производству». Вместе со строкой
+        поступления вышли бы два «📥» подряд об одном и том же."""
+        html = render(cass_changes=[make_cass_change(
+            ["new_cassation", "review_result_change"],
+            {"filing_date": "20.07.2026",
+             "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО"},
+        )])
+        self.assertIn("📥 поступила касс. жалоба", html)
+        self.assertNotIn("Принято к производству", html)
+
     def test_outcome_change_itog_line(self):
         html = render(cass_changes=[make_cass_change(
             ["outcome_change"], {"outcome": "cassation_upheld"},

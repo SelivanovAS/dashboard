@@ -1252,6 +1252,52 @@ class TestLinkCassationCases:
         assert len(changes) == 1 and "new_cassation" in changes[0]["type"]
         assert discovered == []
 
+    def test_stub_appellant_block_does_not_suppress_new_cassation(self):
+        """Заглушка `_apply_fi_cassator` (appellant_* без case_number) НЕ
+        считается связкой: дело, чью касс. жалобу карточка 1-й инст. уже
+        показала, обязано объявить поступление в кассацию.
+
+        Регрессия 09–31.07.2026: условие было `if not old_cass`, заглушка
+        truthy → new_cassation не эмитился, а других типов у свежей карточки
+        нет (outcome/review_result пусты, акта нет) → change выбрасывался
+        целиком. Так молча приехали все 9 дел, включая 8Г-13152/2026."""
+        cases = [{
+            "id": "2-100/2025",
+            "current_stage": "cassation_pending",
+            "first_instance": {"case_number": "2-100/2025"},
+            # ровно то, что кладёт _apply_fi_cassator (runs.py)
+            "cassation": {
+                "appellant": "Истец",
+                "appellant_is_bank": False,
+                "appellant_status": "Истец",
+                "discovered_via_cassation": False,
+            },
+        }]
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-100/2025")]
+        )
+        assert out[0]["current_stage"] == "cassation"
+        assert len(changes) == 1
+        assert "new_cassation" in changes[0]["type"]
+        # filing_date нужен рендеру для строки «📥 поступила касс. жалоба …».
+        assert changes[0]["details"]["filing_date"] == "01.05.2026"
+        assert discovered == []
+
+    def test_linked_card_does_not_repeat_new_cassation(self):
+        """Второй прогон по уже связанной карточке (в т.ч. refresh раздела 4d)
+        поступление не повторяет — иначе дайджест объявлял бы одно и то же
+        каждый день."""
+        cases = [{
+            "id": "2-100/2025",
+            "current_stage": "cassation",
+            "first_instance": {"case_number": "2-100/2025"},
+            "cassation": {"case_number": "8Г-111/2026", "act_published": False},
+        }]
+        out, changes, discovered = uc.link_cassation_cases(
+            cases, [_cass_find("2-100/2025")]
+        )
+        assert changes == [] and discovered == []
+
     def test_past_round_card_does_not_resurrect(self):
         """После remanded + re-link старая карточка 7kas (её 8Г уже в
         history) не должна воскрешать кассацию и утаскивать дело из

@@ -801,6 +801,10 @@ def link_cassation_cases(
                     "review_result": cass_block["review_result"],
                     "result_text": cass_block["result_text"],
                     "result_for_appeal": cass_block["result_for_appeal"],
+                    # Дата поступления жалобы в КСОЮ — для строки «📥 поступила
+                    # касс. жалоба …» в секции «Касс. события» (её печатает
+                    # ТОЛЬКО тип new_cassation, см. template.py).
+                    "filing_date": cass_block["filing_date"],
                     "decision_date": cass_block["decision_date"],
                     "hearing_date": cass_block["hearing_date"],
                     "hearing_time": cass_block.get("hearing_time", ""),
@@ -812,7 +816,16 @@ def link_cassation_cases(
                     "link": cass_block.get("link", ""),
                 },
             }
-            if not old_cass:
+            # Критерий «карточки ещё не было» — ОТСУТСТВИЕ case_number, а не
+            # пустота всего блока: на стадиях cassation_watch/cassation_pending
+            # `_apply_fi_cassator` (runs.py) кладёт в case["cassation"] заглушку
+            # из вкладки «Заявитель жалобы» карточки 1-й инст. — только
+            # appellant_* без номера. Она truthy, и прежнее `if not old_cass`
+            # глушило объявление ровно на самом типичном пути: дело, чью касс.
+            # жалобу мы уже видели в 1-й инст., приезжало в кассацию МОЛЧА
+            # (09–31.07.2026 так пропали все 9 поступлений). Тот же критерий —
+            # у lifecycle.cassation_card_linked, которым гейтится сама заглушка.
+            if not (old_cass.get("case_number") or "").strip():
                 change["type"].append("new_cassation")
             if cass_block["review_result"] and cass_block["review_result"] != old_review:
                 change["type"].append("review_result_change")
