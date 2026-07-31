@@ -196,7 +196,63 @@
         "announced": true
       },
       "archived_at": "2026-07-27"
+    },
+    {
+      "id": "2-3725/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Геворгян Ануш Сосовна, наследственное имущество Оганнисян Тигран Грагатович, Оганнисян Грагат Айкавардович",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3725/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Зимина Анна Юрьевна",
+        "filing_date": "03.02.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 11:54. 08.06.2026",
+        "event_date": "08.06.2026",
+        "hearing_date": "02.06.2026",
+        "hearing_time": "09:00",
+        "link": "263949920|7c47dcf5-e366-4cdf-9663-21ba183e9dfa",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "writs": [
+          {
+            "issue_date": "16.07.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-3725/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "16.07.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-3725/2026#2",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ],
+        "decision_date": "02.06.2026",
+        "last_checked_at": "2026-07-27",
+        "legal_force_est": "2026-07-03",
+        "motivirovka_date": "02.06.2026"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-07-31"
     }
   ],
-  "updated_at": "2026-07-27T04:00:48"
+  "updated_at": "2026-07-31T04:03:31"
 }
