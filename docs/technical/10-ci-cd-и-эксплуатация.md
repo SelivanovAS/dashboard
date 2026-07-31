@@ -125,7 +125,9 @@ workers.dev (ошибка 1010 → 403 до Worker'а), из-за чего ка�
 Коммит-шаг добавляет: `cases.json`, `cases_archive.json`, `cases_archive_*.json`
 (холодные), `last_digest_context.json`, `last_digest.json`,
 `last_personal_pushes.json`, legacy CSV, `.digested_acts`, `.cassation_acts`,
-`parse_health.json`, `.act_summaries.json` (кэш пересказов).
+`parse_health.json`, `.act_summaries.json` (кэш пересказов),
+`.bank_intake_seen.json` (негативный кэш авто-подхвата исков банка — без
+коммита карточки отказников качались бы каждым прогоном заново).
 Сообщение коммита — `📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
 
 Алерт о падении сделан через `curl` (не Python) — сработает, даже если упала
