@@ -111,8 +111,28 @@ def card_rejects(card_info: dict, *, skip_appeal: bool = True) -> str:
     return ""
 
 
+def _stamp_court_ids(fi: dict, fi_row: dict, court=None) -> None:
+    """Проставить delo_id/srv_num записи 1-й инстанции.
+
+    Прогону они не нужны (карточку он строит через CourtConfig.card_url по
+    домену), но ссылку «в суд» из них собирают фронт (app.js buildCourtLink,
+    фолбэк 1540005/1) и дайджест. Приоритет srv_num: href строки выдачи →
+    конфиг строки → CourtConfig. href авторитетнее: на двухсерверных доменах
+    (Покачи на vartovray--hmao.sudrf.ru, Камышловский/Красноуфимский) резолв
+    суда по домену всегда отдаёт первый сервер.
+    """
+    delo_id = fi_row.get("court_delo_id") or (court.delo_id if court else 0)
+    if delo_id:
+        fi["delo_id"] = delo_id
+    srv = (fi_row.get("href_srv_num") or fi_row.get("court_srv_num")
+           or (court.srv_num if court else None))
+    if srv:
+        fi["srv_num"] = srv
+
+
 def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
-                    now_iso: str, source: str = "bank_registry") -> dict:
+                    now_iso: str, source: str = "bank_registry",
+                    court=None) -> dict:
     """JSON-запись трека «Иски банка» из поисковой строки + карточки.
 
     build_json_entry + маркеры трека: track="plaintiff_light",
@@ -120,10 +140,14 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
     «новые иски» основной картотеки (решение юриста 25.07.2026); уже решённые
     получают resolved_emitted=True — старые решения задним числом в дайджест
     не льются. Общая для всех каналов ввода трека.
+
+    `court` (CourtConfig) — источник delo_id/srv_num там, где их нет в строке:
+    целевой поиск по номеру (parse_search_row) этих ключей не отдаёт вовсе.
     """
     entry = build_json_entry(fi_row, card_info)
     entry["track"] = "plaintiff_light"
     entry["initial_bank_role"] = fi_row.get("bank_role", "Истец")
+    _stamp_court_ids(entry["first_instance"], fi_row, court)
     entry["import"] = {
         "operator": operator, "at": now_iso,
         "source": source, "announced": True,

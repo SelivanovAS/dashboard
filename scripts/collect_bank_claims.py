@@ -248,7 +248,8 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             log.info(f"[{i}/{len(rows)}] {num} — {label}")
             continue
 
-        entry = make_bank_entry(r, card_info, operator, now_iso, source="search_sweep")
+        entry = make_bank_entry(r, card_info, operator, now_iso,
+                                source="search_sweep", court=court)
         new_entries.append(entry)
         dedup_exact.add((court.domain, num))
         counters["added"] += 1

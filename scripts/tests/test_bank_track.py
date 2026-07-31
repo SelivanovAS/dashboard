@@ -542,6 +542,30 @@ class TestSplitBankTrack:
         assert "track" not in left
         assert left["track_origin"] == "plaintiff_light"
 
+    def test_court_ids_backfilled(self):
+        """Записи ручных каналов заведены без delo_id/srv_num — ссылку «в суд»
+        фронт собирал по фолбэку 1540005/1."""
+        from court_monitor.runs import split_bank_track
+        case = _track_case(status="В производстве")
+        split_bank_track([case])
+        fi = case["first_instance"]
+        assert fi["delo_id"] and fi["srv_num"] == 1
+
+    def test_two_court_domain_not_guessed(self):
+        """На vartovray--hmao.sudrf.ru два суда (районный srv 1 и Покачи srv 2):
+        по одному домену сервер не угадать — неверный хуже фолбэка."""
+        from court_monitor.runs import split_bank_track
+        case = _track_case(status="В производстве")
+        case["first_instance"]["court_domain"] = "vartovray--hmao.sudrf.ru"
+        split_bank_track([case])
+        assert "srv_num" not in case["first_instance"]
+
+    def test_existing_ids_not_overwritten(self):
+        from court_monitor.runs import split_bank_track
+        case = _track_case(status="В производстве", delo_id=1, srv_num=2)
+        split_bank_track([case])
+        assert case["first_instance"]["srv_num"] == 2
+
     def test_left_track_case_not_returned_to_bank_file(self):
         from court_monitor.runs import split_bank_track
         left = _track_case(appeal_filed_date="01.07.2026")
