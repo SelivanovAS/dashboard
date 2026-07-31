@@ -58,11 +58,12 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from court_monitor import config  # noqa: E402
-from court_monitor.config import log  # noqa: E402
-from court_monitor.lifecycle import (  # noqa: E402
-    classify_writ_kind,
-    fi_decision_date_from_events,
+from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспорт правил приёма
+    _EXCLUDED_RESULT_RX,
+    card_rejects,
+    row_passes,
 )
+from court_monitor.config import log  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
     is_fi_number_tracked,
@@ -86,20 +87,10 @@ EXIT_CAPTCHA = 2
 EXIT_NO_COURT = 3
 EXIT_NO_RESULTS = 4
 
-# Итоги, с которыми иск банка в трек НЕ берём (список юриста 26.07.2026):
-# «оставлено без рассмотрения», «передано по подсудности», «возвращено»,
-# «прекращено». «Отказано» осознанно НЕ здесь — по нему возможна апелляция
-# банка, ранний сигнал о сроке на жалобу важен.
-# С 31.07.2026 — присоединение к другому делу (ст. 151 ГПК): дело живёт дальше
-# под номером приёмника, а импортированное первым же прогоном объявилось бы
-# завершённым и ушло в архив — чистый шум в дайджесте.
-_EXCLUDED_RESULT_RX = re.compile(
-    r"без\s+рассмотрени|подсудност|возвращ|прекращ"
-    r"|присоединен\w*\s+к\s+другому\s+делу"
-    r"|(?:объединен|соединен)\w*\s+в\s+одно\s+производств",
-    re.IGNORECASE
-)
-
+# Правила приёма (роль, исключаемые итоги, карточные фильтры) — общие для всех
+# каналов ввода трека, живут в court_monitor/bank_intake.py; здесь только
+# ре-экспорт (см. импорт выше) + пагинация выдачи, которая нужна лишь этому
+# разовому сборщику.
 _HREF_RX = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 _PAGE_PARAM_RX = re.compile(r"[?&]page=(\d+)")
 
@@ -129,17 +120,6 @@ def discover_page_urls(html: str, base_url: str) -> dict[int, str]:
             url = base_url.rstrip("/") + "/" + href
         pages.setdefault(n, url)
     return pages
-
-
-def row_passes(row: dict) -> tuple[bool, str]:
-    """Пропускать ли строку выдачи в трек. Возвращает (ok, причина-отказа)."""
-    if row.get("bank_role") != "Истец":
-        return False, "role"
-    if _EXCLUDED_RESULT_RX.search(row.get("result") or ""):
-        return False, "excluded_result"
-    if "|" not in (row.get("link") or ""):
-        return False, "no_link"
-    return True, ""
 
 
 def fetch_search_rows(court, pages_limit: int) -> tuple[list[dict], int]:
@@ -248,66 +228,24 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             log.warning(f"[{i}/{len(rows)}] {num} — [FETCH FAIL] карточка")
             continue
         card_info = parse_case_card(card_html, court.base_url)
-        # Второй рубеж фильтра итогов: выдача отстаёт от карточки — у дела
-        # 2-8442/2026 (dry-run 26.07.2026) в выдаче итога ещё не было, а
-        # карточка уже знала «Передано по подсудности».
-        card_result = card_info.get("Результат") or ""
-        if _EXCLUDED_RESULT_RX.search(card_result):
-            counters["excluded_result"] += 1
-            log.info(
-                f"[{i}/{len(rows)}] {num} — [EXCLUDED RESULT] "
-                f"{card_result[:60]} (итог из карточки)"
-            )
-            continue
-        # Дело уже ушло (или уходит) в апелляцию/кассацию — в лёгкий трек не
-        # берём: первый же прогон перевёл бы его в основной cases.json
-        # (bank_case_left_track), т.е. в треке оно побыло бы только мусорным
-        # транзитом (решение юриста 30.07.2026).
-        if (card_info.get("_fi_appeal_filed")
-                or card_info.get("_fi_sent_to_appeal")
-                or card_info.get("_fi_cassation_filed")
-                or card_info.get("_fi_sent_to_cassation")):
-            counters["excluded_appeal"] += 1
-            log.info(
-                f"[{i}/{len(rows)}] {num} — [EXCLUDED APPEAL] "
-                "жалоба/направление в вышестоящую инстанцию"
-            )
-            continue
-        # Уже выдан ИЛ на исполнение решения — жизненный цикл трека пройден,
-        # дело сразу ушло бы в bank-архив. Обеспечительные листы (выданы ДО
-        # решения) не считаются — такое дело ещё ждёт «настоящего» ИЛ. Статус
-        # листа не важен: «Отозван»/«Возвращен» — лист всё равно был выдан.
-        #
-        # ⚠️ Якорь — дата РЕШЕНИЯ из событий карточки, не «Дата заседания»
-        # (ревизия 30.07.2026). `fi.decision_date` записи на этапе сбора ещё
-        # нет, но фолбэк на hearing_date промахивается в обе стороны:
-        # • дело БЕЗ решения — «Дата заседания» непуста (последнее session-
-        #   событие), и обеспечительный лист, выданный ПОЗЖЕ последнего
-        #   заседания, читался бы как «на исполнение» → живое дело молча не
-        #   попало бы в трек, причём строка отчёта неотличима от честного
-        #   исключения (в боевом пайплайне такого не бывает: там у
-        #   нерешённого дела decision_date пуст → classify_writ_kind сразу
-        #   возвращает "interim");
-        # • дело С решением — «Дата заседания» уезжает вперёд, назначь суд
-        #   пост-решенческое заседание (отмена заочного по ст. 237 ГПК,
-        #   судебные расходы, индексация), и лист на исполнение стал бы
-        #   «обеспечительным» → дело с пройденным циклом попало бы в трек.
-        # Фолбэк на «Дату заседания» остаётся для решённой карточки без
-        # события решения в истории движения.
-        decision_date = fi_decision_date_from_events(card_info.get("_events"))
-        if decision_date:
-            fi_probe = {"decision_date": decision_date}
-        elif (card_info.get("Статус") or "").strip() in ("Решено", "Возвращено"):
-            fi_probe = {"hearing_date": card_info.get("Дата заседания", "")}
-        else:
-            fi_probe = {}
-        if any(classify_writ_kind(w, fi_probe) == "enforcement"
-               for w in card_info.get("_writs") or []):
-            counters["excluded_writ"] += 1
-            log.info(
-                f"[{i}/{len(rows)}] {num} — [EXCLUDED WRIT] "
-                "выдан ИЛ на исполнение решения"
-            )
+        # Карточные фильтры — общие правила приёма (court_monitor/bank_intake.py):
+        # исключаемый итог из карточки, признак апелляции/кассации (исторический
+        # сбор такие дела не берёт — в треке они побыли бы мусорным транзитом,
+        # решение юриста 30.07.2026), уже выданный ИЛ на исполнение решения.
+        why_card = card_rejects(card_info, skip_appeal=True)
+        if why_card:
+            counters[why_card] += 1
+            label = {
+                "excluded_result": (
+                    "[EXCLUDED RESULT] "
+                    f"{(card_info.get('Результат') or '')[:60]} (итог из карточки)"
+                ),
+                "excluded_appeal": (
+                    "[EXCLUDED APPEAL] жалоба/направление в вышестоящую инстанцию"
+                ),
+                "excluded_writ": "[EXCLUDED WRIT] выдан ИЛ на исполнение решения",
+            }[why_card]
+            log.info(f"[{i}/{len(rows)}] {num} — {label}")
             continue
 
         entry = make_bank_entry(r, card_info, operator, now_iso, source="search_sweep")

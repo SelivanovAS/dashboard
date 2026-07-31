@@ -52,6 +52,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from court_monitor import config  # noqa: E402
+from court_monitor.bank_intake import make_bank_entry  # noqa: E402,F401 — ре-экспорт
 from court_monitor.config import log  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
@@ -64,7 +65,6 @@ from court_monitor.storage import (  # noqa: E402
     load_json, load_bank_json, save_bank_json,
 )
 from court_monitor.target_search import (  # noqa: E402
-    build_json_entry,
     determine_bank_role,
     parse_search_row,
 )
@@ -125,36 +125,6 @@ def load_bank_file() -> dict:
     if os.path.exists(config.JSON_BANK_PATH):
         return load_bank_json(config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     return {"version": 1, "track": "plaintiff_light", "cases": []}
-
-
-def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
-                    now_iso: str, source: str = "bank_registry") -> dict:
-    """JSON-запись трека «Иски банка» из поисковой строки + карточки.
-
-    build_json_entry + маркеры трека: track="plaintiff_light",
-    import{announced:true} — иски банка в дайджесте не анонсируются
-    (решение юриста 25.07.2026); уже решённые получают resolved_emitted=True —
-    старые решения задним числом в дайджест не льются. Общая для импортёра
-    реестра и разового сборщика выдачи (scripts/collect_bank_claims.py).
-    """
-    entry = build_json_entry(fi_row, card_info)
-    entry["track"] = "plaintiff_light"
-    entry["initial_bank_role"] = fi_row.get("bank_role", "Истец")
-    entry["import"] = {
-        "operator": operator, "at": now_iso,
-        "source": source, "announced": True,
-    }
-    fi = entry["first_instance"]
-    if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
-        fi["resolved_emitted"] = True
-    # Уже выданные листы переносим в запись сразу — тот же принцип, что
-    # resolved_emitted: первый прогон не должен объявить старые ИЛ «новыми»
-    # (без переноса FI-цикл эмитнул бы fi_writ_issued задним числом по всем
-    # решённым делам пула). События пойдут только на листы, появившиеся
-    # ПОСЛЕ постановки на мониторинг.
-    if card_info.get("_writs"):
-        fi["writs"] = card_info["_writs"]
-    return entry
 
 
 def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> dict:
