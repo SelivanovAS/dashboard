@@ -153,6 +153,26 @@ _TERMINAL_FI_EVENT_RX = re.compile(
 FI_TERMINATION_RETURNED = "returned"
 FI_TERMINATION_REFUSAL = "refusal"
 FI_TERMINATION_TRANSFER = "transfer"
+# Присоединение к другому делу (ст. 151 ГПК, соединение в одно производство).
+# Как и transfer — не исход по существу: дело продолжается под другим номером,
+# «победы/поражения» банка тут нет. Отличие от остальных трёх видов: карточка
+# суда статус НЕ флипает (остаётся «В производстве»), поэтому гейт статуса в
+# fi_termination_details для merged ослаблен. Номер дела-приёмника суд не
+# публикует ни в «Результате», ни в движении — его подбирает
+# resolve_bank_merged_targets (linking.py) и всегда помечает предположением.
+FI_TERMINATION_MERGED = "merged"
+
+# Присоединение — единственный вид завершения, который читается ТОЛЬКО из поля
+# «Результат». Оно отражает текущее состояние карточки, а история движения —
+# нет: у дела, где объединение потом отменили, событие остаётся в списке
+# навсегда, и скан истории (ветка events в classify_fi_termination) навесил бы
+# ложный merged. Гейт статуса для merged ослаблен, так что защититься статусом
+# «В производстве», как у остальных видов, здесь нельзя.
+_FI_MERGED_RX = re.compile(
+    r"присоединен\w*\s+к\s+другому\s+делу"
+    r"|(?:объединен|соединен)\w*\s+в\s+одно\s+производств",
+    re.IGNORECASE,
+)
 
 # Поле «Результат» карточки — НЕ движение дела: sudrf пишет туда шапку с
 # причиной без пробела («Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО
@@ -171,6 +191,7 @@ _FI_RESULT_TERMINATION_RX = (
      re.compile(r"отказан\w*\s+в\s+принят", re.I)),
     (FI_TERMINATION_RETURNED,
      re.compile(r"(?:заявлени\w*|иск\w*|материал\w*)\s+возвращ", re.I)),
+    (FI_TERMINATION_MERGED, _FI_MERGED_RX),
 )
 # Тексты движения дела. Порядок — от специфичного к общему (передача и отказ
 # в принятии проверяются до возврата: «отказано в принятии иска» содержит
@@ -389,6 +410,71 @@ def classify_fi_termination(
     return kind, reason, event_text
 
 
+def fi_is_merged(fi: dict) -> bool:
+    """Дело присоединено к другому (ст. 151 ГПК) по ТЕКУЩЕМУ состоянию карточки.
+
+    Читаем поле «Результат», а не флаг: флаг ставит эмит, а предикат нужен и до
+    него (и он же — арбитр при отмене объединения, см. repair_cancelled_merges).
+    """
+    return bool(_FI_MERGED_RX.search((fi or {}).get("result") or ""))
+
+
+def merged_target_reason(fi: dict) -> str:
+    """Хвост строки дайджеста с номером дела-приёмника — либо пусто.
+
+    Номер всегда сопровождается пометкой о происхождении: суд его не публикует,
+    и подбор (resolve_bank_merged_targets) — предположение по совпадению сторон.
+    Юрист должен видеть разницу между догадкой системы и вписанным вручную.
+    """
+    fi = fi or {}
+    # В записи хранится полный id («2-191/2026 (2-979/2025;)») — по нему фронт
+    # находит дело; юристу показываем голый номер, как везде в интерфейсе.
+    num = _bare_case_number(fi.get("merged_into") or "")
+    if not num:
+        return ""
+    if fi.get("merged_into_guess"):
+        return f"№ {num} (предположительно)"
+    return f"№ {num}"
+
+
+def repair_cancelled_merges(cases: list[dict]) -> int:
+    """Снять следы присоединения с дел, где объединение отменили.
+
+    Зеркало repair_spurious_fi_resolutions для merged: та функция гейтится по
+    статусу «Решено»/«Возвращено» (у присоединённого дела статус остаётся
+    «В производстве»), поэтому merged она не покроет никогда. Без ремонта флаги
+    залипают: дело раз в неделю опрашивается, через 30 дней уходит в архив, а
+    resolved_emitted навсегда закрывает канал 3.5 — настоящее решение по
+    существу в дайджест не попало бы.
+
+    Идемпотентно: на повторных прогонах ничего не меняет.
+    """
+    n = 0
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        if not fi.get("merged"):
+            continue
+        if fi_is_merged(fi):
+            continue
+        for key in ("merged", "merged_at", "merged_into",
+                    "merged_into_domain", "merged_into_guess"):
+            fi.pop(key, None)
+        fi["termination_emitted"] = False
+        fi["resolved_emitted"] = False
+        # decision_date снимаем обязательно, а не для симметрии: эмит завершения
+        # заморозил в ней дату определения об объединении, а будущий fi_resolved
+        # ставит её через setdefault — с залипшим ключом настоящая дата решения
+        # не записалась бы никогда, и classify_writ_kind считал бы тип листа от
+        # чужого якоря (обеспечительный молча стал бы «на исполнение»).
+        fi.pop("decision_date", None)
+        n += 1
+        log.info(
+            f"  {case.get('id', '?')}: объединение отменено — "
+            f"дело возвращено в обычный ритм"
+        )
+    return n
+
+
 def fi_termination_details(fi: dict, bank_role: str) -> dict | None:
     """`details` события `fi_returned` для дайджеста — либо None.
 
@@ -414,20 +500,34 @@ def fi_termination_details(fi: dict, bank_role: str) -> dict | None:
     if fi.get("termination_emitted") or fi.get("resolved_emitted"):
         return None
     status = (fi.get("status") or "").strip()
-    if status not in ("Решено", "Возвращено"):
-        return None
     result = (fi.get("result") or "").strip()
-    if status == "Решено" and not result:
-        # «Решено» без результата — служебный статус (экспедиция/архив);
-        # завершение из одной истории движения тут не объявляем, чтобы не
-        # реагировать на старые определения (см. гейт (г) выше).
-        return None
+    # Присоединение к другому делу — исключение из гейта (г): карточка держит
+    # статус «В производстве» (resolved_keywords его не флипают), и при общем
+    # гейте завершение не эмитилось бы никогда. Подмена гейта безопасна: merged
+    # читается ТОЛЬКО из поля «Результат» (см. _FI_MERGED_RX), то есть отражает
+    # текущее состояние карточки, а не старое определение из истории движения.
+    if not (result and _FI_MERGED_RX.search(result)):
+        if status not in ("Решено", "Возвращено"):
+            return None
+        if status == "Решено" and not result:
+            # «Решено» без результата — служебный статус (экспедиция/архив);
+            # завершение из одной истории движения тут не объявляем, чтобы не
+            # реагировать на старые определения (см. гейт (г) выше).
+            return None
     found = classify_fi_termination(
         result, fi.get("last_event", ""), fi.get("events") or []
     )
     if not found:
         return None
     kind, reason, event_text = found
+    if kind == FI_TERMINATION_MERGED:
+        # Номер дела-приёмника суд не публикует — его подбирает
+        # resolve_bank_merged_targets. К моменту эмита (фаза 4b) он обычно ещё
+        # не известен: подбор требует всего списка дел и идёт после FI-цикла,
+        # он же и допишет причину в change["details"]. Здесь — для случая,
+        # когда номер уже стоит в записи (подобран прошлым прогоном до того,
+        # как эмит стал возможен, или вписан юристом вручную).
+        reason = merged_target_reason(fi)
     # Знак исхода для банка. Передача по подсудности — НЕ исход: дело живёт
     # дальше в другом суде, «в пользу банка» там было бы враньём.
     # classify_verdict_fi здесь не годится: на «Передано по подсудности» она
@@ -739,6 +839,29 @@ def classify_writ_kind(writ: dict, fi: dict) -> str:
     return "enforcement" if issue >= anchor else "interim"
 
 
+def bank_writ_expected(fi: dict) -> bool:
+    """Появится ли по этому иску банка исполнительный лист.
+
+    False — значит ждать нечего: дело присоединено к другому (исполнять будут
+    по делу-приёмнику) либо в иске банку ОТКАЗАНО полностью. Частичное
+    удовлетворение листом сопровождается, поэтому «удовлетворён частично»
+    остаётся True.
+
+    Единственный источник правды для всей цепочки: архивное окно и ритм опроса
+    здесь, а фронт читает готовый штамп first_instance.writ_expected (его
+    ставит split_bank_track) — своей копии правила в JS нет, расходиться нечему.
+    «Отказано в принятии» сюда не относится: это возврат на стадии принятия,
+    у него своя ветка завершения (FI_TERMINATION_REFUSAL).
+    """
+    fi = fi or {}
+    if fi.get("merged") or fi_is_merged(fi):
+        return False
+    result = (fi.get("result") or "").lower()
+    if "отказано" in result and "в принят" not in result:
+        return False
+    return True
+
+
 def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     """Архивные окна лёгкого трека исков банка (ветка is_case_archived).
 
@@ -747,6 +870,12 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     выдача), дело уходило бы в архив ровно в окне ожидания ИЛ.
 
     - признак жалобы/направления выше → не архивируем (дело покинет трек);
+    - присоединено к другому делу: BANK_MERGED_ARCHIVE_DAYS (30) от даты
+      определения — окно на отмену объединения (статус карточки при этом
+      остаётся «В производстве», до общих веток дело бы не дошло);
+    - листа не будет (в иске отказано): BANK_DENIED_ARCHIVE_DAYS (30) от
+      мотивировки — окно на апелляционную жалобу банка. Ветка стоит ДО поиска
+      листов: 180-дневный потолок ожидания ИЛ к таким делам не применим;
     - статус не «Решено»/«Возвращено» → активное, не архивируем;
     - «Возвращено» (возврат/прекращение): BANK_RETURNED_ARCHIVE_DAYS (30) от
       event_date/hearing_date — окно на частную жалобу банка;
@@ -760,6 +889,21 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
             or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
         return False
     status = (fi.get("status") or "").strip()
+    if fi.get("merged") or fi_is_merged(fi):
+        anchor = (parse_date(fi.get("merged_at") or "")
+                  or parse_date(fi.get("event_date") or "")
+                  or parse_date(fi.get("hearing_date") or ""))
+        return bool(anchor) and (now - anchor).days > config.BANK_MERGED_ARCHIVE_DAYS
+    if status == "Решено" and not bank_writ_expected(fi):
+        # Якорь — мотивировка: месячный срок обжалования по ст. 321 ГПК течёт
+        # от неё, так что 30 дней ≈ ровно окно на жалобу банка. Резолютивка и
+        # дата заседания — фолбэки для карточек, где мотивировку не публиковали.
+        anchor = (parse_date(fi.get("act_date") or "")
+                  or parse_date(fi.get("motivirovka_date") or "")
+                  or parse_date(fi.get("decision_date") or "")
+                  or parse_date(fi.get("hearing_date") or "")
+                  or parse_date(fi.get("event_date") or ""))
+        return bool(anchor) and (now - anchor).days > config.BANK_DENIED_ARCHIVE_DAYS
     if status == "Возвращено":
         anchor = (parse_date(fi.get("event_date") or "")
                   or parse_date(fi.get("hearing_date") or ""))
@@ -1927,6 +2071,16 @@ def should_skip_case(
     # исполнительный лист во вкладке «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ». Ежедневный парс
     # бесполезен: события там штучные. До решения дело живёт обычным
     # smart-skip по датам заседаний (ветки ниже).
+    # Присоединённое к другому делу живёт в том же недельном ритме, но по своей
+    # причине: статус карточки у него остаётся «В производстве», и без явной
+    # ветки оно опрашивалось бы КАЖДЫМ прогоном (заседание в прошлом) все 30
+    # дней своего окна. Ждём тут единственного — отмены объединения.
+    if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
+            and (block.get("merged") or fi_is_merged(block))):
+        days_since = (today - last_checked).days
+        if days_since < config.BANK_WRIT_CHECK_DAYS:
+            return True, f"merged_weekly({days_since}d/{config.BANK_WRIT_CHECK_DAYS}d)"
+        return False, ""
     if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
             and (block.get("status") or "").strip() in ("Решено", "Возвращено")):
         days_since = (today - last_checked).days
@@ -2006,6 +2160,10 @@ def skip_reason_ru(reason: str) -> str:
     m = re.match(r"writ_weekly\((\d+)d/(\d+)d\)$", reason)
     if m:
         return (f"иск банка решён, ждём ИЛ/жалобу — опрос раз в "
+                f"{m.group(2)} дн. (прошло {m.group(1)})")
+    m = re.match(r"merged_weekly\((\d+)d/(\d+)d\)$", reason)
+    if m:
+        return (f"дело присоединено к другому — опрос раз в "
                 f"{m.group(2)} дн. (прошло {m.group(1)})")
     if reason == "material_pending_promotion":
         return "материал под М-номером, ждём промоушен"

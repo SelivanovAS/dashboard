@@ -250,6 +250,10 @@ function normalizeResult(raw){
   if(/снято\s+с\s+рассмотрен/i.test(s))return 'withdrawn';
   if(/прекращен/i.test(s))return 'dismissed';
   if(/возвращен|жалоб\S+.*возвращен/i.test(s))return 'returned';
+  // Присоединение к другому делу (ст. 151 ГПК) — не исход по существу:
+  // дело продолжается под номером приёмника. Зеркало _FI_MERGED_RX
+  // (scripts/court_monitor/lifecycle.py).
+  if(/присоединен\S*\s+к\s+другому\s+делу|(?:объединен|соединен)\S*\s+в\s+одно\s+производств/i.test(s))return 'merged';
   if(/без\s+рассмотрени/i.test(s))return 'unconsidered';
   // «отказано» проверяем ДО «удовлетворен»: «ОТКАЗАНО в удовлетворении иска»
   // иначе матчится по подстроке «удовлетворении» → 'reversed' и favor
@@ -300,6 +304,9 @@ function fiProceduralEnding(text){
   if(!s)return '';
   if(/оставл\S*\s+без\s+рассмотрени/.test(s))return 'оставлено без рассмотрения';
   if(/прекращ\S*/.test(s)&&/производств/.test(s))return 'прекращено';
+  // Присоединение к другому делу: карточка держит статус «В производстве»,
+  // и без этой ветки дело числилось бы активным вечно.
+  if(/присоединен\S*\s+к\s+другому\s+делу|(?:объединен|соединен)\S*\s+в\s+одно\s+производств/.test(s))return 'дело присоединено к другому делу';
   return '';
 }
 function computeDetailedStatus(c){
@@ -331,8 +338,8 @@ const RESULT_LABELS={upheld:'Оставлено без изменения',rever
 // Лейблы для 1-й инстанции: коды result (upheld/reversed/partial/...) переиспользуем,
 // чтобы getResultFavor работал без правок, но текст бейджа — из «языка карточки суда».
 // upheld в 1-й инст. = «отказано в иске», reversed = «иск удовлетворён».
-const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',pending:'Ожидается'};
-const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',unconsidered:'⊘',pending:'…'};
+const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',merged:'Присоединено',pending:'Ожидается'};
+const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',unconsidered:'⊘',merged:'⇥',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
 // Сторона по процессуальному статусу подателя жалобы: ИСТЕЦ→plaintiff
 // (соистец тоже), ОТВЕТЧИК→defendant; прокурор/заявитель/третье лицо
@@ -1476,7 +1483,7 @@ function renderBankStats(){
   const inWork=act.filter(c=>c.status==='active').length;
   const decided=act.filter(c=>c.status==='decided'||c.status==='returned').length;
   const withWrit=act.filter(c=>hasEnforcementWrit(c)).length;
-  const awaitingWrit=act.filter(c=>c.status==='decided'&&!hasEnforcementWrit(c)).length;
+  const awaitingWrit=act.filter(awaitsWrit).length;
   document.getElementById('stats-primary').innerHTML=`
     <div class="stat-card clickable" data-accent="gold" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('active')"><div class="stat-value">${inWork}</div><div class="stat-label">В производстве</div></div>
     <div class="stat-card clickable" data-accent="blue" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('decided')"><div class="stat-value">${decided}</div><div class="stat-label">Решено</div></div>
@@ -1691,9 +1698,19 @@ function hasEnforcementWrit(c){
 // null — если ждать нечего: лист уже есть, дело не решено, даты нет.
 // Отрицательное значение (решение ещё не в силе) отдаём как есть — ожидание
 // формально не началось, бейдж его не показывает.
+// Ждёт ли дело исполнительный лист — ОДИН предикат на все точки (KPI-плитка,
+// счётчик чипа, фильтр, бейдж). До 31.07.2026 их было три разных, и ни одна не
+// смотрела на исход: дела с отказом в иске и присоединённые к другим числились
+// «ждущими» лист, которого не будет никогда.
+// writ_expected приезжает готовым из cases_bank.json (bank_writ_expected на
+// бэкенде — там же архивные окна); своей копии правила в JS сознательно нет.
+function awaitsWrit(c){
+  if(!c||!c._bankTrack||c.status!=='decided')return false;
+  if(c._fi&&c._fi.writ_expected===false)return false;
+  return !hasEnforcementWrit(c);
+}
 function awaitingWritDays(c){
-  if(!c||!c._bankTrack||c.status!=='decided')return null;
-  if(hasEnforcementWrit(c))return null;
+  if(!awaitsWrit(c))return null;
   const est=parseDate((c._fi&&c._fi.legal_force_est)||'');
   if(!est)return null;
   return -dayDiff(est);
@@ -1769,7 +1786,7 @@ function applyFilters(){
     // Bank-only фильтры трека: «🧾 ИЛ» — есть лист на исполнение;
     // «Ждут ИЛ» — решено, листа на исполнение нет (главная боль трека).
     else if(st==='writs'){if(archived||!hasEnforcementWrit(c))return false;}
-    else if(st==='awaiting_writ'){if(archived||c.status!=='decided'||hasEnforcementWrit(c))return false;}
+    else if(st==='awaiting_writ'){if(archived||!awaitsWrit(c))return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;
@@ -1917,6 +1934,33 @@ function defaultCopyKvHtml(c){
   }
   return `<div class="kv-k">🌙 Копия ответчику</div><div class="kv-v kv-mono">${v}</div>`;
 }
+// Строка «Присоединено к делу» в «Ключевых датах» drawer. Номер приёмника суд
+// НЕ публикует — его подбирает resolve_bank_merged_targets по совпадению
+// сторон, поэтому пометка «предположительно» обязательна: юрист должен видеть,
+// что это догадка системы, а не факт из карточки. Номер кликабелен, если
+// приёмник уже загружен в датасет.
+// Чистая функция — гоняется node-тестом (test_frontend_writs.py).
+function mergedIntoKvHtml(c){
+  const fi=(c&&c._fi)||{};
+  if(!fi.merged&&c.result!=='merged')return '';
+  const num=bareCaseNumber(fi.merged_into||'');
+  if(!num){
+    return `<div class="kv-k">🔗 Присоединено</div><div class="kv-v">к другому делу <span style="color:var(--slate-500);font-weight:500;">(номер суд не публикует)</span></div>`;
+  }
+  // Показываем голый номер (как везде в интерфейсе), а открываем по полному id
+  // из записи: findCaseByNumber сверяет caseNumber, а у дела 1-й инстанции это
+  // j.id целиком — со «скобочным двойником» прошлого года («2-191/2026
+  // (2-979/2025;)»). По голому номеру дело просто не нашлось бы.
+  const esc=escHtml(num);
+  const idEsc=escHtml(fi.merged_into||'').replace(/'/g,'&#39;');
+  const known=!!findCaseByNumber(fi.merged_into||'');
+  const v=known
+    ?`<a href="#" onclick="openDrawer('${idEsc}');return false;">${esc}</a>`
+    :`<span class="kv-mono">${esc}</span>`;
+  const пометка=fi.merged_into_guess
+    ?` <span style="color:var(--slate-500);font-weight:500;">(предположительно)</span>`:'';
+  return `<div class="kv-k">🔗 Присоединено к делу</div><div class="kv-v">${v}${пометка}</div>`;
+}
 // Бейджи листов: «🧾 ИЛ» — есть лист на исполнение решения, «🛡 Обеспечение» —
 // есть обеспечительный (арест). Могут стоять одновременно.
 // withDate — вынести дату свежайшего листа в текст бейджа (мобильная карточка:
@@ -1979,7 +2023,7 @@ function countCasesByStatus(st){
     if(st==='decided')return (c.status==='decided'||c.status==='returned')&&!archived;
     if(st==='archived')return archived;
     if(st==='writs')return !archived&&hasEnforcementWrit(c);
-    if(st==='awaiting_writ')return !archived&&c.status==='decided'&&!hasEnforcementWrit(c);
+    if(st==='awaiting_writ')return !archived&&awaitsWrit(c);
     return false;
   }).length;
 }
@@ -3049,6 +3093,7 @@ function renderDrawer(c){
   // даты, а не только в секции ниже. Только на вкладке 1-й инст.: листы — её
   // артефакт (fi.writs).
   if(drawerStage==='fi'||!hasMultiStage){
+    keyDates+=mergedIntoKvHtml(c);
     const наИсполнение=(c.writs||[]).filter(w=>classifyWritKind(w,c)==='enforcement');
     const датыИЛ=наИсполнение.map(w=>parseDate(w.issue_date||'')).filter(Boolean).sort();
     if(датыИЛ.length){
@@ -3690,14 +3735,37 @@ function buildWatchCanonMap() {
       if (dom && !map.has(dom + '|' + bare)) map.set(dom + '|' + bare, canonical);
     }
   };
+  // Присоединённые к другим делам — ПЕРВЫМИ. Записи карты защищены гардом
+  // `!map.has(...)`, а общий цикл bank-дел ниже зарегистрирует composite
+  // присоединённого дела на самого себя — после него алиас на приёмника молча
+  // не встал бы, и звезда осталась бы на деле, которого больше нет.
+  // Приёмник может лежать в любой из картотек: bank-дело переезжает в
+  // cases.json, как только по нему подана апелляция.
+  const bankList = Array.isArray(bankCases) ? bankCases : [];
+  const mainList = Array.isArray(allCases) ? allCases : [];
+  for (const c of bankList) {
+    const fi = c._fi || {};
+    if (!fi.merged_into) continue;
+    const dom = (fi.court_domain || '').trim();
+    const bare = bareCaseNumber(c.rawId || c.caseNumber);
+    if (!dom || !bare) continue;
+    const targetBare = bareCaseNumber(fi.merged_into);
+    const targetDom = (fi.merged_into_domain || dom).trim();
+    if (!targetBare) continue;
+    const inMain = mainList.some(
+      (x) => bareCaseNumber(x.rawId || x.caseNumber) === targetBare
+    );
+    const canonical = inMain ? targetBare : targetDom + '|' + targetBare;
+    map.set(dom + '|' + bare, canonical);
+  }
   // Основная картотека первой — при коллизии номеров между судами голый
   // (bare) алиас резолвится в основное дело, bank-дела различает composite.
-  for (const c of (Array.isArray(allCases) ? allCases : [])) {
+  for (const c of mainList) {
     addCase(c, bareCaseNumber(c.rawId || c.caseNumber));
   }
   // Bank-дела: канон = composite «домен|номер» (номера не уникальны между
   // судами, bare-канон сталкивал бы два дела в одну звезду).
-  for (const c of (Array.isArray(bankCases) ? bankCases : [])) {
+  for (const c of bankList) {
     const dom = ((c._fi && c._fi.court_domain) || '').trim();
     const bare = bareCaseNumber(c.rawId || c.caseNumber);
     if (!bare) continue;
@@ -3733,10 +3801,9 @@ function isWatchedCase(c) {
 
 // Приводит watchlist к канону по свежей карте алиасов. Вызывается после
 // каждой загрузки данных: подхватывает legacy-формы из localStorage и смену
-// номера дела между прогонами (М-XXXX → 2-XXXX, переход стадии). Sync с
-// Worker отсюда НЕ планируем: сервер и так канонизирует на своей стороне,
-// а самозапуск sync из этой точки давал вечный цикл POST каждые ~600 мс
-// (затирка ответом → ре-экспанд алиасов → новый sync — баг до v98).
+// номера дела между прогонами (М-XXXX → 2-XXXX, переход стадии, присоединение
+// к другому делу).
+let watchlistCanonSynced = false;
 function canonicalizeWatchlistSet() {
   if (watchlist.size === 0) return;
   const next = new Set([...watchlist].map(canonCaseNumber));
@@ -3744,6 +3811,17 @@ function canonicalizeWatchlistSet() {
   if (same) return;
   watchlist = next;
   try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist])); } catch (_) {}
+  // Один POST за загрузку страницы — и только когда набор реально изменился.
+  // Сервер канонизирует своей картой, а она строится из cases.json, где
+  // bank-дел нет: переезд звезды с присоединённого дела на приёмника знает
+  // только фронт, и без этой отправки KV (а значит и push) остался бы на
+  // номере, которого больше нет. Флаг обязателен: безусловный sync отсюда
+  // давал вечный цикл POST каждые ~600 мс (затирка ответом → ре-экспанд
+  // алиасов → новый sync — баг до v98).
+  if (!watchlistCanonSynced) {
+    watchlistCanonSynced = true;
+    scheduleWatchlistSync();
+  }
 }
 
 function isWatched(caseNumber) {

@@ -358,6 +358,7 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_returns = fi_term_kinds.get("returned", 0)
         fi_refusals = fi_term_kinds.get("refusal", 0)
         fi_transfers = fi_term_kinds.get("transfer", 0)
+        fi_merges = fi_term_kinds.get("merged", 0)
         fi_cass_filed = sum(
             1 for ch in fi_changes if "fi_cassation_filed" in ch["type"]
         )
@@ -407,6 +408,12 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 f"➡️ {fi_transfers} "
                 + plural_ru(fi_transfers, 'дело', 'дела', 'дел')
                 + " — по подсудности"
+            )
+        if fi_merges:
+            parts.append(
+                f"🔗 {fi_merges} "
+                + plural_ru(fi_merges, 'дело', 'дела', 'дел')
+                + " — присоединено к другим"
             )
         if fi_appeals_filed:
             parts.append(
@@ -803,6 +810,7 @@ _FI_TERMINATION_LABELS = {
     "returned": "🔚 иск возвращён",
     "refusal": "🔚 отказано в принятии иска",
     "transfer": "➡️ дело передано по подсудности",
+    "merged": "🔗 дело присоединено к другому делу",
 }
 
 
@@ -983,8 +991,15 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             # Вид процессуального завершения; фолбэк — прежняя форма
             # («возврат») для контекстов без termination_kind.
             kind = (d.get("termination_kind") or "returned").strip()
-            out.append(_FI_TERMINATION_LABELS.get(
-                kind, _FI_TERMINATION_LABELS["returned"]))
+            label = _FI_TERMINATION_LABELS.get(
+                kind, _FI_TERMINATION_LABELS["returned"])
+            # Причину возврата в компакт-строке не печатаем (лимит Telegram),
+            # но у присоединения «причина» — это номер дела-приёмника: без него
+            # строка не отвечает на главный вопрос «куда смотреть дальше».
+            reason = (d.get("return_reason") or "").strip()
+            if kind == "merged" and reason:
+                label += f": {escape_html(reason)}"
+            out.append(label)
         elif t == "fi_status_change":
             # Рядом с исходом («⚖️ вынесено решение», «🔚 иск возвращён»)
             # смена статуса — эхо того же факта (зеркало дедупа секции
@@ -1318,11 +1333,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         kind, _FI_TERMINATION_LABELS["returned"]
                     )
                     reason = (d.get("return_reason") or "").strip()
-                    if not reason and kind != "transfer":
+                    if not reason and kind not in ("transfer", "merged"):
                         # Старый контекст: причины в details нет — достаём из
-                        # event_text прежним хелпером. Для передачи фолбэк НЕ
-                        # применяем: он отдал бы первый сегмент события
-                        # («судебное заседание»), а не «куда передано».
+                        # event_text прежним хелпером. Для передачи и
+                        # присоединения фолбэк НЕ применяем: он отдал бы первый
+                        # сегмент события («судебное заседание»), а не «куда».
                         reason = _fi_return_reason_for_render(d)
                     part = escape_html(label)
                     if reason:
