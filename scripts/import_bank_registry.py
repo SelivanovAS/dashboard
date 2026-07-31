@@ -202,7 +202,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
             continue
         card_info = parse_case_card(card_html, court.base_url)
 
-        entry = make_bank_entry(fi_row, card_info, operator, now_iso)
+        entry = make_bank_entry(fi_row, card_info, operator, now_iso, court=court)
         fi = entry["first_instance"]
         new_entries.append(entry)
         dedup_exact.add((domain, case_num))

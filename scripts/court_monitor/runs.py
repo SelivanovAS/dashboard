@@ -1763,6 +1763,26 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
     return to_announce
 
 
+def _backfill_court_ids(fi: dict) -> None:
+    """Дописать delo_id/srv_num записи трека, заведённой до 31.07.2026.
+
+    Ссылку «в суд» фронт собирает как buildCourtLink(link, domain, delo_id,
+    srv_num) с фолбэком 1540005/1 — у записей ручных каналов этих ключей нет
+    вовсе. Резолвим по домену; на домене с ДВУМЯ судами (Покачи и
+    Нижневартовский районный) srv_num не угадать по одному домену, поэтому там
+    не трогаем: неверный сервер хуже честного фолбэка.
+    """
+    domain = (fi.get("court_domain") or "").strip().lower()
+    if not domain or (fi.get("delo_id") and fi.get("srv_num")):
+        return
+    same_domain = [ct for ct in FIRST_INSTANCE_COURTS if ct.domain == domain]
+    if len(same_domain) != 1:
+        return
+    court = same_domain[0]
+    fi.setdefault("delo_id", court.delo_id)
+    fi.setdefault("srv_num", court.srv_num)
+
+
 def split_bank_track(
     cases: list[dict],
 ) -> tuple[list[dict], list[dict], list[dict], int]:
@@ -1795,6 +1815,7 @@ def split_bank_track(
         # (в иске отказано, дело присоединено к другому). Пишем только False —
         # «ждём» и есть дефолт, лишний ключ в 345 записях ни к чему.
         _fi = c.get("first_instance") or {}
+        _backfill_court_ids(_fi)
         _writ_expected = lifecycle.bank_writ_expected(_fi)
         if _writ_expected:
             _fi.pop("writ_expected", None)
