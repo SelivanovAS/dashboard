@@ -89,7 +89,7 @@ dashboard/
 │   ├── admin_page.js              # HTML/JS страницы админки
 │   └── wrangler.toml              # Конфигурация Worker (cron-расписание)
 ├── .github/workflows/
-│   ├── update_cases.yml           # Основной прогон (будни 6:45 МСК через Worker-cron)
+│   ├── update_cases.yml           # Основной прогон (будни 6:30 МСК через Worker-cron)
 │   ├── test_digest.yml            # Ручной тест дайджеста (replay + Telegram + PWA push)
 │   └── tests.yml                  # pytest на каждый push
 ├── scripts/tests/ + tests/        # pytest-набор (485 тестов)
@@ -234,7 +234,7 @@ python3 -m pytest
 GitHub Actions cron ненадёжен на бесплатных планах (задержки до 3-4 часов). Поэтому запуск workflow выполняется через Cloudflare Worker, который вызывает GitHub API `workflow_dispatch` точно по расписанию. Тот же Worker хранит push-подписки (KV) и отдаёт админку.
 
 - **Worker:** `court-monitor-trigger` (`cloudflare-worker/`)
-- **Расписание:** будни 3:45 UTC (6:45 МСК, `crons = ["45 3 * * mon-fri"]`); выходные и праздники РФ дополнительно отсекает `isHoliday()`. Плановый прогон идёт со `smart_skip=true`.
+- **Расписание:** будни 3:30 UTC (6:30 МСК, 8:30 ХМАО, `crons = ["30 3 * * mon-fri"]`); выходные и праздники РФ дополнительно отсекает `isHoliday()`. Плановый прогон идёт со `smart_skip=true`.
 - **Секреты:** `GITHUB_PAT` (GitHub API), `OWNER_SECRET` (админка), `PUSH_SECRET`, `PROGRESS_SECRET` (живой лог), `VAPID_PRIVATE_KEY` (тест-push)
 
 Изменить расписание можно:

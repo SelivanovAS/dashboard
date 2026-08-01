@@ -97,7 +97,7 @@ workflow.
 
 ### `update_cases.yml` — основной (cron Worker'а, с 05.07.2026 снова в облаке)
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`:
-его дёргает cron Cloudflare Worker'а (пн-пт 06:45 МСК, `smart_skip=true`),
+его дёргает cron Cloudflare Worker'а (пн-пт 06:30 МСК, `smart_skip=true`),
 вручную — GitHub UI или админка (кнопки «Полный прогон» / «Стандартный
 прогон»). Шаги: checkout → Python 3.12 → установка зависимостей →
 `python scripts/update_cases.py --json 2>&1 | python -u
