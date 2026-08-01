@@ -206,8 +206,8 @@
 ### Основной путь — облако (бесплатно, без включённой машины)
 
 - **Полный прогон на GitHub Actions:** [.github/workflows/update_cases.yml](.github/workflows/update_cases.yml)
-  — Cloudflare Worker по крону дёргает его через `workflow_dispatch` (03:45 UTC =
-  08:45 ХМАО, пн-пт) — гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
+  — Cloudflare Worker по крону дёргает его через `workflow_dispatch` (03:30 UTC =
+  08:30 ХМАО, пн-пт) — гоняет `python scripts/update_cases.py --json` целиком: парсинг 20 судов +
   апелляция + 7kas → гибридный дайджест (программный рендер + Claude только на
   пересказ мотивировок; откат — `DIGEST_FULL_LLM: "1"` в env) → Telegram (личный
   чат `TELEGRAM_CHAT_ID_TEST`) + Web Push всем подписчикам → коммит данных.
@@ -230,7 +230,7 @@
   (ошибка 1010 → 403 до Worker'а) — так канал молчал 13–16.07.2026.
 - **Секреты** уже в repo secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_*`, `PUSH_*`) —
   новых не нужно.
-- **Планировщик — Cloudflare Worker cron** (`crons = ["45 3 * * mon-fri"]` в
+- **Планировщик — Cloudflare Worker cron** (`crons = ["30 3 * * mon-fri"]` в
   [cloudflare-worker/wrangler.toml](cloudflare-worker/wrangler.toml); применяется
   только после `wrangler deploy`). Worker дёргает `workflow_dispatch`
   `update_cases.yml` с `smart_skip=true` (`worker.js:1139` — `scheduled`).

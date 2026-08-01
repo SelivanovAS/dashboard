@@ -5,7 +5,7 @@ name: "📊 Основной прогон: парсинг + дайджест"
 on:
   # Автозапуск (с 05.07.2026 возвращён в облако): Cloudflare Worker по крону
   # дёргает этот workflow через workflow_dispatch (crons в cloudflare-worker/
-  # wrangler.toml, 03:45 UTC = 08:45 ХМАО, пн-пт). Суды снова пускают US-IP
+  # wrangler.toml, 03:30 UTC = 08:30 ХМАО, пн-пт). Суды снова пускают US-IP
   # GitHub (проверено probe_courts.yml), поэтому полный прогон идёт в облаке.
   workflow_dispatch:  # Запуск через Cloudflare Worker (cron) или вручную из UI
     inputs:

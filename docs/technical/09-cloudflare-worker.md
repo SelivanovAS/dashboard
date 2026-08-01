@@ -40,8 +40,8 @@ Cloudflare Worker — это маленький серверный скрипт,
    `…/actions/workflows/update_cases.yml/dispatches` с `ref: "main"` и входом
    `inputs: { smart_skip: "true" }`. Авторизация — `Bearer ${env.GITHUB_PAT}`.
 
-Расписание в `wrangler.toml`: `crons = ["45 3 * * mon-fri"]` = **06:45 МСК,
-пн-пт** (применяется только после `wrangler deploy`). Отключить (флип на
+Расписание в `wrangler.toml`: `crons = ["30 3 * * mon-fri"]` = **06:30 МСК,
+08:30 ХМАО, пн-пт** (применяется только после `wrangler deploy`). Отключить (флип на
 Mac-резерв) — вернуть `crons = []` и задеплоить.
 
 > ⚠️ Cloudflare Cron Triggers нумерует дни недели **1=Sun..7=Sat** (не как POSIX).
