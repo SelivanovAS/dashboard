@@ -985,11 +985,16 @@ function fmtDur(startIso, endIso) {
   return Math.floor(s / 3600) + " ч " + Math.round((s % 3600) / 60) + " мин";
 }
 let ghTimer = null;
+// Нерабочий ли сегодня день — считает Worker (isHoliday, тот же календарь, что
+// у крона). Своей копии производственного календаря у страницы нет: их и так
+// две (worker.js и textutil.py). null = сервер не ответил, спрашивать не о чем.
+let todayNonWorking = null;
 async function loadGhRuns() {
   clearTimeout(ghTimer);
   try {
     const r = await fetch("/admin/gh-runs?secret=" + encodeURIComponent(SECRET));
     const d = await r.json().catch(function () { return {}; });
+    if (typeof d.today_non_working === "boolean") todayNonWorking = d.today_non_working;
     if (d.next_cron_at) {
       const t = parseIso(d.next_cron_at);
       if (!isNaN(t)) {
@@ -1062,7 +1067,16 @@ document.getElementById("btn-run-main").addEventListener("click", function () {
   dispatchWorkflow("update_cases.yml", { smart_skip: "false" }, document.getElementById("runs-flash"));
 });
 document.getElementById("btn-run-std").addEventListener("click", function () {
-  if (!confirm("Запустить стандартный прогон (как ежедневный автозапуск)?\\n\\nSmart-skip: пропуск дел с известной будущей датой и нерабочих дней РФ. В выходной/праздник прогон сразу завершится строкой «нерабочий день РФ, парсинг пропущен» — это ожидаемо.")) return;
+  // В нерабочий день предлагаем прогнать «как крон, но мимо календаря»:
+  // иначе прогон завершится за 20 секунд строкой «нерабочий день РФ».
+  // Отказ = ничего не запускаем (раньше запускался холостой прогон).
+  if (todayNonWorking) {
+    if (!confirm("Сегодня нерабочий день РФ (выходной или праздник).\\n\\nПрогнать всё равно — как ежедневный автозапуск, но игнорируя календарь? Пропуск дел с известной будущей датой сохранится.")) return;
+    dispatchWorkflow("update_cases.yml", { smart_skip: "true", ignore_calendar: "true" },
+      document.getElementById("runs-flash"));
+    return;
+  }
+  if (!confirm("Запустить стандартный прогон (как ежедневный автозапуск)?\\n\\nSmart-skip: пропуск дел с известной будущей датой и нерабочих дней РФ.")) return;
   dispatchWorkflow("update_cases.yml", { smart_skip: "true" }, document.getElementById("runs-flash"));
 });
 

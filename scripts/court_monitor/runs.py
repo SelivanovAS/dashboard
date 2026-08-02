@@ -1848,6 +1848,25 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
     return entries, counters
 
 
+def skip_non_working_day(today: date, *, smart_skip: bool,
+                         ignore_calendar: bool) -> bool:
+    """Пропускать ли ВЕСЬ прогон: нерабочий день РФ при включённом smart-skip.
+
+    Гейт защищает крон от холостых прогонов в выходные и праздники (второй щит
+    поверх isHoliday() Worker'а — его JS-календарь знает не все годы).
+
+    `ignore_calendar` — явная просьба человека прогнать в нерабочий день
+    (проверка свежих правок, добор после простоя суда). Пер-кейсовый smart-skip
+    при этом СОХРАНЯЕТСЯ: флаг гасит только календарный гейт, а не пропуск
+    отдельных карточек — иначе единственным способом прогнать в выходной
+    оставался бы полный обход всех активных дел (сотни карточек вместе с
+    треком исков банка).
+    """
+    if not smart_skip or ignore_calendar:
+        return False
+    return not is_russian_working_day(today)
+
+
 def bank_track_pending(cases: list[dict]) -> bool:
     """Есть ли в списке дела трека «Иски банка» — гейт раскладки (фаза 7c).
 
@@ -1967,10 +1986,26 @@ def main_json():
         "--smart-skip" in sys.argv
         or os.environ.get("SKIP_NON_WORKING_DAYS") == "1"
     )
+    # Явная просьба прогнать в нерабочий день, сохранив пер-кейсовый smart-skip
+    # (галка ignore_calendar в workflow / кнопка админки). Без неё «режим крона»
+    # в выходной недостижим: календарный гейт и пропуск карточек сидели на одном
+    # флаге, и оставался только полный обход всех дел (решение юриста 02.08.2026).
+    ignore_calendar = (
+        "--ignore-calendar" in sys.argv
+        or os.environ.get("IGNORE_NON_WORKING_DAY") == "1"
+    )
     today = date.today()
-    if smart_skip_mode and not is_russian_working_day(today):
+    if skip_non_working_day(today, smart_skip=smart_skip_mode,
+                            ignore_calendar=ignore_calendar):
         log.info(f"{today.isoformat()} — нерабочий день РФ, парсинг пропущен.")
         return
+    if ignore_calendar and not is_russian_working_day(today):
+        # Без этой строки по логу не отличить «сегодня рабочий день» от
+        # «выходной, но нас попросили прогнать».
+        log.info(
+            f"{today.isoformat()} — нерабочий день, но календарь отключён "
+            f"флагом: прогон идёт, smart-skip по делам сохранён"
+        )
     # Пер-кейсовый smart-skip (should_skip_case) подчиняется тому же флагу:
     # крон всегда передаёт smart_skip=true, ручной запуск без галки —
     # полный прогон всех активных карточек (как и обещает описание галки).

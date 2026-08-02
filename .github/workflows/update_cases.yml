@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: false
+      ignore_calendar:
+        description: 'Прогнать даже в выходной/праздник: режим ежедневного крона (smart-skip по делам сохраняется), но без проверки производственного календаря. Без этой галки прогон со smart_skip в нерабочий день завершается сразу.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -105,6 +110,11 @@ jobs:
           # Smart-skip: при автозапуске Worker передаёт smart_skip=true →
           # парсер пропускает нерабочие дни и дела с известной будущей датой.
           SKIP_NON_WORKING_DAYS: ${{ inputs.smart_skip && '1' || '' }}
+          # Календарный гейт отдельно от пер-кейсового smart-skip: галка
+          # ignore_calendar даёт «режим крона» в выходной (проверка правок,
+          # добор после простоя суда). Крон её не передаёт — плановые прогоны
+          # в праздники по-прежнему завершаются сразу.
+          IGNORE_NON_WORKING_DAY: ${{ inputs.ignore_calendar && '1' || '' }}
           # Группы фаз (::group::) и аннотации WARNING/ERROR в UI Actions
           # (court_monitor/ghlog.py). Явный флаг, а не GITHUB_ACTIONS:
           # pytest-прогоны tests.yml не должны плодить аннотации.
@@ -130,6 +140,9 @@ jobs:
           fi
           if [ "${{ inputs.smart_skip }}" = "true" ]; then
             echo "🧠 SMART-SKIP: skip-нерабочих-дней + skip-будущих-заседаний"
+          fi
+          if [ "${{ inputs.ignore_calendar }}" = "true" ]; then
+            echo "📆 IGNORE-CALENDAR: прогон идёт и в нерабочий день (skip по делам сохранён)"
           fi
           # pipefail обязателен: дефолтный shell GitHub (bash -e) его НЕ
           # включает — без него пушер маскировал бы падение парсера, и
