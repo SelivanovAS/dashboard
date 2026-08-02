@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:1205](../../cloudflare-worker/worker.js#L1205)):
+`scheduled(event, env)` ([worker.js:1220](../../cloudflare-worker/worker.js#L1220)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -54,9 +54,18 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 `smart_skip:"false"` (парсит всё), «Стандартный прогон» — `smart_skip:"true"`
 (как крон).
 
+В нерабочий день «Стандартный прогон» завершился бы за секунды («нерабочий
+день РФ, парсинг пропущен»), поэтому с 02.08.2026 кнопка сперва спрашивает
+«прогнать всё равно?» и при согласии добавляет `ignore_calendar:"true"` —
+календарный гейт снят, пер-кейсовый smart-skip сохранён. Выходной ли сегодня,
+страница не считает сама: `GET /admin/gh-runs` отдаёт поле `today_non_working`
+(`todayNonWorking()` → `isHoliday()` по МСК, тем же календарём, что у крона).
+Третьей копии производственного календаря в проекте быть не должно — их и так
+две (`worker.js` и `textutil.py`).
+
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([1248](../../cloudflare-worker/worker.js#L1248)).
+Маршрутизатор — `fetch(request, env)` ([1263](../../cloudflare-worker/worker.js#L1263)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.

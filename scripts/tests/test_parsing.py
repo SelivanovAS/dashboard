@@ -2704,6 +2704,101 @@ class TestSmartSkipSwitch:
         assert uc.should_skip_case(case, today)[0] is True
 
 
+# ── Календарный гейт прогона (skip_non_working_day) ──────────────────────────
+
+class TestCalendarGate:
+    """Пропуск ВСЕГО прогона по производственному календарю — отдельный от
+    пер-кейсового smart-skip механизм. До 02.08.2026 оба сидели на одной галке,
+    и «режим крона» в выходной был недостижим: юрист запустил прогон в
+    воскресенье, чтобы проверить авто-подхват, и получил выход за 20 секунд.
+    """
+
+    ПОНЕДЕЛЬНИК = date(2026, 8, 3)
+    ВОСКРЕСЕНЬЕ = date(2026, 8, 2)
+    ПРАЗДНИК = date(2026, 6, 12)   # пятница, День России
+
+    @staticmethod
+    def _gate(today, *, smart_skip=True, ignore_calendar=False):
+        from court_monitor.runs import skip_non_working_day
+        return skip_non_working_day(today, smart_skip=smart_skip,
+                                    ignore_calendar=ignore_calendar)
+
+    def test_working_day_runs(self):
+        assert self._gate(self.ПОНЕДЕЛЬНИК) is False
+
+    def test_weekend_skipped(self):
+        assert self._gate(self.ВОСКРЕСЕНЬЕ) is True
+
+    def test_weekday_holiday_skipped(self):
+        """Праздник в будни ловит только этот щит: крон Worker'а знает
+        календарь лишь на 2026 год."""
+        assert self._gate(self.ПРАЗДНИК) is True
+
+    def test_ignore_calendar_overrides_weekend(self):
+        assert self._gate(self.ВОСКРЕСЕНЬЕ, ignore_calendar=True) is False
+
+    def test_ignore_calendar_overrides_holiday(self):
+        assert self._gate(self.ПРАЗДНИК, ignore_calendar=True) is False
+
+    def test_full_run_ignores_calendar_as_before(self):
+        """Полный прогон (галка smart_skip снята) календарь не смотрел и
+        раньше — поведение не изменилось."""
+        assert self._gate(self.ВОСКРЕСЕНЬЕ, smart_skip=False) is False
+
+    def test_per_case_skip_independent(self):
+        """Ключевой смысл правки: календарь отключён, а пер-кейсовый smart-skip
+        живёт — иначе выходной прогон означал бы полный обход всех карточек."""
+        from court_monitor import config
+        assert config.SMART_SKIP_CASES is True
+        case, today = TestShouldSkipMaterialGuard._case("2-1401/2026")
+        assert uc.should_skip_case(case, today)[0] is True
+
+
+class TestCalendarGateWiring:
+    """Галка ignore_calendar должна доезжать от кнопки до прогона.
+
+    Цепочка длинная (админка → Worker → workflow → env → runs.py), и любое
+    её звено рвётся молча: кнопка нажимается, прогон стартует, но завершается
+    «нерабочим днём». Образец — TestBankTrackWiring в test_bank_track.py.
+    """
+
+    @staticmethod
+    def _src(rel: str) -> str:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_workflow_declares_input_and_env(self):
+        import re
+        wf = self._src(".github/workflows/update_cases.yml")
+        assert re.search(r"^\s{6}ignore_calendar:", wf, re.M), (
+            "update_cases.yml не объявляет вход ignore_calendar — галки в "
+            "Run workflow не будет"
+        )
+        m = re.search(r"^\s*IGNORE_NON_WORKING_DAY:\s*(.+)$", wf, re.M)
+        assert m and "inputs.ignore_calendar" in m.group(1), (
+            "вход не прокинут в env — прогон о галке не узнает"
+        )
+
+    def test_worker_whitelists_input(self):
+        src = self._src("cloudflare-worker/worker.js")
+        assert '"ignore_calendar"' in src, (
+            "инпут не в белом списке DISPATCH_WORKFLOWS — Worker отклонит "
+            "запуск из админки (белый список реальный, не UX)"
+        )
+        assert "today_non_working" in src, (
+            "Worker не отдаёт признак нерабочего дня — админке не на чем "
+            "строить вопрос, а свой календарь ей заводить нельзя"
+        )
+
+    def test_admin_dispatches_input(self):
+        src = self._src("cloudflare-worker/admin_page.js")
+        assert "ignore_calendar" in src and "todayNonWorking" in src, (
+            "кнопка «Стандартный прогон» не умеет прогон в нерабочий день"
+        )
+
+
 # ── «Единоличное рассмотрение» (Свердловский облсуд) как session-событие ──────
 
 class TestSoloSessionMarkers:

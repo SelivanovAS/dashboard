@@ -782,6 +782,14 @@ function cronUtcParts() {
 
 // Ближайший запуск cron'а Worker'а с учётом праздников РФ — зеркалит
 // scheduled(): день оценивается по МСК (UTC+3).
+// Нерабочий ли СЕГОДНЯШНИЙ день (МСК, как считает крон в scheduled).
+// Отдаётся админке в /admin/gh-runs: кнопка «Стандартный прогон» по нему
+// решает, спрашивать ли «прогнать всё равно?». Свою копию календаря страница
+// заводить не должна — их и так две (worker.js и textutil.py).
+function todayNonWorking() {
+  return isHoliday(new Date(Date.now() + 3 * 3600 * 1000));
+}
+
 function nextCronAt() {
   const now = new Date();
   const [cronH, cronM] = cronUtcParts();
@@ -836,6 +844,7 @@ async function handleAdminGhRuns(request, env) {
           error: `GitHub ${r.status}`,
           detail: text.slice(0, 200),
           next_cron_at: nextCronAt(),
+          today_non_working: todayNonWorking(),
         }),
         { status: 502, headers: { "Content-Type": "application/json; charset=utf-8" } }
       );
@@ -850,13 +859,19 @@ async function handleAdminGhRuns(request, env) {
       }
     }
     return new Response(
-      JSON.stringify({ runs, main_run: mainRun, next_cron_at: nextCronAt() }),
+      JSON.stringify({
+        runs, main_run: mainRun, next_cron_at: nextCronAt(),
+        today_non_working: todayNonWorking(),
+      }),
       { headers: { "Content-Type": "application/json; charset=utf-8" } }
     );
   } catch (e) {
     console.error("admin/gh-runs error:", e);
     return new Response(
-      JSON.stringify({ error: String(e).slice(0, 200), next_cron_at: null }),
+      JSON.stringify({
+        error: String(e).slice(0, 200), next_cron_at: null,
+        today_non_working: todayNonWorking(),
+      }),
       { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
     );
   }
@@ -869,7 +884,7 @@ async function handleAdminGhRuns(request, env) {
 // запустить полный прогон или Claude-дайджест), скрытие кнопок в UI — лишь UX.
 const DISPATCH_WORKFLOWS = {
   "update_cases.yml": {
-    inputs: new Set(["to_group", "smart_skip"]),
+    inputs: new Set(["to_group", "smart_skip", "ignore_calendar"]),
     roles: ["owner"],
   },
   "test_digest.yml": {
