@@ -16,11 +16,20 @@
 // скрываются атрибутом data-owner-only + html[data-role] (реальный запрет —
 // на эндпоинтах Worker'а: /admin/data и др. отдают оператору 403).
 //
-// Операторский UX (17.07.2026): секция «Импорт дел» вынесена в константу
-// IMPORT_SECTION и вставляется в main по роли — оператору ПЕРВОЙ (его рабочий
-// инструмент, видна сразу, без ожидания cases.json), owner'у — после
-// «Системы» и скрытой до загрузки списка капчёвых судов. Перестановка
-// серверная (в разметке), чтобы скроллспай и tab-порядок работали без правок.
+// Вкладки (02.08.2026): чипы шапки — настоящие вкладки, показана ровно одна
+// секция; пульт плиток остаётся сверху вне вкладок. Раньше страница была
+// лентой на 3,6–5,7 экрана, а у оператора пульт с плиткой «Импорты» начинался
+// ниже первого экрана (секция импорта 788px шла перед ним). Серверная
+// перестановка IMPORT_SECTION по роли за ненадобностью убрана: порядок в DOM
+// больше ничего не решает, решает активный чип (оператору «Импорт» первым
+// чипом = вкладка по умолчанию).
+//
+// Три уровня скрытия секции складываются намеренно и без !important:
+//   роль    — html[data-role="operator"] [data-owner-only] {display:none!important}
+//   конфиг  — инлайновый style="display:none" у #import (нет капчёвых судов)
+//   вкладка — .section / .section.is-tab-active
+// Инлайн бьёт классы, !important бьёт всё: неактивная роль и отсутствующий
+// конфиг не показываются, даже если вкладка активна.
 
 export function renderAdminHtml(secret, role, cfg) {
   role = role === "operator" ? "operator" : "owner";
@@ -45,11 +54,12 @@ export function renderAdminHtml(secret, role, cfg) {
   // секция), owner'у — скрытым до загрузки списка капчёвых судов (у ХМАО
   // их нет — чип так и не появится).
   const IMPORT_CHIP = isOperator
-    ? '<a class="chip-btn active" href="#import" id="nav-import">Импорт</a>'
-    : '<a class="chip-btn" href="#import" id="nav-import" style="display:none;">Импорт</a>';
-  // Секция «Импорт дел»: одна разметка на обе роли, в main вставляется по
-  // роли (оператору — первой, owner'у — после «Системы», см. шапку файла).
-  const IMPORT_SECTION = `<section class="section" id="import"${isOperator ? "" : ' style="display:none;"'}>
+    ? '<a class="chip-btn active" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="true" tabindex="0">Импорт</a>'
+    : '<a class="chip-btn" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="false" tabindex="-1" style="display:none;">Импорт</a>';
+  // Секция «Импорт дел» — вкладка. Оператору активна сразу (его рабочий
+  // инструмент), владельцу — скрыта инлайном до загрузки списка капчёвых
+  // судов (у ХМАО их нет, вкладка так и не появится).
+  const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import"${isOperator ? "" : ' style="display:none;"'}>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -59,11 +69,15 @@ export function renderAdminHtml(secret, role, cfg) {
     </div>
     <div class="card">
       <div class="imp-alert" id="imp-alert" style="display:none;"></div>
+      <!-- На широком экране форма слева, рабочая очередь справа: иначе на
+           1440px операторская — одна узкая колонка, и светофор «какой суд
+           пора» не виден одновременно с формой. ≤1024 — обратно в одну. -->
+      <div class="imp-grid">
       <div class="imp-form">
         <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную:</div>
         <ol class="imp-steps">
           <li>выберите суд из списка;</li>
-          <li>нажмите «Открыть сайт суда»;</li>
+          <li>нажмите «Открыть поиск по суду»;</li>
           <li>на сайте решите проверочный код и найдите дела по слову «Сбербанк»;</li>
           <li>выделите страницу результатов и скопируйте её;</li>
           <li>вставьте скопированное в поле ниже (Ctrl+V / ⌘V) — простой текст не годится, теряются
@@ -74,7 +88,7 @@ export function renderAdminHtml(secret, role, cfg) {
           <label>Суд
             <select id="imp-court"><option value="">загружается…</option></select>
           </label>
-          <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть сайт суда</a>
+          <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть поиск по суду</a>
           <label>Ваше имя
             <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
           </label>
@@ -83,17 +97,24 @@ export function renderAdminHtml(secret, role, cfg) {
           data-placeholder="Вставьте сюда скопированную страницу результатов (Ctrl+V / ⌘V) или перетащите файл «только HTML»…"></div>
         <div class="imp-selection" id="imp-selection"></div>
         <div class="imp-row">
-          <label class="imp-hint">или файл «только HTML»: <input type="file" id="imp-file" accept=".html,.htm,text/html"></label>
+          <input type="file" id="imp-file" class="imp-file-native" accept=".html,.htm,text/html">
+          <label class="btn-outline imp-file-btn" for="imp-file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            Приложить файл «только HTML»
+          </label>
+          <span class="imp-hint">вместо вставки</span>
         </div>
         <div class="imp-row">
           <button class="btn-primary" id="imp-send" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             Отправить на импорт
           </button>
-          <span class="imp-status" id="imp-status"></span>
+          <span class="imp-hint" id="imp-send-hint">вставьте страницу результатов или приложите файл</span>
+          <span class="imp-status" id="imp-status" role="status" aria-live="polite"></span>
         </div>
         <div class="imp-report" id="imp-report"></div>
       </div>
+      <div class="imp-side">
       <details class="fold" id="imp-fresh-fold" open>
         <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
         <div class="fold-body">
@@ -105,6 +126,8 @@ export function renderAdminHtml(secret, role, cfg) {
         <summary>История импортов <span class="run-meta" id="imp-hist-count"></span></summary>
         <div class="fold-body"><div id="imp-history" class="empty">Загрузка…</div></div>
       </details>
+      </div>
+      </div>
     </div>
   </section>`;
   return `<!doctype html><html lang="ru" data-role="${role}"><head>
@@ -223,7 +246,9 @@ export function renderAdminHtml(secret, role, cfg) {
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 120ms; --dur-base: 180ms;
 
-  --content-max: 1140px;
+  /* ⚠️ Расхождение с дашбордом (styles.css: 1800px) ОСОЗНАННОЕ: у админки
+     другая плотность. Ручной сверке подлежат палитра и типографика, не это. */
+  --content-max: 1440px;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -319,6 +344,12 @@ a { color: var(--accent); }
   font-weight:var(--fw-semibold); font-family:var(--font-sans); cursor:pointer; transition:all 120ms var(--ease-out); flex-shrink:0; }
 .btn-refresh:hover { background:var(--bg-3); border-color:var(--border-strong); }
 .btn-refresh:active { transform:scale(0.97); }
+/* Пока «Обновить» ждёт ответы — кнопка гаснет и иконка крутится: на мобильной
+   сети иначе непонятно, нажалось ли (обновление занимает секунды). */
+.btn-refresh[aria-busy="true"] { opacity:0.65; cursor:default; }
+.btn-refresh[aria-busy="true"] svg { animation:spin 900ms linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .btn-refresh[aria-busy="true"] svg { animation:none; } }
 .btn-refresh svg { width:15px; height:15px; }
 
 /* ═══ Контент ═══ */
@@ -327,6 +358,13 @@ a { color: var(--accent); }
 /* Пульт */
 .pult { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:26px; }
 .pult.has-import { grid-template-columns:repeat(5, 1fr); } /* с плиткой «Импорты» (капчёвые суды) */
+/* У оператора плиток три (дайджест и автозапуск — owner-only). Строго внутри
+   min-width-медиа: специфичность html[data-role] .pult выше мобильного
+   .pult, и голое правило перебило бы двухколоночный телефон. */
+@media (min-width: 769px) {
+  html[data-role="operator"] .pult,
+  html[data-role="operator"] .pult.has-import { grid-template-columns:repeat(3, 1fr); }
+}
 .stat-card { background:var(--bg-1); border-radius:var(--radius-md); padding:12px 14px;
   box-shadow:var(--shadow-1); border-left:3px solid var(--border-strong);
   transition:box-shadow 150ms var(--ease-out); cursor:pointer; text-align:left;
@@ -343,9 +381,19 @@ a { color: var(--accent); }
 .stat-value { font-size:var(--fs-2xl); font-weight:var(--fw-bold); letter-spacing:-0.02em;
   line-height:1.15; color:var(--fg-1); margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .stat-sub { font-size:var(--fs-xs); color:var(--fg-3); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Составное значение плитки: крупное число + мелкая подпись единицы рядом
+   («4 новых · 6 изм.»). Даёт честные ДВА числа дайджеста в ширине плитки —
+   раньше показывалось первое число под чужой подписью. */
+.stat-value .tile-part { display:inline-flex; align-items:baseline; gap:4px; }
+.stat-value .tile-part i { font-style:normal; font-size:var(--fs-xs); font-weight:var(--fw-semibold);
+  color:var(--fg-3); letter-spacing:0; }
 
 /* Секции */
-.section { margin-bottom:30px; scroll-margin-top:76px; }
+/* Вкладки: показана ровно одна панель. Скрытие — классом, а НЕ инлайном:
+   инлайновый display:none у #import — отдельный механизм («в регионе нет
+   капчёвых судов»), он бьёт классы и перебивать его нельзя. */
+.section { display:none; }
+.section.is-tab-active { display:block; }
 .section-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
 .section-icon { width:30px; height:30px; border-radius:var(--radius-md); background:var(--accent-bg-strong);
   color:var(--accent-active); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -361,7 +409,29 @@ a { color: var(--accent); }
 .card-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); }
 .card-head .spacer { flex:1; }
 
-.system-grid { display:grid; grid-template-columns:7fr 5fr; gap:14px; align-items:start; }
+/* Полоса запуска — во всю ширину над сеткой (не карточка в сетке). */
+.run-bar { margin-bottom:14px; }
+
+/* Потолок длины строки прозы. На 1440 карточка одна на всю ширину, и
+   инструкция/подписи растягивались бы на ~200 символов в строке. В ch, а не
+   в px: держится за размер шрифта. */
+.run-launch-note, .imp-hint, .imp-steps, .tform-hint, .health-more,
+.push-body, .load-error { max-width:78ch; }
+/* Ряды «имя слева — мета справа»: на всю ширину они разъезжаются по краям. */
+#imp-freshness .health-row, #imp-history .imp-hist-row { max-width:1000px; }
+
+/* Карточки данных. Число видимых — переменная: у оператора одна («Здоровье»),
+   у владельца одна или две («Иски банка» скрыта на 404 — на Урале bank-трека
+   нет). Фиксированные колонки при любом выборе дают дыру, поэтому auto-fit:
+   пустые треки схлопываются, две карточки занимают ширину двух, а не «двух
+   из трёх». Единственный auto-fit в проекте — оправдан именно этим. */
+.system-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+  gap:14px; align-items:start; }
+/* min-width:0 — иначе длинное имя суда растягивает трек. max-width — потолок
+   ОБЩИЙ, не операторский: одиночная карточка бывает и у владельца, а
+   :only-child не сработает — скрытые display:none соседи остаются в DOM.
+   Двухколоночный случай потолок не трогает (~693px на 1440). */
+.system-grid > .card { min-width:0; max-width:700px; }
 
 /* Кнопки */
 .btn-primary { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; background:var(--accent);
@@ -370,7 +440,10 @@ a { color: var(--accent); }
   white-space:nowrap; }
 .btn-primary:hover { background:var(--accent-hover); }
 .btn-primary:active { background:var(--accent-active); transform:scale(0.98); }
-.btn-primary:disabled { opacity:0.6; cursor:default; }
+/* Неактивная кнопка должна выглядеть неактивной. Полупрозрачный зелёный
+   («Отправить на импорт» до вставки страницы) читался как рабочий. */
+.btn-primary:disabled { background:var(--bg-4); color:var(--fg-4); opacity:1; cursor:not-allowed; }
+.btn-primary:disabled:hover { background:var(--bg-4); }
 .btn-primary svg { width:13px; height:13px; }
 .btn-outline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-1);
   border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm); cursor:pointer;
@@ -378,6 +451,9 @@ a { color: var(--accent); }
   white-space:nowrap; }
 .btn-outline:hover { border-color:var(--border-strong); background:var(--bg-3); }
 .btn-outline:disabled { opacity:0.6; cursor:default; }
+/* Размер иконки задаём явно: в inline-flex без него SVG растягивается по
+   высоте строки контейнера (скрепка «Приложить файл» занимала пол-экрана). */
+.btn-outline svg { width:14px; height:14px; flex-shrink:0; }
 .btn-outline.btn-danger { color:var(--danger-fg); }
 .btn-outline.btn-danger:hover { border-color:var(--red-500); background:var(--danger-bg); }
 .btn-icon { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px;
@@ -389,8 +465,12 @@ a { color: var(--accent); }
 /* Бейджи */
 .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:var(--radius-pill);
   font-size:var(--fs-2xs); font-weight:var(--fw-semibold); white-space:nowrap; line-height:1.3; }
-.badge-owner { background:var(--warning-bg); color:var(--warning-fg); font-weight:var(--fw-bold);
+/* Владелец устройства — статус, а не тревога: янтарь оставлен тому, что
+   требует действия («нигде не найдено», «истекает», «N парсеров ⚠»). Раньше
+   ★ OWNER и «нигде не найдено» стояли рядом в одной карточке одним цветом. */
+.badge-owner { background:var(--accent-bg-strong); color:var(--accent-active); font-weight:var(--fw-bold);
   letter-spacing:0.03em; text-transform:uppercase; }
+:root[data-theme="dark"] .badge-owner { color:var(--accent); }
 .badge-expiry { background:var(--warning-bg); color:var(--warning-fg); }
 .badge-device { background:var(--bg-3); color:var(--fg-2); font-weight:var(--fw-medium); }
 .badge-ok   { background:var(--success-bg); color:var(--success-fg); }
@@ -418,6 +498,11 @@ a { color: var(--accent); }
 .action-flash { font-size:var(--fs-2xs); color:var(--fg-3); }
 .action-flash.ok { color:var(--accent); }
 .action-flash.err { color:var(--red-600); }
+/* Крестик у вспышки-ошибки: сообщения об ошибке НЕ гасятся по таймеру
+   (код ошибки нужен, чтобы повторить или показать), закрывает их юрист. */
+.flash-x { border:0; background:none; color:inherit; cursor:pointer; font-family:var(--font-sans);
+  font-size:var(--fs-2xs); padding:0 2px; opacity:0.7; }
+.flash-x:hover { opacity:1; }
 :root[data-theme="dark"] .action-flash.err { color:var(--danger-fg); }
 
 /* Здоровье */
@@ -426,8 +511,14 @@ a { color: var(--accent); }
 .health-row:last-child { border-bottom:0; }
 .health-row .dot { align-self:center; width:8px; height:8px; }
 .health-name { color:var(--fg-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.health-spark { font-family:var(--font-code); color:var(--fg-4); font-size:var(--fs-xs);
-  letter-spacing:1px; margin-left:auto; flex-shrink:0; }
+/* Мини-график: 10 столбиков фиксированной сетки, выравнены по низу. */
+.health-spark { margin-left:auto; flex-shrink:0; display:inline-flex; align-items:flex-end;
+  gap:2px; height:14px; align-self:center; }
+.health-spark .hb { display:block; width:4px; min-height:2px; border-radius:1px;
+  background:var(--fg-4); opacity:0.55; }
+/* Ноль — не «самый низкий столбик», а отдельное состояние: раньше его было
+   не отличить от «просто меньше остальных». */
+.health-spark .hb-zero { height:100%; width:2px; background:var(--red-500); opacity:0.9; }
 .health-count { color:var(--fg-1); font-weight:var(--fw-semibold); font-size:var(--fs-xs);
   min-width:22px; text-align:right; flex-shrink:0; }
 .health-note { color:var(--warning-fg); font-size:var(--fs-2xs); flex-shrink:0; }
@@ -495,11 +586,34 @@ details.fold > summary:hover { color:var(--fg-1); }
 
 /* Карточки подписчиков v2 */
 .subs { display:flex; flex-direction:column; gap:10px; }
-.sub-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-1); padding:12px 16px; }
-.sub-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.sub-name { font-size:var(--fs-lg); font-weight:var(--fw-semibold); }
+/* Потолок ширины: на 1440 имя слева и «N дел» справа иначе разъезжаются по
+   краям через ~1000px пустоты. */
+.sub-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-1);
+  padding:12px 16px; max-width:1000px; }
+/* Свёрнутая строка подписки. Кнопок в summary НЕТ намеренно: клик по
+   вложенной кнопке переключал бы свёртку. Треугольник — тот же приём, что у
+   details.fold, но своим правилом (там селектор по прямому потомку .fold). */
+.sub-card > summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  cursor:pointer; list-style:none; user-select:none; }
+.sub-card > summary::-webkit-details-marker { display:none; }
+.sub-card > summary::before { content:''; width:0; height:0; border-left:5px solid var(--fg-4);
+  border-top:4px solid transparent; border-bottom:4px solid transparent;
+  transition:transform var(--dur-fast) var(--ease-out); flex-shrink:0; }
+.sub-card[open] > summary::before { transform:rotate(90deg); }
+.sub-card > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px;
+  border-radius:var(--radius); }
+.sub-card[open] > summary { padding-bottom:10px; margin-bottom:10px;
+  border-bottom:1px solid var(--divider); }
+/* .spacer объявлен только внутри .section-head/.card-head — строке нужен свой. */
+.sub-row .spacer { flex:1; }
+.sub-count { color:var(--fg-3); font-size:var(--fs-xs); white-space:nowrap; }
+.sub-name { font-size:var(--fs-md); font-weight:var(--fw-semibold); }
 .sub-name.unnamed { color:var(--fg-4); font-style:italic; font-weight:var(--fw-medium); }
-.sub-actions { display:flex; gap:6px; margin-left:auto; align-items:center; flex-wrap:wrap; }
+/* Кнопки теперь своей строкой в теле карточки — прижимать вправо не к чему. */
+.sub-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+/* Водораздел перед удалением: разделяет рабочие действия и необратимое. */
+.sub-actions-sep { width:1px; align-self:stretch; background:var(--divider); margin:0 2px; }
+.btn-icon-danger:hover { color:var(--danger-fg); border-color:var(--red-500); background:var(--danger-bg); }
 .sub-kv { display:flex; gap:4px 14px; flex-wrap:wrap; font-size:var(--fs-xs); color:var(--fg-3); margin-top:5px; }
 .sub-kv b { color:var(--fg-2); font-weight:var(--fw-medium); }
 
@@ -523,6 +637,13 @@ details.fold > summary:hover { color:var(--fg-1); }
 .push-meta a:hover { text-decoration:underline; }
 
 .empty { color:var(--fg-4); font-style:italic; font-size:var(--fs-sm); padding:4px 0; }
+/* Единый блок «не загрузилось»: человеческий текст + «Повторить». Сырое
+   исключение уходит в title и console — юристу оно ничего не говорит, а
+   раньше печаталось прямо в карточку («TypeError: Failed to fetch»). */
+.load-error { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0;
+  color:var(--fg-2); font-size:var(--fs-sm); }
+.load-error .dot { flex-shrink:0; }
+.btn-sm { padding:4px 10px; font-size:var(--fs-xs); }
 .error { color:var(--danger-fg); padding:12px; background:var(--danger-bg); border-radius:var(--radius-md); }
 .loading { color:var(--fg-3); padding:24px; text-align:center; }
 
@@ -560,19 +681,43 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   .app-main { padding:14px 14px 40px; }
   .pult { grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:22px; }
   .pult.has-import { grid-template-columns:repeat(2, 1fr); } /* специфичность: иначе десктопные 5 колонок победят */
+  /* У оператора плиток три — «Импорты» оставалась бы половинной с пустотой
+     справа. Это его главный показатель: растягиваем на всю ширину. */
+  html[data-role="operator"] .pult.has-import #tile-import-card { grid-column:1 / -1; }
   .stat-card { padding:10px 12px; }
   .stat-value { font-size:var(--fs-xl); }
+  /* Подпись плитки переносим вместо обрезки: плитки идут в две колонки, и
+     nowrap+ellipsis резал её на полуслове («из 6 судов · регламент раз в н…»,
+     «push: 3 personal · 5 gener…»). Вторая строка сетку не ломает. */
+  .stat-sub { white-space:normal; overflow:visible; text-overflow:clip; }
+  /* auto-fit сам даёт одну колонку ниже ~690px, но между 690 и 768 дал бы
+     две — правило гарантирует уже проверенную мобильную раскладку. */
   .system-grid { grid-template-columns:1fr; }
-  .section { scroll-margin-top:104px; }
-  .sub-actions { margin-left:0; flex-basis:100%; margin-top:8px; }
-  .health-name { max-width:44vw; }
+  .system-grid > .card { max-width:none; }
+  /* Ряд действий должен умещаться в одну строку: иначе корзина переносится
+     отдельной строкой к левому краю — прямо под палец. */
+  .sub-actions .btn-outline { padding:6px 9px; }
+  .sub-actions .btn-icon { width:28px; height:28px; }
+  /* Имя суда целиком, причина сбоя — своей строкой. Тот же приём, что уже
+     применён к светофору импорта ниже: max-width:44vw обрезал названия на
+     полуслове («Октябрьский районный с…»), а health-note с flex-shrink:0
+     уезжал за правый край вместе с причиной сбоя — самым нужным текстом. */
+  .health-row { flex-wrap:wrap; }
+  /* flex-basis:0, а не auto: с auto длинное имя («Железнодорожный районный
+     суд г. Екатеринбурга») не влезало рядом с точкой и уезжало на свою
+     строку целиком, оставляя точку одну. */
+  .health-name { max-width:none; white-space:normal; flex:1 1 0; min-width:0; }
+  .health-note { flex-basis:100%; margin-left:17px; flex-shrink:1; }
+  .health-spark { display:none; }
   .tform input[type=text] { min-width:0; flex:1; }
   .search-box { min-width:0; flex:1; }
   #imp-freshness .health-name { max-width:none; white-space:normal; }
   #imp-freshness .imp-fresh-meta { flex-basis:100%; margin-left:17px; } /* мета под именем, отступ = точка+gap */
 }
 @media (min-width: 769px) and (max-width: 1024px) {
-  .system-grid { grid-template-columns:1fr; }
+  /* .system-grid тут больше не форсим в одну колонку: именно это правило
+     делало страницу на 1000px ДЛИННЕЕ, чем на 1280 (сетка схлопывалась, а
+     пульт оставался четырёхколоночным). auto-fit сам даёт две колонки. */
   .pult.has-import { grid-template-columns:repeat(3, 1fr); }
 }
 
@@ -584,10 +729,21 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
    через style.display="", что снимает именно inline-стиль). */
 .imp-form { display:flex; flex-direction:column; gap:12px; }
 .imp-row { display:flex; gap:8px 18px; flex-wrap:wrap; align-items:center; font-size:var(--fs-sm); }
-.imp-row label { display:flex; gap:7px; align-items:center; color:var(--fg-2); font-weight:var(--fw-medium); }
+/* min-width:0 обязателен: без него label-флекс принимает ширину самой длинной
+   опции реестра судов («Верх-Исетский районный суд г. Екатеринбурга») и на
+   узком экране уезжает за правый край карточки. */
+.imp-row label { display:flex; gap:7px; align-items:center; color:var(--fg-2); font-weight:var(--fw-medium);
+  min-width:0; max-width:100%; }
 .imp-row select, .imp-row input[type=text] { font-family:var(--font-sans); font-size:var(--fs-sm);
   padding:6px 10px; border-radius:var(--radius); border:1px solid var(--border);
-  background:var(--bg-1); color:var(--fg-1); font-weight:var(--fw-medium); max-width:100%; }
+  background:var(--bg-1); color:var(--fg-1); font-weight:var(--fw-medium);
+  min-width:0; max-width:100%; }
+/* Файловый инпут прячем: он единственный нестилизованный контрол страницы и
+   дублирует чип выбранного файла в индикаторе. Роль кнопки играет <label>. */
+.imp-file-native { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+.imp-file-native:focus-visible + .imp-file-btn { box-shadow:var(--focus-ring); }
+.imp-file-btn { cursor:pointer; }
 .imp-row select:focus, .imp-row input[type=text]:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 .imp-paste { min-height:110px; max-height:260px; overflow:auto; padding:10px 12px;
   border:1.5px dashed var(--border-strong); border-radius:var(--radius-md);
@@ -629,8 +785,34 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 #imp-freshness .health-row:hover .health-name { color:var(--accent); }
 #imp-freshness .health-row:focus-visible { outline:2px solid var(--accent); outline-offset:-2px;
   border-radius:var(--radius); }
-#imp-freshness .health-name { flex:1 1 auto; min-width:0; }
+#imp-freshness .health-name { flex:1 1 0; min-width:0; }
 .imp-fresh-meta { margin-left:auto; flex-shrink:0; } /* распорка вместо пустого health-spark */
+
+/* Форма слева, рабочая очередь справа. min-width:0 обеим колонкам: зона
+   вставки с таблицей суда внутри иначе распирает свой трек. */
+.imp-grid { display:grid; grid-template-columns:1fr; gap:14px; }
+.imp-grid > * { min-width:0; }
+.imp-side { display:flex; flex-direction:column; }
+@media (min-width: 1200px) {
+  .imp-grid { grid-template-columns:minmax(0, 7fr) minmax(0, 5fr); gap:22px; align-items:start; }
+  /* Свёртки справа начинаются вровень с формой, без верхнего отступа fold. */
+  .imp-side > details.fold:first-child { margin-top:0; }
+}
+
+/* Мобильная раскладка формы импорта. ⚠️ Своим медиа-блоком, а НЕ строкой в
+   общем «═══ Мобильная раскладка ═══» выше: тот блок стоит в файле РАНЬШЕ
+   правил .imp-row, и при равной специфичности базовые правила его перебивали
+   (подпись «Суд» оставалась по центру от align-items:center, поля — 13px). */
+@media (max-width: 768px) {
+  .imp-row { gap:10px; }
+  /* Подпись над полем, поле во всю ширину. */
+  .imp-row label { flex-direction:column; align-items:stretch; gap:4px; flex-basis:100%; }
+  /* 16px обязателен: iOS зумит страницу на любом поле мельче 16px, и оператор
+     после каждого касания оказывался в увеличенной вёрстке (--fs-sm = 13px). */
+  .imp-row select, .imp-row input[type=text] { width:100%; font-size:16px; }
+  .imp-row .imp-file-btn, .imp-row #imp-send { width:100%; justify-content:center; }
+  #imp-court-link { align-self:flex-start; }
+}
 </style>
 </head><body>
 
@@ -645,12 +827,12 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <div class="header-sub">мониторинг дел Сбера</div>
       </div>
     </div>
-    <nav class="header-nav" id="nav">
+    <nav class="header-nav" id="nav" role="tablist" aria-label="Разделы админки">
       ${isOperator ? IMPORT_CHIP : ""}
-      <a class="chip-btn${isOperator ? "" : " active"}" href="#system">Система</a>
+      <a class="chip-btn${isOperator ? "" : " active"}" href="#system" id="nav-system" role="tab" aria-controls="system" aria-selected="${isOperator ? "false" : "true"}" tabindex="${isOperator ? "-1" : "0"}">Система</a>
       ${isOperator ? "" : IMPORT_CHIP}
-      <a class="chip-btn" href="#llm" data-owner-only>LLM</a>
-      <a class="chip-btn" href="#subs" data-owner-only>Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
+      <a class="chip-btn" href="#llm" id="nav-llm" role="tab" aria-controls="llm" aria-selected="false" tabindex="-1" data-owner-only>LLM</a>
+      <a class="chip-btn" href="#subs" id="nav-subs" role="tab" aria-controls="subs" aria-selected="false" tabindex="-1" data-owner-only>Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
     </nav>
     <div class="header-actions">
       <div class="header-meta" id="summary" data-owner-only>…</div>
@@ -659,7 +841,7 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
         <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
       </button>
-      <button class="btn-refresh" onclick="refreshAll()" title="Обновить данные">
+      <button class="btn-refresh" onclick="refreshAll(this)" title="Обновить данные">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
         <span>Обновить</span>
       </button>
@@ -668,15 +850,16 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 </header>
 
 <main class="app-main">
-${isOperator ? IMPORT_SECTION : ""}
-
   <div class="pult">
-    <button class="stat-card" data-accent="gray" data-goto="#system">
+    <button class="stat-card" data-accent="gray" data-href="run" title="Открыть лог прогона в GitHub Actions">
       <div class="stat-label">Последний прогон</div>
       <div class="stat-value" id="tile-run-value">…</div>
       <div class="stat-sub" id="tile-run-sub"></div>
     </button>
-    <button class="stat-card" data-accent="blue" data-goto="#system">
+    <!-- Дайджест и автозапуск — продукт и расписание владельца. Оператор
+         диспатчит свой workflow сам и крона не ждёт: три плитки вместо пяти
+         поднимают его форму импорта выше (на телефоне это было три ряда). -->
+    <button class="stat-card" data-accent="blue" data-href="digest" title="Открыть дайджест на дашборде" data-owner-only>
       <div class="stat-label">Дайджест</div>
       <div class="stat-value" id="tile-digest-value">…</div>
       <div class="stat-sub" id="tile-digest-sub"></div>
@@ -686,7 +869,7 @@ ${isOperator ? IMPORT_SECTION : ""}
       <div class="stat-value" id="tile-health-value">…</div>
       <div class="stat-sub" id="tile-health-sub"></div>
     </button>
-    <button class="stat-card" data-accent="gray" data-goto="#system">
+    <button class="stat-card" data-accent="gray" data-href="cron" title="Расписание автозапуска и ручной прогон в GitHub Actions" data-owner-only>
       <div class="stat-label">Автозапуск</div>
       <div class="stat-value" id="tile-cron-value">…</div>
       <div class="stat-sub" id="tile-cron-sub"></div>
@@ -698,31 +881,31 @@ ${isOperator ? IMPORT_SECTION : ""}
     </button>
   </div>
 
-  <section class="section" id="system">
+  <section class="section${isOperator ? "" : " is-tab-active"}" id="system" role="tabpanel" aria-labelledby="nav-system">
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </span>
       <h2 class="section-title">Система</h2>
     </div>
-    <div class="system-grid">
-      <div class="card">
+      <!-- Полоса запуска — ВНЕ сетки: после удаления «Полного прогона» тут
+           одна кнопка с абзацем, и карточкой в 122px рядом с «Здоровьем» на
+           367px она читалась обрубком. В сетке ниже остаются только карточки
+           данных. Целиком owner-only: у оператора кнопок нет вовсе. -->
+      <div class="card run-bar" data-owner-only>
         <div class="card-head">
           <span class="card-title">Запуск прогона</span>
           <span class="run-meta" id="runs-next"></span>
           <span class="spacer"></span>
-          <button class="btn-primary" id="btn-run-main" data-owner-only>
+          <button class="btn-primary" id="btn-run-std" data-owner-only title="Ровно то, что делает ежедневный автозапуск: smart-skip — пропуск дел с известной будущей датой и нерабочих дней">
             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-            Полный прогон
+            Запустить прогон
           </button>
-          <button class="btn-outline" id="btn-run-std" data-owner-only title="Как ежедневный автозапуск: smart-skip — пропуск дел с известной будущей датой и нерабочих дней">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-            Стандартный прогон
-          </button>
-          <span class="action-flash" id="runs-flash"></span>
+          <span class="action-flash" id="runs-flash" role="status" aria-live="polite"></span>
         </div>
-        <div class="run-launch-note">Статусы и логи прогонов — на вкладке Actions в GitHub; здесь остались только кнопки запуска. Плитка «Последний прогон» в пульте обновляется сама.</div>
+        <div class="run-launch-note">Кнопка делает ровно то же, что ежедневный автозапуск. Статусы и логи — на вкладке Actions в GitHub, плитка «Последний прогон» обновляется сама. Полный обход всех дел (без smart-skip) — там же, через Run workflow.</div>
       </div>
+    <div class="system-grid">
       <div class="card">
         <div class="card-head">
           <span class="card-title">Здоровье парсеров</span>
@@ -732,7 +915,9 @@ ${isOperator ? IMPORT_SECTION : ""}
         <div id="health-list" class="loading">Загрузка…</div>
         <div class="health-more" id="health-updated"></div>
       </div>
-      <div class="card" id="bank-parse-card" style="display:none;">
+      <!-- Не операторский трек (решение юриста 02.08.2026): data-owner-only —
+           второй рубеж к тому, что loadStaticData ему файл вообще не тянет. -->
+      <div class="card" id="bank-parse-card" style="display:none;" data-owner-only>
         <div class="card-head">
           <span class="card-title">Парсинг исков банка</span>
           <span class="run-meta" id="bank-parse-date"></span>
@@ -745,9 +930,9 @@ ${isOperator ? IMPORT_SECTION : ""}
     </div>
   </section>
 
-${isOperator ? "" : IMPORT_SECTION}
+${IMPORT_SECTION}
 
-  <section class="section" id="llm" data-owner-only>
+  <section class="section" id="llm" role="tabpanel" aria-labelledby="nav-llm" data-owner-only>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
@@ -755,11 +940,17 @@ ${isOperator ? "" : IMPORT_SECTION}
       <h2 class="section-title">LLM · тест дайджеста</h2>
     </div>
     <div class="card">
-      <div class="card-head">
-        <span class="card-title">Топ бесплатных моделей OpenRouter — что стоит за «топ-N»</span>
-      </div>
-      <div id="llm-top-body" class="loading">Загрузка…</div>
-      <div class="llm-updated" id="llm-updated"></div>
+      <!-- Рейтинг — справочник к форме, а не статус: свёрнут и грузится по
+           раскрытию (или при выборе провайдера openrouter). Раньше внешний
+           запрос к shir-man уходил на каждый заход и на каждое «Обновить», а
+           блок занимал треть мобильного экрана перед «Подписчиками». -->
+      <details class="fold" id="llm-top-fold">
+        <summary>Топ бесплатных моделей OpenRouter — что стоит за «топ-N»</summary>
+        <div class="fold-body">
+          <div id="llm-top-body" class="empty">рейтинг загрузится при раскрытии</div>
+          <div class="llm-updated" id="llm-updated"></div>
+        </div>
+      </details>
       <div class="tform" id="tf">
         <div class="tform-row">
           <label>Провайдер
@@ -817,20 +1008,21 @@ ${isOperator ? "" : IMPORT_SECTION}
             <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
             Запустить тест дайджеста
           </button>
-          <span class="action-flash" id="tf-flash"></span>
+          <span class="action-flash" id="tf-flash" role="status" aria-live="polite"></span>
         </div>
         <div class="tform-hint">Без галок безопасно: Telegram только в личный чат, без публикации на дашборд и без push. «Push всем» работает только вместе с «опубликовать».</div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="subs" data-owner-only>
+  <section class="section" id="subs" role="tabpanel" aria-labelledby="nav-subs" data-owner-only>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </span>
       <h2 class="section-title">Подписчики</h2>
       <span class="section-counter" id="subs-count">…</span>
+      <span id="subs-orphans"></span>
       <span class="spacer"></span>
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -879,6 +1071,7 @@ const SITE_BASE = ${JSON.stringify(CFG.siteBase)};
 const GH_REPO = ${JSON.stringify(CFG.ghRepo)};
 
 const SVG_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const SVG_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
 // ── Общие хелперы ────────────────────────────────────────────────────────────
 // Python на GitHub-раннере пишет naive-таймстампы в UTC без «Z»
@@ -953,6 +1146,17 @@ function stageBadge(stage) {
     return '<span class="badge badge-cassation">Кассация</span>';
   return "";
 }
+// Блок «данные не загрузились» вместо сырого исключения. Юристу текст
+// человеческий, само исключение — в title и console: «TypeError: Failed to
+// fetch» в карточке не говорит ни что сломалось, ни что делать. retryKey
+// разбирает делегированный слушатель ниже.
+function loadErrorHtml(text, retryKey, err) {
+  if (err) console.warn(retryKey + ":", err);
+  return '<div class="load-error" title="' + escHtml(String(err || "")) + '">'
+    + '<span class="dot dot-amber"></span><span>' + escHtml(text) + '</span>'
+    + '<button class="btn-outline btn-sm" type="button" data-retry="' + retryKey + '">Повторить</button>'
+    + '</div>';
+}
 // Плитка пульта: значение/подпись/акцент. valueHtml приходит из наших же
 // рендеров (не из сырых данных) — вставляется как HTML.
 function setTile(name, accent, valueHtml, subHtml) {
@@ -969,6 +1173,10 @@ let subsByEp = new Map();
 let allSubs = [];
 let lastPushesMap = new Map();
 let lastPushesGeneratedAt = "";
+// Какие подписки юрист развернул. Живёт вне DOM: #root перерисовывается на
+// каждое нажатие в поиске и после render(true) (переименование/удаление/
+// watchlist) — иначе раскрытая карточка схлопывалась бы под руками.
+let subsOpen = new Set();
 
 // ── Секция «Система»: запуск прогонов GitHub Actions ─────────────────────────
 // Список последних прогонов и живой лог убраны из админки (29.07.2026,
@@ -985,6 +1193,19 @@ function fmtDur(startIso, endIso) {
   return Math.floor(s / 3600) + " ч " + Math.round((s % 3600) / 60) + " мин";
 }
 let ghTimer = null;
+// Куда ведёт клик по плитке «Последний прогон»: лог именно этого прогона в
+// GitHub. html_url приходит с /admin/gh-runs и раньше молча отбрасывался —
+// при сбое нужный run приходилось искать глазами на вкладке Actions.
+// Ссылку держим переменной, а не <a> внутри плитки: плитка сама <button>,
+// вложенный интерактивный элемент ловил бы клик дважды.
+let ghLastRunUrl = "";
+function ghRunHref() {
+  return ghLastRunUrl || ("https://github.com/" + GH_REPO + "/actions/workflows/update_cases.yml");
+}
+function ghRunSub(run) {
+  const num = String(run.run_number || "");
+  return escHtml(relTime(run.run_started_at)) + (num ? " · #" + escHtml(num) + " ↗" : "");
+}
 // Нерабочий ли сегодня день — считает Worker (isHoliday, тот же календарь, что
 // у крона). Своей копии производственного календаря у страницы нет: их и так
 // две (worker.js и textutil.py). null = сервер не ответил, спрашивать не о чем.
@@ -1016,17 +1237,16 @@ async function loadGhRuns() {
     });
     let hasActive = (d.runs || []).some(function (run) { return run.status !== "completed"; });
     if (main) {
+      if (/^https:\\/\\//.test(String(main.html_url || ""))) ghLastRunUrl = main.html_url;
       const active = main.status !== "completed";
       const dur = fmtDur(main.run_started_at, active ? null : main.updated_at);
       if (active) {
         setTile("run", "amber", '<span class="dot dot-amber dot-pulse"></span>идёт · ' + escHtml(dur),
           "старт " + escHtml(relTime(main.run_started_at)));
       } else if (main.conclusion === "success") {
-        setTile("run", "green", '<span class="dot dot-green"></span>ok · ' + escHtml(dur),
-          escHtml(relTime(main.run_started_at)) + " · #" + escHtml(String(main.run_number || "")));
+        setTile("run", "green", '<span class="dot dot-green"></span>ok · ' + escHtml(dur), ghRunSub(main));
       } else {
-        setTile("run", "red", '<span class="dot dot-red"></span>' + escHtml(main.conclusion || "сбой"),
-          escHtml(relTime(main.run_started_at)) + " · #" + escHtml(String(main.run_number || "")));
+        setTile("run", "red", '<span class="dot dot-red"></span>' + escHtml(main.conclusion || "сбой"), ghRunSub(main));
       }
     } else {
       setTile("run", "gray", "—", "основной прогон не найден");
@@ -1047,25 +1267,21 @@ async function dispatchWorkflow(workflow, inputs, flashEl) {
     });
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok) {
-      flashEl.className = "action-flash ok";
-      flashEl.textContent = "✓ запущен — статус в плитке «Последний прогон»";
+      setFlash(flashEl, "✓ запущен — статус в плитке «Последний прогон»", "ok", 9000);
       // GitHub регистрирует run не мгновенно — обновим список дважды.
       setTimeout(loadGhRuns, 3000);
       setTimeout(loadGhRuns, 12000);
     } else {
-      flashEl.className = "action-flash err";
-      flashEl.textContent = "× " + (d.error || d.detail || ("HTTP " + r.status));
+      setFlash(flashEl, "× " + (d.error || d.detail || ("HTTP " + r.status)), "err");
     }
   } catch (e) {
-    flashEl.className = "action-flash err";
-    flashEl.textContent = "× " + e;
+    setFlash(flashEl, "× " + e, "err");
   }
-  setTimeout(function () { flashEl.textContent = ""; flashEl.className = "action-flash"; }, 9000);
 }
-document.getElementById("btn-run-main").addEventListener("click", function () {
-  if (!confirm("Запустить полный прогон сейчас?\\n\\nПарсинг всех судов + дайджест + Telegram + push подписчикам — как ручной запуск из GitHub UI (без smart-skip).")) return;
-  dispatchWorkflow("update_cases.yml", { smart_skip: "false" }, document.getElementById("runs-flash"));
-});
+// Единственная кнопка запуска (02.08.2026, решение юриста): «Полный прогон»
+// (smart_skip=false) убран — тяжёлый разовый обход всех активных дел нужен
+// редко и запускается из GitHub Actions (Run workflow → снять галку
+// smart_skip). Осталось ровно то, что делает ежедневный крон.
 document.getElementById("btn-run-std").addEventListener("click", function () {
   // В нерабочий день предлагаем прогнать «как крон, но мимо календаря»:
   // иначе прогон завершится за 20 секунд строкой «нерабочий день РФ».
@@ -1076,7 +1292,7 @@ document.getElementById("btn-run-std").addEventListener("click", function () {
       document.getElementById("runs-flash"));
     return;
   }
-  if (!confirm("Запустить стандартный прогон (как ежедневный автозапуск)?\\n\\nSmart-skip: пропуск дел с известной будущей датой и нерабочих дней РФ.")) return;
+  if (!confirm("Запустить прогон сейчас — как ежедневный автозапуск?\\n\\nПарсинг судов + дайджест + Telegram + push подписчикам. Smart-skip: пропуск дел с известной будущей датой.")) return;
   dispatchWorkflow("update_cases.yml", { smart_skip: "true" }, document.getElementById("runs-flash"));
 });
 
@@ -1112,14 +1328,21 @@ function healthMedian(arr) {
   const mid = Math.floor(a.length / 2);
   return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
 }
+// Мини-график последних прогонов. Столбики CSS, а не юникод-блоки: блоки
+// нормировались по СОБСТВЕННОМУ максимуму строки, поэтому ровный ряд [23×10]
+// и качающийся [21,20,19,…] выглядели одинаково, а «▁» означало и ноль, и
+// «просто меньше остальных». Теперь ноль — отдельная красная риска, и он
+// виден. Шкала по-прежнему своя у каждой строки: у судов разный порядок
+// величин, общая шкала расплющила бы мелкие.
 function healthSpark(counts) {
   const last = (counts || []).slice(-10);
   if (!last.length) return "";
   const max = Math.max.apply(null, last);
-  const blocks = "▁▂▃▄▅▆▇█";
   return last.map(function (c) {
-    if (max <= 0) return "▁";
-    return blocks[Math.min(blocks.length - 1, Math.round((c / max) * (blocks.length - 1)))];
+    const v = Number(c) || 0;
+    if (v <= 0) return '<i class="hb hb-zero" title="0 результатов"></i>';
+    const h = max > 0 ? Math.max(18, Math.round((v / max) * 100)) : 18;
+    return '<i class="hb" style="height:' + h + '%" title="' + escHtml(String(v)) + '"></i>';
   }).join("");
 }
 // Светофор зеркалит семантику health.py: тревожен ноль там, где обычно
@@ -1202,8 +1425,10 @@ async function loadHealth() {
     }
   } catch (e) {
     listEl.className = "";
-    listEl.innerHTML = '<div class="empty">Не удалось загрузить parse_health.json: ' + escHtml(String(e)) + '</div>';
-    setTile("health", "gray", "—", "нет данных");
+    listEl.innerHTML = loadErrorHtml("Данные о здоровье парсеров не загрузились", "health", e);
+    // Не «—/нет данных» и не янтарный: серый «?» отличает СБОЙ ЗАГРУЗКИ от
+    // реального состояния парсеров, а янтарь занят под «N парсеров ⚠».
+    setTile("health", "gray", "?", "не загрузилось · повторить");
   }
 }
 
@@ -1250,12 +1475,53 @@ function bpShortDate(iso) {
   var p = String(iso || "").split("-");
   return p.length === 3 ? p[2] + "." + p[1] : String(iso || "");
 }
-function bpRowHtml(row, dotCls) {
+// Разрез по судам. Отчёт сгруппирован по ИСХОДУ, и крупнейшие группы —
+// рутина («заседание в будущем» — 199 дел из 344): если ляжет целый суд, его
+// строки утонут среди сотен обычных. Здесь один ряд на суд, проблемные сверху.
+function bpCourtsFoldHtml(rows) {
+  var by = {};
+  rows.forEach(function (row) {
+    var name = String(row.court || row.court_domain || "—");
+    var c = by[name] || (by[name] = { name: name, total: 0, bad: 0, parsed: 0, skip: 0 });
+    c.total++;
+    var g = bpGroupKey(row);
+    if (g === "fail" || g === "breaker" || g === "nocard") c.bad++;
+    else if (g === "parsed" || g === "intake") c.parsed++;
+    else if (g === "writ" || g === "hearing" || g === "othskip") c.skip++;
+  });
+  var list = Object.keys(by).map(function (k) { return by[k]; });
+  if (!list.length) return "";
+  list.sort(function (a, b) {
+    if (a.bad !== b.bad) return b.bad - a.bad;
+    return b.total - a.total;
+  });
+  var anyBad = list.some(function (c) { return c.bad > 0; });
+  var body = list.map(function (c) {
+    var parts = [c.total + " дел"];
+    if (c.parsed) parts.push(c.parsed + " спарсено");
+    if (c.skip) parts.push(c.skip + " пропуск");
+    return '<div class="health-row"><span class="dot ' + (c.bad ? "dot-red" : "dot-green") + '"></span>'
+      + '<span class="health-name">' + escHtml(c.name) + '</span>'
+      + (c.bad ? '<span class="health-note">' + c.bad + ' без карточки/сбой</span>' : '')
+      + '<span class="bp-meta">' + escHtml(parts.join(" · ")) + '</span>'
+      + '</div>';
+  }).join("");
+  return '<details class="fold"' + (anyBad ? " open" : "") + '>'
+    + '<summary>По судам <span class="bp-group-n">(' + list.length + ')</span></summary>'
+    + '<div class="fold-body">' + body + '</div></details>';
+}
+function bpRowHtml(row, dotCls, gkey) {
   var badges = "";
+  // Статус карточки — только у спарсенных: там он про свежепрочитанное
+  // состояние дела. В группах пропусков это данные прошлого прогона.
+  if (gkey === "parsed" && row.case_status) {
+    badges += ' <span class="badge badge-skip">' + escHtml(String(row.case_status)) + '</span>';
+  }
   if (row.degraded) badges += ' <span class="badge badge-run">огрызок</span>';
-  if (row.force_parsed) badges += ' <span class="badge badge-run">форс-парс</span>';
+  // Форс-парс — штатный механизм (дело давно не проверялось), не тревога.
+  if (row.force_parsed) badges += ' <span class="badge badge-skip">форс-парс</span>';
   if (row.left_track) badges += ' <span class="badge badge-appeal">переезд в основной трек</span>';
-  if (row.archived) badges += ' <span class="badge badge-run">в архив трека</span>';
+  if (row.archived) badges += ' <span class="badge badge-archive">в архив трека</span>';
   if (row.events && row.events.length)
     badges += ' <span class="badge badge-ok">' + row.events.length + ' соб.</span>';
   else if (row.changed) badges += ' <span class="badge badge-ok">обновлено</span>';
@@ -1274,7 +1540,7 @@ function bpAppendRows(gkey) {
   var box = document.getElementById("bp-rows-" + gkey);
   if (!g || !box) return;
   var next = g.rows.slice(g.rendered, g.rendered + BP_CHUNK);
-  box.insertAdjacentHTML("beforeend", next.map(function (row) { return bpRowHtml(row, g.dot); }).join(""));
+  box.insertAdjacentHTML("beforeend", next.map(function (row) { return bpRowHtml(row, g.dot, gkey); }).join(""));
   g.rendered += next.length;
   var btn = document.getElementById("bp-more-" + gkey);
   if (btn) {
@@ -1287,7 +1553,11 @@ async function loadBankParse() {
   var listEl = document.getElementById("bank-parse-list");
   try {
     var r = await fetch(BANK_PARSE_URL, { cache: "no-cache" });
-    if (!r.ok) { card.style.display = "none"; return; }
+    // Прячем карточку ТОЛЬКО на 404 — «территория без bank-трека». Раньше
+    // прятали при любом !r.ok, и 502 от Pages выглядел так же: трека будто
+    // нет вовсе, вместо честного «не загрузилось».
+    if (r.status === 404) { card.style.display = "none"; return; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
     var d = await r.json();
     var rows = d.cases || [];
     var totals = d.totals || {};
@@ -1299,7 +1569,11 @@ async function loadBankParse() {
       (totals.failed ? '<span class="badge badge-fail">' + totals.failed + ' сбой</span> ' : "")
       + (totals.no_card ? '<span class="badge badge-run">' + totals.no_card + ' без карточки</span> ' : "")
       + '<span class="badge badge-ok">' + (totals.parsed || 0) + ' спарсено</span> '
-      + '<span class="badge badge-run">' + (totals.skip || 0) + ' пропуск</span>'
+      // Пропуск — рутина ритма опроса (заседание в будущем, недельный ритм
+      // ИЛ), а не проблема: красить янтарём 292 дела из 344 значит утопить в
+      // них настоящие «сбой» и «без карточки».
+      + '<span class="badge badge-skip">' + (totals.skip || 0) + ' пропуск</span>'
+      + (totals.not_in_queue ? ' <span class="badge badge-skip">' + totals.not_in_queue + ' вне очереди</span>' : "")
       + (totals.intake_new ? ' <span class="badge badge-ok">+' + totals.intake_new + ' подхвачено</span>' : "");
     bpGroupsData = {};
     var byGroup = {};
@@ -1307,7 +1581,7 @@ async function loadBankParse() {
       var k = bpGroupKey(row);
       (byGroup[k] = byGroup[k] || []).push(row);
     });
-    var html = "";
+    var html = bpCourtsFoldHtml(rows);
     BP_GROUPS.forEach(function (g) {
       var items = byGroup[g.key] || [];
       if (!items.length) return;
@@ -1345,18 +1619,23 @@ async function loadBankParse() {
       + relTime(d.updated_at);
   } catch (e) {
     // Файл есть, но не распарсился/сеть мигнула — карточку не прячем зря.
+    card.style.display = "";
     listEl.className = "";
-    listEl.innerHTML = '<div class="empty">Не удалось загрузить bank_parse_report.json: ' + escHtml(String(e)) + '</div>';
+    listEl.innerHTML = loadErrorHtml("Отчёт парсинга исков банка не загрузился", "bank", e);
   }
 }
 
 // ── Секция «LLM»: рейтинг shir-man + мини-форма теста ────────────────────────
-// Рейтинг грузим сразу (секция всегда развёрнута в новой вёрстке).
+// Рейтинг — внешний запрос к стороннему API. Грузим ЛЕНИВО: по раскрытию
+// свёртки или при выборе провайдера openrouter (там подписи «топ-N» без
+// рейтинга бессмысленны). Заход в админку за ним больше не ходит.
 let llmTopLoaded = false;
 async function loadLlmTop() {
   if (llmTopLoaded) return;
   llmTopLoaded = true;
   const el = document.getElementById("llm-top-body");
+  el.className = "loading";
+  el.textContent = "Загрузка…";
   try {
     const r = await fetch("https://shir-man.com/api/free-llm/top-models");
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -1403,6 +1682,8 @@ document.getElementById("tf-provider").addEventListener("change", function () {
   document.getElementById("tf-claude-wrap").style.display = isClaude ? "" : "none";
   document.getElementById("tf-giga-wrap").style.display = this.value === "gigachat" ? "" : "none";
   document.getElementById("tf-or-wrap").style.display = this.value === "openrouter" ? "" : "none";
+  // Подписи «топ-N» без рейтинга не говорят ничего — подтягиваем его тут.
+  if (this.value === "openrouter") loadLlmTop();
   document.getElementById("tf-claude-note").style.display = isClaude ? "" : "none";
   tfUpdateEffortVisibility();
 });
@@ -1588,14 +1869,36 @@ async function fetchAll() {
   return { subs, casesMap, activeCases, pushesMap, pushesGeneratedAt, digest };
 }
 
+// Разбор строки сводки дайджеста на ИМЕНОВАННЫЕ части.
+// Боевой формат (runs.py): «🆕 Новых: 4 · 📋 Изменений: 6 · ➡️ Переходов: 2».
+// Раньше плитка брала match(/\\d+/) — ПЕРВОЕ число строки — и подписывала его
+// словом «изменений»: при «Новых: 4 · Изменений: 6» юрист каждое утро читал
+// «4 изменений», то есть число новых дел под чужой подписью, а изменения не
+// показывались вовсе. Пустой массив = формат не узнан (replay пишет свой) —
+// вызывающий печатает summary как есть, он и так человекочитаемый.
+function digestSummaryParts(summary) {
+  const s = String(summary || "");
+  const out = [];
+  [["Новых", "новых"], ["Изменений", "изм."], ["Переходов", "перех."]].forEach(function (pair) {
+    const m = s.match(new RegExp(pair[0] + ":\\\\s*(\\\\d+)"));
+    if (m && Number(m[1]) > 0) out.push({ n: m[1], unit: pair[1] });
+  });
+  return out;
+}
 // Плитка «Дайджест» + push-агрегат в плитке «Автозапуск».
 function renderDigestTile(digest, pushesMap, pushesGeneratedAt) {
   if (digest && digest.generated_at) {
-    const m = String(digest.summary || "").match(/\\d+/);
-    const value = digest.is_empty ? "пусто" : (m ? m[0] + " изменений" : escHtml(digest.summary || "—"));
-    setTile("digest", "blue", value,
-      escHtml(relTime(digest.generated_at))
-      + ' · <a href="' + DASHBOARD_URL + '?digest=open" target="_blank" rel="noopener noreferrer">на дашборд</a>');
+    const parsed = digestSummaryParts(digest.summary);
+    let value;
+    if (digest.is_empty) value = "пусто";
+    else if (parsed.length) {
+      value = parsed.map(function (p) {
+        return '<span class="tile-part">' + escHtml(p.n) + ' <i>' + escHtml(p.unit) + '</i></span>';
+      }).join("");
+    } else value = escHtml(digest.summary || "—");
+    // Подпись без ссылки «на дашборд»: кликабельна вся плитка (data-href),
+    // ссылка внутри <button> была вложенным интерактивным элементом.
+    setTile("digest", "blue", value, escHtml(relTime(digest.generated_at)) + " · открыть ↗");
   } else {
     setTile("digest", "gray", "—", "last_digest.json недоступен");
   }
@@ -1643,8 +1946,9 @@ function renderLastPush(item, generatedAt) {
 function pushVariantBadge(item) {
   if (!item) return "";
   const v = item.variant || "?";
-  const cls = v === "personal" ? "badge-ok" : v === "skip" ? "badge-skip"
-    : v === "general" ? "badge-run" : "badge-watch";
+  // general/broadcast — штатные варианты рассылки (подписчик без watchlist),
+  // не тревога: янтарь тут только сбивал с толку.
+  const cls = v === "personal" ? "badge-ok" : v === "skip" ? "badge-skip" : "badge-watch";
   return '<span class="badge ' + cls + '">' + escHtml(v) + '</span>';
 }
 // KV-TTL подписки — 60 дней от последней записи; last_seen_at обновляется на
@@ -1698,7 +2002,24 @@ function caseRowHtml(num, casesMap) {
     + (c.court ? '<span class="case-court">' + escHtml(c.court) + '</span>' : '')
     + '</div>';
 }
-function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
+// Сирот по КОНКРЕТНОЙ подписке — для свёрнутой строки. Глобальный счётчик в
+// шапке отвечает «есть ли проблема вообще», этот — «у кого именно»: иначе
+// свёрнутый список её прячет.
+function subOrphanCount(wl, casesMap) {
+  var n = 0;
+  for (var i = 0; i < wl.length; i++) {
+    if (!casesMap.get(bareCaseNumber(wl[i]))) n++;
+  }
+  return n;
+}
+// Карточка подписчика — свёртка (02.08.2026): раньше 8 подписок занимали
+// 1983px, то есть 76% страницы. Свёрнуто — строка на подписку, развёрнуто —
+// всё прежнее содержимое.
+// ⚠️ Класс .sub-card остаётся на самом <details>, data-endpoint не переезжает:
+// на них завязаны btn.closest(".sub-card") в делегировании и flash().
+// ⚠️ В <summary> НЕТ ни одной кнопки — иначе клик по кнопке переключал бы
+// свёртку, а <button> внутри <summary> ещё и вложенный интерактив.
+function renderCard(sub, casesMap, lastPush, pushesGeneratedAt, isOpen, openCases) {
   const epAttr = escHtml(sub.endpoint || "");
   const wl = Array.isArray(sub.watchlist) ? sub.watchlist : [];
   const nameHtml = sub.label
@@ -1707,36 +2028,46 @@ function renderCard(sub, casesMap, lastPush, pushesGeneratedAt) {
   const cases = wl.length
     ? wl.map(function (num) { return caseRowHtml(num, casesMap); }).join("")
     : '<div class="empty">Юрист не отслеживает ни одно дело</div>';
-  return '<div class="sub-card" data-endpoint="' + epAttr + '">'
-    + '<div class="sub-head">'
+  const orphans = subOrphanCount(wl, casesMap);
+  return '<details class="sub-card" data-endpoint="' + epAttr + '"' + (isOpen ? " open" : "") + '>'
+    + '<summary class="sub-row">'
     +   nameHtml
     +   '<span class="badge badge-device">' + escHtml(detectDevice(sub.user_agent)) + '</span>'
     +   (sub.is_owner ? '<span class="badge badge-owner">★ owner</span>' : "")
     +   expiryBadge(sub)
+    +   (orphans ? '<span class="badge badge-run" title="Номера, которых нет ни в активных делах, ни в архиве — push по ним не сработает">⚠ ' + orphans + '</span>' : "")
+    +   '<span class="spacer"></span>'
+    +   '<span class="sub-count">' + wl.length + ' дел</span>'
+    +   pushVariantBadge(lastPush)
+    + '</summary>'
+    + '<div class="sub-body">'
     +   '<div class="sub-actions">'
     +     '<button class="btn-outline" data-action="rename">✏ Имя</button>'
     +     '<button class="btn-outline" data-action="watchlist">Watchlist</button>'
     +     '<button class="btn-outline" data-action="testpush">Тест push</button>'
     +     '<button class="btn-icon" data-action="copyep" title="Копировать endpoint (…' + escHtml((sub.endpoint || "").slice(-24)) + ')">' + SVG_COPY + '</button>'
-    +     '<button class="btn-outline btn-danger" data-action="delete">Удалить</button>'
-    +     '<span class="action-flash"></span>'
+    // Удаление — иконкой за разделителем: текстовая кнопка стояла в одном
+    // ряду с четырьмя рабочими и отличалась только цветом текста, а на 390px
+    // ряд переносился и «Удалить» оказывалась одна слева — прямо под палец.
+    +     '<span class="sub-actions-sep"></span>'
+    +     '<button class="btn-icon btn-icon-danger" data-action="delete" title="Удалить подписку">' + SVG_TRASH + '</button>'
+    +     '<span class="action-flash" role="status" aria-live="polite"></span>'
     +   '</div>'
+    +   '<div class="sub-kv">'
+    +     '<span>Создана <b>' + escHtml(relTime(sub.created_at)) + '</b></span>'
+    +     '<span>Вход <b>' + escHtml(relTime(sub.last_seen_at)) + '</b> <span title="' + escHtml(fullDate(sub.last_seen_at)) + '"></span></span>'
+    +     '<span>Watchlist <b>' + escHtml(relTime(sub.last_watchlist_update_at)) + '</b></span>'
+    +   '</div>'
+    +   '<details class="fold">'
+    +     '<summary>Последний push ' + pushVariantBadge(lastPush) + '</summary>'
+    +     '<div class="fold-body">' + renderLastPush(lastPush, pushesGeneratedAt) + '</div>'
+    +   '</details>'
+    +   '<details class="fold"' + (openCases || (wl.length && wl.length <= 10) ? " open" : "") + '>'
+    +     '<summary>Дела (' + wl.length + ')</summary>'
+    +     '<div class="fold-body">' + cases + '</div>'
+    +   '</details>'
     + '</div>'
-    + '<div class="sub-kv">'
-    +   '<span>Создана <b>' + escHtml(relTime(sub.created_at)) + '</b></span>'
-    +   '<span>Вход <b>' + escHtml(relTime(sub.last_seen_at)) + '</b> <span title="' + escHtml(fullDate(sub.last_seen_at)) + '"></span></span>'
-    +   '<span>Watchlist <b>' + escHtml(relTime(sub.last_watchlist_update_at)) + '</b></span>'
-    +   '<span>Дел: <b>' + wl.length + '</b></span>'
-    + '</div>'
-    + '<details class="fold">'
-    +   '<summary>Последний push ' + pushVariantBadge(lastPush) + '</summary>'
-    +   '<div class="fold-body">' + renderLastPush(lastPush, pushesGeneratedAt) + '</div>'
-    + '</details>'
-    + '<details class="fold"' + (wl.length && wl.length <= 10 ? " open" : "") + '>'
-    +   '<summary>Дела (' + wl.length + ')</summary>'
-    +   '<div class="fold-body">' + cases + '</div>'
-    + '</details>'
-    + '</div>';
+    + '</details>';
 }
 
 async function postAdmin(path, body) {
@@ -1750,12 +2081,23 @@ async function postAdmin(path, body) {
   return { ok: r.ok, status: r.status, data };
 }
 
+// Вспышка результата действия. Успех гаснет сам, ОШИБКА остаётся до крестика:
+// текст вроде «× endpoint мёртв (410)» — единственное место, где виден код
+// сбоя, и стирать его через 5 секунд значит прятать причину.
 function flash(card, text, kind) {
   const el = card.querySelector(".action-flash");
   if (!el) return;
+  setFlash(el, text, kind);
+}
+function setFlash(el, text, kind, holdMs) {
   el.className = "action-flash " + (kind || "");
+  if (kind === "err") {
+    el.innerHTML = escHtml(text)
+      + ' <button class="flash-x" type="button" data-flash-x title="Скрыть">✕</button>';
+    return;
+  }
   el.textContent = text;
-  setTimeout(() => { el.textContent = ""; el.className = "action-flash"; }, 5000);
+  setTimeout(function () { el.textContent = ""; el.className = "action-flash"; }, holdMs || 5000);
 }
 
 // ── Модалка редактирования watchlist ─────────────────────────────────────────
@@ -1967,9 +2309,15 @@ function renderSubsList() {
   const root = document.getElementById("root");
   const q = document.getElementById("subs-search").value.trim().toLowerCase();
   const visible = allSubs.filter(function (s) { return subMatches(s, q); });
+  // Найденное раскрываем сами, но только когда поиск ДЕЙСТВИТЕЛЬНО сузил
+  // список: иначе буква «а» развернёт всех и вернёт простыню. Ручное
+  // состояние (subsOpen) не трогаем — очистка поиска возвращает то, что
+  // юрист раскрыл сам.
+  const autoOpen = !!q && visible.length <= 3;
   root.className = "subs";
   root.innerHTML = visible.map(function (s) {
-    return renderCard(s, casesMapGlobal, lastPushesMap.get(s.endpoint), lastPushesGeneratedAt);
+    return renderCard(s, casesMapGlobal, lastPushesMap.get(s.endpoint), lastPushesGeneratedAt,
+      autoOpen || subsOpen.has(s.endpoint), autoOpen);
   }).join("");
   if (!visible.length) {
     root.innerHTML = '<div class="empty">' + (q ? "Ничего не найдено по запросу" : "Подписок нет.") + '</div>';
@@ -2003,6 +2351,11 @@ async function render(force) {
       "<b>" + subs.length + "</b> подписок · <b>" + owners + "</b> owner<br>"
       + totalWl + " дел в watchlist'ах"
       + (orphanWl ? " · <b>⚠ " + orphanWl + " нигде не найдено</b>" : "");
+    // Тот же счётчик — в заголовке секции: сводка в шапке скрыта на мобильном
+    // (.header-meta{display:none} ≤768px), и с телефона сироты не видны вовсе.
+    document.getElementById("subs-orphans").innerHTML = orphanWl
+      ? '<span class="badge badge-run" title="Номера из watchlist\\'ов, которых нет ни в активных делах, ни в архиве. Push по ним никогда не сработает — крестик в строке дела убирает номер.">⚠ ' + orphanWl + ' нигде не найдено</span>'
+      : "";
     document.getElementById("nav-subs-count").textContent = String(subs.length);
     // Сортируем: owner вверх, затем по последнему входу (свежие первыми).
     subs.sort((a, b) => {
@@ -2032,38 +2385,142 @@ document.getElementById("root").addEventListener("click", (e) => {
   handleAction(card, btn.getAttribute("data-action"), sub, btn);
 });
 document.getElementById("subs-search").addEventListener("input", renderSubsList);
+// Запоминаем раскрытые подписки по КЛИКУ на строку, а не по событию toggle.
+// ⚠️ Chrome шлёт toggle и при парсинге <details open> — то есть каждое
+// присваивание innerHTML рассылает его по всем карточкам, отрендеренным
+// открытыми. Гард по таймеру ненадёжен: эти задачи дренируются позже
+// setTimeout(0), и авто-раскрытые поиском карточки записывались в subsOpen
+// как «раскрытые вручную» — после очистки запроса оставались открытыми.
+// Клик по <summary> парсер не генерирует, а клавиатурная активация (Enter /
+// Space) даёт его сама — обходимся одним слушателем.
+// Состояние читаем в setTimeout(0): переключение open — это default action,
+// на момент обработки события оно ещё не применено.
+document.getElementById("root").addEventListener("click", function (e) {
+  const s = e.target.closest ? e.target.closest("summary") : null;
+  if (!s) return;
+  const det = s.parentElement;
+  // Фильтр обязателен: внутренние details.fold («Последний push», «Дела»)
+  // иначе писали бы мусор.
+  if (!det || !det.classList.contains("sub-card")) return;
+  const ep = det.getAttribute("data-endpoint");
+  if (!ep) return;
+  setTimeout(function () {
+    if (det.open) subsOpen.add(ep); else subsOpen.delete(ep);
+  }, 0);
+});
 
-// ── Чипы-якоря и плитки: прокрутка + подсветка активной секции ───────────────
-(function () {
-  const chips = Array.prototype.slice.call(document.querySelectorAll("#nav .chip-btn"));
-  function setActive(id) {
-    chips.forEach(function (c) {
-      c.classList.toggle("active", c.getAttribute("href") === "#" + id);
-    });
+// ── Вкладки шапки ────────────────────────────────────────────────────────────
+// Чипы #nav — настоящие вкладки: показана ровно одна секция, пульт остаётся
+// сверху вне вкладок. Состояние — в hash (secret живёт в query, hash его не
+// трогает). history.replaceState, а не pushState: вкладка — фильтр вида, а не
+// шаг навигации; иначе «назад» листал бы вкладки вместо ухода со страницы и
+// плодил копии URL с секретом в истории.
+var TAB_DEFAULT = IS_OWNER ? "system" : "import";
+// ⚠️ В hash пишем "tab-<id>", а НЕ голый id секции. Иначе Chrome после
+// replaceState видит в документе элемент с этим id и выполняет отложенный
+// «прыжок к фрагменту» уже после load: страница уезжала вниз на высоту
+// скрытых панелей, а липкая шапка оказывалась за верхним краем. Элемента
+// с id="tab-…" на странице нет (чипы носят id="nav-…"), прыгать некуда.
+// Старый формат (#import) читаем тоже — сохранённая ссылка не должна
+// ломаться, showTab тут же нормализует hash.
+function tabFromHash() {
+  var h = String(location.hash || "").replace(/^#/, "");
+  return h.indexOf("tab-") === 0 ? h.slice(4) : h;
+}
+function tabAllowed(id) {
+  var panel = document.getElementById(id);
+  var chip = document.getElementById("nav-" + id);
+  if (!panel || !chip) return false;
+  // Роль: #llm и #subs у оператора скрыты CSS (реальный запрет — 403 на API).
+  if (!IS_OWNER && panel.hasAttribute("data-owner-only")) return false;
+  // Конфиг: чип «Импорт» инлайн-скрыт, пока loadImportCourts не нашёл в
+  // регионе капчёвые суды. На ХМАО он не появится никогда.
+  if (chip.style.display === "none") return false;
+  return true;
+}
+function showTab(id, opts) {
+  if (!tabAllowed(id)) id = TAB_DEFAULT;
+  var chips = document.querySelectorAll("#nav .chip-btn");
+  for (var i = 0; i < chips.length; i++) {
+    var on = chips[i].getAttribute("href") === "#" + id;
+    chips[i].classList.toggle("active", on);
+    chips[i].setAttribute("aria-selected", on ? "true" : "false");
+    chips[i].tabIndex = on ? 0 : -1;
   }
-  chips.forEach(function (c) {
-    c.addEventListener("click", function (e) {
-      e.preventDefault();
-      const el = document.querySelector(c.getAttribute("href"));
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      setActive(c.getAttribute("href").slice(1));
-    });
+  var panels = document.querySelectorAll("main .section");
+  for (var j = 0; j < panels.length; j++) {
+    panels[j].classList.toggle("is-tab-active", panels[j].id === id);
+  }
+  // Присваивать location.hash нельзя: браузер прыгнет к якорю под шапку.
+  try { history.replaceState(null, "", "#tab-" + id); } catch (e) {}
+  if (!opts || opts.scroll !== false) window.scrollTo(0, 0);
+  if (!opts || !opts.silent) onTabShown(id);
+}
+// Открытие вкладки — повод освежить статику Pages (KV не трогаем): админку
+// держат открытой сутками. Порог тот же, что у visibilitychange.
+function onTabShown(id) {
+  if (id === "system" && Date.now() - lastStaticLoadAt > STATIC_STALE_MS) {
+    loadStaticData(!IS_OWNER);
+  }
+}
+function initTabs() {
+  var nav = document.getElementById("nav");
+  // Делегирование строго на #nav: класс .chip-btn носит ещё и ссылка
+  // «Открыть поиск по суду» внутри формы импорта — глобальный слушатель
+  // перехватил бы переход на сайт суда.
+  nav.addEventListener("click", function (e) {
+    var chip = e.target.closest ? e.target.closest(".chip-btn") : null;
+    if (!chip) return;
+    e.preventDefault();
+    showTab(chip.getAttribute("href").slice(1));
   });
-  const sections = Array.prototype.slice.call(document.querySelectorAll("main .section"));
-  if ("IntersectionObserver" in window) {
-    const visible = {};
-    const io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) { visible[en.target.id] = en.isIntersecting; });
-      for (let i = 0; i < sections.length; i++) {
-        if (visible[sections[i].id]) { setActive(sections[i].id); break; }
-      }
-    }, { rootMargin: "-90px 0px -55% 0px", threshold: 0 });
-    sections.forEach(function (s) { io.observe(s); });
-  }
-  document.querySelectorAll(".stat-card[data-goto]").forEach(function (t) {
+  // Стрелки/Home/End — обязательный минимум для объявленного role="tablist".
+  nav.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight"
+        && e.key !== "Home" && e.key !== "End") return;
+    var open = [];
+    var chips = document.querySelectorAll("#nav .chip-btn");
+    for (var i = 0; i < chips.length; i++) {
+      if (tabAllowed(chips[i].getAttribute("href").slice(1))) open.push(chips[i]);
+    }
+    if (!open.length) return;
+    var cur = open.indexOf(document.activeElement);
+    var next = e.key === "Home" ? 0
+      : e.key === "End" ? open.length - 1
+      : (cur + (e.key === "ArrowRight" ? 1 : open.length - 1) + open.length) % open.length;
+    e.preventDefault();
+    open[next].focus();
+    showTab(open[next].getAttribute("href").slice(1));
+  });
+  window.addEventListener("hashchange", function () {
+    showTab(tabFromHash() || TAB_DEFAULT, { scroll: false });
+  });
+  showTab(tabFromHash() || TAB_DEFAULT, { scroll: false, silent: true });
+}
+// Плитки пульта: одни переключают вкладку (data-goto), другие ведут наружу
+// (data-href) — у дайджеста, лога прогона и расписания крона своих секций на
+// странице нет. Токен, а не готовый URL в разметке: URL — константы страницы,
+// территории отличаются.
+(function () {
+  document.querySelectorAll(".stat-card[data-goto], .stat-card[data-href]").forEach(function (t) {
     t.addEventListener("click", function () {
-      const el = document.querySelector(t.getAttribute("data-goto"));
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      const href = t.getAttribute("data-href");
+      if (href === "digest") {
+        window.open(DASHBOARD_URL + "?digest=open", "_blank", "noopener");
+        return;
+      }
+      if (href === "run") {
+        window.open(ghRunHref(), "_blank", "noopener");
+        return;
+      }
+      if (href === "cron") {
+        // Расписание автозапуска и «Run workflow» для полного обхода — там же.
+        window.open("https://github.com/" + GH_REPO + "/actions/workflows/update_cases.yml",
+          "_blank", "noopener");
+        return;
+      }
+      const sel = t.getAttribute("data-goto");
+      if (sel) showTab(sel.slice(1));
     });
   });
 })();
@@ -2079,8 +2536,23 @@ var impSending = false;        // идёт отправка/импорт — к�
 var impDetectedHosts = [];     // sudrf-хосты текущей вставки/файла (автоопределение суда)
 var impDetectSeq = 0;          // защита от гонки async-чтения файла
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
+var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
+var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
+var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
+// Ссылка «Открыть поиск по суду». srv_num обязателен: на одном домене живут
+// две площадки (районный суд и его постоянное присутствие), и часть судов
+// реестра заведена ТОЛЬКО как srv_num=2 — голая ссылка уводила оператора на
+// чужую площадку. Серверные предохранители этого не ловят: хост и delo_id у
+// обеих площадок совпадают, а фактический сервер импортёр берёт из href
+// карточек дампа. delo_id=1540005 — гражданские дела 1-й инстанции,
+// name_op=sf — форма поиска (та самая, что закрыта проверочным кодом).
 function impCourtLink(domain) {
-  return "https://" + domain + "/modules.php?name=sud_delo";
+  var c = null;
+  for (var i = 0; i < impCourts.length; i++) {
+    if (impCourts[i].domain === domain) { c = impCourts[i]; break; }
+  }
+  return "https://" + domain + "/modules.php?name=sud_delo&srv_num="
+    + encodeURIComponent(String((c && c.srv_num) || 1)) + "&delo_id=1540005&name_op=sf";
 }
 // Синхронизация ссылки «Открыть сайт суда» с выбранным судом. На верхнем
 // уровне, а не внутри loadImportCourts: её зовут change селекта, клик по
@@ -2134,10 +2606,17 @@ async function loadImportCourts() {
     }).join("");
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
     syncImportCourtLink();
+    // Снятие инлайнового скрытия = «разблокировать вкладку»; показывает её
+    // теперь класс .is-tab-active (см. showTab), а не эта строка.
     document.getElementById("import").style.display = "";
     document.getElementById("nav-import").style.display = "";
     document.getElementById("tile-import-card").style.display = "";
     document.querySelector(".pult").classList.add("has-import");
+    // Доводка дип-линка: на старте чип был инлайн-скрыт, поэтому tabAllowed
+    // отклонил бы #import и откатил на «Систему» даже там, где капчёвые суды
+    // есть. Если юрист успел кликнуть другую вкладку, hash уже переписан
+    // replaceState и доводка не сработает — что и нужно.
+    if (tabFromHash() === "import") showTab("import", { scroll: false });
     loadImportLog();
   } catch (e) {
     // cases.json недоступен: оператору — ошибка с «Повторить» (иначе секция
@@ -2203,13 +2682,30 @@ async function loadImportLog(logOnly) {
     // полного обновления — экономим KV lists+reads на каждом тике.
     const r = await fetch("/admin/import-log?secret=" + encodeURIComponent(SECRET)
       + (logOnly ? "&logonly=1" : ""));
-    if (!r.ok) return null;
+    if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
     renderImportHistory(items);
-    if (!logOnly) renderImportFreshness(items, d.last || {});
+    if (!logOnly) {
+      // Кэшируем карту вечных ключей import:last:*: по ней светофор можно
+      // перерисовать после успешного импорта, не тратя второй KV-list.
+      impLastFreshMap = d.last || {};
+      renderImportFreshness(items, impLastFreshMap);
+    }
     return items;
-  } catch (e) { return null; }
+  } catch (e) {
+    // Раньше сбой молча возвращал null, и светофор с историей навсегда
+    // оставались с разметочным «Загрузка…» — оператор не мог отличить
+    // «данные едут» от «журнал не пришёл». На горячем поллинге (logOnly)
+    // молчим по-прежнему: там свой индикатор ожидания и свои ретраи.
+    if (!logOnly) {
+      const fresh = document.getElementById("imp-freshness");
+      const hist = document.getElementById("imp-history");
+      if (fresh) { fresh.className = ""; fresh.innerHTML = loadErrorHtml("Журнал импортов не загрузился", "implog", e); }
+      if (hist) { hist.className = ""; hist.innerHTML = loadErrorHtml("Журнал импортов не загрузился", "implog", e); }
+    }
+    return null;
+  }
 }
 // Светофор свежести: когда каждый капчёвый суд импортировался в последний
 // раз. Основной источник — карта last (вечные ключи import:last:<домен> на
@@ -2224,14 +2720,14 @@ function renderImportFreshness(items, lastMap) {
   Object.keys(lastMap || {}).forEach(function (d) {
     var e = lastMap[d];
     var t = parseIso(e && e.ts);
-    if (!isNaN(t)) byDomain[d] = { ts: t, operator: e.operator || "", added: e.added || 0 };
+    if (!isNaN(t)) byDomain[d] = { ts: t, operator: e.operator || "", added: e.added || 0, rows: e.rows || 0 };
   });
   (items || []).forEach(function (it) {
     if (it.status !== "done" || !it.court_domain) return;
     var t = parseIso(it.updated_at || it.ts);
     if (isNaN(t)) return;
     if (!byDomain[it.court_domain] || byDomain[it.court_domain].ts < t) {
-      byDomain[it.court_domain] = { ts: t, operator: it.operator || "", added: it.added || 0 };
+      byDomain[it.court_domain] = { ts: t, operator: it.operator || "", added: it.added || 0, rows: it.rows || 0 };
     }
   });
   var rows = impCourts.map(function (c) {
@@ -2253,18 +2749,25 @@ function renderImportFreshness(items, lastMap) {
     + '<span class="badge badge-ok">' + (rows.length - nRed - nYellow) + ' ok</span>';
   // Плитка «Импорты» в пульте — из тех же подсчётов, без лишних запросов.
   if (nRed) {
-    setTile("import", "red", nRed + " просрочено", "из " + rows.length + " судов · регламент раз в неделю");
+    // Подписи короткие: плитка узкая (пульт из 5 колонок), и на десктопе
+    // .stat-sub по-прежнему режет длинный текст многоточием.
+    setTile("import", "red", nRed + " просрочено", "из " + rows.length + " судов · раз в неделю");
   } else if (nYellow) {
-    setTile("import", "amber", nYellow + " скоро срок", "из " + rows.length + " судов · жёлтый — 8–14 дней");
+    setTile("import", "amber", nYellow + " скоро срок", "из " + rows.length + " судов · 8–14 дней");
   } else {
     setTile("import", "green", '<span class="dot dot-green"></span>всё свежо', "все " + rows.length + " судов моложе 7 дней");
   }
   el.className = "";
   el.innerHTML = rows.map(function (x) {
     var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
+    // «+7 из 24» — сколько дел завели из скольких сберовских строк было на
+    // странице. rows появился в вечном ключе 02.08.2026: у импортов до этого
+    // его нет, поэтому падаем обратно на голое «+7».
+    var added = x.e && x.e.added
+      ? " · +" + x.e.added + (x.e.rows ? " из " + x.e.rows : "")
+      : "";
     var note = x.e
-      ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "")
-        + (x.e.added ? " · +" + x.e.added : "")
+      ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "") + added
       : "ни разу не импортировался";
     return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
       + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.court.domain) + '">'
@@ -2273,6 +2776,20 @@ function renderImportFreshness(items, lastMap) {
       + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
       + '</div>';
   }).join("");
+  // Первый рендер светофора выбирает в форме самый просроченный суд: список
+  // отсортирован рабочей очередью, а селект до этого показывал первый суд
+  // реестра — оператор каждый раз перевыбирал вручную.
+  // impCourtTouched НЕ ставим: автоопределение суда по вставке должно
+  // по-прежнему иметь право переключить селект молча.
+  if (!impFreshAutoPicked && !impCourtTouched && rows.length) {
+    impFreshAutoPicked = true;
+    var sel = document.getElementById("imp-court");
+    if (sel && rows[0].court.domain !== sel.value) {
+      sel.value = rows[0].court.domain;
+      syncImportCourtLink();
+      impRenderSelection();
+    }
+  }
 }
 // Клик по строке светофора = выбрать суд в форме импорта: светофор работает
 // рабочей очередью («какой суд пора обновить — тот и импортирую»). Слушатели —
@@ -2316,6 +2833,21 @@ function impPollResult(key, startedAt) {
         rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
           + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
           + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
+      }
+      // Успех — очищаем поле вставки и файл. Оператор идёт очередью судов, а
+      // форма оставалась заполненной прошлым дампом: следующий Ctrl+V клеился
+      // в конец предыдущего, автоопределение видело «ссылки нескольких судов»
+      // и блокировало отправку, а кнопки «очистить» на странице нет.
+      // При failed вставку НЕ трогаем — дамп нужен для повторной попытки.
+      if (mine.status === "done") {
+        document.getElementById("imp-paste").innerHTML = "";
+        impSetFile(null);          // внутри — impRenderSelection()
+        impRunDetect();            // сбросить impDetectedHosts и заметку суда
+        // Светофор свежести перерисовываем из УЖЕ полученного журнала поверх
+        // КЭША карты import:last:* — только что импортированный суд иначе
+        // висел бы красным до «Обновить». Полного захода в /admin/import-log
+        // не делаем: это лишний KV-list, а свежая запись и так в journal'е.
+        renderImportFreshness(items, impLastFreshMap);
       }
       impSending = false;
       impUpdateSendState();
@@ -2388,6 +2920,12 @@ async function impRunDetect() {
   }
   if (seq !== impDetectSeq) return; // источник сменился, пока читали файл
   impDetectedHosts = html ? impDetectDomains(html) : [];
+  // Сколько на странице ссылок именно на КАРТОЧКИ дел. Раньше индикатор
+  // считал querySelectorAll("a[href]") — то есть меню, «хлебные крошки» и
+  // пейджер вместе с делами, и на обычной выдаче показывал «ссылок на дела:
+  // 137» при десятке реальных. Признак name_op=case есть и в абсолютных, и в
+  // относительных href, поэтому работает и для файла, и для rich-paste.
+  impDetectedCaseLinks = html ? (html.match(/name_op=case/gi) || []).length : 0;
   // Ровно один суд из списка импорта: подставляем сами, пока оператор не
   // выбирал вручную — ловит главный сценарий «оставил суд по умолчанию,
   // вставил выдачу другого». Ручной выбор автоматика не перебивает.
@@ -2422,16 +2960,19 @@ function impRenderSelection() {
   var el = document.getElementById("imp-selection");
   var paste = document.getElementById("imp-paste");
   var det = impDetectNote();
+  // Одна и та же формулировка для файла и для вставки: считаем карточки дел.
+  var cases = impDetectedCaseLinks
+    ? "дел на странице: " + impDetectedCaseLinks
+    : "<b>дел на странице: 0 — похоже, вставился простой текст, скопируйте страницу заново</b>";
   if (impSelectedFile) {
     el.innerHTML = '<span class="imp-file-chip">файл: ' + escHtml(impSelectedFile.name)
       + " (" + impFmtSize(impSelectedFile.size)
       + ') <button class="imp-file-clear" type="button" id="imp-file-clear" title="Убрать файл">✕</button></span>'
       + '<span>отправится файл — вставленное в поле не используется</span>'
+      + "<span>" + cases + "</span>"
       + (det ? "<span>" + det + "</span>" : "");
   } else if (paste.innerHTML.length) {
-    var k = paste.querySelectorAll("a[href]").length;
-    el.innerHTML = "вставлено " + paste.innerHTML.length + " симв. · ссылок на дела: "
-      + (k ? String(k) : '<b>0 — похоже, простой текст, скопируйте страницу заново</b>')
+    el.innerHTML = "вставлено " + paste.innerHTML.length + " симв. · " + cases
       + (det ? "<span>" + det + "</span>" : "");
   } else {
     el.innerHTML = "";
@@ -2440,7 +2981,12 @@ function impRenderSelection() {
 }
 function impUpdateSendState() {
   var has = !!impSelectedFile || document.getElementById("imp-paste").innerHTML.length > 0;
-  document.getElementById("imp-send").disabled = impSending || !has;
+  var off = impSending || !has;
+  document.getElementById("imp-send").disabled = off;
+  // Подсказка «чего не хватает» — только пока кнопка заблокирована и ничего
+  // не отправляется: сама по себе выключенная кнопка причины не объясняет.
+  var hint = document.getElementById("imp-send-hint");
+  if (hint) hint.style.display = (!has && !impSending) ? "" : "none";
 }
 async function impSend() {
   const domain = document.getElementById("imp-court").value;
@@ -2462,10 +3008,12 @@ async function impSend() {
     return;
   }
   // Главная ошибка операторов — вставка простым текстом: ссылки на карточки
-  // дел теряются, импортёру нечего забирать. Ловим до отправки.
-  if (!/<a[\\s>]/i.test(html)) {
+  // дел теряются, импортёру нечего забирать. Ловим до отправки. Проверяем
+  // именно ссылки на КАРТОЧКИ (name_op=case), а не любой <a>: страница суда
+  // полна навигации, и голый тест на <a> пропускал вставку без единого дела.
+  if (!/name_op=case/i.test(html)) {
     impSetStatus('<span class="badge badge-fail">нет ссылок на дела</span> '
-      + 'Похоже, вставился простой текст. Скопируйте страницу заново (выделением) или приложите файл «только HTML».');
+      + 'Похоже, вставился простой текст или не та страница. Скопируйте страницу результатов заново (выделением) или приложите файл «только HTML».');
     return;
   }
   // Дамп чужого суда: хост в абсолютных ссылках карточек обязан совпадать с
@@ -2564,46 +3112,110 @@ try {
   document.getElementById("imp-name").value = localStorage.getItem("admin_operator_name") || "";
 } catch (e) {}
 
-// Плитка «Дайджест» для оператора: полный render() ему недоступен
-// (/admin/data → 403), а last_digest.json публичный.
-async function loadDigestTileLite() {
+// Плитка «Дайджест» из публичного last_digest.json. Оператору это
+// единственный путь (полный render() ему недоступен, /admin/data → 403);
+// владельцу — точечное обновление плитки без похода в KV. Push-агрегат
+// берём из последнего успешного render() (глобали), иначе перерисовка
+// затёрла бы подпись плитки «Автозапуск» пустым значением.
+async function loadDigestTile() {
   try {
     const r = await fetch(DIGEST_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    renderDigestTile(await r.json(), new Map(), "");
+    renderDigestTile(await r.json(), lastPushesMap, lastPushesGeneratedAt);
   } catch (e) {
     setTile("digest", "gray", "—", "last_digest.json недоступен");
   }
 }
 
-function refreshAll() {
-  loadGhRuns();
-  loadHealth();
-  loadBankParse();
-  loadImportLog();
+// Когда последний раз тянули статику GitHub Pages (health / bank / digest).
+// По этой метке решаем, стоит ли освежать данные при возврате на вкладку.
+let lastStaticLoadAt = 0;
+const STATIC_STALE_MS = 10 * 60 * 1000;
+
+// Статика Pages: ни одной KV-операции, поэтому её безопасно перезагружать и
+// по возврату на вкладку. /admin/data и /admin/import-log сюда НЕ входят —
+// они ходят в KV (инцидент 17.07.2026, лимит бесплатного тарифа общий).
+// withDigest=false там, где плитку дайджеста и так перерисует render()
+// (владелец): иначе гонка двух рендеров затирала бы push-агрегат в подписи
+// плитки «Автозапуск» пустым значением.
+function loadStaticData(withDigest) {
+  lastStaticLoadAt = Date.now();
+  const jobs = [loadHealth()];
+  // Иски банка — не операторский трек: карточка у него скрыта, и файл (на
+  // Урале — сотни килобайт) не запрашиваем вовсе, а не «грузим и прячем».
+  if (IS_OWNER) jobs.push(loadBankParse());
+  // Плитка «Дайджест» у оператора тоже скрыта — тянуть last_digest.json ему
+  // не за чем.
+  if (withDigest && IS_OWNER) jobs.push(loadDigestTile());
+  return jobs;
+}
+
+async function refreshAll(btn) {
+  if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
+  const wlModal = document.getElementById("wl-modal");
+  const renderable = IS_OWNER && !(wlModal && wlModal.open);
+  const jobs = [loadGhRuns()].concat(loadStaticData(!renderable));
   // «Обновить» чинит неудачную первую загрузку списка судов (для региона
   // без капчёвых судов это лишний fetch cases.json — безвредно).
-  if (!impCourts.length) loadImportCourts();
-  if (IS_OWNER) {
-    render(true);
-    llmTopLoaded = false;
-    loadLlmTop();
-  } else {
-    loadDigestTileLite();
+  // Журнал импортов — только там, где секция вообще есть: два KV-list на
+  // территории без капчёвых судов (ХМАО) были бы платой ни за что.
+  if (impCourts.length) jobs.push(loadImportLog());
+  else jobs.push(loadImportCourts());
+  // render() перерисовывает #root целиком: при открытой модалке watchlist
+  // это выбило бы правки из-под рук — тогда плитку дайджеста тянем статикой.
+  if (renderable) {
+    jobs.push(render(true));
+    // Рейтинг перезапрашиваем только если он уже открыт: свёрнутый блок
+    // тянуть с внешнего API незачем.
+    const llmFold = document.getElementById("llm-top-fold");
+    if (llmFold && llmFold.open) { llmTopLoaded = false; jobs.push(loadLlmTop()); }
+  }
+  try {
+    await Promise.allSettled(jobs);
+  } finally {
+    if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); }
   }
 }
 
+// Делегирование на документ: и «Повторить» в блоках ошибок, и крестик у
+// вспышки-ошибки живут в узлах, которые постоянно перерисовываются.
+document.addEventListener("click", function (e) {
+  if (!e.target.closest) return;
+  const x = e.target.closest("[data-flash-x]");
+  if (x) {
+    const f = x.closest(".action-flash");
+    if (f) { f.textContent = ""; f.className = "action-flash"; }
+    return;
+  }
+  const b = e.target.closest("[data-retry]");
+  if (!b) return;
+  const k = b.getAttribute("data-retry");
+  if (k === "health") loadHealth();
+  else if (k === "bank") loadBankParse();
+  // Полный (не logonly) заход осознанно: сбой первой загрузки оставляет без
+  // данных И светофор свежести, а его чинит только карта import:last:*.
+  // Это редкий ручной клик, а не тик поллера — два KV-list допустимы.
+  else if (k === "implog") loadImportLog();
+});
+
+// ⚠️ initTabs() именно здесь, а не на месте определения: onTabShown читает
+// lastStaticLoadAt (let ниже по файлу) — вызов раньше объявления упал бы в TDZ.
+// Скрипт синхронный и стоит в конце body, коррекция по hash успевает до
+// первой отрисовки.
+initTabs();
 loadGhRuns();
-loadHealth();
-loadBankParse();
-loadImportCourts();
-// Owner-данные (подписки, LLM-рейтинг) оператору не грузим: эндпоинты всё
-// равно ответят 403, а секции скрыты.
+loadImportCourts();   // журнал импортов тянет он сам — только если есть gated-суды
+// Плитку дайджеста владельцу рисует render(), оператору она не нужна вовсе.
+loadStaticData(false);
+// Owner-данные (подписки) оператору не грузим: эндпоинты всё равно ответят
+// 403, а секции скрыты. render() заодно рисует плитку дайджеста вместе с
+// push-агрегатом — потому её и не тянем статикой выше.
+// Рейтинг LLM не грузим вовсе: он ленивый (раскрытие свёртки / выбор
+// openrouter в форме) — внешнему API незачем отвечать на каждый заход.
 if (IS_OWNER) {
-  loadLlmTop();
+  const llmFold = document.getElementById("llm-top-fold");
+  if (llmFold) llmFold.addEventListener("toggle", function () { if (llmFold.open) loadLlmTop(); });
   render();
-} else {
-  loadDigestTileLite();
 }
 // Свёрнутая/фоновая вкладка не должна поллить: гасим самоперевзводящийся
 // поллер gh-runs при уходе со вкладки, будим при возврате. Забытая открытая
@@ -2612,9 +3224,14 @@ if (IS_OWNER) {
 document.addEventListener("visibilitychange", function () {
   if (document.hidden) {
     clearTimeout(ghTimer);
-  } else {
-    loadGhRuns();
+    return;
   }
+  loadGhRuns();
+  // Вкладку часто оставляют открытой на ночь: раньше возврат обновлял ТОЛЬКО
+  // плитку прогона, а здоровье парсеров, дайджест и отчёт по искам банка
+  // оставались вчерашними — вместе с метками «5 ч назад», посчитанными в
+  // момент загрузки. Тянем только статику Pages (KV не трогаем).
+  if (Date.now() - lastStaticLoadAt > STATIC_STALE_MS) loadStaticData(true);
 });
 </script>
 </body></html>`;

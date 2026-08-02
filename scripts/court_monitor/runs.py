@@ -1455,6 +1455,40 @@ def _lint_digest_and_alert(digest_html: str, *,
         log.warning(f"digest-lint: ошибка линтера: {exc}", exc_info=True)
 
 
+def _alert_llm_summary_failures() -> None:
+    """🩺-алерт, если пересказы мотивировок сорвались.
+
+    Мотивировки судебных актов пересказывает LLM; при отказе провайдера
+    (17.07.2026: free-пул OpenRouter отвечал 429 на каждый запрос) в дайджест
+    вместо пересказа уходит сырой текст акта. Счётчики жили только в stdout и
+    GITHUB_STEP_SUMMARY — юрист узнавал об этом, только открыв лог прогона.
+
+    ⚠️ Зовётся ПОСЛЕ отправки дайджеста, рядом с линтером: блок 4e (алерты
+    здоровья парсеров) выполняется до генерации дайджеста, и там счётчик
+    всегда 0. Ничего не блокирует и не имеет права ронять прогон.
+    """
+    try:
+        failed = config.METRICS.get("llm_summary_failed", 0)
+        if not failed:
+            return
+        calls = config.METRICS.get("llm_summary_calls", 0)
+        saved = config.METRICS.get("llm_summary_fallback_saved", 0)
+        line = (
+            f"пересказы мотивировок: сбоев {failed} из {calls} "
+            f"— в дайджест ушёл сырой текст акта"
+        )
+        if saved:
+            line += f" (спасено фолбэком: {saved})"
+        log.warning(f"llm-summary: {line}")
+        send_telegram(
+            "🩺 <b>Пересказы актов</b>\n"
+            f"• {escape_html(line)}\n"
+            f"• провайдер: {escape_html(_llm_digest_note())}"
+        )
+    except Exception as exc:
+        log.warning(f"llm-summary: ошибка алерта: {exc}", exc_info=True)
+
+
 def _filter_ctx_fi_changes_echo(
     fi_changes: list[dict], cases: list[dict]
 ) -> list[dict]:
@@ -4491,6 +4525,10 @@ def main_json():
         fi_new_cases=fi_new_cases, fi_changes=fi_changes,
         cass_changes=cass_changes, cass_discovered=cass_discovered,
     )
+    # Сорвавшиеся пересказы мотивировок — тоже сторож качества: юрист узнаёт
+    # в момент прогона, а не когда откроет лог. Только с боевого пути:
+    # test_digest.yml гоняет replay для экспериментов, алерты оттуда — шум.
+    _alert_llm_summary_failures()
 
     # Web Push — краткое уведомление при наличии изменений, разбивка по типам.
     # Числа берём из ФАКТИЧЕСКОГО HTML дайджеста (после _renumber_section_headers /
