@@ -155,6 +155,11 @@ FI_TYPE_DETAILS: dict[str, dict] = {
     },
     # runs.py:1964
     "fi_sent_to_cassation": {"sent_to_cassation_date": "06.06.2026"},
+    # Срок для возражений на апел. жалобу (ст. 325 ГПК). В details дата идёт
+    # в ДД.ММ.ГГГГ, хотя в JSON поле лежит ISO: этим же ключом её печатает
+    # дайджест и разбирает stale-фильтр, а parse_date понимает только русскую
+    # форму.
+    "fi_objections_deadline_set": {"objections_due": "18.08.2026"},
     # runs.py:1812-1824
     "fi_hearing_restart": {
         "restart_event": "Судебное заседание. Рассмотрение дела начато с начала",
@@ -655,6 +660,14 @@ class FiEventMatrixTest(unittest.TestCase):
         html = self._one(["fi_sent_to_cassation"])
         self.assert_in_changes_section(
             html, "📤 направлено в кассац. суд (06.06.2026)"
+        )
+
+    def test_fi_objections_deadline_set(self):
+        """Срок жирным: это рабочий дедлайн юриста, а не справка."""
+        html = self._one(["fi_objections_deadline_set"])
+        self.assert_in_changes_section(
+            html,
+            "⏳ установлен срок для возражений на жалобу — до <b>18.08.2026</b>",
         )
 
     def test_fi_hearing_restart(self):
@@ -1656,6 +1669,7 @@ FI_ALL_TYPES = [
     "fi_hearing_recess", "fi_status_change", "fi_returned",
     "fi_act_published", "fi_final_event", "fi_motivirovka_emitted",
     "fi_appeal_filed", "fi_cassation_filed", "fi_sent_to_cassation",
+    "fi_objections_deadline_set",
     "fi_hearing_restart", "fi_bank_role_changed", "fi_accepted_no_hearing",
     "fi_resolved", "fi_act_text_published",
     "fi_default_cancellation_filed", "fi_default_cancellation_hearing",
@@ -1762,9 +1776,10 @@ class AllEventTypesTest(unittest.TestCase):
         )
 
     def test_section_counters_match(self):
-        # 19 fi-типов → 3.2 (15 + четыре особого порядка отмены заочного
-        # решения); fi_resolved → 3.5; fi_act_text → 3.6.
-        self.assertIn("📅 <b>Изменения (19):</b>", self.html)
+        # 20 fi-типов → 3.2 (15 + четыре особого порядка отмены заочного
+        # решения + срок для возражений на жалобу); fi_resolved → 3.5;
+        # fi_act_text → 3.6.
+        self.assertIn("📅 <b>Изменения (20):</b>", self.html)
         self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", self.html)
         self.assertIn("📄 <b>Опубликованные тексты решений (1):</b>", self.html)
         self.assertIn("📥 <b>Новые иски (1):</b>", self.html)

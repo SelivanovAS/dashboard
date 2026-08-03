@@ -764,6 +764,12 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-await-writ.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
 .badge-await-writ.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
 .badge-await-writ.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+/* «⏳ возражения до ДД.ММ» — срок на возражения по апел. жалобе (ст. 325 ГПК).
+   Шкала обратная к «ждёт ИЛ»: тают дни ДО срока — больше недели норма,
+   3-7 дней присмотреться, 2 и меньше — горит. Токены те же. */
+.badge-objections.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
+.badge-objections.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
+.badge-objections.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
 .kv-await { font-weight:var(--fw-semibold); }
 .kv-await.aw-normal  { color:var(--urgency-far-fg); }
 .kv-await.aw-watch   { color:var(--urgency-tomorrow-fg); }

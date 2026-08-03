@@ -72,6 +72,9 @@ from court_monitor.lifecycle import (
     fi_resolution_contradicted_by_future_hearing,
     default_cancellation_state, default_cancellation_pending,
     default_judgment_vacated, default_cancellation_blocks_appeal,
+    stamp_objections_deadline,
+    is_dirty_appellant_name, bank_sole_role_holder,
+    appellant_is_bank, apply_fi_appellant,
     _is_event_text_in_result_field,
     _events_newly_match, _is_latest_session_event,
     _has_held_prior_hearing, _has_held_prior_session,
@@ -1543,128 +1546,18 @@ def _filter_ctx_fi_changes_echo(
     return kept
 
 
-# «Грязные» значения имени апеллянта — пустое или слово-роль вместо
-# настоящего имени. Такие записи перезаписываются на каждом прогоне,
-# поэтому is_bank для «голой» роли самовосстанавливается при изменении
-# логики без миграции данных. Составные слова-роли («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ»)
-# ловит appellant_role_words — проверять через _is_dirty_appellant_name.
-_DIRTY_APPELLANT_NAMES = ("", "истец", "ответчик", "третье лицо", "иное лицо", "банк")
-
-
-def _is_dirty_appellant_name(name: str) -> bool:
-    """True, если сохранённое имя апеллянта — не настоящее имя.
-
-    «Грязное» = пустое, слово-роль из _DIRTY_APPELLANT_NAMES или набор
-    слов-ролей, включая составные («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ», «ПРЕДСТАВИТЕЛЬ»).
-    Такие значения безопасно перезаписывать пересчётом — настоящее
-    найденное имя не трогаем.
-    """
-    s = (name or "").strip()
-    if s.lower() in _DIRTY_APPELLANT_NAMES:
-        return True
-    return appellant_role_words(s) is not None
-
-
-def _bank_sole_role_holder(case_j: dict, role: str) -> bool:
-    """True, если банк — единственная сторона данной роли в деле.
-
-    Сторона разбирается готовым _norm_party_tokens: филиальные запятые
-    Сбера склеиваются («ПАО Сбербанк в лице филиала — Югорское отделение
-    №5940» остаётся одним токеном), а имя с «настоящими» внутренними
-    запятыми (МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО)
-    распадается на несколько токенов и даёт консервативное False.
-    """
-    party = case_j.get("plaintiff" if role == "Истец" else "defendant", "")
-    tokens = _norm_party_tokens(party)
-    return len(tokens) == 1 and any(p in tokens[0] for p in config.SBER_PATTERNS)
-
-
-def _appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
-    """is_bank подателя жалобы (апеллянта/кассатора) по сырому «Заявителю».
-
-    Слово-роль само по себе не содержит признаков банка. Банк — податель,
-    только когда роль подателя совпадает с ролью банка И банк — единственная
-    сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
-    из них → None («знаем, что определить нельзя» — фронт не выводит ни
-    'bank', ни 'other'). Составные слова-роли разбирает appellant_role_words:
-    одна сторона в составе («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») — считаем по ней; ноль
-    («ПРЕДСТАВИТЕЛЬ»: чей — неизвестно) или несколько («ИСТЕЦ, ТРЕТЬЕ ЛИЦО»)
-    → None, а не False — иначе фронт вешал бы бейдж на противника банка
-    (кейс 33-5089/2026). Именной вход определяем по SBER_PATTERNS, как раньше.
-    """
-    role_words = appellant_role_words(raw)
-    if role_words is not None:
-        if len(role_words) != 1:
-            return None  # податель по словам-ролям неопределим
-        side = role_words[0]
-        if side in ("Истец", "Ответчик"):
-            if side != case_j.get("bank_role", ""):
-                return False
-            if _bank_sole_role_holder(case_j, side):
-                return True
-            return None
-        return None if case_j.get("bank_role") == "Третье лицо" else False
-    return any(p in raw.lower() for p in config.SBER_PATTERNS)
-
-
-def _apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
-    """Проставить апеллянта из карточки 1-й инстанции.
-
-    Источник — `card_info["_fi_appellant_raw"]` (поле «Заявитель» вкладки
-    обжалования / «заявитель жалобы»; бывает слово-роль «ИСТЕЦ»/«ОТВЕТЧИК»
-    или ФИО). Считаем роль/имя/is_bank ОДИН раз и пишем И в first_instance
-    (`fi.appeal_appellant_*` — источник бейджа «Апеллянт» уже в раннем окне
-    first_instance/awaiting_appeal, до появления карточки в апел. суде, т.к.
-    карточка апел. суда подателя жалобы не публикует), И — если блок уже
-    создан link_cases — в appeal (`appeal.appellant_*`). Перезаписываем
-    пустое/«грязное» legacy-значение (роль вместо имени); настоящее найденное
-    имя не трогаем.
-
-    Возвращает True, если что-то изменилось (для флага `changed`).
-    """
-    raw = (card_info.get("_fi_appellant_raw") or "").strip()
-    if not raw:
-        return False
-    role, short = classify_appellant_role(
-        raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
-    )
-    is_bank = _appellant_is_bank(raw, role, case_j)
-
-    changed = False
-    # Сентинел отличает «ключа нет» от «записан null»: is_bank=None должен
-    # ЯВНО попасть в JSON (null «знаем, что неопределимо» блокирует на фронте
-    # legacy-вывод 'other' из слова-роли; отсутствие ключа — не блокирует).
-    _missing = object()
-
-    # first_instance — источник для бейджа в раннем окне.
-    old_fi_name = (fi.get("appeal_appellant") or "").strip()
-    if _is_dirty_appellant_name(old_fi_name):
-        if short and short != old_fi_name:
-            fi["appeal_appellant"] = short
-            changed = True
-        if fi.get("appeal_appellant_is_bank", _missing) != is_bank:
-            fi["appeal_appellant_is_bank"] = is_bank
-            changed = True
-        if role and fi.get("appeal_appellant_status") != role:
-            fi["appeal_appellant_status"] = role
-            changed = True
-
-    # appeal — те же значения, если блок уже создан link_cases.
-    appeal_block = case_j.get("appeal")
-    if appeal_block:
-        old_app_name = (appeal_block.get("appellant") or "").strip()
-        if _is_dirty_appellant_name(old_app_name):
-            if short and short != old_app_name:
-                appeal_block["appellant"] = short
-                changed = True
-            if appeal_block.get("appellant_is_bank", _missing) != is_bank:
-                appeal_block["appellant_is_bank"] = is_bank
-                changed = True
-            if role and appeal_block.get("appellant_status") != role:
-                appeal_block["appellant_status"] = role
-                changed = True
-
-    return changed
+# Апеллянт из карточки 1-й инстанции переехал в lifecycle.py: его зовёт ещё и
+# bank_intake (приём иска банка кладёт апеллянта в запись сразу), а тот не
+# может импортировать runs — runs сам импортирует bank_intake, вышел бы цикл.
+# Ре-экспорт прежних приватных имён обязателен: их зовут backfill_appeal_
+# appellants, _apply_fi_cassator, reclassify_roleword_appellants, FI-цикл и
+# тесты (test_parsing.py, test_appeal_appellant_backfill.py импортируют
+# именно из court_monitor.runs).
+_DIRTY_APPELLANT_NAMES = lifecycle._DIRTY_APPELLANT_NAMES
+_is_dirty_appellant_name = is_dirty_appellant_name
+_bank_sole_role_holder = bank_sole_role_holder
+_appellant_is_bank = appellant_is_bank
+_apply_fi_appellant = apply_fi_appellant
 
 
 def _apply_fi_cassator(case_j: dict, card_info: dict) -> bool:
@@ -3720,6 +3613,31 @@ def main_json():
             if new_events and new_events != old_events:
                 fi[json_field] = new_events
                 changed = True
+
+        # Срок для представления возражений на апел. жалобу (ст. 325 ГПК).
+        # Штампуем ЗДЕСЬ, а не только в migrate_stages: миграция отработала на
+        # загрузке — до того, как блок выше влил свежее движение жалобы, — и
+        # без этого вызова свежий срок доехал бы до drawer'а лишь следующим
+        # прогоном (ровно та суточная слепота, которую чиним у авто-подхвата).
+        # Идемпотентность ЗНАЧЕНИЕМ, как у default_cancel_*_emitted: маркер
+        # хранит объявленный срок, поэтому продление срока объявится снова, а
+        # рутинный перепарс — нет.
+        objections_due = stamp_objections_deadline(fi)
+        if objections_due and objections_due != fi.get("objections_emitted"):
+            # В JSON срок лежит ISO (как legal_force_est — фронт так и читает),
+            # а в details кладём ДД.ММ.ГГГГ: этим же ключом его печатает
+            # дайджест и разбирает stale-фильтр, а parse_date понимает ТОЛЬКО
+            # русскую форму.
+            _obj_due_d = date.fromisoformat(objections_due)
+            # Истёкший срок не объявляем: он бесполезен, а на первом парсе
+            # только что заведённого дела был бы ещё и раскопкой истории.
+            if _obj_due_d >= today:
+                change["type"].append("fi_objections_deadline_set")
+                change["details"]["objections_due"] = _obj_due_d.strftime(
+                    "%d.%m.%Y"
+                )
+            fi["objections_emitted"] = objections_due
+            changed = True
 
         # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
         # Переход cassation_watch → cassation_pending делает advance_case_stage.

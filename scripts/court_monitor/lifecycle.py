@@ -14,7 +14,10 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config
 from court_monitor.config import log
-from court_monitor.textutil import parse_date, _bare_case_number
+from court_monitor.textutil import (
+    parse_date, _bare_case_number,
+    classify_appellant_role, appellant_role_words, _norm_party_tokens,
+)
 
 def _has_held_prior_event(
     events: list,
@@ -865,6 +868,200 @@ def default_cancellation_pending(fi: dict, today: date | None = None) -> bool:
     return default_cancellation_state(fi or {}, today)["outcome"] == "pending"
 
 
+# Срок для представления возражений на апелляционную жалобу (ст. 325 ГПК).
+# Строка живёт НЕ в «Движении дела», а во вкладке карточки «Обжалование
+# решений, определений» → вложенная таблица «Движение жалобы», и приходит в
+# fi["appeal_events"] (см. _fi_appeal_events в parsing/cards.py). У части
+# записей колонки разобраны (name + note), у части осталась только склейка
+# text — смотрим оба, как default_cancellation_state.
+# ⚠️ Слово «возражени» обязательно: рядом в той же таблице живёт «Оставление
+# жалобы (представления) без движения · Срок для устранения недостатков до …»
+# — это другой срок, и он в дедлайн возражений попадать не должен.
+_OBJECTIONS_TERM_RX = re.compile(r"срок\w*\s+для\s+пред\w*\s+возражени")
+_OBJECTIONS_DUE_RX = re.compile(r"срок\s+до\s+(\d{1,2}\.\d{1,2}\.\d{4})")
+
+
+def appeal_objections_deadline(fi: dict) -> tuple[str, str] | None:
+    """(дата установления, срок) из движения апел. жалобы в ISO — или None.
+
+    При нескольких строках побеждает МАКСИМАЛЬНЫЙ срок: суд его продлевает, а
+    прежняя строка из карточки никуда не девается.
+    """
+    best_due: date | None = None
+    best_set = ""
+    for ev in fi.get("appeal_events") or []:
+        haystack = " ".join(
+            str(ev.get(k) or "") for k in ("name", "text", "note")
+        ).lower().replace("ё", "е")
+        if not _OBJECTIONS_TERM_RX.search(haystack):
+            continue
+        m = _OBJECTIONS_DUE_RX.search(haystack)
+        if not m:
+            continue
+        due_dt = parse_date(m.group(1))
+        if not due_dt:
+            continue
+        if best_due is None or due_dt.date() > best_due:
+            best_due = due_dt.date()
+            set_dt = parse_date(ev.get("date") or "")
+            best_set = set_dt.date().isoformat() if set_dt else ""
+    if best_due is None:
+        return None
+    return best_set, best_due.isoformat()
+
+
+# ── Апеллянт из карточки 1-й инстанции ───────────────────────────────────────
+# Живут ЗДЕСЬ, а не в runs.py, потому что их зовёт ещё и bank_intake: приём
+# иска банка должен класть апеллянта в запись сразу, а импортировать runs он
+# не может (runs сам импортирует bank_intake — вышел бы цикл). В runs.py
+# оставлены ре-экспорты прежних приватных имён: их зовут и код, и тесты.
+#
+# «Грязное» имя апеллянта — сохранённое слово-роль вместо настоящего имени.
+# Такие записи перезаписываются на каждом прогоне, поэтому is_bank для «голой»
+# роли самовосстанавливается при изменении логики без миграции данных.
+# Составные слова-роли («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») ловит appellant_role_words —
+# проверять через is_dirty_appellant_name.
+_DIRTY_APPELLANT_NAMES = ("", "истец", "ответчик", "третье лицо", "иное лицо", "банк")
+
+
+def is_dirty_appellant_name(name: str) -> bool:
+    """True, если сохранённое имя апеллянта — не настоящее имя.
+
+    «Грязное» = пустое, слово-роль из _DIRTY_APPELLANT_NAMES или набор
+    слов-ролей, включая составные («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ», «ПРЕДСТАВИТЕЛЬ»).
+    Такие значения безопасно перезаписывать пересчётом — настоящее
+    найденное имя не трогаем.
+    """
+    s = (name or "").strip()
+    if s.lower() in _DIRTY_APPELLANT_NAMES:
+        return True
+    return appellant_role_words(s) is not None
+
+
+def bank_sole_role_holder(case_j: dict, role: str) -> bool:
+    """True, если банк — единственная сторона данной роли в деле.
+
+    Сторона разбирается готовым _norm_party_tokens: филиальные запятые
+    Сбера склеиваются («ПАО Сбербанк в лице филиала — Югорское отделение
+    №5940» остаётся одним токеном), а имя с «настоящими» внутренними
+    запятыми (МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО)
+    распадается на несколько токенов и даёт консервативное False.
+    """
+    party = case_j.get("plaintiff" if role == "Истец" else "defendant", "")
+    tokens = _norm_party_tokens(party)
+    return len(tokens) == 1 and any(p in tokens[0] for p in config.SBER_PATTERNS)
+
+
+def appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
+    """is_bank подателя жалобы (апеллянта/кассатора) по сырому «Заявителю».
+
+    Слово-роль само по себе не содержит признаков банка. Банк — податель,
+    только когда роль подателя совпадает с ролью банка И банк — единственная
+    сторона этой роли: при соответчиках жалобу «ОТВЕТЧИКА» мог подать любой
+    из них → None («знаем, что определить нельзя» — фронт не выводит ни
+    'bank', ни 'other'). Составные слова-роли разбирает appellant_role_words:
+    одна сторона в составе («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») — считаем по ней; ноль
+    («ПРЕДСТАВИТЕЛЬ»: чей — неизвестно) или несколько («ИСТЕЦ, ТРЕТЬЕ ЛИЦО»)
+    → None, а не False — иначе фронт вешал бы бейдж на противника банка
+    (кейс 33-5089/2026). Именной вход определяем по SBER_PATTERNS, как раньше.
+    """
+    role_words = appellant_role_words(raw)
+    if role_words is not None:
+        if len(role_words) != 1:
+            return None  # податель по словам-ролям неопределим
+        side = role_words[0]
+        if side in ("Истец", "Ответчик"):
+            if side != case_j.get("bank_role", ""):
+                return False
+            if bank_sole_role_holder(case_j, side):
+                return True
+            return None
+        return None if case_j.get("bank_role") == "Третье лицо" else False
+    return any(p in raw.lower() for p in config.SBER_PATTERNS)
+
+
+def apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
+    """Проставить апеллянта из карточки 1-й инстанции.
+
+    Источник — `card_info["_fi_appellant_raw"]` (поле «Заявитель» вкладки
+    обжалования / «заявитель жалобы»; бывает слово-роль «ИСТЕЦ»/«ОТВЕТЧИК»
+    или ФИО). Считаем роль/имя/is_bank ОДИН раз и пишем И в first_instance
+    (`fi.appeal_appellant_*` — источник бейджа «Апеллянт» уже в раннем окне
+    first_instance/awaiting_appeal, до появления карточки в апел. суде, т.к.
+    карточка апел. суда подателя жалобы не публикует), И — если блок уже
+    создан link_cases — в appeal (`appeal.appellant_*`). Перезаписываем
+    пустое/«грязное» legacy-значение (роль вместо имени); настоящее найденное
+    имя не трогаем.
+
+    Возвращает True, если что-то изменилось (для флага `changed`).
+    """
+    raw = (card_info.get("_fi_appellant_raw") or "").strip()
+    if not raw:
+        return False
+    role, short = classify_appellant_role(
+        raw, case_j.get("plaintiff", ""), case_j.get("defendant", "")
+    )
+    is_bank = appellant_is_bank(raw, role, case_j)
+
+    changed = False
+    # Сентинел отличает «ключа нет» от «записан null»: is_bank=None должен
+    # ЯВНО попасть в JSON (null «знаем, что неопределимо» блокирует на фронте
+    # legacy-вывод 'other' из слова-роли; отсутствие ключа — не блокирует).
+    _missing = object()
+
+    # first_instance — источник для бейджа в раннем окне.
+    old_fi_name = (fi.get("appeal_appellant") or "").strip()
+    if is_dirty_appellant_name(old_fi_name):
+        if short and short != old_fi_name:
+            fi["appeal_appellant"] = short
+            changed = True
+        if fi.get("appeal_appellant_is_bank", _missing) != is_bank:
+            fi["appeal_appellant_is_bank"] = is_bank
+            changed = True
+        if role and fi.get("appeal_appellant_status") != role:
+            fi["appeal_appellant_status"] = role
+            changed = True
+
+    # appeal — те же значения, если блок уже создан link_cases.
+    appeal_block = case_j.get("appeal")
+    if appeal_block:
+        old_app_name = (appeal_block.get("appellant") or "").strip()
+        if is_dirty_appellant_name(old_app_name):
+            if short and short != old_app_name:
+                appeal_block["appellant"] = short
+                changed = True
+            if appeal_block.get("appellant_is_bank", _missing) != is_bank:
+                appeal_block["appellant_is_bank"] = is_bank
+                changed = True
+            if role and appeal_block.get("appellant_status") != role:
+                appeal_block["appellant_status"] = role
+                changed = True
+
+    return changed
+
+
+def stamp_objections_deadline(fi: dict) -> str:
+    """Проставить срок возражений в запись; вернуть срок ISO или "".
+
+    Пустой результат поля СНИМАЕТ — тот же принцип, что у `writ_expected` и
+    `legal_force_est` в `split_bank_track`: иначе перепарс карточки, где суд
+    убрал ошибочную строку, оставил бы фантомный срок навсегда.
+    """
+    fi = fi if isinstance(fi, dict) else {}
+    got = appeal_objections_deadline(fi)
+    if not got:
+        fi.pop("objections_due", None)
+        fi.pop("objections_set_at", None)
+        return ""
+    set_at, due = got
+    fi["objections_due"] = due
+    if set_at:
+        fi["objections_set_at"] = set_at
+    else:
+        fi.pop("objections_set_at", None)
+    return due
+
+
 def default_judgment_vacated(fi: dict, today: date | None = None) -> bool:
     """Заочное решение отменено, а запись всё ещё держит его как действующее.
 
@@ -1309,6 +1506,12 @@ _FI_DATED_COMPLAINT_TYPES = {
     "fi_appeal_filed": "appeal_filed_date",
     "fi_cassation_filed": "cassation_filed_date",
     "fi_sent_to_cassation": "sent_to_cassation_date",
+    # Якорь срока возражений — САМ СРОК, а не дата его установления: он в
+    # будущем, поэтому штатный дедлайн фильтр не тронет, а давно просроченный
+    # (карточка старого дела) не проскочит. В эхо-класс тип НЕ входит:
+    # апелляционная карточка срок для возражений не публикует, и для дела со
+    # связанной апелляцией это не «догоняющая» новость.
+    "fi_objections_deadline_set": "objections_due",
 }
 # «Догоняющие» события об акте/решении: тип → ключи details с датой (первая
 # читаемая побеждает — у части карточек «Дата публикации акта» пуста, и
@@ -1719,6 +1922,22 @@ def migrate_stages(cases: list[dict]) -> int:
         if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
             if fi.get("hearing_date"):
                 fi["decision_date"] = fi["hearing_date"]
+    # Срок для возражений на апел. жалобу: идемпотентный штамп из движения
+    # жалобы. Здесь он берётся из УЖЕ СОХРАНЁННЫХ appeal_events (свежие FI-цикл
+    # вольёт позже и проштампует сам) — цель прохода анти-паводковая: сроки,
+    # лежащие в данных со времён до этой правки, дайджест задним числом не
+    # объявит. Тот же приём, что resolved_emitted у make_bank_entry.
+    # ⚠️ Засеваем ТОЛЬКО ИСТЁКШИЙ срок. Посев любого срока подряд глушил бы
+    # ровно то, ради чего правка и делается: у дела, заведённого авто-подхватом
+    # с живым сроком, эмит-блок ещё не отработал, `objections_emitted` пуст —
+    # безусловный посев на следующем прогоне закрыл бы дедлайн навсегда.
+    _today = date.today()
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        due = stamp_objections_deadline(fi)
+        if (due and "objections_emitted" not in fi
+                and date.fromisoformat(due) < _today):
+            fi["objections_emitted"] = due
     migrated = 0
     for case in cases:
         changed = True

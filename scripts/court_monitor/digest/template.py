@@ -952,6 +952,7 @@ _BANK_TYPE_LABELS = {
     "fi_default_cancellation_hearing": "📅 заседание по заявлению об отмене",
     "fi_default_judgment_vacated": "⚠️ заочное решение отменено — дело рассматривается заново",
     "fi_default_cancellation_refused": "✅ в отмене заочного решения отказано",
+    "fi_objections_deadline_set": "⏳ установлен срок для возражений на жалобу",
     "fi_appeal_filed": "📨 апел. жалоба ответчика — дело уходит в общий трек",
     "fi_cassation_filed": "📨 касс. жалоба",
     "fi_sent_to_cassation": "📤 направлено в касс. суд",
@@ -1474,6 +1475,14 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     ev_list.append(
                         "📤 направлено в кассац. суд"
                         + (f" ({dt})" if dt else "")
+                    )
+                elif t == "fi_objections_deadline_set":
+                    # Срок жирным: это рабочий дедлайн юриста, а не справка —
+                    # возражения на жалобу подаются в суд 1-й инстанции.
+                    dt = escape_html(d.get("objections_due", ""))
+                    ev_list.append(
+                        "⏳ установлен срок для возражений на жалобу"
+                        + (f" — до <b>{dt}</b>" if dt else "")
                     )
                 elif t == "fi_default_cancellation_filed":
                     dt = escape_html(d.get("cancel_filed_date", ""))
