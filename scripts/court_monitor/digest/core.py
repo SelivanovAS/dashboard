@@ -774,6 +774,23 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 elif t == "fi_status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
+                elif t == "fi_default_cancellation_filed":
+                    # Особый порядок отмены заочного решения (ст. 237 ГПК):
+                    # заявление подаётся в тот же суд 1-й инстанции, это не
+                    # апелляция.
+                    line += ("\n  ЗАОЧНОЕ: подано заявление об отмене "
+                             f"({d.get('cancel_filed_date', '')})")
+                elif t == "fi_default_cancellation_hearing":
+                    line += ("\n  ЗАОЧНОЕ: заседание по заявлению об отмене "
+                             f"{d.get('cancel_hearing_date', '')}")
+                elif t == "fi_default_judgment_vacated":
+                    line += ("\n  ЗАОЧНОЕ РЕШЕНИЕ ОТМЕНЕНО "
+                             f"({d.get('cancel_outcome_date', '')}) — дело "
+                             "рассматривается заново")
+                elif t == "fi_default_cancellation_refused":
+                    line += ("\n  ЗАОЧНОЕ: в отмене отказано "
+                             f"({d.get('cancel_outcome_date', '')}) — пошёл "
+                             "месяц на апелляцию")
                 elif t == "fi_returned":
                     # Процессуальное завершение: возврат иска / отказ в
                     # принятии / передача по подсудности. Эмитим короткую

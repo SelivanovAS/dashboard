@@ -509,3 +509,81 @@ def test_writs_section_is_first_instance_only():
             f"{v.strip()!r}. Листы живут в fi.writs, и на вкладке «Апелляция» "
             "секция висела бы прямо над её заголовком."
         )
+
+
+# ===== 5. Особый порядок отмены заочного решения (ст. 237-243 ГПК) =====
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_default_cancellation_badge_states():
+    """Особый порядок вытесняет нейтральный бейдж «🌙 Заочное»: пока заявление
+    на рассмотрении — взыскание под угрозой, после отмены решения нет вовсе."""
+    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultJudgmentBadgeHtml"))
+    script = deps + """
+const b=dc=>defaultJudgmentBadgeHtml(
+  {_bankTrack:true,_fi:{default_judgment:true,default_cancellation:dc}});
+const out={
+  подано:b({outcome:'pending',filed_date:'28.07.2026',hearing_date:'10.08.2026'}),
+  отменено:b({outcome:'cancelled',outcome_date:'22.07.2026'}),
+  отказано:b({outcome:'refused',outcome_date:'22.07.2026'}),
+  без_порядка:b(undefined),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert "🌙 Отмена заочного" in r["подано"]
+    assert "28.07.2026" in r["подано"] and "10.08.2026" in r["подано"]
+    assert "🌙 Заочное отменено" in r["отменено"] and "22.07.2026" in r["отменено"]
+    # Отказ — решение устояло: бейдж возвращается к нейтральной форме,
+    # апелляционный срок пошёл (ст. 237 ч. 2), особого состояния нет.
+    assert "🌙 Заочное<" in r["отказано"] or "🌙 Заочное" in r["отказано"]
+    assert "Отмена заочного" not in r["отказано"]
+    assert "🌙 Заочное" in r["без_порядка"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_default_cancellation_kv_rows():
+    """Строки «Ключевых дат»: заявление, заседание по нему и исход."""
+    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultCancellationKvHtml"))
+    script = deps + """
+const kv=dc=>defaultCancellationKvHtml({_fi:{default_cancellation:dc}});
+const out={
+  подано:kv({outcome:'pending',filed_date:'28.07.2026',hearing_date:'10.08.2026'}),
+  отменено:kv({outcome:'cancelled',filed_date:'08.07.2026',
+               hearing_date:'22.07.2026',outcome_date:'22.07.2026'}),
+  отказано:kv({outcome:'refused',filed_date:'08.07.2026',
+               hearing_date:'22.07.2026',outcome_date:'22.07.2026'}),
+  нет:kv(undefined),
+  пусто:defaultCancellationKvHtml(null),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert "Заявление об отмене" in r["подано"] and "28.07.2026" in r["подано"]
+    assert "Заседание по заявлению" in r["подано"] and "10.08.2026" in r["подано"]
+    assert "ст. 237 ГПК" in r["подано"]
+    assert "Решение отменено" in r["отменено"] and "рассматривается заново" in r["отменено"]
+    assert "В отмене отказано" in r["отказано"] and "месяц на апелляцию" in r["отказано"]
+    assert r["нет"] == "" and r["пусто"] == "", (
+        "Без особого порядка строк в «Ключевых датах» быть не должно."
+    )
+
+
+def test_cancellation_stamp_is_read_not_recomputed():
+    """Фронт обязан читать готовый штамп default_cancellation, а не искать
+    события сам: events bank-картотека грузит лениво, и правило разъехалось бы
+    с питоновским (тот же принцип, что у writ_expected)."""
+    src = _app_js()
+    assert "default_cancellation" in src, (
+        "Фронт перестал читать штамп default_cancellation."
+    )
+    # Признак разбора — НАЗВАНИЯ событий карточки (по ним матчит Python).
+    # Человеческие подписи бейджа и «Ключевых дат» ту же фразу содержат
+    # законно, поэтому проверяем именно названия событий.
+    for имя_события in ("Регистрация заявления об отмене",
+                        "Рассмотрение заявления об отмене"):
+        assert имя_события not in src, (
+            f"В app.js появился разбор события «{имя_события}» — правило "
+            "особого порядка должно жить только в "
+            "lifecycle.default_cancellation_state, иначе копии разъедутся."
+        )

@@ -1048,3 +1048,476 @@ class TestBankTrackWiring:
         assert config.BANK_TRACK is False
         os.environ.pop("BANK_TRACK", None)
         importlib.reload(config)
+
+
+# ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ────────────────
+# Ответчик подаёт заявление об отмене в ТОТ ЖЕ суд 1-й инстанции; это не
+# апелляция, и апелляционный ход у него открывается только после определения
+# об отказе (ст. 237 ч. 2). Формулировки событий — дословно с карточек
+# 2-243/2026 (Югорский) и 2-616/2026 (Пыть-Яхский), проверенных 03.08.2026.
+
+def _ev(date_: str, text: str, **cols) -> dict:
+    return {"date": date_, "text": text, **cols}
+
+
+def _default_events(filed: str = "", hearing: str = "",
+                    result: str = "", decision: str = "06.05.2026") -> list:
+    evs = [_ev(decision,
+               "Судебное заседание. 11:30. Вынесено заочное решение по делу. "
+               "Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 15.04.2026",
+               name="Судебное заседание",
+               result_event="Вынесено заочное решение по делу")]
+    if filed:
+        evs.append(_ev(filed,
+                       "Регистрация заявления об отмене заочного решения. "
+                       "12:22. 08.07.2026",
+                       name="Регистрация заявления об отмене заочного решения"))
+    if hearing:
+        text = "Рассмотрение заявления об отмене заочного решения. 09:20. "
+        if result:
+            text += result + ". "
+        cols = {"name": "Рассмотрение заявления об отмене заочного решения"}
+        if result:
+            cols["result_event"] = result
+        evs.append(_ev(hearing, text + "14.07.2026", **cols))
+    return evs
+
+
+class TestDefaultCancellationState:
+    def test_no_application_no_state(self):
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events()}, date(2026, 8, 3))
+        assert st["outcome"] == ""
+
+    def test_filed_without_hearing_is_pending(self):
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events(filed="28.07.2026")}, date(2026, 8, 3))
+        assert st["outcome"] == "pending"
+        assert st["filed_date"] == "28.07.2026"
+
+    def test_hearing_ahead_is_pending(self):
+        """Кейс 2-616/2026: заседание 10.08 назначено, результата ещё нет."""
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events(filed="28.07.2026",
+                                       hearing="10.08.2026")},
+            date(2026, 8, 3))
+        assert st["outcome"] == "pending"
+        assert st["hearing_date"] == "10.08.2026"
+
+    def test_cancelled(self):
+        """Кейс 2-243/2026: «Заочное решение отменено» в колонке результата."""
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events(filed="08.07.2026",
+                                       hearing="22.07.2026",
+                                       result="Заочное решение отменено")},
+            date(2026, 8, 3))
+        assert st["outcome"] == "cancelled"
+        assert st["outcome_date"] == "22.07.2026"
+
+    def test_refused(self):
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events(
+                filed="08.07.2026", hearing="22.07.2026",
+                result="В удовлетворении заявления отказано")},
+            date(2026, 8, 3))
+        assert st["outcome"] == "refused"
+
+    def test_unrelated_result_is_not_refusal(self):
+        """⚠️ «Заседание отложено» встречается в корпусе 124 раза — объявить
+        его отказом значило бы открыть апелляционный ход раньше времени."""
+        for res in ("Заседание отложено", "Объявлен перерыв",
+                    "Производство по делу приостановлено"):
+            st = lifecycle.default_cancellation_state(
+                {"events": _default_events(filed="08.07.2026",
+                                           hearing="22.07.2026", result=res)},
+                date(2026, 8, 3))
+            assert st["outcome"] == "pending", res
+
+    def test_legacy_event_without_columns(self):
+        """43% событий 1-й инст. основной картотеки идут без колонок —
+        исход должен читаться из склейки text."""
+        evs = [_ev("06.05.2026",
+                   "Судебное заседание. Вынесено заочное решение по делу."),
+               _ev("08.07.2026",
+                   "Регистрация заявления об отмене заочного решения."),
+               _ev("22.07.2026",
+                   "Рассмотрение заявления об отмене заочного решения. "
+                   "Заочное решение отменено.")]
+        st = lifecycle.default_cancellation_state({"events": evs},
+                                                  date(2026, 8, 3))
+        assert st["outcome"] == "cancelled"
+
+    def test_pending_ceiling(self):
+        """Суд не заполнил результат — через потолок дело возвращается к
+        обычным окнам, иначе висело бы активным вечно."""
+        st = lifecycle.default_cancellation_state(
+            {"events": _default_events(filed="01.01.2026",
+                                       hearing="15.01.2026")},
+            date(2026, 8, 3))
+        assert st["outcome"] == "unknown"
+
+    def test_new_application_resets_previous_outcome(self):
+        evs = _default_events(filed="08.07.2026", hearing="22.07.2026",
+                              result="Заочное решение отменено")
+        evs.append(_ev("30.07.2026",
+                       "Регистрация заявления об отмене заочного решения.",
+                       name="Регистрация заявления об отмене заочного решения"))
+        st = lifecycle.default_cancellation_state({"events": evs},
+                                                  date(2026, 8, 3))
+        assert st["outcome"] == "pending"
+        assert st["filed_date"] == "30.07.2026"
+
+
+class TestDefaultJudgmentVacated:
+    def test_vacated_when_cancellation_newer_than_frozen_decision(self):
+        fi = {"events": _default_events(filed="08.07.2026",
+                                        hearing="22.07.2026",
+                                        result="Заочное решение отменено"),
+              "decision_date": "06.05.2026"}
+        assert lifecycle.default_judgment_vacated(fi) is True
+
+    def test_new_decision_after_cancellation_heals_predicate(self):
+        """⚠️ Ритм опроса решённого дела — неделя, поэтому отмена и новое
+        решение по ст. 243 попадают в одно окно парса. Предикат гаснет по
+        переставленной decision_date, а не по «нет более позднего решения»."""
+        fi = {"events": _default_events(filed="08.07.2026",
+                                        hearing="22.07.2026",
+                                        result="Заочное решение отменено"),
+              "decision_date": "10.08.2026"}
+        assert lifecycle.default_judgment_vacated(fi) is False
+
+    def test_vacated_survives_decision_date_move(self):
+        """После отката дата лежит в decision_date_vacated — предикат обязан
+        читать и её, иначе «решения нет» залипло бы навсегда."""
+        fi = {"events": _default_events(filed="08.07.2026",
+                                        hearing="22.07.2026",
+                                        result="Заочное решение отменено"),
+              "decision_date_vacated": "06.05.2026"}
+        assert lifecycle.default_judgment_vacated(fi) is True
+
+    def test_writ_kind_anchor_survives_vacating(self):
+        """⚠️ Без якоря decision_date_vacated classify_writ_kind свалился бы
+        на дрейфующую hearing_date и перевернул тип уже выданного листа."""
+        fi = {"decision_date_vacated": "06.05.2026",
+              "hearing_date": "20.09.2026"}
+        assert lifecycle.classify_writ_kind(
+            {"issue_date": "20.06.2026"}, fi) == "enforcement"
+
+
+class TestDefaultCancellationGates:
+    def _case(self, **fi) -> dict:
+        return _track_case(**fi)
+
+    def test_pending_keeps_case_in_track(self):
+        """Кейс 2-616/2026: суд зарегистрировал апел. жалобу 23.07, но
+        заявление об отмене ещё не рассмотрено — дело остаётся в треке."""
+        case = self._case(appeal_filed=True, appeal_filed_date="23.07.2026",
+                          events=_default_events(filed="28.07.2026",
+                                                 hearing="10.08.2026"))
+        assert lifecycle.bank_case_left_track(case) is False
+
+    def test_pending_keeps_stage(self):
+        case = self._case(appeal_filed=True, appeal_filed_date="23.07.2026",
+                          events=_default_events(filed="28.07.2026",
+                                                 hearing="10.08.2026"))
+        assert lifecycle.advance_case_stage(case) is None
+        assert case["current_stage"] == "first_instance"
+
+    def test_refusal_opens_appeal_route(self):
+        case = self._case(appeal_filed=True, appeal_filed_date="23.07.2026",
+                          events=_default_events(
+                              filed="08.07.2026", hearing="22.07.2026",
+                              result="В удовлетворении заявления отказано"))
+        assert lifecycle.bank_case_left_track(case) is True
+
+    def test_appeal_after_vacating_opens_route(self):
+        """Жалоба, поданная уже ПОСЛЕ возобновления, дело выпускает."""
+        case = self._case(appeal_filed=True, appeal_filed_date="01.09.2026",
+                          decision_date="06.05.2026",
+                          events=_default_events(
+                              filed="08.07.2026", hearing="22.07.2026",
+                              result="Заочное решение отменено"))
+        assert lifecycle.bank_case_left_track(case) is True
+
+    def test_sent_to_appeal_always_leaves(self):
+        """Дело физически ушло в облсуд — гейт не держит."""
+        case = self._case(appeal_filed=True, sent_to_appeal=True,
+                          events=_default_events(filed="28.07.2026",
+                                                 hearing="10.08.2026"))
+        assert lifecycle.bank_case_left_track(case) is True
+
+    def test_bank_defendant_reaches_awaiting_appeal(self):
+        """⚠️ advance_case_stage — общий код. Банк-ОТВЕТЧИК с заочным решением
+        против него обязан дойти до awaiting_appeal: иначе relink_awaiting_appeal
+        (единственный канал связки на капчёвых судах) его не увидит."""
+        case = {
+            "id": "2-18/2026", "current_stage": "first_instance",
+            "bank_role": "Ответчик",
+            "first_instance": {
+                "appeal_filed": True, "appeal_filed_date": "23.07.2026",
+                "events": _default_events(filed="28.07.2026",
+                                          hearing="10.08.2026"),
+            },
+        }
+        lifecycle.advance_case_stage(case)
+        assert case["current_stage"] == "awaiting_appeal"
+
+    def test_stage_gate_does_not_freeze_linked_appeal(self):
+        """⚠️ Гейт правит только ветку признаков жалобы. Дело, законно
+        переведённое link_cases в стадию appeal, обязано покинуть трек —
+        иначе апел. блок писался бы в cases_bank.json, который основной фронт
+        не грузит, и дело исчезло бы бесшумно."""
+        case = self._case(events=_default_events(filed="28.07.2026",
+                                                 hearing="10.08.2026"))
+        case["current_stage"] = "appeal"
+        assert lifecycle.bank_case_left_track(case) is True
+
+
+class TestDefaultCancellationArchiveAndRhythm:
+    @staticmethod
+    def _dmy(days_ago: int) -> str:
+        return (datetime.now() - timedelta(days=days_ago)).strftime("%d.%m.%Y")
+
+    def test_default_judgment_gets_three_months(self):
+        """Заочному — 90 дней от выдачи ИЛ вместо 14 (решение юриста
+        03.08.2026): так 27.07 в архив ушли три дела Сургутского гор. суда."""
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            decision_date=self._dmy(120),
+            writs=[{"issue_date": self._dmy(40), "status": "Выдан"}],
+            events=_default_events(decision=self._dmy(120)),
+        )
+        assert lifecycle.is_case_archived(case) is False
+
+    def test_ordinary_judgment_keeps_two_weeks(self):
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            decision_date=self._dmy(120),
+            writs=[{"issue_date": self._dmy(40), "status": "Выдан"}],
+            events=[_ev(self._dmy(120),
+                        "Судебное заседание. Вынесено решение по делу.")],
+        )
+        assert lifecycle.is_case_archived(case) is True
+
+    def test_default_judgment_archives_after_three_months(self):
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(200),
+            decision_date=self._dmy(200),
+            writs=[{"issue_date": self._dmy(95), "status": "Выдан"}],
+            events=_default_events(decision=self._dmy(200)),
+        )
+        assert lifecycle.is_case_archived(case) is True
+
+    def test_pending_application_blocks_archive(self):
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            decision_date=self._dmy(120),
+            writs=[{"issue_date": self._dmy(95), "status": "Выдан"}],
+            events=_default_events(decision=self._dmy(120),
+                                   filed=self._dmy(5), hearing=self._dmy(-5)),
+        )
+        assert lifecycle.is_case_archived(case) is False
+
+    def test_skip_until_cancellation_hearing(self):
+        """Событие «Рассмотрение заявления об отмене…» не матчится
+        _HEARING_MARKERS_RX, поэтому без своей ветки дело парсилось бы каждым
+        прогоном."""
+        case = _track_case(
+            status="Решено", last_checked_at="2026-08-03",
+            events=_default_events(filed="28.07.2026", hearing="10.08.2026"),
+        )
+        skip, reason = lifecycle.should_skip_case(case, date(2026, 8, 4))
+        assert skip is True and reason.startswith("default_cancel_hearing")
+        assert "заседание 2026-08-10" in lifecycle.skip_reason_ru(reason)
+        skip, _ = lifecycle.should_skip_case(case, date(2026, 8, 10))
+        assert skip is False
+
+    def test_legal_force_est_silenced(self):
+        pending = _track_case(
+            decision_date="06.05.2026",
+            events=_default_events(filed="28.07.2026", hearing="10.08.2026"),
+        )["first_instance"]
+        assert lifecycle.bank_legal_force_est(pending) is None
+        vacated = _track_case(
+            decision_date="06.05.2026",
+            events=_default_events(filed="08.07.2026", hearing="22.07.2026",
+                                   result="Заочное решение отменено"),
+        )["first_instance"]
+        assert lifecycle.bank_legal_force_est(vacated) is None
+
+    def test_legal_force_est_from_refusal(self):
+        """Отказ в отмене — месяц на апелляцию течёт с этого дня (ст. 237 ч. 2)."""
+        fi = _track_case(
+            decision_date="06.05.2026",
+            events=_default_events(filed="08.07.2026", hearing="22.07.2026",
+                                   result="В удовлетворении заявления отказано"),
+        )["first_instance"]
+        assert lifecycle.bank_legal_force_est(fi) == date(2026, 8, 25)
+
+
+class TestRepairVacatedDefaultJudgments:
+    def test_vacated_case_returns_to_work(self):
+        case = _track_case(
+            status="Решено", result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+            resolved_emitted=True, decision_date="06.05.2026",
+            events=_default_events(filed="08.07.2026", hearing="22.07.2026",
+                                   result="Заочное решение отменено"),
+        )
+        assert lifecycle.repair_vacated_default_judgments([case]) == 1
+        fi = case["first_instance"]
+        assert fi["status"] == "В производстве"
+        assert fi["result"] == ""
+        assert fi["resolved_emitted"] is False
+        assert "decision_date" not in fi
+        assert fi["decision_date_vacated"] == "06.05.2026"
+        # Идемпотентность — иначе ремонт зовётся ДО FI-цикла каждым прогоном.
+        assert lifecycle.repair_vacated_default_judgments([case]) == 0
+
+    def test_case_returns_to_track(self):
+        case = {
+            "id": "2-616/2026", "current_stage": "awaiting_appeal",
+            "bank_role": "Истец", "track_origin": "plaintiff_light",
+            "appeal": None,
+            "first_instance": {
+                "appeal_filed": True, "appeal_filed_date": "23.07.2026",
+                "events": _default_events(filed="28.07.2026",
+                                          hearing="10.08.2026"),
+            },
+        }
+        assert lifecycle.repair_vacated_default_judgments([case]) == 1
+        assert case["track"] == "plaintiff_light"
+        assert "track_origin" not in case
+        assert case["current_stage"] == "first_instance"
+
+    def test_real_appeal_untouched(self):
+        """2-504/2026, 2-339/2026, 2-318/2026 — настоящие апелляции ответчика
+        (заочными не являются), их переезд корректен."""
+        case = {
+            "id": "2-504/2026", "current_stage": "awaiting_appeal",
+            "bank_role": "Истец", "track_origin": "plaintiff_light",
+            "appeal": None,
+            "first_instance": {
+                "appeal_filed": True, "appeal_filed_date": "20.07.2026",
+                "events": [_ev("02.07.2026",
+                               "Судебное заседание. Вынесено решение по делу.")],
+            },
+        }
+        assert lifecycle.repair_vacated_default_judgments([case]) == 0
+        assert case["current_stage"] == "awaiting_appeal"
+        assert "track" not in case
+
+    def test_migrate_stages_runs_repair_first(self):
+        """⚠️ Порядок: бэкфилл decision_date вернул бы снятую дату из
+        hearing_date, а цикл advance_case_stage — стадию awaiting_appeal."""
+        case = {
+            "id": "2-243/2026", "current_stage": "first_instance",
+            "bank_role": "Истец", "track": "plaintiff_light", "appeal": None,
+            "first_instance": {
+                "status": "Решено", "result": "Иск УДОВЛЕТВОРЕН",
+                "resolved_emitted": True, "decision_date": "06.05.2026",
+                "hearing_date": "06.05.2026",
+                "events": _default_events(filed="08.07.2026",
+                                          hearing="22.07.2026",
+                                          result="Заочное решение отменено"),
+            },
+        }
+        lifecycle.migrate_stages([case])
+        fi = case["first_instance"]
+        assert fi["status"] == "В производстве"
+        assert "decision_date" not in fi
+        assert case["current_stage"] == "first_instance"
+
+
+class TestVacatedDefaultWiring:
+    """Проводка отката отменённого заочного решения в FI-цикле main_json.
+
+    Все три инварианта невидимы рендер-тестам: они проверяют уже готовую
+    комбинацию типов, которую сломанный конвейер просто не произведёт.
+    По образцу TestFiTerminationWiring — unit на исходник вместо тяжёлого e2e.
+    """
+
+    @staticmethod
+    def _runs_src() -> str:
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_guard_two_has_vacated_exception(self):
+        """⚠️ Без исключения в Гарде 2 понижение статуса откатывается тем же
+        прогоном: калитка fi_resolution_contradicted_by_future_hearing
+        завершается `return not has_decision`, а у заочного дела событие
+        решения есть всегда."""
+        src = self._runs_src()
+        guard = src[src.index("# Гард 2: регрессия статуса"):]
+        guard = guard[:guard.index("new_status = old_status")]
+        assert "not vacated_default" in guard, (
+            "Из Гарда 2 пропало исключение vacated_default — статус «Решено» "
+            "будет возвращаться, и отменённое заочное решение навсегда "
+            "останется действующим."
+        )
+
+    def test_downgrade_is_one_transaction(self):
+        """Сброс resolved_emitted отдельно от статуса даёт ложный «Иск
+        удовлетворён» в дайджест КАЖДЫМ прогоном (ремонты зовутся до
+        FI-цикла, а триггер-событие карточки никуда не девается)."""
+        src = self._runs_src()
+        block = src[src.index("if vacated_default:\n            if fi.get(\"result\")"):]
+        block = block[:block.index("if new_hearing_date:")]
+        assert 'fi["result"] = ""' in block
+        assert 'fi["decision_date_vacated"] = fi.pop("decision_date")' in block, (
+            "decision_date должна ПЕРЕЕЗЖАТЬ, а не удаляться: иначе "
+            "classify_writ_kind свалится на дрейфующую hearing_date и "
+            "перевернёт тип уже выданного листа."
+        )
+        for flag in ("resolved_emitted", "motivirovka_emitted"):
+            assert flag in block, f"Транзакция не сбрасывает {flag}."
+
+    def test_emit_block_before_hearing_block(self):
+        """У решённого дела case_decided глушит hearing-блок — события особого
+        порядка обязаны эмититься до него."""
+        src = self._runs_src()
+        i_cancel = src.index("_cancel_st = default_cancellation_state(fi, today)")
+        i_hearing = src.index("# Новое/перенесённое заседание")
+        assert i_cancel < i_hearing
+
+    def test_emit_is_idempotent_by_value(self):
+        """Флаги хранят ЗНАЧЕНИЯ, а не True: состояние пересчитывается из
+        events каждым прогоном, а дифф _events_newly_match не годится (его
+        ключ включает дату размещения — перепубликация карточки судом дала бы
+        «новое» событие)."""
+        src = self._runs_src()
+        for flag in ("default_cancel_filed_emitted",
+                     "default_cancel_hearing_emitted",
+                     "default_cancel_outcome_emitted"):
+            assert f'fi["{flag}"] = ' in src, f"Нет флага эмита {flag}."
+            assert f'fi.get("{flag}") != ' in src, (
+                f"Флаг {flag} сравнивается не по значению — повторный эмит "
+                "на втором круге заочного производства не сработает."
+            )
+
+    def test_new_types_have_labels_everywhere(self):
+        """Неизвестный тип даёт ГОЛУЮ строку дела в 3.2 и всё равно считается
+        в счётчике «Изменения (N)» — подписи нужны в трёх местах."""
+        base = os.path.join(SCRIPTS_DIR, "court_monitor", "digest")
+        for fname in ("template.py", "core.py"):
+            with open(os.path.join(base, fname), encoding="utf-8") as f:
+                src = f.read()
+            for t in ("fi_default_cancellation_filed",
+                      "fi_default_cancellation_hearing",
+                      "fi_default_judgment_vacated",
+                      "fi_default_cancellation_refused"):
+                assert t in src, f"{fname}: нет подписи для типа {t}."
+
+    def test_types_are_not_routine_and_not_echo(self):
+        """Трек существует ради таких событий — рутинным фильтром их гасить
+        нельзя. Но в стародатном они быть ОБЯЗАНЫ: импортёр Урала заводит
+        карточки с многолетней историей."""
+        from court_monitor.lifecycle import (
+            BANK_ROUTINE_EVENT_TYPES, FI_ECHO_CATCHUP_TYPES,
+            _FI_CATCHUP_DATED_TYPES,
+        )
+        for t in ("fi_default_cancellation_filed",
+                  "fi_default_judgment_vacated"):
+            assert t not in BANK_ROUTINE_EVENT_TYPES
+            assert t not in FI_ECHO_CATCHUP_TYPES
+            assert t in _FI_CATCHUP_DATED_TYPES

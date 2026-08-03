@@ -1999,6 +1999,17 @@ function bankTrackBadge(c){
 // штампует split_bank_track — events фронт не грузит.
 function defaultJudgmentBadgeHtml(c){
   if(!c||!c._bankTrack||!(c._fi&&c._fi.default_judgment))return '';
+  // Особый порядок отмены (ст. 237-243 ГПК) важнее самого признака заочности:
+  // пока заявление на рассмотрении, взыскание под угрозой, а после отмены
+  // решения нет вовсе. Блок default_cancellation штампует split_bank_track.
+  const dc=(c._fi.default_cancellation)||{};
+  if(dc.outcome==='cancelled'){
+    return `<span class="badge badge-compact badge-default-vacated" title="${escHtml('Заочное решение отменено '+(dc.outcome_date||'')+' (ст. 241 ГПК) — дело рассматривается заново')}">🌙 Заочное отменено</span>`;
+  }
+  if(dc.outcome==='pending'){
+    const hd=dc.hearing_date?`; заседание ${dc.hearing_date}`:'';
+    return `<span class="badge badge-compact badge-default-pending" title="${escHtml('Ответчик подал заявление об отмене заочного решения '+(dc.filed_date||'')+' (ст. 237 ГПК)'+hd)}">🌙 Отмена заочного</span>`;
+  }
   const served=c._fi.default_copy_served_date||'';
   const title=served
     ?`Заочное решение; копия вручена ответчику ${served} — сроки отмены и апелляции идут от вручения`
@@ -2008,6 +2019,27 @@ function defaultJudgmentBadgeHtml(c){
 // Строка «Копия ответчику» в «Ключевых датах» drawer — только у заочных:
 // юристу важно видеть, по какой ветке посчитана дата «Вступило в силу».
 // Чистая функция — гоняется node-тестом (test_frontend_writs.py).
+// Строки особого порядка отмены заочного решения в «Ключевых датах» drawer.
+// Чистая функция — гоняется node-тестом (test_frontend_writs.py).
+function defaultCancellationKvHtml(c){
+  const dc=((c&&c._fi&&c._fi.default_cancellation))||{};
+  if(!dc.outcome)return '';
+  let out='';
+  if(dc.filed_date){
+    out+=`<div class="kv-k">🌙 Заявление об отмене</div><div class="kv-v kv-mono">${escHtml(dc.filed_date)} <span style="color:var(--slate-500);font-weight:500;">(ст. 237 ГПК, в тот же суд)</span></div>`;
+  }
+  if(dc.hearing_date){
+    const хвост=dc.outcome==='pending'
+      ?' <span style="color:var(--slate-500);font-weight:500;">(рассмотрение)</span>':'';
+    out+=`<div class="kv-k">📅 Заседание по заявлению</div><div class="kv-v kv-mono">${escHtml(dc.hearing_date)}${хвост}</div>`;
+  }
+  if(dc.outcome==='cancelled'){
+    out+=`<div class="kv-k">⚠️ Решение отменено</div><div class="kv-v kv-mono">${escHtml(dc.outcome_date||'')} <span style="color:var(--slate-500);font-weight:500;">(дело рассматривается заново)</span></div>`;
+  }else if(dc.outcome==='refused'){
+    out+=`<div class="kv-k">✅ В отмене отказано</div><div class="kv-v kv-mono">${escHtml(dc.outcome_date||'')} <span style="color:var(--slate-500);font-weight:500;">(пошёл месяц на апелляцию)</span></div>`;
+  }
+  return out;
+}
 function defaultCopyKvHtml(c){
   const fi=(c&&c._fi)||{};
   if(!fi.default_judgment)return '';
@@ -3203,6 +3235,7 @@ function renderDrawer(c){
       }
     }
     keyDates+=defaultCopyKvHtml(c);
+    keyDates+=defaultCancellationKvHtml(c);
   }
   keyDates+=`</div>`;
 

@@ -368,6 +368,18 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         fi_accepted = sum(
             1 for ch in fi_changes if "fi_accepted_no_hearing" in ch["type"]
         )
+        # Особый порядок отмены заочного решения (ст. 237-243 ГПК). В сводку
+        # выносим два состояния, меняющие судьбу взыскания: подано заявление
+        # и решение отменено. Заседание по заявлению и отказ в отмене строку
+        # в 3.2 «Изменения» уже имеют — сводку ими не удлиняем.
+        fi_default_cancels = sum(
+            1 for ch in fi_changes
+            if "fi_default_cancellation_filed" in ch["type"]
+        )
+        fi_default_vacated = sum(
+            1 for ch in fi_changes
+            if "fi_default_judgment_vacated" in ch["type"]
+        )
         # fi_bank_role_changed в сводку осознанно НЕ выносим: смена роли —
         # редкий служебный признак, строка в 3.2 «Изменения» его уже несёт.
         if fi_hearings:
@@ -439,6 +451,21 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 + plural_ru(fi_accepted, 'дело принято', 'дела принято',
                             'дел принято')
                 + " к производству"
+            )
+        if fi_default_cancels:
+            parts.append(
+                f"🌙 {fi_default_cancels} "
+                + plural_ru(fi_default_cancels,
+                            'заявление об отмене заочного',
+                            'заявления об отмене заочных',
+                            'заявлений об отмене заочных')
+            )
+        if fi_default_vacated:
+            parts.append(
+                f"⚠️ {fi_default_vacated} "
+                + plural_ru(fi_default_vacated, 'заочное решение отменено',
+                            'заочных решения отменено',
+                            'заочных решений отменено')
             )
         if fi_finals:
             parts.append(
@@ -919,6 +946,12 @@ _BANK_TYPE_LABELS = {
     "fi_final_event": "⚖️ движение по делу",
     # fi_status_change — спец-ветка в _bank_event_phrases: рядом с
     # fi_resolved подавляется, одиночная выводится с деталями «X → Y».
+    # Особый порядок отмены заочного решения (ст. 237-243 ГПК) — дело из трека
+    # НЕ уходит: апелляционного хода у ответчика ещё нет (ст. 237 ч. 2).
+    "fi_default_cancellation_filed": "🌙 подано заявление об отмене заочного решения",
+    "fi_default_cancellation_hearing": "📅 заседание по заявлению об отмене",
+    "fi_default_judgment_vacated": "⚠️ заочное решение отменено — дело рассматривается заново",
+    "fi_default_cancellation_refused": "✅ в отмене заочного решения отказано",
     "fi_appeal_filed": "📨 апел. жалоба ответчика — дело уходит в общий трек",
     "fi_cassation_filed": "📨 касс. жалоба",
     "fi_sent_to_cassation": "📤 направлено в касс. суд",
@@ -1441,6 +1474,32 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     ev_list.append(
                         "📤 направлено в кассац. суд"
                         + (f" ({dt})" if dt else "")
+                    )
+                elif t == "fi_default_cancellation_filed":
+                    dt = escape_html(d.get("cancel_filed_date", ""))
+                    ev_list.append(
+                        "🌙 подано заявление об отмене заочного решения"
+                        + (f" ({dt})" if dt else "")
+                    )
+                elif t == "fi_default_cancellation_hearing":
+                    dt = escape_html(d.get("cancel_hearing_date", ""))
+                    ev_list.append(
+                        "📅 заседание по заявлению об отмене заочного решения"
+                        + (f" <b>{dt}</b>" if dt else "")
+                    )
+                elif t == "fi_default_judgment_vacated":
+                    dt = escape_html(d.get("cancel_outcome_date", ""))
+                    ev_list.append(
+                        "⚠️ <b>заочное решение отменено</b>"
+                        + (f" ({dt})" if dt else "")
+                        + " — дело рассматривается заново"
+                    )
+                elif t == "fi_default_cancellation_refused":
+                    dt = escape_html(d.get("cancel_outcome_date", ""))
+                    ev_list.append(
+                        "✅ в отмене заочного решения отказано"
+                        + (f" ({dt})" if dt else "")
+                        + " — пошёл месяц на апелляцию"
                     )
                 elif t == "fi_hearing_restart":
                     rd = escape_html(d.get("restart_date", ""))
