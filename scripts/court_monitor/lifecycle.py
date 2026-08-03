@@ -1100,9 +1100,21 @@ _FI_DATED_COMPLAINT_TYPES = {
     "fi_cassation_filed": "cassation_filed_date",
     "fi_sent_to_cassation": "sent_to_cassation_date",
 }
+# «Догоняющие» события об акте/решении: тип → ключи details с датой (первая
+# читаемая побеждает — у части карточек «Дата публикации акта» пуста, и
+# единственный якорь остаётся в дате решения). Гасятся ТОЛЬКО на первом парсе
+# заведённого дела, см. suppress_stale_fi_events.
+_FI_CATCHUP_DATED_TYPES = {
+    "fi_resolved": ("decision_date",),
+    "fi_act_published": ("act_date", "decision_date"),
+    "fi_act_text_published": ("act_date", "decision_date"),
+    "fi_motivirovka_emitted": ("motivirovka_date", "decision_date"),
+    "fi_final_event": ("event_date",),
+}
 
 
-def suppress_stale_fi_events(change: dict, today: date | None = None) -> list[str]:
+def suppress_stale_fi_events(change: dict, today: date | None = None, *,
+                             first_parse: bool = False) -> list[str]:
     """Убрать из change["type"] стародатные события (дополнение к
     suppress_fi_echo_events — то ловит «вышестоящее дело уже известно»,
     это — «новость протухла», даже если вышестоящей карточки нет):
@@ -1111,7 +1123,24 @@ def suppress_stale_fi_events(change: dict, today: date | None = None) -> list[st
       СТРОГО в прошлом — «заседание назначено на 17.12.2025» в июле-2026
       не новость (сегодняшняя дата — ещё анонс);
     - жалоба/направление в касс. суд с датой старше
-      config.DIGEST_STALE_EVENT_DAYS (первый парс старой карточки).
+      config.DIGEST_STALE_EVENT_DAYS (первый парс старой карточки);
+    - `first_parse=True` — «догоняющие» события об акте/решении
+      (_FI_CATCHUP_DATED_TYPES) с датой старше того же порога.
+
+    Третье правило требует ОБОИХ условий намеренно. Только по возрасту
+    фильтровать нельзя: суд штатно публикует текст акта через недели после
+    решения, и в основной картотеке это настоящая новость. Только по «первому
+    парсу» — тоже нельзя: свежий иск с решением на той же неделе объявить
+    надо. Вместе они описывают ровно один случай — раскопки истории только
+    что заведённой карточки (2-592/2025: решение 06.10.2025, заведено
+    31.07.2026, объявлено «текст решения опубликован» 03.08.2026 и тем же
+    прогоном ушло в архив). Гейт приёма (bank_intake.entry_is_spent) ловит
+    такие дела раньше — это страховка для тех, кто дожил до архивного окна
+    уже внутри трека.
+
+    ⚠️ Исполнительные листы (fi_writ_issued / fi_writ_status_changed) в
+    правило не входят: ради них трек исков банка и существует, а «старый»
+    лист может быть выдан задолго до постановки дела на мониторинг.
 
     Дата отсутствует/не парсится — событие остаётся (fail-open: лучше
     лишняя строка, чем молча съеденная новость). Флаги, стадии и данные
@@ -1136,9 +1165,23 @@ def suppress_stale_fi_events(change: dict, today: date | None = None) -> list[st
             d = parse_date(details.get(_FI_DATED_COMPLAINT_TYPES[t]) or "")
             if d and (today - d.date()).days > config.DIGEST_STALE_EVENT_DAYS:
                 stale = True
+        elif first_parse and t in _FI_CATCHUP_DATED_TYPES:
+            d = next(
+                (p for p in (parse_date(details.get(k) or "")
+                             for k in _FI_CATCHUP_DATED_TYPES[t]) if p),
+                None,
+            )
+            if d and (today - d.date()).days > config.DIGEST_STALE_EVENT_DAYS:
+                stale = True
         (removed if stale else kept).append(t)
     if removed:
         change["type"] = kept
+        # Тяжёлый пересказ мотивировки уезжает вместе с подавленным событием —
+        # иначе он остался бы в снимке контекста (и в оплаченном LLM-пересказе
+        # акта) ради строки, которую никто не увидит. Тот же приём, что в
+        # suppress_fi_echo_events.
+        if "fi_act_text_published" in removed:
+            details.pop("act_text", None)
     return removed
 
 

@@ -15,10 +15,12 @@ import pytest
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
+sys.path.insert(0, TESTS_DIR)
 
 import collect_bank_claims as cbc  # noqa: E402
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
+from fixture_dates import days_ago as _ago, recent_fi_card_html  # noqa: E402
 
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
 
@@ -138,8 +140,10 @@ def env(tmp_path, monkeypatch):
         return _fixture("search_fi_bank_p1.html")
 
     monkeypatch.setattr(cbc, "fetch_page", fake_fetch_page)
+    # Карточка с датами «на этой неделе»: иначе гейт приёма (entry_is_spent)
+    # справедливо считает февральское дело отработавшим и e2e-набор пустеет.
     monkeypatch.setattr(cbc, "fetch_card_checked",
-                        lambda url, context=None: _fixture("case_card_first_instance.html"))
+                        lambda url, context=None: recent_fi_card_html())
     return tmp_path
 
 
@@ -243,25 +247,29 @@ class TestCardLevelFilters:
             cbc, "parse_case_card",
             lambda html, base_url: {
                 "Статус": "Решено",
-                "Дата заседания": "12.02.2026",
-                "_events": [{"date": "12.02.2026",
+                "Дата заседания": _ago(60),
+                "_events": [{"date": _ago(60),
                              "text": "Вынесено решение по делу. Иск удовлетворён"}],
-                "_writs": [{"issue_date": "20.04.2026", "status": status}]})
+                "_writs": [{"issue_date": _ago(20), "status": status}]})
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["added"] == 0
         assert counters["excluded_writ"] == 3
         assert _bank_cases(env) == []
 
     def test_interim_writ_not_skipped(self, env, monkeypatch):
-        """Обеспечительный лист (выдан ДО решения) — дело ещё ждёт ИЛ."""
+        """Обеспечительный лист (выдан ДО решения) — дело ещё ждёт ИЛ.
+
+        Решение свежее (20 дней): у отказного дела набора окно на жалобу
+        (BANK_DENIED_ARCHIVE_DAYS=30) ещё не истекло, иначе его срезал бы
+        гейт приёма и счёт заведённых был бы про другое."""
         monkeypatch.setattr(
             cbc, "parse_case_card",
             lambda html, base_url: {
                 "Статус": "Решено",
-                "Дата заседания": "12.02.2026",
-                "_events": [{"date": "12.02.2026",
+                "Дата заседания": _ago(20),
+                "_events": [{"date": _ago(20),
                              "text": "Вынесено решение по делу. Иск удовлетворён"}],
-                "_writs": [{"issue_date": "01.11.2025", "status": "Выдан"}]})
+                "_writs": [{"issue_date": _ago(40), "status": "Выдан"}]})
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["added"] == 3
         assert counters["excluded_writ"] == 0

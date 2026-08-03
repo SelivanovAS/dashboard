@@ -1116,6 +1116,12 @@ async function fetchCsvCases(url){
 async function fetchJsonCases(url,timeoutMs){
   const r=await fetchWithTimeout(url,timeoutMs||FETCH_TIMEOUT_MS);
   const data=await r.json();
+  // Время ПРОГОНА, который произвёл файл. Единственный способ отличить
+  // свежий снимок от вчерашнего: SW отдаёт data/*.json из кэша (см.
+  // «Свежесть данных» ниже), а шапка до v127 писала «Обновлено: <сейчас>» —
+  // то есть время рендера страницы, и вчерашние данные выглядели сегодняшними.
+  const stamp=parseIsoUtc(data.updated_at);
+  if(stamp)_dataUpdatedAt[url]=stamp;
   // Блок region пишет бэкенд только в основной cases.json (не в архив):
   // из него строятся подписи судов, ссылки апелляции/кассации и бейдж
   // региона в шапке.
@@ -1124,8 +1130,10 @@ async function fetchJsonCases(url,timeoutMs){
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
 function isJsonUrl(url){return/\.json(\?|$)/i.test(url);}
-async function loadFromSheet(url){
-  showLoading();
+async function loadFromSheet(url,opts){
+  // quiet — фоновое обновление по сигналу SW: экран загрузки не показываем,
+  // данные и так придут из уже обновлённого кэша, мгновенно.
+  if(!(opts&&opts.quiet))showLoading();
   const btn=document.getElementById('btn-refresh');
   if(btn)btn.classList.add('is-loading');
   try{
@@ -1182,19 +1190,93 @@ async function loadFromSheet(url){
 }
 function refreshData(){
   loadFromSheet(resolveSheetUrl());
-  // Bank-датасет обновляем до достигнутого уровня ленивой цепочки: список
-  // (+архив, если уже открывали). События сбрасываются и перечитаются при
-  // следующем открытии drawer — иначе кнопка «Обновить» показывала бы
-  // вчерашний датасет до перезагрузки страницы.
-  if(bankLoaded){
-    const hadArchive=bankArchiveLoaded;
-    bankLoaded=false;bankArchiveLoaded=false;
-    _bankEventsState.active={loaded:false,loading:null};
-    _bankEventsState.archive={loaded:false,loading:null};
-    loadBankDataset()
-      .then(()=>hadArchive?ensureBankArchive():null)
-      .then(()=>applyFilters());
-  }
+  reloadBankDataset();
+}
+// Bank-датасет обновляем до достигнутого уровня ленивой цепочки: список
+// (+архив, если уже открывали). События сбрасываются и перечитаются при
+// следующем открытии drawer — иначе кнопка «Обновить» показывала бы
+// вчерашний датасет до перезагрузки страницы.
+function reloadBankDataset(){
+  if(!bankLoaded)return null;
+  const hadArchive=bankArchiveLoaded;
+  bankLoaded=false;bankArchiveLoaded=false;
+  _bankEventsState.active={loaded:false,loading:null};
+  _bankEventsState.archive={loaded:false,loading:null};
+  return loadBankDataset()
+    .then(()=>hadArchive?ensureBankArchive():null)
+    .then(()=>applyFilters());
+}
+
+/* ========== Свежесть данных (сигнал service worker'а) ========== */
+// SW отдаёт data/*.json по stale-while-revalidate: кэш мгновенно, сеть — в
+// фоне «на следующий раз». Поэтому утром после прогона страница показывала
+// снимок ПРЕДЫДУЩЕГО дня, а блок дайджеста рядом — сегодняшний (он идёт
+// network-first). Так дело 2-592/2025 (03.08.2026) висело в активных, хотя
+// прогон в тот же час увёл его в архив трека.
+// Теперь SW, обновив кэш, шлёт 'data-updated' — здесь мы перечитываем
+// затронутый датасет: повторный fetch попадает в уже свежий кэш, то есть
+// проходит мгновенно и без сети. Network-first в SW не годится:
+// cases.json 2 МБ, cases_bank.json 1.4 МБ — первый экран встал бы на
+// мобильной сети.
+const _dataUpdatedAt={};              // url файла → Date его updated_at
+let _pendingDataUrls=null;            // Set url'ов, ждущих перерисовки
+let _dataRefreshTimer=null;
+const DATA_REFRESH_DEBOUNCE_MS=400;   // пачка файлов одного прогона = 1 проход
+
+function parseIsoUtc(s){
+  // Python на UTC-раннере пишет updated_at без «Z» (naive ISO). Без явного
+  // суффикса браузер прочитал бы его как ЛОКАЛЬНОЕ время и показал прогон
+  // на пять часов раньше (ХМАО = UTC+5). Тот же приём — parseIso в админке.
+  if(!s)return null;
+  const iso=/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)?s:s+'Z';
+  const d=new Date(iso);
+  return isNaN(d.getTime())?null:d;
+}
+
+// Штамп прогона для шапки. Основной cases.json — эталон: оба файла пишет один
+// прогон, а картотека банка грузится лениво (в момент рендера шапки её штампа
+// может ещё не быть). Фолбэк на bank — для территории, где вход сразу в
+// картотеку банка (?bank=1) и cases.json не отдался.
+function currentDataStamp(){
+  return _dataUpdatedAt[resolveSheetUrl()]||_dataUpdatedAt[bankJsonUrl()]||null;
+}
+
+function dataFileKind(url){
+  const name=String(url||'').split('?')[0].split('/').pop();
+  if(name==='cases.json'||name==='cases_archive.json')return 'main';
+  if(name.startsWith('cases_bank'))return 'bank';
+  return '';
+}
+
+function onDataUpdated(url){
+  const kind=dataFileKind(url);
+  if(!kind)return;
+  (_pendingDataUrls||(_pendingDataUrls=new Set())).add(kind);
+  clearTimeout(_dataRefreshTimer);
+  _dataRefreshTimer=setTimeout(applyPendingDataRefresh,DATA_REFRESH_DEBOUNCE_MS);
+}
+
+// Перерисовка на открытом drawer/шторке фильтров/beacon'е выдернула бы
+// содержимое из-под пальца — ждём закрытия (оно и позовёт нас снова).
+function uiBusyForRefresh(){
+  if(activeCaseNumber)return true;
+  const sheet=document.getElementById('filters-sheet');
+  if(sheet&&sheet.classList.contains('open'))return true;
+  return document.body.classList.contains('beacon-open');
+}
+
+function applyPendingDataRefresh(){
+  if(!_pendingDataUrls||!_pendingDataUrls.size)return;
+  if(uiBusyForRefresh())return;   // не теряем: набор ждёт закрытия оверлея
+  const kinds=_pendingDataUrls;
+  _pendingDataUrls=null;
+  const jobs=[];
+  if(kinds.has('main'))jobs.push(loadFromSheet(resolveSheetUrl(),{quiet:true}));
+  if(kinds.has('bank')){const p=reloadBankDataset();if(p)jobs.push(p);}
+  if(!jobs.length)return;
+  Promise.all(jobs).then(()=>{
+    showToast('Данные обновлены — показан последний прогон',{type:'success'});
+  }).catch(e=>console.warn('Фоновое обновление данных не удалось:',e));
 }
 
 // ── Трек «Иски банка» (банк — истец): ленивый датасет ────────────────────────
@@ -1635,7 +1717,12 @@ function renderAnalytics(){
 function renderMeta(){
   const lastVisit=localStorage.getItem(LAST_VISIT_KEY);
   const fmtMeta=d=>d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  let metaHtml='Обновлено: '+fmtMeta(new Date());
+  // Время ПРОГОНА, а не рендера страницы. До v127 здесь стояло
+  // «Обновлено: new Date()» — и вчерашний снимок из кэша SW (см. «Свежесть
+  // данных») подписывался сегодняшним временем: отличить его было нечем.
+  // Штампа нет (CSV-режим, демо-данные) — прежняя подпись.
+  const stamp=currentDataStamp();
+  let metaHtml=stamp?'Данные от: '+fmtMeta(stamp):'Обновлено: '+fmtMeta(new Date());
   if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+fmtMeta(lv)+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
 }
@@ -2149,6 +2236,7 @@ function closeFiltersSheet(){
   document.getElementById('filters-sheet').classList.remove('open');
   document.getElementById('filters-sheet').setAttribute('aria-hidden','true');
   document.getElementById('filters-scrim').classList.remove('open');
+  applyPendingDataRefresh();
 }
 function resetFilters(){
   document.getElementById('filter-status').value='all';
@@ -2580,6 +2668,8 @@ function closeDrawer(){
   document.getElementById('drawer').setAttribute('aria-hidden','true');
   document.getElementById('drawer-scrim').classList.remove('open');
   renderTable();
+  // Фоновое обновление, отложенное на время открытого drawer.
+  applyPendingDataRefresh();
 }
 
 function drawerNav(dir){
@@ -4287,14 +4377,18 @@ if ('serviceWorker' in navigator) {
     window.location.reload();
   });
 
-  // SW шлёт postMessage при клике по пушу, если окно уже открыто.
+  // SW шлёт postMessage при клике по пушу, если окно уже открыто, и когда
+  // фоновая ревалидация принесла свежий data/*.json (см. «Свежесть данных»).
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'open-digest') {
+    const data = event.data || {};
+    if (data.type === 'open-digest') {
       // Если дайджест ещё не успел загрузиться (currentDigestGeneratedAt пуст)
       // — ставим флаг, и loadLastDigest сам покажет beacon в конце.
       if (!digestLoaded) { pendingShowBeacon = true; return; }
       showDigestBeacon();
+      return;
     }
+    if (data.type === 'data-updated') onDataUpdated(data.url);
   });
 }
 
@@ -4989,6 +5083,8 @@ function closeDigestBeacon(opts = {}) {
     } else {
       collapseDigest();
     }
+    // Фоновое обновление, отложенное на время открытого beacon'а.
+    applyPendingDataRefresh();
   }, 220);
 }
 

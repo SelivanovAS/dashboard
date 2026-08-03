@@ -18,10 +18,12 @@ import pytest
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
+sys.path.insert(0, TESTS_DIR)
 
 import import_bank_registry as ibr  # noqa: E402
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
+from fixture_dates import days_ago, recent_fi_card_html  # noqa: E402
 
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
 
@@ -51,8 +53,11 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(ibr, "polite_delay", lambda: None)
     monkeypatch.setattr(ibr, "fetch_page",
                         lambda url, context=None: _fixture("search_fi_all_roles.html"))
+    # Карточка с датами «на этой неделе»: у фикстуры решение датировано
+    # февралём-2026, и гейт приёма (entry_is_spent) справедливо счёл бы такое
+    # дело отработавшим — импортёру нечего было бы заводить.
     monkeypatch.setattr(ibr, "fetch_card_checked",
-                        lambda url, context=None: _fixture("case_card_first_instance.html"))
+                        lambda url, context=None: recent_fi_card_html())
     return tmp_path
 
 

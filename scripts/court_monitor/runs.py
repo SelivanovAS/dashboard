@@ -21,8 +21,8 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle
 from court_monitor.bank_intake import (
-    card_rejects, load_intake_seen, make_bank_entry, remember_rejection,
-    row_passes, save_intake_seen, seen_key,
+    card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
+    remember_rejection, row_passes, save_intake_seen, seen_key,
 )
 from court_monitor.bank_report import (
     BankParseReport, classify_fetch_failure, metrics_snapshot,
@@ -1818,8 +1818,8 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
     """
     counters = {"candidates": 0, "cards": 0, "added": 0, "already": 0,
                 "seen_cached": 0, "role": 0, "excluded_result": 0,
-                "excluded_writ": 0, "no_link": 0, "fetch_fail": 0,
-                "breaker": 0, "capped": 0}
+                "excluded_writ": 0, "already_spent": 0, "no_link": 0,
+                "fetch_fail": 0, "breaker": 0, "capped": 0}
     entries: list[dict] = []
     if not rows or budget <= 0:
         return entries, counters
@@ -1875,6 +1875,14 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
             continue
         entry = make_bank_entry(r, card_info, operator, now_iso,
                                 source="auto_search", court=court)
+        # Последний рубеж: дело, уже подпадающее под архивное окно, этот же
+        # прогон отправил бы в архив — но сперва объявил бы в дайджесте
+        # полугодовой давности решение (разбор 03.08.2026, см. entry_is_spent).
+        if entry_is_spent(entry):
+            counters["already_spent"] += 1
+            remember_rejection(seen, court.domain, num, "already_spent")
+            log.debug(f"  Иски банка: {num} — не берём (already_spent)")
+            continue
         entries.append(entry)
         dedup_exact.add((court.domain, num))
         counters["added"] += 1
@@ -2504,7 +2512,8 @@ def main_json():
             f"известных {bank_intake_totals.get('already', 0)}, "
             f"из кэша отказов {bank_intake_totals.get('seen_cached', 0)}, "
             f"исключено по карточке "
-            f"{bank_intake_totals.get('excluded_result', 0) + bank_intake_totals.get('excluded_writ', 0)})"
+            f"{bank_intake_totals.get('excluded_result', 0) + bank_intake_totals.get('excluded_writ', 0)}, "
+            f"уже отработавших {bank_intake_totals.get('already_spent', 0)})"
         )
         if bank_intake_totals.get("capped"):
             log.warning(
@@ -2861,6 +2870,12 @@ def main_json():
         if card_is_empty_shell(card_info):
             bank_report.record(case_j, "empty_shell")
             continue
+
+        # Первый парс заведённого дела — до бампа last_checked_at (ниже он
+        # уже не отличим от рутинного прогона). По этому флагу дайджест
+        # глушит «догоняющие» события об акте/решении: у только что
+        # импортированной карточки вся её история выглядит новостями.
+        first_card_parse = bool(case_j.get("import")) and not fi.get("last_checked_at")
 
         # Smart-skip: фиксируем дату успешного парсинга карточки (используется
         # для force-parse раз в 21 день).
@@ -3651,7 +3666,11 @@ def main_json():
             )
         # Стародатные события (анонс заседания в прошлом, жалоба старше
         # DIGEST_STALE_EVENT_DAYS) — не новости, а раскопки первого парса.
-        removed_stale = suppress_stale_fi_events(change)
+        # На первом парсе заведённого дела к ним добавляются «догоняющие»
+        # решение/акт: карточка старого дела вся состоит из такой истории.
+        removed_stale = suppress_stale_fi_events(
+            change, first_parse=first_card_parse
+        )
         if removed_stale:
             log.info(
                 f"  {fi.get('case_number', '')}: стародатные события "

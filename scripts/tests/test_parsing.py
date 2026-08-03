@@ -867,6 +867,88 @@ class TestSuppressStaleFiEvents:
         assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
 
 
+class TestStaleCatchupOnFirstParse:
+    """Третье правило стародатного фильтра: «догоняющие» решение/акт на первом
+    парсе только что заведённой карточки. Кейс 2-592/2025 — решение 06.10.2025,
+    дело заведено сборщиком 31.07.2026, объявлено «текст решения опубликован»
+    03.08.2026 и тем же прогоном ушло в архив трека."""
+
+    TODAY = date(2026, 8, 3)
+
+    def _ch(self, types, details):
+        return {"case": "2-592/2025", "type": list(types), "details": details}
+
+    def test_old_act_text_dropped_on_first_parse(self):
+        ch = self._ch(["fi_act_text_published"],
+                      {"act_date": "", "decision_date": "06.10.2025",
+                       "act_text": "мотивировка на 1800 символов"})
+        removed = uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                              first_parse=True)
+        assert removed == ["fi_act_text_published"]
+        assert ch["type"] == []
+        # Тяжёлый пересказ уезжает вместе с событием — он больше не нужен.
+        assert "act_text" not in ch["details"]
+
+    def test_same_event_kept_on_ordinary_run(self):
+        """Без first_parse правило молчит: суд штатно публикует текст акта
+        через недели после решения, и для дела на мониторинге это новость."""
+        ch = self._ch(["fi_act_text_published"],
+                      {"decision_date": "06.10.2025"})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY) == []
+        assert ch["type"] == ["fi_act_text_published"]
+
+    def test_fresh_decision_kept_on_first_parse(self):
+        """Свежий иск с решением на этой неделе объявить надо."""
+        ch = self._ch(["fi_resolved"], {"decision_date": "30.07.2026"})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                           first_parse=True) == []
+        assert ch["type"] == ["fi_resolved"]
+
+    @pytest.mark.parametrize("t,details", [
+        ("fi_resolved", {"decision_date": "06.10.2025"}),
+        ("fi_act_published", {"act_date": "10.10.2025"}),
+        ("fi_motivirovka_emitted", {"motivirovka_date": "10.10.2025"}),
+        ("fi_final_event", {"event_date": "12.11.2025"}),
+    ])
+    def test_all_catchup_types_covered(self, t, details):
+        ch = self._ch([t], details)
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                           first_parse=True) == [t]
+
+    def test_act_date_wins_over_decision_date(self):
+        """Первый читаемый ключ побеждает: решение старое, но акт опубликован
+        на днях — это настоящая новость."""
+        ch = self._ch(["fi_act_text_published"],
+                      {"act_date": "28.07.2026", "decision_date": "06.10.2025"})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                           first_parse=True) == []
+
+    def test_writ_events_never_dropped(self):
+        """Ради исполнительных листов трек и существует, а лист мог быть выдан
+        задолго до постановки дела на мониторинг."""
+        ch = self._ch(["fi_writ_issued", "fi_writ_status_changed"],
+                      {"decision_date": "06.10.2025",
+                       "issue_date": "01.11.2025"})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                           first_parse=True) == []
+        assert len(ch["type"]) == 2
+
+    def test_undated_catchup_kept(self):
+        """Fail-open: даты нет — событие остаётся."""
+        ch = self._ch(["fi_act_text_published"], {})
+        assert uc.suppress_stale_fi_events(ch, today=self.TODAY,
+                                           first_parse=True) == []
+
+    def test_window_boundary(self):
+        # Ровно 45 дней — ещё новость; 46 — уже раскопки.
+        ch45 = self._ch(["fi_resolved"], {"decision_date": "19.06.2026"})
+        assert uc.suppress_stale_fi_events(ch45, today=self.TODAY,
+                                           first_parse=True) == []
+        ch46 = self._ch(["fi_resolved"], {"decision_date": "18.06.2026"})
+        assert uc.suppress_stale_fi_events(ch46, today=self.TODAY,
+                                           first_parse=True) == ["fi_resolved"]
+
+
 class TestDedupeFiChanges:
     """Одно FI-дело в двух записях (апелляция + частная жалоба) даёт
     идентичные события — в дайджесте дело не должно двоиться."""
@@ -4368,3 +4450,29 @@ class TestFiTerminationWiring:
         block = src[i_term:i_hearing]
         assert 'fi["termination_emitted"] = True' in block
         assert 'fi["resolved_emitted"] = True' in block
+
+
+class TestFirstParseFlagWiring:
+    """Проводка флага «первый парс заведённого дела» в FI-цикле main_json.
+
+    Флаг снимается ДО бампа last_checked_at — после него первый парс уже
+    неотличим от рутинного прогона, и стародатный фильтр «догоняющих»
+    событий молча выключился бы навсегда (тесты самого фильтра при этом
+    остались бы зелёными: он проверяется отдельно, с явным аргументом).
+    Тот же приём, что в TestFiTerminationWiring."""
+
+    @staticmethod
+    def _runs_src():
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_flag_computed_before_last_checked_bump(self):
+        src = self._runs_src()
+        i_flag = src.index("first_card_parse = bool(case_j.get(\"import\"))")
+        i_bump = src.index('fi["last_checked_at"] = today.isoformat()')
+        assert i_flag < i_bump
+
+    def test_flag_reaches_stale_filter(self):
+        src = self._runs_src()
+        assert "first_parse=first_card_parse" in src

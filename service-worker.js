@@ -8,7 +8,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v126';
+const CACHE_VERSION = 'v127';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -144,20 +144,55 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+// Версия ответа для сравнения «кэш vs сеть». ETag GitHub Pages отдаёт всегда;
+// Last-Modified — фолбэк для локального http.server и прочих хостингов.
+function responseTag(res) {
+  if (!res) return null;
+  return res.headers.get('ETag') || res.headers.get('Last-Modified') || null;
+}
+
 // stale-while-revalidate: отдаём из кэша моментально, в фоне обновляем кэш.
-async function staleWhileRevalidate(request, cacheName) {
+// ⚠️ Страница получает ВЧЕРАШНИЙ снимок: свежая копия ложится в кэш и видна
+// только со следующего открытия. Для дашборда это значило «прогон был, а дела
+// прежние» (кейс 2-592/2025, 03.08.2026: дело ушло в архив трека, а картотека
+// показывала его активным — при том что last_digest.json идёт network-first и
+// дайджест рядом был уже сегодняшний). Поэтому, обновив кэш, сообщаем об этом
+// клиентам — app.js перечитает датасет из кэша (мгновенно, без сети) и
+// перерисуется. Network-first здесь не годится: cases.json 2 МБ,
+// cases_bank.json 1.4 МБ — первый экран встал бы на мобильной сети.
+// ⚠️ `event` обязателен: отдав ответ из кэша, браузер вправе усыпить SW — и
+// фоновая ревалидация умрёт вместе с ним, не обновив кэш и не сообщив
+// странице. event.waitUntil держит SW живым до конца дозагрузки. Без этого
+// именно на телефоне (где SW усыпляют агрессивнее) юрист снова увидел бы
+// вчерашние данные.
+async function staleWhileRevalidate(request, cacheName, event) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   const network = fetch(request)
-    .then((res) => {
-      if (res && res.ok) cache.put(request, res.clone());
+    .then(async (res) => {
+      if (res && res.ok) {
+        const changed = cached && responseTag(cached) !== responseTag(res);
+        await cache.put(request, res.clone());
+        // Сообщаем только о РЕАЛЬНОМ обновлении уже показанных данных:
+        // первая загрузка (кэша не было) и так отдала свежее, а версия без
+        // ETag/Last-Modified неотличима — молчим, прежнее поведение.
+        if (changed) await notifyDataUpdated(request.url);
+      }
       return res;
     })
     .catch(() => null);
+  if (cached && event) event.waitUntil(network);
   return cached || (await network) || new Response('[]', {
     status: 503,
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
+}
+
+async function notifyDataUpdated(url) {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  for (const client of clients) {
+    client.postMessage({ type: 'data-updated', url });
+  }
 }
 
 // cache-first: сначала кэш, если нет — сеть, при ответе — кладём в кэш.
@@ -247,7 +282,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (isDataRequest(url)) {
-    event.respondWith(staleWhileRevalidate(request, CACHE_NAME));
+    event.respondWith(staleWhileRevalidate(request, CACHE_NAME, event));
     return;
   }
 
