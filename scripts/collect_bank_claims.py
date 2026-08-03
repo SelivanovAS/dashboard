@@ -63,6 +63,7 @@ from court_monitor import config  # noqa: E402
 from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспорт правил приёма
     _EXCLUDED_RESULT_RX,
     card_rejects,
+    entry_is_spent,
     row_passes,
 )
 from court_monitor.config import log  # noqa: E402
@@ -193,7 +194,7 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
     counters = {
         "pages": pages_done, "rows": len(rows), "added": 0, "already": 0,
         "role": 0, "excluded_result": 0, "excluded_appeal": 0,
-        "excluded_writ": 0, "no_link": 0, "fetch_fail": 0,
+        "excluded_writ": 0, "already_spent": 0, "no_link": 0, "fetch_fail": 0,
     }
     if not rows:
         return counters
@@ -252,6 +253,16 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
 
         entry = make_bank_entry(r, card_info, operator, now_iso,
                                 source="search_sweep", court=court)
+        # Последний рубеж: дело, уже подпадающее под архивное окно трека.
+        # Исторический сбор натыкается на такие постоянно (26 из 27 записей
+        # bank-архива прожили в треке не больше 3 дней) — см. entry_is_spent.
+        if entry_is_spent(entry):
+            counters["already_spent"] += 1
+            log.info(
+                f"[{i}/{len(rows)}] {num} — [ALREADY SPENT] цикл пройден, "
+                "дело сразу ушло бы в архив трека"
+            )
+            continue
         new_entries.append(entry)
         dedup_exact.add((court.domain, num))
         counters["added"] += 1
@@ -276,6 +287,7 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
         f"{counters['excluded_result']} исключено по итогу | "
         f"{counters['excluded_appeal']} ушло в апелляцию/кассацию | "
         f"{counters['excluded_writ']} с ИЛ на исполнение | "
+        f"{counters['already_spent']} уже отработавших | "
         f"{counters['no_link']} без ссылки | {counters['fetch_fail']} сбоев карточек"
     )
     return counters

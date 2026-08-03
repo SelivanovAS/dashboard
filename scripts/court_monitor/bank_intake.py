@@ -26,6 +26,7 @@ from court_monitor.config import log
 from court_monitor.lifecycle import (
     classify_writ_kind,
     fi_decision_date_from_events,
+    is_case_archived,
 )
 from court_monitor.target_search import build_json_entry
 
@@ -116,10 +117,39 @@ def card_rejects(card_info: dict, *, skip_appeal: bool = True) -> str:
     return ""
 
 
+def entry_is_spent(entry: dict) -> bool:
+    """Отработало ли дело свой цикл ЕЩЁ ДО постановки на мониторинг.
+
+    Проверка на выходе `make_bank_entry`, последним рубежом после
+    `row_passes`/`card_rejects`: те смотрят на отдельные признаки (итог, лист,
+    жалоба), а этот — на собранную запись целиком, БОЕВЫМ предикатом
+    `is_case_archived`. Запись несёт `current_stage="first_instance"` и
+    `track="plaintiff_light"`, поэтому проверка сама уходит в
+    `_is_bank_track_archived` — своей копии архивных правил здесь нет и
+    расходиться нечему.
+
+    Смысл (разбор 03.08.2026): дело, которое уже подпадает под архивное окно,
+    первый же прогон архивирует — но по дороге качает карточку и пишет о
+    полугодовой давности решении строку в дайджест. Так вышло с 2-592/2025
+    (решение 06.10.2025, в иске отказано, суд сдал дело в архив 12.11.2025):
+    заведено 31.07.2026, объявлено «текст решения опубликован» 03.08.2026,
+    тем же прогоном ушло в архив. 26 из 27 записей bank-архива прожили в треке
+    не больше 3 дней — вся эта работа и весь этот шум не нужны.
+
+    Дела с признаком жалобы предикат не трогает (в `_is_bank_track_archived`
+    это первая же ветка) — авто-подхват продолжит заводить их для переезда в
+    основной cases.json.
+    """
+    return is_case_archived(entry)
+
+
 # ── Негативный кэш отказников ────────────────────────────────────────────────
 # Причины, которые не изменятся сами: дело с таким итогом/листом трек не ждёт.
 # Сетевые сбои сюда НЕ пишем — их надо ретраить следующим прогоном.
-PERMANENT_REJECTIONS = ("excluded_result", "excluded_writ", "no_link")
+# already_spent тоже вечная: архивное окно со временем только «твердеет», и без
+# записи в кэш авто-подхват качал бы карточку такого дела каждый прогон.
+PERMANENT_REJECTIONS = ("excluded_result", "excluded_writ", "no_link",
+                        "already_spent")
 
 
 def seen_key(domain: str, case_number: str) -> str:
@@ -224,6 +254,18 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
     fi = entry["first_instance"]
     if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
         fi["resolved_emitted"] = True
+        # ⚠️ Замораживаем дату решения ПРЯМО ЗДЕСЬ. Строкой выше выставлен
+        # resolved_emitted, а эмит fi_resolved — единственное место, где
+        # decision_date замерзает; для импортированного решённого дела он уже
+        # не выстрелит никогда. Без штампа поле осталось бы пустым, и якорем
+        # для classify_writ_kind / bank_legal_force_est / архивного окна стал
+        # бы фолбэк hearing_date — та самая дрейфующая дата, от которой лист
+        # на исполнение молча становится обеспечительным (см. предупреждение
+        # у classify_writ_kind). Карточка несёт событие решения с первого
+        # парса, брать его неоткуда больше.
+        decision_date = fi_decision_date_from_events(card_info.get("_events"))
+        if decision_date:
+            fi["decision_date"] = decision_date
     # Уже выданные листы переносим в запись сразу — тот же принцип, что
     # resolved_emitted: первый прогон не должен объявить старые ИЛ «новыми»
     # (без переноса FI-цикл эмитнул бы fi_writ_issued задним числом по всем

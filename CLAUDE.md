@@ -73,9 +73,9 @@
 | `bank_writ_expected` (ждём ли ИЛ: отказ/присоединение → нет) | [scripts/court_monitor/lifecycle.py:842](scripts/court_monitor/lifecycle.py:842) |
 | `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1804](scripts/court_monitor/runs.py:1804) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
-| `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:47](scripts/court_monitor/bank_intake.py:47) |
+| `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:48](scripts/court_monitor/bank_intake.py:48) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
-| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1904](scripts/court_monitor/runs.py:1904) |
+| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1912](scripts/court_monitor/runs.py:1912) |
 | `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:171](scripts/court_monitor/lifecycle.py:171) |
 | `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:440](scripts/court_monitor/lifecycle.py:440) |
 | `resolve_bank_merged_targets` (подбор дела-приёмника по ФИО ответчика) | [scripts/court_monitor/linking.py:1251](scripts/court_monitor/linking.py:1251) |
@@ -90,14 +90,14 @@
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1330](scripts/court_monitor/lifecycle.py:1330) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1373](scripts/court_monitor/lifecycle.py:1373) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:182](scripts/court_monitor/netutil.py:182) |
 | `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:100](scripts/court_monitor/netutil.py:100) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:432](scripts/court_monitor/parsing/search.py:432) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:173](scripts/court_monitor/config.py:173) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1360](scripts/court_monitor/lifecycle.py:1360) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1403](scripts/court_monitor/lifecycle.py:1403) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:981](scripts/court_monitor/linking.py:981) |
@@ -111,7 +111,7 @@
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:532](scripts/court_monitor/runs.py:532) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2010](scripts/court_monitor/runs.py:2010) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2018](scripts/court_monitor/runs.py:2018) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -322,6 +322,22 @@
 записях (апелляция по существу + частная жалоба) не двоится. Replay-режимы
 (`--replay-last`/`--push-last-digest`) прогоняют сохранённый контекст через
 все три фильтра (`_filter_ctx_fi_changes_echo` в runs.py).
+С 03.08.2026 у стародатного фильтра третье правило: «догоняющие» события об
+акте/решении (`_FI_CATCHUP_DATED_TYPES`: `fi_resolved`, `fi_act_published`,
+`fi_act_text_published`, `fi_motivirovka_emitted`, `fi_final_event`) старше
+того же порога режутся, но ТОЛЬКО на первом парсе заведённого дела
+(`first_parse=`, флаг `first_card_parse` снимается в FI-цикле ДО бампа
+`fi["last_checked_at"]` — после него первый парс неотличим от рутинного;
+стережёт `TestFirstParseFlagWiring`). Оба условия обязательны: только по
+возрасту нельзя — суд штатно публикует текст акта через недели после решения,
+и для дела на мониторинге это новость; только по «первому парсу» нельзя —
+свежий иск с решением на той же неделе объявить надо. Вместе они описывают
+раскопки истории только что заведённой карточки (2-592/2025: решение
+06.10.2025, заведено 31.07.2026, объявлено 03.08.2026 и тем же прогоном ушло
+в архив). ⚠️ `fi_writ_issued`/`fi_writ_status_changed` в правило НЕ входят —
+ради листов трек и существует. Тяжёлый `details["act_text"]` уезжает вместе
+с подавленным событием (иначе остался бы в снимке контекста и в оплаченном
+LLM-пересказе ради строки, которую никто не увидит).
 
 **Процессуальное завершение 1-й инст. (`classify_fi_termination` /
 `fi_termination_details`, lifecycle.py; с 29.07.2026):** возврат иска, отказ
@@ -446,9 +462,26 @@ drawer; номера не уникальны между судами — пот�
 - **Правила приёма в трек** (роль, исключаемые итоги, карточные фильтры, сборка
   записи) — общий модуль [scripts/court_monitor/bank_intake.py](scripts/court_monitor/bank_intake.py)
   для всех трёх каналов ввода: `row_passes` (строка выдачи), `card_rejects`
-  (карточка; флаг `skip_appeal` — см. ниже), `make_bank_entry`, негативный кэш
-  подхвата. Ручные скрипты зовут его ре-экспортом — `runs.py` из пакета не может
-  импортировать `scripts/*.py` (зависимости односторонние).
+  (карточка; флаг `skip_appeal` — см. ниже), `make_bank_entry`, `entry_is_spent`,
+  негативный кэш подхвата. Ручные скрипты зовут его ре-экспортом — `runs.py` из
+  пакета не может импортировать `scripts/*.py` (зависимости односторонние).
+- **Гейт «дело уже отработало» (`entry_is_spent`, с 03.08.2026)** — последний
+  рубеж ВСЕХ трёх каналов, после `make_bank_entry`: собранная запись проверяется
+  БОЕВЫМ `is_case_archived` (запись несёт `current_stage`+`track`, проверка сама
+  уходит в `_is_bank_track_archived` — своей копии правил нет). Дело, уже
+  подпадающее под архивное окно, первый же прогон архивирует, но перед этим
+  качает карточку и пишет в дайджест решение полугодовой давности: 2-592/2025
+  (решение 06.10.2025, отказ, суд сдал в архив 12.11.2025) заведено 31.07.2026,
+  объявлено «текст решения опубликован» 03.08.2026 и тем же прогоном ушло в
+  архив трека; **26 из 27** записей bank-архива прожили в треке ≤3 дней. Отказ
+  вечный (`already_spent` в `PERMANENT_REJECTIONS`) — иначе авто-подхват качал
+  бы карточку каждый прогон. Дела с признаком жалобы гейт не трогает (первая
+  ветка `_is_bank_track_archived`). Там же `make_bank_entry` **замораживает
+  `decision_date`** из событий карточки: он ставит решённым делам
+  `resolved_emitted=True`, а эмит `fi_resolved` — единственное место, где дата
+  замерзает, и для импортированного дела он уже не выстрелит; без штампа якорем
+  `classify_writ_kind`/`bank_legal_force_est`/архивного окна осталась бы
+  дрейфующая `hearing_date`.
 - **Ввод пула — канал 1 (авто, с 31.07.2026)**: **блок 3b фазы 3 прогона**
   (`intake_bank_rows`, runs.py) — истцовые строки той же страницы выдачи, которую
   прогон уже качает ради ответчик-дел, заводятся в трек сами (`import.source =
@@ -799,6 +832,31 @@ URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER
 Метаданные в KV: `created_at` (один раз), `last_seen_at` (на каждом `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`, `label`. Старые подписки заполняют поля при следующем `/subscribe`.
 
 Локальная отладка админки: `wrangler dev --config cloudflare-worker/wrangler.toml --port 8787` + `cloudflare-worker/.dev.vars` (gitignored) с `OWNER_SECRET=localtest123` → `http://localhost:8787/admin?secret=localtest123`. KV локальный пустой, GitHub API отвечает 401 (нет PAT) — это ожидаемо.
+
+## Свежесть данных на фронте (SW, v127)
+
+`data/*.json` идут в service worker'е по **stale-while-revalidate** (кэш
+мгновенно, сеть в фоне) — иначе первый экран ждал бы 2 МБ `cases.json` и
+1.4 МБ `cases_bank.json`. Цена: страница показывала снимок ПРЕДЫДУЩЕГО
+прогона, а свежий появлялся лишь со следующего открытия. `fetch(url,
+{cache:'no-cache'})` в app.js от этого не спасает — это директива HTTP-кэша,
+SW её не касается. Инцидент 03.08.2026: дело 2-592/2025 висело в активных,
+хотя утренний прогон увёл его в архив трека, при этом блок дайджеста рядом
+был сегодняшним (`last_digest.json` — network-first), а шапка писала
+«Обновлено: <время рендера>» — отличить вчерашний снимок было нечем.
+
+Как сейчас: `staleWhileRevalidate` сравнивает `ETag` (фолбэк `Last-Modified`)
+кэша и сети и при расхождении шлёт окнам `postMessage({type:'data-updated'})`
+(первая загрузка — молча, там и так свежее). В app.js `onDataUpdated` →
+`dataFileKind` (main/bank) → дебаунс 400 мс → `applyPendingDataRefresh`:
+`loadFromSheet(url,{quiet:true})` и/или `reloadBankDataset()`, повторный fetch
+попадает в уже свежий кэш (мгновенно, без сети), в конце — тост. Пока открыт
+drawer/шторка фильтров/beacon (`uiBusyForRefresh`) — откладываем, набор не
+теряется, `closeDrawer`/`closeFiltersSheet`/`closeDigestBeacon` зовут проход
+снова. Шапка показывает «Данные от: …» — `updated_at` файла; `parseIsoUtc`
+дочитывает «Z» к naive-ISO (Python на UTC-раннере пишет без него, иначе ХМАО
+увидел бы прогон на 5 часов раньше). Стражи —
+[scripts/tests/test_frontend_freshness.py](scripts/tests/test_frontend_freshness.py).
 
 ## Подписки на дела (watchlist) на фронте
 

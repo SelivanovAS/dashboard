@@ -53,7 +53,10 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from court_monitor import config  # noqa: E402
-from court_monitor.bank_intake import make_bank_entry  # noqa: E402,F401 — ре-экспорт
+from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспорт правил приёма
+    entry_is_spent,
+    make_bank_entry,
+)
 from court_monitor.config import log  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
@@ -136,6 +139,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
     counters = {
         "added": 0, "already": 0, "not_plaintiff": 0, "subsidiary": 0,
         "no_link": 0, "not_found": 0, "fetch_fail": 0, "unknown_court": 0,
+        "already_spent": 0,
     }
     new_entries: list[dict] = []
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -205,6 +209,17 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
 
         entry = make_bank_entry(fi_row, card_info, operator, now_iso, court=court)
         fi = entry["first_instance"]
+        # Дело из реестра, уже подпадающее под архивное окно трека: первый же
+        # прогон качнул бы карточку, объявил старое решение в дайджесте и
+        # отправил дело в архив (см. entry_is_spent).
+        if entry_is_spent(entry):
+            log.info(
+                "  [ALREADY SPENT] цикл пройден "
+                f"(статус={fi.get('status', '?')}, "
+                f"итог={(fi.get('result') or '—')[:40]!r}) — не берём"
+            )
+            counters["already_spent"] += 1
+            continue
         new_entries.append(entry)
         dedup_exact.add((domain, case_num))
         counters["added"] += 1
@@ -226,6 +241,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
         f"Итого: +{counters['added']} новых | {counters['already']} уже в базе | "
         f"{counters['not_plaintiff']} не истец | {counters['subsidiary']} дочки | "
         f"{counters['no_link']} без ссылки | {counters['not_found']} не найдено | "
+        f"{counters['already_spent']} уже отработавших | "
         f"{counters['fetch_fail']} сбоев | {counters['unknown_court']} неизв. суд"
     )
     return counters

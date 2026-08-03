@@ -14,7 +14,7 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
-from court_monitor import config, lifecycle  # noqa: E402
+from court_monitor import bank_intake, config, lifecycle  # noqa: E402
 from court_monitor.parsing.cards import parse_case_card  # noqa: E402
 
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
@@ -429,6 +429,124 @@ class TestBankTrackArchive:
         case = _track_case(status="Решено", hearing_date=self._dmy(70))
         case.pop("track")
         assert self._archived(case) is True
+
+
+# ── Гейт приёма: дело, уже отработавшее свой цикл ────────────────────────────
+
+class TestEntryIsSpentGate:
+    """`entry_is_spent` — последний рубеж всех трёх каналов ввода (разбор
+    03.08.2026). Кейс 2-592/2025: решение 06.10.2025, в иске отказано, суд
+    сдал дело в архив 12.11.2025 — сборщик завёл его 31.07.2026, первый же
+    прогон качнул карточку, объявил «текст решения опубликован» и отправил
+    дело в архив трека. 26 из 27 записей bank-архива прожили в треке не
+    больше трёх дней."""
+
+    @staticmethod
+    def _dmy(days_ago: int) -> str:
+        return (datetime.now() - timedelta(days=days_ago)).strftime("%d.%m.%Y")
+
+    def test_denied_long_ago_rejected(self):
+        """Дело 2-592/2025: в иске отказано, месячный срок на жалобу истёк."""
+        entry = _track_case(
+            status="Решено",
+            result="ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
+            motivirovka_date=self._dmy(300), hearing_date=self._dmy(304),
+        )
+        assert bank_intake.entry_is_spent(entry) is True
+
+    def test_denied_within_appeal_window_taken(self):
+        """Свежий отказ — берём: банк ещё может подать апелляционную жалобу,
+        ради раннего сигнала о сроке такие дела в трек и вносят."""
+        entry = _track_case(
+            status="Решено",
+            result="ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
+            motivirovka_date=self._dmy(10), hearing_date=self._dmy(14),
+        )
+        assert bank_intake.entry_is_spent(entry) is False
+
+    def test_case_awaiting_writ_taken(self):
+        """Иск удовлетворён, лист ещё не выдан — ровно то, ради чего трек."""
+        entry = _track_case(
+            status="Решено", result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+            hearing_date=self._dmy(40), act_date=self._dmy(35),
+        )
+        assert bank_intake.entry_is_spent(entry) is False
+
+    def test_pending_case_taken(self):
+        assert bank_intake.entry_is_spent(
+            _track_case(status="В производстве")) is False
+
+    def test_appeal_flag_never_spent(self):
+        """Признак жалобы гасит архивные окна первой же веткой — авто-подхват
+        (skip_appeal=False) обязан такие дела заводить: тем же прогоном они
+        переезжают в основной cases.json на мониторинг апелляции."""
+        entry = _track_case(
+            status="Решено",
+            result="ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
+            motivirovka_date=self._dmy(300), appeal_filed=True,
+        )
+        assert bank_intake.entry_is_spent(entry) is False
+
+    def test_stale_writ_issued_rejected(self):
+        """Лист на исполнение выдан давно → окно 14 дней истекло."""
+        entry = _track_case(
+            status="Решено", result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+            hearing_date=self._dmy(120),
+            writs=[{"issue_date": self._dmy(30), "status": "Выдан"}],
+        )
+        assert bank_intake.entry_is_spent(entry) is True
+
+    def test_non_track_entry_untouched(self):
+        """Предикат смотрит на трек-запись; у обычного дела своё 60-дневное
+        окно — гейт зовут только каналы ввода трека, но перепутать нельзя."""
+        entry = _track_case(status="В производстве", hearing_date=self._dmy(400))
+        entry.pop("track")
+        assert bank_intake.entry_is_spent(entry) is False
+
+
+class TestMakeBankEntryFreezesDecisionDate:
+    """make_bank_entry ставит resolved_emitted=True решённым делам, а эмит
+    fi_resolved — единственное место, где замерзает decision_date: для
+    импортированного дела он уже не выстрелит никогда. Без штампа якорем
+    classify_writ_kind / bank_legal_force_est осталась бы дрейфующая
+    hearing_date."""
+
+    ROW = {
+        "case_number": "2-1/2026", "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru", "judge": "Иванов И.И.",
+        "filing_date": "01.02.2026", "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "link": "1|a-1", "plaintiff": "ПАО Сбербанк", "defendant": "Петров П.П.",
+        "category": "кредит", "bank_role": "Истец",
+    }
+
+    def _entry(self, card):
+        return bank_intake.make_bank_entry(
+            dict(self.ROW), card, "тест", "2026-08-03T09:00:00")
+
+    def test_decision_date_taken_from_events(self):
+        entry = self._entry({
+            "Статус": "Решено", "Дата заседания": "20.06.2026",
+            "_events": [{"date": "10.03.2026",
+                         "text": "Вынесено решение по делу. Иск удовлетворён"},
+                        {"date": "20.06.2026",
+                         "text": "Судебное заседание. Заявление о расходах"}],
+        })
+        fi = entry["first_instance"]
+        assert fi["resolved_emitted"] is True
+        # Дата решения, а не пост-решенческого заседания.
+        assert fi["decision_date"] == "10.03.2026"
+
+    def test_pending_case_gets_no_decision_date(self):
+        entry = self._entry({"Статус": "В производстве",
+                             "Дата заседания": "20.09.2026", "_events": []})
+        assert "decision_date" not in entry["first_instance"]
+
+    def test_decided_card_without_decision_event(self):
+        """Событие решения в истории не найдено — поле не выдумываем."""
+        entry = self._entry({"Статус": "Решено",
+                             "Дата заседания": "20.06.2026", "_events": []})
+        assert entry["first_instance"].get("decision_date", "") == ""
 
 
 # ── classify_writ_kind: исполнение решения vs обеспечительные меры ───────────
