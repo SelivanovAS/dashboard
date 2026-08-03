@@ -651,12 +651,20 @@ def bank_case_left_track(case: dict) -> bool:
     Признаки: подана апел. жалоба (видна в карточке 1-й инст. — «флаг без
     даты» тоже считается, как в is_case_archived) ИЛИ стадия уже не
     first_instance (link_cases/migrate_stages увели дело выше).
+
+    ⚠️ Гейт особого порядка закрывает ТОЛЬКО ветку признаков жалобы. Ранний
+    выход на всю функцию заморозил бы в лёгком треке дело, которое link_cases
+    законно перевёл в стадию `appeal`: оно перестало бы и архивироваться, и
+    парситься, а апелляционный блок писался бы в cases_bank.json — файл,
+    который основной фронт не грузит. Дело исчезло бы бесшумно.
     """
     if not is_bank_plaintiff_track(case):
         return False
     if (case.get("current_stage") or "first_instance") != "first_instance":
         return True
     fi = case.get("first_instance") or {}
+    if default_cancellation_blocks_appeal(fi):
+        return False
     return bool(
         fi.get("appeal_filed") or fi.get("appeal_filed_date")
         or fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date")
@@ -736,6 +744,14 @@ def bank_default_judgment_info(fi: dict) -> dict:
             # (ст. 241 ГПК) и нового рассмотрения обычное решение снимает
             # заочность — событие первого круга остаётся в истории навсегда.
             info["default_judgment"] = bool(m.group(1))
+            # Границей круга обнуляем и производные признаки: после «отмена →
+            # снова заочное» вручение копии первого круга иначе осталось бы
+            # последним известным, и bank_legal_force_est дал бы вступление в
+            # силу раньше реального (завышенный «⏳ ждёт ИЛ» и преждевременный
+            # архив живого дела).
+            info["motivirovka_date"] = ""
+            info["default_copy_served_date"] = ""
+            info["default_copy_returned"] = False
         if _MOTIVATED_DECISION_RX.search(text) and ev.get("date"):
             info["motivirovka_date"] = ev["date"]  # последнее событие побеждает
         if _DEFAULT_COPY_RX.search(text):
@@ -744,6 +760,165 @@ def bank_default_judgment_info(fi: dict) -> dict:
             if _COPY_RETURNED_RX.search(text):
                 info["default_copy_returned"] = True
     return info
+
+
+# ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ──────────────
+# Ответчик подаёт заявление об отмене в ТОТ ЖЕ суд 1-й инстанции (7 дн со дня
+# вручения копии, ст. 237 ч. 1); суд рассматривает его в заседании за 10 дн
+# (ст. 240) и выносит определение об ОТКАЗЕ либо об ОТМЕНЕ решения с
+# возобновлением рассмотрения по существу (ст. 241, 243). Это НЕ апелляция:
+# апелляционный ход у ответчика открывается только со дня определения об
+# отказе (ст. 237 ч. 2) — до этого зарегистрированная судом апел. жалоба не
+# должна уводить иск банка из лёгкого трека (кейс 2-616/2026: жалоба 23.07,
+# заявление об отмене 28.07, заседание по нему 10.08).
+#
+# ⚠️ Матчим по ev["text"], а не по колонке ev["name"]: в основной картотеке
+# 43% событий 1-й инстанции идут без разобранных колонок (legacy-склейки), а
+# дело 2-616/2026 живёт именно там. result_event используем как уточнение
+# исхода, когда колонка есть.
+_DEFAULT_CANCEL_FILED_RX = re.compile(
+    r"регистрац\w*\s+заявлени\w*\s+об\s+отмене\s+заочн")
+_DEFAULT_CANCEL_HEARING_RX = re.compile(
+    r"рассмотрени\w*\s+заявлени\w*\s+об\s+отмене\s+заочн")
+# Исходы — БЕЛЫЙ СПИСОК. Правило «любой непустой результат = отказ» негодно:
+# в колонке «Результат события» того же заседания реально встречаются
+# «Заседание отложено» (124 раза по корпусу), «Объявлен перерыв» (25),
+# «Производство приостановлено» (20) — заявление тогда ещё не рассмотрено.
+_DEFAULT_CANCEL_GRANTED_RX = re.compile(r"заочн\w*\s+решени\w*\s+отменен")
+_DEFAULT_CANCEL_REFUSED_RX = re.compile(
+    r"отказан\w*\s+в\s+удовлетворении\s+заявлени"
+    r"|в\s+удовлетворении\s+заявлени\w*[^.]{0,60}отказан"
+    r"|отказан\w*\s+в\s+отмене\s+заочн")
+
+
+def default_cancellation_state(fi: dict, today: date | None = None) -> dict:
+    """Состояние особого порядка отмены заочного решения по событиям карточки.
+
+    Возвращает {"filed_date", "hearing_date", "outcome", "outcome_date"} с
+    датами «ДД.ММ.ГГГГ»|"" и outcome:
+      ""          — порядок не запускался (заявления в карточке нет);
+      "pending"   — заявление подано, определения ещё нет;
+      "cancelled" — заочное решение отменено (ст. 241), дело рассматривается
+                    заново;
+      "refused"   — в отмене отказано; с этого дня течёт месяц на апелляцию
+                    (ст. 237 ч. 2);
+      "unknown"   — заявление подано, но исход не читается: суд не заполнил
+                    «Результат» дольше BANK_DEFAULT_CANCEL_PENDING_MAX_DAYS
+                    либо уже вынес новое решение. Последствий не имеет —
+                    окна и ритм опроса возвращаются к обычным (без потолка
+                    дело висело бы в активных вечно и парсилось бы каждым
+                    прогоном: ветка pending снимает и архивацию, и недельный
+                    ритм).
+
+    Новое заявление обнуляет исход прошлого круга — заочное решение может
+    выноситься повторно (ст. 243 запрещает повторное заявление только по
+    решению, вынесенному ПОСЛЕ отмены).
+    """
+    today = today or date.today()
+    filed_date = hearing_date = outcome = outcome_date = ""
+    last_decision: date | None = None
+    for ev in fi.get("events") or []:
+        text = (ev.get("text") or "").lower().replace("ё", "е")
+        if not text:
+            continue
+        ev_dt = parse_date(ev.get("date") or "")
+        if _ANY_DECISION_RX.search(text):
+            if ev_dt:
+                last_decision = ev_dt.date()
+            continue
+        if _DEFAULT_CANCEL_FILED_RX.search(text):
+            filed_date = ev.get("date") or filed_date
+            hearing_date = outcome = outcome_date = ""
+            continue
+        if _DEFAULT_CANCEL_HEARING_RX.search(text):
+            hearing_date = ev.get("date") or hearing_date
+            # Колонка «Результат события» точнее склейки; её нет у legacy-
+            # записей — тогда ищем исход в самом тексте события.
+            result_col = (ev.get("result_event") or "").strip()
+            src = (result_col or text).lower().replace("ё", "е")
+            if _DEFAULT_CANCEL_GRANTED_RX.search(src):
+                outcome, outcome_date = "cancelled", ev.get("date") or ""
+            elif _DEFAULT_CANCEL_REFUSED_RX.search(src):
+                outcome, outcome_date = "refused", ev.get("date") or ""
+    if not filed_date:
+        return {"filed_date": "", "hearing_date": "",
+                "outcome": "", "outcome_date": ""}
+    if not outcome:
+        filed_d = parse_date(filed_date)
+        anchor_dt = parse_date(hearing_date) or filed_d
+        if (last_decision and filed_d
+                and last_decision > filed_d.date()):
+            # После подачи заявления суд уже вынес новое решение — порядок
+            # отработал, а результат в карточке не отражён.
+            outcome = "unknown"
+        elif (anchor_dt and (today - anchor_dt.date()).days
+                > config.BANK_DEFAULT_CANCEL_PENDING_MAX_DAYS):
+            outcome = "unknown"
+        else:
+            outcome = "pending"
+    return {"filed_date": filed_date, "hearing_date": hearing_date,
+            "outcome": outcome, "outcome_date": outcome_date}
+
+
+def default_cancellation_pending(fi: dict, today: date | None = None) -> bool:
+    """Заявление об отмене подано, определения суда ещё нет."""
+    return default_cancellation_state(fi or {}, today)["outcome"] == "pending"
+
+
+def default_judgment_vacated(fi: dict, today: date | None = None) -> bool:
+    """Заочное решение отменено, а запись всё ещё держит его как действующее.
+
+    ⚠️ Сравниваем дату отмены с ЗАМОРОЖЕННОЙ `decision_date`, а не «нет ли
+    более позднего решения»: при недельном ритме опроса (BANK_WRIT_CHECK_DAYS)
+    отмена и новое решение по ст. 243 попадают в одно окно парса, и проверка
+    «нет более позднего решения» не сработала бы никогда — дело осталось бы с
+    датой отменённого решения и resolved_emitted=True, а новое решение не
+    попало бы в дайджест вовсе. С этим условием предикат самоисцеляется: как
+    только эмит fi_resolved переставит decision_date на новое решение, он
+    гаснет сам.
+    """
+    fi = fi or {}
+    st = default_cancellation_state(fi, today)
+    if st["outcome"] != "cancelled":
+        return False
+    cancelled_dt = parse_date(st["outcome_date"])
+    if not cancelled_dt:
+        return False
+    # decision_date_vacated — та же дата после отката (см. classify_writ_kind):
+    # без неё предикат, однажды сработав, считал бы «решения нет» вечно даже
+    # после нового решения по существу.
+    frozen_dt = (parse_date(fi.get("decision_date") or "")
+                 or parse_date(fi.get("decision_date_vacated") or ""))
+    return not frozen_dt or cancelled_dt > frozen_dt
+
+
+def default_cancellation_blocks_appeal(fi: dict,
+                                       today: date | None = None) -> bool:
+    """Апелляционного хода у ответчика пока нет — признак жалобы не считается.
+
+    Гейт переезда иска банка в основную картотеку и смены стадии. Закрывает
+    ровно два окна: заявление на рассмотрении и решение отменено (жалоба на
+    отменённое решение беспредметна). Жалоба, поданная уже ПОСЛЕ
+    возобновления, дело выпускает как обычно.
+
+    `sent_to_appeal` не глушится никогда: дело физически ушло в облсуд —
+    жёсткое доказательство настоящей апелляции.
+    """
+    fi = fi or {}
+    if fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date"):
+        return False
+    st = default_cancellation_state(fi, today)
+    if st["outcome"] == "pending":
+        return True
+    if st["outcome"] != "cancelled":
+        return False
+    if not default_judgment_vacated(fi, today):
+        return False
+    filed_dt = parse_date(fi.get("appeal_filed_date") or "")
+    cancelled_dt = parse_date(st["outcome_date"])
+    if filed_dt and cancelled_dt and filed_dt > cancelled_dt:
+        return False
+    return True
 
 
 def bank_legal_force_est(fi: dict) -> date | None:
@@ -770,6 +945,20 @@ def bank_legal_force_est(fi: dict) -> date | None:
     ожидания ИЛ считается от других якорей).
     """
     from court_monitor.textutil import add_working_days, month_term_last_day
+
+    # Особый порядок отмены (ст. 237-243 ГПК) останавливает счёт: пока
+    # заявление на рассмотрении — срок не течёт, а после отмены решения нет
+    # вовсе. Пустой результат заставляет split_bank_track снять ключ
+    # legal_force_est, и фронтовый бейдж «⏳ ждёт ИЛ» гаснет сам.
+    _cancel = default_cancellation_state(fi)
+    if _cancel["outcome"] == "pending" or default_judgment_vacated(fi):
+        return None
+    if _cancel["outcome"] == "refused":
+        # В отмене отказано — с этого дня течёт месяц на апелляцию
+        # (ст. 237 ч. 2), а не от вручения копии.
+        refused_dt = parse_date(_cancel["outcome_date"])
+        if refused_dt:
+            return month_term_last_day(refused_dt.date()) + timedelta(days=1)
 
     info = bank_default_judgment_info(fi)
     # decision_date — замороженная дата решения; hearing_date остаётся
@@ -832,7 +1021,12 @@ def classify_writ_kind(writ: dict, fi: dict) -> str:
     issue = parse_date(writ.get("issue_date") or "")
     if not issue:
         return "unknown"
+    # decision_date_vacated — та же замороженная дата, убранная откатом
+    # отменённого заочного решения (ст. 241 ГПК). Читаем её вторым якорем,
+    # чтобы отмена не перевернула тип уже выданного листа: без неё фолбэк
+    # уходит на дрейфующую hearing_date.
     anchor = (parse_date(fi.get("decision_date") or "")
+              or parse_date(fi.get("decision_date_vacated") or "")
               or parse_date(fi.get("hearing_date") or ""))
     if not anchor:
         return "interim"
@@ -888,6 +1082,12 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     if (fi.get("appeal_filed") or fi.get("appeal_filed_date")
             or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
         return False
+    # Заявление об отмене заочного решения на рассмотрении — держим дело в
+    # активных до определения суда (решение юриста 03.08.2026): исход может
+    # вернуть иск на новое рассмотрение по существу. Потолок ожидания —
+    # BANK_DEFAULT_CANCEL_PENDING_MAX_DAYS внутри самого предиката.
+    if default_cancellation_pending(fi):
+        return False
     status = (fi.get("status") or "").strip()
     if fi.get("merged") or fi_is_merged(fi):
         anchor = (parse_date(fi.get("merged_at") or "")
@@ -924,7 +1124,17 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
         if d
     ]
     if issue_dates:
-        return (now - max(issue_dates)).days > config.BANK_WRIT_ARCHIVE_DAYS
+        # Заочному решению — 3 месяца вместо 14 дней (решение юриста
+        # 03.08.2026): ответчик подаёт заявление об отмене в тот же суд
+        # (ст. 237 ГПК), и суды реально отменяют такие решения спустя 1-2
+        # месяца. ⚠️ Заочность ПЕРЕСЧИТЫВАЕМ по событиям, а не читаем штамп
+        # fi["default_judgment"]: у архивных записей его нет вовсе — именно
+        # поэтому три заочных дела Сургутского гор. выглядели «обычными» и
+        # ушли в архив по 14-дневному окну 27.07.2026.
+        window = (config.BANK_DEFAULT_WRIT_ARCHIVE_DAYS
+                  if bank_default_judgment_info(fi)["default_judgment"]
+                  else config.BANK_WRIT_ARCHIVE_DAYS)
+        return (now - max(issue_dates)).days > window
     est = bank_legal_force_est(fi)
     if est:
         return (now.date() - est).days > config.BANK_WRIT_WAIT_MAX_DAYS
@@ -1110,6 +1320,14 @@ _FI_CATCHUP_DATED_TYPES = {
     "fi_act_text_published": ("act_date", "decision_date"),
     "fi_motivirovka_emitted": ("motivirovka_date", "decision_date"),
     "fi_final_event": ("event_date",),
+    # Особый порядок отмены заочного решения: на первом парсе только что
+    # заведённой карточки давно завершённый порядок — не новость (импортёр
+    # Урала заводит карточки с многолетней историей). Тот же класс, что
+    # кейс 2-592/2025.
+    "fi_default_cancellation_filed": ("cancel_filed_date",),
+    "fi_default_cancellation_hearing": ("cancel_hearing_date",),
+    "fi_default_judgment_vacated": ("cancel_outcome_date",),
+    "fi_default_cancellation_refused": ("cancel_outcome_date",),
 }
 
 
@@ -1232,6 +1450,15 @@ def advance_case_stage(case: dict) -> str | None:
 
     if stage == "first_instance":
         if fi.get("appeal_filed_date"):
+            # Иск банка в особом порядке отмены заочного решения стадию не
+            # меняет: апелляционного хода у ответчика ещё нет (ст. 237 ч. 2).
+            # ⚠️ Сужение до трека обязательно — код общий: банк-ОТВЕТЧИК с
+            # заочным решением против него иначе не дошёл бы до
+            # awaiting_appeal, а relink_awaiting_appeal требует именно эту
+            # стадию (на Урале это единственный канал связки с апелляцией).
+            if (is_bank_plaintiff_track(case)
+                    and default_cancellation_blocks_appeal(fi)):
+                return None
             case["current_stage"] = "awaiting_appeal"
             return "first_instance"
         return None
@@ -1400,6 +1627,67 @@ def migrate_appeal_court_fields(cases: list[dict], default_court) -> int:
     return migrated
 
 
+def repair_vacated_default_judgments(cases: list[dict]) -> int:
+    """Чинит дела, застигнутые особым порядком отмены заочного решения.
+
+    Два ремонта, оба идемпотентные и по правилам (не по списку номеров):
+
+    1. Заочное решение ОТМЕНЕНО (ст. 241 ГПК), а запись держит его как
+       действующее: статус «Решено», resolved_emitted, замороженная
+       decision_date, расчётное вступление в силу. Тот же откат, что делает
+       FI-цикл при живом парсе, — нужен потому, что решённое дело трека
+       опрашивается раз в неделю, и до ближайшего парса дашборд показывал бы
+       «⏳ ждёт ИЛ» по несуществующему решению (кейс 2-243/2026, Югорский).
+
+    2. Иск банка, уехавший в основную картотеку по жалобе, поданной ДО
+       определения по заявлению об отмене: апелляционного хода у ответчика
+       ещё нет (ст. 237 ч. 2), дело должно оставаться в лёгком треке
+       (кейс 2-616/2026, Пыть-Яхский: жалоба 23.07, заявление об отмене 28.07,
+       заседание по нему 10.08). Возвращаем маркер трека и стадию — дальше
+       split_bank_track уложит дело в cases_bank.json сам.
+
+    Возвращает число изменённых дел.
+    """
+    fixed = 0
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        if not fi:
+            continue
+        touched = False
+        if default_judgment_vacated(fi):
+            if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
+                fi["status"] = "В производстве"
+                touched = True
+            if fi.get("result"):
+                fi["result"] = ""
+                touched = True
+            if fi.get("decision_date"):
+                fi["decision_date_vacated"] = fi.pop("decision_date")
+                touched = True
+            for flag in ("resolved_emitted", "motivirovka_emitted"):
+                if fi.get(flag):
+                    fi[flag] = False
+                    touched = True
+        # Возврат в лёгкий трек. Признак «дело оттуда уехало» — track_origin,
+        # который ставит split_bank_track; апелляционной карточки при этом
+        # быть не должно (её появление — законный выход из трека).
+        if (case.get("track_origin") == "plaintiff_light"
+                and not case.get("track")
+                and not case.get("appeal")
+                and case.get("current_stage") in ("first_instance",
+                                                  "awaiting_appeal")
+                and default_cancellation_blocks_appeal(fi)):
+            case["track"] = "plaintiff_light"
+            case.pop("track_origin", None)
+            case["current_stage"] = "first_instance"
+            touched = True
+        if touched:
+            fixed += 1
+    if fixed:
+        log.info(f"Ремонт особого порядка отмены заочного решения: {fixed}")
+    return fixed
+
+
 def migrate_stages(cases: list[dict]) -> int:
     """Идемпотентная миграция существующих дел под новую state-machine:
     - first_instance + appeal_filed_date → awaiting_appeal
@@ -1407,6 +1695,11 @@ def migrate_stages(cases: list[dict]) -> int:
       → cassation_watch
     - cassation_watch с зарегистрированной касс. жалобой → cassation_pending
     Возвращает число мигрированных дел."""
+    # ⚠️ Ремонт особого порядка отмены заочного решения идёт ПЕРВЫМ: бэкфилл
+    # decision_date ниже вернул бы снятую дату из hearing_date, а цикл
+    # advance_case_stage — стадию awaiting_appeal. Правила, а не список
+    # номеров: миграция идемпотентна и отработает на территории Урала.
+    repair_vacated_default_judgments(cases)
     # Идемпотентно заполняем initial_bank_role у дел, где его ещё нет.
     # Используется в дайджесте, чтобы показать «было: <роль>» при изменении
     # bank_role (напр. банк исключён из ответчиков → стал «Третье лицо»).
@@ -2124,6 +2417,20 @@ def should_skip_case(
         if days_since < config.BANK_WRIT_CHECK_DAYS:
             return True, f"merged_weekly({days_since}d/{config.BANK_WRIT_CHECK_DAYS}d)"
         return False, ""
+    # Особый порядок отмены заочного решения: суд обязан рассмотреть заявление
+    # за 10 дней (ст. 240 ГПК), и недельный ритм ИЛ тут не годится. Но и
+    # парсить каждым прогоном нельзя: событие «Рассмотрение заявления об отмене
+    # заочного решения» не матчится ни _SESSION_START_RX, ни _HEARING_MARKERS_RX,
+    # поэтому get_next_planned_date по нему вернёт None и общие ветки ниже
+    # дело не притормозят (78 заочных дел в ХМАО, на Урале сотни). Скипаем
+    # ровно до дня заседания по заявлению.
+    if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
+            and default_cancellation_pending(block, today)):
+        _cancel_hd = parse_date(
+            default_cancellation_state(block, today)["hearing_date"])
+        if _cancel_hd and _cancel_hd.date() > today:
+            return True, f"default_cancel_hearing({_cancel_hd.date().isoformat()})"
+        return False, ""
     if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
             and (block.get("status") or "").strip() in ("Решено", "Возвращено")):
         days_since = (today - last_checked).days
@@ -2208,6 +2515,10 @@ def skip_reason_ru(reason: str) -> str:
     if m:
         return (f"дело присоединено к другому — опрос раз в "
                 f"{m.group(2)} дн. (прошло {m.group(1)})")
+    m = re.match(r"default_cancel_hearing\((.+)\)$", reason)
+    if m:
+        return (f"заявление об отмене заочного решения — заседание "
+                f"{m.group(1)} ещё впереди")
     if reason == "material_pending_promotion":
         return "материал под М-номером, ждём промоушен"
     return reason

@@ -70,6 +70,8 @@ from court_monitor.lifecycle import (
     extract_fi_verdict_from_events, extract_result_from_event,
     classify_hearing_type, bank_side_outcome, bank_side_outcome_fi,
     fi_resolution_contradicted_by_future_hearing,
+    default_cancellation_state, default_cancellation_pending,
+    default_judgment_vacated, default_cancellation_blocks_appeal,
     _is_event_text_in_result_field,
     _events_newly_match, _is_latest_session_event,
     _has_held_prior_hearing, _has_held_prior_session,
@@ -2001,6 +2003,16 @@ def split_bank_track(
                 _fi[_k] = _v
             else:
                 _fi.pop(_k, None)
+        # Особый порядок отмены заочного решения — готовым блоком для фронта
+        # (своей копии правил в JS нет, как и у writ_expected). Блок
+        # самоисцеляющийся: порядок закончился новым решением → ключ снимаем,
+        # иначе бейдж «заявление об отмене» залип бы навсегда, а cases_bank.json
+        # фронт грузит целиком.
+        _cancel = lifecycle.default_cancellation_state(_fi)
+        if _cancel["outcome"] in ("pending", "cancelled", "refused"):
+            _fi["default_cancellation"] = _cancel
+        else:
+            _fi.pop("default_cancellation", None)
         if lifecycle.bank_case_left_track(c):
             c.pop("track", None)
             c["track_origin"] = "plaintiff_light"
@@ -2093,6 +2105,28 @@ def main_json():
         bank_archived_cases = load_bank_json(
             config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH
         ).get("cases", [])
+        # Возврат из архива трека по изменившимся окнам. Заочные дела уезжали
+        # туда через 14 дней от выдачи ИЛ, а с 03.08.2026 им положено 3 месяца
+        # (BANK_DEFAULT_WRIT_ARCHIVE_DAYS) — так 27.07.2026 в архив ушли три
+        # дела Сургутского гор. суда. Штатного канала реактивации у bank-архива
+        # нет: reactivate_archived_first_instance работает по основному архиву,
+        # а bank-архив подмешивается только в дедуп-индекс. Правило общее, не
+        # список номеров, — то же вернёт дела на территории Урала при синке.
+        _bank_back = [bc for bc in bank_archived_cases if not is_case_archived(bc)]
+        if _bank_back:
+            _back_ids = {id(bc) for bc in _bank_back}
+            bank_archived_cases = [
+                bc for bc in bank_archived_cases if id(bc) not in _back_ids
+            ]
+            for bc in _bank_back:
+                bc.pop("archived_at", None)
+                bc.setdefault("track", "plaintiff_light")
+            cases = cases + _bank_back
+            bank_track_count += len(_bank_back)
+            log.info(
+                f"Возвращено из архива трека по новым окнам: {len(_bank_back)} "
+                + ", ".join(bc.get("id", "?") for bc in _bank_back)
+            )
     # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
     # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
     # задвоилось как «новое». В archived_cases их не добавляем: иначе при
@@ -2744,7 +2778,9 @@ def main_json():
         # (заседание/беседа/подг./предв./«без движения») до даты+1.
         skip, reason = should_skip_case(case_j, today)
         if skip:
-            if reason.startswith("future_hearing"):
+            if reason.startswith(("future_hearing", "default_cancel_hearing")):
+                # Заседание по заявлению об отмене заочного решения — такая же
+                # известная будущая активность, а не «без движения».
                 fi_skipped_future += 1
             elif reason.startswith(("writ_weekly", "merged_weekly")):
                 # Недельный ритм исков банка — не «без движения»
@@ -2933,12 +2969,31 @@ def main_json():
         if spurious_resolution:
             new_status = "В производстве"
             new_result = ""
+        # Второе законное понижение статуса: заочное решение ОТМЕНЕНО судом
+        # 1-й инстанции (ст. 241 ГПК) — решения больше нет, дело рассматривается
+        # заново. Своя ветка нужна потому, что калитка выше
+        # (fi_resolution_contradicted_by_future_hearing) завершается
+        # `return not has_decision`: у заочного дела событие «Вынесено заочное
+        # решение» есть всегда, значит она False, и Гард 2 вернул бы «Решено»
+        # тем же прогоном. Поле «Результат» суд при отмене НЕ чистит (кейс
+        # 2-243/2026: там до сих пор «Иск УДОВЛЕТВОРЕН»), поэтому карточка
+        # сама статус не понизит — решаем по событиям.
+        vacated_probe = {
+            "events": card_info.get("_events") or fi.get("events") or [],
+            "decision_date": fi.get("decision_date", ""),
+            "decision_date_vacated": fi.get("decision_date_vacated", ""),
+        }
+        vacated_default = default_judgment_vacated(vacated_probe, today)
+        if vacated_default:
+            new_status = "В производстве"
+            new_result = ""
         # Гард 2: регрессия статуса Решено/Возвращено → В производстве обычно
         # означает, что карточка не вернула статус корректно (мусор в поле
         # result или отсутствие нужного last_event). Не понижаем статус.
         if (old_status in ("Решено", "Возвращено")
                 and new_status == "В производстве"
-                and not spurious_resolution):
+                and not spurious_resolution
+                and not vacated_default):
             new_status = old_status
 
         # ── Обновляем поля первой инстанции ──
@@ -2953,6 +3008,28 @@ def main_json():
         if new_result and new_result != old_result:
             fi["result"] = new_result
             changed = True
+        # Откат отменённого заочного решения — ОДНОЙ транзакцией со статусом.
+        # ⚠️ Сбрасывать resolved_emitted отдельно от понижения статуса нельзя:
+        # ремонты зовутся ДО FI-цикла, триггер (событие карточки) никуда не
+        # девается, и при залипшем «Решено» открытый гейт эмитил бы
+        # fi_resolved «Иск удовлетворён» в дайджест КАЖДЫМ прогоном.
+        if vacated_default:
+            if fi.get("result"):
+                # Иначе фронт напишет «Статус: Решено» по c.result независимо
+                # от самого статуса (app.js, fiResolved).
+                fi["result"] = ""
+                changed = True
+            if fi.get("decision_date"):
+                # НЕ удаляем дату, а переносим: classify_writ_kind фолбэчится
+                # на hearing_date, а она перезаписывается каждым прогоном —
+                # уже выданный лист на исполнение молча стал бы
+                # обеспечительным вместе с бейджем, KPI «С ИЛ» и окном архива.
+                fi["decision_date_vacated"] = fi.pop("decision_date")
+                changed = True
+            for _vac_flag in ("resolved_emitted", "motivirovka_emitted"):
+                if fi.get(_vac_flag):
+                    fi[_vac_flag] = False
+                    changed = True
         if new_hearing_date:
             fi["hearing_date"] = new_hearing_date
         elif (
@@ -3155,6 +3232,42 @@ def main_json():
             # fi_resolved: hearing_date перечитывается каждым прогоном.
             fi.setdefault("decision_date", fi.get("hearing_date", ""))
             changed = True
+
+        # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ──────
+        # Блок стоит рядом с процессуальным завершением и ДО hearing-блока по
+        # той же причине: у решённого дела case_decided глушит весь
+        # hearing-блок, а эти события юристу нужны всегда — заявление об
+        # отмене ставит под удар уже полученное взыскание.
+        # ⚠️ Идемпотентность — ЗНАЧЕНИЯМИ в флагах, а не булевыми: состояние
+        # пересчитывается из events каждым прогоном (иначе «подано заявление»
+        # уезжало бы в дайджест ежедневно), а дифф _events_newly_match не
+        # годится — его ключ (date, text), и text несёт дату размещения, так
+        # что перепубликация карточки судом дала бы «новое» событие. Хранение
+        # самой даты вместо True заодно даёт повторный эмит на ВТОРОМ круге
+        # заочного производства.
+        _cancel_st = default_cancellation_state(fi, today)
+        if _cancel_st["filed_date"]:
+            if fi.get("default_cancel_filed_emitted") != _cancel_st["filed_date"]:
+                change["type"].append("fi_default_cancellation_filed")
+                change["details"]["cancel_filed_date"] = _cancel_st["filed_date"]
+                fi["default_cancel_filed_emitted"] = _cancel_st["filed_date"]
+                changed = True
+            hd = _cancel_st["hearing_date"]
+            if hd and fi.get("default_cancel_hearing_emitted") != hd:
+                change["type"].append("fi_default_cancellation_hearing")
+                change["details"]["cancel_hearing_date"] = hd
+                fi["default_cancel_hearing_emitted"] = hd
+                changed = True
+            outcome = _cancel_st["outcome"]
+            if (outcome in ("cancelled", "refused")
+                    and fi.get("default_cancel_outcome_emitted") != outcome):
+                change["type"].append(
+                    "fi_default_judgment_vacated" if outcome == "cancelled"
+                    else "fi_default_cancellation_refused"
+                )
+                change["details"]["cancel_outcome_date"] = _cancel_st["outcome_date"]
+                fi["default_cancel_outcome_emitted"] = outcome
+                changed = True
 
         # Новое/перенесённое заседание
         if (new_hearing_date and new_hearing_date != old_hearing_date

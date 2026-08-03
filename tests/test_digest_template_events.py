@@ -93,6 +93,12 @@ def render(**overrides) -> str:
 
 # Эталонные details по типам — ровно те ключи, что кладёт update_active_cases.
 FI_TYPE_DETAILS: dict[str, dict] = {
+    # Особый порядок отмены заочного решения (ст. 237-243 ГПК), runs.py —
+    # блок рядом с процессуальным завершением.
+    "fi_default_cancellation_filed": {"cancel_filed_date": "28.07.2026"},
+    "fi_default_cancellation_hearing": {"cancel_hearing_date": "10.08.2026"},
+    "fi_default_judgment_vacated": {"cancel_outcome_date": "22.07.2026"},
+    "fi_default_cancellation_refused": {"cancel_outcome_date": "22.07.2026"},
     # runs.py:1543-1550
     "fi_hearing_new": {
         "hearing_date": "15.08.2026", "hearing_time": "10:30",
@@ -1652,6 +1658,8 @@ FI_ALL_TYPES = [
     "fi_appeal_filed", "fi_cassation_filed", "fi_sent_to_cassation",
     "fi_hearing_restart", "fi_bank_role_changed", "fi_accepted_no_hearing",
     "fi_resolved", "fi_act_text_published",
+    "fi_default_cancellation_filed", "fi_default_cancellation_hearing",
+    "fi_default_judgment_vacated", "fi_default_cancellation_refused",
 ]
 
 CASS_EVENT_TYPES = [
@@ -1754,8 +1762,9 @@ class AllEventTypesTest(unittest.TestCase):
         )
 
     def test_section_counters_match(self):
-        # 15 fi-типов → 3.2; fi_resolved → 3.5; fi_act_text → 3.6.
-        self.assertIn("📅 <b>Изменения (15):</b>", self.html)
+        # 19 fi-типов → 3.2 (15 + четыре особого порядка отмены заочного
+        # решения); fi_resolved → 3.5; fi_act_text → 3.6.
+        self.assertIn("📅 <b>Изменения (19):</b>", self.html)
         self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", self.html)
         self.assertIn("📄 <b>Опубликованные тексты решений (1):</b>", self.html)
         self.assertIn("📥 <b>Новые иски (1):</b>", self.html)
