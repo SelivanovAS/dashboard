@@ -774,6 +774,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 elif t == "fi_status_change":
                     line += (f"\n  Статус: {d.get('old_status', '')} "
                              f"→ {d.get('new_status', '')}")
+                elif t == "fi_objections_deadline_set":
+                    # Срок для возражений на апел. жалобу (ст. 325 ГПК) —
+                    # дедлайн работы юриста, подаётся в суд 1-й инстанции.
+                    line += ("\n  Срок для возражений на жалобу: до "
+                             f"{d.get('objections_due', '')}")
                 elif t == "fi_default_cancellation_filed":
                     # Особый порядок отмены заочного решения (ст. 237 ГПК):
                     # заявление подаётся в тот же суд 1-й инстанции, это не

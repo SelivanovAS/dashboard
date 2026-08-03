@@ -24,6 +24,7 @@ from datetime import date, timedelta
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.lifecycle import (
+    apply_fi_appellant,
     classify_writ_kind,
     fi_decision_date_from_events,
     is_case_archived,
@@ -273,11 +274,13 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
     # ПОСЛЕ постановки на мониторинг.
     if card_info.get("_writs"):
         fi["writs"] = card_info["_writs"]
-    _stamp_appeal_flags(fi, card_info)
+    _stamp_appeal_flags(fi, card_info, entry)
     return entry
 
 
-def _stamp_appeal_flags(fi: dict, card_info: dict) -> None:
+def _stamp_appeal_flags(
+    fi: dict, card_info: dict, entry: dict | None = None
+) -> None:
     """Перенести признаки жалобы/направления наверх из карточки в запись.
 
     Нужно авто-подхвату (он такие дела берёт, skip_appeal=False): по этим
@@ -285,7 +288,13 @@ def _stamp_appeal_flags(fi: dict, card_info: dict) -> None:
     cases.json на полный мониторинг апелляции. Без переноса поля появились бы
     только со следующим парсом карточки, а у решённого дела он через неделю
     (writ_weekly) — дело неделю висело бы в лёгком треке, где апелляцию никто
-    не ищет. Ставим только поля: события эмитит FI-цикл, как обычно.
+    не ищет.
+
+    События дайджеста отсюда НЕ эмитятся — это делает FI-цикл. ⚠️ Для самой
+    подачи жалобы он их и не выдаст никогда: `fi_appeal_filed` идемпотентен по
+    `fi["appeal_filed"]`, а флаг мы ставим здесь. Так и задумано — такие дела
+    объявляет своя строка `fi_bank_claim_registered` («…по делу подана жалоба,
+    дело в общем треке»).
     """
     for card_key, fi_key in (
         ("_fi_appeal_filed", "appeal_filed"),
@@ -299,3 +308,18 @@ def _stamp_appeal_flags(fi: dict, card_info: dict) -> None:
     ):
         if card_info.get(card_key):
             fi[fi_key] = card_info[card_key]
+    # Движение жалобы целиком — это ДАННЫЕ drawer'а, а не события дайджеста:
+    # без него хронология дела, заведённого с уже поданной жалобой, обрывается
+    # на «дело сдано в отдел судебного делопроизводства», и срок для возражений
+    # (ст. 325 ГПК) считать не из чего. Гард «только непустое» — тот же, что в
+    # FI-цикле: перепарс огрызка карточки не должен затирать историю жалобы.
+    for card_key, fi_key in (
+        ("_fi_appeal_events", "appeal_events"),
+        ("_fi_cassation_events", "cassation_events"),
+    ):
+        if card_info.get(card_key):
+            fi[fi_key] = card_info[card_key]
+    # Кто подал жалобу — источник бейджа «Апеллянт» и полярности срочности
+    # у срока возражений (возражения пишет тот, против кого жалоба).
+    if entry is not None:
+        apply_fi_appellant(fi, entry, card_info)

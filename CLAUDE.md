@@ -34,7 +34,7 @@
 - [scripts/add_cases_manually.py](scripts/add_cases_manually.py) — ручное добавление дел 1-й инстанции.
 - [scripts/import_search_dump.py](scripts/import_search_dump.py) — **офлайн-импортёр дампов выдачи капчёвых судов** (Свердловская обл.: 54 записи реестра со `search_gated=True` — автопоиск выключен, карточки мониторятся). Оператор решает капчу → вставляет дамп в секцию «Импорт дел» админки → Worker кладёт в KV + диспатчит [import_cases.yml](.github/workflows/import_cases.yml) → импортёр (utf-8→win-1251, нормализация pretty-print, дедуп `collect_existing_ids`, `srv_num` из href; **только «банк-ответчик»**, как в автопоиске — истец/третье лицо идут в отчёт как `[SKIPPED ROLE]`, решение юриста 16.07.2026 после первого живого импорта; промоушен М→2 при комбо-номере — `[PROMOTED]`, зеркало main_json) → коммит cases.json → итог назад в админку (`/import-result`, журнал `import:log:*`). **Защита «дамп ↔ выбранный суд» (17.07.2026):** хосты абсолютных href карточек (`name=sud_delo`) + маркер Chrome «saved from url» сверяются с судом импорта на трёх уровнях — автоопределение суда в админке (`impDetectDomains`/`impRunDetect`, подставляет суд сам, ручной выбор не перебивает), 400 Worker'а (`detectDumpSudrfHosts`), `EXIT_WRONG_COURT=5` импортёра (`detect_dump_hosts`); `delo_id` из href карточек ловит выдачу не того раздела (суды 1-й инст. он не различает — у всех 1540005). Относительные href (файл Firefox) хостов не несут — проверки молчат. Дела получают служебный блок `"import": {operator, at, source, announced}`; ближайший прогон объявляет их «новыми исками» в дайджесте/пуше один раз (`announce_imported_cases`, runs.py). Подробно — [docs/Тиражирование_регионы.md](docs/Тиражирование_регионы.md).
 - [scripts/build_region_registry.py](scripts/build_region_registry.py) + [.github/workflows/probe_region_registry.yml](.github/workflows/probe_region_registry.yml) — проба реестра территории с GitHub-раннера (delo_id + классификация капчи; вход `ops/region_probe/courts_probe.csv`, отчёт коммитится в `ops/region_probe/report.txt`).
-- `scripts/tests/` + `tests/` — pytest-набор (320+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста — матрица всех 29 типов событий в [tests/test_digest_template_events.py](tests/test_digest_template_events.py), линтер). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
+- `scripts/tests/` + `tests/` — pytest-набор (320+ тестов: парсеры, state machine, линковка, архив, детектор здоровья, рендер дайджеста — матрица всех 30 типов событий в [tests/test_digest_template_events.py](tests/test_digest_template_events.py), линтер). Запуск одним прогоном: `python3 -m pytest` из корня (конфиг — [pytest.ini](pytest.ini)); CI гоняет на каждый push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 - [data/cases.json](data/cases.json) — активные дела (UTF-8, `version: 1`, `updated_at` ISO).
 - [data/cases_archive.json](data/cases_archive.json) — «горячий» архив: дела, заархивированные за последние 12 мес. (`COLD_ARCHIVE_DAYS`). Грузится фронтом.
 - `data/cases_archive_YYYY.json` — «холодные» годовые архивы: дела старше года, вынесенные ротацией (`rotate_cold_archive`). **Фронт их не грузит** (чтобы вес не рос безгранично), но скрипт читает их в индекс дедупликации. Холодные дела «заморожены»: не реактивируются автоматически.
@@ -70,18 +70,21 @@
 | `fi_health_key` (ключ журнала здоровья; `#2` у второго сервера домена — иначе Покачи затирал наблюдение районного) | [scripts/court_monitor/runs.py:120](scripts/court_monitor/runs.py:120) |
 | `collect_existing_ids` (общий дедуп-индекс main_json/импортёра) | [scripts/court_monitor/linking.py:1071](scripts/court_monitor/linking.py:1071) |
 | `load_bank_json` / `save_bank_json` (split-хранение bank-трека: список + events) | [scripts/court_monitor/storage.py:174](scripts/court_monitor/storage.py:174) |
-| `bank_writ_expected` (ждём ли ИЛ: отказ/присоединение → нет) | [scripts/court_monitor/lifecycle.py:1036](scripts/court_monitor/lifecycle.py:1036) |
+| `bank_writ_expected` (ждём ли ИЛ: отказ/присоединение → нет) | [scripts/court_monitor/lifecycle.py:1233](scripts/court_monitor/lifecycle.py:1233) |
 | `default_cancellation_state` (особый порядок отмены заочного: подано/отменено/отказано; матч по тексту события, белый список исходов) | [scripts/court_monitor/lifecycle.py:809](scripts/court_monitor/lifecycle.py:809) |
-| `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:868](scripts/court_monitor/lifecycle.py:868) |
-| `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:895](scripts/court_monitor/lifecycle.py:895) |
-| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:1630](scripts/court_monitor/lifecycle.py:1630) |
-| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1806](scripts/court_monitor/runs.py:1806) |
+| `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1065](scripts/court_monitor/lifecycle.py:1065) |
+| `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1092](scripts/court_monitor/lifecycle.py:1092) |
+| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:1833](scripts/court_monitor/lifecycle.py:1833) |
+| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1699](scripts/court_monitor/runs.py:1699) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
-| `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:48](scripts/court_monitor/bank_intake.py:48) |
+| `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:49](scripts/court_monitor/bank_intake.py:49) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
-| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1914](scripts/court_monitor/runs.py:1914) |
-| `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:171](scripts/court_monitor/lifecycle.py:171) |
-| `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:440](scripts/court_monitor/lifecycle.py:440) |
+| `_stamp_appeal_flags` (флаги жалобы + ДВИЖЕНИЕ жалобы + апеллянт из карточки в запись) | [scripts/court_monitor/bank_intake.py:280](scripts/court_monitor/bank_intake.py:280) |
+| `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1043](scripts/court_monitor/lifecycle.py:1043) |
+| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py) | [scripts/court_monitor/runs.py:1559](scripts/court_monitor/runs.py:1559) |
+| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1807](scripts/court_monitor/runs.py:1807) |
+| `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:174](scripts/court_monitor/lifecycle.py:174) |
+| `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:443](scripts/court_monitor/lifecycle.py:443) |
 | `resolve_bank_merged_targets` (подбор дела-приёмника по ФИО ответчика) | [scripts/court_monitor/linking.py:1251](scripts/court_monitor/linking.py:1251) |
 | `bank_cold_archive_path` / `is_bank_cold_archive_file` (холодные bank-архивы) | [scripts/court_monitor/config.py:107](scripts/court_monitor/config.py:107) |
 | `case_court_key` / `dedupe_new_archive_entries` (ключ (домен, id) — номера не уникальны между судами) | [scripts/court_monitor/linking.py:1186](scripts/court_monitor/linking.py:1186) |
@@ -94,14 +97,14 @@
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1600](scripts/court_monitor/lifecycle.py:1600) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1803](scripts/court_monitor/lifecycle.py:1803) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:182](scripts/court_monitor/netutil.py:182) |
 | `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:100](scripts/court_monitor/netutil.py:100) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:432](scripts/court_monitor/parsing/search.py:432) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:173](scripts/court_monitor/config.py:173) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1691](scripts/court_monitor/lifecycle.py:1691) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1894](scripts/court_monitor/lifecycle.py:1894) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:375](scripts/court_monitor/linking.py:375) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:981](scripts/court_monitor/linking.py:981) |
@@ -114,8 +117,8 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:52](scripts/court_monitor/linking.py:52) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:534](scripts/court_monitor/runs.py:534) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2030](scripts/court_monitor/runs.py:2030) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:537](scripts/court_monitor/runs.py:537) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1923](scripts/court_monitor/runs.py:1923) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -178,6 +181,11 @@
          "appeal_filed", "appeal_filed_date",        // апел. жалоба в карточке 1-й инст.
          "appeal_appellant", "appeal_appellant_is_bank", "appeal_appellant_status",
          "appeal_appellant_checked_at",  // штамп тихого бэкфилла апеллянта (backfill_appeal_appellants)
+         "objections_due",         // ISO; срок для представления возражений на
+                                   // апел. жалобу (ст. 325 ГПК) — штамп из
+                                   // appeal_events, фронт читает готовым
+         "objections_set_at",      // ISO; когда суд срок установил
+         "objections_emitted",     // объявленный срок (идемпотентность ЗНАЧЕНИЕМ)
          "cassation_filed", "cassation_filed_date",  // касс. жалоба (идёт через 1-ю инст.)
          "sent_to_cassation", "sent_to_cassation_date"
       },
@@ -609,6 +617,35 @@ drawer; номера не уникальны между судами — пот�
   строку дела и всё равно считается в счётчике «Изменения (N)». Фронт читает
   готовый штамп `first_instance.default_cancellation` (самоисцеляющийся блок в
   `split_bank_track`) — своей копии правил в JS нет.
+- **Срок для возражений на апел. жалобу (ст. 325 ГПК, с 03.08.2026)**: строка
+  «Установлен срок для предоставления возражений · Срок до ДД.ММ.ГГГГ» живёт НЕ
+  в «Движении дела», а во вкладке карточки «Обжалование решений, определений» →
+  вложенная таблица «Движение жалобы», и приезжает в `first_instance.appeal_events`
+  (парсер это умел всегда, 17 строк в корпусе — но датой-дедлайном срок нигде не
+  был, только сырым текстом в ленте drawer'а). Извлекает `appeal_objections_deadline`
+  (lifecycle.py) — матч по `name`, при его отсутствии по `text` (43% строк —
+  legacy-склейки), при нескольких строках побеждает МАКСИМАЛЬНЫЙ срок (суд
+  продлевает). ⚠️ Слово «возражени» в паттерне обязательно: рядом в той же
+  таблице живёт «Оставление жалобы без движения · Срок для устранения
+  недостатков до …» — срок ОБРАТНОЙ полярности (недостатки устраняет податель
+  жалобы). Штамп `objections_due`/`objections_set_at` (ISO) ставится в ДВУХ
+  местах: `migrate_stages` (идемпотентно, обе картотеки — bank-дела подмешаны в
+  `cases` до вызова) и эмит-блок FI-цикла (миграция отработала на загрузке, ДО
+  вливания свежих `appeal_events` — без второго вызова срок доезжал бы до
+  drawer'а следующим прогоном). Событие `fi_objections_deadline_set`,
+  идемпотентность ЗНАЧЕНИЕМ в `objections_emitted`. **Анти-паводок:** эмит
+  гейтится «срок ещё не истёк», а `migrate_stages` засевает маркер ТОЛЬКО
+  истёкшим сроком — безусловный посев закрыл бы дедлайн навсегда у дела,
+  заведённого авто-подхватом (эмит-блок к тому моменту ещё не отрабатывал).
+  Stale-якорь — САМ срок (`objections_due` в `_FI_DATED_COMPLAINT_TYPES`): он в
+  будущем, штатный дедлайн фильтр не тронет. В эхо-класс тип НЕ входит —
+  апелляционная карточка срок не публикует. Фронт: строка «⏳ Возражения до» в
+  «Ключевых датах», пилюля `objectionsBadgeHtml` в строке/hero и в слоте
+  `.mc-track` мобильной карточки (не отдельным рядом!). **Полярность срочности
+  задаёт апеллянт**: `appeal_appellant_is_bank===false` → срок наш, красим по
+  остатку (>7 дн / ≤7 / ≤2); `true` → жалоба банка, пилюли нет; `null`
+  («неопределимо» при соответчиках) → строка есть, срочности нет. Читать
+  `c._fi` напрямую — VM коэрсит `!!` и теряет разницу false/null.
 - **Листа не будет** (`bank_writ_expected`, с 31.07.2026 — находки юриста в
   прогоне 30.07): два класса дел ИЛ не породят, и держать их в очереди
   ожидания бессмысленно. **(1) В иске ОТКАЗАНО** — ждём только апел. жалобу

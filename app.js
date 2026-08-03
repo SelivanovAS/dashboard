@@ -366,18 +366,27 @@ const CASS_RESULT_LABELS={
 // Единая точка истины для бейджа стадии — используется в desktop-таблице,
 // mobile-card, drawer-hero, блоке «Ближайшие». Без этого helper'а условие
 // дрейфовало в трёх местах (см. правки кассации).
+/* Корзина инстанции: та ступень, где сейчас фокус работы. ЕДИНЫЙ источник
+ * истины для бейджа, фильтра инстанции и счётчиков сегментов. Переходные
+ * стадии показываем как инстанцию, куда дело уже движется: как только подана
+ * жалоба — ступень переключается. awaiting_relink = после кассационной отмены
+ * ждём карточку нижестоящей, последний содержательный акт от КСОЮ → «Кассация».
+ * ⚠️ Раньше бейдж группировал стадии, а фильтр сравнивал `c.stage` строго с
+ * тремя своими значениями — дела в awaiting_appeal / cassation_watch /
+ * cassation_pending (62 из 163 на 03.08.2026) не совпадали ни с одним и молча
+ * исчезали из выдачи, хотя бейдж рядом писал «Апелляция». */
+function stageGroup(c){
+  const s=(c&&c.stage)||'appeal';
+  if(s==='first_instance')return 'first_instance';
+  if(s==='cassation'||s==='awaiting_relink')return 'cassation';
+  return 'appeal';  // appeal, awaiting_appeal, cassation_watch, cassation_pending
+}
 function stageBadgeHtml(c){
-  const s=c&&c.stage;
-  // Переходные стадии показываем как ту инстанцию, куда дело уже движется:
-  // как только подана жалоба — бейдж переключается на следующую ступень.
-  // awaiting_relink = после кассационной отмены, ждём карточку нижестоящей —
-  // последний содержательный акт от КСОЮ, поэтому «Кассация».
-  if(s==='first_instance')return '<span class="badge badge-fi">1 инст.</span>';
-  if(s==='appeal'||s==='awaiting_appeal'||s==='cassation_watch'||s==='cassation_pending')
-    return '<span class="badge badge-appeal">Апелляция</span>';
-  if(s==='cassation'||s==='awaiting_relink')
-    return '<span class="badge badge-cassation">Кассация</span>';
-  return '';
+  if(!c||!c.stage)return '';
+  const g=stageGroup(c);
+  if(g==='first_instance')return '<span class="badge badge-fi">1 инст.</span>';
+  if(g==='cassation')return '<span class="badge badge-cassation">Кассация</span>';
+  return '<span class="badge badge-appeal">Апелляция</span>';
 }
 // Бейдж «Обжалуется» — рядом со стадией, когда жалоба подана, но карточка
 // в следующей инстанции ещё не появилась. Направление однозначно вытекает
@@ -580,7 +589,7 @@ function computeDerived(c){
   // first_instance + поданная жалоба — фактически «awaiting_appeal» (парсер
   // ещё не подтянул дату из вкладки «Обжалование решений»). Архивировать
   // нельзя — иначе дело пропадёт с экрана раньше, чем переедет в апел. суд.
-  const fiHasFiledAppeal=c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation);
+  const fiHasFiledAppeal=c.stage==='first_instance'&&(c.fiAppealFiled||c.fiSentToAppeal||c.fiCassationFiled||c.fiSentToCassation);
   // cassation / awaiting_relink — также архивирует state-machine на бэке
   // (CASSATION_ACT_ARCHIVE_DAYS=30, CASSATION_NO_ACT_PUBLISH_DAYS=45).
   // Без этого исключения кассац. дело со status=decided (см. фикс ниже
@@ -912,10 +921,9 @@ function jsonToCase(j){
     fiCassationFiled:!!fi.cassation_filed,
     fiSentToCassation:!!fi.sent_to_cassation,
     fiSentToAppeal:!!fi.sent_to_appeal,
-    fiAppealFiledDate:fi.appeal_filed_date||'',
-    fiSentToAppealDate:fi.sent_to_appeal_date||'',
-    fiCassationFiledDate:fi.cassation_filed_date||'',
-    fiSentToCassationDate:fi.sent_to_cassation_date||'',
+    // Даты жалоб в VM не дублируем: «Ключевые даты» читают их из c._fi
+    // напрямую (там же нужны сырые sent_to_*_date), а прежние четыре
+    // fi*Date-поля никто не читал.
     // JSON-specific: full stage data for detail view
     _fi:fi,
     _ap:ap.case_number?ap:null,
@@ -1817,6 +1825,51 @@ function awaitingWritBadgeHtml(c){
   if(!lvl)return '';
   return `<span class="badge badge-compact badge-await-writ aw-${lvl}" title="Решение вступило в силу ${escHtml(formatDate(parseDate(c._fi.legal_force_est)))} (расчётно), исполнительный лист не выдан">⏳ ждёт ИЛ ${d} дн.</span>`;
 }
+/* ── Срок для возражений на апел. жалобу (ст. 325 ГПК) ──────────────────────
+ * Готовый штамп first_instance.objections_due (ISO) считает Python
+ * (appeal_objections_deadline в lifecycle.py) из движения жалобы — своей копии
+ * правил в JS нет, как и у writ_expected / legal_force_est.
+ * Шкала ОБРАТНАЯ к «ждёт ИЛ»: там копятся дни ожидания, тут тают дни до срока.
+ */
+function objectionsDaysLeft(c){
+  const due=(c&&c._fi&&c._fi.objections_due)||'';
+  return due?dayDiff(due):null;
+}
+/* Уровень срочности. Полярность задаёт АПЕЛЛЯНТ: возражения пишет тот, против
+ * кого подана жалоба. is_bank===true → жалоба банка, срок для противника,
+ * тревожить юриста нечем. is_bank===false → срок наш, красим по остатку.
+ * null («знаем, что неопределимо» — соответчики) → строку показываем, но без
+ * срочности: пропущенный процессуальный срок дороже лишней строки, а кричать
+ * не о чем. Читаем c._fi напрямую: VM коэрсит !! и теряет разницу false/null. */
+function objectionsLevel(c){
+  const d=objectionsDaysLeft(c);
+  if(d===null||d<0)return '';
+  const isBank=(c&&c._fi)?c._fi.appeal_appellant_is_bank:undefined;
+  if(isBank!==false)return 'calm';
+  return d<=2?'overdue':d<=7?'watch':'normal';
+}
+function objectionsBadgeHtml(c){
+  const lvl=objectionsLevel(c);
+  if(!lvl||lvl==='calm')return '';
+  const d=objectionsDaysLeft(c);
+  const дата=formatDate(parseDate(c._fi.objections_due)).replace(/\.\d{4}$/,'');
+  return `<span class="badge badge-compact badge-objections aw-${lvl}" title="Суд установил срок для представления возражений на апелляционную жалобу — до ${escHtml(formatDate(parseDate(c._fi.objections_due)))}, осталось ${d} дн.">⏳ возражения до ${дата}</span>`;
+}
+/* Строка «Ключевых дат». Показываем и после истечения — «Ключевые даты» это
+ * регистр реквизитов (там же лежат прошедшие «Поступление» и «Решение»), —
+ * но цветом-срочностью только пока срок идёт. */
+function objectionsKvHtml(c){
+  const due=(c&&c._fi&&c._fi.objections_due)||'';
+  if(!due)return '';
+  const d=objectionsDaysLeft(c);
+  const lvl=objectionsLevel(c);
+  const хвост=(d===null||d<0)
+    ? ` <span style="color:var(--slate-500);font-weight:500;">(срок истёк)</span>`
+    : (lvl&&lvl!=='calm')
+      ? ` <span class="kv-await aw-${lvl}">осталось ${d} дн.</span>`
+      : ` <span style="color:var(--slate-500);font-weight:500;">(осталось ${d} дн.)</span>`;
+  return `<div class="kv-k">⏳ Возражения до</div><div class="kv-v kv-mono">${formatDate(parseDate(due))}${хвост}</div>`;
+}
 // Включён ли надкартотечный «★ Мои» (звёзды обеих картотек, один список).
 function mineModeOn(){return filterMineActive&&watchlist.size>0;}
 // Активный датасет: «★ Мои» объединяет обе картотеки, иначе — по сегменту.
@@ -1876,7 +1929,7 @@ function applyFilters(){
     else if(st==='awaiting_writ'){if(archived||!awaitsWrit(c))return false;}
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
-    if(stg!=='all'&&(c.stage||'appeal')!==stg)return false;
+    if(stg!=='all'&&stageGroup(c)!==stg)return false;
     if(mineOn&&!q&&!isWatchedCase(c)&&!isNewCase(c))return false;
     if(q){const blob=c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!blob.includes(q))return false;}
     return true;
@@ -2117,6 +2170,15 @@ function writShieldIconHtml(c){
 // лист на исполнение выдан → «🧾 ИЛ ДД.ММ», иначе решение в силе без листа →
 // «⏳ ждёт ИЛ N дн.». Пусто — подвал карточки не рендерится вовсе.
 function mcTrackLineHtml(c){
+  // Срок возражений идёт ПЕРВЫМ: жёсткий процессуальный дедлайн важнее мягкой
+  // очереди ожидания ИЛ. Пересечение почти невозможно — запись покидает трек
+  // при подаче жалобы, и awaitingWritDays у неё уже null.
+  const objLvl=objectionsLevel(c);
+  if(objLvl&&objLvl!=='calm'){
+    const d=objectionsDaysLeft(c);
+    const дата=formatDate(parseDate(c._fi.objections_due)).replace(/\.\d{4}$/,'');
+    return `<span class="mc-track-await aw-${objLvl}" title="Возражения на апелляционную жалобу — до ${escHtml(formatDate(parseDate(c._fi.objections_due)))}">⏳ возражения до ${дата}</span>`;
+  }
   if(c.writs&&c.writs.some(w=>classifyWritKind(w,c)!=='interim')){
     const даты=c.writs.filter(w=>classifyWritKind(w,c)!=='interim')
       .map(w=>parseDate(w.issue_date||'')).filter(Boolean).sort();
@@ -2204,12 +2266,13 @@ function renderChipBar(){
     <button class="seg-btn ${rl==='defendant'?'active':''}" onclick="setRoleFilter('defendant')">Ответчик</button>
   </div>`;
     // Инстанция — показываем если есть хотя бы две стадии в данных.
-    // Кассация = только current_stage='cassation' (буквально — карточка
-    // живёт на 7kas). cassation_watch / cassation_pending остаются под
-    // меткой «1 инст.» / «Апелляция», т.к. фокус карточки там же.
-    const fiCount=allCases.filter(c=>(c.stage||'appeal')==='first_instance').length;
-    const apCount=allCases.filter(c=>(c.stage||'appeal')==='appeal').length;
-    const csCount=allCases.filter(c=>c.stage==='cassation').length;
+    // Считаем ТОЙ ЖЕ корзиной stageGroup, что и бейдж с фильтром: иначе
+    // сегмент «Апелляция» показывал 40 при 62 делах, которые под него
+    // отфильтруются, а картотека, где все дела в awaiting_appeal, не
+    // получала сегмента вовсе.
+    const fiCount=allCases.filter(c=>stageGroup(c)==='first_instance').length;
+    const apCount=allCases.filter(c=>stageGroup(c)==='appeal').length;
+    const csCount=allCases.filter(c=>stageGroup(c)==='cassation').length;
     if(fiCount>0&&(apCount>0||csCount>0)){
       let inst=`<div class="seg-ctrl">
       <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
@@ -2574,7 +2637,9 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
-    const metaBadges = [stageBadge, pendingBadge, bankTrackBadge(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    // Срок возражений — сразу после «Обжалуется»: это дедлайн, он важнее
+    // принадлежности к треку и статуса листа.
+    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), bankTrackBadge(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -3202,14 +3267,29 @@ function renderDrawer(c){
   // Ключевая дата «Жалоба предъявлена» — крайний свежий факт подачи апел.
   // или касс. жалобы (либо «Подана» без даты, если парсер ещё не подтянул
   // дату из вкладки «Обжалование решений»). Видна сразу под «Решением».
+  // Учитываем и sent_to_* — суд не всегда публикует регистрацию жалобы, но
+  // отметку «направлено в вышестоящую инстанцию» ставит. Бейдж «Обжалуется»
+  // (pendingAppealBadge) на них реагировал всегда, а строка — нет: дело с
+  // одним лишь «направлено» показывало бейдж и пустое место под ним.
   const fiKv=c._fi||{};
-  if(fiKv.appeal_filed||fiKv.cassation_filed){
-    const kind=fiKv.cassation_filed?'кассац.':'апел.';
-    const d=fiKv.cassation_filed?fiKv.cassation_filed_date:fiKv.appeal_filed_date;
-    const val=d?`${formatDate(d)} <span style="color:var(--slate-500);font-weight:500;">(${kind})</span>`
+  const kvCass=fiKv.cassation_filed||fiKv.sent_to_cassation;
+  if(fiKv.appeal_filed||fiKv.sent_to_appeal||kvCass){
+    const kind=kvCass?'кассац.':'апел.';
+    const filedD=kvCass?fiKv.cassation_filed_date:fiKv.appeal_filed_date;
+    const sentD=kvCass?fiKv.sent_to_cassation_date:fiKv.sent_to_appeal_date;
+    // Дату отправки за дату подачи не выдаём — она помечена отдельно.
+    const d=filedD||sentD;
+    const note=filedD?kind:`${kind}, направлено`;
+    // ⚠️ formatDate ждёт ISO: в first_instance даты лежат в ДД.ММ.ГГГГ, и без
+    // parseDate new Date('03.06.2026') читался как 6 марта — 28 дел корпуса
+    // показывали дату подачи жалобы с переставленными днём и месяцем.
+    const val=d?`${formatDate(parseDate(d))} <span style="color:var(--slate-500);font-weight:500;">(${note})</span>`
                 :`<span style="color:var(--slate-500);font-weight:500;">${kind} жалоба подана</span>`;
     keyDates+=`<div class="kv-k">Жалоба предъявлена</div><div class="kv-v kv-mono">${val}</div>`;
   }
+  // Срок для возражений — сразу под подачей жалобы: это её прямое следствие
+  // и единственный дедлайн работы юриста на этой стадии.
+  keyDates+=objectionsKvHtml(c);
   // Для иска банка исполнительный лист и есть цель дела — дата свежайшего
   // листа на исполнение решения должна читаться там же, где остальные ключевые
   // даты, а не только в секции ниже. Только на вкладке 1-й инст.: листы — её
@@ -3420,7 +3500,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${objectionsBadgeHtml(c)}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
