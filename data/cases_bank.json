@@ -3,6 +3,78 @@
   "track": "plaintiff_light",
   "cases": [
     {
+      "id": "М-5175/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Кравец Бэлла Валерьевна, ООО \"ЭКСПРЕСС МЕБЕЛЬ\"",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-5175/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Школьников А.Е.",
+        "filing_date": "04.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 17:07. 04.08.2026",
+        "event_date": "04.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "279840709|ca9acfb8-a1e2-4f1c-b8c5-68bb27db32c5",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-08-05T03:31:48",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-2509/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "ЗОИДОВ СОХИБДЖОН АБДУРАУФОВИЧ",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-2509/2026",
+        "court": "Ханты-Мансийский районный суд",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "judge": "Щербинин А.А.",
+        "filing_date": "04.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 15:58. 04.08.2026",
+        "event_date": "04.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "279811094|7fddfdd4-aeaf-43f5-ae8b-cd341f8dd097",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-08-05T03:32:03",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
       "id": "М-6914/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
@@ -26,7 +98,8 @@
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -62,7 +135,8 @@
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -75,7 +149,7 @@
       }
     },
     {
-      "id": "М-659/2026",
+      "id": "2-813/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк",
       "defendant": "Зайцев Юрий Алексеевич",
@@ -83,22 +157,26 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-659/2026",
+        "case_number": "2-813/2026",
         "court": "Советский районный суд",
         "court_domain": "sovetsk--hmao.sudrf.ru",
         "judge": "Рыбалкин Андрей Александрович",
         "filing_date": "03.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 17:04. 03.08.2026",
-        "event_date": "03.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 14:00. Зал судебных заседаний (3 этаж), судья Рыбалкин А.А., т. 3-17-58. 04.08.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "18.08.2026",
+        "hearing_time": "14:00",
         "link": "279739314|756e73fc-eb3c-4e9a-9d8e-07474dcc1034",
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "material_number": "М-659/2026",
+        "accepted_pending_emit": false,
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-10-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -134,7 +212,8 @@
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -232,7 +311,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-04"
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -269,7 +348,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-04"
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -458,7 +537,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-04"
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -495,7 +574,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-04"
+        "last_checked_at": "2026-08-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -523,8 +602,8 @@
         "filing_date": "31.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 15:12. 31.07.2026",
-        "event_date": "31.07.2026",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 16:27. Оставление иска (заявления, жалобы) без движения. 04.08.2026",
+        "event_date": "04.08.2026",
         "hearing_date": "",
         "hearing_time": "",
         "link": "279669208|ae8fe4a4-1d60-493b-b5d6-c1cb61d4fd49",
@@ -534,7 +613,7 @@
         "srv_num": 2,
         "material_number": "М-2-337/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "accepted_emitted": true
       },
       "appeal": null,
@@ -548,7 +627,7 @@
       }
     },
     {
-      "id": "М-384/2026",
+      "id": "2-377/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала-Югорское отделение № 5940",
       "defendant": "Минеев Артем Николаевич",
@@ -556,23 +635,26 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-384/2026",
+        "case_number": "2-377/2026",
         "court": "Кондинский районный суд",
         "court_domain": "kondinsk--hmao.sudrf.ru",
         "judge": "Косолапова О.А.",
         "filing_date": "31.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 12:33. 31.07.2026",
-        "event_date": "31.07.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 09:30. Зал №3. 04.08.2026",
+        "event_date": "21.09.2026",
+        "hearing_date": "21.09.2026",
+        "hearing_time": "09:30",
         "link": "279666369|da5c5406-f70a-4231-8ff0-68c1cd9e8027",
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-04"
+        "last_checked_at": "2026-08-05",
+        "material_number": "М-384/2026",
+        "accepted_pending_emit": false,
+        "legal_force_est": "2026-11-06"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -649,7 +731,7 @@
         "link": "279112360|2a816359-247b-4b87-8cb6-af976bce3a69",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -686,7 +768,7 @@
         "link": "278470309|fc54f967-5439-4bda-9ad3-b45937727700",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -723,7 +805,7 @@
         "link": "277043283|a93e61fa-0aec-48bc-aba3-2e6fe7d608a8",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-15"
@@ -761,7 +843,7 @@
         "link": "276945960|32eebc4e-7548-45a2-b41e-46a08d3c0a9e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-15"
@@ -799,7 +881,7 @@
         "link": "274170009|7ebe600b-6934-4fbe-910e-83a0c45a42c6",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-11"
@@ -875,7 +957,7 @@
         "link": "271283691|43f7fb00-e123-49d6-a813-e561f3058ef0",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-18"
@@ -913,7 +995,7 @@
         "link": "268592970|4a82faa7-4727-446e-adee-938991cfe685",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-11"
@@ -951,7 +1033,7 @@
         "link": "267716510|149c4337-58e5-4ada-a9d5-86e6c1e5110b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-08-22"
@@ -989,7 +1071,7 @@
         "link": "266338601|9d9ebc48-d893-440c-8819-0d749a806bc8",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-05"
@@ -1027,7 +1109,7 @@
         "link": "266085843|5b08a490-0a8b-41bd-aab6-40c4dcae3a6d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-11"
@@ -1107,7 +1189,7 @@
         "link": "263944497|2f835c33-2cec-4faa-b2e8-6b83deef8198",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-01"
@@ -1204,7 +1286,7 @@
       }
     },
     {
-      "id": "М-344/2026",
+      "id": "9-31/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала - Уральский Банк ПАО Сбербанк",
       "defendant": "Буров Никита Олегович, Харжевская Мария Сергеевна",
@@ -1212,12 +1294,12 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-344/2026",
+        "case_number": "9-31/2026",
         "court": "Берёзовский районный суд",
         "court_domain": "berezovo--hmao.sudrf.ru",
         "judge": "Пуртова Г.А.",
         "filing_date": "22.07.2026",
-        "status": "В производстве",
+        "status": "Решено",
         "result": "",
         "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 17:00. Оставление иска (заявления, жалобы) без движения. 23.07.2026",
         "event_date": "22.07.2026",
@@ -1228,7 +1310,9 @@
         "act_date": "",
         "last_checked_at": "2026-08-04",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "material_number": "М-344/2026",
+        "accepted_pending_emit": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1301,7 +1385,7 @@
         "link": "269031505|34ea89f3-cb0a-4cf2-b4d1-df40744a65dd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-06-16"
@@ -1339,7 +1423,7 @@
         "link": "265067267|e061a52b-6976-4141-8903-531e8dd48c24",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-15"
@@ -1415,7 +1499,7 @@
         "link": "278941396|4a185871-c39b-48a3-9f58-3c219a2f94d4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -1452,7 +1536,7 @@
         "link": "278468992|a95efa08-4eb5-4eb7-94e7-b1a6320b0906",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -1612,7 +1696,7 @@
         "link": "268269936|e223f23f-bcb8-473f-ba80-098b267c37b2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-06-23"
@@ -1735,7 +1819,7 @@
         "link": "279545655|b51c7fd5-63e3-4ff8-820c-c7683ded3a96",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -1803,17 +1887,17 @@
         "filing_date": "22.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 09:30. 23.07.2026",
-        "event_date": "31.07.2026",
-        "hearing_date": "31.07.2026",
-        "hearing_time": "09:30",
+        "last_event": "Судебное заседание. 16:30. 04.08.2026",
+        "event_date": "10.08.2026",
+        "hearing_date": "10.08.2026",
+        "hearing_time": "16:30",
         "link": "279071176|2784fec5-5162-4458-84fd-70dcf943a945",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-15"
+        "legal_force_est": "2026-09-25"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1839,19 +1923,22 @@
         "court_domain": "ugorsk--hmao.sudrf.ru",
         "judge": "Колобаев В.Н.",
         "filing_date": "22.06.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 09:20. 15.07.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Судебное заседание. 09:20. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 15.07.2026",
         "event_date": "03.08.2026",
         "hearing_date": "03.08.2026",
         "hearing_time": "09:20",
         "link": "277103236|068af30a-11ce-4f63-8f14-1772ab4a983a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-18"
+        "legal_force_est": "2026-09-18",
+        "decision_date": "03.08.2026",
+        "resolved_emitted": true,
+        "default_judgment": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2047,7 +2134,7 @@
         "act_published": false,
         "act_date": "",
         "resolved_emitted": false,
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "default_judgment": true,
@@ -2266,7 +2353,7 @@
         "link": "266163571|7f886cbd-8288-479d-9e22-a194a52f9bee",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-08-15"
@@ -2548,7 +2635,7 @@
         "link": "257316015|98ac61db-86d7-4337-be46-73a638a50a5e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-04-24"
@@ -2630,7 +2717,7 @@
         "link": "279661017|5e3bdec4-d994-4a44-bbee-ab047d2052bf",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -2667,7 +2754,7 @@
         "link": "279422435|17794daa-9730-4a23-96ba-2c1b56ab4a9d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -2704,7 +2791,7 @@
         "link": "279054048|54c47492-0b52-4d30-be0f-232e1f596c1d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -3083,7 +3170,7 @@
         "link": "267921495|ba0dbb9c-bd25-4031-909a-6715432e040e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-18"
@@ -3121,7 +3208,7 @@
         "link": "267795064|fcc10638-e6f2-4106-a218-0a7e23e787f3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-11"
@@ -3193,17 +3280,17 @@
         "filing_date": "04.03.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Предварительное судебное заседание. 09:00. 204. 29.06.2026",
-        "event_date": "03.08.2026",
-        "hearing_date": "03.08.2026",
-        "hearing_time": "09:00",
+        "last_event": "Предварительное судебное заседание. 16:30. 204. 05.08.2026",
+        "event_date": "08.10.2026",
+        "hearing_date": "08.10.2026",
+        "hearing_time": "16:30",
         "link": "267328754|387c0c9b-d5b0-471b-af48-69ad5857ffa1",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-18"
+        "legal_force_est": "2026-11-24"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3551,7 +3638,7 @@
         "link": "277584726|eed08362-a00a-4a5d-811c-ef7d327db4e4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -3581,17 +3668,17 @@
         "filing_date": "25.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Судебное заседание. 16:00. 21.07.2026",
-        "event_date": "03.08.2026",
-        "hearing_date": "03.08.2026",
-        "hearing_time": "16:00",
+        "last_event": "Судебное заседание. 08:30. 04.08.2026",
+        "event_date": "21.08.2026",
+        "hearing_date": "21.08.2026",
+        "hearing_time": "08:30",
         "link": "277415827|fabb3e7d-121b-486d-8643-a9e7d67e64a8",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-18"
+        "legal_force_est": "2026-10-06"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3626,7 +3713,7 @@
         "link": "277273712|bc59de5a-7c4b-4f4e-ad6c-bb699cea81fb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-15"
@@ -3740,7 +3827,7 @@
         "link": "269050888|13ebdefb-3b16-4c0e-a738-15b218c53c5f",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-07-28"
@@ -4167,9 +4254,9 @@
         "court_domain": "uganskray--hmao.sudrf.ru",
         "judge": "Меркуленко Андрей Викторович",
         "filing_date": "30.06.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 14:15. Зал судебного заседания судьи Меркуленко А.В.. 30.07.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Судебное заседание. 14:15. Зал судебного заседания судьи Меркуленко А.В.. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 30.07.2026",
         "event_date": "04.08.2026",
         "hearing_date": "04.08.2026",
         "hearing_time": "14:15",
@@ -4185,10 +4272,13 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-03",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-19"
+        "legal_force_est": "2026-09-19",
+        "decision_date": "04.08.2026",
+        "resolved_emitted": true,
+        "default_judgment": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5172,7 +5262,7 @@
         "link": "279511504|4c69d4ea-0f5a-46a6-8af7-dda73930a927",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -5965,7 +6055,7 @@
         "link": "279279424|c53b9820-7046-419e-bc3e-4fc08abc130a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -6160,7 +6250,7 @@
         "link": "268803129|1dd2538c-90de-4622-ae50-ddacfb4ee1cd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-08-29",
         "delo_id": 1540005,
         "srv_num": 1
@@ -6280,7 +6370,7 @@
         "link": "276945093|d65248f9-fad1-4856-93fd-8c2875e987ba",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -6520,7 +6610,7 @@
         "link": "267156331|2cefe11f-78db-4685-9603-ce29c2874437",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-01",
         "delo_id": 1540005,
         "srv_num": 1
@@ -6558,7 +6648,7 @@
         "link": "266341122|62559287-d9cc-4e79-8240-bf59642c0782",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-08-08",
         "delo_id": 1540005,
         "srv_num": 1
@@ -7247,7 +7337,7 @@
         "link": "274498462|dd163380-db1e-4b6e-b125-73a86ccb722b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-06-16"
       },
       "appeal": null,
@@ -7323,7 +7413,7 @@
         "link": "274494485|b8adba22-3873-4496-9a7c-68027a279c71",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-05-08"
       },
       "appeal": null,
@@ -7359,7 +7449,7 @@
         "link": "279418463|d51e6d44-2224-43d8-b3c1-89f16b795fc3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -7396,7 +7486,7 @@
         "link": "279373952|aa7ff38e-aa66-4306-b17b-213f22ed58ca",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -7471,7 +7561,7 @@
         "link": "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -7892,7 +7982,7 @@
         "link": "276958130|e90d481e-8756-4c7b-a071-73d70b2352f0",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-19",
         "delo_id": 1540005,
         "srv_num": 1
@@ -8537,7 +8627,7 @@
         "link": "268933004|a4ea52ca-329f-428e-8f8e-48f061d70d86",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-07-16",
         "delo_id": 1540005,
         "srv_num": 1
@@ -8841,16 +8931,17 @@
         "filing_date": "27.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 17:39. 27.07.2026",
-        "event_date": "27.07.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 15:50. 304. 04.08.2026",
+        "event_date": "24.08.2026",
+        "hearing_date": "24.08.2026",
+        "hearing_time": "15:50",
         "link": "279308875|5579502c-d290-48cc-a8f2-19cf6dbcdb96",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "legal_force_est": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8925,7 +9016,7 @@
         "link": "279308971|610cbe45-9e65-41cd-824d-0165371899ac",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -8962,7 +9053,7 @@
         "link": "279230017|53eb636b-e0e9-410c-86fe-4b7c48972832",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -9227,7 +9318,7 @@
         "link": "278607879|7a80a316-40eb-4933-a79d-a6535b4bf5f2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -9302,7 +9393,7 @@
         "link": "277566337|41acfbfc-f2f9-429a-bf98-d6500f190226",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -9415,7 +9506,7 @@
         "link": "277261081|f656ca7c-7b22-4b59-a51f-18af5a91bb17",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -9452,7 +9543,7 @@
         "link": "276973094|fd9574c2-08ad-4c6c-b94d-4d60c286e24b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-08",
         "delo_id": 1540005,
         "srv_num": 1
@@ -9604,7 +9695,7 @@
         "link": "275894683|1dc48f8f-0101-4f82-8ae8-3157ee1bd813",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -9923,7 +10014,7 @@
         "link": "274043388|95dee9ce-cb79-4f3b-aacf-5133c3e00690",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-08-21",
         "delo_id": 1540005,
         "srv_num": 1
@@ -10037,7 +10128,7 @@
         "link": "272996758|bceb2b7f-35bf-4779-967c-a3c227e62f32",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -10270,7 +10361,7 @@
         "link": "270220839|27ed0dee-0bb0-4c67-94a2-6455938771b6",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-19",
         "delo_id": 1540005,
         "srv_num": 1
@@ -10386,7 +10477,7 @@
         "link": "268831417|131dd327-a482-4f4f-b4b4-e793555b154e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -10589,15 +10680,15 @@
         "filing_date": "16.03.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Судебное заседание. 09:15. 211. 14.07.2026",
-        "event_date": "04.08.2026",
-        "hearing_date": "04.08.2026",
-        "hearing_time": "09:15",
+        "last_event": "Судебное заседание. 09:30. 211. 04.08.2026",
+        "event_date": "19.08.2026",
+        "hearing_date": "19.08.2026",
+        "hearing_time": "09:30",
         "link": "268028243|1257f21c-d88c-40dc-9a32-3ea1950121f6",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
-        "legal_force_est": "2026-09-19",
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-10-03",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -10714,7 +10805,7 @@
         "link": "267659221|7e0afbc0-aace-4298-a6f2-b89febf92c0a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -11123,7 +11214,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-11",
         "delo_id": 1540005,
         "srv_num": 1
@@ -11359,7 +11450,7 @@
         "link": "266517171|002e63a4-bac3-46c8-9061-e974a6785919",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-11",
         "delo_id": 1540005,
         "srv_num": 1
@@ -11830,7 +11921,7 @@
         "link": "263570020|efe057d0-5ffb-435c-8865-6d6ebe78eed4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-04",
         "delo_id": 1540005,
         "srv_num": 1
@@ -12310,15 +12401,15 @@
         "filing_date": "16.12.2025",
         "status": "В производстве",
         "result": "",
-        "last_event": "Судебное заседание. 11:20. 311. 18.06.2026",
-        "event_date": "28.07.2026",
-        "hearing_date": "28.07.2026",
-        "hearing_time": "11:20",
+        "last_event": "Судебное заседание. 15:30. 311. 04.08.2026",
+        "event_date": "27.08.2026",
+        "hearing_date": "27.08.2026",
+        "hearing_time": "15:30",
         "link": "256923286|e1e964b3-6f8d-41e5-ae30-a100049f6e9f",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
-        "legal_force_est": "2026-09-12",
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -12398,7 +12489,7 @@
         "link": "256477517|2970643c-0bd3-4d6e-81de-6fdeb890c765",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-08-28",
         "delo_id": 1540005,
         "srv_num": 1
@@ -12562,7 +12653,7 @@
         "link": "256203569|223d4647-d8a5-47a4-9a2d-8df61e403cb9",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -12718,7 +12809,7 @@
         "link": "278934558|00b0c150-f4b8-4de9-a2cb-d0d78191b425",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-19",
         "delo_id": 1540005,
         "srv_num": 1
@@ -12870,7 +12961,7 @@
         "link": "278819942|9b6a01e3-cbae-493b-8ecc-ef8947909f9c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -13059,7 +13150,7 @@
         "link": "278329841|be66dc11-8d04-4c1d-ad8c-6acfa97e0c46",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -13173,7 +13264,7 @@
         "link": "278187824|e864fe82-caa0-42a7-9cbc-2c8539be9da5",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -13849,15 +13940,15 @@
         "filing_date": "24.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 14:05. Зал судебного заседания 513. 30.06.2026",
-        "event_date": "14.07.2026",
-        "hearing_date": "14.07.2026",
-        "hearing_time": "14:05",
+        "last_event": "Судебное заседание. 10:00. Зал судебного заседания 513. 04.08.2026",
+        "event_date": "06.08.2026",
+        "hearing_date": "06.08.2026",
+        "hearing_time": "10:00",
         "link": "277377140|81f7b8d0-f27b-4eb9-89ff-3d2275c0a601",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
-        "legal_force_est": "2026-08-29",
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -14299,7 +14390,7 @@
         "link": "277724256|5e2fba02-aa19-46ff-a4ea-c998e45ac859",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-08-18",
         "delo_id": 1540005,
         "srv_num": 1
@@ -14946,7 +15037,7 @@
         "link": "273911594|2a83e323-af5e-418d-afd2-84de18c771c7",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-19",
         "delo_id": 1540005,
         "srv_num": 1
@@ -15364,7 +15455,7 @@
         "link": "271983058|c7b98952-b9f8-45d7-9a55-79967a05d3bb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -15476,15 +15567,15 @@
         "filing_date": "14.05.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Предварительное судебное заседание. 08:55. Зал судебного заседания 402. 27.05.2026",
-        "event_date": "03.08.2026",
-        "hearing_date": "03.08.2026",
-        "hearing_time": "08:55",
+        "last_event": "Судебное заседание. 11:55. Зал судебного заседания 402. 04.08.2026",
+        "event_date": "06.08.2026",
+        "hearing_date": "06.08.2026",
+        "hearing_time": "11:55",
         "link": "272105616|740338a4-4e2f-416d-9a9a-45fd0d7bb572",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
-        "legal_force_est": "2026-09-18",
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -15867,7 +15958,7 @@
         "link": "271150751|7eabe880-d1cb-46b0-b00f-71242971527d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-11",
         "delo_id": 1540005,
         "srv_num": 1
@@ -16418,7 +16509,7 @@
         "link": "269037374|6ed6a698-d112-4fcd-8955-2195b11ba552",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -16905,19 +16996,21 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Елшин Николай Александрович",
         "filing_date": "17.03.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Предварительное судебное заседание. 09:00. Зал судебного заседания 402. 13.05.2026",
+        "status": "Решено",
+        "result": "Производство по делу ПРЕКРАЩЕНОСТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом",
+        "last_event": "Предварительное судебное заседание. 09:00. Зал судебного заседания 402. Производство по делу прекращено. СТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом. 13.05.2026",
         "event_date": "30.07.2026",
         "hearing_date": "30.07.2026",
         "hearing_time": "09:00",
         "link": "268241184|cc660916-87b6-47c2-80cc-57d477427081",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "decision_date": "30.07.2026",
+        "resolved_emitted": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17660,7 +17753,7 @@
         "link": "267274163|cc451396-dc59-4cf3-9f8d-94bf32e22241",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1
@@ -17896,7 +17989,7 @@
         "link": "266858042|ff7de7b5-7d4f-49d0-8d10-2984819cd8fb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-05",
         "legal_force_est": "2026-09-18",
         "delo_id": 1540005,
         "srv_num": 1
@@ -19198,7 +19291,164 @@
         "source": "search_sweep",
         "announced": true
       }
+    },
+    {
+      "id": "2-4292/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Денега Вадим Петрович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-4292/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Елшин Николай Александрович",
+        "filing_date": "02.03.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Копия заочного решения возвратилась невручённой. 14:18. 15.06.2026",
+        "event_date": "09.06.2026",
+        "hearing_date": "30.04.2026",
+        "hearing_time": "08:36",
+        "link": "267274304|d6ac8c0f-6b94-47c7-b5c6-9240e6fd1030",
+        "act_published": true,
+        "act_date": "",
+        "resolved_emitted": true,
+        "writs": [
+          {
+            "issue_date": "22.06.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4292/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ],
+        "decision_date": "30.04.2026",
+        "last_checked_at": "2026-08-05",
+        "act_text": "КОПИЯ Дело № ЗАОЧНОЕ РЕШЕНИЕ Именем Российской Федерации ДД.ММ.ГГГГ года &lt;адрес&gt; Сургутский городской суд &lt;адрес&gt; – Югры в составе: председательствующего судьи Елшина Н.А., при секретаре судебного заседания Маркиной Е.Ю., рассмотрев в открытом судебном заседании гражданское дело по иску публичного акционерного общества Сбербанк России к Денега В.П. о взыскании кредитной задолженности, установил: Истец обратился в суд с иском к ответчику о взыскании задолженности по кредитному договору, мотивировав требования тем, что по кредитному договору ответчику были выданы денежные средства. Ответчик воспользовался денежными средствами из предоставленной суммы кредитования, однако после получения средств свои обязательства по возврату кредита и уплате процентов, а также оказанных услуг не выполняет. Просят взыскать с ответчика образовавшуюся сумму задолженности, а также расходы по уплате государственной пошлины. Представитель истца в суд не явился, о времени и месте судебного заседания извещен надлежащим образом, просил суд рассмотреть дело без его участия. Ответчик в суд не явился, о времени и месте рассмотрения дела извещался надлежащим образом путем направления судебного извещения по адресу постоянной регистрации, и считается извещенным в соответствии со ст.165.1 ГК РФ. Дело рассмотрено в отсутствие сторон на основании ч. 2 ст. 153, ст. 167, 233 ГПК РФ в порядке заочного производства. Исследовав и оценив в совокупности представленные доказательства, суд приходит к выводу об удовлетворении требований ПАО Сбербанк по следующим основаниям. Судом установлено, что ПАО «Сбербанк России» и Денега В.П. заключили договор № от ДД.ММ.ГГГГ на предоставление возобновляемой кредитной линии посредством выдачи кредитной карты Сбербанка с предоставленным по ней кредитом и обслуживанием счета по данной карте в российских рублях. Указанный договор заключен в результате публичной оферты путем оформления заемщиком заявления на получение кредитной карты Сбербанка. Во исполнение заключенного договора Денега В.П. выдана кредитная карта № по эмиссионному контракту № от ДД.ММ.ГГГГ . также ответчику был открыт счет № для отражения операций, проводимых с использованием кредитной карты в соответствии с заключенным договором. С ДД.ММ.ГГГГ в связи с реорганизацией номера контрактов и номера счетов были изменены. Номер кредитного контракта № от ДД.ММ.ГГГГ изменен на № от ДД.ММ.ГГГГ . ДД.ММ.ГГГГ в рамках договора № от ДД.ММ.ГГГГ между ПАО Сбербанк и Денега В.П. заключено дополнительное соглашение и подписаны индивидуальные условия выпуска и обслуживания кредитной карты. В соответствии с Условиями выпуска и обслуживания кредитной карты ПАО Сбербанк, Условия в совокупности с Памяткой держателя карт ПАО Сбербанк, Памяткой по безопасности при использовании карт, Заявлением на получение карты, надлежащим образом заполненным и подписанным Заемщиком, Альбомом тарифов на услуги, предоставляемые ПАО Сбербанк физическим лицам, являются договором на выпуск и обслуживание банковской карты, открытие счета для учета операций с использованием карты и предоставление Заемщику возобновляемой кредитной линии для проведения операций по счету карты. Со всеми вышеуказанными документами ответчик был ознакомлен и обязался их исполнять, о чем свидетельствует подпись в заявлении на получение карты. В соответствии с условиями на сумму основного долга начисляются проценты за пользование кредитом по ставке и на условиях, определенных тарифами банка. Процентная ставка за пользование кредитом – 21,9 % годовых. Согласно Общим условиям, погашение кредита и уплата процентов за его использование осуществляется ежемесячно по частям (оплата суммы обязательного платежа) или полностью (оплата суммы общей задолженности) в соответствии с информацией, указанной в отчете, путем пополнения счета карты не позднее 10 календарных дней с даты формирования отчета по карте. Условиями предусмотрено, что за несвоевременное погашение обязательного платежа взимается неустойка в соответствии с Тарифами Банка. Сумма неустойки рассчитывается от остатка просроченного основного долга по ставке, установленной Тарифами Банка, и включается в сумму очередного обязательного платежа до полной оплаты Заемщиком всей суммы неустойки, рассчитанной по дату оплаты суммы просроченного основного долга в полном объеме. Тарифами Банка определена неустойка в размере 36 % годовых. Согласно статьям 309, 310, 314 Гражданского кодекса РФ обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, односторонний отказ от исполнения обязательства не допускается, обязательство должно быть исполнено в срок, установленный обязательством. В соответствии с положениями статей 810, 811, 819 Гражданского кодекса РФ по кредитному договору банк (кредитор) обязуется предоставить денежные средства (кредит) заёмщику в размере и на условиях, предусмотренных договором, а заёмщик обязуется возвратить полученную денежную сумму и уплатить проценты на неё. Заёмщик обязан возвратить займодавцу полученную сумму займа в срок и в порядке, которые предусмотрены договором займа. В случаях, когда заёмщик не возвращает в срок сумму займа, на эту сумму подлежат уплате проценты в размере, предусмотренном договором займа. Если договором займа предусмотрено возвращение займа по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заимодавец вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с процентами за пользование займом, причитающимися на момент его возврата. Ответчик неоднократно нарушал сроки погашения основного долга и процентов за пользование кредитом, что подтверждается представленными расчетом задолженности. В настоящее время за ответчиком в соответствии с расчётом образовалась просроченная задолженность. Ответчику ДД.ММ.ГГГГ направлено письмо с требованием досрочно возвратить банку всю сумму кредита. Требование до настоящего момента не выполнено. В настоящее время за ответчиком в соответствии с расчётом образовалась просроченная задолженность за период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ (включительно) в размере 649 861 рубль 64 копейки, в том числе: просроченный основной долг – 559 997 рублей 73 копейки, просроченные проценты – 73 693 рубля 61 копейка, неустойка за просроченный основной долг – 10 257 рублей 28 копеек, неустойка за просроченные проценты – 5 913 рублей 02 копейки. Суд считает возможным принять расчет задолженности, представленный истцом, так как ответчиком в соответствии со ст. 56 ГПК РФ свой расчет или возражения на расчет истца суду не предоставлены, расчет истца арифметически верен, соответствует условиям договора, фактическому движению денежных средств по лицевому счету и не противоречит требованиям закона. Не представлено ответчиком и доказательств своевременного и в полном объёме внесения денежных средств в качестве оплаты по кредитному договору. При таких обстоятельствах суд находит исковые требования о взыскании задолженности по кредитному договору в размерах, заявленных истцом обоснованными и подлежащими удовлетворению. В соответствии со ст. 98 ГПК РФ с ответчика в пользу истца подлежат взысканию расходы по уплате государственной пошлины в размере 17 997 рублей. На основании изложенного и руководствуясь ст. 194-199, 233 ГПК РФ, суд решил: Исковые требования публичного акционерного общества Сбербанк России к Денега В.П. о взыскании кредитной задолженности – удовлетворить. Взыскать с Денега В.П. , паспорт № , в пользу публичного акционерного общества Сбербанк России, ИНН № , задолженность по кредитному договору № от ДД.ММ.ГГГГ за период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ (включительно) в размере 649 861 рубль 64 копейки, расходы по оплате государственной пошлины в размере 17 997 рублей, а всего взыскать 667 858 рублей 64 копейки. Заявление ответчика об отмене настоящего решения может быть подано в Сургутский городской суд в течение семи дней со дня вручения ему копии этого решения. Заявление об отмене заочного решения суда должно содержать:",
+        "legal_force_est": "2026-06-19",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "default_judgment": true,
+        "motivirovka_date": "30.04.2026",
+        "default_copy_returned": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      }
+    },
+    {
+      "id": "2-4272/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Хасиятулин Артур Амирович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-4272/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Беловолова Ирина Игоревна",
+        "filing_date": "02.02.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 14:30. 04.05.2026",
+        "event_date": "04.05.2026",
+        "hearing_date": "01.04.2026",
+        "hearing_time": "15:30",
+        "link": "263897229|a3492f49-ce73-4133-937b-4a1f73cad96c",
+        "act_published": true,
+        "act_date": "",
+        "resolved_emitted": true,
+        "writs": [
+          {
+            "issue_date": "22.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4272/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ],
+        "decision_date": "01.04.2026",
+        "last_checked_at": "2026-08-05",
+        "act_text": "№ 2-4272/2026 86RS0004-01-2026-001728-85 Заочное решение Именем Российской Федерации 1 апреля 2026 года город Сургут Сургутский городской суд Ханты-Мансийского автономного округа-Югры в составе председательствующего судьи Беловоловой И.И., при секретаре судебного заседания ФИО4 , рассмотрев в открытом судебном заседании гражданское дело по исковому заявлению публичного акционерного общества «Сбербанк России» в лице филиала-Югорское отделение № к Хасиятулин А.А. о взыскании задолженности по кредитному договору и обращении взыскания на заложенное имущество, установил: ПАО «Сбербанк России» в лице филиала-Югорское отделение № » обратилось в Сургутский городской суд с исковым заявлением о взыскании задолженности по кредитному договору и обращении взыскания на заложенное имущество к Хасиятулин А.А. Требования мотивированы тем, что между ООО «Драйв Клик Банк» и Хасиятулин А.А. заключен кредитный договор № от ДД.ММ.ГГГГ . По условиям кредитного договора банк предоставил ответчику кредит в размере № рублей под № % годовых сроком на № месяца. Банком выполнено зачисление кредита в сумме № рублей. Таким образом, банк выполнил свои обязательства по кредитному договору в полном объеме. Согласно условиям кредитного договора, заемщик обязан производить погашение кредита ежемесячными платежами, уплата процентов также должна производиться ежемесячно, одновременно с погашением кредита. Кредит выдан на приобретение транспортного средства HYUNDAI SONATA, год выпуска ДД.ММ.ГГГГ , VIN № . ООО «Драйв Клик Банк» и ПАО «Сбербанк России» заключили договор уступки прав требования № от ДД.ММ.ГГГГ , в связи с чем, все права кредитора по кредитному договору № от ДД.ММ.ГГГГ перешли к ПАО «Сбербанк России», о чем ответчик уведомлен. Поскольку ответчик обязательства по своевременному погашению кредита и процентов по нему исполнял ненадлежащим образом, за период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ (включительно) образовалась просроченная задолженность в размере № , в том числе: просроченные проценты – № , просроченный основной долг – № , неустойка за просроченный основной долг – № , неустойка за просроченные проценты – № , судебные расходы по оплате государственной пошлины в размере № . Ответчик неоднократно нарушал сроки погашения основного долга и процентов за пользование кредитом, что подтверждается представленными расчетом задолженности. В настоящее время за ответчиком в соответствии с расчетом образовалась просроченная задолженность. Ответчику были направлены письма с требованием досрочно возвратить банку всю сумму кредита. Требование до настоящего момента не выполнено. В связи с чем истец просит взыскать в пользу ПАО «Сбербанк России» с Хасиятулин А.А. задолженность по кредитному договору № от ДД.ММ.ГГГГ за период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ (включительно) задолженность в размере № , в том числе: просроченные проценты – № , просроченный основной долг – № рублей, неустойка за просроченный основной долг – № рублей, неустойка за просроченные проценты – № , судебные расходы по оплате государственной пошлины в размере № рублей; обратить взыскание на предмет залога – транспортное средство HYUNDAI SONATA, год выпуска &lt;адрес&gt; , VIN № , определить способ продажи заложенного имущества – публичные торги, установив начальную цену продажи предмета залога в размере № рублей; взыскать проценты по ставке № % годовых, начисляемые на остаток задолженности по кредитному договору № от ДД.ММ.ГГГГ в размере № рублей, начиная с ДД.ММ.ГГГГ по день фактического возврата кредита. Представитель истца, извещенный о дате, времени и месте рассмотрения дела, в судебное заседание не явился, указал в исковом заявлении просьбу о рассмотрении дела в его отсутствие. Ответчик Хасиятулин А.А. о дате, месте и времени судебного заседания извещен надлежащим образом, суд, руководствуясь ст.117 ГПК РФ, ч.4 ст.167 ГПК РФ, определил рассмотреть гражданское дело в отсутствие ответчика, в соответствии со ст. 233 ГПК РФ в порядке заочного производства. Изучив исковое заявление, материалы гражданского дела, суд приходит к следующим выводам. Согласно статье 819 Гражданского кодекса Российской Федерации по кредитному договору банк или иная кредитная организация (кредитор) обязуются предоставить денежные средства (кредит) заемщику в размере и на условиях, предусмотренных договором, а заемщик обязуется возвратить полученную денежную сумму и уплатить проценты на нее. К отношениям по кредитному договору применяются правила, предусмотренные параграфом 1 настоящей главы, если иное не предусмотрено правилами настоящего параграфа и не вытекает из существа кредитного договора. На основании статьи 809 Гражданского кодекса Российской Федерации если иное не предусмотрено законом или договором займа, заимодавец имеет право на получение с заемщика процентов на сумму займа в размерах и в порядке, определенных договором. При отсутствии иного соглашения проценты выплачиваются ежемесячно до дня возврата суммы займа. В силу статьи 811 Гражданского кодекса Российской Федерации, если договором займа предусмотрено возвращение по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заимодавец вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с причитающимися процентами. В соответствии с пунктом 1 статьи 329 и пунктом 1 статьи 334 Гражданского кодекса Российской Федерации залог является одним из способов обеспечения исполнения обязательств, при котором кредитор (залогодержатель) имеет право в случае неисполнения должником этого обязательства получить удовлетворение из стоимости заложенного имущества преимущественно перед другими кредиторами. Согласно статье 348 Гражданского кодекса Российской Федерации взыскание на заложенное имущество для удовлетворения требований залогодержателя может быть обращено в случае неисполнения или ненадлежащего исполнения должником обеспеченного залогом обязательства (пункт 1). Обращение взыскания на заложенное имущество не допускается, если допущенное должником нарушение обеспеченного залогом обязательства незначительно и размер требований залогодержателя вследствие этого явно несоразмерен стоимости заложенного имущества. Если не доказано иное, предполагается, что нарушение обеспеченного залогом обязательства незначительно и размер требований залогодержателя явно несоразмерен стоимости заложенного имущества при условии, что одновременно соблюдены следующие условия: 1) сумма неисполненного обязательства составляет менее чем пять процентов от размера стоимости заложенного имущества; 2) период просрочки исполнения обязательства, обеспеченного залогом, составляет менее чем три месяца (пункт 2). Если договором залога не предусмотрено иное, обращение взыскания на имущество, заложенное для обеспечения обязательства, исполняемого периодическими платежами, допускается при систематическом нарушении сроков их внесения, то есть при нарушении сроков внесения платежей более чем три раза в течение двенадцати месяцев, предшествующих дате обращения в суд или дате направления уведомления об обращении взыскания на заложенное имущество во внесудебном порядке, даже при условии, что каждая просрочка незначительна (пункт 3). В соответствии со статьями 309, 310 Гражданского кодекса Российской Федерации обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона. Односторонний отказ от исполнения обязательств не допускается Изучив материалы дела, суд приходит к следующему. ДД.ММ.ГГГГ между ООО «Драйв Клик Банк» и Хасиятулин А.А. заключен кредитный договор № . По условиям кредитного договора банк предоставил ответчику кредит в размере № рублей под № % годовых сроком на № месяца. Банком выполнено зачисление кредита в сумме № рублей. Кредит выдан на приобретение транспортного средства HYUNDAI SONATA, год выпуска &lt;адрес&gt; , VIN № . ДД.ММ.ГГГГ между ООО «Драйв Клик Банк» и ПАО «Сбербанк России» заключен договор уступки прав требования № , согласно которому все права кредитора по кредитному договору № от ДД.ММ.ГГГГ пер",
+        "legal_force_est": "2026-05-16",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "default_judgment": true,
+        "motivirovka_date": "01.04.2026"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      }
+    },
+    {
+      "id": "2-3708/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Эргашев Жонибек Муроталиевич",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3708/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Зимина Анна Юрьевна",
+        "filing_date": "02.02.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Копия заочного решения возвратилась невручённой. 14:48. 04.06.2026",
+        "event_date": "03.06.2026",
+        "hearing_date": "19.05.2026",
+        "hearing_time": "10:45",
+        "link": "263897224|8cdaeb9b-e676-4f10-9ef9-5ab0d972c58a",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "writs": [
+          {
+            "issue_date": "08.07.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-3708/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ],
+        "decision_date": "19.05.2026",
+        "last_checked_at": "2026-08-05",
+        "legal_force_est": "2026-07-03",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "default_judgment": true,
+        "motivirovka_date": "19.05.2026",
+        "default_copy_returned": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      }
     }
   ],
-  "updated_at": "2026-08-04T03:46:04"
+  "updated_at": "2026-08-05T03:45:07"
 }
