@@ -839,6 +839,106 @@ class TestSplitBankTrack:
         assert "default_judgment" not in bank_active[0]["first_instance"]
 
 
+# ── Возврат из горячего bank-архива (reactivate_bank_archived) ───────────────
+
+class TestBankArchiveReactivation:
+    """Регресс на инцидент 04–07.08.2026: возврат заочных из архива без гейта
+    «уже в активных» клонировал дело каждым прогоном (+1 копия в день), а
+    архивный файл не пересохранялся и продолжал отдавать те же записи."""
+
+    @staticmethod
+    def _dmy(days_ago: int) -> str:
+        return (datetime.now() - timedelta(days=days_ago)).strftime("%d.%m.%Y")
+
+    def _default_archived_entry(self, **extra) -> dict:
+        """Заочное решение, ИЛ 30 дн назад: по старому окну (14 дн) уехало в
+        архив, по текущему (BANK_DEFAULT_WRIT_ARCHIVE_DAYS=90) — активно."""
+        case = _track_case(
+            status="Решено", hearing_date=self._dmy(120),
+            decision_date=self._dmy(120), default_judgment=True,
+            writs=[{"issue_date": self._dmy(30), "status": "Выдан"}],
+        )
+        case["archived_at"] = "2026-07-27"
+        case.update(extra)
+        return case
+
+    def test_returned_case_removed_from_archive(self):
+        from court_monitor.linking import reactivate_bank_archived
+        entry = self._default_archived_entry()
+        cases: list[dict] = []
+        archived = [entry]
+        moved = reactivate_bank_archived(cases, archived)
+        assert moved == 1
+        assert archived == []           # мутация на месте — файл ужмётся
+        assert cases == [entry]
+        assert "archived_at" not in entry
+        assert entry["track"] == "plaintiff_light"
+
+    def test_already_active_not_duplicated(self):
+        """Главный регресс: дело уже в активных → НЕ клонировать, запись
+        остаётся в архиве (её судьбу решит юрист/ремонт, а не дубль)."""
+        from court_monitor.linking import reactivate_bank_archived
+        active = _track_case(status="Решено")
+        archived_entry = self._default_archived_entry()
+        cases = [active]
+        archived = [archived_entry]
+        moved = reactivate_bank_archived(cases, archived)
+        assert moved == 0
+        assert cases == [active]        # ни одной новой копии
+        assert archived == [archived_entry]
+
+    def test_same_number_other_court_still_returned(self):
+        """Ключ — (домен, id): одноимённое дело ДРУГОГО суда возврату не
+        мешает (номера дел не уникальны между судами)."""
+        from court_monitor.linking import reactivate_bank_archived
+        other_court = _track_case(status="В производстве")
+        other_court["first_instance"]["court_domain"] = "nvartovsk--hmao.sudrf.ru"
+        entry = self._default_archived_entry()
+        cases = [other_court]
+        archived = [entry]
+        moved = reactivate_bank_archived(cases, archived)
+        assert moved == 1
+        assert entry in cases and archived == []
+
+    def test_ordinary_judgment_stays_archived(self):
+        """Регресс на 2-3898/2026: обычное (не заочное) решение с ИЛ 30 дн
+        назад — окно 14 дн истекло, дело законно лежит в архиве."""
+        from court_monitor.linking import reactivate_bank_archived
+        entry = self._default_archived_entry()
+        del entry["first_instance"]["default_judgment"]
+        cases: list[dict] = []
+        archived = [entry]
+        moved = reactivate_bank_archived(cases, archived)
+        assert moved == 0
+        assert cases == [] and archived == [entry]
+
+    def test_duplicates_inside_archive_collapse(self):
+        """Два экземпляра одного дела в самом архиве → возвращается один,
+        второй остаётся лежать (не два клона в активных)."""
+        import copy
+        from court_monitor.linking import reactivate_bank_archived
+        a = self._default_archived_entry()
+        b = copy.deepcopy(a)
+        cases: list[dict] = []
+        archived = [a, b]
+        moved = reactivate_bank_archived(cases, archived)
+        assert moved == 1
+        assert len(cases) == 1 and len(archived) == 1
+
+    def test_run_wiring_saves_archive_after_reactivation(self):
+        """Проводка в main_json: счётчик bank_reactivated обязан входить в
+        условие пересохранения bank-архива — иначе изъятие живёт только в
+        памяти и клонирование возвращается (сам инцидент)."""
+        import inspect
+        import re
+        from court_monitor import runs
+        src = inspect.getsource(runs.main_json)
+        assert re.search(
+            r"if \(bank_newly_archived or bank_reactivated\b", src
+        ), "bank_reactivated выпал из условия сохранения bank-архива"
+        assert "reactivate_bank_archived(cases, bank_archived_cases)" in src
+
+
 # ── Дайджест: секция «Иски банка» ────────────────────────────────────────────
 
 def _bank_change(types: list[str], details: dict | None = None) -> dict:

@@ -101,6 +101,54 @@ class TestSaveLoadRoundTrip:
         assert loaded["cases"] == []
 
 
+class TestReactivationArchiveRoundTrip:
+    def test_archive_shrinks_and_events_follow(self, tmp_path):
+        """Возврат из bank-архива + пересохранение: список и events-мапа
+        теряют РОВНО возвращённое дело, события остальных целы (регресс на
+        инцидент 04–07.08.2026 — архив не пересохранялся после изъятия)."""
+        lst = str(tmp_path / "cases_bank_archive.json")
+        ev = str(tmp_path / "cases_bank_archive_events.json")
+        # Заочное с ИЛ 30 дн назад — по текущему окну (90 дн) не архивно.
+        # Заочность при непустых events ПЕРЕСЧИТЫВАЕТСЯ по событиям (флаг
+        # игнорируется) — поэтому событие решения обязано быть заочным.
+        ev_back = [{"date": (datetime.now() - timedelta(days=120)).strftime("%d.%m.%Y"),
+                    "text": "Вынесено заочное решение по делу"}]
+        back = _bank_case("2-100/2026", "a.sudrf.ru", ev_back)
+        back["first_instance"].update(
+            status="Решено",
+            hearing_date=(datetime.now() - timedelta(days=120)).strftime("%d.%m.%Y"),
+            writs=[{"issue_date": (datetime.now() - timedelta(days=30)).strftime("%d.%m.%Y"),
+                    "status": "Выдан"}],
+        )
+        back["archived_at"] = "2026-07-27"
+        # Обычное решение с давним ИЛ — законно остаётся в архиве.
+        stay = _bank_case("2-200/2026", "b.sudrf.ru", EV_B)
+        stay["first_instance"].update(
+            status="Решено",
+            hearing_date=(datetime.now() - timedelta(days=120)).strftime("%d.%m.%Y"),
+            writs=[{"issue_date": (datetime.now() - timedelta(days=30)).strftime("%d.%m.%Y"),
+                    "status": "Выдан"}],
+        )
+        stay["archived_at"] = "2026-07-27"
+        storage.save_bank_json(
+            {"version": 1, "track": "plaintiff_light", "cases": [back, stay]},
+            lst, ev)
+
+        archived = storage.load_bank_json(lst, ev)["cases"]
+        cases: list[dict] = []
+        moved = linking.reactivate_bank_archived(cases, archived)
+        assert moved == 1 and cases[0]["id"] == "2-100/2026"
+
+        storage.save_bank_json(
+            {"version": 1, "track": "plaintiff_light", "cases": archived},
+            lst, ev)
+        raw_list = json.loads(open(lst, encoding="utf-8").read())
+        raw_ev = json.loads(open(ev, encoding="utf-8").read())
+        assert [c["id"] for c in raw_list["cases"]] == ["2-200/2026"]
+        assert set(raw_ev["events"]) == {"b.sudrf.ru|2-200/2026"}
+        assert raw_ev["events"]["b.sudrf.ru|2-200/2026"] == EV_B
+
+
 class TestBankColdRotation:
     def test_rotate_with_bank_path_builder(self, tmp_path, monkeypatch):
         """Ротация горячего bank-архива: дело старше COLD_ARCHIVE_DAYS уезжает

@@ -55,6 +55,12 @@ const KNOWN_CASES_KEY=lsKey('sber-court-known-cases');
 const READ_CASES_KEY=lsKey('sber-court-read-cases');
 const NOTES_KEY=lsKey('sber-court-notes');
 const SORT_PREF_KEY=lsKey('sber-court-sort');
+// Свёрнутость «Ближайших заседаний»: #analytics-row пересобирается целиком
+// на каждом applyFilters (смена картотеки, фильтр, поиск, сортировка), классы
+// свёртки живут в разметке — без персиста блок разворачивался при каждом
+// переключении «Основные ⇄ Иски банка». Дефолт (ключа нет) — раскрыто.
+const UPCOMING_COLLAPSED_KEY=lsKey('upcoming_collapsed');
+function upcomingCollapsed(){try{return localStorage.getItem(UPCOMING_COLLAPSED_KEY)==='true';}catch(_){return false;}}
 const ARCHIVE_DAYS=60;
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
@@ -416,6 +422,9 @@ let allCases=[],filteredCases=[],sortField='relevance',sortDir='desc';
 // bankFileExists — HEAD-проба + персист BANK_EXISTS_KEY (офлайн).
 let bankCases=[],bankLoaded=false,bankViewActive=false,bankFileExists=false;
 let bankArchiveLoaded=false;
+// archived_count из корня cases_bank.json (пишет прогон): размер горячего
+// bank-архива ДО его ленивой загрузки — иначе «в архиве: N» взять неоткуда.
+let bankArchivedMeta=null;
 let bankListLoading=null,bankArchiveLoading=null;
 // Состояние ленивых events-файлов трека: active — по активным делам,
 // archive — по горячему архиву (свой файл, грузится отдельно).
@@ -1134,6 +1143,9 @@ async function fetchJsonCases(url,timeoutMs){
   // из него строятся подписи судов, ссылки апелляции/кассации и бейдж
   // региона в шапке.
   if(data.region){window.REGION_INFO=data.region;updateRegionBadge();}
+  // archived_count несёт только активный файл bank-трека — счётчик архива
+  // для bank-режима (см. bankArchivedMeta).
+  if(typeof data.archived_count==='number')bankArchivedMeta=data.archived_count;
   const cases=data.cases||[];
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
@@ -1439,7 +1451,9 @@ function renderDatasetSwitch(){
   // сегмента на него не влияет — прячем переключатель, чтобы не путать.
   if(!bankFileExists||mineModeOn()){box.hidden=true;return;}
   box.hidden=false;
-  const bankCount=bankLoaded?`<span class="chip-count">${bankCases.length}</span>`:'';
+  // Счётчик сегмента — АКТИВНЫЕ дела: после ленивой догрузки архива
+  // bankCases прирастает архивными, и число прыгало бы 493→517.
+  const bankCount=bankLoaded?`<span class="chip-count">${bankCases.filter(c=>!c._bankArchived).length}</span>`:'';
   const mainCount=`<span class="chip-count">${allCases.length}</span>`;
   box.innerHTML=`<div class="seg-ctrl">
     <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные${mainCount}</button>
@@ -1593,7 +1607,9 @@ function toggleUpcoming(){
   const card=document.querySelector('#analytics-row .analytics-card');
   if(!list||!card)return;
   list.classList.toggle('collapsed');
-  card.classList.toggle('upcoming-collapsed', list.classList.contains('collapsed'));
+  const collapsed=list.classList.contains('collapsed');
+  card.classList.toggle('upcoming-collapsed', collapsed);
+  try{localStorage.setItem(UPCOMING_COLLAPSED_KEY,collapsed?'true':'false');}catch(_){}
 }
 
 /* ========== Analytics ========== */
@@ -1654,13 +1670,17 @@ function renderAnalytics(){
   // на карточке (см. toggleUpcoming).
   const chevronHtml=`<button class="card-chevron-btn" id="upcoming-chevron" type="button" aria-label="Свернуть/развернуть" onclick="event.stopPropagation();toggleUpcoming();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`;
   const upTitle=(bankViewActive&&!mineMode)?'Ближайшие заседания · иски банка':'Ближайшие заседания';
-  let upHtml=`<div class="analytics-card"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">${upTitle}</span>${chevronHtml}</div>`;
+  // Свёрнутость восстанавливаем классами прямо в разметке (не после вставки
+  // innerHTML): состояние переживает полный пересбор #analytics-row. Класс
+  // нужен ОБЕИМ веткам (list и empty) — toggleUpcoming работает с любой.
+  const upCollapsed=upcomingCollapsed();
+  let upHtml=`<div class="analytics-card${upCollapsed?' upcoming-collapsed':''}"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">${upTitle}</span>${chevronHtml}</div>`;
 
   if(shownCases.length===0){
     const emptyText=mineMode?'По твоим делам ближайших заседаний нет':'Нет предстоящих заседаний';
-    upHtml+=`<div class="upcoming-empty">${emptyText}</div>`;
+    upHtml+=`<div class="upcoming-empty${upCollapsed?' collapsed':''}">${emptyText}</div>`;
   }else{
-    upHtml+='<div class="upcoming-list">';
+    upHtml+='<div class="upcoming-list'+(upCollapsed?' collapsed':'')+'">';
     groupMeta.forEach(g=>{
       const items=groups[g.key];
       if(!items.length)return;
@@ -2226,6 +2246,13 @@ function renderChipBar(){
   const nToday=countCasesByStatus('today');
   const nWeek=countCasesByStatus('week');
   const nWrits=countCasesByStatus('writs');
+  // Чип «Архив» в bank-режиме до ленивой загрузки архива: честное число даёт
+  // archived_count из корня cases_bank.json; меты нет (старый снимок) — «…»,
+  // чип остаётся триггером загрузки и не врёт нулём. Скрываем только
+  // достоверный ноль.
+  const nArchChip=(bankViewActive&&bankFileExists&&!bankArchiveLoaded)
+    ?(bankArchivedMeta==null?'…':bankArchivedMeta)
+    :countCasesByStatus('archived');
   const chips=[
     {k:'all',l:'Все',n:countCasesByStatus('all'),cls:''},
     {k:'new',l:'Новые',n:nNew,cls:'chip-new',hide:nNew===0},
@@ -2235,7 +2262,7 @@ function renderChipBar(){
     {k:'decided',l:'Рассмотрено',n:countCasesByStatus('decided'),cls:''},
     // «🧾 ИЛ» — только в картотеке банка: дела с листом на исполнение.
     {k:'writs',l:'🧾 ИЛ',n:nWrits,cls:'',hide:!bankViewActive||nWrits===0},
-    {k:'archived',l:'Архив',n:countCasesByStatus('archived'),cls:'',hide:countCasesByStatus('archived')===0&&!(bankViewActive&&bankFileExists&&!bankArchiveLoaded)},
+    {k:'archived',l:'Архив',n:nArchChip,cls:'',hide:nArchChip===0},
   ];
   let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
   // Чип «★ Мои» — единый mine-режим (фильтр + дайджест + «Ближайшие»), как
@@ -2348,11 +2375,15 @@ function renderCounter(){
     document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${total}</strong> дел обеих картотек`;
     return;
   }
-  // В режиме «Иски банка» счётчик считает по активному датасету; «новых» и
-  // «в архиве» — атрибуты основной картотеки, в bank-режиме их не показываем.
+  // В режиме «Иски банка» знаменатель — АКТИВНЫЕ дела: после ленивой
+  // догрузки архива bankCases прирастает архивными, и «из N» прыгал бы.
+  // Размер архива до загрузки даёт archived_count из корня cases_bank.json
+  // (bankArchivedMeta); старый снимок без меты — архив просто не упоминаем.
   if(bankViewActive){
-    const loadingNote=bankArchiveLoading?' · загрузка архива…':'';
-    document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${bankCases.length}</strong> исков банка${loadingNote}`;
+    const nArch=bankArchiveLoaded?bankCases.filter(c=>c._bankArchived).length:bankArchivedMeta;
+    const nActive=bankArchiveLoaded?bankCases.length-nArch:bankCases.length;
+    const archText=bankArchiveLoading?' · загрузка архива…':(nArch>0?` · ${nArch} в архиве`:'');
+    document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${nActive}</strong> исков банка${archText}`;
     return;
   }
   const archText=archivedCount>0?` · ${archivedCount} в архиве`:'';
