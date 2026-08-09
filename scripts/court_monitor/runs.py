@@ -1672,6 +1672,39 @@ def reclassify_roleword_appellants(cases: list[dict]) -> int:
     return fixed_cases
 
 
+def reclassify_named_appellants_is_bank(cases: list[dict]) -> int:
+    """Пересчитать is_bank ИМЕННЫХ подателей жалобы без HTTP.
+
+    С 09.08.2026 «жалоба банка» — только сам ПАО Сбербанк: дочки
+    (страхование/НПФ/лизинг) отсеиваются config.name_is_real_sberbank.
+    Уже сохранённые записи сами не излечиваются: живая касс. карточка
+    пересчитала бы флаг при следующем парсе, но дела, которые больше не
+    парсятся (акт вышел, ждут архива), держали бы 🏦 на жалобе дочки
+    вечно (кейс 8Г-11469/2026 — «Сбербанк страхование жизни»,
+    appellant_is_bank: true). Понижаем только True→False по новому
+    правилу; None и False не трогаем (None — «неопределимо» от
+    слов-ролей, его пересчитывает reclassify_roleword_appellants).
+    Тихо, идемпотентно, событий в дайджест не эмитит.
+    Возвращает число дел, где что-то изменилось.
+    """
+    fixed_cases = 0
+    for case_j in cases:
+        case_changed = False
+        for block_key, name_key, bank_key, _status_key in _APPELLANT_FIELD_MAP:
+            block = case_j.get(block_key)
+            if not isinstance(block, dict):
+                continue
+            raw = (block.get(name_key) or "").strip()
+            if not raw or appellant_role_words(raw) is not None:
+                continue  # пусто или слово-роль — не наш вход
+            if block.get(bank_key) is True and not config.name_is_real_sberbank(raw):
+                block[bank_key] = False
+                case_changed = True
+        if case_changed:
+            fixed_cases += 1
+    return fixed_cases
+
+
 def announce_imported_cases(cases: list[dict]) -> list[dict]:
     """Импортированные дела, ещё не объявленные в дайджесте, → к анонсу.
 
@@ -2506,6 +2539,15 @@ def main_json():
             f"Апеллянт: слова-роли переклассифицированы в {refixed} "
             f"{plural_ru(refixed, 'деле', 'делах', 'делах')}"
         )
+    # Именные податели-«банки»: с 09.08.2026 дочки Сбера (страхование/НПФ/
+    # лизинг) банком не считаются — понижаем сохранённый is_bank у дел,
+    # которые больше не парсятся (кейс 8Г-11469/2026). См. функцию.
+    refixed_named = reclassify_named_appellants_is_bank(cases)
+    if refixed_named:
+        log.info(
+            f"Апеллянт: is_bank дочек Сбера снят в {refixed_named} "
+            f"{plural_ru(refixed_named, 'деле', 'делах', 'делах')}"
+        )
     # Тихий бэкфилл апеллянта (стадия appeal): карточка апел. суда подателя
     # жалобы не публикует, а карточка 1-й инст. в appeal не парсится
     # (should_parse_fi_card) — разовый точечный заход ТОЛЬКО за полями
@@ -3162,6 +3204,28 @@ def main_json():
                 fi["default_cancel_outcome_emitted"] = outcome
                 changed = True
 
+        # ── Копия заочного решения возвратилась невручённой (09.08.2026) ──
+        # Факт запускает формулу ВС для срока вступления в силу
+        # (bank_legal_force_est), но раньше жил только внутри расчёта — юрист
+        # узнавал о нём случайно, из карточки (разбор дайджеста 07.08.2026:
+        # 2-4427/2026 и 2-2803/2026 «молчали»). Стоит здесь же, ДО
+        # hearing-блока: у решённого дела case_decided глушит hearing-часть.
+        # Идемпотентность — ЗНАЧЕНИЕМ (датой события), как у флагов особого
+        # порядка выше: булев флаг со сбросом в транзакции отката тут же
+        # переобъявил бы возврат ПЕРВОГО круга (события в истории остаются),
+        # а дата второго круга отличается — эмит случится сам. Анти-паводок
+        # для уже случившихся — посев в migrate_stages.
+        _dj_info = lifecycle.bank_default_judgment_info(fi)
+        if _dj_info["default_copy_returned"]:
+            _copy_key = _dj_info.get("default_copy_returned_date") or "unknown"
+            if fi.get("default_copy_returned_emitted") != _copy_key:
+                change["type"].append("fi_default_copy_returned")
+                change["details"]["copy_returned_date"] = (
+                    _dj_info.get("default_copy_returned_date") or ""
+                )
+                fi["default_copy_returned_emitted"] = _copy_key
+                changed = True
+
         # Новое/перенесённое заседание
         if (new_hearing_date and new_hearing_date != old_hearing_date
                 and not case_decided):
@@ -3309,6 +3373,10 @@ def main_json():
                 change["details"]["decision_date"] = fi.get("hearing_date", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
                 change["details"]["category"] = case_j.get("category", "")
+                # Заочность — в details (только при True, replay-safe):
+                # банк-секция помечает решение «🌙 заочное» (09.08.2026).
+                if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
+                    change["details"]["default_judgment"] = True
                 # Дата решения замораживается В ЗАПИСИ. hearing_date у решённого
                 # дела её держит, но перечитывается каждым прогоном (выше,
                 # безусловная запись new_hearing_date) и уедет вперёд, назначь
@@ -3351,8 +3419,13 @@ def main_json():
                     change["details"].get("act_date")
                     or card_info.get("Дата публикации акта", "")
                 )
+                # Замороженная decision_date первой: суд публикует тексты
+                # с лагом в недели (07.08.2026: тексты решений от 03.06—09.07),
+                # и дрейфующая hearing_date к этому моменту может держать уже
+                # дату заседания по расходам/индексации.
                 change["details"]["decision_date"] = (
                     change["details"].get("decision_date")
+                    or fi.get("decision_date")
                     or fi.get("hearing_date", "")
                 )
                 change["details"]["verdict_label"] = verdict
@@ -3362,6 +3435,9 @@ def main_json():
                 )
                 change["details"]["category"] = case_j.get("category", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
+                # Заочность — банк-секция помечает «🌙 заочное» (09.08.2026).
+                if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
+                    change["details"]["default_judgment"] = True
                 # Текст акта уже сообщил исход (verdict_label + полная
                 # мотивировка в 3.6). Закрываем канал fi_resolved, чтобы
                 # расширенный поиск вердикта по истории (extract_fi_verdict_
@@ -4389,8 +4465,17 @@ def main_json():
     # ушла выше) остаются в основном cases.json навсегда: маркер track
     # снимается, след остаётся в track_origin. Архивация трека — свои окна
     # (_is_bank_track_archived), свой файл cases_bank_archive.json.
+    total_active_bank = 0
     if bank_track_pending(cases):
         cases, bank_active, bank_newly_archived, moved_to_main = split_bank_track(cases)
+        # Счётчик активных исков банка для футера дайджеста (09.08.2026):
+        # «В производстве: всего 78» без упоминания сотен track-дел, по
+        # которым та же рассылка отчитывается секцией, дезориентировал.
+        total_active_bank = sum(
+            1 for c in bank_active
+            if (c.get("first_instance") or {}).get("status", "").strip()
+            == "В производстве"
+        )
         if moved_to_main:
             log.info(
                 f"Иски банка: {moved_to_main} "
@@ -4513,11 +4598,17 @@ def main_json():
     timings["save"] = time.perf_counter() - t0
 
     # ── 9. Дайджест и Telegram ──
-    # total_active: апелляция (CSV) + 1 инстанция (JSON, ещё не в апелляции).
-    # FI считаем по статусу карточки, не по current_stage — иначе попадают
-    # уже решённые дела и счётчик «1 инст.» получается завышенным.
+    # total_active: апелляция + 1 инстанция (ещё не в апелляции) — всё из
+    # JSON. FI считаем по статусу карточки, не по current_stage — иначе
+    # попадают уже решённые дела и счётчик «1 инст.» получается завышенным.
+    # Апелляцию с 09.08.2026 тоже считаем по cases.json: CSV-снимок держал
+    # дела, давно ушедшие из апелляции (07.08: «апел.: 23» при 20 живых —
+    # 33-3793/2026 и 33-1895/2026 уже в cassation_watch, 33-2013/2026 в
+    # архиве), state machine — единственный честный источник.
     total_active_appeal = sum(
-        1 for c in csv_cases if c.get("Статус", "").strip() != "Решено"
+        1 for c in cases
+        if c.get("current_stage") == "appeal"
+        and (c.get("appeal") or {}).get("status", "").strip() != "Решено"
     )
     # FI-счётчик включает только дела, которые сейчас в мониторинге на 1-й
     # инстанции и ещё не вынесли решение. cassation_watch — это тоже парсинг
@@ -4546,6 +4637,7 @@ def main_json():
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
         total_active_cassation=total_active_cassation,
+        total_active_bank=total_active_bank,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
     )
@@ -4556,6 +4648,7 @@ def main_json():
         total_active_appeal=total_active_appeal,
         total_active_fi=total_active_fi,
         total_active_cassation=total_active_cassation,
+        total_active_bank=total_active_bank,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
     )
@@ -4785,6 +4878,7 @@ def main_replay_last(push_all: bool = False):
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
         total_active_cassation=total_active_cassation,
+        total_active_bank=ctx.get("total_active_bank", 0),
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
@@ -4961,6 +5055,7 @@ def main_push_last_digest(owner_only: bool = False):
         total_active_appeal=ctx.get("total_active_appeal", 0),
         total_active_fi=ctx.get("total_active_fi", 0),
         total_active_cassation=total_active_cassation,
+        total_active_bank=ctx.get("total_active_bank", 0),
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
@@ -5022,12 +5117,16 @@ def main_digest_only():
     cases = load_csv(config.CSV_PATH)
     log.info(f"Загружено {len(cases)} дел из CSV")
 
-    total_active_appeal = sum(
-        1 for c in cases if c.get("Статус", "").strip() != "Решено"
-    )
     # FI-счётчик берём из JSON если он есть — без него «1 инст.» будет 0.
     json_data = load_json(config.JSON_PATH)
     json_cases = json_data.get("cases", [])
+    # Апелляция — тоже из JSON (09.08.2026, зеркало main_json): CSV-снимок
+    # держит давно ушедшие из апелляции дела.
+    total_active_appeal = sum(
+        1 for c in json_cases
+        if c.get("current_stage") == "appeal"
+        and (c.get("appeal") or {}).get("status", "").strip() != "Решено"
+    )
     total_active_fi = sum(
         1 for c in json_cases
         if c.get("current_stage") == "first_instance"

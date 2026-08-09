@@ -562,6 +562,7 @@ def _ensure_footer(
     total_active_fi: int,
     total_active_appeal: int,
     total_active_cassation: int,
+    total_active_bank: int = 0,
 ) -> str:
     """Гарантировать наличие финальной плашки `📌 В производстве …` и
     ссылки `📊 Дашборд` в конце дайджеста.
@@ -585,7 +586,12 @@ def _ensure_footer(
     badge = (
         f"📌 <b>В производстве: всего {total_active}"
         f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
-        f" | касс.: {total_active_cassation})</b>"
+        f" | касс.: {total_active_cassation})"
+        # Иски банка — отдельная картотека, в сумму «всего» не входит
+        # (09.08.2026); 0 = трек выключен, приписки нет.
+        + (f" · 🏦 иски банка: {total_active_bank} в производстве"
+           if total_active_bank else "")
+        + "</b>"
     )
     link = f'<a href="{config.DASHBOARD_URL}">📊 Дашборд</a>'
     cleaned.append("")

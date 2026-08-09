@@ -544,11 +544,28 @@ def fi_termination_details(fi: dict, bank_role: str) -> dict | None:
         bank_side_outcome_fi(bank_role, verdict_for_bank)
         if verdict_for_bank else ""
     )
+    # Дата события-завершения — для строки дайджеста «➡️ дело передано по
+    # подсудности (29.06.2026)»: суд заполняет «Результат» с лагом в недели
+    # (2-822/2026: передача 29.06, объявлена 07.08), и без даты юрист не
+    # понимает, когда это случилось. Ищем дату события с этим текстом;
+    # фолбэк — первая дата внутри самого текста (sudrf клеит её в хвост).
+    termination_date = ""
+    if event_text:
+        termination_date = next(
+            (ev.get("date") or "" for ev in (fi.get("events") or [])
+             if (ev.get("text") or "") == event_text and ev.get("date")),
+            "",
+        )
+        if not termination_date:
+            m_dt = re.search(r'\d{2}\.\d{2}\.\d{4}', event_text)
+            if m_dt:
+                termination_date = m_dt.group(0)
     return {
         "termination_kind": kind,
         "return_reason": reason,
         "event_text": event_text,
         "bank_outcome": bank_outcome,
+        "termination_date": termination_date,
     }
 
 
@@ -713,7 +730,9 @@ def bank_default_judgment_info(fi: dict) -> dict:
     - default_copy_served_date: "ДД.ММ.ГГГГ"|"" — «Копия заочного решения
       ответчику (истцу) вручена»;
     - default_copy_returned: bool — «Копия заочного решения возвратилась
-      невручённой».
+      невручённой»;
+    - default_copy_returned_date: "ДД.ММ.ГГГГ"|"" — дата события о возврате
+      копии (для события дайджеста fi_default_copy_returned, 09.08.2026).
 
     Событие «Отправка копии заочного решения» сознательно НЕ используется:
     формула ВС (Обзор №2 (2015), в. 14) считает трёхдневный срок направления
@@ -730,12 +749,15 @@ def bank_default_judgment_info(fi: dict) -> dict:
             "motivirovka_date": fi.get("motivirovka_date") or "",
             "default_copy_served_date": fi.get("default_copy_served_date") or "",
             "default_copy_returned": bool(fi.get("default_copy_returned")),
+            "default_copy_returned_date":
+                fi.get("default_copy_returned_date") or "",
         }
     info = {
         "default_judgment": False,
         "motivirovka_date": "",
         "default_copy_served_date": "",
         "default_copy_returned": False,
+        "default_copy_returned_date": "",
     }
     for ev in events:
         text = (ev.get("text") or "").lower().replace("ё", "е")
@@ -755,6 +777,7 @@ def bank_default_judgment_info(fi: dict) -> dict:
             info["motivirovka_date"] = ""
             info["default_copy_served_date"] = ""
             info["default_copy_returned"] = False
+            info["default_copy_returned_date"] = ""
         if _MOTIVATED_DECISION_RX.search(text) and ev.get("date"):
             info["motivirovka_date"] = ev["date"]  # последнее событие побеждает
         if _DEFAULT_COPY_RX.search(text):
@@ -762,6 +785,7 @@ def bank_default_judgment_info(fi: dict) -> dict:
                 info["default_copy_served_date"] = ev["date"]
             if _COPY_RETURNED_RX.search(text):
                 info["default_copy_returned"] = True
+                info["default_copy_returned_date"] = ev.get("date") or ""
     return info
 
 
@@ -963,7 +987,10 @@ def appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
     одна сторона в составе («ИСТЕЦ, ПРЕДСТАВИТЕЛЬ») — считаем по ней; ноль
     («ПРЕДСТАВИТЕЛЬ»: чей — неизвестно) или несколько («ИСТЕЦ, ТРЕТЬЕ ЛИЦО»)
     → None, а не False — иначе фронт вешал бы бейдж на противника банка
-    (кейс 33-5089/2026). Именной вход определяем по SBER_PATTERNS, как раньше.
+    (кейс 33-5089/2026). Именной вход — только сам ПАО Сбербанк: дочки
+    (страхование/НПФ/лизинг) отсеиваются name_is_real_sberbank (кейс
+    8Г-11469/2026: 🏦 «жалоба банка» вставал на ООО «Сбербанк страхование
+    жизни», решение юриста 09.08.2026).
     """
     role_words = appellant_role_words(raw)
     if role_words is not None:
@@ -977,7 +1004,7 @@ def appellant_is_bank(raw: str, role: str, case_j: dict) -> bool | None:
                 return True
             return None
         return None if case_j.get("bank_role") == "Третье лицо" else False
-    return any(p in raw.lower() for p in config.SBER_PATTERNS)
+    return config.name_is_real_sberbank(raw)
 
 
 def apply_fi_appellant(fi: dict, case_j: dict, card_info: dict) -> bool:
@@ -1531,6 +1558,10 @@ _FI_CATCHUP_DATED_TYPES = {
     "fi_default_cancellation_hearing": ("cancel_hearing_date",),
     "fi_default_judgment_vacated": ("cancel_outcome_date",),
     "fi_default_cancellation_refused": ("cancel_outcome_date",),
+    # Возврат копии заочного решения: тот же класс догоняющих — у только что
+    # заведённой карточки давний возврат копии не новость (второй слой
+    # анти-паводка после посева в migrate_stages).
+    "fi_default_copy_returned": ("copy_returned_date",),
 }
 
 
@@ -1938,6 +1969,20 @@ def migrate_stages(cases: list[dict]) -> int:
         if (due and "objections_emitted" not in fi
                 and date.fromisoformat(due) < _today):
             fi["objections_emitted"] = due
+    # Возврат копии заочного решения (09.08.2026): посев эмит-флага делам,
+    # где возврат уже случился ДО появления события fi_default_copy_returned
+    # (2-4427/2026, 2-2803/2026) — иначе первый прогон после деплоя объявил
+    # бы месячной давности факты новостями. Флаг — ЗНАЧЕНИЕМ (датой), в
+    # унисон с эмит-блоком FI-цикла; уже стоящий (в т.ч. от эмита) не трогаем.
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        if "default_copy_returned_emitted" in fi:
+            continue
+        _dj = bank_default_judgment_info(fi)
+        if _dj["default_copy_returned"]:
+            fi["default_copy_returned_emitted"] = (
+                _dj.get("default_copy_returned_date") or "unknown"
+            )
     migrated = 0
     for case in cases:
         changed = True

@@ -34,6 +34,8 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
+from court_monitor import config as cm_config  # noqa: E402
+from court_monitor import lifecycle as cm_lifecycle  # noqa: E402
 from court_monitor import runs as cm_runs  # noqa: E402
 
 _CASE_ID = "233606509"
@@ -483,3 +485,91 @@ class TestReclassifyRolewordAppellants:
         # Банк — истец, жалоба «ОТВЕТЧИКА» → точно не банк.
         assert fi["appeal_appellant_is_bank"] is False
         assert case["appeal"]["appellant_is_bank"] is False
+
+
+class TestNameIsRealSberbank:
+    """«Банк» — только сам ПАО Сбербанк, дочки отсеиваются (09.08.2026;
+    кейс 8Г-11469/2026: 🏦 «жалоба банка» вставал на жалобу
+    ООО «Сбербанк страхование жизни»)."""
+
+    def test_real_bank_forms(self):
+        assert cm_config.name_is_real_sberbank("ПАО Сбербанк") is True
+        assert cm_config.name_is_real_sberbank("ПАО Сбер") is True
+        assert cm_config.name_is_real_sberbank(
+            "ПАО Сбербанк в лице Уральского банка") is True
+
+    def test_subsidiaries_are_not_bank(self):
+        assert cm_config.name_is_real_sberbank(
+            'ООО "Сбербанк страхование жизни"') is False
+        assert cm_config.name_is_real_sberbank(
+            "ООО СК Сбербанк страхование") is False
+        assert cm_config.name_is_real_sberbank("АО НПФ Сбербанк") is False
+
+    def test_bank_next_to_subsidiary_still_bank(self):
+        assert cm_config.name_is_real_sberbank(
+            "ПАО Сбербанк, ООО Сбербанк страхование жизни") is True
+
+    def test_empty_and_stranger(self):
+        assert cm_config.name_is_real_sberbank("") is False
+        assert cm_config.name_is_real_sberbank("Иванов Иван Иванович") is False
+
+    def test_lifecycle_named_appellant_subsidiary_false(self):
+        """Именная ветка appellant_is_bank: дочка → False, сам банк → True."""
+        case = {"bank_role": "Третье лицо", "plaintiff": "Лаптев А.Н.",
+                "defendant": "ООО СК Сбербанк Страхование жизни"}
+        assert cm_lifecycle.appellant_is_bank(
+            'ООО "Сбербанк страхование жизни"', "", case) is False
+        assert cm_lifecycle.appellant_is_bank(
+            "ПАО Сбербанк", "", case) is True
+
+
+class TestReclassifyNamedAppellantsIsBank:
+    """Миграция сохранённых is_bank именных подателей: дочки Сбера с
+    ложным True понижаются в False (живые касс. карточки пересчитал бы
+    парс, миграция — для дел, которые больше не парсятся)."""
+
+    def _case_8g_11469(self) -> dict:
+        return {
+            "id": "2-441/2025",
+            "current_stage": "cassation",
+            "bank_role": "Третье лицо",
+            "plaintiff": "Лаптев Алексей Николаевич",
+            "defendant": "ООО СК Сбербанк Страхование жизни",
+            "cassation": {
+                "case_number": "8Г-11469/2026",
+                "appellant": 'ООО "Сбербанк страхование жизни"',
+                "appellant_is_bank": True,
+                "appellant_status": "ОТВЕТЧИК",
+            },
+        }
+
+    def test_subsidiary_true_downgraded(self):
+        case = self._case_8g_11469()
+        assert cm_runs.reclassify_named_appellants_is_bank([case]) == 1
+        assert case["cassation"]["appellant_is_bank"] is False
+        # Имя и статус не тронуты.
+        assert case["cassation"]["appellant"] == \
+            'ООО "Сбербанк страхование жизни"'
+        assert case["cassation"]["appellant_status"] == "ОТВЕТЧИК"
+
+    def test_idempotent(self):
+        case = self._case_8g_11469()
+        cm_runs.reclassify_named_appellants_is_bank([case])
+        assert cm_runs.reclassify_named_appellants_is_bank([case]) == 0
+
+    def test_real_bank_true_kept(self):
+        case = self._case_8g_11469()
+        case["cassation"]["appellant"] = "ПАО Сбербанк"
+        assert cm_runs.reclassify_named_appellants_is_bank([case]) == 0
+        assert case["cassation"]["appellant_is_bank"] is True
+
+    def test_role_words_and_none_untouched(self):
+        """Слова-роли — зона reclassify_roleword_appellants; None/False
+        не повышаются и не трогаются."""
+        case = self._case_8g_11469()
+        case["cassation"]["appellant"] = "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ"
+        assert cm_runs.reclassify_named_appellants_is_bank([case]) == 0
+        case["cassation"]["appellant"] = 'ООО "Сбербанк страхование жизни"'
+        case["cassation"]["appellant_is_bank"] = None
+        assert cm_runs.reclassify_named_appellants_is_bank([case]) == 0
+        assert case["cassation"]["appellant_is_bank"] is None

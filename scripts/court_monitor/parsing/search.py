@@ -44,21 +44,11 @@ def _parse_combined_cell(text: str) -> dict:
     return result
 
 
-# Паттерны дочерних структур Сбербанка, которые НЕ являются ПАО Сбербанк
-# (страхование, НПФ, УК и т.п.). Порядок не важен — все применяются последовательно.
-_SBER_SUBSIDIARY_PATTERNS = [
-    # Сбербанк страхование [жизни] — СК ООО/АО «Сбербанк страхование жизни» и варианты
-    re.compile(r'сбербанк\s+страхован\w*(?:\s+жизн\w*)?', re.IGNORECASE),
-    # НПФ Сбербанк — АО «НПФ Сбербанк», «Негосударственный пенсионный фонд Сбербанк»
-    re.compile(r'нпф\s+сбербанк', re.IGNORECASE),
-    re.compile(r'негосударственн\w*\s+пенсионн\w*\s+фонд\w*\s+сбербанк', re.IGNORECASE),
-    # Сбербанк Управление Активами — УК
-    re.compile(r'сбербанк\s+управлен\w*\s+актив\w*', re.IGNORECASE),
-    # Сбербанк Лизинг
-    re.compile(r'сбербанк\s+лизинг\w*', re.IGNORECASE),
-    # Сбербанк Факторинг
-    re.compile(r'сбербанк\s+факторинг\w*', re.IGNORECASE),
-]
+# Паттерны дочерних структур Сбербанка переехали в config (09.08.2026):
+# фильтр дочек понадобился lifecycle/linking для appellant_is_bank, а они
+# не могут импортировать parsing (цикл). Алиас — ре-экспорт для
+# совместимости (parsing/__init__.py и фасад update_cases.py).
+_SBER_SUBSIDIARY_PATTERNS = config.SBER_SUBSIDIARY_PATTERNS
 
 
 def is_subsidiary_only_case(plaintiff: str, defendant: str) -> bool:

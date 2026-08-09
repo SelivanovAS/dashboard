@@ -317,7 +317,18 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                         'смен статуса')
             + " в апелляции"
         )
-    if fi_changes:
+    # Передачи по подсудности банк-трека — в общий счётчик «➡️ … по
+    # подсудности»: тело дайджеста показывает их в секции «Иски банка», и
+    # сводка «1 дело» при двух передачах в теле дезориентировала (выпуск
+    # 07.08.2026: 2-822/2026 в основном треке + 2-8088/2026 в банковском).
+    bank_transfers = sum(
+        1 for ch in (bank_changes or [])
+        if "fi_returned" in ch["type"]
+        and ((ch.get("details") or {}).get("termination_kind") or "")
+        == "transfer"
+    )
+    if fi_changes or bank_transfers:
+        fi_changes = fi_changes or []
         fi_hearings = sum(
             1 for ch in fi_changes
             if ("fi_hearing_new" in ch["type"]
@@ -357,7 +368,7 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             fi_term_kinds[kind] = fi_term_kinds.get(kind, 0) + 1
         fi_returns = fi_term_kinds.get("returned", 0)
         fi_refusals = fi_term_kinds.get("refusal", 0)
-        fi_transfers = fi_term_kinds.get("transfer", 0)
+        fi_transfers = fi_term_kinds.get("transfer", 0) + bank_transfers
         fi_merges = fi_term_kinds.get("merged", 0)
         fi_cass_filed = sum(
             1 for ch in fi_changes if "fi_cassation_filed" in ch["type"]
@@ -829,6 +840,52 @@ def _strip_echoed_terminal_events(fi_changes: list[dict]) -> list[dict]:
     return out
 
 
+def _merge_motiv_into_resolved(fi_changes: list[dict]) -> list[dict]:
+    """Склеить «решение + мотивировка» одного дела в одну запись 3.5.
+
+    До 09.08.2026 fi_resolved уходил в 3.5 «Вынесенные решения», а
+    мотивировочное событие того же прогона (fi_motivirovka_emitted или
+    мотивировочный fi_final_event — исключение эхо-фильтра выше) — отдельной
+    строкой в 3.2 «Изменения»: дело печаталось ДВАЖДЫ с полным списком
+    сторон (кейс Урала 2-484/2026: 32 соответчика в обеих строках, вопрос
+    юриста 09.08.2026). Мотив-типы вычищаются, дата уезжает в
+    details["motiv_merged_date"] — рендер 3.5 допишет «Мотивировка
+    изготовлена …» в ту же запись. Применяется к ОСНОВНОМУ треку ПОСЛЕ
+    отделения bank_changes: в банк-секции дело и так одна строка (дубля
+    нет), а склейка потеряла бы факт мотивировки. Комбинации с
+    fi_act_text_published / fi_returned не трогаем — у них своя вёрстка.
+    Оригинальные dict'ы не мутируем (replay); идемпотентно — после прохода
+    мотив-типов при fi_resolved не остаётся. Зовётся ДО build_summary_line:
+    счётчики «🏁 финальных»/«📄 мотивировок» отражают склейку сами.
+    """
+    out: list[dict] = []
+    for ch in fi_changes:
+        types = ch.get("type") or []
+        if (ch.get("track") == "plaintiff_light"
+                or "fi_resolved" not in types
+                or "fi_returned" in types
+                or "fi_act_text_published" in types):
+            out.append(ch)
+            continue
+        d = ch.get("details") or {}
+        motiv_date: str | None = None
+        kept = list(types)
+        if "fi_motivirovka_emitted" in kept:
+            motiv_date = (d.get("motivirovka_date") or "").strip()
+            kept = [t for t in kept if t != "fi_motivirovka_emitted"]
+        ev_raw = (d.get("event") or "").strip()
+        if "fi_final_event" in kept and ev_raw and _is_motiv_event(ev_raw):
+            if not motiv_date:
+                motiv_date = _motiv_date_from_event(ev_raw, d).strip()
+            kept = [t for t in kept if t != "fi_final_event"]
+        if motiv_date is None:
+            out.append(ch)
+            continue
+        out.append({**ch, "type": kept,
+                    "details": {**d, "motiv_merged_date": motiv_date}})
+    return out
+
+
 # Виды процессуального завершения 1-й инстанции. Ключ — details
 # ["termination_kind"] (ставит lifecycle.fi_termination_details). Старые
 # контексты (--replay-last до 29.07.2026) ключа не несут — фолбэк на
@@ -923,6 +980,21 @@ def _appeal_complaint_suffix(d: dict, pl_disp: str, df_disp: str) -> str:
     return ""
 
 
+def _is_motiv_made_event(event: str) -> bool:
+    """Строгий детект «Изготовлено мотивированное решение…» для НОРМАЛИЗАЦИИ
+    формулировки. Не путать с широким `_is_motiv_event` (эхо-фильтр,
+    группировка): не распознанная здесь формулировка уйдёт сырой ⚖️-строкой,
+    но факт не потеряется."""
+    ev_low = (event or "").lower()
+    return 'изготовлено' in ev_low and 'мотивированное решение' in ev_low
+
+
+def _motiv_date_from_event(event: str, d: dict) -> str:
+    """Дата мотивировки из текста события; фолбэк — details["event_date"]."""
+    m = re.search(r'(\d{2}\.\d{2}\.\d{4})', event or '')
+    return m.group(1) if m else (d.get('event_date') or '')
+
+
 # ── Секция «Иски банка» (лёгкий трек, банк — истец) ──────────────────────────
 # Компактный формат «одна строка на дело»: при масштабе пилота (сотни дел)
 # полная вёрстка секции 3.2 не влезла бы в Telegram-бюджет (~7600 симв.).
@@ -952,6 +1024,9 @@ _BANK_TYPE_LABELS = {
     "fi_default_cancellation_hearing": "📅 заседание по заявлению об отмене",
     "fi_default_judgment_vacated": "⚠️ заочное решение отменено — дело рассматривается заново",
     "fi_default_cancellation_refused": "✅ в отмене заочного решения отказано",
+    # Возврат копии запускает формулу ВС для срока вступления в силу — юрист
+    # должен видеть его, а не вычислять по карточке (разбор 07.08.2026).
+    "fi_default_copy_returned": "🌙 копия заочного решения возвратилась невручённой",
     "fi_objections_deadline_set": "⏳ установлен срок для возражений на жалобу",
     "fi_appeal_filed": "📨 апел. жалоба ответчика — дело уходит в общий трек",
     "fi_cassation_filed": "📨 касс. жалоба",
@@ -1014,9 +1089,30 @@ def _bank_event_phrases(ch: dict) -> list[str]:
                     + f" → <b>{escape_html(w.get('status') or '?')}</b>"
                 )
         elif t == "fi_resolved":
+            # Дата решения и заочность — контекст, без которого строка
+            # дезориентирует (разбор 07.08.2026: суд объявляет решения
+            # с лагом в недели). default_judgment в details опционален —
+            # старые контексты replay живут без пометки.
             v = (d.get("verdict_label") or "").strip()
-            out.append("⚖️ <b>вынесено решение</b>"
-                       + (f": {escape_html(v)}" if v else ""))
+            dd = (d.get("decision_date") or "").strip()
+            ph = ("⚖️ <b>вынесено решение</b>"
+                  + (f" {escape_html(dd)}" if dd else "")
+                  + (f": {escape_html(v)}" if v else ""))
+            if d.get("default_judgment"):
+                ph += " (🌙 заочное)"
+            out.append(ph)
+        elif t == "fi_act_text_published":
+            # Своя ветка вместо генерик-подписи: «текст решения опубликован»
+            # без даты решения и заочности читался как свежий исход, хотя
+            # суд задним числом выложил тексты июньских решений (2-4427/2026:
+            # заочное 03.06, копия не вручена — а строка молчала).
+            dd = (d.get("decision_date") or "").strip()
+            ph = ("📄 текст решения"
+                  + (f" от {escape_html(dd)}" if dd else "")
+                  + " опубликован")
+            if d.get("default_judgment"):
+                ph += " (🌙 заочное)"
+            out.append(ph)
         elif t in ("fi_hearing_new", "fi_hearing_next"):
             hp = (d.get("hearing_date") or "").strip()
             out.append("📅 заседание"
@@ -1037,6 +1133,13 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             reason = (d.get("return_reason") or "").strip()
             if kind == "merged" and reason:
                 label += f": {escape_html(reason)}"
+            # Дата события-завершения: суд заполняет «Результат» с лагом в
+            # недели, и без даты юрист не понимает, когда это случилось
+            # (2-8088/2026: передача 07.07, объявлена 07.08). Ключ
+            # опционален — старые контексты replay без скобок.
+            td = (d.get("termination_date") or "").strip()
+            if td:
+                label += f" ({escape_html(td)})"
             out.append(label)
         elif t == "fi_bank_claim_registered":
             ph = _BANK_TYPE_LABELS["fi_bank_claim_registered"]
@@ -1066,6 +1169,28 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             else:
                 # Старый контекст без деталей (--replay-last) — прежняя форма.
                 out.append("ℹ️ смена статуса")
+        elif t == "fi_default_copy_returned":
+            dt = (d.get("copy_returned_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS["fi_default_copy_returned"]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_final_event":
+            # Содержимое события вместо пустого генерика «движение по делу»
+            # (разбор 07.08.2026, 2-5178/2026: за подписью пряталось
+            # «Изготовлено мотивированное решение» — факт, от которого течёт
+            # срок на апелляцию). Мотивировка нормализуется как в 3.2, прочее
+            # цитируется коротко; пустой event — прежний генерик (replay).
+            ev_raw = (d.get("event") or "").strip()
+            if ev_raw and _is_motiv_made_event(ev_raw):
+                md = _motiv_date_from_event(ev_raw, d)
+                out.append("📄 мотивировка изготовлена"
+                           + (f" ({escape_html(md)})" if md else ""))
+            elif ev_raw:
+                quote = _event_quote(ev_raw, d.get("event_date", ""))
+                if len(quote) > 100:
+                    quote = quote[:100].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+                out.append(f"⚖️ {escape_html(quote)}")
+            else:
+                out.append(_BANK_TYPE_LABELS["fi_final_event"])
         else:
             label = _BANK_TYPE_LABELS.get(t)
             if label:
@@ -1073,10 +1198,71 @@ def _bank_event_phrases(ch: dict) -> list[str]:
     return out
 
 
+# Группы «по важности» для сортировки секции (решение юриста 09.08.2026):
+# решения и акты → исполнительные листы → завершения → новые иски →
+# заседания (ближайшие сверху) → прочее. До этого 29 строк шли в порядке
+# очереди обработки прогона и не читались (разбор дайджеста 07.08.2026).
+_BANK_GROUP_ORDER = (
+    frozenset({"fi_resolved", "fi_act_text_published", "fi_act_published",
+               "fi_motivirovka_emitted"}),
+    frozenset({"fi_writ_issued", "fi_writ_status_changed"}),
+    frozenset({"fi_returned"}),
+    frozenset({"fi_bank_claim_registered", "fi_accepted_no_hearing"}),
+    frozenset({"fi_hearing_new", "fi_hearing_next", "fi_hearing_postponed",
+               "fi_hearing_recess", "fi_hearing_restart"}),
+)
+_BANK_GROUP_HEARINGS = 4
+_BANK_GROUP_OTHER = len(_BANK_GROUP_ORDER)
+
+
+def _bank_change_group(ch: dict) -> int:
+    """Индекс группы «по важности»; у дела с несколькими типами — старшая.
+
+    Мотивировочный fi_final_event (детект по details["event"]) — та же
+    группа, что решения: содержательно это «мотивировка изготовлена».
+    """
+    types = ch.get("type") or []
+    best = _BANK_GROUP_OTHER
+    for i, grp in enumerate(_BANK_GROUP_ORDER):
+        if any(t in grp for t in types):
+            best = min(best, i)
+    if (best > 0 and "fi_final_event" in types
+            and _is_motiv_event((ch.get("details") or {}).get("event") or "")):
+        best = 0
+    return best
+
+
 def _bank_track_block(bank_changes: list[dict]) -> list[str]:
-    """Строки секции «Иски банка»: заголовок + одна строка на дело."""
+    """Строки секции «Иски банка»: заголовок + одна строка на дело.
+
+    Дела отсортированы по группам важности (_BANK_GROUP_ORDER), между
+    группами пустая строка; внутри группы порядок исходный (стабильная
+    сортировка), заседания — по дате, ближайшие сверху. Подзаголовков у
+    групп нет осознанно: счётчик «ИСКИ БАНКА (N)» сверяет линтер
+    (_check_section_counters — строка с номером = дело), новые заголовки
+    с (N) пришлось бы синхронизировать с ним, а Telegram-лимит и так
+    режет секцию первой.
+    """
+    def _sort_key(pair: tuple[int, dict]) -> tuple[int, float, int]:
+        idx, ch = pair
+        grp = _bank_change_group(ch)
+        ts = 0.0
+        if grp == _BANK_GROUP_HEARINGS:
+            hd = parse_date(
+                ((ch.get("details") or {}).get("hearing_date") or "").strip()
+            )
+            ts = hd.timestamp() if hd else float("inf")
+        return (grp, ts, idx)
+
+    ordered = [ch for _, ch in
+               sorted(enumerate(bank_changes), key=_sort_key)]
     block = [f"🏦 <b>ИСКИ БАНКА ({len(bank_changes)}):</b>", ""]
-    for ch in bank_changes:
+    prev_grp: int | None = None
+    for ch in ordered:
+        grp = _bank_change_group(ch)
+        if prev_grp is not None and grp != prev_grp:
+            block.append("")
+        prev_grp = grp
         num = escape_html(ch.get("case", ""))
         court = escape_html(shorten_court_name(ch.get("court", "")))
         df = escape_html(shorten_party_name(
@@ -1098,6 +1284,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              total_active_appeal: int = 0,
                              total_active_fi: int = 0,
                              total_active_cassation: int = 0,
+                             total_active_bank: int = 0,
                              cass_changes: list[dict] | None = None,
                              cass_discovered: list[dict] | None = None,
                              act_summarizer=None) -> str:
@@ -1164,8 +1351,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         fi_changes = [
             ch for ch in fi_changes if ch.get("track") != "plaintiff_light"
         ]
+    # Склейка «решение + мотивировка» одного дела — ПОСЛЕ отделения банк-трека
+    # (в его компакт-строке дубля нет) и ДО сводки (кейс Урала 2-484/2026).
+    fi_changes = _merge_motiv_into_resolved(fi_changes)
 
     total_active = total_active_appeal + total_active_fi + total_active_cassation
+    # Иски банка — отдельная картотека: в сумму «всего» не входят, футер
+    # упоминает их отдельной припиской (09.08.2026); 0 = трек выключен.
+    bank_footer_tail = (
+        f" · 🏦 иски банка: {total_active_bank} в производстве"
+        if total_active_bank else ""
+    )
 
     # ── Короткое сообщение если изменений нет ──
     # stage_transitions намеренно НЕ учитываем: мостик в дайджест больше
@@ -1177,7 +1373,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             today,
             f"В производстве: всего {total_active}"
             f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
-            f" | касс.: {total_active_cassation})",
+            f" | касс.: {total_active_cassation})" + bank_footer_tail,
         )
 
     # ── Группировка changes по типам (для блока АПЕЛЛЯЦИЯ) ──
@@ -1396,6 +1592,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         # 3.5 в 3.2 эта информация терялась бы (решение юриста
                         # 29.07.2026).
                         part += f" (для банка: {escape_html(bank_out)})"
+                    # Дата события-завершения (09.08.2026): суд заполняет
+                    # «Результат» с лагом в недели (2-822/2026: передача
+                    # 29.06, объявлена 07.08) — без даты строка читается как
+                    # свежая новость. Ключ опционален (replay).
+                    td = (d.get("termination_date") or "").strip()
+                    if td:
+                        part += f" ({escape_html(td)})"
                     ev_list.append(part)
                 elif t == "fi_act_published":
                     ad = escape_html(d.get("act_date", ""))
@@ -1406,16 +1609,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     )
                 elif t == "fi_final_event":
                     ev_raw = d.get('event', '') or ''
-                    ev_low = ev_raw.lower()
                     # Спец-обработка фразы «Изготовлено мотивированное
                     # решение в окончательной форме» — эквивалент
                     # fi_act_published; нормализуем под единую формулировку.
-                    if ('изготовлено' in ev_low
-                            and 'мотивированное решение' in ev_low):
-                        m = re.search(r'(\d{2}\.\d{2}\.\d{4})', ev_raw)
-                        ad = escape_html(
-                            m.group(1) if m else (d.get('event_date') or '')
-                        )
+                    if _is_motiv_made_event(ev_raw):
+                        ad = escape_html(_motiv_date_from_event(ev_raw, d))
                         ev_list.append(
                             "📄 мотивированное решение изготовлено"
                             + (f" {ad}" if ad else "")
@@ -1509,6 +1707,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         "✅ в отмене заочного решения отказано"
                         + (f" ({dt})" if dt else "")
                         + " — пошёл месяц на апелляцию"
+                    )
+                elif t == "fi_default_copy_returned":
+                    # Запускает формулу ВС для срока вступления в силу
+                    # (решение + 3 раб. дн + 7 раб. дн + месяц) — юристу
+                    # важно видеть сам факт (разбор 07.08.2026).
+                    dt = escape_html(d.get("copy_returned_date", ""))
+                    ev_list.append(
+                        "🌙 копия заочного решения возвратилась невручённой"
+                        + (f" ({dt})" if dt else "")
                     )
                 elif t == "fi_hearing_restart":
                     rd = escape_html(d.get("restart_date", ""))
@@ -1608,6 +1815,16 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             if "fi_bank_role_changed" in ch["type"]:
                 decision_parts.append(
                     "<b>Для банка:</b> нейтрально — банк не сторона согласно карточке"
+                )
+            # Мотивировка того же прогона, приклеенная _merge_motiv_into_
+            # resolved (кейс Урала 2-484/2026): раньше печаталась отдельной
+            # строкой в 3.2 — дело выходило дважды.
+            if "motiv_merged_date" in d:
+                md = escape_html((d.get("motiv_merged_date") or "").strip())
+                decision_parts.append(
+                    "Мотивировка изготовлена"
+                    + (f" {md}" if md else "")
+                    + ", полный текст не опубликован"
                 )
             fi_block.append(". ".join(decision_parts))
             # Пустая строка между делами (воздух, просьба юриста 06.07.2026).
@@ -2453,7 +2670,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     lines.append(
         f"📌 <b>В производстве: всего {total_active}"
         f" (1 инст.: {total_active_fi} | апел.: {total_active_appeal}"
-        f" | касс.: {total_active_cassation})</b>"
+        f" | касс.: {total_active_cassation})"
+        + bank_footer_tail + "</b>"
     )
     lines.append(f'<a href="{config.DASHBOARD_URL}">📊 Дашборд</a>')
 

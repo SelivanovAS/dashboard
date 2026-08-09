@@ -313,7 +313,23 @@ class TestDefaultJudgmentInfo:
             "motivirovka_date": "28.05.2026",
             "default_copy_served_date": "26.06.2026",
             "default_copy_returned": True,
+            "default_copy_returned_date": "15.06.2026",
         }
+
+    def test_copy_returned_date_reset_by_new_round(self):
+        """Граница круга (новое решение-событие) сбрасывает и дату возврата
+        копии — иначе событие fi_default_copy_returned второго круга
+        считалось бы уже объявленным по дате первого."""
+        fi = {"events": [
+            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
+            {"date": "15.03.2026",
+             "text": "Копия заочного решения возвратилась невручённой"},
+            {"date": "15.04.2026",
+             "text": "Вынесено заочное решение по делу. Иск УДОВЛЕТВОРЕН"},
+        ]}
+        info = lifecycle.bank_default_judgment_info(fi)
+        assert info["default_copy_returned"] is False
+        assert info["default_copy_returned_date"] == ""
 
     def test_last_decision_wins(self):
         """Отмена заочного (ст. 241) → новое рассмотрение → обычное решение:
@@ -346,6 +362,56 @@ class TestDefaultJudgmentInfo:
             fi = {"events": [
                 {"date": "01.06.2026", "text": f"Копия заочного решения {word}"}]}
             assert lifecycle.bank_default_judgment_info(fi)["default_copy_returned"] is True
+
+
+class TestDefaultCopyReturnedSeeding:
+    """Анти-паводок fi_default_copy_returned: migrate_stages засевает
+    эмит-флаг делам, где возврат копии случился ДО появления события
+    (2-4427/2026, 2-2803/2026) — первый прогон после деплоя не объявляет
+    месячной давности факты новостями."""
+
+    def _case(self) -> dict:
+        return {
+            "id": "2-4427/2026",
+            "current_stage": "first_instance",
+            "track": "plaintiff_light",
+            "bank_role": "Истец",
+            "first_instance": {
+                "case_number": "2-4427/2026",
+                "status": "Решено",
+                "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+                "hearing_date": "03.06.2026",
+                "events": [
+                    {"date": "03.06.2026",
+                     "text": "Судебное заседание. 11:00. Вынесено заочное "
+                             "решение по делу. Иск УДОВЛЕТВОРЕН"},
+                    {"date": "08.07.2026",
+                     "text": "Копия заочного решения возвратилась "
+                             "невручённой. 16:25. 23.07.2026"},
+                ],
+            },
+        }
+
+    def test_seeded_with_event_date(self):
+        case = self._case()
+        lifecycle.migrate_stages([case])
+        assert (case["first_instance"]["default_copy_returned_emitted"]
+                == "08.07.2026")
+
+    def test_existing_flag_untouched(self):
+        """Уже стоящий флаг (в т.ч. от эмита FI-цикла) посев не перетирает."""
+        case = self._case()
+        case["first_instance"]["default_copy_returned_emitted"] = "01.01.2026"
+        lifecycle.migrate_stages([case])
+        assert (case["first_instance"]["default_copy_returned_emitted"]
+                == "01.01.2026")
+
+    def test_no_copy_return_not_seeded(self):
+        case = self._case()
+        case["first_instance"]["events"] = case["first_instance"]["events"][:1]
+        lifecycle.migrate_stages([case])
+        assert ("default_copy_returned_emitted"
+                not in case["first_instance"])
 
 
 # ── is_case_archived: архивные окна трека ────────────────────────────────────
@@ -910,6 +976,137 @@ class TestBankDigestSection:
         короткая форма."""
         html = _digest([_bank_change(["fi_status_change"])])
         assert "ℹ️ смена статуса" in html
+
+    # ── Правки по разбору дайджеста 07.08.2026 ──
+
+    def test_grouped_by_importance(self):
+        """Группировка «по важности» (решение юриста 09.08.2026): решения →
+        ИЛ → завершения → новые иски → заседания (ближайшие сверху)."""
+        h_far = _bank_change(["fi_hearing_new"], {"hearing_date": "20.09.2026"})
+        h_far["case"] = "2-901/2026"
+        h_near = _bank_change(["fi_hearing_next"],
+                              {"hearing_date": "15.08.2026"})
+        h_near["case"] = "2-902/2026"
+        new_claim = _bank_change(["fi_bank_claim_registered"],
+                                 {"filing_date": "05.08.2026"})
+        new_claim["case"] = "М-903/2026"
+        transfer = _bank_change(["fi_returned"],
+                                {"termination_kind": "transfer"})
+        transfer["case"] = "2-904/2026"
+        writ = _bank_change(["fi_writ_issued"], {"writs": [{
+            "issue_date": "06.08.2026", "electronic_id": "86RS#1",
+            "status": "Выдан"}]})
+        writ["case"] = "2-905/2026"
+        resolved = _bank_change(["fi_resolved"],
+                                {"verdict_label": "удовлетворено"})
+        resolved["case"] = "2-906/2026"
+        html = _digest([h_far, h_near, new_claim, transfer, writ, resolved])
+        order = [html.index(n) for n in
+                 ("2-906/2026", "2-905/2026", "2-904/2026", "М-903/2026",
+                  "2-902/2026", "2-901/2026")]
+        assert order == sorted(order), "порядок групп «по важности» нарушен"
+        assert "ИСКИ БАНКА (6)" in html
+
+    def test_final_event_motivirovka_informative(self):
+        """За генериком «движение по делу» пряталась мотивировка — факт, от
+        которого течёт срок на апелляцию (2-5178/2026, 07.08.2026)."""
+        html = _digest([_bank_change(["fi_final_event"], {
+            "event": ("Изготовлено мотивированное решение в окончательной "
+                      "форме. 17:00. 06.08.2026"),
+            "event_date": "31.07.2026"})])
+        assert "📄 мотивировка изготовлена (06.08.2026)" in html
+        assert "движение по делу" not in html
+
+    def test_final_event_other_quoted(self):
+        html = _digest([_bank_change(["fi_final_event"], {
+            "event": "Производство по делу возобновлено. 10:00. 05.08.2026",
+            "event_date": "05.08.2026"})])
+        assert "Производство по делу возобновлено" in html
+        assert "движение по делу" not in html
+
+    def test_final_event_empty_falls_back(self):
+        """Старый контекст без details.event — прежний генерик (replay)."""
+        html = _digest([_bank_change(["fi_final_event"])])
+        assert "движение по делу" in html
+
+    def test_transfer_carries_date(self):
+        """«Когда передано?» — вопрос юриста по 2-8088/2026: суд заполняет
+        «Результат» с лагом в недели, дата события обязана быть в строке."""
+        html = _digest([_bank_change(["fi_returned"], {
+            "termination_kind": "transfer",
+            "termination_date": "07.07.2026"})])
+        assert "дело передано по подсудности (07.07.2026)" in html
+
+    def test_transfer_without_date_no_parens(self):
+        """Старый контекст без termination_date — без пустых скобок."""
+        html = _digest([_bank_change(["fi_returned"],
+                                     {"termination_kind": "transfer"})])
+        assert "дело передано по подсудности" in html
+        assert "по подсудности (" not in html
+
+    def test_act_text_published_with_context(self):
+        """Дата решения и заочность в строке публикации: суд задним числом
+        выложил тексты июньских решений (2-4427/2026, 07.08.2026)."""
+        html = _digest([_bank_change(["fi_act_text_published"], {
+            "decision_date": "03.06.2026", "default_judgment": True})])
+        assert "текст решения от 03.06.2026 опубликован (🌙 заочное)" in html
+
+    def test_act_text_published_legacy_plain(self):
+        html = _digest([_bank_change(["fi_act_text_published"])])
+        assert "текст решения опубликован" in html
+        assert "🌙" not in html
+
+    def test_resolved_with_date_and_default_marker(self):
+        html = _digest([_bank_change(["fi_resolved"], {
+            "verdict_label": "удовлетворено", "decision_date": "03.06.2026",
+            "default_judgment": True})])
+        assert ("вынесено решение</b> 03.06.2026: удовлетворено (🌙 заочное)"
+                in html)
+
+    def test_default_copy_returned_rendered(self):
+        """Новое событие: возврат копии заочного решения (формула ВС) —
+        раньше факт жил только внутри расчёта legal_force_est."""
+        html = _digest([_bank_change(["fi_default_copy_returned"], {
+            "copy_returned_date": "08.07.2026"})])
+        assert ("🌙 копия заочного решения возвратилась невручённой"
+                in html)
+        assert "08.07.2026" in html
+
+    def test_summary_counts_bank_transfers(self):
+        """Сводка «1 дело — по подсудности» при двух передачах в теле
+        (07.08.2026: 2-822 в основном треке + 2-8088 в банковском)."""
+        ordinary = _bank_change(["fi_returned"],
+                                {"termination_kind": "transfer"})
+        ordinary.pop("track")
+        bank = _bank_change(["fi_returned"],
+                            {"termination_kind": "transfer"})
+        html = _digest([ordinary, bank])
+        assert "➡️ 2 дела — по подсудности" in html
+
+    def test_summary_bank_only_transfer_counted(self):
+        html = _digest([_bank_change(["fi_returned"],
+                                     {"termination_kind": "transfer"})])
+        assert "➡️ 1 дело — по подсудности" in html
+
+    def test_footer_mentions_bank_track(self):
+        """Футер «всего 78» без упоминания сотен активных исков банка
+        дезориентировал (разбор 07.08.2026); 0 = трек выключен, приписки
+        нет (территория без трека и старые контексты replay)."""
+        from court_monitor.digest.template import generate_template_digest
+        html = generate_template_digest(
+            [], [], fi_changes=[_bank_change(["fi_hearing_new"],
+                                             {"hearing_date": "01.09.2026"})],
+            total_active_bank=345,
+        )
+        assert "· 🏦 иски банка: 345 в производстве</b>" in html
+        html0 = _digest([_bank_change(["fi_hearing_new"],
+                                      {"hearing_date": "01.09.2026"})])
+        assert "иски банка:" not in html0
+
+    def test_footer_bank_tail_in_no_changes_digest(self):
+        from court_monitor.digest.template import generate_template_digest
+        html = generate_template_digest([], [], total_active_bank=345)
+        assert "🏦 иски банка: 345 в производстве" in html
 
     def test_fio_suffix_shortened_in_bank_line(self):
         """ФИО с «кызы»/«оглы» сокращаются и в bank-строке (до фикса
@@ -1505,7 +1702,8 @@ class TestVacatedDefaultWiring:
             for t in ("fi_default_cancellation_filed",
                       "fi_default_cancellation_hearing",
                       "fi_default_judgment_vacated",
-                      "fi_default_cancellation_refused"):
+                      "fi_default_cancellation_refused",
+                      "fi_default_copy_returned"):
                 assert t in src, f"{fname}: нет подписи для типа {t}."
 
     def test_types_are_not_routine_and_not_echo(self):
@@ -1517,7 +1715,8 @@ class TestVacatedDefaultWiring:
             _FI_CATCHUP_DATED_TYPES,
         )
         for t in ("fi_default_cancellation_filed",
-                  "fi_default_judgment_vacated"):
+                  "fi_default_judgment_vacated",
+                  "fi_default_copy_returned"):
             assert t not in BANK_ROUTINE_EVENT_TYPES
             assert t not in FI_ECHO_CATCHUP_TYPES
             assert t in _FI_CATCHUP_DATED_TYPES
