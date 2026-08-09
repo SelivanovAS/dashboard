@@ -462,9 +462,12 @@ def _cassation_card_to_block(info: dict) -> dict:
             info.get("result_for_appeal", ""), info.get("act_text", "")
         )
     cassator_status = (info.get("cassator_status") or "").upper()
+    # Кассатор-«банк» — только сам ПАО Сбербанк: дочки (страхование/НПФ/
+    # лизинг) отсеиваются, иначе 🏦 в дайджесте вставал на жалобу
+    # ООО «Сбербанк страхование жизни» (кейс 8Г-11469/2026, 09.08.2026).
     appellant_is_bank = bool(
         info.get("cassator")
-        and any(p in info["cassator"].lower() for p in config.SBER_PATTERNS)
+        and config.name_is_real_sberbank(info["cassator"])
     )
     link = ""
     # Карточка сама не отдаёт case_id/case_uid, поэтому link собирается выше

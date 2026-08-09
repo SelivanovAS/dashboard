@@ -15,11 +15,11 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([1923](../../scripts/court_monitor/runs.py#L1923)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| `--json` | `main_json` ([1956](../../scripts/court_monitor/runs.py#L1956)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([1050](../../scripts/court_monitor/runs.py#L1050)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([5014](../../scripts/court_monitor/runs.py#L5014)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([4698](../../scripts/court_monitor/runs.py#L4698)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4875](../../scripts/court_monitor/runs.py#L4875)) | Повторно разослать уже сохранённый дайджест. |
+| `--digest-only` | `main_digest_only` ([5109](../../scripts/court_monitor/runs.py#L5109)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([4791](../../scripts/court_monitor/runs.py#L4791)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([4969](../../scripts/court_monitor/runs.py#L4969)) | Повторно разослать уже сохранённый дайджест. |
 | `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1309](../../scripts/court_monitor/runs.py#L1309)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash

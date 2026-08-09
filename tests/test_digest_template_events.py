@@ -819,10 +819,10 @@ class FiComboTest(unittest.TestCase):
         self.assertNotIn("📅 <b>Изменения", html)
         self.assertEqual(anchors(html).count("2-100/2026"), 1)
 
-    def test_resolved_plus_motivirovka_final_event_kept(self):
-        """Исключение из предохранителя: «Изготовлено мотивированное
-        решение» — отдельный полезный факт (можно идти забирать), он
-        остаётся рядом с решением."""
+    def test_resolved_plus_motivirovka_final_event_merged(self):
+        """Склейка 09.08.2026 (кейс Урала 2-484/2026): мотивировка того же
+        прогона приклеивается к записи 3.5, отдельной строки в 3.2 нет —
+        раньше дело печаталось дважды с полным списком сторон."""
         html = render(fi_changes=[make_fi_change(
             ["fi_resolved", "fi_final_event"],
             {"event": "Изготовлено мотивированное решение в окончательной "
@@ -830,22 +830,54 @@ class FiComboTest(unittest.TestCase):
              "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
         )])
         self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn("📄 мотивированное решение изготовлено 12.06.2026", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 2)
+        self.assertIn(
+            "Мотивировка изготовлена 12.06.2026, полный текст не опубликован",
+            html)
+        self.assertNotIn("📅 <b>Изменения", html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 1)
 
-    def test_resolved_plus_motivirovka_reversed_word_order_kept(self):
-        """Регресс ревью 29.07.2026: порядкозависимый регексп исключения
-        молча терял факт мотивировки на «Мотивированное решение
-        изготовлено…» — остальные детекторы (runs.py, рендер) порядок слов
-        не требуют, фильтр обязан совпадать с ними."""
+    def test_resolved_plus_motivirovka_reversed_word_order_merged(self):
+        """Регресс ревью 29.07.2026 (порядок слов) — теперь через склейку:
+        «Мотивированное решение изготовлено…» тоже уезжает в запись 3.5."""
         html = render(fi_changes=[make_fi_change(
             ["fi_resolved", "fi_final_event"],
             {"event": "Мотивированное решение изготовлено 12.06.2026",
              "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
         )])
         self.assertIn("Вынесенные решения (1)", html)
+        self.assertIn(
+            "Мотивировка изготовлена 12.06.2026, полный текст не опубликован",
+            html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 1)
+
+    def test_resolved_plus_motivirovka_emitted_merged(self):
+        """Та же склейка для типа fi_motivirovka_emitted (дата — из
+        details["motivirovka_date"]); счётчик «📄 мотивировок» в сводке
+        склейку отражает — отдельного пункта не остаётся."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_resolved", "fi_motivirovka_emitted"],
+            {"motivirovka_date": "13.06.2026"},
+        )])
+        self.assertIn("Вынесенные решения (1)", html)
+        self.assertIn(
+            "Мотивировка изготовлена 13.06.2026, полный текст не опубликован",
+            html)
+        self.assertNotIn("📅 <b>Изменения", html)
+        self.assertNotIn("мотивировка готова", html)
+        self.assertEqual(anchors(html).count("2-100/2026"), 1)
+
+    def test_returned_plus_motivirovka_not_merged(self):
+        """Скоуп склейки: с fi_returned мотивировка остаётся отдельной
+        строкой в 3.2 — записи 3.5 у такого дела нет."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_returned", "fi_final_event"],
+            {"event": "Мотивированное решение изготовлено 12.06.2026",
+             "termination_kind": "returned",
+             "return_reason": "дело не подсудно данному суду",
+             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
+        )])
         self.assertIn("📄 мотивированное решение изготовлено 12.06.2026", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 2)
+        self.assertIn("иск возвращён", html)
 
     def test_resolved_plus_side_hearing_event_in_both_sections(self):
         # Побочное hearing-событие того же дела остаётся в 3.2, решение — в 3.5.

@@ -36,7 +36,8 @@ from court_monitor.digest.postprocess import (
 from court_monitor.digest.template import (
     generate_template_digest, render_no_changes_digest, build_summary_line,
     short_category_chain, category_short,
-    _strip_echoed_terminal_events, _FI_TERMINATION_LABELS,
+    _strip_echoed_terminal_events, _merge_motiv_into_resolved,
+    _FI_TERMINATION_LABELS,
 )
 from court_monitor.lifecycle import _fi_return_reason_for_render
 from court_monitor.parsing import (
@@ -61,6 +62,7 @@ def save_digest_context(
     total_active_appeal: int = 0,
     total_active_fi: int = 0,
     total_active_cassation: int = 0,
+    total_active_bank: int = 0,
     cass_changes: list[dict] | None = None,
     cass_discovered: list[dict] | None = None,
 ) -> None:
@@ -81,6 +83,7 @@ def save_digest_context(
         "total_active_appeal": total_active_appeal,
         "total_active_fi": total_active_fi,
         "total_active_cassation": total_active_cassation,
+        "total_active_bank": total_active_bank,
         "cass_changes": cass_changes or [],
         "cass_discovered": cass_discovered or [],
     }
@@ -355,6 +358,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     total_active_appeal: int = 0,
                     total_active_fi: int = 0,
                     total_active_cassation: int = 0,
+                    total_active_bank: int = 0,
                     cass_changes: list[dict] | None = None,
                     cass_discovered: list[dict] | None = None) -> str:
     """Сгенерировать дайджест через Claude API.
@@ -404,6 +408,10 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # в 3.2, и как «Итог: возвращено» в 3.5). Гибридный путь применит фильтр
     # ещё раз внутри generate_template_digest — он идемпотентен.
     fi_changes = _strip_echoed_terminal_events(fi_changes)
+    # Склейка «решение + мотивировка» одного дела (кейс Урала 2-484/2026) —
+    # для обоих путей; банк-трек функция пропускает сама, повторное
+    # применение в generate_template_digest идемпотентно.
+    fi_changes = _merge_motiv_into_resolved(fi_changes)
 
     total_active = total_active_appeal + total_active_fi + total_active_cassation
 
@@ -426,6 +434,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
             act_summarizer=llm.summarize_act_motivation,
@@ -452,6 +461,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
                 total_active_cassation=total_active_cassation,
+                total_active_bank=total_active_bank,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
@@ -465,6 +475,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
                 total_active_cassation=total_active_cassation,
+                total_active_bank=total_active_bank,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
@@ -477,6 +488,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
         )
@@ -796,6 +808,13 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     line += ("\n  ЗАОЧНОЕ: в отмене отказано "
                              f"({d.get('cancel_outcome_date', '')}) — пошёл "
                              "месяц на апелляцию")
+                elif t == "fi_default_copy_returned":
+                    # Возврат копии запускает формулу ВС для срока
+                    # вступления заочного решения в силу (09.08.2026).
+                    line += ("\n  ЗАОЧНОЕ: копия решения возвратилась "
+                             "невручённой"
+                             + (f" ({d.get('copy_returned_date', '')})"
+                                if d.get('copy_returned_date') else ""))
                 elif t == "fi_returned":
                     # Процессуальное завершение: возврат иска / отказ в
                     # принятии / передача по подсудности. Эмитим короткую
@@ -815,6 +834,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     bank_out = (d.get("bank_outcome") or "").strip()
                     if bank_out:
                         line += f" (для банка: {bank_out})"
+                    # Дата события-завершения — суд заполняет «Результат»
+                    # с лагом в недели (09.08.2026); ключ опционален.
+                    td = (d.get("termination_date") or "").strip()
+                    if td:
+                        line += f" ({td})"
                 elif t == "fi_act_published":
                     # Срабатывает, когда в карточке появилась дата публикации
                     # резолютивки, но полного текста (act_text) ещё нет.
@@ -968,6 +992,15 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     f"{d.get('new_role', '')}"
                     f" (банк не является стороной согласно карточке;"
                     f" для банка — нейтрально)"
+                )
+            if "motiv_merged_date" in d:
+                # Мотивировка того же прогона, приклеенная
+                # _merge_motiv_into_resolved (кейс Урала 2-484/2026).
+                _md = (d.get("motiv_merged_date") or "").strip()
+                line += (
+                    "\n  Мотивировка изготовлена"
+                    + (f" {_md}" if _md else "")
+                    + ", полный текст не опубликован"
                 )
             if d.get("last_event"):
                 line += f"\n  Последнее событие: {d['last_event']}"
@@ -1513,6 +1546,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
                 total_active_cassation=total_active_cassation,
+                total_active_bank=total_active_bank,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
@@ -1545,6 +1579,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_fi=total_active_fi,
             total_active_appeal=total_active_appeal,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
         )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
@@ -1594,6 +1629,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 total_active_appeal=total_active_appeal,
                 total_active_fi=total_active_fi,
                 total_active_cassation=total_active_cassation,
+                total_active_bank=total_active_bank,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
             )
@@ -1626,6 +1662,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_fi=total_active_fi,
             total_active_appeal=total_active_appeal,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
         )
         text = _normalize_section_spacing(text)
         text = _wrap_all_bare_case_numbers(text, url_by_num)
@@ -1643,6 +1680,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
         )
@@ -1655,6 +1693,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
         )
@@ -1667,6 +1706,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_appeal=total_active_appeal,
             total_active_fi=total_active_fi,
             total_active_cassation=total_active_cassation,
+            total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
         )
