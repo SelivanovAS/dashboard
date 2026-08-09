@@ -23,6 +23,7 @@ from court_monitor.regions.base import _eyo
 from court_monitor.lifecycle import (
     _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
     _infer_archived_at, _parse_iso_date, should_parse_fi_card,
+    is_case_archived,
 )
 from court_monitor.netutil import fetch_page, polite_delay
 from court_monitor.parsing import (
@@ -443,6 +444,51 @@ def reactivate_archived_first_instance(
         f"Реактивация из архива: подмешано {len(moved)} дел 1-й инст. "
         f"(возраст ≤{max_age_days} дн.) для повторного парсинга карточки. "
         f"Без новой жалобы вернутся в архив через split_archived_json."
+    )
+    return len(moved)
+
+
+def reactivate_bank_archived(
+    cases: list[dict], bank_archived_cases: list[dict]
+) -> int:
+    """Вернуть из горячего bank-архива дела, которые по ТЕКУЩИМ окнам
+    `_is_bank_track_archived` архивными больше не считаются (пример: заочные
+    уезжали через 14 дней от выдачи ИЛ, а с 03.08.2026 им положено 90 —
+    `BANK_DEFAULT_WRIT_ARCHIVE_DAYS`; так 27.07.2026 в архив ушли три дела
+    Сургутского гор. суда). Правило общее, не список номеров, — то же вернёт
+    дела на территории Урала при синке.
+
+    Гейт «уже в активных» — по `case_court_key` (домен, id), как в
+    `reactivate_archived_first_instance`: без него возврат каждый прогон
+    клонировал заочные дела из архива в активные (инцидент 04–07.08.2026,
+    +1 копия в день — архивный файл пересохранялся только при пополнении и
+    изъятия не видел). Совпадение с активным делом оставляет запись в архиве.
+
+    `bank_archived_cases` мутируется на месте, `cases` пополняется.
+    Возвращает число перенесённых — ненулевое ОБЯЗАНО пересохранить архив
+    (условие в фазе 7c `main_json`), иначе изъятие живёт только в памяти.
+    """
+    if not bank_archived_cases:
+        return 0
+    ntd = _fi_name_to_domain()
+    active_keys = {case_court_key(c, ntd) for c in cases if c.get("id")}
+    moved: list[dict] = []
+    keep: list[dict] = []
+    for bc in bank_archived_cases:
+        if is_case_archived(bc) or case_court_key(bc, ntd) in active_keys:
+            keep.append(bc)
+            continue
+        bc.pop("archived_at", None)
+        bc.setdefault("track", "plaintiff_light")
+        moved.append(bc)
+        active_keys.add(case_court_key(bc, ntd))
+    if not moved:
+        return 0
+    cases.extend(moved)
+    bank_archived_cases[:] = keep
+    log.info(
+        f"Возвращено из архива трека по новым окнам: {len(moved)} — "
+        + ", ".join(bc.get("id", "?") for bc in moved)
     )
     return len(moved)
 

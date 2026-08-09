@@ -86,7 +86,8 @@ from court_monitor.lifecycle import (
 from court_monitor.linking import (
     collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
     dedupe_new_archive_entries, find_new_cases, link_cases, link_cassation_cases,
-    reactivate_archived_first_instance, relink_awaiting_relink_first_instance,
+    reactivate_archived_first_instance, reactivate_bank_archived,
+    relink_awaiting_relink_first_instance,
     rotate_cold_archive, _fi_search_to_json_case, backfill_fi_links,
     resolve_bank_merged_targets,
 )
@@ -2027,32 +2028,18 @@ def main_json():
     # Горячий архив bank-трека: в дедуп-индексы + фаза 7c (ротация в холодные
     # годовые требует склеенных записей — холодные хранят events inline).
     bank_archived_cases: list[dict] = []
+    bank_reactivated = 0
     if config.BANK_TRACK and os.path.exists(config.JSON_BANK_ARCHIVE_PATH):
         bank_archived_cases = load_bank_json(
             config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH
         ).get("cases", [])
-        # Возврат из архива трека по изменившимся окнам. Заочные дела уезжали
-        # туда через 14 дней от выдачи ИЛ, а с 03.08.2026 им положено 3 месяца
-        # (BANK_DEFAULT_WRIT_ARCHIVE_DAYS) — так 27.07.2026 в архив ушли три
-        # дела Сургутского гор. суда. Штатного канала реактивации у bank-архива
-        # нет: reactivate_archived_first_instance работает по основному архиву,
-        # а bank-архив подмешивается только в дедуп-индекс. Правило общее, не
-        # список номеров, — то же вернёт дела на территории Урала при синке.
-        _bank_back = [bc for bc in bank_archived_cases if not is_case_archived(bc)]
-        if _bank_back:
-            _back_ids = {id(bc) for bc in _bank_back}
-            bank_archived_cases = [
-                bc for bc in bank_archived_cases if id(bc) not in _back_ids
-            ]
-            for bc in _bank_back:
-                bc.pop("archived_at", None)
-                bc.setdefault("track", "plaintiff_light")
-            cases = cases + _bank_back
-            bank_track_count += len(_bank_back)
-            log.info(
-                f"Возвращено из архива трека по новым окнам: {len(_bank_back)} "
-                + ", ".join(bc.get("id", "?") for bc in _bank_back)
-            )
+        # Возврат из архива трека по изменившимся окнам (детали и гейт «уже в
+        # активных» — в докстроке reactivate_bank_archived). Счётчик обязан
+        # дойти до условия сохранения архива в фазе 7c: без пересохранения
+        # изъятие живёт только в памяти, и каждый прогон клонирует дело заново
+        # (инцидент 04–07.08.2026: три заочных Сургутского ×4 копии).
+        bank_reactivated = reactivate_bank_archived(cases, bank_archived_cases)
+        bank_track_count += bank_reactivated
     # Холодные годовые архивы (cases_archive_YYYY.json) грузим ТОЛЬКО для
     # индекса дедупликации — чтобы старое дело, всплывшее в поиске суда, не
     # задвоилось как «новое». В archived_cases их не добавляем: иначе при
@@ -4499,15 +4486,17 @@ def main_json():
             bank_archived_all, path_builder=config.bank_cold_archive_path
         )
         # Пересохраняем архив только при реальных изменениях (новые архивные,
-        # ротация) либо для разовой миграции старого монолита на split-формат
-        # (архив есть, events-файла ещё нет) — иначе каждый прогон коммитил бы
-        # файл с одним лишь свежим updated_at.
+        # реактивация — bank_hot_before считается уже ПОСЛЕ изъятия и его не
+        # видит, ротация) либо для разовой миграции старого монолита на
+        # split-формат (архив есть, events-файла ещё нет) — иначе каждый
+        # прогон коммитил бы файл с одним лишь свежим updated_at.
         bank_archive_needs_migration = (
             bool(bank_archived_cases)
             and os.path.exists(config.JSON_BANK_ARCHIVE_PATH)
             and not os.path.exists(config.JSON_BANK_ARCHIVE_EVENTS_PATH)
         )
-        if (bank_newly_archived or len(bank_archived_all) != bank_hot_before
+        if (bank_newly_archived or bank_reactivated
+                or len(bank_archived_all) != bank_hot_before
                 or bank_archive_needs_migration):
             save_bank_json(
                 {"version": 1, "track": "plaintiff_light",
@@ -4515,8 +4504,13 @@ def main_json():
                 config.JSON_BANK_ARCHIVE_PATH,
                 config.JSON_BANK_ARCHIVE_EVENTS_PATH,
             )
+        # archived_count — размер горячего bank-архива для фронта: архив
+        # грузится лениво (по клику чипа «Архив»), и до этого счётчик
+        # «N в архиве» взять больше неоткуда.
         save_bank_json(
-            {"version": 1, "track": "plaintiff_light", "cases": bank_active},
+            {"version": 1, "track": "plaintiff_light",
+             "archived_count": len(bank_archived_all),
+             "cases": bank_active},
             config.JSON_BANK_PATH,
             config.JSON_BANK_EVENTS_PATH,
         )
