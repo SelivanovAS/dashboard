@@ -275,7 +275,33 @@ def test_bank_meta_url_guard_wired():
     )
 
 
-# ===== 6. Знаменатели — активные дела =====
+# ===== 6. Hover — только устройства с курсором (скрин юриста 10.08.2026) =====
+
+def test_hover_rules_touch_safe():
+    """Залипший тач-hover iOS красил АКТИВНЫЙ сегмент в бледный --bg-3 при
+    белом тексте («Иски банка»/«Истец» пропадали). Hover-фон .chip-btn/.seg-btn
+    обязан жить в @media (hover:hover) и не трогать .active."""
+    css = _read("styles.css")
+    for селектор in (".chip-btn:hover", ".seg-btn:hover"):
+        for m in re.finditer(re.escape(селектор) + r"[^{]*\{[^}]*background", css):
+            # Правило с фоном обязано быть внутри @media (hover:hover)...
+            before = css[: m.start()]
+            блок = before.rfind("@media (hover:hover)")
+            закрытий = before[блок:].count("}") if блок >= 0 else 0
+            открытий = before[блок:].count("{") if блок >= 0 else 0
+            assert блок >= 0 and открытий > закрытий, (
+                f"{селектор} с background вне @media (hover:hover): на iOS "
+                "hover залипает после касания и перекрашивает кнопку."
+            )
+            # ...и нести гард :not(.active): специфичность :hover:not(...) выше
+            # .seg-btn.active, бледный фон победил бы зелёный у активной кнопки.
+            assert ":not(.active)" in m.group(0), (
+                f"{селектор} без :not(.active): при наведении/тапе активная "
+                "кнопка теряет зелёный фон, оставаясь с белым текстом."
+            )
+
+
+# ===== 7. Знаменатели — активные дела =====
 
 def test_counters_active_denominator():
     src = _app_js()
