@@ -1198,6 +1198,80 @@ class TestBankDigestSection:
                                      {"termination_kind": "transfer"})])
         assert "➡️ 1 дело — по подсудности" in html
 
+    def test_writ_batch_collapsed_to_range(self):
+        """Пачка однотипных ИЛ схлопывается в «префикс + диапазон»
+        (решение юриста 10.08.2026; кейс 2-201/2026 — 6 одинаковых фраз)."""
+        writs = [{"issue_date": "05.08.2026",
+                  "electronic_id": f"86RS0018#2-201/2026#{i}",
+                  "blank_number": "", "status": "Выдан",
+                  "recipient": "ОСП по Кондинскому району"}
+                 for i in range(1, 7)]
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
+        assert ("выдано 6 исполнительных листов</b> 05.08.2026 "
+                "(86RS0018#2-201/2026, №1–6)") in html
+        assert html.count("86RS0018#2-201/2026") == 1, (
+            "полный префикс ИД должен печататься один раз"
+        )
+        # Сводка считает ДЕЛА с выданными ИЛ (исторически), не листы —
+        # схлопывание фраз её не меняет.
+        assert "(🧾 1 ИЛ)" in html
+
+    def test_writ_batch_split_by_recipient(self):
+        """Разные получатели — отдельные фразы; разрывные номера — списком
+        и диапазоном (кейс 2-4938/2026: Сургут №4,6 / Н.Уренгой №5,7 /
+        Когалым №8–9)."""
+        def w(i, rec):
+            return {"issue_date": "04.08.2026",
+                    "electronic_id": f"86RS0004#2-4938/2026#{i}",
+                    "blank_number": "", "status": "Выдан", "recipient": rec}
+        writs = [w(4, "ОСП по г. Сургуту"), w(5, "ОСП по г. Новому Уренгою"),
+                 w(6, "ОСП по г. Сургуту"), w(7, "ОСП по г. Новому Уренгою"),
+                 w(8, "ОСП по г. Когалыму"), w(9, "ОСП по г. Когалыму")]
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
+        assert "№4, 6) → ОСП по г. Сургуту" in html
+        assert "№5, 7) → ОСП по г. Новому Уренгою" in html
+        assert "№8–9) → ОСП по г. Когалыму" in html
+
+    def test_writ_batch_with_single_leftover(self):
+        """Группа + одиночка (кейс 2-6140/2026: №1–3 в ОСП, №4 взыскателю):
+        одиночный лист — прежним полным форматом."""
+        def w(i, rec):
+            return {"issue_date": "06.08.2026",
+                    "electronic_id": f"86RS0004#2-6140/2026#{i}",
+                    "blank_number": "", "status": "Выдан", "recipient": rec}
+        writs = [w(1, "ОСП по г. Сургуту"), w(2, "ОСП по г. Сургуту"),
+                 w(3, "ОСП по г. Сургуту"), w(4, "Взыскатель")]
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
+        assert "выдано 3 исполнительных листа</b> 06.08.2026" in html
+        assert "№1–3) → ОСП по г. Сургуту" in html
+        assert ("выдан исполнительный лист</b> 06.08.2026 "
+                "(86RS0004#2-6140/2026#4) → Взыскатель") in html
+
+    def test_writ_batch_with_blank_number_not_collapsed(self):
+        """Бумажный бланк «ФС №…» терять нельзя — пачка с ним не
+        схлопывается (fail-open в прежний пер-листовый формат)."""
+        writs = [{"issue_date": "05.08.2026",
+                  "electronic_id": "86RS0018#2-201/2026#1",
+                  "blank_number": "ФС № 039166358", "status": "Выдан",
+                  "recipient": "ОСП по Кондинскому району"},
+                 {"issue_date": "05.08.2026",
+                  "electronic_id": "86RS0018#2-201/2026#2",
+                  "blank_number": "", "status": "Выдан",
+                  "recipient": "ОСП по Кондинскому району"}]
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
+        assert "выдано 2" not in html
+        assert "ФС № 039166358" in html
+        assert "86RS0018#2-201/2026#2" in html
+
+    def test_interim_writ_batch_collapsed(self):
+        writs = [{"issue_date": "23.04.2026", "kind": "interim",
+                  "electronic_id": f"86RS0004#2-100/2026#{i}",
+                  "blank_number": "", "status": "Выдан",
+                  "recipient": ""} for i in (1, 2)]
+        html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
+        assert ("🛡 <b>выдано 2 обеспечительных листа (арест)</b> 23.04.2026 "
+                "(86RS0004#2-100/2026, №1–2)") in html
+
     def test_footer_mentions_bank_track(self):
         """Футер «всего 78» без упоминания сотен активных исков банка
         дезориентировал (разбор 07.08.2026); 0 = трек выключен, приписки
