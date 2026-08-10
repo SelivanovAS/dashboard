@@ -664,6 +664,18 @@ body {
 .new-cases-banner .dismiss { margin-left:auto; background:none; border:none; color:var(--amber-700); cursor:pointer; font-size:16px; opacity:.6; transition:opacity 120ms var(--ease-out); padding:4px; }
 .new-cases-banner .dismiss:hover { opacity:1; }
 
+/* Кросс-поиск (#search-cross-hint): «Найдено N в другой картотеке» при
+   нулевой выдаче. Нейтральная палитра — навигационная подсказка, не алерт. */
+.info-line { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:10px; display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; font-size:var(--fs-sm); color:var(--fg-3); animation:fadeUp .4s var(--ease-out); }
+.info-line[hidden] { display:none; }
+.info-line .bridge-text { flex:1 1 auto; min-width:200px; }
+.info-line strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
+.info-line .bridge-btn { flex:0 0 auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:6px 12px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-1); cursor:pointer; transition:all 120ms var(--ease-out); }
+.info-line .bridge-btn:hover { box-shadow:var(--shadow-1); border-color:var(--green-500); }
+@media (max-width:768px) {
+  .info-line .bridge-btn { flex-basis:100%; }
+}
+
 /* ========== Table ========== */
 .table-wrap { background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); overflow:hidden; animation:fadeUp .6s var(--ease-out); }
 .table-scroll { overflow-x:auto; max-height:calc(100vh - 200px); overflow-y:auto; }

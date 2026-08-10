@@ -429,6 +429,9 @@ let bankListLoading=null,bankArchiveLoading=null;
 // Состояние ленивых events-файлов трека: active — по активным делам,
 // archive — по горячему архиву (свой файл, грузится отдельно).
 const _bankEventsState={active:{loaded:false,loading:null},archive:{loaded:false,loading:null}};
+// Кросс-поиск: после неудачной фоновой загрузки bank-списка не ретраим её
+// на каждый ввод в поиск (loadBankDataset ошибку глотает — флаг свой).
+let _crossHintLoadFailed=false;
 // Пагинация рендера (сбрасывается в applyFilters).
 let renderLimit=RENDER_CHUNK;
 let newCaseNumbers=new Set();
@@ -1144,8 +1147,9 @@ async function fetchJsonCases(url,timeoutMs){
   // региона в шапке.
   if(data.region){window.REGION_INFO=data.region;updateRegionBadge();}
   // archived_count несёт только активный файл bank-трека — счётчик архива
-  // для bank-режима (см. bankArchivedMeta).
-  if(typeof data.archived_count==='number')bankArchivedMeta=data.archived_count;
+  // для bank-режима (см. bankArchivedMeta). Гард isBankListUrl обязателен:
+  // иначе поле из чужого файла молча испортило бы счётчик.
+  if(typeof data.archived_count==='number'&&isBankListUrl(url))bankArchivedMeta=data.archived_count;
   const cases=data.cases||[];
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
@@ -1266,6 +1270,13 @@ function dataFileKind(url){
   if(name==='cases.json'||name==='cases_archive.json')return 'main';
   if(name.startsWith('cases_bank'))return 'bank';
   return '';
+}
+
+// Мету архива bank-трека (archived_count) несёт ТОЛЬКО активный список
+// cases_bank.json. Гард по basename: без него это поле из любого другого
+// data-файла молча перезаписало бы счётчик архива банка (bankArchivedMeta).
+function isBankListUrl(url){
+  return String(url||'').split('?')[0].split('/').pop()==='cases_bank.json';
 }
 
 function onDataUpdated(url){
@@ -1451,10 +1462,13 @@ function renderDatasetSwitch(){
   // сегмента на него не влияет — прячем переключатель, чтобы не путать.
   if(!bankFileExists||mineModeOn()){box.hidden=true;return;}
   box.hidden=false;
-  // Счётчик сегмента — АКТИВНЫЕ дела: после ленивой догрузки архива
-  // bankCases прирастает архивными, и число прыгало бы 493→517.
+  // Счётчики ОБОИХ сегментов — АКТИВНЫЕ дела. Bank: после ленивой догрузки
+  // архива bankCases прирастает архивными, и число прыгало бы 493→517.
+  // Основные: архив приезжает сразу из cases_archive.json — с ним «Основные»
+  // считались бы с архивом, а «Иски банка» без (асимметрия до v132).
+  // Инвариант: знаменатели везде = активные, архив — отдельным хвостом.
   const bankCount=bankLoaded?`<span class="chip-count">${bankCases.filter(c=>!c._bankArchived).length}</span>`:'';
-  const mainCount=`<span class="chip-count">${allCases.length}</span>`;
+  const mainCount=`<span class="chip-count">${allCases.filter(c=>!caseArchived(c)).length}</span>`;
   box.innerHTML=`<div class="seg-ctrl">
     <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные${mainCount}</button>
     <button class="seg-btn ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="setDatasetView('bank')">Иски банка${bankCount}</button>
@@ -1550,15 +1564,27 @@ function populateFilterOptions(){
 // Enter/Space → click. Проверка event.target===this — чтобы нажатия на
 // вложенных настоящих кнопках (звезда ★) не всплывали на контейнер.
 const KBD_ACT=`onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();this.click();}"`;
+// KPI основной картотеки по произвольному списку дел. Чистая функция —
+// гоняется node-тестом (test_frontend_bridges.py).
+function mainKpiCounts(list){
+  const active=list.filter(c=>c.status==='active').length;
+  const won=list.filter(c=>getResultFavor(c)==='favorable').length;
+  const lost=list.filter(c=>getResultFavor(c)==='unfavorable').length;
+  const meaningful=won+lost;
+  const winRate=meaningful>0?Math.round(won/meaningful*100):0;
+  const weekAgoIso=new Date(Date.now()-7*24*60*60*1000).toISOString().slice(0,10);
+  const freshActs=list.filter(c=>c.hasPublishedActs&&(c.actDate&&c.actDate>=weekAgoIso||c.lastEventDate&&c.lastEventDate>=weekAgoIso)).length;
+  return {active,won,lost,meaningful,winRate,freshActs};
+}
 function renderStats(){
   if(bankViewActive&&!mineModeOn()){renderBankStats();return;}
-  const active=allCases.filter(c=>c.status==='active').length;
-  const w=allCases.filter(c=>getResultFavor(c)==='favorable').length;
-  const lost=allCases.filter(c=>getResultFavor(c)==='unfavorable').length;
-  const meaningful=w+lost;
-  const winRate=meaningful>0?Math.round(w/meaningful*100):0;
-  const weekAgoIso=new Date(Date.now()-7*24*60*60*1000).toISOString().slice(0,10);
-  const freshActs=allCases.filter(c=>c.hasPublishedActs&&(c.actDate&&c.actDate>=weekAgoIso||c.lastEventDate&&c.lastEventDate>=weekAgoIso)).length;
+  // «★ Мои» — плитки по СВОЕМУ набору: обе картотеки, тот же предикат
+  // isWatchedCase(c)||isNewCase(c), что и mine-ветка applyFilters (держать
+  // синхронно!). До v132 KPI игнорировали режим и показывали цифры всей
+  // основной картотеки. Состав плиток не меняем: bank-звёзды честно попадают
+  // в «В производстве»/«В пользу банка», а «ждёт ИЛ» виден бейджами списка.
+  const src=mineModeOn()?activeDataset().filter(c=>isWatchedCase(c)||isNewCase(c)):allCases;
+  const {active,won:w,lost,meaningful,winRate,freshActs}=mainKpiCounts(src);
 
   document.getElementById('stats-primary').innerHTML=`
     <div class="stat-card clickable" data-accent="gold" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('active')"><div class="stat-value">${active}</div><div class="stat-label">В производстве</div></div>
@@ -1901,6 +1927,17 @@ function watchlistHasBankEntries(){
   for(const x of watchlist)if(String(x).includes('|'))return true;
   return false;
 }
+// Поисковый блоб дела — ЕДИНСТВЕННЫЙ источник и для предиката applyFilters,
+// и для кросс-поиска по соседней картотеке (renderSearchCrossHint): две
+// склейки разъехались бы молча. Чистая функция — гоняется node-тестом.
+function caseSearchBlob(c){
+  return c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
+}
+// Совпадения поиска в списке. Архивные не считаем (обе выдачи по умолчанию
+// их тоже не показывают). Чистая функция — гоняется node-тестом.
+function countSearchMatches(list,q){
+  return list.filter(c=>!caseArchived(c)&&caseSearchBlob(c).includes(q)).length;
+}
 function applyFilters(){
   const q=document.getElementById('search-input').value.toLowerCase();
   let st=document.getElementById('filter-status').value;
@@ -1951,7 +1988,7 @@ function applyFilters(){
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&stageGroup(c)!==stg)return false;
     if(mineOn&&!q&&!isWatchedCase(c)&&!isNewCase(c))return false;
-    if(q){const blob=c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();if(!blob.includes(q))return false;}
+    if(q&&!caseSearchBlob(c).includes(q))return false;
     return true;
   });
 
@@ -2023,7 +2060,7 @@ function applyFilters(){
   renderLimit=RENDER_CHUNK;
   // KPI и «Ближайшие заседания» зависят от активного датасета и mine-режима —
   // перерисовываем вместе с таблицей (дёшево: O(n) по датасету).
-  renderDatasetSwitch();renderChipBar();renderStats();renderAnalytics();renderTable();renderMobileCards();renderCounter();
+  renderDatasetSwitch();renderChipBar();renderStats();renderAnalytics();renderTable();renderMobileCards();renderCounter();renderSearchCrossHint();
 }
 
 function toggleSort(f){
@@ -2297,9 +2334,14 @@ function renderChipBar(){
     // сегмент «Апелляция» показывал 40 при 62 делах, которые под него
     // отфильтруются, а картотека, где все дела в awaiting_appeal, не
     // получала сегмента вовсе.
-    const fiCount=allCases.filter(c=>stageGroup(c)==='first_instance').length;
-    const apCount=allCases.filter(c=>stageGroup(c)==='appeal').length;
-    const csCount=allCases.filter(c=>stageGroup(c)==='cassation').length;
+    // В mine-режиме — по mine-набору (обе картотеки, предикат mine-ветки
+    // applyFilters): счётчики решают видимость кнопок сегмента, и до v132
+    // считались по allCases — сегмент «Апелляция» мог показаться при заведомо
+    // пустой выдаче (все bank-звёзды — 1-я инстанция).
+    const segSrc=mineModeOn()?activeDataset().filter(c=>isWatchedCase(c)||isNewCase(c)):allCases;
+    const fiCount=segSrc.filter(c=>stageGroup(c)==='first_instance').length;
+    const apCount=segSrc.filter(c=>stageGroup(c)==='appeal').length;
+    const csCount=segSrc.filter(c=>stageGroup(c)==='cassation').length;
     if(fiCount>0&&(apCount>0||csCount>0)){
       let inst=`<div class="seg-ctrl">
       <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
@@ -2323,8 +2365,12 @@ function renderChipBar(){
   if(countEl){
     let active=0;
     if(st&&st!=='all')active++;
-    if(rl&&rl!=='all')active++;
-    if(stg&&stg!=='all')active++;
+    // Роль/инстанция в bank-режиме скрыты И игнорируются applyFilters —
+    // их «зависшие» значения фильтрами не считаем (иначе кнопка врала бы).
+    if(!bankViewActive&&rl&&rl!=='all')active++;
+    if(!bankViewActive&&stg&&stg!=='all')active++;
+    const cat=document.getElementById('filter-category').value;
+    if(cat&&cat!=='all')active++;
     if(active){countEl.textContent=active;countEl.style.display='inline-flex';}
     else countEl.style.display='none';
   }
@@ -2364,6 +2410,11 @@ function resetFilters(){
   document.getElementById('filter-status').value='all';
   document.getElementById('filter-role').value='all';
   document.getElementById('filter-stage').value='all';
+  // Категория — тоже фильтр: до v132 «Сбросить» молча оставлял её активной
+  // (видимого сеттера у неё нет, и юрист не мог понять, почему список неполон).
+  document.getElementById('filter-category').value='all';
+  // «★ Мои» сознательно НЕ сбрасываем: это режим просмотра (filterMineActive),
+  // а не фильтр — у него своя кнопка/чип.
   applyFilters();
 }
 
@@ -2386,9 +2437,49 @@ function renderCounter(){
     document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${nActive}</strong> исков банка${archText}`;
     return;
   }
+  // Знаменатель — АКТИВНЫЕ дела (зеркально bank-ветке выше): архив идёт
+  // хвостом «· N в архиве», а не прячется внутри «из N». Инвариант обеих
+  // картотек с v132, тот же в renderDatasetSwitch.
   const archText=archivedCount>0?` · ${archivedCount} в архиве`:'';
   const newText=newCaseNumbers.size>0?` · ${newCaseNumbers.size} новых`:'';
-  document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${allCases.length}</strong> дел${newText}${archText}`;
+  document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${allCases.length-archivedCount}</strong> дел${newText}${archText}`;
+}
+
+// Кросс-поиск (#search-cross-hint): запрос не нашёлся в активной картотеке —
+// считаем совпадения в соседней и предлагаем переключиться. Дело банка-истца
+// при апел. жалобе переезжает из «Исков банка» в «Основные», и юрист искал
+// его не там без единого намёка. Подсчёт — только по поисковой строке
+// (статус/категория активной картотеки на соседнюю не переносимы), подсказка
+// навигационная. Единственный новый триггер ленивой загрузки во фронте:
+// bank-список догружается фоном под тройным гардом (тот же паттерн, что
+// enhanceDigestCaseLinks); ensureBankArchive/ensureBankEvents отсюда НЕ
+// зовутся — глубина ленивой цепочки не растёт. _crossHintLoadFailed гасит
+// повторные попытки после неудачной загрузки (loadBankDataset ошибку глотает,
+// иначе каждый ввод в поиск ретраил бы мёртвую сеть).
+function renderSearchCrossHint(){
+  const box=document.getElementById('search-cross-hint');
+  if(!box)return;
+  const q=document.getElementById('search-input').value.toLowerCase();
+  if(!q||mineModeOn()||filteredCases.length>0){box.hidden=true;return;}
+  if(!bankViewActive&&bankFileExists&&!bankLoaded&&!bankListLoading&&!_crossHintLoadFailed){
+    box.hidden=false;
+    box.innerHTML=`<span class="bridge-text">Проверяем картотеку «Иски банка»…</span>`;
+    loadBankDataset().then(()=>{
+      if(!bankLoaded)_crossHintLoadFailed=true;
+      // Поиск мог опустеть за время fetch — тогда пересчёт не нужен.
+      if(document.getElementById('search-input').value)applyFilters();
+    });
+    return;
+  }
+  const other=bankViewActive?allCases:(bankLoaded?bankCases:null);
+  if(!other){box.hidden=true;return;}
+  const n=countSearchMatches(other,q);
+  if(n===0){box.hidden=true;return;}
+  const target=bankViewActive?'main':'bank';
+  const name=bankViewActive?'Основные':'Иски банка';
+  box.hidden=false;
+  box.innerHTML=`<span class="bridge-text">Найдено <strong>${n}</strong> в картотеке «${name}».</span>`+
+    `<button class="bridge-btn" onclick="setDatasetView('${target}')">Показать</button>`;
 }
 
 /* ========== Table ========== */
