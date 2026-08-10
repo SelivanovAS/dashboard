@@ -587,3 +587,40 @@ def test_cancellation_stamp_is_read_not_recomputed():
             "особого порядка должно жить только в "
             "lifecycle.default_cancellation_state, иначе копии разъедутся."
         )
+
+
+# ===== 6. Ссылка не лезет внутрь номера листа (дайджест, 10.08.2026) =====
+
+
+def test_digest_links_writ_guard_wired():
+    """enhanceDigestCaseLinks обязан звать caseNumInsideWritId — иначе номер
+    дела внутри электронного ИД листа («86RS0011#2-234/2026#1») снова станет
+    ссылкой в блоке дайджеста (жалоба юриста 10.08.2026)."""
+    src = _strip_comments(_fn_src("enhanceDigestCaseLinks"))
+    assert "caseNumInsideWritId(" in src, (
+        "Из enhanceDigestCaseLinks пропал гард caseNumInsideWritId — "
+        "номер дела внутри реквизита листа снова линкуется."
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_case_num_inside_writ_id_predicate():
+    """Предикат «номер дела — часть электронного ИД листа»: признак — «#»
+    вплотную слева или справа от совпадения."""
+    fn = _fn_src("caseNumInsideWritId")
+    cases = [
+        # (text, idx, len, ожидание)
+        ["86RS0011#2-234/2026#1", 9, 10, True],    # середина ИД
+        [" (86RS0011#2-234/2026#1)", 11, 10, True],
+        ["2-234/2026 (Белоярский гор. суд)", 0, 10, False],  # обычный номер
+        ["выдан лист 86RS0011#2-234/2026", 20, 10, True],    # «#» слева
+        ["2-234/2026#1", 0, 10, True],                        # «#» справа
+    ]
+    script = (fn + "\nconst C=" + json.dumps(cases, ensure_ascii=False)
+              + ";process.stdout.write(JSON.stringify("
+                "C.map(([t,i,l])=>caseNumInsideWritId(t,i,l))));")
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    got = json.loads(out.stdout)
+    assert got == [c[3] for c in cases], (
+        f"Предикат разошёлся с ожиданием: {got}"
+    )

@@ -1260,8 +1260,16 @@ def _bank_track_block(bank_changes: list[dict]) -> list[str]:
     prev_grp: int | None = None
     for ch in ordered:
         grp = _bank_change_group(ch)
-        if prev_grp is not None and grp != prev_grp:
-            block.append("")
+        # Воздух (просьба юриста 10.08.2026): пустая строка между КАЖДЫМ
+        # делом — 10-15 строк группы вплотную не читались; граница групп
+        # важности — разделителем «⸻» (как между подсекциями), иначе с
+        # повсеместным воздухом она стала бы невидимой. Линтер не задет:
+        # _check_section_counters считает только строки с номерами дел.
+        if prev_grp is not None:
+            if grp != prev_grp:
+                block.extend(["", "⸻", ""])
+            else:
+                block.append("")
         prev_grp = grp
         num = escape_html(ch.get("case", ""))
         court = escape_html(shorten_court_name(ch.get("court", "")))

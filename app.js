@@ -5075,6 +5075,17 @@ function buildPrimaryNumberMap() {
   return map;
 }
 
+// Номер дела внутри электронного ИД исполнительного листа
+// («86RS0011#2-234/2026#1», формат «регион#дело#номер») — это реквизит
+// листа, а не упоминание дела: оборачивать его ссылкой нельзя (жалоба
+// юриста 10.08.2026 — ссылка внутри номера листа в строке «выдан ИЛ»).
+// Признак — «#» вплотную слева или справа от совпадения. Чистая функция,
+// тестируется в node (test_frontend_writs.py).
+function caseNumInsideWritId(text, idx, len) {
+  return (idx > 0 && text[idx - 1] === '#')
+    || text[idx + len] === '#';
+}
+
 function enhanceDigestCaseLinks() {
   const body = document.getElementById('digest-body');
   if (!body) return;
@@ -5121,6 +5132,8 @@ function enhanceDigestCaseLinks() {
     text.replace(CASE_NUMBER_RE, (match, _g1, idx) => {
       const full = primaryToFull.get(match);
       if (!full) return match;
+      // Реквизит листа («…#2-234/2026#1») — не линкуем.
+      if (caseNumInsideWritId(text, idx, match.length)) return match;
       touched = true;
       if (idx > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, idx)));
       const a = document.createElement('a');
