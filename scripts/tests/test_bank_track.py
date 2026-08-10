@@ -1208,8 +1208,9 @@ class TestBankDigestSection:
                  for i in range(1, 7)]
         html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
         assert ("выдано 6 исполнительных листов</b> 05.08.2026 "
-                "(86RS0018#2-201/2026, №1–6)") in html
-        assert html.count("86RS0018#2-201/2026") == 1, (
+                "(86RS0018#2-201/2026#1, №2–6)") in html
+        assert html.count("86RS0018#2-201/2026#1") == 1
+        assert "№2–6" in html, (
             "полный префикс ИД должен печататься один раз"
         )
         # Сводка считает ДЕЛА с выданными ИЛ (исторически), не листы —
@@ -1228,9 +1229,9 @@ class TestBankDigestSection:
                  w(6, "ОСП по г. Сургуту"), w(7, "ОСП по г. Новому Уренгою"),
                  w(8, "ОСП по г. Когалыму"), w(9, "ОСП по г. Когалыму")]
         html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
-        assert "№4, 6) → ОСП по г. Сургуту" in html
-        assert "№5, 7) → ОСП по г. Новому Уренгою" in html
-        assert "№8–9) → ОСП по г. Когалыму" in html
+        assert "(86RS0004#2-4938/2026#4, №6) → ОСП по г. Сургуту" in html
+        assert "(86RS0004#2-4938/2026#5, №7) → ОСП по г. Новому Уренгою" in html
+        assert "(86RS0004#2-4938/2026#8, №9) → ОСП по г. Когалыму" in html
 
     def test_writ_batch_with_single_leftover(self):
         """Группа + одиночка (кейс 2-6140/2026: №1–3 в ОСП, №4 взыскателю):
@@ -1243,7 +1244,7 @@ class TestBankDigestSection:
                  w(3, "ОСП по г. Сургуту"), w(4, "Взыскатель")]
         html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
         assert "выдано 3 исполнительных листа</b> 06.08.2026" in html
-        assert "№1–3) → ОСП по г. Сургуту" in html
+        assert "(86RS0004#2-6140/2026#1, №2–3) → ОСП по г. Сургуту" in html
         assert ("выдан исполнительный лист</b> 06.08.2026 "
                 "(86RS0004#2-6140/2026#4) → Взыскатель") in html
 
@@ -1270,7 +1271,7 @@ class TestBankDigestSection:
                   "recipient": ""} for i in (1, 2)]
         html = _digest([_bank_change(["fi_writ_issued"], {"writs": writs})])
         assert ("🛡 <b>выдано 2 обеспечительных листа (арест)</b> 23.04.2026 "
-                "(86RS0004#2-100/2026, №1–2)") in html
+                "(86RS0004#2-100/2026#1, №2)") in html
 
     def test_footer_mentions_bank_track(self):
         """Футер «всего 78» без упоминания сотен активных исков банка

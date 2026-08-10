@@ -1130,8 +1130,15 @@ def _bank_event_phrases(ch: dict) -> list[str]:
                               + "</b>")
                     if issue_date:
                         ph += f" {escape_html(issue_date)}"
-                    ph += (f" ({escape_html(next(iter(prefixes)))}, "
-                           f"№{_writ_suffix_ranges(suffixes)})")
+                    # Первый лист — ПОЛНЫМ реквизитом (просьба юриста
+                    # 10.08.2026: им оперируют копипастой), остальные —
+                    # номерами диапазоном: «(…#1, №2–6)».
+                    first_sfx = min(suffixes)
+                    rest = sorted(set(suffixes) - {first_sfx})
+                    full_first = f"{next(iter(prefixes))}#{first_sfx}"
+                    ph += (f" ({escape_html(full_first)}"
+                           + (f", №{_writ_suffix_ranges(rest)}" if rest else "")
+                           + ")")
                     if rec:
                         ph += f" → {escape_html(shorten_bailiff_name(rec))}"
                     out.append(ph)
