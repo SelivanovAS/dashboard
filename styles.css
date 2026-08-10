@@ -614,7 +614,13 @@ body {
 .chip-bar-segments { display:flex; gap:12px; flex-wrap:wrap; align-items:stretch; width:100%; }
 .chip-bar .chip-divider { width:1px; height:22px; background:var(--border); margin:0 4px; }
 .chip-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius-pill); background:var(--bg-1); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out); font-family:var(--font-sans); white-space:nowrap; line-height:1.3; }
-.chip-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
+/* Hover — только устройства с курсором: на тач-экранах iOS «залипает» hover
+   после касания, и бледный фон перекрывал зелёный у .active (белый текст на
+   бледной плашке — не прочитать, скрин юриста 10.08.2026). Гард :not(.active)
+   держит активную кнопку зелёной и под мышью. */
+@media (hover:hover) {
+  .chip-btn:hover:not(.active) { border-color:var(--border-strong); background:var(--bg-3); }
+}
 .chip-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 .chip-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
 .chip-btn.chip-new.active { background:var(--amber-500); border-color:var(--amber-500); color:#fff; }
@@ -636,7 +642,12 @@ body {
 /* На активном (заливка --accent) серый счётчик тонул — как у .chip-btn.active. */
 .seg-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
 .seg-btn:not(:last-child) { border-right:1px solid var(--border); }
-.seg-btn:hover:not(:disabled) { background:var(--bg-3); }
+/* Тот же гард hover, что у .chip-btn выше: специфичность :hover:not(...) выше
+   .seg-btn.active, и залипший тач-hover красил АКТИВНЫЙ сегмент в бледный
+   --bg-3 при белом тексте («Иски банка»/«Истец» пропадали на глазах). */
+@media (hover:hover) {
+  .seg-btn:hover:not(:disabled):not(.active) { background:var(--bg-3); }
+}
 .seg-btn.active { background:var(--accent); color:#fff; }
 .seg-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
