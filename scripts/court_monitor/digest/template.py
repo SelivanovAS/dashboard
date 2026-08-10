@@ -1035,6 +1035,26 @@ _BANK_TYPE_LABELS = {
 }
 
 
+# Электронный ИД листа с числовым суффиксом («86RS0018#2-201/2026#6»):
+# общий префикс + номер листа. Основа схлопывания пачек в дайджесте.
+_WRIT_EID_SUFFIX_RE = re.compile(r'^(.*)#(\d+)$')
+
+
+def _writ_suffix_ranges(nums: list[int]) -> str:
+    """Номера листов диапазонами: [1..6] → «1–6», [4,6] → «4, 6»,
+    [4,5,6,8,9] → «4–6, 8–9». Для фразы пачки однотипных ИЛ."""
+    nums = sorted(set(nums))
+    parts: list[str] = []
+    i = 0
+    while i < len(nums):
+        j = i
+        while j + 1 < len(nums) and nums[j + 1] == nums[j] + 1:
+            j += 1
+        parts.append(str(nums[i]) if i == j else f"{nums[i]}–{nums[j]}")
+        i = j + 1
+    return ", ".join(parts)
+
+
 def _writ_numbers(writ: dict) -> str:
     """Номер(а) исполнительного листа одной строкой.
 
@@ -1057,23 +1077,82 @@ def _bank_event_phrases(ch: dict) -> list[str]:
     out: list[str] = []
     for t in ch.get("type") or []:
         if t == "fi_writ_issued":
+            # Пачки однотипных листов схлопываются (просьба юриста
+            # 10.08.2026: 2-201/2026 дало 6 фраз, различие — суффикс #N).
+            # Группа = (kind, дата выдачи, получатель); схлопываем ТОЛЬКО
+            # электронные ИД с общим префиксом и без бумажного бланка —
+            # реквизит «ФС №…» терять нельзя (fail-open в прежний формат).
+            writ_groups: dict[tuple, list[dict]] = {}
+            writ_order: list[tuple] = []
             for w in d.get("writs") or [{}]:
-                # Тип листа различает дата выдачи (classify_writ_kind):
-                # обеспечительный (арест) выдаётся в начале дела, лист на
-                # исполнение — после вступления решения в силу.
-                if w.get("kind") == "interim":
-                    ph = "🛡 <b>выдан обеспечительный лист (арест)</b>"
-                else:
-                    ph = "🧾 <b>выдан исполнительный лист</b>"
-                if w.get("issue_date"):
-                    ph += f" {escape_html(w['issue_date'])}"
-                num = _writ_numbers(w)
-                if num:
-                    ph += f" ({escape_html(num)})"
-                rec = (w.get("recipient") or "").strip()
-                if rec:
-                    ph += f" → {escape_html(shorten_bailiff_name(rec))}"
-                out.append(ph)
+                key = (w.get("kind") or "",
+                       (w.get("issue_date") or "").strip(),
+                       (w.get("recipient") or "").strip())
+                if key not in writ_groups:
+                    writ_groups[key] = []
+                    writ_order.append(key)
+                writ_groups[key].append(w)
+            for key in writ_order:
+                grp = writ_groups[key]
+                kind, issue_date, rec = key
+                suffixes: list[int] = []
+                prefixes: set[str] = set()
+                collapsible = len(grp) >= 2
+                if collapsible:
+                    for w in grp:
+                        if (w.get("blank_number") or "").strip():
+                            collapsible = False
+                            break
+                        m = _WRIT_EID_SUFFIX_RE.match(
+                            (w.get("electronic_id") or "").strip())
+                        if not m:
+                            collapsible = False
+                            break
+                        prefixes.add(m.group(1))
+                        suffixes.append(int(m.group(2)))
+                    if len(prefixes) != 1:
+                        collapsible = False
+                if collapsible:
+                    n = len(grp)
+                    if kind == "interim":
+                        ph = ("🛡 <b>выдано "
+                              + f"{n} "
+                              + plural_ru(n, 'обеспечительный лист',
+                                          'обеспечительных листа',
+                                          'обеспечительных листов')
+                              + " (арест)</b>")
+                    else:
+                        ph = ("🧾 <b>выдано "
+                              + f"{n} "
+                              + plural_ru(n, 'исполнительный лист',
+                                          'исполнительных листа',
+                                          'исполнительных листов')
+                              + "</b>")
+                    if issue_date:
+                        ph += f" {escape_html(issue_date)}"
+                    ph += (f" ({escape_html(next(iter(prefixes)))}, "
+                           f"№{_writ_suffix_ranges(suffixes)})")
+                    if rec:
+                        ph += f" → {escape_html(shorten_bailiff_name(rec))}"
+                    out.append(ph)
+                    continue
+                for w in grp:
+                    # Тип листа различает дата выдачи (classify_writ_kind):
+                    # обеспечительный (арест) выдаётся в начале дела, лист
+                    # на исполнение — после вступления решения в силу.
+                    if w.get("kind") == "interim":
+                        ph = "🛡 <b>выдан обеспечительный лист (арест)</b>"
+                    else:
+                        ph = "🧾 <b>выдан исполнительный лист</b>"
+                    if w.get("issue_date"):
+                        ph += f" {escape_html(w['issue_date'])}"
+                    num = _writ_numbers(w)
+                    if num:
+                        ph += f" ({escape_html(num)})"
+                    rec_w = (w.get("recipient") or "").strip()
+                    if rec_w:
+                        ph += f" → {escape_html(shorten_bailiff_name(rec_w))}"
+                    out.append(ph)
         elif t == "fi_writ_status_changed":
             for w in d.get("writ_status_changes") or []:
                 # Номер обязателен именно здесь: у дела бывает несколько листов
