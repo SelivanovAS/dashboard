@@ -527,3 +527,29 @@ class TestWrongCourtGuard:
                 '&amp;case_uid=aaaa-7777&amp;delo_id=1540005">2-7/2026</a>')
         assert isd.detect_dump_hosts(html) == {"revdinsky--svd.sudrf.ru"}
         assert isd.detect_card_delo_ids(html) == {"1540005"}
+
+
+# ── Проводка workflow (по образцу TestWiring из test_add_cases_targeted) ─────
+
+ROOT_DIR = os.path.dirname(SCRIPTS_DIR)
+
+
+def _read_repo(rel: str) -> str:
+    with open(os.path.join(ROOT_DIR, rel), encoding="utf-8") as f:
+        return f.read()
+
+
+class TestWorkflowWiring:
+    def test_import_result_checks_commit_outcome(self):
+        """status:"done" в журнал импортов — только при успешном push: упавший
+        шаг «Commit cases.json» (конфликт rebase после трёх ретраев) без сверки
+        COMMIT_OUTCOME слал бы оператору «+N добавлено» при потерянных данных."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        assert "id: commit" in yml
+        assert "IMPORT_OUTCOME: ${{ steps.import.outcome }}" in yml
+        assert "COMMIT_OUTCOME: ${{ steps.commit.outcome }}" in yml
+        # оба outcome входят в расчёт STATUS
+        assert ('[ "$IMPORT_OUTCOME" = "success" ] && '
+                '[ "$COMMIT_OUTCOME" = "success" ]') in yml
+        # при упавшем коммите summary получает подсказку повторить импорт
+        assert "коммит не запушился" in yml
