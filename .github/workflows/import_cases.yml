@@ -102,6 +102,7 @@ jobs:
             --operator "$OPERATOR"
 
       - name: Commit cases.json
+        id: commit
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
@@ -124,8 +125,17 @@ jobs:
         if: always()
         env:
           IMPORT_OUTCOME: ${{ steps.import.outcome }}
+          COMMIT_OUTCOME: ${{ steps.commit.outcome }}
         run: |
-          STATUS=$([ "$IMPORT_OUTCOME" = "success" ] && echo done || echo failed)
+          # done — только когда И импорт отработал, И коммит запушился: упавший
+          # push (конфликт rebase после трёх ретраев) без этой сверки слал бы
+          # оператору «+N добавлено», хотя данные никуда не уехали.
+          STATUS=$([ "$IMPORT_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" = "success" ] && echo done || echo failed)
+          if [ "$IMPORT_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" != "success" ] && [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            jq '.error = "дамп обработан, но коммит не запушился (конфликт с параллельной записью) — повторите импорт: уже добавленное отсеет дедуп"' \
+              "$IMPORT_SUMMARY_PATH" > /tmp/import_sum_err.json \
+              && mv /tmp/import_sum_err.json "$IMPORT_SUMMARY_PATH"
+          fi
           if [ -s "$IMPORT_SUMMARY_PATH" ]; then
             BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
               '{dump_key:$dk, status:$st, run_url:$ru,
