@@ -51,21 +51,47 @@ export function renderAdminHtml(secret, role, cfg) {
   };
   const isOperator = role === "operator";
   // Чип «Импорт» в nav: оператору — первым и активным сразу (его стартовая
-  // секция), owner'у — скрытым до загрузки списка капчёвых судов (у ХМАО
-  // их нет — чип так и не появится).
+  // секция). С появлением точечного добавления вкладка видна ОБЕИМ ролям
+  // всегда (работает и без капчёвых судов — у ХМАО их нет); дамповая часть
+  // внутри прячется сама, когда gated-судов в регионе нет (loadImportCourts).
   const IMPORT_CHIP = isOperator
     ? '<a class="chip-btn active" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="true" tabindex="0">Импорт</a>'
-    : '<a class="chip-btn" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="false" tabindex="-1" style="display:none;">Импорт</a>';
-  // Секция «Импорт дел» — вкладка. Оператору активна сразу (его рабочий
-  // инструмент), владельцу — скрыта инлайном до загрузки списка капчёвых
-  // судов (у ХМАО их нет, вкладка так и не появится).
-  const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import"${isOperator ? "" : ' style="display:none;"'}>
+    : '<a class="chip-btn" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="false" tabindex="-1">Импорт</a>';
+  // Секция «Импорт дел» — вкладка: первым — блок точечного добавления
+  // (обе роли, любой регион), ниже — импорт дампов капчёвых судов.
+  const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import">
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </span>
       <h2 class="section-title">Импорт дел</h2>
       <span class="section-counter" id="imp-court-count"></span>
+    </div>
+    <div class="card" id="ac-card">
+      <div class="imp-hint" style="margin-bottom:8px;"><b>Добавить дела точечно</b> — по одному делу в строке, до 20 за раз:
+        номер дела («2-1234/2026») или ссылка на карточку дела с сайта суда.
+        Для судов с проверочным кодом работает только ссылка: откройте дело в
+        браузере (код решается один раз) и скопируйте адрес карточки.</div>
+      <textarea id="ac-input" rows="4" spellcheck="false"
+        placeholder="2-1234/2026&#10;https://…sudrf.ru/modules.php?…name_op=case…"></textarea>
+      <div class="imp-selection" id="ac-check"></div>
+      <div class="imp-row">
+        <label>Суд для номеров
+          <select id="ac-court"><option value="">определить автоматически</option></select>
+        </label>
+        <label>Ваше имя
+          <input type="text" id="ac-name" maxlength="60" placeholder="как вас записать в журнале">
+        </label>
+      </div>
+      <div class="imp-row">
+        <button class="btn-primary" id="ac-send" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Добавить дела
+        </button>
+        <span class="imp-hint" id="ac-send-hint">введите номер дела или ссылку на карточку</span>
+        <span class="imp-status" id="ac-status" role="status" aria-live="polite"></span>
+      </div>
+      <div class="imp-report" id="ac-report"></div>
     </div>
     <div class="card">
       <div class="imp-alert" id="imp-alert" style="display:none;"></div>
@@ -751,6 +777,15 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 .imp-paste:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 .imp-paste:empty::before { content:attr(data-placeholder); color:var(--fg-4); font-style:italic; }
 .imp-paste table { max-width:100%; font-size:var(--fs-2xs); }
+/* Точечное добавление: многострочное поле — тот же язык, что .imp-paste. */
+#ac-input { width:100%; min-height:84px; max-height:220px; resize:vertical;
+  padding:10px 12px; border:1.5px dashed var(--border-strong);
+  border-radius:var(--radius-md); background:var(--bg-2);
+  font:inherit; font-size:var(--fs-xs); color:var(--fg-1);
+  margin-bottom:6px; box-sizing:border-box; }
+#ac-input:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+#ac-card .imp-row { margin-top:8px; }
+.ac-err { color:var(--danger-fg, #c0392b); }
 .imp-hint { font-size:var(--fs-xs); color:var(--fg-3); }
 .imp-status { font-size:var(--fs-sm); }
 .imp-status .badge { vertical-align:baseline; }
@@ -812,6 +847,9 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
   .imp-row select, .imp-row input[type=text] { width:100%; font-size:16px; }
   .imp-row .imp-file-btn, .imp-row #imp-send { width:100%; justify-content:center; }
   #imp-court-link { align-self:flex-start; }
+  /* Точечное добавление: 16px обязателен — iOS зумит поля мельче. */
+  #ac-input { font-size:16px; }
+  .imp-row #ac-send { width:100%; justify-content:center; }
 }
 </style>
 </head><body>
@@ -2433,8 +2471,8 @@ function tabAllowed(id) {
   if (!panel || !chip) return false;
   // Роль: #llm и #subs у оператора скрыты CSS (реальный запрет — 403 на API).
   if (!IS_OWNER && panel.hasAttribute("data-owner-only")) return false;
-  // Конфиг: чип «Импорт» инлайн-скрыт, пока loadImportCourts не нашёл в
-  // регионе капчёвые суды. На ХМАО он не появится никогда.
+  // Вкладка «Импорт» с появлением точечного добавления видна всем всегда;
+  // проверка инлайн-скрытия оставлена на будущее (сейчас не срабатывает).
   if (chip.style.display === "none") return false;
   return true;
 }
@@ -2530,6 +2568,7 @@ function initTabs() {
 // Секция скрыта, если gated-судов в регионе нет (у ХМАО прячется сама).
 var impCourts = [];            // [{name, domain, search_gated, srv_num}]
 var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
+var acRegion = null;           // весь region-блок cases.json — точечному добавлению
 var impPollTimer = null;
 var impSelectedFile = null;    // файл на отправку (из input или drag-n-drop)
 var impSending = false;        // идёт отправка/импорт — кнопка заблокирована
@@ -2576,20 +2615,34 @@ async function loadImportCourts() {
     const r = await fetch(CASES_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
-    const fi = (j && j.region && Array.isArray(j.region.fi_courts)) ? j.region.fi_courts : [];
+    // Весь блок региона — точечному добавлению: проверка ссылок против
+    // реестра (апелляция/кассация/чужой регион) и селект судов для номеров.
+    acRegion = (j && j.region) || null;
+    const fi = (acRegion && Array.isArray(acRegion.fi_courts)) ? acRegion.fi_courts : [];
     const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
     fi.forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
     });
+    acFillCourts(fi);
+    acUpdateState(); // ссылки могли ждать реестра для клиентской проверки
     if (!gated.length) {
-      // Регион без капчёвых судов: owner'у секция не нужна (ХМАО), а оператор
-      // видит её всегда — честно объясняем, почему форма недоступна.
-      if (!IS_OWNER) {
-        impShowAlert("В регионе нет судов с ручным импортом — уточните у владельца.");
-        document.querySelector("#import .imp-form").style.display = "none";
-        document.getElementById("imp-fresh-fold").style.display = "none";
-        document.getElementById("imp-hist-fold").style.display = "none";
-      }
+      // Регион без капчёвых судов (ХМАО): дамповая часть не нужна, но
+      // вкладка живёт — точечное добавление и общая история работают всем.
+      var form = document.querySelector("#import .imp-form");
+      if (form) form.style.display = "none";
+      var ff = document.getElementById("imp-fresh-fold");
+      if (ff) ff.style.display = "none";
+      var grid = document.querySelector("#import .imp-grid");
+      if (grid) grid.style.display = "block"; // осталась одна колонка (история)
+      // logonly: светофора здесь нет, второй KV-list по import:last:* ни к
+      // чему (лимит lists общий на аккаунт — инцидент 17.07.2026). Ошибку
+      // из «тихого» режима дорисовываем сами, иначе висело бы «Загрузка…».
+      loadImportLog(true).then(function (items) {
+        if (items === null) {
+          var hist = document.getElementById("imp-history");
+          if (hist) { hist.className = ""; hist.innerHTML = loadErrorHtml("Журнал импортов не загрузился", "implog", ""); }
+        }
+      });
       return;
     }
     // Дедуп по домену: вторые площадки («сервер 2») делят домен с первой,
@@ -2606,26 +2659,17 @@ async function loadImportCourts() {
     }).join("");
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
     syncImportCourtLink();
-    // Снятие инлайнового скрытия = «разблокировать вкладку»; показывает её
-    // теперь класс .is-tab-active (см. showTab), а не эта строка.
-    document.getElementById("import").style.display = "";
-    document.getElementById("nav-import").style.display = "";
+    // Плитка «Импорты» и светофор — только про регламент дампов капчёвых
+    // судов; сама вкладка видна всем и без них.
     document.getElementById("tile-import-card").style.display = "";
     document.querySelector(".pult").classList.add("has-import");
-    // Доводка дип-линка: на старте чип был инлайн-скрыт, поэтому tabAllowed
-    // отклонил бы #import и откатил на «Систему» даже там, где капчёвые суды
-    // есть. Если юрист успел кликнуть другую вкладку, hash уже переписан
-    // replaceState и доводка не сработает — что и нужно.
-    if (tabFromHash() === "import") showTab("import", { scroll: false });
     loadImportLog();
   } catch (e) {
-    // cases.json недоступен: оператору — ошибка с «Повторить» (иначе секция
-    // молча пуста и выглядит поломкой), owner'у — тихо, как раньше (на ХМАО
-    // gated-судов нет вовсе, алерт вытаскивал бы ненужную секцию).
-    if (!IS_OWNER) {
-      impShowAlert('Не удалось загрузить список судов (cases.json). '
-        + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
-    }
+    // cases.json недоступен: точечное добавление продолжает работать (без
+    // клиентской проверки ссылок — её сделает сервер), но об урезанном
+    // режиме честно говорим обеим ролям.
+    impShowAlert('Не удалось загрузить список судов (cases.json). '
+      + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
   }
 }
 function impStatusBadge(status) {
@@ -2635,6 +2679,7 @@ function impStatusBadge(status) {
   return '<span class="badge badge-skip">отправлено</span>';
 }
 function impResultText(item) {
+  if (item.kind === "case") return acResultText(item);
   if (item.status === "done") {
     var parts = ["+" + (item.added || 0) + " добавлено"];
     if (item.promoted) parts.push(item.promoted + " материалов стали делами");
@@ -2647,6 +2692,20 @@ function impResultText(item) {
   if (item.status === "failed") return item.error || "ошибка — детали в журнале";
   return "";
 }
+// Сводка записи точечного добавления (kind:"case") — общий журнал с дампами.
+function acResultText(item) {
+  if (item.status === "failed") return item.error || "ошибка — детали в журнале";
+  if (item.status !== "done") return "";
+  var parts = [];
+  var added = (item.added_main || 0) + (item.added_bank || 0);
+  if (added) parts.push("+" + added + " добавлено");
+  if (item.reactivated) parts.push(item.reactivated + " возвращено из архива");
+  if (item.promoted) parts.push(item.promoted + " материалов стали делами");
+  if (item.already) parts.push(item.already + " уже в базе");
+  if (item.not_found) parts.push(item.not_found + " не найдено");
+  if (item.refused) parts.push(item.refused + " отказано");
+  return parts.length ? parts.join(" · ") : "без изменений";
+}
 function renderImportHistory(items) {
   const el = document.getElementById("imp-history");
   document.getElementById("imp-hist-count").textContent = items.length ? "(" + items.length + ")" : "";
@@ -2657,7 +2716,11 @@ function renderImportHistory(items) {
   }
   el.className = "";
   el.innerHTML = items.slice(0, 20).map(function (it) {
-    const court = impCourtNameByDomain[it.court_domain] || it.court_domain || "?";
+    // Точечные добавления (kind:"case") живут в том же журнале: вместо суда —
+    // маркер канала и размер пачки (суд у пачки может быть разный построчно).
+    const court = it.kind === "case"
+      ? ("📌 точечно · " + (it.items_count || "?") + " стр.")
+      : (impCourtNameByDomain[it.court_domain] || it.court_domain || "?");
     // Построчный отчёт импортёра ([ADDED]/[ALREADY]/[SKIPPED ROLE]/…) хранится
     // в записи журнала — показываем свёрткой, как в live-блоке после отправки.
     var linesHtml = "";
@@ -2723,7 +2786,9 @@ function renderImportFreshness(items, lastMap) {
     if (!isNaN(t)) byDomain[d] = { ts: t, operator: e.operator || "", added: e.added || 0, rows: e.rows || 0 };
   });
   (items || []).forEach(function (it) {
-    if (it.status !== "done" || !it.court_domain) return;
+    // kind:"case" — точечное добавление: свежесть ДАМПОВОГО регламента оно
+    // не подтверждает (зеркало серверного гейта import:last в worker.js).
+    if (it.status !== "done" || !it.court_domain || it.kind === "case") return;
     var t = parseIso(it.updated_at || it.ts);
     if (isNaN(t)) return;
     if (!byDomain[it.court_domain] || byDomain[it.court_domain].ts < t) {
@@ -3111,6 +3176,251 @@ impUpdateSendState();
 try {
   document.getElementById("imp-name").value = localStorage.getItem("admin_operator_name") || "";
 } catch (e) {}
+
+// ── Точечное добавление дел (блок «Добавить дела», обе роли) ─────────────────
+// По одному делу в строке: номер («2-1234/2026») или ссылка на карточку sudrf
+// (для капчёвых судов — единственный путь: код закрывает поиск, карточки
+// открыты). Построчные предпроверки — зеркало Worker'а (handleAdminAddCase)
+// и скрипта (classify_input в targeted_add.py); содержательные отказы (роль,
+// дубль, «не найдено») делает скрипт на раннере, сюда они приходят журналом.
+var AC_MAX_ITEMS = 20;
+// JS-зеркало _FI_CASE_NUM_RE: буквенный/цифровой префикс + опциональный
+// средний сегмент постоянного присутствия (Покачи «2-2-279/2026»).
+var AC_NUM_RE = /^(?:[А-ЯA-Z]+|\\d+)-(?:\\d+-)?\\d+\\/\\d{4}$/;
+var acSending = false;
+var acPollTimer = null;
+// Пачка может честно идти дольше дампового импорта: до 20 номеров × все
+// открытые суды региона + очередь cases-data-write за ночным прогоном.
+// Тик 60 с (не 30, как у дампов): каждый тик — KV-list, а лимит list'ов
+// free-tier общий на аккаунт (инцидент 17.07.2026); 40 мин × 60 с ≤ 40 шт.
+var AC_POLL_TICK_MS = 60 * 1000;
+var AC_POLL_GIVEUP_MS = 40 * 60 * 1000;
+
+function acFillCourts(fi) {
+  var sel = document.getElementById("ac-court");
+  if (!sel) return;
+  var opts = ['<option value="">определить автоматически</option>'];
+  (fi || []).forEach(function (c) {
+    if (!c || !c.domain || c.search_gated) return; // по капчёвым номер не ищется
+    opts.push('<option value="' + escHtml(c.domain + "|" + (c.srv_num || 1))
+      + '">' + escHtml(c.name || c.domain) + '</option>');
+  });
+  var prev = sel.value;
+  sel.innerHTML = opts.join("");
+  if (prev) sel.value = prev; // перерисовка списка не сбрасывает выбор
+}
+
+function acClassifyLine(raw) {
+  var s = raw.trim();
+  if (!s) return { kind: "" };
+  if (s.indexOf("://") !== -1 || s.toLowerCase().indexOf(".sudrf.ru") !== -1) {
+    return { kind: "link", value: s };
+  }
+  var n = s.replace(/\\u00a0/g, " ").replace(/^\\s*(?:№|N)\\s*/i, "");
+  n = n.split("~")[0].split("(")[0].replace(/\\s+/g, "");
+  return AC_NUM_RE.test(n) ? { kind: "number", value: n } : { kind: "" };
+}
+
+// Клиентская проверка ссылки против реестра региона (acRegion из cases.json).
+// Реестр не загрузился — молчим, авторитетную проверку сделает скрипт.
+function acCheckLink(url) {
+  var s = url.replace(/&amp;/g, "&");
+  if (s.indexOf("://") === -1) s = "https://" + s;
+  var u;
+  try { u = new URL(s); } catch (e) { return "не удалось разобрать ссылку"; }
+  var host = u.hostname.toLowerCase();
+  if (host.slice(-9) !== ".sudrf.ru") return "это не адрес сайта суда (sudrf.ru)";
+  if (!/case_id=\\d+/.test(u.search)) {
+    return "в ссылке нет case_id — откройте саму карточку дела, а не страницу поиска";
+  }
+  if (!acRegion) return "";
+  var i;
+  var appeals = acRegion.appeal_courts || [];
+  for (i = 0; i < appeals.length; i++) {
+    if ((appeals[i].domain || "").toLowerCase() === host) {
+      return "это карточка апелляции (" + (appeals[i].name || host)
+        + ") — добавьте ссылку на дело в суде первой инстанции, апелляция подтянется сама";
+    }
+  }
+  var cass = acRegion.cassation || {};
+  if ((cass.domain || "").toLowerCase() === host) {
+    return "это карточка кассации — она отслеживается автоматически по делу 1-й инстанции";
+  }
+  var fi = acRegion.fi_courts || [];
+  var court = null;
+  for (i = 0; i < fi.length; i++) {
+    if ((fi[i].domain || "").toLowerCase() === host) { court = fi[i]; break; }
+  }
+  if (!court) return "суд " + host + " не из нашего региона";
+  var dm = /[?&]delo_id=(\\d+)/.exec(u.search);
+  if (dm && parseInt(dm[1], 10) !== (court.delo_id || 1540005)) {
+    return "ссылка ведёт в другой раздел судопроизводства — откройте карточку в разделе гражданских дел";
+  }
+  return "";
+}
+
+// Разобрать textarea: валидные строки + построчные ошибки (с номером строки).
+function acLines() {
+  var raw = document.getElementById("ac-input").value || "";
+  var lines = raw.split("\\n");
+  var items = [];
+  var errors = [];
+  for (var i = 0; i < lines.length; i++) {
+    var s = lines[i].trim();
+    if (!s) continue;
+    var c = acClassifyLine(s);
+    if (!c.kind) {
+      errors.push("строка " + (i + 1) + ": не похоже ни на номер дела, ни на ссылку на карточку");
+      continue;
+    }
+    if (c.kind === "link") {
+      var why = acCheckLink(s);
+      if (why) { errors.push("строка " + (i + 1) + ": " + why); continue; }
+    }
+    items.push(s);
+  }
+  return { items: items, errors: errors };
+}
+
+function acSetStatus(html) {
+  var el = document.getElementById("ac-status");
+  if (el) el.innerHTML = html;
+}
+
+function acUpdateState() {
+  var check = document.getElementById("ac-check");
+  var btn = document.getElementById("ac-send");
+  var hint = document.getElementById("ac-send-hint");
+  if (!check || !btn) return;
+  var st = acLines();
+  var over = st.items.length > AC_MAX_ITEMS;
+  var bits = [];
+  if (st.items.length) {
+    bits.push("к добавлению: " + st.items.length
+      + (st.items.length === 1 ? " дело" : st.items.length < 5 ? " дела" : " дел"));
+  }
+  if (over) {
+    bits.push('<span class="ac-err">не больше ' + AC_MAX_ITEMS
+      + ' за раз — разбейте на части</span>');
+  }
+  st.errors.forEach(function (e) {
+    bits.push('<span class="ac-err">' + escHtml(e) + "</span>");
+  });
+  check.innerHTML = bits.join(" · ");
+  var ready = st.items.length > 0 && !st.errors.length && !over && !acSending;
+  btn.disabled = !ready;
+  if (hint) {
+    hint.textContent = acSending ? ""
+      : st.errors.length || over ? "исправьте строки с ошибками"
+      : st.items.length ? "" : "введите номер дела или ссылку на карточку";
+  }
+}
+
+async function acSend() {
+  if (acSending) return;
+  var st = acLines();
+  if (!st.items.length || st.errors.length || st.items.length > AC_MAX_ITEMS) return;
+  var name = (document.getElementById("ac-name").value || "").trim();
+  if (!name) {
+    acSetStatus('<span class="badge badge-fail">укажите ваше имя</span>');
+    return;
+  }
+  try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
+  var courtDomain = "";
+  var courtSrv = "";
+  var sel = document.getElementById("ac-court");
+  if (sel && sel.value) {
+    var p = sel.value.split("|");
+    courtDomain = p[0];
+    courtSrv = p[1] || "";
+  }
+  acSending = true;
+  acUpdateState();
+  document.getElementById("ac-report").innerHTML = "";
+  acSetStatus("отправляю…");
+  try {
+    var r = await fetch("/admin/add-case?secret=" + encodeURIComponent(SECRET), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: st.items, court_domain: courtDomain,
+        court_srv_num: courtSrv, operator: name,
+      }),
+    });
+    var d = await r.json().catch(function () { return {}; });
+    if (r.ok && d.ok) {
+      acSetStatus(impStatusBadge("dispatched") + " пачка принята, обработка в очереди…");
+      acPollResult(d.key, Date.now());
+    } else {
+      acSetStatus('<span class="badge badge-fail">✕</span> '
+        + escHtml((d && d.error) || ("HTTP " + r.status)));
+      acSending = false;
+      acUpdateState();
+    }
+  } catch (e) {
+    acSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
+    acSending = false;
+    acUpdateState();
+  }
+}
+
+function acPollResult(key, startedAt) {
+  clearTimeout(acPollTimer);
+  acPollTimer = setTimeout(async function () {
+    var items = await loadImportLog(true);
+    var mine = (items || []).find(function (it) { return it.uuid === key; });
+    if (mine && (mine.status === "done" || mine.status === "failed")) {
+      acSetStatus(impStatusBadge(mine.status) + " " + escHtml(acResultText(mine)));
+      var rep = document.getElementById("ac-report");
+      if (rep && Array.isArray(mine.lines) && mine.lines.length) {
+        rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
+          + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
+          + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
+      }
+      // Успех — чистим поле (следующая пачка не должна клеиться к прошлой);
+      // при failed ввод сохраняем для повтора.
+      if (mine.status === "done") {
+        document.getElementById("ac-input").value = "";
+      }
+      acSending = false;
+      acUpdateState();
+      return;
+    }
+    if (Date.now() - startedAt > AC_POLL_GIVEUP_MS) {
+      acSetStatus('<span class="badge badge-fail">нет ответа ~40 мин</span> '
+        + 'Итог появится в «Истории импортов» — обновите страницу позже. '
+        + 'Если его там нет, отправьте пачку заново: уже добавленные дела система отсеет сама.');
+      acSending = false;
+      acUpdateState();
+      return;
+    }
+    var st = (mine && mine.status === "started") ? "started" : "dispatched";
+    acSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
+      + (st === "started" ? "выполняется" : "в очереди") + " · " + impElapsedText(startedAt));
+    acPollResult(key, startedAt);
+  }, AC_POLL_TICK_MS);
+}
+
+// Инициализация блока точечного добавления.
+(function () {
+  var input = document.getElementById("ac-input");
+  if (!input) return;
+  input.addEventListener("input", acUpdateState);
+  document.getElementById("ac-court").addEventListener("change", acUpdateState);
+  document.getElementById("ac-send").addEventListener("click", acSend);
+  var acName = document.getElementById("ac-name");
+  try { acName.value = localStorage.getItem("admin_operator_name") || ""; } catch (e) {}
+  // Имя общее с формой дампов: заполнил в одной — появилось в другой.
+  acName.addEventListener("input", function () {
+    var impName = document.getElementById("imp-name");
+    if (impName) impName.value = acName.value;
+  });
+  var impName = document.getElementById("imp-name");
+  if (impName) {
+    impName.addEventListener("input", function () { acName.value = impName.value; });
+  }
+  acUpdateState();
+})();
 
 // Плитка «Дайджест» из публичного last_digest.json. Оператору это
 // единственный путь (полный render() ему недоступен, /admin/data → 403);

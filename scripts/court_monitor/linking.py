@@ -1414,6 +1414,38 @@ def is_fi_number_tracked(
     )
 
 
+def promote_material_record(old: dict, row: dict) -> None:
+    """Переименовать М-запись в возбуждённое гражданское дело (промоушен М→2).
+
+    `old` — существующая запись материала (id «М-…»), `row` — строка выдачи
+    (или её аналог, собранный из карточки) с комбо-номером: case_number —
+    гражданский номер, material_number — прежний М-номер. Общее тело
+    импортёра дампов (import_search_dump) и точечного добавления
+    (targeted_add); зеркало промоушена блока 3 main_json. Индексы дедупа
+    правит вызывающий — у каналов они устроены по-разному.
+    """
+    num = row["case_number"]
+    mat = (row.get("material_number") or "").strip()
+    old["id"] = num
+    fi_block = old.setdefault("first_instance", {})
+    fi_block["case_number"] = num
+    # М-номер остаётся алиасом — ★ юриста на материале не теряется.
+    if mat and not fi_block.get("material_number"):
+        fi_block["material_number"] = mat
+    if row.get("judge"):
+        fi_block["judge"] = row["judge"]
+    if row.get("link"):
+        fi_block["link"] = row["link"]
+    if row.get("href_srv_num"):
+        fi_block["srv_num"] = row["href_srv_num"]
+    if row.get("status"):
+        fi_block["status"] = row["status"]
+    # Флаг события «принято к производству, заседание не назначено» —
+    # эмитит ближайший прогон (как при промоушене автопоиска).
+    if not fi_block.get("accepted_emitted"):
+        fi_block["accepted_pending_emit"] = True
+
+
 def _fi_search_to_json_case(fi: dict) -> dict:
     """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
     initial_role = fi.get("bank_role", "Ответчик")

@@ -235,13 +235,16 @@ class RegionConfig:
             # админке Worker'а: search_gated=True помечает капчёвые суды,
             # чьи дела заводятся импортёром. srv_num нужен для различения
             # вторых площадок (Камышловский/Красноуфимский: два сервера
-            # на одном домене).
+            # на одном домене). delo_id (с 10.08.2026) — клиентской проверке
+            # «ссылка ведёт в другой раздел» у точечного добавления: код
+            # гражданских дел 1-й инст. различается по субъектам.
             "fi_courts": [
                 {
                     "name": c.name,
                     "domain": c.domain,
                     "search_gated": c.search_gated,
                     "srv_num": c.srv_num,
+                    "delo_id": c.delo_id,
                 }
                 for c in self.first_instance_courts
             ],

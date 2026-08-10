@@ -899,6 +899,10 @@ const DISPATCH_WORKFLOWS = {
     inputs: new Set(["dump_key", "court_domain", "operator"]),
     roles: ["owner", "operator"],
   },
+  "add_cases.yml": {
+    inputs: new Set(["job_key", "operator"]),
+    roles: ["owner", "operator"],
+  },
 };
 
 // Один POST workflow_dispatch на GitHub API (ветка main). Общий для кнопок
@@ -1108,8 +1112,168 @@ async function handleImportDumpGet(request, env) {
   });
 }
 
+// ── Точечное добавление дел (блок «Добавить дела» админки) ──────────────────
+// Поток — зеркало импорта дампов: POST /admin/add-case кладёт задание в KV
+// (import:case:<uuid>, TTL 24 ч), заводит запись ОБЩЕГО журнала импортов
+// (kind:"case") и диспатчит add_cases.yml → Action забирает job-JSON
+// GET /add-case-job → scripts/add_cases_targeted.py → POST /import-result.
+// Строки пачки едут через KV, а не через inputs workflow: ссылка на карточку
+// длиннее лимита 100 символов, и ввод оператора не должен касаться shell.
+
+const ADD_CASE_MAX_ITEMS = 20;      // потолок строк в одной пачке
+const ADD_CASE_ITEM_MAX = 300;      // длина одной строки (номер или ссылка)
+const ADD_CASE_TOTAL_MAX = 8192;    // суммарный размер пачки
+// JS-зеркало _FI_CASE_NUM_RE (textutil.py): буквенный или цифровой префикс,
+// опциональный средний сегмент постоянного присутствия (Покачи «2-2-279/2026»).
+const ADD_CASE_NUM_RE = /^(?:[А-ЯA-Z]+|\d+)-(?:\d+-)?\d+\/\d{4}$/;
+
+// Клиент шлёт строки как есть; здесь — та же нормализация номера, что в
+// classify_input (targeted_add.py): «№», NBSP, скобочный двойник, хвост «~ М-».
+function addCaseClassify(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (s.includes("://") || s.toLowerCase().includes(".sudrf.ru")) {
+    return "link";
+  }
+  let n = s.replace(/\u00a0/g, " ").replace(/^\s*(?:№|N)\s*/i, "");
+  n = n.split("~")[0].split("(")[0].replace(/\s+/g, "");
+  return ADD_CASE_NUM_RE.test(n) ? "number" : "";
+}
+
+// Приём пачки от оператора/владельца: валидация построчно → KV → журнал →
+// dispatch. Любая невалидная строка = 400 с её номером — сюрпризов после
+// отправки быть не должно (содержательные отказы делает скрипт).
+async function handleAdminAddCase(request, env) {
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
+  const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return new Response("Bad JSON", { status: 400 });
+  }
+  const operator = String((body && body.operator) || "").trim().slice(0, 60);
+  const rawItems = Array.isArray(body && body.items) ? body.items : null;
+  if (!rawItems || !rawItems.length) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "нет ни одной строки — введите номер дела или ссылку на карточку" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  if (rawItems.length > ADD_CASE_MAX_ITEMS) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `не больше ${ADD_CASE_MAX_ITEMS} дел за одну отправку — разбейте на части` }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const items = [];
+  let total = 0;
+  for (let i = 0; i < rawItems.length; i++) {
+    const item = String(rawItems[i] || "").trim();
+    if (!item || item.length > ADD_CASE_ITEM_MAX) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: пустая или длиннее ${ADD_CASE_ITEM_MAX} символов` }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    const kind = addCaseClassify(item);
+    if (!kind) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: не похоже ни на номер дела, ни на ссылку на карточку sudrf` }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    if (kind === "link" && !/case_id=\d+/.test(item.replace(/&amp;/g, "&"))) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: в ссылке нет case_id — откройте саму карточку дела, а не страницу поиска` }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    total += item.length;
+    items.push(item);
+  }
+  if (total > ADD_CASE_TOTAL_MAX) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "пачка слишком большая — разбейте на части" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const courtDomain = String((body && body.court_domain) || "").trim().toLowerCase();
+  if (courtDomain && !/^[a-z0-9][a-z0-9.-]*\.sudrf\.ru$/.test(courtDomain)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "court_domain не похож на домен sudrf.ru" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const courtSrv = String((body && body.court_srv_num) || "").trim();
+  if (courtSrv && !/^[12]$/.test(courtSrv)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "court_srv_num: ожидается 1 или 2" }),
+      { status: 400, headers: jsonHeaders }
+    );
+  }
+  const uuid = crypto.randomUUID();
+  const jobKey = `import:case:${uuid}`;
+  const ts = new Date().toISOString();
+  const logKey = `import:log:${ts}|${uuid}`;
+  const record = {
+    uuid, kind: "case", items_count: items.length,
+    preview: items[0].slice(0, 120),
+    court_domain: courtDomain, operator, ts,
+    status: "dispatched", updated_at: ts,
+  };
+  const job = {
+    kind: "case", items, court_domain: courtDomain,
+    court_srv_num: courtSrv, operator, ts,
+  };
+  await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {
+    expirationTtl: IMPORT_DUMP_TTL,
+  });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+    expirationTtl: IMPORT_LOG_TTL,
+  });
+  const res = await dispatchWorkflowOnGitHub(env, "add_cases.yml", {
+    job_key: jobKey, operator,
+  });
+  if (!res.ok) {
+    record.status = "failed";
+    record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
+    record.updated_at = new Date().toISOString();
+    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+      expirationTtl: IMPORT_LOG_TTL,
+    });
+    return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
+      status: 502, headers: jsonHeaders,
+    });
+  }
+  console.log(`add-case принят: ${jobKey} (${items.length} строк, ${operator || "без имени"})`);
+  return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
+}
+
+// Выдача job-файла GitHub Action'у (Bearer PUSH_SECRET — шаблон /import-dump).
+async function handleAddCaseJobGet(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const url = new URL(request.url);
+  const key = url.searchParams.get("key") || "";
+  if (!/^import:case:[0-9a-f-]{36}$/.test(key)) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const job = await env.PUSH_SUBSCRIPTIONS.get(key);
+  if (job === null) {
+    return new Response("Not Found (задание истекло — TTL 24 ч — или не существовало)", { status: 404 });
+  }
+  return new Response(job, {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
 // Итог импорта от Action'а: started/done/failed + числа + строки отчёта.
-// Обновляет запись журнала по uuid из dump_key.
+// Обновляет запись журнала по uuid из dump_key (импорт дампов) либо job_key
+// (точечное добавление, kind:"case") — журнал у обоих каналов общий.
 async function handleImportResult(request, env) {
   const auth = request.headers.get("Authorization") || "";
   if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
@@ -1121,7 +1285,8 @@ async function handleImportResult(request, env) {
   } catch (_) {
     return new Response("Bad JSON", { status: 400 });
   }
-  const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""));
+  const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""))
+    || /^import:case:([0-9a-f-]{36})$/.exec(String(body.job_key || ""));
   const status = String(body.status || "");
   if (!m || !["started", "done", "failed"].includes(status)) {
     return new Response("Bad Request", { status: 400 });
@@ -1140,7 +1305,9 @@ async function handleImportResult(request, env) {
   try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
   record.status = status;
   record.updated_at = new Date().toISOString();
-  for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows"]) {
+  for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
+                     // счётчики точечного добавления (kind:"case")
+                     "items", "added_main", "added_bank", "reactivated", "refused", "not_found"]) {
     if (typeof body[num] === "number") record[num] = body[num];
   }
   if (Array.isArray(body.lines)) {
@@ -1159,7 +1326,9 @@ async function handleImportResult(request, env) {
   // Отдельный вечный ключ (без TTL): журнал живёт 90 дней и отдаётся
   // последними 50 записями — при ~52 судах с еженедельным регламентом
   // окна журнала на «когда суд импортировался в последний раз» не хватает.
-  if (status === "done" && record.court_domain) {
+  // Точечное добавление (kind:"case") светофор НЕ бумпает: свежесть — это
+  // регламент полного импорта дампа выдачи, одно дело его не подтверждает.
+  if (status === "done" && record.court_domain && record.kind !== "case") {
     await env.PUSH_SUBSCRIPTIONS.put(
       `import:last:${record.court_domain}`,
       JSON.stringify({
@@ -1337,6 +1506,14 @@ export default {
 
     if (url.pathname === "/admin/import-dump" && request.method === "POST") {
       return handleAdminImportDump(request, env);
+    }
+
+    if (url.pathname === "/admin/add-case" && request.method === "POST") {
+      return handleAdminAddCase(request, env);
+    }
+
+    if (url.pathname === "/add-case-job" && request.method === "GET") {
+      return handleAddCaseJobGet(request, env);
     }
 
     if (url.pathname === "/import-dump" && request.method === "GET") {

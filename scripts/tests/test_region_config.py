@@ -206,6 +206,7 @@ class TestSverdlovskYanaoRegion:
             "domain": "akademicheskiy--svd.sudrf.ru",
             "search_gated": True,
             "srv_num": 1,
+            "delo_id": 1540005,
         }
         assert any(not c["search_gated"] for c in fi)  # ЯНАО ищется
         hmao_fi = get_region("hmao").public_info()["fi_courts"]
