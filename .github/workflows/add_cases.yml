@@ -1,0 +1,165 @@
+# Точечное добавление дел из админки Worker'а (блок «Добавить дела»:
+# POST /admin/add-case → KV import:case:<uuid> → workflow_dispatch сюда).
+# Поток: забрать job-файл с Worker'а (Bearer PUSH_SECRET, свой User-Agent —
+# урок бана Python-urllib 13–16.07.2026) → scripts/add_cases_targeted.py
+# (номера — целевой поиск по открытым судам региона; ссылки — карточка
+# напрямую, единственный путь для капчёвых судов) → commit data/ →
+# POST /import-result (итог оператору в общий журнал импортов админки).
+#
+# ⚠ Все inputs и строки отчёта передаются через env/файлы, НЕ через ${{ }} в
+# run: — строки пачки и имя оператора произвольны, интерполяция в shell
+# была бы инъекцией. Сами строки ввода вообще не касаются shell: они едут
+# job-файлом через KV.
+name: "📌 Точечное добавление дел"
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_key:
+        description: 'KV-ключ задания (import:case:<uuid>) — выдаёт Worker при приёме пачки'
+        required: true
+        type: string
+      operator:
+        description: 'Имя оператора (журнал импортов)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+# Общая группа записи в data/ с основным прогоном (update_cases.yml) и
+# импортёрами: параллельная запись уронила бы push non-fast-forward'ом.
+# cancel-in-progress выключен — пачка ждёт очередь, не убивая прогон.
+concurrency:
+  group: cases-data-write
+  cancel-in-progress: false
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    # До 20 номеров без выбранного суда = до 20 × N_судов запросов с вежливой
+    # паузой (~2.5 с) — худший случай ~30 мин чистого поиска; 15 минут
+    # импортёра дампов здесь мало, а гибель по таймауту посреди Python теряет
+    # ВСЮ пачку (save_state и POST итога не выполняются).
+    timeout-minutes: 45
+    env:
+      # Inputs — только через env (см. предупреждение в шапке).
+      JOB_KEY: ${{ inputs.job_key }}
+      OPERATOR: ${{ inputs.operator }}
+      # Без ретраев (боевой дефолт): в отличие от дампового импорта здесь до
+      # 400 поисковых запросов, и ОДИН лежащий суд с ретраями (3 × таймаут +
+      # паузы ≈ 100 с на запрос) взрывал бы худший случай за пределы
+      # timeout-minutes. Пропуск безопасен: суд попадёт в «не ответили»,
+      # повтор пачки дёшев — уже добавленное отсеет дедуп.
+      FETCH_MAX_RETRIES: "1"
+      PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+      PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # workers.dev режет пустой/дефолтный UA некоторых клиентов (ошибка 1010,
+      # инцидент живого лога 13–16.07.2026) — представляемся явно.
+      UA: court-monitor-addcase/1.0
+      IMPORT_SUMMARY_PATH: /tmp/add_cases_summary.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: POST started (журнал импортов в админке)
+        run: |
+          jq -n --arg jk "$JOB_KEY" --arg ru "$RUN_URL" \
+            '{job_key:$jk, status:"started", run_url:$ru}' \
+          | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
+              -H "Authorization: Bearer $PUSH_SECRET" \
+              -H "Content-Type: application/json" \
+              --data @- || true
+
+      - name: Скачать задание с Worker'а
+        run: |
+          curl -f -s -m 60 -A "$UA" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            "$PUSH_WORKER_URL/add-case-job?key=$(python3 -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["JOB_KEY"]))')" \
+            -o /tmp/add_cases_job.json
+          SIZE=$(wc -c < /tmp/add_cases_job.json)
+          echo "Задание: $SIZE байт"
+          if [ "$SIZE" -lt 10 ]; then
+            echo "::error::Задание подозрительно мало ($SIZE байт) — вероятно истёк TTL 24 ч"
+            exit 1
+          fi
+
+      - name: Точечное добавление дел
+        id: addcases
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          REGION: ${{ vars.REGION }}
+          # Мастер-выключатель трека исков банка территории: при '0' скрипт
+          # отказывает истцовым строкам (прогон bank-файлы не грузит, запись
+          # зависла бы замороженной).
+          BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}
+        run: |
+          python3 scripts/add_cases_targeted.py --job /tmp/add_cases_job.json
+
+      - name: Commit данных
+        id: commit
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          # Реактивация из архива меняет и архивные файлы (включая холодные
+          # годовые и bank-пары) — добавляем весь data/.
+          git add -A data/
+          if git diff --cached --quiet; then
+            echo "Изменений нет (добавлено 0 дел) — коммит не нужен"
+            exit 0
+          fi
+          ADDED=$(jq -r '(.added_main // 0) + (.added_bank // 0) + (.reactivated // 0) + (.promoted // 0)' \
+            "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
+          git commit -m "📌 Точечное добавление: +${ADDED} (${OPERATOR:-без имени})"
+          # Ретраи: чужой push мог проскочить между checkout и push.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
+
+      - name: POST итога в журнал импортов
+        if: always()
+        env:
+          ADD_OUTCOME: ${{ steps.addcases.outcome }}
+          COMMIT_OUTCOME: ${{ steps.commit.outcome }}
+        run: |
+          # done — только когда И скрипт отработал, И коммит запушился: упавший
+          # push (конфликт rebase после трёх ретраев) без этой сверки слал бы
+          # оператору «+N добавлено», хотя данные никуда не уехали.
+          STATUS=$([ "$ADD_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" = "success" ] && echo done || echo failed)
+          if [ "$ADD_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" != "success" ] && [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            jq '.error = "данные обработаны, но коммит не запушился (конфликт с параллельной записью) — повторите пачку: уже добавленное отсеет дедуп"' \
+              "$IMPORT_SUMMARY_PATH" > /tmp/add_sum_err.json \
+              && mv /tmp/add_sum_err.json "$IMPORT_SUMMARY_PATH"
+          fi
+          if [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            BODY=$(jq -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{job_key:$jk, status:$st, run_url:$ru,
+                items:(.items // 0),
+                added_main:(.added_main // 0), added_bank:(.added_bank // 0),
+                reactivated:(.reactivated // 0), promoted:(.promoted // 0),
+                already:(.already // 0), refused:(.refused // 0),
+                not_found:(.not_found // 0), lines:(.lines // [])}
+               + (if .error then {error:.error} else {} end)' \
+              "$IMPORT_SUMMARY_PATH")
+          else
+            BODY=$(jq -n -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{job_key:$jk, status:$st, run_url:$ru,
+                error:"прогон упал до разбора задания (скачивание/зависимости) — детали в run_url"}')
+          fi
+          printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \
+            -X POST "$PUSH_WORKER_URL/import-result" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @- || true

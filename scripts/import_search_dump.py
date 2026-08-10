@@ -65,6 +65,7 @@ from court_monitor import config  # noqa: E402
 from court_monitor.config import cold_archive_glob, log  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
+    promote_material_record,
 )
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
@@ -214,24 +215,8 @@ def import_rows(
                 counters["promoted"] += 1
                 promoted_any = True
                 lines.append(f"[PROMOTED] {mat} → {num} — материал возбуждён в дело, запись переименована")
-                old["id"] = num
-                fi_block = old.setdefault("first_instance", {})
-                fi_block["case_number"] = num
-                # М-номер остаётся алиасом — ★ юриста на материале не теряется.
-                if not fi_block.get("material_number"):
-                    fi_block["material_number"] = mat
-                if r.get("judge"):
-                    fi_block["judge"] = r["judge"]
-                if r.get("link"):
-                    fi_block["link"] = r["link"]
-                if r.get("href_srv_num"):
-                    fi_block["srv_num"] = r["href_srv_num"]
-                if r.get("status"):
-                    fi_block["status"] = r["status"]
-                # Флаг события «принято к производству, заседание не назначено»
-                # — эмитит ближайший прогон (как при промоушене автопоиска).
-                if not fi_block.get("accepted_emitted"):
-                    fi_block["accepted_pending_emit"] = True
+                # Тело промоушена общее с точечным добавлением (linking.py).
+                promote_material_record(old, r)
                 case_by_id.pop((domain, mat), None)
                 case_by_id[(domain, num)] = old
                 dedup_exact.discard((domain, mat))

@@ -216,6 +216,34 @@ def match_fi_court_by_short_name(short_name: str) -> CourtConfig | None:
     return _FI_COURTS_BY_NAME.get(_eyo(short_name.strip().lower()))
 
 
+def fi_court_by_domain(domain: str, srv_num: int | None = None) -> CourtConfig | None:
+    """CourtConfig 1-й инст. АКТИВНОГО региона по паре (домен, srv_num).
+
+    Проверка «свой/чужой суд» точечного добавления (targeted_add).
+    _FI_COURTS_BY_DOMAIN выше не годится: он схлопывает двухсерверные домены
+    (Покачи, Камышловский/Красноуфимский на Урале) до первой площадки и снят
+    статически при импорте модуля — monkeypatch региона в тестах он не видит.
+    Здесь перебор идёт по get_region() НА ВЫЗОВ (config.X-инвариант, как
+    _fi_name_to_domain в linking.py).
+
+    srv_num=None или площадки с таким номером на домене нет → первая площадка
+    домена (совместимо с прежним резолвом по голому домену). None — домена
+    нет в реестре 1-й инстанции региона вовсе.
+    """
+    d = (domain or "").strip().lower()
+    if not d:
+        return None
+    first: CourtConfig | None = None
+    for c in get_region().first_instance_courts:
+        if c.domain.lower() != d:
+            continue
+        if srv_num is not None and c.srv_num == srv_num:
+            return c
+        if first is None:
+            first = c
+    return first
+
+
 def fi_card_url(fi_or_details: dict) -> str:
     """Построить URL карточки дела первой инстанции.
 
