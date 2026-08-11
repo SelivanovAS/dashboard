@@ -1719,14 +1719,7 @@ function renderAnalytics(){
         // имя/отчество до инициалов, фамилию оставляет целой.
         const pl=shortName(shortParty(c.plaintiff));
         const df=shortName(shortParty(c.defendant));
-        // Бейдж роли — ТОЛЬКО для 3-го лица (решение юриста 11.08.2026):
-        // истец/ответчик и так видны из строки сторон ниже — Сбербанк
-        // подсвечен зелёным, порядок «истец vs ответчик». А у дел 3-го лица
-        // банка в сторонах нет вовсе — без бейджа связь дела с банком
-        // невидима. Тот же принцип, что у roleBadge в hero drawer'а.
-        const roleBadge=c.sberbankRole==='third_party'
-          ?'<span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'
-          :'';
+        const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
         const timeTxt=c.hearingTime||'—';
         const showDate=(g.key==='week'||g.key==='later');
         const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'}))}</span>`:'';
@@ -1762,7 +1755,7 @@ function renderAnalytics(){
         // иконку не дублируем, клик по элементу открывает drawer целиком.
         upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
-          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}${roleBadge}${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
       });
       upHtml+='</div></div>';
@@ -2104,11 +2097,10 @@ function classifyWritKind(w,c){
 // есть основные дела (объединённый «★ Мои» — независимо от выбранного
 // сегмента, drawer по ссылке из дайджеста): внутри чистой картотеки банка
 // он был бы на каждой строке и только шумел.
-function bankTrackBadge(c){
-  return (c&&c._bankTrack&&(mineModeOn()||!bankViewActive))
-    ?'<span class="badge badge-compact badge-bank-track" title="Картотека «Иски банка»">🏦 Иск банка</span>'
-    :'';
-}
+// Бейдж 🏦 картотеки банка на карточках «★ Мои» УДАЛЁН 11.08.2026 решением
+// юриста: роль банка и так видна из строки сторон (ПАО Сбербанк подсвечен
+// истцом), принадлежность к внутренней картотеке в mine-списке не нужна.
+// Не возвращать (страж test_bank_track_badge_stays_removed).
 // Бейдж «🌙 Заочное» — решение вынесено в заочном производстве (ст. 233 ГПК):
 // срок вступления в силу считается иначе (вручение копии + 7 раб. дн + месяц,
 // без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому тип
@@ -2768,7 +2760,7 @@ function renderTable(){
     const caseNumEsc=escHtml(c.caseNumber);
     // Срок возражений — сразу после «Обжалуется»: это дедлайн, он важнее
     // принадлежности к треку и статуса листа.
-    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), bankTrackBadge(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -3629,7 +3621,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${objectionsBadgeHtml(c)}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${objectionsBadgeHtml(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
@@ -3754,7 +3746,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${bankTrackBadge(c)}${defaultJudgmentBadgeHtml(c)}${newBadge}${archived}</span>
+        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${defaultJudgmentBadgeHtml(c)}${newBadge}${archived}</span>
       </div>
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
