@@ -277,7 +277,7 @@ BANK_AUTO_INTAKE = os.environ.get("BANK_AUTO_INTAKE", "1") == "1"
 BANK_INTAKE_DRY_RUN = os.environ.get("BANK_INTAKE_DRY_RUN", "0") == "1"
 BANK_INTAKE_MAX_PER_RUN = int(os.environ.get("BANK_INTAKE_MAX_PER_RUN", "30") or 30)
 # Потолок карточек-кандидатов на ОДИН суд. Фаза 3 идёт раньше FI-цикла, и
-# пять подряд нечитаемых карточек открывают пер-судовый предохранитель
+# три подряд нечитаемых карточек открывают пер-судовый предохранитель
 # (CARD_BREAKER_THRESHOLD) — без кэпа подхват мог бы в одиночку снять суд с
 # обхода карточек на весь прогон.
 BANK_INTAKE_MAX_CARDS_PER_COURT = int(
@@ -305,13 +305,13 @@ FETCH_MAX_RETRIES = int(os.environ.get("FETCH_MAX_RETRIES", "1"))
 # карточки этого хоста пропускаются без HTTP (netutil.card_breaker_allows).
 # Успешная карточка сбрасывает счётчик. 0 — предохранитель выключен (ручные
 # пробы лежащего суда). Память — ОДИН прогон (сброс в _metrics_reset).
-CARD_BREAKER_THRESHOLD = int(os.environ.get("CARD_BREAKER_THRESHOLD", "5"))
+CARD_BREAKER_THRESHOLD = int(os.environ.get("CARD_BREAKER_THRESHOLD", "3"))
 # Half-open: у отключённого суда каждая K-я пропущенная карточка идёт как
 # проба — суд ожил в середине прогона → обход возобновляется (короткая
 # заглушка не отнимает суд на сутки). Заодно самостраховка канарейки
 # (пре-открытие по заглушке на странице ПОИСКА при живых карточках
 # самоисправится первой же пробой). 0 — без проб.
-CARD_BREAKER_PROBE_EVERY = int(os.environ.get("CARD_BREAKER_PROBE_EVERY", "25"))
+CARD_BREAKER_PROBE_EVERY = int(os.environ.get("CARD_BREAKER_PROBE_EVERY", "30"))
 # Пер-кейсовый smart-skip (should_skip_case): пропуск карточек с известной
 # будущей датой (заседание / «без движения»). Выставляется в main_json из
 # флага --smart-skip / env SKIP_NON_WORKING_DAYS: крон передаёт его всегда,
