@@ -1,6 +1,6 @@
 {
-  "name": "Сбер Юрист",
-  "short_name": "Сбер Юрист",
+  "name": "Алитигатор",
+  "short_name": "Алитигатор",
   "description": "Мониторинг гражданских дел Сбербанка в ХМАО-Югре",
   "start_url": "./sberbank_dashboard.html",
   "scope": "./",

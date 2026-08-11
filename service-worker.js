@@ -8,7 +8,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v135';
+const CACHE_VERSION = 'v136';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -39,7 +39,7 @@ const APP_SHELL = [
 // Минимальная офлайн-страница на случай, если HTML не оказалось ни в сети, ни в кэше.
 const OFFLINE_HTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Нет связи · Сбер Юрист</title>
+<title>Нет связи · Алитигатор</title>
 <style>
   body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#f1faf3;color:#14181f;
        display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center}
@@ -225,7 +225,7 @@ async function cacheFirst(request, cacheName) {
 self.addEventListener('push', (event) => {
   const data = event.data
     ? event.data.json()
-    : { title: 'Сбер Юрист', body: 'Есть обновления по делам' };
+    : { title: 'Алитигатор', body: 'Есть обновления по делам' };
 
   // URL, который SW откроет по клику. Бэкенд (Python send_web_push) присылает
   // абсолютный путь '/sberbank_dashboard.html?digest=open' — приводим к
@@ -235,7 +235,7 @@ self.addEventListener('push', (event) => {
   const clickUrl = rawUrl.startsWith('/') ? '.' + rawUrl : rawUrl;
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Сбер Юрист', {
+    self.registration.showNotification(data.title || 'Алитигатор', {
       body: data.body || 'Есть обновления по делам',
       icon: './icon-192.png',
       badge: './icon-192.png',
