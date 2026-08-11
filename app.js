@@ -1719,7 +1719,14 @@ function renderAnalytics(){
         // имя/отчество до инициалов, фамилию оставляет целой.
         const pl=shortName(shortParty(c.plaintiff));
         const df=shortName(shortParty(c.defendant));
-        const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
+        // Бейдж роли — ТОЛЬКО для 3-го лица (решение юриста 11.08.2026):
+        // истец/ответчик и так видны из строки сторон ниже — Сбербанк
+        // подсвечен зелёным, порядок «истец vs ответчик». А у дел 3-го лица
+        // банка в сторонах нет вовсе — без бейджа связь дела с банком
+        // невидима. Тот же принцип, что у roleBadge в hero drawer'а.
+        const roleBadge=c.sberbankRole==='third_party'
+          ?'<span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'
+          :'';
         const timeTxt=c.hearingTime||'—';
         const showDate=(g.key==='week'||g.key==='later');
         const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'}))}</span>`:'';
@@ -1755,7 +1762,7 @@ function renderAnalytics(){
         // иконку не дублируем, клик по элементу открывает drawer целиком.
         upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
-          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
+          `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}${roleBadge}${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
       });
       upHtml+='</div></div>';
