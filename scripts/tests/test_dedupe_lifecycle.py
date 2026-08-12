@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import unittest
+from contextlib import contextmanager
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
@@ -23,6 +25,25 @@ from court_monitor.lifecycle import (  # noqa: E402
     dedupe_cassation_by_uid,
     dedupe_orphan_by_base_number,
 )
+
+
+@contextmanager
+def _captured_log():
+    """Собрать записи логгера court-monitor (assertLogs требует ≥1 записи —
+    для проверок «тишины» не годится)."""
+    court_log = logging.getLogger("court-monitor")
+    records: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = records.append  # type: ignore[assignment]
+    court_log.addHandler(handler)
+    try:
+        yield records
+    finally:
+        court_log.removeHandler(handler)
+
+
+def _warnings_of(records: list[logging.LogRecord]) -> list[str]:
+    return [r.getMessage() for r in records if r.levelno >= logging.WARNING]
 
 
 def _orphan(num="2-208/2026", court="Сургутский городской суд", domain=""):
@@ -93,22 +114,11 @@ class TestDedupeOrphanCourtAware(unittest.TestCase):
             _owner(num="2-813/2026", court="Мегионский городской суд",
                    domain="megion--hmao.sudrf.ru"),
         ]
-        import logging
-        court_log = logging.getLogger("court-monitor")
-        records: list[logging.LogRecord] = []
-        handler = logging.Handler()
-        handler.emit = records.append  # type: ignore[assignment]
-        court_log.addHandler(handler)
-        try:
+        with _captured_log() as records:
             merged = dedupe_orphan_by_base_number(cases)
-        finally:
-            court_log.removeHandler(handler)
         self.assertEqual(merged, 0)
         self.assertEqual(len(cases), 3)
-        self.assertFalse(
-            [r for r in records if r.levelno >= logging.WARNING],
-            [r.getMessage() for r in records],
-        )
+        self.assertFalse(_warnings_of(records), _warnings_of(records))
 
     def test_orphan_without_court_still_merges(self):
         # Легаси-стаб без суда: пустой ключ матчит любой — прежнее
@@ -146,6 +156,73 @@ class TestDedupeOrphanCourtAware(unittest.TestCase):
         ]
         merged = dedupe_orphan_by_base_number(cases)
         self.assertEqual(merged, 1)
+
+
+def _uid_anchor(id_="33-5546/2026", uid="86RS0011-01-2025-000791-84",
+                stage="appeal"):
+    """Не-discovery запись апел. производства с УИД дела 1-й инст."""
+    return {
+        "id": id_,
+        "current_stage": stage,
+        "first_instance": {"judicial_uid": uid, "case_number": "2-49/2026"},
+        "appeal": {"case_number": id_},
+    }
+
+
+def _uid_discovery(uid="86RS0011-01-2025-000791-84"):
+    """Discovery-двойник, заведённый парсером 7kas."""
+    return {
+        "id": "2-49/2026",
+        "current_stage": "cassation",
+        "discovered_via_cassation": True,
+        "first_instance": {"judicial_uid": uid, "case_number": "2-49/2026"},
+        "cassation": {
+            "case_number": "8Г-1/2026",
+            "judicial_uid": uid,
+            "last_checked_at": "2026-08-12",
+        },
+    }
+
+
+class TestDedupeCassationUidWarning(unittest.TestCase):
+    def test_two_anchors_without_discovery_silent(self):
+        # Основная апелляция + частная жалоба одного дела 1-й инст.
+        # штатно делят УИД — сливать нечего, WARNING не печатается.
+        cases = [
+            _uid_anchor("33-5546/2026"),
+            _uid_anchor("33-2894/2026", stage="cassation_watch"),
+        ]
+        with _captured_log() as records:
+            merged = dedupe_cassation_by_uid(cases)
+        self.assertEqual(merged, 0)
+        self.assertEqual(len(cases), 2)
+        self.assertFalse(_warnings_of(records), _warnings_of(records))
+
+    def test_two_anchors_with_discovery_warns(self):
+        # Настоящая неоднозначность: двойник есть, а якорь не выбрать.
+        cases = [
+            _uid_anchor("33-5546/2026"),
+            _uid_anchor("33-2894/2026", stage="cassation_watch"),
+            _uid_discovery(),
+        ]
+        with _captured_log() as records:
+            merged = dedupe_cassation_by_uid(cases)
+        self.assertEqual(merged, 0)
+        self.assertEqual(len(cases), 3)
+        self.assertTrue(
+            any("якорь неоднозначен" in w for w in _warnings_of(records)),
+            _warnings_of(records),
+        )
+
+    def test_single_anchor_with_discovery_merges(self):
+        cases = [_uid_anchor("33-5546/2026"), _uid_discovery()]
+        merged = dedupe_cassation_by_uid(cases)
+        self.assertEqual(merged, 1)
+        self.assertEqual(len(cases), 1)
+        host = cases[0]
+        self.assertEqual(host["id"], "33-5546/2026")
+        self.assertEqual(host["cassation"]["case_number"], "8Г-1/2026")
+        self.assertIn("слит автоматически", host.get("notes", ""))
 
 
 if __name__ == "__main__":
