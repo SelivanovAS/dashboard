@@ -3104,6 +3104,74 @@ class TestSoloSessionMarkers:
         assert kind == "hearing"
 
 
+# ── Огрызок апелляционной карточки не считается прочитанной ──────────────────
+
+class TestAppealDegradedCardNotChecked:
+    """Огрызок апел. карточки (<6 таблиц, движение не распозналось — sudrf
+    отдал вкладку «обжалование» вместо «ДЕЛО») не считается прочитанной:
+    last_checked_at не бумпается, parsed не растёт, «Время заседания» не
+    затирается пустотой (33-2042/2026, Урал, 12.08.2026). Ожидаемый огрызок
+    suspended-дела, напротив, ОБЯЗАН бампать last_checked_at — на нём живёт
+    недельный ритм suspended_weekly."""
+
+    _DEGRADED_CARD = {
+        "Последнее событие": "", "Дата события": "",
+        "Статус": "В производстве",
+        "Время заседания": "",
+        "_appellant_raw": "",
+        "_events": [],
+        "_table_count": 4,
+    }
+
+    @staticmethod
+    def _run(monkeypatch, mirror):
+        from court_monitor import runs as cm_runs
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: set())
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(cm_runs, "should_skip_case",
+                            lambda shim, today, **kw: (False, ""))
+        monkeypatch.setattr(cm_runs, "card_breaker_allows", lambda dom: True)
+        monkeypatch.setattr(cm_runs, "fetch_card_checked",
+                            lambda url, **kw: "<html>огрызок</html>")
+        monkeypatch.setattr(
+            cm_runs, "parse_case_card",
+            lambda html, base: dict(TestAppealDegradedCardNotChecked._DEGRADED_CARD),
+        )
+        case = {
+            "Номер дела": "33-2042/2026", "Ссылка": "1|aaaa-bbbb",
+            "Истец": "ПАО Сбербанк", "Ответчик": "Иванов Иван Иванович",
+            "Последнее событие": "", "Статус": "В производстве",
+            "Время заседания": "10:30",
+        }
+        _, changes, stats = cm_runs.update_active_cases(
+            [case], json_appeal_by_num={"33-2042/2026": mirror})
+        return case, changes, stats
+
+    def test_degraded_card_skipped_without_bump(self, monkeypatch):
+        mirror = {"case_number": "33-2042/2026",
+                  "events": [{"date": "01.08.2026",
+                              "text": "Передача дела судье"}]}
+        before = cm_config.METRICS.get("cards_degraded", 0)
+        case, changes, stats = self._run(monkeypatch, mirror)
+        assert stats["parsed"] == 0
+        assert "last_checked_at" not in mirror
+        assert case["Время заседания"] == "10:30"
+        assert changes == []
+        assert cm_config.METRICS["cards_degraded"] == before + 1
+
+    def test_suspended_expected_shell_still_bumps(self, monkeypatch):
+        mirror = {"case_number": "33-2042/2026",
+                  "events": [{"date": "01.08.2026",
+                              "text": "Жалоба оставлена без движения"}]}
+        before = cm_config.METRICS.get("cards_degraded", 0)
+        case, changes, stats = self._run(monkeypatch, mirror)
+        assert stats["parsed"] == 1
+        assert mirror.get("last_checked_at")
+        # Ожидаемый огрызок — не деградация: метрика не растёт.
+        assert cm_config.METRICS["cards_degraded"] == before
+
+
 # ── Апелляционный change: добор апеллянта из зеркала бэкфилла ─────────────────
 
 class TestAppealChangeAppellantFromMirror:
@@ -3136,7 +3204,7 @@ class TestAppealChangeAppellantFromMirror:
                             lambda html, base: card_info)
         monkeypatch.setattr(cm_runs, "card_is_empty_shell", lambda ci: False)
         monkeypatch.setattr(cm_runs, "_warn_if_card_degraded",
-                            lambda ci, num: None)
+                            lambda ci, num, **kw: "")
         case = {
             "Номер дела": "33-100/2026", "Ссылка": "1|aaaa-bbbb",
             "Истец": "ПАО Сбербанк",

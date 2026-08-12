@@ -662,10 +662,24 @@ def update_active_cases(
             continue
 
         card_info = parse_case_card(html, _ap_court.base_url)
-        _warn_if_card_degraded(card_info, case["Номер дела"])
         # Второй рубеж (как в FI-цикле): страница вовсе без таблиц — не
         # карточка, успешной проверкой не считаем и last_checked_at не бумпаем.
         if card_is_empty_shell(card_info):
+            continue
+        # Огрызок (<6 таблиц и движение не распозналось — sudrf отдал
+        # вкладку «обжалование» вместо «ДЕЛО»): прочитанной НЕ считаем —
+        # раньше дело бумпало last_checked_at («проверено сегодня» без
+        # данных), а «Время заседания» ниже затиралось пустотой
+        # (33-2042/2026, Урал, 12.08.2026). Новым апелляциям без движения
+        # continue не вредит: планового срока нет, перечитываются каждым
+        # прогоном. Ожидаемый огрызок дела «без движения» ("suspended")
+        # идёт дальше и бампает last_checked_at — на нём живёт недельный
+        # ритм suspended_weekly. ⚠️ В FI-цикле аналогичного continue НЕТ
+        # намеренно: у suspended-исков банка огрызок штатен, continue
+        # сломал бы недельный ритм опроса (там — mark_degraded + 🩺-порог).
+        if _warn_if_card_degraded(
+            card_info, case["Номер дела"], case_block=ap_dict_skip
+        ) == "degraded":
             continue
         parsed += 1
 
