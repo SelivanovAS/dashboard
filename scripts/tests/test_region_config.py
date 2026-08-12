@@ -258,6 +258,32 @@ class TestSverdlovskYanaoRegion:
         assert got is not None
         assert got.domain == "kamyshlovsky--svd.sudrf.ru" and got.srv_num == 1
 
+    def test_perm_sverdlovsky_district_court_not_matched(self):
+        """«Свердловский районный суд г. Перми» — район ГОРОДА ПЕРМИ, а не
+        Свердловская область (Пермский край в юрисдикции 7-го КСОЮ — норма
+        выдачи). Голая подстрока «свердловск» в fi_region_markers пропускала
+        его через guard и заодно поднимала WARNING «похож на регион»
+        (лог Урала 12.08.2026)."""
+        import re
+        r = get_region("sverdlovsk_yanao")
+        perm = "Свердловский районный суд г. Перми"
+        assert uc.match_region_first_instance(perm, r) is None
+        assert re.search(r.fi_suspect_regex, perm, re.IGNORECASE) is None
+
+    def test_suspect_regex_still_covers_region_forms(self):
+        """Детектор рассинхрона обязан по-прежнему ловить настоящие суды
+        региона (страховка «ё/е» и склонений живёт на suspect_regex)."""
+        import re
+        r = get_region("sverdlovsk_yanao")
+        for long_name in (
+            "Алапаевский городской суд Свердловской области",
+            "Ленинский районный суд г. Нижний Тагил Свердловской области",
+            "Октябрьский районный суд г. Екатеринбурга",
+            "Пуровский районный суд Ямало-Ненецкого автономного округа",
+        ):
+            assert re.search(r.fi_suspect_regex, long_name, re.IGNORECASE), \
+                long_name
+
     def test_cross_region_matrix(self):
         """Матрица «длинное имя → ровно один регион»: реестры ХМАО и
         Свердловск+ЯНАО не перехватывают чужие суды (одноимённые районные
