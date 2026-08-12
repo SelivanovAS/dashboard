@@ -318,6 +318,39 @@ process.stdout.write(JSON.stringify(out));"""
     assert r["обычное"] == "" and r["не_банк"] == "" and r["пусто"] == ""
 
 
+def test_default_judgment_badge_lives_with_result_not_case_header():
+    """Заочность — свойство решения: в списках она рендерится внутри
+    «Состояния», не отъедает ширину номера дела и стадии. Drawer сохраняет
+    бейдж в hero-meta как краткую сводку открытого дела."""
+    state = _strip_comments(_fn_src("buildStateHtml"))
+    assert "defaultJudgmentBadgeHtml(c)" in state
+    assert "decisionMeta=[defaultHtml,actHtml]" in state, (
+        "«Заочное» и публикация акта должны собираться в один ряд метаданных."
+    )
+    assert "state-decision-meta" in state
+
+    css = _read("styles.css")
+    assert re.search(
+        r"\.state-decision-meta\s+\.badge[\s\S]*?"
+        r"\.state-decision-meta\s+\.badge-act-no\s*"
+        r"\{\s*font-size:var\(--fs-2xs\)",
+        css,
+    ), "«Заочное» и статус публикации акта снова получили разный кегль."
+
+    src = _strip_comments(_app_js())
+    table_meta = re.search(r"const metaBadges\s*=\s*\[([^\]]+)\]", src)
+    assert table_meta, "В renderTable не найден список metaBadges."
+    assert "defaultJudgmentBadgeHtml" not in table_meta.group(1), (
+        "«Заочное» вернулось в шапку desktop-строки рядом с номером дела."
+    )
+
+    mobile_headers = [line for line in src.splitlines() if 'class="mc-badges"' in line]
+    assert len(mobile_headers) == 1, "В renderMobileCards потеряна группа .mc-badges."
+    assert "defaultJudgmentBadgeHtml" not in mobile_headers[0], (
+        "«Заочное» вернулось в шапку мобильной карточки рядом с «1 инст.»."
+    )
+
+
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
 def test_default_copy_kv_row():
     """Строка «Копия ответчику» в «Ключевых датах»: юрист видит, по какой
