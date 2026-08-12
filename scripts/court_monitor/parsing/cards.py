@@ -83,7 +83,7 @@ def _warn_if_card_degraded(
     case_number: str,
     case_block: dict | None = None,
     court: str = "",
-) -> bool:
+) -> str:
     """Логируем обрезанную карточку только если из неё не удалось
     выдернуть ни одного события (иначе компактный шаблон — это норма).
 
@@ -94,14 +94,18 @@ def _warn_if_card_degraded(
     court — короткое имя суда для обхода 1-й инстанции (20 судов, по
     номеру дела суд не восстановить); апелляция/кассация не передают.
 
-    Возвращает True для «огрызка» (в обеих ветках — и warning, и
-    ожидаемый suspended-debug): пер-кейсовый отчёт bank-трека помечает
-    такую проверку degraded.
+    Возвращает "" для нормальной карточки, для «огрызка» — вид:
+    "degraded" (warning + метрика) или "suspended" (ожидаемый огрызок
+    дела «без движения», debug). Обе непустые строки truthy — пер-кейсовый
+    отчёт bank-трека помечает degraded по прежней truthiness; апел-цикл
+    различает виды: "degraded" не считается прочитанной карточкой (без
+    бампа last_checked_at), а "suspended" обязан бампать — на
+    last_checked_at живёт недельный ритм suspended_weekly.
     """
     if card_info.get("_table_count", 0) >= 6:
-        return False
+        return ""
     if card_info.get("_events"):
-        return False
+        return ""
     court_tag = f" ({court})" if court else ""
     msg = (
         f"  {case_number}{court_tag}: карточка обрезана "
@@ -114,10 +118,10 @@ def _warn_if_card_degraded(
             last_text = ((events[-1] or {}).get("text") or "").lower()
             if _SUSPENDED_RX.search(last_text):
                 log.debug(msg + " (suspended — ожидаемо)")
-                return True
+                return "suspended"
     config.METRICS["cards_degraded"] += 1
     log.warning(msg)
-    return True
+    return "degraded"
 
 
 def card_is_empty_shell(card_info: dict) -> bool:
