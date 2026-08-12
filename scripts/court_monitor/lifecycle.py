@@ -2302,9 +2302,15 @@ def dedupe_cassation_by_uid(cases: list[dict]) -> int:
 
     Сливаем ТОЛЬКО когда в группе ровно один host — НЕ-discovery (anchor с
     appeal/first_instance), а остальные — `discovered_via_cassation`. Если
-    не-discovery записей ≥2 — не трогаем (это разные дела с коллизией данных,
-    хотя по УИД такого быть не должно). Одиночные discovery (без anchor) тоже
-    оставляем — это настоящие находки кассации.
+    не-discovery записей ≥2 — не трогаем; при этом несколько не-discovery
+    записей на один УИД — ШТАТНО, а не коллизия: УИД принадлежит делу 1-й
+    инст., а апел. производств (33-…) у него может быть несколько — основная
+    жалоба + частная / возвращённая и переподанная (разбор 12.08.2026: все
+    5 «подозрительных» УИД оказались такими парами). Поэтому WARNING
+    печатаем только когда в группе есть discovery-двойник, которому не
+    выбрать якорь; без двойника сливать нечего и предупреждать не о чем.
+    Одиночные discovery (без anchor) тоже оставляем — это настоящие
+    находки кассации.
 
     `id` host сохраняется (как в ручных сшивках bea0f7d) — иначе ломаются
     watchlist-подписки и фронт.
@@ -2333,10 +2339,11 @@ def dedupe_cassation_by_uid(cases: list[dict]) -> int:
         anchors = [i for i in idxs if not cases[i].get("discovered_via_cassation")]
         losers = [i for i in idxs if cases[i].get("discovered_via_cassation")]
         if len(anchors) != 1 or not losers:
-            if len(anchors) > 1:
+            if losers and len(anchors) > 1:
                 log.warning(
-                    f"Дедуп касс./УИД: {uid} — {len(anchors)} не-discovery "
-                    f"записей, не трогаю"
+                    f"Дедуп касс./УИД: {uid} — discovery-двойник при "
+                    f"{len(anchors)} не-discovery записях, якорь "
+                    f"неоднозначен — не трогаю"
                 )
             continue
 
