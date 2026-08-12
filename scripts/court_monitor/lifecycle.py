@@ -2019,6 +2019,20 @@ def migrate_stages(cases: list[dict]) -> int:
     return migrated
 
 
+def _fi_court_key(c: dict) -> str:
+    """Ключ суда 1-й инст. записи для дедупа: домен, фолбэк — резолв
+    короткого имени через реестр региона. Пустая строка = суд неизвестен
+    (легаси-стаб) — такой ключ матчит любой."""
+    from court_monitor.courts import match_fi_court_by_short_name
+
+    fi = c.get("first_instance") or {}
+    dom = (fi.get("court_domain") or "").strip().lower()
+    if dom:
+        return dom
+    cfg = match_fi_court_by_short_name(fi.get("court") or "")
+    return cfg.domain if cfg else ""
+
+
 def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
     """Идемпотентный дедуп «сирот» по базовому номеру 1-й инст.
 
@@ -2031,11 +2045,18 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
 
     Хозяин — запись с тем же `_bare_case_number(id)`, у которой есть реальные
     данные карточки 1-й инст. (`events` или `act_text`), и стадия
-    `first_instance`/`awaiting_appeal`.
+    `first_instance`/`awaiting_appeal`. Хозяин подбирается С УЧЁТОМ СУДА
+    (`_fi_court_key`): номера дел не уникальны между судами — 2-813/2026
+    12.08.2026 жил сразу в трёх судах bank-трека, и слияние поперёк судов
+    склеило бы чужие дела. Пустой ключ суда (легаси-стаб) матчит любой —
+    прежнее лечение стабов без суда сохраняется.
 
     Сливаем сироту в хозяина: дозаполняем `appeal` хозяина, не перезаписывая
     уже заполненные поля. Стадию хозяина переводим в `appeal`. Сироту
     удаляем из `cases` in-place.
+
+    Группы без сирот — не аномалия, а голые коллизии номеров между судами
+    (у bank-трека это норма): сливать нечего, WARNING не печатаем.
 
     Возвращает число слитых сирот.
     """
@@ -2076,9 +2097,26 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
             ):
                 owners.append(i)
 
-        if len(orphans) == 1 and len(owners) == 1:
+        if not orphans:
+            # Голая коллизия номеров между судами — сливать нечего.
+            continue
+
+        # Хозяина подбираем с учётом суда (см. докстроку): при одном сироте
+        # отбрасываем хозяев заведомо чужих судов.
+        if len(orphans) == 1:
+            orph_key = _fi_court_key(cases[orphans[0]])
+            eligible = [
+                i for i in owners
+                if not orph_key
+                or not _fi_court_key(cases[i])
+                or _fi_court_key(cases[i]) == orph_key
+            ]
+        else:
+            eligible = owners
+
+        if len(orphans) == 1 and len(eligible) == 1:
             orph = cases[orphans[0]]
-            host = cases[owners[0]]
+            host = cases[eligible[0]]
             orph_appeal = orph.get("appeal") or {}
             host_appeal = host.get("appeal")
 
@@ -2104,10 +2142,15 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
                 f"Дедуп: {base} сирота {orph.get('id', '?')} слита "
                 f"в {host.get('id', '?')}"
             )
-        elif len(orphans) + len(owners) > 2 or (orphans and not owners):
+        else:
+            courts = " | ".join(
+                ((cases[i].get("first_instance") or {}).get("court") or "?")
+                for i in orphans + owners
+            )
             log.warning(
                 f"Дедуп: {base} неоднозначная группа "
-                f"(сирот: {len(orphans)}, хозяев: {len(owners)}) — не трогаю"
+                f"(сирот: {len(orphans)}, хозяев: {len(owners)}; "
+                f"суды: {courts}) — не трогаю"
             )
 
     if to_remove:
