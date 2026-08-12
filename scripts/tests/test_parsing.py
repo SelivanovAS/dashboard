@@ -1380,6 +1380,42 @@ class TestLinkCassationCases:
         )
         assert changes == [] and discovered == []
 
+    def test_uid_prefers_record_awaiting_cassation(self):
+        """Кейс 8Г-11947/2026 (12.08.2026): два апел. производства одного
+        дела 1-й инст. штатно делят УИД (основная жалоба + частная), а
+        `setdefault` выбирал якорь «первым по файлу» — новая кассация
+        прицепилась к записи частной жалобы, ждавшая кассацию запись
+        осталась висеть в cassation_pending. Якорь по УИД — запись,
+        ЖДУЩАЯ кассацию (_uid_priority)."""
+        uid = "86RS0004-01-2024-005924-75"
+        private = {  # частная жалоба, своя кассация уже связана
+            "id": "33-4383/2026",
+            "current_stage": "cassation",
+            "first_instance": {"case_number": "2-8029/2025",
+                               "judicial_uid": uid},
+            "cassation": {"case_number": "8Г-1000/2026",
+                          "act_published": False},
+        }
+        main = {  # основная апелляция, ждёт кассацию
+            "id": "33-1458/2026",
+            "current_stage": "cassation_pending",
+            "first_instance": {"case_number": "2-8029/2025",
+                               "judicial_uid": uid},
+            "cassation": None,
+        }
+        cases = [private, main]  # частная жалоба ПЕРВОЙ по файлу
+        out, changes, discovered = uc.link_cassation_cases(
+            cases,
+            [_cass_find("2-8029/2025", cass_num="8Г-11947/2026",
+                        judicial_uid=uid)],
+        )
+        assert discovered == []
+        assert out[1]["id"] == "33-1458/2026"
+        assert out[1]["current_stage"] == "cassation"
+        assert out[1]["cassation"]["case_number"] == "8Г-11947/2026"
+        # Запись частной жалобы не тронута.
+        assert out[0]["cassation"]["case_number"] == "8Г-1000/2026"
+
     def test_past_round_card_does_not_resurrect(self):
         """После remanded + re-link старая карточка 7kas (её 8Г уже в
         history) не должна воскрешать кассацию и утаскивать дело из

@@ -643,10 +643,31 @@ def link_cassation_cases(
     # проставил «Номер дела в первой инстанции»). Закрывает класс discovery-
     # дублей вида `2-278/2025` ↔ `33-2082/2026`.
     uid_index: dict[str, int] = {}
+    uid_prio: dict[str, int] = {}
+
+    def _uid_priority(c: dict) -> int:
+        """Приоритет записи как якоря матча по УИД (меньше — лучше).
+
+        УИД принадлежит делу 1-й инст., а апел. производств (33-…) у него
+        может быть несколько (основная жалоба + частная) — «первая по файлу»
+        через setdefault выбирала якорь произвольно: 8Г-11947/2026 прицепился
+        к записи частной жалобы 33-4383/2026 вместо ждавшей кассацию
+        33-1458/2026 (12.08.2026). Новая касс. жалоба почти наверняка
+        относится к записи, ЖДУЩЕЙ кассацию; запись с уже заполненным
+        8Г-номером матчится первичным cass_index, и новый 8Г того же УИД —
+        про соседа. При равном приоритете побеждает первая по файлу
+        (детерминизм прежнего поведения)."""
+        if c.get("current_stage") in ("cassation_pending", "cassation_watch"):
+            return 0
+        cass = c.get("cassation") or {}
+        if not (cass.get("case_number") or "").strip():
+            return 1
+        return 2
 
     def _index_case(
         c: dict, i: int,
         fi_idx: dict[str, int], cs_idx: dict[str, int], u_idx: dict[str, int],
+        u_prio: dict[str, int],
     ) -> None:
         _put_idx(fi_idx, c.get("id", ""), i)
         fi = c.get("first_instance") or {}
@@ -668,11 +689,15 @@ def link_cassation_cases(
             cass.get("judicial_uid"),
         ):
             uid = (uid or "").strip()
-            if uid:
-                u_idx.setdefault(uid, i)
+            if not uid:
+                continue
+            p = _uid_priority(c)
+            if uid not in u_idx or p < u_prio.get(uid, 99):
+                u_idx[uid] = i
+                u_prio[uid] = p
 
     for i, c in enumerate(cases):
-        _index_case(c, i, fi_index, cass_index, uid_index)
+        _index_case(c, i, fi_index, cass_index, uid_index, uid_prio)
 
     # Параллельные индексы горячего архива (если передан): касс. жалоба на
     # дело, уже ушедшее в архив (например, из cassation_watch по 120-дневному
@@ -680,9 +705,11 @@ def link_cassation_cases(
     arch_fi_index: dict[str, int] = {}
     arch_cass_index: dict[str, int] = {}
     arch_uid_index: dict[str, int] = {}
+    arch_uid_prio: dict[str, int] = {}
     if archived_cases:
         for i, c in enumerate(archived_cases):
-            _index_case(c, i, arch_fi_index, arch_cass_index, arch_uid_index)
+            _index_case(c, i, arch_fi_index, arch_cass_index,
+                        arch_uid_index, arch_uid_prio)
     resurrected: set[int] = set()  # позиции archived_cases, изъятые в активные
 
     # Дедуп определений (.cassation_acts): повторный new_act по тому же
@@ -750,7 +777,8 @@ def link_cassation_cases(
                 idx = len(cases) - 1
                 # Регистрируем ключи в активных индексах: повторная находка
                 # по этому делу в том же прогоне сматчится уже с активным.
-                _index_case(arch_case, idx, fi_index, cass_index, uid_index)
+                _index_case(arch_case, idx, fi_index, cass_index,
+                            uid_index, uid_prio)
                 log.info(
                     f"  7kas: {fi_num} восстановлено из архива "
                     f"(стадия была {arch_case.get('current_stage') or '—'})"
