@@ -200,16 +200,16 @@ LLM реально «думает». Алгоритм:
 
 | Функция | Что гарантирует |
 |---------|-----------------|
-| `_wrap_all_bare_case_numbers` ([78](../../scripts/court_monitor/digest/postprocess.py#L78)) | Все «голые» номера дел обёрнуты в ссылки на карточки. |
-| `_ensure_appeal_new_case_full_layout` ([155](../../scripts/court_monitor/digest/postprocess.py#L155)) | Полная вёрстка блока нового апел. дела. |
-| `_validate_digest_new_sections` ([263](../../scripts/court_monitor/digest/postprocess.py#L263)) / `_drop_hallucinated_from_section` ([329](../../scripts/court_monitor/digest/postprocess.py#L329)) | Отсев галлюцинаций (только для full-LLM-режима). |
-| `_renumber_section_headers` ([452](../../scripts/court_monitor/digest/postprocess.py#L452)) / `_drop_zero_count_sections` ([1146](../../scripts/court_monitor/digest/postprocess.py#L1146)) | Перенумерация разделов, выкидывание пустых. |
-| `summarize_digest_counters` ([782](../../scripts/court_monitor/digest/postprocess.py#L782)) / `_compute_summary_lines` ([812](../../scripts/court_monitor/digest/postprocess.py#L812)) / `_replace_summary_block` ([1006](../../scripts/court_monitor/digest/postprocess.py#L1006)) | Блок «📋 Сводка» считается по фактическому HTML — те же цифры, что и в push. |
-| `_normalize_section_spacing` ([603](../../scripts/court_monitor/digest/postprocess.py#L603)) | Отступы: строки одного дела подряд, пустая строка только между разными делами. |
-| `_shorten_categories_in_html` ([1120](../../scripts/court_monitor/digest/postprocess.py#L1120)) | Сокращение длинных категорий. |
-| `_purge_3_6_without_act_text` ([1206](../../scripts/court_monitor/digest/postprocess.py#L1206)) | Чистка раздела без текста акта. |
-| `_ensure_footer` ([558](../../scripts/court_monitor/digest/postprocess.py#L558)) | Футер со ссылкой на дашборд. |
-| `_close_open_tags` ([1340](../../scripts/court_monitor/digest/postprocess.py#L1340)) / `_strip_orphan_close_tags` ([1356](../../scripts/court_monitor/digest/postprocess.py#L1356)) / `truncate_html_message` ([1383](../../scripts/court_monitor/digest/postprocess.py#L1383)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
+| `_wrap_all_bare_case_numbers` ([81](../../scripts/court_monitor/digest/postprocess.py#L81)) | Все «голые» номера дел обёрнуты в ссылки на карточки. |
+| `_ensure_appeal_new_case_full_layout` ([158](../../scripts/court_monitor/digest/postprocess.py#L158)) | Полная вёрстка блока нового апел. дела. |
+| `_validate_digest_new_sections` ([266](../../scripts/court_monitor/digest/postprocess.py#L266)) / `_drop_hallucinated_from_section` ([332](../../scripts/court_monitor/digest/postprocess.py#L332)) | Отсев галлюцинаций (только для full-LLM-режима). |
+| `_renumber_section_headers` ([455](../../scripts/court_monitor/digest/postprocess.py#L455)) / `_drop_zero_count_sections` ([1149](../../scripts/court_monitor/digest/postprocess.py#L1149)) | Перенумерация разделов, выкидывание пустых. |
+| `summarize_digest_counters` ([785](../../scripts/court_monitor/digest/postprocess.py#L785)) / `_compute_summary_lines` ([815](../../scripts/court_monitor/digest/postprocess.py#L815)) / `_replace_summary_block` ([1009](../../scripts/court_monitor/digest/postprocess.py#L1009)) | Блок «📋 Сводка» считается по фактическому HTML — те же цифры, что и в push. |
+| `_normalize_section_spacing` ([606](../../scripts/court_monitor/digest/postprocess.py#L606)) | Отступы: строки одного дела подряд, пустая строка только между разными делами. |
+| `_shorten_categories_in_html` ([1123](../../scripts/court_monitor/digest/postprocess.py#L1123)) | Сокращение длинных категорий. |
+| `_purge_3_6_without_act_text` ([1209](../../scripts/court_monitor/digest/postprocess.py#L1209)) | Чистка раздела без текста акта. |
+| `_ensure_footer` ([561](../../scripts/court_monitor/digest/postprocess.py#L561)) | Футер со ссылкой на дашборд. |
+| `_close_open_tags` ([1343](../../scripts/court_monitor/digest/postprocess.py#L1343)) / `_strip_orphan_close_tags` ([1359](../../scripts/court_monitor/digest/postprocess.py#L1359)) / `truncate_html_message` ([1386](../../scripts/court_monitor/digest/postprocess.py#L1386)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
 
 ## Структура дайджеста
 
