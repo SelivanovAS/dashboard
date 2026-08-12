@@ -593,15 +593,20 @@ def update_active_cases(
                 {"current_stage": "appeal", "appeal": _ap_d}, today)[0]:
             plan_skip += 1
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «активных дел».
+    planned_parse = planned_total - plan_skip
     _plan_parts = []
     if plan_skip:
         _plan_parts.append(f"{plan_skip} отложено — заседание в будущем")
     if past_stage:
         _plan_parts.append(f"{past_stage} не парсим — апелляция уже пройдена")
     log.info(_format_queue_balance(
-        "Апелляция: активных дел", active_total,
-        planned_total - plan_skip, _plan_parts,
+        "Апелляция: активных дел", active_total, planned_parse, _plan_parts,
     ))
+    # Прогресс «проверено X из Y»: числитель и знаменатель — ПОСЛЕ smart-skip,
+    # в тех же единицах, что «парсим Y» строки плана. Раньше знаменателем была
+    # вся очередь итерации (planned_total, со скипами) — лог писал «парсим 40»,
+    # а потом «проверено … из 45» (разбор 12.08.2026).
+    checked = 0
 
     for case in cases:
         if is_archived(case):
@@ -609,11 +614,6 @@ def update_active_cases(
         if skip_apel_nums and case.get("Номер дела", "").strip() in skip_apel_nums:
             continue
         eligible_total += 1
-        if eligible_total % 20 == 0:
-            log.info(
-                f"Апелляция: проверено {eligible_total} из {planned_total} "
-                f"(изменений {len(changes)})"
-            )
 
         # Smart-skip: если есть JSON-двойник апел-дела, проверяем известную
         # будущую дату. Для CSV-row без JSON-родителя — фолбэк, парсим как раньше.
@@ -632,6 +632,13 @@ def update_active_cases(
             planned_fp, _kfp = get_next_planned_date(ap_dict_skip.get("events") or [])
             if planned_fp and planned_fp >= today:
                 force_parsed += 1
+
+        checked += 1
+        if checked % 20 == 0:
+            log.info(
+                f"Апелляция: проверено {checked} из {planned_parse} "
+                f"(изменений {len(changes)})"
+            )
 
         cid, cuid = case_id_uid(case.get("Ссылка", ""))
         if not cid or not cuid:
@@ -1013,6 +1020,7 @@ def update_active_cases(
         "skipped_breaker": skipped_breaker,
         "force_parsed": force_parsed,
         "parsed": parsed,
+        "planned": planned_parse,
         "total": eligible_total,
     }
 
@@ -2680,12 +2688,13 @@ def main_json():
     fi_court_seconds: dict[str, float] = {}
     fi_court_cards: dict[str, int] = {}
 
-    for fi_idx, case_j in enumerate(fi_active, 1):
-        if fi_idx % 20 == 0:
-            log.info(
-                f"1 инст: проверено {fi_idx} из {len(fi_active)} "
-                f"(изменений {len(fi_changes)})"
-            )
+    # Прогресс «проверено X из Y» — в единицах ПЛАНА (fi_plan_parse), после
+    # пропусков без-карточки/smart-skip. Раньше знаменателем был весь
+    # fi_active — число, не совпадающее ни с одним из чисел плана
+    # (разбор 12.08.2026).
+    fi_checked = 0
+
+    for case_j in fi_active:
         fi = case_j.get("first_instance", {})
         fi_num_log = fi.get("case_number") or case_j.get("id") or "?"
         court_domain = fi.get("court_domain", "")
@@ -2728,6 +2737,12 @@ def main_json():
                                reason_ru=skip_reason_ru(reason))
             log.debug(f"  skip {fi.get('case_number','?')}: {skip_reason_ru(reason)}")
             continue
+        fi_checked += 1
+        if fi_checked % 20 == 0:
+            log.info(
+                f"1 инст: проверено {fi_checked} из {fi_plan_parse} "
+                f"(изменений {len(fi_changes)})"
+            )
         # Предохранитель: суд отключён (N карточек подряд не прочитано либо
         # заглушка на его странице поиска — канарейка) — HTTP и polite_delay
         # не тратим, last_checked_at не бумпается. Каждая K-я карточка идёт
@@ -3798,7 +3813,9 @@ def main_json():
             log.debug(f"  {fi['case_number']}: без изменений")
 
     timings["fi_update"] = time.perf_counter() - t0
-    fi_total = len(fi_active)
+    # Знаменатель итога — план (fi_plan_parse), в тех же единицах, что
+    # строки «парсим Y» и «проверено X из Y»; скипы — пояснением в скобках.
+    fi_total = fi_plan_parse
     fi_skip_total = (fi_skipped_future + fi_skipped_suspended
                      + fi_skipped_writ_weekly)
     _fi_sum_parts = []
@@ -3844,9 +3861,11 @@ def main_json():
         )
     if ap_skip_stats["force_parsed"]:
         _ap_sum_parts.append(f"форс-парс {ap_skip_stats['force_parsed']}")
+    # Знаменатель — план (без smart-skip), в тех же единицах, что строка
+    # «парсим Y» и прогресс; скипы остаются пояснением в скобках.
     log.info(
         f"Апелляция: спарсено {ap_skip_stats['parsed']} "
-        f"из {ap_skip_stats['total']} карточек"
+        f"из {ap_skip_stats.get('planned', ap_skip_stats['total'])} карточек"
         + (f" ({'; '.join(_ap_sum_parts)})" if _ap_sum_parts else "")
     )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
@@ -4150,7 +4169,6 @@ def main_json():
             cid, cuid = case_id_uid(link)
             if not cid or not cuid:
                 continue
-            cass_refresh_total += 1
             skip, reason = should_skip_case(case, today_for_refresh)
             if skip:
                 if "future_hearing" in reason:
@@ -4167,6 +4185,9 @@ def main_json():
                     f"({fi_saved}): {skip_reason_ru(reason)}"
                 )
                 continue
+            # Счётчик — ПОСЛЕ smart-skip: сводка «спарсено X из Y» ниже
+            # считает в знаменателе план (без отложенных), как строка плана.
+            cass_refresh_total += 1
             planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
             if planned_fp and planned_fp >= today_for_refresh:
                 cass_refresh_force_parsed += 1
