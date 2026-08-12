@@ -2103,9 +2103,10 @@ function classifyWritKind(w,c){
 // Не возвращать (страж test_bank_track_badge_stays_removed).
 // Бейдж «🌙 Заочное» — решение вынесено в заочном производстве (ст. 233 ГПК):
 // срок вступления в силу считается иначе (вручение копии + 7 раб. дн + месяц,
-// без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому тип
-// решения должен читаться рядом с «⏳ ждёт ИЛ». Поле default_judgment
-// штампует split_bank_track — events фронт не грузит.
+// без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому в
+// списках тип решения читается в блоке «Состояние» рядом с результатом, а не
+// конкурирует с номером и стадией в шапке. Поле default_judgment штампует
+// split_bank_track — events фронт не грузит.
 function defaultJudgmentBadgeHtml(c){
   if(!c||!c._bankTrack||!(c._fi&&c._fi.default_judgment))return '';
   // Особый порядок отмены (ст. 237-243 ГПК) важнее самого признака заочности:
@@ -2641,11 +2642,17 @@ function buildStatusBadge(c,vm){
 function buildStateHtml(c,vm){
   const actHtml=buildActHtml(vm);
   const chips=buildStageChips(c);
+  // Заочность — свойство решения, а не стадия дела. Держим её под результатом
+  // вместе с публикацией акта; так номер и «1 инст.» остаются чистой шапкой.
+  // Особые состояния («Отмена заочного» / «Заочное отменено») проходят тем же
+  // хелпером и не теряются, даже если repair уже снял результат.
+  const defaultHtml=defaultJudgmentBadgeHtml(c);
   if(vm.resultPresent){
     const favorIcon=buildFavorIcon(vm);
-    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>${chips?`<span class="state-sub">${chips}</span>`:''}${actHtml?`<span class="state-sub">${actHtml}</span>`:''}</div>`;
+    const decisionMeta=[defaultHtml,actHtml].filter(Boolean).join('');
+    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>${chips?`<span class="state-sub">${chips}</span>`:''}${decisionMeta?`<span class="state-sub state-decision-meta">${decisionMeta}</span>`:''}</div>`;
   }
-  return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}</div>`;
+  return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}${defaultHtml?`<span class="state-sub state-decision-meta">${defaultHtml}</span>`:''}</div>`;
 }
 function buildHearingHtml(c,vm,opts){
   if(!(c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Без движения до'||c.nextDateLabel==='Рассмотрение'))){
@@ -2760,7 +2767,7 @@ function renderTable(){
     const caseNumEsc=escHtml(c.caseNumber);
     // Срок возражений — сразу после «Обжалуется»: это дедлайн, он важнее
     // принадлежности к треку и статуса листа.
-    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), defaultJudgmentBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -3746,7 +3753,7 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${defaultJudgmentBadgeHtml(c)}${newBadge}${archived}</span>
+        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${newBadge}${archived}</span>
       </div>
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
