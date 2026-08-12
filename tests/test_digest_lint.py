@@ -174,6 +174,57 @@ class LintProblemsTest(unittest.TestCase):
                 self.fail(f"линтер бросил исключение: {exc!r}")
 
 
+class LintBankSectionBoundaryTest(unittest.TestCase):
+    """Граница секций у банк-блока (инцидент 12.08.2026).
+
+    «🏦 ИСКИ БАНКА (N)» не входил в _DIGEST_HEADER_RE: линтер не видел, где
+    кончается секция «📑 Касс. события», и приписывал ей все банк-строки
+    («заявлено 1, по факту дел 22»). Заодно сам банк-счётчик не сверялся
+    вовсе — заголовок без эмодзи из списка не распознавался секцией.
+    """
+
+    def test_bank_header_matches_header_re(self):
+        from court_monitor.digest.postprocess import _DIGEST_HEADER_RE
+        self.assertIsNotNone(
+            _DIGEST_HEADER_RE.match("🏦 <b>ИСКИ БАНКА (21):</b>")
+        )
+
+    def test_bank_flagged_case_lines_are_not_headers(self):
+        # Строки-дела кассации с флагом банка начинаются с 🏦, но после
+        # тега идёт цифра/«8Г» — под [А-ЯA-Zа-яa-z] не подпадают.
+        from court_monitor.digest.postprocess import _DIGEST_HEADER_RE
+        for line in (
+            '🏦 <a href="https://x"><b>8Г-11469/2026</b></a> — Сбербанк',
+            "🏦 <b>8Г-11469/2026</b> — Сбербанк vs Иванов",
+        ):
+            self.assertIsNone(_DIGEST_HEADER_RE.match(line), line)
+
+    @staticmethod
+    def _html(bank_declared: int) -> str:
+        return (
+            "📑 <b>Касс. события (1):</b>\n\n"
+            '<a href="https://x/k"><b>8Г-10462/2026</b></a> — Немцов vs Сбербанк\n'
+            "Суд 1 инст.: Нижневартовский гор. суд | категория: Иное\n\n"
+            f"🏦 <b>ИСКИ БАНКА ({bank_declared}):</b>\n\n"
+            '<a href="https://x/1"><b>2-100/2026</b></a> — Сбербанк vs Иванов\n\n'
+            '<a href="https://x/2"><b>2-200/2026</b></a> — Сбербанк vs Петров\n\n'
+            "📌 <b>В производстве: всего 79</b>"
+        )
+
+    def test_cassation_counter_not_polluted_by_bank_section(self):
+        from court_monitor.digest.lint import _check_section_counters
+        self.assertEqual(_check_section_counters(self._html(2)), [])
+
+    def test_bank_counter_now_checked(self):
+        from court_monitor.digest.lint import _check_section_counters
+        problems = _check_section_counters(self._html(5))
+        self.assertTrue(
+            any("ИСКИ БАНКА" in p and "заявлено 5" in p
+                and "по факту дел 2" in p for p in problems),
+            problems,
+        )
+
+
 class LintKillSwitchTest(unittest.TestCase):
     def test_runs_helper_respects_kill_switch(self):
         # DIGEST_LINT=0 → _lint_digest_and_alert не зовёт линтер вовсе.
