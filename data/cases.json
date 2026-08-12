@@ -4044,7 +4044,7 @@
     },
     {
       "id": "33-4383/2026",
-      "current_stage": "cassation",
+      "current_stage": "cassation_pending",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940, ПАО Сбербанк России",
       "defendant": "Кусков Олег Игоревич, Кусков Олег Игорьевич",
       "category": "Споры, возникающие из трудовых отношений → Трудовые споры (независимо от форм собственности работодателя): → О возмещении ущерба, причиненного при исполнении трудовых обязанностей → по искам работодателей",
@@ -4258,47 +4258,12 @@
       },
       "initial_bank_role": "Истец",
       "cassation": {
-        "case_number": "8Г-11947/2026",
-        "cassation_number": "",
-        "court": "Седьмой кассационный суд общей юрисдикции",
-        "court_domain": "7kas.sudrf.ru",
-        "judge": "Вдовиченко Ирина Михайловна",
-        "filing_date": "13.07.2026",
-        "fi_decision_date": "01.12.2025",
-        "act_kind": "Судебное РЕШЕНИЕ",
-        "category": "Споры, возникающие из трудовых отношений →Трудовые споры (независимо от форм собственности работодателя): →О возмещении ущерба, причиненного при исполнении трудовых обязанностей →по искам работодателей",
-        "judicial_uid": "86RS0004-01-2024-005924-75",
-        "appellant": "Кусков О. И.",
+        "appellant": "Ответчик",
         "appellant_is_bank": false,
-        "appellant_status": "ОТВЕТЧИК",
-        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
-        "suspended_until": "",
-        "hearing_date": "08.09.2026",
-        "hearing_time": "12:10",
-        "decision_date": "",
-        "result_text": "",
-        "result_for_appeal": "",
-        "act_published": false,
-        "act_date": "",
-        "act_text": "",
-        "outcome": "",
-        "remanded_to": "",
-        "events": [
-          {
-            "name": "Судебное заседание",
-            "date": "08.09.2026",
-            "time": "12:10",
-            "place": "103(П1)",
-            "result_event": "",
-            "ground": "",
-            "note": "",
-            "posted_at": "17.07.2026"
-          }
-        ],
-        "link": "12106635|6fadbda5-ee6b-4c93-9c7f-9aaa995b0fef",
-        "last_checked_at": "2026-08-10",
+        "appellant_status": "Ответчик",
         "discovered_via_cassation": false
-      }
+      },
+      "cassation_pending_since": "2026-07-07"
     },
     {
       "id": "33-4365/2026",
@@ -20138,7 +20103,7 @@
     },
     {
       "id": "33-1458/2026",
-      "current_stage": "cassation_pending",
+      "current_stage": "cassation",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
       "defendant": "Кусков Олег Игоревич",
       "category": "Трудовые споры",
@@ -20330,12 +20295,47 @@
       },
       "initial_bank_role": "Истец",
       "cassation": {
-        "appellant": "Ответчик",
+        "case_number": "8Г-11947/2026",
+        "cassation_number": "",
+        "court": "Седьмой кассационный суд общей юрисдикции",
+        "court_domain": "7kas.sudrf.ru",
+        "judge": "Вдовиченко Ирина Михайловна",
+        "filing_date": "13.07.2026",
+        "fi_decision_date": "01.12.2025",
+        "act_kind": "Судебное РЕШЕНИЕ",
+        "category": "Споры, возникающие из трудовых отношений →Трудовые споры (независимо от форм собственности работодателя): →О возмещении ущерба, причиненного при исполнении трудовых обязанностей →по искам работодателей",
+        "judicial_uid": "86RS0004-01-2024-005924-75",
+        "appellant": "Кусков О. И.",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик",
+        "appellant_status": "ОТВЕТЧИК",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "suspended_until": "",
+        "hearing_date": "08.09.2026",
+        "hearing_time": "12:10",
+        "decision_date": "",
+        "result_text": "",
+        "result_for_appeal": "",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "outcome": "",
+        "remanded_to": "",
+        "events": [
+          {
+            "name": "Судебное заседание",
+            "date": "08.09.2026",
+            "time": "12:10",
+            "place": "103(П1)",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "17.07.2026"
+          }
+        ],
+        "link": "12106635|6fadbda5-ee6b-4c93-9c7f-9aaa995b0fef",
+        "last_checked_at": "2026-08-10",
         "discovered_via_cassation": false
-      },
-      "cassation_pending_since": "2026-07-07"
+      }
     },
     {
       "id": "33-1235/2026",
