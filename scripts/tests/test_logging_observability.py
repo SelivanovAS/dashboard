@@ -263,7 +263,7 @@ class TestQueueBalanceLines:
             {"Номер дела": "33-3/2026", "Ссылка": ""},
         ]
         with caplog.at_level(logging.INFO, logger="court-monitor"):
-            cm_runs.update_active_cases(
+            _, _, stats = cm_runs.update_active_cases(
                 cases,
                 json_appeal_by_num={"33-2/2026": {"_skip": True}},
                 skip_apel_nums={"33-3/2026"},
@@ -273,6 +273,33 @@ class TestQueueBalanceLines:
             "(1 отложено — заседание в будущем; "
             "1 не парсим — апелляция уже пройдена)"
         ) in caplog.text
+        # Числа согласованы: план (после smart-skip) и очередь итерации.
+        assert stats["planned"] == 1
+        assert stats["total"] == 2
+
+    def test_progress_line_uses_plan_denominator(self, monkeypatch, caplog):
+        """Прогресс «проверено X из Y» — в единицах ПЛАНА: скипнутые
+        smart-skip'ом дела не считаются ни в числителе, ни в знаменателе.
+        Раньше лог писал «парсим 40», а потом «проверено 20 из 45»
+        (знаменатель включал отложенных; разбор 12.08.2026)."""
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: set())
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(
+            cm_runs, "should_skip_case",
+            lambda shim, today, **kw: (
+                (True, "future_hearing_31.12.2099")
+                if (shim.get("appeal") or {}).get("_skip") else (False, "")
+            ),
+        )
+        # 25 дел: 4 отложено, 21 в плане; пустая «Ссылка» — дальше цикл не
+        # ходит (HTTP нет), но «проверено» уже посчитано.
+        cases = [{"Номер дела": f"33-{i}/2026", "Ссылка": ""}
+                 for i in range(25)]
+        json_map = {f"33-{i}/2026": {"_skip": i < 4} for i in range(25)}
+        with caplog.at_level(logging.INFO, logger="court-monitor"):
+            cm_runs.update_active_cases(cases, json_appeal_by_num=json_map)
+        assert "Апелляция: проверено 20 из 21 (изменений 0)" in caplog.text
 
 
 # ── log_run_summary: опциональные строки ─────────────────────────────────────
