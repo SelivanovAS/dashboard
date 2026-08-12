@@ -1764,7 +1764,8 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
 
     `budget` — сколько ещё дел разрешено завести в этом прогоне (общий на все
     суды кэп BANK_INTAKE_MAX_PER_RUN). Карточки на один суд ограничены
-    отдельно: фаза 3 идёт раньше FI-цикла, и пачка нечитаемых карточек
+    отдельно: фаза поиска 1-й инст. идёт раньше FI-цикла карточек, и
+    пачка нечитаемых карточек
     открыла бы пер-судовый предохранитель, сняв суд с обхода на весь прогон.
     """
     counters = {"candidates": 0, "cards": 0, "added": 0, "already": 0,
@@ -2150,8 +2151,392 @@ def main_json():
             f"Дедуп: слито {merged_cass} касс. дублей по cassation.case_number"
         )
 
+    # Наблюдения для детектора молчаливой поломки парсеров (блок 4e):
+    # {ключ источника: сколько строк дал поиск; None — страница не загрузилась}.
+    health_obs: dict = {}
+    health_labels: dict = {}
+    # Суды 1-й инст., чья страница поиска пришла как проверочный код (CAPTCHA):
+    # {domain: court.name}. Отдельный 🩺-алерт в блоке 4e, чтобы код не читался
+    # молча как «дел нет» (см. detect_captcha_challenge).
+    fi_challenge: dict = {}
+
+    # ═══ Порядок инстанций (решение юриста 12.08.2026): кассация →
+    # апелляция → 1-я инстанция. Важные инстанции парсятся первыми — при
+    # падении/таймауте прогона посередине кассация и апелляция уже
+    # проверены. Исторические баннеры блоков (4c/4d/4a/4b/3b) сохранены —
+    # на них завязаны перекрёстные ссылки в коде и docs; фактический
+    # порядок задаёт последовательность ниже, номера фаз — log_phase.
+    # ── 4c. Кассация (7kas.sudrf.ru) ──
+    # Поиск только первая страница (по решению пользователя). Фильтр HMAO —
+    # внутри parse_cassation_search_page по match_hmao_first_instance.
+    # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
+    # поиск иногда матчит по случайному совпадению в тексте.
+    log_phase(2, 9, "Кассация 7kas: поиск и карточки")
+    t0 = time.perf_counter()
+    cass_changes: list[dict] = []
+    cass_discovered: list[dict] = []
+    cass_eligible = 0
+    cass_parsed = 0
+    cass_skipped_future = 0
+    cass_skipped_suspended = 0
+    cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
+    # Ключи здоровья кассации — из региона (для ХМАО совпадают с историческими
+    # "cassation:7kas:total"/"cassation:7kas:hmao", медианы не обнуляются).
+    _region = get_region()
+    _ck_total, _ck_matched = _region.health_cassation_keys()
+    _kas_short = CASSATION_COURT.domain.split(".")[0]
+    health_labels[_ck_total] = f"Кассация {_kas_short} (вся выдача)"
+    health_labels[_ck_matched] = f"Кассация {_kas_short} (фильтр региона)"
+    try:
+        log.info(
+            "Кассация, шаг 1/2 — поиск по имени банка "
+            "(первая страница выдачи 7kas)"
+        )
+        polite_delay()
+        cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
+        if not cass_search_html:
+            health_obs[_ck_total] = None
+        if cass_search_html:
+            cass_search_results = parse_cassation_search_page(cass_search_html)
+            # 0 строк + маркеры проверочного кода → поиск 7kas закрыт CAPTCHA.
+            if not cass_search_results and detect_captcha_challenge(cass_search_html):
+                fi_challenge[CASSATION_COURT.domain] = (
+                    f"Кассация ({CASSATION_COURT.name})"
+                )
+            # Канарейка предохранителя: выдача 7kas пришла заглушкой →
+            # карточки кассации не запрашиваем (пре-открытие).
+            if not cass_search_results and looks_like_outage_page(cass_search_html):
+                card_breaker_preopen(
+                    CASSATION_COURT.domain, "заглушка на странице поиска"
+                )
+            # «Наши» строки выдачи = сматчились с FI-реестром активного региона
+            # (fi_court_config ставит parse_cassation_search_page через
+            # match_hmao_first_instance — легаси-имя, матчер регион-зависимый).
+            hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
+            # Отдельные источники: total ловит поломку парсера выдачи КСОЮ,
+            # matched — слетевший матчер судов (класс бага «Берёзовский», ё/е).
+            health_obs[_ck_total] = len(cass_search_results)
+            health_obs[_ck_matched] = len(hmao_results)
+            log.info(
+                f"  7kas: в выдаче {len(cass_search_results)} дел, "
+                f"из них {len(hmao_results)} по судам региона ({_region.name}) "
+                f"({len(cass_search_results) - len(hmao_results)} "
+                f"чужих регионов отброшено)"
+            )
+            # Отброшенные суды нужны в логе, чтобы рассинхрон названия (ё/е,
+            # переименование, новый суд) был виден, а не исчезал в счётчике —
+            # именно такая строка вскрыла бы баг с «Березовским» (е vs ё).
+            # Чтобы не печатать простыню из ~20 чужих судов: похожие на ХМАО —
+            # WARNING (кандидаты на рассинхрон реестра), остальные — первые 5
+            # на INFO, полный список на DEBUG.
+            dropped_courts = sorted({
+                (r.get("fi_court_long") or "").strip()
+                for r in cass_search_results if not r["fi_court_config"]
+            } - {""})
+            if dropped_courts:
+                # Regex «похож на наш регион» — из RegionConfig (шире маркеров
+                # матчера: включает словоформы, у ХМАО — Югор/Югр и т.п.).
+                _sus_rx = _region.fi_suspect_regex
+                suspicious = [
+                    c for c in dropped_courts
+                    if _sus_rx and re.search(_sus_rx, c, re.IGNORECASE)
+                ]
+                for s in suspicious:
+                    log.warning(
+                        f"  7kas: суд похож на регион ({_region.name}), но не "
+                        f"сматчился с реестром (возможен рассинхрон названия, "
+                        f"класс бага «ё/е»): {s}"
+                    )
+                others = [c for c in dropped_courts if c not in suspicious]
+                shown = others[:5]
+                rest = len(others) - len(shown)
+                if shown:
+                    log.info(
+                        "  7kas: отброшено как чужой регион: " + "; ".join(shown)
+                        + (f" — и ещё {rest} (полный список на DEBUG)" if rest else "")
+                    )
+                log.debug(
+                    "  7kas: отброшено как чужой регион (полный список): "
+                    + "; ".join(dropped_courts)
+                )
+
+            # Индекс существующих дел по номеру 1-й инст. — для smart-skip
+            # (discovery-кейсы остаются вне индекса и парсятся всегда).
+            cass_fi_index: dict[str, dict] = {}
+            for c in cases:
+                fi = c.get("first_instance") or {}
+                n = (fi.get("case_number") or c.get("id") or "").strip()
+                if n:
+                    cass_fi_index.setdefault(n, c)
+
+            today_for_skip = date.today()
+            cass_finds: list[dict] = []
+            for r in hmao_results:
+                cass_eligible += 1
+                fi_num_search = (r.get("fi_case_number") or "").strip()
+                existing_case = cass_fi_index.get(fi_num_search) if fi_num_search else None
+                if existing_case and existing_case.get("current_stage") == "cassation":
+                    skip, reason = should_skip_case(existing_case, today_for_skip)
+                    if skip:
+                        if "future_hearing" in reason:
+                            cass_skipped_future += 1
+                        else:
+                            cass_skipped_suspended += 1
+                        log.debug(
+                            f"  7kas: skip {r['cassation_internal_number']} "
+                            f"({fi_num_search}): {skip_reason_ru(reason)}"
+                        )
+                        continue
+                polite_delay()
+                card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
+                card_html = fetch_card_checked(
+                    card_url, context=r["cassation_internal_number"]
+                )
+                if not card_html:
+                    log.warning(
+                        f"  7kas: не удалось загрузить карточку "
+                        f"{r['cassation_internal_number']}"
+                    )
+                    continue
+                info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
+                if not info:
+                    log.warning(
+                        f"  7kas: не удалось распарсить карточку "
+                        f"{r['cassation_internal_number']}"
+                    )
+                    continue
+                if not info.get("sber_present"):
+                    log.info(
+                        f"  7kas: пропуск {r['cassation_internal_number']} — "
+                        f"в УЧАСТНИКАХ нет ПАО Сбербанк (или только дочка)"
+                    )
+                    continue
+                # Подмержим поля из выдачи (link, cassation_internal_number,
+                # fi_court_config, fi_case_number — у info уже всё это есть, но
+                # link нет: его нужно собрать из case_id|case_uid).
+                info["link"] = f"{r['case_id']}|{r['case_uid']}"
+                info["cassation_internal_number"] = r["cassation_internal_number"]
+                # Если в карточке fi_case_number пустой (редко) — берём из выдачи.
+                if not info.get("fi_case_number") and r.get("fi_case_number"):
+                    info["fi_case_number"] = r["fi_case_number"]
+                cass_finds.append(info)
+                cass_parsed += 1
+
+            # Передаём горячий архив: касс. жалоба на архивное дело (ушло из
+            # cassation_watch по 120-дневному окну до регистрации на 7kas)
+            # восстанавливает запись с историей, а не плодит discovery-дубль.
+            archived_before_cass = len(archived_cases)
+            cases, cass_changes, cass_discovered = link_cassation_cases(
+                cases, cass_finds, archived_cases
+            )
+            cass_resurrected_count += archived_before_cass - len(archived_cases)
+        else:
+            log.warning("7kas: пустой ответ от поиска")
+    except Exception as exc:
+        # Падение парсера кассации не должно ронять весь прогон (с 08.2026
+        # она идёт первой — тем важнее дойти до апелляции и 1-й инст. ниже).
+        # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
+        log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
+    _cass_sum_parts = []
+    if cass_skipped_future:
+        _cass_sum_parts.append(f"{cass_skipped_future} отложено — заседание в будущем")
+    if cass_skipped_suspended:
+        _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
+    log.info(
+        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек региона"
+        + (f" ({'; '.join(_cass_sum_parts)})" if _cass_sum_parts else "")
+    )
+    timings["cassation"] = time.perf_counter() - t0
+
+    # ── 4d. Refresh кассации по cassation.link ──
+    # Раздел 4c берёт только первую страницу выдачи 7kas — старые касс. дела
+    # вытесняются и перестают обновляться. Этот раздел добивает «хвост»:
+    # ходит по всем делам стадии cassation, у которых сохранён cassation.link.
+    # Smart-skip (should_skip_case) использует get_next_planned_date по events,
+    # включая «жалоба оставлена без движения до DD.MM.YYYY», поэтому реальные
+    # HTTP-запросы летят только когда есть смысл (D+1 после плановой даты).
+    t0 = time.perf_counter()
+    cass_refresh_total = 0
+    cass_refresh_skipped_future = 0
+    cass_refresh_skipped_suspended = 0
+    cass_refresh_fresh = 0
+    cass_refresh_parsed = 0
+    cass_refresh_force_parsed = 0
+    log.info(
+        "Кассация, шаг 2/2 — обход своих дел, "
+        "ушедших с первой страницы выдачи"
+    )
+    try:
+        today_for_refresh = date.today()
+        today_iso = today_for_refresh.isoformat()
+        cass_refresh_finds: list[dict] = []
+        # План очереди до старта цикла: без HTTP, те же условия, что ниже.
+        _plan_total = 0
+        _plan_skip = 0
+        _plan_fresh = 0
+        _plan_no_link = 0
+        for _c in cases:
+            if _c.get("current_stage") != "cassation":
+                continue
+            _cb = _c.get("cassation") or {}
+            if _cb.get("last_checked_at") == today_iso:
+                _plan_fresh += 1
+                continue
+            _cid, _cuid = case_id_uid((_cb.get("link") or "").strip())
+            if not _cid or not _cuid:
+                _plan_no_link += 1
+                continue
+            _plan_total += 1
+            if should_skip_case(_c, today_for_refresh)[0]:
+                _plan_skip += 1
+        # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
+        _plan_parts = []
+        if _plan_fresh:
+            _plan_parts.append(f"{_plan_fresh} уже обновлены шагом 1")
+        if _plan_skip:
+            _plan_parts.append(f"{_plan_skip} отложено — заседание в будущем")
+        if _plan_no_link:
+            _plan_parts.append(
+                f"{_plan_no_link} без ссылки на карточку — пропустим"
+            )
+        log.info(_format_queue_balance(
+            "7kas refresh: дел в стадии кассации",
+            _plan_total + _plan_fresh + _plan_no_link,
+            _plan_total - _plan_skip, _plan_parts,
+        ))
+        for case in cases:
+            if case.get("current_stage") != "cassation":
+                continue
+            cass = case.get("cassation") or {}
+            # Уже обновили в 4c → пропускаем (last_checked_at = сегодня).
+            if cass.get("last_checked_at") == today_iso:
+                cass_refresh_fresh += 1
+                continue
+            link = (cass.get("link") or "").strip()
+            if not link:
+                continue
+            cid, cuid = case_id_uid(link)
+            if not cid or not cuid:
+                continue
+            skip, reason = should_skip_case(case, today_for_refresh)
+            if skip:
+                if "future_hearing" in reason:
+                    cass_refresh_skipped_future += 1
+                else:
+                    cass_refresh_skipped_suspended += 1
+                fi_saved = (
+                    (case.get("first_instance") or {}).get("case_number")
+                    or case.get("id")
+                    or "?"
+                )
+                log.debug(
+                    f"  7kas refresh: skip {cass.get('case_number') or '?'} "
+                    f"({fi_saved}): {skip_reason_ru(reason)}"
+                )
+                continue
+            # Счётчик — ПОСЛЕ smart-skip: сводка «спарсено X из Y» ниже
+            # считает в знаменателе план (без отложенных), как строка плана.
+            cass_refresh_total += 1
+            planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
+            if planned_fp and planned_fp >= today_for_refresh:
+                cass_refresh_force_parsed += 1
+            polite_delay()
+            try:
+                card_url = CASSATION_COURT.card_url(cid, cuid)
+                card_html = fetch_card_checked(
+                    card_url, context=cass.get("case_number") or "?"
+                )
+            except Exception as exc:
+                log.warning(
+                    f"  7kas refresh: ошибка загрузки "
+                    f"{cass.get('case_number') or '?'}: {exc}"
+                )
+                continue
+            if not card_html:
+                log.warning(
+                    f"  7kas refresh: пустой ответ для "
+                    f"{cass.get('case_number') or '?'}"
+                )
+                continue
+            info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
+            if not info:
+                log.warning(
+                    f"  7kas refresh: не удалось распарсить "
+                    f"{cass.get('case_number') or '?'}"
+                )
+                continue
+            # Карточка не отдаёт link и внутренний номер — берём из БД.
+            info["link"] = link
+            info["cassation_internal_number"] = cass.get("case_number", "")
+            if not info.get("fi_case_number"):
+                fi_saved = (
+                    (case.get("first_instance") or {}).get("case_number")
+                    or case.get("id")
+                    or ""
+                )
+                if fi_saved:
+                    info["fi_case_number"] = fi_saved
+            cass_refresh_finds.append(info)
+            cass_refresh_parsed += 1
+        if cass_refresh_finds:
+            cases, more_changes, _ = link_cassation_cases(cases, cass_refresh_finds)
+            # Изменения от refresh попадают в общий канал дайджеста.
+            cass_changes.extend(more_changes)
+    except Exception as exc:
+        log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
+    _refresh_sum_parts = []
+    if cass_refresh_skipped_future:
+        _refresh_sum_parts.append(
+            f"{cass_refresh_skipped_future} отложено — заседание в будущем"
+        )
+    if cass_refresh_skipped_suspended:
+        _refresh_sum_parts.append(f"{cass_refresh_skipped_suspended} без движения")
+    if cass_refresh_force_parsed:
+        _refresh_sum_parts.append(f"форс-парс {cass_refresh_force_parsed}")
+    if cass_refresh_fresh:
+        _refresh_sum_parts.append(f"{cass_refresh_fresh} уже обновлены шагом 1")
+    log.info(
+        f"7kas refresh: спарсено {cass_refresh_parsed} "
+        f"из {cass_refresh_total} карточек"
+        + (f" ({'; '.join(_refresh_sum_parts)})" if _refresh_sum_parts else "")
+    )
+    timings["cassation_refresh"] = time.perf_counter() - t0
+
+    # Резервный щит после обоих link_cassation_cases (раздел 4c + 4d):
+    # если по какой-то причине свежий прогон создал двойника (нашёлся
+    # касс. номер, которого нет в cass_index в момент построения индекса
+    # — например, индекс был построен до append'а в этом же прогоне) —
+    # вычищаем сразу, не дожидаясь следующего cron.
+    post_cass_merged = dedupe_cassation_by_internal_number(cases)
+    if post_cass_merged:
+        log.info(
+            f"Дедуп после link_cassation_cases: слито {post_cass_merged} "
+            f"касс. дублей"
+        )
+    # Дозапись дедуп-индексов: discovery-дела, заведённые кассацией выше,
+    # обязаны попасть в снимки existing_ids/fi_dedup_* ДО поиска 1-й
+    # инстанции ниже — иначе тот же прогон завёл бы дубль, окажись дело на
+    # стр. 1 выдачи (индексы — снимок фазы загрузки; с 2026-08 кассация
+    # идёт ПЕРВОЙ инстанцией прогона).
+    for _dc in cass_discovered:
+        _dc_id = (_dc.get("id") or "").strip()
+        if not _dc_id:
+            continue
+        existing_ids.add(_dc_id)
+        _dc_fi = _dc.get("first_instance") or {}
+        _dc_dom = (_dc_fi.get("court_domain") or "").strip().lower()
+        _dc_bare = _bare_case_number(_dc_id)
+        if _dc_dom:
+            fi_dedup_exact.add((_dc_dom, _dc_id))
+            if _dc_bare and _dc_bare != _dc_id:
+                fi_dedup_exact.add((_dc_dom, _dc_bare))
+        else:
+            fi_dedup_wildcard.add(_dc_id)
+            if _dc_bare and _dc_bare != _dc_id:
+                fi_dedup_wildcard.add(_dc_bare)
+
     # ── 2. Парсинг апелляции: новые дела ──
-    log_phase(2, 9, "Поиск апелляции: новые дела")
+    log_phase(3, 9, "Поиск апелляции: новые дела")
     t0 = time.perf_counter()
     csv_cases = load_csv(config.CSV_PATH)
     csv_archived = load_csv(config.CSV_ARCHIVE_PATH)
@@ -2161,15 +2546,6 @@ def main_json():
         if c.get("Номер дела")
     }
     csv_active_count = sum(1 for c in csv_cases if not is_archived(c))
-
-    # Наблюдения для детектора молчаливой поломки парсеров (блок 4e):
-    # {ключ источника: сколько строк дал поиск; None — страница не загрузилась}.
-    health_obs: dict = {}
-    health_labels: dict = {}
-    # Суды 1-й инст., чья страница поиска пришла как проверочный код (CAPTCHA):
-    # {domain: court.name}. Отдельный 🩺-алерт в блоке 4e, чтобы код не читался
-    # молча как «дел нет» (см. detect_captcha_challenge).
-    fi_challenge: dict = {}
 
     appeal_new_cases_csv: list[dict] = []
     # Составной ключ (домен апел-суда, номер апелляции): номера 33-…/YYYY между
@@ -2246,6 +2622,65 @@ def main_json():
 
     timings["appeal_new"] = time.perf_counter() - t0
 
+    # ── 4. Обновление существующих дел ──
+    # 4a. Апелляция: обновляем карточки апел. только для стадии "appeal".
+    # После перехода в cassation_watch апел. карточка больше не
+    # парсится (см. user-decision: «30 дней после апел. заседания или
+    # публикация акта — и мы перестаём парсить сайт апел. инстанции»).
+    log_phase(4, 9, "Обновление карточек апелляции")
+    t0 = time.perf_counter()
+    json_appeal_by_num: dict = {}
+    json_case_by_apnum: dict = {}
+    skip_apel_nums: set[str] = set()
+    for c in cases:
+        ap = c.get("appeal")
+        if ap and ap.get("case_number"):
+            num = ap["case_number"].strip()
+            json_appeal_by_num[num] = ap
+            json_case_by_apnum[num] = c
+            if c.get("current_stage") != "appeal":
+                skip_apel_nums.add(num)
+    csv_cases, changes, ap_skip_stats = update_active_cases(
+        csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
+        json_case_by_apnum=json_case_by_apnum,
+    )
+
+    if appeal_new_cases_csv:
+        csv_cases = appeal_new_cases_csv + csv_cases
+
+    timings["appeal_update"] = time.perf_counter() - t0
+
+    ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
+    _ap_sum_parts = []
+    if ap_skip_stats["skipped_future"]:
+        _ap_sum_parts.append(
+            f"{ap_skip_stats['skipped_future']} отложено — заседание в будущем"
+        )
+    if ap_skip_stats["skipped_suspended"]:
+        _ap_sum_parts.append(f"{ap_skip_stats['skipped_suspended']} без движения")
+    if ap_skip_stats.get("skipped_breaker"):
+        _ap_sum_parts.append(
+            f"{ap_skip_stats['skipped_breaker']} пропущено предохранителем — "
+            f"суд недоступен"
+        )
+    if ap_skip_stats["force_parsed"]:
+        _ap_sum_parts.append(f"форс-парс {ap_skip_stats['force_parsed']}")
+    # Знаменатель — план (без smart-skip), в тех же единицах, что строка
+    # «парсим Y» и прогресс; скипы остаются пояснением в скобках.
+    log.info(
+        f"Апелляция: спарсено {ap_skip_stats['parsed']} "
+        f"из {ap_skip_stats.get('planned', ap_skip_stats['total'])} карточек"
+        + (f" ({'; '.join(_ap_sum_parts)})" if _ap_sum_parts else "")
+    )
+    # Щит по УИД: discovery-двойник, не сматченный по fi_case_number (у апел.-
+    # записи он пуст), но делящий УИД с реальной апел./watch-записью.
+    post_cass_uid_merged = dedupe_cassation_by_uid(cases)
+    if post_cass_uid_merged:
+        log.info(
+            f"Дедуп по УИД после link_cassation_cases: слито "
+            f"{post_cass_uid_merged} касс. дублей"
+        )
+
     # ── 3. Парсинг судов первой инстанции: новые дела ──
     t0 = time.perf_counter()
     fi_new_cases: list[dict] = []
@@ -2257,7 +2692,7 @@ def main_json():
     # Автопоиск — только по судам без капчи (search_gated=True исключаются:
     # их дела заводит импортёр, карточки мониторятся ниже через fi_court_map).
     enabled_courts = courts_for_search()
-    log_phase(3, 9, f"Поиск новых дел: {len(enabled_courts)} судов 1-й инстанции")
+    log_phase(5, 9, f"Поиск новых дел: {len(enabled_courts)} судов 1-й инстанции")
 
     # Индекс существующих cases по id — нужен для промоушена М-записей
     # в 2-XXX, когда материал регистрируется и в выдаче появляется
@@ -2494,40 +2929,12 @@ def main_json():
         if not config.BANK_INTAKE_DRY_RUN:
             save_intake_seen(bank_intake_seen)
 
-    # ── 4. Обновление существующих дел ──
-    # 4a. Апелляция: обновляем карточки апел. только для стадии "appeal".
-    # После перехода в cassation_watch апел. карточка больше не
-    # парсится (см. user-decision: «30 дней после апел. заседания или
-    # публикация акта — и мы перестаём парсить сайт апел. инстанции»).
-    log_phase(4, 9, "Обновление карточек апелляции")
-    t0 = time.perf_counter()
-    json_appeal_by_num: dict = {}
-    json_case_by_apnum: dict = {}
-    skip_apel_nums: set[str] = set()
-    for c in cases:
-        ap = c.get("appeal")
-        if ap and ap.get("case_number"):
-            num = ap["case_number"].strip()
-            json_appeal_by_num[num] = ap
-            json_case_by_apnum[num] = c
-            if c.get("current_stage") != "appeal":
-                skip_apel_nums.add(num)
-    csv_cases, changes, ap_skip_stats = update_active_cases(
-        csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
-        json_case_by_apnum=json_case_by_apnum,
-    )
-
-    if appeal_new_cases_csv:
-        csv_cases = appeal_new_cases_csv + csv_cases
-
-    timings["appeal_update"] = time.perf_counter() - t0
-
     # 4b. Первая инстанция: обновляем карточки 1-й инст. только для стадий,
     # где она активна — first_instance (стандартный мониторинг) и
     # cassation_watch (ищем касс. жалобу после апел. определения).
     # awaiting_appeal / appeal / cassation_pending — парсинг 1-й инст.
     # не нужен (см. advance_case_stage).
-    log_phase(5, 9, "Обновление карточек 1-й инстанции")
+    log_phase(6, 9, "Обновление карточек 1-й инстанции")
     t0 = time.perf_counter()
     # Бэкфилл ссылок на карточку 1-й инст. для дел, пришедших «сверху» (через
     # поиск апелляции): у них link/court_domain пусты, и без этого цикл ниже
@@ -3846,28 +4253,6 @@ def main_json():
             "1 инст: медленные суды — "
             + _format_slow_courts(fi_court_seconds, fi_court_cards)
         )
-    ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
-    _ap_sum_parts = []
-    if ap_skip_stats["skipped_future"]:
-        _ap_sum_parts.append(
-            f"{ap_skip_stats['skipped_future']} отложено — заседание в будущем"
-        )
-    if ap_skip_stats["skipped_suspended"]:
-        _ap_sum_parts.append(f"{ap_skip_stats['skipped_suspended']} без движения")
-    if ap_skip_stats.get("skipped_breaker"):
-        _ap_sum_parts.append(
-            f"{ap_skip_stats['skipped_breaker']} пропущено предохранителем — "
-            f"суд недоступен"
-        )
-    if ap_skip_stats["force_parsed"]:
-        _ap_sum_parts.append(f"форс-парс {ap_skip_stats['force_parsed']}")
-    # Знаменатель — план (без smart-skip), в тех же единицах, что строка
-    # «парсим Y» и прогресс; скипы остаются пояснением в скобках.
-    log.info(
-        f"Апелляция: спарсено {ap_skip_stats['parsed']} "
-        f"из {ap_skip_stats.get('planned', ap_skip_stats['total'])} карточек"
-        + (f" ({'; '.join(_ap_sum_parts)})" if _ap_sum_parts else "")
-    )
     log.info(f"Обновлено дел 1 инстанции: {fi_update_count}")
 
     # Одно FI-дело может жить в двух записях (апелляция по существу +
@@ -3917,361 +4302,6 @@ def main_json():
                 f"Иски банка: рутина отфильтрована (BANK_DIGEST_ROUTINE=0): "
                 f"{before_bank} → {len(fi_changes)} записей fi_changes"
             )
-
-    # ── 4c. Кассация (7kas.sudrf.ru) ──
-    # Поиск только первая страница (по решению пользователя). Фильтр HMAO —
-    # внутри parse_cassation_search_page по match_hmao_first_instance.
-    # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
-    # поиск иногда матчит по случайному совпадению в тексте.
-    log_phase(6, 9, "Кассация 7kas: поиск и карточки")
-    t0 = time.perf_counter()
-    cass_changes: list[dict] = []
-    cass_discovered: list[dict] = []
-    cass_eligible = 0
-    cass_parsed = 0
-    cass_skipped_future = 0
-    cass_skipped_suspended = 0
-    cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
-    # Ключи здоровья кассации — из региона (для ХМАО совпадают с историческими
-    # "cassation:7kas:total"/"cassation:7kas:hmao", медианы не обнуляются).
-    _region = get_region()
-    _ck_total, _ck_matched = _region.health_cassation_keys()
-    _kas_short = CASSATION_COURT.domain.split(".")[0]
-    health_labels[_ck_total] = f"Кассация {_kas_short} (вся выдача)"
-    health_labels[_ck_matched] = f"Кассация {_kas_short} (фильтр региона)"
-    try:
-        log.info(
-            "Кассация, шаг 1/2 — поиск по имени банка "
-            "(первая страница выдачи 7kas)"
-        )
-        polite_delay()
-        cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
-        if not cass_search_html:
-            health_obs[_ck_total] = None
-        if cass_search_html:
-            cass_search_results = parse_cassation_search_page(cass_search_html)
-            # 0 строк + маркеры проверочного кода → поиск 7kas закрыт CAPTCHA.
-            if not cass_search_results and detect_captcha_challenge(cass_search_html):
-                fi_challenge[CASSATION_COURT.domain] = (
-                    f"Кассация ({CASSATION_COURT.name})"
-                )
-            # Канарейка предохранителя: выдача 7kas пришла заглушкой →
-            # карточки кассации не запрашиваем (пре-открытие).
-            if not cass_search_results and looks_like_outage_page(cass_search_html):
-                card_breaker_preopen(
-                    CASSATION_COURT.domain, "заглушка на странице поиска"
-                )
-            # «Наши» строки выдачи = сматчились с FI-реестром активного региона
-            # (fi_court_config ставит parse_cassation_search_page через
-            # match_hmao_first_instance — легаси-имя, матчер регион-зависимый).
-            hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
-            # Отдельные источники: total ловит поломку парсера выдачи КСОЮ,
-            # matched — слетевший матчер судов (класс бага «Берёзовский», ё/е).
-            health_obs[_ck_total] = len(cass_search_results)
-            health_obs[_ck_matched] = len(hmao_results)
-            log.info(
-                f"  7kas: в выдаче {len(cass_search_results)} дел, "
-                f"из них {len(hmao_results)} по судам региона ({_region.name}) "
-                f"({len(cass_search_results) - len(hmao_results)} "
-                f"чужих регионов отброшено)"
-            )
-            # Отброшенные суды нужны в логе, чтобы рассинхрон названия (ё/е,
-            # переименование, новый суд) был виден, а не исчезал в счётчике —
-            # именно такая строка вскрыла бы баг с «Березовским» (е vs ё).
-            # Чтобы не печатать простыню из ~20 чужих судов: похожие на ХМАО —
-            # WARNING (кандидаты на рассинхрон реестра), остальные — первые 5
-            # на INFO, полный список на DEBUG.
-            dropped_courts = sorted({
-                (r.get("fi_court_long") or "").strip()
-                for r in cass_search_results if not r["fi_court_config"]
-            } - {""})
-            if dropped_courts:
-                # Regex «похож на наш регион» — из RegionConfig (шире маркеров
-                # матчера: включает словоформы, у ХМАО — Югор/Югр и т.п.).
-                _sus_rx = _region.fi_suspect_regex
-                suspicious = [
-                    c for c in dropped_courts
-                    if _sus_rx and re.search(_sus_rx, c, re.IGNORECASE)
-                ]
-                for s in suspicious:
-                    log.warning(
-                        f"  7kas: суд похож на регион ({_region.name}), но не "
-                        f"сматчился с реестром (возможен рассинхрон названия, "
-                        f"класс бага «ё/е»): {s}"
-                    )
-                others = [c for c in dropped_courts if c not in suspicious]
-                shown = others[:5]
-                rest = len(others) - len(shown)
-                if shown:
-                    log.info(
-                        "  7kas: отброшено как чужой регион: " + "; ".join(shown)
-                        + (f" — и ещё {rest} (полный список на DEBUG)" if rest else "")
-                    )
-                log.debug(
-                    "  7kas: отброшено как чужой регион (полный список): "
-                    + "; ".join(dropped_courts)
-                )
-
-            # Индекс существующих дел по номеру 1-й инст. — для smart-skip
-            # (discovery-кейсы остаются вне индекса и парсятся всегда).
-            cass_fi_index: dict[str, dict] = {}
-            for c in cases:
-                fi = c.get("first_instance") or {}
-                n = (fi.get("case_number") or c.get("id") or "").strip()
-                if n:
-                    cass_fi_index.setdefault(n, c)
-
-            today_for_skip = date.today()
-            cass_finds: list[dict] = []
-            for r in hmao_results:
-                cass_eligible += 1
-                fi_num_search = (r.get("fi_case_number") or "").strip()
-                existing_case = cass_fi_index.get(fi_num_search) if fi_num_search else None
-                if existing_case and existing_case.get("current_stage") == "cassation":
-                    skip, reason = should_skip_case(existing_case, today_for_skip)
-                    if skip:
-                        if "future_hearing" in reason:
-                            cass_skipped_future += 1
-                        else:
-                            cass_skipped_suspended += 1
-                        log.debug(
-                            f"  7kas: skip {r['cassation_internal_number']} "
-                            f"({fi_num_search}): {skip_reason_ru(reason)}"
-                        )
-                        continue
-                polite_delay()
-                card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
-                card_html = fetch_card_checked(
-                    card_url, context=r["cassation_internal_number"]
-                )
-                if not card_html:
-                    log.warning(
-                        f"  7kas: не удалось загрузить карточку "
-                        f"{r['cassation_internal_number']}"
-                    )
-                    continue
-                info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
-                if not info:
-                    log.warning(
-                        f"  7kas: не удалось распарсить карточку "
-                        f"{r['cassation_internal_number']}"
-                    )
-                    continue
-                if not info.get("sber_present"):
-                    log.info(
-                        f"  7kas: пропуск {r['cassation_internal_number']} — "
-                        f"в УЧАСТНИКАХ нет ПАО Сбербанк (или только дочка)"
-                    )
-                    continue
-                # Подмержим поля из выдачи (link, cassation_internal_number,
-                # fi_court_config, fi_case_number — у info уже всё это есть, но
-                # link нет: его нужно собрать из case_id|case_uid).
-                info["link"] = f"{r['case_id']}|{r['case_uid']}"
-                info["cassation_internal_number"] = r["cassation_internal_number"]
-                # Если в карточке fi_case_number пустой (редко) — берём из выдачи.
-                if not info.get("fi_case_number") and r.get("fi_case_number"):
-                    info["fi_case_number"] = r["fi_case_number"]
-                cass_finds.append(info)
-                cass_parsed += 1
-
-            # Передаём горячий архив: касс. жалоба на архивное дело (ушло из
-            # cassation_watch по 120-дневному окну до регистрации на 7kas)
-            # восстанавливает запись с историей, а не плодит discovery-дубль.
-            archived_before_cass = len(archived_cases)
-            cases, cass_changes, cass_discovered = link_cassation_cases(
-                cases, cass_finds, archived_cases
-            )
-            cass_resurrected_count += archived_before_cass - len(archived_cases)
-        else:
-            log.warning("7kas: пустой ответ от поиска")
-    except Exception as exc:
-        # Кассация — третий парсер, его падение не должно ронять весь прогон.
-        # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
-        log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
-    _cass_sum_parts = []
-    if cass_skipped_future:
-        _cass_sum_parts.append(f"{cass_skipped_future} отложено — заседание в будущем")
-    if cass_skipped_suspended:
-        _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
-    log.info(
-        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек региона"
-        + (f" ({'; '.join(_cass_sum_parts)})" if _cass_sum_parts else "")
-    )
-    timings["cassation"] = time.perf_counter() - t0
-
-    # ── 4d. Refresh кассации по cassation.link ──
-    # Раздел 4c берёт только первую страницу выдачи 7kas — старые касс. дела
-    # вытесняются и перестают обновляться. Этот раздел добивает «хвост»:
-    # ходит по всем делам стадии cassation, у которых сохранён cassation.link.
-    # Smart-skip (should_skip_case) использует get_next_planned_date по events,
-    # включая «жалоба оставлена без движения до DD.MM.YYYY», поэтому реальные
-    # HTTP-запросы летят только когда есть смысл (D+1 после плановой даты).
-    t0 = time.perf_counter()
-    cass_refresh_total = 0
-    cass_refresh_skipped_future = 0
-    cass_refresh_skipped_suspended = 0
-    cass_refresh_fresh = 0
-    cass_refresh_parsed = 0
-    cass_refresh_force_parsed = 0
-    log.info(
-        "Кассация, шаг 2/2 — обход своих дел, "
-        "ушедших с первой страницы выдачи"
-    )
-    try:
-        today_for_refresh = date.today()
-        today_iso = today_for_refresh.isoformat()
-        cass_refresh_finds: list[dict] = []
-        # План очереди до старта цикла: без HTTP, те же условия, что ниже.
-        _plan_total = 0
-        _plan_skip = 0
-        _plan_fresh = 0
-        _plan_no_link = 0
-        for _c in cases:
-            if _c.get("current_stage") != "cassation":
-                continue
-            _cb = _c.get("cassation") or {}
-            if _cb.get("last_checked_at") == today_iso:
-                _plan_fresh += 1
-                continue
-            _cid, _cuid = case_id_uid((_cb.get("link") or "").strip())
-            if not _cid or not _cuid:
-                _plan_no_link += 1
-                continue
-            _plan_total += 1
-            if should_skip_case(_c, today_for_refresh)[0]:
-                _plan_skip += 1
-        # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
-        _plan_parts = []
-        if _plan_fresh:
-            _plan_parts.append(f"{_plan_fresh} уже обновлены шагом 1")
-        if _plan_skip:
-            _plan_parts.append(f"{_plan_skip} отложено — заседание в будущем")
-        if _plan_no_link:
-            _plan_parts.append(
-                f"{_plan_no_link} без ссылки на карточку — пропустим"
-            )
-        log.info(_format_queue_balance(
-            "7kas refresh: дел в стадии кассации",
-            _plan_total + _plan_fresh + _plan_no_link,
-            _plan_total - _plan_skip, _plan_parts,
-        ))
-        for case in cases:
-            if case.get("current_stage") != "cassation":
-                continue
-            cass = case.get("cassation") or {}
-            # Уже обновили в 4c → пропускаем (last_checked_at = сегодня).
-            if cass.get("last_checked_at") == today_iso:
-                cass_refresh_fresh += 1
-                continue
-            link = (cass.get("link") or "").strip()
-            if not link:
-                continue
-            cid, cuid = case_id_uid(link)
-            if not cid or not cuid:
-                continue
-            skip, reason = should_skip_case(case, today_for_refresh)
-            if skip:
-                if "future_hearing" in reason:
-                    cass_refresh_skipped_future += 1
-                else:
-                    cass_refresh_skipped_suspended += 1
-                fi_saved = (
-                    (case.get("first_instance") or {}).get("case_number")
-                    or case.get("id")
-                    or "?"
-                )
-                log.debug(
-                    f"  7kas refresh: skip {cass.get('case_number') or '?'} "
-                    f"({fi_saved}): {skip_reason_ru(reason)}"
-                )
-                continue
-            # Счётчик — ПОСЛЕ smart-skip: сводка «спарсено X из Y» ниже
-            # считает в знаменателе план (без отложенных), как строка плана.
-            cass_refresh_total += 1
-            planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
-            if planned_fp and planned_fp >= today_for_refresh:
-                cass_refresh_force_parsed += 1
-            polite_delay()
-            try:
-                card_url = CASSATION_COURT.card_url(cid, cuid)
-                card_html = fetch_card_checked(
-                    card_url, context=cass.get("case_number") or "?"
-                )
-            except Exception as exc:
-                log.warning(
-                    f"  7kas refresh: ошибка загрузки "
-                    f"{cass.get('case_number') or '?'}: {exc}"
-                )
-                continue
-            if not card_html:
-                log.warning(
-                    f"  7kas refresh: пустой ответ для "
-                    f"{cass.get('case_number') or '?'}"
-                )
-                continue
-            info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
-            if not info:
-                log.warning(
-                    f"  7kas refresh: не удалось распарсить "
-                    f"{cass.get('case_number') or '?'}"
-                )
-                continue
-            # Карточка не отдаёт link и внутренний номер — берём из БД.
-            info["link"] = link
-            info["cassation_internal_number"] = cass.get("case_number", "")
-            if not info.get("fi_case_number"):
-                fi_saved = (
-                    (case.get("first_instance") or {}).get("case_number")
-                    or case.get("id")
-                    or ""
-                )
-                if fi_saved:
-                    info["fi_case_number"] = fi_saved
-            cass_refresh_finds.append(info)
-            cass_refresh_parsed += 1
-        if cass_refresh_finds:
-            cases, more_changes, _ = link_cassation_cases(cases, cass_refresh_finds)
-            # Изменения от refresh попадают в общий канал дайджеста.
-            cass_changes.extend(more_changes)
-    except Exception as exc:
-        log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
-    _refresh_sum_parts = []
-    if cass_refresh_skipped_future:
-        _refresh_sum_parts.append(
-            f"{cass_refresh_skipped_future} отложено — заседание в будущем"
-        )
-    if cass_refresh_skipped_suspended:
-        _refresh_sum_parts.append(f"{cass_refresh_skipped_suspended} без движения")
-    if cass_refresh_force_parsed:
-        _refresh_sum_parts.append(f"форс-парс {cass_refresh_force_parsed}")
-    if cass_refresh_fresh:
-        _refresh_sum_parts.append(f"{cass_refresh_fresh} уже обновлены шагом 1")
-    log.info(
-        f"7kas refresh: спарсено {cass_refresh_parsed} "
-        f"из {cass_refresh_total} карточек"
-        + (f" ({'; '.join(_refresh_sum_parts)})" if _refresh_sum_parts else "")
-    )
-    timings["cassation_refresh"] = time.perf_counter() - t0
-
-    # Резервный щит после обоих link_cassation_cases (раздел 4c + 4d):
-    # если по какой-то причине свежий прогон создал двойника (нашёлся
-    # касс. номер, которого нет в cass_index в момент построения индекса
-    # — например, индекс был построен до append'а в этом же прогоне) —
-    # вычищаем сразу, не дожидаясь следующего cron.
-    post_cass_merged = dedupe_cassation_by_internal_number(cases)
-    if post_cass_merged:
-        log.info(
-            f"Дедуп после link_cassation_cases: слито {post_cass_merged} "
-            f"касс. дублей"
-        )
-    # Щит по УИД: discovery-двойник, не сматченный по fi_case_number (у апел.-
-    # записи он пуст), но делящий УИД с реальной апел./watch-записью.
-    post_cass_uid_merged = dedupe_cassation_by_uid(cases)
-    if post_cass_uid_merged:
-        log.info(
-            f"Дедуп по УИД после link_cassation_cases: слито "
-            f"{post_cass_uid_merged} касс. дублей"
-        )
 
     # ── 4e. Здоровье парсеров: детектор молчаливой поломки ──
     # Суд, вернувший 0 при живой истории, HTTP-фейлы подряд, глобальный ноль
@@ -4807,7 +4837,10 @@ def main_json():
             "Stage transitions": len(stage_transitions),
             "Appeal new": len(appeal_new_cases_csv),
             "Appeal changes": len(changes),
-            "Appeal parse": f"{ap_skip_stats['parsed']}/{ap_skip_stats['total']}",
+            "Appeal parse": (
+                f"{ap_skip_stats['parsed']}"
+                f"/{ap_skip_stats.get('planned', ap_skip_stats['total'])}"
+            ),
             "Appeal skip": ap_skip_total,
             "Appeal force": ap_skip_stats["force_parsed"],
             "Cassation parse": f"{cass_refresh_parsed}/{cass_refresh_total}",
