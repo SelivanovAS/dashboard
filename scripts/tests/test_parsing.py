@@ -3254,7 +3254,7 @@ class TestMatchHmaoFirstInstance:
 
 from court_monitor import linking as cm_linking  # noqa: E402
 from court_monitor.courts import (  # noqa: E402
-    APPEAL_COURT, match_fi_court_by_short_name,
+    APPEAL_COURT, CourtConfig, match_fi_court_by_short_name,
 )
 from court_monitor.parsing import find_fi_case_link  # noqa: E402
 
@@ -3466,6 +3466,104 @@ class TestBackfillFiLinks:
         assert len(fetched) == 1
         # Второе дело не тронуто — доберётся на следующем прогоне.
         assert cases[1]["first_instance"]["link"] == ""
+
+    def test_material_number_skipped_no_fetch(self, monkeypatch):
+        """«13-…» — материалы исполнения (номер с апел. карточки частной
+        жалобы): раздел g1_case их не содержит, поиск структурно вернёт
+        пустоту — HTTP не тратим (13-228/2026, Урал, 12.08.2026)."""
+        def boom(url, **kw):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(num="13-228/2026")]
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_hybrid_number_searched_bare(self, monkeypatch):
+        """Гибридный номер «2-716/2025 (2-9422/2024;)» ищется bare-формой —
+        поиск полной строкой не находит ничего (зеркало апеллянт-бэкфилла)."""
+        fetched_urls = []
+
+        def fake_fetch(url, **kw):
+            fetched_urls.append(url)
+            return _fi_number_search_html("2-716/2025 (2-9422/2024;)")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", fake_fetch)
+        cases = [self._case(num="2-716/2025 (2-9422/2024;)")]
+        assert cm_linking.backfill_fi_links(cases) == 1
+        assert "G1_CASE__CASE_NUMBERSS=2-716%2F2025" in fetched_urls[0]
+        assert "9422" not in fetched_urls[0]
+
+    def test_gated_court_skipped_no_fetch(self, monkeypatch):
+        """Капчёвый суд: поиск автоматике недоступен — HTTP и кэп не жжём."""
+        gated = CourtConfig(
+            "Академический районный суд", "akademichesky--svd.sudrf.ru",
+            1540005, "first_instance", search_gated=True,
+        )
+        monkeypatch.setattr(
+            cm_linking, "match_fi_court_by_short_name", lambda name: gated
+        )
+
+        def boom(url, **kw):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        cases = [self._case(court="Академический районный суд")]
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+    def test_no_data_page_stamps_without_warning(self, monkeypatch, caplog):
+        """«Данных по запросу не обнаружено» — штатная пустая выдача:
+        INFO (не WARNING) + штамп повторной попытки."""
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url, **kw: "<html>Данных по запросу не обнаружено</html>",
+        )
+        cases = [self._case()]
+        with caplog.at_level(logging.INFO, logger="court-monitor"):
+            assert cm_linking.backfill_fi_links(cases) == 0
+        fi = cases[0]["first_instance"]
+        assert fi["link_backfill_checked_at"] == date.today().isoformat()
+        warns = [r for r in caplog.records
+                 if r.levelno >= logging.WARNING and "backfill" in r.getMessage()]
+        assert not warns, [r.getMessage() for r in warns]
+
+    def test_not_found_stamps_and_skips_until_retry_window(self, monkeypatch):
+        """Не найдено в выдаче → штамп; внутри окна LINK_BACKFILL_RETRY_DAYS
+        HTTP не тратим, по истечении — пробуем снова."""
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url, **kw: _fi_number_search_html("2-9999/2025"),
+        )
+        cases = [self._case()]
+        assert cm_linking.backfill_fi_links(cases) == 0
+        fi = cases[0]["first_instance"]
+        assert fi["link_backfill_checked_at"] == date.today().isoformat()
+
+        # Свежий штамп: повторный вызов — без единого fetch.
+        def boom(url, **kw):
+            raise AssertionError("fetch_page не должен вызываться")
+
+        monkeypatch.setattr(cm_linking, "fetch_page", boom)
+        assert cm_linking.backfill_fi_links(cases) == 0
+
+        # Протухший штамп: пробуем снова (и на этот раз находим).
+        fi["link_backfill_checked_at"] = (
+            date.today()
+            - timedelta(days=cm_config.LINK_BACKFILL_RETRY_DAYS + 1)
+        ).isoformat()
+        monkeypatch.setattr(
+            cm_linking, "fetch_page",
+            lambda url, **kw: _fi_number_search_html("2-716/2025"),
+        )
+        assert cm_linking.backfill_fi_links(cases) == 1
+        assert fi["link"] == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
+
+    def test_network_failure_does_not_stamp(self, monkeypatch):
+        """Сетевой сбой — не «пустая выдача»: штампа нет, ретрай следующим
+        прогоном."""
+        monkeypatch.setattr(cm_linking, "fetch_page", lambda url, **kw: "")
+        cases = [self._case()]
+        assert cm_linking.backfill_fi_links(cases) == 0
+        assert "link_backfill_checked_at" not in cases[0]["first_instance"]
 
 
 # ── classify_appellant_role: слово-роль vs имя ──────────────────────────────
