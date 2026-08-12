@@ -4455,6 +4455,72 @@ class TestClassifyFiTermination:
         assert uc.classify_fi_termination("", "", None) is None
 
 
+from court_monitor.textutil import fi_closure_reason  # noqa: E402
+
+
+class TestFiClosureReason:
+    """Причина процессуального закрытия (ст. 220/222 ГПК) для дайджеста.
+
+    Строки — из боевых карточек (разбор юриста 12.08.2026: 2-3974/2026
+    Нижневартовский, 2-6650/2026 Сургутский): sudrf клеит шапку поля
+    «Результат» и причину без разделителя.
+    """
+
+    def test_refusal_of_claim_glued(self):
+        assert fi_closure_reason(
+            "Производство по делу ПРЕКРАЩЕНОИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА "
+            "и отказ принят судом"
+        ) == "в связи с отказом истца от иска"
+
+    def test_settlement_glued(self):
+        assert fi_closure_reason(
+            "Производство по делу ПРЕКРАЩЕНОСТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ "
+            "СОГЛАШЕНИЕ и оно утверждено судом"
+        ) == "в связи с утверждением мирового соглашения"
+
+    def test_unknown_reason_falls_back_to_lowercase_remainder(self):
+        assert fi_closure_reason(
+            "Производство по делу ПРЕКРАЩЕНОДЕЛО НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ "
+            "В ПОРЯДКЕ ГРАЖДАНСКОГО СУДОПРОИЗВОДСТВА"
+        ) == ("дело не подлежит рассмотрению в порядке "
+              "гражданского судопроизводства")
+
+    def test_bare_label_without_reason_is_empty(self):
+        # Голый ярлык кладёт фолбэк extract_fi_verdict_from_events —
+        # причиной он не является.
+        assert fi_closure_reason("прекращено") == ""
+
+    def test_bare_label_takes_reason_from_last_event(self):
+        ev = ("Судебное заседание. 11:00. 117. Производство по делу "
+              "прекращено. ИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА и отказ принят судом. "
+              "07.07.2026")
+        assert (fi_closure_reason("прекращено", ev)
+                == "в связи с отказом истца от иска")
+
+    def test_no_consideration_plaintiff_no_show(self):
+        assert fi_closure_reason(
+            "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ "
+            "(не просивший о разбирательстве дела в его отсутствие) "
+            "НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ"
+        ) == "истец не явился в суд по вторичному вызову"
+
+    def test_no_consideration_parties_no_show(self):
+        assert fi_closure_reason(
+            "Заявление ОСТАВЛЕНО БЕЗ РАССМОТРЕНИЯСТОРОНЫ (не просившие о "
+            "разбирательстве дела в их отсутствие) НЕ ЯВИЛИСЬ В СУД ПО "
+            "ВТОРИЧНОМУ ВЫЗОВУ"
+        ) == "стороны не явились в суд по вторичному вызову"
+
+    def test_empty_inputs(self):
+        assert fi_closure_reason("") == ""
+        assert fi_closure_reason("", "") == ""
+
+    def test_event_without_closure_marker_is_silent(self):
+        assert fi_closure_reason(
+            "прекращено",
+            "Судебное заседание. Заседание отложено. 01.08.2026") == ""
+
+
 class TestFiTerminationDetails:
     """Гейт эмиссии и сборка details для события fi_returned."""
 
