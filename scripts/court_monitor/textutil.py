@@ -746,3 +746,96 @@ def _bare_case_number(num: str) -> str:
         bare = s.split("(")[0].strip()
         return bare or s
     return s
+
+
+# ── Причина процессуального закрытия дела (ст. 220/222 ГПК) ──
+# Поле «Результат» карточки клеит шапку и причину БЕЗ разделителя
+# («Производство по делу ПРЕКРАЩЕНОИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА…»), поэтому
+# шапка срезается регэкспом с начала строки, а не сплитом по знакам.
+_FI_CLOSURE_HEAD_RX = re.compile(
+    r"^(?:производство\s+(?:по\s+делу\s+)?прекращено"
+    r"|(?:иск\w*|заявлени\w*|жалоб\w*|материал\w*)?\s*(?:\([^)]*\)\s*)?"
+    r"оставлен\w*\s+без\s+рассмотрения)[\s.:,;-]*",
+    re.IGNORECASE,
+)
+
+# Голый ярлык вердикта без шапки — то, что кладёт фолбэк
+# extract_fi_verdict_from_events; причиной не является.
+_FI_CLOSURE_BARE_LABEL_RX = re.compile(
+    r"^(?:прекращено|оставлен\w*\s+без\s+рассмотрения)[\s.:,;-]*",
+    re.IGNORECASE,
+)
+
+# Формула закрытия внутри текста события — для поиска причины в last_event
+# (там она лежит сегментом сразу ПОСЛЕ формулы, перед датой публикации).
+_FI_CLOSURE_EVENT_MARKER_RX = re.compile(
+    r"(?:производство\s+(?:по\s+делу\s+)?прекращено"
+    r"|оставлен\w*\s+без\s+рассмотрения)[\s.:,;-]*",
+    re.IGNORECASE,
+)
+
+# Канонизация типовых формул sudrf: КАПС-остаток поля «Результат» заменяется
+# юридически точной формулировкой (просьба юриста 12.08.2026). Всё прочее
+# уходит в фолбэк — подчищенный остаток строки lowercase.
+_FI_CLOSURE_CANON = (
+    (re.compile(r"отказ\w*\s+(?:истц\w+\s+)?от\s+иска", re.IGNORECASE),
+     "в связи с отказом истца от иска"),
+    (re.compile(r"миров\w+\s+соглашени", re.IGNORECASE),
+     "в связи с утверждением мирового соглашения"),
+    (re.compile(r"сторон\w*\s*(?:\([^)]*\)\s*)?не\s+явил\w+\s+в\s+суд\s+по\s+вторичному\s+вызову",
+                re.IGNORECASE),
+     "стороны не явились в суд по вторичному вызову"),
+    (re.compile(r"не\s+явил\w+\s+в\s+суд\s+по\s+вторичному\s+вызову",
+                re.IGNORECASE),
+     "истец не явился в суд по вторичному вызову"),
+)
+
+_FI_CLOSURE_TAIL_DATE_RX = re.compile(r"\s*\d{2}\.\d{2}\.\d{4}\s*$")
+
+
+def _closure_canon_or_clean(text: str) -> str:
+    """Каноническая формулировка причины или подчищенный остаток lowercase."""
+    if not text:
+        return ""
+    for rx, canon in _FI_CLOSURE_CANON:
+        if rx.search(text):
+            return canon
+    cleaned = _FI_CLOSURE_TAIL_DATE_RX.sub("", text)
+    # Скобочные пояснения суда («(не просивший о разбирательстве…)») — шум.
+    cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.;:-—")
+    return cleaned.lower()
+
+
+def fi_closure_reason(raw_result: str, last_event: str = "") -> str:
+    """Причина прекращения производства / оставления иска без рассмотрения.
+
+    Источник №1 — поле «Результат» карточки (в details дайджеста —
+    raw_result): срезаем шапку, остаток канонизируем. Источник №2 —
+    last_event: когда «Результат» пуст и вердикт добыт фолбэком из событий,
+    raw_result — голый ярлык («прекращено») без причины, а в строке движения
+    причина лежит сразу после формулы закрытия («…Производство по делу
+    прекращено. ИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА и отказ принят судом. 07.07.2026»).
+    Ничего не распознали — пустая строка: рендер печатает закрытие без
+    скобки с причиной, а не ломается.
+    """
+    text = (raw_result or "").strip()
+    if text:
+        headless = _FI_CLOSURE_HEAD_RX.sub("", text, count=1)
+        headless = _FI_CLOSURE_BARE_LABEL_RX.sub("", headless, count=1).strip()
+        reason = _closure_canon_or_clean(headless)
+        if reason:
+            return reason
+    ev = (last_event or "").strip()
+    if not ev:
+        return ""
+    # Каноническая формула видна в любом месте события — берём её сразу.
+    for rx, canon in _FI_CLOSURE_CANON:
+        if rx.search(ev):
+            return canon
+    m = _FI_CLOSURE_EVENT_MARKER_RX.search(ev)
+    if not m:
+        return ""
+    tail = _FI_CLOSURE_TAIL_DATE_RX.sub("", ev[m.end():])
+    seg = re.split(r"[.;]", tail)[0].strip()
+    return _closure_canon_or_clean(seg)

@@ -63,7 +63,7 @@ high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 1373](../../scripts/court_monitor/digest/template.py#L1373). Собирает весь HTML дайджеста
+[Строка 1395](../../scripts/court_monitor/digest/template.py#L1395). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.

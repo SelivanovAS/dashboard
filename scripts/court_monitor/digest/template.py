@@ -32,7 +32,7 @@ from court_monitor.storage import load_json
 from court_monitor.textutil import (
     escape_html, shorten_party_name, shorten_court_name, shorten_bailiff_name,
     _bare_case_number, parties_short, parse_date, case_id_uid, ROLE_GENITIVE,
-    plural_ru, appellant_role_words,
+    plural_ru, appellant_role_words, fi_closure_reason,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -898,6 +898,17 @@ _FI_TERMINATION_LABELS = {
 }
 
 
+# Процессуальные закрытия, идущие каналом fi_resolved (статус «Решено» их
+# и приносит): решения по существу тут НЕТ, «вынесено решение: прекращено»
+# дезориентировало юриста (разбор 12.08.2026, дела 2-3974/2026 и 2-6650/2026).
+# Ключ — details["verdict_label"], значение — шапка строки вместо
+# «вынесено решение»; причина добывается fi_closure_reason из raw_result.
+_FI_CLOSURE_HEADS = {
+    "прекращено": "производство по делу прекращено",
+    "оставлено без рассмотрения": "иск оставлен без рассмотрения",
+}
+
+
 # Слова-роли из карточки: вкладка «Обжалование» в поле «Заявитель» отдаёт
 # «ИСТЕЦ»/«ОТВЕТЧИК» вместо имени. В дайджесте показываем НАИМЕНОВАНИЕ лица,
 # а не статус (просьба юриста 07.07.2026: «апеллянт: Истец Истец» → имя лица).
@@ -1181,9 +1192,20 @@ def _bank_event_phrases(ch: dict) -> list[str]:
             # старые контексты replay живут без пометки.
             v = (d.get("verdict_label") or "").strip()
             dd = (d.get("decision_date") or "").strip()
-            ph = ("⚖️ <b>вынесено решение</b>"
-                  + (f" {escape_html(dd)}" if dd else "")
-                  + (f": {escape_html(v)}" if v else ""))
+            closure_head = _FI_CLOSURE_HEADS.get(v)
+            if closure_head:
+                # Прекращено / без рассмотрения — определение, не решение;
+                # причина из «Результата» карточки (raw_result есть и в
+                # старых контекстах — replay печатает исправленную строку).
+                reason = fi_closure_reason(
+                    d.get("raw_result", ""), d.get("last_event", ""))
+                ph = (f"⚖️ <b>{closure_head}</b>"
+                      + (f" {escape_html(dd)}" if dd else "")
+                      + (f" ({escape_html(reason)})" if reason else ""))
+            else:
+                ph = ("⚖️ <b>вынесено решение</b>"
+                      + (f" {escape_html(dd)}" if dd else "")
+                      + (f": {escape_html(v)}" if v else ""))
             if d.get("default_judgment"):
                 ph += " (🌙 заочное)"
             out.append(ph)
@@ -1896,12 +1918,26 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             head_tail = (" | " + " | ".join(head_extras)) if head_extras else ""
             fi_block.append(f"{link} ({court}) — {pl} vs {df}{head_tail}")
             # Строка 2: дата вынесения + исход.
-            decision_parts: list[str] = [
-                f"{dec_date} вынесено решение" if dec_date
-                else "Вынесено решение"
-            ]
-            if verdict:
-                decision_parts.append(f"<b>Итог:</b> {verdict}")
+            closure_head = _FI_CLOSURE_HEADS.get(
+                (d.get("verdict_label") or "").strip())
+            if closure_head:
+                # Процессуальное закрытие: не «вынесено решение», а
+                # определение — шапка называет его прямо, причина в скобках,
+                # дублирующий «Итог: прекращено» не печатается.
+                reason = fi_closure_reason(
+                    d.get("raw_result", ""), d.get("last_event", ""))
+                head = (f"{dec_date} {closure_head}" if dec_date
+                        else closure_head[:1].upper() + closure_head[1:])
+                decision_parts: list[str] = [
+                    head + (f" ({escape_html(reason)})" if reason else "")
+                ]
+            else:
+                decision_parts = [
+                    f"{dec_date} вынесено решение" if dec_date
+                    else "Вынесено решение"
+                ]
+                if verdict:
+                    decision_parts.append(f"<b>Итог:</b> {verdict}")
             if bank_out:
                 decision_parts.append(f"<b>Для банка:</b> {bank_out}")
             # Банк исключён из сторон / переведён в 3-е лицо — явный нейтралитет
