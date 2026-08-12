@@ -3633,6 +3633,18 @@ class TestBackfillFiLinks:
         assert cm_linking.backfill_fi_links(cases) == 0
         assert "link_backfill_checked_at" not in cases[0]["first_instance"]
 
+    def test_outage_page_does_not_stamp(self, monkeypatch):
+        """Заглушка аутейджа (HTTP 200 без таблиц, класс 20.07.2026) — сбой
+        инфраструктуры, а не «дела нет»: недельный штамп не ставится, иначе
+        однодневный аутейдж откладывал бы дослинк у всей очереди."""
+        outage = ("<html>Информация временно недоступна. "
+                  "Приносим свои извинения. "
+                  "Обратитесь непосредственно в суд.</html>")
+        monkeypatch.setattr(cm_linking, "fetch_page", lambda url, **kw: outage)
+        cases = [self._case()]
+        assert cm_linking.backfill_fi_links(cases) == 0
+        assert "link_backfill_checked_at" not in cases[0]["first_instance"]
+
 
 # ── classify_appellant_role: слово-роль vs имя ──────────────────────────────
 class TestClassifyAppellantRole:

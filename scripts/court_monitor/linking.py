@@ -28,7 +28,8 @@ from court_monitor.lifecycle import (
 from court_monitor.netutil import fetch_page, polite_delay
 from court_monitor.parsing import (
     parse_cassation_card, classify_cassation_outcome, cassation_remanded_to,
-    find_fi_case_link, is_no_data_page, parties_from_participants,
+    detect_captcha_challenge, find_fi_case_link, is_no_data_page,
+    looks_like_outage_page, parties_from_participants,
 )
 from court_monitor.storage import (
     load_cassation_acts, save_cassation_acts, _cassation_act_key,
@@ -399,6 +400,17 @@ def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
             log.warning(
                 f"  backfill_fi_links: {num} ({court.name}) — поиск по номеру "
                 f"не загрузился"
+            )
+            continue
+        if looks_like_outage_page(html) or detect_captcha_challenge(html):
+            # Заглушка недоступности (HTTP 200 «Информация временно
+            # недоступна», аутейдж класса 20.07.2026) или проверочный код —
+            # сбой инфраструктуры, а не «дела нет»: штамп не ставим, как и
+            # при сетевом сбое, иначе однодневный аутейдж откладывал бы
+            # дослинк на LINK_BACKFILL_RETRY_DAYS у всей очереди.
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — поиск пришёл "
+                f"заглушкой/кодом, ретрай следующим прогоном"
             )
             continue
         if is_no_data_page(html):
