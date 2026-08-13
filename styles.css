@@ -802,7 +802,9 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-writ-interim { background:var(--indigo-100); color:var(--indigo-700); }
 /* «🌙 Заочное» — решение в заочном производстве (ст. 233 ГПК): свой порядок
    вступления в силу. Приглушённый серый — информирует, не тревожит
-   (тревожная гамма занята порогами aw-*) */
+   (тревожная гамма занята порогами aw-*). В списках у решённого дела признак
+   печатается тихой меткой (.state-quiet), пилюля остаётся hero drawer'а и
+   делам, у которых результат снят ремонтом. */
 .badge-default-judgment { background:var(--slate-100); color:var(--slate-700); }
 /* Особый порядок отмены заочного решения (ст. 237-243 ГПК). «Отмена заочного»
    — заявление ответчика на рассмотрении (взыскание под угрозой), «Заочное
@@ -863,18 +865,38 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 
 .badge-cat { background:var(--bg-3); color:var(--fg-2); font-weight:var(--fw-medium); border-radius:var(--radius-xs); font-size:var(--fs-2xs); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; padding:2px 7px; }
 .badge-act    { display:inline-block; padding:2px 7px; border-radius:var(--radius-xs); background:var(--blue-100); color:var(--blue-700); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); }
-.badge-act-no { display:inline-block; padding:2px 7px; border-radius:var(--radius-xs); background:var(--bg-3); color:var(--fg-3); font-size:var(--fs-2xs); }
 
 .cell-state { display:flex; flex-direction:column; gap:4px; align-items:flex-start; line-height:1.3; }
+/* Пилюля исхода/статуса не должна вылезать за свою колонку: у .badge стоит
+   nowrap, и на узкой карточке (320px — колонка ≈153px) длинный исход
+   («Удовл-но частично», «Оставлено без рассмотрения») наезжал на дату
+   заседания справа. Разрешаем перенос ТОЛЬКО прямому потомку .cell-state
+   (ряд метаданных со своими плашками не трогаем); flex-wrap обязателен —
+   у .badge display:inline-flex, одного white-space мало. Пока текст влезает
+   (375px и шире, вся десктопная таблица), правило ничего не меняет. */
+.cell-state > .badge { max-width:100%; white-space:normal; flex-wrap:wrap; text-align:left; }
 .cell-state .state-sub { font-size:var(--fs-2xs); color:var(--fg-3); }
 /* Тип решения и публикация акта — единая строка метаданных под результатом:
-   «🌙 Заочное  Акт не опубликован». Мобильное правило ниже поднимает все
-   обычные .badge до 13px, поэтому здесь явно сохраняем обоим элементам один
-   компактный кегль 11px. На совсем узком экране перенос разрешён. */
+   «🌙 заочное · акт не опубликован». Плашками остались только события —
+   синяя «Акт 12.08» и цветные состояния отмены заочного; факты-отсутствия
+   идут тихим текстом (.state-quiet), кегль и цвет наследуют от .state-sub.
+   Мобильное правило ниже поднимает все обычные .badge до 13px, поэтому
+   плашкам здесь явно сохраняем компактный кегль 11px. На совсем узком экране
+   перенос разрешён. */
 .cell-state .state-decision-meta { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+/* Тихий текст, открывающий ряд, сдвигаем на горизонтальный отступ пилюли
+   (.badge padding:3px 9px): иначе он начинается от края ячейки, а текст
+   исхода — на 9px правее, и строка «акт не опубликован» читается съехавшей
+   влево из-под бейджа. Плашкам сдвиг НЕ даём: они выравниваются по краю
+   пилюли, плашка с плашкой — в одну линию. */
+.cell-state .state-decision-meta > .state-quiet:first-child { margin-left:9px; }
 .cell-state .state-decision-meta .badge,
-.cell-state .state-decision-meta .badge-act,
-.cell-state .state-decision-meta .badge-act-no { font-size:var(--fs-2xs); }
+.cell-state .state-decision-meta .badge-act { font-size:var(--fs-2xs); }
+/* Разделитель между тихими метками — псевдоэлементом, а не в разметке: так он
+   не появится ни перед первой меткой, ни рядом с плашкой. Вешаем его на
+   ПРЕДЫДУЩУЮ метку (::after), а не на следующую: при переносе ряда «·» иначе
+   встаёт в начало второй строки и читается как маркер списка. */
+.cell-state .state-decision-meta .state-quiet:has(+ .state-quiet)::after { content:' ·'; }
 
 .cat-role-cell { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
 .cat-role-cell .badge { font-size:var(--fs-2xs); padding:2px 7px; }
@@ -884,7 +906,12 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .next-date-warn { color:var(--amber-600); font-style:italic; font-size:var(--fs-2xs); }
 .court-cell { font-size:var(--fs-xs); color:var(--fg-2); line-height:1.35; }
 .result-cell { display:flex; flex-direction:column; gap:2px; }
-.badge-icon { font-size:var(--fs-2xs); line-height:1; }
+/* Значок исхода внутри пилюли («⊘», «—», «↩», «◐», «⇥»). Кегль наследуем от
+   пилюли, а не прибиваем к 11px: на карточке телефона текст 15px, и вдвое
+   меньший знак читался грязью (разбор 13.08.2026). ✓/✕ у favorable/
+   unfavorable идут инлайн-стилем мимо этого класса — они и были нормального
+   размера, отсюда и разнобой. */
+.badge-icon { font-size:inherit; line-height:1; font-weight:var(--fw-bold); }
 
 /* «NEW» / Архив / стадии в виде плотных пилюль */
 .badge-new      { background:var(--amber-500); color:#fff; font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
