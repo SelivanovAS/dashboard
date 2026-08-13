@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=151">
+<link rel="stylesheet" href="styles.css?v=152">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -156,7 +156,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       <span id="new-cases-text"></span>
       <span class="banner-hint">Нажмите, чтобы отфильтровать</span>
-      <button class="dismiss" onclick="dismissNewBanner(event)" title="Скрыть">&times;</button>
+      <button class="dismiss btn-x" onclick="dismissNewBanner(event)" title="Скрыть" aria-label="Скрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
     </div>
     <div id="error-banner" class="error-banner" style="display:none;"></div>
 
@@ -166,7 +166,7 @@
       <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
         <span class="digest-title" id="digest-title">📰 Дайджест</span>
         <span class="digest-meta" id="digest-meta"></span>
-        <button class="digest-close" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
+        <button class="digest-close btn-x" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
         </button>
         <button class="digest-toggle" id="digest-toggle" aria-label="Свернуть/развернуть" type="button" onclick="event.stopPropagation();toggleDigest();">
@@ -198,7 +198,7 @@
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
-          <button class="search-clear" id="search-clear" onclick="clearSearch()" title="Очистить">&times;</button>
+          <button class="search-clear btn-x" id="search-clear" onclick="clearSearch()" title="Очистить" aria-label="Очистить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
         </div>
         <button class="filters-btn" id="filters-btn" onclick="openFiltersSheet()" aria-label="Фильтры">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
@@ -281,7 +281,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header">
       <span>Фильтры</span>
-      <button class="sheet-close" onclick="closeFiltersSheet()" aria-label="Закрыть">&times;</button>
+      <button class="sheet-close btn-x" onclick="closeFiltersSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
     </div>
     <div class="sheet-body" id="filters-sheet-body"></div>
     <div class="sheet-footer">
@@ -292,6 +292,6 @@
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=151" defer></script>
+<script src="app.js?v=152" defer></script>
 </body>
 </html>

@@ -414,6 +414,23 @@ body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
 
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { overflow-x:hidden; max-width:100%; }
+
+/* Контракт ВСЕХ кнопок «закрыть»: содержимое — только svg, никакого
+   текстового «×». Знак умножения U+00D7 сидит на математической оси
+   шрифта, то есть всегда выше оптического центра, и flex его не спасает:
+   flex центрирует строчный бокс, а не чернила глифа. Плюс font-family у
+   <button> не наследуется (глобального `button{font:inherit}` в проекте
+   нет) — крестик рисовался системным шрифтом, и величина сдвига была
+   разной на разных ОС. Геометрия svg симметрична, шрифт в ней не
+   участвует вовсе.
+   ⚠️ display:block у svg обязателен: инлайновый svg тянет за собой
+   строчный бокс с подстрочным просветом и ломает центровку заново.
+   ⚠️ Правило стоит В НАЧАЛЕ файла намеренно: у .search-clear и
+   .digest-close свой display:none (показываются по классу), и при равной
+   специфичности выигрывает тот, кто ниже — стой .btn-x после них, обе
+   кнопки были бы всегда видимы. */
+.btn-x { display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.btn-x svg { display:block; }
 body {
   font-family: var(--font-sans);
   font-weight: var(--fw-medium);
@@ -602,9 +619,12 @@ body {
 .search-box svg { width:17px; height:17px; color:var(--fg-3); flex-shrink:0; }
 .search-input { border:none; outline:none; background:transparent; font-size:var(--fs-lg); color:var(--fg-1); flex:1; font-family:var(--font-sans); font-weight:var(--fw-medium); }
 .search-input::placeholder { color:var(--fg-4); }
-.search-clear { display:none; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; border:none; background:var(--bg-4); color:var(--fg-2); font-size:var(--fs-xs); cursor:pointer; line-height:1; padding:0; transition:background 120ms var(--ease-out); }
+/* Кружок с заливкой показывает любой сдвиг крестика лучше всех — поэтому
+   здесь особенно важен svg, а не текстовый глиф (см. .btn-x). */
+.search-clear { display:none; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; border:none; background:var(--bg-4); color:var(--fg-2); cursor:pointer; padding:0; transition:background 120ms var(--ease-out); }
 .search-clear:hover { background:var(--border-strong); }
-.search-clear.visible { display:flex; }
+.search-clear.visible { display:inline-flex; }
+.search-clear svg { width:11px; height:11px; }
 .filter-select { padding:7px 14px; border:1px solid var(--border); border-radius:var(--radius-pill); font-size:var(--fs-sm); background:var(--bg-1); color:var(--fg-1); cursor:pointer; font-family:var(--font-sans); font-weight:var(--fw-medium); transition:border-color 120ms var(--ease-out); }
 .filter-select:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 
@@ -672,7 +692,8 @@ body {
 .new-cases-banner svg { width:18px; height:18px; flex-shrink:0; }
 .new-cases-banner strong { font-weight:var(--fw-bold); }
 .new-cases-banner .banner-hint { font-size:var(--fs-2xs); opacity:.7; margin-left:4px; }
-.new-cases-banner .dismiss { margin-left:auto; background:none; border:none; color:var(--amber-700); cursor:pointer; font-size:16px; opacity:.6; transition:opacity 120ms var(--ease-out); padding:4px; }
+.new-cases-banner .dismiss { margin-left:auto; flex-shrink:0; width:28px; height:28px; background:none; border:none; border-radius:50%; color:var(--amber-700); cursor:pointer; opacity:.6; transition:opacity 120ms var(--ease-out); }
+.new-cases-banner .dismiss svg { width:16px; height:16px; }
 .new-cases-banner .dismiss:hover { opacity:1; }
 
 /* Кросс-поиск (#search-cross-hint): «Найдено N в другой картотеке» при
@@ -1040,7 +1061,8 @@ tr.detail-row { display:none; }
 .drawer-title .dt-main { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-xl); letter-spacing:-0.01em; line-height:1.2; color:var(--fg-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .drawer-title .dt-main .watch-btn { width:34px; height:34px; font-size:22px; margin-left:0; flex-shrink:0; }
 .drawer-title .dt-sub { font-size:var(--fs-2xs); color:var(--fg-3); margin-top:2px; }
-.drawer-close { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; font-size:24px; line-height:1; }
+.drawer-close { width:40px; height:40px; flex-shrink:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; }
+.drawer-close svg { width:18px; height:18px; }
 .drawer-close:hover { background:var(--bg-3); color:var(--fg-1); }
 /* Padding-bottom = высота футера + safe-area, чтобы последний элемент
    не уходил под полупрозрачное «стекло» drawer-footer. */
@@ -1161,7 +1183,10 @@ tr.detail-row { display:none; }
 .filters-sheet.open { transform:translateY(0); }
 .sheet-handle { align-self:center; width:40px; height:4px; background:var(--border); border-radius:var(--radius-pill); margin:6px 0 2px; }
 .sheet-header { display:flex; align-items:center; justify-content:space-between; padding:4px 20px 8px; font-size:var(--fs-xl); font-weight:var(--fw-bold); color:var(--fg-1); border-bottom:1px solid var(--border); }
-.sheet-close { background:none; border:none; font-size:24px; line-height:1; color:var(--fg-4); cursor:pointer; padding:2px 8px; }
+/* Фикс-бокс вместо padding'а: прежний хитбокс был ~24×28 — для пальца
+   мало, а шторка фильтров живёт только на телефоне. */
+.sheet-close { width:36px; height:36px; flex-shrink:0; background:none; border:none; border-radius:50%; color:var(--fg-4); cursor:pointer; }
+.sheet-close svg { width:20px; height:20px; }
 .sheet-body { padding:10px 20px; overflow-y:auto; flex:1; }
 .sheet-body .chip-bar,
 .sheet-body { display:flex; flex-wrap:wrap; gap:6px; }
@@ -1407,8 +1432,9 @@ tr.detail-row { display:none; }
   .cat-bar-label { font-size:var(--fs-md); }
   .cat-bar-count { font-size:var(--fs-sm); }
   .search-input { font-size:16px; }
-  /* На мобиле «×» крупнее и с большим хитбоксом — палец не промахивается. */
-  .search-clear { width:28px; height:28px; font-size:16px; margin-right:-4px; }
+  /* На мобиле крестик крупнее и с большим хитбоксом — палец не промахивается. */
+  .search-clear { width:28px; height:28px; margin-right:-4px; }
+  .search-clear svg { width:16px; height:16px; }
   .filter-select { font-size:16px; }
   .table-counter { font-size:var(--fs-md); }
   .badge { font-size:var(--fs-sm); }
