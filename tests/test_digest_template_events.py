@@ -1053,15 +1053,38 @@ class AppealEventMatrixTest(unittest.TestCase):
         self.assertIn("Смирнова А.В. vs УК Комфорт", html)
         self.assertIn("категория: жилищн. спор", html)
         self.assertIn("банк — третье лицо", html)
-        # Строка 2: «{дата} вынесено определение — {результат} (жалоба …)»
-        # — суффикс апеллянта с 30.07.2026 («по чьей жалобе рассмотрено»).
+        # Строка 2 (13.08.2026): нормализованный ярлык и знак «Для банка»
+        # вместо сырого поля «Результат» — они считались при эмите всегда,
+        # но выводились только в секции текстов актов. Суффикс апеллянта
+        # («по чьей жалобе», 30.07.2026) сохраняется.
         self.assertIn(
-            "28.07.2026 вынесено определение — "
-            "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ "
+            "28.07.2026 вынесено определение. "
+            "<b>Итог:</b> решение оставлено без изменения, "
+            "жалоба — без удовлетворения. "
+            "<b>Для банка:</b> нейтрально (банк — третье лицо). "
             "(жалоба истца Смирнова А.В.)",
             html,
         )
+        # Сырое поле не дублируется рядом с ярлыком.
+        self.assertNotIn("ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
+
+    def test_new_result_legacy_context_without_verdict_label(self):
+        """Старый контекст (--replay-last) без verdict_label — прежняя
+        форма с сырым полем «Результат» (replay-safe фолбэк)."""
+        details = {"result": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+                   "hearing_date": "28.07.2026"}
+        ch = make_appeal_change(["new_result"])
+        ch["details"] = {**ch["details"], **details}
+        ch["details"].pop("verdict_label", None)
+        ch["details"].pop("bank_outcome", None)
+        html = render(changes=[ch])
+        self.assertIn(
+            "28.07.2026 вынесено определение — "
+            "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            html,
+        )
+        self.assertNotIn("<b>Итог:</b>", html)
 
     def test_new_act_in_published_texts_section(self):
         html = render(changes=[make_appeal_change(["new_act"])])
@@ -2084,6 +2107,249 @@ class SummarizerWiringTest(unittest.TestCase):
         self.assertIn("ПЕРЕСКАЗ_FIRST_INSTANCE", html)
         self.assertIn("ПЕРЕСКАЗ_APPEAL", html)
         self.assertIn("ПЕРЕСКАЗ_CASSATION", html)
+
+
+# ── Доработки основного трека 13.08.2026 ─────────────────────────────────────
+
+class MainTrackAdditions13AugTest(unittest.TestCase):
+    """Разбор «что уходит в дайджест» по основному прогону: новые ветки 3.2,
+    дата решения в 3.6, тип заседания скобками, нейтральная полярность."""
+
+    def test_fi_default_copy_served_in_3_2(self):
+        """Д2: эмит общий для треков, ветка была только в банк-секции —
+        в основной 3.2 выходила «голая» строка дела без текста события."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_default_copy_served"], {"copy_served_date": "12.08.2026"})])
+        self.assertIn(
+            "🌙 копия заочного решения вручена ответчику (12.08.2026) "
+            "— 7 раб. дн. на заявление об отмене",
+            html,
+        )
+
+    def test_fi_post_decision_hearing_in_3_2(self):
+        """П3: заседание по решённому делу (расходы/индексация против
+        банка) — гард case_decided глушил их полностью."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_post_decision_hearing"],
+            {"hearing_date": "25.08.2026", "hearing_time": "11:00",
+             "hearing_topic": "индексация присужденных сумм"})])
+        self.assertIn(
+            "📅 заседание по решённому делу — <b>25.08.2026 в 11:00</b> "
+            "(индексация присужденных сумм)",
+            html,
+        )
+
+    def test_fi_post_decision_hearing_counted_in_summary(self):
+        html = render(fi_changes=[make_fi_change(
+            ["fi_post_decision_hearing"], {"hearing_date": "25.08.2026"})])
+        self.assertIn("📅 1 заседание в 1-й инст.", html)
+
+    def test_hearing_type_paren_for_non_default(self):
+        """П4(д): «беседа»/«подготовка дела» раньше схлопывались в родовое
+        «заседание». Скобочная форма — род существительного не ломает шаблон."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_hearing_next"],
+            {"hearing_date": "15.08.2026", "hearing_time": "10:30",
+             "hearing_type": "беседа"})])
+        self.assertIn(
+            "📅 заседание назначено на <b>15.08.2026 в 10:30</b> (беседа)",
+            html,
+        )
+        html2 = render(fi_changes=[make_fi_change(
+            ["fi_hearing_postponed"],
+            {"hearing_date": "20.09.2026", "hearing_time": "12:00",
+             "hearing_type": "предварительное заседание"})])
+        self.assertIn(
+            "🔁 заседание отложено на <b>20.09.2026 в 12:00</b> "
+            "(предварительное заседание)",
+            html2,
+        )
+
+    def test_refused_wording_neutral_for_defendant_bank(self):
+        """П4(е): прежнее «✅ … пошёл месяц на апелляцию» писалось с позиции
+        истца; в основной картотеке банк — ответчик, отказ по ЕГО заявлению
+        «галочкой» не отмечают."""
+        html = render(fi_changes=[make_fi_change(
+            ["fi_default_cancellation_refused"])])
+        self.assertIn(
+            "⚖️ в отмене заочного решения отказано (22.07.2026) "
+            "— открыт месячный срок на апелляцию",
+            html,
+        )
+        self.assertNotIn("✅", html)
+
+    def test_act_text_published_carries_decision_date(self):
+        """П4(б): «Итог» без даты решения читался как свежий исход при
+        поздней публикации текста (урок банк-секции 07.08)."""
+        html = render(fi_changes=[make_fi_change(["fi_act_text_published"])])
+        self.assertIn(
+            "<b>Итог:</b> иск удовлетворён (решение от 01.06.2026)", html
+        )
+
+    def test_act_text_published_legacy_without_decision_date(self):
+        ch = make_fi_change(["fi_act_text_published"])
+        ch["details"].pop("decision_date", None)
+        html = render(fi_changes=[ch])
+        self.assertIn("<b>Итог:</b> иск удовлетворён", html)
+        self.assertNotIn("(решение от", html)
+
+
+class AppealNewCaseFiNumberTest(unittest.TestCase):
+    """П4(в): номер дела 1-й инст. в строке 1 новой апелляции (строго в
+    строке 1 — линтер и postprocess считают дела по строкам с номерами)."""
+
+    def test_fi_number_in_line1(self):
+        c = make_appeal_new_case()
+        c["Номер дела 1 инстанции"] = "2-1234/2026"
+        html = render(new_cases=[c])
+        self.assertIn("(1-я инст.: 2-1234/2026)", html)
+        # Хвост в ТОЙ ЖЕ строке, что и якорь 33-номера.
+        line = next(l for l in html.split("\n") if "33-300/2026" in l)
+        self.assertIn("(1-я инст.: 2-1234/2026)", line)
+
+    def test_legacy_row_without_fi_number(self):
+        html = render(new_cases=[make_appeal_new_case()])
+        self.assertNotIn("(1-я инст.:", html)
+
+
+class CassationAdditions13AugTest(unittest.TestCase):
+    """П1/П2/П4(г): рендер заседаний кассации, «без движения» и хвоста
+    «куда направлено» при remanded."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        patcher = patch.object(
+            cm_config, "JSON_PATH",
+            os.path.join(self._tmp.name, "нет-такого-файла.json"),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_hearing_scheduled_single_type_renders(self):
+        """Change с единственным типом даёт якорь дела + строку заседания
+        (типо-независимая сборка), без строки поступления и лишнего «Итога»."""
+        html = render(cass_changes=[make_cass_change(
+            ["cass_hearing_scheduled"],
+            {"hearing_date": "25.08.2026", "hearing_time": "10:30"})])
+        self.assertIn("📑 <b>Касс. события (1):</b>", html)
+        self.assertIn(
+            "📅 Назначено судебное заседание на <b>25.08.2026 в 10:30</b>",
+            html,
+        )
+        self.assertNotIn("поступила касс. жалоба", html)
+        self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
+
+    def test_suspended_line_renders(self):
+        html = render(cass_changes=[make_cass_change(
+            ["cass_suspended"], {"suspended_until": "25.08.2026"})])
+        self.assertIn(
+            "⏸ жалоба оставлена без движения — срок устранения недостатков "
+            "до <b>25.08.2026</b>",
+            html,
+        )
+
+    def test_suspended_suppresses_accepted_marker(self):
+        """«Принято к производству» рядом с «без движения» избыточно:
+        жалоба очевидно принята, раз суд дал срок."""
+        html = render(cass_changes=[make_cass_change(
+            ["cass_suspended"],
+            {"suspended_until": "25.08.2026",
+             "review_result": "ПЕРЕДАНО НА РАССМОТРЕНИЕ, ВОЗБУЖДЕНО "
+                              "КАССАЦИОННОЕ ПРОИЗВОДСТВО"})])
+        self.assertIn("жалоба оставлена без движения", html)
+        self.assertNotIn("Принято к производству", html)
+
+    def test_remanded_outcome_carries_destination(self):
+        """П4(г): «куда направлено» вычислялось всегда, но не выводилось."""
+        html = render(cass_changes=[make_cass_change(
+            ["outcome_change"],
+            {"outcome": "cassation_remanded", "remanded_to": "appeal",
+             "decision_date": "05.08.2026"})])
+        self.assertIn(
+            "Отменено и направлено на новое рассмотрение "
+            "→ в суд апелляционной инстанции",
+            html,
+        )
+
+    def test_remanded_without_destination_no_tail(self):
+        """Старый контекст без remanded_to — без хвоста (replay-safe)."""
+        html = render(cass_changes=[make_cass_change(
+            ["outcome_change"], {"outcome": "cassation_remanded"})])
+        self.assertIn("Отменено и направлено на новое рассмотрение", html)
+        self.assertNotIn("→ в суд", html)
+
+    def test_remanded_tail_in_discovery(self):
+        c = make_cass_discovered()
+        c["cassation"]["outcome"] = "cassation_remanded"
+        c["cassation"]["remanded_to"] = "first_instance"
+        html = render(cass_discovered=[c])
+        self.assertIn(
+            "Отменено и направлено на новое рассмотрение "
+            "→ в суд первой инстанции",
+            html,
+        )
+
+    def test_summary_counts_cass_hearings(self):
+        html = render(cass_changes=[make_cass_change(
+            ["cass_hearing_scheduled"], {"hearing_date": "25.08.2026"})])
+        self.assertIn("📅 1 заседание кассации", html)
+
+
+class AppealSecondRoundMarkTest(unittest.TestCase):
+    """П5: пометка «повторное рассмотрение после кассации» у новых апелляций
+    второго круга — матч по свежему cases.json (к рендеру связка уже есть)."""
+
+    def _patch_json(self, cases: list[dict] | None):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = os.path.join(tmp.name, "cases.json")
+        if cases is not None:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"version": 1, "cases": cases}, f, ensure_ascii=False)
+        patcher = patch.object(cm_config, "JSON_PATH", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _round2_case(appeal_num: str = "33-300/2026") -> dict:
+        return {
+            "id": "2-900/2025",
+            "current_stage": "appeal",
+            "round": 2,
+            "history": [{"round": 1, "reason": "cassation_remanded_to_appeal",
+                         "first_instance": {}, "appeal": {}, "cassation": {}}],
+            "first_instance": {"case_number": "2-900/2025"},
+            "appeal": {"case_number": appeal_num,
+                       "court_domain": "sud--hmao.sudrf.ru"},
+        }
+
+    def test_second_round_marked(self):
+        self._patch_json([self._round2_case()])
+        c = make_appeal_new_case()
+        c["_appeal_domain"] = "sud--hmao.sudrf.ru"
+        html = render(new_cases=[c])
+        self.assertIn("🔁 повторное рассмотрение после кассации", html)
+
+    def test_domain_fallback_matches(self):
+        """Старый контекст без _appeal_domain — фолбэк-ключ с пустым доменом."""
+        self._patch_json([self._round2_case()])
+        html = render(new_cases=[make_appeal_new_case()])
+        self.assertIn("🔁 повторное рассмотрение после кассации", html)
+
+    def test_first_round_not_marked(self):
+        case = self._round2_case()
+        case["round"] = 1
+        case["history"] = []
+        self._patch_json([case])
+        html = render(new_cases=[make_appeal_new_case()])
+        self.assertNotIn("повторное рассмотрение", html)
+
+    def test_missing_json_degrades_silently(self):
+        self._patch_json(None)  # файла нет
+        html = render(new_cases=[make_appeal_new_case()])
+        self.assertNotIn("повторное рассмотрение", html)
+        self.assertIn("📥 <b>Новые дела (1):</b>", html)
 
 
 if __name__ == "__main__":

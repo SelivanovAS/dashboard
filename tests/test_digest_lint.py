@@ -262,6 +262,47 @@ class LintKillSwitchTest(unittest.TestCase):
         self.assertEqual(sent, [])
 
 
+class LintMainTrackAdditions13AugTest(unittest.TestCase):
+    """Новые строки основного прогона (13.08.2026) проходят линтер. Самая
+    опасная точка — номер дела 1-й инст. в строке 1 новой апелляции: счётчики
+    считают дела по строкам с номерами, второй номер в ТОЙ ЖЕ строке дела
+    удваивать счёт не должен."""
+
+    def test_new_lines_pass_lint(self):
+        appeal_new = {
+            "Номер дела": "33-300/2026",
+            "Истец": "Петров Пётр Петрович",
+            "Ответчик": "ПАО Сбербанк",
+            "Роль банка": "Ответчик",
+            "Категория": "Споры → Иски о взыскании сумм по кредитному договору",
+            "Суд 1 инстанции": "Сургутский городской суд",
+            "Дата поступления": "01.07.2026",
+            "Ссылка": "700800|eeee-ffff",
+            "Номер дела 1 инстанции": "2-1234/2026",
+        }
+        from tests.test_digest_template_events import make_cass_change
+        ctx = _ctx(
+            new_cases=[appeal_new],
+            fi_changes=[make_fi_change(
+                ["fi_post_decision_hearing"],
+                {"hearing_date": "25.08.2026", "hearing_time": "11:00"},
+            )],
+            cass_changes=[
+                make_cass_change(
+                    ["cass_hearing_scheduled"],
+                    {"hearing_date": "26.08.2026", "hearing_time": "10:00"},
+                ),
+                make_cass_change(
+                    ["cass_suspended"],
+                    {"suspended_until": "30.08.2026"},
+                    case="2-501/2025", cass_num="8Г-101/2026",
+                ),
+            ],
+        )
+        html = render(**ctx)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+
 class LintBankCalendarEventsTest(unittest.TestCase):
     """Новые события трека исков банка (13.08.2026) проходят линтер: одна
     строка с номером на запись, счётчик «ИСКИ БАНКА (N)» сходится."""

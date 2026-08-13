@@ -334,7 +334,11 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
             if ("fi_hearing_new" in ch["type"]
                 or "fi_hearing_next" in ch["type"]
                 or "fi_hearing_postponed" in ch["type"]
-                or "fi_hearing_recess" in ch["type"])
+                or "fi_hearing_recess" in ch["type"]
+                # Заседание по решённому делу — тоже заседание 1-й инст.
+                # (расходы/индексация; двойного счёта с банк-треком нет —
+                # track-записи изъяты из fi_changes до сводки).
+                or "fi_post_decision_hearing" in ch["type"])
         )
         fi_status = sum(1 for ch in fi_changes if "fi_status_change" in ch["type"])
         fi_acts = sum(1 for ch in fi_changes if "fi_act_published" in ch["type"])
@@ -518,11 +522,20 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
         cass_outcomes = sum(1 for ch in cass_changes if "outcome_change" in ch["type"])
         cass_reviews = sum(1 for ch in cass_changes if "review_result_change" in ch["type"])
         cass_news = sum(1 for ch in cass_changes if "new_cassation" in ch["type"])
+        cass_hearings = sum(
+            1 for ch in cass_changes if "cass_hearing_scheduled" in ch["type"]
+        )
         if cass_news:
             parts.append(
                 f"📥 {cass_news} "
                 + plural_ru(cass_news, 'касс. карточка', 'касс. карточки',
                             'касс. карточек')
+            )
+        if cass_hearings:
+            parts.append(
+                f"📅 {cass_hearings} "
+                + plural_ru(cass_hearings, 'заседание кассации',
+                            'заседания кассации', 'заседаний кассации')
             )
         if cass_reviews:
             parts.append(
@@ -639,6 +652,16 @@ def _fmt_hearing_dt(date: str, time: str) -> str:
     if not date:
         return ""
     return f"{date} в {time}" if time else date
+
+
+def _hearing_type_paren(d: dict) -> str:
+    """Скобочный хвост « (беседа)» для строк заседаний 3.2 (13.08.2026).
+
+    Тип печатаем только НЕ-родовой: «заседание» — дефолт, скобки не нужны.
+    Скобки вместо «назначено {тип} на» — род существительного («назначена
+    беседа», «назначена подготовка дела») сломал бы единый шаблон строки."""
+    ht = (d.get("hearing_type") or "").strip()
+    return f" ({escape_html(ht)})" if ht and ht != "заседание" else ""
 
 
 # ── Основная логика обновления ───────────────────────────────────────────────
@@ -1102,6 +1125,15 @@ def _bank_hearing_time(d: dict) -> str:
     нет», скрываем (то же правило, что _fmt_hearing_dt в 3.2)."""
     ht = (d.get("hearing_time") or "").strip()
     return "" if ht in ("00:00", "0:00") else ht
+
+
+# Куда возвращено дело при cassation_remanded — enum из cassation_remanded_to
+# (parsing/cassation.py). Русская фраза для хвоста «Итог: … → …»; неизвестное
+# значение хвоста не даёт.
+_REMANDED_TO_RU = {
+    "appeal": "в суд апелляционной инстанции",
+    "first_instance": "в суд первой инстанции",
+}
 
 
 def _bank_event_phrases(ch: dict) -> list[str]:
@@ -1811,7 +1843,14 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                             d.get("hearing_date", ""), d.get("hearing_time", "")
                         )
                     )
-                    ev_list.append(f"📅 заседание назначено на <b>{new_p}</b>")
+                    # Тип заседания скобками и только не-родовой (13.08.2026):
+                    # «беседа»/«подготовка дела» раньше схлопывались в
+                    # «заседание». Скобки вместо «назначено {тип} на» — род
+                    # («назначена беседа») сломал бы шаблон.
+                    ht32 = _hearing_type_paren(d)
+                    ev_list.append(
+                        f"📅 заседание назначено на <b>{new_p}</b>{ht32}"
+                    )
                 elif t == "fi_hearing_postponed":
                     new_p = escape_html(
                         _fmt_hearing_dt(
@@ -1820,7 +1859,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     )
                     # Только новая дата (старую больше не показываем —
                     # по запросу пользователя).
-                    ev_list.append(f"🔁 заседание отложено на <b>{new_p}</b>")
+                    ht32 = _hearing_type_paren(d)
+                    ev_list.append(
+                        f"🔁 заседание отложено на <b>{new_p}</b>{ht32}"
+                    )
                 elif t == "fi_hearing_recess":
                     new_p = escape_html(
                         _fmt_hearing_dt(
@@ -1970,11 +2012,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         + " — дело рассматривается заново"
                     )
                 elif t == "fi_default_cancellation_refused":
+                    # Без «✅» и «пошёл месяц» (13.08.2026): формулировка была
+                    # с позиции банка-истца, а в основной картотеке банк —
+                    # ответчик, и отказ по ЕГО заявлению «галочкой» не
+                    # отметишь. Банк-секция хранит свою (там истец).
                     dt = escape_html(d.get("cancel_outcome_date", ""))
                     ev_list.append(
-                        "✅ в отмене заочного решения отказано"
+                        "⚖️ в отмене заочного решения отказано"
                         + (f" ({dt})" if dt else "")
-                        + " — пошёл месяц на апелляцию"
+                        + " — открыт месячный срок на апелляцию"
                     )
                 elif t == "fi_default_copy_returned":
                     # Запускает формулу ВС для срока вступления в силу
@@ -1985,6 +2031,33 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                         "🌙 копия заочного решения возвратилась невручённой"
                         + (f" ({dt})" if dt else "")
                     )
+                elif t == "fi_default_copy_served":
+                    # Парное к возврату (13.08.2026): эмит общий для обоих
+                    # треков, а ветка была только в банк-секции — в основной
+                    # 3.2 выходила «голая» строка дела без текста события.
+                    dt = escape_html(d.get("copy_served_date", ""))
+                    ev_list.append(
+                        "🌙 копия заочного решения вручена ответчику"
+                        + (f" ({dt})" if dt else "")
+                        + " — 7 раб. дн. на заявление об отмене"
+                    )
+                elif t == "fi_post_decision_hearing":
+                    # Заседание по решённому делу (13.08.2026): в основной
+                    # картотеке это судебные расходы/индексация ПРОТИВ банка,
+                    # отсрочки должников — гард case_decided глушил их
+                    # полностью. Формат — зеркало банк-ветки.
+                    pdh = escape_html(
+                        _fmt_hearing_dt(
+                            d.get("hearing_date", ""), d.get("hearing_time", "")
+                        )
+                    )
+                    topic = escape_html(d.get("hearing_topic", "") or "")
+                    part = "📅 заседание по решённому делу"
+                    if pdh:
+                        part += f" — <b>{pdh}</b>"
+                    if topic:
+                        part += f" ({topic})"
+                    ev_list.append(part)
                 elif t == "fi_hearing_restart":
                     rd = escape_html(d.get("restart_date", ""))
                     nhd = escape_html(d.get("next_hearing_date", ""))
@@ -2156,7 +2229,15 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             fi_block.append(f"{link} — {pl} vs {df}")
             itog_parts: list[str] = []
             if verdict:
-                itog_parts.append(f"<b>Итог:</b> {verdict}")
+                # Дата решения (13.08.2026): суд публикует тексты задним
+                # числом, и «Итог» без даты читался как свежий исход — тот
+                # же урок, что в банк-секции (разбор 07.08). Ключ опционален,
+                # старые контексты живут без скобок.
+                dd36 = escape_html(d.get("decision_date", "") or "")
+                itog_parts.append(
+                    f"<b>Итог:</b> {verdict}"
+                    + (f" (решение от {dd36})" if dd36 else "")
+                )
             if bank_out:
                 itog_parts.append(f"<b>Для банка:</b> {bank_out}")
             if "fi_bank_role_changed" in ch["type"]:
@@ -2175,6 +2256,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         # убрать хвостовую пустую строку, если добавили
         if fi_block and fi_block[-1] == "":
             fi_block.pop()
+
+    # Актуальный cases.json — один load на рендер (13.08.2026): пометка
+    # «повторное рассмотрение после кассации» у новых апелляций (ниже) и
+    # подтяжка родительских полей кассационных событий (секция КАССАЦИЯ
+    # переиспользует). Переданный kwarg `cases` — legacy CSV-строки апелляции,
+    # для обоих потребителей не годится. Нет файла/битый — обе фичи молча
+    # деградируют (пометки нет, поля пустые), как и раньше.
+    try:
+        full_cases_for_cass = load_json(config.JSON_PATH).get("cases", []) or []
+    except (OSError, json.JSONDecodeError):
+        full_cases_for_cass = []
+    # Индекс «(домен апел. суда, bare апел. номера) → дело» для пометки
+    # второго круга: к моменту рендера link_cases уже отработал и cases.json
+    # сохранён (фазы 8 → 9), у дела нового круга в appeal лежит НОВЫЙ
+    # 33-номер. Фолбэк-ключ с пустым доменом — для строк без _appeal_domain
+    # (старые контексты replay).
+    case_by_appeal_num: dict[tuple, dict] = {}
+    for c_idx in full_cases_for_cass:
+        ap_idx = c_idx.get("appeal") or {}
+        _ap_bare = _bare_case_number((ap_idx.get("case_number") or "").strip())
+        if not _ap_bare:
+            continue
+        _ap_dom = (ap_idx.get("court_domain") or "").strip()
+        case_by_appeal_num.setdefault((_ap_dom, _ap_bare), c_idx)
+        case_by_appeal_num.setdefault(("", _ap_bare), c_idx)
 
     # ── Блок АПЕЛЛЯЦИЯ ──
     appeal_block: list[str] = []
@@ -2206,7 +2312,18 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              if role else "")
             prefix = f"{role_icon} " if role_icon else ""
             # Строка 1: номер + стороны (компакт-вёрстка, без отступов).
-            appeal_block.append(f"{link} {prefix}{pl} vs {df}")
+            # Номер дела 1-й инст. — хвостом СТРОКИ 1 (13.08.2026): юрист
+            # сразу видит, какое дело поехало наверх. ⚠️ Именно в строку 1:
+            # линтер и postprocess считают дела по строкам с номерами —
+            # отдельная строка удвоила бы счётчик секции. Ключа нет (старые
+            # контексты) → без хвоста.
+            fi_no = escape_html(
+                (c.get("Номер дела 1 инстанции") or "").strip()
+            )
+            appeal_block.append(
+                f"{link} {prefix}{pl} vs {df}"
+                + (f" (1-я инст.: {fi_no})" if fi_no else "")
+            )
             # Строка 2: суд 1 инст. | категория | банк (если не в сторонах).
             line2_parts: list[str] = []
             if court_fi:
@@ -2217,6 +2334,20 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 appeal_block.append(
                     " | ".join(line2_parts) + role_tail
                 )
+            # Повторное рассмотрение после кассации (13.08.2026): второй круг
+            # был неотличим от обычной новой апелляции, а приоритет у него
+            # другой. Матч по свежему cases.json; несматч → без пометки.
+            _rnd_case = (case_by_appeal_num.get(
+                ((c.get("_appeal_domain") or "").strip(),
+                 _bare_case_number((c.get("Номер дела") or "").strip())))
+                or case_by_appeal_num.get(
+                    ("", _bare_case_number((c.get("Номер дела") or "").strip()))
+                ))
+            if (_rnd_case and int(_rnd_case.get("round") or 1) >= 2
+                    and any(str((h or {}).get("reason") or "").startswith(
+                        "cassation_remanded")
+                        for h in (_rnd_case.get("history") or []))):
+                appeal_block.append("🔁 повторное рассмотрение после кассации")
             # Строка 3: дата поступления отдельной строкой, эмодзи 📥
             # ПОСЛЕ <b>дата</b>, чтобы не попасть под _DIGEST_HEADER_RE.
             if filing:
@@ -2441,14 +2572,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 line1 += f" — {pl} vs {df}"
             line1 += head_tail
             appeal_block.append(line1)
-            # Строка 2: дата вынесения определения + результат + по чьей
-            # жалобе (просьба юриста 30.07.2026).
+            # Строка 2: дата вынесения определения + итог + по чьей жалобе
+            # (просьба юриста 30.07.2026). С 13.08.2026 вместо сырого поля
+            # «Результат» — нормализованный ярлык и знак «Для банка»: они
+            # считались при эмите всегда, но выводились только в секции
+            # текстов актов, а итог юрист читает здесь. Сырое поле не
+            # дублируем: classify_verdict сам фолбэчит в сырую строку, так
+            # что информация не теряется. Старый контекст без verdict_label
+            # (--replay-last) — прежняя форма.
             from_str = _appeal_complaint_suffix(d, pl, df)
-            appeal_block.append(
-                f"{hearing_dt} вынесено определение — {result_text}{from_str}"
-                if hearing_dt
-                else f"Вынесено определение — {result_text}{from_str}"
-            )
+            verdict54 = escape_html(d.get("verdict_label", "") or "")
+            bank54 = escape_html(d.get("bank_outcome", "") or "")
+            if verdict54:
+                line2 = (f"{hearing_dt} вынесено определение."
+                         if hearing_dt else "Вынесено определение.")
+                line2 += f" <b>Итог:</b> {verdict54}."
+                if bank54:
+                    line2 += f" <b>Для банка:</b> {bank54}."
+                line2 += from_str
+                appeal_block.append(line2)
+            else:
+                appeal_block.append(
+                    f"{hearing_dt} вынесено определение — {result_text}{from_str}"
+                    if hearing_dt
+                    else f"Вынесено определение — {result_text}{from_str}"
+                )
             # Пустая строка между делами (двухстрочные карточки иначе слипаются).
             appeal_block.append("")
         if appeal_block and appeal_block[-1] == "":
@@ -2580,14 +2728,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # Словарь cases-by-id для подтягивания plaintiff/defendant/category/
     # bank_role/first_instance.court по родительскому case (в cass_changes.details
     # этих полей нет — раньше шаблон выводил пустые «{не указаны}»).
-    # cass_changes ссылаются на FI-номер. Подгружаем актуальный cases.json
-    # (JSON-формат с FI-делами) — переданный `cases` может быть в legacy
-    # CSV-формате и содержать только апел. дела (33-XXXX), что для касс.
-    # событий с FI-ключами не подходит.
-    try:
-        full_cases_for_cass = load_json(config.JSON_PATH).get("cases", []) or []
-    except (OSError, json.JSONDecodeError):
-        full_cases_for_cass = []
+    # cass_changes ссылаются на FI-номер. Сам cases.json загружен ОДИН раз
+    # выше, перед блоком АПЕЛЛЯЦИЯ (13.08.2026, общий с пометкой второго
+    # круга) — переданный `cases` может быть в legacy CSV-формате и содержать
+    # только апел. дела (33-XXXX), что для касс. событий с FI-ключами
+    # не подходит.
     cases_by_id_for_cass: dict[str, dict] = {}
     for c_idx in (full_cases_for_cass or cases or []):
         for k_idx in (
@@ -2697,6 +2842,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 label_d = cassation_review_label(
                     cass.get("review_result", ""), outcome_d
                 )
+            # Куда возвращено при remanded — зеркало «Касс. событий».
+            if outcome_d == "cassation_remanded" and label_d:
+                _rem_ru_d = _REMANDED_TO_RU.get(
+                    (cass.get("remanded_to") or "").strip()
+                )
+                if _rem_ru_d:
+                    label_d += f" → {_rem_ru_d}"
             if label_d == "📥 Принято к производству":
                 # Дублирует строку «📥 поступила касс. жалоба» выше.
                 label_d = ""
@@ -2858,6 +3010,17 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 cass_block.append(
                     f"📅 Назначено судебное заседание на {hearing_str}"
                 )
+            # «Без движения» (13.08.2026): срок устранения недостатков —
+            # строка только при типе cass_suspended (сам suspended_until в
+            # details есть у любого события, повторять его всякий раз не надо).
+            suspended_printed = False
+            su_cs = (d.get("suspended_until", "") or "").strip()
+            if su_cs and "cass_suspended" in (ch.get("type") or []):
+                cass_block.append(
+                    "⏸ жалоба оставлена без движения — срок устранения "
+                    f"недостатков до <b>{escape_html(su_cs)}</b>"
+                )
+                suspended_printed = True
             # Строка 5: Итог — готовая подпись из CASSATION_OUTCOME_RU /
             # cassation_review_label. + «от Роль Имя» из заявителя. Для
             # cassation_terminated раскрываем общую метку до конкретики
@@ -2874,13 +3037,25 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 d.get("review_result", ""), outcome
             )
             label = outcome_label_ru or review_label_ru
+            # Куда возвращено при remanded (13.08.2026): enum вычислялся
+            # всегда, но никуда не выводился — юрист не знал, ждать ли дело
+            # в апелляции или в 1-й инстанции. Неизвестное значение — без
+            # хвоста (replay-safe).
+            if outcome == "cassation_remanded" and label:
+                _rem_ru = _REMANDED_TO_RU.get(
+                    (d.get("remanded_to", "") or "").strip()
+                )
+                if _rem_ru:
+                    label += f" → {_rem_ru}"
             # Подавляем стадийный маркер «Принято к производству», если уже
             # есть строка с датой заседания — повторять «принято» избыточно,
             # юрист и так видит, что заседание назначено. Строка поступления
             # гасит его по той же причине: карточка часто приезжает сразу с
             # «ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО…» (cassation_review_label),
-            # и вышли бы два «📥» подряд об одном и том же.
-            if (hd or arrival_printed) and label == "📥 Принято к производству":
+            # и вышли бы два «📥» подряд об одном и том же. Строка «без
+            # движения» — тоже: жалоба очевидно принята, раз суд дал срок.
+            if ((hd or arrival_printed or suspended_printed)
+                    and label == "📥 Принято к производству"):
                 label = ""
             if label:
                 # Сокращаем имя заявителя (та же причина, что и в секции

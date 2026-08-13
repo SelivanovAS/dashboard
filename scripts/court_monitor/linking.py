@@ -890,6 +890,38 @@ def link_cassation_cases(
                     f"  7kas: {fi_num} в awaiting_relink — блок кассации "
                     f"{old_cass['case_number']} замещается {cass_int_num}"
                 )
+            # ── «Исход не отзывают»: защита от мигания парса (13.08.2026) ──
+            # Блок ниже замещается ЦЕЛИКОМ, а деградировавший парс 7kas отдаёт
+            # пустые терминальные поля — outcome затирался, и следующий удачный
+            # прогон объявлял его «новым» повторно (old_outcome=="" к тому
+            # моменту; .cassation_acts кроет только new_act). Пустое новое ←
+            # непустое старое, ТОЛЬКО для той же жалобы: в awaiting_relink с
+            # ДРУГИМ 8Г-номером старый блок принадлежит другой жалобе, её исход
+            # переносить нельзя. hearing_date/hearing_time/suspended_until/
+            # events намеренно НЕ бэкфиллятся — они легитимно исчезают
+            # (заседание прошло, «без движения» снято). Побочный плюс: у
+            # awaiting_relink-дел outcome=remanded перестаёт мигать пустым для
+            # advance_case_stage.
+            if (old_cass.get("case_number") or "").strip() in ("", cass_int_num):
+                _restored: list[str] = []
+                for _k in ("outcome", "remanded_to", "review_result",
+                           "result_text", "result_for_appeal", "decision_date"):
+                    if (not (cass_block.get(_k) or "").strip()
+                            and (old_cass.get(_k) or "").strip()):
+                        cass_block[_k] = old_cass[_k]
+                        _restored.append(_k)
+                if not cass_block.get("act_published") and old_act_published:
+                    cass_block["act_published"] = True
+                    cass_block["act_date"] = (cass_block.get("act_date")
+                                              or old_cass.get("act_date", ""))
+                    cass_block["act_text"] = (cass_block.get("act_text")
+                                              or old_cass.get("act_text", ""))
+                    _restored.append("act_published")
+                if _restored:
+                    log.debug(
+                        f"  7kas: {fi_num} — терминальные поля восстановлены "
+                        f"после деградировавшего парса: {', '.join(_restored)}"
+                    )
             case["cassation"] = cass_block
             # ── Бэкфилл сторон из УЧАСТНИКОВ карточки 7kas ──
             # Дела, заведённые discovery'ем до расширения разбора ролей (или с
@@ -956,6 +988,11 @@ def link_cassation_cases(
                     "act_kind": cass_block["act_kind"],
                     "act_published": bool(cass_block.get("act_published")),
                     "link": cass_block.get("link", ""),
+                    # Куда возвращено при remanded (enum first_instance|appeal)
+                    # — рендер «Итога» показывает «→ в суд … инстанции».
+                    "remanded_to": cass_block.get("remanded_to", ""),
+                    # Срок «без движения» — для события cass_suspended.
+                    "suspended_until": cass_block.get("suspended_until", ""),
                 },
             }
             # Критерий «карточки ещё не было» — ОТСУТСТВИЕ case_number, а не
@@ -994,6 +1031,36 @@ def link_cassation_cases(
                     if act_key:
                         digested_cass_acts.add(act_key)
                         cass_acts_dirty = True
+            # ── Заседание кассации (13.08.2026) ──
+            # Раньше типа не было вовсе: дата печаталась только «прицепом» к
+            # другому событию и глушилась при известном исходе — назначение и
+            # перенос заседания 7kas (явка/ВКС) проходили молча. Гейты:
+            # только БУДУЩАЯ дата (прошлая — раскопанная история), исхода ещё
+            # нет (после исхода дата заседания — атрибут прошлого), и не при
+            # new_cassation — у поступления заседание печатает штатная строка.
+            # Идемпотентность значением: блок после мержа несёт новую дату;
+            # дела с будущим заседанием skip'аются до его дня, а перенос
+            # после прошедшей даты (old=прошлая, new=будущая) — желаемый эмит.
+            if (cass_block["hearing_date"]
+                    and cass_block["hearing_date"]
+                    != (old_cass.get("hearing_date") or "").strip()
+                    and not (cass_block["outcome"] or "").strip()
+                    and "new_cassation" not in change["type"]
+                    and _ddmmyyyy_in_future(cass_block["hearing_date"])):
+                change["type"].append("cass_hearing_scheduled")
+            # ── Касс. жалоба «без движения» (13.08.2026) ──
+            # suspended_until вычислялся всегда, но жил только в skip-логике —
+            # юрист не видел ни факта, ни срока устранения недостатков (а при
+            # жалобе банка срок — наш). Гейта new_cassation нет: у свежей
+            # карточки «без движения» — и есть новость. Продление срока (новая
+            # дата) переобъявляется — желаемо. Снятие суспенда назначенным
+            # заседанием гасит сам _cassation_card_to_block (пустое значение
+            # события не даёт).
+            if (cass_block.get("suspended_until")
+                    and cass_block["suspended_until"]
+                    != (old_cass.get("suspended_until") or "").strip()
+                    and _ddmmyyyy_in_future(cass_block["suspended_until"])):
+                change["type"].append("cass_suspended")
             if change["type"]:
                 cass_changes.append(change)
             stage_changed = prev_stage != case["current_stage"]
@@ -1075,6 +1142,7 @@ def link_cassation_cases(
                     "act_kind": cass_block["act_kind"],
                     "act_published": bool(cass_block.get("act_published")),
                     "link": cass_block.get("link", ""),
+                    "remanded_to": cass_block.get("remanded_to", ""),
                 },
             })
             if cass_block["act_published"]:
@@ -1492,6 +1560,21 @@ def _sort_key_date(raw: str) -> tuple:
     if not m:
         return ("9999", "99", "99")
     return (m.group(3), m.group(2), m.group(1))
+
+
+def _ddmmyyyy_in_future(raw: str) -> bool:
+    """True, если строка «ДД.ММ.ГГГГ» парсится и дата СТРОГО в будущем.
+
+    Гейт календарных событий кассации (заседание, «без движения»): прошедшая
+    дата — раскопанная история карточки, не анонс."""
+    m = _DATE_DDMMYYYY_RX.match((raw or "").strip())
+    if not m:
+        return False
+    try:
+        return date(int(m.group(3)), int(m.group(2)),
+                    int(m.group(1))) > date.today()
+    except ValueError:
+        return False
 
 
 def is_fi_number_tracked(

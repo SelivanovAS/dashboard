@@ -2390,9 +2390,11 @@ class TestBankCalendarWiring:
         assert i_call < i_merge
 
     def test_post_decision_branch_after_hearing_block_and_gated(self):
-        """Ветка пост-решенческого заседания: после hearing-блока, только
-        track, только при подтверждающем session-событии, идемпотентна
-        значением даты, не дублирует заседание по отмене заочного."""
+        """Ветка пост-решенческого заседания: после hearing-блока, ОБА трека
+        (track-гейт снят 13.08.2026 — в основной картотеке это расходы и
+        индексация ПРОТИВ банка), только при подтверждающем session-событии,
+        идемпотентна значением даты, не дублирует заседание по отмене
+        заочного."""
         src = self._runs_src()
         i_hearing = src.index("# Новое/перенесённое заседание")
         i_branch = src.index("Заседание по РЕШЁННОМУ делу")
@@ -2400,7 +2402,10 @@ class TestBankCalendarWiring:
         assert i_hearing < i_branch < i_promo
         branch = src[i_branch:i_promo]
         assert "case_decided and new_hearing_date" in branch
-        assert "is_bank_plaintiff_track(case_j)" in branch
+        assert "is_bank_plaintiff_track(case_j)" not in branch, (
+            "Track-гейт вернулся: основной трек снова ослеп к заседаниям "
+            "по решённым делам (судебные расходы/индексация против банка)."
+        )
         assert "_SESSION_START_RX.search" in branch
         assert ('fi.get("post_decision_hearing_emitted") != new_hearing_date'
                 in branch)
