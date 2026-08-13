@@ -41,12 +41,17 @@ concurrency:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 45 мин: истцовые строки дампа теперь качают карточки (до
+    # MAX_BANK_CARDS_PER_IMPORT=100 по ~3-6 с) — прежних 15 мин впритык.
+    timeout-minutes: 45
     env:
       # Inputs — только через env (см. предупреждение в шапке).
       DUMP_KEY: ${{ inputs.dump_key }}
       COURT_DOMAIN: ${{ inputs.court_domain }}
       OPERATOR: ${{ inputs.operator }}
+      # Трек «Иски банка»: при BANK_TRACK=0 истцовые строки дампа идут прежним
+      # [SKIPPED ROLE] (зеркало add_cases.yml).
+      BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}
       # Операторский импорт: ретраи полезны — запросов мало, повтор запуска
       # дороже (боевой дефолт FETCH_MAX_RETRIES=1).
       FETCH_MAX_RETRIES: "3"
@@ -107,13 +112,23 @@ jobs:
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
           git add data/cases.json
+          # Файлы трека «Иски банка» и негативный кэш отказников: появляются
+          # только когда дамп нёс истцовые строки (первый импорт территории
+          # создаёт их с нуля).
+          for f in data/cases_bank.json data/cases_bank_events.json \
+                   data/.bank_intake_seen.json; do
+            [ -f "$f" ] && git add "$f"
+          done
           if git diff --cached --quiet; then
             echo "Изменений нет (добавлено 0 дел) — коммит не нужен"
             exit 0
           fi
           ADDED=$(jq -r '.added // 0' "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
+          ADDED_BANK=$(jq -r '.added_bank // 0' "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "0")
           COURT=$(jq -r '.court // .court_domain // "?"' "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
-          git commit -m "📥 Импорт: ${COURT} +${ADDED} (${OPERATOR:-без имени})"
+          BANK_SUFFIX=""
+          [ "$ADDED_BANK" != "0" ] && BANK_SUFFIX=" · 🏦 +${ADDED_BANK} в трек"
+          git commit -m "📥 Импорт: ${COURT} +${ADDED}${BANK_SUFFIX} (${OPERATOR:-без имени})"
           # Ретраи: чужой push мог проскочить между checkout и push.
           for i in 1 2 3; do
             git push && exit 0
@@ -139,7 +154,8 @@ jobs:
           if [ -s "$IMPORT_SUMMARY_PATH" ]; then
             BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
               '{dump_key:$dk, status:$st, run_url:$ru,
-                added:(.added // 0), promoted:(.promoted // 0),
+                added:(.added // 0), added_bank:(.added_bank // 0),
+                promoted:(.promoted // 0),
                 already:(.already // 0), skipped_role:(.skipped_role // 0),
                 no_link:(.no_link // 0), subsidiary:(.subsidiary // 0),
                 rows:(.rows // 0), lines:(.lines // [])}

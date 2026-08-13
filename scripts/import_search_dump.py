@@ -11,28 +11,44 @@
 запускает этот скрипт. Карточки добавленных дел дозаполняет ближайший прогон
 (суд в реестре со search_gated=True: поиск выключен, карточки мониторятся).
 
-Скрипт полностью ОФЛАЙН — сайты судов не трогает (у них капча). Всё берётся
-из дампа: стороны, судья, дата, ссылка на карточку (case_id|case_uid из href).
+Дела «банк-ответчик» полностью ОФЛАЙН — сайты судов не трогаются (у них
+капча). Всё берётся из дампа: стороны, судья, дата, ссылка на карточку
+(case_id|case_uid из href).
 
-Импортируются ТОЛЬКО дела «банк-ответчик» — как в основном треке автопоиска
-(иски банка из дампов капчёвых судов пока не заводятся: карточек в офлайн-дампе
-нет, а правила приёма трека их требуют)
-(решение юриста 16.07.2026 после первого живого импорта: в 1-й инстанции
-дела, где банк истец или третье лицо, не отслеживаем). Прочие роли видны
-в построчном отчёте как [SKIPPED ROLE] — оператору не нужно ничего
-фильтровать руками.
+Роли (история решений юриста):
+- «банк-ответчик» → основная картотека cases.json (как в автопоиске);
+- «банк-истец» → с 13.08.2026 (разгон Урала) заводится в трек «Иски банка»
+  (data/cases_bank.json). Правила приёма общие с авто-подхватом прогона
+  (court_monitor/bank_intake.py); по ссылке из дампа качается КАРТОЧКА дела —
+  единственный онлайн-шаг импортёра: проверочный код закрывает только поиск,
+  карточки открыты (проба 15.07.2026). Дела с признаком жалобы берутся
+  (skip_appeal=False, как в авто-подхвате) и ближайшим прогоном переезжают в
+  основной cases.json на полный мониторинг апелляции. При выключенном треке
+  (BANK_TRACK=0) истцовые строки идут прежним [SKIPPED ROLE] — территория без
+  трека ведёт себя байт-в-байт как раньше. (Прежнее правило 16.07.2026
+  «только банк-ответчик» принималось ДО появления трека исков банка.)
+- «третье лицо» → [SKIPPED ROLE], в 1-й инстанции не отслеживаем.
 
 Построчный отчёт:
     [ADDED]        — дело добавлено в cases.json
+    [ADDED BANK]   — иск банка добавлен в трек (cases_bank.json)
     [PROMOTED]     — материал (М-…) из прошлого импорта возбуждён в дело:
                      существующая запись переименована (зеркало промоушена
                      main_json), дубль не создаётся
-    [ALREADY]      — уже отслеживается (активные + горячий и холодный архивы)
-    [SKIPPED ROLE] — банк истец/третье лицо, в 1-й инст. не отслеживаем
+    [ALREADY]      — уже отслеживается (все картотеки: активные + архивы +
+                     трек исков банка)
+    [SKIPPED ROLE] — банк третье лицо (или истец при выключенном треке)
     [NO LINK]      — в дампе нет ссылки на карточку (cid|cuid) — дело
                      немониторимо, пропуск. Обычно это вставка «как текст»:
                      копируйте выделение страницы или сохраняйте «только HTML».
     [SUBSIDIARY]   — сторона только дочка Сбера (страхование, НПФ…), пропуск
+    [EXCLUDED RESULT] / [EXCLUDED WRIT] / [SPENT] — иск банка не взят в трек:
+                     итог из списка исключений / уже выдан ИЛ на исполнение /
+                     дело уже отработало цикл (правила bank_intake)
+    [SEEN]         — иск банка уже отклонялся ранее (негативный кэш)
+    [FETCH FAIL]   — карточка иска банка не прочиталась (повторить импорт)
+    [BANK CAPPED]  — потолок карточек за один импорт; повторите импорт того же
+                     дампа — уже добавленное отсеет дедуп
 
 JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import_cases.yml
 возвращает её оператору через POST /import-result Worker'а.
@@ -50,7 +66,6 @@ JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import os
 import re
@@ -62,11 +77,18 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from court_monitor import config  # noqa: E402
-from court_monitor.config import cold_archive_glob, log  # noqa: E402
+from court_monitor.bank_intake import (  # noqa: E402 — правила приёма в трек
+    card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
+    remember_rejection, row_passes, save_intake_seen, seen_key,
+)
+from court_monitor.config import log  # noqa: E402
+from court_monitor.courts import fi_court_by_domain  # noqa: E402
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
     promote_material_record,
 )
+from court_monitor.netutil import fetch_card_checked, polite_delay  # noqa: E402
+from court_monitor.parsing import parse_case_card  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
     parse_first_instance_search,
@@ -74,7 +96,10 @@ from court_monitor.parsing.search import (  # noqa: E402
 from court_monitor.parsing.tables import extract_tables  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
 from court_monitor.regions.base import CourtConfig  # noqa: E402
-from court_monitor.storage import load_json, save_json  # noqa: E402
+from court_monitor.storage import load_json, save_bank_json, save_json  # noqa: E402
+# Прецедент импорта scripts→scripts — collect_bank_claims.py: зависимости
+# односторонние, court_monitor из scripts/*.py не импортирует.
+from import_bank_registry import load_all_tracked, load_bank_file  # noqa: E402
 
 # Коды выхода — контракт import_cases.yml (ненулевой = failed в журнале импорта)
 EXIT_OK = 0
@@ -82,6 +107,12 @@ EXIT_CAPTCHA = 2
 EXIT_NO_TABLE = 3
 EXIT_UNKNOWN_COURT = 4
 EXIT_WRONG_COURT = 5
+
+# Кэп-страховка таймаута workflow (45 мин), НЕ продуктовый лимит: дневной темп
+# (~200 дел, решение юриста 13.08.2026) держит оператор числом вставленных
+# дампов. Карточка ≈ 3-6 с (polite_delay + сеть); повтор импорта того же дампа
+# безопасен — уже добавленное отсеет дедуп.
+MAX_BANK_CARDS_PER_IMPORT = 100
 
 
 def read_dump(path: str) -> str:
@@ -160,6 +191,119 @@ def resolve_court(court_domain: str) -> CourtConfig | None:
     return None
 
 
+def _bank_seen(bank_state: dict) -> dict:
+    """Негативный кэш отказников трека — ленивая загрузка на первый истцовый
+    ряд: дампы без исков банка не должны трогать файл вовсе."""
+    if bank_state["seen"] is None:
+        bank_state["seen"] = load_intake_seen()
+    return bank_state["seen"]
+
+
+def _bank_remember(bank_state: dict, domain: str, num: str, reason: str) -> None:
+    if remember_rejection(_bank_seen(bank_state), domain, num, reason):
+        bank_state["seen_dirty"] = True
+
+
+def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
+                     bank_state: dict) -> tuple[str, str, dict | None]:
+    """Одна истцовая строка дампа → запись трека «Иски банка».
+
+    Возвращает (ключ счётчика, строка отчёта, запись|None). Единственный
+    HTTP-запрос — карточка дела (капча закрывает только поиск); любой отказ
+    строки НЕ валит импорт. `bank_state` — сквозное состояние импорта:
+    негативный кэш отказников и счётчик скачанных карточек (кэп-страховка).
+
+    ⚠️ `no_link` в кэш НЕ пишем, в отличие от авто-подхвата: там ссылку не
+    отдала выдача самого суда (свойство дела), а тут её обычно теряет вставка
+    «как текст» — запомнив такой отказ, мы бы молча скипали дело и в следующем,
+    правильно вставленном дампе.
+    """
+    num = r["case_number"]
+    domain = (r.get("court_domain") or "").strip().lower()
+    parties = " — ".join(x for x in (r.get("plaintiff"), r.get("defendant")) if x)
+
+    ok, why = row_passes(r)
+    if not ok:
+        # Роль уже проверена веткой вызова → why ∈ {excluded_result, no_link}.
+        if why == "no_link":
+            return "no_link", (
+                f"[NO LINK] {num} — в дампе нет ссылки на карточку, пропуск "
+                "(копируйте выделение страницы или сохраняйте «только HTML»)"
+            ), None
+        _bank_remember(bank_state, domain, num, why)
+        return "excluded_result", (
+            f"[EXCLUDED RESULT] {num} — {(r.get('result') or '')[:60]} "
+            "(итог из списка исключений трека)"
+        ), None
+
+    rec = _bank_seen(bank_state).get(seen_key(domain, num))
+    if rec:
+        return "seen_cached", (
+            f"[SEEN] {num} — уже отклонялся ранее "
+            f"({rec.get('reason', '?')}), пропуск"
+        ), None
+
+    if dry_run:
+        return "bank_dry_run", (
+            f"[BANK DRY-RUN] {num} — кандидат в трек исков банка "
+            "(карточка не качается)"
+        ), None
+
+    if bank_state["cards"] >= MAX_BANK_CARDS_PER_IMPORT:
+        return "bank_capped", (
+            f"[BANK CAPPED] {num} — потолок {MAX_BANK_CARDS_PER_IMPORT} "
+            "карточек за импорт; повторите импорт этого же дампа — уже "
+            "добавленное отсеет дедуп"
+        ), None
+
+    # srv_num из href авторитетнее конфига: на двухсерверных доменах
+    # (Камышловский/Красноуфимский) резолв по голому домену отдаёт сервер 1.
+    court = fi_court_by_domain(domain, r.get("href_srv_num"))
+    if court is None:
+        # Не должно случаться: домен уже прошёл resolve_court в main().
+        return "fetch_fail", (
+            f"[FETCH FAIL] {num} — суд {domain} не найден в реестре региона"
+        ), None
+
+    cid, _, cuid = (r.get("link") or "").partition("|")
+    bank_state["cards"] += 1
+    polite_delay()
+    card_html = fetch_card_checked(court.card_url(cid, cuid), context=num)
+    if not card_html:
+        # Сетевой сбой/заглушка/код — отказ НЕ вечный, в кэш не пишем:
+        # повторный импорт того же дампа дочитает.
+        return "fetch_fail", (
+            f"[FETCH FAIL] {num} — карточка не прочиталась, повторите импорт"
+        ), None
+    card_info = parse_case_card(card_html, court.base_url)
+
+    why_card = card_rejects(card_info, skip_appeal=False)
+    if why_card:
+        _bank_remember(bank_state, domain, num, why_card)
+        line = {
+            "excluded_result": (
+                f"[EXCLUDED RESULT] {num} — "
+                f"{(card_info.get('Результат') or '')[:60]} (итог из карточки)"
+            ),
+            "excluded_writ": (
+                f"[EXCLUDED WRIT] {num} — выдан ИЛ на исполнение решения, "
+                "цикл трека пройден"
+            ),
+        }[why_card]
+        return why_card, line, None
+
+    entry = make_bank_entry(r, card_info, operator, now_iso,
+                            source="dump", court=court)
+    if entry_is_spent(entry):
+        _bank_remember(bank_state, domain, num, "already_spent")
+        return "already_spent", (
+            f"[SPENT] {num} — дело уже отработало цикл трека "
+            "(сразу ушло бы в архив), пропуск"
+        ), None
+
+    return "added_bank", f"[ADDED BANK] {num} · Истец · {parties}", entry
+
+
 def import_rows(
     rows: list[dict], stats: dict, operator: str, dry_run: bool,
 ) -> dict:
@@ -167,17 +311,14 @@ def import_rows(
     построчный отчёт. Возвращает summary-dict (он же уходит в GITHUB_OUTPUT)."""
     data = load_json(config.JSON_PATH)
     cases = data.get("cases", [])
-    archived = load_json(config.JSON_ARCHIVE_PATH).get("cases", [])
-    cold: list[dict] = []
-    for cold_path in glob.glob(cold_archive_glob()):
-        if os.path.abspath(cold_path) == os.path.abspath(config.JSON_ARCHIVE_PATH):
-            continue
-        cold.extend(load_json(cold_path).get("cases", []))
     # Дедуп — с УЧЁТОМ суда: номера дел не уникальны между судами, глобальный
     # индекс по номеру давал бы ложное «уже отслеживается» при совпадении
     # номера с делом другого суда (вопрос юриста 16.07.2026). Хелпер общий
-    # с фильтром новых дел main_json.
-    dedup_exact, dedup_wildcard = collect_fi_dedup_index(cases + archived + cold)
+    # с фильтром новых дел main_json. С 13.08.2026 индекс строится по ВСЕМ
+    # картотекам (load_all_tracked: активные + горячие/холодные архивы + оба
+    # bank-файла): истцовые строки заводятся в трек, а переехавшее обжалование
+    # живёт в основном cases.json — обе стороны обязаны давать [ALREADY].
+    dedup_exact, dedup_wildcard = collect_fi_dedup_index(load_all_tracked())
     # Индекс активных дел по (домен, id) — для промоушена М→2 (материал из
     # прошлого импорта возбуждён в дело; зеркало блока 3 main_json). Домен в
     # ключе: М-номера тоже не уникальны, чужой суд запись не переименовывает.
@@ -193,8 +334,14 @@ def import_rows(
     counters = {
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "no_link": 0, "subsidiary": 0,
+        # Трек «Иски банка» (истцовые строки, с 13.08.2026):
+        "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
+        "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
+        "bank_dry_run": 0, "bank_capped": 0,
     }
     new_entries: list[dict] = []
+    bank_entries: list[dict] = []
+    bank_state = {"seen": None, "seen_dirty": False, "cards": 0}
     promoted_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -228,10 +375,24 @@ def import_rows(
             counters["already"] += 1
             lines.append(f"[ALREADY] {num} — уже отслеживается в этом суде")
             continue
-        # Только «банк-ответчик» — зеркало фильтра боевого автопоиска
-        # (parse_first_instance_search без keep_all_roles). Парсим-то мы все
-        # роли, чтобы оператор видел в отчёте, что строка не потерялась,
-        # а осознанно пропущена.
+        # Истцовые строки → трек «Иски банка» (с 13.08.2026, разгон Урала).
+        # При выключенном треке проваливаются в прежний [SKIPPED ROLE] —
+        # территория без трека ведёт себя байт-в-байт как раньше.
+        if config.BANK_TRACK and r.get("bank_role") == "Истец":
+            outcome, line, bank_entry = _import_bank_row(
+                r, operator, now_iso, dry_run, bank_state)
+            counters[outcome] += 1
+            lines.append(line)
+            if bank_entry is not None:
+                bank_entries.append(bank_entry)
+                dedup_exact.add((domain, num))
+                if bare != num:
+                    dedup_exact.add((domain, bare))
+            continue
+        # «Банк-ответчик» — в основную картотеку, зеркало фильтра боевого
+        # автопоиска (parse_first_instance_search без keep_all_roles).
+        # Парсим-то мы все роли, чтобы оператор видел в отчёте, что строка
+        # не потерялась, а осознанно пропущена.
         if r.get("bank_role") != "Ответчик":
             counters["skipped_role"] += 1
             lines.append(
@@ -279,7 +440,18 @@ def import_rows(
     elif dry_run:
         log.info("DRY-RUN: cases.json не изменён")
 
-    return {"counters": counters, "lines": lines, "added_entries": new_entries}
+    if bank_entries and not dry_run:
+        # Пара обязана грузиться склеенной (load_bank_file): save_bank_json
+        # перезаписывает events-файл целиком, и без склейки события
+        # существующих дел трека потерялись бы.
+        bank = load_bank_file()
+        bank["cases"] = bank_entries + bank.get("cases", [])
+        save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
+    if bank_state["seen_dirty"] and not dry_run:
+        save_intake_seen(bank_state["seen"])
+
+    return {"counters": counters, "lines": lines, "added_entries": new_entries,
+            "added_bank_entries": bank_entries}
 
 
 def write_github_output(summary: dict) -> None:
@@ -325,6 +497,9 @@ def main(argv: list[str] | None = None) -> int:
         "region": region.code,
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "no_link": 0, "subsidiary": 0, "rows": 0,
+        "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
+        "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
+        "bank_dry_run": 0, "bank_capped": 0,
         "lines": [],
     }
 
@@ -421,6 +596,20 @@ def main(argv: list[str] | None = None) -> int:
         summary["skipped_role"], summary["no_link"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
+    bank_touched = sum(summary[k] for k in (
+        "added_bank", "excluded_result", "excluded_writ", "already_spent",
+        "seen_cached", "fetch_fail", "bank_dry_run", "bank_capped",
+    ))
+    if bank_touched:
+        log.info(
+            "Иски банка: +%d в трек | %d исключено по итогу | %d с ИЛ | "
+            "%d отработавших | %d из кэша отказов | %d сбоев карточек | "
+            "%d dry-run | %d за кэпом",
+            summary["added_bank"], summary["excluded_result"],
+            summary["excluded_writ"], summary["already_spent"],
+            summary["seen_cached"], summary["fetch_fail"],
+            summary["bank_dry_run"], summary["bank_capped"],
+        )
     write_github_output(summary)
     return EXIT_OK
 
