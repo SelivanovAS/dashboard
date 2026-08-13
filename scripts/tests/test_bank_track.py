@@ -1457,6 +1457,55 @@ class TestBankTrackWiring:
         importlib.reload(config)
 
 
+class TestBankIntakeCapsWiring:
+    """Кэпы подхвата и порог алерта должны быть достижимы из Variables.
+
+    Рычаг темпа ввода территории (разгон Урала 08.2026: юрист держит
+    ~200 дел/день): без проброса в update_cases.yml переменные в Settings →
+    Variables молча не работают, а константный порог алерта (50) при кэпе 200
+    слал бы 🩺 «паводок» каждый штатный день разгона.
+    """
+
+    CAPS = {
+        "BANK_INTAKE_MAX_PER_RUN": "30",
+        "BANK_INTAKE_MAX_CARDS_PER_COURT": "10",
+        "BANK_INTAKE_ALERT_ADDED": "50",
+    }
+
+    @staticmethod
+    def _workflow() -> str:
+        return TestBankTrackWiring._workflow()
+
+    def test_caps_forwarded_from_variables(self):
+        import re
+        wf = self._workflow()
+        for name, default in self.CAPS.items():
+            m = re.search(rf"^\s*{name}:\s*(.+)$", wf, re.M)
+            assert m, (
+                f"update_cases.yml не прокидывает {name} — переменная в "
+                "Settings → Variables территории молча не сработает."
+            )
+            assert f"vars.{name}" in m.group(1), (
+                f"{name} берётся не из Variables: {m.group(1).strip()!r}"
+            )
+            assert re.search(rf"\|\|\s*'{default}'", m.group(1)), (
+                f"У проброса {name} нет фолбэка '{default}' — территория без "
+                "переменной получит пустую строку."
+            )
+
+    def test_alert_threshold_reads_env(self):
+        """config.BANK_INTAKE_ALERT_ADDED обязан читаться из env."""
+        import importlib
+        os.environ["BANK_INTAKE_ALERT_ADDED"] = "200"
+        try:
+            importlib.reload(config)
+            assert config.BANK_INTAKE_ALERT_ADDED == 200
+        finally:
+            os.environ.pop("BANK_INTAKE_ALERT_ADDED", None)
+            importlib.reload(config)
+        assert config.BANK_INTAKE_ALERT_ADDED == 50
+
+
 # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ────────────────
 # Ответчик подаёт заявление об отмене в ТОТ ЖЕ суд 1-й инстанции; это не
 # апелляция, и апелляционный ход у него открывается только после определения
