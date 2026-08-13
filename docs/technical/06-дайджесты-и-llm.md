@@ -37,7 +37,7 @@
 детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
 
 Провайдер LLM выбирается переменной `LLM_PROVIDER`
-([строка 358](../../scripts/court_monitor/config.py#L358)): `claude` по
+([строка 380](../../scripts/court_monitor/config.py#L380)): `claude` по
 умолчанию, `gigachat` или `openrouter`.
 Основной мониторинг работает на Claude; GigaChat и OpenRouter доступны из
 тестового workflow `test_digest.yml` (inputs `llm_provider` + `llm_model`).
@@ -63,14 +63,14 @@ high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 1395](../../scripts/court_monitor/digest/template.py#L1395). Собирает весь HTML дайджеста
+[Строка 1547](../../scripts/court_monitor/digest/template.py#L1547). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([733](../../scripts/court_monitor/digest/template.py#L733)).
+([735](../../scripts/court_monitor/digest/template.py#L735)).
 
 ### Что не должно попасть в две секции
 
@@ -166,7 +166,7 @@ LLM реально «думает». Алгоритм:
 5. При любой ошибке/пустом ответе (в т.ч. после гардов чистки) → `None`,
    и вызывающий код откатывается на сырой excerpt мотивировки
    (`_render_act_summary_or_excerpt`,
-   [679](../../scripts/court_monitor/digest/template.py#L679)).
+   [681](../../scripts/court_monitor/digest/template.py#L681)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
@@ -218,11 +218,21 @@ LLM реально «думает». Алгоритм:
 - **Разделы по типам событий:** новые дела (1-я инст. / апелляция / кассация),
   изменения, переходы стадий, опубликованные акты с пересказом. Нумеруются и
   чистятся от пустых.
-- **Футер:** ссылка на дашборд.
+- **Секция «🏦 ИСКИ БАНКА (N)»** — последней: компакт «одна строка на дело»,
+  записи `fi_changes` с маркером `track == "plaintiff_light"` отщепляются от
+  основного списка. Фразы — `_bank_event_phrases`
+  (template.py), группировка «по важности» — `_BANK_GROUP_ORDER`. С 13.08.2026
+  строки несут даты/время (срок возражений, отмена заочного, жалобы,
+  мотивировка, заседания с временем; replay-safe фолбэк на голую подпись) +
+  четыре события: `fi_legal_force_reached`, `fi_writ_overdue` (календарный
+  проход, см. [05](05-конвейер-обновления.md)), `fi_post_decision_hearing`
+  (заседание по решённому делу), `fi_default_copy_served` (вручение копии
+  заочного). Сводка пишет «N дел с событиями» (счёт по делам, не событиям).
+- **Футер:** ссылка на дашборд (+ приписка «🏦 иски банка: N в производстве»).
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([479](../../scripts/court_monitor/config.py#L479)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([501](../../scripts/court_monitor/config.py#L501)).
 
 ## Разбор акта в карточке (`act_analysis`)
 

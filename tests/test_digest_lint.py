@@ -262,5 +262,33 @@ class LintKillSwitchTest(unittest.TestCase):
         self.assertEqual(sent, [])
 
 
+class LintBankCalendarEventsTest(unittest.TestCase):
+    """Новые события трека исков банка (13.08.2026) проходят линтер: одна
+    строка с номером на запись, счётчик «ИСКИ БАНКА (N)» сходится."""
+
+    def test_new_bank_events_pass_lint(self):
+        bank_changes = [
+            make_fi_change(
+                ["fi_legal_force_reached", "fi_writ_overdue"],
+                {"legal_force_date": "11.07.2026", "overdue_days": 33},
+                track="plaintiff_light",
+            ),
+            make_fi_change(
+                ["fi_post_decision_hearing"],
+                {"hearing_date": "25.08.2026", "hearing_time": "11:00",
+                 "hearing_topic": "индексация присужденных сумм"},
+                case="2-101/2026", track="plaintiff_light",
+            ),
+            make_fi_change(
+                ["fi_default_copy_served"],
+                {"copy_served_date": "12.08.2026"},
+                case="2-102/2026", track="plaintiff_light",
+            ),
+        ]
+        ctx = _ctx(fi_changes=bank_changes)
+        html = render(**ctx)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1338,7 +1338,7 @@ class TestBankDigestSection:
         assert html.index("ПЕРВАЯ ИНСТАНЦИЯ") < html.index("ИСКИ БАНКА")
         assert html.index("ИСКИ БАНКА") < html.index("В производстве")
         assert "📅 1 заседание в 1-й инст." in html
-        assert "1 событие по искам банка" in html
+        assert "1 дело с событиями по искам банка" in html
 
     def test_only_bank_changes_not_empty_digest(self):
         html = _digest([_bank_change(["fi_writ_issued"], {"writs": [
@@ -1367,7 +1367,7 @@ class TestBankDigestSection:
         """Строка приёма считается в сводке как событие трека — иначе
         счётчик «(N)» заголовка разойдётся с содержимым (сторож линтера)."""
         html = _digest([_bank_change(["fi_bank_claim_registered"])])
-        assert "1 событие по искам банка" in html
+        assert "1 дело с событиями по искам банка" in html
 
 
 class TestBankRoutineFilter:
@@ -1913,7 +1913,11 @@ class TestVacatedDefaultWiring:
                       "fi_default_cancellation_hearing",
                       "fi_default_judgment_vacated",
                       "fi_default_cancellation_refused",
-                      "fi_default_copy_returned"):
+                      "fi_default_copy_returned",
+                      "fi_default_copy_served",
+                      "fi_legal_force_reached",
+                      "fi_writ_overdue",
+                      "fi_post_decision_hearing"):
                 assert t in src, f"{fname}: нет подписи для типа {t}."
 
     def test_types_are_not_routine_and_not_echo(self):
@@ -1926,7 +1930,483 @@ class TestVacatedDefaultWiring:
         )
         for t in ("fi_default_cancellation_filed",
                   "fi_default_judgment_vacated",
-                  "fi_default_copy_returned"):
+                  "fi_default_copy_returned",
+                  "fi_default_copy_served"):
             assert t not in BANK_ROUTINE_EVENT_TYPES
             assert t not in FI_ECHO_CATCHUP_TYPES
             assert t in _FI_CATCHUP_DATED_TYPES
+
+    def test_calendar_types_filter_wiring(self):
+        """Календарные события и пост-решенческие заседания: не рутина и не
+        эхо (ради них правка 13.08.2026 и делалась); «вступило в силу» — в
+        стародатном (страховка от массового импорта давно решённых дел), а
+        «ИЛ завис» — НЕТ намеренно: поздно обнаруженный зависший лист — тем
+        более алерт. Пост-решенческое заседание — в анонсном списке (прошлая
+        дата не анонс)."""
+        from court_monitor.lifecycle import (
+            BANK_ROUTINE_EVENT_TYPES, FI_ECHO_CATCHUP_TYPES,
+            _FI_DATED_COMPLAINT_TYPES, _FI_HEARING_ANNOUNCE_TYPES,
+        )
+        for t in ("fi_legal_force_reached", "fi_writ_overdue",
+                  "fi_post_decision_hearing"):
+            assert t not in BANK_ROUTINE_EVENT_TYPES
+            assert t not in FI_ECHO_CATCHUP_TYPES
+        assert "fi_legal_force_reached" in _FI_DATED_COMPLAINT_TYPES
+        assert (_FI_DATED_COMPLAINT_TYPES["fi_legal_force_reached"]
+                == "legal_force_date")
+        assert "fi_writ_overdue" not in _FI_DATED_COMPLAINT_TYPES
+        assert "fi_post_decision_hearing" in _FI_HEARING_ANNOUNCE_TYPES
+
+
+# ── Обогащение строк датами (разбор дайджеста 13.08.2026) ────────────────────
+
+class TestBankDigestEnrichedDates:
+    """Половина строк секции была голыми подписями без дат. Каждая ветка
+    replay-safe: ключа в details нет (старый контекст) — прежняя подпись."""
+
+    def test_objections_deadline_carries_date(self):
+        """Дата срока — и есть новость; без неё строка не говорила ничего."""
+        html = _digest([_bank_change(["fi_objections_deadline_set"],
+                                     {"objections_due": "25.08.2026"})])
+        assert "возражения на жалобу — до <b>25.08.2026</b>" in html
+
+    def test_objections_deadline_legacy_fallback(self):
+        html = _digest([_bank_change(["fi_objections_deadline_set"])])
+        assert "установлен срок для возражений на жалобу" in html
+
+    def test_cancellation_filed_carries_date(self):
+        html = _digest([_bank_change(["fi_default_cancellation_filed"],
+                                     {"cancel_filed_date": "12.08.2026"})])
+        assert "заявление об отмене заочного решения (12.08.2026)" in html
+
+    def test_cancellation_hearing_carries_date(self):
+        """Дата заседания по заявлению — явка представителя банка."""
+        html = _digest([_bank_change(["fi_default_cancellation_hearing"],
+                                     {"cancel_hearing_date": "20.08.2026"})])
+        assert "заседание по заявлению об отмене — <b>20.08.2026</b>" in html
+
+    def test_cancellation_outcomes_carry_dates(self):
+        html = _digest([_bank_change(["fi_default_judgment_vacated"],
+                                     {"cancel_outcome_date": "12.08.2026"})])
+        assert "дело рассматривается заново (12.08.2026)" in html
+        html = _digest([_bank_change(["fi_default_cancellation_refused"],
+                                     {"cancel_outcome_date": "12.08.2026"})])
+        assert "в отмене заочного решения отказано (12.08.2026)" in html
+
+    def test_cancellation_legacy_no_empty_parens(self):
+        html = _digest([_bank_change(["fi_default_cancellation_filed"])])
+        assert "подано заявление об отмене заочного решения" in html
+        assert "решения (" not in html
+
+    def test_appeal_filed_carries_date(self):
+        html = _digest([_bank_change(["fi_appeal_filed"],
+                                     {"appeal_filed_date": "11.08.2026"})])
+        assert ("апел. жалоба ответчика от 11.08.2026 — дело уходит "
+                "в общий трек") in html
+
+    def test_appeal_filed_legacy_fallback(self):
+        html = _digest([_bank_change(["fi_appeal_filed"])])
+        assert "апел. жалоба ответчика — дело уходит в общий трек" in html
+
+    def test_cassation_events_carry_dates(self):
+        html = _digest([_bank_change(["fi_cassation_filed"],
+                                     {"cassation_filed_date": "01.08.2026"})])
+        assert "касс. жалоба (01.08.2026)" in html
+        html = _digest([_bank_change(["fi_sent_to_cassation"],
+                                     {"sent_to_cassation_date": "05.08.2026"})])
+        assert "направлено в касс. суд (05.08.2026)" in html
+
+    def test_motivirovka_carries_date(self):
+        """От мотивировки течёт месяц на апелляцию (ст. 321 ГПК); дата была
+        только у fi_final_event-ветки — асимметрия убрана."""
+        html = _digest([_bank_change(["fi_motivirovka_emitted"],
+                                     {"motivirovka_date": "08.08.2026"})])
+        assert "мотивировка изготовлена (08.08.2026)" in html
+
+    def test_act_published_carries_date(self):
+        html = _digest([_bank_change(["fi_act_published"],
+                                     {"act_date": "08.08.2026"})])
+        assert "решение изготовлено (08.08.2026)" in html
+
+    def test_hearing_carries_time(self):
+        """Основной трек время печатает, банковский терял — а являться-то
+        по времени."""
+        html = _digest([_bank_change(["fi_hearing_new"],
+                                     {"hearing_date": "17.08.2026",
+                                      "hearing_time": "10:30"})])
+        assert "заседание <b>17.08.2026</b> в 10:30" in html
+
+    def test_hearing_midnight_placeholder_hidden(self):
+        """00:00 — заглушка ГАС «времени нет» (правило _fmt_hearing_dt)."""
+        html = _digest([_bank_change(["fi_hearing_new"],
+                                     {"hearing_date": "17.08.2026",
+                                      "hearing_time": "00:00"})])
+        assert "в 00:00" not in html
+        assert "заседание <b>17.08.2026</b>" in html
+
+    def test_postponed_carries_time(self):
+        html = _digest([_bank_change(["fi_hearing_postponed"],
+                                     {"hearing_date": "21.08.2026",
+                                      "hearing_time": "14:00"})])
+        assert "отложено на <b>21.08.2026</b> в 14:00" in html
+
+    def test_recess_carries_continuation(self):
+        """details перерыва несут НОВУЮ дату продолжения (runs.py пишет
+        hearing_* для всех исходов классификации) — раньше терялась."""
+        html = _digest([_bank_change(["fi_hearing_recess"],
+                                     {"hearing_date": "21.08.2026",
+                                      "hearing_time": "09:00"})])
+        assert "перерыв — продолжение <b>21.08.2026</b> в 09:00" in html
+
+    def test_recess_legacy_fallback(self):
+        html = _digest([_bank_change(["fi_hearing_recess"])])
+        assert "перерыв в заседании" in html
+
+    def test_bank_role_change_carries_roles(self):
+        html = _digest([_bank_change(["fi_bank_role_changed"],
+                                     {"old_role": "Истец",
+                                      "new_role": "Третье лицо"})])
+        assert "роль банка: Истец → Третье лицо" in html
+
+    def test_bank_role_change_legacy_fallback(self):
+        html = _digest([_bank_change(["fi_bank_role_changed"])])
+        assert "роль банка изменилась" in html
+
+    def test_summary_plural_cases(self):
+        """Сводка считает ДЕЛА (записи секции) и склоняет честно — прежняя
+        подпись «N событий» врала (у дела может быть несколько событий)."""
+        second = _bank_change(["fi_resolved"])
+        second["case"] = "2-101/2026"
+        html = _digest([_bank_change(["fi_resolved"]), second])
+        assert "2 дела с событиями по искам банка" in html
+
+
+# ── Календарные события: рендер ──────────────────────────────────────────────
+
+class TestBankCalendarEventRendering:
+    def test_legal_force_reached_rendered(self):
+        html = _digest([_bank_change(["fi_legal_force_reached"],
+                                     {"legal_force_date": "06.08.2026"})])
+        assert ("решение вступило в силу (расч. 06.08.2026) — ожидаем ИЛ"
+                in html)
+
+    def test_legal_force_reached_legacy_fallback(self):
+        html = _digest([_bank_change(["fi_legal_force_reached"])])
+        assert "решение вступило в силу (расч.) — ожидаем ИЛ" in html
+
+    def test_writ_overdue_rendered(self):
+        html = _digest([_bank_change(["fi_writ_overdue"],
+                                     {"overdue_days": 33,
+                                      "legal_force_date": "11.07.2026"})])
+        assert ("ИЛ не выдан 33 дн. после вступления в силу</b> "
+                "(в силе с 11.07.2026)") in html
+
+    def test_post_decision_hearing_rendered(self):
+        html = _digest([_bank_change(
+            ["fi_post_decision_hearing"],
+            {"hearing_date": "25.08.2026", "hearing_time": "11:00",
+             "hearing_topic": "индексация присужденных сумм"})])
+        assert ("заседание по решённому делу — <b>25.08.2026</b> в 11:00 "
+                "(индексация присужденных сумм)") in html
+
+    def test_post_decision_hearing_without_topic(self):
+        html = _digest([_bank_change(["fi_post_decision_hearing"],
+                                     {"hearing_date": "25.08.2026"})])
+        assert "заседание по решённому делу — <b>25.08.2026</b>" in html
+
+    def test_copy_served_rendered(self):
+        html = _digest([_bank_change(["fi_default_copy_served"],
+                                     {"copy_served_date": "12.08.2026"})])
+        assert ("копия заочного решения вручена ответчику 12.08.2026 "
+                "(7 раб. дн. на заявление об отмене)") in html
+
+    def test_calendar_events_grouped_with_writs(self):
+        """«Вступило в силу»/«лист завис» — группа ИЛ (этапы одной цепочки
+        «решение → сила → выдача»); пост-решенческое заседание — в группе
+        заседаний (сортировка по дате достаётся сама)."""
+        from court_monitor.digest.template import _bank_change_group
+        assert (_bank_change_group({"type": ["fi_legal_force_reached"]})
+                == _bank_change_group({"type": ["fi_writ_issued"]}))
+        assert (_bank_change_group({"type": ["fi_writ_overdue"]})
+                == _bank_change_group({"type": ["fi_writ_issued"]}))
+        assert (_bank_change_group({"type": ["fi_post_decision_hearing"]})
+                == _bank_change_group({"type": ["fi_hearing_new"]}))
+
+
+# ── Календарный проход collect_bank_calendar_events ──────────────────────────
+
+class TestBankCalendarEvents:
+    """Юнит календарного прохода: «вступило в силу» и «ИЛ завис» наступают
+    датой, а не карточкой — решённые дела живут в недельном ритме и в
+    FI-цикле change не собирают."""
+
+    TODAY = date(2026, 8, 13)
+
+    def _case(self, **fi_extra) -> dict:
+        fi = {
+            "case_number": "2-100/2026",
+            "court": "Сургутский городской суд",
+            "court_domain": "surggor--hmao.sudrf.ru",
+            "link": "111|aaaa-1111",
+            "status": "Решено",
+            "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+            "decision_date": "05.06.2026",
+            # est = месяц от мотивировки + 1 день = 11.07.2026 (33 дн назад)
+            "act_date": "10.06.2026",
+        }
+        fi.update(fi_extra)
+        return _track_case(**fi)
+
+    def _run(self, cases, monkeypatch, *, fi_changes=None,
+             epoch=date(2026, 1, 1), today=None):
+        from court_monitor.runs import collect_bank_calendar_events
+        monkeypatch.setattr(config, "BANK_CALENDAR_EVENTS_SINCE", epoch)
+        # Архивные окна считаются от РЕАЛЬНЫХ часов — фиксируем, чтобы тест
+        # не флейкал, когда est уедет за 180-дневный потолок (своя логика
+        # архивов покрыта TestBankTrackArchive).
+        monkeypatch.setattr(lifecycle, "is_case_archived", lambda c: False)
+        ch = fi_changes if fi_changes is not None else []
+        n = collect_bank_calendar_events(cases, ch, today or self.TODAY)
+        return n, ch
+
+    def test_both_events_emitted(self, monkeypatch):
+        case = self._case()
+        n, ch = self._run([case], monkeypatch)
+        assert n == 1 and len(ch) == 1
+        assert ch[0]["type"] == ["fi_legal_force_reached", "fi_writ_overdue"]
+        assert ch[0]["track"] == "plaintiff_light"
+        assert ch[0]["case"] == "2-100/2026"
+        d = ch[0]["details"]
+        assert d["legal_force_date"] == "11.07.2026"
+        assert d["overdue_days"] == 33
+        assert d["court_domain"] == "surggor--hmao.sudrf.ru"
+        assert d["link"] == "111|aaaa-1111"
+        fi = case["first_instance"]
+        assert fi["legal_force_emitted"] == "2026-07-11"
+        assert fi["writ_overdue_emitted"] == "2026-07-11"
+
+    def test_force_only_before_threshold(self, monkeypatch):
+        case = self._case(act_date="05.07.2026")  # est = 06.08, 7 дн назад
+        n, ch = self._run([case], monkeypatch)
+        assert ch[0]["type"] == ["fi_legal_force_reached"]
+        assert ch[0]["details"]["legal_force_date"] == "06.08.2026"
+        assert "writ_overdue_emitted" not in case["first_instance"]
+
+    def test_future_est_silent(self, monkeypatch):
+        case = self._case(act_date="20.07.2026")  # est = 21.08.2026
+        assert self._run([case], monkeypatch) == (0, [])
+        assert "legal_force_emitted" not in case["first_instance"]
+
+    def test_backlog_before_epoch_marked_quietly(self, monkeypatch):
+        """Решение юриста 13.08.2026: бэклог деплоя (64 «в силе» /
+        14 «просрочено») не объявлять — маркеры ставятся тихо, дальше
+        объявляются только новые наступления."""
+        case = self._case()  # est 11.07.2026 — до эпохи 13.08.2026
+        n, ch = self._run([case], monkeypatch, epoch=date(2026, 8, 13))
+        assert (n, ch) == (0, [])
+        fi = case["first_instance"]
+        assert fi["legal_force_emitted"] == "2026-07-11"
+        assert fi["writ_overdue_emitted"] == "2026-07-11"
+
+    def test_overdue_crossing_after_epoch_alerts(self, monkeypatch):
+        """est до эпохи, но 30-дневный порог пересечён ПОСЛЕ неё — свежая
+        просрочка, алерт обязан выйти (иначе дела, вступившие в силу
+        накануне деплоя, зависали бы молча)."""
+        case = self._case(act_date="05.07.2026")  # est 06.08, порог 05.09
+        n, ch = self._run([case], monkeypatch, epoch=date(2026, 8, 13),
+                          today=date(2026, 9, 10))
+        assert len(ch) == 1
+        assert ch[0]["type"] == ["fi_writ_overdue"]
+        assert ch[0]["details"]["overdue_days"] == 35
+
+    def test_not_resolved_gate(self, monkeypatch):
+        """est умеет посчитаться от дрейфующей hearing_date и у нерешённого
+        дела — ложное «в силе» недопустимо."""
+        case = self._case(status="В производстве")
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_left_track_gate(self, monkeypatch):
+        case = self._case(appeal_filed=True)
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_cassation_gate(self, monkeypatch):
+        case = self._case(cassation_filed=True)
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_denied_gate(self, monkeypatch):
+        """В иске отказано — листа не будет (bank_writ_expected)."""
+        case = self._case(result="В удовлетворении иска ОТКАЗАНО")
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_enforcement_writ_gate(self, monkeypatch):
+        """Лист на исполнение уже выдан — цепочка ожидания закрыта."""
+        case = self._case(writs=[{"issue_date": "01.08.2026",
+                                  "status": "Выдан"}])
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_interim_writ_does_not_gate(self, monkeypatch):
+        """Обеспечительный лист (до решения) ожидание ИЛ не закрывает."""
+        case = self._case(writs=[{"issue_date": "01.05.2026",
+                                  "status": "Выдан"}])
+        n, ch = self._run([case], monkeypatch)
+        assert n == 1
+        assert "fi_legal_force_reached" in ch[0]["type"]
+
+    def test_archived_case_silent(self, monkeypatch):
+        from court_monitor.runs import collect_bank_calendar_events
+        monkeypatch.setattr(config, "BANK_CALENDAR_EVENTS_SINCE",
+                            date(2026, 1, 1))
+        monkeypatch.setattr(lifecycle, "is_case_archived", lambda c: True)
+        ch: list = []
+        assert collect_bank_calendar_events([self._case()], ch,
+                                            self.TODAY) == 0
+        assert ch == []
+
+    def test_non_track_ignored(self, monkeypatch):
+        case = self._case()
+        case.pop("track")
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_idempotent_second_run_silent(self, monkeypatch):
+        case = self._case()
+        self._run([case], monkeypatch)
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_est_shift_reemits_with_new_date(self, monkeypatch):
+        """Сдвиг расчётной даты (поздняя мотивировка, вручение копии)
+        переобъявляет событие с новой датой — идемпотентность ЗНАЧЕНИЕМ."""
+        case = self._case()
+        self._run([case], monkeypatch)
+        # Месяц от 01.07 кончается 01.08 (суббота) → последний день срока
+        # сдвигается на рабочий понедельник 03.08 (ст. 108 ГПК), сила — 04.08.
+        case["first_instance"]["act_date"] = "01.07.2026"
+        n, ch = self._run([case], monkeypatch)
+        assert ch[0]["type"] == ["fi_legal_force_reached"]
+        assert ch[0]["details"]["legal_force_date"] == "04.08.2026"
+        assert case["first_instance"]["legal_force_emitted"] == "2026-08-04"
+
+    def test_merges_into_existing_track_change(self, monkeypatch):
+        """Дело парсилось этим прогоном (недельный ритм) — календарные типы
+        дописываются в его запись: секция держит одну строку на дело."""
+        case = self._case()
+        existing = _bank_change(["fi_status_change"])
+        n, ch = self._run([case], monkeypatch, fi_changes=[existing])
+        assert n == 1 and len(ch) == 1
+        assert ch[0] is existing
+        assert ch[0]["type"] == ["fi_status_change", "fi_legal_force_reached",
+                                 "fi_writ_overdue"]
+        assert ch[0]["details"]["legal_force_date"] == "11.07.2026"
+
+    def test_migrate_stages_does_not_seed_calendar_markers(self):
+        """Ловушка порядка: migrate_stages идёт на загрузке РАНЬШЕ прохода —
+        вечный посев «est наступила» глушил бы события в день наступления
+        даты (данные не меняются, меняется календарь). Анти-паводок живёт
+        в эпохе BANK_CALENDAR_EVENTS_SINCE, не в посеве."""
+        case = self._case()
+        lifecycle.migrate_stages([case])
+        assert "legal_force_emitted" not in case["first_instance"]
+        assert "writ_overdue_emitted" not in case["first_instance"]
+
+
+# ── Вручение копии заочного решения ──────────────────────────────────────────
+
+class TestDefaultCopyServedSeeding:
+    """Анти-паводок fi_default_copy_served: migrate_stages засевает эмит-флаг
+    делам, где вручение уже в истории событий, — зеркало посева возврата
+    копии (TestDefaultCopyReturnedSeeding)."""
+
+    def _case(self) -> dict:
+        return {
+            "id": "2-616/2026",
+            "current_stage": "first_instance",
+            "track": "plaintiff_light",
+            "bank_role": "Истец",
+            "first_instance": {
+                "case_number": "2-616/2026",
+                "status": "Решено",
+                "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+                "hearing_date": "03.06.2026",
+                "events": [
+                    {"date": "03.06.2026",
+                     "text": "Судебное заседание. 11:00. Вынесено заочное "
+                             "решение по делу. Иск УДОВЛЕТВОРЕН"},
+                    {"date": "10.06.2026",
+                     "text": "Копия заочного решения ответчику (истцу) "
+                             "вручена. 16:25. 23.06.2026"},
+                ],
+            },
+        }
+
+    def test_seeded_with_event_date(self):
+        case = self._case()
+        lifecycle.migrate_stages([case])
+        assert (case["first_instance"]["default_copy_served_emitted"]
+                == "10.06.2026")
+
+    def test_existing_flag_untouched(self):
+        case = self._case()
+        case["first_instance"]["default_copy_served_emitted"] = "01.01.2026"
+        lifecycle.migrate_stages([case])
+        assert (case["first_instance"]["default_copy_served_emitted"]
+                == "01.01.2026")
+
+    def test_no_serving_not_seeded(self):
+        case = self._case()
+        case["first_instance"]["events"] = case["first_instance"]["events"][:1]
+        lifecycle.migrate_stages([case])
+        assert "default_copy_served_emitted" not in case["first_instance"]
+
+
+# ── Проводка календарных событий и новых веток FI-цикла ──────────────────────
+
+class TestBankCalendarWiring:
+    """Инварианты порядка невидимы рендер-тестам — unit на исходник, по
+    образцу TestVacatedDefaultWiring."""
+
+    @staticmethod
+    def _runs_src() -> str:
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_pass_called_between_intake_insert_and_routine_filter(self):
+        """Проход стоит ПОСЛЕ врезки новых исков (слияние строк по делу) и
+        ДО фильтра рутины/save_digest_context — replay видит события."""
+        src = self._runs_src()
+        i_intake = src.index("for _bc in bank_new_cases:")
+        i_call = src.index(
+            "collect_bank_calendar_events(cases, fi_changes, today)")
+        i_routine = src.index("lifecycle.filter_bank_routine_events(fi_changes)")
+        assert i_intake < i_call < i_routine
+
+    def test_pass_called_before_bank_new_cases_merged(self):
+        """Свежезаведённое авто-подхватом дело проход видеть не должен:
+        его старую историю отсеивают эпоха и стародатный фильтр, а не
+        порядок, но порядок — первый рубеж."""
+        src = self._runs_src()
+        i_call = src.index(
+            "collect_bank_calendar_events(cases, fi_changes, today)")
+        i_merge = src.index("cases = bank_new_cases + cases")
+        assert i_call < i_merge
+
+    def test_post_decision_branch_after_hearing_block_and_gated(self):
+        """Ветка пост-решенческого заседания: после hearing-блока, только
+        track, только при подтверждающем session-событии, идемпотентна
+        значением даты, не дублирует заседание по отмене заочного."""
+        src = self._runs_src()
+        i_hearing = src.index("# Новое/перенесённое заседание")
+        i_branch = src.index("Заседание по РЕШЁННОМУ делу")
+        i_promo = src.index("# Промоушен материала М→2")
+        assert i_hearing < i_branch < i_promo
+        branch = src[i_branch:i_promo]
+        assert "case_decided and new_hearing_date" in branch
+        assert "is_bank_plaintiff_track(case_j)" in branch
+        assert "_SESSION_START_RX.search" in branch
+        assert ('fi.get("post_decision_hearing_emitted") != new_hearing_date'
+                in branch)
+        assert "fi_default_cancellation_hearing" in branch
+
+    def test_copy_served_emit_idempotent_by_value(self):
+        src = self._runs_src()
+        assert 'fi.get("default_copy_served_emitted") != _served' in src
+        assert 'fi["default_copy_served_emitted"] = _served' in src

@@ -78,7 +78,7 @@
 | `default_cancellation_state` (особый порядок отмены заочного: подано/отменено/отказано; матч по тексту события, белый список исходов) | [scripts/court_monitor/lifecycle.py:809](scripts/court_monitor/lifecycle.py:809) |
 | `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1092](scripts/court_monitor/lifecycle.py:1092) |
 | `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1119](scripts/court_monitor/lifecycle.py:1119) |
-| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:1864](scripts/court_monitor/lifecycle.py:1864) |
+| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:1876](scripts/court_monitor/lifecycle.py:1876) |
 | `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1755](scripts/court_monitor/runs.py:1755) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
 | `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:49](scripts/court_monitor/bank_intake.py:49) |
@@ -90,7 +90,7 @@
 | `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:174](scripts/court_monitor/lifecycle.py:174) |
 | `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:443](scripts/court_monitor/lifecycle.py:443) |
 | `resolve_bank_merged_targets` (подбор дела-приёмника по ФИО ответчика) | [scripts/court_monitor/linking.py:1393](scripts/court_monitor/linking.py:1393) |
-| `bank_cold_archive_path` / `is_bank_cold_archive_file` (холодные bank-архивы) | [scripts/court_monitor/config.py:107](scripts/court_monitor/config.py:107) |
+| `bank_cold_archive_path` / `is_bank_cold_archive_file` (холодные bank-архивы) | [scripts/court_monitor/config.py:108](scripts/court_monitor/config.py:108) |
 | `case_court_key` / `dedupe_new_archive_entries` (ключ (домен, id) — номера не уникальны между судами) | [scripts/court_monitor/linking.py:1328](scripts/court_monitor/linking.py:1328) |
 | `get_region` (env REGION → RegionConfig, ленивый лоадер) | [scripts/court_monitor/regions/__init__.py:20](scripts/court_monitor/regions/__init__.py:20) |
 | `match_region_first_instance` (обобщённый матчер по региону) | [scripts/court_monitor/courts.py:58](scripts/court_monitor/courts.py:58) |
@@ -101,14 +101,14 @@
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1834](scripts/court_monitor/lifecycle.py:1834) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:1846](scripts/court_monitor/lifecycle.py:1846) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:182](scripts/court_monitor/netutil.py:182) |
 | `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:100](scripts/court_monitor/netutil.py:100) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:422](scripts/court_monitor/parsing/search.py:422) |
-| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:173](scripts/court_monitor/config.py:173) |
+| `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:174](scripts/court_monitor/config.py:174) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1925](scripts/court_monitor/lifecycle.py:1925) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:1937](scripts/court_monitor/lifecycle.py:1937) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:441](scripts/court_monitor/linking.py:441) |
 | `reactivate_bank_archived` (возврат из bank-архива; гейт «уже в активных» по case_court_key + мутация архива на месте — счётчик обязан пересохранить архив, иначе клоны) | [scripts/court_monitor/linking.py:451](scripts/court_monitor/linking.py:451) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
@@ -123,7 +123,7 @@
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:538](scripts/court_monitor/runs.py:538) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:1980](scripts/court_monitor/runs.py:1980) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2086](scripts/court_monitor/runs.py:2086) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -734,6 +734,42 @@ drawer; номера не уникальны между судами — пот�
   CSV-снимка с мёртвыми делами. Дубль «решение + мотивировка» одного дела
   склеивается в одну запись 3.5 (`_merge_motiv_into_resolved`, кейс Урала
   2-484/2026; банк-трек функция пропускает — там дело и так одна строка).
+  **С 13.08.2026 (разбор «что уходит в дайджест» юристом)**: (1) голые
+  подписи обогащены датами/временем в `_bank_event_phrases` — срок
+  возражений («до ДД.ММ.ГГГГ»), четыре события отмены заочного, жалобы,
+  мотивировка/акт, время заседаний (00:00-заглушка ГАС скрыта,
+  `_bank_hearing_time`), перерыв — с датой продолжения, роль банка —
+  «X → Y»; всё replay-safe (нет ключа → прежняя подпись). (2) Четыре
+  НОВЫХ события: **`fi_legal_force_reached`** («✅ решение вступило в силу
+  (расч.) — ожидаем ИЛ») и **`fi_writ_overdue`** («⚠️ ИЛ не выдан N дн.»,
+  порог `BANK_WRIT_OVERDUE_ALERT_DAYS`=30 — синхронен фронтовому бейджу) —
+  **календарный проход `collect_bank_calendar_events`** (runs.py, после
+  врезки intake / ДО фильтра рутины и вливания `bank_new_cases`; решённые
+  дела живут в недельном ритме и в FI-цикле change не собирают, а эти
+  события наступают датой); гейты: «Решено» (est умеет посчитаться и у
+  нерешённого от дрейфующей hearing_date), не покинуло трек,
+  `bank_writ_expected`, не архивируется, нет enforcement-листа;
+  идемпотентность ЗНАЧЕНИЕМ est (сдвиг даты переобъявляет — осознанно);
+  типы календарных дописываются в существующую запись дела (одна строка).
+  ⚠️ Анти-паводок — НЕ посев в migrate_stages (расчётная дата пересекает
+  «сегодня» без изменения данных, посев на загрузке глушил бы и будущие
+  события), а **эпоха `BANK_CALENDAR_EVENTS_SINCE`**=13.08.2026: сила
+  раньше эпохи / порог просрочки, пересечённый до эпохи, — тихая пометка
+  (бэклог «64 в силе / 14 просрочено» юрист велел не объявлять);
+  `fi_legal_force_reached` вдобавок в `_FI_DATED_COMPLAINT_TYPES`
+  (массовый импорт давно решённых дел), `fi_writ_overdue` — нет намеренно.
+  **`fi_post_decision_hearing`** («📅 заседание по решённому делу», ветка
+  в FI-цикле ПОСЛЕ hearing-блока: гард `case_decided` глушил индексацию /
+  суд. расходы / отсрочку должника целиком) — только трек, только будущая
+  дата, обязательное session-событие (фантомная «Дата заседания» решённых
+  дел — фолбэк по определениям), не дублирует заседание по отмене
+  заочного; тема из `ev.ground` → `details["hearing_topic"]`; тип в
+  `_FI_HEARING_ANNOUNCE_TYPES`. **`fi_default_copy_served`** («🌙 копия
+  заочного вручена ответчику», парное к возвратившейся: запускает 7-дн
+  срок отмены и пересчёт est) — эмит рядом с copy_returned, посев в
+  `migrate_stages` + `_FI_CATCHUP_DATED_TYPES`. Группы: календарные — с
+  ИЛ, пост-решенческое — с заседаниями. Сводка теперь пишет «N дел с
+  событиями по искам банка» (считала ДЕЛА, а подписывала «событий»).
 - **Выключатель `BANK_TRACK`** — Actions Variable территории (прокидывается в
   [update_cases.yml](.github/workflows/update_cases.yml), фолбэк `'1'` = как
   сейчас). ⚠️ Гасит только ПРОГОН: сегмент «🏦 Иски банка» на дашборде

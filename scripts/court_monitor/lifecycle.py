@@ -1527,6 +1527,11 @@ def suppress_fi_echo_events(case: dict, change: dict) -> list[str]:
 _FI_HEARING_ANNOUNCE_TYPES = (
     "fi_hearing_new", "fi_hearing_next",
     "fi_hearing_postponed", "fi_hearing_recess",
+    # Заседание по решённому делу трека исков банка (индексация, расходы,
+    # отсрочка): тот же анонс с details["hearing_date"] — прошлая дата не
+    # новость, а раскопанная история (эмит и так гейтится будущей датой,
+    # фильтр — ремень к подтяжкам).
+    "fi_post_decision_hearing",
 )
 # Жалобы/направления: тип → ключ details с датой самого события.
 _FI_DATED_COMPLAINT_TYPES = {
@@ -1539,6 +1544,11 @@ _FI_DATED_COMPLAINT_TYPES = {
     # апелляционная карточка срок для возражений не публикует, и для дела со
     # связанной апелляцией это не «догоняющая» новость.
     "fi_objections_deadline_set": "objections_due",
+    # «Решение вступило в силу (расч.)» трека исков банка: страховка от
+    # массового импорта давно решённых дел — «вступление» многомесячной
+    # давности не новость. fi_writ_overdue здесь НЕТ намеренно: поздно
+    # обнаруженный зависший лист — тем более алерт.
+    "fi_legal_force_reached": "legal_force_date",
 }
 # «Догоняющие» события об акте/решении: тип → ключи details с датой (первая
 # читаемая побеждает — у части карточек «Дата публикации акта» пуста, и
@@ -1562,6 +1572,8 @@ _FI_CATCHUP_DATED_TYPES = {
     # заведённой карточки давний возврат копии не новость (второй слой
     # анти-паводка после посева в migrate_stages).
     "fi_default_copy_returned": ("copy_returned_date",),
+    # Вручение копии заочного решения: парное к возврату, тот же класс.
+    "fi_default_copy_served": ("copy_served_date",),
 }
 
 
@@ -1983,6 +1995,23 @@ def migrate_stages(cases: list[dict]) -> int:
             fi["default_copy_returned_emitted"] = (
                 _dj.get("default_copy_returned_date") or "unknown"
             )
+    # Вручение копии заочного решения (13.08.2026): посев эмит-флага делам,
+    # где вручение уже в истории событий, — зеркало посева возврата копии
+    # выше, тот же анти-паводок для события fi_default_copy_served.
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        if "default_copy_served_emitted" in fi:
+            continue
+        _dj = bank_default_judgment_info(fi)
+        if _dj["default_judgment"] and _dj["default_copy_served_date"]:
+            fi["default_copy_served_emitted"] = _dj["default_copy_served_date"]
+    # ⚠️ Календарные события трека («вступило в силу», «ИЛ просрочен») тут НЕ
+    # сеются намеренно. Расчётная дата силы пересекает «сегодня» без изменения
+    # данных карточки, а migrate_stages идёт на загрузке — РАНЬШЕ календарного
+    # прохода collect_bank_calendar_events (runs.py): вечный посев «est уже
+    # наступила» глушил бы не только бэклог деплоя, но и ВСЕ будущие события
+    # (в день наступления даты посев успевал бы первым). Анти-паводок у них —
+    # эпоха фичи config.BANK_CALENDAR_EVENTS_SINCE внутри самого прохода.
     migrated = 0
     for case in cases:
         changed = True

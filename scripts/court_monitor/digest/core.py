@@ -943,6 +943,35 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                     )
                     if mat:
                         line += f" (ранее материал {mat})"
+                elif t == "fi_default_copy_served":
+                    # Парное к возврату копии: вручение запускает 7-дневный
+                    # срок на заявление об отмене (ст. 237 ГПК, 13.08.2026).
+                    line += ("\n  ЗАОЧНОЕ: копия решения вручена ответчику"
+                             + (f" ({d.get('copy_served_date', '')})"
+                                if d.get('copy_served_date') else "")
+                             + " — 7 раб. дн. на заявление об отмене")
+                elif t == "fi_legal_force_reached":
+                    line += ("\n  РЕШЕНИЕ ВСТУПИЛО В СИЛУ (расчётно"
+                             + (f" {d.get('legal_force_date', '')}"
+                                if d.get('legal_force_date') else "")
+                             + ") — ожидаем исполнительный лист")
+                elif t == "fi_writ_overdue":
+                    days = d.get("overdue_days", "")
+                    line += (
+                        "\n  ИСПОЛНИТЕЛЬНЫЙ ЛИСТ НЕ ВЫДАН"
+                        + (f" {days} дн. после вступления в силу" if days
+                           else " после вступления в силу")
+                        + (f" (в силе с {d.get('legal_force_date', '')})"
+                           if d.get('legal_force_date') else "")
+                    )
+                elif t == "fi_post_decision_hearing":
+                    hd = d.get("hearing_date", "")
+                    ht = d.get("hearing_time", "")
+                    topic = d.get("hearing_topic", "")
+                    line += ("\n  ЗАСЕДАНИЕ ПО РЕШЁННОМУ ДЕЛУ: "
+                             + hd + (f" {ht}" if ht else ""))
+                    if topic:
+                        line += f" ({topic})"
             fi_changes_buf.append(line)
         if fi_changes_buf:
             context_parts.append("\nИЗМЕНЕНИЯ ПО ДЕЛАМ ПЕРВОЙ ИНСТАНЦИИ:")
