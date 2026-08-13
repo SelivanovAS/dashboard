@@ -393,10 +393,14 @@ a { color: var(--accent); }
 }
 .stat-card { background:var(--bg-1); border-radius:var(--radius-md); padding:12px 14px;
   box-shadow:var(--shadow-1); border-left:3px solid var(--border-strong);
-  transition:box-shadow 150ms var(--ease-out); cursor:pointer; text-align:left;
+  transition:box-shadow 150ms var(--ease-out); cursor:default; text-align:left;
   border-top:0; border-right:0; border-bottom:0; font-family:var(--font-sans);
   display:block; width:100%; min-width:0; }
-.stat-card:hover { box-shadow:var(--shadow-md); }
+/* Рука и ховер — только у плиток, которые куда-то ведут: у оператора «Последний
+   прогон» лишается data-href (на GitHub его не пустят) и не должен обещать
+   переход. Селектор общий с делегированием кликов ниже. */
+.stat-card[data-goto], .stat-card[data-href] { cursor:pointer; }
+.stat-card[data-goto]:hover, .stat-card[data-href]:hover { box-shadow:var(--shadow-md); }
 .stat-card[data-accent="green"] { border-left-color:var(--accent); }
 .stat-card[data-accent="red"]   { border-left-color:var(--red-500); }
 .stat-card[data-accent="amber"] { border-left-color:var(--amber-500); }
@@ -404,8 +408,15 @@ a { color: var(--accent); }
 .stat-card[data-accent="gray"]  { border-left-color:var(--border-strong); }
 .stat-label { font-size:var(--fs-2xs); color:var(--fg-3); font-weight:var(--fw-semibold);
   text-transform:uppercase; letter-spacing:0.05em; }
+/* max-height — жёсткий потолок ряда пульта: длинная сводка дайджеста тянула
+   ВЕСЬ ряд по самой высокой плитке (9 строк, инцидент 13.08.2026). 3.4em — это
+   ДВА ряда .tile-part с запасом: на телефоне три числа переносятся, а ряд там
+   ≈1.55em (inline-flex .tile-part с baseline-выравниванием растит строчный
+   бокс — по line-height:1.15 не считать, подрежет). Штатные значения целы,
+   третий ряд уже не поместится; текстовый фолбэк клампится сам, ниже. */
 .stat-value { font-size:var(--fs-2xl); font-weight:var(--fw-bold); letter-spacing:-0.02em;
-  line-height:1.15; color:var(--fg-1); margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  line-height:1.15; color:var(--fg-1); margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  max-height:3.4em; overflow:hidden; }
 .stat-sub { font-size:var(--fs-xs); color:var(--fg-3); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Составное значение плитки: крупное число + мелкая подпись единицы рядом
    («4 новых · 6 изм.»). Даёт честные ДВА числа дайджеста в ширине плитки —
@@ -413,6 +424,13 @@ a { color: var(--accent); }
 .stat-value .tile-part { display:inline-flex; align-items:baseline; gap:4px; }
 .stat-value .tile-part i { font-style:normal; font-size:var(--fs-xs); font-weight:var(--fw-semibold);
   color:var(--fg-3); letter-spacing:0; }
+/* Текстовый фолбэк значения: сводку, которую не удалось разобрать на числа,
+   печатаем мелко и в две строки с многоточием (полная — в title). Замер
+   строк требует -webkit-box, поэтому это ОТДЕЛЬНЫЙ элемент внутри flex'а
+   .stat-value, а не сам .stat-value; min-width:0 — чтобы flex его сжал. */
+.stat-value .tile-text { flex:1 1 auto; min-width:0;
+  font-size:var(--fs-sm); font-weight:var(--fw-semibold); line-height:1.3; letter-spacing:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 
 /* Секции */
 /* Вкладки: показана ровно одна панель. Скрытие — классом, а НЕ инлайном:
@@ -897,7 +915,10 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 
 <main class="app-main">
   <div class="pult">
-    <button class="stat-card" data-accent="gray" data-href="run" title="Открыть лог прогона в GitHub Actions">
+    <!-- У оператора плитка НЕ ведёт на GitHub (доступа туда у него нет): без
+         data-href она выпадает из делегирования кликов, disabled убирает её из
+         фокуса, а ghRunSub не рисует стрелку ↗. -->
+    <button class="stat-card" data-accent="gray"${isOperator ? " disabled" : ' data-href="run" title="Открыть лог прогона в GitHub Actions"'}>
       <div class="stat-label">Последний прогон</div>
       <div class="stat-value" id="tile-run-value">…</div>
       <div class="stat-sub" id="tile-run-sub"></div>
@@ -1255,7 +1276,9 @@ function ghRunHref() {
 }
 function ghRunSub(run) {
   const num = String(run.run_number || "");
-  return escHtml(relTime(run.run_started_at)) + (num ? " · #" + escHtml(num) + " ↗" : "");
+  // Стрелка ↗ — только владельцу: у оператора плитка не кликается (см. пульт).
+  return escHtml(relTime(run.run_started_at))
+    + (num ? " · #" + escHtml(num) + (IS_OWNER ? " ↗" : "") : "");
 }
 // Нерабочий ли сегодня день — считает Worker (isHoliday, тот же календарь, что
 // у крона). Своей копии производственного календаря у страницы нет: их и так
@@ -1946,7 +1969,14 @@ function renderDigestTile(digest, pushesMap, pushesGeneratedAt) {
       value = parsed.map(function (p) {
         return '<span class="tile-part">' + escHtml(p.n) + ' <i>' + escHtml(p.unit) + '</i></span>';
       }).join("");
-    } else value = escHtml(digest.summary || "—");
+    } else {
+      // Сводку не разобрали на числа — печатаем текстом, но КЛАМПОМ: replay
+      // (test_digest.yml с публикацией результатов) пишет в summary полную
+      // сводку дайджеста на 9 частей, и голый текст раздувал ряд пульта.
+      // Полная строка остаётся в title (у кнопки свой — вложенный побеждает).
+      value = '<span class="tile-text" title="' + escHtml(digest.summary || "")
+        + '">' + escHtml(digest.summary || "—") + '</span>';
+    }
     // Подпись без ссылки «на дашборд»: кликабельна вся плитка (data-href),
     // ссылка внутри <button> была вложенным интерактивным элементом.
     setTile("digest", "blue", value, escHtml(relTime(digest.generated_at)) + " · открыть ↗");
