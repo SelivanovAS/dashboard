@@ -75,7 +75,7 @@ REGION = RegionConfig(
     fi_suspect_regex="Ханты-Манс|Югор|Югр|ХМАО",
     dashboard_url="https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
     tz_offset_hours=5,
-    pwa_name="Алитигатор",
+    pwa_name="СберСуд",
     # Тексты с падежами, которые нельзя вывести из name автоматически
     # (используются точечно, напр. в промпте full-LLM дайджеста).
     extra={"appeal_prep": "в Суде ХМАО-Югры"},

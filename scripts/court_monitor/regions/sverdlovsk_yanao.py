@@ -171,5 +171,5 @@ REGION = RegionConfig(
     # Variable DASHBOARD_URL (имя репозитория может отличаться).
     dashboard_url="https://selivanovas.github.io/dashboard-ural/sberbank_dashboard.html",
     tz_offset_hours=5,
-    pwa_name="Алитигатор (Урал)",
+    pwa_name="СберСуд (Урал)",
 )
