@@ -18,11 +18,13 @@ import pytest
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
+sys.path.insert(0, TESTS_DIR)
 
 import import_search_dump as isd  # noqa: E402
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.parsing.search import parse_first_instance_search  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
+from fixture_dates import recent_fi_card_html  # noqa: E402
 
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
 
@@ -107,19 +109,43 @@ class TestNormalizeDump:
 
 @pytest.fixture
 def import_env(tmp_path, monkeypatch):
-    """tmp-хранилище + активный регион Свердловск/ЯНАО + GITHUB_OUTPUT."""
+    """tmp-хранилище + активный регион Свердловск/ЯНАО + GITHUB_OUTPUT.
+
+    С веткой истцовых строк импортёр перестал быть офлайновым: по искам банка
+    качается карточка — сеть мокается (свежая карточка, счётчик вызовов в
+    card_calls), как в test_collect_bank_claims.
+    """
     json_path = tmp_path / "cases.json"
     archive_path = tmp_path / "cases_archive.json"
+    bank_path = tmp_path / "cases_bank.json"
+    bank_events_path = tmp_path / "cases_bank_events.json"
+    seen_path = tmp_path / ".bank_intake_seen.json"
     gh_out = tmp_path / "gh_output.txt"
     monkeypatch.setattr(cm_config, "JSON_PATH", str(json_path))
     monkeypatch.setattr(cm_config, "JSON_ARCHIVE_PATH", str(archive_path))
+    monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(bank_path))
+    monkeypatch.setattr(cm_config, "JSON_BANK_EVENTS_PATH", str(bank_events_path))
+    monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_PATH",
+                        str(tmp_path / "cases_bank_archive.json"))
+    monkeypatch.setattr(cm_config, "JSON_BANK_ARCHIVE_EVENTS_PATH",
+                        str(tmp_path / "cases_bank_archive_events.json"))
+    monkeypatch.setattr(cm_config, "BANK_INTAKE_SEEN_PATH", str(seen_path))
     monkeypatch.setattr(cm_config, "REGION", "sverdlovsk_yanao")
     monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
+    monkeypatch.setattr(isd, "polite_delay", lambda: None)
+    card_calls = {"n": 0}
+
+    def fake_card(url, context=None):
+        card_calls["n"] += 1
+        return recent_fi_card_html()
+
+    monkeypatch.setattr(isd, "fetch_card_checked", fake_card)
     dump = tmp_path / "dump.html"
     dump.write_text(_fixture("search_fi_all_roles.html"), encoding="utf-8")
     return {
         "tmp": tmp_path, "json": json_path, "archive": archive_path,
-        "gh_out": gh_out, "dump": dump,
+        "bank": bank_path, "bank_events": bank_events_path, "seen": seen_path,
+        "gh_out": gh_out, "dump": dump, "card_calls": card_calls,
     }
 
 
@@ -139,15 +165,16 @@ def _run(env, *extra) -> int:
 
 
 class TestImporterE2E:
-    def test_import_keeps_only_bank_defendant(self, import_env):
-        """Только «банк-ответчик» — решение юриста 16.07.2026 (в 1-й инст.
-        дела истца/третьего лица не отслеживаем, как и в автопоиске)."""
+    def test_roles_split_between_tracks(self, import_env):
+        """Ответчики → cases.json, истец → трек «Иски банка» (с 13.08.2026),
+        третье лицо — [SKIPPED ROLE] (решение юриста 16.07.2026)."""
         rc = _run(import_env)
         assert rc == isd.EXIT_OK
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         ids = [c["id"] for c in data["cases"]]
-        # 2 добавлено: ответчики со ссылкой. 2-1002 (истец) и 2-1004 (третье
-        # лицо) — [SKIPPED ROLE]; 2-1005 — ответчик без ссылки ([NO LINK]).
+        # 2 добавлено в основную: ответчики со ссылкой. 2-1002 (истец) — в
+        # трек исков банка; 2-1004 (третье лицо) — [SKIPPED ROLE];
+        # 2-1005 — ответчик без ссылки ([NO LINK]).
         assert sorted(ids) == ["2-1001/2026", "2-1006/2026"]
         by_id = {c["id"]: c for c in data["cases"]}
         c1 = by_id["2-1001/2026"]
@@ -172,13 +199,14 @@ class TestImporterE2E:
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 2
+        assert s["added_bank"] == 1
         assert s["already"] == 0
-        assert s["skipped_role"] == 2
+        assert s["skipped_role"] == 1
         assert s["no_link"] == 1
         assert s["subsidiary"] == 1
         assert s["court"] == "Академический районный суд г. Екатеринбурга"
         assert s["operator"] == "Творонович Ю.А."
-        assert any("[SKIPPED ROLE] 2-1002/2026" in l for l in s["lines"])
+        assert any("[ADDED BANK] 2-1002/2026" in l for l in s["lines"])
         assert any("[SKIPPED ROLE] 2-1004/2026" in l for l in s["lines"])
         assert any("[NO LINK] 2-1005/2026" in l for l in s["lines"])
         assert any("[SUBSIDIARY] 2-1003/2026" in l for l in s["lines"])
@@ -189,10 +217,13 @@ class TestImporterE2E:
         assert rc == isd.EXIT_OK
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 0
-        assert s["already"] == 2
-        assert s["skipped_role"] == 2  # пропуски ролей стабильны на повторе
+        assert s["added_bank"] == 0
+        assert s["already"] == 3  # 2 основной картотеки + 1 из трека банка
+        assert s["skipped_role"] == 1  # пропуски ролей стабильны на повторе
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         assert len(data["cases"]) == 2  # дублей нет
+        bank = json.loads(import_env["bank"].read_text(encoding="utf-8"))
+        assert len(bank["cases"]) == 1
 
     def test_dedup_against_archive(self, import_env):
         """Дело из горячего архива не всплывает как новое."""
@@ -208,8 +239,12 @@ class TestImporterE2E:
         rc = _run(import_env, "--dry-run")
         assert rc == isd.EXIT_OK
         assert not import_env["json"].exists()
+        assert not import_env["bank"].exists()
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 2 and s["dry_run"] is True
+        assert s["bank_dry_run"] == 1 and s["added_bank"] == 0
+        # dry-run не ходит в сеть даже за карточками исков банка
+        assert import_env["card_calls"]["n"] == 0
 
     def test_captcha_dump_rejected(self, import_env):
         import_env["dump"].write_text(
@@ -423,16 +458,164 @@ class TestImporterE2E:
     def test_pretty_dump_end_to_end(self, import_env):
         """Pretty-print дамп: нормализация внутри импортёра, стороны на месте
         (без неё 2-1001 потерял бы истца, а роль 2-1002 распозналась бы
-        неверно и дело НЕ отсеялось бы фильтром ролей)."""
+        неверно и иск банка НЕ ушёл бы в свой трек)."""
         import_env["dump"].write_text(
             _fixture("search_fi_all_roles_pretty.html"), encoding="utf-8")
         _run(import_env)
         data = json.loads(import_env["json"].read_text(encoding="utf-8"))
         by_id = {c["id"]: c for c in data["cases"]}
-        assert list(by_id) == ["2-1001/2026"]  # истец 2-1002 отсеян
+        assert list(by_id) == ["2-1001/2026"]  # истец 2-1002 не в основной
         assert by_id["2-1001/2026"]["plaintiff"] == "Петров Пётр Петрович"
         s = _read_summary(import_env["gh_out"])
-        assert s["skipped_role"] == 1
+        assert s["added_bank"] == 1  # 2-1002 распознан истцом → в трек
+
+
+# ── Истцовые строки → трек «Иски банка» (с 13.08.2026, разгон Урала) ─────────
+
+def _bank_cases(env) -> list[dict]:
+    if not env["bank"].exists():
+        return []
+    return json.loads(env["bank"].read_text(encoding="utf-8")).get("cases", [])
+
+
+def _seen_map(env) -> dict:
+    if not env["seen"].exists():
+        return {}
+    return json.loads(env["seen"].read_text(encoding="utf-8")).get("seen", {})
+
+
+class TestBankDumpImport:
+    def test_plaintiff_added_to_bank_track(self, import_env):
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        cases = _bank_cases(import_env)
+        assert [c["id"] for c in cases] == ["2-1002/2026"]
+        c = cases[0]
+        assert c["track"] == "plaintiff_light"
+        assert c["bank_role"] == "Истец"
+        assert c["current_stage"] == "first_instance"
+        assert c["import"]["source"] == "dump"
+        assert c["import"]["announced"] is True   # не анонсируется «новым иском»
+        assert c["import"]["operator"] == "Творонович Ю.А."
+        # srv_num из href (2) авторитетнее конфига суда (1)
+        assert c["first_instance"]["srv_num"] == 2
+        # split-хранение: events уехали в отдельный файл под композитным ключом
+        assert import_env["bank_events"].exists()
+        assert "2-1002/2026" in import_env["bank_events"].read_text(encoding="utf-8")
+        # ровно одна карточка скачана (только истец; ответчики офлайн)
+        assert import_env["card_calls"]["n"] == 1
+
+    def test_track_off_keeps_old_behaviour(self, import_env, monkeypatch):
+        """BANK_TRACK=0: истцовые строки идут прежним [SKIPPED ROLE], сеть
+        не трогается — территория без трека ведёт себя байт-в-байт как
+        раньше."""
+        monkeypatch.setattr(cm_config, "BANK_TRACK", False)
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["skipped_role"] == 2 and s["added_bank"] == 0
+        assert any("[SKIPPED ROLE] 2-1002/2026" in l for l in s["lines"])
+        assert not import_env["bank"].exists()
+        assert import_env["card_calls"]["n"] == 0
+
+    def test_dedup_against_bank_file(self, import_env):
+        """Иск банка, уже живущий в треке, — [ALREADY] без единого HTTP."""
+        import_env["bank"].write_text(json.dumps({
+            "version": 1, "track": "plaintiff_light",
+            "cases": [{
+                "id": "2-1002/2026",
+                "current_stage": "first_instance",
+                "track": "plaintiff_light",
+                "first_instance": {"case_number": "2-1002/2026",
+                                   "court_domain": "akademicheskiy--svd.sudrf.ru"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["added_bank"] == 0 and s["already"] == 1
+        assert import_env["card_calls"]["n"] == 0
+        assert len(_bank_cases(import_env)) == 1  # дублей нет
+
+    def test_spent_case_rejected_and_cached(self, import_env, monkeypatch):
+        """Дело с давним решением (сразу ушло бы в архив трека) — [SPENT],
+        отказ вечный → негативный кэш, повтор без второго HTTP."""
+        monkeypatch.setattr(isd, "fetch_card_checked", lambda url, context=None: (
+            import_env["card_calls"].__setitem__("n", import_env["card_calls"]["n"] + 1)
+            or _fixture("case_card_first_instance.html")))
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["already_spent"] == 1 and s["added_bank"] == 0
+        assert not import_env["bank"].exists()
+        key = "akademicheskiy--svd.sudrf.ru|2-1002/2026"
+        assert _seen_map(import_env)[key]["reason"] == "already_spent"
+        assert import_env["card_calls"]["n"] == 1
+        _run(import_env)
+        s2 = _read_summary(import_env["gh_out"])
+        assert s2["seen_cached"] == 1
+        assert import_env["card_calls"]["n"] == 1  # второго HTTP не было
+
+    def test_fetch_fail_not_cached(self, import_env, monkeypatch):
+        """Сетевой сбой карточки — отказ НЕ вечный: кэш пуст, повтор импорта
+        с ожившей карточкой добавляет дело."""
+        monkeypatch.setattr(isd, "fetch_card_checked",
+                            lambda url, context=None: None)
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK  # сбой строки не валит импорт
+        s = _read_summary(import_env["gh_out"])
+        assert s["fetch_fail"] == 1 and s["added_bank"] == 0
+        assert not import_env["seen"].exists()
+        monkeypatch.setattr(isd, "fetch_card_checked",
+                            lambda url, context=None: recent_fi_card_html())
+        _run(import_env)
+        assert _read_summary(import_env["gh_out"])["added_bank"] == 1
+
+    def test_appeal_case_taken_with_flags(self, import_env, monkeypatch):
+        """Дело с поданной жалобой берётся (skip_appeal=False, как в
+        авто-подхвате) — флаги переносятся, ближайший прогон уведёт его в
+        основной cases.json."""
+        monkeypatch.setattr(isd, "fetch_card_checked", lambda url, context=None:
+                            _fixture("case_card_fi_with_appeal.html"))
+        _run(import_env)
+        cases = _bank_cases(import_env)
+        assert len(cases) == 1
+        assert cases[0]["first_instance"].get("appeal_filed")
+
+    def test_row_excluded_result_cached(self, import_env):
+        """Терминальный итог уже в строке выдачи — отказ до HTTP, в кэш."""
+        state = {"seen": None, "seen_dirty": False, "cards": 0}
+        outcome, line, entry = isd._import_bank_row(
+            {"case_number": "2-500/2026",
+             "court_domain": "akademicheskiy--svd.sudrf.ru",
+             "bank_role": "Истец", "link": "1|a",
+             "result": "Производство по делу ПРЕКРАЩЕНО",
+             "plaintiff": "ПАО Сбербанк", "defendant": "Иванов И.И."},
+            "Тест", "2026-08-13T12:00:00", False, state)
+        assert outcome == "excluded_result" and entry is None
+        assert "[EXCLUDED RESULT]" in line
+        assert state["seen_dirty"] is True
+        assert state["cards"] == 0
+
+    def test_no_link_not_cached(self, import_env):
+        """no_link в кэш НЕ пишется: ссылку обычно теряет вставка «как
+        текст», а не выдача суда — иначе правильный повторный дамп молча
+        скипал бы дело как [SEEN]."""
+        state = {"seen": None, "seen_dirty": False, "cards": 0}
+        outcome, _, _ = isd._import_bank_row(
+            {"case_number": "2-501/2026",
+             "court_domain": "akademicheskiy--svd.sudrf.ru",
+             "bank_role": "Истец", "link": "", "result": ""},
+            "Тест", "2026-08-13T12:00:00", False, state)
+        assert outcome == "no_link"
+        assert state["seen_dirty"] is False
+
+    def test_cap_limits_cards(self, import_env, monkeypatch):
+        """Кэп-страховка таймаута: при исчерпании — [BANK CAPPED], без HTTP."""
+        monkeypatch.setattr(isd, "MAX_BANK_CARDS_PER_IMPORT", 0)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["bank_capped"] == 1 and s["added_bank"] == 0
+        assert import_env["card_calls"]["n"] == 0
+        assert any("[BANK CAPPED]" in l for l in s["lines"])
 
 
 # ── Защита «выбран суд А, вставлен дамп суда Б» ──────────────────────────────
@@ -553,3 +736,17 @@ class TestWorkflowWiring:
                 '[ "$COMMIT_OUTCOME" = "success" ]') in yml
         # при упавшем коммите summary получает подсказку повторить импорт
         assert "коммит не запушился" in yml
+
+    def test_bank_track_wiring(self):
+        """Проводка ветки истцовых строк: BANK_TRACK из Variables, таймаут
+        с запасом на карточки, bank-файлы в коммите, added_bank в журнале.
+        Любой из четырёх пропусков ломает канал молча: флаг не доезжает /
+        джоб отстреливается на 100 карточках / данные трека не коммитятся /
+        оператор не видит «+N в трек» в админке."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        assert "BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}" in yml
+        assert "timeout-minutes: 45" in yml
+        for f in ("data/cases_bank.json", "data/cases_bank_events.json",
+                  "data/.bank_intake_seen.json"):
+            assert f in yml, f"{f} не попадает в commit-шаг import_cases.yml"
+        assert "added_bank:(.added_bank // 0)" in yml
