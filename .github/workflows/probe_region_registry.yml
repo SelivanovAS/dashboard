@@ -5,10 +5,20 @@
 # и классифицирует боевой поиск (RESULTS/EMPTY/CAPTCHA/FAIL). Отчёт коммитится
 # в ops/region_probe/report.txt — читать его локально через git pull.
 # НИЧЕГО не парсит в данные, не шлёт дайджест.
+# Второй режим — галка scan_servers: разведка судебных присутствий (вторых
+# площадок srv_num=2+) по всем доменам 1-й инстанции региона (env REGION);
+# отчёт — ops/region_probe/servers_report.txt. Только с раннера: с Mac sudrf
+# закрыт VPN'ом.
 name: "🔬 Проба реестра региона (delo_id + капча)"
 
 on:
   workflow_dispatch:
+    inputs:
+      scan_servers:
+        description: "Скан судебных присутствий (srv_num) вместо пробы CSV"
+        type: boolean
+        required: false
+        default: false
   push:
     paths:
       - "ops/region_probe/courts_probe.csv"
@@ -37,19 +47,30 @@ jobs:
 
       - name: Проба судов (2 вежливых запроса на суд)
         env:
+          # Регион территории (Actions Variable форка; пусто у эталона =
+          # hmao) — скан площадок берёт домены из конфига региона.
+          REGION: ${{ vars.REGION }}
           # Ручная проба: ретраи полезны — запросов мало, повтор запуска
           # дороже (боевой дефолт FETCH_MAX_RETRIES=1).
           FETCH_MAX_RETRIES: "3"
         run: |
-          python3 scripts/build_region_registry.py \
-            --input ops/region_probe/courts_probe.csv 2>&1 \
-            | tee ops/region_probe/report.txt
+          if [ "${{ github.event.inputs.scan_servers }}" = "true" ]; then
+            python3 scripts/build_region_registry.py --scan-servers 2>&1 \
+              | tee ops/region_probe/servers_report.txt
+          else
+            python3 scripts/build_region_registry.py \
+              --input ops/region_probe/courts_probe.csv 2>&1 \
+              | tee ops/region_probe/report.txt
+          fi
 
       - name: Commit report
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
           git add ops/region_probe/report.txt
+          if [ -f ops/region_probe/servers_report.txt ]; then
+            git add ops/region_probe/servers_report.txt
+          fi
           git diff --cached --quiet && exit 0
           git commit -m "🔬 Отчёт пробы реестра региона ($(date -u +'%d.%m.%Y %H:%M') UTC)"
           # Ретраи на случай параллельного пуша другого workflow.
