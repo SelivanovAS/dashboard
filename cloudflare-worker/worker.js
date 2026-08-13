@@ -714,7 +714,7 @@ async function buildVapidAuth(env, audience) {
 }
 
 // 5) Тестовый push конкретной подписке. Без encryption: SW сам покажет
-// дефолтное уведомление «Алитигатор — есть обновления по делам». Этого
+// дефолтное уведомление «СберСуд — есть обновления по делам». Этого
 // достаточно чтобы убедиться, что push реально доходит до устройства.
 async function handleAdminTestPush(request, env) {
   const r = await adminAuthAndLoad(request, env);

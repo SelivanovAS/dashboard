@@ -1,6 +1,6 @@
 {
-  "name": "Алитигатор",
-  "short_name": "Алитигатор",
+  "name": "СберСуд",
+  "short_name": "СберСуд",
   "description": "Мониторинг гражданских дел Сбербанка в ХМАО-Югре",
   "start_url": "./sberbank_dashboard.html",
   "scope": "./",
