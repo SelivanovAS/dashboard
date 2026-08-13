@@ -557,9 +557,11 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 interim_n += 1
             if any(w.get("kind") != "interim" for w in writs):
                 enf_n += 1
+        # n = число ДЕЛ (записей секции, у дела может быть несколько
+        # событий) — прежняя подпись «N событий» врала (разбор 13.08.2026).
         part = (
-            f"🏦 {n} " + plural_ru(n, "событие", "события", "событий")
-            + " по искам банка"
+            f"🏦 {n} " + plural_ru(n, "дело", "дела", "дел")
+            + " с событиями по искам банка"
         )
         tails = []
         if enf_n:
@@ -1043,6 +1045,19 @@ _BANK_TYPE_LABELS = {
     "fi_cassation_filed": "📨 касс. жалоба",
     "fi_sent_to_cassation": "📤 направлено в касс. суд",
     "fi_bank_role_changed": "ℹ️ роль банка изменилась",
+    # Календарные события ожидания ИЛ (13.08.2026, collect_bank_calendar_
+    # events в runs.py): наступление расчётной даты силы и алерт зависшего
+    # листа. Ради листов трек и существует — раньше дайджест сообщал только
+    # факт выдачи и молчал, пока лист не выдан.
+    "fi_legal_force_reached": "✅ решение вступило в силу (расч.) — ожидаем ИЛ",
+    "fi_writ_overdue": "⚠️ ИЛ не выдан после вступления в силу",
+    # Заседание по решённому делу (индексация, расходы, отсрочка): гард
+    # case_decided глушит обычный hearing-блок, этот тип — его законная
+    # пост-решенческая ветка (только трек, только будущие даты).
+    "fi_post_decision_hearing": "📅 заседание по решённому делу",
+    # Парное к «возвратилась невручённой»: вручение запускает 7-дневный
+    # срок на заявление об отмене (ст. 237 ГПК) и пересчёт даты силы.
+    "fi_default_copy_served": "🌙 копия заочного решения вручена ответчику",
 }
 
 
@@ -1080,6 +1095,13 @@ def _writ_numbers(writ: dict) -> str:
         (writ.get("blank_number") or "").strip(),
     ) if n]
     return " · ".join(nums)
+
+
+def _bank_hearing_time(d: dict) -> str:
+    """Время заседания для банк-строки; «00:00» — заглушка ГАС «времени
+    нет», скрываем (то же правило, что _fmt_hearing_dt в 3.2)."""
+    ht = (d.get("hearing_time") or "").strip()
+    return "" if ht in ("00:00", "0:00") else ht
 
 
 def _bank_event_phrases(ch: dict) -> list[str]:
@@ -1222,13 +1244,23 @@ def _bank_event_phrases(ch: dict) -> list[str]:
                 ph += " (🌙 заочное)"
             out.append(ph)
         elif t in ("fi_hearing_new", "fi_hearing_next"):
+            # Время — как в основном треке (разбор 13.08.2026: являться-то по
+            # времени); placeholder 00:00 суда скрываем, как в 3.2.
             hp = (d.get("hearing_date") or "").strip()
-            out.append("📅 заседание"
-                       + (f" <b>{escape_html(hp)}</b>" if hp else " назначено"))
+            ht = _bank_hearing_time(d)
+            ph = ("📅 заседание"
+                  + (f" <b>{escape_html(hp)}</b>" if hp else " назначено"))
+            if hp and ht:
+                ph += f" в {escape_html(ht)}"
+            out.append(ph)
         elif t == "fi_hearing_postponed":
             hp = (d.get("hearing_date") or "").strip()
-            out.append("🔁 отложено"
-                       + (f" на <b>{escape_html(hp)}</b>" if hp else ""))
+            ht = _bank_hearing_time(d)
+            ph = ("🔁 отложено"
+                  + (f" на <b>{escape_html(hp)}</b>" if hp else ""))
+            if hp and ht:
+                ph += f" в {escape_html(ht)}"
+            out.append(ph)
         elif t == "fi_returned":
             # Вид процессуального завершения; фолбэк — прежняя форма
             # («возврат») для контекстов без termination_kind.
@@ -1299,6 +1331,122 @@ def _bank_event_phrases(ch: dict) -> list[str]:
                 out.append(f"⚖️ {escape_html(quote)}")
             else:
                 out.append(_BANK_TYPE_LABELS["fi_final_event"])
+        # ── Обогащение датами (разбор дайджеста 13.08.2026): половина строк
+        # секции была голыми подписями. Каждая ветка replay-safe: ключа в
+        # details нет (старый контекст) → прежняя подпись из _BANK_TYPE_LABELS.
+        elif t == "fi_objections_deadline_set":
+            # Дата срока — и есть новость; без неё строка не говорила ничего.
+            due = (d.get("objections_due") or "").strip()
+            out.append(
+                f"⏳ возражения на жалобу — до <b>{escape_html(due)}</b>"
+                if due else _BANK_TYPE_LABELS[t]
+            )
+        elif t == "fi_default_cancellation_filed":
+            # От даты подачи течёт 10-дневный срок рассмотрения (ст. 240 ГПК).
+            dt = (d.get("cancel_filed_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_default_cancellation_hearing":
+            # Дата заседания по заявлению — это явка представителя банка.
+            dt = (d.get("cancel_hearing_date") or "").strip()
+            out.append(
+                f"📅 заседание по заявлению об отмене — <b>{escape_html(dt)}</b>"
+                if dt else _BANK_TYPE_LABELS[t]
+            )
+        elif t in ("fi_default_judgment_vacated",
+                   "fi_default_cancellation_refused"):
+            # У отказа дата особенно важна: с неё открывается апелляционный
+            # ход ответчика (ст. 237 ч. 2 ГПК) — юрист считает срок.
+            dt = (d.get("cancel_outcome_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_appeal_filed":
+            dt = (d.get("appeal_filed_date") or "").strip()
+            out.append(
+                f"📨 апел. жалоба ответчика от {escape_html(dt)} — "
+                "дело уходит в общий трек"
+                if dt else _BANK_TYPE_LABELS[t]
+            )
+        elif t == "fi_cassation_filed":
+            dt = (d.get("cassation_filed_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_sent_to_cassation":
+            dt = (d.get("sent_to_cassation_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_motivirovka_emitted":
+            # От мотивировки течёт месяц на апелляцию (ст. 321 ГПК) и
+            # считается вступление в силу. Дата была только у ветки
+            # fi_final_event — асимметрию убираем.
+            dt = (d.get("motivirovka_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_act_published":
+            dt = (d.get("act_date") or "").strip()
+            out.append(_BANK_TYPE_LABELS[t]
+                       + (f" ({escape_html(dt)})" if dt else ""))
+        elif t == "fi_hearing_recess":
+            # details несут НОВУЮ дату продолжения (runs.py пишет hearing_*
+            # для всех исходов классификации) — раньше она терялась.
+            hp = (d.get("hearing_date") or "").strip()
+            ht = _bank_hearing_time(d)
+            if hp:
+                ph = f"⏸ перерыв — продолжение <b>{escape_html(hp)}</b>"
+                if ht:
+                    ph += f" в {escape_html(ht)}"
+                out.append(ph)
+            else:
+                out.append(_BANK_TYPE_LABELS[t])
+        elif t == "fi_bank_role_changed":
+            old_r = (d.get("old_role") or "").strip()
+            new_r = (d.get("new_role") or "").strip()
+            out.append(
+                f"ℹ️ роль банка: {escape_html(old_r)} → {escape_html(new_r)}"
+                if (old_r or new_r) else _BANK_TYPE_LABELS[t]
+            )
+        # ── Календарные события ожидания ИЛ + пост-решенческие (13.08.2026) ──
+        elif t == "fi_legal_force_reached":
+            dt = (d.get("legal_force_date") or "").strip()
+            out.append(
+                f"✅ решение вступило в силу (расч. {escape_html(dt)}) — "
+                "ожидаем ИЛ"
+                if dt else _BANK_TYPE_LABELS[t]
+            )
+        elif t == "fi_writ_overdue":
+            days = d.get("overdue_days")
+            dt = (d.get("legal_force_date") or "").strip()
+            if days:
+                ph = (f"⚠️ <b>ИЛ не выдан {days} дн. после вступления "
+                      f"в силу</b>")
+                if dt:
+                    ph += f" (в силе с {escape_html(dt)})"
+                out.append(ph)
+            else:
+                out.append(_BANK_TYPE_LABELS[t])
+        elif t == "fi_post_decision_hearing":
+            hp = (d.get("hearing_date") or "").strip()
+            ht = _bank_hearing_time(d)
+            topic = (d.get("hearing_topic") or "").strip()
+            if hp:
+                ph = (f"📅 заседание по решённому делу — "
+                      f"<b>{escape_html(hp)}</b>")
+                if ht:
+                    ph += f" в {escape_html(ht)}"
+                if topic:
+                    ph += f" ({escape_html(topic)})"
+                out.append(ph)
+            else:
+                out.append(_BANK_TYPE_LABELS[t])
+        elif t == "fi_default_copy_served":
+            # Срок на заявление об отмене — рабочие дни (ст. 107 ГПК),
+            # как в расчёте BANK_DEFAULT_CANCEL_WORKDAYS.
+            dt = (d.get("copy_served_date") or "").strip()
+            ph = _BANK_TYPE_LABELS[t]
+            if dt:
+                ph += f" {escape_html(dt)}"
+            ph += " (7 раб. дн. на заявление об отмене)"
+            out.append(ph)
         else:
             label = _BANK_TYPE_LABELS.get(t)
             if label:
@@ -1313,11 +1461,15 @@ def _bank_event_phrases(ch: dict) -> list[str]:
 _BANK_GROUP_ORDER = (
     frozenset({"fi_resolved", "fi_act_text_published", "fi_act_published",
                "fi_motivirovka_emitted"}),
-    frozenset({"fi_writ_issued", "fi_writ_status_changed"}),
+    # Календарные события ожидания ИЛ — в группе листов: «вступило в силу»
+    # и «лист завис» суть этапы той же цепочки «решение → сила → выдача».
+    frozenset({"fi_writ_issued", "fi_writ_status_changed",
+               "fi_legal_force_reached", "fi_writ_overdue"}),
     frozenset({"fi_returned"}),
     frozenset({"fi_bank_claim_registered", "fi_accepted_no_hearing"}),
     frozenset({"fi_hearing_new", "fi_hearing_next", "fi_hearing_postponed",
-               "fi_hearing_recess", "fi_hearing_restart"}),
+               "fi_hearing_recess", "fi_hearing_restart",
+               "fi_post_decision_hearing"}),
 )
 _BANK_GROUP_HEARINGS = 4
 _BANK_GROUP_OTHER = len(_BANK_GROUP_ORDER)

@@ -1977,6 +1977,112 @@ def split_bank_track(
     return rest, bank_active, bank_newly_archived, moved
 
 
+def collect_bank_calendar_events(
+    cases: list[dict], fi_changes: list[dict], today: date,
+) -> int:
+    """Календарные события трека «Иски банка» — без HTTP (13.08.2026).
+
+    Решённое track-дело живёт в недельном ритме writ_weekly и в FI-цикле
+    change не собирает, а два события наступают КАЛЕНДАРЁМ, не карточкой:
+    - fi_legal_force_reached — расчётная дата вступления решения в силу
+      (bank_legal_force_est) наступила: пора контролировать выдачу ИЛ;
+    - fi_writ_overdue — листа на исполнение всё нет спустя
+      config.BANK_WRIT_OVERDUE_ALERT_DAYS от силы: пора запрашивать.
+
+    Гейты (по дешевизне): track → статус «Решено» (est умеет посчитаться от
+    дрейфующей hearing_date и у нерешённого дела — ложное «в силе»
+    недопустимо) → дело не покинуло трек (жалобы) → bank_writ_expected
+    (отказ/присоединение — листа не будет) → не уходит в архив этим прогоном
+    (потолок 180 дн: алерт по умирающему делу — шум) → нет enforcement-листа
+    → est наступила. Особый порядок отмены заочного гейтится самим
+    bank_legal_force_est (pending/отмена → None).
+
+    Идемпотентность — ЗНАЧЕНИЕМ est в fi["legal_force_emitted"] /
+    fi["writ_overdue_emitted"]: сдвиг расчётной даты (поздняя мотивировка,
+    вручение копии заочного) переобъявляет события с новой датой — осознанно.
+
+    Анти-паводок — эпоха фичи config.BANK_CALENDAR_EVENTS_SINCE: событие
+    эмитится, только если его наступление (для силы — сама est, для
+    просрочки — est + порог) случилось ПОСЛЕ эпохи; более раннее тихо
+    получает маркер (бэклог деплоя юрист велел не объявлять — он виден в
+    чипе «Ждут ИЛ»). Посев в migrate_stages тут не годится: он идёт на
+    загрузке, РАНЬШЕ прохода, и в день наступления даты глушил бы событие.
+    Второй слой у fi_legal_force_reached — стародатный фильтр
+    (_FI_DATED_COMPLAINT_TYPES): массовый импорт давно решённых дел не
+    зальёт дайджест «вступлениями» многомесячной давности; у fi_writ_overdue
+    его нет намеренно — поздно обнаруженный зависший лист тем более алерт.
+
+    Если у дела уже есть track-запись в fi_changes этого прогона (карточка
+    парсилась по ритму) — типы дописываются в неё: секция держит одну строку
+    на дело. Возвращает число дел с новыми календарными событиями.
+    """
+    by_case: dict[str, dict] = {}
+    for ch in fi_changes:
+        if ch.get("track") == "plaintiff_light" and ch.get("case"):
+            by_case.setdefault(ch["case"], ch)
+    emitted = 0
+    for c in cases:
+        if not lifecycle.is_bank_plaintiff_track(c):
+            continue
+        fi = c.get("first_instance") or {}
+        if (fi.get("status") or "").strip() != "Решено":
+            continue
+        if (lifecycle.bank_case_left_track(c)
+                or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
+            continue
+        if not lifecycle.bank_writ_expected(fi):
+            continue
+        if lifecycle.is_case_archived(c):
+            continue
+        if any(lifecycle.classify_writ_kind(w, fi) == "enforcement"
+               for w in fi.get("writs") or []):
+            continue
+        est = lifecycle.bank_legal_force_est(fi)
+        if not est or est > today:
+            continue
+        est_iso = est.isoformat()
+        since = config.BANK_CALENDAR_EVENTS_SINCE
+        types: list[str] = []
+        details: dict = {}
+        if fi.get("legal_force_emitted") != est_iso:
+            fi["legal_force_emitted"] = est_iso
+            if est > since:
+                types.append("fi_legal_force_reached")
+        overdue_days = (today - est).days
+        if (overdue_days >= config.BANK_WRIT_OVERDUE_ALERT_DAYS
+                and fi.get("writ_overdue_emitted") != est_iso):
+            fi["writ_overdue_emitted"] = est_iso
+            if est + timedelta(days=config.BANK_WRIT_OVERDUE_ALERT_DAYS) > since:
+                types.append("fi_writ_overdue")
+                details["overdue_days"] = overdue_days
+        if not types:
+            continue
+        details["legal_force_date"] = est.strftime("%d.%m.%Y")
+        key = fi.get("case_number") or c.get("id", "")
+        existing = by_case.get(key)
+        if existing is not None:
+            existing["type"].extend(types)
+            existing.setdefault("details", {}).update(details)
+        else:
+            fi_changes.append({
+                "case": key,
+                "court": fi.get("court", ""),
+                "plaintiff": c.get("plaintiff", ""),
+                "defendant": c.get("defendant", ""),
+                "bank_role": c.get("bank_role", ""),
+                "category": c.get("category", ""),
+                "track": "plaintiff_light",
+                "type": types,
+                "details": {
+                    "link": fi.get("link", ""),
+                    "court_domain": fi.get("court_domain", ""),
+                    **details,
+                },
+            })
+        emitted += 1
+    return emitted
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -3649,6 +3755,23 @@ def main_json():
                 fi["default_copy_returned_emitted"] = _copy_key
                 changed = True
 
+        # ── Копия заочного решения ВРУЧЕНА ответчику (13.08.2026) ──
+        # Парное к возврату выше: вручение запускает 7-дневный срок на
+        # заявление об отмене (ст. 237 ГПК) и пересчитывает расчётное
+        # вступление в силу от даты вручения. Раньше факт жил только в
+        # расчёте bank_legal_force_est и на фронте (defaultCopyKvHtml) —
+        # дайджест молчал. Идемпотентность — ЗНАЧЕНИЕМ (датой): на втором
+        # круге заочного bank_default_judgment_info обнуляет served-дату
+        # границей нового решения, новая дата ≠ маркер — эмит случится сам.
+        # Анти-паводок — посев в migrate_stages + _FI_CATCHUP_DATED_TYPES.
+        if _dj_info["default_judgment"] and _dj_info["default_copy_served_date"]:
+            _served = _dj_info["default_copy_served_date"]
+            if fi.get("default_copy_served_emitted") != _served:
+                change["type"].append("fi_default_copy_served")
+                change["details"]["copy_served_date"] = _served
+                fi["default_copy_served_emitted"] = _served
+                changed = True
+
         # Новое/перенесённое заседание
         if (new_hearing_date and new_hearing_date != old_hearing_date
                 and not case_decided):
@@ -3731,6 +3854,51 @@ def main_json():
                 change["details"]["hearing_type"] = classify_hearing_type(
                     matched_ev.get("text", "")
                 )
+
+        # ── Заседание по РЕШЁННОМУ делу (трек исков банка, 13.08.2026) ──
+        # Гард case_decided выше глушит hearing-блок целиком — и заседания по
+        # решённым делам (индексация, судебные расходы, правопреемство,
+        # отсрочка/рассрочка по заявлению должника) не попадали в дайджест
+        # никак, а банку туда являться и возражать. Отдельный тип, ТОЛЬКО
+        # track-делам и только с БУДУЩЕЙ датой (прошлая — раскопанная история
+        # карточки; второй слой — _FI_HEARING_ANNOUNCE_TYPES stale-фильтра).
+        # Гейты: (1) подтверждающее session-событие на эту дату обязательно —
+        # у решённых дел «Дата заседания» карточки заполняется и фолбэком по
+        # датам определений (cards.py), без гейта был бы фантом; (2) заседание
+        # по заявлению об отмене заочного уже объявляет
+        # fi_default_cancellation_hearing — не дублируем (сверка и с
+        # _cancel_st, и с типами прогона: маркер отмены мог встать в прошлый
+        # прогон). Идемпотентность — ЗНАЧЕНИЕМ даты; состояние дела не трогаем
+        # (decision_date заморожен, дрейф hearing_date учтён его якорями).
+        # Ритм опроса не меняется: writ_weekly-ветка should_skip_case стоит
+        # раньше future_hearing — анонс может опоздать до 7 дн (принято).
+        if (case_decided and new_hearing_date
+                and new_hearing_date != old_hearing_date
+                and lifecycle.is_bank_plaintiff_track(case_j)
+                and new_hearing_date != (_cancel_st["hearing_date"] or "")
+                and "fi_default_cancellation_hearing" not in change["type"]
+                and fi.get("post_decision_hearing_emitted") != new_hearing_date):
+            _pdh_dt = parse_date(new_hearing_date)
+            if _pdh_dt and _pdh_dt.date() > today:
+                _pdh_ev = next(
+                    (ev for ev in (card_info.get("_events") or [])
+                     if ev.get("date") == new_hearing_date
+                     and _SESSION_START_RX.search(ev.get("text") or "")),
+                    None,
+                )
+                if _pdh_ev:
+                    change["type"].append("fi_post_decision_hearing")
+                    change["details"]["hearing_date"] = new_hearing_date
+                    change["details"]["hearing_time"] = new_hearing_time
+                    change["details"]["hearing_type"] = classify_hearing_type(
+                        _pdh_ev.get("text", "")
+                    )
+                    # Тема — из колонки «Основание» события, если суд её
+                    # разобрал: юристу важно «индексация» это или «отсрочка».
+                    _pdh_topic = (_pdh_ev.get("ground") or "").strip()
+                    if _pdh_topic:
+                        change["details"]["hearing_topic"] = _pdh_topic[:60]
+                    fi["post_decision_hearing_emitted"] = new_hearing_date
 
         # Промоушен материала М→2: иск принят к производству, но заседание ещё
         # не назначено. Промоушен переименовывает запись ДО фильтра новых дел,
@@ -4289,6 +4457,22 @@ def main_json():
                 "left_track": lifecycle.bank_case_left_track(_bc),
             },
         })
+
+    # Календарные события трека: «решение вступило в силу (расч.)» и «ИЛ не
+    # выдан N дн.» наступают датой, а не карточкой — решённые дела живут в
+    # недельном ритме writ_weekly и в FI-цикле change не собирают. Порядок
+    # load-bearing: ПОСЛЕ dedupe (синтетике он не нужен) и врезки новых
+    # исков (слияние строк по делу), ДО фильтра рутины и save_digest_context
+    # (replay видит события) и ДО вливания bank_new_cases в cases —
+    # свежезаведённое дело со старым решением объявит не этот проход, а
+    # эпоха/стародатный фильтр отсеют. Маркеры мутируются в тех же dict,
+    # которые сохранит save_bank_json в фазе 7c.
+    _cal_emitted = collect_bank_calendar_events(cases, fi_changes, today)
+    if _cal_emitted:
+        log.info(
+            f"Иски банка: календарных событий (сила/просрочка ИЛ) "
+            f"по {_cal_emitted} делам"
+        )
 
     # Трек «Иски банка»: при BANK_DIGEST_ROUTINE=0 рутина track-дел
     # (заседания, статусы, принятия) в дайджест не идёт — остаются решение,
