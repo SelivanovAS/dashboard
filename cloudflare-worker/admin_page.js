@@ -486,7 +486,7 @@ a { color: var(--accent); }
   padding:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-3);
   border-radius:var(--radius); cursor:pointer; transition:all 120ms var(--ease-out); }
 .btn-icon:hover { background:var(--bg-3); color:var(--fg-1); border-color:var(--border-strong); }
-.btn-icon svg { width:14px; height:14px; }
+.btn-icon svg { display:block; width:14px; height:14px; }
 
 /* Бейджи */
 .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:var(--radius-pill);
@@ -526,8 +526,12 @@ a { color: var(--accent); }
 .action-flash.err { color:var(--red-600); }
 /* Крестик у вспышки-ошибки: сообщения об ошибке НЕ гасятся по таймеру
    (код ошибки нужен, чтобы повторить или показать), закрывает их юрист. */
-.flash-x { border:0; background:none; color:inherit; cursor:pointer; font-family:var(--font-sans);
-  font-size:var(--fs-2xs); padding:0 2px; opacity:0.7; }
+/* vertical-align:-2px — замерено в браузере: кнопка встаёт ровно по центру
+   строки сообщения (её собственная высота входит в строчный бокс, поэтому
+   поправка не 1:1 и «на глаз» не подбирается). */
+.flash-x { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+  vertical-align:-2px; border:0; background:none; color:inherit; cursor:pointer; padding:0; opacity:0.7; }
+.flash-x svg { display:block; width:11px; height:11px; }
 .flash-x:hover { opacity:1; }
 :root[data-theme="dark"] .action-flash.err { color:var(--danger-fg); }
 
@@ -646,6 +650,9 @@ details.fold > summary:hover { color:var(--fg-1); }
 .case-row { display:flex; gap:8px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--divider);
   flex-wrap:wrap; font-size:var(--fs-sm); }
 .case-row:last-child { border-bottom:0; }
+/* Строка выровнена по базовой линии — это нужно тексту и бейджам, но
+   кнопку 30×30 такой baseline уводит вниз целиком, мимо номера дела. */
+.case-row .btn-icon { align-self:center; }
 .case-num { font-family:var(--font-code); font-weight:var(--fw-semibold); font-size:var(--fs-xs); color:var(--fg-1); white-space:nowrap; }
 .case-alias { font-family:var(--font-code); color:var(--fg-4); font-size:var(--fs-2xs);
   background:var(--bg-3); padding:1px 6px; border-radius:var(--radius-xs); white-space:nowrap; }
@@ -809,8 +816,9 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 .imp-file-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 10px;
   border-radius:var(--radius-pill); background:var(--info-bg); color:var(--info-fg);
   font-weight:var(--fw-medium); }
-.imp-file-clear { border:0; background:none; color:inherit; cursor:pointer; font-size:inherit;
-  padding:0 2px; line-height:1; }
+.imp-file-clear { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+  vertical-align:-3px; border:0; background:none; color:inherit; cursor:pointer; padding:0; }
+.imp-file-clear svg { display:block; width:10px; height:10px; }
 /* Вспышка формы после клика по суду в светофоре. */
 .imp-flash { animation:impFlash 1.6s var(--ease-out) 1; border-radius:var(--radius-md); }
 @keyframes impFlash { 0% { box-shadow:var(--focus-ring); } 100% { box-shadow:0 0 0 3px transparent; } }
@@ -1141,6 +1149,11 @@ function fullDate(iso) {
 function escHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+// Крестик «закрыть»/«убрать» — только svg. Прежний текстовый «✕» (U+2715)
+// в IBM Plex Sans отсутствует вовсе: браузер подставлял системный шрифт с
+// чужими вертикальными метриками, и крестик стоял не по центру кнопки
+// по-разному на разных ОС. Зеркало ICON_X из app.js.
+const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>';
 function bareCaseNumber(n) {
   return String(n || "").trim().split(/[\\s(]/)[0];
 }
@@ -2014,7 +2027,7 @@ function caseRowHtml(num, casesMap) {
     // его в watchlist бессмысленно — даём убрать прямо из карточки.
     return '<div class="case-row"><span class="case-num" title="' + escHtml(num) + '">' + escHtml(shownNum) + '</span>'
       + '<span class="badge badge-run" title="Дело удалено или переименовано без алиаса — push по этому номеру никогда не сработает">нигде не найдено</span>'
-      + '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist">✕</button>'
+      + '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist" aria-label="Убрать номер из watchlist">' + ICON_X + '</button>'
       + '</div>';
   }
   const parties = (c.plaintiff && c.defendant)
@@ -2131,7 +2144,7 @@ function setFlash(el, text, kind, holdMs) {
   el.className = "action-flash " + (kind || "");
   if (kind === "err") {
     el.innerHTML = escHtml(text)
-      + ' <button class="flash-x" type="button" data-flash-x title="Скрыть">✕</button>';
+      + ' <button class="flash-x" type="button" data-flash-x title="Скрыть" aria-label="Скрыть">' + ICON_X + '</button>';
     return;
   }
   el.textContent = text;
@@ -2203,7 +2216,7 @@ function renderWlExtras() {
   el.innerHTML = '<div class="wl-count" style="margin-top:8px;">Номера не из активных дел (уйдут как есть):</div>'
     + wlState.extras.map(function (n) {
       return '<div class="case-row"><span class="case-num">' + escHtml(n) + '</span>'
-        + '<button class="btn-icon" type="button" data-extra-del="' + escHtml(n) + '" title="Убрать">✕</button></div>';
+        + '<button class="btn-icon" type="button" data-extra-del="' + escHtml(n) + '" title="Убрать" aria-label="Убрать">' + ICON_X + '</button></div>';
     }).join("");
 }
 function updateWlCount() {
@@ -3032,7 +3045,7 @@ function impRenderSelection() {
   if (impSelectedFile) {
     el.innerHTML = '<span class="imp-file-chip">файл: ' + escHtml(impSelectedFile.name)
       + " (" + impFmtSize(impSelectedFile.size)
-      + ') <button class="imp-file-clear" type="button" id="imp-file-clear" title="Убрать файл">✕</button></span>'
+      + ') <button class="imp-file-clear" type="button" id="imp-file-clear" title="Убрать файл" aria-label="Убрать файл">' + ICON_X + '</button></span>'
       + '<span>отправится файл — вставленное в поле не используется</span>'
       + "<span>" + cases + "</span>"
       + (det ? "<span>" + det + "</span>" : "");
