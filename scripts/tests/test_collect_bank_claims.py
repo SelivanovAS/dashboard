@@ -356,3 +356,51 @@ class TestCardLevelFilters:
         counters = cbc.collect(_court(), 10, 0, False, "тест")
         assert counters["excluded_appeal"] == 3
         assert counters["added"] == 0
+
+
+# ── Проводка workflow (гейт территорий, инцидент 26.07.2026) ─────────────────
+
+ROOT_DIR = os.path.dirname(SCRIPTS_DIR)
+
+
+def _read_repo(rel: str) -> str:
+    with open(os.path.join(ROOT_DIR, rel), encoding="utf-8") as f:
+        return f.read()
+
+
+class TestWorkflowWiring:
+    """collect_bank_claims.yml обязан быть безопасен в форке территории.
+
+    Инцидент 26.07.2026: push-триггер срабатывал в форке на самом merge
+    синхронизации с эталоном, и сборщик уходил в суды ХМАО (дефолтный домен
+    surggor + регион hmao без REGION). Из форка workflow тогда удалили; с
+    13.08.2026 (разгон Урала) он возвращается — под тройной защитой.
+    """
+
+    def _yml(self) -> str:
+        return _read_repo(".github/workflows/collect_bank_claims.yml")
+
+    def test_push_runs_pinned_to_reference_repo(self):
+        """Push-запуски живут только в эталоне (пин по github.repository);
+        ручной Run workflow работает на любой территории."""
+        yml = self._yml()
+        assert ("if: github.event_name == 'workflow_dispatch' || "
+                "github.repository == 'SelivanovAS/dashboard'") in yml
+
+    def test_region_forwarded_from_variables(self):
+        """Без REGION форк резолвил бы суды по региону hmao."""
+        assert "REGION: ${{ vars.REGION }}" in self._yml()
+
+    def test_court_domain_input_has_no_hmao_default(self):
+        """У input court_domain нет ХМАО-дефолта: на территории пустое поле
+        молча собирало бы чужой суд. Фолбэк surggor остаётся только в
+        run-шаге — для push-запусков, отрезанных от форка гейтом."""
+        yml = self._yml()
+        inputs_block = yml.split("jobs:")[0]
+        assert "default: \"surggor--hmao.sudrf.ru\"" not in inputs_block
+        assert "required: true" in inputs_block.split("srv_num:")[0]
+
+    def test_push_trigger_still_forces_dry_run(self):
+        """Прежняя страховка не потеряна: push-запуск всегда dry-run."""
+        yml = self._yml()
+        assert '[ "${{ github.event_name }}" != "workflow_dispatch" ]' in yml

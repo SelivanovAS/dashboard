@@ -13,9 +13,12 @@ on:
   workflow_dispatch:
     inputs:
       court_domain:
-        description: "Домен суда 1-й инстанции"
-        required: false
-        default: "surggor--hmao.sudrf.ru"
+        # ⚠️ Без дефолта (с 13.08.2026): прежний дефолт surggor--hmao был
+        # ХМАО-шным, и запуск на территории с непроставленным полем молча
+        # собирал бы чужой суд. Фолбэк в run-шаге остаётся только для
+        # push-запусков, которые гейтом job живут лишь в эталоне.
+        description: "Домен суда 1-й инстанции (обязателен)"
+        required: true
       srv_num:
         description: "Номер сервера суда (Покачи на vartovray — 2)"
         required: false
@@ -48,6 +51,11 @@ permissions:
 
 jobs:
   collect:
+    # ⚠️ Гейт территорий (инцидент 26.07.2026): push-триггер срабатывает и в
+    # форке — на самом merge синхронизации с эталоном — и сборщик уходил в
+    # суды ХМАО из репозитория территории. Push-запуски живут ТОЛЬКО в
+    # эталоне (пин по репозиторию); ручной Run workflow работает везде.
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'SelivanovAS/dashboard'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # Один писатель data/* за раз — сериализация с основным прогоном
@@ -67,6 +75,10 @@ jobs:
 
       - name: Сбор выдачи (10 страниц + карточки истцовых дел)
         env:
+          # Регион территории (Actions Variable форка; пусто у эталона =
+          # hmao). Второй корень инцидента 26.07.2026: без REGION форк
+          # резолвил суды по региону hmao.
+          REGION: ${{ vars.REGION }}
           # Ручная операция: ретраи полезны — повтор запуска дороже
           # (боевой дефолт FETCH_MAX_RETRIES=1).
           FETCH_MAX_RETRIES: "3"

@@ -582,7 +582,12 @@ drawer; номера не уникальны между судами — пот�
   выше). **Канал 3 — разовый сборщик
   выдачи** [scripts/collect_bank_claims.py](scripts/collect_bank_claims.py)
   + workflow [collect_bank_claims.yml](.github/workflows/collect_bank_claims.yml)
-  (галка dry_run, отчёт → `ops/bank_registry/collect_report.txt`): обходит
+  (галка dry_run, отчёт → `ops/bank_registry/collect_report.txt`; **с
+  13.08.2026 безопасен в форке территории**: push-запуски запинены на эталон
+  `github.repository == 'SelivanovAS/dashboard'` — инцидент 26.07.2026, когда
+  merge синхронизации триггерил сбор судов ХМАО из форка; `REGION` из vars;
+  `court_domain` обязателен, без ХМАО-дефолта; стережёт `TestWorkflowWiring`
+  в test_collect_bank_claims.py): обходит
   первые N страниц выдачи поиска по «Сбербанк» одного суда — **единственное
   место с пагинацией** (`discover_page_urls` находит ссылки пейджера в HTML,
   фолбэк `&page=N`, стоп-защиты от пустой/повторившейся страницы); строка
