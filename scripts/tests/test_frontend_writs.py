@@ -299,7 +299,10 @@ process.stdout.write(JSON.stringify(out));"""
 def test_default_judgment_badge():
     """Бейдж «🌙 Заочное» — только у bank-дел с проштампованным
     default_judgment; тултип различает «вручена» и «формула ВС»."""
-    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultJudgmentBadgeHtml"))
+    deps = "\n".join(
+        _fn_src(n)
+        for n in ("escHtml", "defaultJudgmentTitle", "defaultJudgmentBadgeHtml")
+    )
     script = deps + """
 const out={
   заочное:defaultJudgmentBadgeHtml(
@@ -309,6 +312,12 @@ const out={
   обычное:defaultJudgmentBadgeHtml({_bankTrack:true,_fi:{}}),
   не_банк:defaultJudgmentBadgeHtml({_bankTrack:false,_fi:{default_judgment:true}}),
   пусто:defaultJudgmentBadgeHtml(null),
+  skip_нейтральное:defaultJudgmentBadgeHtml(
+    {_bankTrack:true,_fi:{default_judgment:true}},{skipNeutral:true}),
+  skip_отменено:defaultJudgmentBadgeHtml(
+    {_bankTrack:true,_fi:{default_judgment:true,
+      default_cancellation:{outcome:'cancelled',outcome_date:'22.07.2026'}}},
+    {skipNeutral:true}),
 };
 process.stdout.write(JSON.stringify(out));"""
     out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
@@ -316,26 +325,145 @@ process.stdout.write(JSON.stringify(out));"""
     assert "🌙 Заочное" in r["заочное"] and "формуле ВС" in r["заочное"]
     assert "26.06.2026" in r["вручена"] and "от вручения" in r["вручена"]
     assert r["обычное"] == "" and r["не_банк"] == "" and r["пусто"] == ""
+    # skipNeutral гасит только нейтральную пилюлю (её заменяет суффикс в бейдже
+    # результата); особые состояния отмены остаются пилюлями всегда.
+    assert r["skip_нейтральное"] == "", (
+        "skipNeutral обязан погасить пилюлю «🌙 Заочное» — иначе она задвоится "
+        "с суффиксом «· заочно» внутри бейджа результата."
+    )
+    assert "🌙 Заочное отменено" in r["skip_отменено"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_default_judgment_quiet():
+    """Тихая метка «🌙 заочное» в ряду метаданных: нейтральная заочность и
+    отказ в отмене (решение устояло) — да; pending/cancelled — нет, там
+    работает цветная пилюля."""
+    deps = "\n".join(
+        _fn_src(n)
+        for n in ("escHtml", "defaultJudgmentTitle", "defaultJudgmentQuietHtml")
+    )
+    script = deps + """
+const s=(fi)=>defaultJudgmentQuietHtml({_bankTrack:true,_fi:fi});
+const out={
+  заочное:s({default_judgment:true}),
+  отказано:s({default_judgment:true,default_cancellation:{outcome:'refused'}}),
+  подано:s({default_judgment:true,default_cancellation:{outcome:'pending'}}),
+  отменено:s({default_judgment:true,default_cancellation:{outcome:'cancelled'}}),
+  обычное:s({}),
+  не_банк:defaultJudgmentQuietHtml({_bankTrack:false,_fi:{default_judgment:true}}),
+  пусто:defaultJudgmentQuietHtml(null),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert "заочное" in r["заочное"] and "state-quiet" in r["заочное"]
+    assert "badge" not in r["заочное"], (
+        "Метка заочности снова стала плашкой — юрист выбрал тихий текст "
+        "13.08.2026 именно потому, что пилюля спорила с бейджем результата."
+    )
+    assert "формуле ВС" in r["заочное"], "У тихой метки пропал тултип с расчётом срока."
+    assert "заочное" in r["отказано"], (
+        "Отказ в отмене заочного — решение устояло, признак снова нейтральный: "
+        "без метки он пропадёт из строки совсем (пилюлю гасит skipNeutral)."
+    )
+    assert r["подано"] == "" and r["отменено"] == ""
+    assert r["обычное"] == "" and r["не_банк"] == "" and r["пусто"] == ""
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
+def test_act_label_quiet_negative():
+    """Публикация акта: событие — синей плашкой, отсутствие — тихим текстом
+    в тон соседней метке заочности (решение юриста 13.08.2026)."""
+    script = _fn_src("buildActHtml") + """
+const out={
+  опубликован:buildActHtml({actLabel:'Акт 12.08.2026',actNegative:false}),
+  нет:buildActHtml({actLabel:'Акт не опубликован',actNegative:true}),
+  пусто:buildActHtml({actLabel:'',actNegative:false}),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert 'class="badge-act"' in r["опубликован"] and "12.08.2026" in r["опубликован"]
+    assert 'class="state-quiet"' in r["нет"] and "акт не опубликован" in r["нет"]
+    assert "badge" not in r["нет"], "«Акт не опубликован» снова стал плашкой."
+    assert r["пусто"] == ""
 
 
 def test_default_judgment_badge_lives_with_result_not_case_header():
-    """Заочность — свойство решения: в списках она рендерится внутри
-    «Состояния», не отъедает ширину номера дела и стадии. Drawer сохраняет
-    бейдж в hero-meta как краткую сводку открытого дела."""
+    """Заочность — свойство решения: у решённого дела она едет ТИХОЙ МЕТКОЙ в
+    ряду метаданных (пилюля рядом с бейджем результата спорила с ним за
+    внимание на каждом пятом деле трека), у нерешённого остаётся пилюлей.
+    Шапку с номером и стадией не трогает ни та, ни другая форма.
+    Drawer сохраняет пилюлю в hero-meta: бейджа результата там нет."""
     state = _strip_comments(_fn_src("buildStateHtml"))
-    assert "defaultJudgmentBadgeHtml(c)" in state
-    assert "decisionMeta=[defaultHtml,actHtml]" in state, (
-        "«Заочное» и публикация акта должны собираться в один ряд метаданных."
+    assert "defaultJudgmentBadgeHtml(c,{skipNeutral:vm.resultPresent})" in state, (
+        "Пилюля «🌙 Заочное» должна гаситься именно там, где её заменяет тихая "
+        "метка — иначе признак задвоится."
+    )
+    assert "decisionMeta=[defaultHtml,djQuiet,actHtml]" in state, (
+        "Ряд метаданных: цветная пилюля особого состояния впереди, за ней тихие "
+        "метки заочности и публикации акта."
+    )
+    assert "djQuiet=(opts&&opts.compact)?'':defaultJudgmentQuietHtml(c)" in state, (
+        "В мобильной карточке нейтральной заочности быть не должно (решение "
+        "юриста 13.08.2026) — признак остаётся в десктопной строке и в hero "
+        "drawer'а. Особые состояния отмены гейт не трогает."
+    )
+    src_all = _strip_comments(_app_js())
+    assert "buildStateHtml(c,vm,{compact:true})" in src_all, (
+        "renderMobileCards перестал звать buildStateHtml в compact-режиме — "
+        "заочность вернётся в карточку."
     )
     assert "state-decision-meta" in state
+    assert 'res-body">${favorIcon} ${vm.resultLabel}</span>' in state, (
+        "Начинка пилюли исхода обязана быть ОДНИМ элементом: перенос длинного "
+        "исхода на узкой карточке иначе отрывает галочку и «✓ / Удовл-но / "
+        "частично» встаёт тремя строками."
+    )
+
+    hero = _strip_comments(_fn_src("renderDrawer"))
+    assert "defaultJudgmentBadgeHtml(c)" in hero, (
+        "В hero drawer'а бейджа результата нет — там пилюля «🌙 Заочное» "
+        "обязана остаться краткой сводкой дела."
+    )
 
     css = _read("styles.css")
     assert re.search(
-        r"\.state-decision-meta\s+\.badge[\s\S]*?"
-        r"\.state-decision-meta\s+\.badge-act-no\s*"
+        r"\.state-decision-meta\s+\.badge,\s*"
+        r"\.cell-state\s+\.state-decision-meta\s+\.badge-act\s*"
         r"\{\s*font-size:var\(--fs-2xs\)",
         css,
-    ), "«Заочное» и статус публикации акта снова получили разный кегль."
+    ), (
+        "Плашки ряда метаданных снова получили разный кегль: мобильное правило "
+        "поднимает .badge до 13px, и без этой строки «Акт 12.08» разъедется с "
+        "соседями."
+    )
+    assert ".badge-act-no" not in css, (
+        "Плашка «Акт не опубликован» вернулась в CSS — отсутствие акта печатается "
+        "тихим текстом (.state-quiet)."
+    )
+    assert re.search(
+        r"\.state-quiet:has\(\+ \.state-quiet\)::after\s*\{\s*content:' ·'",
+        css,
+    ), (
+        "Пропал разделитель между тихими метками: «🌙 заочное» и «акт не "
+        "опубликован» склеятся в одну фразу. Он висит на ПРЕДЫДУЩЕЙ метке — "
+        "иначе при переносе ряда «·» уезжает в начало второй строки."
+    )
+    assert re.search(r"\.cell-state > \.badge \{[^}]*white-space:normal", css), (
+        "Пилюле исхода снова запрещён перенос: на 320px «Удовл-но частично» "
+        "наезжало на дату заседания справа."
+    )
+    assert re.search(
+        r"\.state-decision-meta > \.state-quiet:first-child \{ margin-left:9px",
+        css,
+    ), (
+        "Тихая метка, открывающая ряд, обязана вставать под ТЕКСТ пилюли "
+        "(9px = её горизонтальный padding), иначе строка «акт не опубликован» "
+        "читается съехавшей влево. Плашкам сдвиг не даём — они держат линию по "
+        "краю пилюли."
+    )
 
     src = _strip_comments(_app_js())
     table_meta = re.search(r"const metaBadges\s*=\s*\[([^\]]+)\]", src)
@@ -348,6 +476,43 @@ def test_default_judgment_badge_lives_with_result_not_case_header():
     assert len(mobile_headers) == 1, "В renderMobileCards потеряна группа .mc-badges."
     assert "defaultJudgmentBadgeHtml" not in mobile_headers[0], (
         "«Заочное» вернулось в шапку мобильной карточки рядом с «1 инст.»."
+    )
+
+
+def test_result_badge_short_label():
+    """Пилюля исхода печатает короткую форму («Удовл-но»): в левой колонке
+    карточки места мало, а с суффиксом «· заочно» полная формулировка
+    переносилась в три строки и наезжала на дату. Полная форма обязана
+    остаться в тултипе пилюли и в «Результате» drawer'а — короткая нужна
+    только там, где тесно."""
+    src = _strip_comments(_app_js())
+    short = re.search(r"const FI_RESULT_LABELS_SHORT=\{([^}]*)\}", src)
+    assert short, "В app.js нет словаря коротких форм исхода FI_RESULT_LABELS_SHORT."
+    assert "Удовл-но частично" in short.group(1), (
+        "Форма сокращения выбрана юристом 13.08.2026 — «Удовл-но» (опора на "
+        "привычное «удовл.»), не «Удов-но»."
+    )
+    assert "reversed" not in short.group(1), (
+        "Полное удовлетворение печатается ПОЛНОСТЬЮ (решение юриста): одно "
+        "слово «Удовлетворено» влезает в колонку даже на 320px, сокращать его "
+        "незачем — тесно становится только с «частично»."
+    )
+
+    vm = _strip_comments(_fn_src("prepareCaseViewModel"))
+    assert "resultLabelFull" in vm and "FI_RESULT_LABELS_SHORT[c.result]||resultLabelFull" in vm, (
+        "Короткая форма должна иметь фолбэк на полную: словарь покрывает только "
+        "два самых ходовых исхода."
+    )
+
+    state = _strip_comments(_fn_src("buildStateHtml"))
+    assert "vm.resultLabelFull" in state, (
+        "Полная формулировка исхода пропала из тултипа пилюли — сокращение "
+        "стало единственным источником."
+    )
+
+    drawer = _strip_comments(_fn_src("renderDrawer"))
+    assert "FI_RESULT_LABELS_SHORT" not in drawer, (
+        "В drawer'е места достаточно: «Результат» печатается полностью."
     )
 
 
@@ -551,7 +716,10 @@ def test_writs_section_is_first_instance_only():
 def test_default_cancellation_badge_states():
     """Особый порядок вытесняет нейтральный бейдж «🌙 Заочное»: пока заявление
     на рассмотрении — взыскание под угрозой, после отмены решения нет вовсе."""
-    deps = "\n".join(_fn_src(n) for n in ("escHtml", "defaultJudgmentBadgeHtml"))
+    deps = "\n".join(
+        _fn_src(n)
+        for n in ("escHtml", "defaultJudgmentTitle", "defaultJudgmentBadgeHtml")
+    )
     script = deps + """
 const b=dc=>defaultJudgmentBadgeHtml(
   {_bankTrack:true,_fi:{default_judgment:true,default_cancellation:dc}});

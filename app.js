@@ -345,7 +345,21 @@ const RESULT_LABELS={upheld:'Оставлено без изменения',rever
 // чтобы getResultFavor работал без правок, но текст бейджа — из «языка карточки суда».
 // upheld в 1-й инст. = «отказано в иске», reversed = «иск удовлетворён».
 const FI_RESULT_LABELS={upheld:'Отказано',reversed:'Удовлетворено',partial:'Удовлетворено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',merged:'Присоединено',pending:'Ожидается'};
-const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'—',withdrawn:'⊘',unconsidered:'⊘',merged:'⇥',pending:'…'};
+// Короткие формы ДЛЯ ПИЛЮЛИ результата (решение юриста 13.08.2026). Сокращаем
+// ТОЛЬКО частичное удовлетворение: «Удовлетворено» одним словом в левую
+// колонку карточки влезает даже на 320px (≈153px), а «Удовлетворено частично»
+// — нет, и пилюля переносится в две строки. Полная формулировка живёт в
+// тултипе пилюли и в «Результате» drawer'а; CSV-экспорт идёт своим словарём и
+// не затронут.
+const FI_RESULT_LABELS_SHORT={partial:'Удовл-но частично'};
+// Знак исхода в пилюле. Виден ТОЛЬКО когда исход нейтрален для банка
+// (favor='neutral'): при favorable/unfavorable buildFavorIcon рисует ✓/✕
+// своим цветом. Отсюда требование к набору — знак должен говорить сам,
+// без опоры на цвет. Геометрическая семья (⊘ ⊖ ⊕ ⊠ ◐) читается как «не
+// рассмотрено / изъято / влилось / закрыто / наполовину»; правки 13.08.2026:
+// «—» у Прекращено смысла не нёс и выглядел дефисом перед словом, «⇥»
+// у Присоединено читался табуляцией, а «⊘» стоял сразу у двух исходов.
+const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'⊠',withdrawn:'⊖',unconsidered:'⊘',merged:'⊕',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
 // Сторона по процессуальному статусу подателя жалобы: ИСТЕЦ→plaintiff
 // (соистец тоже), ОТВЕТЧИК→defendant; прокурор/заявитель/третье лицо
@@ -2101,13 +2115,30 @@ function classifyWritKind(w,c){
 // юриста: роль банка и так видна из строки сторон (ПАО Сбербанк подсвечен
 // истцом), принадлежность к внутренней картотеке в mine-списке не нужна.
 // Не возвращать (страж test_bank_track_badge_stays_removed).
+// Тултип заочного решения — общий для пилюли и для суффикса в бейдже
+// результата: текст объясняет, по какой ветке считается вступление в силу,
+// и в двух местах он обязан быть один (разъезд формулировок читался бы как
+// разные сроки по одному делу). Чистая функция — гоняется node-тестом.
+function defaultJudgmentTitle(c){
+  const served=(c&&c._fi&&c._fi.default_copy_served_date)||'';
+  return served
+    ?`Заочное решение; копия вручена ответчику ${served} — сроки отмены и апелляции идут от вручения`
+    :'Заочное решение; сведений о вручении копии нет — вступление в силу по формуле ВС (3 + 7 раб. дн + месяц)';
+}
 // Бейдж «🌙 Заочное» — решение вынесено в заочном производстве (ст. 233 ГПК):
 // срок вступления в силу считается иначе (вручение копии + 7 раб. дн + месяц,
-// без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому в
-// списках тип решения читается в блоке «Состояние» рядом с результатом, а не
-// конкурирует с номером и стадией в шапке. Поле default_judgment штампует
-// split_bank_track — events фронт не грузит.
-function defaultJudgmentBadgeHtml(c){
+// без сведений о вручении — формула ВС: 3 + 7 раб. дн + месяц), поэтому тип
+// решения читается рядом с результатом, а не конкурирует с номером и стадией
+// в шапке. Поле default_judgment штампует split_bank_track — events фронт
+// не грузит.
+// opts.skipNeutral — нейтральную заочность в списках печатает не эта функция,
+// а тихая метка defaultJudgmentQuietHtml: вторая пилюля рядом с результатом
+// спорила с ним за внимание на каждом пятом деле трека (100 заочных из 509 на
+// 13.08.2026). Особые состояния отмены тихой меткой не заменяются НИКОГДА —
+// там цвет и есть сигнал.
+// Hero drawer'а бейджа результата не имеет и зовёт функцию без opts —
+// нейтральная пилюля остаётся его краткой сводкой.
+function defaultJudgmentBadgeHtml(c,opts){
   if(!c||!c._bankTrack||!(c._fi&&c._fi.default_judgment))return '';
   // Особый порядок отмены (ст. 237-243 ГПК) важнее самого признака заочности:
   // пока заявление на рассмотрении, взыскание под угрозой, а после отмены
@@ -2120,11 +2151,25 @@ function defaultJudgmentBadgeHtml(c){
     const hd=dc.hearing_date?`; заседание ${dc.hearing_date}`:'';
     return `<span class="badge badge-compact badge-default-pending" title="${escHtml('Ответчик подал заявление об отмене заочного решения '+(dc.filed_date||'')+' (ст. 237 ГПК)'+hd)}">🌙 Отмена заочного</span>`;
   }
-  const served=c._fi.default_copy_served_date||'';
-  const title=served
-    ?`Заочное решение; копия вручена ответчику ${served} — сроки отмены и апелляции идут от вручения`
-    :'Заочное решение; сведений о вручении копии нет — вступление в силу по формуле ВС (3 + 7 раб. дн + месяц)';
-  return `<span class="badge badge-compact badge-default-judgment" title="${escHtml(title)}">🌙 Заочное</span>`;
+  if(opts&&opts.skipNeutral)return '';
+  return `<span class="badge badge-compact badge-default-judgment" title="${escHtml(defaultJudgmentTitle(c))}">🌙 Заочное</span>`;
+}
+// «🌙 заочное» — ТИХАЯ метка в ряду метаданных под результатом (решение
+// юриста 13.08.2026): пилюля рядом с бейджем результата конкурировала с ним
+// за внимание и добавляла карточке третий ярус, а строчный серый текст
+// сообщает тот же факт, не претендуя на вес исхода.
+// Только нейтральный случай: при особом порядке отмены (pending/cancelled)
+// метки нет — там работает цветная пилюля defaultJudgmentBadgeHtml.
+// Чистая функция — гоняется node-тестом (test_frontend_writs.py).
+function defaultJudgmentQuietHtml(c){
+  if(!c||!c._bankTrack||!(c._fi&&c._fi.default_judgment))return '';
+  // Ветки-исключения зеркалят defaultJudgmentBadgeHtml дословно: отказ в
+  // отмене (outcome='refused') особым состоянием НЕ считается — решение
+  // устояло, признак заочности снова нейтральный и обязан ехать меткой,
+  // иначе он пропал бы из строки вовсе (пилюлю там уже погасил skipNeutral).
+  const oc=((c._fi.default_cancellation)||{}).outcome;
+  if(oc==='pending'||oc==='cancelled')return '';
+  return `<span class="state-quiet" title="${escHtml(defaultJudgmentTitle(c))}">🌙 заочное</span>`;
 }
 // Строка «Копия ответчику» в «Ключевых датах» drawer — только у заочных:
 // юристу важно видеть, по какой ветке посчитана дата «Вступило в силу».
@@ -2527,9 +2572,13 @@ function prepareCaseViewModel(c){
   // набор лейблов («Удовлетворено», «Отказано», «Удовлетворено частично»),
   // который повторяет язык карточки суда. Окраска favorable/unfavorable
   // (зелёный/красный) считается отдельно в getResultFavor.
-  const resultLabel=((c.resultSource||'appeal')==='fi'&&resultPresent)
+  const resultLabelFull=((c.resultSource||'appeal')==='fi'&&resultPresent)
     ?(FI_RESULT_LABELS[c.result]||c.result||'')
     :(RESULT_LABELS[c.result]||c.result||'');
+  // В пилюлю идёт короткая форма (места мало), полная — в тултип и drawer.
+  const resultLabel=((c.resultSource||'appeal')==='fi'&&resultPresent)
+    ?(FI_RESULT_LABELS_SHORT[c.result]||resultLabelFull)
+    :resultLabelFull;
   const resultBadgeCls=getResultBadgeClass(c);
   const favor=getResultFavor(c);
   // "Передача дела судье" — показываем как отдельный статус с датой события.
@@ -2604,7 +2653,7 @@ function prepareCaseViewModel(c){
     :(!csIsBank&&csSide==='defendant'));
   return{
     roleClass,ds,isFutureHearing,
-    resultPresent,resultIcon,resultLabel,resultBadgeCls,favor,
+    resultPresent,resultIcon,resultLabel,resultLabelFull,resultBadgeCls,favor,
     statusLabel,statusInlineDate,statusBelowDate,
     actLabel,actNegative,
     plaintiffIsAppellant,defendantIsAppellant,
@@ -2617,8 +2666,15 @@ function prepareCaseViewModel(c){
 function buildFavorIcon(vm){
   return vm.favor==='favorable'?'<span style="color:var(--success);font-weight:700;">✓</span>':vm.favor==='unfavorable'?'<span style="color:var(--danger);font-weight:700;">✕</span>':`<span class="badge-icon">${vm.resultIcon}</span>`;
 }
+// Публикация акта в ряду метаданных: позитив — синяя метка «Акт 12.08» (это
+// событие, у дела появился читаемый текст), негатив — тихая строчная метка
+// «акт не опубликован» в тон соседнему «🌙 заочное» (отсутствие факта плашки
+// не заслуживает; решение юриста 13.08.2026).
 function buildActHtml(vm){
-  return vm.actLabel?`<span class="${vm.actNegative?'badge-act-no':'badge-act'}">${vm.actLabel}</span>`:'';
+  if(!vm.actLabel)return '';
+  return vm.actNegative
+    ?'<span class="state-quiet">акт не опубликован</span>'
+    :`<span class="badge-act">${vm.actLabel}</span>`;
 }
 function buildStageChips(c){
   // «Рассмотрение с начала» больше не чип — 🔄 встраивается в статус-бейдж
@@ -2639,18 +2695,36 @@ function buildStatusBadge(c,vm){
   const prefix=(c.restartFromScratch&&vm.ds!=='paused')?'🔄 ':statusIcon(vm.ds);
   return `<span class="badge badge-${vm.ds}"${title}>${prefix}${vm.statusLabel}</span>`;
 }
-function buildStateHtml(c,vm){
+/* opts.compact — мобильная карточка (симметрично buildHearingHtml). Там
+ * нейтральную заочность НЕ печатаем вовсе (решение юриста 13.08.2026):
+ * карточка и так плотная, а признак остаётся в десктопной строке и в hero
+ * drawer'а, который на телефоне и открывают. Особые состояния отмены
+ * («Отмена заочного» / «Заочное отменено») в карточке ОСТАЮТСЯ — это риск
+ * по конкретному делу, а не свойство решения. */
+function buildStateHtml(c,vm,opts){
   const actHtml=buildActHtml(vm);
   const chips=buildStageChips(c);
-  // Заочность — свойство решения, а не стадия дела. Держим её под результатом
-  // вместе с публикацией акта; так номер и «1 инст.» остаются чистой шапкой.
+  // Заочность — свойство решения, а не стадия дела: у решённого дела она едет
+  // тихой меткой в ряду метаданных, у нерешённого (repair снял результат)
+  // остаётся пилюлей. Так номер и «1 инст.» остаются чистой шапкой, а под
+  // результатом не встаёт вторая пилюля-конкурент.
   // Особые состояния («Отмена заочного» / «Заочное отменено») проходят тем же
-  // хелпером и не теряются, даже если repair уже снял результат.
-  const defaultHtml=defaultJudgmentBadgeHtml(c);
+  // хелпером пилюлями в обеих ветках — цвет там и есть сигнал риска.
+  const defaultHtml=defaultJudgmentBadgeHtml(c,{skipNeutral:vm.resultPresent});
   if(vm.resultPresent){
     const favorIcon=buildFavorIcon(vm);
-    const decisionMeta=[defaultHtml,actHtml].filter(Boolean).join('');
-    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}">${favorIcon} ${vm.resultLabel}</span>${chips?`<span class="state-sub">${chips}</span>`:''}${decisionMeta?`<span class="state-sub state-decision-meta">${decisionMeta}</span>`:''}</div>`;
+    // Ряд метаданных: цветная пилюля особого состояния впереди, за ней тихие
+    // метки заочности и публикации акта.
+    const djQuiet=(opts&&opts.compact)?'':defaultJudgmentQuietHtml(c);
+    const decisionMeta=[defaultHtml,djQuiet,actHtml].filter(Boolean).join('');
+    // Тултип пилюли — полная формулировка исхода: в самой пилюле она сокращена
+    // (FI_RESULT_LABELS_SHORT), и полная форма обязана остаться под рукой.
+    const resTitle=vm.resultLabelFull!==vm.resultLabel
+      ?` title="${escHtml(vm.resultLabelFull)}"`:'';
+    // .res-body — один flex-элемент на всю начинку пилюли: без обёртки
+    // разрешённый перенос (см. .cell-state > .badge в styles.css) отрывал
+    // галочку от текста и «✓ / Удовл-но / частично» вставало тремя строками.
+    return `<div class="cell-state"><span class="badge ${vm.resultBadgeCls}"${resTitle}><span class="res-body">${favorIcon} ${vm.resultLabel}</span></span>${chips?`<span class="state-sub">${chips}</span>`:''}${decisionMeta?`<span class="state-sub state-decision-meta">${decisionMeta}</span>`:''}</div>`;
   }
   return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}${defaultHtml?`<span class="state-sub state-decision-meta">${defaultHtml}</span>`:''}</div>`;
 }
@@ -3749,7 +3823,7 @@ function renderMobileCards(){
     const courtJudgeShort=courtJudgeFull?' · '+shortName(courtJudgeFull):'';
     const courtTip=[courtTitle(c),courtJudgeFull].filter(Boolean).join(' · ');
     const hearingHtml=buildHearingHtml(c,vm,{compact:true});
-    const stateHtml=buildStateHtml(c,vm);
+    const stateHtml=buildStateHtml(c,vm,{compact:true});
     const trackLine=mcTrackLineHtml(c);
 
     const cardClass=['mobile-card',isUnread?'card-new':'',accent].filter(Boolean).join(' ');
