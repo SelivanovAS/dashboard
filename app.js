@@ -4875,6 +4875,19 @@ function collectNewCaseNumbers(ctx) {
     const id = String(c['Номер дела'] || '').trim();
     if (id) set.add(id);
   }
+  // Новые иски банка (авто-подхват, событие fi_bank_claim_registered) живут
+  // не отдельным списком, а внутри fi_changes — это тоже «дело поступило в
+  // суд», в mine-режиме показываем без звезды. Ключ composite «домен|номер»:
+  // номера исков банка не уникальны между судами. Push этим НЕ затронут
+  // (delivery.py фильтрует их по watchlist — решение юриста 13.08.2026).
+  for (const ch of ctx?.fi_changes || []) {
+    const types = Array.isArray(ch?.type) ? ch.type : [ch?.type];
+    if (!types.includes('fi_bank_claim_registered')) continue;
+    const bare = bareCaseNumber(ch.case);
+    if (!bare) continue;
+    const dom = String((ch.details || {}).court_domain || '').trim();
+    set.add(dom ? dom + '|' + bare : bare);
+  }
   return set;
 }
 
@@ -4885,20 +4898,42 @@ function collectNewCaseNumbers(ctx) {
 // группирующие параграфы сохраняем целиком, а блоки дел внутри них —
 // относятся к ближайшей следующей FILTERED-секции (📅 Изменения,
 // 📄 Опубликованные акты и т.п.).
-const SECTION_NEW_RE = /(Новые\s+иски|Новые\s+дела)/i;
-const SECTION_HEADER_RE = /^[\u{1F4E5}\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}\u{2696}\u{1F3DB}]\s*\u{FE0F}?\s*<b>/u;
+const SECTION_NEW_RE = /(Новые\s+иски|Новые\s+дела|Новые\s+касс)/i;
+// ⚠️ Набор эмодзи держать наравне с `_DIGEST_HEADER_RE` (postprocess.py):
+// незнакомый заголовок не сбрасывает состояние машины, и секция наследует
+// режим предыдущей. Так «🏦 ИСКИ БАНКА», «📑 Касс. события» и «⚖️🔬 КАССАЦИЯ»
+// наследовали 'new' от «📥 Новые дела» апелляции и уходили в mine-версию
+// целиком (13.08.2026). Альтернатива ⚖️🔬 обязана стоять ПЕРЕД одиночным ⚖:
+// после него в строке идёт 🔬, а не <b>, и класс символов не матчит.
+// 📌📊📋 (шапка, сводка, футер) — только здесь: они не фильтруются, но
+// обязаны закрывать предыдущую секцию, иначе футер «📌 В производстве…»
+// выпадет из mine-версии как «параграф без номера дела».
+const SECTION_HEADER_RE = /^(?:\u{2696}\u{FE0F}\u{1F52C}|[\u{1F4E5}\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{1F4F0}\u{2696}\u{1F3DB}\u{1F3E6}\u{1F4D1}\u{1F4CC}\u{1F4CA}\u{1F4CB}])\s*\u{FE0F}?\s*<b>/u;
 // Фильтруемые секции — списки дел внутри. ⚖️ может быть и группирующим
 // («⚖️ АПЕЛЛЯЦИЯ»), и фильтруемым («⚖️ Вынесенные акты»). Различаем по
 // SECTION_GROUPING_RE ниже: текст в верхнем регистре без скобок = группа.
-const SECTION_FILTERED_RE = /^[\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{2696}]\s*\u{FE0F}?\s*<b>/u;
-// Группирующий заголовок: 🏛/⚖️ + UPPERCASE-русский текст без счётчика
-// в скобках. Пример: «🏛 ПЕРВАЯ ИНСТАНЦИЯ», «⚖️ АПЕЛЛЯЦИЯ».
-const SECTION_GROUPING_RE = /^[\u{1F3DB}\u{2696}]\s*\u{FE0F}?\s*<b>[А-ЯЁ\s]+<\/b>\s*$/u;
+// 🏦 «ИСКИ БАНКА» и 📑 «Касс. события» — такие же списки дел, фильтруются.
+const SECTION_FILTERED_RE = /^[\u{1F4C5}\u{1F501}\u{1F500}\u{1F4E8}\u{1F4E4}\u{1F4C4}\u{2696}\u{1F3E6}\u{1F4D1}]\s*\u{FE0F}?\s*<b>/u;
+// Группирующий заголовок: 🏛/⚖️/⚖️🔬 + UPPERCASE-русский текст без счётчика
+// в скобках. Пример: «🏛 ПЕРВАЯ ИНСТАНЦИЯ», «⚖️ АПЕЛЛЯЦИЯ», «⚖️🔬 КАССАЦИЯ».
+const SECTION_GROUPING_RE = /^(?:\u{2696}\u{FE0F}\u{1F52C}|[\u{1F3DB}\u{2696}])\s*\u{FE0F}?\s*<b>[А-ЯЁ\s]+<\/b>\s*$/u;
+// Футер «📌 В производстве: …» — конец дайджеста, а не пустая группа: на нём
+// пост-обработка обязана остановить поиск содержимого группы, иначе последний
+// группирующий заголовок («⚖️🔬 КАССАЦИЯ» с выкинутыми делами) остаётся сиротой.
+const SECTION_FOOTER_RE = /^\u{1F4CC}\s*\u{FE0F}?\s*<b>/u;
+// «🏦 ИСКИ БАНКА» — самостоятельный раздел верхнего уровня: своего
+// группирующего заголовка у него нет, но содержимым кассации он не является.
+// Для пост-обработки он такая же граница, как футер.
+const SECTION_BANK_RE = /^\u{1F3E6}\s*\u{FE0F}?\s*<b>/u;
 
 // Регексп для распознавания «голого» номера дела внутри HTML — должен быть
 // ровно тем, что использует enhanceDigestCaseLinks (CASE_NUMBER_RE), плюс
 // учитывать суффиксы вида «(2-3719/2025;)».
-const MINE_CASE_RE = /<a[^>]*><b>([^<]+)<\/b><\/a>/g;
+const MINE_CASE_RE = /<a([^>]*)><b>([^<]+)<\/b><\/a>/g;
+// Домен суда из href той же ссылки — единственный способ отличить дела с
+// одинаковым номером в разных судах (звёзды исков банка хранятся composite-
+// формой «домен|номер»). В HTML это тот же хост, что в details.court_domain.
+const MINE_HREF_DOMAIN_RE = /https?:\/\/([^\/"'\s>]+)/;
 
 // Извлечь все номера дел, упомянутые в HTML-фрагменте. Берём первый
 // «голый» номер, нормализуем как `_bare_case_number` в Python: до пробела/
@@ -4907,15 +4942,40 @@ const MINE_CASE_RE = /<a[^>]*><b>([^<]+)<\/b><\/a>/g;
 function bareCaseNumber(num) {
   return String(num || '').trim().split(/[\s(]/)[0];
 }
-function casesInFragment(html) {
+// Ссылки на дела в HTML-фрагменте: пара {bare, dom}. Домен нужен искам банка
+// (см. MINE_HREF_DOMAIN_RE), у остальных дел он просто игнорируется.
+function caseRefsInFragment(html) {
   const out = [];
   let m;
   MINE_CASE_RE.lastIndex = 0;
   while ((m = MINE_CASE_RE.exec(html)) !== null) {
-    const bare = bareCaseNumber(m[1]);
-    if (bare) out.push(bare);
+    const bare = bareCaseNumber(m[2]);
+    if (!bare) continue;
+    const dm = MINE_HREF_DOMAIN_RE.exec(m[1] || '');
+    out.push({ bare, dom: dm ? dm[1] : '' });
   }
   return out;
+}
+
+// Дело из HTML принадлежит mine-набору? Зеркало `_fi_change_matches`
+// (delivery.py): сперва канонический bare-номер, затем composite «домен|номер»
+// — звезда иска банка хранится только в composite-форме, и без второй проверки
+// после починки регекспов секций из mine-версии выпали бы ВСЕ звёздные
+// bank-дела. Обе формы прогоняем через canonCaseNumber: карта алиасов знает
+// composite-ключи переехавших дел (buildWatchCanonMap).
+function mineRefMatches(ref, mineSet) {
+  if (!ref || !ref.bare) return false;
+  if (mineSet.has(canonCaseNumber(ref.bare))) return true;
+  if (!ref.dom) return false;
+  return mineSet.has(canonCaseNumber(ref.dom + '|' + ref.bare));
+}
+
+// Число в заголовке секции («🏦 <b>ИСКИ БАНКА (21):</b>») считает дела всего
+// дайджеста. В mine-версии оно врёт — переписываем по факту оставшихся блоков.
+function retitleSectionHeader(header, n) {
+  const lines = String(header).split('\n');
+  lines[0] = lines[0].replace(/\((\d+)\)/, '(' + n + ')');
+  return lines.join('\n');
 }
 
 // Фильтр общего HTML дайджеста по mine-набору номеров дел (watchlist + новые).
@@ -4929,7 +4989,6 @@ function casesInFragment(html) {
 // после него встретился хотя бы один mine-блок (иначе заголовок-сирота
 // «📅 Изменения (2):» без содержимого мусорит на странице).
 function filterGeneralHtmlByMine(html, mineSet) {
-  const inMine = (num) => mineSet.has(canonCaseNumber(num));
   const paragraphs = String(html).split(/\n{2,}/);
   const kept = [];
   // Состояние секции: 'none' | 'new' (общесистемная — оставляем) |
@@ -4940,6 +4999,11 @@ function filterGeneralHtmlByMine(html, mineSet) {
   // Отложенный заголовок фильтруемой секции — добавим в kept только при
   // первом mine-блоке этой секции.
   let pendingFilteredHeader = null;
+  // Место уже добавленного заголовка в kept и его исходный текст: по мере
+  // сохранения блоков переписываем в нём счётчик (см. retitleSectionHeader).
+  let filteredHeaderIdx = -1;
+  let filteredHeaderSrc = '';
+  let filteredKeptCount = 0;
   for (const para of paragraphs) {
     const trimmed = para.trim();
     if (!trimmed) continue;
@@ -4961,27 +5025,33 @@ function filterGeneralHtmlByMine(html, mineSet) {
         pendingFilteredHeader = null;
         kept.push(para);
       }
+      filteredHeaderIdx = -1;
+      filteredKeptCount = 0;
       continue;
     }
     // Параграф без заголовка. Что делать — зависит от текущей секции.
     if (section === 'filtered') {
       // Считаем номера дел в параграфе. В блоке-деле первый <a><b>NUM</b></a>
       // — заголовочный номер; если он в mine, оставляем параграф целиком.
-      MINE_CASE_RE.lastIndex = 0;
-      const m = MINE_CASE_RE.exec(para);
-      if (!m) {
+      const ref = caseRefsInFragment(para)[0];
+      if (!ref) {
         // Параграф без номера дела внутри фильтруемой секции — служебный
         // (разделитель «⸻»). В mine-режиме при пустой секции это пыль:
         // выкидываем, иначе остаются 2-3 ⸻ подряд после удаления блоков.
         continue;
       }
-      const num = bareCaseNumber(m[1]);
-      if (inMine(num)) {
+      if (mineRefMatches(ref, mineSet)) {
         if (pendingFilteredHeader) {
+          filteredHeaderIdx = kept.length;
+          filteredHeaderSrc = pendingFilteredHeader;
           kept.push(pendingFilteredHeader);
           pendingFilteredHeader = null;
         }
         kept.push(para);
+        if (filteredHeaderIdx >= 0) {
+          filteredKeptCount++;
+          kept[filteredHeaderIdx] = retitleSectionHeader(filteredHeaderSrc, filteredKeptCount);
+        }
       }
       // иначе — выкидываем (не наш блок).
     } else {
@@ -5002,7 +5072,15 @@ function filterGeneralHtmlByMine(html, mineSet) {
       let hasContent = false;
       for (let j = i + 1; j < kept.length; j++) {
         const fl = (kept[j].split('\n')[0] || '').trim();
-        if (SECTION_GROUPING_RE.test(fl)) break;
+        // Границы группы: следующая группа, раздел «🏦 ИСКИ БАНКА» и футер
+        // «📌 В производстве…». Без них последний группирующий заголовок
+        // («⚖️🔬 КАССАЦИЯ» со всеми делами, выкинутыми фильтром) оставался
+        // сиротой — ровно тот мусор, ради которого пост-обработка и написана.
+        if (SECTION_GROUPING_RE.test(fl) || SECTION_BANK_RE.test(fl)
+            || SECTION_FOOTER_RE.test(fl)) break;
+        // Заголовок подсекции («📅 Изменения») сам по себе не контент — в kept
+        // он попадает только вместе со своими блоками, их и ищем дальше.
+        if (SECTION_HEADER_RE.test(fl)) continue;
         hasContent = true;
         break;
       }
@@ -5040,7 +5118,10 @@ function buildMineHtml(generalHtml, ctx) {
   for (const w of watchlist) mineSet.add(canonCaseNumber(w));
   for (const n of collectNewCaseNumbers(ctx)) mineSet.add(canonCaseNumber(n));
   const filtered = filterGeneralHtmlByMine(generalHtml, mineSet);
-  const cases = casesInFragment(filtered).filter((n) => mineSet.has(canonCaseNumber(n)));
+  // Считаем тем же предикатом, что и фильтр: у исков банка совпадение даёт
+  // только composite-форма, и подсчёт по голым номерам обнулял бы found —
+  // юрист получал бы «показан общий дайджест» при живых своих делах.
+  const cases = caseRefsInFragment(filtered).filter((ref) => mineRefMatches(ref, mineSet));
   if (cases.length === 0) {
     return {
       html: generalHtml,
