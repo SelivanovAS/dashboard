@@ -4907,3 +4907,277 @@ class TestFirstParseFlagWiring:
     def test_flag_reaches_stale_filter(self):
         src = self._runs_src()
         assert "first_parse=first_card_parse" in src
+
+
+class TestAppealActDigestDedupe:
+    """Д1 (13.08.2026): дедуп актов апелляции — только при реально взятом
+    тексте. Суд поднимает флаг «Акт опубликован» раньше выкладки текста;
+    безусловный `_digested_acts.add` после первого new_act навсегда закрывал
+    ветку добора B — доехавший позже текст не попадал в дайджест никогда."""
+
+    _LONG_ACT = (
+        "Суд апелляционной инстанции, изучив материалы дела и доводы жалобы, "
+        "приходит к выводу об отсутствии оснований для отмены решения. "
+        "Выводы суда первой инстанции соответствуют установленным "
+        "обстоятельствам, нормы материального права применены верно, "
+        "процессуальных нарушений не допущено."
+    )
+
+    @staticmethod
+    def _run(monkeypatch, case, card_over, digested):
+        from court_monitor import runs as cm_runs
+        card = {
+            "Последнее событие": "Судебное заседание. Вынесено решение",
+            "Дата события": "01.08.2026",
+            "Статус": "Решено",
+            "Время заседания": "",
+            "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            "Акт опубликован": "Да",
+            "Дата заседания": "01.08.2026",
+            "Дата публикации акта": "05.08.2026",
+            "act_text": "",
+            "_appellant_raw": "",
+            "_events": [{"date": "01.08.2026",
+                         "text": "Судебное заседание. Вынесено решение"}],
+            "_table_count": 8,
+        }
+        card.update(card_over)
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: digested)
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(cm_runs, "should_skip_case",
+                            lambda shim, today, **kw: (False, ""))
+        monkeypatch.setattr(cm_runs, "card_breaker_allows", lambda dom: True)
+        monkeypatch.setattr(cm_runs, "fetch_card_checked",
+                            lambda url, **kw: "<html>карточка</html>")
+        monkeypatch.setattr(cm_runs, "parse_case_card",
+                            lambda html, base: dict(card))
+        _, changes, _ = cm_runs.update_active_cases(
+            [case], json_appeal_by_num={case["Номер дела"]: {
+                "case_number": case["Номер дела"], "events": []}})
+        return changes
+
+    @staticmethod
+    def _case() -> dict:
+        return {
+            "Номер дела": "33-7777/2026", "Ссылка": "1|aaaa-bbbb",
+            "Истец": "ПАО Сбербанк", "Ответчик": "Иванов Иван Иванович",
+            "Последнее событие": "Судебное заседание. Вынесено решение",
+            "Статус": "Решено",
+            "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            "Акт опубликован": "Нет",
+        }
+
+    def test_flag_without_text_emits_but_not_deduped(self, monkeypatch):
+        digested: set = set()
+        case = self._case()
+        changes = self._run(monkeypatch, case, {"act_text": ""}, digested)
+        assert any("new_act" in ch["type"] for ch in changes)
+        assert "33-7777/2026" not in digested, (
+            "Номер попал в дедуп без текста — ветка добора B закрыта, "
+            "поздний текст акта потерян навсегда (дефект Д1)."
+        )
+        assert case["Акт опубликован"] == "Да"
+
+    def test_late_text_gets_second_new_act_and_dedupes(self, monkeypatch):
+        digested: set = set()
+        case = self._case()
+        self._run(monkeypatch, case, {"act_text": ""}, digested)
+        # Текст доехал следующим прогоном: ветка B доносит «Почему».
+        changes2 = self._run(monkeypatch, case,
+                             {"act_text": self._LONG_ACT}, digested)
+        acts2 = [ch for ch in changes2 if "new_act" in ch["type"]]
+        assert len(acts2) == 1
+        assert self._LONG_ACT[:40] in acts2[0]["details"]["act_text"]
+        assert "33-7777/2026" in digested
+        # Третий прогон — тихо: акт уже в дедупе.
+        changes3 = self._run(monkeypatch, case,
+                             {"act_text": self._LONG_ACT}, digested)
+        assert not any("new_act" in ch["type"] for ch in changes3)
+
+    def test_short_text_never_dedupes_and_never_repeats(self, monkeypatch):
+        """Мотив ≤100 симв. — ни дедупа, ни повторных эмитов (ветка B
+        требует содержательный текст, ветка A одноразова по флагу CSV)."""
+        digested: set = set()
+        case = self._case()
+        self._run(monkeypatch, case, {"act_text": "Коротко."}, digested)
+        assert "33-7777/2026" not in digested
+        changes2 = self._run(monkeypatch, case,
+                             {"act_text": "Коротко."}, digested)
+        assert not any("new_act" in ch["type"] for ch in changes2)
+
+
+class TestCassationTerminalBackfill:
+    """Д3 (13.08.2026): «исход не отзывают» — деградировавший парс 7kas не
+    затирает терминальные поля блока, и следующий удачный прогон не объявляет
+    исход повторно (.cassation_acts кроет только new_act)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cassation_acts(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            cm_config, "CASSATION_ACTS_PATH", str(tmp_path / ".cassation_acts")
+        )
+
+    @staticmethod
+    def _terminal_case() -> dict:
+        return {
+            "id": "2-100/2025",
+            "current_stage": "cassation",
+            "first_instance": {"case_number": "2-100/2025"},
+            "cassation": {
+                "case_number": "8Г-111/2026",
+                "outcome": "cassation_upheld",
+                "review_result": "рассмотрено по существу",
+                "result_text": "жалоба оставлена без удовлетворения",
+                "result_for_appeal": "оставлено без изменения",
+                "decision_date": "01.07.2026",
+                "act_published": True,
+                "act_date": "05.07.2026",
+                "act_text": "мотивировочная часть определения",
+            },
+        }
+
+    def test_degraded_parse_preserves_terminal_fields_silently(self):
+        cases = [self._terminal_case()]
+        out, changes, _ = uc.link_cassation_cases(
+            cases, [_cass_find("2-100/2025")]  # все терминальные поля пусты
+        )
+        cs = out[0]["cassation"]
+        assert cs["outcome"] == "cassation_upheld"
+        assert cs["result_text"] == "жалоба оставлена без удовлетворения"
+        assert cs["decision_date"] == "01.07.2026"
+        assert cs["act_published"] is True
+        assert cs["act_text"] == "мотивировочная часть определения"
+        assert changes == [], (
+            "Деградировавший парс дал события — следующий удачный прогон "
+            "объявит исход повторно."
+        )
+
+    def test_hearing_and_suspended_still_erasable(self):
+        """Заседание и «без движения» легитимно исчезают (прошло/снято) —
+        бэкфилл их НЕ трогает."""
+        case = self._terminal_case()
+        case["cassation"]["hearing_date"] = "01.06.2026"
+        case["cassation"]["suspended_until"] = "10.06.2026"
+        out, _, _ = uc.link_cassation_cases(
+            [case], [_cass_find("2-100/2025")]
+        )
+        cs = out[0]["cassation"]
+        assert cs["hearing_date"] == ""
+        assert cs["suspended_until"] == ""
+
+    def test_other_complaint_in_awaiting_relink_not_backfilled(self):
+        """awaiting_relink с ДРУГИМ 8Г-номером: старый блок — другая жалоба,
+        её исход в новый блок не переносится."""
+        case = self._terminal_case()
+        case["current_stage"] = "awaiting_relink"
+        out, _, _ = uc.link_cassation_cases(
+            [case], [_cass_find("2-100/2025", cass_num="8Г-222/2026")]
+        )
+        cs = out[0]["cassation"]
+        assert cs["case_number"] == "8Г-222/2026"
+        assert cs["outcome"] == ""
+        assert cs["act_published"] is False
+
+
+class TestCassationCalendarEvents:
+    """П1/П2 (13.08.2026): заседание кассации и «без движения» — раньше
+    этих типов не было вовсе (дата печаталась только «прицепом», суспенд жил
+    лишь в skip-логике)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cassation_acts(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            cm_config, "CASSATION_ACTS_PATH", str(tmp_path / ".cassation_acts")
+        )
+
+    @staticmethod
+    def _linked_case(**cass_over) -> dict:
+        cass = {"case_number": "8Г-111/2026", "act_published": False}
+        cass.update(cass_over)
+        return {
+            "id": "2-100/2025",
+            "current_stage": "cassation",
+            "first_instance": {"case_number": "2-100/2025"},
+            "cassation": cass,
+        }
+
+    def test_new_future_hearing_emits(self):
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case()],
+            [_cass_find("2-100/2025",
+                        hearing_date="15.01.2099", hearing_time="10:30")],
+        )
+        assert len(changes) == 1
+        assert changes[0]["type"] == ["cass_hearing_scheduled"]
+        assert changes[0]["details"]["hearing_date"] == "15.01.2099"
+        assert changes[0]["details"]["hearing_time"] == "10:30"
+
+    def test_rescheduled_after_passed_date_emits(self):
+        """Перенос: старая дата прошла, новая в будущем — желаемый эмит."""
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case(hearing_date="01.06.2026")],
+            [_cass_find("2-100/2025", hearing_date="15.01.2099")],
+        )
+        assert any("cass_hearing_scheduled" in ch["type"] for ch in changes)
+
+    def test_same_date_silent(self):
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case(hearing_date="15.01.2099")],
+            [_cass_find("2-100/2025", hearing_date="15.01.2099")],
+        )
+        assert changes == []
+
+    def test_past_date_silent(self):
+        """Прошлая дата — раскопанная история карточки, не анонс."""
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case()],
+            [_cass_find("2-100/2025", hearing_date="01.06.2026")],
+        )
+        assert changes == []
+
+    def test_fresh_link_does_not_double_announce_hearing(self):
+        """При new_cassation заседание уже печатает штатная строка рендера —
+        отдельный тип был бы дублем."""
+        case = {
+            "id": "2-100/2025",
+            "current_stage": "cassation_pending",
+            "first_instance": {"case_number": "2-100/2025"},
+            "cassation": None,
+        }
+        out, changes, _ = uc.link_cassation_cases(
+            [case], [_cass_find("2-100/2025", hearing_date="15.01.2099")],
+        )
+        assert len(changes) == 1
+        assert changes[0]["type"] == ["new_cassation"]
+
+    def test_new_future_suspension_emits_with_details(self):
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case()],
+            [_cass_find("2-100/2025", suspended_until="15.01.2099")],
+        )
+        assert len(changes) == 1
+        assert changes[0]["type"] == ["cass_suspended"]
+        assert changes[0]["details"]["suspended_until"] == "15.01.2099"
+
+    def test_extended_suspension_reannounces(self):
+        """Суд продлил срок устранения недостатков — новая дата объявляется."""
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case(suspended_until="01.01.2099")],
+            [_cass_find("2-100/2025", suspended_until="15.02.2099")],
+        )
+        assert any("cass_suspended" in ch["type"] for ch in changes)
+
+    def test_same_suspension_silent(self):
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case(suspended_until="15.01.2099")],
+            [_cass_find("2-100/2025", suspended_until="15.01.2099")],
+        )
+        assert changes == []
+
+    def test_past_suspension_silent(self):
+        out, changes, _ = uc.link_cassation_cases(
+            [self._linked_case()],
+            [_cass_find("2-100/2025", suspended_until="01.06.2026")],
+        )
+        assert changes == []
