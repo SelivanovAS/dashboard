@@ -131,7 +131,8 @@ def save_last_digest(html: str, summary: str = "", *, is_empty: bool = False) ->
 # `<stage>.act_analysis`. Парсер опирается на тот же контракт
 # `<a><b>НОМЕР</b></a>`, который сейчас использует фронт в mine-режиме.
 
-def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
+def _extract_case_paragraphs_from_digest(html: str, case_id: str, *,
+                                         require_explained: bool = False) -> str:
     """Из HTML дайджеста вернуть «разборный» абзац — тот, в котором есть
     маркер `<b>Почему:</b>` и первый `<a><b>НОМЕР</b></a>` соответствует
     `case_id`. Маркер «Почему:» уникален для раздела «Опубликованные
@@ -141,7 +142,11 @@ def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
     склеиваются в одно поле `act_analysis.html`. Если разборных абзацев
     нет (старый шаблонный дайджест без LLM-мотивировки) — возвращаем
     все найденные абзацы как раньше, чтобы не сломать исторический
-    fallback. Пустую строку — если ничего не нашлось."""
+    fallback. Пустую строку — если ничего не нашлось.
+
+    `require_explained=True` — без «Почему»-абзаца вернуть пустоту (не
+    фолбэчиться на любые абзацы с номером): банк-секция печатает дело
+    ОДНОЙ строкой с номером, и фолбэк выдал бы её за «AI анализ»."""
     if not html or not case_id:
         return ""
     target = _bare_case_number(case_id)
@@ -167,6 +172,8 @@ def _extract_case_paragraphs_from_digest(html: str, case_id: str) -> str:
     if not out:
         return ""
     explained = [p for p in out if "<b>Почему:</b>" in p]
+    if require_explained:
+        return "\n\n".join(explained)
     return "\n\n".join(explained or out)
 
 
@@ -177,6 +184,7 @@ def attach_act_analyses(
     all_changes: list[dict] | None = None,
     cass_changes: list[dict] | None = None,
     is_empty: bool = False,
+    require_explained: bool = False,
 ) -> int:
     """Записать LLM-разбор опубликованного акта в `cases.json`.
 
@@ -201,6 +209,11 @@ def attach_act_analyses(
     у остальных дел `act_analysis` сохраняется с прошлых прогонов и
     переживает любое количество последующих дайджестов. Идемпотентно:
     при повторном прогоне на тех же данных `generated_at` не обновляется.
+
+    `require_explained=True` — абзац из дайджеста берётся только с маркером
+    «Почему:», иначе сразу raw_act-фолбэк (банк-вызов в runs.py: дело там
+    печатается одной строкой с номером, и обычный фолбэк выдал бы её за
+    «AI анализ»).
 
     Возвращает кол-во дел, у которых поле реально изменилось.
     """
@@ -259,14 +272,16 @@ def attach_act_analyses(
         details = ch.get("details") or {}
         act_date = details.get("act_date") or ""
 
-        html_fragment = _extract_case_paragraphs_from_digest(digest_html, bare)
+        html_fragment = _extract_case_paragraphs_from_digest(
+            digest_html, bare, require_explained=require_explained
+        )
         if not html_fragment and stage == "cassation":
             # Шаблонный рендер кассации оборачивает КАССАЦИОННЫЙ номер
             # (8Г-…), а не номер 1-й инст. из change["case"] — пробуем его.
             alt = _bare_case_number(ch.get("cassation_internal_number") or "")
             if alt:
                 html_fragment = _extract_case_paragraphs_from_digest(
-                    digest_html, alt
+                    digest_html, alt, require_explained=require_explained
                 )
         if html_fragment:
             source = "digest"

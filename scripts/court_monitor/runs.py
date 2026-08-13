@@ -52,7 +52,7 @@ from court_monitor.digest.core import (
     save_digest_context, save_last_digest,
 )
 from court_monitor.digest.lint import lint_digest_html
-from court_monitor.digest.template import build_summary_line
+from court_monitor.digest.template import build_summary_line, bank_act_why_eligible
 from court_monitor.health import (
     load_parse_health, save_parse_health, update_parse_health,
 )
@@ -794,6 +794,14 @@ def update_active_cases(
             act_text = fetch_act_text(
                 card_info["_act_url"], context=case["Номер дела"]
             )
+        # Персист текста апел. определения (13.08.2026): раньше текст жил один
+        # прогон (только details события) — drawer апелляции не мог показать
+        # полный текст, в отличие от 1-й инст. и кассации. Пишем один раз,
+        # независимо от гейтов дайджеста (.digested_acts): «при добытом
+        # тексте». Бэкфилл старых актов не делаем — потребовал бы перекачку.
+        if (ap_json is not None and act_text
+                and not (ap_json.get("act_text") or "").strip()):
+            ap_json["act_text"] = act_text[:8000]  # симметрия FI
         # Снимок итога на момент публикации акта: результат обычно уже давно
         # стоит в карточке (акт публикуется через 14+ дней после заседания).
         # verdict_label в JSON не сохраняется — переклассифицируем из сырого
@@ -4718,6 +4726,11 @@ def main_json():
     # снимается, след остаётся в track_origin. Архивация трека — свои окна
     # (_is_bank_track_archived), свой файл cases_bank_archive.json.
     total_active_bank = 0
+    # Инициализация ДО ветки: bank_active нужен и ПОСЛЕ дайджеста (второй
+    # attach_act_analyses для drawer банк-дел), а при выключенном треке
+    # ветка не выполняется — без дефолтов был бы NameError.
+    bank_active: list[dict] = []
+    bank_archived_all: list[dict] = []
     if bank_track_pending(cases):
         cases, bank_active, bank_newly_archived, moved_to_main = split_bank_track(cases)
         # Счётчик активных исков банка для футера дайджеста (09.08.2026):
@@ -5008,6 +5021,45 @@ def main_json():
         # фронта (atomic-write через временный файл уже встроен).
         data["cases"] = cases
         save_json(data, config.JSON_PATH)
+
+    # То же для банк-дел (13.08.2026): к моменту attach они уже разложены из
+    # `cases` в bank_active (split_bank_track, фаза 7c), и первый вызов их
+    # «не находит» — «Почему» из банк-секции не доезжал до drawer'а. Гейт
+    # bank_act_why_eligible общий с рендером банк-секции (только исход против
+    # банка); require_explained — банк-дело печатается одной строкой с
+    # номером, и обычный фолбэк «любой абзац с номером» выдал бы её за
+    # «AI анализ» (при отказе LLM сработает raw_act-фолбэк по details).
+    # Записи bank_active — склеенные dict'ы этого же прогона, повторный
+    # save_bank_json недеструктивен (payload байт-в-байт как в 7c).
+    bank_act_chs = [ch for ch in fi_changes
+                    if ch.get("track") == "plaintiff_light"
+                    and bank_act_why_eligible(ch)]
+    if bank_active and bank_act_chs:
+        # Номера bank-дел НЕ уникальны между судами (потому bank_events_key
+        # композитный), а attach ищет дело по голому номеру — цели фильтруем
+        # по домену суда из details, иначе разбор прилип бы к делу-тёзке.
+        bank_analyses_updated = 0
+        for _bch in bank_act_chs:
+            _dom = ((_bch.get("details") or {}).get("court_domain") or "").strip()
+            _targets = [c for c in bank_active
+                        if not _dom
+                        or ((c.get("first_instance") or {})
+                            .get("court_domain") or "").strip() == _dom]
+            bank_analyses_updated += attach_act_analyses(
+                _targets,
+                digest,
+                all_changes=[_bch],
+                is_empty=digest_is_empty,
+                require_explained=True,
+            )
+        if bank_analyses_updated:
+            save_bank_json(
+                {"version": 1, "track": "plaintiff_light",
+                 "archived_count": len(bank_archived_all),
+                 "cases": bank_active},
+                config.JSON_BANK_PATH,
+                config.JSON_BANK_EVENTS_PATH,
+            )
 
     timings["total"] = time.perf_counter() - t_total_start
 

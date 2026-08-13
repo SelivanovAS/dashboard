@@ -5007,6 +5007,80 @@ class TestAppealActDigestDedupe:
         assert not any("new_act" in ch["type"] for ch in changes2)
 
 
+class TestAppealActTextPersist:
+    """Персист текста апел. определения (13.08.2026): раньше текст жил один
+    прогон (только details события) — drawer апелляции не показывал полный
+    текст. Пишется в ap_json["act_text"][:8000] один раз, независимо от
+    гейтов дайджеста; ветки A/B эмита new_act не задеты."""
+
+    _LONG_ACT = ("Суд апелляционной инстанции, изучив материалы дела, "
+                 "оснований для отмены решения не нашёл. ") * 200  # >8000
+
+    @staticmethod
+    def _run(monkeypatch, case, card_over, ap):
+        from court_monitor import runs as cm_runs
+        card = {
+            "Последнее событие": "Судебное заседание. Вынесено решение",
+            "Дата события": "01.08.2026",
+            "Статус": "Решено",
+            "Время заседания": "",
+            "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            "Акт опубликован": "Да",
+            "Дата заседания": "01.08.2026",
+            "Дата публикации акта": "05.08.2026",
+            "act_text": "",
+            "_appellant_raw": "",
+            "_events": [{"date": "01.08.2026",
+                         "text": "Судебное заседание. Вынесено решение"}],
+            "_table_count": 8,
+        }
+        card.update(card_over)
+        monkeypatch.setattr(cm_runs, "polite_delay", lambda: None)
+        monkeypatch.setattr(cm_runs, "load_digested_acts", lambda: set())
+        monkeypatch.setattr(cm_runs, "save_digested_acts", lambda acts: None)
+        monkeypatch.setattr(cm_runs, "should_skip_case",
+                            lambda shim, today, **kw: (False, ""))
+        monkeypatch.setattr(cm_runs, "card_breaker_allows", lambda dom: True)
+        monkeypatch.setattr(cm_runs, "fetch_card_checked",
+                            lambda url, **kw: "<html>карточка</html>")
+        monkeypatch.setattr(cm_runs, "parse_case_card",
+                            lambda html, base: dict(card))
+        _, changes, _ = cm_runs.update_active_cases(
+            [case], json_appeal_by_num={case["Номер дела"]: ap})
+        return changes
+
+    @staticmethod
+    def _case() -> dict:
+        return {
+            "Номер дела": "33-8888/2026", "Ссылка": "1|aaaa-bbbb",
+            "Истец": "ПАО Сбербанк", "Ответчик": "Иванов Иван Иванович",
+            "Последнее событие": "Судебное заседание. Вынесено решение",
+            "Статус": "Решено",
+            "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
+            "Акт опубликован": "Нет",
+        }
+
+    def test_act_text_persisted_trimmed(self, monkeypatch):
+        ap = {"case_number": "33-8888/2026", "events": []}
+        changes = self._run(monkeypatch, self._case(),
+                            {"act_text": self._LONG_ACT}, ap)
+        assert ap["act_text"] == self._LONG_ACT[:8000]
+        # Ветка A не задета: new_act эмитится как раньше.
+        assert any("new_act" in ch["type"] for ch in changes)
+
+    def test_existing_text_not_overwritten(self, monkeypatch):
+        ap = {"case_number": "33-8888/2026", "events": [],
+              "act_text": "старый текст определения"}
+        self._run(monkeypatch, self._case(),
+                  {"act_text": self._LONG_ACT}, ap)
+        assert ap["act_text"] == "старый текст определения"
+
+    def test_no_text_no_field(self, monkeypatch):
+        ap = {"case_number": "33-8888/2026", "events": []}
+        self._run(monkeypatch, self._case(), {"act_text": ""}, ap)
+        assert "act_text" not in ap
+
+
 class TestCassationTerminalBackfill:
     """Д3 (13.08.2026): «исход не отзывают» — деградировавший парс 7kas не
     затирает терминальные поля блока, и следующий удачный прогон не объявляет
