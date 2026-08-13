@@ -2352,5 +2352,223 @@ class AppealSecondRoundMarkTest(unittest.TestCase):
         self.assertIn("📥 <b>Новые дела (1):</b>", html)
 
 
+# ── Банк-трек: «Почему» при исходе против банка (13.08.2026) ────────────────
+
+class _RecordingSummarizer:
+    """Фейковый пересказчик, запоминающий вызовы (act_text, case_meta)."""
+
+    def __init__(self, reply: str | None = "ПЕРЕСКАЗ_БАНК"):
+        self.calls: list[tuple[str, dict]] = []
+        self.reply = reply
+
+    def __call__(self, act_text, *, case_meta):
+        self.calls.append((act_text, case_meta))
+        return self.reply
+
+
+def make_bank_act_change(bank_outcome: str = "против банка",
+                         details: dict | None = None) -> dict:
+    """fi_act_text_published банк-трека — исход задаётся параметром."""
+    d = {
+        "verdict_label": "отказано",
+        "raw_result": "ОТКАЗАНО в удовлетворении иска",
+        "bank_outcome": bank_outcome,
+    }
+    if details:
+        d.update(details)
+    return make_fi_change(["fi_act_text_published"], d,
+                          track="plaintiff_light")
+
+
+class BankActWhyTest(unittest.TestCase):
+    """Секция «🏦 ИСКИ БАНКА»: пересказ «Почему» только при исходе против
+    банка (решение юриста 13.08.2026); сырой excerpt не печатается вовсе."""
+
+    @staticmethod
+    def _line_after_case(html: str, num: str = "2-100/2026") -> str | None:
+        lines = html.split("\n")
+        for i, ln in enumerate(lines):
+            if num in ln and "ИСКИ БАНКА" not in ln:
+                return lines[i + 1] if i + 1 < len(lines) else ""
+        return None
+
+    def test_adverse_outcome_prints_pochemu(self):
+        rec = _RecordingSummarizer()
+        html = render(fi_changes=[make_bank_act_change()],
+                      act_summarizer=rec)
+        self.assertIn("🏦 <b>ИСКИ БАНКА (1):</b>", html)
+        # «Почему» — строкой СРАЗУ за строкой дела (контракт
+        # attach_act_analyses: абзац head+Почему без пустой строки).
+        nxt = self._line_after_case(html)
+        self.assertEqual(nxt, "<b>Почему:</b> <i>ПЕРЕСКАЗ_БАНК</i>")
+        # Без номера дела в строке пересказа — линтер считает дела по
+        # строкам с номерами, второй номер удвоил бы счётчик.
+        self.assertNotIn("2-100/2026", nxt)
+        self.assertEqual(anchors(html).count("2-100/2026"), 1)
+        self.assertEqual(len(rec.calls), 1)
+        self.assertEqual(rec.calls[0][1].get("stage"), "first_instance")
+
+    def test_partial_outcome_prints_pochemu(self):
+        rec = _RecordingSummarizer()
+        html = render(
+            fi_changes=[make_bank_act_change("частично в пользу банка")],
+            act_summarizer=rec,
+        )
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_БАНК</i>", html)
+
+    def test_favorable_outcome_no_pochemu(self):
+        rec = _RecordingSummarizer()
+        html = render(fi_changes=[make_bank_act_change("в пользу банка")],
+                      act_summarizer=rec)
+        self.assertNotIn("Почему:", html)
+        self.assertEqual(rec.calls, [], "Пересказ полного удовлетворения "
+                         "иска банка не заказан юристом — LLM звать нельзя.")
+
+    def test_no_act_text_prior_render(self):
+        # Старый контекст replay: события без текста рендерятся как раньше.
+        rec = _RecordingSummarizer()
+        html = render(
+            fi_changes=[make_bank_act_change(details={"act_text": ""})],
+            act_summarizer=rec,
+        )
+        self.assertIn("🏦 <b>ИСКИ БАНКА (1):</b>", html)
+        self.assertNotIn("Почему:", html)
+        self.assertEqual(rec.calls, [])
+
+    def test_summarizer_refusal_no_raw_excerpt(self):
+        # LLM отказал → прежняя одна строка; сырой excerpt в компакт-секции
+        # не печатаем (Telegram-бюджет), drawer получит raw_act от attach.
+        rec = _RecordingSummarizer(reply=None)
+        html = render(fi_changes=[make_bank_act_change()],
+                      act_summarizer=rec)
+        self.assertNotIn("Почему:", html)
+        self.assertNotIn("Суд установил", html)
+
+    def test_bank_act_not_in_main_3_6(self):
+        # Банк-событие не утекает в основную секцию 3.6.
+        html = render(fi_changes=[make_bank_act_change()],
+                      act_summarizer=_fake_summarizer)
+        self.assertNotIn("Опубликованные тексты решений", html)
+
+
+class BankActWhyEligibleTest(unittest.TestCase):
+    """Юнит общего гейта bank_act_why_eligible (рендер + attach в runs.py)."""
+
+    def test_adverse_and_partial_eligible(self):
+        for outcome in ("против банка", "частично в пользу банка",
+                        "частично против банка"):
+            self.assertTrue(cm_template.bank_act_why_eligible(
+                make_bank_act_change(outcome)), outcome)
+
+    def test_favorable_empty_and_textless_not_eligible(self):
+        self.assertFalse(cm_template.bank_act_why_eligible(
+            make_bank_act_change("в пользу банка")))
+        self.assertFalse(cm_template.bank_act_why_eligible(
+            make_bank_act_change("")))
+        self.assertFalse(cm_template.bank_act_why_eligible(
+            make_bank_act_change(details={"act_text": ""})))
+
+    def test_other_types_not_eligible(self):
+        self.assertFalse(cm_template.bank_act_why_eligible(
+            make_fi_change(["fi_resolved"], track="plaintiff_light")))
+
+
+class BankActAttachContractTest(unittest.TestCase):
+    """«Почему» банк-секции доезжает до act_analysis банк-дела; без
+    «Почему»-абзаца require_explained не выдаёт строку события за анализ."""
+
+    @staticmethod
+    def _bank_case() -> dict:
+        return {
+            "id": "2-100/2026",
+            "track": "plaintiff_light",
+            "first_instance": {
+                "case_number": "2-100/2026",
+                "court_domain": "vartovgor--hmao.sudrf.ru",
+            },
+        }
+
+    def test_pochemu_paragraph_attached(self):
+        ch = make_bank_act_change()
+        html = render(fi_changes=[ch], act_summarizer=_fake_summarizer)
+        case = self._bank_case()
+        updated = uc.attach_act_analyses(
+            [case], html, all_changes=[ch], require_explained=True,
+        )
+        self.assertEqual(updated, 1)
+        aa = case["first_instance"]["act_analysis"]
+        self.assertEqual(aa["source"], "digest")
+        self.assertIn("<b>Почему:</b>", aa["html"])
+        self.assertIn("ПЕРЕСКАЗ_FIRST_INSTANCE", aa["html"])
+
+    def test_require_explained_falls_back_to_raw_act(self):
+        # Без «Почему» в дайджесте (LLM отказал) обычный фолбэк взял бы
+        # одностроковый абзац банк-секции с номером дела — require_explained
+        # уводит в raw_act по details.
+        ch = make_bank_act_change()
+        html = render(fi_changes=[ch])  # без summarizer — «Почему» нет
+        case = self._bank_case()
+        updated = uc.attach_act_analyses(
+            [case], html, all_changes=[ch], require_explained=True,
+        )
+        self.assertEqual(updated, 1)
+        aa = case["first_instance"]["act_analysis"]
+        self.assertEqual(aa["source"], "raw_act")
+        self.assertIn("Суд установил", aa["html"])
+
+
+# ── Discovery-кассация: источник текста для пересказа (13.08.2026) ──────────
+
+class DiscoveryActSourceTest(unittest.TestCase):
+    """«Новые касс. дела»: текст мотивировки — из details discovery-change'а
+    (обрезан и задедуплен linking-ом); прямое чтение case — только фолбэк."""
+
+    def test_paired_change_text_used(self):
+        disc = make_cass_discovered()
+        disc["cassation"]["outcome"] = "cassation_upheld"
+        disc["cassation"]["act_text"] = "ПОЛНЫЙ_ТЕКСТ_ИЗ_CASES. " * 300
+        ch = make_cass_change(
+            ["discovered_in_cassation", "new_act"],
+            case="2-505/2025", cass_num="8Г-505/2026",
+        )
+        rec = _RecordingSummarizer(reply="ПЕРЕСКАЗ_DISC")
+        html = render(cass_discovered=[disc], cass_changes=[ch],
+                      act_summarizer=rec)
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_DISC</i>", html)
+        self.assertEqual(len(rec.calls), 1)
+        self.assertEqual(rec.calls[0][0], ch["details"]["act_text"])
+        self.assertNotIn("ПОЛНЫЙ_ТЕКСТ_ИЗ_CASES", rec.calls[0][0])
+
+    def test_deduped_act_stays_silent(self):
+        # Акт уже объявлялся (.cassation_acts): у discovery-change'а
+        # act_published=True, но act_text linking не положил — молчим.
+        disc = make_cass_discovered()
+        disc["cassation"]["outcome"] = "cassation_upheld"
+        disc["cassation"]["act_text"] = "ПОЛНЫЙ_ТЕКСТ_ИЗ_CASES. " * 300
+        ch = make_cass_change(
+            ["discovered_in_cassation"], {"act_published": True},
+            case="2-505/2025", cass_num="8Г-505/2026",
+        )
+        rec = _RecordingSummarizer()
+        html = render(cass_discovered=[disc], cass_changes=[ch],
+                      act_summarizer=rec)
+        self.assertNotIn("Почему:", html)
+        self.assertNotIn("ПОЛНЫЙ_ТЕКСТ_ИЗ_CASES", html)
+        self.assertEqual(rec.calls, [])
+
+    def test_legacy_context_fallback_is_trimmed(self):
+        # Change'а нет (legacy-контекст replay): фолбэк читает case, но с
+        # той же обрезкой extract_motive_part(...,1800) — раньше полный акт
+        # (до ~10 КБ) уходил в LLM целиком.
+        disc = make_cass_discovered()
+        disc["cassation"]["outcome"] = "cassation_upheld"
+        disc["cassation"]["act_text"] = "А" * 5000
+        rec = _RecordingSummarizer(reply="ПЕРЕСКАЗ_DISC")
+        html = render(cass_discovered=[disc], act_summarizer=rec)
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_DISC</i>", html)
+        self.assertEqual(len(rec.calls), 1)
+        self.assertLessEqual(len(rec.calls[0][0]), 1800)
+
+
 if __name__ == "__main__":
     unittest.main()

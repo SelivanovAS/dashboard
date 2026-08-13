@@ -303,6 +303,24 @@ class LintMainTrackAdditions13AugTest(unittest.TestCase):
         self.assertEqual(uc.lint_digest_html(html, **ctx), [])
 
 
+class LintBankActWhyTest(unittest.TestCase):
+    """«Почему» в банк-секции (13.08.2026) не ломает счётчик «ИСКИ БАНКА (N)»:
+    строка пересказа идёт без номера дела и линтером не считается."""
+
+    def test_bank_act_with_pochemu_passes_lint(self):
+        from tests.test_digest_template_events import (
+            make_bank_act_change, _fake_summarizer,
+        )
+        ctx = _ctx(fi_changes=[
+            make_bank_act_change(),
+            make_fi_change(["fi_hearing_new"], case="2-101/2026",
+                           track="plaintiff_light"),
+        ])
+        html = render(**ctx, act_summarizer=_fake_summarizer)
+        self.assertIn("<b>Почему:</b>", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+
 class LintBankCalendarEventsTest(unittest.TestCase):
     """Новые события трека исков банка (13.08.2026) проходят линтер: одна
     строка с номером на запись, счётчик «ИСКИ БАНКА (N)» сходится."""

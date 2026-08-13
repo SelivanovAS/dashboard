@@ -32,7 +32,7 @@ from court_monitor.storage import load_json
 from court_monitor.textutil import (
     escape_html, shorten_party_name, shorten_court_name, shorten_bailiff_name,
     _bare_case_number, parties_short, parse_date, case_id_uid, ROLE_GENITIVE,
-    plural_ru, appellant_role_words, fi_closure_reason,
+    plural_ru, appellant_role_words, fi_closure_reason, extract_motive_part,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -1524,7 +1524,26 @@ def _bank_change_group(ch: dict) -> int:
     return best
 
 
-def _bank_track_block(bank_changes: list[dict]) -> list[str]:
+def bank_act_why_eligible(ch: dict) -> bool:
+    """Положен ли банк-делу пересказ «Почему» (13.08.2026, решение юриста).
+
+    Только fi_act_text_published с текстом и исходом ПРОТИВ банка:
+    bank_outcome ∉ {"", "в пользу банка"} — bank_side_outcome_fi даёт ровно
+    5 значений, и предикат покрывает отказ/частичное/прекращение с учётом
+    роли. Полные удовлетворения не пересказываем — мотивировка шаблонна.
+    Общий гейт рендера банк-секции и attach_act_analyses в runs.py
+    (второй должен молчать там, где молчит первый — иначе в drawer
+    утекала бы строка события под видом «AI анализа»)."""
+    if "fi_act_text_published" not in (ch.get("type") or []):
+        return False
+    d = ch.get("details") or {}
+    if not (d.get("act_text") or "").strip():
+        return False
+    return (d.get("bank_outcome") or "").strip() not in ("", "в пользу банка")
+
+
+def _bank_track_block(bank_changes: list[dict], *,
+                      act_summarizer=None) -> list[str]:
     """Строки секции «Иски банка»: заголовок + одна строка на дело.
 
     Дела отсортированы по группам важности (_BANK_GROUP_ORDER), между
@@ -1534,6 +1553,13 @@ def _bank_track_block(bank_changes: list[dict]) -> list[str]:
     (_check_section_counters — строка с номером = дело), новые заголовки
     с (N) пришлось бы синхронизировать с ним, а Telegram-лимит и так
     режет секцию первой.
+
+    act_summarizer (13.08.2026, решение юриста): у fi_act_text_published
+    с исходом ПРОТИВ банка (bank_outcome ∉ {"", "в пользу банка"} —
+    bank_side_outcome_fi даёт ровно 5 значений, и предикат покрывает
+    отказ/частичное/прекращение с учётом роли) вторым абзацем печатается
+    LLM-пересказ «Почему». Полные удовлетворения не пересказываем —
+    мотивировка шаблонна, а секция и так самая длинная.
     """
     def _sort_key(pair: tuple[int, dict]) -> tuple[int, float, int]:
         idx, ch = pair
@@ -1573,6 +1599,33 @@ def _bank_track_block(bank_changes: list[dict]) -> list[str]:
         head = f"{link} ({court})" + (f" — {df}" if df else "")
         phrases = _bank_event_phrases(ch)
         block.append(f"{head}: {'; '.join(phrases)}" if phrases else head)
+        # «Почему» при исходе против банка (bank_act_why_eligible) — строкой
+        # СРАЗУ за строкой дела (без пустой строки: абзац head+Почему —
+        # контракт attach_act_analyses, он же несёт разбор в drawer). Без
+        # номера дела — линтер считает дела по строкам с номерами. Печатаем
+        # ТОЛЬКО kind=="summary": сырой excerpt в компакт-секции не
+        # показываем (Telegram-бюджет; при отказе LLM остаётся прежняя одна
+        # строка, drawer получит raw_act-фолбэк от attach_act_analyses).
+        # Пустой act_text (старые контексты replay) — прежний рендер.
+        if bank_act_why_eligible(ch):
+            why, why_kind = _act_summary_or_excerpt_with_kind(
+                (d.get("act_text") or "").strip(),
+                {
+                    "stage": "first_instance",
+                    "bank_role": ch.get("bank_role", ""),
+                    "verdict_label": d.get("verdict_label", ""),
+                    "plaintiff": shorten_party_name(
+                        ch.get("plaintiff", ""), keep_fio_full=True
+                    ),
+                    "defendant": shorten_party_name(
+                        ch.get("defendant", ""), keep_fio_full=True
+                    ),
+                    "category": d.get("category", ""),
+                },
+                summarizer=act_summarizer,
+            )
+            if why and why_kind == "summary":
+                block.append(f"<b>Почему:</b> <i>{why}</i>")
     return block
 
 
@@ -1598,9 +1651,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     `act_summarizer` — опциональный callable вида
     `summarize_act_motivation(act_text, *, case_meta) -> str | None`.
     Если задан, в секциях 5.5 (апел. опубл. акты), 3.6 (1-й инст. опубл.
-    решения) и кассации (new_act) вместо обрезанного excerpt'а
-    подставляется LLM-пересказ. None или ошибка callable → fallback
-    на excerpt (старое поведение).
+    решения), кассации (new_act) и «🏦 ИСКИ БАНКА» (fi_act_text_published
+    с исходом против банка — только пересказ, без excerpt-фолбэка)
+    вместо обрезанного excerpt'а подставляется LLM-пересказ. None или
+    ошибка callable → fallback на excerpt (старое поведение).
 
     Поля details, которые шаблон НЕ выводит ОСОЗНАННО (не дыры покрытия):
     - `old_hearing_date`/`old_hearing_time` — юрист просил показывать
@@ -2746,6 +2800,18 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     def _g_cass(parent: dict, eng: str, ru: str) -> str:
         return (parent.get(eng) or parent.get(ru) or "").strip() if parent else ""
     if cass_discovered:
+        # Индекс discovery-change'ей (13.08.2026): их details["act_text"] уже
+        # обрезан extract_motive_part(...,1800) и загейчен .cassation_acts в
+        # linking.py — правильный источник текста для пересказа. Прямое чтение
+        # case["cassation"]["act_text"] ниже — только фолбэк для legacy-replay
+        # (полный акт до ~10 КБ уходил в LLM целиком и мимо дедупа).
+        disc_ch_by_key: dict[str, dict] = {}
+        for _dch in cass_changes:
+            if "discovered_in_cassation" in (_dch.get("type") or []):
+                for _k in (_dch.get("cassation_internal_number"),
+                           _dch.get("case")):
+                    if _k:
+                        disc_ch_by_key.setdefault(_k, _dch)
         cass_block.append(f"📥 <b>Новые касс. дела ({len(cass_discovered)}):</b>")
         for c in cass_discovered:
             cass = c.get("cassation") or {}
@@ -2857,8 +2923,20 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 if reason_d:
                     itog_line += f"; {escape_html(reason_d)}"
                 cass_block.append(itog_line)
+            # Текст мотивировки — из details discovery-change'а (обрезан и
+            # задедуплен linking-ом). Change найден, а текста нет — акт уже
+            # объявлялся (.cassation_acts) или не опубликован: молчим и
+            # summarizer не зовём. Change не найден — legacy-контекст replay,
+            # фолбэк на прямое чтение с той же обрезкой 1800.
+            _disc_ch = (disc_ch_by_key.get(cass.get("case_number") or "")
+                        or disc_ch_by_key.get(c.get("id") or ""))
+            if _disc_ch is not None:
+                disc_act = ((_disc_ch.get("details") or {})
+                            .get("act_text") or "")
+            else:
+                disc_act = extract_motive_part(cass.get("act_text") or "", 1800)
             disc_excerpt, disc_kind = _act_summary_or_excerpt_with_kind(
-                cass.get("act_text") or "",
+                disc_act,
                 {
                     "stage": "cassation",
                     "bank_role": role,
@@ -3121,7 +3199,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # страдает первым, основная повестка выживает.
     if bank_changes:
         lines.extend(["", ""])
-        lines.extend(_bank_track_block(bank_changes))
+        lines.extend(_bank_track_block(bank_changes,
+                                       act_summarizer=act_summarizer))
 
     lines.extend(["", ""])
     lines.append(

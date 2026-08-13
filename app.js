@@ -3494,6 +3494,12 @@ function renderDrawer(c){
       grid+=`<div class="kv-k">Из</div><div class="kv-v kv-v-muted">${parts.join(' · ')}</div>`;
     }
     grid+=`</div>`;
+    // Полный текст апел. определения — свёрткой, как у 1-й инст. и кассации.
+    // Поле пишется с 13.08.2026 (только новые акты) — у старых дел его нет.
+    if(ap.act_text){
+      const обрезан=ap.act_text.length>=8000;
+      grid+=`<details class="act-block"><summary>Текст определения (полный)</summary><pre class="act-pre">${escHtml(ap.act_text)}</pre>${обрезан?'<div class="act-note">Текст обрезан при загрузке — полная версия в карточке дела.</div>':''}</details>`;
+    }
     courtSection=grid;
   }else if(drawerStage==='cs'&&stageData){
     const cs=stageData;
