@@ -312,8 +312,10 @@ BANK_INTAKE_MAX_PER_RUN = int(os.environ.get("BANK_INTAKE_MAX_PER_RUN", "30") or
 BANK_INTAKE_MAX_CARDS_PER_COURT = int(
     os.environ.get("BANK_INTAKE_MAX_CARDS_PER_COURT", "10") or 10
 )
-BANK_INTAKE_ALERT_ADDED = 50    # заведено больше за прогон → 🩺-алерт (паводок:
-                                # молча сломался дедуп или суд опубликовал архив)
+# Заведено больше за прогон → 🩺-алерт (паводок: молча сломался дедуп или суд
+# опубликовал архив). Из env — на разгоне новой территории кэпы поднимают
+# (BANK_INTAKE_MAX_PER_RUN=200), и константный порог алертил бы каждый день.
+BANK_INTAKE_ALERT_ADDED = int(os.environ.get("BANK_INTAKE_ALERT_ADDED", "50") or 50)
 BANK_INTAKE_SEEN_TTL_DAYS = 60  # сколько помним отказников негативного кэша
 # Legacy: CSV-ветка архивации (apelljatsiя в CSV) ещё использует старое
 # 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.

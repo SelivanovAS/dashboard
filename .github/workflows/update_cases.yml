@@ -80,6 +80,12 @@ jobs:
           # создаются (для первого прогона после деплоя).
           BANK_AUTO_INTAKE: ${{ vars.BANK_AUTO_INTAKE || '1' }}
           BANK_INTAKE_DRY_RUN: ${{ vars.BANK_INTAKE_DRY_RUN || '0' }}
+          # Кэпы подхвата — рычаг темпа ввода территории без правки кода
+          # (разгон Урала 08.2026: юрист держит ~200 дел/день). Порог алерта
+          # поднимают вместе с кэпом, иначе штатный разгон ежедневно алертит.
+          BANK_INTAKE_MAX_PER_RUN: ${{ vars.BANK_INTAKE_MAX_PER_RUN || '30' }}
+          BANK_INTAKE_MAX_CARDS_PER_COURT: ${{ vars.BANK_INTAKE_MAX_CARDS_PER_COURT || '10' }}
+          BANK_INTAKE_ALERT_ADDED: ${{ vars.BANK_INTAKE_ALERT_ADDED || '50' }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM
           # только на пересказ мотивировок актов. Откат на полный
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
