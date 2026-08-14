@@ -127,9 +127,9 @@
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:1114](scripts/court_monitor/digest/llm.py:1114) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:1124](scripts/court_monitor/digest/llm.py:1124) |
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1255](scripts/court_monitor/digest/llm.py:1255) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1265](scripts/court_monitor/digest/llm.py:1265) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
 | доставка: `send_telegram` | [scripts/court_monitor/delivery.py:646](scripts/court_monitor/delivery.py:646) |
 | PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:459](scripts/court_monitor/delivery.py:459) |
@@ -768,7 +768,32 @@ drawer; номера не уникальны между судами — пот�
   однократный sync в KV. `worker.js`/`delivery.py` не трогаем: их alias-карты
   строятся из cases.json, где bank-дел нет.
 - **Дайджест**: секция «🏦 ИСКИ БАНКА (N)» — компакт, одна строка на дело,
-  ПОСЛЕДНЕЙ (при обрезке Telegram страдает первой); события `fi_writ_issued`/
+  ПОСЛЕДНЕЙ (при обрезке Telegram страдает первой). **С 14.08.2026 —
+  свёртка массовых заведений** (`split_bank_intake_fold`, template.py; порог
+  `BANK_INTAKE_DIGEST_FOLD`=25 из Actions Variables, `0` — выключить):
+  первый боевой прогон авто-подхвата на Урале завёл 116 исков разом, и секция
+  стала стеной одинаковых строк «взят на мониторинг» (HTML 60 КБ) — решения,
+  ИЛ и заседания в ней утонули. Больше порога → одна строка
+  «🆕 заведено N новых исков банка в M судах — список на дашборде» на месте
+  группы «новые иски»; сворачиваются ТОЛЬКО дела, где `fi_bank_claim_registered`
+  единственный тип и нет `details["left_track"]` (дело с решением/ИЛ или
+  уехавшее в общий трек печатается подробно). Счётчик заголовка = число
+  ПОДРОБНЫХ дел, при нуле подробных заголовок вовсе без `(N)` (секцию без
+  счётчика `_check_section_counters` штатно пропускает). Сводка получает
+  отдельную часть «🆕 N новых исков банка заведено» (вложить второй
+  разделитель внутрь части нельзя — части склеены через «·»); без свёртки
+  строка прежняя посимвольно. ⚠️ **Хелпер общий с линтером**:
+  `_expected_number_alternatives` (lint.py) и `llm._collect_case_numbers`
+  перебирают ВЕСЬ `fi_changes` и требуют каждый номер в HTML — без гейта
+  дайджест-паводок переехал бы в 🩺-алерт на 116 строк «потерян номер дела»
+  (а при `DIGEST_POLISH=1` полировка отвергалась бы всегда); два независимых
+  расчёта порога разъехались бы молча. Порог прокинут и в replay-пути
+  (`test_digest.yml`, `replay_on_push.yml`) — иначе тестовый дайджест
+  разойдётся с боевым. В mine-версии свёрнутая строка выпадает сама (параграф
+  без номера дела) — это верно, звёзд у только что заведённых дел нет.
+  Полный LLM-путь (`DIGEST_FULL_LLM=1`) свёртки не имеет осознанно: банк-записи
+  там не отделяются, а путь — аварийный откат и в workflow не включён.
+  События `fi_writ_issued`/
   `fi_writ_status_changed` (НЕ в эхо/stale-фильтрах) и `fi_bank_claim_registered`
   (дело заведено авто-подхватом; НЕ рутина — переживает `BANK_DIGEST_ROUTINE=0`);
   маркер `change["track"]`
@@ -1106,6 +1131,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 - `BANK_AUTO_INTAKE` — авто-подхват исков банка в прогоне (дефолт 1; `0` — трек работает, но новые иски снова заводятся только вручную).
 - `BANK_INTAKE_DRY_RUN` — холостой прогон подхвата: кандидаты считаются и логируются, карточки не качаются, записи не создаются (дефолт 0). Для первого прогона после деплоя.
 - `BANK_INTAKE_MAX_PER_RUN` / `BANK_INTAKE_MAX_CARDS_PER_COURT` / `BANK_INTAKE_ALERT_ADDED` — потолки подхвата за прогон (30) и карточек на один суд (10: поиск 1-й инст. идёт раньше FI-цикла карточек, пачка нечитаемых карточек открыла бы предохранитель суда) + порог 🩺-алерта «паводок» (50). С 13.08.2026 прокинуты в update_cases.yml из Actions Variables (рычаг темпа ввода территории: разгон Урала — 200/25/200 без правки кода; стережёт `TestBankIntakeCapsWiring`).
+- `BANK_INTAKE_DIGEST_FOLD` — порог свёртки массовых заведений в дайджесте (25; `0` — печатать подельно). Прокинут в update_cases.yml, test_digest.yml и replay_on_push.yml — replay обязан воспроизводить крон.
 - `BANK_INTAKE_SEEN_TTL_DAYS` — сколько помним отказников негативного кэша (60).
 - `CARD_BREAKER_THRESHOLD` — пер-суд предохранитель карточек: столько не прочитанных карточек подряд (заглушка/код/сеть) снимают суд с обхода до конца прогона (дефолт 3; `0` — выключить, например для ручной пробы лежащего суда).
 - `CARD_BREAKER_PROBE_EVERY` — half-open: каждая K-я пропущенная карточка отключённого суда идёт пробой, успех возвращает суд в обход (дефолт 30; `0` — без проб).

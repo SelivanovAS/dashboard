@@ -57,6 +57,9 @@ jobs:
           # актов (summarize_act_motivation, кэш data/.act_summaries.json).
           # Откат на старый полный LLM-дайджест — вернуть строку
           # `DIGEST_FULL_LLM: "1"` в этот env-блок.
+          # Порог свёртки «заведено N новых исков банка»: replay обязан
+          # воспроизводить крон (у спящего резерва D2 это боевой дайджест).
+          BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # Личный чат — как и старый крон по умолчанию (to_group=false).

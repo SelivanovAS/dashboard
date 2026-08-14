@@ -1051,7 +1051,17 @@ def _collect_case_numbers(
         n = (ch.get("case") or "").strip()
         if n:
             nums.add(n)
+    # Свёрнутые «заведено N новых исков банка» в HTML номеров не дают —
+    # симметрично линтеру (lint._expected_number_alternatives). Без гейта
+    # валидатор полировщика при DIGEST_POLISH=1 отвергал бы КАЖДУЮ полировку
+    # в дни разгона территории.
+    from court_monitor.digest.template import split_bank_intake_fold
+    _folded_ids = {id(ch) for ch in
+                   split_bank_intake_fold([ch for ch in (fi_changes or [])
+                                           if ch.get("track")])[1]}
     for ch in fi_changes or []:
+        if id(ch) in _folded_ids:
+            continue
         n = (ch.get("case") or "").strip()
         if n:
             nums.add(n)

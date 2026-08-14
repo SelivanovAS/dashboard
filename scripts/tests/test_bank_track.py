@@ -1034,11 +1034,12 @@ class TestBankArchiveReactivation:
 
 # ── Дайджест: секция «Иски банка» ────────────────────────────────────────────
 
-def _bank_change(types: list[str], details: dict | None = None) -> dict:
+def _bank_change(types: list[str], details: dict | None = None,
+                 case: str = "2-100/2026") -> dict:
     d = {"link": "111|aaaa-1111", "court_domain": "surggor--hmao.sudrf.ru"}
     d.update(details or {})
     return {
-        "case": "2-100/2026",
+        "case": case,
         "court": "Сургутский городской суд",
         "plaintiff": "ПАО Сбербанк",
         "defendant": "Иванов Иван Иванович",
@@ -1463,6 +1464,113 @@ class TestBankDigestSection:
         assert "1 дело с событиями по искам банка" in html
 
 
+class TestBankIntakeDigestFold:
+    """Свёртка «заведено N новых исков банка» (разгон Урала 14.08.2026).
+
+    Первый боевой прогон авто-подхвата завёл 116 исков разом, и секция стала
+    стеной одинаковых строк «взят на мониторинг» (HTML 60 КБ): решения, ИЛ и
+    заседания в ней утонули. Порог — BANK_INTAKE_DIGEST_FOLD (25), условие
+    «больше порога».
+    """
+
+    @staticmethod
+    def _intake(n: int) -> list[dict]:
+        return [_bank_change(["fi_bank_claim_registered"],
+                             case=f"2-{1000 + i}/2026") for i in range(n)]
+
+    def test_at_threshold_rendered_per_case(self):
+        """Ровно порог — ещё подельно (условие «больше 25»)."""
+        html = _digest(self._intake(25))
+        assert "ИСКИ БАНКА (25)" in html
+        assert "2-1000/2026" in html
+        assert "заведено" not in html
+
+    def test_above_threshold_folded(self):
+        html = _digest(self._intake(26))
+        assert "заведено 26 новых исков банка" in html
+        assert "2-1000/2026" not in html
+        assert "2-1025/2026" not in html
+        # Все дела свёрнуты — заголовок без счётчика.
+        assert "ИСКИ БАНКА:" in html and "ИСКИ БАНКА (" not in html
+
+    def test_mixed_run_keeps_real_events(self):
+        """Настоящие события печатаются подробно и только они в счётчике."""
+        html = _digest(self._intake(30) + [
+            _bank_change(["fi_writ_issued"], {"writs": [
+                {"issue_date": "26.06.2026", "status": "Выдан"}]},
+                case="2-500/2026"),
+            _bank_change(["fi_resolved"], {"result": "Иск УДОВЛЕТВОРЕН"},
+                         case="2-501/2026"),
+        ])
+        assert "ИСКИ БАНКА (2)" in html
+        assert "2-500/2026" in html and "2-501/2026" in html
+        assert html.count("взят на мониторинг") == 0
+        assert "заведено 30 новых исков банка" in html
+
+    def test_case_with_registration_and_event_not_folded(self):
+        """Заведено И получило решение тем же прогоном — подробно."""
+        html = _digest(self._intake(30) + [
+            _bank_change(["fi_bank_claim_registered", "fi_resolved"],
+                         {"result": "Иск УДОВЛЕТВОРЕН"}, case="2-777/2026"),
+        ])
+        assert "ИСКИ БАНКА (1)" in html
+        assert "2-777/2026" in html
+
+    def test_left_track_registration_kept_detailed(self):
+        """Дело, тем же прогоном уехавшее в общий трек, — подробно: это
+        единственный сигнал, что искать его надо уже не в лёгком треке."""
+        html = _digest(self._intake(30) + [
+            _bank_change(["fi_bank_claim_registered"], {"left_track": True},
+                         case="2-888/2026"),
+        ])
+        assert "ИСКИ БАНКА (1)" in html
+        assert "2-888/2026" in html
+        assert "подана жалоба, дело в общем треке" in html
+
+    def test_fold_off_by_zero(self, monkeypatch):
+        monkeypatch.setattr(config, "BANK_INTAKE_DIGEST_FOLD", 0)
+        html = _digest(self._intake(200))
+        assert "ИСКИ БАНКА (200)" in html
+        assert "заведено" not in html
+
+    def test_summary_splits_counts(self):
+        html = _digest(self._intake(30) + [
+            _bank_change(["fi_resolved"], {"result": "Иск УДОВЛЕТВОРЕН"},
+                         case="2-501/2026"),
+        ])
+        assert "1 дело с событиями по искам банка" in html
+        assert "30 новых исков банка заведено" in html
+
+    def test_summary_unchanged_below_threshold(self):
+        """Регресс формата: без свёртки сводка прежняя."""
+        html = _digest([_bank_change(["fi_bank_claim_registered"])])
+        assert "1 дело с событиями по искам банка" in html
+        assert "заведено" not in html
+
+    def test_folded_line_has_no_case_number(self):
+        """Иначе её посчитает _check_section_counters — счётчик разойдётся."""
+        from court_monitor.digest.postprocess import _line_has_case_number
+        from court_monitor.digest.template import _bank_intake_fold_line
+        line = _bank_intake_fold_line(self._intake(30))
+        assert _line_has_case_number(line) is False
+
+    def test_folded_line_is_not_a_header(self):
+        """Заголовком её принимать нельзя: машина состояний секций оборвала бы
+        счёт соседней секции (инцидент 12.08.2026 с наследованием режима)."""
+        from court_monitor.digest.postprocess import _DIGEST_HEADER_RE
+        from court_monitor.digest.template import _bank_intake_fold_line
+        line = _bank_intake_fold_line(self._intake(30))
+        assert _DIGEST_HEADER_RE.match(line) is None
+
+    def test_folded_line_counts_courts(self):
+        """На разгоне юрист хочет видеть охват — хвост «в N судах»."""
+        from court_monitor.digest.template import _bank_intake_fold_line
+        changes = self._intake(30)
+        for i, ch in enumerate(changes):
+            ch["court"] = f"Суд №{i % 12}"
+        assert "в 12 судах" in _bank_intake_fold_line(changes)
+
+
 class TestBankRoutineFilter:
     def test_routine_dropped_substance_kept(self):
         from court_monitor.lifecycle import filter_bank_routine_events
@@ -1563,6 +1671,7 @@ class TestBankIntakeCapsWiring:
         "BANK_INTAKE_MAX_PER_RUN": "30",
         "BANK_INTAKE_MAX_CARDS_PER_COURT": "10",
         "BANK_INTAKE_ALERT_ADDED": "50",
+        "BANK_INTAKE_DIGEST_FOLD": "25",
     }
 
     @staticmethod
@@ -1597,6 +1706,31 @@ class TestBankIntakeCapsWiring:
             os.environ.pop("BANK_INTAKE_ALERT_ADDED", None)
             importlib.reload(config)
         assert config.BANK_INTAKE_ALERT_ADDED == 50
+
+    def test_fold_threshold_reads_env(self):
+        import importlib
+        os.environ["BANK_INTAKE_DIGEST_FOLD"] = "0"
+        try:
+            importlib.reload(config)
+            assert config.BANK_INTAKE_DIGEST_FOLD == 0
+        finally:
+            os.environ.pop("BANK_INTAKE_DIGEST_FOLD", None)
+            importlib.reload(config)
+        assert config.BANK_INTAKE_DIGEST_FOLD == 25
+
+    def test_fold_forwarded_to_replay_workflows(self):
+        """Порог свёртки обязан быть и в replay-путях: иначе тестовый или
+        резервный дайджест разойдётся с боевым кроном."""
+        import re
+        root = os.path.dirname(SCRIPTS_DIR)
+        for name in ("test_digest.yml", "replay_on_push.yml"):
+            path = os.path.join(root, ".github", "workflows", name)
+            with open(path, encoding="utf-8") as f:
+                yml = f.read()
+            m = re.search(r"^\s*BANK_INTAKE_DIGEST_FOLD:\s*(.+)$", yml, re.M)
+            assert m, f"{name} не прокидывает BANK_INTAKE_DIGEST_FOLD"
+            assert "vars.BANK_INTAKE_DIGEST_FOLD" in m.group(1)
+            assert re.search(r"\|\|\s*'25'", m.group(1))
 
 
 # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ────────────────

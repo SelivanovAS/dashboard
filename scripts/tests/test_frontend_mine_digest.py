@@ -325,3 +325,61 @@ def test_push_filter_untouched():
         "юриста 13.08.2026: послабление сделано ТОЛЬКО на дашборде — на "
         "Урале авто-подхват заводит десятки исков за прогон, в push это шум."
     )
+
+
+# ===== 5. Свёрнутая строка «заведено N новых исков банка» =====
+# Разгон Урала 14.08.2026: при >25 заведениях за прогон рендер печатает одну
+# строку без номера дела (config.BANK_INTAKE_DIGEST_FOLD). Для mine-версии
+# это «параграф без номера» внутри фильтруемой секции — он обязан выпадать
+# (звёзд у только что заведённых дел нет), не ломая ни машину состояний, ни
+# пересчёт счётчика заголовка.
+
+FOLDED_LINE = "🆕 <b>заведено 116 новых исков банка</b> в 12 судах — список на дашборде"
+
+DIGEST_FOLDED = DIGEST.replace(
+    '<a href="https://surggor--hmao.sudrf.ru/x?name_op=case"><b>М-7220/2026</b></a> — 🆕 иск банка',
+    FOLDED_LINE,
+)
+
+
+def _run_filter_html(html: str, stars: list[str], ctx: dict) -> list[str]:
+    src = _app_js()
+    script = _harness(src) + """
+const DIGEST = %s, CTX = %s, STARS = %s;
+const mine = new Set(STARS.map(canonCaseNumber));
+for (const n of collectNewCaseNumbers(CTX)) mine.add(canonCaseNumber(n));
+const out = filterGeneralHtmlByMine(DIGEST, mine);
+console.log(JSON.stringify(out.split(/\\n{2,}/).filter(Boolean)
+  .map((p) => p.split('\\n')[0])));
+""" % (json.dumps(html), json.dumps(ctx), json.dumps(stars))
+    return json.loads(_node(script))
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен")
+def test_folded_line_dropped_in_mine():
+    """Свёрнутая строка выпадает, звёздное дело банка остаётся."""
+    ctx = {**CTX, "fi_changes": [CTX["fi_changes"][1]]}
+    lines = _run_filter_html(
+        DIGEST_FOLDED, ["vartovgor--hmao.sudrf.ru|2-6736/2026"], ctx)
+    assert not any("заведено 116" in s for s in lines), (
+        "Свёрнутая строка осталась в mine-версии — у только что заведённых "
+        "дел звёзд нет, юрист видит чужие дела в «★ Мои»."
+    )
+    assert any("2-6736/2026" in s for s in lines), (
+        "Звёздное дело банка выпало вместе со свёрнутой строкой."
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен")
+def test_folded_line_does_not_break_section_machine():
+    """Строка не заголовок: футер и соседние секции не должны пострадать."""
+    lines = _run_filter_html(
+        DIGEST_FOLDED, ["vartovgor--hmao.sudrf.ru|2-6736/2026"], CTX)
+    assert any(s.startswith("📌") for s in lines), (
+        "Футер выпал — значит свёрнутая строка сбила состояние машины "
+        "секций (тот же класс бага, что 12.08.2026 с 🏦 в _DIGEST_HEADER_RE)."
+    )
+    заголовок = next((s for s in lines if s.startswith("🏦")), "")
+    assert "(1)" in заголовок, (
+        f"Счётчик заголовка «{заголовок}» не пересчитан по факту строк."
+    )

@@ -558,11 +558,15 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
     # Трек «Иски банка» — одна агрегатная строка (детализация по типам
     # раздула бы сводку: секция и так компактная, одна строка на дело).
     if bank_changes:
-        n = len(bank_changes)
+        # Свёрнутые заведения (разгон территории) считаем ОТДЕЛЬНОЙ частью:
+        # вложить второй разделитель внутрь части нельзя — части сводки уже
+        # склеены через «·». Без свёртки строка прежняя посимвольно.
+        bank_detailed, bank_folded = split_bank_intake_fold(bank_changes)
+        n = len(bank_detailed)
         # ИЛ в сводке — раздельно по типам: «🧾 ИЛ» — на исполнение решения,
         # «🛡» — обеспечительные (арест). kind в details ставит эмиссия.
         enf_n = interim_n = 0
-        for ch in bank_changes:
+        for ch in bank_detailed:
             if "fi_writ_issued" not in (ch.get("type") or []):
                 continue
             writs = (ch.get("details") or {}).get("writs") or []
@@ -572,18 +576,26 @@ def build_summary_line(new_cases: list[dict], changes: list[dict],
                 enf_n += 1
         # n = число ДЕЛ (записей секции, у дела может быть несколько
         # событий) — прежняя подпись «N событий» врала (разбор 13.08.2026).
-        part = (
-            f"🏦 {n} " + plural_ru(n, "дело", "дела", "дел")
-            + " с событиями по искам банка"
-        )
-        tails = []
-        if enf_n:
-            tails.append(f"🧾 {enf_n} ИЛ")
-        if interim_n:
-            tails.append(f"🛡 {interim_n} обеспечит.")
-        if tails:
-            part += f" ({', '.join(tails)})"
-        parts.append(part)
+        if n:
+            part = (
+                f"🏦 {n} " + plural_ru(n, "дело", "дела", "дел")
+                + " с событиями по искам банка"
+            )
+            tails = []
+            if enf_n:
+                tails.append(f"🧾 {enf_n} ИЛ")
+            if interim_n:
+                tails.append(f"🛡 {interim_n} обеспечит.")
+            if tails:
+                part += f" ({', '.join(tails)})"
+            parts.append(part)
+        if bank_folded:
+            f_n = len(bank_folded)
+            parts.append(
+                f"🆕 {f_n} "
+                + plural_ru(f_n, "новый иск", "новых иска", "новых исков")
+                + " банка заведено"
+            )
     return " · ".join(parts) if parts else "без изменений"
 
 
@@ -1524,6 +1536,56 @@ def _bank_change_group(ch: dict) -> int:
     return best
 
 
+_BANK_GROUP_INTAKE = 3
+
+
+def split_bank_intake_fold(
+    bank_changes: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Разделить банк-секцию на подробные строки и свёрнутые «заведения».
+
+    Возвращает `(детализируемые, свёрнутые)`. Свёртываются только записи, где
+    `fi_bank_claim_registered` — ЕДИНСТВЕННЫЙ тип: дело, которое тем же
+    прогоном получило решение или лист, обязано печататься подробно. Дела с
+    `details["left_track"]` тоже остаются подробно — это единственный сигнал,
+    что искать дело надо уже не в лёгком треке.
+
+    Порог — `config.BANK_INTAKE_DIGEST_FOLD` (0 = не сворачивать), условие
+    «больше порога». Разгон Урала 14.08.2026: 116 одинаковых строк «взят на
+    мониторинг» раздули дайджест до 60 КБ и утопили настоящие события.
+
+    ⚠️ Один источник правды для рендера И для линтера (`lint.py`,
+    `_expected_number_alternatives`) — у свёрнутых дел номера в HTML не будет,
+    и без общего хелпера линтер объявил бы все 116 потерянными: дайджест-
+    паводок просто переехал бы в 🩺-алерт. Тем же хелпером гейтится
+    `llm._collect_case_numbers` (валидатор полировщика).
+    """
+    limit = config.BANK_INTAKE_DIGEST_FOLD
+    if limit <= 0:
+        return list(bank_changes), []
+    foldable = [
+        ch for ch in bank_changes
+        if (ch.get("type") or []) == ["fi_bank_claim_registered"]
+        and not (ch.get("details") or {}).get("left_track")
+    ]
+    if len(foldable) <= limit:
+        return list(bank_changes), []
+    folded_ids = {id(ch) for ch in foldable}
+    detailed = [ch for ch in bank_changes if id(ch) not in folded_ids]
+    return detailed, foldable
+
+
+def _bank_intake_fold_line(folded: list[dict]) -> str:
+    """Строка-свёртка. Без номера дела (иначе её посчитает счётчик секции
+    `_check_section_counters`) и без ссылки — «📊 Дашборд» и так в футере."""
+    courts = {(ch.get("court") or "").strip() for ch in folded} - {""}
+    tail = (f" в {len(courts)} судах" if len(courts) > 1
+            else (f" ({shorten_court_name(next(iter(courts)))})" if courts else ""))
+    return (f"🆕 <b>заведено {len(folded)} "
+            f"{plural_ru(len(folded), 'новый иск', 'новых иска', 'новых исков')} "
+            f"банка</b>{tail} — список на дашборде")
+
+
 def bank_act_why_eligible(ch: dict) -> bool:
     """Положен ли банк-делу пересказ «Почему» (13.08.2026, решение юриста).
 
@@ -1561,6 +1623,13 @@ def _bank_track_block(bank_changes: list[dict], *,
     LLM-пересказ «Почему». Полные удовлетворения не пересказываем —
     мотивировка шаблонна, а секция и так самая длинная.
     """
+    detailed, folded = split_bank_intake_fold(bank_changes)
+    if folded:
+        log.info(
+            f"Дайджест: свёрнуто {len(folded)} заведений исков банка "
+            f"(порог {config.BANK_INTAKE_DIGEST_FOLD})"
+        )
+
     def _sort_key(pair: tuple[int, dict]) -> tuple[int, float, int]:
         idx, ch = pair
         grp = _bank_change_group(ch)
@@ -1572,11 +1641,28 @@ def _bank_track_block(bank_changes: list[dict], *,
             ts = hd.timestamp() if hd else float("inf")
         return (grp, ts, idx)
 
-    ordered = [ch for _, ch in
-               sorted(enumerate(bank_changes), key=_sort_key)]
-    block = [f"🏦 <b>ИСКИ БАНКА ({len(bank_changes)}):</b>", ""]
+    ordered: list[dict | str] = [ch for _, ch in
+                                 sorted(enumerate(detailed), key=_sort_key)]
+    if folded:
+        # Свёрнутая строка — на месте группы «новые иски»: порядок «по
+        # важности» и разделители ⸻ отрабатывает тот же цикл ниже.
+        pos = len([ch for ch in ordered
+                   if _bank_change_group(ch) < _BANK_GROUP_INTAKE])
+        ordered.insert(pos, _bank_intake_fold_line(folded))
+    # Счётчик заголовка = число ПОДРОБНЫХ дел (линтер считает строки с
+    # номерами). Все дела свёрнуты — заголовок вовсе без (N): «(0)» рядом со
+    # строкой «заведено 116» читается как поломка, а секцию без счётчика
+    # _check_section_counters штатно пропускает.
+    block = [f"🏦 <b>ИСКИ БАНКА ({len(detailed)}):</b>" if detailed
+             else "🏦 <b>ИСКИ БАНКА:</b>", ""]
     prev_grp: int | None = None
     for ch in ordered:
+        if isinstance(ch, str):
+            if prev_grp is not None:
+                block.extend(["", "⸻", ""])
+            prev_grp = _BANK_GROUP_INTAKE
+            block.append(ch)
+            continue
         grp = _bank_change_group(ch)
         # Воздух (просьба юриста 10.08.2026): пустая строка между КАЖДЫМ
         # делом — 10-15 строк группы вплотную не читались; граница групп

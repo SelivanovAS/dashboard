@@ -86,6 +86,8 @@ jobs:
           BANK_INTAKE_MAX_PER_RUN: ${{ vars.BANK_INTAKE_MAX_PER_RUN || '30' }}
           BANK_INTAKE_MAX_CARDS_PER_COURT: ${{ vars.BANK_INTAKE_MAX_CARDS_PER_COURT || '10' }}
           BANK_INTAKE_ALERT_ADDED: ${{ vars.BANK_INTAKE_ALERT_ADDED || '50' }}
+          # Порог свёртки «заведено N новых исков банка» в дайджесте.
+          BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM
           # только на пересказ мотивировок актов. Откат на полный
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.

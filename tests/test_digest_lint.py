@@ -351,3 +351,69 @@ class LintBankCalendarEventsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LintBankIntakeFoldTest(unittest.TestCase):
+    """Свёртка «заведено N новых исков банка» (разгон Урала 14.08.2026).
+
+    Первый боевой прогон авто-подхвата на территории завёл 116 исков за раз, и
+    секция «🏦 ИСКИ БАНКА» стала стеной одинаковых строк «взят на мониторинг»
+    (HTML 60 КБ). Рендер сворачивает их в одну строку — а линтер обязан знать
+    об этом: `_expected_number_alternatives` перебирает ВЕСЬ fi_changes и
+    требует каждый номер в HTML, то есть без правки дайджест-паводок просто
+    переехал бы в 🩺-алерт на 116 строк «потерян номер дела».
+    """
+
+    @staticmethod
+    def _intake(n: int) -> list[dict]:
+        return [
+            make_fi_change(["fi_bank_claim_registered"],
+                           case=f"2-{1000 + i}/2026", track="plaintiff_light")
+            for i in range(n)
+        ]
+
+    def test_folded_numbers_not_expected(self):
+        """Свёрнутые дела номеров в HTML не дают — линтер молчит."""
+        fi_changes = self._intake(30) + [
+            make_fi_change(["fi_writ_issued"], case="2-500/2026",
+                           track="plaintiff_light"),
+            make_fi_change(["fi_resolved"], case="2-501/2026",
+                           track="plaintiff_light"),
+        ]
+        ctx = _ctx(fi_changes=fi_changes)
+        html = render(**ctx)
+        self.assertNotIn("2-1000/2026", html)      # свёрнуто
+        self.assertIn("2-500/2026", html)          # реальное событие осталось
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+    def test_missing_number_still_caught(self):
+        """Свёртка не глушит линтер вообще: настоящая потеря номера ловится."""
+        fi_changes = self._intake(30) + [
+            make_fi_change(["fi_writ_issued"], case="2-500/2026",
+                           track="plaintiff_light"),
+        ]
+        ctx = _ctx(fi_changes=fi_changes)
+        html = render(**ctx).replace("2-500/2026", "2-999/2026")
+        problems = uc.lint_digest_html(html, **ctx)
+        self.assertTrue(any("2-500/2026" in p for p in problems), problems)
+
+    def test_section_counter_matches_detailed_rows(self):
+        """Заголовок объявляет число ПОДРОБНЫХ дел, свёрнутая строка не в счёт."""
+        from court_monitor.digest.lint import _check_section_counters
+        fi_changes = self._intake(30) + [
+            make_fi_change(["fi_writ_issued"], case="2-500/2026",
+                           track="plaintiff_light"),
+            make_fi_change(["fi_resolved"], case="2-501/2026",
+                           track="plaintiff_light"),
+        ]
+        html = render(**_ctx(fi_changes=fi_changes))
+        self.assertIn("ИСКИ БАНКА (2)", html)
+        self.assertEqual(_check_section_counters(html), [])
+
+    def test_below_threshold_untouched(self):
+        """Ниже порога — всё как раньше: подельно и с полным счётчиком."""
+        ctx = _ctx(fi_changes=self._intake(3))
+        html = render(**ctx)
+        self.assertIn("ИСКИ БАНКА (3)", html)
+        self.assertIn("2-1000/2026", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
