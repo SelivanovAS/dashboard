@@ -496,6 +496,54 @@ class TestBankTrackArchive:
         case.pop("track")
         assert self._archived(case) is True
 
+    # ── Процессуальное завершение со статусом «Решено» (разгон 14.08.2026) ──
+    # Карточка отдаёт «Решено» с терминальным «Результатом» — до фикса такие
+    # дела уходили в ветку «Решено без ИЛ» и 180 дней ждали лист, которого не
+    # будет. Кейсы: 9-125/2026 (Пуровский, отказ в принятии), 9-31/2026
+    # (Берёзовский, возврат), 2-1588/2026 и 2-8088/2026 (передача по
+    # подсудности).
+
+    REFUSAL_RESULT = ("ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ "
+                      "РАССМОТРЕНИЮ и разрешению в порядке гражданского "
+                      "судопроизводства")
+
+    def test_refusal_to_accept_archived_after_30_days(self):
+        case = _track_case(status="Решено", result=self.REFUSAL_RESULT,
+                           event_date=self._dmy(56), hearing_date="")
+        assert self._archived(case) is True
+
+    def test_refusal_to_accept_kept_within_30_days(self):
+        """Окно на частную жалобу — дело живо."""
+        case = _track_case(status="Решено", result=self.REFUSAL_RESULT,
+                           event_date=self._dmy(10), hearing_date="")
+        assert self._archived(case) is False
+
+    def test_refusal_anchor_falls_back_to_event_date(self):
+        """У такой карточки нет ни решения, ни заседания, ни мотивировки —
+        якорем работает последний фолбэк event_date. Без него дело осталось
+        бы активным навсегда (`bool(anchor)` = False)."""
+        fi = _track_case(status="Решено", result=self.REFUSAL_RESULT,
+                         event_date="", hearing_date="")["first_instance"]
+        assert lifecycle._is_bank_track_archived(fi, datetime.now()) is False
+        fi["event_date"] = self._dmy(56)
+        assert lifecycle._is_bank_track_archived(fi, datetime.now()) is True
+
+    def test_transfer_by_jurisdiction_not_waiting_for_writ(self):
+        case = _track_case(status="Решено",
+                           result="Передано по подсудности, подведомственности",
+                           event_date=self._dmy(56), hearing_date="")
+        assert lifecycle.bank_writ_expected(case["first_instance"]) is False
+        assert self._archived(case) is True
+
+    def test_returned_with_decided_status_archived(self):
+        """Кейс 9-31/2026: возврат, но статус карточки «Решено» — ветка
+        «Возвращено» его не ловит, ловит ветка «листа не будет»."""
+        case = _track_case(
+            status="Решено",
+            result="Заявление ВОЗВРАЩЕНО заявителюНЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи",
+            event_date=self._dmy(56), hearing_date="")
+        assert self._archived(case) is True
+
 
 # ── Гейт приёма: дело, уже отработавшее свой цикл ────────────────────────────
 
@@ -541,6 +589,28 @@ class TestEntryIsSpentGate:
     def test_pending_case_taken(self):
         assert bank_intake.entry_is_spent(
             _track_case(status="В производстве")) is False
+
+    def test_old_refusal_to_accept_is_spent(self):
+        """Побочный эффект фикса 14.08.2026: старый отказ в принятии больше
+        не заводится — раньше он проходил приём и полгода качался каждую
+        неделю в ожидании листа, которого не будет. Отказ вечный
+        (`already_spent` в PERMANENT_REJECTIONS), карточка не перекачивается.
+        """
+        entry = _track_case(
+            status="Решено", hearing_date="", event_date=self._dmy(56),
+            result="ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ "
+                   "РАССМОТРЕНИЮ",
+        )
+        assert bank_intake.entry_is_spent(entry) is True
+
+    def test_fresh_refusal_to_accept_taken(self):
+        """Свежий отказ в принятии берём — окно на частную жалобу открыто."""
+        entry = _track_case(
+            status="Решено", hearing_date="", event_date=self._dmy(10),
+            result="ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ "
+                   "РАССМОТРЕНИЮ",
+        )
+        assert bank_intake.entry_is_spent(entry) is False
 
     def test_appeal_flag_never_spent(self):
         """Признак жалобы гасит архивные окна первой же веткой — авто-подхват
@@ -725,6 +795,29 @@ class TestSplitBankTrack:
         assert left in rest and ordinary in rest
         assert "track" not in left
         assert left["track_origin"] == "plaintiff_light"
+
+    def test_refusal_stamps_writ_expected_false_and_drops_est(self):
+        """Отказ в принятии: фронт получает готовый штамп «листа не будет».
+
+        Без штампа дело попадает в KPI и чип «Ждут ИЛ» (`awaitsWrit` в app.js
+        читает только его), а расчётная дата вступления в силу рисовала бы
+        строку «Вступило в силу (расч.)» там, где исполнять нечего.
+        Разовая миграция данных не нужна — штамп пересчитывается каждым
+        прогоном, здесь это и проверяется: поле снимается с записи, где оно
+        осталось от прошлых прогонов.
+        """
+        from court_monitor.runs import split_bank_track
+        case = _track_case(
+            status="Решено", hearing_date="", event_date=self._dmy(10),
+            result="ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ "
+                   "РАССМОТРЕНИЮ",
+            legal_force_est="2026-09-18",  # штамп прошлых прогонов
+        )
+        _, bank_active, _, _ = split_bank_track([case])
+        assert bank_active == [case]
+        fi = case["first_instance"]
+        assert fi["writ_expected"] is False
+        assert "legal_force_est" not in fi
 
     def test_gate_follows_data_not_load_counter(self):
         """Гейт раскладки смотрит на дела, а не на «сколько загрузилось из
@@ -2285,6 +2378,17 @@ class TestBankCalendarEvents:
     def test_denied_gate(self, monkeypatch):
         """В иске отказано — листа не будет (bank_writ_expected)."""
         case = self._case(result="В удовлетворении иска ОТКАЗАНО")
+        assert self._run([case], monkeypatch) == (0, [])
+
+    def test_refusal_to_accept_gate(self, monkeypatch):
+        """Отказ в принятии — тот же гейт (разгон 14.08.2026, 9-125/2026).
+
+        До фикса такое дело числилось ждущим ИЛ, и календарный проход слал бы
+        по нему «✅ решение вступило в силу» и «⚠️ ИЛ не выдан N дн.» —
+        события про лист, которого не будет.
+        """
+        case = self._case(result="ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ "
+                                 "ПОДЛЕЖИТ РАССМОТРЕНИЮ")
         assert self._run([case], monkeypatch) == (0, [])
 
     def test_enforcement_writ_gate(self, monkeypatch):

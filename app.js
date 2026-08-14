@@ -460,6 +460,11 @@ const _bankEventsState={active:{loaded:false,loading:null},archive:{loaded:false
 // Кросс-поиск: после неудачной фоновой загрузки bank-списка не ретраим её
 // на каждый ввод в поиск (loadBankDataset ошибку глотает — флаг свой).
 let _crossHintLoadFailed=false;
+// Сколько дел в ХВОСТЕ filteredCases приехало из соседней картотеки. Хвост
+// живёт в общем массиве (на нём завязаны стрелки drawer, фокус клавиатуры и
+// пагинация), поэтому счётчику и рендерам нужна граница: свои дела — это
+// filteredCases.length - crossCount, дальше идёт группа соседа.
+let crossCount=0;
 // Пагинация рендера (сбрасывается в applyFilters).
 let renderLimit=RENDER_CHUNK;
 let newCaseNumbers=new Set();
@@ -1486,6 +1491,12 @@ window.setDatasetView=setDatasetView;
 function renderDatasetSwitch(){
   const box=document.getElementById('dataset-switch');
   if(!box)return;
+  // Липкость полосы списка — по тому же предикату, что и видимость капсулы:
+  // в «★ Мои» юрист просил её не липнуть (решение 13.08.2026), а без
+  // cases_bank.json прикреплять сверху нечего — остаётся один счётчик.
+  const bar=document.getElementById('list-bar');
+  const липкая=bankFileExists&&!mineModeOn();
+  if(bar)bar.classList.toggle('is-sticky',липкая);
   // «★ Мои» — надкартотечный режим: показывает звёзды обеих картотек, выбор
   // сегмента на него не влияет — прячем переключатель, чтобы не путать.
   if(!bankFileExists||mineModeOn()){box.hidden=true;return;}
@@ -1821,7 +1832,11 @@ function onSearchInput(){
   // не пришлось руками промахивать «Ближайшие заседания»/«Сводку».
   // Дальше при наборе не дёргаем — позиция уже там, где нужно.
   if(v.length>0&&__searchWasEmpty){
-    const anchor=document.getElementById('table-counter')
+    // Якорь — полоса списка целиком (капсула + счётчик): она липкая, и
+    // подвести надо именно её под шапку, иначе список начнётся ПОД полосой,
+    // а прицел уедет на её высоту.
+    const anchor=document.getElementById('list-bar')
+      ||document.getElementById('table-counter')
       ||document.getElementById('mobile-cards')
       ||document.querySelector('.table-wrap');
     if(anchor){
@@ -1956,16 +1971,36 @@ function watchlistHasBankEntries(){
   return false;
 }
 // Поисковый блоб дела — ЕДИНСТВЕННЫЙ источник и для предиката applyFilters,
-// и для кросс-поиска по соседней картотеке (renderSearchCrossHint): две
-// склейки разъехались бы молча. Чистая функция — гоняется node-тестом.
+// и для кросс-поиска по соседней картотеке: две склейки разъехались бы молча.
+// Чистая функция — гоняется node-тестом.
 function caseSearchBlob(c){
   return c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
 }
-// Совпадения поиска в списке. Архивные не считаем (обе выдачи по умолчанию
+// Совпадения поиска в списке. Архивные не берём (обе выдачи по умолчанию
 // их тоже не показывают). Чистая функция — гоняется node-тестом.
-function countSearchMatches(list,q){
-  return list.filter(c=>!caseArchived(c)&&caseSearchBlob(c).includes(q)).length;
+// ⚠️ Единственное место, где строится список кросс-совпадений: countSearchMatches
+// — обёртка над ним, вторая реализация разъехалась бы со счётчиком молча.
+function collectSearchMatches(list,q){
+  return list.filter(c=>!caseArchived(c)&&caseSearchBlob(c).includes(q));
 }
+function countSearchMatches(list,q){
+  return collectSearchMatches(list,q).length;
+}
+// Минимальная длина запроса для подмешивания соседней картотеки. Одиночная
+// буква даёт бессмысленную выдачу, а первый же кросс-поиск в сессии тянет
+// 1.6 МБ cases_bank.json — качать их ради неё незачем.
+const CROSS_MIN_QUERY=2;
+// Соседняя картотека для кросс-поиска: null — подмешивать нечего (режим
+// «★ Мои» надкартотечный сам, короткий запрос, сосед не загружен).
+function crossDataset(q){
+  if(!q||q.length<CROSS_MIN_QUERY||mineModeOn())return null;
+  if(bankViewActive)return allCases;
+  return bankLoaded?bankCases:null;
+}
+// Имя картотеки, из которой приехал хвост, — для заголовка группы.
+function crossGroupName(){return bankViewActive?'Основные':'Иски банка';}
+// Индекс первого дела хвоста: до него — своя выдача, дальше — группа соседа.
+function crossStartIdx(){return filteredCases.length-crossCount;}
 function applyFilters(){
   const q=document.getElementById('search-input').value.toLowerCase();
   let st=document.getElementById('filter-status').value;
@@ -2081,6 +2116,15 @@ function applyFilters(){
     if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase();}
     if(va<vb)return sortDir==='asc'?-1:1;if(va>vb)return sortDir==='asc'?1:-1;return 0;
   });
+
+  // Кросс-поиск: совпадения соседней картотеки дописываем ХВОСТОМ после
+  // сортировки — своя выдача остаётся своей, а дела соседа идут группой под
+  // заголовком. Фильтры активной картотеки на соседа не переносим (статус и
+  // категория между треками несопоставимы), только поисковую строку.
+  const crossList=crossDataset(q);
+  const cross=crossList?collectSearchMatches(crossList,q):[];
+  crossCount=cross.length;
+  if(crossCount)filteredCases=filteredCases.concat(cross);
 
   // Reset focus если вышел за границы
   if(focusedRowIdx>=filteredCases.length)focusedRowIdx=filteredCases.length-1;
@@ -2478,13 +2522,35 @@ function resetFilters(){
 }
 
 /* ========== Counter ========== */
+// Счётчик стоит в одной строке с капсулой картотек и подстраивается под
+// остаток места (решение юриста 14.08.2026: «когда места хватает — писать
+// развёрнуто»). Разметка несёт ВСЕ части сразу, а fitCounter выбирает
+// самый подробный вариант, который влезает, отрезая по одной наименее
+// ценной части. Порядок отсечения — от служебного к сути:
+//   full  «Показано 1 из 166 дел · 61 в архиве · 3 в картотеке «Иски банка»»
+//   lead  без «Показано»            (.tc-lead)
+//   nouns без « дел»/« исков банка»  (.tc-wordy)
+//   tails без архива/новых/кросса    (.tc-tail)
+//   slash «1 / 166» вместо «1 из 166» (.tc-slash)
+// Что отрезано, то не пропало: размер архива виден на чипе «Архив» в шторке
+// фильтров, число кросс-совпадений — в заголовке группы прямо над делами.
+const tcLead=s=>`<span class="tc-lead">${s}</span>`;
+const tcWordy=s=>`<span class="tc-wordy">${s}</span>`;
+const tcTail=s=>`<span class="tc-tail">${s}</span>`;
+// ⚠️ «из» живёт в СВОЁМ классе, не в .tc-wordy: иначе ступень «убрать слова»
+// уносила бы и разделитель, и счётчик читался как «1166».
+const tcOf='<span class="tc-of"> из </span><span class="tc-slash"> / </span>';
 function renderCounter(){
   // «★ Мои» — объединённый режим: счётчик по обеим картотекам.
   if(mineModeOn()){
     const total=activeDataset().length;
-    document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${total}</strong> дел обеих картотек`;
+    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${filteredCases.length}</strong>${tcOf}<strong>${total}</strong>${tcWordy(' дел обеих картотек')}`;
     return;
   }
+  // Своя выдача — без хвоста кросс-поиска: он приехал из соседней картотеки
+  // и к знаменателю активной не относится, поэтому идёт отдельной припиской.
+  const свои=crossStartIdx();
+  const crossText=crossCount>0?tcTail(` · <strong>${crossCount}</strong> в картотеке «${crossGroupName()}»`):'';
   // В режиме «Иски банка» знаменатель — АКТИВНЫЕ дела: после ленивой
   // догрузки архива bankCases прирастает архивными, и «из N» прыгал бы.
   // Размер архива до загрузки даёт archived_count из корня cases_bank.json
@@ -2492,26 +2558,61 @@ function renderCounter(){
   if(bankViewActive){
     const nArch=bankArchiveLoaded?bankCases.filter(c=>c._bankArchived).length:bankArchivedMeta;
     const nActive=bankArchiveLoaded?bankCases.length-nArch:bankCases.length;
-    const archText=bankArchiveLoading?' · загрузка архива…':(nArch>0?` · ${nArch} в архиве`:'');
-    document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${nActive}</strong> исков банка${archText}`;
+    const archText=bankArchiveLoading?tcTail(' · загрузка архива…'):(nArch>0?tcTail(` · ${nArch} в архиве`):'');
+    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${nActive}</strong>${tcWordy(' исков банка')}${archText}${crossText}`;
     return;
   }
   // Знаменатель — АКТИВНЫЕ дела (зеркально bank-ветке выше): архив идёт
   // хвостом «· N в архиве», а не прячется внутри «из N». Инвариант обеих
   // картотек с v132, тот же в renderDatasetSwitch.
-  const archText=archivedCount>0?` · ${archivedCount} в архиве`:'';
-  const newText=newCaseNumbers.size>0?` · ${newCaseNumbers.size} новых`:'';
-  document.getElementById('table-counter').innerHTML=`Показано <strong>${filteredCases.length}</strong> из <strong>${allCases.length-archivedCount}</strong> дел${newText}${archText}`;
+  const archText=archivedCount>0?tcTail(` · ${archivedCount} в архиве`):'';
+  const newText=newCaseNumbers.size>0?tcTail(` · ${newCaseNumbers.size} новых`):'';
+  document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${allCases.length-archivedCount}</strong>${tcWordy(' дел')}${newText}${archText}${crossText}`;
+  fitCounter();
 }
 
-// Кросс-поиск (#search-cross-hint): запрос не нашёлся в активной картотеке —
-// считаем совпадения в соседней и предлагаем переключиться. Дело банка-истца
-// при апел. жалобе переезжает из «Исков банка» в «Основные», и юрист искал
-// его не там без единого намёка. Подсчёт — только по поисковой строке
-// (статус/категория активной картотеки на соседнюю не переносимы), подсказка
-// навигационная. Единственный новый триггер ленивой загрузки во фронте:
-// bank-список догружается фоном под тройным гардом (тот же паттерн, что
-// enhanceDigestCaseLinks); ensureBankArchive/ensureBankEvents отсюда НЕ
+// Подгонка счётчика под остаток строки. Уровни отсекаются по одному, пока
+// текст не влезет; на десктопе (полоса не липкая, ряд отдельный) уровень не
+// ставится вовсе — там места вдоволь. Замер через scrollWidth требует
+// white-space:nowrap у счётчика — оно стоит в CSS рядом с уровнями.
+const _TC_LEVELS=['lead','nouns','tails','slash'];
+function fitCounter(){
+  const cnt=document.getElementById('table-counter');
+  const bar=document.getElementById('list-bar');
+  if(!cnt)return;
+  cnt.removeAttribute('data-fit');
+  if(!bar||!bar.classList.contains('is-sticky'))return;
+  const sw=document.getElementById('dataset-switch');
+  const gap=parseFloat(getComputedStyle(bar).columnGap)||10;
+  const занято=(sw&&!sw.hidden)?sw.offsetWidth+gap:0;
+  const подобрать=место=>{
+    cnt.removeAttribute('data-fit');
+    for(const уровень of _TC_LEVELS){
+      if(cnt.scrollWidth<=место)return true;
+      cnt.setAttribute('data-fit',уровень);
+    }
+    return cnt.scrollWidth<=место;
+  };
+  const место=bar.clientWidth-занято;
+  cnt.classList.remove('is-squeezed');
+  if(место>0&&подобрать(место))return;
+  // Не влезло даже кратчайшей формой — на 320px капсула занимает почти всю
+  // строку. Счётчик там просто не показываем (решение юриста 14.08.2026):
+  // перенос на вторую строку удваивал высоту ЛИПКОЙ полосы ради цифры,
+  // без которой можно жить. Класс снимается выше, до замера, — иначе
+  // спрятанный счётчик мерился бы нулевой шириной и «влезал» всегда.
+  cnt.classList.add('is-squeezed');
+}
+
+// Кросс-поиск (#search-cross-hint): дела соседней картотеки подмешиваются в
+// выдачу ХВОСТОМ (см. applyFilters + crossDataset) — переключаться руками не
+// нужно. Дело банка-истца при апел. жалобе переезжает из «Исков банка» в
+// «Основные», и юрист искал его не там без единого намёка; до 13.08.2026 тут
+// была подсказка с кнопкой «Показать», и срабатывала она ТОЛЬКО при нулевой
+// выдаче — при 3 своих + 2 соседских делах про соседские никто не узнавал.
+// От прежней подсказки остался один экран — индикатор фоновой загрузки
+// bank-списка: она идёт под тем же тройным гардом (паттерн
+// enhanceDigestCaseLinks), ensureBankArchive/ensureBankEvents отсюда НЕ
 // зовутся — глубина ленивой цепочки не растёт. _crossHintLoadFailed гасит
 // повторные попытки после неудачной загрузки (loadBankDataset ошибку глотает,
 // иначе каждый ввод в поиск ретраил бы мёртвую сеть).
@@ -2519,7 +2620,7 @@ function renderSearchCrossHint(){
   const box=document.getElementById('search-cross-hint');
   if(!box)return;
   const q=document.getElementById('search-input').value.toLowerCase();
-  if(!q||mineModeOn()||filteredCases.length>0){box.hidden=true;return;}
+  if(!q||q.length<CROSS_MIN_QUERY||mineModeOn()){box.hidden=true;return;}
   if(!bankViewActive&&bankFileExists&&!bankLoaded&&!bankListLoading&&!_crossHintLoadFailed){
     box.hidden=false;
     box.innerHTML=`<span class="bridge-text">Проверяем картотеку «Иски банка»…</span>`;
@@ -2530,15 +2631,7 @@ function renderSearchCrossHint(){
     });
     return;
   }
-  const other=bankViewActive?allCases:(bankLoaded?bankCases:null);
-  if(!other){box.hidden=true;return;}
-  const n=countSearchMatches(other,q);
-  if(n===0){box.hidden=true;return;}
-  const target=bankViewActive?'main':'bank';
-  const name=bankViewActive?'Основные':'Иски банка';
-  box.hidden=false;
-  box.innerHTML=`<span class="bridge-text">Найдено <strong>${n}</strong> в картотеке «${name}».</span>`+
-    `<button class="bridge-btn" onclick="setDatasetView('${target}')">Показать</button>`;
+  box.hidden=true;
 }
 
 /* ========== Table ========== */
@@ -2806,8 +2899,13 @@ function renderTable(){
     const accent=rowAccent(c);
     const rowClass=['row-clickable',isNew?'row-new':'',expanded?'row-expanded':'',focused?'row-focus':'',accent].filter(Boolean).join(' ');
 
+    // Хвост кросс-поиска: дела соседней картотеки идут своей группой в конце.
+    // Внутри хвоста обычная relevance-группировка подавлена — он и есть группа.
+    if(crossCount&&idx===crossStartIdx()){
+      html+=`<tr class="group-header cross-group"><td colspan="${COLS.length}"><span class="group-dot"></span>Из картотеки «${crossGroupName()}» (${crossCount})</td></tr>`;
+    }
     // Разделители групп при relevance-sort: новые → с датой → без даты → рассмотренные → архив
-    if(sortField==='relevance'){
+    if(sortField==='relevance'&&idx<crossStartIdx()){
       const archived=caseArchived(c);
       const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
@@ -3779,9 +3877,14 @@ function renderMobileCards(){
   // Те же группы что и в desktop-таблице — рендерим только при relevance-сортировке.
   let prevGroup=null;
   const newCount=filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length;
-  document.getElementById('mobile-cards').innerHTML=filteredCases.slice(0,renderLimit).map(c=>{
+  document.getElementById('mobile-cards').innerHTML=filteredCases.slice(0,renderLimit).map((c,idx)=>{
     let groupHeader='';
-    if(sortField==='relevance'){
+    // Хвост кросс-поиска — своей группой в конце (зеркало renderTable);
+    // обычная relevance-группировка внутри хвоста подавлена.
+    if(crossCount&&idx===crossStartIdx()){
+      groupHeader=`<div class="mc-group-header gh-cross"><span class="group-dot"></span>Из картотеки «${crossGroupName()}» (${crossCount})</div>`;
+    }
+    else if(sortField==='relevance'&&idx<crossStartIdx()){
       const archived=caseArchived(c);
       const isNew=isNewCase(c);
       const isUnread=isNew&&!readCases.has(c.caseNumber);
@@ -3991,13 +4094,31 @@ function setupDrawerSwipe(){
 // иначе на каждый scroll-event получаем querySelector + DOM-write.
 let __headerEl = null;
 let __headerScrolled = false;
+// Липкая полоса списка (.list-bar) стоит под шапкой, а высота шапки НЕ
+// постоянна: на телефоне 73px, при .scrolled — 69px (padding меняется), на
+// десктопе 57px. Константой top не обойтись — будет зазор или перекрытие,
+// поэтому измеряем и отдаём в CSS переменной. Пишем только при изменении:
+// обработчик висит на scroll.
+function syncHeaderHeight(){
+  if (!__headerEl) __headerEl = document.querySelector('.app-header');
+  if (!__headerEl) return;
+  const h = Math.round(__headerEl.getBoundingClientRect().height);
+  if (h && h !== syncHeaderHeight._last){
+    syncHeaderHeight._last = h;
+    document.documentElement.style.setProperty('--header-h', h + 'px');
+  }
+}
 window.addEventListener('scroll', () => {
   if (!__headerEl) __headerEl = document.querySelector('.app-header');
   const want = window.scrollY > 30;
   if (want === __headerScrolled) return;
   __headerScrolled = want;
   __headerEl?.classList.toggle('scrolled', want);
+  // Класс сменил padding шапки — пересчитываем после перерисовки стилей.
+  requestAnimationFrame(syncHeaderHeight);
 }, { passive: true });
+window.addEventListener('resize', () => { syncHeaderHeight(); fitCounter(); }, { passive: true });
+syncHeaderHeight();
 
 // Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
 // остаётся на нижней границе layout-viewport и оказывается под клавиатурой,
