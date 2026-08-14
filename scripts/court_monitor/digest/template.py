@@ -1909,6 +1909,22 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 fi_block.append(
                     f"<b>{filing}</b> — 📥 иск зарегистрирован в суде"
                 )
+            # Строки 3-4 — только у дел, заведённых импортом дампа: с
+            # 14.08.2026 он читает карточку сразу, и прогон уже не объявит
+            # «заседание назначено»/«решение вынесено» отдельными событиями
+            # (диффу не с чем сравнивать — данные приехали вместе с делом).
+            # У дел, найденных поиском, эти поля пусты — строки не печатаются
+            # и вёрстка секции прежняя посимвольно.
+            hearing = escape_html(fi.get("hearing_date", ""))
+            if hearing:
+                htime = _bank_hearing_time(fi)
+                fi_block.append(
+                    f"<b>{hearing}</b> — 📅 заседание назначено"
+                    + (f" в {escape_html(htime)}" if htime else "")
+                )
+            fi_result = (fi.get("result") or "").strip()
+            if fi_result:
+                fi_block.append(f"⚖️ Итог: {escape_html(fi_result[:120])}")
             # Пустая строка между делами (правило вёрстки юриста: строки
             # одного дела подряд, пустая строка — между разными делами).
             fi_block.append("")

@@ -29,6 +29,7 @@ from court_monitor.lifecycle import (
     fi_decision_date_from_events,
     is_case_archived,
 )
+from court_monitor.parsing.cards import card_is_empty_shell
 from court_monitor.target_search import build_json_entry
 
 # Итоги, с которыми иск банка в трек НЕ берём (список юриста 26.07.2026):
@@ -253,6 +254,38 @@ def make_bank_entry(fi_row: dict, card_info: dict, operator: str,
         "source": source, "announced": True,
     }
     fi = entry["first_instance"]
+    # Карточка прочитана ЗДЕСЬ ЖЕ (build_json_entry собрал запись из
+    # распарсенной карточки: events, hearing_date, writs, флаги жалобы) —
+    # отмечаем дату проверки. Без неё ветка force-parse в should_skip_case
+    # стоит ПЕРВОЙ и перебивает всё остальное: и будущее заседание, и
+    # недельный ритм ИЛ, — прогон читает ту же карточку заново каждый день,
+    # пока не пройдёт заседание (разгон Урала 14.08.2026: 265 карточек трека
+    # в очереди при 154 делах с заседанием впереди).
+    # ⚠️ ТОЛЬКО ДАТА, без времени: should_skip_case читает поле через
+    # date.fromisoformat, а на полном таймстампе тот бросает ValueError и
+    # уходит в ту же ветку force-parse — правка стала бы холостой и заметной
+    # только по DEBUG-строке «невалидный last_checked_at».
+    _checked_day = (now_iso or "")[:10]
+    try:
+        date.fromisoformat(_checked_day)
+    except ValueError:
+        # Битый штамп канала — лучше лишний парс, чем «проверено» наугад.
+        _checked_day = ""
+    # ⚠️ И только по НАСТОЯЩЕЙ карточке: страница без таблиц (аутейдж sudrf
+    # 20.07.2026 отдавал такие с HTTP 200) — не проверка. У приёма нет
+    # второго рубежа FI-цикла (`card_is_empty_shell` там стоит перед бампом),
+    # а `card_rejects` смотрит только на «Результат»/жалобы/листы, и статус
+    # запись берёт ещё и из СТРОКИ выдачи: «Решено» + заглушка дали бы
+    # запись «проверено» с неделей тишины по writ_weekly.
+    if _checked_day and not card_is_empty_shell(card_info):
+        fi["last_checked_at"] = _checked_day
+        # Первый парс карточки ПРОГОНОМ всё ещё впереди, а по отсутствию
+        # штампа его теперь не опознать — дайджест узнаёт о нём по этому
+        # маркеру (см. first_card_parse в runs.py: он глушит «догоняющие»
+        # события об акте/решении, иначе вся история заведённой карточки
+        # уходит новостями). У записи без штампа маркер не нужен — там
+        # работает прежний предикат «нет last_checked_at».
+        fi["intake_card_parse"] = True
     if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
         fi["resolved_emitted"] = True
         # ⚠️ Замораживаем дату решения ПРЯМО ЗДЕСЬ. Строкой выше выставлен

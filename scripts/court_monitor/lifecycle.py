@@ -1956,6 +1956,57 @@ def repair_vacated_default_judgments(cases: list[dict]) -> int:
     return fixed
 
 
+def migrate_intake_checked_stamp(cases: list[dict]) -> int:
+    """Проставить дату проверки делам трека, заведённым до появления штампа.
+
+    `make_bank_entry` пишет `last_checked_at` при заведении с 14.08.2026 —
+    карточку читает сам импорт. Записи, созданные раньше, штампа не имеют, и
+    ветка force-parse в `should_skip_case` перебивает у них и будущее
+    заседание, и недельный ритм ИЛ: прогон читает карточку заново каждый день
+    (на Урале так набралось 259 записей из 298 за один день разгона).
+
+    Гейты нарочно избыточны — ни один не должен позволить проштамповать
+    запись, чью карточку никто не читал:
+    - только трек «Иски банка» (в основной картотеке дела заводятся со СТРОКИ
+      выдачи, без карточки — там штамповать нечего);
+    - есть блок `import` с разбираемой датой `at` (её и ставим: сегодняшняя
+      дата соврала бы, дав делу лишнюю неделю тишины);
+    - `events` непусты — доказательство, что карточка читалась. Гейт
+      КОНСЕРВАТИВНЫЙ, а не исчерпывающий: свежий материал (М-номер) приходит
+      с карточки без таблицы движения, и штампа не получит — не беда, у него
+      своя ветка `material_pending_promotion` ВЫШЕ чтения `last_checked_at`;
+    - штампа ещё нет (у воскрешённых из архива он сохранён и может быть
+      старым — перетирать его нельзя, там ждёт force-parse по 21 дню).
+
+    ⚠️ Жить может ТОЛЬКО внутри `migrate_stages`: у трека split-хранение, и на
+    диске `first_instance.events` пуст у ВСЕХ записей (события лежат в
+    `cases_bank_events.json`, склеивает `load_bank_json`). Вынесенная в
+    отдельный скрипт над файлом, эта миграция проштампует ноль записей и
+    будет выглядеть молчаливо сломанной.
+    """
+    stamped = 0
+    for case in cases:
+        if not is_bank_plaintiff_track(case):
+            continue
+        imp = case.get("import")
+        if not isinstance(imp, dict):
+            continue
+        fi = case.get("first_instance") or {}
+        if fi.get("last_checked_at") or not fi.get("events"):
+            continue
+        day = (imp.get("at") or "")[:10]
+        try:
+            date.fromisoformat(day)
+        except ValueError:
+            continue
+        fi["last_checked_at"] = day
+        # Первый парс прогоном у этих дел ещё не случился — маркер сохраняет
+        # его признак ровно так же, как у новых записей (см. first_card_parse).
+        fi["intake_card_parse"] = True
+        stamped += 1
+    return stamped
+
+
 def migrate_stages(cases: list[dict]) -> int:
     """Идемпотентная миграция существующих дел под новую state-machine:
     - first_instance + appeal_filed_date → awaiting_appeal
@@ -1968,6 +2019,15 @@ def migrate_stages(cases: list[dict]) -> int:
     # advance_case_stage — стадию awaiting_appeal. Правила, а не список
     # номеров: миграция идемпотентна и отработает на территории Урала.
     repair_vacated_default_judgments(cases)
+    # Дата проверки делам трека, заведённым до 14.08.2026 (карточку читал
+    # импорт, а штампа не ставил) — иначе force-parse перебивает у них
+    # smart-skip целиком. Идемпотентно: второй прогон уже не находит записей.
+    _intake_stamped = migrate_intake_checked_stamp(cases)
+    if _intake_stamped:
+        log.info(
+            f"Иски банка: дата проверки при заведении проставлена: "
+            f"{_intake_stamped}"
+        )
     # Идемпотентно заполняем initial_bank_role у дел, где его ещё нет.
     # Используется в дайджесте, чтобы показать «было: <роль>» при изменении
     # bank_role (напр. банк исключён из ответчиков → стал «Третье лицо»).
@@ -2715,6 +2775,60 @@ def get_next_planned_date(events: list[dict]) -> tuple[date | None, str]:
     return None, ""
 
 
+def known_future_date_skip(
+    block: dict, stage: str, today: date, case_id: str = "?",
+) -> tuple[bool, str] | None:
+    """Известная будущая дата в блоке → причина пропуска, иначе None.
+
+    Два источника, ровно как раньше жило внутри `should_skip_case`:
+    - кассация — ЯВНЫЕ поля `hearing_date`/`suspended_until` (DD.MM.YYYY):
+      events карточки 7kas держат текст в `name`, а не в `text`, и
+      `get_next_planned_date` по ним не срабатывает вовсе;
+    - все стадии — последняя запись `events` через `get_next_planned_date`.
+      Для кассации это ФОЛБЭК: явные поля проверяются первыми и, не дав
+      скипа, пропускают дальше (порядок сохранён с 08.07.2026).
+
+    «>=» у заседания: день N скипаем, парсим с N+1 (решение юриста
+    08.07.2026) — акт «единоличного рассмотрения», опубликованный в сам
+    день N, подхватится следующим прогоном.
+
+    Вынесено в отдельную функцию 14.08.2026: та же проверка нужна ВЫШЕ, в
+    ветке force-parse — известная будущая дата сильнее 21-дневной страховки
+    (решение юриста). Две копии правил разъехались бы молча.
+    """
+    if stage == "cassation":
+        hd_raw = (block.get("hearing_date") or "").strip()
+        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
+        if m_hd:
+            try:
+                hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
+                if hd >= today:
+                    return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
+            except ValueError:
+                log.debug(
+                    f"  {case_id}: невалидная hearing_date кассации {hd_raw!r}"
+                )
+        su_raw = (block.get("suspended_until") or "").strip()
+        m_su = _DATE_DDMMYYYY_RX.match(su_raw)
+        if m_su:
+            try:
+                su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
+                if su > today:
+                    return True, f"suspended_until({su.strftime('%d.%m.%Y')})"
+            except ValueError:
+                log.debug(
+                    f"  {case_id}: невалидная suspended_until кассации {su_raw!r}"
+                )
+
+    planned, kind = get_next_planned_date(block.get("events") or [])
+    if planned and planned >= today:
+        ymd = planned.strftime("%d.%m.%Y")
+        if kind == "hearing":
+            return True, f"future_hearing({ymd})"
+        return True, f"suspended_until({ymd})"
+    return None
+
+
 def should_skip_case(
     case_dict: dict,
     today: date,
@@ -2764,6 +2878,18 @@ def should_skip_case(
             )
             last_checked = None
     if last_checked is None or (today - last_checked).days >= force_parse_days:
+        # Известная будущая дата СИЛЬНЕЕ страховки force-parse (решение
+        # юриста 14.08.2026): пока заседание впереди, читать карточку не за
+        # чем — суд до заседания её не меняет, а 21-дневная страховка
+        # заставляла перечитывать дела с заседанием через два месяца.
+        # ⚠️ Цена решения: перенос заседания на более РАННЮЮ дату мы увидим
+        # только в исходный день. Страховка от этого и раньше защищала лишь
+        # частично (окно сужалось до 21 дня, но перенос на ближайшую неделю
+        # так же оставался незамеченным).
+        known = known_future_date_skip(block, stage, today,
+                                       case_dict.get("id", "?"))
+        if known:
+            return known
         return False, ""
 
     # Трек «Иски банка»: решённое дело опрашивается раз в BANK_WRIT_CHECK_DAYS
@@ -2803,44 +2929,10 @@ def should_skip_case(
             return True, f"writ_weekly({days_since}d/{config.BANK_WRIT_CHECK_DAYS}d)"
         return False, ""
 
-    # Кассация: явные поля hearing_date / suspended_until в блоке (DD.MM.YYYY).
-    # events карточки 7kas хранят текст в поле name (не text), поэтому
-    # get_next_planned_date по ним не сработает — читаем явные поля.
-    # «>=», как и у 1-й инст./апелляции: день N скипаем, парсим с N+1
-    # (решение юриста 08.07.2026). Акт «единоличного рассмотрения»,
-    # опубликованный в сам день N, подхватится на следующем прогоне.
-    if stage == "cassation":
-        hd_raw = (block.get("hearing_date") or "").strip()
-        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
-        if m_hd:
-            try:
-                hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
-                if hd >= today:
-                    return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
-            except ValueError:
-                log.debug(
-                    f"  {case_dict.get('id', '?')}: невалидная hearing_date "
-                    f"кассации {hd_raw!r}"
-                )
-        su_raw = (block.get("suspended_until") or "").strip()
-        m_su = _DATE_DDMMYYYY_RX.match(su_raw)
-        if m_su:
-            try:
-                su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
-                if su > today:
-                    return True, f"suspended_until({su.strftime('%d.%m.%Y')})"
-            except ValueError:
-                log.debug(
-                    f"  {case_dict.get('id', '?')}: невалидная suspended_until "
-                    f"кассации {su_raw!r}"
-                )
-
-    planned, kind = get_next_planned_date(block.get("events") or [])
-    if planned and planned >= today:
-        ymd = planned.strftime("%d.%m.%Y")
-        if kind == "hearing":
-            return True, f"future_hearing({ymd})"
-        return True, f"suspended_until({ymd})"
+    known = known_future_date_skip(block, stage, today,
+                                   case_dict.get("id", "?"))
+    if known:
+        return known
 
     # Дело «без движения» без явной будущей даты исправления — парсим раз
     # в 7 дней. Суды 1-й инст. ХМАО часто не указывают срок устранения

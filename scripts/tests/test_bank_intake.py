@@ -168,6 +168,95 @@ class TestCourtIds:
         assert entry["initial_bank_role"] == "Истец"
 
 
+# ── Дата проверки при заведении (карточку читал импорт) ─────────────────────
+
+class TestIntakeCheckedStamp:
+    """Без штампа ветка force-parse в should_skip_case перебивает ВСЁ —
+    и будущее заседание, и недельный ритм ИЛ (разгон Урала 14.08.2026)."""
+
+    @staticmethod
+    def _card(**extra):
+        # _table_count — настоящая карточка (у заглушки таблиц 0).
+        card = {"Статус": "В производстве", "_table_count": 5, "_events": [
+            {"date": "01.08.2026", "text": "Регистрация иска"},
+        ]}
+        card.update(extra)
+        return card
+
+    def test_stamp_is_date_only(self):
+        """⚠️ Полный таймстамп should_skip_case не разберёт (date.fromisoformat
+        бросит ValueError) и уйдёт в тот же force-parse — правка холостая."""
+        from datetime import date
+
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(), self._card(), "оператор",
+            "2026-08-14T05:53:09")["first_instance"]
+        assert fi["last_checked_at"] == "2026-08-14"
+        assert date.fromisoformat(fi["last_checked_at"]) == date(2026, 8, 14)
+
+    def test_intake_marker_set(self):
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(), self._card(), "оператор",
+            "2026-08-14T05:53:09")["first_instance"]
+        assert fi["intake_card_parse"] is True
+
+    def test_empty_now_iso_leaves_key_absent(self):
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(), self._card(), "оператор", "")["first_instance"]
+        assert "last_checked_at" not in fi
+
+    def test_garbage_now_iso_not_stamped(self):
+        """Лучше лишний парс, чем «проверено» наугад: битую строку в поле
+        should_skip_case всё равно не разберёт, а в данных она осядет."""
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(), self._card(), "оператор", "вчера")["first_instance"]
+        assert "last_checked_at" not in fi
+        assert "intake_card_parse" not in fi
+
+    def test_shell_card_not_stamped(self):
+        """Заглушка sudrf (HTTP 200, ноль таблиц) — не проверка. У приёма нет
+        второго рубежа FI-цикла, а «Решено» запись берёт и из строки выдачи:
+        штамп дал бы неделю тишины по writ_weekly без единого чтения."""
+        fi = bank_intake.make_bank_entry(
+            TestCourtIds._row(status="Решено"),
+            {"_table_count": 0}, "оператор",
+            "2026-08-14T05:53:09")["first_instance"]
+        assert "last_checked_at" not in fi
+        assert "intake_card_parse" not in fi
+
+    def test_future_hearing_skipped_right_after_intake(self):
+        """Ради этого всё и делается: заведённое дело с заседанием впереди
+        прогон читать не должен."""
+        from datetime import date
+
+        from court_monitor import lifecycle
+
+        entry = bank_intake.make_bank_entry(
+            TestCourtIds._row(), self._card(_events=[
+                {"date": "20.09.2026", "text": "Судебное заседание. 10:00"},
+            ]), "оператор", "2026-08-14T05:53:09")
+        skip, reason = lifecycle.should_skip_case(entry, date(2026, 8, 17))
+        assert skip is True
+        assert reason.startswith("future_hearing")
+
+    def test_resolved_case_goes_to_weekly_writ_rhythm(self):
+        """Решённое дело без штампа парсилось бы каждым прогоном, хотя для
+        него и придуман недельный ритм ожидания ИЛ."""
+        from datetime import date
+
+        from court_monitor import lifecycle
+
+        entry = bank_intake.make_bank_entry(
+            TestCourtIds._row(status="Решено"),
+            self._card(**{"Статус": "Решено", "_events": [
+                {"date": "10.08.2026", "text": "Решение. Иск удовлетворен"},
+            ]}),
+            "оператор", "2026-08-14T05:53:09")
+        skip, reason = lifecycle.should_skip_case(entry, date(2026, 8, 17))
+        assert skip is True
+        assert reason.startswith("writ_weekly")
+
+
 # ── Перенос признаков жалобы (решение №3: такие дела подхват берёт) ──────────
 
 class TestAppealFlagsCarried:

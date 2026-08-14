@@ -790,6 +790,32 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assertIn("📥 <b>Новые иски (1):</b>", html)
         self.assertIn("<b>01.07.2026</b> — 📥 иск зарегистрирован в суде", html)
         self.assertEqual(anchors(html).count("2-300/2026"), 1)
+        # Дело, найденное поиском: карточки ещё нет, лишних строк тоже
+        self.assertNotIn("заседание назначено", html)
+        self.assertNotIn("Итог:", html)
+
+    def test_fi_new_case_from_dump_shows_card_facts(self):
+        """Импортёр дампа с 14.08.2026 читает карточку сразу, поэтому прогон
+        уже не объявит «заседание назначено»/«решение вынесено» отдельными
+        событиями — диффу не с чем сравнивать. Факты обязаны приехать в самой
+        строке нового иска, иначе они пропадают совсем."""
+        case = make_fi_new_case()
+        case["first_instance"]["hearing_date"] = "20.09.2026"
+        case["first_instance"]["hearing_time"] = "10:30"
+        case["first_instance"]["result"] = "Иск УДОВЛЕТВОРЕН ЧАСТИЧНО"
+        html = render(fi_new_cases=[case])
+        self.assertIn("<b>20.09.2026</b> — 📅 заседание назначено в 10:30", html)
+        self.assertIn("⚖️ Итог: Иск УДОВЛЕТВОРЕН ЧАСТИЧНО", html)
+        # Линтер считает дела по строкам с номерами — новых номеров не завели.
+        self.assertEqual(anchors(html).count("2-300/2026"), 1)
+
+    def test_fi_new_case_hides_placeholder_hearing_time(self):
+        case = make_fi_new_case()
+        case["first_instance"]["hearing_date"] = "20.09.2026"
+        case["first_instance"]["hearing_time"] = "00:00"
+        html = render(fi_new_cases=[case])
+        self.assertIn("<b>20.09.2026</b> — 📅 заседание назначено", html)
+        self.assertNotIn("00:00", html)
 
 
 # ── 1-я инстанция: комбо-дедупы 3.2 / 3.5 / 3.6 ─────────────────────────────

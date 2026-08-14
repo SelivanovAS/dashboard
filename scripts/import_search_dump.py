@@ -70,7 +70,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -89,6 +89,7 @@ from court_monitor.linking import (  # noqa: E402
 )
 from court_monitor.netutil import fetch_card_checked, polite_delay  # noqa: E402
 from court_monitor.parsing import parse_case_card  # noqa: E402
+from court_monitor.parsing.cards import card_is_empty_shell  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
     parse_first_instance_search,
@@ -96,6 +97,7 @@ from court_monitor.parsing.search import (  # noqa: E402
 from court_monitor.parsing.tables import extract_tables  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
 from court_monitor.regions.base import CourtConfig  # noqa: E402
+from court_monitor.target_search import build_json_entry  # noqa: E402
 from court_monitor.storage import load_json, save_bank_json, save_json  # noqa: E402
 # Прецедент импорта scripts→scripts — collect_bank_claims.py: зависимости
 # односторонние, court_monitor из scripts/*.py не импортирует.
@@ -304,6 +306,55 @@ def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
     return "added_bank", f"[ADDED BANK] {num} · Истец · {parties}", entry
 
 
+def _fetch_main_card(r: dict, domain: str, bank_state: dict,
+                     dry_run: bool) -> dict | None:
+    """Карточка для дела основной картотеки (банк-ответчик) или None.
+
+    None — работаем как раньше: запись собирается из строки выдачи, штампа
+    проверки не получает, и ближайший прогон её дочитает. Строку дампа отказ
+    НЕ роняет: у истцовой ветки `[FETCH FAIL]` дело просто не берут в трек, а
+    здесь это иск ПРОТИВ банка — потерять его нельзя.
+
+    Кэп карточек ОБЩИЙ с истцовой веткой (`bank_state["cards"]`): страховка от
+    таймаута джоба считает запросы, а не роли. Dry-run не ходит в сеть вовсе.
+    """
+    if dry_run:
+        return None
+    if bank_state["cards"] >= MAX_BANK_CARDS_PER_IMPORT:
+        return None
+    court = fi_court_by_domain(domain, r.get("href_srv_num"))
+    if court is None:
+        return None
+    cid, _, cuid = (r.get("link") or "").partition("|")
+    bank_state["cards"] += 1
+    polite_delay()
+    card_html = fetch_card_checked(court.card_url(cid, cuid), context=r.get("case_number", ""))
+    if not card_html:
+        return None
+    card_info = parse_case_card(card_html, court.base_url)
+    # Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается — иначе
+    # запись получит штамп «проверено» и не будет перечитана до заседания.
+    if card_is_empty_shell(card_info):
+        return None
+    return card_info
+
+
+def _stamp_intake_checked(fi: dict, now_iso: str) -> None:
+    """Отметка «карточку читал импорт» — зеркало make_bank_entry.
+
+    ⚠️ Пара неразделима: один только `last_checked_at` навсегда выключает
+    `first_card_parse` в FI-цикле, и стародатный фильтр «догоняющих» событий
+    об акте/решении умирает молча (см. runs.py).
+    """
+    day = (now_iso or "")[:10]
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        return
+    fi["last_checked_at"] = day
+    fi["intake_card_parse"] = True
+
+
 def import_rows(
     rows: list[dict], stats: dict, operator: str, dry_run: bool,
 ) -> dict:
@@ -415,6 +466,25 @@ def import_rows(
         # судов (Камышловский/Красноуфимский) резолв по домену даёт сервер 1.
         if r.get("href_srv_num"):
             entry["first_instance"]["srv_num"] = r["href_srv_num"]
+        # Карточку читаем и для исков ПРОТИВ банка (с 14.08.2026): истцовые
+        # строки того же дампа её качали всегда, а дело основной картотеки
+        # заводилось пустышкой — без даты заседания и хронологии — до
+        # ближайшего прогона. Залитый вечером пятницы дамп юрист видел
+        # безжизненным все выходные.
+        card_info = _fetch_main_card(r, domain, bank_state, dry_run)
+        note = ""
+        if card_info:
+            # Один источник правды по маппингу полей карточки — build_json_entry;
+            # update поверх card-blind записи сохраняет ключи, которых он не
+            # кладёт (delo_id, srv_num из href выше, act_text).
+            entry["first_instance"].update(
+                build_json_entry(r, card_info)["first_instance"]
+            )
+            if card_info.get("_writs"):
+                entry["first_instance"]["writs"] = card_info["_writs"]
+            _stamp_intake_checked(entry["first_instance"], now_iso)
+        else:
+            note = " (карточка недоступна — дозаполнит прогон)"
         # Служебный блок: кто и когда завёл дело (история импортов, бейдж
         # «импортировано» на фронте — задел).
         entry["import"] = {"operator": operator, "at": now_iso, "source": "dump"}
@@ -423,7 +493,9 @@ def import_rows(
         if bare != num:
             dedup_exact.add((domain, bare))
         counters["added"] += 1
-        lines.append(f"[ADDED] {num} · {r.get('bank_role', '?')} · {parties}")
+        lines.append(
+            f"[ADDED] {num} · {r.get('bank_role', '?')} · {parties}{note}"
+        )
 
     for num in stats.get("subsidiary_cases", []):
         counters["subsidiary"] += 1
