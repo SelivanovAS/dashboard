@@ -19,10 +19,14 @@ on:
         type: boolean
         required: false
         default: false
+  # Push-триггер — только на реестр судов: правишь courts_probe.csv → проба
+  # сама сходит и проверит новые суды. ⚠️ Путь самого workflow из списка убран
+  # (14.08.2026): merge правки этого файла в форк территории — это push, и он
+  # запускал пробу на территории без спроса, перезаписывая её отчёт (класс
+  # инцидента 26.07.2026 со сборщиком исков банка).
   push:
     paths:
       - "ops/region_probe/courts_probe.csv"
-      - ".github/workflows/probe_region_registry.yml"
 
 permissions:
   contents: write

@@ -23,14 +23,25 @@
 
 Второй режим — `--scan-servers` (с 13.08.2026, разгон Урала): разведка
 СУДЕБНЫХ ПРИСУТСТВИЙ / вторых площадок. Судебное присутствие живёт на домене
-районного суда отдельным сервером (`srv_num=2+`: Покачи на vartovray в ХМАО,
-Камышловский/Красноуфимский на Урале), и суд без записи в конфиге НЕВИДИМ
-ЦЕЛИКОМ — обычная проба по CSV ходит только на сервер 1 и площадок не
-находит. Режим делает 1 GET страницы модуля sud_delo на каждый уникальный
-домен 1-й инстанции региона (env REGION; `--input` добавляет домены-кандидаты
-не из конфига), разбирает селектор площадок (ссылки с `srv_num=`, фолбэк —
-union всех srv_num в HTML) и сверяет с конфигом: «⚠ НОВАЯ ПЛОЩАДКА» + готовая
-строка CourtConfig (search_gated наследуется от площадок домена).
+районного суда отдельным сервером (`srv_num=2+`: Покачи на vartovray в ХМАО),
+и суд без записи в конфиге НЕВИДИМ ЦЕЛИКОМ — обычная проба по CSV ходит
+только на сервер 1 и площадок не находит. Режим делает 1 GET страницы модуля
+sud_delo на каждый уникальный домен 1-й инстанции региона (env REGION;
+`--input` добавляет домены-кандидаты не из конфига), разбирает селектор
+площадок (ссылки с `srv_num=`, фолбэк — union всех srv_num в HTML) и сверяет
+с конфигом: «⚠ НОВАЯ ПЛОЩАДКА» + готовая строка CourtConfig (search_gated
+наследуется от площадок домена).
+
+⚠️ Классификация площадок (14.08.2026, по итогам первого прогона на Урале).
+Все четыре найденные там вторые площадки оказались картотеками УГОЛОВНОГО
+судопроизводства — юрист их отверг, в мониторинг нужна только гражданская.
+Классифицируем по ПОДПИСИ площадки, а не по номеру: у Железнодорожного р/с
+ЕКБ гражданская картотека живёт как раз на srv 2, а уголовная на srv 1.
+Неопознанную подпись доразбираем разделами страницы самой площадки
+(`survey_delo_ids(domain, srv_num)`). Подписи печатаются для ВСЕХ найденных
+площадок, включая уже сконфигурированные, — иначе уголовная картотека,
+заведённая в конфиг вслепую, остаётся невидимой (так 16.07.2026 попали
+вторые площадки Камышловского и Красноуфимского).
 
 Запуск:  REGION=sverdlovsk_yanao python3 scripts/build_region_registry.py --scan-servers
 """
@@ -75,11 +86,19 @@ def _domain(url: str) -> str:
     return m.group(1) if m else url.strip()
 
 
-def survey_delo_ids(domain: str) -> dict[int, str]:
-    """{delo_id: подпись ссылки} со страницы модуля sud_delo."""
+def survey_delo_ids(domain: str, srv_num: int = 0) -> dict[int, str]:
+    """{delo_id: подпись ссылки} со страницы модуля sud_delo.
+
+    `srv_num` — страница КОНКРЕТНОЙ площадки многосерверного домена (второй
+    слой классификации в --scan-servers: наличие гражданского раздела решает
+    вопрос там, где подпись площадки ничего не сказала).
+    """
     _polite()
-    page = fetch_page(f"https://{domain}/modules.php?name=sud_delo",
-                      context=f"обзор {domain}")
+    url = f"https://{domain}/modules.php?name=sud_delo"
+    if srv_num:
+        url += f"&srv_num={srv_num}"
+    page = fetch_page(url, context=f"обзор {domain}"
+                      + (f" srv {srv_num}" if srv_num else ""))
     found: dict[int, str] = {}
     if not page:
         return found
@@ -124,6 +143,86 @@ def parse_server_options(page: str) -> dict[int, str]:
     return found or {1: ""}
 
 
+# Класс площадки. Ключевая находка прогона 14.08.2026 по Уралу: все четыре
+# найденные вторые площадки оказались картотеками УГОЛОВНОГО судопроизводства
+# («Уголовная коллегия» у трёх судов ЕКБ, «Уголовные дела и дела об
+# административных правонарушениях» у Железнодорожного), и в мониторинг они не
+# нужны. Отсюда же — почему классифицируем по ПОДПИСИ, а не по номеру: у
+# Железнодорожного гражданская картотека живёт как раз на srv 2, а уголовная
+# на srv 1.
+SRV_CIVIL = "civil"
+SRV_OTHER = "other"
+SRV_UNKNOWN = "unknown"
+SRV_CLASS_RU = {
+    SRV_CIVIL: "гражданская",
+    SRV_OTHER: "НЕ гражданская",
+    SRV_UNKNOWN: "не опознана",
+}
+_LABEL_CIVIL_RE = re.compile(r"гражданск", re.IGNORECASE)
+_LABEL_OTHER_RE = re.compile(
+    r"уголовн|административн|коап|адм\.\s*правонаруш", re.IGNORECASE
+)
+
+
+def classify_server_label(label: str) -> str:
+    """Класс площадки по её подписи в селекторе.
+
+    Обе группы слов сразу («Гражданские и административные дела») → UNKNOWN:
+    автоматика тут ошибётся в обе стороны — такую площадку не предлагаем в
+    конфиг, но и удалять из конфига не советуем. Пустая подпись — норма
+    односерверного домена (parse_server_options отдаёт {1: ""}), она тоже
+    UNKNOWN и не должна порождать ни алярма, ни шума.
+    """
+    text = (label or "").strip()
+    if not text:
+        return SRV_UNKNOWN
+    civil = bool(_LABEL_CIVIL_RE.search(text))
+    other = bool(_LABEL_OTHER_RE.search(text))
+    if civil and other:
+        return SRV_UNKNOWN
+    if other:
+        return SRV_OTHER
+    if civil:
+        return SRV_CIVIL
+    return SRV_UNKNOWN
+
+
+def classify_server(label: str, sections: dict[int, str] | None = None,
+                    civil_delo_id: int = 0) -> str:
+    """Класс площадки: подпись, при неопознанной — разделы её страницы.
+
+    `sections` — {delo_id: подпись} страницы sud_delo КОНКРЕТНОЙ площадки
+    (survey_delo_ids с srv_num). Второй слой нужен там, где селектор подписей
+    не дал: наличие гражданского раздела решает вопрос точно. Подпись
+    приоритетнее — если она опознана, лишний запрос ничего не переигрывает.
+    """
+    verdict = classify_server_label(label)
+    if verdict != SRV_UNKNOWN or not sections:
+        return verdict
+    if civil_delo_id and civil_delo_id in sections:
+        return SRV_CIVIL
+    titles = " ".join(sections.values())
+    if _LABEL_OTHER_RE.search(titles) and not _LABEL_CIVIL_RE.search(titles):
+        return SRV_OTHER
+    return SRV_UNKNOWN
+
+
+def configured_not_civil(found: dict[int, str], known: set[int],
+                         sections: dict[int, dict[int, str]] | None = None,
+                         civil_delo_id: int = 0) -> list[int]:
+    """Площадки, которые СТОЯТ в конфиге, но по подписи не гражданские.
+
+    Ради этого списка проба и печатает подписи уже сконфигурированных
+    площадок: «слепая» запись в конфиге (Камышловский/Красноуфимский заведены
+    16.07.2026 без проверки назначения) иначе невидима — compare_servers
+    показывал подписи только новых.
+    """
+    sections = sections or {}
+    return [n for n in sorted(known & set(found))
+            if classify_server(found[n], sections.get(n), civil_delo_id)
+            == SRV_OTHER]
+
+
 def _region_fi_index(region: RegionConfig):
     """(площадки, капча, имя) по доменам 1-й инстанции конфига региона."""
     configured: dict[str, set[int]] = {}
@@ -138,11 +237,18 @@ def _region_fi_index(region: RegionConfig):
 
 
 def compare_servers(domain: str, name: str, found: dict[int, str],
-                    region: RegionConfig) -> tuple[str, list[str]]:
+                    region: RegionConfig,
+                    sections: dict[int, dict[int, str]] | None = None,
+                    ) -> tuple[str, list[str]]:
     """Сверка найденных площадок домена с конфигом региона.
 
     Возвращает (строка сводки, готовые CourtConfig-строки новых площадок).
     Для домена не из конфига новыми считаются ВСЕ найденные площадки.
+    Кандидатами становятся только площадки, НЕ опознанные как уголовные
+    (решение юриста 14.08.2026: картотеки уголовного судопроизводства нам не
+    нужны); у неопознанной подписи строка выдаётся с пометкой «проверить
+    глазами». `sections` — разделы страниц площадок (второй слой
+    классификации), опционально.
     """
     configured, gated, names = _region_fi_index(region)
     dom = domain.lower()
@@ -150,12 +256,33 @@ def compare_servers(domain: str, name: str, found: dict[int, str],
     missing = sorted(set(found) - known)
     gone = sorted(known - set(found))
     base_name = names.get(dom, name)
+    civil_delo_id = region.fi_default_delo_id
+    sections = sections or {}
+
+    def _cls(n: int) -> str:
+        return classify_server(found.get(n, ""), sections.get(n), civil_delo_id)
 
     parts = [f"найдено: {sorted(found)}", f"в конфиге: {sorted(known) or '—'}"]
-    if missing:
-        labels = "; ".join(
-            f"{n}: {found[n] or 'без подписи'}" for n in missing)
-        parts.append(f"⚠ НОВАЯ ПЛОЩАДКА → {labels}")
+    # Подписи ВСЕХ площадок, включая сконфигурированные, — иначе уголовная
+    # картотека, заведённая в конфиг вслепую, остаётся невидимой. Печатаем
+    # только когда есть что показать: 60 односерверных доменов территории
+    # иначе дали бы строку-шум «1: без подписи».
+    if len(found) > 1 or any((v or "").strip() for v in found.values()):
+        parts.append("подписи: " + "; ".join(
+            f"{n}: {found[n] or 'без подписи'} [{SRV_CLASS_RU[_cls(n)]}]"
+            for n in sorted(found)
+        ))
+    for n in missing:
+        cls = _cls(n)
+        label = found[n] or "без подписи"
+        if cls == SRV_OTHER:
+            parts.append(f"⚠ НОВАЯ ПЛОЩАДКА {n}: {label} — НЕ гражданская, "
+                         "в конфиг не предлагаем")
+        else:
+            parts.append(f"⚠ НОВАЯ ПЛОЩАДКА {n}: {label}")
+    for n in configured_not_civil(found, known, sections, civil_delo_id):
+        parts.append(f"⚠ В КОНФИГЕ НЕ ГРАЖДАНСКАЯ ПЛОЩАДКА {n}: "
+                     f"{found[n] or 'без подписи'} — убрать из региона")
     if gone:
         # Конфиг знает площадку, которой нет на странице — чаще это значит,
         # что селектор не распарсился, а не что присутствие закрыли.
@@ -163,11 +290,19 @@ def compare_servers(domain: str, name: str, found: dict[int, str],
 
     config_lines = []
     for n in missing:
+        cls = _cls(n)
+        if cls == SRV_OTHER:
+            continue          # уголовную картотеку в конфиг не предлагаем
+        if cls == SRV_UNKNOWN:
+            config_lines.append(
+                f"    # ⚠ {dom} srv {n}: подпись не опознана — "
+                "проверить глазами перед добавлением"
+            )
         gated_part = ", search_gated=True" if gated.get(dom) else ""
         label = found[n] or f"сервер {n}"
         config_lines.append(
-            f'    CourtConfig("{base_name} ({label})", "{dom}", 1540005, '
-            f'"first_instance"{gated_part}, srv_num={n}),'
+            f'    CourtConfig("{base_name} ({label})", "{dom}", '
+            f'{civil_delo_id}, "first_instance"{gated_part}, srv_num={n}),'
         )
     return " | ".join(parts), config_lines
 
@@ -188,8 +323,12 @@ def scan_servers_mode(extra: list[tuple[str, str]]) -> None:
 
     print(f"Регион {region.code}: доменов на скан площадок — {len(targets)} "
           "(1 запрос на домен, ~3.5 с пауза)\n")
+    configured, _, _ = _region_fi_index(region)
+    civil_delo_id = region.fi_default_delo_id
     summary: list[str] = []
     config_lines: list[str] = []
+    to_remove: list[str] = []
+    skipped_other = unknown_n = 0
     for i, (dom, name) in enumerate(targets, 1):
         print(f"[{i}/{len(targets)}] {name} — {dom}")
         _polite()
@@ -199,8 +338,27 @@ def scan_servers_mode(extra: list[tuple[str, str]]) -> None:
             verdict = "FAIL (страница sud_delo не загрузилась)"
         else:
             found = parse_server_options(page)
-            verdict, lines = compare_servers(dom, name, found, region)
+            # Второй слой — только для многосерверных доменов с неопознанной
+            # подписью: у односерверных подписи нет по определению, и тратить
+            # на них запрос незачем (на Урале это было бы +60 GET).
+            sections: dict[int, dict[int, str]] = {}
+            if len(found) > 1:
+                for n, label in sorted(found.items()):
+                    if classify_server_label(label) == SRV_UNKNOWN:
+                        sections[n] = survey_delo_ids(dom, n)
+            verdict, lines = compare_servers(dom, name, found, region, sections)
             config_lines.extend(lines)
+            for n in sorted(found):
+                cls = classify_server(found[n], sections.get(n), civil_delo_id)
+                if n in configured.get(dom, set()):
+                    if cls == SRV_OTHER:
+                        to_remove.append(
+                            f"{dom} srv {n} — «{found[n] or 'без подписи'}»")
+                    continue
+                if cls == SRV_OTHER:
+                    skipped_other += 1
+                elif cls == SRV_UNKNOWN:
+                    unknown_n += 1
         print(f"    {verdict}\n")
         summary.append(f"{name:45.45} | {verdict}")
 
@@ -208,13 +366,21 @@ def scan_servers_mode(extra: list[tuple[str, str]]) -> None:
     print("СВОДКА ПЛОЩАДОК:")
     for s in summary:
         print("  " + s)
+    if to_remove:
+        print(f"\n⚠ В КОНФИГЕ НЕ ГРАЖДАНСКИЕ ПЛОЩАДКИ "
+              f"(убрать из regions/{region.code}.py):")
+        for line in to_remove:
+            print("  " + line)
     if config_lines:
         print("\n⚠ Найдены площадки вне конфига — готовые строки CourtConfig "
               "(проверить глазами подпись/капчу перед добавлением):")
         for line in config_lines:
             print(line)
     else:
-        print("\nНовых площадок не найдено — конфиг региона полон.")
+        print("\nНовых ГРАЖДАНСКИХ площадок не найдено.")
+    print(f"Пропущено как не гражданские (уголовные/административные "
+          f"картотеки): {skipped_other}")
+    print(f"Требуют проверки глазами (подпись не опознана): {unknown_n}")
 
 
 def live_search_check(court: CourtConfig) -> str:
