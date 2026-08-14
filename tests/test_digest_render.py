@@ -103,7 +103,25 @@ class TemplateDigestBaselineTest(unittest.TestCase):
             n = (ch.get("case") or "").strip()
             if n:
                 expected.append({n})
-        for ch in self.ctx.get("fi_changes") or []:
+        # Ожидаемый список считаем ПО ТЕМ ЖЕ фильтрам, что применяет рендер,
+        # иначе тест ловит не дефект, а штатное поведение:
+        # • `_strip_archive_final_events` (с 29.07.2026) выбрасывает change,
+        #   у которого единственное событие — административное «дело передано
+        #   в архив» (кейс 2-345/2026, контекст ХМАО 14.08.2026);
+        # • `split_bank_intake_fold` (с 14.08.2026) сворачивает массовые
+        #   заведения исков банка — их номеров в HTML нет по замыслу
+        #   (в контексте Урала 14.08 таких 116, baseline падал бы каждый
+        #   день разгона).
+        from court_monitor.digest.template import (
+            _strip_archive_final_events, split_bank_intake_fold,
+        )
+        fi_changes = _strip_archive_final_events(
+            self.ctx.get("fi_changes") or [])
+        folded_ids = {id(ch) for ch in split_bank_intake_fold(
+            [ch for ch in fi_changes if ch.get("track")])[1]}
+        for ch in fi_changes:
+            if id(ch) in folded_ids:
+                continue
             n = (ch.get("case") or "").strip()
             if n:
                 expected.append({n})
