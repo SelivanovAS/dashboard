@@ -2009,6 +2009,32 @@ class LargeDigestTest(unittest.TestCase):
         for part in uc.split_message(html, cm_config.TELEGRAM_MSG_LIMIT):
             self.assertLessEqual(len(part), cm_config.TELEGRAM_MSG_LIMIT)
 
+    def test_mass_bank_intake_folded(self):
+        """Разгон территории: 116 заведений + 39 событий (боевой прогон Урала
+        14.08.2026, HTML был 60 КБ). Свёртка оставляет одну строку, линтер
+        молчит, дайджест снова читаемого размера."""
+        intake = [
+            make_fi_change(["fi_bank_claim_registered"],
+                           case=f"2-{1000 + i}/2026", track="plaintiff_light")
+            for i in range(116)
+        ]
+        real = [
+            make_fi_change(["fi_writ_issued"], case=f"2-{500 + i}/2026",
+                           track="plaintiff_light")
+            for i in range(39)
+        ]
+        ctx = {"fi_changes": intake + real}
+        html = render(**ctx)
+        self.assertIn("заведено 116 новых исков банка", html)
+        self.assertIn("ИСКИ БАНКА (39)", html)
+        self.assertNotIn("2-1000/2026", html)
+        self.assertIn("2-500/2026", html)
+        self.assertLess(len(html), 20000, "свёртка не сократила дайджест")
+        self.assertEqual(uc.lint_digest_html(
+            html, new_cases=[], changes=[], fi_new_cases=[],
+            fi_changes=intake + real, cass_changes=[], cass_discovered=[],
+        ), [])
+
 
 # ── Telegram-копия: полный HTML на дашборд, короткая версия в Telegram ───────
 

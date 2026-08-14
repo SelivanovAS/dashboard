@@ -37,7 +37,7 @@
 детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
 
 Провайдер LLM выбирается переменной `LLM_PROVIDER`
-([строка 382](../../scripts/court_monitor/config.py#L382)): `claude` по
+([строка 390](../../scripts/court_monitor/config.py#L390)): `claude` по
 умолчанию, `gigachat` или `openrouter`.
 Основной мониторинг работает на Claude; GigaChat и OpenRouter доступны из
 тестового workflow `test_digest.yml` (inputs `llm_provider` + `llm_model`).
@@ -63,14 +63,14 @@ high). ⚠ У моделей нового поколения (Opus 4.7+/Sonnet 5
 
 ## Программный рендер — `generate_template_digest`
 
-[Строка 1632](../../scripts/court_monitor/digest/template.py#L1632). Собирает весь HTML дайджеста
+[Строка 1718](../../scripts/court_monitor/digest/template.py#L1718). Собирает весь HTML дайджеста
 из списков событий (`fi_new_cases`, `changes`, `fi_changes`, `stage_transitions`,
 `cass_changes`, `cass_discovered` — см. [05](05-конвейер-обновления.md)). Делит
 их по разделам и подсекциям, проставляет нумерацию, формирует «Сводку» и футер.
 Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>`.
 
 Если изменений нет — отдаётся «пустой» дайджест через `render_no_changes_digest`
-([758](../../scripts/court_monitor/digest/template.py#L758)).
+([770](../../scripts/court_monitor/digest/template.py#L770)).
 
 ### Что не должно попасть в две секции
 
@@ -166,7 +166,7 @@ LLM реально «думает». Алгоритм:
 5. При любой ошибке/пустом ответе (в т.ч. после гардов чистки) → `None`,
    и вызывающий код откатывается на сырой excerpt мотивировки
    (`_render_act_summary_or_excerpt`,
-   [704](../../scripts/court_monitor/digest/template.py#L704)).
+   [716](../../scripts/court_monitor/digest/template.py#L716)).
 
 Кэш пересказов: `_load_act_summaries` ([60](../../scripts/court_monitor/storage.py#L60))
 и `_save_act_summaries` ([73](../../scripts/court_monitor/storage.py#L73)),
@@ -194,12 +194,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 1114](../../scripts/court_monitor/digest/llm.py#L1114). При `DIGEST_POLISH=1`
+[Строка 1124](../../scripts/court_monitor/digest/llm.py#L1124). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
 `_DIGEST_POLISH_SYSTEM_PROMPT` ([973](../../scripts/court_monitor/digest/llm.py#L973)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([1070](../../scripts/court_monitor/digest/llm.py#L1070)): проверяется контракт
+([1080](../../scripts/court_monitor/digest/llm.py#L1080)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -247,6 +247,16 @@ LLM реально «думает». Алгоритм:
   проход, см. [05](05-конвейер-обновления.md)), `fi_post_decision_hearing`
   (заседание по решённому делу), `fi_default_copy_served` (вручение копии
   заочного). Сводка пишет «N дел с событиями» (счёт по делам, не событиям).
+  **С 14.08.2026 — свёртка массовых заведений** (`split_bank_intake_fold`,
+  порог `BANK_INTAKE_DIGEST_FOLD`=25): больше порога дел, у которых
+  `fi_bank_claim_registered` — единственный тип, печатаются одной строкой
+  «🆕 заведено N новых исков банка в M судах» (разгон Урала: 116 одинаковых
+  строк раздули HTML до 60 КБ). Счётчик заголовка = число ПОДРОБНЫХ дел, при
+  нуле подробных заголовок без `(N)`; сводка получает отдельную часть
+  «🆕 N новых исков банка заведено». Тот же хелпер гейтит линтер
+  (`_expected_number_alternatives`) и валидатор полировщика
+  (`llm._collect_case_numbers`) — иначе они объявят свёрнутые номера
+  потерянными.
   С 13.08.2026 у `fi_act_text_published` с исходом **против банка**
   (`bank_act_why_eligible`: `bank_outcome ∉ {"", "в пользу банка"}` — отказ,
   частичное, прекращение с учётом роли) второй строкой печатается LLM-пересказ
@@ -258,7 +268,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([503](../../scripts/court_monitor/config.py#L503)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([511](../../scripts/court_monitor/config.py#L511)).
 
 ## Разбор акта в карточке (`act_analysis`)
 

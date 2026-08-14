@@ -26,6 +26,7 @@ from court_monitor.config import log
 from court_monitor.digest.postprocess import (
     _DIGEST_HEADER_RE, _close_open_tags, _line_has_case_number,
 )
+from court_monitor.digest.template import split_bank_intake_fold
 from court_monitor.textutil import _bare_case_number
 
 # Контракт фронта и attach_act_analyses: номер дела в <a ...><b>номер</b></a>.
@@ -73,7 +74,17 @@ def _expected_number_alternatives(
         _add(c.get("id", ""))
     for ch in changes or []:
         _add(ch.get("case", ""))
+    # Свёрнутые «заведено N новых исков банка» номеров в HTML не дают —
+    # ждать их нельзя (разгон Урала 14.08.2026: иначе дайджест-паводок из
+    # 116 строк переехал бы в 🩺-алерт «потерян номер дела» на те же 116
+    # строк). Делит список ТОТ ЖЕ хелпер, что и рендер, — два независимых
+    # расчёта порога разъехались бы молча.
+    _folded_ids = {id(ch) for ch in
+                   split_bank_intake_fold([ch for ch in (fi_changes or [])
+                                           if ch.get("track")])[1]}
     for ch in fi_changes or []:
+        if id(ch) in _folded_ids:
+            continue
         _add(ch.get("case", ""))
     for ch in cass_changes or []:
         _add(ch.get("case", ""), ch.get("cassation_internal_number", ""))

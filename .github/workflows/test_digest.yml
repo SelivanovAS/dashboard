@@ -124,6 +124,9 @@ jobs:
           # Регион территории (Actions Variable форка; пусто у эталона = hmao).
           REGION: ${{ vars.REGION }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          # Порог свёртки «заведено N новых исков банка»: replay обязан
+          # воспроизводить крон, иначе тестовый дайджест разойдётся с боевым.
+          BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
