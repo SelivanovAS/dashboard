@@ -83,7 +83,13 @@ def test_objections_level_polarity_and_scale():
     deps = "\n".join(_fn_src(n) for n in _DEPS)
     script = deps + r"""
 const mk=(due,isBank)=>({_fi:{objections_due:due,appeal_appellant_is_bank:isBank}});
-const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+// ⚠️ Собираем ISO из ЛОКАЛЬНЫХ частей даты, а не через toISOString():
+// арифметика setDate идёт по локальному времени, а toISOString сериализует
+// UTC — после полуночи по UTC «через 12 дней» превращалось в «осталось 11
+// дн.», и тест падал по часам, а не по коду (14.08.2026).
+const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);
+  const p=x=>String(x).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
 const r={};
 // Шкала при жалобе противника (возражения — наши).
 r.далеко   = objectionsLevel(mk(iso(20), false));
@@ -119,7 +125,13 @@ def test_objections_badge_and_kv():
     deps = "\n".join(_fn_src(n) for n in _DEPS)
     script = deps + r"""
 const mk=(due,isBank)=>({_fi:{objections_due:due,appeal_appellant_is_bank:isBank}});
-const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+// ⚠️ Собираем ISO из ЛОКАЛЬНЫХ частей даты, а не через toISOString():
+// арифметика setDate идёт по локальному времени, а toISOString сериализует
+// UTC — после полуночи по UTC «через 12 дней» превращалось в «осталось 11
+// дн.», и тест падал по часам, а не по коду (14.08.2026).
+const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);
+  const p=x=>String(x).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
 console.log(JSON.stringify({
   пилюля:      objectionsBadgeHtml(mk(iso(5), false)),
   пилюляБанк:  objectionsBadgeHtml(mk(iso(5), true)),

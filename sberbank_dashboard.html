@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=152">
+<link rel="stylesheet" href="styles.css?v=161">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -251,17 +251,22 @@
       </div>
     </div>
 
-    <!-- Переключатель картотек «Основные | Иски банка» — рендерится JS
-         (renderDatasetSwitch), скрыт пока data/cases_bank.json не существует.
-         Живёт в потоке контента (не в тулбаре): на мобильном тулбар — плавающая
-         капсула внизу, а картотеку надо видеть над таблицей. -->
-    <div class="dataset-switch" id="dataset-switch" hidden></div>
+    <!-- Полоса списка: переключатель картотек + счётчик ОДНОЙ строкой.
+         На телефоне липнет под шапкой (класс is-sticky ставит
+         renderDatasetSwitch — только вне режима «★ Мои»), чтобы картотека
+         не уезжала при скролле списка. Переключатель рендерится JS и скрыт,
+         пока data/cases_bank.json не существует; счётчик есть всегда,
+         поэтому пустой липкой полосы не бывает.
+         Живёт в потоке контента (не в тулбаре): на мобильном тулбар —
+         плавающая капсула внизу, а картотеку надо видеть над таблицей. -->
+    <div class="list-bar" id="list-bar">
+      <div class="dataset-switch" id="dataset-switch" hidden></div>
+      <div class="table-counter" id="table-counter"></div>
+    </div>
 
-    <!-- Table counter -->
-    <div class="table-counter" id="table-counter"></div>
-
-    <!-- Кросс-поиск: при 0 результатов подсказывает совпадения в другой
-         картотеке (renderSearchCrossHint). -->
+    <!-- Кросс-поиск: индикатор фоновой загрузки соседней картотеки
+         (renderSearchCrossHint). Сами найденные дела подмешиваются хвостом
+         в выдачу — см. applyFilters. -->
     <div class="search-cross-hint info-line" id="search-cross-hint" hidden></div>
 
     <!-- Desktop table -->
@@ -292,6 +297,6 @@
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=152" defer></script>
+<script src="app.js?v=161" defer></script>
 </body>
 </html>

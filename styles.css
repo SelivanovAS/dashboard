@@ -413,7 +413,18 @@ body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
 :root[data-theme-pref="dark"]  .theme-toggle .icon-moon { display:inline; }
 
 * { margin:0; padding:0; box-sizing:border-box; }
-html, body { overflow-x:hidden; max-width:100%; }
+/* ⚠️ overflow-x:hidden — ТОЛЬКО на html, у body его быть не должно.
+   По спецификации overflow корневого элемента распространяется на вьюпорт
+   (горизонтальный вылет всё так же обрезается), а вот body с собственным
+   overflow становится СКРОЛЛ-КОНТЕЙНЕРОМ — и position:sticky у любого
+   потомка перестаёт работать: он липнет к боксу body, который сам не
+   скроллится. Так молча не липла .app-header (её position:sticky и
+   обработчик тени .scrolled существовали, но при scrollY=896 шапка стояла
+   на -827px, то есть просто уезжала) и не заработала бы .list-bar.
+   Проверено 13.08.2026: с overflow-x только на html шапка встаёт на 0,
+   полоса — ровно под ней, scrollWidth не превышает innerWidth. */
+html { overflow-x:hidden; }
+html, body { max-width:100%; }
 
 /* Контракт ВСЕХ кнопок «закрыть»: содержимое — только svg, никакого
    текстового «×». Знак умножения U+00D7 сидит на математической оси
@@ -679,10 +690,40 @@ body {
 /* Переключатель картотек «Основные | Иски банка» (#dataset-switch): свой ряд
    над счётчиком таблицы, в потоке контента — виден и на мобильном (тулбар
    там — плавающая капсула внизу). Сегмент — существующие .seg-ctrl/.seg-btn. */
-.dataset-switch { display:flex; align-items:center; margin-bottom:10px; }
+/* Полоса списка: капсула картотек слева, счётчик справа — одной строкой
+   (раньше это были два ряда, причём справа от капсулы пусто). На телефоне
+   липнет под шапкой, см. .list-bar.is-sticky в мобильном медиа-блоке. */
+.list-bar { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.dataset-switch { display:flex; align-items:center; }
 .dataset-switch[hidden] { display:none; }
 .dataset-switch .seg-ctrl { flex:0 0 auto; }
-.table-counter { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:8px; animation:fadeUp .55s var(--ease-out); }
+/* min-width:0 — иначе длинный счётчик распирает полосу и выдавливает капсулу. */
+.table-counter { flex:1 1 auto; min-width:0; text-align:right; font-size:var(--fs-sm); color:var(--fg-3); animation:fadeUp .55s var(--ease-out); }
+/* nowrap обязателен: fitCounter подбирает ступень по scrollWidth, а перенос
+   строк внутри счётчика обнулил бы этот замер. */
+.list-bar.is-sticky .table-counter { white-space:nowrap; }
+/* Не влез даже кратчайшей формой (узкие экраны вроде 320px) — прячем:
+   вторая строка удваивала бы высоту липкой полосы. Ставит fitCounter. */
+.list-bar.is-sticky .table-counter.is-squeezed { display:none; }
+/* Капсулы нет (нет cases_bank.json или режим «★ Мои») — счётчик остаётся
+   слева, как был до появления полосы, а не жмётся к правому краю пустой строки. */
+.dataset-switch[hidden] + .table-counter { text-align:left; }
+/* Счётчик в две формы: на десктопе — фраза целиком, на телефоне остаётся
+   только «N из M» (места в липкой полосе рядом с капсулой ~99px). Служебные
+   слова — .tc-wordy, хвосты про архив/новые/кросс-поиск — .tc-tail; ступени
+   отсечения ставит fitCounter (app.js) атрибутом data-fit — от «места
+   хватает на всё» до «1 / 166». Порядок ступеней: lead → nouns → tails →
+   slash, каждая включает предыдущие. */
+.tc-slash { display:none; }
+.table-counter[data-fit] .tc-lead { display:none; }
+.table-counter[data-fit="nouns"] .tc-wordy,
+.table-counter[data-fit="tails"] .tc-wordy,
+.table-counter[data-fit="slash"] .tc-wordy { display:none; }
+.table-counter[data-fit="tails"] .tc-tail,
+.table-counter[data-fit="slash"] .tc-tail { display:none; }
+/* Последняя ступень: «из» уступает косой черте (11px экономии). */
+.table-counter[data-fit="slash"] .tc-of { display:none; }
+.table-counter[data-fit="slash"] .tc-slash { display:inline; }
 .table-counter strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
 
 /* ========== Banners ========== */
@@ -1035,6 +1076,13 @@ tr.group-header + tr td { padding-top:14px; }
 .mc-group-header.gh-awaiting .group-dot { background:var(--gray-400); }
 .mc-group-header.gh-decided .group-dot { background:var(--gray-500); }
 .mc-group-header.gh-archive .group-dot { background:var(--gray-300); }
+/* Хвост кросс-поиска: дела соседней картотеки. Зелёная точка — не статус
+   дела, а «другая картотека»; отбивка сверху крупнее, чтобы группа читалась
+   как отдельный блок, а не продолжение своей выдачи. */
+tr.group-header.cross-group td { padding-top:20px; }
+tr.group-header.cross-group td .group-dot,
+.mc-group-header.gh-cross .group-dot { background:var(--green-500); }
+.mc-group-header.gh-cross { padding-top:16px; }
 
 /* Row click → drawer */
 tbody tr.row-clickable { cursor:pointer; }
@@ -1309,7 +1357,32 @@ tr.detail-row { display:none; }
   .upcoming-case { font-size:var(--fs-lg); overflow-wrap:anywhere; word-break:break-word; }
   .upcoming-parties { overflow-wrap:anywhere; word-break:break-word; }
   .up-court { overflow-wrap:anywhere; white-space:normal; }
-  .app-main { overflow-x:hidden; }
+  /* ⚠️ Здесь НЕ должно быть `.app-main { overflow-x:hidden }`. Оно делало
+     .app-main скроллпортом для своих потомков, и position:sticky у .list-bar
+     на телефоне не работал вовсе. Правило дублировало `html, body
+     { overflow-x:hidden }` (в начале файла), а реальные переполнения лечат
+     overflow-wrap:anywhere у строк выше — поэтому снято 13.08.2026. */
+  /* Полоса списка липнет под шапкой: на телефоне карточки скроллятся
+     страницей, и картотека с счётчиком уезжали из виду. Класс is-sticky
+     ставит renderDatasetSwitch — только вне режима «★ Мои» (решение юриста).
+     --header-h пишет JS: высота шапки прыгает 73→69px при .scrolled, и
+     константой top тут не обойтись. z-index 90 — ниже шапки (100), выше
+     плавающего тулбара (50), вне диапазона drawer/шторки/маячка (150+).
+     Фон обязателен: у самой полосы его нет, просвечивал бы контент. */
+  .list-bar.is-sticky { position:sticky; top:var(--header-h, 73px); z-index:90;
+    background:var(--bg-2); padding:8px 0; margin-bottom:2px; }
+  /* Замер на 375px: капсула 254px, полосе 355px — счётчику остаётся 89px, а
+     полная фраза занимает 500px и разваливала строку на шесть. Уплотняем
+     капсулу, а объём текста счётчика подбирает fitCounter по остатку места.
+     Что он отрезает, то не пропадает: архив виден на чипе «Архив» в шторке
+     фильтров, число кросс-совпадений — в заголовке группы над самими
+     делами. На совсем узких экранах счётчик скрывается целиком
+     (.is-squeezed), поэтому flex-wrap здесь — просто страховка. */
+  .list-bar { flex-wrap:wrap; gap:6px 10px; }
+  .list-bar .seg-btn { padding:6px 8px; gap:4px; font-size:var(--fs-md); }
+  /* Числа в сегментах крупнее базовых 10px (решение юриста 14.08.2026):
+     размер картотеки читается с расстояния руки наравне с подписью. */
+  .list-bar .chip-count { padding:1px 6px; height:18px; font-size:var(--fs-xs); }
   /* Мобильное переопределение: на десктопе .up-time-value 16px, на мобиле 15 — экономит ширину карточки. */
   .up-time-value { font-size:var(--fs-md); }
   /* Мобильный «toolbar» — невидимый контейнер, который позиционирует floating-
@@ -1427,7 +1500,15 @@ tr.detail-row { display:none; }
   .app-header .btn-refresh svg { width:20px; height:20px; }
   .stats-mobile-summary .sms-item { font-size:var(--fs-lg); }
   .stats-mobile-summary .sms-item strong { font-size:22px; }
-  .analytics-title { font-size:var(--fs-sm); }
+  /* Заголовки «Дайджест» и «Ближайшие заседания» — крупнее (решение юриста
+     14.08.2026): на телефоне это два одинаковых по смыслу свёрнутых блока,
+     и 13px читались мелко. Кегль держать одинаковым у обоих, иначе
+     карточки разъедутся по высоте. */
+  .analytics-title { font-size:var(--fs-md); }
+  /* Свёрнутая карточка заседаний обязана совпадать по высоте с шапкой
+     дайджеста (padding у .digest-head на телефоне 10px 12px): они стоят
+     друг под другом, и разница в 8px читалась как небрежность. */
+  .analytics-card.upcoming-collapsed { padding:10px 12px; }
   .cat-bar-row { font-size:var(--fs-md); }
   .cat-bar-label { font-size:var(--fs-md); }
   .cat-bar-count { font-size:var(--fs-sm); }
@@ -1826,7 +1907,7 @@ body.beacon-open { overflow: hidden; }
 
 @media (max-width: 768px) {
   .digest-head { padding: 10px 12px; }
-  .digest-title { font-size: var(--fs-sm); }
+  .digest-title { font-size: var(--fs-md); }
   .digest-meta { display: none; }
   /* На мобиле — чуть крупнее шрифт (16px вместо 15) для удобного чтения
      с расстояния руки, и плотнее padding по краям. */

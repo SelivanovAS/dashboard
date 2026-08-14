@@ -1,21 +1,42 @@
 """
-Стражи кросс-поиска между картотеками и полировки фильтров (v132, app.js).
+Стражи кросс-поиска между картотеками и липкой полосы списка (app.js).
 
 Контекст 10.08.2026. Юрист спросил, зачем картотеки «Основные» и «Иски банка»
 разделены и нельзя ли заменить это ролевыми фильтрами. Разбор показал: граница
-проходит не по роли, а по жизненному циклу (58 из 59 «истцовых» дел основной
-картотеки — иски банка, ушедшие на обжалование и ПЕРЕЕХАВШИЕ из трека), и
-слияние отвергнуто. Вместо него — кросс-поиск по соседней картотеке при
-нулевой выдаче и честные счётчики. (Баннер-мостик при фильтре «Истец» был
-построен и УДАЛЁН тем же днём решением юриста: он дублировал переключатель
-картотек, стоящий прямо над ним, и дёргал раскладку — не возвращать.)
+проходит не по роли, а по жизненному циклу (истцовые дела основной картотеки —
+иски банка, ушедшие на обжалование и покинувшие трек), и слияние отвергнуто.
+(Баннер-мостик при фильтре «Истец» был построен и УДАЛЁН тем же днём решением
+юриста: он дублировал переключатель картотек, стоящий прямо над ним, и дёргал
+раскладку — не возвращать.)
+
+Замер 13.08.2026 подтвердил цену слияния на актуальных данных: 41 дело из 509
+ушло бы в архив по обычному 60-дневному окну, а 21 исполнительный лист из 39
+выдан ПОЗЖЕ 60-го дня (лаг решение → ИЛ: 43-104 дня) — трек живёт ровно ради
+этих листов. Плюс +157 карточек за прогон и 87.5% строк дайджеста стали бы
+трековыми.
+
+Тогда же (v155) переделан сам кросс-поиск. Было: подсказка «Найдено N в
+картотеке X» с кнопкой «Показать», и ТОЛЬКО при нулевой выдаче — при 3 своих
+и 2 соседских делах про соседские не узнавал никто. Стало: дела соседней
+картотеки дописываются в filteredCases ХВОСТОМ под заголовком группы, без
+переключения вида. Отдельный бейдж принадлежности не нужен — роль читается
+из подсветки ПАО Сбербанк (решение юриста 11.08.2026, см.
+test_bank_track_badge_stays_removed). Тогда же появилась липкая полоса списка
+(капсула картотек + счётчик одной строкой) и вскрылось, что overflow-x:hidden
+у body много месяцев ломал липкость самой .app-header.
 
 Что охраняем:
 1. Поисковый блоб один на предикат applyFilters и кросс-поиск (caseSearchBlob);
-   кросс-подсчёт не считает архив обеих картотек.
+   отбор совпадений — один на список и счётчик (collectSearchMatches);
+   архив обеих картотек в кросс-поиск не попадает.
 2. Ленивая догрузка bank-списка из кросс-поиска — под тройным гардом + флагом
    неудачи (loadBankDataset ошибку глотает, без флага каждый ввод в поиск
-   ретраил бы мёртвую сеть).
+   ретраил бы мёртвую сеть); хвост не строится на запросе короче двух
+   символов — иначе первая же буква тянула бы 1.6 МБ cases_bank.json.
+2b. Липкая полоса: только в мобильном медиа-блоке, top из --header-h (высота
+   шапки плавает 73→69px), класс is-sticky по !mineModeOn(), и ГЛАВНОЕ —
+   у body нет overflow-x:hidden (он делает body скролл-контейнером и убивает
+   sticky у всех потомков, включая шапку).
 3. KPI и счётчики сегментов в «★ Мои» считаются по mine-набору (тот же
    предикат isWatchedCase||isNewCase, что и в mine-ветке applyFilters) — до
    v132 плитки показывали цифры всей основной картотеки.
@@ -63,6 +84,13 @@ def _fn_src(src: str, name: str) -> str:
     return m.group(0)
 
 
+def _const_src(src: str, name: str) -> str:
+    """Строка объявления const — чистые функции часто читают такие пороги."""
+    m = re.search(r"^const\s+" + re.escape(name) + r"\s*=.*$", src, re.M)
+    assert m, f"Константа {name} не найдена."
+    return m.group(0) + "\n"
+
+
 def _node(script: str) -> str:
     r = subprocess.run([NODE, "-e", script], capture_output=True, text=True)
     assert r.returncode == 0, f"node упал:\n{r.stderr}"
@@ -100,11 +128,12 @@ def test_search_blob_single_source():
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
 def test_cross_search_counts():
-    """countSearchMatches: находит по блобу, не считает архив ОБЕИХ картотек."""
+    """collectSearchMatches: находит по блобу, не берёт архив ОБЕИХ картотек."""
     src = _app_js()
     script = (
         _fn_src(src, "caseSearchBlob")
         + _fn_src(src, "caseArchived")
+        + _fn_src(src, "collectSearchMatches")
         + _fn_src(src, "countSearchMatches")
         + """
 const list=[
@@ -118,14 +147,80 @@ console.log(JSON.stringify([
   countSearchMatches(list,'сбербанк'),
   countSearchMatches(list,'2-518'),
   countSearchMatches(list,'нет-такого'),
+  // Список и счётчик обязаны сходиться: счётчик — обёртка над списком.
+  collectSearchMatches(list,'сбербанк').length,
 ]));
 """
     )
     got = json.loads(_node(script))
-    assert got == [1, 2, 1, 0], (
-        f"countSearchMatches: {got}, ожидалось [1, 2, 1, 0] — архивные записи "
-        "обеих картотек (computed.archived и _bankArchived) не считаются."
+    assert got == [1, 2, 1, 0, 2], (
+        f"countSearchMatches: {got}, ожидалось [1, 2, 1, 0, 2] — архивные записи "
+        "обеих картотек (computed.archived и _bankArchived) не берём, а счётчик "
+        "обязан быть обёрткой над collectSearchMatches."
     )
+
+
+def test_count_search_matches_wraps_collect():
+    """Вторая реализация отбора разъехалась бы со счётчиком молча."""
+    src = _app_js()
+    fn = _fn_src(src, "countSearchMatches")
+    assert "collectSearchMatches(list,q).length" in fn.replace(" ", ""), (
+        "countSearchMatches перестал быть обёрткой над collectSearchMatches: "
+        "два независимых фильтра дадут разное число в счётчике и в выдаче."
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен")
+def test_cross_dataset_gates():
+    """Хвост соседней картотеки: не в «★ Мои», не на коротком запросе."""
+    src = _app_js()
+    script = (
+        "let bankViewActive=false,bankLoaded=true,_mine=false;\n"
+        "const allCases=['ОСНОВНЫЕ'],bankCases=['БАНК'];\n"
+        "function mineModeOn(){return _mine;}\n"
+        + _const_src(src, "CROSS_MIN_QUERY")
+        + _fn_src(src, "crossDataset")
+        + """
+const out=[];
+out.push(crossDataset('иванов'));           // штатно → соседняя картотека
+out.push(crossDataset(''));                 // пустой запрос
+out.push(crossDataset('и'));                // односимвольный — не тянем 1.6 МБ
+_mine=true;  out.push(crossDataset('иванов'));  // «★ Мои» надкартотечный сам
+_mine=false; bankViewActive=true; out.push(crossDataset('иванов'));
+bankViewActive=false; bankLoaded=false; out.push(crossDataset('иванов'));
+console.log(JSON.stringify(out));
+"""
+    )
+    got = json.loads(_node(script))
+    assert got == [["БАНК"], None, None, None, ["ОСНОВНЫЕ"], None], (
+        f"crossDataset: {got}. Ожидалось: штатно — соседняя картотека; пустой "
+        "и односимвольный запрос, «★ Мои» и незагруженный сосед — None "
+        "(односимвольный гард бережёт 1.6 МБ cases_bank.json на каждый ввод)."
+    )
+
+
+def test_cross_tail_wiring():
+    """Хвост дописывается в filteredCases, а счётчик его не путает со своими."""
+    src = _app_js()
+    fn = _fn_src(src, "applyFilters")
+    assert "crossCount=cross.length" in fn.replace(" ", "").replace("\n", ""), (
+        "applyFilters не выставляет crossCount — граница своей выдачи и хвоста "
+        "потеряна, счётчик и заголовок группы разъедутся."
+    )
+    assert "filteredCases.concat(cross)" in fn, (
+        "Хвост кросс-поиска больше не дописывается в filteredCases: на этом "
+        "массиве висят стрелки drawer, фокус клавиатуры и пагинация."
+    )
+    counter = _fn_src(src, "renderCounter")
+    assert "crossStartIdx()" in counter, (
+        "renderCounter снова считает по filteredCases.length — в «Показано N» "
+        "попадут дела соседней картотеки, а знаменатель остался свой."
+    )
+    for имя in ("renderTable", "renderMobileCards"):
+        assert "crossStartIdx()" in _fn_src(src, имя), (
+            f"{имя} не рисует заголовок группы соседней картотеки — дела "
+            "соседа сольются со своей выдачей без единого признака."
+        )
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
@@ -165,6 +260,166 @@ def test_cross_search_lazy_guard():
             f"Кросс-поиск зовёт {запрет} — глубина ленивой цепочки не должна "
             "расти: список догружается, архив и events ждут своих триггеров."
         )
+
+
+# ===== 2b. Липкая полоса списка (v155) =====
+
+def test_list_bar_sticky_only_on_mobile():
+    """Липкость объявлена в мобильном медиа-блоке и нигде больше.
+
+    На десктопе список скроллится внутри .table-scroll, а не страницей —
+    липнуть там нечему (решение юриста 13.08.2026: «только телефон»).
+    """
+    css = _read("styles.css")
+    правила = re.findall(r"\.list-bar\.is-sticky\s*\{[^}]*\}", css)
+    assert len(правила) == 1, (
+        f"Правил .list-bar.is-sticky найдено {len(правила)}, ожидалось одно."
+    )
+    assert "position:sticky" in правила[0].replace(" ", ""), ".list-bar.is-sticky не липкая."
+    # Ближайший ОТКРЫТЫЙ выше @media должен быть мобильным: блоков
+    # max-width:768px в файле несколько, поэтому ищем именно предшествующий.
+    # Именно ПРАВИЛО, а не упоминание в комментарии выше по файлу.
+    до = css[: re.search(r"\.list-bar\.is-sticky\s*\{", css).start()]
+    последний_media = до.rindex("@media")
+    шапка = до[последний_media : последний_media + 40].replace(" ", "")
+    assert "max-width:768px" in шапка, (
+        f"Липкость полосы объявлена вне мобильного медиа-блока (ближайший выше "
+        f"— «{шапка.strip()}»): на десктопе список скроллится внутри "
+        ".table-scroll, липнуть там нечему."
+    )
+    assert "var(--header-h" in правила[0], (
+        "top у липкой полосы зашит константой: высота шапки не постоянна "
+        "(телефон 73px, при .scrolled 69px, десктоп 61px) — будет зазор."
+    )
+
+
+def test_body_has_no_overflow_x():
+    """overflow-x:hidden у body убивает position:sticky у ВСЕХ потомков.
+
+    По спецификации overflow корневого элемента распространяется на вьюпорт,
+    а body с собственным overflow становится скролл-контейнером — и sticky
+    липнет к его боксу, который сам не скроллится. Из-за этого молча не
+    липла .app-header (при scrollY=896 стояла на -827px). Правило снято
+    13.08.2026; вернуть его — снова сломать обе липкости разом.
+    """
+    css = _read("styles.css")
+    assert not re.search(r"^html,\s*body\s*\{[^}]*overflow-x\s*:\s*hidden", css, re.M), (
+        "overflow-x:hidden вернулся на body — position:sticky у .app-header и "
+        ".list-bar перестанет работать (обрезка вылета живёт на html)."
+    )
+    assert re.search(r"^html\s*\{[^}]*overflow-x\s*:\s*hidden", css, re.M), (
+        "Пропала обрезка горизонтального вылета у html — появится "
+        "горизонтальный скролл страницы на узких экранах."
+    )
+    мобильный = css[css.rindex("@media (max-width: 768px)") if "@media (max-width: 768px)" in css else css.rindex("@media (max-width:768px)"):]
+    assert not re.search(r"\.app-main\s*\{[^}]*overflow-x\s*:\s*hidden", мобильный), (
+        ".app-main {overflow-x:hidden} вернулся в мобильный блок — он делает "
+        ".app-main скроллпортом, и липкая полоса на телефоне мертва."
+    )
+
+
+def test_list_bar_sticky_class_follows_mine_mode():
+    """Класс is-sticky ставится по !mineModeOn() — требование юриста."""
+    src = _app_js()
+    fn = _fn_src(src, "renderDatasetSwitch")
+    сжато = fn.replace(" ", "")
+    assert "bankFileExists&&!mineModeOn()" in сжато, (
+        "Предикат липкости разошёлся с предикатом видимости капсулы: юрист "
+        "просил не липнуть в режиме «★ Мои»."
+    )
+    assert 'classList.toggle("is-sticky"' in сжато or "classList.toggle('is-sticky'" in сжато, (
+        "renderDatasetSwitch не переключает is-sticky на #list-bar."
+    )
+    assert 'id="list-bar"' in _read("sberbank_dashboard.html"), (
+        "Обёртка #list-bar исчезла из разметки — капсула и счётчик снова "
+        "разъедутся на два ряда, и липнуть будет нечему."
+    )
+
+
+def test_counter_fit_ladder():
+    """Счётчик разворачивается настолько, насколько хватает места.
+
+    Решение юриста 14.08.2026: «когда места хватает — можно тут же более
+    развёрнуто писать». fitCounter отрезает по одной наименее ценной части,
+    пока текст не влезет рядом с капсулой картотек.
+    """
+    src = _app_js()
+    fn = _fn_src(src, "fitCounter")
+    assert "scrollWidth" in fn, (
+        "fitCounter больше не меряет ширину — ступень перестанет зависеть от "
+        "реального места, и на узком экране счётчик снова разорвёт полосу."
+    )
+    assert "is-sticky" in fn, (
+        "fitCounter обязан отступать на десктопе (полоса не липкая, счётчик "
+        "стоит своим рядом — там места вдоволь и резать нечего)."
+    )
+    assert "fitCounter()" in _fn_src(src, "renderCounter"), (
+        "renderCounter не зовёт fitCounter — ступень застынет на прошлой."
+    )
+    assert re.search(r"_TC_LEVELS\s*=\s*\['lead','nouns','tails','slash'\]", src), (
+        "Порядок ступеней изменился. Он не случаен: сперва уходит служебное "
+        "«Показано», потом существительные, потом хвосты про архив и соседнюю "
+        "картотеку, и только в конце «из» уступает косой черте."
+    )
+    # nowrap обязателен: иначе scrollWidth меряет уже перенесённый текст.
+    css = _read("styles.css")
+    assert re.search(r"\.list-bar\.is-sticky\s+\.table-counter\s*\{[^}]*white-space:\s*nowrap", css), (
+        "Пропал white-space:nowrap у счётчика в липкой полосе — замер "
+        "scrollWidth станет бессмысленным, и лестница ступеней сломается."
+    )
+
+
+def test_counter_hidden_when_it_cannot_fit():
+    """Не влез даже кратчайшей формой — счётчик скрыт, а не перенесён.
+
+    Решение юриста 14.08.2026: «на 320 вообще не надо счётчик писать».
+    Перенос на вторую строку удваивал высоту ЛИПКОЙ полосы (50→75px) ради
+    цифры, без которой можно жить.
+    """
+    fn = _fn_src(_app_js(), "fitCounter")
+    assert "classList.add('is-squeezed')" in fn.replace('"', "'"), (
+        "fitCounter больше не прячет счётчик — на узких экранах полоса снова "
+        "станет двухстрочной."
+    )
+    assert fn.index("classList.remove('is-squeezed')".replace('"', "'")) < fn.index(
+        "classList.add('is-squeezed')".replace('"', "'")
+    ), (
+        "Класс .is-squeezed обязан сниматься ДО замера: у спрятанного счётчика "
+        "scrollWidth равен нулю, он «влезал» бы всегда и не возвращался."
+    )
+    css = _read("styles.css")
+    assert re.search(
+        r"\.list-bar\.is-sticky\s+\.table-counter\.is-squeezed\s*\{[^}]*display:\s*none", css
+    ), (
+        "Правило скрытия счётчика ослабло или уехало из липкой полосы — на "
+        "десктопе счётчик прятать нельзя, там своя строка."
+    )
+
+
+def test_counter_separator_survives_word_trim():
+    """«из» живёт в своём классе, иначе счётчик читается как «1166»."""
+    src = _app_js()
+    assert 'class="tc-of"' in src, (
+        "Разделитель «из» снова в .tc-wordy: ступень «убрать слова» унесёт его "
+        "вместе с существительными, и «1 из 166» схлопнется в «1166»."
+    )
+    css = _read("styles.css")
+    assert re.search(r'\[data-fit="slash"\]\s*\.tc-of\s*\{[^}]*display:\s*none', css), (
+        "На последней ступени «из» обязан уступать месту косой черте."
+    )
+    assert re.search(r'\[data-fit="slash"\]\s*\.tc-slash\s*\{[^}]*display:\s*inline', css), (
+        "Косая черта не показывается на последней ступени — числа слипнутся."
+    )
+
+
+def test_header_height_written_from_js():
+    """--header-h пишет JS: константой top у липкой полосы не обойтись."""
+    src = _app_js()
+    assert "--header-h" in src, (
+        "JS перестал писать --header-h — липкая полоса встанет по фолбэку и "
+        "разъедется с шапкой (её высота меняется при .scrolled)."
+    )
+    assert "syncHeaderHeight" in src
 
 
 # ===== 3. «★ Мои»: честные KPI и сегменты =====
