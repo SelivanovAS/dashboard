@@ -3217,6 +3217,7 @@ def main_json():
     fi_skipped_writ_weekly = 0
     fi_skipped_breaker = 0
     fi_force_parsed = 0
+    fi_distrusted_date = 0
     fi_parsed = 0
     # Пер-кейсовый отчёт парсинга bank-трека: какой иск банка парсили /
     # пропустили и почему → data/bank_parse_report.json (запись в фазе 7c) →
@@ -3315,6 +3316,22 @@ def main_json():
         if planned_fp and planned_fp >= today:
             fi_force_parsed += 1
             bank_report.mark_force_parsed(case_j)
+            # Отдельная пометка, если дату не пропустил горизонт доверия: это
+            # не рутинная страховка, а опечатка суда в дате (2-1725/2026 —
+            # заседание 20.08.2029). Без неё такой парс сливается с обычным
+            # форс-парсом, и класс остаётся невидимым: находку 14.08.2026
+            # добыли только ручной симуляцией.
+            _ahead = (planned_fp - today).days
+            if _ahead > config.KNOWN_DATE_TRUST_DAYS:
+                fi_distrusted_date += 1
+                bank_report.mark_distrusted_date(
+                    case_j, planned_fp.strftime("%d.%m.%Y"))
+                log.warning(
+                    f"  {fi_num_log}: дата заседания "
+                    f"{planned_fp.strftime('%d.%m.%Y')} дальше горизонта "
+                    f"доверия ({_ahead} дн) — похоже на опечатку суда, "
+                    f"карточку читаем страховкой раз в 21 день"
+                )
 
         polite_delay()
         url = court_cfg.card_url(cid, cuid)
@@ -4464,6 +4481,10 @@ def main_json():
         )
     if fi_force_parsed:
         _fi_sum_parts.append(f"форс-парс {fi_force_parsed}")
+    if fi_distrusted_date:
+        _fi_sum_parts.append(
+            f"из них по недоверенной дате {fi_distrusted_date}"
+        )
     log.info(
         f"1 инст: спарсено {fi_parsed} из {fi_total} карточек"
         + (f" ({'; '.join(_fi_sum_parts)})" if _fi_sum_parts else "")
