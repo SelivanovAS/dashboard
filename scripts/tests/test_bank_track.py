@@ -2702,3 +2702,80 @@ class TestBankCalendarWiring:
         src = self._runs_src()
         assert 'fi.get("default_copy_served_emitted") != _served' in src
         assert 'fi["default_copy_served_emitted"] = _served' in src
+
+
+# ── Миграция: дата проверки делам, заведённым до появления штампа ───────────
+
+class TestIntakeCheckedStampMigration:
+    """Гейты нарочно избыточны: проштамповать запись, чью карточку никто не
+    читал, значит ослепить прогон на 21 день (страховка force-parse)."""
+
+    @staticmethod
+    def _case(**over) -> dict:
+        case = _track_case(
+            events=[{"date": "20.09.2026", "text": "Судебное заседание. 10:00"}]
+        )
+        case["import"] = {"operator": "оператор", "at": "2026-08-14T05:53:09",
+                          "source": "dump", "announced": True}
+        case.update(over)
+        return case
+
+    def test_stamp_taken_from_import_date(self):
+        """Дата ввода, а не сегодняшняя: сегодняшняя дала бы делу лишнюю
+        неделю тишины."""
+        case = self._case()
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 1
+        assert case["first_instance"]["last_checked_at"] == "2026-08-14"
+        assert case["first_instance"]["intake_card_parse"] is True
+
+    def test_idempotent(self):
+        case = self._case()
+        lifecycle.migrate_intake_checked_stamp([case])
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+
+    def test_existing_stamp_not_overwritten(self):
+        """У воскрешённых из архива штамп сохранён и может быть старым —
+        перетирать нельзя, там ждёт force-parse по 21 дню."""
+        case = self._case()
+        case["first_instance"]["last_checked_at"] = "2026-07-01"
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+        assert case["first_instance"]["last_checked_at"] == "2026-07-01"
+
+    def test_empty_events_refused(self):
+        """Непустые events — единственное доказательство, что карточка
+        читалась (основная картотека заводит дела со СТРОКИ выдачи)."""
+        case = self._case()
+        case["first_instance"]["events"] = []
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+        assert "last_checked_at" not in case["first_instance"]
+
+    def test_no_import_block_refused(self):
+        case = self._case()
+        case.pop("import")
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+
+    def test_non_track_case_refused(self):
+        case = self._case()
+        case.pop("track")
+        case["bank_role"] = "Ответчик"
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+
+    def test_broken_import_date_refused(self):
+        case = self._case()
+        case["import"]["at"] = "вчера"
+        assert lifecycle.migrate_intake_checked_stamp([case]) == 0
+
+    def test_migrated_case_is_skipped_by_future_hearing(self):
+        """Итог миграции — то же поведение, что у свежезаведённого дела."""
+        case = self._case()
+        lifecycle.migrate_intake_checked_stamp([case])
+        skip, reason = lifecycle.should_skip_case(case, date(2026, 8, 17))
+        assert skip is True
+        assert reason.startswith("future_hearing")
+
+    def test_called_from_migrate_stages(self):
+        """Проводка: без вызова из migrate_stages миграция не отработает ни
+        на одной территории."""
+        case = self._case()
+        lifecycle.migrate_stages([case])
+        assert case["first_instance"]["last_checked_at"] == "2026-08-14"

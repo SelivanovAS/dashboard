@@ -1306,6 +1306,13 @@ async function handleImportResult(request, env) {
   record.status = status;
   record.updated_at = new Date().toISOString();
   for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
+                     // Трек «Иски банка» в дамповом импорте: заведения считались
+                     // всегда, а отказы терялись здесь — оператор видел «+1
+                     // добавлено» там, где в трек ушло ещё четыре дела (разбор
+                     // 14.08.2026). Список обязан совпадать с jq-пейлоадом в
+                     // import_cases.yml — что не перечислено там, сюда не доедет.
+                     "excluded_result", "excluded_writ", "already_spent",
+                     "seen_cached", "bank_capped", "fetch_fail",
                      // счётчики точечного добавления (kind:"case")
                      "items", "added_main", "added_bank", "reactivated", "refused", "not_found"]) {
     if (typeof body[num] === "number") record[num] = body[num];
@@ -1336,6 +1343,9 @@ async function handleImportResult(request, env) {
         ts: record.updated_at,
         operator: record.operator || "",
         added: record.added || 0,
+        // Заведения в трек «Иски банка» — тоже результат импорта: без них
+        // светофор писал «+0 из 24» на странице, с которой ушло четыре иска.
+        added_bank: record.added_bank || 0,
         promoted: record.promoted || 0,
         // Сколько сберовских строк было на импортированной странице: светофор
         // показывает «+7 из 24», и оператору видно, полный ли вышел импорт

@@ -2950,6 +2950,86 @@ class TestShouldSkipMaterialGuard:
         assert reason.startswith("future_hearing")
 
 
+# ── force-parse vs известная будущая дата (решение юриста 14.08.2026) ────────
+
+class TestKnownFutureDateBeatsForceParse:
+    """21-дневная страховка force-parse больше НЕ перебивает известную
+    будущую дату: до заседания суд карточку не меняет, и перечитывать дело с
+    заседанием через два месяца незачем. Страховка остаётся для всего
+    остального — дел без известной даты впереди."""
+
+    ДЕНЬ = date(2026, 8, 17)
+
+    @staticmethod
+    def _case(last_checked: str | None, planned: str | None,
+              stage: str = "first_instance", num: str = "2-100/2026"):
+        fi: dict = {"case_number": num}
+        if last_checked is not None:
+            fi["last_checked_at"] = last_checked
+        fi["events"] = (
+            [{"date": planned, "text": "Судебное заседание. 10:00"}]
+            if planned else
+            [{"date": "01.06.2026", "text": "Регистрация иска"}]
+        )
+        return {"id": num, "current_stage": stage, "first_instance": fi}
+
+    def test_stale_stamp_with_future_hearing_skipped(self):
+        """Раньше: штамп старше 21 дня → force-parse. Теперь — скип."""
+        case = self._case("2026-07-01", "20.09.2026")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason == "future_hearing(20.09.2026)"
+
+    def test_no_stamp_with_future_hearing_skipped(self):
+        case = self._case(None, "20.09.2026")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason.startswith("future_hearing")
+
+    def test_stale_stamp_without_future_date_still_force_parsed(self):
+        """Страховка на месте: нет известной даты впереди — читаем."""
+        case = self._case("2026-07-01", None)
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is False
+        assert reason == ""
+
+    def test_past_hearing_still_force_parsed(self):
+        """Дата в прошлом известной будущей не является."""
+        case = self._case("2026-07-01", "10.08.2026")
+        assert uc.should_skip_case(case, self.ДЕНЬ)[0] is False
+
+    def test_material_guard_still_wins(self):
+        """Гейт М-номера стоит ВЫШЕ и не должен пострадать: без него
+        промоушен М→2 по карточке не отработает."""
+        case = self._case("2026-07-01", "20.09.2026", num="М-100/2026")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is False
+        assert reason == "material_pending_promotion"
+
+    def test_cassation_explicit_fields_beat_force_parse(self):
+        """У 7kas даты живут в явных полях блока — events там в `name`,
+        get_next_planned_date по ним молчит."""
+        case = {"id": "8Г-1/2026", "current_stage": "cassation",
+                "cassation": {"last_checked_at": "2026-07-01",
+                              "hearing_date": "25.09.2026"}}
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason == "future_hearing(25.09.2026)"
+
+    def test_helper_is_single_source_of_truth(self):
+        """Обе точки (ветка force-parse и общая проверка ниже) обязаны звать
+        один хелпер — две копии правил разъехались бы молча."""
+        import inspect
+
+        src = inspect.getsource(uc.should_skip_case)
+        assert src.count("known_future_date_skip(") == 2
+        # Разбор дат — только внутри хелпера (в докстроке упоминание
+        # get_next_planned_date остаётся, поэтому смотрим сам код).
+        code = src[src.index('"""', src.index('"""') + 3) + 3:]
+        assert "get_next_planned_date(" not in code
+        assert "_DATE_DDMMYYYY_RX" not in code
+
+
 # ── should_skip_case: глобальный выключатель SMART_SKIP_CASES ─────────────────
 
 class TestSmartSkipSwitch:
@@ -4907,6 +4987,34 @@ class TestFirstParseFlagWiring:
     def test_flag_reaches_stale_filter(self):
         src = self._runs_src()
         assert "first_parse=first_card_parse" in src
+
+    def test_intake_marker_popped_unconditionally(self):
+        """pop — отдельной строкой: внутри булева выражения он не выполнился
+        бы на короткой схеме, и маркер завис бы навсегда, объявляя первым
+        КАЖДЫЙ прогон (трек «Иски банка» ставит last_checked_at при заведении,
+        и по одному отсутствию штампа первый парс уже не опознать)."""
+        src = self._runs_src()
+        i_pop = src.index('intake_pending = bool(fi.pop("intake_card_parse"')
+        i_flag = src.index("first_card_parse = bool(case_j.get(\"import\"))")
+        i_bump = src.index('fi["last_checked_at"] = today.isoformat()')
+        assert i_pop < i_flag < i_bump
+        assert "intake_pending or not fi.get(\"last_checked_at\")" in src
+
+    def test_flag_true_on_first_parse_then_false(self):
+        """Поведенческая проверка поверх порядка строк: запись со штампом
+        ввода даёт первый парс один раз, второй прогон — уже рутина."""
+        fi = {"last_checked_at": "2026-08-14", "intake_card_parse": True}
+        case_j = {"import": {"source": "dump"}, "first_instance": fi}
+
+        def _compute():
+            intake_pending = bool(fi.pop("intake_card_parse", False))
+            return bool(case_j.get("import")) and (
+                intake_pending or not fi.get("last_checked_at")
+            )
+
+        assert _compute() is True
+        assert "intake_card_parse" not in fi
+        assert _compute() is False
 
 
 class TestAppealActDigestDedupe:

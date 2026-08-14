@@ -2731,9 +2731,21 @@ function impStatusBadge(status) {
 function impResultText(item) {
   if (item.kind === "case") return acResultText(item);
   if (item.status === "done") {
-    var parts = ["+" + (item.added || 0) + " добавлено"];
+    // Оба трека, а не один: до 14.08.2026 строка считала только основную
+    // картотеку, и импорт, заведший 4 иска банка и отсеявший 5, показывал
+    // «+1 добавлено» — оператор читал это как «страница пустая».
+    // Формулировки разводят картотеки словами: «в картотеку» — дела против
+    // банка, «в иски банка» — истцовые.
+    var parts = ["+" + (item.added || 0) + " в картотеку"];
+    if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
     if (item.promoted) parts.push(item.promoted + " материалов стали делами");
     if (item.already) parts.push(item.already + " уже в базе");
+    if (item.excluded_result) parts.push(item.excluded_result + " отсеяно по итогу");
+    if (item.excluded_writ) parts.push(item.excluded_writ + " ИЛ уже выдан");
+    var seen = (item.already_spent || 0) + (item.seen_cached || 0);
+    if (seen) parts.push(seen + " уже в треке");
+    if (item.bank_capped) parts.push(item.bank_capped + " не влезло в потолок");
+    if (item.fetch_fail) parts.push(item.fetch_fail + " карточка не открылась");
     if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
     if (item.no_link) parts.push(item.no_link + " без ссылки");
     if (item.subsidiary) parts.push(item.subsidiary + " дочки");
@@ -2833,7 +2845,13 @@ function renderImportFreshness(items, lastMap) {
   Object.keys(lastMap || {}).forEach(function (d) {
     var e = lastMap[d];
     var t = parseIso(e && e.ts);
-    if (!isNaN(t)) byDomain[d] = { ts: t, operator: e.operator || "", added: e.added || 0, rows: e.rows || 0 };
+    // added — оба трека: страница, с которой ушли только истцовые дела,
+    // показывала «+0 из 24» и читалась как неудачный импорт. added_bank
+    // появился в вечном ключе 14.08.2026, у прежних записей его нет.
+    if (!isNaN(t)) byDomain[d] = {
+      ts: t, operator: e.operator || "",
+      added: (e.added || 0) + (e.added_bank || 0), rows: e.rows || 0,
+    };
   });
   (items || []).forEach(function (it) {
     // kind:"case" — точечное добавление: свежесть ДАМПОВОГО регламента оно

@@ -61,6 +61,23 @@ class TestSaveLoadRoundTrip:
         assert by_id["2-100/2026"]["first_instance"]["events"] == EV_A
         assert by_id["2-200/2026"]["first_instance"]["events"] == EV_B
 
+    def test_intake_markers_survive_round_trip(self, tmp_path):
+        """`last_checked_at` и `intake_card_parse` ставит приём, а снимает
+        маркер первый парс ПРОГОНОМ — между ними запись переживает как
+        минимум одно сохранение. Потеряется маркер — стародатный фильтр
+        «догоняющих» событий молча выключится на заведённых делах."""
+        lst = str(tmp_path / "l.json")
+        ev = str(tmp_path / "e.json")
+        case = _bank_case("2-300/2026", "c.sudrf.ru", EV_A)
+        case["first_instance"]["last_checked_at"] = "2026-08-14"
+        case["first_instance"]["intake_card_parse"] = True
+        storage.save_bank_json(
+            {"version": 1, "cases": [case]}, lst, ev)
+
+        fi = storage.load_bank_json(lst, ev)["cases"][0]["first_instance"]
+        assert fi["last_checked_at"] == "2026-08-14"
+        assert fi["intake_card_parse"] is True
+
     def test_save_is_non_destructive(self, tmp_path):
         """После save_bank_json записи в data сохраняют events — пайплайн
         продолжает работать со склеенными записями."""

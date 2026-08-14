@@ -502,8 +502,10 @@ class TestBankDumpImport:
         # split-хранение: events уехали в отдельный файл под композитным ключом
         assert import_env["bank_events"].exists()
         assert "2-1002/2026" in import_env["bank_events"].read_text(encoding="utf-8")
-        # ровно одна карточка скачана (только истец; ответчики офлайн)
-        assert import_env["card_calls"]["n"] == 1
+        # 3 карточки: истец (2-1002) + два ответчика со ссылкой (2-1001,
+        # 2-1006). Ответчиков читаем с 14.08.2026 — до этого дело основной
+        # картотеки заводилось пустышкой до ближайшего прогона.
+        assert import_env["card_calls"]["n"] == 3
 
     def test_track_off_keeps_old_behaviour(self, import_env, monkeypatch):
         """BANK_TRACK=0: истцовые строки идут прежним [SKIPPED ROLE], сеть
@@ -516,7 +518,9 @@ class TestBankDumpImport:
         assert s["skipped_role"] == 2 and s["added_bank"] == 0
         assert any("[SKIPPED ROLE] 2-1002/2026" in l for l in s["lines"])
         assert not import_env["bank"].exists()
-        assert import_env["card_calls"]["n"] == 0
+        # Истцовые строки сети не касаются; два ответчика со ссылкой — да
+        # (их карточки от выключателя трека не зависят).
+        assert import_env["card_calls"]["n"] == 2
 
     def test_dedup_against_bank_file(self, import_env):
         """Иск банка, уже живущий в треке, — [ALREADY] без единого HTTP."""
@@ -533,7 +537,8 @@ class TestBankDumpImport:
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
         assert s["added_bank"] == 0 and s["already"] == 1
-        assert import_env["card_calls"]["n"] == 0
+        # Карточку иска банка не качаем (дедуп раньше), но два ответчика — да.
+        assert import_env["card_calls"]["n"] == 2
         assert len(_bank_cases(import_env)) == 1  # дублей нет
 
     def test_spent_case_rejected_and_cached(self, import_env, monkeypatch):
@@ -548,11 +553,13 @@ class TestBankDumpImport:
         assert not import_env["bank"].exists()
         key = "akademicheskiy--svd.sudrf.ru|2-1002/2026"
         assert _seen_map(import_env)[key]["reason"] == "already_spent"
-        assert import_env["card_calls"]["n"] == 1
+        assert import_env["card_calls"]["n"] == 3   # истец + два ответчика
         _run(import_env)
         s2 = _read_summary(import_env["gh_out"])
         assert s2["seen_cached"] == 1
-        assert import_env["card_calls"]["n"] == 1  # второго HTTP не было
+        # Второго HTTP по истцу не было (негативный кэш), ответчики на
+        # повторе отсекаются дедупом ещё раньше — счётчик не вырос.
+        assert import_env["card_calls"]["n"] == 3
 
     def test_fetch_fail_not_cached(self, import_env, monkeypatch):
         """Сетевой сбой карточки — отказ НЕ вечный: кэш пуст, повтор импорта
@@ -750,3 +757,100 @@ class TestWorkflowWiring:
                   "data/.bank_intake_seen.json"):
             assert f in yml, f"{f} не попадает в commit-шаг import_cases.yml"
         assert "added_bank:(.added_bank // 0)" in yml
+
+    def test_bank_counters_reach_operator(self):
+        """Сквозная проводка счётчиков трека: Python считает все 14, а до глаз
+        оператора доходили 6 — сводка писала «+1 добавлено» там, где в трек
+        ушло ещё 4 дела и 5 отсеялось (разбор 14.08.2026). Рвётся в любом из
+        трёх звеньев независимо, и каждое молчит."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        for key in ("excluded_result", "excluded_writ", "already_spent",
+                    "seen_cached", "bank_capped", "fetch_fail"):
+            assert f"{key}:(.{key} // 0)" in yml, f"{key} не уезжает из workflow"
+            assert f'"{key}"' in worker, f"{key} режет whitelist Worker'а"
+        # Сводка админки считает ОБА трека (образец — acResultText рядом).
+        assert 'parts = ["+" + (item.added || 0) + " в картотеку"]' in admin
+        assert 'item.added_bank' in admin and '" в иски банка"' in admin
+        for word in ("отсеяно по итогу", "ИЛ уже выдан", "уже в треке"):
+            assert word in admin, f"в сводке нет корзины «{word}»"
+        # Светофор свежести «+N из M» — тоже по обоим трекам.
+        assert "(e.added || 0) + (e.added_bank || 0)" in admin
+        assert "added_bank: record.added_bank || 0" in worker
+
+
+# ── Карточка для исков ПРОТИВ банка (основная картотека, с 14.08.2026) ───────
+
+class TestMainTrackCardRead:
+    """До 14.08.2026 дело «банк-ответчик» заводилось из строки выдачи: без
+    даты заседания и хронологии — до ближайшего прогона. Истцовые строки того
+    же дампа карточку качали всегда."""
+
+    @staticmethod
+    def _defendant(env) -> dict:
+        data = json.loads(env["json"].read_text(encoding="utf-8"))
+        return {c["id"]: c for c in data["cases"]}["2-1001/2026"]
+
+    def test_card_data_lands_in_record(self, import_env):
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        fi = self._defendant(import_env)["first_instance"]
+        assert fi["events"], "хронология не приехала — карточку не прочитали"
+        assert fi["hearing_date"]
+        assert fi["last_event"]
+
+    def test_intake_stamp_and_marker_set(self, import_env):
+        """Пара неразделима: один только штамп навсегда выключит
+        first_card_parse, и стародатный фильтр дайджеста умрёт молча."""
+        from datetime import date as _date
+
+        _run(import_env)
+        fi = self._defendant(import_env)["first_instance"]
+        assert _date.fromisoformat(fi["last_checked_at"])  # строго дата
+        assert fi["intake_card_parse"] is True
+
+    def test_srv_num_from_href_survives_card_merge(self, import_env):
+        """build_json_entry не кладёт srv_num вовсе — переопределение из href
+        обязано уцелеть под наложением карточки (двухсерверные суды)."""
+        _run(import_env)
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        by_id = {c["id"]: c for c in data["cases"]}
+        assert by_id["2-1001/2026"]["first_instance"]["srv_num"] == 1
+        assert by_id["2-1001/2026"]["first_instance"]["delo_id"]
+        assert by_id["2-1001/2026"]["initial_bank_role"] == "Ответчик"
+
+    def test_fetch_failure_still_adds_case(self, import_env, monkeypatch):
+        """Иск ПРОТИВ банка терять нельзя: карточка не открылась — заводим по
+        строке выдачи, без штампа, прогон дочитает."""
+        monkeypatch.setattr(isd, "fetch_card_checked",
+                            lambda url, context=None: None)
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 2
+        fi = self._defendant(import_env)["first_instance"]
+        assert fi["events"] == []
+        assert "last_checked_at" not in fi and "intake_card_parse" not in fi
+        assert any("карточка недоступна" in l for l in s["lines"])
+
+    def test_empty_shell_not_stamped(self, import_env, monkeypatch):
+        """Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается."""
+        monkeypatch.setattr(isd, "fetch_card_checked",
+                            lambda url, context=None: "<html><body>Информация "
+                            "временно недоступна</body></html>")
+        _run(import_env)
+        fi = self._defendant(import_env)["first_instance"]
+        assert "last_checked_at" not in fi
+
+    def test_dry_run_stays_offline(self, import_env):
+        """Кэп и dry-run считают запросы, а не роли."""
+        _run(import_env, "--dry-run")
+        assert import_env["card_calls"]["n"] == 0
+
+    def test_cap_shared_with_bank_branch(self, import_env, monkeypatch):
+        monkeypatch.setattr(isd, "MAX_BANK_CARDS_PER_IMPORT", 0)
+        _run(import_env)
+        assert import_env["card_calls"]["n"] == 0
+        fi = self._defendant(import_env)["first_instance"]
+        assert fi["events"] == []      # заведено, но card-blind

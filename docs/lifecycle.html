@@ -550,7 +550,7 @@
   <div class="notes">
     <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">Функция <code>should_skip_case()</code> в <code>scripts/update_cases.py</code>. Применяется для стадий <code>first_instance</code>, <code>cassation_watch</code>, <code>appeal</code>, <code>cassation</code> на этапе обновления карточек. На <code>awaiting_*</code> и <code>cassation_pending</code> вообще не вызывается — там парсинг карточек не идёт.</p>
     <ul>
-      <li><b>Force-parse страховка:</b> если <code>last_checked_at</code> пуст или прошло ≥ <b>21 дня</b> — всё равно парсим. Защита от потерянных событий.</li>
+      <li><b>Force-parse страховка:</b> если <code>last_checked_at</code> пуст или прошло ≥ <b>21 дня</b> — всё равно парсим. Защита от потерянных событий. Ветка стоит ПЕРВОЙ и перебивает все остальные, поэтому с 14.08.2026 трек «Иски банка» ставит <code>last_checked_at</code> уже при заведении дела (<code>make_bank_entry</code>): карточку читает сам приём, и без штампа заведённое дело парсилось бы каждым прогоном до самого заседания.</li>
       <li><b>Будущее заседание:</b> следующая плановая дата (из <code>events</code> или явного <code>hearing_date</code>) ≥ сегодня → skip с причиной <code>future_hearing(DD.MM.YYYY)</code>.</li>
       <li><b>Приостановлено:</b> <code>suspended_until</code> ≥ сегодня → skip с причиной <code>suspended_until(...)</code>.</li>
       <li><b>Оставлено без движения:</b> если последнее событие содержит «оставлено без движения» и прошло &lt; <b>7 дней</b> с прошлой проверки → skip с причиной <code>suspended_weekly(Xd/7d)</code>.</li>
