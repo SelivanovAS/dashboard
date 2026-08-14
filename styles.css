@@ -56,9 +56,10 @@
   --red-500:   #ef4444;
   --red-100:   #fee2e2;
 
-  --rose-700:  #be123c;
-  --rose-100:  #ffe4e6;
-
+  /* ⚠️ Пары --rose-* тут больше нет (14.08.2026): её единственным
+     потребителем был бейдж «Кассатор», а тёмного варианта у неё не
+     существовало — на тёмной теме он светился светло-розовым кирпичом.
+     Заводя новый токен, объявляй его СРАЗУ в обоих блоках темы. */
   --violet-700: #6d28d9;
   --violet-100: #ede9fe;
 
@@ -97,10 +98,32 @@
   --accent-bg-strong: var(--sber-green-100);
   --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
 
+  /* Активный сегмент (#dataset-switch, роль/инстанция, шторка фильтров).
+     Отдельные токены, а не голый --accent: в тёмной теме бренд-зелёный с
+     белым текстом оставался единственной насыщенной заливкой экрана и бил
+     по глазам среди приглушённой палитры (решение юриста 14.08.2026).
+     В светлой теме — прежние значения побайтово. */
+  --seg-active-bg:       var(--accent);
+  --seg-active-fg:       #fff;
+  --seg-active-count-bg: rgba(255, 255, 255, 0.25);
+
+  /* «Без движения» — рыжая ветка тёплой оси (не путать с амбер «Отложено»).
+     Токенами, потому что цвет обязан иметь тёмный вариант: литералами он
+     светил персиковым кирпичом на тёмной теме. */
+  --state-suspended-bg:  #ffedd5;
+  --state-suspended-fg:  #c2410c;
+  --badge-to-fi-border:  #fecaca;
+
   /* Стадии дела */
-  /* Холодная градация по насыщенности: 1 инст. (teal) → апелляция (indigo) →
-     кассация (violet). Тёплые цвета (red/amber) оставлены под urgency
-     заседаний, чтобы стадия и срочность не сливались. */
+  /* Три цветовые оси, не пересекающиеся между собой (правило 14.08.2026):
+     ХОЛОДНОЕ  — стадия дела: 1 инст. (teal) → апелляция (indigo) → кассация
+                 (violet), градация по насыщенности;
+     ТЁПЛОЕ    — состояние и срочность: заседание сегодня/скоро, «Отложено»,
+                 «Без движения», «Обжалуется»;
+     ГРАФИТ    — роль стороны в жалобе («Апеллянт»/«Кассатор») и архив.
+     До этого роль «Апеллянт» сидела на violet — том же самом, что стадия
+     «Кассация» (побайтово: #ede9fe/#6d28d9), и юрист их путал. Новую
+     сущность красить в занятую ось нельзя: сначала выбрать ось. */
   --stage-fi-fg:        var(--teal-800);
   --stage-fi-bg:        var(--teal-100);
   --stage-await-fg:     var(--indigo-700);
@@ -119,6 +142,14 @@
   --role-defendant-bg:  var(--pink-100);
   --role-third-fg:      var(--gray-600);
   --role-third-bg:      var(--gray-150);
+
+  /* Роль стороны в жалобе — «Апеллянт»/«Кассатор». Графитовая ось: вместе
+     эти бейджи не встречаются (на кассац. стадиях «Апеллянт» подавлён),
+     различает их слово, а не цвет. ⚠️ Пара обязана быть объявлена в ОБЕИХ
+     темах: у прежнего rose тёмного варианта не было, и «Кассатор» светился
+     светло-розовым кирпичом на тёмном фоне. */
+  --role-badge-fg:      var(--gray-700);
+  --role-badge-bg:      var(--gray-150);
 
   /* Срочность */
   --urgency-today-fg:   var(--red-700);
@@ -290,6 +321,18 @@
   --accent-bg-strong: rgba(47, 191, 74, 0.20);
   --focus-ring: 0 0 0 3px rgba(47, 191, 74, 0.40);
 
+  /* Активный сегмент: приглушённый зелёный со светлым текстом (решение
+     юриста 14.08.2026). Бренд-зелёный с белым текстом был единственной
+     насыщенной заливкой тёмного экрана и бил по глазам. */
+  --seg-active-bg:       #1e7a34;
+  --seg-active-fg:       #eaf7ec;
+  --seg-active-count-bg: rgba(255, 255, 255, 0.18);
+
+  /* «Без движения» — рыжий в тон urgency-tomorrow, приглушённой заливкой. */
+  --state-suspended-bg:  rgba(249, 115, 22, 0.18);
+  --state-suspended-fg:  #fdba74;
+  --badge-to-fi-border:  rgba(239, 68, 68, 0.35);
+
   /* Стадии — приглушённые холодные фоны на тёмном (teal/indigo/violet) */
   --stage-fi-fg:        #5eead4;
   --stage-fi-bg:        rgba(20, 184, 166, 0.16);
@@ -309,6 +352,11 @@
   --role-defendant-bg:  rgba(244, 114, 182, 0.16);
   --role-third-fg:      #b0b6c0;
   --role-third-bg:      rgba(154, 160, 172, 0.14);
+
+  /* Роль стороны в жалобе (Апеллянт/Кассатор) — графит, чуть контрастнее
+     архивного: бейдж стоит внутри строки со сторонами, а не в шапке. */
+  --role-badge-fg:      #b0b6c0;
+  --role-badge-bg:      rgba(154, 160, 172, 0.16);
 
   /* Срочность */
   --urgency-today-fg:   #fca5a5;
@@ -418,11 +466,14 @@ body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
    (горизонтальный вылет всё так же обрезается), а вот body с собственным
    overflow становится СКРОЛЛ-КОНТЕЙНЕРОМ — и position:sticky у любого
    потомка перестаёт работать: он липнет к боксу body, который сам не
-   скроллится. Так молча не липла .app-header (её position:sticky и
-   обработчик тени .scrolled существовали, но при scrollY=896 шапка стояла
-   на -827px, то есть просто уезжала) и не заработала бы .list-bar.
+   скроллится. Так молча не липла .app-header (её position:sticky
+   существовал, но при scrollY=896 шапка стояла на -827px, то есть просто
+   уезжала) и не заработала бы .list-bar.
    Проверено 13.08.2026: с overflow-x только на html шапка встаёт на 0,
-   полоса — ровно под ней, scrollWidth не превышает innerWidth. */
+   полоса — ровно под ней, scrollWidth не превышает innerWidth.
+   ⚠️ Запрет в силе и после 14.08.2026, когда шапку на телефоне сделали
+   статичной: от него по-прежнему зависит липкая полоса списка на телефоне
+   и липкая шапка на десктопе. */
 html { overflow-x:hidden; }
 html, body { max-width:100%; }
 
@@ -670,8 +721,8 @@ body {
 .chip-bar-segments .seg-ctrl { flex:0 0 auto; min-width:280px; }
 /* inline-flex + gap: счётчик .chip-count не липнет к подписи («Иски банка163»). */
 .seg-btn { flex:1 1 0; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
-/* На активном (заливка --accent) серый счётчик тонул — как у .chip-btn.active. */
-.seg-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
+/* На активном (заливка --seg-active-bg) серый счётчик тонул — как у .chip-btn.active. */
+.seg-btn.active .chip-count { background:var(--seg-active-count-bg); color:var(--seg-active-fg); }
 .seg-btn:not(:last-child) { border-right:1px solid var(--border); }
 /* Тот же гард hover, что у .chip-btn выше: специфичность :hover:not(...) выше
    .seg-btn.active, и залипший тач-hover красил АКТИВНЫЙ сегмент в бледный
@@ -679,7 +730,7 @@ body {
 @media (hover:hover) {
   .seg-btn:hover:not(:disabled):not(.active) { background:var(--bg-3); }
 }
-.seg-btn.active { background:var(--accent); color:#fff; }
+.seg-btn.active { background:var(--seg-active-bg); color:var(--seg-active-fg); }
 .seg-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
 .btn-outline { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm); cursor:pointer; color:var(--fg-1); font-weight:var(--fw-semibold); transition:all 120ms var(--ease-out); }
@@ -872,8 +923,12 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
    — заявление ответчика на рассмотрении (взыскание под угрозой), «Заочное
    отменено» — решения больше нет, дело рассматривается заново. Оба состояния
    вытесняют нейтральный бейдж «Заочное». */
-.badge-default-pending { background:var(--amber-100,#fef3c7); color:var(--amber-800,#92400e); }
-.badge-default-vacated { background:var(--red-100,#fee2e2); color:var(--red-700,#b91c1c); }
+/* ⚠️ Без литеральных фолбэков в var(): токена --amber-800 в проекте нет
+   вовсе, и в тёмной теме фолбэк #92400e ставил ТЁМНО-КОРИЧНЕВЫЙ текст на
+   тёмный фон — бейдж не читался. Фолбэк маскирует опечатку в имени токена
+   ровно там, где ошибку и не видно: в другой теме. */
+.badge-default-pending { background:var(--amber-100); color:var(--amber-700); }
+.badge-default-vacated { background:var(--red-100); color:var(--red-700); }
 /* Пагинация рендера: кнопка «Показать ещё N» под таблицей/карточками
    (IntersectionObserver дорисовывает сам — кнопка видна на медленном скролле
    и как фолбэк без observer'а) */
@@ -892,14 +947,23 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-prelim    { background:var(--blue-100); color:var(--blue-700); }
 .badge-main      { background:var(--blue-100); color:var(--blue-700); }
 .badge-postponed { background:var(--amber-100); color:var(--amber-700); }
-.badge-to-fi     { background:var(--red-100); color:var(--red-700); border:1px solid #fecaca; font-weight:var(--fw-bold); }
-.badge-suspended { background:#ffedd5; color:#c2410c; }
+.badge-to-fi     { background:var(--red-100); color:var(--red-700); border:1px solid var(--badge-to-fi-border); font-weight:var(--fw-bold); }
+/* ⚠️ Через токены, а НЕ литералами: до 14.08.2026 тут стояли #ffedd5/#c2410c
+   без тёмного варианта, и «Без движения» светилось на тёмной теме светлым
+   персиковым кирпичом (тот же дефект, что был у --rose-* «Кассатора»).
+   Любой новый цвет бейджа объявляем СРАЗУ в обоих блоках темы. */
+.badge-suspended { background:var(--state-suspended-bg); color:var(--state-suspended-fg); }
 .badge-paused    { background:var(--pink-100); color:var(--pink-700); }
 .badge-awaiting  { background:var(--blue-100); color:var(--blue-700); }
 
-.status-cell { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
-.status-date { font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--fg-2); font-weight:var(--fw-semibold); }
-.status-date-prominent { font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--fg-1); }
+/* Дата статуса в колонке дат — «Передано судье», «Поступило в суд»,
+   «Приостановлено», «Без движения» (buildHearingHtml, 14.08.2026). Кегль и
+   моношрифт как у .hearing-primary — даты обеих природ стоят одним столбцом,
+   но вес обычный и цвет приглушённый: это дата СЛУЧИВШЕГОСЯ, а не
+   назначенного заседания, и перетягивать взгляд она не должна.
+   ⚠️ Классы .status-cell/.status-date-prominent, лежавшие тут же, удалены
+   14.08.2026 — потребителей в JS у них не было ни одного. */
+.status-date { font-family:var(--font-mono); font-size:var(--fs-md); color:var(--fg-3); letter-spacing:-0.01em; white-space:nowrap; }
 
 /* Роли. В hero drawer'а с 28.07.2026 остаётся только бейдж 3-го лица (роль
    «истец»/«ответчик» видна из подсветки ПАО Сбербанк в строках сторон), но
@@ -908,11 +972,14 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .badge-plaintiff { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); }
 .badge-defendant { background:var(--role-defendant-bg); color:var(--role-defendant-fg); }
 .badge-third     { background:var(--role-third-bg); color:var(--role-third-fg); }
-.badge-appellant { background:var(--violet-100); color:var(--violet-700); font-weight:var(--fw-semibold); }
+/* Апеллянт/Кассатор — графитовая ось (см. правило трёх осей у стадий выше,
+   решение юриста 14.08.2026). Раньше «Апеллянт» был violet — тот же цвет,
+   что стадия «Кассация», а «Кассатор» rose — токен без тёмного варианта. */
+.badge-appellant { background:var(--role-badge-bg); color:var(--role-badge-fg); font-weight:var(--fw-semibold); }
 /* Кассатор — податель кассац. жалобы, показывается на стадиях cassation*/
 /* awaiting_relink ВМЕСТО Апеллянта. Источник: cs.appellant_* (карточка 7kas) */
 /* или _fi_cassator_raw (1-я инст. карточка, пока 7kas-карточки нет). */
-.badge-cassator  { background:var(--rose-100); color:var(--rose-700); font-weight:var(--fw-semibold); }
+.badge-cassator  { background:var(--role-badge-bg); color:var(--role-badge-fg); font-weight:var(--fw-semibold); }
 
 /* Исходы */
 .badge-upheld    { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
@@ -1273,6 +1340,14 @@ tr.detail-row { display:none; }
 /* 🛡-иконка обеспечительного листа — перед бейджем стадии, без слова
    (перекомпоновка 28.07.2026): фоновый факт, текст съедал место у номера. */
 .mc-shield { font-size:15px; line-height:1; }
+/* «Обжалуется» — своим рядом под шапкой, по правому краю: точно под бейджем
+   стадии, с которым он и читается в паре («Апелляция» + «Обжалуется» = дело
+   ушло в кассацию). В одной строке с номером (как было до 14.08.2026) пара
+   бейджей отжимала номер дела в многоточие на узком экране — решение юриста.
+   ⚠️ Ряд отдельный, а НЕ перенос внутри .mc-badges: у .mc-top
+   align-items:center, и двухстрочная группа увела бы номер в вертикальный
+   центр карточки. */
+.mc-pending { display:flex; justify-content:flex-end; margin:-2px 0 6px; }
 .mc-court-label { font-size:var(--fs-xs); color:var(--fg-3); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mc-third { margin-bottom:8px; }
 .mc-parties { font-size:var(--fs-md); color:var(--fg-2); margin-bottom:10px; line-height:1.4; display:flex; flex-direction:column; gap:3px; }
@@ -1323,11 +1398,19 @@ tr.detail-row { display:none; }
   /* На мобиле унифицируем высоту футеров с нижним toolbar'ом (~72px),
      чтобы drawer-footer визуально не «нависал» больше нижней панели. */
   :root { --footer-h: 72px; }
-  /* Header в стиле iOS Liquid Glass: full-width, прозрачный, blur. Контент
-     проскальзывает под ним. Тот же оттенок --pill-bg, что и floating-капсулы
-     снизу — единая стеклянная среда сверху и снизу. Fallback ниже. */
+  /* Header в стиле iOS Liquid Glass: full-width, прозрачный, blur. Тот же
+     оттенок --pill-bg, что и floating-капсулы снизу — единая стеклянная среда
+     сверху и снизу. Fallback ниже.
+     ⚠️ position:static — решение юриста 14.08.2026: на телефоне липкая шапка
+     занимала ~73px первого экрана навсегда, а работа идёт в списке ниже.
+     Теперь шапка уезжает вместе с контентом; на десктопе липкость сохранена
+     (базовое правило .app-header выше по файлу). Следствия: z-index:100 при
+     static не действует, и верхним липким слоем становится полоса списка
+     (.list-bar.is-sticky, z-index 90) — она же липнет к top:0, а не под
+     шапку; диапазоны drawer/шторки/маячка (150+) не затронуты. */
   .app-header {
     padding:0 16px;
+    position:static;
     background:var(--pill-bg);
     -webkit-backdrop-filter:var(--glass-blur);
     backdrop-filter:var(--glass-blur);
@@ -1341,8 +1424,12 @@ tr.detail-row { display:none; }
   .header-inner .header-brand { flex:1 1 auto; min-width:0; transition:opacity 200ms var(--ease-out); }
   .header-brand .header-title { font-size:var(--fs-md); line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .header-logo { width:32px; height:32px; flex-shrink:0; }
-  .app-header.scrolled .header-inner { padding:8px 0; }
-  .app-header.scrolled .header-brand .header-title { -webkit-line-clamp:1; }
+  /* ⚠️ Здесь НЕ должно быть правил `.app-header.scrolled …`. Сжатие шапки при
+     прокрутке (padding 10→8px, заголовок в одну строку) имело смысл, пока она
+     липла: экономило высоту у постоянно видимой полосы. У статичной шапки оно
+     на scrollY≈30 укорачивает документ, и весь контент под шапкой — уже за
+     кадром — прыгает вверх на 4px. Снято 14.08.2026 вместе с липкостью; класс
+     `scrolled` больше никто не ставит (обработчик из app.js удалён). */
   .header-actions { width:auto; justify-content:flex-end; gap:8px; flex-shrink:0; }
   .stats-mobile-summary,
   .stats-primary,
@@ -1362,14 +1449,19 @@ tr.detail-row { display:none; }
      на телефоне не работал вовсе. Правило дублировало `html, body
      { overflow-x:hidden }` (в начале файла), а реальные переполнения лечат
      overflow-wrap:anywhere у строк выше — поэтому снято 13.08.2026. */
-  /* Полоса списка липнет под шапкой: на телефоне карточки скроллятся
-     страницей, и картотека с счётчиком уезжали из виду. Класс is-sticky
-     ставит renderDatasetSwitch — только вне режима «★ Мои» (решение юриста).
-     --header-h пишет JS: высота шапки прыгает 73→69px при .scrolled, и
-     константой top тут не обойтись. z-index 90 — ниже шапки (100), выше
-     плавающего тулбара (50), вне диапазона drawer/шторки/маячка (150+).
-     Фон обязателен: у самой полосы его нет, просвечивал бы контент. */
-  .list-bar.is-sticky { position:sticky; top:var(--header-h, 73px); z-index:90;
+  /* Полоса списка липнет к самому верху экрана: на телефоне карточки
+     скроллятся страницей, и картотека с счётчиком уезжали из виду. Класс
+     is-sticky ставит renderDatasetSwitch — только вне режима «★ Мои»
+     (решение юриста).
+     ⚠️ top:0, а не под шапку: с 14.08.2026 шапка на телефоне статична
+     (position:static выше) и уезжает вместе с контентом — липнуть под неё
+     нечему. Прежний `top:var(--header-h, 73px)` открыл бы над полосой щель
+     в высоту шапки, сквозь которую видно уезжающий контент; вместе с ним
+     ушла и вся механика --header-h/syncHeaderHeight в app.js.
+     z-index 90 — выше плавающего тулбара (50), вне диапазона
+     drawer/шторки/маячка (150+). Фон обязателен: у самой полосы его нет,
+     просвечивал бы контент. */
+  .list-bar.is-sticky { position:sticky; top:0; z-index:90;
     background:var(--bg-2); padding:8px 0; margin-bottom:2px; }
   /* Замер на 375px: капсула 254px, полосе 355px — счётчику остаётся 89px, а
      полная фраза занимает 500px и разваливала строку на шесть. Уплотняем
