@@ -83,6 +83,9 @@ from court_monitor.bank_intake import (  # noqa: E402 — правила при�
 )
 from court_monitor.config import log  # noqa: E402
 from court_monitor.courts import fi_court_by_domain  # noqa: E402
+from court_monitor.lifecycle import (  # noqa: E402
+    FI_NOT_ACCEPTED_RU, fi_not_accepted_kind,
+)
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
     promote_material_record,
@@ -384,7 +387,7 @@ def import_rows(
     lines: list[str] = []
     counters = {
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
-        "no_link": 0, "subsidiary": 0,
+        "not_accepted": 0, "no_link": 0, "subsidiary": 0,
         # Трек «Иски банка» (истцовые строки, с 13.08.2026):
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
@@ -449,6 +452,23 @@ def import_rows(
             lines.append(
                 f"[SKIPPED ROLE] {num} — банк {r.get('bank_role', '?').lower()}: "
                 "в 1-й инстанции отслеживаем только «банк-ответчик», пропуск"
+            )
+            continue
+        # Иск к производству не принят (возврат / отказ в принятии / передача по
+        # подсудности) — мониторить нечего: тяжбы не было. До 14.08.2026 такое
+        # дело заводилось активным, объявлялось «новым иском» и 60 дней занимало
+        # картотеку, каждый прогон качая карточку (19 дел Урала, 6 ХМАО —
+        # разбор юриста). Гейт стоит ДО проверки ссылки и до `_fetch_main_card`:
+        # так экономим HTTP и даём точную причину вместо «нет ссылки».
+        # Прекращение и «оставлено без рассмотрения» в класс не входят —
+        # производство было, и по частной жалобе дело оживает под тем же номером.
+        not_accepted = fi_not_accepted_kind(r.get("result") or "")
+        if not_accepted:
+            counters["not_accepted"] += 1
+            lines.append(
+                f"[NOT ACCEPTED] {num} — "
+                f"{FI_NOT_ACCEPTED_RU.get(not_accepted, not_accepted)}: "
+                "к производству не принят, не заводим"
             )
             continue
         if not r.get("link"):
@@ -568,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         "dry_run": bool(args.dry_run),
         "region": region.code,
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
-        "no_link": 0, "subsidiary": 0, "rows": 0,
+        "not_accepted": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
         "bank_dry_run": 0, "bank_capped": 0,
@@ -662,10 +682,12 @@ def main(argv: list[str] | None = None) -> int:
     log.info("=" * 60)
     log.info(
         "Импорт (%s, оператор %s): +%d новых | %d промоушенов М→2 | "
-        "%d уже в базе | %d не наша роль | %d без ссылки | %d дочки%s",
+        "%d уже в базе | %d не наша роль | %d не принято к производству | "
+        "%d без ссылки | %d дочки%s",
         court.name, operator or "—",
         summary["added"], summary["promoted"], summary["already"],
-        summary["skipped_role"], summary["no_link"], summary["subsidiary"],
+        summary["skipped_role"], summary["not_accepted"],
+        summary["no_link"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
     bank_touched = sum(summary[k] for k in (

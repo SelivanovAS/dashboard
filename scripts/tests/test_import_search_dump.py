@@ -854,3 +854,70 @@ class TestMainTrackCardRead:
         assert import_env["card_calls"]["n"] == 0
         fi = self._defendant(import_env)["first_instance"]
         assert fi["events"] == []      # заведено, но card-blind
+
+
+# ── Иск к производству не принят (с 14.08.2026) ──────────────────────────────
+
+class TestNotAcceptedGate:
+    """Дело, которое суд к производству не принял, в мониторинг не заводим.
+
+    До 14.08.2026 фильтр итогов существовал только у трека исков БАНКА
+    (bank_intake._EXCLUDED_RESULT_RX); ветка «банк-ответчик» проверяла строку
+    лишь на роль и ссылку, и возврат любой давности заводился активным,
+    объявлялся «новым иском» и 60 дней занимал картотеку, каждый прогон качая
+    карточку (19 дел Урала, 6 ХМАО — разбор юриста).
+
+    Класс узкий: прекращение и «оставлено без рассмотрения» заводятся
+    по-прежнему — производство было, по частной жалобе дело оживает под ТЕМ ЖЕ
+    номером (решение юриста).
+    """
+
+    @staticmethod
+    def _run_dump(env) -> dict:
+        env["dump"].write_text(_fixture("search_fi_not_accepted.html"),
+                               encoding="utf-8")
+        rc = _run(env)
+        assert rc == isd.EXIT_OK
+        return _read_summary(env["gh_out"])
+
+    def _ids(self, env) -> set:
+        data = json.loads(env["json"].read_text(encoding="utf-8"))
+        return {c["id"] for c in data["cases"]}
+
+    def test_not_accepted_rows_are_not_imported(self, import_env):
+        s = self._run_dump(import_env)
+        assert s["not_accepted"] == 3
+        assert self._ids(import_env).isdisjoint(
+            {"9-552/2026", "9-54/2026", "2-4141/2026"}
+        )
+
+    def test_class_border_still_imported(self, import_env):
+        """Прекращение, «без рассмотрения» и живое дело — заводятся."""
+        s = self._run_dump(import_env)
+        assert s["added"] == 3
+        assert self._ids(import_env) == {
+            "2-489/2026", "2-2242/2026", "2-7777/2026",
+        }
+
+    def test_gate_saves_card_requests(self, import_env):
+        """Гейт стоит ДО _fetch_main_card: отвергнутые карточки не качаем."""
+        self._run_dump(import_env)
+        assert import_env["card_calls"]["n"] == 3   # только заведённые дела
+
+    def test_report_line_names_the_reason(self, import_env):
+        s = self._run_dump(import_env)
+        lines = [l for l in s["lines"] if l.startswith("[NOT ACCEPTED]")]
+        assert len(lines) == 3
+        assert any("заявление возвращено" in l for l in lines)
+        assert any("отказано в принятии" in l for l in lines)
+        assert any("передано по подсудности" in l for l in lines)
+
+    def test_counter_reaches_operator(self):
+        """Счётчик обязан пройти три звена: jq-пейлоад workflow → whitelist
+        Worker'а → сводка админки. Каждое рвётся молча (урок 14.08.2026)."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert "not_accepted:(.not_accepted // 0)" in yml
+        assert '"not_accepted"' in worker
+        assert "item.not_accepted" in admin

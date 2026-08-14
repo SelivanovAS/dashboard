@@ -78,7 +78,7 @@ from court_monitor.lifecycle import (
     _is_event_text_in_result_field,
     _events_newly_match, _is_latest_session_event,
     _has_held_prior_hearing, _has_held_prior_session,
-    fi_termination_details,
+    fi_termination_details, fi_not_accepted_kind,
     _extract_return_reason, _RESTART_RE, _RECESS_RE, _SESSION_START_RX,
     _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
     _TERMINAL_FI_EVENT_RX, _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
@@ -2952,6 +2952,27 @@ def main_json():
                 fi_dedup_exact, fi_dedup_wildcard,
             )
         ]
+        # Иск к производству не принят (возврат / отказ в принятии / передача по
+        # подсудности) — в мониторинг не заводим вовсе: тяжбы не было, а дело
+        # 60 дней занимало бы активную картотеку, каждый прогон качая карточку,
+        # и один раз объявилось бы «новым иском» (решение юриста 14.08.2026,
+        # общее с импортёром дампов). Отсев идёт ДО _discovered_already_resolved_old:
+        # тот заводит терминальные дела старше 60 дней сразу в архив, но свежий
+        # возврат мимо него проходил. Уже отслеживаемых дел правило не касается —
+        # у них своя цепочка (fi_termination_details → «🔚 иск возвращён» → архив).
+        not_accepted = [
+            r for r in new_fi if fi_not_accepted_kind(r.get("result") or "")
+        ]
+        if not_accepted:
+            skip_ids = {id(r) for r in not_accepted}
+            new_fi = [r for r in new_fi if id(r) not in skip_ids]
+            log.info(
+                f"  {court_tag} {court.name}: {len(not_accepted)} "
+                f"{plural_ru(len(not_accepted), 'дело', 'дела', 'дел')} "
+                f"не принято к производству — не заводим "
+                f"({', '.join(r['case_number'] for r in not_accepted[:5])}"
+                f"{'…' if len(not_accepted) > 5 else ''})"
+            )
         if new_fi:
             fresh = [r for r in new_fi if not _discovered_already_resolved_old(r)]
             stale = [r for r in new_fi if _discovered_already_resolved_old(r)]
