@@ -227,9 +227,13 @@ function shortName(s){
  * Используется и для определения ближайшего заседания, и для «с начала»,
  * и для перехода апелляции к правилам 1-й инстанции. */
 function classifyEvent(txt){
-  const s=(txt||'').toLowerCase();
+  const s=(txt||'').toLowerCase().trimStart();
   if(!s)return null;
-  if(/подготовк\S*\s+дела|собеседован/.test(s))return 'prep';
+  // «Беседа. …» — самостоятельный заголовок карточки ГАС наравне с
+  // «Подготовка дела (собеседование)»; до 14.08.2026 фронт его не знал вовсе
+  // (бэковый classify_hearing_type знал), и такие дела показывались общим
+  // «Назначено». Матч с начала строки: слово встречается и в описаниях.
+  if(/подготовк\S*\s+дела|собеседован/.test(s)||/^беседа\b/.test(s))return 'prep';
   if(/предварительн\S*\s+судебн\S*\s+заседан/.test(s))return 'prelim';
   if(/судебн\S*\s+заседан/.test(s))return 'main';
   return null;
@@ -422,10 +426,13 @@ function stageBadgeHtml(c){
   if(g==='cassation')return '<span class="badge badge-cassation">Кассация</span>';
   return '<span class="badge badge-appeal">Апелляция</span>';
 }
-// Бейдж «Обжалуется» — рядом со стадией, когда жалоба подана, но карточка
-// в следующей инстанции ещё не появилась. Направление однозначно вытекает
-// из соседнего stage-бейджа («1 инст. · Обжалуется» = в апел., «Апелляция ·
-// Обжалуется» = в касс.), поэтому текст без уточнения.
+// Бейдж «Обжалуется» — при стадии, когда жалоба подана, но карточка в
+// следующей инстанции ещё не появилась. Направление однозначно вытекает
+// из stage-бейджа («1 инст.» + «Обжалуется» = в апел., «Апелляция» +
+// «Обжалуется» = в касс.), поэтому текст без уточнения. ⚠️ Связка со
+// стадией ЗРИТЕЛЬНАЯ: на десктопе бейджи стоят в одной строке, в мобильной
+// карточке «Обжалуется» с 14.08.2026 — строкой ниже, но прямо под стадией
+// и по правому краю (решение юриста: в одной строке он отжимал номер дела).
 function pendingAppealBadge(c){
   if(!c)return '';
   const s=c.stage;
@@ -866,6 +873,10 @@ function jsonToCase(j){
   }
   // Тип ближайшего будущего заседания — из events[] активной стадии
   // (беседа/предв./осн.). Если события не найдены — остаётся null.
+  // ⚠️ Фолбэк на текст последнего события (ниже) нужен картотеке «Иски банка»:
+  // там events грузятся лениво (ensureBankEvents, при открытии drawer), и в
+  // списке их НЕТ — все заседания показывались общим «Назначено», хотя в
+  // основной картотеке рядом стоят «Беседа»/«Предв-ое СЗ»/«Основное СЗ».
   let nextHearingType=null;
   if(nextDate&&primaryEvents.length){
     // Ищем событие, чья дата совпадает с nextDate; если таких несколько —
@@ -880,6 +891,17 @@ function jsonToCase(j){
       }
     }
     nextHearingType=match;
+  }else if(nextDate&&!primaryEvents.length){
+    // Список без events (bank-картотека): тип берём из текста последнего
+    // события. last_event не обязан быть строкой самого заседания — но
+    // фолбэк односторонний: классификатор либо узнаёт заголовок заседания,
+    // либо возвращает null и бейдж остаётся прежним «Назначено». Сверка с
+    // настоящими events по 478 делам трека (14.08.2026): 355 попаданий,
+    // 123 «молчания», НИ ОДНОЙ ошибки типа; а среди дел с БУДУЩИМ заседанием
+    // (только там бейдж и виден) уточнены 264 из 264 — все «молчания» пришлись
+    // на прошедшие заседания, где last_event уже пост-решенческий («сдано в
+    // отдел», «изготовлено мотивированное решение», «копия возвратилась»).
+    nextHearingType=classifyEvent(evText);
   }
   // «Рассмотрение начато с начала» — маркер в первой инстанции (чаще всего),
   // но по ГПК может встречаться и на стадии апелляции с правилами 1-й инст.
@@ -1840,7 +1862,13 @@ function onSearchInput(){
       ||document.getElementById('mobile-cards')
       ||document.querySelector('.table-wrap');
     if(anchor){
-      const headerH=(document.querySelector('.app-header')?.offsetHeight)||0;
+      // Поправку на шапку берём, только если она РЕАЛЬНО липкая: с 14.08.2026
+      // на телефоне она статична и уезжает вместе с контентом — вычитать
+      // нечего, иначе прицел встанет на её высоту ниже нужного. Читаем
+      // computed style, а не брейкпойнт: правило живёт в CSS, дублировать
+      // 768px в JS — заводить вторую точку правды.
+      const hdr=document.querySelector('.app-header');
+      const headerH=(hdr&&getComputedStyle(hdr).position==='sticky')?hdr.offsetHeight:0;
       const top=anchor.getBoundingClientRect().top+window.scrollY-headerH-8;
       window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
     }
@@ -2644,9 +2672,12 @@ const COLS=[
 ];
 
 /* Иконки статусов (Lucide-style, outline) */
+// Календарь — общая иконка ВСЕХ назначенных заседаний (scheduled/prep/prelim/
+// main): у дела есть дата в календаре, а тип заседания несёт подпись бейджа.
+const CALENDAR_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
 const STATUS_ICONS={
   active:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  scheduled:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  scheduled:  CALENDAR_ICON,
   postponed:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h14M12 5l7 7-7 7"/></svg>',
   suspended:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>',
   paused:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>',
@@ -2654,12 +2685,15 @@ const STATUS_ICONS={
   decided:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8l7-5 7 5M3 14l4-6 4 6M13 14l4-6 4 6M3 14a4 4 0 008 0M13 14a4 4 0 008 0"/></svg>',
   // Возвращено — стрелка-разворот (иск/материал возвращён заявителю)
   returned:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 015 5v0a5 5 0 01-5 5H7"/></svg>',
-  // Беседа — две реплики (диалог)
-  prep:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
-  // Предв. СЗ — календарь с галочкой
-  prelim:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 15l2 2 4-4"/></svg>',
-  // Осн. СЗ — весы правосудия
-  main:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8l7-5 7 5M3 14l4-6 4 6M13 14l4-6 4 6M3 14a4 4 0 008 0M13 14a4 4 0 008 0"/></svg>',
+  // Беседа / Предв-ое СЗ / Основное СЗ — ТОТ ЖЕ календарь, что у «Назначено»
+  // (решение юриста 14.08.2026): это всё назначенные заседания, и иконка
+  // говорит «в календаре есть дата», а какое именно заседание — говорит слово.
+  // Прежний набор (диалог у беседы, календарь-с-галочкой у предварительного,
+  // весы у основного) разводил родственные состояния сильнее, чем они
+  // различаются, а весы вдобавок совпадали с иконкой «Рассмотрено».
+  prep:       CALENDAR_ICON,
+  prelim:     CALENDAR_ICON,
+  main:       CALENDAR_ICON,
 };
 function statusIcon(ds){return STATUS_ICONS[ds]||STATUS_ICONS.awaiting;}
 
@@ -2688,27 +2722,35 @@ function prepareCaseViewModel(c){
     :resultLabelFull;
   const resultBadgeCls=getResultBadgeClass(c);
   const favor=getResultFavor(c);
-  // "Передача дела судье" — показываем как отдельный статус с датой события.
-  const transferToJudge=ds==='awaiting'&&/передача дела судье/i.test(c.lastEvent||'');
-  const statusLabel=transferToJudge?'Передано судье':(STATUS_LABELS[ds]||ds);
-  // Дата возле статуса. Для scheduled/postponed/suspended — «под» бейджем,
-  // для paused/decided/transfer — «внутри» бейджа. Возвращаем plain text.
-  let statusInlineDate='',statusBelowDate='';
-  if((ds==='scheduled'||ds==='prep'||ds==='prelim'||ds==='main')&&isFutureHearing){
-    statusBelowDate=formatDate(c.nextDate);
-  }else if((ds==='postponed'||ds==='suspended')&&c.nextDate){
-    statusBelowDate='до '+formatDate(c.nextDate);
-  }else if(ds==='paused'){
-    const d=c.lastEventDate||c.nextDate;
-    if(d)statusInlineDate=formatDate(d);
-  }else if(ds==='decided'){
-    const d=c.nextDate||(c.lastEventDate&&!/сдано в отдел|передано в экспедиц/i.test(c.lastEvent||'')?c.lastEventDate:'');
-    if(d)statusInlineDate=formatDate(d);
-  }else if(ds==='returned'){
-    const d=c.lastEventDate||c.nextDate;
-    if(d)statusInlineDate=formatDate(d);
-  }
-  if(transferToJudge&&c.lastEventDate)statusInlineDate=formatDate(c.lastEventDate);
+  // Передача судье — отдельный статус с датой события.
+  // ⚠️ «дела|материалов»: суд пишет «Передача МАТЕРИАЛОВ судье» (19 дел трека,
+  // 1 в основной картотеке), а прежний паттерн искал «передача дела судье» —
+  // лейбл не рендерился НИ РАЗУ, все такие дела показывались «Не назначено».
+  const transferToJudge=ds==='awaiting'&&/передача\s+(?:дела|материалов)\s+судье/i.test(c.lastEvent||'');
+  // «Не назначено» описывает отсутствие события; юрист просил писать по факту —
+  // «Поступило в суд» + дата поступления (решение 14.08.2026).
+  // ⚠️ Два гарда, оба нужны. (1) Только 1-я инстанция: c.dateReceived — это
+  // fi.filing_date, дата поступления ИСКА, и на карточке апелляции она
+  // говорила бы о поступлении в апел. суд, чего в данных нет вовсе.
+  // (2) Только когда колонка дат пуста: у дел с ПРОШЕДШИМ заседанием статус
+  // тоже awaiting («следующее не назначено»), и справа стоит та самая
+  // прошедшая дата — «Поступило в суд» рядом с ней читалось бы как дата
+  // поступления (кейсы 33-5546/2026, 8Г-10733/2026).
+  const arrivedInCourt=ds==='awaiting'&&!transferToJudge&&!!c.dateReceived
+    &&!hasHearingDate(c)&&stageGroup(c)==='first_instance';
+  const statusLabel=transferToJudge?'Передано судье'
+    :arrivedInCourt?'Поступило в суд'
+    :(STATUS_LABELS[ds]||ds);
+  // Дата статуса — для дел БЕЗ даты заседания: «Передано судье», «Поступило в
+  // суд», «Приостановлено», «Без движения». Едет в колонку дат (buildHearingHtml),
+  // где у остальных дел стоит дата заседания: даты выстраиваются в один столбец
+  // и в карточке, и в таблице. ⚠️ Только при пустом c.nextDate: у кассационного
+  // «Без движения» есть суд. срок (suspended_until), и его «б/дв. до …» сильнее
+  // даты самого события.
+  let statusDate='';
+  if(transferToJudge&&!hasHearingDate(c)&&c.lastEventDate)statusDate=formatDate(c.lastEventDate);
+  else if(arrivedInCourt)statusDate=formatDate(c.dateReceived);
+  else if((ds==='paused'||ds==='suspended')&&!hasHearingDate(c)&&c.lastEventDate)statusDate=formatDate(c.lastEventDate);
   // Публикация акта: показываем только для решённых дел.
   let actLabel='',actNegative=false;
   if(resultPresent){
@@ -2761,7 +2803,7 @@ function prepareCaseViewModel(c){
   return{
     roleClass,ds,isFutureHearing,
     resultPresent,resultIcon,resultLabel,resultLabelFull,resultBadgeCls,favor,
-    statusLabel,statusInlineDate,statusBelowDate,
+    statusLabel,statusDate,
     actLabel,actNegative,
     plaintiffIsAppellant,defendantIsAppellant,
     plaintiffIsCassator,defendantIsCassator,
@@ -2790,17 +2832,20 @@ function buildStageChips(c){
     return '<span class="badge badge-to-fi badge-compact" title="Апелляция перешла к рассмотрению дела по правилам производства в суде первой инстанции (ч.5 ст.330 ГПК)">⚠ по правилам 1-й инст.</span>';
   return '';
 }
-/* Бейдж статуса с учётом «рассмотрение с начала»: если флаг поднят,
- * перед текстом ставим 🔄, SVG-иконку убираем (иначе строка перегружена),
- * в title кладём дату сброса. Для decided/result не применяется.
- * Исключение — paused: смысл бейджа «дело приостановлено», иконка паузы
- * первична; «с начала» остаётся в title. */
+/* Бейдж статуса. Иконка — ВСЕГДА своя, по статусу (statusIcon).
+ * ⚠️ До 14.08.2026 у дел с «рассмотрение начато с начала» её ВЫТЕСНЯЛ
+ * эмодзи 🔄, и в столбце статусов два одинаковых «Отложено» выглядели
+ * разными состояниями. Плюс эмодзи рисуется системным цветным шрифтом:
+ * он не наследует цвет бейджа и на тёмной теме выпадал из палитры
+ * (все остальные значки — inline-SVG на currentColor). Решение юриста:
+ * убрать из бейджа совсем — сам факт виден в хронологии карточки дела
+ * (событие «Рассмотрение дела начато с начала») и в title бейджа с датой.
+ * Не возвращать эмодзи в бейджи: любой новый значок — inline-SVG. */
 function buildStatusBadge(c,vm){
   const title=c.restartFromScratch
     ?` title="${c.restartDate?formatDate(c.restartDate)+' — ':''}рассмотрение дела начато с начала"`
     :'';
-  const prefix=(c.restartFromScratch&&vm.ds!=='paused')?'🔄 ':statusIcon(vm.ds);
-  return `<span class="badge badge-${vm.ds}"${title}>${prefix}${vm.statusLabel}</span>`;
+  return `<span class="badge badge-${vm.ds}"${title}>${statusIcon(vm.ds)}${vm.statusLabel}</span>`;
 }
 /* opts.compact — мобильная карточка (симметрично buildHearingHtml). Там
  * нейтральную заочность НЕ печатаем вовсе (решение юриста 13.08.2026):
@@ -2835,8 +2880,23 @@ function buildStateHtml(c,vm,opts){
   }
   return `<div class="cell-state">${buildStatusBadge(c,vm)}${chips?`<span class="state-sub">${chips}</span>`:''}${defaultHtml?`<span class="state-sub state-decision-meta">${defaultHtml}</span>`:''}</div>`;
 }
+// Есть ли у дела дата для колонки дат. ⚠️ Голого c.nextDate мало: он бывает
+// заполнен при метке, которую колонка не печатает («Решение», «Приостановлено»
+// и пр.), и такие дела остаются с пустой колонкой. Общий предикат нужен, чтобы
+// prepareCaseViewModel (дата статуса) и buildHearingHtml (сама колонка) видели
+// одно и то же: разъедься они — дата статуса встала бы рядом с датой заседания.
+const HEARING_DATE_LABELS=['Заседание','Отложено до','Без движения до','Рассмотрение'];
+function hasHearingDate(c){
+  return !!(c&&c.nextDate&&HEARING_DATE_LABELS.includes(c.nextDateLabel));
+}
 function buildHearingHtml(c,vm,opts){
-  if(!(c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Без движения до'||c.nextDateLabel==='Рассмотрение'))){
+  if(!hasHearingDate(c)){
+    // Даты заседания нет — но у «Передано судье» / «Поступило в суд» /
+    // «Приостановлено» / «Без движения» есть дата самого события (решение
+    // юриста 14.08.2026: бейдж без даты не говорит, вчера это было или
+    // полгода назад). Печатаем её приглушённо (.status-date), чтобы дата
+    // статуса не читалась как назначенное заседание.
+    if(vm&&vm.statusDate)return `<div class="cell-hearing"><span class="status-date">${vm.statusDate}</span></div>`;
     // Прочерк — только в десктопной таблице (пустая ячейка колонки); в
     // мобильной карточке он выглядел потерянным минусом справа от статуса.
     return (opts&&opts.compact)?'':'<span class="cell-empty">—</span>';
@@ -2920,8 +2980,10 @@ function renderTable(){
 
     // Highlight Sberbank in parties + appellant/cassator badge inline.
     // На кассац. стадиях бейдж "Апеллянт" подавлён (см. prepareCaseViewModel),
-    // вместо него — "Кассатор" из cs.appellant_*. Бейджи rose vs violet —
-    // визуально явное разделение апелляции и кассации.
+    // вместо него — "Кассатор" из cs.appellant_*; вместе они не встречаются,
+    // поэтому гамма у них ОДНА (графит, styles.css) — различает слово.
+    // ⚠️ Не возвращать им цветную заливку: холодные цвета заняты стадиями,
+    // тёплые — состояниями (см. комментарий у шкалы стадий в styles.css).
     const appBadge=' <span class="badge badge-appellant badge-compact">Апеллянт</span>';
     const cassBadge=' <span class="badge badge-cassator badge-compact">Кассатор</span>';
     const plaintiffHtml=highlightSberbank(shortParty(c.plaintiff))
@@ -3950,8 +4012,9 @@ function renderMobileCards(){
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
-        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${pendingBadge}${newBadge}${archived}</span>
+        <span class="mc-badges">${writShieldIconHtml(c)}${stageBadge}${newBadge}${archived}</span>
       </div>
+      ${pendingBadge?`<div class="mc-pending">${pendingBadge}</div>`:''}
       ${courtLine?`<div class="mc-court-label" title="${escHtml(courtTip)}">${escHtml(courtLine)}${escHtml(courtJudgeShort)}</div>`:''}
       ${thirdBadge?`<div class="mc-third">${thirdBadge}</div>`:''}
       <div class="mc-parties">
@@ -4089,36 +4152,16 @@ function setupDrawerSwipe(){
   dr.addEventListener('touchend',end);
   dr.addEventListener('touchcancel',end);
 }
-// Хедер: тень при скролле. Мобильный toolbar — плавающая стеклянная плашка,
-// фиксированная и не скрывается. Кэшируем header-ref + change-detection,
-// иначе на каждый scroll-event получаем querySelector + DOM-write.
-let __headerEl = null;
-let __headerScrolled = false;
-// Липкая полоса списка (.list-bar) стоит под шапкой, а высота шапки НЕ
-// постоянна: на телефоне 73px, при .scrolled — 69px (padding меняется), на
-// десктопе 57px. Константой top не обойтись — будет зазор или перекрытие,
-// поэтому измеряем и отдаём в CSS переменной. Пишем только при изменении:
-// обработчик висит на scroll.
-function syncHeaderHeight(){
-  if (!__headerEl) __headerEl = document.querySelector('.app-header');
-  if (!__headerEl) return;
-  const h = Math.round(__headerEl.getBoundingClientRect().height);
-  if (h && h !== syncHeaderHeight._last){
-    syncHeaderHeight._last = h;
-    document.documentElement.style.setProperty('--header-h', h + 'px');
-  }
-}
-window.addEventListener('scroll', () => {
-  if (!__headerEl) __headerEl = document.querySelector('.app-header');
-  const want = window.scrollY > 30;
-  if (want === __headerScrolled) return;
-  __headerScrolled = want;
-  __headerEl?.classList.toggle('scrolled', want);
-  // Класс сменил padding шапки — пересчитываем после перерисовки стилей.
-  requestAnimationFrame(syncHeaderHeight);
-}, { passive: true });
-window.addEventListener('resize', () => { syncHeaderHeight(); fitCounter(); }, { passive: true });
-syncHeaderHeight();
+// ⚠️ Здесь жила механика липкой шапки: syncHeaderHeight писал высоту в CSS
+// --header-h (по нему липкая полоса списка вставала ПОД шапку), а обработчик
+// scroll вешал класс .scrolled (шапка сжималась с 73 до 69px). С 14.08.2026
+// шапка на телефоне статична (styles.css, мобильный блок), полоса липнет к
+// top:0, а на десктопе высота шапки не нужна вовсе — потребителей у обоих
+// механизмов не осталось, и обработчик scroll снят целиком. Не возвращать
+// без CSS-правила, которое реально читает --header-h.
+// Мобильный toolbar — плавающая стеклянная плашка, фиксированная и не
+// скрывается: к шапке отношения не имеет.
+window.addEventListener('resize', () => { fitCounter(); }, { passive: true });
 
 // Когда на мобиле всплывает экранная клавиатура — `position:fixed` toolbar
 // остаётся на нижней границе layout-viewport и оказывается под клавиатурой,
