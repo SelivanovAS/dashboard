@@ -37,7 +37,7 @@
 детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
 
 Провайдер LLM выбирается переменной `LLM_PROVIDER`
-([строка 390](../../scripts/court_monitor/config.py#L390)): `claude` по
+([строка 400](../../scripts/court_monitor/config.py#L400)): `claude` по
 умолчанию, `gigachat` или `openrouter`.
 Основной мониторинг работает на Claude; GigaChat и OpenRouter доступны из
 тестового workflow `test_digest.yml` (inputs `llm_provider` + `llm_model`).
@@ -268,7 +268,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([511](../../scripts/court_monitor/config.py#L511)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([521](../../scripts/court_monitor/config.py#L521)).
 
 ## Разбор акта в карточке (`act_analysis`)
 

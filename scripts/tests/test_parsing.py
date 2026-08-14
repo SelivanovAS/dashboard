@@ -3016,6 +3016,75 @@ class TestKnownFutureDateBeatsForceParse:
         assert skip is True
         assert reason == "future_hearing(25.09.2026)"
 
+    def test_absurd_date_falls_back_to_force_parse(self):
+        """Живой кейс 2-1725/2026: суд назначил заседание на 20.08.2029 при
+        соседних событиях от 29.07.2026 (опечатка в годе). Безусловное доверие
+        похоронило бы дело на три года."""
+        case = self._case("2026-07-01", "20.08.2029")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is False
+        assert reason == ""
+
+    def test_absurd_date_still_skipped_when_stamp_is_fresh(self):
+        """⚠️ Суть асимметрии: горизонт живёт ТОЛЬКО в ветке force-parse.
+        Ограничь его внутри хелпера — и больное дело читалось бы КАЖДЫЙ
+        прогон (366 раз в год вместо 17)."""
+        case = self._case("2026-08-16", "20.08.2029")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason == "future_hearing(20.08.2029)"
+
+    def test_absurd_date_keeps_21_day_rhythm(self):
+        """Больное дело возвращается ровно к прежнему страховочному ритму.
+
+        Штамп при чтении бумпается — как в FI-цикле прогона; без этого
+        симуляция выродилась бы в «читаем каждый день с 21-го»."""
+        from datetime import timedelta
+
+        case = self._case("2026-08-17", "20.08.2029")
+        fi = case["first_instance"]
+        reads = []
+        for i in range(60):
+            d = self.ДЕНЬ + timedelta(days=i)
+            if not uc.should_skip_case(case, d)[0]:
+                reads.append(i)
+                fi["last_checked_at"] = d.isoformat()
+        assert reads == [21, 42]
+
+    def test_horizon_boundary(self):
+        """Граница ровно по KNOWN_DATE_TRUST_DAYS: день в день — доверяем."""
+        from datetime import timedelta
+
+        from court_monitor import config as cm_config
+
+        horizon = cm_config.KNOWN_DATE_TRUST_DAYS
+        for ahead, expect_skip in ((horizon, True), (horizon + 1, False)):
+            planned = (self.ДЕНЬ + timedelta(days=ahead)).strftime("%d.%m.%Y")
+            case = self._case("2026-07-01", planned)
+            assert uc.should_skip_case(case, self.ДЕНЬ)[0] is expect_skip, ahead
+
+    def test_absurd_cassation_hearing_does_not_hide_suspension(self):
+        """Горизонт применяется к КАЖДОЙ дате с падением на следующую: у
+        кассации абсурдный hearing_date не должен глушить законный
+        suspended_until."""
+        case = {"id": "8Г-2/2026", "current_stage": "cassation",
+                "cassation": {"last_checked_at": "2026-07-01",
+                              "hearing_date": "25.09.2029",
+                              "suspended_until": "20.09.2026"}}
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason == "suspended_until(20.09.2026)"
+
+    def test_distrusted_date_marked_in_run(self):
+        """Наблюдаемость: класс «опечатка суда» обязан быть отличим от
+        рутинного форс-парса — иначе его снова найдут только симуляцией."""
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        assert "config.KNOWN_DATE_TRUST_DAYS" in src
+        assert "bank_report.mark_distrusted_date(" in src
+        assert "fi_distrusted_date" in src
+
     def test_helper_is_single_source_of_truth(self):
         """Обе точки (ветка force-parse и общая проверка ниже) обязаны звать
         один хелпер — две копии правил разъехались бы молча."""

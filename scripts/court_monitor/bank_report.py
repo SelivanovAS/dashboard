@@ -154,6 +154,16 @@ class BankParseReport:
         if row is not None:
             row["force_parsed"] = True
 
+    def mark_distrusted_date(self, case: dict, date_ru: str):
+        """Дата заседания дальше горизонта доверия — похоже на опечатку суда.
+
+        Отдельно от `force_parsed`: рутинная страховка и «суд написал 2029
+        вместо 2026» — разные новости, а в отчёте они иначе неразличимы.
+        """
+        row = self._row(case)
+        if row is not None:
+            row["distrusted_date"] = date_ru
+
     def mark_degraded(self, case: dict):
         row = self._row(case)
         if row is not None:

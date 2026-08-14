@@ -2817,6 +2817,7 @@ def get_next_planned_date(events: list[dict]) -> tuple[date | None, str]:
 
 def known_future_date_skip(
     block: dict, stage: str, today: date, case_id: str = "?",
+    max_ahead_days: int | None = None,
 ) -> tuple[bool, str] | None:
     """Известная будущая дата в блоке → причина пропуска, иначе None.
 
@@ -2832,17 +2833,27 @@ def known_future_date_skip(
     08.07.2026) — акт «единоличного рассмотрения», опубликованный в сам
     день N, подхватится следующим прогоном.
 
+    `max_ahead_days` — ГОРИЗОНТ ДОВЕРИЯ: дата дальше него известной не
+    считается (дело 2-1725/2026: суд назначил заседание на 20.08.2029 при
+    соседних событиях от 29.07.2026 — опечатка в годе). Проверяется у КАЖДОГО
+    кандидата отдельно, с падением на следующий источник: абсурдный
+    `hearing_date` кассации не должен глушить законный `suspended_until` и
+    событийный фолбэк.
+
     Вынесено в отдельную функцию 14.08.2026: та же проверка нужна ВЫШЕ, в
     ветке force-parse — известная будущая дата сильнее 21-дневной страховки
     (решение юриста). Две копии правил разъехались бы молча.
     """
+    def _trusted(d: date) -> bool:
+        return max_ahead_days is None or (d - today).days <= max_ahead_days
+
     if stage == "cassation":
         hd_raw = (block.get("hearing_date") or "").strip()
         m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
         if m_hd:
             try:
                 hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
-                if hd >= today:
+                if hd >= today and _trusted(hd):
                     return True, f"future_hearing({hd.strftime('%d.%m.%Y')})"
             except ValueError:
                 log.debug(
@@ -2853,7 +2864,7 @@ def known_future_date_skip(
         if m_su:
             try:
                 su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
-                if su > today:
+                if su > today and _trusted(su):
                     return True, f"suspended_until({su.strftime('%d.%m.%Y')})"
             except ValueError:
                 log.debug(
@@ -2861,7 +2872,7 @@ def known_future_date_skip(
                 )
 
     planned, kind = get_next_planned_date(block.get("events") or [])
-    if planned and planned >= today:
+    if planned and planned >= today and _trusted(planned):
         ymd = planned.strftime("%d.%m.%Y")
         if kind == "hearing":
             return True, f"future_hearing({ymd})"
@@ -2922,12 +2933,26 @@ def should_skip_case(
         # юриста 14.08.2026): пока заседание впереди, читать карточку не за
         # чем — суд до заседания её не меняет, а 21-дневная страховка
         # заставляла перечитывать дела с заседанием через два месяца.
-        # ⚠️ Цена решения: перенос заседания на более РАННЮЮ дату мы увидим
-        # только в исходный день. Страховка от этого и раньше защищала лишь
-        # частично (окно сужалось до 21 дня, но перенос на ближайшую неделю
-        # так же оставался незамеченным).
-        known = known_future_date_skip(block, stage, today,
-                                       case_dict.get("id", "?"))
+        # ⚠️ Цена решения шире, чем кажется: до дня заседания невидим не
+        # только перенос на более РАННЮЮ дату, но и любые досудебные движения
+        # карточки — объединение дел, частная жалоба, обеспечительные меры,
+        # отказ от иска, мировое, замена стороны. При законном заседании через
+        # 90 дней новость опаздывает на все 90 (прежде — максимум на 21).
+        # Юрист это принял; фиксируем целиком, чтобы решение не пересматривали
+        # по половине картины.
+        # ⚠️ ГОРИЗОНТ ДОВЕРИЯ (KNOWN_DATE_TRUST_DAYS) передаётся ТОЛЬКО здесь,
+        # и асимметрия с проверкой ниже — суть правки. Дата из карточки суда
+        # может быть любой: 2-1725/2026 приехало с заседанием 20.08.2029 при
+        # соседних событиях от 29.07.2026, и безусловное доверие похоронило бы
+        # дело на три года. Ограничить горизонт ВНУТРИ хелпера (то есть и для
+        # проверки ниже) нельзя: тогда такое дело перестанет скипаться вовсе и
+        # будет читаться КАЖДЫЙ прогон — 366 раз в год вместо 17. Так же оно
+        # возвращается ровно к прежнему страховочному ритму «раз в 21 день» и
+        # само подхватит исправленную судом дату.
+        known = known_future_date_skip(
+            block, stage, today, case_dict.get("id", "?"),
+            max_ahead_days=config.KNOWN_DATE_TRUST_DAYS,
+        )
         if known:
             return known
         return False, ""
