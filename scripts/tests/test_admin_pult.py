@@ -126,3 +126,58 @@ def test_run_sub_arrow_gated_by_owner():
         "Стрелка ↗ в подписи плитки прогона снова безусловна — она обещает "
         "оператору переход, которого нет."
     )
+
+
+# ── Постоянные судебные присутствия в форме импорта (14.08.2026) ─────────────
+# Скан площадок нашёл на Урале два реальных присутствия: Пышма у Камышловского
+# и Ачит у Красноуфимского (обе площадки в реестре с 16.07.2026). В админку они
+# не попадали: список судов дедуплицировался ПО ДОМЕНУ, и вторая площадка
+# выпадала из выпадающего списка и светофора — её дела не импортировал никто.
+
+def test_import_courts_not_deduped_by_domain():
+    """Дедуп по домену снова съел бы присутствия."""
+    src = _admin()
+    m = re.search(r"impCourts = gated[^\n;]*", src)
+    assert m, "Не нашёл сборку impCourts."
+    assert "filter" not in m.group(0), (
+        "impCourts снова фильтруется при сборке — если это дедуп по домену, "
+        "постоянные судебные присутствия (Пышма, Ачит) исчезнут из формы "
+        "импорта и светофора."
+    )
+
+
+def test_court_select_value_is_domain_plus_srv():
+    """Значение строки — «домен|srv»: голый домен не различает площадки."""
+    src = _admin()
+    assert re.search(r"function impCourtKey\(c\)[^\n]*domain \+ \"\|\"", src), (
+        "impCourtKey должен собирать ключ «домен|srv_num»."
+    )
+    m = re.search(r'sel\.innerHTML = impCourts\.map\([\s\S]{0,200}?\)\.join\(""\);', src)
+    assert m and "impCourtKey(c)" in m.group(0), (
+        "У <option> значением снова стоит голый домен — площадки склеятся."
+    )
+
+
+def test_dump_post_sends_bare_domain():
+    """На сервер уходит домен: Worker и его белый список судов — по домену,
+    а фактическую площадку дела импортёр берёт из href карточек дампа."""
+    src = _admin()
+    m = re.search(r"async function impSend\(\)[\s\S]{0,400}", src)
+    assert m and 'impDomainOf(document.getElementById("imp-court").value)' in m.group(0), (
+        "impSend отправляет значение селекта как есть — на сервер уедет "
+        "«домен|srv», которого нет в белом списке Worker'а."
+    )
+
+
+def test_detect_compares_by_domain():
+    """Автоопределение суда по вставке сравнивает ДОМЕНЫ: у площадок одного
+    суда хост общий, и переключать выбранное присутствие на первую площадку
+    из-за совпадения хоста нельзя."""
+    src = _admin()
+    for anchor in ('!== impDetectedHosts[0]', '=== h) {'):
+        idx = src.find(anchor)
+        assert idx > 0, anchor
+        assert "impDomainOf" in src[idx - 120:idx], (
+            f"Сравнение у «{anchor}» идёт без impDomainOf — присутствие будет "
+            "молча перевыбираться на первую площадку домена."
+        )

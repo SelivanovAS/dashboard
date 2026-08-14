@@ -2621,19 +2621,29 @@ var impCourtTouched = false;   // оператор выбирал суд сам 
 var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
 var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
 var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
-// Ссылка «Открыть поиск по суду». srv_num обязателен: на одном домене живут
-// две площадки (районный суд и его постоянное присутствие), и часть судов
-// реестра заведена ТОЛЬКО как srv_num=2 — голая ссылка уводила оператора на
-// чужую площадку. Серверные предохранители этого не ловят: хост и delo_id у
-// обеих площадок совпадают, а фактический сервер импортёр берёт из href
-// карточек дампа. delo_id=1540005 — гражданские дела 1-й инстанции,
-// name_op=sf — форма поиска (та самая, что закрыта проверочным кодом).
-function impCourtLink(domain) {
+// Ключ суда в форме импорта — «домен|srv_num», а не голый домен (14.08.2026).
+// На одном домене живут ДВЕ площадки: сам районный суд и его постоянное
+// судебное присутствие (Камышловский + Пышма, Красноуфимский + Ачит на
+// Урале). Прежний дедуп по домену выкидывал присутствие из выпадающего списка
+// и светофора — его дела не импортировал никто, хотя в реестре региона оно
+// стояло с 16.07.2026. Сам ДАМП по-прежнему уходит на сервер с голым доменом:
+// фактическую площадку дела импортёр берёт из href карточек (_stamp_court_ids),
+// а хост и delo_id у площадок совпадают.
+function impCourtKey(c) { return c.domain + "|" + String(c.srv_num || 1); }
+function impDomainOf(key) { return String(key || "").split("|")[0]; }
+// Ссылка «Открыть поиск по суду». srv_num обязателен: голая ссылка уводила
+// оператора на первую площадку домена, а часть судов реестра заведена ТОЛЬКО
+// как srv_num=2 (Железнодорожный ЕКБ — у него на первой площадке уголовная
+// картотека). delo_id=1540005 — гражданские дела 1-й инстанции, name_op=sf —
+// форма поиска (та самая, что закрыта проверочным кодом).
+function impCourtLink(key) {
+  var dom = impDomainOf(key);
   var c = null;
   for (var i = 0; i < impCourts.length; i++) {
-    if (impCourts[i].domain === domain) { c = impCourts[i]; break; }
+    if (impCourtKey(impCourts[i]) === key) { c = impCourts[i]; break; }
+    if (!c && impCourts[i].domain === dom) c = impCourts[i];
   }
-  return "https://" + domain + "/modules.php?name=sud_delo&srv_num="
+  return "https://" + dom + "/modules.php?name=sud_delo&srv_num="
     + encodeURIComponent(String((c && c.srv_num) || 1)) + "&delo_id=1540005&name_op=sf";
 }
 // Синхронизация ссылки «Открыть сайт суда» с выбранным судом. На верхнем
@@ -2688,17 +2698,14 @@ async function loadImportCourts() {
       });
       return;
     }
-    // Дедуп по домену: вторые площадки («сервер 2») делят домен с первой,
-    // а фактический сервер дела импортёр берёт из href дампа.
-    const seen = {};
-    impCourts = gated.filter(function (c) {
-      if (seen[c.domain]) return false;
-      seen[c.domain] = true;
-      return true;
-    });
+    // Дедупа по домену БОЛЬШЕ НЕТ (14.08.2026): он выкидывал из списка
+    // постоянные судебные присутствия (Пышма у Камышловского, Ачит у
+    // Красноуфимского) — отдельные площадки того же сайта со своей
+    // картотекой, и их дела не импортировал никто. Ключ строки — «домен|srv».
+    impCourts = gated.slice();
     const sel = document.getElementById("imp-court");
     sel.innerHTML = impCourts.map(function (c) {
-      return '<option value="' + escHtml(c.domain) + '">' + escHtml(c.name) + '</option>';
+      return '<option value="' + escHtml(impCourtKey(c)) + '">' + escHtml(c.name) + '</option>';
     }).join("");
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
     syncImportCourtLink();
@@ -2838,11 +2845,15 @@ function renderImportFreshness(items, lastMap) {
       byDomain[it.court_domain] = { ts: t, operator: it.operator || "", added: it.added || 0, rows: it.rows || 0 };
     }
   });
+  // Свежесть — по ДОМЕНУ: вечный ключ import:last:* серверный и площадок не
+  // различает, поэтому у суда и его присутствия дата общая. Для регламента
+  // это честно (оператор берёт обе выдачи за один заход на сайт суда), а
+  // строки в списке всё равно свои — иначе присутствие невидимо.
   var rows = impCourts.map(function (c) {
     var e = byDomain[c.domain];
     var days = e ? (Date.now() - e.ts) / 86400000 : Infinity;
     var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
-    return { court: c, e: e, days: days, level: level };
+    return { court: c, key: impCourtKey(c), e: e, days: days, level: level };
   });
   // Просроченные и «ни разу» сверху, внутри уровня — самые давние первыми.
   rows.sort(function (a, b) {
@@ -2878,7 +2889,7 @@ function renderImportFreshness(items, lastMap) {
       ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "") + added
       : "ни разу не импортировался";
     return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
-      + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.court.domain) + '">'
+      + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.key) + '">'
       + '<span class="dot ' + dotCls + '"></span>'
       + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
       + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
@@ -2892,8 +2903,8 @@ function renderImportFreshness(items, lastMap) {
   if (!impFreshAutoPicked && !impCourtTouched && rows.length) {
     impFreshAutoPicked = true;
     var sel = document.getElementById("imp-court");
-    if (sel && rows[0].court.domain !== sel.value) {
-      sel.value = rows[0].court.domain;
+    if (sel && rows[0].key !== sel.value) {
+      sel.value = rows[0].key;
       syncImportCourtLink();
       impRenderSelection();
     }
@@ -2902,10 +2913,18 @@ function renderImportFreshness(items, lastMap) {
 // Клик по строке светофора = выбрать суд в форме импорта: светофор работает
 // рабочей очередью («какой суд пора обновить — тот и импортирую»). Слушатели —
 // делегированием в init-блоке ниже (список ререндерится на каждом поллинге).
-function impPickCourt(domain) {
-  if (!domain) return;
+function impPickCourt(key) {
+  if (!key) return;
   var sel = document.getElementById("imp-court");
-  sel.value = domain;
+  // Автоопределение по вставке даёт голый ДОМЕН (хост из href карточек) —
+  // площадку по нему не различить, выбираем первую строку этого домена.
+  // Светофор и ручной выбор передают полный ключ «домен|srv».
+  if (key.indexOf("|") < 0) {
+    for (var i = 0; i < impCourts.length; i++) {
+      if (impCourts[i].domain === key) { key = impCourtKey(impCourts[i]); break; }
+    }
+  }
+  sel.value = key;
   syncImportCourtLink();
   impRenderSelection(); // заметка автоопределения зависит от выбранного суда
   var row = sel.closest(".imp-row");
@@ -3037,9 +3056,11 @@ async function impRunDetect() {
   // Ровно один суд из списка импорта: подставляем сами, пока оператор не
   // выбирал вручную — ловит главный сценарий «оставил суд по умолчанию,
   // вставил выдачу другого». Ручной выбор автоматика не перебивает.
+  // Сравниваем по ДОМЕНУ: у площадок одного суда хост общий, и переключать
+  // выбранное присутствие на первую площадку из-за этого нельзя.
   if (impDetectedHosts.length === 1 && impCourtInDropdown(impDetectedHosts[0])
       && !impCourtTouched
-      && document.getElementById("imp-court").value !== impDetectedHosts[0]) {
+      && impDomainOf(document.getElementById("imp-court").value) !== impDetectedHosts[0]) {
     impPickCourt(impDetectedHosts[0]);
   }
   impRenderSelection();
@@ -3058,7 +3079,7 @@ function impDetectNote() {
     return "<b>⚠ ссылки ведут в «" + escHtml(name) + "» (" + escHtml(h)
       + ") — этого суда нет в списке импортируемых</b>";
   }
-  if (document.getElementById("imp-court").value === h) {
+  if (impDomainOf(document.getElementById("imp-court").value) === h) {
     return "определён суд: <b>" + escHtml(name) + "</b>";
   }
   return "<b>⚠ ссылки ведут в «" + escHtml(name) + "», а выбран другой суд</b> "
@@ -3097,7 +3118,10 @@ function impUpdateSendState() {
   if (hint) hint.style.display = (!has && !impSending) ? "" : "none";
 }
 async function impSend() {
-  const domain = document.getElementById("imp-court").value;
+  // На сервер уходит голый ДОМЕН: площадку дела импортёр берёт из href
+  // карточек дампа (_stamp_court_ids), а Worker и его белый список судов
+  // работают по домену. Ключ селекта — «домен|srv» (см. impCourtKey).
+  const domain = impDomainOf(document.getElementById("imp-court").value);
   const name = document.getElementById("imp-name").value.trim();
   try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
   let html = "";

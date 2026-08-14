@@ -36,8 +36,15 @@ APPEAL_COURTS: tuple[CourtConfig, ...] = (
 )
 
 # Суды первой инстанции Свердловской области (список юриста от 16.07.2026,
-# 52 суда; Камышловский и Красноуфимский имеют по 2 сервера на одном домене —
-# итого 54 записи). У ВСЕХ поиск закрыт проверочным кодом → search_gated=True
+# 52 суда; Камышловский и Красноуфимский имеют по 2 площадки на одном домене —
+# постоянные судебные присутствия в Пышме и Ачите, итого 54 записи).
+# ⚠️ Скан площадок 14.08.2026 (--scan-servers): вторые площадки судов ЕКБ
+# (Верх-Исетский, Кировский, Орджоникидзевский) — картотеки УГОЛОВНОГО
+# судопроизводства, в реестр их не берём (решение юриста). У Железнодорожного
+# наоборот: гражданская картотека на srv 2 (она и заведена), уголовная на
+# srv 1 — площадку определяет ПОДПИСЬ, а не номер. Сверка с перечнем ГАС
+# «Правосудие» (court_subj=66) дала полное совпадение 52 = 52.
+# У ВСЕХ поиск закрыт проверочным кодом → search_gated=True
 # (см. CourtConfig.search_gated: карточки мониторятся, автопоиск выключен).
 # delo_id=1540005 — стандартный id «Гражданские дела 1 инст.» ГАС «Правосудие»
 # (совпадает у всех 33 проверенных судов ХМАО/ЯНАО; у Академического
@@ -58,12 +65,19 @@ SVERDLOVSK_FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Верхотурский районный суд",       "verhotursky--svd.sudrf.ru",      1540005, "first_instance", search_gated=True),
     CourtConfig("Городской суд г. Лесного",        "lesnoy--svd.sudrf.ru",           1540005, "first_instance", search_gated=True),
     CourtConfig("Дзержинский районный суд г. Нижний Тагил", "dzerzhinsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
+    # ⚠️ srv_num=2 — НЕ опечатка и не присутствие: у этого суда ГРАЖДАНСКАЯ
+    # картотека живёт на второй площадке, а на первой — «Уголовные дела и дела
+    # об административных правонарушениях» (скан площадок 14.08.2026).
+    # «Починка» на srv_num=1 потеряет суд целиком.
     CourtConfig("Железнодорожный районный суд г. Екатеринбурга", "zheleznodorozhny--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
     CourtConfig("Ивдельский городской суд",        "ivdelsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
     CourtConfig("Ирбитский районный суд",          "irbitsky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
     CourtConfig("Каменский районный суд",          "kamensky--svd.sudrf.ru",         1540005, "first_instance", search_gated=True),
     CourtConfig("Камышловский районный суд",       "kamyshlovsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
-    CourtConfig("Камышловский районный суд (сервер 2)", "kamyshlovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
+    # Постоянное судебное присутствие в п. Пышма (подпись площадки на сайте —
+    # «Камышловский районный суд для п.п. Пышма», проверено 14.08.2026). Это
+    # НЕ уголовная коллегия, как вторые площадки судов ЕКБ, — запись верная.
+    CourtConfig("Камышловский районный суд (п.п. Пышма)", "kamyshlovsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
     CourtConfig("Карпинский городской суд",        "karpinsky--svd.sudrf.ru",        1540005, "first_instance", search_gated=True),
     CourtConfig("Качканарский городской суд",      "kachkanarsky--svd.sudrf.ru",     1540005, "first_instance", search_gated=True),
     # ⚠ Домен действительно «--cvd» (не svd!): проба probe_region_registry.yml
@@ -75,7 +89,9 @@ SVERDLOVSK_FIRST_INSTANCE_COURTS: tuple[CourtConfig, ...] = (
     CourtConfig("Краснотурьинский городской суд",  "krasnoturinsky--svd.sudrf.ru",   1540005, "first_instance", search_gated=True),
     CourtConfig("Красноуральский городской суд",   "krasnouralsky--svd.sudrf.ru",    1540005, "first_instance", search_gated=True),
     CourtConfig("Красноуфимский районный суд",     "krasnoufimsky--svd.sudrf.ru",    1540005, "first_instance", search_gated=True),
-    CourtConfig("Красноуфимский районный суд (сервер 2)", "krasnoufimsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
+    # Постоянное судебное присутствие в пгт Ачит (вторая площадка домена,
+    # проверено 14.08.2026) — территориальное, не уголовное.
+    CourtConfig("Красноуфимский районный суд (пгт Ачит)", "krasnoufimsky--svd.sudrf.ru", 1540005, "first_instance", search_gated=True, srv_num=2),
     CourtConfig("Кушвинский городской суд",        "kushvinsky--svd.sudrf.ru",       1540005, "first_instance", search_gated=True),
     CourtConfig("Ленинский районный суд г. Екатеринбурга", "leninskyeka--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
     CourtConfig("Ленинский районный суд г. Нижний Тагил", "leninskytag--svd.sudrf.ru", 1540005, "first_instance", search_gated=True),
