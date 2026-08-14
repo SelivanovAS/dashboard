@@ -1306,6 +1306,10 @@ async function handleImportResult(request, env) {
   record.status = status;
   record.updated_at = new Date().toISOString();
   for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
+                     // Иск к производству не принят (возврат / отказ в принятии /
+                     // передача по подсудности) — в картотеку не заводим с
+                     // 14.08.2026; без ключа корзина молча пропала бы из сводки.
+                     "not_accepted",
                      // Трек «Иски банка» в дамповом импорте: заведения считались
                      // всегда, а отказы терялись здесь — оператор видел «+1
                      // добавлено» там, где в трек ушло ещё четыре дела (разбор

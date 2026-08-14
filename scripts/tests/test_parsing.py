@@ -5363,3 +5363,81 @@ class TestCassationCalendarEvents:
             [_cass_find("2-100/2025", suspended_until="01.06.2026")],
         )
         assert changes == []
+
+
+class TestFiNotAcceptedKind:
+    """Класс «иск к производству не принят» — гейт КАНАЛОВ ПРИЁМА
+    (импортёр дампов + автопоиск блока 3, с 14.08.2026).
+
+    Узкий по решению юриста: возврат, отказ в принятии и передача по
+    подсудности — тяжбы не было. Прекращение и «оставлено без рассмотрения»
+    сюда не входят (производство было, по частной жалобе дело оживает под тем
+    же номером), присоединение — тоже (дело живёт под номером приёмника).
+    """
+
+    def test_three_kinds_of_the_class(self):
+        assert uc.fi_not_accepted_kind(
+            "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ"
+        ) == "returned"
+        assert uc.fi_not_accepted_kind(
+            "ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ"
+        ) == "refusal"
+        assert uc.fi_not_accepted_kind(
+            "Передано по подсудности, подведомственности"
+        ) == "transfer"
+
+    def test_border_of_the_class(self):
+        for result in (
+            "Иск (заявление, жалоба) ОСТАВЛЕН(А) БЕЗ РАССМОТРЕНИЯ",
+            "Производство по делу ПРЕКРАЩЕНОИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА",
+            "Присоединено к другому делу",
+            "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        ):
+            assert uc.fi_not_accepted_kind(result) == "", result
+
+    def test_empty_result_takes_the_case(self):
+        """Пустой «Результат» = решения ещё нет = дело берём. Классификатор
+        при пустом результате уходит в историю движения, где у живого дела
+        лежит отменённый возврат прошлого круга — предикат обязан звать его
+        с пустыми last_event/events (урок 14.08.2026)."""
+        assert uc.fi_not_accepted_kind("") == ""
+        assert uc.fi_not_accepted_kind("   ") == ""
+
+    def test_labels_cover_every_kind(self):
+        """Карта подписей — одна на оба канала; без ключа отчёт оператору
+        напечатал бы служебное английское слово."""
+        assert set(uc.FI_NOT_ACCEPTED_RU) == set(uc.FI_NOT_ACCEPTED_KINDS)
+
+
+class TestNotAcceptedIntakeWiring:
+    """Проводка гейта в блоке 3 main_json (по образцу TestFiTerminationWiring).
+
+    Отсев обязан стоять ДО split fresh/stale: _discovered_already_resolved_old
+    заводит терминальные дела старше 60 дней сразу в архив, но свежий возврат
+    проходил мимо него и объявлялся «новым иском». Тест на исходник —
+    единственный дешёвый способ: сам блок сидит внутри main_json.
+    """
+
+    @staticmethod
+    def _runs_src():
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_gate_runs_before_fresh_stale_split(self):
+        src = self._runs_src()
+        i_new = src.index("        new_fi = [\n")
+        i_gate = src.index("fi_not_accepted_kind(r.get(\"result\") or \"\")")
+        i_split = src.index("fresh = [r for r in new_fi "
+                            "if not _discovered_already_resolved_old(r)]")
+        assert i_new < i_gate < i_split
+
+    def test_gate_removes_rows_from_new_fi(self):
+        """Отвергнутые строки обязаны выпасть из new_fi, а не просто
+        залогироваться: иначе дело всё равно заведётся."""
+        src = self._runs_src()
+        i_gate = src.index("fi_not_accepted_kind(r.get(\"result\") or \"\")")
+        i_split = src.index("fresh = [r for r in new_fi "
+                            "if not _discovered_already_resolved_old(r)]")
+        block = src[i_gate:i_split]
+        assert "new_fi = [r for r in new_fi if id(r) not in skip_ids]" in block

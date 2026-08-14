@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:1404](../../cloudflare-worker/worker.js#L1404)):
+`scheduled(event, env)` ([worker.js:1408](../../cloudflare-worker/worker.js#L1408)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,7 +70,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([1447](../../cloudflare-worker/worker.js#L1447)).
+Маршрутизатор — `fetch(request, env)` ([1451](../../cloudflare-worker/worker.js#L1451)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.

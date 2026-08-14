@@ -2747,6 +2747,7 @@ function impResultText(item) {
     if (item.bank_capped) parts.push(item.bank_capped + " не влезло в потолок");
     if (item.fetch_fail) parts.push(item.fetch_fail + " карточка не открылась");
     if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
+    if (item.not_accepted) parts.push(item.not_accepted + " к производству не принято");
     if (item.no_link) parts.push(item.no_link + " без ссылки");
     if (item.subsidiary) parts.push(item.subsidiary + " дочки");
     return parts.join(" · ");
