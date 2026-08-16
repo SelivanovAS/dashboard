@@ -148,6 +148,12 @@ fi
 
 # Секреты — через конфиг curl (`-K файл`), а не аргументами командной строки:
 # в argv их видит любой `ps` на машине.
+#
+# ⚠️ КАЖДЫЙ запрос идёт с `--compressed`. Без него Worker отдаёт ответ
+# ОБРЕЗАННЫМ: замер 16.08.2026 — журнал импортов пришёл 17 757 байт вместо
+# 194 710 и оборвался посреди строки. jq на таком молчал (ошибка уходила в
+# /dev/null), очередь выглядела пустой при пяти необработанных дампах, а на
+# самом дампе это дало бы ЧАСТИЧНЫЙ импорт — половину дел из выдачи.
 CURL_CFG="$TMP_DIR/curl.cfg"
 worker_cfg() {  # $1 = путь+query — пишет конфиг curl (адрес + авторизация)
   {
@@ -160,6 +166,29 @@ worker_cfg() {  # $1 = путь+query — пишет конфиг curl (адре
 journal_cfg() {
   printf 'url = "%s/admin/import-log?secret=%s&logonly=1"\n' \
     "$WORKER_URL" "$OWNER_SECRET" > "$CURL_CFG"
+}
+
+# Каким секретом ходить в канал импорта. Пустой uuid: авторизация проверяется
+# ДО поиска ключа, поэтому 404 значит «секрет подошёл, дампа с таким ключом
+# нет», а 401 — «не подошёл». Один дешёвый запрос за прогон.
+# ⚠️ Настоящий PUSH_SECRET на машине юриста взять неоткуда (write-only и в
+# Cloudflare, и в GitHub), и в файле у него легко окажется чужой токен — так и
+# случилось 16.08.2026 с progress_token. Поэтому не требуем его, а проверяем:
+# не подошёл — молча переходим на владельческий, который Worker тоже принимает.
+AUTH_KIND=""
+resolve_worker_auth() {
+  local code
+  worker_cfg "/import-dump?key=import:dump:00000000-0000-0000-0000-000000000000"
+  code=$(curl -s --compressed -o /dev/null -w "%{http_code}" -m 30 -A "$UA" -K "$CURL_CFG" 2>/dev/null)
+  if [ "$code" != "401" ]; then AUTH_KIND="push_secret"; return 0; fi
+  if [ -n "$OWNER_SECRET" ] && [ "$PUSH_SECRET" != "$OWNER_SECRET" ]; then
+    PUSH_SECRET="$OWNER_SECRET"
+    worker_cfg "/import-dump?key=import:dump:00000000-0000-0000-0000-000000000000"
+    code=$(curl -s --compressed -o /dev/null -w "%{http_code}" -m 30 -A "$UA" -K "$CURL_CFG" 2>/dev/null)
+    if [ "$code" != "401" ]; then AUTH_KIND="owner_secret"; return 0; fi
+  fi
+  AUTH_KIND=""
+  return 1
 }
 
 # ── Преflight: сеть Сбера, маршруты, живой суд ───────────────────────────────
@@ -215,28 +244,34 @@ if [ "$CHECK_ONLY" = "1" ]; then
     log "  впишите настоящие url и owner_secret (push_secret не обязателен)"
   else
     journal_cfg
-    code=$(curl -s -o "$TMP_DIR/log.json" -w '%{http_code}' -m 30 -A "$UA" \
+    code=$(curl -s --compressed -o "$TMP_DIR/log.json" -w '%{http_code}' -m 30 -A "$UA" \
       -K "$CURL_CFG" 2>/dev/null)
     case "$code" in
       200) log "✓ журнал импортов читается (owner_secret подходит)" ;;
       401) log "✗ owner_secret не подходит — Worker ответил 401" ;;
       *)   log "✗ журнал импортов: Worker ответил $code" ;;
     esac
-    # Пустой uuid: авторизация проверяется до поиска ключа, поэтому 404 —
-    # это «секрет подходит, просто такого дампа нет».
-    worker_cfg "/import-dump?key=import:dump:00000000-0000-0000-0000-000000000000"
-    code=$(curl -s -o /dev/null -w '%{http_code}' -m 30 -A "$UA" -K "$CURL_CFG" 2>/dev/null)
-    case "$code" in
-      404|400) log "✓ push_secret подходит (Worker пустил, дампа с таким ключом нет)" ;;
-      401)     log "✗ push_secret не подходит — Worker ответил 401" ;;
-      *)       log "✗ доступ к дампам: Worker ответил $code" ;;
-    esac
-    if [ "$code" != "401" ] && [ -s "$TMP_DIR/log.json" ]; then
-      n=$(jq -r --argjson now "$(date +%s)" --argjson ttl "$DUMP_TTL" \
-             --argjson grace "$STARTED_GRACE" \
-             -f "$REPO/ops/mac-local-run/import_queue.jq" "$TMP_DIR/log.json" \
-             2>/dev/null | grep -c . || true)
-      log "  дампов, которые резерв забрал бы прямо сейчас: ${n:-0}"
+    if resolve_worker_auth; then
+      if [ "$AUTH_KIND" = "push_secret" ]; then
+        log "✓ доступ к дампам: подходит push_secret"
+      else
+        log "✓ доступ к дампам: идём владельческим секретом"
+        log "  (push_secret в файле не подошёл — это нормально, он не нужен)"
+      fi
+    else
+      log "✗ доступ к дампам: Worker не принял ни один секрет (401)"
+    fi
+    if [ -n "$AUTH_KIND" ] && [ -s "$TMP_DIR/log.json" ]; then
+      # Разбор отделён от подсчёта: битый ответ обязан быть виден. Раньше
+      # ошибка jq уходила в /dev/null, и обрезанный журнал показывал «0».
+      if queue=$(jq -r --argjson now "$(date +%s)" --argjson ttl "$DUMP_TTL" \
+                    --argjson grace "$STARTED_GRACE" \
+                    -f "$REPO/ops/mac-local-run/import_queue.jq" \
+                    "$TMP_DIR/log.json" 2>/dev/null); then
+        log "  дампов, которые резерв забрал бы прямо сейчас: $(printf '%s' "$queue" | grep -c . || true)"
+      else
+        log "  ✗ журнал пришёл битым — импорт бы не пошёл (ответ Worker'а не разобрался)"
+      fi
     fi
   fi
   log "Проверка закончена: ничего не менялось"
@@ -280,7 +315,7 @@ fi
 
 post_body() {  # $1 = файл с JSON-телом (само тело не секрет — идёт аргументом)
   worker_cfg "/import-result"
-  curl -s -m 20 -A "$UA" -X POST -K "$CURL_CFG" \
+  curl -s --compressed -m 20 -A "$UA" -X POST -K "$CURL_CFG" \
     -H "Content-Type: application/json" --data @"$1" -o /dev/null || true
 }
 post_status() {  # $1 = ключ дампа, $2 = статус
@@ -380,13 +415,18 @@ if [ -n "$FILE_ARG" ]; then
 fi
 
 # ── Режим 2: очередь Worker'а ────────────────────────────────────────────────
-if [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ] || [ -z "$PUSH_SECRET" ]; then
-  log "Нет $WORKER_CONF (url/owner_secret/push_secret) — очередь не забрать, выход"
+if [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ]; then
+  log "Нет $WORKER_CONF (url/owner_secret) — очередь не забрать, выход"
   exit 0
 fi
+# Каким секретом ходим (push_secret или владельческий) — решает Worker, а не
+# содержимое файла: чужой токен в push_secret иначе ронял бы весь импорт.
+resolve_worker_auth \
+  || die "Worker не принял ни один секрет (401) — проверьте owner_secret в $WORKER_CONF"
+log "Канал импорта: авторизуемся ключом $AUTH_KIND"
 
 journal_cfg
-if ! curl -f -s -m 30 -A "$UA" -K "$CURL_CFG" -o "$TMP_DIR/log.json"; then
+if ! curl -f -s --compressed -m 30 -A "$UA" -K "$CURL_CFG" -o "$TMP_DIR/log.json"; then
   die "журнал импортов не читается ($WORKER_URL/admin/import-log)"
 fi
 
@@ -416,7 +456,7 @@ while IFS=$'\t' read -r uuid domain operator prev <&3; do
   dump="$TMP_DIR/dump.html"
   post_status "$key" started
   worker_cfg "/import-dump?key=$key"
-  if ! curl -f -s -m 60 -A "$UA" -K "$CURL_CFG" -o "$dump"; then
+  if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$dump"; then
     log "  ERROR: дамп не скачался — истёк TTL 24 ч или сеть"
     post_error "$key" "резерв на Mac: дамп не скачался из KV (истёк TTL 24 ч?) — вставьте выдачу заново"
     rc=1
