@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -734,6 +735,17 @@ def _read_repo(rel: str) -> str:
         return f.read()
 
 
+# Пейлоад отчёта в админку — общий файл облака и резерва на Mac (16.08.2026):
+# инлайновая копия в каждом канале разъехалась бы так же, как разъезжались
+# списки файлов данных, и счётчик пропал бы из сводки молча.
+IMPORT_BODY_JQ = "ops/import_result_body.jq"
+
+
+def _jq_has_counter(body: str, key: str) -> bool:
+    """Есть ли в фильтре поле-счётчик key с дефолтом 0 (пробелы не важны)."""
+    return re.search(rf"\b{key}\s*:\s*\(\s*\.{key}\s*//\s*0\s*\)", body) is not None
+
+
 class TestWorkflowWiring:
     def test_import_result_checks_commit_outcome(self):
         """status:"done" в журнал импортов — только при успешном push: упавший
@@ -761,19 +773,19 @@ class TestWorkflowWiring:
         for f in ("data/cases_bank.json", "data/cases_bank_events.json",
                   "data/.bank_intake_seen.json"):
             assert f in yml, f"{f} не попадает в commit-шаг import_cases.yml"
-        assert "added_bank:(.added_bank // 0)" in yml
+        assert _jq_has_counter(_read_repo(IMPORT_BODY_JQ), "added_bank")
 
     def test_bank_counters_reach_operator(self):
         """Сквозная проводка счётчиков трека: Python считает все 14, а до глаз
         оператора доходили 6 — сводка писала «+1 добавлено» там, где в трек
         ушло ещё 4 дела и 5 отсеялось (разбор 14.08.2026). Рвётся в любом из
         трёх звеньев независимо, и каждое молчит."""
-        yml = _read_repo(".github/workflows/import_cases.yml")
+        body = _read_repo(IMPORT_BODY_JQ)
         worker = _read_repo("cloudflare-worker/worker.js")
         admin = _read_repo("cloudflare-worker/admin_page.js")
         for key in ("excluded_result", "excluded_writ", "already_spent",
                     "seen_cached", "bank_capped", "fetch_fail"):
-            assert f"{key}:(.{key} // 0)" in yml, f"{key} не уезжает из workflow"
+            assert _jq_has_counter(body, key), f"{key} не уезжает из отчёта"
             assert f'"{key}"' in worker, f"{key} режет whitelist Worker'а"
         # Сводка админки считает ОБА трека (образец — acResultText рядом).
         assert 'parts = ["+" + (item.added || 0) + " в картотеку"]' in admin
@@ -789,11 +801,11 @@ class TestWorkflowWiring:
         отдал блок-страницу, дела завелись пустышками, а сводка бодро писала
         «+4 в картотеку» — провал был виден только в свёртке «Отчёт
         построчно», куда никто не смотрит."""
-        yml = _read_repo(".github/workflows/import_cases.yml")
+        body = _read_repo(IMPORT_BODY_JQ)
         worker = _read_repo("cloudflare-worker/worker.js")
         admin = _read_repo("cloudflare-worker/admin_page.js")
         for key in ("card_failed", "refilled"):
-            assert f"{key}:(.{key} // 0)" in yml, f"{key} не уезжает из workflow"
+            assert _jq_has_counter(body, key), f"{key} не уезжает из отчёта"
             assert f'"{key}"' in worker, f"{key} режет whitelist Worker'а"
             assert f"item.{key}" in admin, f"{key} не доходит до сводки админки"
         assert "без карточки" in admin, "сводка молчит о непрочитанных карточках"
@@ -804,17 +816,33 @@ class TestWorkflowWiring:
         не счётчик: числовой whitelist Worker'а её бы срезал. Без причины все
         четыре беды выглядят одинаково, и «нас блокируют по адресу» неотличимо
         от «портал лёг» (инцидент 16.08.2026)."""
-        yml = _read_repo(".github/workflows/import_cases.yml")
+        body = _read_repo(IMPORT_BODY_JQ)
         worker = _read_repo("cloudflare-worker/worker.js")
         admin = _read_repo("cloudflare-worker/admin_page.js")
         # Поле шлётся ВСЕГДА (пустая строка = «чисто»): re-run того же job
         # после снятия блока обязан очистить прежнюю причину в записи журнала.
-        assert 'card_fail_reason:(.card_fail_reason // "")' in yml
+        assert re.search(
+            r'card_fail_reason\s*:\s*\(\s*\.card_fail_reason\s*//\s*""\s*\)', body)
         assert 'typeof body.card_fail_reason === "string"' in worker
         assert "record.card_fail_reason = body.card_fail_reason.slice" in worker
         assert "delete record.card_fail_reason" in worker, \
             "пустая причина не чистит прежнюю — успешный re-run останется с «HTTP 403»"
         assert "item.card_fail_reason" in admin
+
+    def test_report_body_is_shared_with_mac_backup(self):
+        """Пейлоад отчёта — ОДИН файл на облако и резерв: копия в каждом канале
+        разъехалась бы так же, как разъезжались списки файлов данных (резерв не
+        коммитил семь путей трека) и домены судов для маршрутов."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        mac = _read_repo("ops/mac-local-run/import_dumps.sh")
+        assert f"-f {IMPORT_BODY_JQ}" in yml, "облако не читает общий фильтр"
+        assert IMPORT_BODY_JQ in mac, "резерв не читает общий фильтр"
+        # Инлайновой копии счётчиков не осталось ни там, ни там (короткие
+        # служебные посты «started»/«failed» без счётчиков — не в счёт).
+        for text, who in ((yml, "workflow"), (mac, "mac-скрипт")):
+            for key in ("added", "skipped_role", "fetch_fail"):
+                assert f"{key}:(.{key}" not in text, \
+                    f"{who} собирает пейлоад сам — счётчики разъедутся"
 
 
 # ── Карточка для исков ПРОТИВ банка (основная картотека, с 14.08.2026) ───────
@@ -1062,6 +1090,44 @@ class TestCardBlindRefill:
         assert s["card_fail_reason"] == (
             "вместо карточки пришла страница без данных")
 
+    def test_breaker_does_not_mask_the_cause(self, import_env, monkeypatch):
+        """Предохранитель — наше следствие, а не причина: он открывается после
+        трёх отказов подряд и дальше пропускает карточки БЕЗ запроса. На дампе
+        Урала 16.08.2026 это дало 7 пропусков против 3 настоящих отказов, и
+        голое большинство подсунуло оператору «суд снят с обхода» вместо «нас
+        блокируют по адресу»."""
+        state = {"n": 0}
+
+        def blocked_then_breaker(url, context=None):
+            state["n"] += 1
+            isd.config.FETCH_DIAG.clear()
+            isd.config.FETCH_DIAG.update(
+                {"kind": "blocked", "status": 200, "ip": "20.1.2.3"}
+                if state["n"] == 1 else {"kind": "breaker"})
+            return ""
+        monkeypatch.setattr(isd, "fetch_card_checked", blocked_then_breaker)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["card_fail_reason"].startswith(
+            "суд заблокировал запрос (страница защиты ГАС) (наш адрес 20.1.2.3)")
+        # Пропуски не пропадают из отчёта — они объясняют, почему запросов
+        # меньше, чем непрочитанных дел.
+        assert "ещё 2 карточек не запрашивали" in s["card_fail_reason"]
+        assert len(s["card_fail_reason"]) <= 200, "Worker режет строку на 200"
+
+    def test_breaker_alone_stays_the_answer(self, import_env, monkeypatch):
+        """Одни пропуски (канарейка поиска открыла предохранитель ещё до первой
+        карточки) — тогда предохранитель и есть весь ответ, хвоста нет."""
+        def breaker(url, context=None):
+            isd.config.FETCH_DIAG.clear()
+            isd.config.FETCH_DIAG.update({"kind": "breaker"})
+            return ""
+        monkeypatch.setattr(isd, "fetch_card_checked", breaker)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["card_fail_reason"] == (
+            "суд снят с обхода после нескольких неудач подряд")
+
     def test_refill_respects_dry_run(self, import_env, monkeypatch):
         outage = self._outage(import_env, monkeypatch)
         _run(import_env)
@@ -1131,11 +1197,10 @@ class TestNotAcceptedGate:
         assert any("передано по подсудности" in l for l in lines)
 
     def test_counter_reaches_operator(self):
-        """Счётчик обязан пройти три звена: jq-пейлоад workflow → whitelist
+        """Счётчик обязан пройти три звена: jq-пейлоад отчёта → whitelist
         Worker'а → сводка админки. Каждое рвётся молча (урок 14.08.2026)."""
-        yml = _read_repo(".github/workflows/import_cases.yml")
         worker = _read_repo("cloudflare-worker/worker.js")
         admin = _read_repo("cloudflare-worker/admin_page.js")
-        assert "not_accepted:(.not_accepted // 0)" in yml
+        assert _jq_has_counter(_read_repo(IMPORT_BODY_JQ), "not_accepted")
         assert '"not_accepted"' in worker
         assert "item.not_accepted" in admin

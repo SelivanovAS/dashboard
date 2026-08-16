@@ -39,9 +39,14 @@ for arg in "$@"; do
   esac
 done
 
+# ── Общий слой сети Сбера (маршруты, преflight, ssh-адрес) ───────────────────
+# Тот же файл подключает import_dumps.sh: копия преflight'а во втором скрипте
+# разъехалась бы так же, как разъезжались списки файлов данных и домены судов.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_sber_net.sh"
+
 # ── Параметры (правь тут при переезде/смене сети) ────────────────────────────
 REPO="${REPO_ARG:-${CM_REPO:-/Users/aleksandrselivanov/dashboard}}"
-SBER_GATEWAY="10.217.111.250"          # шлюз сети Сбера (egress РФ). Маршрут
+SBER_GATEWAY="$CM_SBER_GATEWAY"        # шлюз сети Сбера (egress РФ). Маршрут
                                        # судов заворачиваем через него, мимо VPN.
 PYTHON="/usr/bin/python3"
 LOG_DIR="$REPO/ops/mac-local-run"
@@ -60,16 +65,8 @@ notify() {  # $1 = текст уведомления macOS (+ Telegram, если
 # машиной — прогон идёт в 08:00. Секреты вне репозитория: файл
 # ~/.config/court-monitor/telegram с двумя строками token=… и chat_id=…
 # Нет файла — молча, как раньше.
-alert_telegram() {  # $1 = текст
-  local f="$CONF_DIR/telegram" token chat
-  [ -f "$f" ] || return 0
-  token=$(awk -F= '/^token=/{print $2}' "$f" | tr -d '[:space:]')
-  chat=$(awk -F= '/^chat_id=/{print $2}' "$f" | tr -d '[:space:]')
-  [ -n "$token" ] && [ -n "$chat" ] || return 0
-  curl -sS -m 20 -o /dev/null \
-    "https://api.telegram.org/bot$token/sendMessage" \
-    --data-urlencode "chat_id=$chat" \
-    --data-urlencode "text=🚨 Mac-парсинг ($(basename "$REPO")): $1" >/dev/null 2>&1 || true
+alert_telegram() {  # $1 = текст (тело — cm_alert_telegram, общее с импортом)
+  cm_alert_telegram "$CONF_DIR" "Mac-парсинг ($(basename "$REPO"))" "$1"
 }
 die() {  # $1 = текст → в лог, уведомление, Telegram, выход 1
   log "ERROR: $1"; notify "Ошибка: $1"; alert_telegram "$1"
@@ -121,7 +118,7 @@ cd "$REPO" || die "нет каталога $REPO"
 # Признак — шлюз Сбера присутствует среди default-маршрутов (в т.ч. когда VPN
 # поднят и добавляет свой второй default). Если нет — мы не в офисной сети,
 # заворачивать суды некуда, тихо выходим (не ошибка).
-if ! netstat -rn -f inet | awk '$1=="default"{print $2}' | grep -qx "$SBER_GATEWAY"; then
+if ! cm_in_sber_network; then
   log "Пропуск: шлюз $SBER_GATEWAY не найден среди default-маршрутов (не в сети Сбера)"
   notify "Пропуск: не в сети Сбера — дайджест не собран"
   exit 0
@@ -135,13 +132,8 @@ start_pusher
 # Username»), а SSH:22 к github.com в этой сети закрыт. Единственный рабочий
 # путь — ssh.github.com:443; URL выводим из origin, чтобы форк и эталон
 # обслуживались одним кодом.
-GIT_URL=$(git remote get-url origin 2>/dev/null \
-  | sed -E 's#^https://github\.com/#ssh://git@ssh.github.com:443/#; s#^git@github\.com:#ssh://git@ssh.github.com:443/#')
-case "$GIT_URL" in
-  ssh://git@ssh.github.com:443/*) : ;;
-  *) die "не смог вывести ssh-адрес из origin ($GIT_URL)" ;;
-esac
-export GIT_SSH_COMMAND="ssh -p 443 -o HostName=ssh.github.com"
+GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
+export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
 log "git через $GIT_URL"
 
 # ── Подтянуть вчерашние replay-коммиты GitHub (иначе push отклонят) ───────────
@@ -152,66 +144,25 @@ if [ "$CHECK_ONLY" != "1" ] && ! git pull --rebase --autostash "$GIT_URL" main >
 fi
 
 # ── Маршрут судов мимо VPN через en0 ─────────────────────────────
-# Домены берём из РЕЕСТРА АКТИВНОГО РЕГИОНА (get_region), резолвим, дедупим IP,
-# на каждый ставим host-маршрут через шлюз Сбера. Идемпотентно.
+# Домены берём из РЕЕСТРА АКТИВНОГО РЕГИОНА (get_region) — тело в
+# lib_sber_net.sh, общее с импортом дампов.
 # ⚠️ Раньше домены искались регекспом по scripts/court_monitor/courts.py.
 # После регионализации (16.07.2026) реестры уехали в regions/*.py, и регексп
 # находил ШЕСТЬ строк из комментариев и докстрингов вместо 20 доменов ХМАО:
 # маршруты строились не туда, суды шли через VPN мимо egress РФ, а WARNING
-# ниже это молча проглатывал. Поэтому пустой список теперь фатален.
-UNIQ_IPS=$("$PYTHON" - <<'PYROUTE'
-import socket, sys
-sys.path.insert(0, "scripts")
-try:
-    from court_monitor.regions import get_region
-    region = get_region()
-except Exception:
-    raise SystemExit(0)
-hosts = {c.domain for c in region.first_instance_courts if c.enabled}
-hosts |= {c.domain for c in region.appeal_courts}
-hosts.add(region.cassation_court.domain)
-ips = set()
-resolved = 0
-for h in sorted(hosts):
-    try:
-        ips.add(socket.gethostbyname(h))
-        resolved += 1
-    except OSError:
-        pass
-# Первая строка — счётчики для лога, дальше IP построчно. Оба числа важны:
-# доменов должно быть 21 (ХМАО) / 67 (Урал), а УНИКАЛЬНЫЙ IP может выйти
-# ОДИН — суды ГАС сидят за общим балансировщиком, и это норма, не поломка.
-print(f"{resolved}/{len(hosts)}")
-print("\n".join(sorted(ips)))
-PYROUTE
-)
-ROUTE_STAT=$(echo "$UNIQ_IPS" | head -1)
-UNIQ_IPS=$(echo "$UNIQ_IPS" | tail -n +2)
-if [ -z "$UNIQ_IPS" ]; then
-  die "не удалось получить домены судов из реестра региона — маршруты не построить"
-fi
-log "Доменов судов region-реестра отрезолвлено: $ROUTE_STAT → уникальных IP: $(echo "$UNIQ_IPS" | wc -l | tr -d ' ') (IP может быть один — общий балансировщик ГАС)"
-for ip in $UNIQ_IPS; do
-  # Пересоздаём маршрут заново каждый прогон: старый мог остаться в таблице,
-  # но битым после смены IP en0 (route висит, а connect даёт EADDRNOTAVAIL).
-  # delete (без ошибки, если нет) + add. Идемпотентно и самозалечивается.
-  sudo -n /sbin/route -n delete -host "$ip" >/dev/null 2>&1
-  if sudo -n /sbin/route -n add -host "$ip" "$SBER_GATEWAY" >>"$LOG" 2>&1; then
-    log "  маршрут $ip → $SBER_GATEWAY (пересоздан)"
-  else
-    log "  WARN: не смог поставить маршрут $ip (sudoers не настроен? см. README)"
-  fi
-done
+# внутри это молча проглатывал. Поэтому пустой список фатален.
+cm_setup_court_routes "$PYTHON" log \
+  || die "не удалось получить домены судов из реестра региона — маршруты не построить"
 
 # ── Проверка доступности судов ───────────────────────────────────────────────
 # Хост берём из реестра региона (апелляция территории), а не хардкодом ХМАО:
 # на форке проба стучалась бы в чужой суд.
-PROBE_HOST=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
-from court_monitor.regions import get_region; print(get_region().appeal_courts[0].domain)' 2>/dev/null)
-[ -n "$PROBE_HOST" ] || die "не смог определить суд для пробы доступности"
-if curl -sS -o /dev/null --connect-timeout 15 --max-time 45 "https://$PROBE_HOST/" >>"$LOG" 2>&1; then
+PROBE_HOST=$(cm_probe_court_host "$PYTHON") \
+  || die "не смог определить суд для пробы доступности"
+if PROBE_ERR=$(cm_court_reachable "$PROBE_HOST"); then
   log "Суд $PROBE_HOST доступен"
 else
+  log "curl: ${PROBE_ERR:-без вывода}"
   die "суд $PROBE_HOST недоступен даже с маршрутом — парсинг пропущен"
 fi
 
@@ -232,12 +183,8 @@ fi
 # Actions Variables — на Mac их взять неоткуда, и подхват шёл бы с дефолтами
 # кода (30/10/50 вместо 200/25/200 у Урала). Файл вне репозитория: это
 # свойство машины, а не кода. Нет файла — дефолты, как раньше.
-REGION_CODE=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
-from court_monitor import config; print(config.REGION)' 2>/dev/null)
-if [ -n "$REGION_CODE" ] && [ -f "$CONF_DIR/env.$REGION_CODE" ]; then
-  log "Переменные территории: $CONF_DIR/env.$REGION_CODE"
-  set -a; . "$CONF_DIR/env.$REGION_CODE"; set +a
-fi
+REGION_CODE=$(cm_region_code "$PYTHON")
+cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 
 log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без секретов) ..."
 SKIP_NON_WORKING_DAYS=1 "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
