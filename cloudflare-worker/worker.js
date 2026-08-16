@@ -1355,7 +1355,14 @@ async function handleImportResult(request, env) {
   // окна журнала на «когда суд импортировался в последний раз» не хватает.
   // Точечное добавление (kind:"case") светофор НЕ бумпает: свежесть — это
   // регламент полного импорта дампа выдачи, одно дело его не подтверждает.
-  if (status === "done" && record.court_domain && record.kind !== "case") {
+  // ⚠️ Импорт, у которого суд не отдал карточки, свежесть тоже НЕ подтверждает
+  // (16.08.2026): дамп Верх-Исетского завёл НОЛЬ — 12 исков банка отвалились
+  // по блок-странице ГАС, — а суд покрасился зелёным «импортирован сегодня».
+  // Через неделю оператор к нему не вернулся бы, и дела остались бы
+  // ненайденными. Работа сделана, только когда карточки читались.
+  const cardsUnread = (record.fetch_fail || 0) + (record.card_failed || 0);
+  if (status === "done" && record.court_domain && record.kind !== "case"
+      && cardsUnread === 0) {
     await env.PUSH_SUBSCRIPTIONS.put(
       `import:last:${record.court_domain}`,
       JSON.stringify({

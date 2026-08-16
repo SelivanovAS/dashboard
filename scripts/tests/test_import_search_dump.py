@@ -829,6 +829,34 @@ class TestWorkflowWiring:
             "пустая причина не чистит прежнюю — успешный re-run останется с «HTTP 403»"
         assert "item.card_fail_reason" in admin
 
+    def test_lost_bank_claims_are_named_a_loss(self):
+        """Потеря исков банка — главное в сводке, а называлась мягче всего:
+        «12 карточка не открылась» звучало технической мелочью, хотя означало
+        двенадцать НЕзаведённых дел (блок ГАС 16.08.2026). Правила приёма в
+        трек решаются только по карточке, вернуть строку может лишь повтор."""
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert "исков банка НЕ заведено" in admin
+        assert "повторите дамп" in admin
+        # Мягкая формулировка не должна вернуться отдельной частью сводки.
+        assert '+ " карточка не открылась"' not in admin
+
+    def test_freshness_not_bumped_when_cards_unread(self):
+        """Импорт без прочитанных карточек не подтверждает регламент: дамп
+        Верх-Исетского завёл НОЛЬ, а суд покрасился зелёным «импортирован
+        сегодня» — через неделю оператор к нему не вернулся бы."""
+        worker = _read_repo("cloudflare-worker/worker.js")
+        assert "const cardsUnread" in worker
+        assert "record.fetch_fail" in worker and "record.card_failed" in worker
+        assert "cardsUnread === 0" in worker
+
+    def test_breaker_tuned_for_dump_size(self):
+        """Дефолты предохранителя считаны на боевой обход сотен карточек:
+        проба «каждые 30 пропущенных» в дампе на 25 строк = «никогда», и
+        мигающий блок убивал остаток дампа безвозвратно."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        assert 'CARD_BREAKER_THRESHOLD: "5"' in yml
+        assert 'CARD_BREAKER_PROBE_EVERY: "3"' in yml
+
     def test_report_body_is_shared_with_mac_backup(self):
         """Пейлоад отчёта — ОДИН файл на облако и резерв: копия в каждом канале
         разъехалась бы так же, как разъезжались списки файлов данных (резерв не
