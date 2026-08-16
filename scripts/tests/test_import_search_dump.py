@@ -799,6 +799,19 @@ class TestWorkflowWiring:
         assert "без карточки" in admin, "сводка молчит о непрочитанных карточках"
         assert "карточек дочитано" in admin
 
+    def test_card_fail_reason_reaches_operator(self):
+        """Причина отказа (403 / страница защиты / код / заглушка) — строка, а
+        не счётчик: числовой whitelist Worker'а её бы срезал. Без причины все
+        четыре беды выглядят одинаково, и «нас блокируют по адресу» неотличимо
+        от «портал лёг» (инцидент 16.08.2026)."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert "card_fail_reason:.card_fail_reason" in yml
+        assert 'typeof body.card_fail_reason === "string"' in worker
+        assert "record.card_fail_reason = body.card_fail_reason.slice" in worker
+        assert "item.card_fail_reason" in admin
+
 
 # ── Карточка для исков ПРОТИВ банка (основная картотека, с 14.08.2026) ───────
 
@@ -977,6 +990,49 @@ class TestCardBlindRefill:
         # Дело в апелляции карточку не запрашивало вовсе.
         assert import_env["card_calls"]["n"] == spent + 2
         assert self._defendant(import_env)["first_instance"]["events"] == []
+
+    def test_report_names_the_reason(self, import_env, monkeypatch):
+        """Отчёт обязан называть класс отказа: 403, страница защиты, код и
+        заглушка до 16.08.2026 давали одну строку «карточка не прочиталась»."""
+        def blocked(url, context=None):
+            isd.config.FETCH_DIAG.clear()
+            isd.config.FETCH_DIAG.update(
+                {"kind": "http_403", "status": 403, "ip": "20.1.2.3"})
+            return ""
+        monkeypatch.setattr(isd, "fetch_card_checked", blocked)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["card_fail_reason"] == (
+            "суд отвечает HTTP 403 — адрес заблокирован (наш адрес 20.1.2.3)")
+        added = [l for l in s["lines"] if l.startswith("[ADDED]")]
+        assert added and all("HTTP 403" in l for l in added)
+
+    def test_bank_row_says_case_was_not_added(self, import_env, monkeypatch):
+        """У иска банка отказ означает потерю дела целиком — правила приёма в
+        трек решаются только по карточке. Строка обязана это говорить."""
+        def blocked(url, context=None):
+            isd.config.FETCH_DIAG.clear()
+            isd.config.FETCH_DIAG.update({"kind": "blocked", "status": 200})
+            return ""
+        monkeypatch.setattr(isd, "fetch_card_checked", blocked)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        fetch_fail = [l for l in s["lines"] if l.startswith("[FETCH FAIL]")]
+        assert fetch_fail, "истцовая строка обязана была отвалиться"
+        assert all("НЕ заведён" in l for l in fetch_fail)
+        assert all("страница защиты" in l for l in fetch_fail)
+
+    def test_cap_does_not_borrow_foreign_diagnosis(self, import_env,
+                                                   monkeypatch):
+        """Кэп/суд не в реестре — запроса не было, а FETCH_DIAG держит диагноз
+        ЧУЖОЙ карточки. Назвав его причиной, отчёт бы соврал."""
+        monkeypatch.setattr(isd, "MAX_BANK_CARDS_PER_IMPORT", 0)
+        isd.config.FETCH_DIAG.clear()
+        isd.config.FETCH_DIAG.update({"kind": "http_403", "status": 403})
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["card_fail_reason"] == ""
+        assert s["card_failed"] == 0
 
     def test_refill_respects_dry_run(self, import_env, monkeypatch):
         outage = self._outage(import_env, monkeypatch)

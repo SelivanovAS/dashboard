@@ -12,6 +12,11 @@ name: 🔬 Проба доступа к судам с GitHub (US-egress)
 on:
   workflow_dispatch:
 
+# Отчёт пробы карточек коммитится в ops/court_probe/report.txt: логи ранов
+# требуют admin-прав, и разбирать по ним провал импорта нельзя.
+permissions:
+  contents: write
+
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -65,3 +70,29 @@ jobs:
           print(">>> Если у всех 'данные ✓' — блок для US снят, облако снова может парсить.")
           print(">>> Если ОШИБКА/таймаут или 'НЕТ ДАННЫХ' — блок для GitHub жив, Mac-схема оправдана.")
           PY
+
+      # Главный шаг с 16.08.2026. Шаги выше спрашивают ПОИСК, а у капчёвых
+      # судов Свердловской области он закрыт по проекту — весь канал
+      # мониторинга там карточки, и молчат именно они. Отчёт коммитится:
+      # логи ранов требуют admin-прав, и разбирать провал по ним нельзя.
+      - name: Python — проба КАРТОЧЕК своего региона (отчёт файлом)
+        env:
+          REGION: ${{ vars.REGION }}
+        run: |
+          mkdir -p ops/court_probe
+          python3 scripts/probe_court_access.py 2>&1 \
+            | tee ops/court_probe/report.txt
+
+      - name: Commit report
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add ops/court_probe/report.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "🔬 Отчёт пробы доступа к судам ($(date -u +'%d.%m.%Y %H:%M') UTC)"
+          # Ретраи на случай параллельного пуша другого workflow.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
