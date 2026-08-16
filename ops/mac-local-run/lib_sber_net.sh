@@ -51,9 +51,8 @@ cm_git_ssh_command() { printf '%s\n' "ssh -p 443 -o HostName=ssh.github.com"; }
 # ставим host-маршрут через шлюз Сбера. Идемпотентно.
 # Код 1 — реестр не отдал доменов (это фатально для вызывающего: без
 # маршрутов суды пойдут через VPN мимо egress РФ, и прогон промолчит).
-cm_setup_court_routes() {
-  local python="$1" logfn="${2:-:}" out stat ips ip err
-  out=$("$python" - <<'PYROUTE'
+cm_court_ips() {  # $1 = python; строка «отрезолвлено/всего», дальше IP построчно
+  "$1" - <<'PYROUTE'
 import socket, sys
 sys.path.insert(0, "scripts")
 try:
@@ -78,7 +77,11 @@ for h in sorted(hosts):
 print(f"{resolved}/{len(hosts)}")
 print("\n".join(sorted(ips)))
 PYROUTE
-)
+}
+
+cm_setup_court_routes() {
+  local python="$1" logfn="${2:-:}" out stat ips ip err
+  out=$(cm_court_ips "$python")
   stat=$(echo "$out" | head -1)
   ips=$(echo "$out" | tail -n +2)
   [ -n "$ips" ] || return 1
@@ -109,8 +112,47 @@ from court_monitor.regions import get_region; print(get_region().appeal_courts[0
   printf '%s\n' "$host"
 }
 
-cm_court_reachable() {
-  curl -sS -o /dev/null --connect-timeout 15 --max-time 45 "https://$1/" 2>&1
+# ⚠️ Мало «ответил ли сервер»: страница защиты ГАС «Правосудие» приходит с
+# HTTP 200 и телом ~1 КБ («Этот запрос заблокирован по соображениям
+# безопасности (G) : ip: …»). Прежняя проба считала её успехом, и прогон шёл
+# читать карточки, которых нет, — ровно то, что случилось с облаком 16.08.2026.
+# Судим по РАЗМЕРУ, а не по тексту: страницы судов в win-1251, и русский
+# маркер в UTF-8-скрипте не совпал бы. Настоящая главная страница суда —
+# десятки КБ, заглушка и блок-страница — около одного.
+CM_COURT_MIN_BYTES="${CM_COURT_MIN_BYTES:-4096}"
+
+cm_court_reachable() {  # $1 = хост; печатает диагностику, 0 = суд живой
+  local out code size
+  out=$(curl -sS -o /dev/null -w '%{http_code} %{size_download}' \
+        --connect-timeout 15 --max-time 45 "https://$1/" 2>&1) || {
+    printf '%s' "$out"; return 1; }
+  code=${out%% *}
+  size=${out##* }
+  if [ "$code" != "200" ]; then
+    printf 'суд ответил HTTP %s' "$code"; return 1
+  fi
+  if [ "${size:-0}" -lt "$CM_COURT_MIN_BYTES" ]; then
+    printf 'ответ всего %s байт — это не страница суда, а заглушка или страница защиты ГАС (нас блокируют по адресу)' "$size"
+    return 1
+  fi
+  return 0
+}
+
+# ── Снять host-маршруты судов ────────────────────────────────────────────────
+# Нужно вне сети Сбера: маршруты, поставленные в офисе, остаются в таблице и
+# ведут в недоступный шлюз — суды перестают открываться вообще, а причина
+# выглядит как «нас блокируют». sudoers разрешает delete без пароля.
+cm_clear_court_routes() {
+  local python="$1" logfn="${2:-:}" ips ip n=0
+  ips=$(cm_court_ips "$python" | tail -n +2)
+  [ -n "$ips" ] || return 0
+  for ip in $ips; do
+    if netstat -rn -f inet | awk -v i="$ip" '$1==i{f=1} END{exit !f}'; then
+      sudo -n /sbin/route -n delete -host "$ip" >/dev/null 2>&1 && n=$((n + 1))
+    fi
+  done
+  [ "$n" -gt 0 ] && "$logfn" "Сняты маршруты судов через шлюз Сбера: $n (мы не в офисной сети)"
+  return 0
 }
 
 # ── Алерт о сбое в Telegram ──────────────────────────────────────────────────

@@ -775,8 +775,14 @@ function ghRepoApi() { return "https://api.github.com/repos/" + cfgVar("GH_REPO"
 // (CRON_UTC), держать в синхроне с [triggers].crons! Плитка «Автозапуск»
 // в админке раньше врала: время было захардкожено (03:45 — расписание
 // ХМАО до 15.07.2026). Фолбэк — текущий крон ХМАО-инстанса (03:30).
+// ⛔ Пустой CRON_UTC = «крона нет» (флип на Mac-резерв 16.08.2026): держать в
+// синхроне с [triggers].crons = []. Иначе плитка «Автозапуск» продолжала бы
+// обещать «завтра в 08:30» при выключенном кроне — самая опасная ложь админки
+// в дни блока, когда юрист как раз проверяет, ходит ли что-нибудь вообще.
 function cronUtcParts() {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(cfgVar("CRON_UTC", "3:30")).trim());
+  const raw = String(cfgVar("CRON_UTC", "3:30")).trim();
+  if (!raw) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(raw);
   return m ? [Number(m[1]), Number(m[2])] : [3, 30];
 }
 
@@ -791,8 +797,10 @@ function todayNonWorking() {
 }
 
 function nextCronAt() {
+  const parts = cronUtcParts();
+  if (!parts) return null;          // крон выключен — обещать нечего
   const now = new Date();
-  const [cronH, cronM] = cronUtcParts();
+  const [cronH, cronM] = parts;
   for (let i = 0; i < 30; i++) {
     const day = new Date(now.getTime() + i * 86400000);
     const fire = new Date(Date.UTC(

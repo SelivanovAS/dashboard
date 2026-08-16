@@ -181,6 +181,11 @@ bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural --check
 # Холостой заход: что забрал бы и что завёл бы. Ничего не пишет и не коммитит
 bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural --dry-run
 
+# Проверка ВНЕ офиса (дома): не требовать шлюз Сбера. Суды всё равно обязаны
+# ответить по-настоящему — через корпоративный VPN они отдают 403, поэтому
+# VPN на время проверки надо выключить. Ежедневный запуск ключа не получает.
+bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural --check --anywhere
+
 # Боевой разбор очереди
 bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural
 tail -f ops/mac-local-run/import_dumps.log

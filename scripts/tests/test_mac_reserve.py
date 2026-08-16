@@ -199,3 +199,37 @@ class TestFlipReadiness:
         """Само переключение — решение юриста, а не побочный эффект правки."""
         toml = _read("cloudflare-worker/wrangler.toml")
         assert "crons" in toml and "[]" not in toml.split("crons")[1][:40]
+
+
+class TestHonestCourtProbe:
+    """Проба доступности врала: `curl` без `-f` считает HTTP 403 успехом, а
+    страница защиты ГАС и вовсе приходит с HTTP 200 и телом ~1 КБ. Резерв
+    сказал бы «суд доступен», прошёл дальше и прочитал НОЛЬ карточек — ровно
+    тот провал, из-за которого встало облако 16.08.2026, только молча."""
+
+    def test_probe_checks_code_and_size(self, lib):
+        body = lib[lib.index("cm_court_reachable()"):]
+        body = body[:body.index("\n}")]
+        assert "%{http_code}" in body and "%{size_download}" in body, \
+            "проба снова смотрит только на код возврата curl"
+        assert 'code" != "200"' in body, "HTTP 403 опять сойдёт за успех"
+        assert "CM_COURT_MIN_BYTES" in body, \
+            "страница защиты ГАС (HTTP 200, ~1 КБ) снова пройдёт за живой суд"
+
+    def test_size_threshold_is_declared(self, lib):
+        assert "CM_COURT_MIN_BYTES=" in lib
+
+    def test_stale_office_routes_are_dropped(self, lib):
+        """Маршруты, поставленные в офисе, вне сети Сбера ведут в никуда: суды
+        не открылись бы вообще, а выглядело бы это как блок по адресу."""
+        assert "cm_clear_court_routes()" in lib
+        assert "route -n delete -host" in lib
+
+    def test_import_preflight_has_three_states(self):
+        """«Мы дома» — не ошибка (тихий пропуск), «мы в офисе, а суд молчит» —
+        ошибка с алертом. Два состояния вместо трёх дали бы либо ложную
+        тревогу каждый вечер, либо молчание в день, когда всё встало."""
+        text = _read("ops/mac-local-run/import_dumps.sh")
+        assert "PRE_RC" in text and 'PRE_RC" = "1"' in text
+        assert "PREFLIGHT_ERR" in text
+        assert "--anywhere" in text, "нет способа проверить резерв вне офиса"
