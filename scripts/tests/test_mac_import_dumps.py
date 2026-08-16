@@ -107,6 +107,25 @@ class TestDriverWiring:
             "битый ответ Worker'а снова превратится в честный на вид ноль"
         assert "ничего не менялось" in check
 
+    @pytest.mark.parametrize("script", [IMPORTER, PARSER, DRIVER, LIB,
+                                        "ops/stage_data_files.sh"])
+    def test_no_variable_glued_to_cyrillic_punctuation(self, script):
+        """`«$prev»` роняет прогон: bash 3.2 в локали Терминала приклеивает
+        первый байт ёлочки (0xC2) к имени переменной, получается несуществующее
+        имя, и `set -u` завершает скрипт. В локали C та же строка работает —
+        дефект пережил и `bash -n`, и репетицию в песочнице, и проявился только
+        на боевом запуске у юриста (16.08.2026). Комментарии и логи проекта
+        русские, значит класс будет повторяться: ловим регекспом."""
+        # Комментарии пропускаем: в них дефект цитируется как пример (bash их
+        # не разбирает), а объяснение «почему нельзя» обязано остаться в коде.
+        bad = [(i, l.strip()) for i, l in
+               enumerate(_read_repo(script).splitlines(), 1)
+               if not l.strip().startswith("#")
+               and re.search(r"\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]", l)]
+        assert not bad, (
+            f"{script}: подстановка без фигурных скобок вплотную к не-ASCII "
+            f"символу — {bad}")
+
     def test_auth_is_resolved_by_worker_not_by_file(self):
         """В push_secret легко попадает чужой токен (так и вышло 16.08.2026 с
         progress_token). Каким секретом ходить, решает ответ Worker'а: не
