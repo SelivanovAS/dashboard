@@ -121,9 +121,22 @@ from court_monitor.regions import get_region; print(get_region().appeal_courts[0
 # десятки КБ, заглушка и блок-страница — около одного.
 CM_COURT_MIN_BYTES="${CM_COURT_MIN_BYTES:-4096}"
 
-cm_court_reachable() {  # $1 = хост; печатает диагностику, 0 = суд живой
-  local out code size
-  out=$(curl -sS -o /dev/null -w '%{http_code} %{size_download}' \
+# ⚠️ Подпись клиента (User-Agent) решает: WAF судов отдаёт `curl/…` и
+# `python-requests/…` ровно тот же 403, что и заблокированному адресу.
+# Замер 16.08.2026 с домашнего интернета юриста: голый curl → 403 (1330 б),
+# браузерная подпись → 200 (197 КБ той же страницы). Проба без подписи
+# объявляла бы блоком ЛЮБОЙ прогон, в том числе из офиса. Берём подпись у
+# самого парсера — одно место правды, а не вторая копия строки.
+cm_court_ua() {
+  "$1" -c 'import sys; sys.path.insert(0, "scripts");
+from court_monitor.netutil import session; print(session.headers.get("User-Agent", ""))' 2>/dev/null
+}
+
+cm_court_reachable() {  # $1 = хост, $2 = python; печатает диагностику, 0 = живой
+  local out code size ua
+  ua=$(cm_court_ua "${2:-python3}")
+  [ -n "$ua" ] || ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  out=$(curl -sS -o /dev/null -w '%{http_code} %{size_download}' -A "$ua" \
         --connect-timeout 15 --max-time 45 "https://$1/" 2>&1) || {
     printf '%s' "$out"; return 1; }
   code=${out%% *}

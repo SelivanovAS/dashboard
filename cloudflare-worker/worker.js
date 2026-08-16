@@ -1101,9 +1101,20 @@ async function handleAdminImportDump(request, env) {
 
 // Выдача сырого дампа GitHub Action'у (Bearer PUSH_SECRET — он уже есть в
 // GH secrets; шаблон /subscriptions).
-async function handleImportDumpGet(request, env) {
+// Авторизация КАНАЛА ИМПОРТА (выдача дампа + приём отчёта). Кроме
+// PUSH_SECRET (им ходит GitHub Action) принимаем OWNER_SECRET: резерв на Mac
+// делает ту же работу, когда суды режут адреса раннеров, а PUSH_SECRET на
+// машине юриста взять НЕОТКУДА — он write-only и в Cloudflare, и в GitHub
+// secrets. Границу доверия это не двигает: владельческим секретом открывается
+// вся админка, включая запуск workflow, — он и так сильнее (16.08.2026).
+function importChannelAuthOk(request, env) {
   const auth = request.headers.get("Authorization") || "";
-  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+  if (env.PUSH_SECRET && auth === `Bearer ${env.PUSH_SECRET}`) return true;
+  return !!(env.OWNER_SECRET && auth === `Bearer ${env.OWNER_SECRET}`);
+}
+
+async function handleImportDumpGet(request, env) {
+  if (!importChannelAuthOk(request, env)) {
     return new Response("Unauthorized", { status: 401 });
   }
   const url = new URL(request.url);
@@ -1283,8 +1294,7 @@ async function handleAddCaseJobGet(request, env) {
 // Обновляет запись журнала по uuid из dump_key (импорт дампов) либо job_key
 // (точечное добавление, kind:"case") — журнал у обоих каналов общий.
 async function handleImportResult(request, env) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+  if (!importChannelAuthOk(request, env)) {
     return new Response("Unauthorized", { status: 401 });
   }
   let body;
