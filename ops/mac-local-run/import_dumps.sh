@@ -229,6 +229,15 @@ cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 # Операторский импорт: ретраи полезны — запросов мало, повтор дороже
 # (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
 export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
+# Предохранитель под размер ДАМПА, а не боевого прогона — те же значения, что
+# у облака (env в import_cases.yml, страж test_breaker_settings_match_cloud):
+# дефолты кода (3 отказа, проба каждые 30 пропущенных) считаны на обход сотен
+# карточек, а в дампе на 25 строк «каждые 30» означает «никогда», и мигающий
+# суд не восстановится внутри импорта. 16.08.2026 это стоило дампа
+# Верх-Исетского: три отказа подряд сняли суд с обхода, 12 исков банка не
+# запрашивались вовсе.
+export CARD_BREAKER_THRESHOLD="${CARD_BREAKER_THRESHOLD:-5}"
+export CARD_BREAKER_PROBE_EVERY="${CARD_BREAKER_PROBE_EVERY:-3}"
 
 GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
 export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
