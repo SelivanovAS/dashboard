@@ -360,6 +360,11 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
     # Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается — иначе
     # запись получит штамп «проверено» и не будет перечитана до заседания.
     if card_is_empty_shell(card_info):
+        # Диагноз этого же запроса: fetch прошёл (kind="ok"), но карточки в
+        # ответе нет. Без уточнения fetch_fail_reason_ru() промолчит, причина
+        # не накопится, и админка подставит ложное «суд не ответил» (ревью
+        # Fable 16.08.2026 — класс empty_shell был недостижим).
+        config.FETCH_DIAG["kind"] = "empty_shell"
         return None, "failed"
     return card_info, ""
 
@@ -416,6 +421,11 @@ def _card_blind_case(case: dict | None, r: dict) -> dict | None:
     if not r.get("link"):
         return None
     fi = case.get("first_instance") or {}
+    # Пришиваем блок обратно: при отсутствующем/None first_instance «or {}»
+    # даёт НОВЫЙ dict, и дозаполнение ушло бы в никуда — отчёт сказал бы
+    # [REFILLED], а запись осталась пустой (ревью Fable 16.08.2026; сейчас
+    # таких записей ноль, класс латентный).
+    case["first_instance"] = fi
     if fi.get("last_checked_at") or fi.get("intake_card_parse"):
         return None
     if fi.get("events"):
@@ -620,6 +630,11 @@ def import_rows(
             reason = _note_card_failure(bank_state)
             note = (f" ({reason or 'карточка недоступна'} — дозаполнит прогон "
                     "или повторная вставка дампа)")
+        elif why == "capped":
+            # За кэпом карточек дело тоже заводится card-blind — без пометки
+            # хвост большого дампа выглядел бы полноценно заведённым (ревью
+            # Fable 16.08.2026). В card_failed НЕ считаем: запроса не было.
+            note = " (за кэпом карточек — дозаполнит повторная вставка дампа)"
         # Служебный блок: кто и когда завёл дело (история импортов, бейдж
         # «импортировано» на фронте — задел).
         entry["import"] = {"operator": operator, "at": now_iso, "source": "dump"}

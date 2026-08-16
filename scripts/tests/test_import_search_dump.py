@@ -807,9 +807,13 @@ class TestWorkflowWiring:
         yml = _read_repo(".github/workflows/import_cases.yml")
         worker = _read_repo("cloudflare-worker/worker.js")
         admin = _read_repo("cloudflare-worker/admin_page.js")
-        assert "card_fail_reason:.card_fail_reason" in yml
+        # Поле шлётся ВСЕГДА (пустая строка = «чисто»): re-run того же job
+        # после снятия блока обязан очистить прежнюю причину в записи журнала.
+        assert 'card_fail_reason:(.card_fail_reason // "")' in yml
         assert 'typeof body.card_fail_reason === "string"' in worker
         assert "record.card_fail_reason = body.card_fail_reason.slice" in worker
+        assert "delete record.card_fail_reason" in worker, \
+            "пустая причина не чистит прежнюю — успешный re-run останется с «HTTP 403»"
         assert "item.card_fail_reason" in admin
 
 
@@ -1033,6 +1037,30 @@ class TestCardBlindRefill:
         s = _read_summary(import_env["gh_out"])
         assert s["card_fail_reason"] == ""
         assert s["card_failed"] == 0
+
+    def test_capped_rows_are_marked_card_blind(self, import_env, monkeypatch):
+        """За кэпом дело тоже заводится пустым — без пометки хвост большого
+        дампа выглядел бы полноценно заведённым (ревью Fable 16.08.2026)."""
+        monkeypatch.setattr(isd, "MAX_BANK_CARDS_PER_IMPORT", 0)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        added = [l for l in s["lines"] if l.startswith("[ADDED]")]
+        assert added and all("за кэпом карточек" in l for l in added)
+
+    def test_empty_shell_reason_reaches_summary(self, import_env, monkeypatch):
+        """Огрызок (fetch прошёл, карточки в ответе нет) обязан дать свою
+        причину: раньше диагноз оставался «ok», причина не копилась, и админка
+        подставляла ложное «суд не ответил» (ревью Fable 16.08.2026)."""
+        def shell(url, context=None):
+            isd.config.FETCH_DIAG.clear()
+            isd.config.FETCH_DIAG.update({"kind": "ok", "status": 200})
+            return "<html><body>нет таблиц вовсе</body></html>"
+        monkeypatch.setattr(isd, "fetch_card_checked", shell)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["card_failed"] == 2
+        assert s["card_fail_reason"] == (
+            "вместо карточки пришла страница без данных")
 
     def test_refill_respects_dry_run(self, import_env, monkeypatch):
         outage = self._outage(import_env, monkeypatch)

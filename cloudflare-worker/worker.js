@@ -1338,8 +1338,13 @@ async function handleImportResult(request, env) {
   // Почему суд не отдал карточки (403 / страница защиты / проверочный код /
   // заглушка) — строка, а не счётчик: точная причина уже есть построчно, а
   // сводке нужен один вывод. Числовой whitelist выше строки режет.
+  // Пустая причина ЧИСТИТ прежнюю: re-run того же job после снятия блока
+  // перезаписывает счётчики (card_failed=0), и оставшаяся строка «HTTP 403…»
+  // красила бы успешный прогон предупреждением (ревью Fable 16.08.2026).
   if (typeof body.card_fail_reason === "string" && body.card_fail_reason) {
     record.card_fail_reason = body.card_fail_reason.slice(0, 200);
+  } else if (typeof body.card_fail_reason === "string") {
+    delete record.card_fail_reason;
   }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,

@@ -148,6 +148,27 @@ class TestFlipReadiness:
         assert "if: false" not in yml, "дайджест-на-push всё ещё усыплён"
         assert "github.actor != 'github-actions[bot]'" in yml
 
+    def test_replay_guarded_by_mac_commit_message(self):
+        """Условие по актору отсекает только крон: без гарда по сообщению
+        коммита ЛЮБОЙ человеческий push, задевший last_digest_context.json
+        (ручная починка данных, merge), повторно разослал бы вчерашний дайджест
+        всем при живом кроне (ревью Fable 16.08.2026). «Mac-парсинг» —
+        фиксированный хвост сообщения коммита parse_and_push.sh: менять их
+        только парой."""
+        yml = _code(_read(".github/workflows/replay_on_push.yml"))
+        assert "contains(github.event.head_commit.message, 'Mac-парсинг')" in yml
+        worker = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "(Mac-парсинг)" in worker, \
+            "сообщение коммита Mac потеряло маркер — replay_on_push оглохнет"
+
+    def test_route_log_reports_domains_not_only_ips(self):
+        """Суды ГАС сидят за общим балансировщиком: уникальный IP может выйти
+        ОДИН, и лог «IP: 1» без числа доменов читался бы как «резерв сломан»
+        прямо в понедельник флипа (ревью Fable 16.08.2026)."""
+        worker = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "ROUTE_STAT" in worker
+        assert "общий балансировщик" in worker
+
     def test_replay_name_is_not_misleading(self):
         yml = _read(".github/workflows/replay_on_push.yml")
         assert "усыплён" not in yml.splitlines()[0]

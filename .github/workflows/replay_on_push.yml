@@ -39,7 +39,17 @@ jobs:
     # github-actions[bot]; GITHUB_TOKEN-пуши и так не триггерят workflow,
     # paths-фильтр смотрит только на last_digest_context.json — но держим
     # явный щит.)
-    if: github.actor != 'github-actions[bot]'
+    #
+    # Гард по сообщению коммита (ревью Fable 16.08.2026): условие по актору
+    # отсекает ТОЛЬКО крон. Без второй половины ЛЮБОЙ человеческий push,
+    # задевший last_digest_context.json (ручная починка данных, merge,
+    # тестовый прогон резерва в выходные), повторно разослал бы вчерашний
+    # дайджест в Telegram и push ВСЕМ подписчикам — при ещё живом кроне.
+    # «(Mac-парсинг)» — фиксированный хвост сообщения коммита
+    # parse_and_push.sh; только такие пуши и должны собирать дайджест.
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      contains(github.event.head_commit.message, 'Mac-парсинг')
 
     steps:
       - name: Checkout repository
