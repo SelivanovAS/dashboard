@@ -1,9 +1,9 @@
 """
 Стражи mine-версии дайджеста на фронте (app.js): секция «🏦 ИСКИ БАНКА».
 
-Контекст 13.08.2026. Юрист: «при выборе моих дел в дайджесте должны быть
-только мои дела + новые дела, поступившие в суд; по искам банка в первой
-инстанции это не работает». Разбор нашёл две независимые поломки:
+С 15.08.2026 «Мои» — самостоятельный раздел и содержит строго отмеченные
+звездой дела. Новые дела без звезды больше не подмешиваются ни в таблицу,
+ни в персональную версию дайджеста.
 
 A. Регекспы секций не знали заголовков «🏦 ИСКИ БАНКА», «📑 Касс. события» и
    «⚖️🔬 КАССАЦИЯ» — незнакомый заголовок не сбрасывает состояние машины
@@ -19,11 +19,9 @@ B. Звезда иска банка хранится composite-формой «д
 
 Что охраняем:
 1. Наборы эмодзи в SECTION_*_RE (grep) — 🏦/📑 фильтруются, ⚖️🔬 распознаётся,
-   📌 (футер) закрывает секцию, «Новые касс» общесистемны.
+   📌 (футер) закрывает секцию, заголовки новых дел тоже проходят watchlist.
 2. Composite-матчинг банк-строк по домену из href (mineRefMatches).
-3. Новые иски банка (fi_bank_claim_registered) проходят как «новые дела» —
-   без звезды. Push этим НЕ затронут: там они по-прежнему по watchlist
-   (решение юриста 13.08.2026).
+3. Любые новые дела, включая fi_bank_claim_registered, требуют звезду.
 4. Счётчик found в buildMineHtml считается тем же предикатом — иначе
    bank-only совпадение давало ложный фолбэк «показан общий дайджест».
 5. Заголовки-сироты (группа, у которой всё выкинуто) убираются, футер — нет.
@@ -104,7 +102,7 @@ def _harness(src: str, extra_fns: tuple[str, ...] = ()) -> str:
 
 
 # Миниатюра боевого дайджеста (структура секций — как в data/last_digest.json
-# от 13.08.2026): группы 🏛/⚖️/⚖️🔬, фильтруемые 📅/📑/🏦, общесистемная 📥,
+# от 13.08.2026): группы 🏛/⚖️/⚖️🔬, фильтруемые 📅/📑/🏦/📥,
 # разделители «⸻» внутри банк-секции и футер 📌.
 DIGEST = "\n\n".join([
     "📊 <b>Мониторинг дел Сбербанка ХМАО-Югра — 13.08.2026</b>\n📋 <b>Сводка</b>",
@@ -154,7 +152,6 @@ def _run_filter(stars: list[str]) -> list[str]:
     script = _harness(src) + """
 const DIGEST = %s, CTX = %s, STARS = %s;
 const mine = new Set(STARS.map(canonCaseNumber));
-for (const n of collectNewCaseNumbers(CTX)) mine.add(canonCaseNumber(n));
 const out = filterGeneralHtmlByMine(DIGEST, mine);
 console.log(JSON.stringify(out.split(/\\n{2,}/).filter(Boolean)
   .map((p) => p.split('\\n')[0])));
@@ -206,27 +203,31 @@ def test_cassation_grouping_header_recognized():
         )
 
 
-def test_new_cassation_cases_stay_systemwide():
-    """«📥 Новые касс. дела» (discovery) не фильтруются — как в delivery.py."""
+def test_new_cassation_headers_are_recognized_and_filtered():
+    """«📥 Новые касс. дела» распознаются, но больше не обходят watchlist."""
     rx = _const_src(_app_js(), "SECTION_NEW_RE")
     assert "касс" in rx, (
-        "SECTION_NEW_RE не считает «Новые касс. дела» общесистемной секцией, "
-        "хотя cass_discovered в delivery.py не фильтруется по watchlist."
+        "SECTION_NEW_RE не распознаёт «Новые касс. дела»."
+    )
+    fn = _fn_src(_app_js(), "filterGeneralHtmlByMine").replace(" ", "")
+    assert "(SECTION_FILTERED_RE.test(firstLine)||isNew)" in fn, (
+        "Новая кассация снова проходит в «Мои» без звезды."
     )
 
 
 # ===== 2-3. Поведение фильтра =====
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
-def test_bank_section_filtered_without_stars():
-    """Без звёзд в секции банка остаются только новые иски банка."""
+def test_no_cases_without_stars():
+    """Без звёзд персональная версия не подмешивает даже новые дела."""
     lines = _run_filter([])
     nums = _numbers(lines)
-    assert nums == ["33-5715/2026", "М-7220/2026"], (
-        f"Осталось {nums}: ожидались только общесистемные — новое дело "
-        "апелляции и новый иск банка (fi_bank_claim_registered)."
+    assert nums == [], (
+        f"Осталось {nums}: в «Моих» оказались дела без звезды."
     )
-    assert any(s.startswith("🏦") for s in lines), "Заголовок секции банка пропал."
+    assert not any(s.startswith("🏦") for s in lines), (
+        "Пустой заголовок секции банка остался без дел."
+    )
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
@@ -236,6 +237,9 @@ def test_bank_star_matches_by_composite_domain():
     assert "2-6736/2026" in nums, (
         "Звёздное дело банка выпало: composite-матчинг по домену из href не "
         "работает (звёзды bank-дел в другой форме не хранятся)."
+    )
+    assert nums == ["2-6736/2026"], (
+        f"Кроме звёздного дела в «Мои» подмешались чужие/новые: {nums}."
     )
 
 
@@ -260,7 +264,7 @@ def test_section_counter_matches_kept_rows():
     """Счётчик заголовка пересчитан по факту: «(4)» при четырёх строках."""
     lines = _run_filter(["vartovgor--hmao.sudrf.ru|2-6736/2026"])
     заголовок = next(s for s in lines if s.startswith("🏦"))
-    assert "(2)" in заголовок, (
+    assert "(1)" in заголовок, (
         f"Заголовок «{заголовок}» несёт счётчик общего дайджеста — в "
         "mine-версии юрист видит «(4)» над двумя строками и решает, что "
         "фильтр потерял его дела."
@@ -302,16 +306,15 @@ def test_found_counted_by_same_predicate():
     )
 
 
-def test_bank_new_claims_pass_as_new_cases():
-    """fi_bank_claim_registered — «дело поступило в суд», идёт без звезды."""
-    fn = _fn_src(_app_js(), "collectNewCaseNumbers")
-    assert "fi_bank_claim_registered" in fn, (
-        "Новые иски банка снова требуют звезду: авто-подхват заводит их сам, "
-        "звезды на них по определению ещё нет."
+def test_new_cases_do_not_expand_mine_set():
+    """Контекст новых дел не расширяет watchlist персонального дайджеста."""
+    build = _fn_src(_app_js(), "buildMineHtml")
+    assert "collectNewCaseNumbers" not in build, (
+        "buildMineHtml снова добавляет новые дела без звезды."
     )
-    assert "court_domain" in fn, (
-        "Новый иск банка кладётся голым номером — в mine-набор он обязан "
-        "попасть composite-ключом «домен|номер» (номера не уникальны)."
+    filt = _fn_src(_app_js(), "filterGeneralHtmlByMine")
+    assert "(SECTION_FILTERED_RE.test(firstLine)||isNew)" in filt.replace(" ", ""), (
+        "Секции «Новые дела» снова считаются общесистемными и обходят watchlist."
     )
 
 
@@ -347,7 +350,6 @@ def _run_filter_html(html: str, stars: list[str], ctx: dict) -> list[str]:
     script = _harness(src) + """
 const DIGEST = %s, CTX = %s, STARS = %s;
 const mine = new Set(STARS.map(canonCaseNumber));
-for (const n of collectNewCaseNumbers(CTX)) mine.add(canonCaseNumber(n));
 const out = filterGeneralHtmlByMine(DIGEST, mine);
 console.log(JSON.stringify(out.split(/\\n{2,}/).filter(Boolean)
   .map((p) => p.split('\\n')[0])));

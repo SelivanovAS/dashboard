@@ -228,18 +228,30 @@
     <!-- Analytics row -->
     <div class="analytics-row" id="analytics-row"></div>
 
+    <!-- Верхний уровень навигации: три равноправных раздела. Полоса стоит
+         перед поиском и фильтрами, потому что сначала пользователь выбирает
+         область данных, а уже потом сужает её. Счётчик остаётся справа на
+         широком экране; на узком при нехватке места его скрывает fitCounter. -->
+    <div class="list-bar" id="list-bar">
+      <div class="dataset-switch" id="dataset-switch"></div>
+      <div class="table-counter" id="table-counter"></div>
+    </div>
+
     <!-- Toolbar -->
     <div class="toolbar">
-      <!-- Ряд 1: ★ (моб) + поиск + кнопка фильтров (моб) + быстрые статус-чипы (десктоп) -->
+      <!-- Ряд 1: ★ Мои (моб, только при непустых подписках) + поиск +
+           фильтры (моб) + общие статусы (десктоп). Нижняя звезда дублирует
+           верхний раздел и остаётся быстрым входом во время прокрутки. -->
       <div class="toolbar-row toolbar-row-search">
         <button class="toolbar-mine-btn mine-toggle-btn" id="toolbar-mine-btn" type="button"
-                aria-label="Только мои дела"
-                aria-pressed="false"
                 hidden
+                aria-label="Мои дела"
+                aria-pressed="false"
+                title="Показать мои дела"
                 onclick="toggleMobileMine()">★</button>
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" class="search-input" id="search-input" placeholder="Поиск по номеру, сторонам, категории..." oninput="onSearchInput()">
+          <input type="text" class="search-input" id="search-input" placeholder="Поиск по всем делам..." aria-label="Поиск по номеру, сторонам и категории во всех разделах" oninput="onSearchInput()">
           <button class="search-clear btn-x" id="search-clear" onclick="clearSearch()" title="Очистить" aria-label="Очистить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
         </div>
         <button class="filters-btn" id="filters-btn" onclick="openFiltersSheet()" aria-label="Фильтры">
@@ -250,7 +262,7 @@
         <!-- Быстрые статус-чипы (десктоп) — рендерятся JS -->
         <div class="chip-bar chip-bar-quick" id="chip-bar-quick"></div>
       </div>
-      <!-- Ряд 2: сегментные переключатели (роль + инстанция) — рендерятся JS -->
+      <!-- Ряд 2: контекстные фильтры выбранного раздела — рендерятся JS -->
       <div class="toolbar-row toolbar-row-segments">
         <div class="chip-bar chip-bar-segments" id="chip-bar-segments"></div>
       </div>
@@ -269,10 +281,6 @@
           <option value="awaiting">Ожидает назначения</option>
           <option value="decided">Рассмотрено</option>
           <option value="lost">Проиграно (отм./изм.)</option>
-          <!-- Bank-only значения трека «Иски банка»: без option'ов
-               setStatusFilter('writs') молча не сработал бы -->
-          <option value="writs">🧾 Есть исполнительный лист</option>
-          <option value="awaiting_writ">Ждут исполнительный лист</option>
           <option value="archived">Архив (60+ дней)</option>
         </select>
         <select class="filter-select" id="filter-role" style="display:none;" onchange="applyFilters()">
@@ -287,28 +295,41 @@
           <option value="appeal">Апелляция</option>
           <option value="cassation">Кассация</option>
         </select>
+        <!-- Контекст трека «Иски банка» хранится отдельно от общего статуса:
+             скрытое значение никогда не влияет на другие разделы. -->
+        <select class="filter-select" id="filter-bank-control" style="display:none;" onchange="applyFilters()">
+          <option value="all">Любой контроль</option>
+          <option value="writs">Есть исполнительный лист</option>
+          <option value="awaiting_writ">Ждут исполнительный лист</option>
+          <option value="interim">Обеспечение</option>
+        </select>
+        <!-- У «Моих» свои источник, роль и инстанция. Они не наследуют
+             контекст основной картотеки и сохраняются при переключении. -->
+        <select class="filter-select" id="filter-mine-source" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все источники</option>
+          <option value="main">Основные</option>
+          <option value="bank">Иски банка</option>
+        </select>
+        <select class="filter-select" id="filter-mine-role" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все роли</option>
+          <option value="plaintiff">Истец</option>
+          <option value="defendant">Ответчик</option>
+          <option value="third_party">Сбер 3-е лицо</option>
+        </select>
+        <select class="filter-select" id="filter-mine-stage" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все инстанции</option>
+          <option value="first_instance">1 инстанция</option>
+          <option value="appeal">Апелляция</option>
+          <option value="cassation">Кассация</option>
+        </select>
         <select class="filter-select" id="filter-category" style="display:none;" onchange="applyFilters()">
           <option value="all">Все категории</option>
         </select>
       </div>
     </div>
 
-    <!-- Полоса списка: переключатель картотек + счётчик ОДНОЙ строкой.
-         На телефоне липнет под шапкой (класс is-sticky ставит
-         renderDatasetSwitch — только вне режима «★ Мои»), чтобы картотека
-         не уезжала при скролле списка. Переключатель рендерится JS и скрыт,
-         пока data/cases_bank.json не существует; счётчик есть всегда,
-         поэтому пустой липкой полосы не бывает.
-         Живёт в потоке контента (не в тулбаре): на мобильном тулбар —
-         плавающая капсула внизу, а картотеку надо видеть над таблицей. -->
-    <div class="list-bar" id="list-bar">
-      <div class="dataset-switch" id="dataset-switch" hidden></div>
-      <div class="table-counter" id="table-counter"></div>
-    </div>
-
-    <!-- Кросс-поиск: индикатор фоновой загрузки соседней картотеки
-         (renderSearchCrossHint). Сами найденные дела подмешиваются хвостом
-         в выдачу — см. applyFilters. -->
+    <!-- Глобальный поиск: здесь показывается только индикатор фоновой загрузки
+         bank-списка. Найденные дела подмешиваются группами — см. applyFilters. -->
     <div class="search-cross-hint info-line" id="search-cross-hint" hidden></div>
 
     <!-- Desktop table -->
