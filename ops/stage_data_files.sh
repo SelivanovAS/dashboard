@@ -61,6 +61,10 @@ if [ "${1:-}" = "--list" ]; then
   exit 0
 fi
 
+# Провал git add — ФАТАЛЕН (ревью Fable 16.08.2026): молча пропущенный add
+# (index.lock параллельного git, внезапный gitignore) дал бы «изменений нет —
+# коммит не нужен», и данные прогона не опубликовались бы. Старый инлайновый
+# список в workflow падал громко под bash -e — тише него быть нельзя.
 added=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
@@ -69,12 +73,14 @@ while IFS= read -r p; do
       # Глоб холодных архивов: без совпадений git add ругнулся бы.
       for f in $p; do
         [ -e "$f" ] || continue
-        git add "$f" && added=$((added + 1))
+        git add "$f" || { echo "stage_data_files: git add $f не удался" >&2; exit 1; }
+        added=$((added + 1))
       done
       ;;
     *)
       [ -e "$p" ] || continue
-      git add "$p" && added=$((added + 1))
+      git add "$p" || { echo "stage_data_files: git add $p не удался" >&2; exit 1; }
+      added=$((added + 1))
       ;;
   esac
 done <<< "$paths"

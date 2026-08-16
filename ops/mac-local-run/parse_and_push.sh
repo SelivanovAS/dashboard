@@ -31,7 +31,11 @@ for arg in "$@"; do
   case "$arg" in
     --check) CHECK_ONLY=1 ;;
     -*)      echo "неизвестный ключ: $arg" >&2; exit 2 ;;
-    *)       REPO_ARG="$arg" ;;
+    # ПЕРВЫЙ позиционный побеждает: parse_all.sh передаёт путь клона первым
+    # аргументом и добавляет свои «$@» следом — если бы побеждал последний,
+    # случайный путь в аргументах драйвера перекрыл бы клон КАЖДОЙ итерации
+    # (один репозиторий прогнался бы дважды, остальные молча пропали).
+    *)       [ -n "$REPO_ARG" ] || REPO_ARG="$arg" ;;
   esac
 done
 
@@ -167,18 +171,26 @@ hosts = {c.domain for c in region.first_instance_courts if c.enabled}
 hosts |= {c.domain for c in region.appeal_courts}
 hosts.add(region.cassation_court.domain)
 ips = set()
+resolved = 0
 for h in sorted(hosts):
     try:
         ips.add(socket.gethostbyname(h))
+        resolved += 1
     except OSError:
         pass
+# Первая строка — счётчики для лога, дальше IP построчно. Оба числа важны:
+# доменов должно быть 21 (ХМАО) / 67 (Урал), а УНИКАЛЬНЫЙ IP может выйти
+# ОДИН — суды ГАС сидят за общим балансировщиком, и это норма, не поломка.
+print(f"{resolved}/{len(hosts)}")
 print("\n".join(sorted(ips)))
 PYROUTE
 )
+ROUTE_STAT=$(echo "$UNIQ_IPS" | head -1)
+UNIQ_IPS=$(echo "$UNIQ_IPS" | tail -n +2)
 if [ -z "$UNIQ_IPS" ]; then
   die "не удалось получить домены судов из реестра региона — маршруты не построить"
 fi
-log "Судебных IP для маршрутизации: $(echo "$UNIQ_IPS" | wc -l | tr -d ' ')"
+log "Доменов судов region-реестра отрезолвлено: $ROUTE_STAT → уникальных IP: $(echo "$UNIQ_IPS" | wc -l | tr -d ' ') (IP может быть один — общий балансировщик ГАС)"
 for ip in $UNIQ_IPS; do
   # Пересоздаём маршрут заново каждый прогон: старый мог остаться в таблице,
   # но битым после смены IP en0 (route висит, а connect даёт EADDRNOTAVAIL).

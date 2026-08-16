@@ -165,8 +165,11 @@ def classify_response(status: int | None, html: str, url: str) -> tuple[str, dic
         return CAPTCHA, marks
     if looks_like_non_card_page(html, url):
         # Страница защиты и штатная заглушка sudrf идут одним детектором —
-        # различает их только текст: у защиты в теле есть наш адрес.
-        return (BLOCKED if marks else OUTAGE), marks
+        # различает их только текст: у защиты в теле есть НАШ АДРЕС. Именно
+        # ip, а не любой mark: _BLOCK_RULE_RE матчит первую латинскую букву в
+        # скобках, и «(C) 2006» из футера обычной заглушки перекрасил бы её в
+        # БЛОК — а это главный вердикт отчёта (ревью Fable 16.08.2026).
+        return (BLOCKED if marks.get("ip") else OUTAGE), marks
     if card_is_empty_shell(parse_case_card(html, url)):
         return EMPTY, marks
     return OK, marks

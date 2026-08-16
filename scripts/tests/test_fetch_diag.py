@@ -188,3 +188,12 @@ class TestProbeClassification:
         page = ("<html><body><p>Данных по запросу не обнаружено</p>"
                 "</body></html>")
         assert classify_response(200, page, CARD_URL)[0] == EMPTY
+
+    def test_copyright_in_outage_footer_is_not_a_block(self):
+        """БЛОК от ЗАГЛУШКИ отличает НАШ АДРЕС, а не любой mark:
+        _BLOCK_RULE_RE матчит первую латинскую букву в скобках, и «(C) 2006»
+        из футера обычной заглушки перекрашивал бы её в БЛОК — главный
+        вердикт отчёта (ревью Fable 16.08.2026)."""
+        page = OUTAGE_PAGE.replace(
+            "</body>", "<footer>(C) 2006 ГАС Правосудие</footer></body>")
+        assert classify_response(200, page, CARD_URL)[0] == OUTAGE
