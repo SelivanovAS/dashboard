@@ -304,8 +304,13 @@ class TestImporterE2E:
                 "id": "2-1001/2026",
                 "current_stage": "first_instance",
                 "bank_role": "Ответчик",
+                # Штамп проверки обязателен: без него запись card-blind, и
+                # повтор дампа дочитает ей карточку ([REFILLED], с 16.08.2026)
+                # вместо голого [ALREADY]. Здесь проверяется дедуп номера, а
+                # не дозаполнение — см. TestCardBlindRefill.
                 "first_instance": {"case_number": "2-1001/2026",
-                                   "court_domain": "akademicheskiy--svd.sudrf.ru"},
+                                   "court_domain": "akademicheskiy--svd.sudrf.ru",
+                                   "last_checked_at": "2026-08-01"},
             }],
         }, ensure_ascii=False), encoding="utf-8")
         _run(import_env)
@@ -779,6 +784,21 @@ class TestWorkflowWiring:
         assert "(e.added || 0) + (e.added_bank || 0)" in admin
         assert "added_bank: record.added_bank || 0" in worker
 
+    def test_card_counters_reach_operator(self):
+        """Те же три звена для карточек основной картотеки (16.08.2026): суд
+        отдал блок-страницу, дела завелись пустышками, а сводка бодро писала
+        «+4 в картотеку» — провал был виден только в свёртке «Отчёт
+        построчно», куда никто не смотрит."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        for key in ("card_failed", "refilled"):
+            assert f"{key}:(.{key} // 0)" in yml, f"{key} не уезжает из workflow"
+            assert f'"{key}"' in worker, f"{key} режет whitelist Worker'а"
+            assert f"item.{key}" in admin, f"{key} не доходит до сводки админки"
+        assert "без карточки" in admin, "сводка молчит о непрочитанных карточках"
+        assert "карточек дочитано" in admin
+
 
 # ── Карточка для исков ПРОТИВ банка (основная картотека, с 14.08.2026) ───────
 
@@ -854,6 +874,120 @@ class TestMainTrackCardRead:
         assert import_env["card_calls"]["n"] == 0
         fi = self._defendant(import_env)["first_instance"]
         assert fi["events"] == []      # заведено, но card-blind
+
+
+# ── Дозаполнение card-blind записей повторным дампом (с 16.08.2026) ──────────
+
+class TestCardBlindRefill:
+    """Инцидент 16.08.2026: портал Ленинского р/с ЕКБ отдавал «Этот запрос
+    заблокирован по соображениям безопасности» (HTTP 200) вместо карточек, и
+    два импорта завели 5 дел пустышками. Провал был молчаливым — сводка
+    админки писала «+4 в картотеку», — а починить его было нечем: повторная
+    вставка того же дампа отвечала [ALREADY] и карточку не читала. Крон ходит
+    пн-пт, так что дамп выходного дня стоял пустым до понедельника."""
+
+    @staticmethod
+    def _defendant(env) -> dict:
+        data = json.loads(env["json"].read_text(encoding="utf-8"))
+        return {c["id"]: c for c in data["cases"]}["2-1001/2026"]
+
+    @staticmethod
+    def _outage(import_env, monkeypatch) -> dict:
+        """Управляемый аутейдж суда: блок-страница (HTTP 200 без карточки) →
+        fetch_card_checked отдаёт "". Переключатель, а не monkeypatch.undo():
+        фикстура import_env делит с тестом ОДИН экземпляр monkeypatch, и undo
+        снёс бы заодно подмену региона и путей хранилища."""
+        state = {"blocked": True}
+        calls = import_env["card_calls"]
+
+        def fake_card(url, context=None):
+            calls["n"] += 1
+            return "" if state["blocked"] else recent_fi_card_html()
+
+        monkeypatch.setattr(isd, "fetch_card_checked", fake_card)
+        return state
+
+    def test_failed_cards_are_counted(self, import_env, monkeypatch):
+        """Счётчик card_failed — единственный способ узнать о провале, не
+        разворачивая построчный отчёт."""
+        self._outage(import_env, monkeypatch)
+        assert _run(import_env) == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 2 and s["card_failed"] == 2
+        assert s["refilled"] == 0
+
+    def test_repeat_dump_refills_card(self, import_env, monkeypatch):
+        """Второй заход того же дампа: дел не прибавилось, карточки дочитаны."""
+        outage = self._outage(import_env, monkeypatch)
+        _run(import_env)
+        assert self._defendant(import_env)["first_instance"]["events"] == []
+
+        outage["blocked"] = False               # суд снова отдаёт карточки
+        assert _run(import_env) == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["added"] == 0, "дело не должно завестись вторым экземпляром"
+        assert s["refilled"] == 2 and s["card_failed"] == 0
+        assert any(l.startswith("[REFILLED]") for l in s["lines"])
+        fi = self._defendant(import_env)["first_instance"]
+        assert fi["events"], "хронология не приехала — карточку не дочитали"
+        assert fi["hearing_date"] and fi["last_checked_at"]
+        assert fi["intake_card_parse"] is True
+
+    def test_refill_survives_on_disk(self, import_env, monkeypatch):
+        """Дозаполнение правит существующую запись по ссылке: без refilled_any
+        в условии сохранения оно жило бы только в памяти процесса."""
+        outage = self._outage(import_env, monkeypatch)
+        _run(import_env)
+        before = import_env["json"].read_text(encoding="utf-8")
+        outage["blocked"] = False
+        _run(import_env)
+        assert import_env["json"].read_text(encoding="utf-8") != before
+
+    def test_filled_record_costs_no_http(self, import_env):
+        """Рутинный повтор дампа по заполненным делам сети не трогает."""
+        _run(import_env)
+        spent = import_env["card_calls"]["n"]
+        assert spent, "первый импорт обязан был читать карточки"
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert import_env["card_calls"]["n"] == spent
+        assert s["refilled"] == 0 and s["card_failed"] == 0
+        assert s["already"] == 3        # два ответчика + иск банка из трека
+
+    def test_refill_skips_case_above_first_instance(self, import_env,
+                                                    monkeypatch):
+        """Дело уехало в апелляцию — карточка 1-й инст. уже не главный
+        источник, и наложение перетёрло бы статус строкой дампа."""
+        outage = self._outage(import_env, monkeypatch)
+        _run(import_env)
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        for c in data["cases"]:
+            if c["id"] == "2-1001/2026":
+                c["current_stage"] = "appeal"
+        import_env["json"].write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        outage["blocked"] = False
+        spent = import_env["card_calls"]["n"]
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["refilled"] == 1, "второй ответчик дочитаться обязан"
+        # +2 запроса: дочитанный ответчик и повторная проба иска банка (его
+        # [FETCH FAIL] в негативный кэш не пишется — отказ не вечный).
+        # Дело в апелляции карточку не запрашивало вовсе.
+        assert import_env["card_calls"]["n"] == spent + 2
+        assert self._defendant(import_env)["first_instance"]["events"] == []
+
+    def test_refill_respects_dry_run(self, import_env, monkeypatch):
+        outage = self._outage(import_env, monkeypatch)
+        _run(import_env)
+        outage["blocked"] = False
+        spent = import_env["card_calls"]["n"]
+        _run(import_env, "--dry-run")
+        s = _read_summary(import_env["gh_out"])
+        assert import_env["card_calls"]["n"] == spent
+        assert s["refilled"] == 0 and s["card_failed"] == 0
+        assert self._defendant(import_env)["first_instance"]["events"] == []
 
 
 # ── Иск к производству не принят (с 14.08.2026) ──────────────────────────────
