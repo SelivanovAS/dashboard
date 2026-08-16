@@ -452,7 +452,11 @@ done_n=0
 while IFS=$'\t' read -r uuid domain operator prev <&3; do
   [ -n "$uuid" ] || continue
   key="import:dump:$uuid"
-  log "→ $domain · оператор ${operator:-—} · в журнале «$prev» · $uuid"
+  # ⚠️ Фигурные скобки обязательны: `«$prev»` bash 3.2 в локали Терминала
+  # разбирает как имя «prev»» (первый байт ёлочки — 0xC2 — приклеивается к
+  # имени), и при `set -u` прогон падает на первом же дампе. В локали C та же
+  # строка работает — поэтому дефект пережил и bash -n, и репетицию.
+  log "→ $domain · оператор ${operator:-—} · в журнале «${prev:-?}» · $uuid"
   dump="$TMP_DIR/dump.html"
   post_status "$key" started
   worker_cfg "/import-dump?key=$key"
