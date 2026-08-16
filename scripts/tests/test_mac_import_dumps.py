@@ -101,9 +101,31 @@ class TestDriverWiring:
         text = _read_repo(IMPORTER)
         check = text[text.index('if [ "$CHECK_ONLY" = "1" ]'):]
         assert "проверяйте из офиса" in check, "--check требует сеть Сбера"
-        assert "owner_secret не подходит" in check and "push_secret подходит" in check, \
-            "--check не проверяет секреты Worker'а"
+        assert "owner_secret не подходит" in check, "--check не проверяет секрет админки"
+        assert "доступ к дампам" in check, "--check не проверяет доступ к дампам"
+        assert "журнал пришёл битым" in check, \
+            "битый ответ Worker'а снова превратится в честный на вид ноль"
         assert "ничего не менялось" in check
+
+    def test_auth_is_resolved_by_worker_not_by_file(self):
+        """В push_secret легко попадает чужой токен (так и вышло 16.08.2026 с
+        progress_token). Каким секретом ходить, решает ответ Worker'а: не
+        подошёл — переходим на владельческий, а не роняем весь импорт."""
+        text = _read_repo(IMPORTER)
+        assert "resolve_worker_auth" in text
+        assert 'PUSH_SECRET="$OWNER_SECRET"' in text
+
+    def test_every_worker_request_asks_for_compression(self):
+        """Без --compressed Worker отдаёт ответ ОБРЕЗАННЫМ (замер 16.08.2026:
+        журнал 17 757 байт вместо 194 710). Для журнала это «очередь пуста»
+        при пяти дампах, для самого дампа — частичный импорт, который проверка
+        «дамп подозрительно мал» не ловит."""
+        text = _read_repo(IMPORTER)
+        calls = [l for l in text.splitlines()
+                 if "curl " in l and "-K" in l and not l.strip().startswith("#")]
+        assert calls, "не нашёл запросов к Worker'у"
+        bad = [l.strip() for l in calls if "--compressed" not in l]
+        assert not bad, f"запросы без --compressed: {bad}"
 
     def test_breaker_settings_match_cloud(self):
         """Предохранитель настроен под размер ДАМПА (5 отказов, проба каждые 3),
