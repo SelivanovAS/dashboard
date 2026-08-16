@@ -104,8 +104,10 @@ def test_revalidation_survives_sw_sleep():
         "Фоновая ревалидация больше не продлевает жизнь SW — свежие данные "
         "могут не доехать до кэша и до страницы."
     )
+    # С 15.08.2026 данные живут в неверсионированном DATA_CACHE (переживает
+    # бамп CACHE_VERSION) — см. test_frontend_offline.py.
     assert re.search(r"event\.respondWith\(staleWhileRevalidate\("
-                     r"request, CACHE_NAME, event\)\)", sw), (
+                     r"request, DATA_CACHE, event\)\)", sw), (
         "В staleWhileRevalidate не передаётся event — waitUntil звать нечем."
     )
 

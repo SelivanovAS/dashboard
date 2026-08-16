@@ -66,10 +66,11 @@
     bindAuto(initial);
   })();
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=164">
+<!-- Шрифты — свои woff2 через @font-face в styles.css (с 15.08.2026).
+     Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
+     кэше он держал белый экран до сетевого таймаута — defer-скрипты не
+     исполняются, пока висит стилевой лист. -->
+<link rel="stylesheet" href="styles.css?v=170">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -116,10 +117,51 @@
   </div>
 </div>
 
-<div id="loading-screen" class="loading-screen" style="display:none;">
-  <div class="loading-spinner"></div>
-  <div class="loading-text">Загрузка данных из таблицы...</div>
+<!-- Экран «нет данных»: показывается, когда датасет не удалось взять ни из
+     сети, ни из офлайн-кэша. До 15.08.2026 на его месте молча подставлялись
+     демо-данные (DEMO_CSV): из восьми демо-дел четыре решены больше
+     ARCHIVE_DAYS назад и прятались фильтром «all» — юрист офлайн видел ровно
+     4 чужие карточки и считал, что потерял свои дела. Честный экран лучше
+     правдоподобной подделки; демо остаётся по явной ссылке. -->
+<div id="nodata-screen" class="setup-screen" style="display:none;">
+  <div class="setup-card">
+    <div class="setup-header">
+      <h1>Нет сохранённых данных</h1>
+      <p>Дела ещё не загружались на этом устройстве</p>
+    </div>
+    <div class="setup-body">
+      <p id="nodata-reason" class="nodata-reason"></p>
+      <p>Подключитесь к интернету и повторите — после первой загрузки
+         дашборд будет открываться и без сети.</p>
+      <button class="setup-btn" onclick="retryLoad()">Повторить</button>
+      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
+        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">посмотреть демо-данные</a>
+      </p>
+    </div>
+  </div>
 </div>
+
+<!-- ⚠️ Без style="display:none": экран загрузки виден С ПЕРВОГО кадра, до
+     исполнения app.js. Раньше и #loading-screen, и #app были скрыты в
+     разметке, спиннер зажигал только showLoading() из app.js — всё время до
+     этого (офлайн: сетевые таймауты SW + ожидание шрифтов) юрист смотрел
+     в буквально белый лист. -->
+<div id="loading-screen" class="loading-screen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Загрузка данных…</div>
+</div>
+<!-- Сторож загрузки: app.js мог не доехать вовсе (офлайн + пустой кэш кода,
+     оборванная сеть, синтаксическая ошибка). Без него видимый спиннер выше
+     дал бы тот же белый экран, только с вечным кружком. Скрипт инлайновый —
+     обязан жить без app.js; снимают его show*-функции (app.js). -->
+<script>
+  window.__bootWatchdog = setTimeout(function () {
+    var t = document.querySelector('#loading-screen .loading-text');
+    if (!t) return;
+    t.innerHTML = 'Приложение не отвечает — похоже, нет связи.<br><br>' +
+      '<button class="setup-btn" onclick="location.reload()">Перезагрузить</button>';
+  }, 12000);
+</script>
 
 <div id="app" style="display:none;">
   <header class="app-header">
@@ -297,6 +339,6 @@
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=164" defer></script>
+<script src="app.js?v=170" defer></script>
 </body>
 </html>

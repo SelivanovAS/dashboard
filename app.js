@@ -45,6 +45,18 @@ const FETCH_TIMEOUT_HEAVY_MS=30000;
 // офлайн падает (SW обрабатывает только GET), и без персиста переключатель
 // картотек исчезал бы в офлайне даже при закэшированном датасете.
 const BANK_EXISTS_KEY=lsKey('bank_exists_v1');
+// Данные подняты из Cache Storage, а не из сети: шапка обязана это показать
+// (метка «офлайн» в renderMeta) — иначе снимок недельной давности выглядит
+// сегодняшним. Сбрасывается на событии online и при успешной сетевой загрузке.
+let _dataFromCache=false;
+// Зеркало SCOPE_NS/DATA_CACHE из service-worker.js — формула ДОСЛОВНО та же
+// (каталог, из которого открыта страница; фронты ХМАО и Урала живут на одном
+// origin, промах по имени увёл бы в чужой кэш). Совпадение стережёт
+// test_frontend_offline.py поведенческим тестом.
+function dataCacheName(){
+  const ns=location.pathname.split('/').slice(0,-1).filter(Boolean).join('-')||'root';
+  return 'sber-jurist-'+ns+'-data';
+}
 // Пагинация рендера: таблица и карточки рисуют первые N строк, дальше —
 // «Показать ещё» + IntersectionObserver-дозагрузка. Фильтры/поиск/сортировка
 // работают по всему датасету, ограничен только DOM (масштаб трека банка).
@@ -1136,32 +1148,62 @@ function resolveSheetUrl(){
   return stored;
 }
 function init(){
-  // PWA-shortcut «Новые дела» и прямые ссылки: ?filter=<значение #filter-status>.
-  // Невалидные значения молча игнорируем, applyFilters подхватит select сам.
+  // PWA-shortcut «Новые дела» и прямые ссылки. Общие статусы остаются в
+  // #filter-status; старые bank-only ссылки мигрируют в отдельный
+  // #filter-bank-control и сразу открывают нужный раздел.
   try{
-    const f=new URLSearchParams(window.location.search).get('filter');
+    const params=new URLSearchParams(window.location.search);
+    const f=params.get('filter');
     const sel=document.getElementById('filter-status');
-    if(f&&sel&&[...sel.options].some(o=>o.value===f))sel.value=f;
+    const bankCtl=document.getElementById('filter-bank-control');
+    if(f&&bankCtl&&[...bankCtl.options].some(o=>o.value===f)&&f!=='all'){
+      bankCtl.value=f;
+      bankViewActive=true;
+      bankFileExists=true;
+    }else if(f&&sel&&[...sel.options].some(o=>o.value===f)){
+      sel.value=f;
+    }
+    if(params.get('bank')==='1'){
+      bankViewActive=true;
+      bankFileExists=true;
+    }
+    if(params.get('mine')==='1'){
+      filterMineActive=true;
+      try{localStorage.setItem(FILTER_MINE_KEY,'true');}catch(_){}
+    }
   }catch(_){}
   // Переключатель картотек рисуем сразу из персиста прошлых визитов —
   // HEAD-проба лишь актуализирует флаг фоном (офлайн она падает всегда).
   try{if(localStorage.getItem(BANK_EXISTS_KEY)==='1')bankFileExists=true;}catch(_){}
-  // Deep-link ?bank=1 — открыть сразу картотеку исков банка (ссылки из
-  // дайджеста/ярлыков). Датасет грузим, не дожидаясь HEAD-пробы; при сбое
-  // loadBankDataset сам откатит режим и покажет баннер.
-  try{
-    if(new URLSearchParams(window.location.search).get('bank')==='1'){
-      bankViewActive=true;
-      bankFileExists=true;
-      loadBankDataset().then(()=>applyFilters());
-    }
-  }catch(_){}
+  // Deep-link ?bank=1 и legacy ?filter=writs: датасет грузим, не дожидаясь
+  // HEAD-пробы. В режиме «Мои» он подгрузится отдельно, только если есть
+  // composite-звёзды трека банка.
+  if(bankViewActive)loadBankDataset().then(()=>applyFilters());
   loadFromSheet(resolveSheetUrl());
   probeBankFile();
 }
-function showSetup(){document.getElementById('setup-screen').style.display='';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='none';}
-function showLoading(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='';document.getElementById('app').style.display='none';}
-function showApp(){document.getElementById('setup-screen').style.display='none';document.getElementById('loading-screen').style.display='none';document.getElementById('app').style.display='';}
+// Экраны взаимоисключающие. Каждая show*-функция снимает сторож белого
+// экрана (__bootWatchdog из HTML): что-то показано — значит app.js жив.
+function _clearBootWatchdog(){try{clearTimeout(window.__bootWatchdog);}catch(_){}}
+function _showScreens(setup,loading,nodata,app){
+  document.getElementById('setup-screen').style.display=setup;
+  document.getElementById('loading-screen').style.display=loading;
+  const nd=document.getElementById('nodata-screen');
+  if(nd)nd.style.display=nodata;
+  document.getElementById('app').style.display=app;
+  _clearBootWatchdog();
+}
+function showSetup(){_showScreens('','none','none','none');}
+function showLoading(){_showScreens('none','','none','none');}
+function showApp(){_showScreens('none','none','none','');}
+// Экран «Нет сохранённых данных»: ни сеть, ни офлайн-кэш датасета не дали.
+// До 15.08.2026 в этой ситуации молча подставлялись демо-дела (DEMO_CSV).
+function showNoData(reason){
+  const el=document.getElementById('nodata-reason');
+  if(el)el.textContent=reason?('Причина: '+reason):'';
+  _showScreens('none','none','','none');
+}
+function retryLoad(){loadFromSheet(resolveSheetUrl());}
 function saveSheetUrl(){const u=document.getElementById('sheet-url-input').value.trim();if(!u)return;localStorage.setItem(STORAGE_KEY,u);loadFromSheet(u);}
 function resetConfig(){if(confirm('Сменить подключённую таблицу?')){localStorage.removeItem(STORAGE_KEY);showSetup();}}
 function loadDemo(){const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);showApp();renderAll();}
@@ -1195,9 +1237,41 @@ async function fetchCsvCases(url){
   if(rows.length<2)return [];
   return rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
 }
+// Прямое чтение Cache Storage из окна, минуя service worker. Страховка от
+// трёх бед: (1) SW вернул синтетический 503 (сеть недоступна, а его
+// cache.match промахнулся — например, запись когда-то упала по квоте);
+// (2) SW ещё не контролирует страницу (первый визит до clients.claim) —
+// fetch идёт мимо него и офлайн не работает вовсе; (3) SW redundant после
+// неудачного install. До 15.08.2026 второго шанса не было: любая ошибка
+// вела прямиком в демо-данные. Фолбэк на caches.match без имени — для
+// устройств, ещё не переживших миграцию activate (данные в старом
+// версионированном кэше); он безопасен: URL несёт путь территории, чужой
+// кэш по нему не ответит. Всё в try/catch — window.caches в приватном
+// режиме Safari кидает.
+async function readJsonFromCache(url){
+  if(!('caches' in window))return null;
+  try{
+    const abs=new URL(url,location.href).href;
+    const cache=await caches.open(dataCacheName());
+    let res=await cache.match(abs);
+    if(!res)res=await caches.match(abs);
+    if(!res||!res.ok)return null;
+    return await res.json();
+  }catch(_){return null;}
+}
 async function fetchJsonCases(url,timeoutMs){
-  const r=await fetchWithTimeout(url,timeoutMs||FETCH_TIMEOUT_MS);
-  const data=await r.json();
+  let data;
+  try{
+    const r=await fetchWithTimeout(url,timeoutMs||FETCH_TIMEOUT_MS);
+    data=await r.json();
+    _dataFromCache=false;
+  }catch(e){
+    // Сеть не дала файл — поднимаем офлайн-снимок напрямую из Cache Storage.
+    data=await readJsonFromCache(url);
+    if(!data)throw e;
+    _dataFromCache=true;
+    console.info('Данные из офлайн-кэша:',url,'('+e.message+')');
+  }
   // Время ПРОГОНА, который произвёл файл. Единственный способ отличить
   // свежий снимок от вчерашнего: SW отдаёт data/*.json из кэша (см.
   // «Свежесть данных» ниже), а шапка до v127 писала «Обновлено: <сейчас>» —
@@ -1262,12 +1336,17 @@ async function loadFromSheet(url,opts){
     showApp();hideError();renderAll();
   }catch(e){
     console.warn('Ошибка загрузки:',e.message);
-    try{
-      const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);
-      showApp();showError('Не удалось загрузить данные ('+e.message+'). Показаны встроенные данные.');renderAll();
-    }catch(inner){
-      console.error('Не удалось показать fallback:',inner);
-      showApp();showError('Ошибка загрузки: '+e.message);
+    // ⚠️ Демо-данных здесь БОЛЬШЕ НЕТ. До 15.08.2026 любая ошибка подставляла
+    // DEMO_CSV «встроенными данными»: юрист офлайн видел 4 чужие карточки
+    // (из 8 демо-дел четыре старше ARCHIVE_DAYS и скрыты фильтром «all»)
+    // и был уверен, что потерял свои дела. loadDemo() остался, но только по
+    // явному клику с setup-экрана / экрана «нет данных».
+    if(allCases.length){
+      // Повторное/фоновое обновление уже показанного датасета — приложение
+      // не разбираем, баннер поверх живых данных.
+      showApp();showError('Не удалось обновить данные ('+e.message+'). Показан сохранённый снимок.');renderAll();
+    }else{
+      showNoData(e.message);
     }
   }finally{
     document.getElementById('loading-screen').style.display='none';
@@ -1391,7 +1470,13 @@ async function probeBankFile(){
   const url=bankJsonUrl();
   if(!url)return;
   try{
-    const r=await fetch(url,{method:'HEAD',cache:'no-cache'});
+    // HEAD идёт МИМО SW (тот перехватывает только GET) — офлайн такой запрос
+    // висел до таймаута ОС. AbortController здесь безопасен: это не навигация.
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),5000);
+    let r;
+    try{r=await fetch(url,{method:'HEAD',cache:'no-cache',signal:ctrl.signal});}
+    finally{clearTimeout(timer);}
     if(r.ok){bankFileExists=true;}
     else if(r.status===404&&!bankViewActive&&!bankLoaded){bankFileExists=false;}
     try{localStorage.setItem(BANK_EXISTS_KEY,bankFileExists?'1':'0');}catch(_){}
@@ -1845,6 +1930,13 @@ function renderMeta(){
   // Штампа нет (CSV-режим, демо-данные) — прежняя подпись.
   const stamp=currentDataStamp();
   let metaHtml=stamp?'Данные от: '+fmtMeta(stamp):'Обновлено: '+fmtMeta(new Date());
+  // Снимок из офлайн-кэша подписываем явно — тем же штампом currentDataStamp,
+  // второго механизма даты не заводим. navigator.onLine здесь только
+  // ДОБАВЛЯЕТ метку (ложное false у него бывает, ложное true — нет... бывает
+  // и оно, потому основной сигнал — факт чтения из кэша _dataFromCache).
+  if(_dataFromCache||navigator.onLine===false){
+    metaHtml='<span class="meta-offline">офлайн</span>'+metaHtml;
+  }
   if(lastVisit){const lv=new Date(lastVisit);if(!isNaN(lv))metaHtml+='<br><span class="meta-last-visit">Пред. визит: '+fmtMeta(lv)+'</span>';}
   document.getElementById('meta-info').innerHTML=metaHtml;
 }
@@ -4855,6 +4947,32 @@ async function setupPushNotifications(reg) {
   });
 }
 
+// Возврат сети: сбросить метку «офлайн» и тихо подтянуть свежий снимок.
+// Уход в офлайн — только перерисовать подпись в шапке.
+window.addEventListener('online',()=>{
+  _dataFromCache=false;
+  try{renderMeta();}catch(_){}
+  if(allCases.length)loadFromSheet(resolveSheetUrl(),{quiet:true});
+});
+window.addEventListener('offline',()=>{try{renderMeta();}catch(_){}});
+
+// Постоянное хранилище: ~7 МБ данных живут в Cache Storage, и best-effort
+// хранилище браузер вправе вытеснить при нехватке места. Спрашиваем ОДИН раз:
+// Chromium у установленного PWA выдаёт разрешение молча, Firefox покажет
+// промпт, в Safari метода нет (feature-detect) — там PWA с домашнего экрана
+// и так не подпадает под 7-дневную чистку.
+(async function requestPersistentStorage(){
+  try{
+    if(!navigator.storage||!navigator.storage.persist)return;
+    const KEY=lsKey('storage_persist_asked_v1');
+    if(localStorage.getItem(KEY)==='1')return;
+    if(await navigator.storage.persisted()){localStorage.setItem(KEY,'1');return;}
+    const ok=await navigator.storage.persist();
+    localStorage.setItem(KEY,'1');
+    console.info('Постоянное хранилище:',ok?'выдано':'отказано');
+  }catch(_){}
+})();
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js')
@@ -5036,8 +5154,10 @@ async function loadLastDigest() {
   const body = document.getElementById('digest-body');
   if (!block || !body) return;
   try {
-    const r = await fetch('./data/last_digest.json', { cache: 'no-cache' });
-    if (!r.ok) return;
+    // fetchWithTimeout кидает и на !r.ok — для этого try/catch это тот же
+    // «дайджеста нет», что и прежний `if (!r.ok) return`. Голый fetch офлайн
+    // висел до сетевого таймаута ОС.
+    const r = await fetchWithTimeout('./data/last_digest.json', FETCH_TIMEOUT_MS);
     const data = await r.json();
     if (!data || !data.html) return;
     // Кэшируем общий HTML — переключение «Общий ⇄ Мой» больше не требует
@@ -5434,8 +5554,8 @@ async function setDigestView(mode) {
       // перезапишется результатом buildMineHtml.
       body.innerHTML = '<div class="digest-loading"><span class="digest-spinner"></span>Собираю мои дела…</div>';
       try {
-        const r = await fetch('./data/last_digest_context.json', { cache: 'no-cache' });
-        if (r.ok) _digestContext = await r.json();
+        const r = await fetchWithTimeout('./data/last_digest_context.json', FETCH_TIMEOUT_MS);
+        _digestContext = await r.json();
       } catch (_) {}
     }
     const built = buildMineHtml(_digestGeneralHtml || '', _digestContext);
