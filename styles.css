@@ -1,9 +1,55 @@
 /* ============================================================
    Мониторинг дел · v2 design system
    Белый фон, сберовский зелёный — только акцент. Плотный B2B-интерфейс.
-   Шрифт: IBM Plex Sans (цифры — основным шрифтом + tabular-nums) + IBM Plex Mono для <code>.
+   Шрифт: IBM Plex Sans (цифры — основным шрифтом + tabular-nums).
    Класс-имена сохранены — app.js рендерит без правок.
    ============================================================ */
+
+/* ---------- 0. Шрифты (свои woff2, с 15.08.2026) ----------
+   До этого IBM Plex Sans тянулся render-blocking `<link>` с Google Fonts:
+   офлайн при непрогретом кэше страница ждала сетевой таймаут ОС (defer-скрипты
+   не исполняются, пока висит стилевой лист) — главный вклад в «белый экран»
+   из жалобы юриста. Файлы вариативные (один woff2 на 400-700, проверено по
+   css2: 4 веса → 1 URL на подмножество), суммарно ~110 КБ, живут в APP_SHELL
+   service worker'а. IBM Plex Mono выброшен: единственным потребителем был
+   `.setup-body code` экрана настройки, который юрист не видит. unicode-range
+   скопированы из ответа css2 — браузер качает только нужные подмножества. */
+/* cyrillic-ext */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ---------- 1. Base palette ---------- */
 :root {
@@ -211,7 +257,8 @@
   --font-body: var(--font-sans);
   /* Цифры и номера дел рендерим основным шрифтом с tabular-nums (см. body) — --font-mono наследует sans для совместимости */
   --font-mono: var(--font-sans);
-  --font-code: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+  /* IBM Plex Mono не грузим (см. блок шрифтов вверху) — системный mono-стек */
+  --font-code: 'SF Mono', Menlo, Consolas, monospace;
 
   --fs-2xs: 11px;
   --fs-xs:  12px;
@@ -525,6 +572,8 @@ body {
 .setup-body ol li:last-child { border-bottom:none; }
 .setup-body ol li::before { content:counter(steps); display:flex; align-items:center; justify-content:center; min-width:26px; height:26px; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent-active); font-weight:var(--fw-bold); font-size:var(--fs-sm); flex-shrink:0; margin-top:1px; }
 .setup-body code { font-family:var(--font-code); font-size:var(--fs-xs); background:var(--bg-3); padding:2px 7px; border-radius:var(--radius-xs); color:var(--fg-1); }
+/* Причина на экране «Нет сохранённых данных» (#nodata-screen) */
+.nodata-reason { margin:0 0 12px; font-size:var(--fs-sm); color:var(--fg-3); }
 .setup-input-group { margin-top:20px; }
 .setup-input-group label { font-weight:var(--fw-semibold); font-size:var(--fs-sm); color:var(--fg-2); display:block; margin-bottom:6px; }
 .setup-input { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); transition:all 120ms var(--ease-out); background:var(--bg-1); color:var(--fg-1); }
@@ -549,6 +598,12 @@ body {
 .header-actions { display:flex; align-items:center; gap:12px; }
 .header-meta { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); text-align:right; }
 .header-meta b { color:var(--fg-1); font-weight:var(--fw-semibold); }
+/* Метка «данные из офлайн-кэша» — живёт внутри .header-meta перед
+   «Данные от: …», второго механизма штампа не заводим (см. renderMeta).
+   Токены warning-* объявлены в обеих темах. */
+.meta-offline { display:inline-block; padding:1px 7px; margin-right:6px; border-radius:var(--radius-pill);
+                background:var(--warning-bg); color:var(--warning-fg);
+                font-size:var(--fs-2xs); font-weight:var(--fw-semibold); }
 
 .btn-refresh { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-weight:var(--fw-semibold); font-family:var(--font-sans); cursor:pointer; transition:all 120ms var(--ease-out); }
 .btn-refresh:hover { background:var(--bg-3); border-color:var(--border-strong); }
