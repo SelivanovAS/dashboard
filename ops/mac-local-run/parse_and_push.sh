@@ -159,7 +159,7 @@ cm_setup_court_routes "$PYTHON" log \
 # на форке проба стучалась бы в чужой суд.
 PROBE_HOST=$(cm_probe_court_host "$PYTHON") \
   || die "не смог определить суд для пробы доступности"
-if PROBE_ERR=$(cm_court_reachable "$PROBE_HOST"); then
+if PROBE_ERR=$(cm_court_reachable "$PROBE_HOST" "$PYTHON"); then
   log "Суд $PROBE_HOST доступен"
 else
   log "curl: ${PROBE_ERR:-без вывода}"

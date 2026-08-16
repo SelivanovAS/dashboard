@@ -139,6 +139,11 @@ if [ -f "$WORKER_CONF" ]; then
   OWNER_SECRET=$(awk -F= '/^owner_secret=/{print $2}' "$WORKER_CONF" | tr -d '[:space:]')
   PUSH_SECRET=$(awk -F= '/^push_secret=/{print $2}' "$WORKER_CONF" | tr -d '[:space:]')
   WORKER_URL="${WORKER_URL%/}"
+  # push_secret НЕОБЯЗАТЕЛЕН: Worker принимает и владельческий секрет
+  # (importChannelAuthOk). PUSH_SECRET на машине юриста взять неоткуда — он
+  # write-only и в Cloudflare, и в GitHub secrets, — а owner_secret у юриста
+  # есть всегда: им он открывает админку.
+  case "$PUSH_SECRET" in ""|*…*) PUSH_SECRET="$OWNER_SECRET" ;; esac
 fi
 
 # Секреты — через конфиг curl (`-K файл`), а не аргументами командной строки:
@@ -180,7 +185,7 @@ sber_preflight() {  # 0 — можно идти в суды
   # отчёта, в боевом пути — текстом ошибки).
   PROBE_HOST=$(cm_probe_court_host "$PYTHON") || {
     PREFLIGHT_ERR="не смог определить суд для пробы доступности"; return 2; }
-  if PREFLIGHT_ERR=$(cm_court_reachable "$PROBE_HOST"); then
+  if PREFLIGHT_ERR=$(cm_court_reachable "$PROBE_HOST" "$PYTHON"); then
     log "Суд $PROBE_HOST доступен"
     return 0
   fi
@@ -204,10 +209,10 @@ if [ "$CHECK_ONLY" = "1" ]; then
   esac
   if [ ! -f "$WORKER_CONF" ]; then
     log "✗ настройки Worker'а: нет файла $WORKER_CONF (см. README)"
-  elif [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ] || [ -z "$PUSH_SECRET" ] \
-       || case "$OWNER_SECRET$PUSH_SECRET" in *…*) true ;; *) false ;; esac; then
+  elif [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ] \
+       || case "$OWNER_SECRET" in *…*) true ;; *) false ;; esac; then
     log "✗ настройки Worker'а: в $WORKER_CONF пусто или остались «…» —"
-    log "  впишите настоящие url / owner_secret / push_secret"
+    log "  впишите настоящие url и owner_secret (push_secret не обязателен)"
   else
     journal_cfg
     code=$(curl -s -o "$TMP_DIR/log.json" -w '%{http_code}' -m 30 -A "$UA" \
