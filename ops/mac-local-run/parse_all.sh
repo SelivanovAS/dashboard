@@ -25,6 +25,7 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER="$HERE/parse_and_push.sh"
+IMPORTER="$HERE/import_dumps.sh"
 LIST="$HOME/.config/court-monitor/territories"
 DEFAULT_REPO="/Users/aleksandrselivanov/dashboard"
 
@@ -53,6 +54,13 @@ for repo in "${repos[@]}"; do
   fi
   echo "  → $repo"
   bash "$WORKER" "$repo" "$@" || rc=1
+  # Очередь дампов капчёвых судов: пока суды режут адреса облачных раннеров,
+  # операторский импорт в облаке заводит НОЛЬ, и разобрать очередь может
+  # только эта машина. Отказ импорта НЕ фатален для прогона — дайджест
+  # важнее очереди, и в облаке эти каналы тоже независимы.
+  # Идёт ПОСЛЕ парсинга: лок у скриптов общий (один индекс git на клон).
+  echo "  → $repo (дампы)"
+  bash "$IMPORTER" "$repo" "$@" || echo "  ПРЕДУПРЕЖДЕНИЕ: импорт дампов не доработал ($repo)"
 done
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: готово (код $rc)"

@@ -373,21 +373,42 @@ def _note_card_failure(bank_state: dict) -> str:
     """Записать причину только что провалившегося запроса и вернуть её текст.
 
     Читает `config.FETCH_DIAG` СРАЗУ после отказа (следующий запрос затрёт) и
-    копит причины в `bank_state`: сводка импорта покажет самую частую. Пустая
-    строка — класс неизвестен, вызыватель оставит прежнюю формулировку.
+    копит в `bank_state` ПАРЫ (класс, текст): сводке нужен не просто самый
+    частый текст, а самая частая НАСТОЯЩАЯ причина — см. `_top_card_fail_reason`.
+    Пустая строка — класс неизвестен, вызыватель оставит прежнюю формулировку.
     """
     reason = fetch_fail_reason_ru()
     if reason:
-        bank_state.setdefault("fail_reasons", []).append(reason)
+        kind = str(config.FETCH_DIAG.get("kind", ""))
+        bank_state.setdefault("fail_reasons", []).append((kind, reason))
     return reason
 
 
 def _top_card_fail_reason(bank_state: dict) -> str:
-    """Самая частая причина отказа за импорт — одна строка для сводки."""
+    """Причина отказа за импорт — одна строка для сводки оператору.
+
+    ⚠️ «Суд снят с обхода» (класс breaker) — НАШЕ СЛЕДСТВИЕ, а не причина:
+    предохранитель открывается после `CARD_BREAKER_THRESHOLD`=3 отказов подряд
+    и дальше пропускает карточки БЕЗ запроса. На дампе из 10 истцовых строк это
+    7 «предохранитель» против 3 настоящих — и голое большинство показывало
+    оператору «суд снят с обхода» там, где ответом было «нас блокируют по
+    адресу» (импорт Урала 16.08.2026). Поэтому большинство считаем по
+    причинам С ЗАПРОСОМ, а предохранитель добавляем хвостом: сколько карточек
+    мы не спросили вовсе. Одни лишь пропуски (порог открыт канарейкой поиска
+    ещё до первой карточки) — тогда он и есть весь ответ.
+    """
     reasons = bank_state.get("fail_reasons") or []
     if not reasons:
         return ""
-    return Counter(reasons).most_common(1)[0][0]
+    real = [text for kind, text in reasons if kind != "breaker"]
+    skipped = len(reasons) - len(real)
+    if not real:
+        return Counter(text for _, text in reasons).most_common(1)[0][0]
+    top = Counter(real).most_common(1)[0][0]
+    if skipped:
+        top += f"; ещё {skipped} карточек не запрашивали — суд снят с обхода"
+    # Worker режет строку на 200 символов: длинный хвост съел бы саму причину.
+    return top[:200]
 
 
 def _apply_main_card(fi: dict, r: dict, card_info: dict, now_iso: str) -> None:

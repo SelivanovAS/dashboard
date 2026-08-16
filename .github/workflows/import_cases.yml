@@ -152,25 +152,12 @@ jobs:
               && mv /tmp/import_sum_err.json "$IMPORT_SUMMARY_PATH"
           fi
           if [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            # Пейлоад — ops/import_result_body.jq, ОДИН на облако и резерв
+            # (ops/mac-local-run/import_dumps.sh). Инлайновая копия здесь
+            # разъехалась бы с маковской ровно так же, как разъезжались списки
+            # файлов данных, — и счётчик молча пропал бы из сводки оператора.
             BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{dump_key:$dk, status:$st, run_url:$ru,
-                added:(.added // 0), added_bank:(.added_bank // 0),
-                promoted:(.promoted // 0),
-                already:(.already // 0), skipped_role:(.skipped_role // 0),
-                not_accepted:(.not_accepted // 0),
-                card_failed:(.card_failed // 0), refilled:(.refilled // 0),
-                no_link:(.no_link // 0), subsidiary:(.subsidiary // 0),
-                excluded_result:(.excluded_result // 0),
-                excluded_writ:(.excluded_writ // 0),
-                already_spent:(.already_spent // 0),
-                seen_cached:(.seen_cached // 0),
-                bank_capped:(.bank_capped // 0),
-                fetch_fail:(.fetch_fail // 0),
-                rows:(.rows // 0),
-                card_fail_reason:(.card_fail_reason // ""),
-                lines:(.lines // [])}
-               + (if .error then {error:.error} else {} end)' \
-              "$IMPORT_SUMMARY_PATH")
+              -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
               '{dump_key:$dk, status:$st, run_url:$ru,

@@ -50,8 +50,16 @@ def driver() -> str:
     return _read("ops/mac-local-run/parse_all.sh")
 
 
+@pytest.fixture(scope="module")
+def lib() -> str:
+    """Общий слой сети Сбера: с 16.08.2026 маршруты, преflight, ssh-адрес и
+    проба живут здесь — их делят парсинг и импорт дампов."""
+    return _read("ops/mac-local-run/lib_sber_net.sh")
+
+
 class TestShellIsValid:
-    @pytest.mark.parametrize("name", ["parse_and_push.sh", "parse_all.sh"])
+    @pytest.mark.parametrize("name", ["parse_and_push.sh", "parse_all.sh",
+                                      "import_dumps.sh", "lib_sber_net.sh"])
     def test_syntax(self, name):
         subprocess.run(["bash", "-n", os.path.join(RESERVE_DIR, name)],
                        check=True, capture_output=True)
@@ -63,20 +71,31 @@ class TestRoutesFromRegion:
     находил ШЕСТЬ строк из комментариев вместо 20 доменов — суды шли через
     VPN мимо egress РФ, а WARNING это проглатывал."""
 
-    def test_domains_come_from_registry(self, worker):
-        assert "from court_monitor.regions import get_region" in worker
-        assert "first_instance_courts" in worker
-        assert "cassation_court" in worker
+    def test_domains_come_from_registry(self, lib):
+        assert "from court_monitor.regions import get_region" in lib
+        assert "first_instance_courts" in lib
+        assert "cassation_court" in lib
 
-    def test_courts_py_is_not_grepped(self, worker):
-        assert "court_monitor/courts.py" not in _code(worker), \
-            "домены снова ищутся регекспом по courts.py"
+    def test_courts_py_is_not_grepped(self, worker, lib):
+        for text in (worker, lib):
+            assert "court_monitor/courts.py" not in _code(text), \
+                "домены снова ищутся регекспом по courts.py"
 
-    def test_empty_list_is_fatal(self, worker):
-        """Молчаливый пропуск и был причиной незамеченной поломки."""
-        block = worker[worker.index("UNIQ_IPS"):]
+    def test_empty_list_is_fatal(self, lib):
+        """Молчаливый пропуск и был причиной незамеченной поломки: библиотека
+        обязана вернуть отказ, а не построить ноль маршрутов молча."""
+        block = lib[lib.index("cm_setup_court_routes()"):]
         head = block[:block.index("for ip in")]
-        assert "die " in head and "WARN" not in head
+        assert 'return 1' in head and "WARN" not in head
+
+    @pytest.mark.parametrize("script", ["ops/mac-local-run/parse_and_push.sh",
+                                        "ops/mac-local-run/import_dumps.sh"])
+    def test_callers_die_on_empty_registry(self, script):
+        """…а каждый вызыватель — умереть на этом отказе: без маршрутов суды
+        пойдут через VPN мимо egress РФ, и прогон промолчит."""
+        text = _code(_read(script))
+        call = text[text.index("cm_setup_court_routes"):]
+        assert "|| die" in call[:200], f"{script} проглатывает отказ маршрутов"
 
     def test_courts_py_really_has_no_domains(self):
         """Страж самой находки: если реестр когда-нибудь вернётся в courts.py,
@@ -92,24 +111,28 @@ class TestGitOverSsh:
     """`git push origin main` с Mac падает: origin по https, учётных данных
     нет, а SSH:22 к github.com в этой сети закрыт."""
 
-    def test_push_and_pull_use_derived_ssh_url(self, worker):
-        assert "ssh.github.com:443" in worker
-        assert 'GIT_SSH_COMMAND="ssh -p 443 -o HostName=ssh.github.com"' in worker
-        assert "git remote get-url origin" in worker, \
+    def test_push_and_pull_use_derived_ssh_url(self, lib):
+        assert "ssh.github.com:443" in lib
+        assert "ssh -p 443 -o HostName=ssh.github.com" in lib
+        assert "git remote get-url origin" in lib, \
             "адрес должен выводиться из origin — форк и эталон обслуживает один код"
 
-    def test_no_bare_origin_push(self, worker):
-        assert "git push origin main" not in worker
+    @pytest.mark.parametrize("script", ["ops/mac-local-run/parse_and_push.sh",
+                                        "ops/mac-local-run/import_dumps.sh"])
+    def test_no_bare_origin_push(self, script):
+        text = _read(script)
+        assert "git push origin main" not in text
+        assert "cm_git_ssh_url" in text, f"{script} не берёт ssh-адрес из origin"
 
 
 class TestTerritories:
     def test_repo_is_a_parameter(self, worker):
         assert 'REPO="${REPO_ARG:-${CM_REPO:-' in worker
 
-    def test_probe_host_from_region(self, worker):
-        assert "oblsud--hmao.sudrf.ru" not in worker, \
+    def test_probe_host_from_region(self, worker, lib):
+        assert "oblsud--hmao.sudrf.ru" not in worker + lib, \
             "хост пробы захардкожен на ХМАО — форк стучался бы в чужой суд"
-        assert "appeal_courts[0].domain" in worker
+        assert "appeal_courts[0].domain" in lib
 
     def test_driver_defaults_to_single_repo(self, driver):
         """Файла territories нет → прежняя установка не меняется."""
@@ -161,13 +184,12 @@ class TestFlipReadiness:
         assert "(Mac-парсинг)" in worker, \
             "сообщение коммита Mac потеряло маркер — replay_on_push оглохнет"
 
-    def test_route_log_reports_domains_not_only_ips(self):
+    def test_route_log_reports_domains_not_only_ips(self, lib):
         """Суды ГАС сидят за общим балансировщиком: уникальный IP может выйти
         ОДИН, и лог «IP: 1» без числа доменов читался бы как «резерв сломан»
         прямо в понедельник флипа (ревью Fable 16.08.2026)."""
-        worker = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "ROUTE_STAT" in worker
-        assert "общий балансировщик" in worker
+        assert "Доменов судов region-реестра отрезолвлено" in lib
+        assert "общий балансировщик" in lib
 
     def test_replay_name_is_not_misleading(self):
         yml = _read(".github/workflows/replay_on_push.yml")
