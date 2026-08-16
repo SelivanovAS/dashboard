@@ -150,3 +150,19 @@ class TestWorkflowWiring:
         yml = _read_repo(".github/workflows/probe_courts.yml")
         assert yml.index("pip install --quiet requests") < \
             yml.index("probe_court_access.py")
+
+    def test_no_hardcoded_hmao_hosts(self):
+        """16.08.2026 проба на Урале честно доложила о судах ХМАО: хосты были
+        захардкожены, а REGION не передавался. Отчёт о чужой территории хуже,
+        чем никакого."""
+        yml = _read_repo(".github/workflows/probe_courts.yml")
+        body = yml.split("jobs:", 1)[1]
+        assert "--hmao.sudrf.ru" not in body, "в шагах остались хосты ХМАО"
+        assert "APPEAL_COURT," not in body, "суды берутся по именам, не из региона"
+
+    def test_region_is_job_wide(self):
+        """REGION на job, а не на одном шаге: иначе curl и поиск снова уедут
+        в чужой регион, а карточки — в свой."""
+        yml = _read_repo(".github/workflows/probe_courts.yml")
+        head = yml.split("steps:", 1)[0]
+        assert "REGION: ${{ vars.REGION }}" in head

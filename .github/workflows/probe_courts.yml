@@ -21,12 +21,37 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Регион — на ВЕСЬ job, а не на отдельный шаг: 16.08.2026 проба на Урале
+    # честно доложила про суды ХМАО (хосты были захардкожены, а REGION никуда
+    # не передавался) — отчёт о чужой территории хуже, чем никакого.
+    env:
+      REGION: ${{ vars.REGION }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Хосты своего региона (для шагов ниже)
+        id: hosts
+        run: |
+          # get_region() тянет только stdlib — можно до pip install.
+          HOSTS=$(python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          from court_monitor.regions import get_region
+          r = get_region()
+          # По одному представителю каждой инстанции: блок бьёт по адресу, а не
+          # по конкретному суду — больше хостов ничего не добавит.
+          hosts = [r.first_instance_courts[0].domain]
+          hosts += [c.domain for c in r.appeal_courts]
+          hosts.append(r.cassation_court.domain)
+          print(" ".join(dict.fromkeys(hosts)))
+          PY
+          )
+          echo "Регион ${REGION:-hmao}, хосты: $HOSTS"
+          echo "list=$HOSTS" >> "$GITHUB_OUTPUT"
+
       - name: Сырой curl — TLS-хендшейк и HTTP-код (подпись блока)
         run: |
-          for host in oblsud--hmao.sudrf.ru surggor--hmao.sudrf.ru 7kas.sudrf.ru; do
+          for host in ${{ steps.hosts.outputs.list }}; do
             echo "=== $host ==="
             curl -sS -o /dev/null \
               --connect-timeout 12 --max-time 25 \
@@ -45,12 +70,17 @@ jobs:
           from court_monitor import courts
           from court_monitor.netutil import session
 
-          targets = [
-              ("Апелляция ХМАО",   courts.APPEAL_COURT),
-              ("Сургутский горсуд", courts.FIRST_INSTANCE_COURTS[0]),
-              ("Нижневартовский ГС", courts.FIRST_INSTANCE_COURTS[2]),
-              ("7-й КСОЮ",          courts.CASSATION_COURT),
-          ]
+          # Суды берём из АКТИВНОГО региона (env REGION), а не по именам ХМАО:
+          # на форке территории такая проба докладывала о чужих судах.
+          # Капчёвые суды в список поиска не берём — у них код закрывает поиск
+          # по проекту, «нет данных» там не новость (карточки спрашивает
+          # probe_court_access.py ниже).
+          targets = [(f"{c.name} (1-я инст.)", c)
+                     for c in courts.FIRST_INSTANCE_COURTS
+                     if c.enabled and not c.search_gated][:2]
+          targets += [(f"{c.name} (апелляция)", c) for c in courts.APPEAL_COURTS]
+          targets.append((f"{courts.CASSATION_COURT.name} (кассация)",
+                          courts.CASSATION_COURT))
           ok = 0
           for label, c in targets:
               url = c.search_url()
