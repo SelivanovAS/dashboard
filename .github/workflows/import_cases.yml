@@ -158,6 +158,7 @@ jobs:
                 promoted:(.promoted // 0),
                 already:(.already // 0), skipped_role:(.skipped_role // 0),
                 not_accepted:(.not_accepted // 0),
+                card_failed:(.card_failed // 0), refilled:(.refilled // 0),
                 no_link:(.no_link // 0), subsidiary:(.subsidiary // 0),
                 excluded_result:(.excluded_result // 0),
                 excluded_writ:(.excluded_writ // 0),

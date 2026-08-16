@@ -2739,6 +2739,15 @@ function impResultText(item) {
     var parts = ["+" + (item.added || 0) + " в картотеку"];
     if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
     if (item.promoted) parts.push(item.promoted + " материалов стали делами");
+    // Карточки основной картотеки (16.08.2026): суд может отдать блок-страницу
+    // вместо карточки, и дело заводится пустышкой. Раньше это было видно только
+    // в свёртке «Отчёт построчно» — сводка бодро писала «+4 в картотеку».
+    // Ставим сразу после заведений: это про те же дела, а не корзина отсева.
+    if (item.refilled) parts.push(item.refilled + " карточек дочитано");
+    if (item.card_failed) {
+      parts.push("⚠ " + item.card_failed + " без карточки (суд не ответил) — "
+        + "вставьте дамп ещё раз или дождитесь прогона");
+    }
     if (item.already) parts.push(item.already + " уже в базе");
     if (item.excluded_result) parts.push(item.excluded_result + " отсеяно по итогу");
     if (item.excluded_writ) parts.push(item.excluded_writ + " ИЛ уже выдан");

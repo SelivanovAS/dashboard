@@ -310,36 +310,88 @@ def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
 
 
 def _fetch_main_card(r: dict, domain: str, bank_state: dict,
-                     dry_run: bool) -> dict | None:
-    """Карточка для дела основной картотеки (банк-ответчик) или None.
+                     dry_run: bool) -> tuple[dict | None, str]:
+    """Карточка для дела основной картотеки (банк-ответчик).
 
-    None — работаем как раньше: запись собирается из строки выдачи, штампа
-    проверки не получает, и ближайший прогон её дочитает. Строку дампа отказ
-    НЕ роняет: у истцовой ветки `[FETCH FAIL]` дело просто не берут в трек, а
-    здесь это иск ПРОТИВ банка — потерять его нельзя.
+    Возвращает пару (карточка|None, причина), причина ∈ {"", "dry_run",
+    "failed"}. Пара, а не голый None: до 16.08.2026 все исходы сливались в
+    None, и «не пробовали» (dry-run) было неотличимо от «пробовали и не
+    вышло» — счётчик отказов построить было не из чего, а без него провал
+    доезжал до оператора только строкой в свёртке «Отчёт построчно»
+    (инцидент 16.08.2026: два импорта Ленинского р/с ЕКБ завели 5 дел
+    пустышками, портал суда отдавал «Этот запрос заблокирован по
+    соображениям безопасности» с HTTP 200, а сводка писала «+4 в картотеку»).
+
+    "failed" — один факт «карточки нет» на все причины: отказ загрузки,
+    заглушка, пропуск открытым предохранителем суда, кэп карточек. Точная
+    причина остаётся в WARNING прогона; оператору важно только, дочитывать
+    ли дамп повторно.
+
+    Отказ строку дампа НЕ роняет: у истцовой ветки `[FETCH FAIL]` дело просто
+    не берут в трек, а здесь это иск ПРОТИВ банка — потерять его нельзя.
+    Запись собирается из строки выдачи, штампа проверки не получает, и
+    ближайший прогон (или повторный импорт того же дампа) её дочитает.
 
     Кэп карточек ОБЩИЙ с истцовой веткой (`bank_state["cards"]`): страховка от
     таймаута джоба считает запросы, а не роли. Dry-run не ходит в сеть вовсе.
     """
     if dry_run:
-        return None
+        return None, "dry_run"
     if bank_state["cards"] >= MAX_BANK_CARDS_PER_IMPORT:
-        return None
+        return None, "failed"
     court = fi_court_by_domain(domain, r.get("href_srv_num"))
     if court is None:
-        return None
+        return None, "failed"
     cid, _, cuid = (r.get("link") or "").partition("|")
     bank_state["cards"] += 1
     polite_delay()
     card_html = fetch_card_checked(court.card_url(cid, cuid), context=r.get("case_number", ""))
     if not card_html:
-        return None
+        return None, "failed"
     card_info = parse_case_card(card_html, court.base_url)
     # Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается — иначе
     # запись получит штамп «проверено» и не будет перечитана до заседания.
     if card_is_empty_shell(card_info):
+        return None, "failed"
+    return card_info, ""
+
+
+def _apply_main_card(fi: dict, r: dict, card_info: dict, now_iso: str) -> None:
+    """Наложить прочитанную карточку на блок first_instance записи.
+
+    Общее тело двух путей — заведения дела и дозаполнения card-blind записи
+    повторным дампом. Один источник правды по маппингу полей карточки —
+    `build_json_entry`; `update` поверх существующего блока сохраняет ключи,
+    которых он не кладёт (`delo_id`, `srv_num` из href, `act_text`).
+    """
+    fi.update(build_json_entry(r, card_info)["first_instance"])
+    if card_info.get("_writs"):
+        fi["writs"] = card_info["_writs"]
+    _stamp_intake_checked(fi, now_iso)
+
+
+def _card_blind_case(case: dict | None, r: dict) -> dict | None:
+    """Блок first_instance записи, которую стоит дочитать, иначе None.
+
+    Card-blind — дело заведено из строки выдачи, карточку не читал никто:
+    ни импорт (`intake_card_parse`), ни прогон (`last_checked_at`), и
+    хронология пуста. Оба признака обязательны: штамп без событий бывает у
+    дела, чью карточку прогон прочитал, а событий там нет.
+
+    Гейт стадии: дозаполняем только `first_instance` — у дела, уехавшего в
+    апелляцию/кассацию, карточка 1-й инстанции уже не главный источник, и
+    наложение `build_json_entry` перетёрло бы `status`/`result` строкой дампа.
+    """
+    if not case or case.get("current_stage") != "first_instance":
         return None
-    return card_info
+    if not r.get("link"):
+        return None
+    fi = case.get("first_instance") or {}
+    if fi.get("last_checked_at") or fi.get("intake_card_parse"):
+        return None
+    if fi.get("events"):
+        return None
+    return fi
 
 
 def _stamp_intake_checked(fi: dict, now_iso: str) -> None:
@@ -388,6 +440,9 @@ def import_rows(
     counters = {
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0,
+        # Карточка дела основной картотеки (с 16.08.2026): сколько записей
+        # осталось без неё и сколько дочитано повторным дампом.
+        "card_failed": 0, "refilled": 0,
         # Трек «Иски банка» (истцовые строки, с 13.08.2026):
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
@@ -397,6 +452,7 @@ def import_rows(
     bank_entries: list[dict] = []
     bank_state = {"seen": None, "seen_dirty": False, "cards": 0}
     promoted_any = False
+    refilled_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     for r in rows:
@@ -426,8 +482,41 @@ def import_rows(
                     dedup_exact.add((domain, bare))
                 continue
         if is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard):
-            counters["already"] += 1
-            lines.append(f"[ALREADY] {num} — уже отслеживается в этом суде")
+            # Дозаполнение card-blind записи (с 16.08.2026): дело уже заведено,
+            # но карточку не читал никто — повторная вставка того же дампа её
+            # дочитывает. Без этой ветки починить импорт, у которого суд не
+            # отдал карточки, было нечем: [ALREADY] молчал, и оставалось ждать
+            # основного прогона — а крон ходит пн-пт, и дамп выходного дня
+            # стоял пустым до понедельника (инцидент 16.08.2026).
+            # Запись ищем ТОЧНЫМ ключом: is_fi_number_tracked матчит и архивы,
+            # и wildcard комбо-номеров, а трогать мы вправе только активное
+            # дело ЭТОГО суда. Трек «Иски банка» сюда не попадает по
+            # построению — case_by_id собран из основного cases.json.
+            target = case_by_id.get((domain, num)) or case_by_id.get((domain, bare))
+            fi_blind = (_card_blind_case(target, r)
+                        if r.get("bank_role") == "Ответчик" else None)
+            if fi_blind is None:
+                counters["already"] += 1
+                lines.append(f"[ALREADY] {num} — уже отслеживается в этом суде")
+                continue
+            card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
+            if card_info:
+                _apply_main_card(fi_blind, r, card_info, now_iso)
+                refilled_any = True
+                counters["refilled"] += 1
+                lines.append(
+                    f"[REFILLED] {num} — карточка дочитана "
+                    "(дело было заведено без неё)"
+                )
+            else:
+                counters["already"] += 1
+                if why == "failed":
+                    counters["card_failed"] += 1
+                lines.append(
+                    f"[ALREADY] {num} — уже отслеживается в этом суде"
+                    + ("; карточка не открылась, дозаполнит прогон"
+                       if why == "failed" else "")
+                )
             continue
         # Истцовые строки → трек «Иски банка» (с 13.08.2026, разгон Урала).
         # При выключенном треке проваливаются в прежний [SKIPPED ROLE] —
@@ -491,20 +580,14 @@ def import_rows(
         # заводилось пустышкой — без даты заседания и хронологии — до
         # ближайшего прогона. Залитый вечером пятницы дамп юрист видел
         # безжизненным все выходные.
-        card_info = _fetch_main_card(r, domain, bank_state, dry_run)
+        card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
         note = ""
         if card_info:
-            # Один источник правды по маппингу полей карточки — build_json_entry;
-            # update поверх card-blind записи сохраняет ключи, которых он не
-            # кладёт (delo_id, srv_num из href выше, act_text).
-            entry["first_instance"].update(
-                build_json_entry(r, card_info)["first_instance"]
-            )
-            if card_info.get("_writs"):
-                entry["first_instance"]["writs"] = card_info["_writs"]
-            _stamp_intake_checked(entry["first_instance"], now_iso)
-        else:
-            note = " (карточка недоступна — дозаполнит прогон)"
+            _apply_main_card(entry["first_instance"], r, card_info, now_iso)
+        elif why == "failed":
+            counters["card_failed"] += 1
+            note = (" (карточка недоступна — дозаполнит прогон "
+                    "или повторная вставка дампа)")
         # Служебный блок: кто и когда завёл дело (история импортов, бейдж
         # «импортировано» на фронте — задел).
         entry["import"] = {"operator": operator, "at": now_iso, "source": "dump"}
@@ -524,9 +607,10 @@ def import_rows(
     for line in lines:
         log.info(line)
 
-    if (new_entries or promoted_any) and not dry_run:
-        # Промоушен правит существующие записи cases по ссылке — сохранить
-        # надо и когда новых дел нет.
+    if (new_entries or promoted_any or refilled_any) and not dry_run:
+        # Промоушен и дозаполнение правят существующие записи cases по ссылке —
+        # сохранить надо и когда новых дел нет. Без refilled_any дочитанная
+        # карточка жила бы только в памяти процесса.
         data["cases"] = new_entries + cases
         save_json(data, config.JSON_PATH)
     elif dry_run:
@@ -589,6 +673,7 @@ def main(argv: list[str] | None = None) -> int:
         "region": region.code,
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
+        "card_failed": 0, "refilled": 0,
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
         "bank_dry_run": 0, "bank_capped": 0,
@@ -690,6 +775,15 @@ def main(argv: list[str] | None = None) -> int:
         summary["no_link"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
+    if summary["card_failed"] or summary["refilled"]:
+        # Отдельной строкой, а не хвостом сводки выше: провал чтения карточек —
+        # повод повторить импорт, и он не должен теряться среди корзин отсева.
+        log.warning(
+            "Карточки основной картотеки: %d дочитано | %d осталось без "
+            "карточки (суд не отдал) — дозаполнит прогон или повторная "
+            "вставка того же дампа",
+            summary["refilled"], summary["card_failed"],
+        )
     bank_touched = sum(summary[k] for k in (
         "added_bank", "excluded_result", "excluded_writ", "already_spent",
         "seen_cached", "fetch_fail", "bank_dry_run", "bank_capped",
