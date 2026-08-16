@@ -486,11 +486,12 @@ const _bankEventsState={active:{loaded:false,loading:null},archive:{loaded:false
 // Кросс-поиск: после неудачной фоновой загрузки bank-списка не ретраим её
 // на каждый ввод в поиск (loadBankDataset ошибку глотает — флаг свой).
 let _crossHintLoadFailed=false;
-// Сколько дел в ХВОСТЕ filteredCases приехало из соседней картотеки. Хвост
-// живёт в общем массиве (на нём завязаны стрелки drawer, фокус клавиатуры и
-// пагинация), поэтому счётчику и рендерам нужна граница: свои дела — это
-// filteredCases.length - crossCount, дальше идёт группа соседа.
+// Группы глобального поискового хвоста. Текущий раздел всегда остаётся первым,
+// затем идут остальные без дублей в порядке «Мои → Основные → Иски банка».
+// Хвост живёт в filteredCases: на нём завязаны drawer, клавиатурный фокус и
+// пагинация. searchGroups хранит границы и подписи отдельных групп.
 let crossCount=0;
+let searchGroups=[];
 // Пагинация рендера (сбрасывается в applyFilters).
 let renderLimit=RENDER_CHUNK;
 let newCaseNumbers=new Set();
@@ -1502,7 +1503,9 @@ async function loadBankDataset(){
       if(typeof enhanceDigestCaseLinks==='function')enhanceDigestCaseLinks();
     }catch(e){
       console.warn('Иски банка: датасет не загрузился:',e.message);
-      bankViewActive=false;
+      // В «Моих» bankViewActive хранит раздел, в который вернёмся; ошибка
+      // фоновой догрузки не должна сама переключать этот выбор.
+      if(!mineModeOn())bankViewActive=false;
       showError('Не удалось загрузить иски банка ('+e.message+')');
     }finally{
       bankListLoading=null;
@@ -1584,47 +1587,76 @@ function bankEventsPending(c){
   return !_bankEventsState[c._bankArchived?'archive':'active'].loaded;
 }
 async function setDatasetView(v){
-  const want=v==='bank';
-  if(want===bankViewActive){renderDatasetSwitch();return;}
-  bankViewActive=want;
-  if(bankViewActive&&!bankLoaded)await loadBankDataset();
-  // Возврат в основные с bank-only статус-фильтром → «Все» (writs/awaiting_writ
-  // в основной картотеке всегда пусты и выглядели бы как сломанный дашборд).
-  const stSel=document.getElementById('filter-status');
-  if(!bankViewActive&&stSel&&(stSel.value==='writs'||stSel.value==='awaiting_writ'))stSel.value='all';
-  // Категории у картотек разные — пересобрать выпадашку под активную.
+  if(!['main','bank','mine'].includes(v))return;
+  const same=activeScope()===v;
+  filterMineActive=v==='mine';
+  if(v!=='mine')bankViewActive=v==='bank';
+  try{localStorage.setItem(FILTER_MINE_KEY,filterMineActive?'true':'false');}catch(_){}
+
+  // Активный сегмент загорается сразу, не после тяжёлого fetch bank-списка.
+  renderDatasetSwitch();
+  if(v==='mine'){
+    // Сначала показываем уже доступные звёзды, затем без блокировки интерфейса
+    // дополняем набор активными и архивными делами банка.
+    populateFilterOptions();
+    applyFilters();
+    if(digestLoaded)setDigestView('mine');
+    if(watchlistHasBankEntries()){
+      if(!bankLoaded)await loadBankDataset();
+      if(bankLoaded&&!bankArchiveLoaded)await ensureBankArchive();
+      populateFilterOptions();
+      applyFilters();
+    }
+    return;
+  }
+  if(v==='bank'&&!bankLoaded)await loadBankDataset();
+  // Категории у областей разные — пересобрать выпадашку под выбранную.
   populateFilterOptions();
   applyFilters();
+  if(digestLoaded)setDigestView('general');
+  if(same)renderDatasetSwitch();
 }
 window.setDatasetView=setDatasetView;
-// Сегмент-переключатель картотек «Основные | Иски банка» (#dataset-switch
-// над таблицей). Скрыт, пока файла cases_bank.json нет (HEAD-проба
-// probeBankFile) — до пилотного импорта дашборд выглядит как раньше.
-// В отличие от чипов-фильтров виден и на мобильном (тулбар там — плавающая
-// капсула внизу, в шторку «Фильтры» переключатель картотеки не прячем).
+function syncMobileMineButton(){
+  const btn=document.getElementById('toolbar-mine-btn');
+  if(!btn)return;
+  const on=activeScope()==='mine';
+  btn.hidden=watchlist.size===0;
+  btn.classList.toggle('active',on);
+  btn.setAttribute('aria-pressed',on?'true':'false');
+  btn.setAttribute('title',on?'Вернуться к предыдущему разделу':'Показать мои дела');
+}
+// Верхний переключатель областей «Основные | Иски банка | ★ Мои».
+// «Мои» всегда видимы, даже при нуле: это самостоятельный раздел с понятным
+// empty-state, а не фильтр, который появляется после первой звезды.
+function scopeMineIcon(){
+  return '<svg class="scope-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2-4.5-4.4 6.2-.9L12 3Z"></path></svg>';
+}
 function renderDatasetSwitch(){
+  syncMobileMineButton();
   const box=document.getElementById('dataset-switch');
   if(!box)return;
-  // Липкость полосы списка — по тому же предикату, что и видимость капсулы:
-  // в «★ Мои» юрист просил её не липнуть (решение 13.08.2026), а без
-  // cases_bank.json прикреплять сверху нечего — остаётся один счётчик.
   const bar=document.getElementById('list-bar');
-  const липкая=bankFileExists&&!mineModeOn();
-  if(bar)bar.classList.toggle('is-sticky',липкая);
-  // «★ Мои» — надкартотечный режим: показывает звёзды обеих картотек, выбор
-  // сегмента на него не влияет — прячем переключатель, чтобы не путать.
-  if(!bankFileExists||mineModeOn()){box.hidden=true;return;}
+  if(bar)bar.classList.add('is-sticky');
   box.hidden=false;
-  // Счётчики ОБОИХ сегментов — АКТИВНЫЕ дела. Bank: после ленивой догрузки
+  const scope=activeScope();
+  // Счётчики картотек — активные дела. Bank: после ленивой догрузки
   // архива bankCases прирастает архивными, и число прыгало бы 493→517.
-  // Основные: архив приезжает сразу из cases_archive.json — с ним «Основные»
-  // считались бы с архивом, а «Иски банка» без (асимметрия до v132).
-  // Инвариант: знаменатели везде = активные, архив — отдельным хвостом.
-  const bankCount=bankLoaded?`<span class="chip-count">${bankCases.filter(c=>!c._bankArchived).length}</span>`:'';
+  // «Мои» считают все найденные звёзды, включая архив: сохранённое дело не
+  // должно исчезать из бейджа только из-за смены жизненного цикла.
+  const bankCount=bankLoaded
+    ?`<span class="chip-count">${bankCases.filter(c=>!c._bankArchived).length}</span>`
+    :(bankFileExists?'<span class="chip-count">…</span>':'');
   const mainCount=`<span class="chip-count">${allCases.filter(c=>!caseArchived(c)).length}</span>`;
-  box.innerHTML=`<div class="seg-ctrl">
-    <button class="seg-btn ${bankViewActive?'':'active'}" aria-pressed="${bankViewActive?'false':'true'}" onclick="setDatasetView('main')">Основные${mainCount}</button>
-    <button class="seg-btn ${bankViewActive?'active':''}" aria-pressed="${bankViewActive?'true':'false'}" onclick="setDatasetView('bank')">Иски банка${bankCount}</button>
+  // До входа в «Мои» bank-список может быть ещё не загружен; размер самого
+  // watchlist уже известен и не занижает бейдж composite-звёзд.
+  const mineCount=`<span class="chip-count">${watchlist.size}</span>`;
+  const bankButton=(bankFileExists||bankLoaded||scope==='bank')
+    ?`<button class="seg-btn ${scope==='bank'?'active':''}" aria-pressed="${scope==='bank'?'true':'false'}" onclick="setDatasetView('bank')"><span>Иски банка</span>${bankCount}</button>`:'';
+  box.innerHTML=`<div class="seg-ctrl scope-switch" role="group" aria-label="Раздел дел">
+    <button class="seg-btn ${scope==='main'?'active':''}" aria-pressed="${scope==='main'?'true':'false'}" onclick="setDatasetView('main')"><span>Основные</span>${mainCount}</button>
+    ${bankButton}
+    <button class="seg-btn scope-mine-btn ${scope==='mine'?'active':''}" aria-pressed="${scope==='mine'?'true':'false'}" onclick="setDatasetView('mine')">${scopeMineIcon()}<span>Мои</span>${mineCount}</button>
   </div>`;
 }
 function showError(m){const e=document.getElementById('error-banner');e.style.display='';e.textContent='';const s=document.createElement('strong');s.textContent='Ошибка: ';e.appendChild(s);e.appendChild(document.createTextNode(m));}
@@ -1704,7 +1736,7 @@ function populateFilterOptions(){
   // Категории — из активного датасета: у исков банка свой набор категорий,
   // выпадашка основной картотеки для них бесполезна (и наоборот).
   const cats=new Set();
-  activeDataset().forEach(c=>{if(c.category)cats.add(c.category);});
+  scopedDataset().forEach(c=>{if(c.category)cats.add(c.category);});
   const catSel=document.getElementById('filter-category');
   const catVal=catSel.value;
   catSel.innerHTML='<option value="all">Все категории</option>'+[...cats].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
@@ -1731,12 +1763,9 @@ function mainKpiCounts(list){
 }
 function renderStats(){
   if(bankViewActive&&!mineModeOn()){renderBankStats();return;}
-  // «★ Мои» — плитки по СВОЕМУ набору: обе картотеки, тот же предикат
-  // isWatchedCase(c)||isNewCase(c), что и mine-ветка applyFilters (держать
-  // синхронно!). До v132 KPI игнорировали режим и показывали цифры всей
-  // основной картотеки. Состав плиток не меняем: bank-звёзды честно попадают
-  // в «В производстве»/«В пользу банка», а «ждёт ИЛ» виден бейджами списка.
-  const src=mineModeOn()?activeDataset().filter(c=>isWatchedCase(c)||isNewCase(c)):allCases;
+  // «Мои» — только отмеченные звёздой дела обеих картотек. Новые без звезды
+  // больше не подмешиваются: раздел предсказуем и совпадает с watchlist.
+  const src=mineModeOn()?scopedDataset():allCases;
   const {active,won:w,lost,meaningful,winRate,freshActs}=mainKpiCounts(src);
 
   document.getElementById('stats-primary').innerHTML=`
@@ -1770,8 +1799,8 @@ function renderBankStats(){
   document.getElementById('stats-primary').innerHTML=`
     <div class="stat-card clickable" data-accent="gold" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('active')"><div class="stat-value">${inWork}</div><div class="stat-label">В производстве</div></div>
     <div class="stat-card clickable" data-accent="blue" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('decided')"><div class="stat-value">${decided}</div><div class="stat-label">Решено</div></div>
-    <div class="stat-card clickable" data-accent="green" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('writs')"><div class="stat-value">${withWrit}</div><div class="stat-label">🧾 С ИЛ</div></div>
-    <div class="stat-card clickable" data-accent="red" role="button" tabindex="0" ${KBD_ACT} onclick="setStatusFilter('awaiting_writ')"><div class="stat-value">${awaitingWrit}</div><div class="stat-label">Ждут ИЛ</div></div>`;
+    <div class="stat-card clickable" data-accent="green" role="button" tabindex="0" ${KBD_ACT} onclick="setBankControlFilter('writs')"><div class="stat-value">${withWrit}</div><div class="stat-label">🧾 С ИЛ</div></div>
+    <div class="stat-card clickable" data-accent="red" role="button" tabindex="0" ${KBD_ACT} onclick="setBankControlFilter('awaiting_writ')"><div class="stat-value">${awaitingWrit}</div><div class="stat-label">Ждут ИЛ</div></div>`;
   document.getElementById('stats-secondary').innerHTML='';
   document.getElementById('stats-mobile-summary').innerHTML=`<div class="sms-row"><div class="sms-items"><span class="sms-item"><strong>${inWork}</strong> в произв.</span><span class="sms-item"><strong>${decided}</strong> решено</span><span class="sms-item"><strong>${withWrit}</strong> 🧾 ИЛ</span><span class="sms-item"><strong>${awaitingWrit}</strong> ждут ИЛ</span></div><span class="sms-chevron">▼</span></div>`;
 }
@@ -1802,7 +1831,7 @@ function renderAnalytics(){
 
   // Источник — активный датасет: основная картотека / иски банка / «★ Мои»
   // (объединённый: заседания по звёздам обеих картотек).
-  let allUpcoming=activeDataset()
+  let allUpcoming=scopedDataset()
     .filter(c=>c.status==='active'&&c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Рассмотрение'))
     .map(c=>{
       const t=c.hearingTime||'';
@@ -1813,13 +1842,8 @@ function renderAnalytics(){
     .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
     .sort((a,b)=>a.hearingDate-b.hearingDate);
 
-  // Mine-режим (чип «★ Мои» нажат и есть watchlist) — блок «Ближайшие
-  // заседания» показывает только дела из watchlist (обеих картотек).
-  // Источник истины — filterMineActive (единый для таблицы и дайджеста).
+  // В «Моих» scopedDataset уже оставил только watchlist обеих картотек.
   const mineMode = mineModeOn();
-  if (mineMode) {
-    allUpcoming = allUpcoming.filter(c => isWatchedCase(c));
-  }
 
   // Take up to 10 of each stage, then merge by date — cap at 12 total.
   // Кассац. дела учитываем наряду с FI/Ап.: у 7kas есть hearing_date,
@@ -1901,12 +1925,13 @@ function renderAnalytics(){
         const courtTip=[courtTitle(c),judgeFull].filter(Boolean).join(' · ');
         const courtHtml=court?`<div class="up-court" title="${escHtml(courtTip)}">${escHtml(court)}${escHtml(judge)}</div>`:'';
         const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
+        const drawerIdEsc=escHtml(caseCanonId(c)).replace(/'/g,'&#39;');
         // В «Ближайших» показываем только основной номер — старые номера
         // в скобках (после remand'а или объединения дел) перегружают строку.
         const caseShort=c.caseNumber.replace(/\s*\(.*$/, '');
         // Ссылка на карточку суда живёт в drawer — в списке «Ближайших»
         // иконку не дублируем, клик по элементу открывает drawer целиком.
-        upHtml+=`<div class="upcoming-item" data-case="${caseEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseEsc}')">`+
+        upHtml+=`<div class="upcoming-item" data-case="${drawerIdEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${drawerIdEsc}')">`+
           `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
           `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
@@ -1988,7 +2013,9 @@ function clearSearch(){
 function filterNewCases(e){
   if(e.target.closest('.dismiss'))return;
   document.getElementById('filter-status').value='new';
-  applyFilters();
+  // Баннер относится к новым делам основной картотеки. Из «Моих» и трека
+  // банка ведём в правильный раздел, иначе общий статус дал бы пустой экран.
+  setDatasetView('main');
 }
 function dismissNewBanner(e){e.stopPropagation();document.getElementById('new-cases-banner').style.display='none';}
 
@@ -2001,6 +2028,10 @@ function caseArchived(c){
 // у них свой бейдж «🛡» и они не закрывают ожидание ИЛ).
 function hasEnforcementWrit(c){
   return (c.writs||[]).some(w=>classifyWritKind(w,c)==='enforcement');
+}
+// Обеспечительная мера — самостоятельная очередь контроля в треке банка.
+function hasInterimWrit(c){
+  return (c.writs||[]).some(w=>classifyWritKind(w,c)==='interim');
 }
 // Сколько дней дело ждёт исполнительный лист. Якорь — legal_force_est
 // (расчётная дата вступления решения в силу по ГПК: мотивировка/вручение
@@ -2086,19 +2117,25 @@ function objectionsKvHtml(c){
       : ` <span style="color:var(--slate-500);font-weight:500;">(осталось ${d} дн.)</span>`;
   return `<div class="kv-k">⏳ Возражения до</div><div class="kv-v kv-mono">${formatDate(parseDate(due))}${хвост}</div>`;
 }
-// Включён ли надкартотечный «★ Мои» (звёзды обеих картотек, один список).
-function mineModeOn(){return filterMineActive&&watchlist.size>0;}
-// Активный датасет: «★ Мои» объединяет обе картотеки, иначе — по сегменту.
+// Текущий раздел. «Мои» остаются полноценным режимом и при нуле звёзд —
+// тогда интерфейс показывает объясняющий empty-state.
+function mineModeOn(){return filterMineActive;}
+function activeScope(){return mineModeOn()?'mine':(bankViewActive?'bank':'main');}
+function combinedDataset(){return allCases.concat(bankLoaded?bankCases:[]);}
+function mineDataset(){return combinedDataset().filter(c=>isWatchedCase(c));}
+// Активный датасет до фильтров: в «Моих» это объединение двух картотек.
 function activeDataset(){
-  if(mineModeOn())return allCases.concat(bankLoaded?bankCases:[]);
+  if(mineModeOn())return combinedDataset();
   return bankViewActive?bankCases:allCases;
 }
+// Область, по которой считаются KPI и бейджи общих фильтров.
+function scopedDataset(){return mineModeOn()?mineDataset():activeDataset();}
 function watchlistHasBankEntries(){
   for(const x of watchlist)if(String(x).includes('|'))return true;
   return false;
 }
 // Поисковый блоб дела — ЕДИНСТВЕННЫЙ источник и для предиката applyFilters,
-// и для кросс-поиска по соседней картотеке: две склейки разъехались бы молча.
+// и для глобального поиска по остальным разделам: две склейки разъехались бы.
 // Чистая функция — гоняется node-тестом.
 function caseSearchBlob(c){
   return c.computed?c.computed.searchBlob:[c.caseNumber,c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.lastEvent,c.notes].join(' ').toLowerCase();
@@ -2113,54 +2150,80 @@ function collectSearchMatches(list,q){
 function countSearchMatches(list,q){
   return collectSearchMatches(list,q).length;
 }
-// Минимальная длина запроса для подмешивания соседней картотеки. Одиночная
+// Минимальная длина запроса для подмешивания остальных разделов. Одиночная
 // буква даёт бессмысленную выдачу, а первый же кросс-поиск в сессии тянет
 // 1.6 МБ cases_bank.json — качать их ради неё незачем.
 const CROSS_MIN_QUERY=2;
-// Соседняя картотека для кросс-поиска: null — подмешивать нечего (режим
-// «★ Мои» надкартотечный сам, короткий запрос, сосед не загружен).
-function crossDataset(q){
-  if(!q||q.length<CROSS_MIN_QUERY||mineModeOn())return null;
-  if(bankViewActive)return allCases;
-  return bankLoaded?bankCases:null;
+const SEARCH_SCOPE_PRIORITY=['mine','main','bank'];
+const SEARCH_SCOPE_LABELS={mine:'Мои дела',main:'Основные',bank:'Иски банка'};
+// Чистая сборка глобального хвоста. already — уже отфильтрованная выдача
+// текущего раздела. Set по ссылке на объект убирает главный источник дублей:
+// «Мои» состоят из тех же объектов, что «Основные» и «Иски банка».
+function buildGlobalSearchTail(currentScope,q,lists,already){
+  const items=[];
+  const groups=[];
+  if(!q||q.length<CROSS_MIN_QUERY)return {items,groups};
+  const seen=new Set(already||[]);
+  SEARCH_SCOPE_PRIORITY.forEach(scope=>{
+    if(scope===currentScope)return;
+    const matches=collectSearchMatches((lists&&lists[scope])||[],q)
+      .filter(c=>!seen.has(c));
+    if(!matches.length)return;
+    const offset=items.length;
+    matches.forEach(c=>seen.add(c));
+    items.push(...matches);
+    groups.push({scope,label:SEARCH_SCOPE_LABELS[scope],offset,count:matches.length});
+  });
+  return {items,groups};
 }
-// Имя картотеки, из которой приехал хвост, — для заголовка группы.
-function crossGroupName(){return bankViewActive?'Основные':'Иски банка';}
-// Индекс первого дела хвоста: до него — своя выдача, дальше — группа соседа.
-function crossStartIdx(){return filteredCases.length-crossCount;}
+// Индекс первого дела хвоста: до него — выдача текущего раздела.
+function crossStartIdx(){return searchGroups.length?searchGroups[0].start:filteredCases.length;}
+function searchGroupAt(idx){return searchGroups.find(g=>g.start===idx)||null;}
 function applyFilters(){
   const q=document.getElementById('search-input').value.toLowerCase();
-  let st=document.getElementById('filter-status').value;
-  const rlRaw=document.getElementById('filter-role').value;
+  const st=document.getElementById('filter-status').value;
   const cat=document.getElementById('filter-category').value;
-  const stageEl=document.getElementById('filter-stage');
-  const stgRaw=stageEl?stageEl.value:'all';
-  // В bank-режиме сегменты «роль»/«инстанция» скрыты И игнорируются: все дела
-  // трека — истец, 1-я инстанция. Значения селектов не сбрасываем — при
-  // возврате в основную картотеку фильтры оживают как были.
-  const rl=bankViewActive?'all':rlRaw;
-  const stg=bankViewActive?'all':stgRaw;
-  // Bank-only значения статус-фильтра в основной картотеке бессмысленны
-  // (deep-link ?filter=writs и т.п.) — тихо откатываем на «Все».
-  if(!bankViewActive&&!mineModeOn()&&(st==='writs'||st==='awaiting_writ')){
-    document.getElementById('filter-status').value='all';st='all';
-  }
+  const scope=activeScope();
+  // Контекст каждого раздела живёт в собственных select'ах. Скрытые значения
+  // других разделов сознательно не читаем — они сохраняются, но не фильтруют.
+  const rl=scope==='main'
+    ?document.getElementById('filter-role').value
+    :scope==='mine'?document.getElementById('filter-mine-role').value:'all';
+  const stg=scope==='main'
+    ?document.getElementById('filter-stage').value
+    :scope==='mine'?document.getElementById('filter-mine-stage').value:'all';
+  const bankControl=scope==='bank'
+    ?document.getElementById('filter-bank-control').value:'all';
+  const mineSource=scope==='mine'
+    ?document.getElementById('filter-mine-source').value:'all';
   // Ленивый архив трека: первый клик чипа «Архив» в bank-режиме тянет
   // cases_bank_archive.json; по готовности фильтр пересчитается сам.
-  if(bankViewActive&&st==='archived'&&!bankArchiveLoaded&&!bankArchiveLoading){
+  if(scope==='bank'&&st==='archived'&&!bankArchiveLoaded&&!bankArchiveLoading){
     ensureBankArchive().then(()=>applyFilters());
   }
-  // «★ Мои» — надкартотечный: показывает отмеченные дела ОБЕИХ картотек
-  // (+ новые за день из основной). Composite-звёзды требуют bank-датасета —
-  // подгружаем его фоном при первом включении.
+  // «Мои» объединяют звёзды обеих картотек. Для composite-звёзд загружаем
+  // и активный список, и архив банка: сохранённое дело не должно исчезнуть
+  // только потому, что перешло в архив.
   const mineOn=mineModeOn();
-  if(mineOn&&!bankLoaded&&!bankListLoading&&watchlistHasBankEntries()){
-    loadBankDataset().then(()=>applyFilters());
+  if(mineOn&&watchlistHasBankEntries()){
+    if(!bankLoaded&&!bankListLoading){
+      loadBankDataset()
+        .then(()=>{
+          if(!bankLoaded)return false;
+          return !bankArchiveLoaded?ensureBankArchive().then(()=>true):true;
+        })
+        .then(ok=>{if(ok!==false)applyFilters();});
+    }else if(bankLoaded&&!bankArchiveLoaded&&!bankArchiveLoading){
+      ensureBankArchive().then(()=>applyFilters());
+    }
   }
-  // Непустой поиск (q) перекрывает фильтр «Мои» — ищем по всей базе
-  // активного датасета, а не только по watchlist'у (условие `!q` ниже).
   filteredCases=activeDataset().filter(c=>{
     const archived=caseArchived(c);
+    // Поиск в «Моих» остаётся внутри watchlist: строка поиска больше не
+    // превращает раздел в незаметный глобальный поиск.
+    if(mineOn&&!isWatchedCase(c))return false;
+    if(mineSource==='main'&&c._bankTrack)return false;
+    if(mineSource==='bank'&&!c._bankTrack)return false;
     if(st==='archived'){if(!archived)return false;}
     else if(st==='new'){if(!isNewCase(c))return false;}
     else if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;if(archived||c.status!=='active'||d===null||d<0||d>1)return false;}
@@ -2170,14 +2233,11 @@ function applyFilters(){
     else if(st==='scheduled'||st==='postponed'||st==='suspended'||st==='paused'||st==='awaiting'){if(c.detailedStatus!==st||archived)return false;}
     else if(st==='decided'){if((c.status!=='decided'&&c.status!=='returned')||archived)return false;}
     else if(st==='lost'){if(getResultFavor(c)!=='unfavorable')return false;}
-    // Bank-only фильтры трека: «🧾 ИЛ» — есть лист на исполнение;
-    // «Ждут ИЛ» — решено, листа на исполнение нет (главная боль трека).
-    else if(st==='writs'){if(archived||!hasEnforcementWrit(c))return false;}
-    else if(st==='awaiting_writ'){if(archived||!awaitsWrit(c))return false;}
+    // Контроль трека банка — отдельная ось, не общий статус.
+    if(bankControl!=='all'&&!bankControlMatches(c,bankControl))return false;
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
     if(stg!=='all'&&stageGroup(c)!==stg)return false;
-    if(mineOn&&!q&&!isWatchedCase(c)&&!isNewCase(c))return false;
     if(q&&!caseSearchBlob(c).includes(q))return false;
     return true;
   });
@@ -2187,7 +2247,7 @@ function applyFilters(){
   // Чип «Ждут ИЛ» — это очередь работы, а не список: при relevance-сортировке
   // (дефолт) она вырождалась бы в «все рассмотренные вперемешку». Ставим
   // дольше всех ждущих наверх; явную сортировку по колонке юрист не теряет.
-  const очередьИЛ=(document.getElementById('filter-status')||{}).value==='awaiting_writ';
+  const очередьИЛ=scope==='bank'&&bankControl==='awaiting_writ';
   filteredCases.sort((a,b)=>{
     if(очередьИЛ&&sortField==='relevance'){
       const da=awaitingWritDays(a),db=awaitingWritDays(b);
@@ -2244,14 +2304,19 @@ function applyFilters(){
     if(va<vb)return sortDir==='asc'?-1:1;if(va>vb)return sortDir==='asc'?1:-1;return 0;
   });
 
-  // Кросс-поиск: совпадения соседней картотеки дописываем ХВОСТОМ после
-  // сортировки — своя выдача остаётся своей, а дела соседа идут группой под
-  // заголовком. Фильтры активной картотеки на соседа не переносим (статус и
-  // категория между треками несопоставимы), только поисковую строку.
-  const crossList=crossDataset(q);
-  const cross=crossList?collectSearchMatches(crossList,q):[];
-  crossCount=cross.length;
-  if(crossCount)filteredCases=filteredCases.concat(cross);
+  // Глобальный поиск: после отсортированной выдачи текущего раздела добавляем
+  // остальные разделы. Их контекстные фильтры не переносим — роль, стадия и
+  // банковский контроль относятся только к открытому разделу. «Мои» идут
+  // раньше исходных картотек и забирают свои объекты из следующих групп.
+  const primaryCount=filteredCases.length;
+  const globalTail=buildGlobalSearchTail(scope,q,{
+    mine:mineDataset(),
+    main:allCases,
+    bank:bankLoaded?bankCases:[],
+  },filteredCases);
+  searchGroups=globalTail.groups.map(g=>({...g,start:primaryCount+g.offset}));
+  crossCount=globalTail.items.length;
+  if(crossCount)filteredCases=filteredCases.concat(globalTail.items);
 
   // Reset focus если вышел за границы
   if(focusedRowIdx>=filteredCases.length)focusedRowIdx=filteredCases.length-1;
@@ -2479,9 +2544,9 @@ function mcTrackLineHtml(c){
   return `<span class="mc-track-await aw-${lvl}" title="Решение вступило в силу ${escHtml(formatDate(parseDate(c._fi.legal_force_est)))} (расчётно), исполнительный лист не выдан">⏳ ждёт ИЛ ${d} дн.</span>`;
 }
 function countCasesByStatus(st){
-  // Счётчики чипов считаются по активному датасету (основной / иски банка /
-  // объединённый «★ Мои»).
-  return activeDataset().filter(c=>{
+  // Общие статус-чипы считают только текущую область. В «Моих» это строго
+  // watchlist, поэтому и цифры, и последующая выдача используют один набор.
+  return scopedDataset().filter(c=>{
     const archived=caseArchived(c);
     if(st==='all')return !archived;
     if(st==='new')return isNewCase(c);
@@ -2490,34 +2555,35 @@ function countCasesByStatus(st){
     if(st==='active')return c.status==='active'&&!archived;
     if(st==='decided')return (c.status==='decided'||c.status==='returned')&&!archived;
     if(st==='archived')return archived;
-    if(st==='writs')return !archived&&hasEnforcementWrit(c);
-    if(st==='awaiting_writ')return !archived&&awaitsWrit(c);
     return false;
   }).length;
 }
+function bankControlMatches(c,control){
+  if(control==='all')return !caseArchived(c);
+  if(caseArchived(c))return false;
+  if(control==='writs')return hasEnforcementWrit(c);
+  if(control==='awaiting_writ')return awaitsWrit(c);
+  if(control==='interim')return hasInterimWrit(c);
+  return true;
+}
 function renderChipBar(){
-  // На десктопе чипы разнесены по двум контейнерам: быстрые статус-чипы +
-  // ★Мои в #chip-bar-quick (рядом с поиском), сегментные переключатели
-  // роль/инстанция в #chip-bar-segments (свой ряд под поиском).
-  // Bottom-sheet (#filters-sheet-body) получает обе пачки склеенными,
-  // как и раньше — мобильный sheet двухрядной структуры не знает.
+  // Ряд 1 одинаков во всех разделах: общие статусы. Ряд 2 меняет только
+  // контекст: роль/инстанция, контроль ИЛ либо источник/роль/инстанция.
   const barQuick=document.getElementById('chip-bar-quick');
   const barSegments=document.getElementById('chip-bar-segments');
   // Совместимость со старой разметкой (если где-то остался #chip-bar):
   const barLegacy=document.getElementById('chip-bar');
   if(!barQuick&&!barSegments&&!barLegacy)return;
+  const scope=activeScope();
   const st=document.getElementById('filter-status').value;
-  const rl=document.getElementById('filter-role').value;
-  const stg=document.getElementById('filter-stage').value;
   const nNew=countCasesByStatus('new');
   const nToday=countCasesByStatus('today');
   const nWeek=countCasesByStatus('week');
-  const nWrits=countCasesByStatus('writs');
   // Чип «Архив» в bank-режиме до ленивой загрузки архива: честное число даёт
   // archived_count из корня cases_bank.json; меты нет (старый снимок) — «…»,
   // чип остаётся триггером загрузки и не врёт нулём. Скрываем только
   // достоверный ноль.
-  const nArchChip=(bankViewActive&&bankFileExists&&!bankArchiveLoaded)
+  const nArchChip=(scope==='bank'&&bankFileExists&&!bankArchiveLoaded)
     ?(bankArchivedMeta==null?'…':bankArchivedMeta)
     :countCasesByStatus('archived');
   const chips=[
@@ -2527,60 +2593,59 @@ function renderChipBar(){
     {k:'week',l:'На неделе',n:nWeek,cls:'chip-week',hide:nWeek===0},
     {k:'active',l:'Активные',n:countCasesByStatus('active'),cls:''},
     {k:'decided',l:'Рассмотрено',n:countCasesByStatus('decided'),cls:''},
-    // «🧾 ИЛ» — только в картотеке банка: дела с листом на исполнение.
-    {k:'writs',l:'🧾 ИЛ',n:nWrits,cls:'',hide:!bankViewActive||nWrits===0},
     {k:'archived',l:'Архив',n:nArchChip,cls:'',hide:nArchChip===0},
   ];
-  let quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
-  // Чип «★ Мои» — единый mine-режим (фильтр + дайджест + «Ближайшие»), как
-  // у мобильной кнопки #toolbar-mine-btn. Виден только при непустом
-  // watchlist. Источник истины — filterMineActive (тот же предикат, что в
-  // applyFilters); _digestViewMode — производное. Класс mine-toggle-btn
-  // включает чип в синхронизацию setDigestView (флип .active).
-  // С v119 режим надкартотечный: счётчик — звёзды ОБЕИХ картотек.
-  if(watchlist.size>0){
-    const mineOn=filterMineActive;
-    const nMine=allCases.concat(bankLoaded?bankCases:[])
-      .filter(c=>isWatchedCase(c)&&!caseArchived(c)).length;
-    quickHtml+=`<button class="chip-btn chip-mine mine-toggle-btn ${mineOn?'active':''}" aria-pressed="${mineOn?'true':'false'}" onclick="toggleMobileMine()">★ Мои<span class="chip-count">${nMine}</span></button>`;
-  }
-  // Переключатель картотек «Основные | Иски банка» живёт НЕ здесь, а в
-  // #dataset-switch над таблицей (renderDatasetSwitch): это смена картотеки,
-  // а не фильтр, и на мобильном он не должен прятаться в шторку «Фильтры».
-  // Segmented controls: роль и инстанция — собираются отдельно, чтобы лечь
-  // в свой ряд тулбара на десктопе (.chip-bar-segments).
-  // В bank-режиме сегменты скрыты: все дела трека — истец, 1-я инстанция
-  // (значения селектов не сбрасываются и оживают при возврате в основные).
+  const quickHtml=chips.filter(x=>!x.hide).map(x=>`<button class="chip-btn ${x.cls} ${st===x.k?'active':''}" onclick="setStatusFilter('${x.k}')">${x.l}<span class="chip-count">${x.n}</span></button>`).join('');
+  const group=(label,buttons,extraClass='')=>`<div class="filter-group ${extraClass}"><span class="filter-group-label">${label}</span><div class="seg-ctrl">${buttons}</div></div>`;
+  const roleButtons=(value,setter)=>`
+    <button class="seg-btn ${value==='all'?'active':''}" onclick="${setter}('all')">Все</button>
+    <button class="seg-btn ${value==='third_party'?'active':''}" onclick="${setter}('third_party')">3-е лицо</button>
+    <button class="seg-btn ${value==='plaintiff'?'active':''}" onclick="${setter}('plaintiff')">Истец</button>
+    <button class="seg-btn ${value==='defendant'?'active':''}" onclick="${setter}('defendant')">Ответчик</button>`;
+  const stageGroupHtml=(value,setter,src,showAll=false)=>{
+    const fiCount=src.filter(c=>stageGroup(c)==='first_instance').length;
+    const apCount=src.filter(c=>stageGroup(c)==='appeal').length;
+    const csCount=src.filter(c=>stageGroup(c)==='cassation').length;
+    if(!showAll&&!fiCount&&!apCount&&!csCount)return '';
+    let buttons=`<button class="seg-btn ${value==='all'?'active':''}" onclick="${setter}('all')">Все</button>`;
+    if(showAll||fiCount)buttons+=`<button class="seg-btn ${value==='first_instance'?'active':''}" onclick="${setter}('first_instance')">1 инст.</button>`;
+    if(showAll||apCount)buttons+=`<button class="seg-btn ${value==='appeal'?'active':''}" onclick="${setter}('appeal')">Апелляция</button>`;
+    if(showAll||csCount)buttons+=`<button class="seg-btn ${value==='cassation'?'active':''}" onclick="${setter}('cassation')">Кассация</button>`;
+    return group('Инстанция',buttons);
+  };
   let segmentsHtml='';
-  if(!bankViewActive){
-    segmentsHtml=`<div class="seg-ctrl">
-    <button class="seg-btn ${rl==='all'?'active':''}" onclick="setRoleFilter('all')">Все роли</button>
-    <button class="seg-btn ${rl==='third_party'?'active':''}" onclick="setRoleFilter('third_party')">3-е лицо</button>
-    <button class="seg-btn ${rl==='plaintiff'?'active':''}" onclick="setRoleFilter('plaintiff')">Истец</button>
-    <button class="seg-btn ${rl==='defendant'?'active':''}" onclick="setRoleFilter('defendant')">Ответчик</button>
-  </div>`;
-    // Инстанция — показываем если есть хотя бы две стадии в данных.
-    // Считаем ТОЙ ЖЕ корзиной stageGroup, что и бейдж с фильтром: иначе
-    // сегмент «Апелляция» показывал 40 при 62 делах, которые под него
-    // отфильтруются, а картотека, где все дела в awaiting_appeal, не
-    // получала сегмента вовсе.
-    // В mine-режиме — по mine-набору (обе картотеки, предикат mine-ветки
-    // applyFilters): счётчики решают видимость кнопок сегмента, и до v132
-    // считались по allCases — сегмент «Апелляция» мог показаться при заведомо
-    // пустой выдаче (все bank-звёзды — 1-я инстанция).
-    const segSrc=mineModeOn()?activeDataset().filter(c=>isWatchedCase(c)||isNewCase(c)):allCases;
-    const fiCount=segSrc.filter(c=>stageGroup(c)==='first_instance').length;
-    const apCount=segSrc.filter(c=>stageGroup(c)==='appeal').length;
-    const csCount=segSrc.filter(c=>stageGroup(c)==='cassation').length;
-    if(fiCount>0&&(apCount>0||csCount>0)){
-      let inst=`<div class="seg-ctrl">
-      <button class="seg-btn ${stg==='all'?'active':''}" onclick="setStageFilter('all')">Все инст.</button>
-      <button class="seg-btn ${stg==='first_instance'?'active':''}" onclick="setStageFilter('first_instance')">1 инст.</button>`;
-      if(apCount>0)inst+=`<button class="seg-btn ${stg==='appeal'?'active':''}" onclick="setStageFilter('appeal')">Апелляция</button>`;
-      if(csCount>0)inst+=`<button class="seg-btn ${stg==='cassation'?'active':''}" onclick="setStageFilter('cassation')">Кассация</button>`;
-      inst+=`</div>`;
-      segmentsHtml+=inst;
-    }
+  if(scope==='main'){
+    const rl=document.getElementById('filter-role').value;
+    const stg=document.getElementById('filter-stage').value;
+    segmentsHtml=group('Роль',roleButtons(rl,'setRoleFilter'))
+      +stageGroupHtml(stg,'setStageFilter',allCases);
+  }else if(scope==='bank'){
+    const control=document.getElementById('filter-bank-control').value;
+    const src=bankCases.filter(c=>!caseArchived(c));
+    const nAll=src.length;
+    const nWrits=src.filter(c=>bankControlMatches(c,'writs')).length;
+    const nAwait=src.filter(c=>bankControlMatches(c,'awaiting_writ')).length;
+    const nInterim=src.filter(c=>bankControlMatches(c,'interim')).length;
+    const buttons=`
+      <button class="seg-btn ${control==='all'?'active':''}" onclick="setBankControlFilter('all')">Любой<span class="chip-count">${nAll}</span></button>
+      <button class="seg-btn ${control==='writs'?'active':''}" onclick="setBankControlFilter('writs')">С ИЛ<span class="chip-count">${nWrits}</span></button>
+      <button class="seg-btn ${control==='awaiting_writ'?'active':''}" onclick="setBankControlFilter('awaiting_writ')">Ждут ИЛ<span class="chip-count">${nAwait}</span></button>
+      <button class="seg-btn ${control==='interim'?'active':''}" onclick="setBankControlFilter('interim')">Обеспечение<span class="chip-count">${nInterim}</span></button>`;
+    segmentsHtml=group('Контроль',buttons,'filter-group-bank-control');
+  }else{
+    const mineSrc=mineDataset();
+    const source=document.getElementById('filter-mine-source').value;
+    const rl=document.getElementById('filter-mine-role').value;
+    const stg=document.getElementById('filter-mine-stage').value;
+    const nMain=mineSrc.filter(c=>!c._bankTrack).length;
+    const nBank=mineSrc.filter(c=>c._bankTrack).length;
+    const sourceButtons=`
+      <button class="seg-btn ${source==='all'?'active':''}" onclick="setMineSourceFilter('all')">Все<span class="chip-count">${mineSrc.length}</span></button>
+      <button class="seg-btn ${source==='main'?'active':''}" onclick="setMineSourceFilter('main')">Основные<span class="chip-count">${nMain}</span></button>
+      <button class="seg-btn ${source==='bank'?'active':''}" onclick="setMineSourceFilter('bank')">Иски банка<span class="chip-count">${nBank}</span></button>`;
+    segmentsHtml=group('Источник',sourceButtons)
+      +group('Роль',roleButtons(rl,'setMineRoleFilter'))
+      +stageGroupHtml(stg,'setMineStageFilter',mineSrc,true);
   }
   if(barQuick)barQuick.innerHTML=quickHtml;
   if(barSegments)barSegments.innerHTML=segmentsHtml;
@@ -2595,10 +2660,16 @@ function renderChipBar(){
   if(countEl){
     let active=0;
     if(st&&st!=='all')active++;
-    // Роль/инстанция в bank-режиме скрыты И игнорируются applyFilters —
-    // их «зависшие» значения фильтрами не считаем (иначе кнопка врала бы).
-    if(!bankViewActive&&rl&&rl!=='all')active++;
-    if(!bankViewActive&&stg&&stg!=='all')active++;
+    if(scope==='main'){
+      if(document.getElementById('filter-role').value!=='all')active++;
+      if(document.getElementById('filter-stage').value!=='all')active++;
+    }else if(scope==='bank'){
+      if(document.getElementById('filter-bank-control').value!=='all')active++;
+    }else{
+      if(document.getElementById('filter-mine-source').value!=='all')active++;
+      if(document.getElementById('filter-mine-role').value!=='all')active++;
+      if(document.getElementById('filter-mine-stage').value!=='all')active++;
+    }
     const cat=document.getElementById('filter-category').value;
     if(cat&&cat!=='all')active++;
     if(active){countEl.textContent=active;countEl.style.display='inline-flex';}
@@ -2608,10 +2679,12 @@ function renderChipBar(){
 function setStatusFilter(v){document.getElementById('filter-status').value=v;applyFilters();}
 function setRoleFilter(v){document.getElementById('filter-role').value=v;applyFilters();}
 function setStageFilter(v){document.getElementById('filter-stage').value=v;applyFilters();}
+function setBankControlFilter(v){document.getElementById('filter-bank-control').value=v;applyFilters();}
+function setMineSourceFilter(v){document.getElementById('filter-mine-source').value=v;applyFilters();}
+function setMineRoleFilter(v){document.getElementById('filter-mine-role').value=v;applyFilters();}
+function setMineStageFilter(v){document.getElementById('filter-mine-stage').value=v;applyFilters();}
 function setMineFilter(v){
-  filterMineActive=!!v;
-  try{localStorage.setItem(FILTER_MINE_KEY,filterMineActive?'true':'false');}catch(_){}
-  applyFilters();
+  setDatasetView(v?'mine':(bankViewActive?'bank':'main'));
 }
 window.setMineFilter=setMineFilter;
 // ★-кнопка тулбара/чипа = единый toggle: фильтр + дайджест + upcoming.
@@ -2620,9 +2693,7 @@ window.setMineFilter=setMineFilter;
 // разъезжались: чип горел при неотфильтрованной таблице, а клик по нему
 // лишь гасил подсветку (для фильтрации нужен был второй клик).
 function toggleMobileMine(){
-  const next=!filterMineActive;
-  setMineFilter(next);
-  setDigestView(next?'mine':'general');
+  setDatasetView(filterMineActive?(bankViewActive?'bank':'main'):'mine');
 }
 window.toggleMobileMine=toggleMobileMine;
 function openFiltersSheet(){
@@ -2638,13 +2709,21 @@ function closeFiltersSheet(){
 }
 function resetFilters(){
   document.getElementById('filter-status').value='all';
-  document.getElementById('filter-role').value='all';
-  document.getElementById('filter-stage').value='all';
+  const scope=activeScope();
+  if(scope==='main'){
+    document.getElementById('filter-role').value='all';
+    document.getElementById('filter-stage').value='all';
+  }else if(scope==='bank'){
+    document.getElementById('filter-bank-control').value='all';
+  }else{
+    document.getElementById('filter-mine-source').value='all';
+    document.getElementById('filter-mine-role').value='all';
+    document.getElementById('filter-mine-stage').value='all';
+  }
   // Категория — тоже фильтр: до v132 «Сбросить» молча оставлял её активной
   // (видимого сеттера у неё нет, и юрист не мог понять, почему список неполон).
   document.getElementById('filter-category').value='all';
-  // «★ Мои» сознательно НЕ сбрасываем: это режим просмотра (filterMineActive),
-  // а не фильтр — у него своя кнопка/чип.
+  // Раздел не сбрасываем: верхний переключатель — навигация, не фильтр.
   applyFilters();
 }
 
@@ -2664,20 +2743,35 @@ function resetFilters(){
 const tcLead=s=>`<span class="tc-lead">${s}</span>`;
 const tcWordy=s=>`<span class="tc-wordy">${s}</span>`;
 const tcTail=s=>`<span class="tc-tail">${s}</span>`;
+function crossCounterHtml(){
+  if(!crossCount)return '';
+  if(searchGroups.length===1){
+    return tcTail(` · <strong>${crossCount}</strong> в разделе «${searchGroups[0].label}»`);
+  }
+  return tcTail(` · <strong>${crossCount}</strong> в других разделах`);
+}
 // ⚠️ «из» живёт в СВОЁМ классе, не в .tc-wordy: иначе ступень «убрать слова»
 // уносила бы и разделитель, и счётчик читался как «1166».
 const tcOf='<span class="tc-of"> из </span><span class="tc-slash"> / </span>';
 function renderCounter(){
-  // «★ Мои» — объединённый режим: счётчик по обеим картотекам.
+  // «Мои» — объединённый watchlist двух картотек. Знаменатель не включает
+  // новые дела без звезды и меняется на размер архива при выборе «Архив».
   if(mineModeOn()){
-    const total=activeDataset().length;
-    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${filteredCases.length}</strong>${tcOf}<strong>${total}</strong>${tcWordy(' дел обеих картотек')}`;
+    const mineAll=mineDataset();
+    const nArch=mineAll.filter(caseArchived).length;
+    const nActive=mineAll.length-nArch;
+    const archiveSelected=document.getElementById('filter-status').value==='archived';
+    const total=archiveSelected?nArch:nActive;
+    const archText=nArch>0&&!archiveSelected?tcTail(` · ${nArch} в архиве`):'';
+    const свои=crossStartIdx();
+    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${total}</strong>${tcWordy(' моих дел')}${archText}${crossCounterHtml()}`;
+    fitCounter();
     return;
   }
-  // Своя выдача — без хвоста кросс-поиска: он приехал из соседней картотеки
-  // и к знаменателю активной не относится, поэтому идёт отдельной припиской.
+  // Выдача текущего раздела — без глобального хвоста: другие разделы к её
+  // знаменателю не относятся, поэтому идут отдельной припиской.
   const свои=crossStartIdx();
-  const crossText=crossCount>0?tcTail(` · <strong>${crossCount}</strong> в картотеке «${crossGroupName()}»`):'';
+  const crossText=crossCounterHtml();
   // В режиме «Иски банка» знаменатель — АКТИВНЫЕ дела: после ленивой
   // догрузки архива bankCases прирастает архивными, и «из N» прыгал бы.
   // Размер архива до загрузки даёт archived_count из корня cases_bank.json
@@ -2687,6 +2781,7 @@ function renderCounter(){
     const nActive=bankArchiveLoaded?bankCases.length-nArch:bankCases.length;
     const archText=bankArchiveLoading?tcTail(' · загрузка архива…'):(nArch>0?tcTail(` · ${nArch} в архиве`):'');
     document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${nActive}</strong>${tcWordy(' исков банка')}${archText}${crossText}`;
+    fitCounter();
     return;
   }
   // Знаменатель — АКТИВНЫЕ дела (зеркально bank-ветке выше): архив идёт
@@ -2731,12 +2826,9 @@ function fitCounter(){
   cnt.classList.add('is-squeezed');
 }
 
-// Кросс-поиск (#search-cross-hint): дела соседней картотеки подмешиваются в
-// выдачу ХВОСТОМ (см. applyFilters + crossDataset) — переключаться руками не
-// нужно. Дело банка-истца при апел. жалобе переезжает из «Исков банка» в
-// «Основные», и юрист искал его не там без единого намёка; до 13.08.2026 тут
-// была подсказка с кнопкой «Показать», и срабатывала она ТОЛЬКО при нулевой
-// выдаче — при 3 своих + 2 соседских делах про соседские никто не узнавал.
+// Глобальный поиск (#search-cross-hint): текущий раздел остаётся первым, затем
+// дела остальных разделов подмешиваются группами «Мои → Основные → Иски
+// банка» (см. buildGlobalSearchTail). Переключаться руками не нужно.
 // От прежней подсказки остался один экран — индикатор фоновой загрузки
 // bank-списка: она идёт под тем же тройным гардом (паттерн
 // enhanceDigestCaseLinks), ensureBankArchive/ensureBankEvents отсюда НЕ
@@ -2747,10 +2839,10 @@ function renderSearchCrossHint(){
   const box=document.getElementById('search-cross-hint');
   if(!box)return;
   const q=document.getElementById('search-input').value.toLowerCase();
-  if(!q||q.length<CROSS_MIN_QUERY||mineModeOn()){box.hidden=true;return;}
-  if(!bankViewActive&&bankFileExists&&!bankLoaded&&!bankListLoading&&!_crossHintLoadFailed){
+  if(!q||q.length<CROSS_MIN_QUERY){box.hidden=true;return;}
+  if(bankFileExists&&!bankLoaded&&!bankListLoading&&!_crossHintLoadFailed){
     box.hidden=false;
-    box.innerHTML=`<span class="bridge-text">Проверяем картотеку «Иски банка»…</span>`;
+    box.innerHTML=`<span class="bridge-text">Проверяем раздел «Иски банка»…</span>`;
     loadBankDataset().then(()=>{
       if(!bankLoaded)_crossHintLoadFailed=true;
       // Поиск мог опустеть за время fetch — тогда пересчёт не нужен.
@@ -2769,6 +2861,20 @@ const COLS=[
   {k:'nextDate',     l:'Заседание', s:1,w:'140px'},
   {k:'state',        l:'Состояние', s:1,w:'220px'}
 ];
+
+function emptyCasesCopy(){
+  if(mineModeOn()&&bankListLoading){
+    return {title:'Загружаем отслеживаемые дела…',detail:''};
+  }
+  if(mineModeOn()&&mineDataset().length===0){
+    return {
+      title:'Пока нет отслеживаемых дел',
+      detail:'Поставьте звёздочку у нужного дела — оно появится здесь.'
+    };
+  }
+  if(mineModeOn())return {title:'Нет моих дел, соответствующих фильтрам',detail:'Измените или сбросьте фильтры.'};
+  return {title:'Нет дел, соответствующих фильтрам',detail:''};
+}
 
 /* Иконки статусов (Lucide-style, outline) */
 // Календарь — общая иконка ВСЕХ назначенных заседаний (scheduled/prep/prelim/
@@ -3043,7 +3149,8 @@ function renderTable(){
   }).join('')+'</tr>';
 
   if(!filteredCases.length){
-    document.getElementById('table-body').innerHTML=`<tr><td colspan="${COLS.length}" class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><p>Нет дел, соответствующих фильтрам</p></td></tr>`;
+    const empty=emptyCasesCopy();
+    document.getElementById('table-body').innerHTML=`<tr><td colspan="${COLS.length}" class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 012-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><p>${empty.title}</p>${empty.detail?`<span>${empty.detail}</span>`:''}</td></tr>`;
     return;
   }
 
@@ -3058,17 +3165,18 @@ function renderTable(){
     const accent=rowAccent(c);
     const rowClass=['row-clickable',isNew?'row-new':'',expanded?'row-expanded':'',focused?'row-focus':'',accent].filter(Boolean).join(' ');
 
-    // Хвост кросс-поиска: дела соседней картотеки идут своей группой в конце.
-    // Внутри хвоста обычная relevance-группировка подавлена — он и есть группа.
-    if(crossCount&&idx===crossStartIdx()){
-      html+=`<tr class="group-header cross-group"><td colspan="${COLS.length}"><span class="group-dot"></span>Из картотеки «${crossGroupName()}» (${crossCount})</td></tr>`;
+    // Глобальный поисковый хвост разбит на отдельные группы. Внутри них
+    // обычная relevance-группировка подавлена — заголовок раздела важнее.
+    const searchGroup=searchGroupAt(idx);
+    if(searchGroup){
+      html+=`<tr class="group-header cross-group"><td colspan="${COLS.length}"><span class="group-dot"></span>Раздел «${searchGroup.label}» (${searchGroup.count})</td></tr>`;
     }
     // Разделители групп при relevance-sort: новые → с датой → без даты → рассмотренные → архив
     if(sortField==='relevance'&&idx<crossStartIdx()){
       const archived=caseArchived(c);
       const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
-        if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length})</td></tr>`;}
+        if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length})</td></tr>`;}
         else if(grp==='upcoming'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--info);"></span>С назначенной датой</td></tr>`;}
         else if(grp==='awaiting'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-300);"></span>Поступили, дата не назначена</td></tr>`;}
         else if(grp==='decided'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-400);"></span>Рассмотренные</td></tr>`;}
@@ -3112,6 +3220,7 @@ function renderTable(){
 
     const rc=vm.roleClass;
     const caseNumEsc=escHtml(c.caseNumber);
+    const drawerIdEsc=escHtml(caseCanonId(c)).replace(/'/g,'&#39;');
     // Срок возражений — сразу после «Обжалуется»: это дедлайн, он важнее
     // принадлежности к треку и статуса листа.
     const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
@@ -3129,7 +3238,7 @@ function renderTable(){
     const subRow = caseSub
       ? `<span class="case-sub-row"><span class="case-sub">${caseSubEsc}</span>${actions}</span>`
       : '';
-    html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${caseNumEsc}" onclick="openDrawer('${caseNumEsc.replace(/'/g,'&#39;')}')">
+    html+=`<tr class="${rowClass}" data-idx="${idx}" data-case="${drawerIdEsc}" onclick="openDrawer('${drawerIdEsc}')">
       <td><div class="case-number">${watch}<div class="case-num-stack"><span class="case-row-top"><span class="case-main" title="${caseNumEsc}">${caseMainEsc}</span>${metaBadges}${topActions}</span>${subRow}</div></div></td>
       <td class="col-court"><div class="cell-court" title="${escHtml(courtTitle(c))}">${escHtml(courtLabel(c))||'<span class="cell-empty">—</span>'}</div></td>
       <td><div class="parties-col"><span><span class="party-tag">И</span><span class="party-name">${plaintiffHtml}</span></span><span><span class="party-tag">О</span><span class="party-name">${defendantHtml}</span></span>${rc==='third'?'<span><span class="badge badge-third badge-compact">Сбер 3-е лицо</span>'+(vm.isCassStage?(c.cassAppellantIsBank?cassBadge:''):(c.appellant==='bank'?appBadge:''))+'</span>':''}</div></td>
@@ -3187,21 +3296,24 @@ function copyBtnHtml(value,title,cls){
 }
 
 /* ========== Drawer ========== */
-function findCaseIdx(num){return filteredCases.findIndex(x=>x.caseNumber===num);}
+function findCaseIdx(num){return filteredCases.findIndex(x=>x.caseNumber===num||caseCanonId(x)===num);}
 
 // Поиск дела по номеру в активном датасете (bank-режим → иски банка),
 // с фолбэком на второй датасет — drawer работает в обоих режимах.
 function findCaseByNumber(num){
-  const primary=bankViewActive?bankCases:allCases;
-  const secondary=bankViewActive?allCases:bankCases;
-  return primary.find(x=>x.caseNumber===num)||secondary.find(x=>x.caseNumber===num);
+  const match=list=>list.find(x=>x.caseNumber===num||caseCanonId(x)===num);
+  const visible=match(filteredCases);
+  if(visible)return visible;
+  const primary=mineModeOn()?combinedDataset():(bankViewActive?bankCases:allCases);
+  const secondary=mineModeOn()?[]:(bankViewActive?allCases:bankCases);
+  return match(primary)||match(secondary);
 }
 
 function openDrawer(caseNumber){
   const c=findCaseByNumber(caseNumber);
   if(!c)return;
-  activeCaseNumber=caseNumber;
-  markCaseRead(caseNumber);
+  activeCaseNumber=c.caseNumber;
+  markCaseRead(c.caseNumber);
   // Вкладка по умолчанию — та инстанция, где по текущей стадии идёт движение,
   // а НЕ самая старшая открытая. Раньше апелляция побеждала всегда, когда её
   // карточка есть; с пер-инстанционной хронологией это прятало бы живые
@@ -3218,14 +3330,14 @@ function openDrawer(caseNumber){
     :['fi','ap','cs'];
   const естьВкладка={fi:hasFi,ap:hasAp,cs:hasCs};
   drawerStage=предпочтение.find(s=>естьВкладка[s])||null;
-  const idx=findCaseIdx(caseNumber);
+  const idx=findCaseIdx(caseCanonId(c));
   if(idx>=0)focusedRowIdx=idx;
   renderDrawer(c);
   // Трек «Иски банка»: хроника (events) лежит в отдельном ленивом файле —
   // тянем при первом открытии drawer и перерисовываем, если дело ещё открыто.
   if(bankEventsPending(c)){
     ensureBankEvents(c).then(()=>{
-      if(activeCaseNumber===caseNumber)renderDrawer(c);
+      if(activeCaseNumber===c.caseNumber)renderDrawer(c);
     });
   }
   document.getElementById('drawer').classList.add('open');
@@ -4032,18 +4144,20 @@ function saveLocalNote(num,val){
 /* ========== Mobile Cards ========== */
 function renderMobileCards(){
   if(!filteredCases.length){
-    document.getElementById('mobile-cards').innerHTML='<div class="empty-state"><p>Нет дел, соответствующих фильтрам</p></div>';
+    const empty=emptyCasesCopy();
+    document.getElementById('mobile-cards').innerHTML=`<div class="empty-state"><p>${empty.title}</p>${empty.detail?`<span>${empty.detail}</span>`:''}</div>`;
     return;
   }
   // Те же группы что и в desktop-таблице — рендерим только при relevance-сортировке.
   let prevGroup=null;
-  const newCount=filteredCases.filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length;
+  const newCount=filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length;
   document.getElementById('mobile-cards').innerHTML=filteredCases.slice(0,renderLimit).map((c,idx)=>{
     let groupHeader='';
-    // Хвост кросс-поиска — своей группой в конце (зеркало renderTable);
-    // обычная relevance-группировка внутри хвоста подавлена.
-    if(crossCount&&idx===crossStartIdx()){
-      groupHeader=`<div class="mc-group-header gh-cross"><span class="group-dot"></span>Из картотеки «${crossGroupName()}» (${crossCount})</div>`;
+    // Каждая область глобального поиска получает свой заголовок (зеркало
+    // renderTable); обычная relevance-группировка внутри хвоста подавлена.
+    const searchGroup=searchGroupAt(idx);
+    if(searchGroup){
+      groupHeader=`<div class="mc-group-header gh-cross"><span class="group-dot"></span>Раздел «${searchGroup.label}» (${searchGroup.count})</div>`;
     }
     else if(sortField==='relevance'&&idx<crossStartIdx()){
       const archived=caseArchived(c);
@@ -4106,8 +4220,9 @@ function renderMobileCards(){
 
     const cardClass=['mobile-card',isUnread?'card-new':'',accent].filter(Boolean).join(' ');
     const caseNumEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
+    const drawerIdEsc=escHtml(caseCanonId(c)).replace(/'/g,'&#39;');
 
-    return `<div class="${cardClass}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${caseNumEsc}')">
+    return `<div class="${cardClass}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${drawerIdEsc}')">
       <div class="mc-top">
         ${watchBtnHtml(c)}
         <span class="mc-case">${escHtml(c.caseNumber)}</span>
@@ -4337,9 +4452,8 @@ updateRegionBadge();
 // push только по делам, отмеченным юристом. Пустой watchlist = «всё подряд».
 const WATCHLIST_KEY = lsKey('watchlist_v1');
 const WATCHLIST_HINT_KEY = lsKey('watchlist_hint_shown');
-// Фильтр «Только мои дела»: показывать только отслеживаемые (★) + новые.
-// Дефолт: включён при первой звёздочке. При пустом watchlist чип скрывается
-// и фильтр не применяется (нечего фильтровать).
+// Раздел «Мои»: показывает только отслеживаемые (★) дела обеих картотек.
+// Он видим и доступен при пустом watchlist — там показывается подсказка.
 const FILTER_MINE_KEY = lsKey('filter_mine_v1');
 let watchlist = new Set();
 try {
@@ -4365,18 +4479,7 @@ try {
     stored = 'true';
     localStorage.setItem(FILTER_MINE_KEY, 'true');
   }
-  const on = stored === 'true';
-  if (on && watchlist.size === 0) {
-    // Stale: при пустом watchlist чип «★ Мои» скрыт и фильтр маскируется
-    // (mineOn = filterMineActive && watchlist.size>0). Юрист не видит,
-    // что флаг включён, и первая же поставленная звезда «внезапно» режет
-    // таблицу. Чистим, чтобы инвариант «пустой watchlist ⇒ фильтр выкл»
-    // соблюдался всегда.
-    try { localStorage.removeItem(FILTER_MINE_KEY); } catch (_) {}
-    filterMineActive = false;
-  } else {
-    filterMineActive = on;
-  }
+  filterMineActive = stored === 'true';
 } catch (_) { filterMineActive = false; }
 
 // No-op для совместимости со старыми вызовами (reconcile с сервера).
@@ -4552,19 +4655,10 @@ function toggleWatch(caseNumber, btn) {
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
-  // Снятие последней звезды → фильтр «★ Мои» больше не имеет смысла.
-  // Сбрасываем флаг сразу, до applyFilters(): иначе при следующей звезде
-  // (или перезагрузке страницы с восстановлением stored=true) таблица
-  // схлопнется до 1 дела с активным чипом, и юрист подумает, что
-  // фильтр включила звёздочка.
-  if (watchlist.size === 0 && filterMineActive) {
-    filterMineActive = false;
-    try { localStorage.setItem(FILTER_MINE_KEY, 'false'); } catch (_) {}
-  }
-  // Перерисовываем chip-bar и пересчитываем filteredCases — chip появляется
-  // или исчезает в зависимости от размера watchlist, а фильтр пересчитывается.
-  // Авто-включение фильтра «Мои дела» НЕ делаем: пользователь сам решает,
-  // включать ли фильтр после постановки звезды (чипом «★ Мои»).
+  // Если снята последняя звезда внутри «Моих», остаёмся в разделе и
+  // показываем его empty-state. Верхний сегмент «Мои» остаётся доступен,
+  // а нижний быстрый ярлык рядом с поиском при нуле скрывается.
+  // Авто-включение «Моих» при постановке звезды по-прежнему не делаем.
   if (typeof applyFilters === 'function') {
     try { applyFilters(); } catch (_) {}
   } else if (typeof renderChipBar === 'function') {
@@ -5183,23 +5277,11 @@ async function loadLastDigest() {
     currentDigestGeneratedAt = data.generated_at || null;
     digestLoaded = true;
 
-    // Стартовый режим: ?mine=1 (push-click_url) → 'mine'; иначе — из
-    // filterMineActive (единый источник истины, ключ filter_mine_v1).
-    // Дефолт свежего устройства — «общий»; выбор юриста помнится. До v98
-    // дефолт был 'mine' по отдельному ключу digest_view_v1, из-за чего чип
-    // «★ Мои» горел при неотфильтрованной таблице.
+    // Стартовый режим совпадает с верхним разделом. ?mine=1 уже обработан
+    // init(), но учитываем его и здесь на случай иной очередности событий.
     const urlMine = new URL(window.location.href);
-    let initialMode = 'general';
-    if (watchlist.size > 0) {
-      if (urlMine.searchParams.has('mine')) {
-        initialMode = 'mine';
-        // ?mine=1 (push-click_url, PWA-shortcut) включает единый mine-режим:
-        // не только дайджест, но и фильтр таблицы — консистентно с кнопкой ★.
-        setMineFilter(true);
-      } else {
-        initialMode = filterMineActive ? 'mine' : 'general';
-      }
-    }
+    const initialMode=(urlMine.searchParams.get('mine')==='1'||filterMineActive)
+      ?'mine':'general';
     await setDigestView(initialMode);
     refreshDigestModeVisibility();
 
@@ -5242,8 +5324,8 @@ async function loadLastDigest() {
   }
 }
 
-// Собрать множество номеров «новых дел» из last_digest_context.json. Новые
-// дела — общесистемный сигнал, в mine-режиме они проходят без watchlist.
+// Legacy-парсер новых дел из контекста дайджеста. Оставлен для совместимости
+// формата, но раздел «Мои» больше не добавляет эти номера автоматически.
 function collectNewCaseNumbers(ctx) {
   const set = new Set();
   for (const c of ctx?.fi_new_cases || []) {
@@ -5357,21 +5439,21 @@ function retitleSectionHeader(header, n) {
   return lines.join('\n');
 }
 
-// Фильтр общего HTML дайджеста по mine-набору номеров дел (watchlist + новые).
+// Фильтр общего HTML дайджеста по mine-набору номеров дел (только watchlist).
 // State machine между параграфами: LLM делит дайджест на параграфы по
 // двойному \n, и заголовок секции часто оказывается в отдельном
 // параграфе от блоков дел этой секции. Идём слева направо, помним
 // «текущую секцию»: если она фильтруемая (📅 Изменения, 📄 Акты и т.п.),
-// последующие параграфы-блоки фильтруем по mine; если общесистемная
-// («Новые дела», группирующие 🏛/⚖️) — оставляем как есть. Параграф-
+// последующие параграфы-блоки фильтруем по mine; группирующие 🏛/⚖️
+// оставляем как структуру. Секции «Новые дела» фильтруются так же: новизна
+// без звезды больше не делает дело «моим». Параграф-
 // заголовок фильтруемой секции откладываем и сохраняем только если
 // после него встретился хотя бы один mine-блок (иначе заголовок-сирота
 // «📅 Изменения (2):» без содержимого мусорит на странице).
 function filterGeneralHtmlByMine(html, mineSet) {
   const paragraphs = String(html).split(/\n{2,}/);
   const kept = [];
-  // Состояние секции: 'none' | 'new' (общесистемная — оставляем) |
-  // 'filtered' (фильтруемая — пропускаем блоки не из mine) |
+  // Состояние секции: 'none' | 'filtered' (пропускаем блоки не из mine) |
   // 'group' (группирующая 🏛/⚖️ — оставляем заголовок, дальше блоки
   // будут до следующего заголовка).
   let section = 'none';
@@ -5394,13 +5476,13 @@ function filterGeneralHtmlByMine(html, mineSet) {
     if (isHeader) {
       const isNew = SECTION_NEW_RE.test(firstLine);
       const isGrouping = SECTION_GROUPING_RE.test(firstLine.trim());
-      const isFiltered = SECTION_FILTERED_RE.test(firstLine) && !isNew && !isGrouping;
+      const isFiltered = (SECTION_FILTERED_RE.test(firstLine)||isNew) && !isGrouping;
       if (isFiltered) {
         section = 'filtered';
         pendingFilteredHeader = para;
       } else {
-        // Новые/группирующие — оставляем заголовок и переключаем секцию.
-        section = isNew ? 'new' : 'group';
+        // Группирующие и служебные заголовки оставляем как структуру.
+        section = 'group';
         pendingFilteredHeader = null;
         kept.push(para);
       }
@@ -5434,7 +5516,7 @@ function filterGeneralHtmlByMine(html, mineSet) {
       }
       // иначе — выкидываем (не наш блок).
     } else {
-      // Общесистемный/новый/группирующий контекст — оставляем.
+      // Служебный/группирующий контекст — оставляем.
       kept.push(para);
     }
   }
@@ -5471,7 +5553,7 @@ function filterGeneralHtmlByMine(html, mineSet) {
 }
 
 // Возвращает HTML персональной версии дайджеста: фильтрует «фильтруемые»
-// секции по mine-набору номеров дел (watchlist ∪ новые). Описание актов,
+// секции строго по watchlist. Описание актов,
 // мотивы и итоги — идентичны Telegram-версии. Если по mine-набору ничего
 // не осталось — возвращает { html: generalHtml, fallbackNote, found: 0 }
 // (показываем общий + плашка-заметка). Чистая функция, никаких побочек.
@@ -5483,19 +5565,10 @@ function buildMineHtml(generalHtml, ctx) {
       found: 0,
     };
   }
-  if (!ctx) {
-    return {
-      html: generalHtml,
-      fallbackNote: 'Не удалось загрузить контекст для персональной версии — показан общий дайджест.',
-      found: 0,
-    };
-  }
-  // mineSet — в канонических bare-id (watchlist уже канон; номера новых дел
-  // и номера из HTML дайджеста приводим через canonCaseNumber, иначе строка
-  // с «8Г-…»/«33-…» не сматчится с каноном дела).
+  // mineSet — в канонических bare-id. Контекст оставлен параметром для
+  // совместимости загрузчика, но больше не расширяет набор новыми делами.
   const mineSet = new Set();
   for (const w of watchlist) mineSet.add(canonCaseNumber(w));
-  for (const n of collectNewCaseNumbers(ctx)) mineSet.add(canonCaseNumber(n));
   const filtered = filterGeneralHtmlByMine(generalHtml, mineSet);
   // Считаем тем же предикатом, что и фильтр: у исков банка совпадение даёт
   // только composite-форма, и подсчёт по голым номерам обнулял бы found —
@@ -5509,14 +5582,14 @@ function buildMineHtml(generalHtml, ctx) {
     };
   }
   return {
-    html: `<div class="mine-digest-note">★ Только мои дела + новые. По делам: ${cases.length}.</div>${filtered}`,
+    html: `<div class="mine-digest-note">★ Только мои дела. По делам: ${cases.length}.</div>${filtered}`,
     fallbackNote: null,
     found: cases.length,
   };
 }
 
 // Переключатель «★ Мой» в шапке блока дайджеста. Одна кнопка-toggle:
-// нажата — показываем mine-версию (только дела из watchlist + новые),
+// нажата — показываем mine-версию (только дела из watchlist),
 // отжата — общий дайджест (как в Telegram). Перерисовывает тело без
 // перезагрузки. Своего состояния не персистит: единственный источник
 // истины — filterMineActive (ключ filter_mine_v1, пишет setMineFilter);
@@ -5525,7 +5598,7 @@ async function setDigestView(mode) {
   const body = document.getElementById('digest-body');
   const titleEl = document.getElementById('digest-title');
   if (!body) return;
-  const next = (mode === 'mine' && watchlist.size > 0) ? 'mine' : 'general';
+  const next = mode === 'mine' ? 'mine' : 'general';
   _digestViewMode = next;
   // Обновляем состояние всех кнопок-тогглов «★ Мои дела» (в шапке
   // дайджеста и в шапке «Ближайшие заседания»).
@@ -5535,7 +5608,7 @@ async function setDigestView(mode) {
     el.setAttribute('aria-pressed', on ? 'true' : 'false');
     el.setAttribute('title', on
       ? 'Показан только список твоих дел. Нажми, чтобы вернуть все.'
-      : 'Показать только мои дела + новые');
+      : 'Показать только мои дела');
   });
   // Удаляем устаревшую mine-pill в шапке, если она там осталась от старой
   // версии (виден тоггл — pill избыточен и тесно становится на мобиле).
@@ -5586,11 +5659,9 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
-// Видимость тоггла «Общий ⇄ Мой» зависит от размера watchlist: при пустом
-// watchlist mine-режим не имеет смысла. Целевой режим считаем от
-// filterMineActive (единый источник истины): опустел watchlist — откат на
-// «Общий» (сам флаг сбрасывает toggleWatch); состав watchlist в режиме
-// «Мой» поменялся — пересобираем тело (mineSet изменился). До v98 здесь был
+// Целевой вид дайджеста следует за верхним разделом даже при пустом
+// watchlist: buildMineHtml покажет объясняющую плашку. Состав watchlist в
+// режиме «Мой» поменялся — пересобираем тело (mineSet изменился). До v98 был
 // дефолт «Мой», из-за которого первая же звезда зажигала чип «★ Мои» без
 // фильтрации таблицы. Вызываем при изменении watchlist (toggleWatch,
 // reconcileWatchlistWithServer) и при загрузке дайджеста.
@@ -5599,7 +5670,8 @@ function refreshDigestModeVisibility() {
   document.querySelectorAll('.mine-toggle-btn').forEach((el) => {
     el.hidden = !visible;
   });
-  const want = (visible && filterMineActive) ? 'mine' : 'general';
+  syncMobileMineButton();
+  const want = filterMineActive ? 'mine' : 'general';
   if (_digestViewMode !== want) {
     // Смена режима: в 'mine' переключаемся только при загруженном общем
     // HTML (иначе нечего фильтровать), в 'general' — безусловно.

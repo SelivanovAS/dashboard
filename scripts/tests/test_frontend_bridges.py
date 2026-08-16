@@ -1,5 +1,5 @@
 """
-Стражи кросс-поиска между картотеками и липкой полосы списка (app.js).
+Стражи глобального поиска между разделами и липкой полосы списка (app.js).
 
 Контекст 10.08.2026. Юрист спросил, зачем картотеки «Основные» и «Иски банка»
 разделены и нельзя ли заменить это ролевыми фильтрами. Разбор показал: граница
@@ -15,7 +15,7 @@
 этих листов. Плюс +157 карточек за прогон и 87.5% строк дайджеста стали бы
 трековыми.
 
-Тогда же (v155) переделан сам кросс-поиск. Было: подсказка «Найдено N в
+В v155 переделан сам кросс-поиск. Было: подсказка «Найдено N в
 картотеке X» с кнопкой «Показать», и ТОЛЬКО при нулевой выдаче — при 3 своих
 и 2 соседских делах про соседские не узнавал никто. Стало: дела соседней
 картотеки дописываются в filteredCases ХВОСТОМ под заголовком группы, без
@@ -23,24 +23,26 @@
 из подсветки ПАО Сбербанк (решение юриста 11.08.2026, см.
 test_bank_track_badge_stays_removed). Тогда же появилась липкая полоса списка
 (капсула картотек + счётчик одной строкой) и вскрылось, что overflow-x:hidden
-у body много месяцев ломал липкость самой .app-header.
+у body много месяцев ломал липкость самой .app-header. В v167 поиск стал
+глобальным: текущий раздел первый, затем «Мои → Основные → Иски банка» без
+повтора тех же starred-объектов.
 
 Что охраняем:
-1. Поисковый блоб один на предикат applyFilters и кросс-поиск (caseSearchBlob);
+1. Поисковый блоб один на предикат applyFilters и глобальный поиск (caseSearchBlob);
    отбор совпадений — один на список и счётчик (collectSearchMatches);
    архив обеих картотек в кросс-поиск не попадает.
-2. Ленивая догрузка bank-списка из кросс-поиска — под тройным гардом + флагом
+2. Ленивая догрузка bank-списка из глобального поиска — под тройным гардом + флагом
    неудачи (loadBankDataset ошибку глотает, без флага каждый ввод в поиск
    ретраил бы мёртвую сеть); хвост не строится на запросе короче двух
    символов — иначе первая же буква тянула бы 1.6 МБ cases_bank.json.
 2b. Липкая полоса: только в мобильном медиа-блоке, top:0 (с 14.08.2026 шапка
    на телефоне статична и уезжает с контентом — липнуть под неё нечему, а
    прежний top:var(--header-h) открыл бы над полосой щель в высоту шапки),
-   класс is-sticky по !mineModeOn(), и ГЛАВНОЕ — у body нет overflow-x:hidden
+   класс is-sticky во всех трёх разделах, и ГЛАВНОЕ — у body нет overflow-x:hidden
    (он делает body скролл-контейнером и убивает sticky у всех потомков,
    включая десктопную шапку).
-3. KPI и счётчики сегментов в «★ Мои» считаются по mine-набору (тот же
-   предикат isWatchedCase||isNewCase, что и в mine-ветке applyFilters) — до
+3. KPI и счётчики сегментов в «★ Мои» считаются по строгому watchlist-набору
+   (`isWatchedCase`, без автоматического добавления новых дел) — до
    v132 плитки показывали цифры всей основной картотеки.
 4. «Сбросить» сбрасывает и категорию; счётчик кнопки «Фильтры» учитывает
    категорию и не считает роль/инстанцию в bank-режиме (там они игнорируются).
@@ -173,55 +175,74 @@ def test_count_search_matches_wraps_collect():
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
-def test_cross_dataset_gates():
-    """Хвост соседней картотеки: не в «★ Мои», не на коротком запросе."""
+def test_global_search_priority_and_dedup():
+    """Текущий раздел уже впереди; хвост: Мои → Основные → Иски банка."""
     src = _app_js()
     script = (
-        "let bankViewActive=false,bankLoaded=true,_mine=false;\n"
-        "const allCases=['ОСНОВНЫЕ'],bankCases=['БАНК'];\n"
-        "function mineModeOn(){return _mine;}\n"
+        "function caseArchived(c){return !!c.archived;}\n"
+        + _fn_src(src, "caseSearchBlob")
+        + _fn_src(src, "collectSearchMatches")
         + _const_src(src, "CROSS_MIN_QUERY")
-        + _fn_src(src, "crossDataset")
+        + _const_src(src, "SEARCH_SCOPE_PRIORITY")
+        + _const_src(src, "SEARCH_SCOPE_LABELS")
+        + _fn_src(src, "buildGlobalSearchTail")
         + """
-const out=[];
-out.push(crossDataset('иванов'));           // штатно → соседняя картотека
-out.push(crossDataset(''));                 // пустой запрос
-out.push(crossDataset('и'));                // односимвольный — не тянем 1.6 МБ
-_mine=true;  out.push(crossDataset('иванов'));  // «★ Мои» надкартотечный сам
-_mine=false; bankViewActive=true; out.push(crossDataset('иванов'));
-bankViewActive=false; bankLoaded=false; out.push(crossDataset('иванов'));
-console.log(JSON.stringify(out));
+const item=id=>({id,computed:{archived:false,searchBlob:'сбербанк '+id}});
+const mainCurrent=item('main-current');
+const mineMain=item('mine-main');
+const mineBank=item('mine-bank');
+const bankOnly=item('bank-only');
+const mainOnly=item('main-only');
+const lists={
+  mine:[mineMain,mineBank],
+  main:[mainCurrent,mineMain,mainOnly],
+  bank:[mineBank,bankOnly],
+};
+const fromMain=buildGlobalSearchTail('main','сбербанк',lists,[mainCurrent]);
+const fromMine=buildGlobalSearchTail('mine','сбербанк',lists,[mineMain]);
+const short=buildGlobalSearchTail('main','с',lists,[mainCurrent]);
+console.log(JSON.stringify({
+  mainItems:fromMain.items.map(x=>x.id),
+  mainGroups:fromMain.groups.map(g=>[g.scope,g.count,g.offset]),
+  mineItems:fromMine.items.map(x=>x.id),
+  mineGroups:fromMine.groups.map(g=>[g.scope,g.count,g.offset]),
+  short,
+}));
 """
     )
     got = json.loads(_node(script))
-    assert got == [["БАНК"], None, None, None, ["ОСНОВНЫЕ"], None], (
-        f"crossDataset: {got}. Ожидалось: штатно — соседняя картотека; пустой "
-        "и односимвольный запрос, «★ Мои» и незагруженный сосед — None "
-        "(односимвольный гард бережёт 1.6 МБ cases_bank.json на каждый ввод)."
-    )
+    assert got == {
+        "mainItems": ["mine-main", "mine-bank", "bank-only"],
+        "mainGroups": [["mine", 2, 0], ["bank", 1, 2]],
+        "mineItems": ["main-current", "main-only", "mine-bank", "bank-only"],
+        "mineGroups": [["main", 2, 0], ["bank", 2, 2]],
+        "short": {"items": [], "groups": []},
+    }
 
 
 def test_cross_tail_wiring():
-    """Хвост дописывается в filteredCases, а счётчик его не путает со своими."""
+    """Группы дописываются в filteredCases, счётчик не путает их с текущей."""
     src = _app_js()
     fn = _fn_src(src, "applyFilters")
-    assert "crossCount=cross.length" in fn.replace(" ", "").replace("\n", ""), (
+    compact = fn.replace(" ", "").replace("\n", "")
+    assert "crossCount=globalTail.items.length" in compact, (
         "applyFilters не выставляет crossCount — граница своей выдачи и хвоста "
         "потеряна, счётчик и заголовок группы разъедутся."
     )
-    assert "filteredCases.concat(cross)" in fn, (
+    assert "filteredCases.concat(globalTail.items)" in fn, (
         "Хвост кросс-поиска больше не дописывается в filteredCases: на этом "
         "массиве висят стрелки drawer, фокус клавиатуры и пагинация."
     )
+    assert "searchGroups=globalTail.groups.map" in compact
     counter = _fn_src(src, "renderCounter")
     assert "crossStartIdx()" in counter, (
         "renderCounter снова считает по filteredCases.length — в «Показано N» "
-        "попадут дела соседней картотеки, а знаменатель остался свой."
+        "попадут дела других разделов, а знаменатель остался свой."
     )
     for имя in ("renderTable", "renderMobileCards"):
-        assert "crossStartIdx()" in _fn_src(src, имя), (
-            f"{имя} не рисует заголовок группы соседней картотеки — дела "
-            "соседа сольются со своей выдачей без единого признака."
+        rendered = _fn_src(src, имя)
+        assert "crossStartIdx()" in rendered and "searchGroupAt(idx)" in rendered, (
+            f"{имя} не рисует отдельные заголовки разделов глобального поиска."
         )
 
 
@@ -252,6 +273,9 @@ def test_cross_search_lazy_guard():
         "Гард фоновой догрузки ослаб: без bankListLoading параллельные вызовы "
         "плодят fetch'и, без _crossHintLoadFailed каждый ввод в поиск ретраит "
         "мёртвую сеть (loadBankDataset ошибку глотает)."
+    )
+    assert "mineModeOn()" not in fn, (
+        "Глобальный поиск снова отключён в разделе «Мои»."
     )
     assert "document.getElementById('search-input').value" in fn.split("loadBankDataset", 1)[1], (
         "После фоновой загрузки нет проверки, что поиск ещё не очищен — "
@@ -322,17 +346,22 @@ def test_body_has_no_overflow_x():
     )
 
 
-def test_list_bar_sticky_class_follows_mine_mode():
-    """Класс is-sticky ставится по !mineModeOn() — требование юриста."""
+def test_list_bar_sticky_keeps_all_three_scopes_available():
+    """После повышения «Моих» до раздела верхняя навигация не исчезает."""
     src = _app_js()
     fn = _fn_src(src, "renderDatasetSwitch")
     сжато = fn.replace(" ", "")
-    assert "bankFileExists&&!mineModeOn()" in сжато, (
-        "Предикат липкости разошёлся с предикатом видимости капсулы: юрист "
-        "просил не липнуть в режиме «★ Мои»."
+    assert "classList.add('is-sticky')" in сжато.replace('"', "'"), (
+        "Верхняя навигация перестала быть липкой в одном из разделов — "
+        "Основные / Иски банка / Мои должны оставаться равноправными."
     )
-    assert 'classList.toggle("is-sticky"' in сжато or "classList.toggle('is-sticky'" in сжато, (
-        "renderDatasetSwitch не переключает is-sticky на #list-bar."
+    for scope in ("main", "bank", "mine"):
+        assert f"setDatasetView('{scope}')" in fn, (
+            f"В верхнем переключателе пропал раздел {scope}."
+        )
+    assert "mineModeOn()){box.hidden=true" not in сжато, (
+        "Переключатель снова скрывается внутри «Моих» — выйти из раздела "
+        "без прокрутки/перезагрузки будет невозможно."
     )
     assert 'id="list-bar"' in _read("sberbank_dashboard.html"), (
         "Обёртка #list-bar исчезла из разметки — капсула и счётчик снова "
@@ -362,8 +391,8 @@ def test_counter_fit_ladder():
     )
     assert re.search(r"_TC_LEVELS\s*=\s*\['lead','nouns','tails','slash'\]", src), (
         "Порядок ступеней изменился. Он не случаен: сперва уходит служебное "
-        "«Показано», потом существительные, потом хвосты про архив и соседнюю "
-        "картотеку, и только в конце «из» уступает косой черте."
+        "«Показано», потом существительные, потом хвосты про архив и другие "
+        "разделы, и только в конце «из» уступает косой черте."
     )
     # nowrap обязателен: иначе scrollWidth меряет уже перенесённый текст.
     css = _read("styles.css")
@@ -499,9 +528,8 @@ console.log(JSON.stringify(mainKpiCounts(list)));
 def test_mine_kpi_and_segments_use_mine_set():
     """KPI и сегменты в mine-режиме — по mine-набору, предикат = applyFilters."""
     src = _app_js()
-    mine_pred = "isWatchedCase(c)||isNewCase(c)"
     stats = _fn_src(src, "renderStats")
-    assert f"mineModeOn()?activeDataset().filter(c=>{mine_pred}):allCases" in stats, (
+    assert "mineModeOn()?scopedDataset():allCases" in stats, (
         "renderStats в «★ Мои» обязан считать KPI по mine-набору обеих картотек "
         "(до v132 плитки показывали цифры всей основной картотеки)."
     )
@@ -510,20 +538,18 @@ def test_mine_kpi_and_segments_use_mine_set():
         "гоняет node-тест."
     )
     chip = _fn_src(src, "renderChipBar")
-    assert f"mineModeOn()?activeDataset().filter(c=>{mine_pred}):allCases" in chip, (
-        "Счётчики сегментов стадий в «★ Мои» обязаны считаться по mine-набору: "
-        "иначе сегмент «Апелляция» показывается при заведомо пустой выдаче "
-        "(все bank-звёзды — 1-я инстанция)."
+    assert "const mineSrc=mineDataset()" in chip, (
+        "Контекстные сегменты «Моих» считают не watchlist обеих картотек."
     )
-    for корзина in ("first_instance", "appeal", "cassation"):
-        assert f"segSrc.filter(c=>stageGroup(c)==='{корзина}')" in chip, (
-            f"Счётчик сегмента «{корзина}» ушёл с segSrc/stageGroup."
-        )
-    # Страж синхронности: mine-ветка предиката applyFilters использует тот же
-    # предикат (в отрицании) — если её переименуют, править оба места.
-    assert "!isWatchedCase(c)&&!isNewCase(c)" in _fn_src(src, "applyFilters"), (
-        "Mine-ветка applyFilters изменилась — синхронизировать предикат "
-        "с renderStats/renderChipBar (KPI обязаны считать тот же набор)."
+    apply = _fn_src(src, "applyFilters")
+    assert "mineOn&&!isWatchedCase(c)" in apply, (
+        "«Мои» снова допускают дела без звезды."
+    )
+    assert "mineOn&&!q" not in apply, (
+        "Поиск снова отключает ограничение watchlist и уходит во всю базу."
+    )
+    assert "isWatchedCase(c)||isNewCase(c)" not in stats + chip + apply, (
+        "Новые дела без звезды снова автоматически подмешиваются в «Мои»."
     )
 
 
@@ -537,13 +563,13 @@ def test_reset_and_btn_count():
         "список неполон (видимого сеттера у категории нет)."
     )
     chip = _fn_src(src, "renderChipBar")
-    assert "!bankViewActive&&rl&&rl!=='all'" in chip, (
-        "Счётчик кнопки «Фильтры» считает роль в bank-режиме, где applyFilters "
-        "её игнорирует — кнопка врёт."
-    )
-    assert "!bankViewActive&&stg&&stg!=='all'" in chip, (
-        "Счётчик кнопки «Фильтры» считает инстанцию в bank-режиме."
-    )
+    for scope in ("scope==='main'", "scope==='bank'", "filter-mine-source",
+                  "filter-mine-role", "filter-mine-stage", "filter-bank-control"):
+        assert scope in chip, f"Счётчик фильтров не учитывает контекст {scope}."
+    apply = _fn_src(src, "applyFilters")
+    assert "const scope=activeScope()" in apply
+    assert "scope==='bank'" in apply and "filter-bank-control" in apply
+    assert "scope==='mine'" in apply and "filter-mine-source" in apply
     m = re.search(r"filters-btn-count[\s\S]*?display='none'", chip)
     assert m and "filter-category" in m.group(0), (
         "Счётчик кнопки «Фильтры» не учитывает категорию — активная категория "
