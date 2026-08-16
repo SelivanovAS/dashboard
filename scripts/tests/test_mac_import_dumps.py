@@ -93,6 +93,29 @@ class TestDriverWiring:
         assert "worker.<регион>" in text or "worker.&lt;регион&gt;" in text
         assert "import_dumps.sh" in text
 
+    def test_check_reports_each_item_separately(self):
+        """Настройки Worker'а юрист заводит дома, а суды видны только из офиса.
+        Требовать всё сразу — значит «проверить нельзя никогда»: --check обязан
+        доложить по пунктам и не падать на отсутствии сети Сбера."""
+        text = _read_repo(IMPORTER)
+        check = text[text.index('if [ "$CHECK_ONLY" = "1" ]'):]
+        assert "проверяйте из офиса" in check, "--check требует сеть Сбера"
+        assert "owner_secret не подходит" in check and "push_secret подходит" in check, \
+            "--check не проверяет секреты Worker'а"
+        assert "ничего не менялось" in check
+
+    def test_manual_run_prints_to_screen(self):
+        """Юрист запускает руками и смотрит в терминал, а не в лог-файл;
+        из-под launchd stdout не терминал — там остаётся только лог."""
+        assert "[ -t 1 ]" in _read_repo(IMPORTER)
+
+    def test_territory_without_captcha_courts_exits(self):
+        """У ХМАО капчёвых судов нет — дампов не бывает, и ежедневный
+        parse_all.sh не должен пугать «нет настроек Worker'а»."""
+        text = _read_repo(IMPORTER)
+        assert "search_gated" in text
+        assert "капчёвых судов нет" in text
+
     def test_config_is_read_without_source(self):
         """Файл читается awk-ом, а не `source`: env.<регион> уходит в окружение
         прогона, и PUSH_SECRET+PUSH_WORKER_URL там включили бы вторую доставку
