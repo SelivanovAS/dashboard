@@ -1,4 +1,4 @@
-name: "💤 Резерв D2: дайджест на push (усыплён)"
+name: "🔁 Резерв D2: дайджест на push"
 
 # Вторая половина автозапуска (вариант D2). Парсинг судов делает Mac юриста
 # (ops/mac-local-run/) и пушит свежий data/last_digest_context.json. Этот
@@ -26,17 +26,20 @@ concurrency:
 jobs:
   replay:
     runs-on: ubuntu-latest
-    # ⏸ 05.07.2026: D2-резерв УСЫПЛЁН — основной автозапуск вернулся в облако
-    # (update_cases.yml по крону). `if: false` глушит сборку дайджеста, даже
-    # если Mac ещё раз запушит last_digest_context.json (чтобы не было второго
-    # дайджеста, пока Mac-LaunchAgent не выгружен). Разбудить резерв: вернуть
-    # условие `github.actor != 'github-actions[bot]'` + `launchctl load` на Mac +
-    # отключить облачный крон в update_cases.yml. См. CLAUDE.md, «Процедура флипа».
+    # ⏸ 05.07.2026 резерв усыпили (`if: false`), 16.08.2026 РАЗБУДИЛИ обратно:
+    # проба показала 0 карточек из 21 с раннера GitHub — блок по адресу
+    # вернулся, и Mac-парсинг снова на столе. Пока облачный крон жив, это
+    # условие безвредно: крон пушит через GITHUB_TOKEN под актором
+    # `github-actions[bot]`, и оно его отсекает — дайджест соберётся только на
+    # push с Mac. Само переключение — отдельное действие: `crons = []` +
+    # `wrangler deploy` ОБОИХ Worker'ов + `launchctl load` на Mac
+    # (см. CLAUDE.md, «Процедура флипа»).
     #
-    # (Прежняя анти-петля: коммит last_digest.json делает github-actions[bot];
-    # GITHUB_TOKEN-пуши и так не триггерят workflow, paths-фильтр смотрит только
-    # на last_digest_context.json — но держали явный щит.)
-    if: false
+    # (Та же строка — анти-петля: коммит last_digest.json делает
+    # github-actions[bot]; GITHUB_TOKEN-пуши и так не триггерят workflow,
+    # paths-фильтр смотрит только на last_digest_context.json — но держим
+    # явный щит.)
+    if: github.actor != 'github-actions[bot]'
 
     steps:
       - name: Checkout repository

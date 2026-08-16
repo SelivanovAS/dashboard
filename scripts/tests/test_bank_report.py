@@ -244,11 +244,20 @@ class TestBankReportWiring:
             return f.read()
 
     def test_workflow_commits_report(self):
-        wf = self._read(os.path.join(".github", "workflows", "update_cases.yml"))
-        assert re.search(r"git add data/bank_parse_report\.json", wf), (
-            "update_cases.yml не коммитит data/bank_parse_report.json — "
-            "отчёт не попадёт на GitHub Pages и карточка админки будет пустой."
+        # С 16.08.2026 список коммитимых файлов один на облако и Mac-резерв:
+        # ops/stage_data_files.sh спрашивает пути у court_monitor.config.
+        import subprocess
+        root = os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))))
+        out = subprocess.run(["bash", "ops/stage_data_files.sh", "--list"],
+                             cwd=root, capture_output=True, text=True,
+                             check=True).stdout
+        assert "data/bank_parse_report.json" in out, (
+            "отчёт парсинга не коммитится — он не попадёт на GitHub Pages "
+            "и карточка админки будет пустой."
         )
+        wf = self._read(os.path.join(".github", "workflows", "update_cases.yml"))
+        assert "stage_data_files.sh" in wf, "workflow не зовёт хелпер"
 
     def test_worker_config_has_bank_parse_url(self):
         worker = self._read(os.path.join("cloudflare-worker", "worker.js"))
