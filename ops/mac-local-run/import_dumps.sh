@@ -73,7 +73,13 @@ STARTED_GRACE=900       # запись «идёт» моложе 15 мин — �
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 ts()  { date '+%Y-%m-%d %H:%M:%S'; }
-log() { echo "$(ts) $*" >>"$LOG"; }
+# Запуск руками (терминал) — дублируем строку на экран: юрист смотрит на неё,
+# а не в лог-файл. Из-под launchd stdout не терминал, и лог остаётся тихим.
+log() {
+  echo "$(ts) $*" >>"$LOG"
+  if [ -t 1 ]; then echo "$*"; fi
+  return 0
+}
 notify() {
   /usr/bin/osascript -e "display notification \"$1\" with title \"Импорт дампов\"" >/dev/null 2>&1 || true
 }
@@ -103,48 +109,18 @@ log "Старт import_dumps (pid $$)$([ "$DRY_RUN" = "1" ] && echo " · DRY-RUN
 cd "$REPO" || die "нет каталога $REPO"
 command -v jq >/dev/null 2>&1 || die "нужен jq (brew install jq) — им разбираются журнал и отчёт"
 
-# ── Преflight: сеть Сбера, маршруты, живой суд ───────────────────────────────
-# Импортёр ходит в суд за карточками (без них иск банка не заводится вовсе),
-# поэтому проверки те же, что у парсинга. Не в офисной сети — тихий выход.
-if ! cm_in_sber_network; then
-  log "Пропуск: шлюз $CM_SBER_GATEWAY не найден среди default-маршрутов (не в сети Сбера)"
-  exit 0
-fi
-log "Сеть Сбера подтверждена (шлюз $CM_SBER_GATEWAY)"
-
-cm_setup_court_routes "$PYTHON" log \
-  || die "не удалось получить домены судов из реестра региона — маршруты не построить"
-
-PROBE_HOST=$(cm_probe_court_host "$PYTHON") \
-  || die "не смог определить суд для пробы доступности"
-if PROBE_ERR=$(cm_court_reachable "$PROBE_HOST"); then
-  log "Суд $PROBE_HOST доступен"
-else
-  log "curl: ${PROBE_ERR:-без вывода}"
-  die "суд $PROBE_HOST недоступен даже с маршрутом — импорт пропущен"
-fi
-
-if [ "$CHECK_ONLY" = "1" ]; then
-  log "--check: сеть, маршруты и доступ к судам в порядке; импорт пропущен"
-  notify "Проверка импорта пройдена ($(basename "$REPO"))"
-  exit 0
-fi
-
-# ── Регион, переменные территории, адрес git ─────────────────────────────────
+# ── Территория: есть ли тут вообще капчёвые суды ─────────────────────────────
+# Дампы существуют только там, где поиск закрыт проверочным кодом (Свердловская
+# обл.). На ХМАО импортировать нечего — молча выходим, чтобы ежедневный
+# parse_all.sh не пугал юриста «нет настроек Worker'а».
 REGION_CODE=$(cm_region_code "$PYTHON")
 [ -n "$REGION_CODE" ] || die "не смог определить регион клона $REPO"
-# BANK_TRACK и кэпы в облаке живут Actions Variables — без файла территории
-# импорт пошёл бы с дефолтами кода, то есть иначе, чем в облаке.
-cm_load_territory_env "$PYTHON" "$CONF_DIR" log
-# Операторский импорт: ретраи полезны — запросов мало, повтор дороже
-# (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
-export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
-
-GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
-export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
-
-if ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
-  die "git pull --rebase не удался (см. лог)"
+GATED=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
+from court_monitor.regions import get_region
+print(sum(1 for c in get_region().first_instance_courts if c.search_gated))' 2>/dev/null)
+if [ "${GATED:-0}" = "0" ]; then
+  log "Территория $REGION_CODE: капчёвых судов нет — дампы не импортируются, выход"
+  exit 0
 fi
 
 # ── Worker: адрес и секреты ──────────────────────────────────────────────────
@@ -168,6 +144,98 @@ worker_cfg() {  # $1 = путь+query — пишет конфиг curl (адре
     printf 'url = "%s%s"\n' "$WORKER_URL" "$1"
   } > "$CURL_CFG"
 }
+# Журнал импортов: секрет в query — как у самой админки, поэтому URL уходит
+# через конфиг curl, а не argv.
+journal_cfg() {
+  printf 'url = "%s/admin/import-log?secret=%s&logonly=1"\n' \
+    "$WORKER_URL" "$OWNER_SECRET" > "$CURL_CFG"
+}
+
+# ── Преflight: сеть Сбера, маршруты, живой суд ───────────────────────────────
+# Импортёр ходит в суд за карточками (без них иск банка не заводится вовсе),
+# поэтому проверки те же, что у парсинга.
+sber_preflight() {  # 0 — можно идти в суды
+  cm_in_sber_network || return 1
+  log "Сеть Сбера подтверждена (шлюз $CM_SBER_GATEWAY)"
+  cm_setup_court_routes "$PYTHON" log \
+    || die "не удалось получить домены судов из реестра региона — маршруты не построить"
+  PROBE_HOST=$(cm_probe_court_host "$PYTHON") \
+    || die "не смог определить суд для пробы доступности"
+  if PROBE_ERR=$(cm_court_reachable "$PROBE_HOST"); then
+    log "Суд $PROBE_HOST доступен"
+  else
+    log "curl: ${PROBE_ERR:-без вывода}"
+    die "суд $PROBE_HOST недоступен даже с маршрутом — импорт пропущен"
+  fi
+}
+
+# ── --check: отчёт по пунктам, ничего не меняем ──────────────────────────────
+# Каждый пункт проверяется ОТДЕЛЬНО и не отменяет остальные: настройки Worker'а
+# юрист заводит дома, а суды доступны только из офиса — требовать всё сразу
+# значило бы «проверить нельзя никогда».
+if [ "$CHECK_ONLY" = "1" ]; then
+  log "Проверка: клон $REPO · территория $REGION_CODE · капчёвых судов $GATED"
+  if sber_preflight; then
+    log "✓ суды: маршруты построены, суд отвечает"
+  else
+    log "— сеть Сбера: НЕТ (шлюз $CM_SBER_GATEWAY среди маршрутов не найден)"
+    log "  карточки судов отсюда не читаются — эту часть проверяйте из офиса"
+  fi
+  if [ ! -f "$WORKER_CONF" ]; then
+    log "✗ настройки Worker'а: нет файла $WORKER_CONF (см. README)"
+  elif [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ] || [ -z "$PUSH_SECRET" ] \
+       || case "$OWNER_SECRET$PUSH_SECRET" in *…*) true ;; *) false ;; esac; then
+    log "✗ настройки Worker'а: в $WORKER_CONF пусто или остались «…» —"
+    log "  впишите настоящие url / owner_secret / push_secret"
+  else
+    journal_cfg
+    code=$(curl -s -o "$TMP_DIR/log.json" -w '%{http_code}' -m 30 -A "$UA" \
+      -K "$CURL_CFG" 2>/dev/null)
+    case "$code" in
+      200) log "✓ журнал импортов читается (owner_secret подходит)" ;;
+      401) log "✗ owner_secret не подходит — Worker ответил 401" ;;
+      *)   log "✗ журнал импортов: Worker ответил $code" ;;
+    esac
+    # Пустой uuid: авторизация проверяется до поиска ключа, поэтому 404 —
+    # это «секрет подходит, просто такого дампа нет».
+    worker_cfg "/import-dump?key=import:dump:00000000-0000-0000-0000-000000000000"
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 30 -A "$UA" -K "$CURL_CFG" 2>/dev/null)
+    case "$code" in
+      404|400) log "✓ push_secret подходит (Worker пустил, дампа с таким ключом нет)" ;;
+      401)     log "✗ push_secret не подходит — Worker ответил 401" ;;
+      *)       log "✗ доступ к дампам: Worker ответил $code" ;;
+    esac
+    if [ "$code" != "401" ] && [ -s "$TMP_DIR/log.json" ]; then
+      n=$(jq -r --argjson now "$(date +%s)" --argjson ttl "$DUMP_TTL" \
+             --argjson grace "$STARTED_GRACE" \
+             -f "$REPO/ops/mac-local-run/import_queue.jq" "$TMP_DIR/log.json" \
+             2>/dev/null | grep -c . || true)
+      log "  дампов, которые резерв забрал бы прямо сейчас: ${n:-0}"
+    fi
+  fi
+  log "Проверка закончена: ничего не менялось"
+  exit 0
+fi
+
+# ── Боевой путь ──────────────────────────────────────────────────────────────
+if ! sber_preflight; then
+  log "Пропуск: шлюз $CM_SBER_GATEWAY не найден среди default-маршрутов (не в сети Сбера)"
+  exit 0
+fi
+
+# BANK_TRACK и кэпы в облаке живут Actions Variables — без файла территории
+# импорт пошёл бы с дефолтами кода, то есть иначе, чем в облаке.
+cm_load_territory_env "$PYTHON" "$CONF_DIR" log
+# Операторский импорт: ретраи полезны — запросов мало, повтор дороже
+# (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
+export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
+
+GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
+export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
+
+if ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
+  die "git pull --rebase не удался (см. лог)"
+fi
 
 post_body() {  # $1 = файл с JSON-телом (само тело не секрет — идёт аргументом)
   worker_cfg "/import-result"
@@ -276,10 +344,7 @@ if [ -z "$WORKER_URL" ] || [ -z "$OWNER_SECRET" ] || [ -z "$PUSH_SECRET" ]; then
   exit 0
 fi
 
-# Журнал импортов: секрет в query — как у самой админки, поэтому URL уходит
-# через конфиг curl, а не argv.
-printf 'url = "%s/admin/import-log?secret=%s&logonly=1"\n' "$WORKER_URL" "$OWNER_SECRET" \
-  > "$CURL_CFG"
+journal_cfg
 if ! curl -f -s -m 30 -A "$UA" -K "$CURL_CFG" -o "$TMP_DIR/log.json"; then
   die "журнал импортов не читается ($WORKER_URL/admin/import-log)"
 fi
