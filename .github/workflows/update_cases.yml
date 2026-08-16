@@ -163,84 +163,12 @@ jobs:
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
-          git add data/sberbank_cases.csv data/.digested_acts data/cases.json
-          # Дедуп кассационных определений (аналог .digested_acts) — без
-          # коммита повторный new_act по тому же определению не подавится.
-          if [ -f data/.cassation_acts ]; then
-            git add data/.cassation_acts
-          fi
-          if [ -f data/sberbank_cases_archive.csv ]; then
-            git add data/sberbank_cases_archive.csv
-          fi
-          if [ -f data/cases_archive.json ]; then
-            git add data/cases_archive.json
-          fi
-          # Трек «Иски банка» (банк — истец): отдельные файлы, прогон
-          # перекладывает их на каждом запуске (раскладка 7c в main_json).
-          if [ -f data/cases_bank.json ]; then
-            git add data/cases_bank.json
-          fi
-          if [ -f data/cases_bank_archive.json ]; then
-            git add data/cases_bank_archive.json
-          fi
-          # Split-хранение трека: events лежат отдельно от списков (фронт
-          # грузит их лениво); плюс холодные годовые cases_bank_archive_YYYY
-          # (glob цепляет и events-файл архива — это не страшно, add идемпотентен).
-          if [ -f data/cases_bank_events.json ]; then
-            git add data/cases_bank_events.json
-          fi
-          if [ -f data/cases_bank_archive_events.json ]; then
-            git add data/cases_bank_archive_events.json
-          fi
-          if compgen -G "data/cases_bank_archive_*.json" > /dev/null; then
-            git add data/cases_bank_archive_*.json
-          fi
-          # Холодные годовые архивы (cases_archive_YYYY.json) — дела старше года,
-          # вынесенные из горячего архива ротацией (rotate_cold_archive). Фронт
-          # их не грузит, но без коммита новые файлы теряются между прогонами.
-          git add data/cases_archive_*.json 2>/dev/null || true
-          # Контекст дайджеста нужен workflow «🧪 Тест дайджеста» (test_digest.yml,
-          # --replay-last). Без коммита каждый следующий запуск видит пустой
-          # checkout и падает.
-          if [ -f data/last_digest_context.json ]; then
-            git add data/last_digest_context.json
-          fi
-          # Готовый HTML дайджеста для блока «📰 Дайджест» на сайте (читает app.js).
-          # Без коммита GitHub Pages обслуживает старую версию.
-          if [ -f data/last_digest.json ]; then
-            git add data/last_digest.json
-          fi
-          # Журнал последней push-рассылки — читает админка подписчиков, чтобы
-          # показать «что получила каждая подписка». Без коммита файл теряется
-          # в раннере GitHub Actions и не попадает на GitHub Pages → админка
-          # фетчит 404 и блок «Последний push» остаётся пустым.
-          if [ -f data/last_personal_pushes.json ]; then
-            git add data/last_personal_pushes.json
-          fi
-          # Пер-кейсовый отчёт парсинга трека «Иски банка» (какие дела
-          # парсились/пропущены и почему) — читает карточка «Парсинг исков
-          # банка» в админке. Без коммита файл не попадает на GitHub Pages.
-          if [ -f data/bank_parse_report.json ]; then
-            git add data/bank_parse_report.json
-          fi
-          # Журнал здоровья парсеров (детектор молчаливой поломки): история
-          # количества результатов по каждому суду. Без коммита история
-          # обнуляется каждый прогон и детектор слепнет.
-          if [ -f data/parse_health.json ]; then
-            git add data/parse_health.json
-          fi
-          # Кэш LLM-пересказов мотивировок актов (гибридный дайджест).
-          # Без коммита каждый прогон заново оплачивает пересказ тех же актов.
-          if [ -f data/.act_summaries.json ]; then
-            git add data/.act_summaries.json
-          fi
-          # Негативный кэш авто-подхвата исков банка: дела, отвергнутые по
-          # карточке (итог из списка исключений, уже выданный ИЛ). Без коммита
-          # прогон качал бы их карточки каждый день заново — в дедуп-индекс
-          # такие дела не попадают.
-          if [ -f data/.bank_intake_seen.json ]; then
-            git add data/.bank_intake_seen.json
-          fi
+          # Список коммитимых файлов ОДИН на облако и Mac-резерв: хелпер
+          # спрашивает пути у court_monitor.config (там они и объявлены).
+          # Раньше список вёлся руками в двух местах и молча разъехался —
+          # Mac-путь не коммитил семь файлов трека «Иски банка», появившихся
+          # уже после того, как резерв усыпили. См. ops/stage_data_files.sh.
+          bash ops/stage_data_files.sh
           BEFORE_SHA=$(git rev-parse HEAD)
           git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
           AFTER_SHA=$(git rev-parse HEAD)

@@ -469,8 +469,17 @@ class TestIntakeWiring:
         assert re.search(r"\|\|\s*'1'", m.group(1)), "нет фолбэка '1'"
 
     def test_seen_cache_committed(self):
-        wf = self._src(".github/workflows/update_cases.yml")
-        assert "data/.bank_intake_seen.json" in wf, (
+        """С 16.08.2026 список коммитимых файлов один на облако и Mac-резерв
+        (ops/stage_data_files.sh спрашивает пути у config) — проверяем там же,
+        где он теперь и живёт."""
+        import subprocess
+        root = os.path.dirname(SCRIPTS_DIR)
+        out = subprocess.run(["bash", "ops/stage_data_files.sh", "--list"],
+                             cwd=root, capture_output=True, text=True,
+                             check=True).stdout
+        assert "data/.bank_intake_seen.json" in out, (
             "негативный кэш не коммитится — отказники будут перекачиваться "
             "каждым прогоном"
         )
+        assert "stage_data_files.sh" in self._src(
+            ".github/workflows/update_cases.yml"), "workflow не зовёт хелпер"

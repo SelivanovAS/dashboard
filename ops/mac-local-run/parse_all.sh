@@ -1,0 +1,59 @@
+#!/bin/bash
+# =============================================================================
+# Резерв D2: прогон ВСЕХ территорий подряд одним запуском.
+#
+# ЗАЧЕМ. parse_and_push.sh работает с одним клоном. После тиражирования
+# (16.07.2026) территорий стало две — эталон ХМАО и форк Свердловск/ЯНАО, — а
+# резерв остался однотерриториальным: при блоке облака Урал просто стоял.
+# Этот драйвер зовёт parse_and_push.sh по каждому клону последовательно
+# (решение юриста 16.08.2026: подряд, одним запуском — так проще и надёжнее,
+# а если машина уснёт, LaunchAgent досработает при пробуждении).
+#
+# СПИСОК ТЕРРИТОРИЙ — вне репозитория: ~/.config/court-monitor/territories,
+# по строке на клон, «#» — комментарий. Путь к клону форка есть свойство
+# машины, а не кода, и в эталон он попасть не должен. Файла нет → работаем по
+# одному ~/dashboard, то есть прежняя установка не меняется.
+#
+# Пример файла:
+#   /Users/aleksandrselivanov/dashboard
+#   /Users/aleksandrselivanov/dashboard-ural
+#
+# Запуск (обычно — LaunchAgent'ом com.court-monitor.parse):
+#   bash ops/mac-local-run/parse_all.sh [--check]
+# =============================================================================
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKER="$HERE/parse_and_push.sh"
+LIST="$HOME/.config/court-monitor/territories"
+DEFAULT_REPO="/Users/aleksandrselivanov/dashboard"
+
+repos=()
+if [ -f "$LIST" ]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"                       # срезать комментарий
+    line="$(echo "$line" | xargs)"           # обрезать пробелы
+    [ -n "$line" ] || continue
+    repos+=("$line")
+  done < "$LIST"
+fi
+[ ${#repos[@]} -gt 0 ] || repos=("$DEFAULT_REPO")
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: территорий ${#repos[@]}"
+
+# Территории независимы: отказ одной НЕ отменяет остальные — иначе лежащий
+# суд Урала лишил бы юриста дайджеста и по ХМАО. Ненулевой код возвращаем в
+# конце, чтобы сбой был виден в launchd.err.log.
+rc=0
+for repo in "${repos[@]}"; do
+  if [ ! -d "$repo/.git" ]; then
+    echo "  ПРОПУСК: $repo — не похоже на клон репозитория"
+    rc=1
+    continue
+  fi
+  echo "  → $repo"
+  bash "$WORKER" "$repo" "$@" || rc=1
+done
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: готово (код $rc)"
+exit "$rc"

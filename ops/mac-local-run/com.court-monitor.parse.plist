@@ -3,6 +3,8 @@
 <!--
   LaunchAgent: парсинг судов на Mac по будням.
   Ставится в ~/Library/LaunchAgents/ (см. ops/mac-local-run/README.md).
+  Зовёт parse_all.sh — он прогоняет ВСЕ территории подряд (список клонов
+  в ~/.config/court-monitor/territories; нет файла = только ~/dashboard).
 
   Время — ЛОКАЛЬНОЕ (этот Mac на +05, Ханты-Мансийск). 08:00 местного ≈
   06:00 МСК. LaunchAgent досрабатывает при пробуждении/входе, если в 08:00
@@ -17,7 +19,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/parse_and_push.sh</string>
+        <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/parse_all.sh</string>
     </array>
 
     <key>StartCalendarInterval</key>

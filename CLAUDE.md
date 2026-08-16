@@ -300,10 +300,34 @@
    `card_is_empty_shell`, вердикт итога `OK`/`BLOCKED`/`CAPTCHA`/`OUTAGE`/`MIXED`. **Отчёт коммитится**
    в `ops/court_probe/report.txt` — логи ранов требуют admin-прав, и разбирать по ним провал нельзя.
 2. Отключить облако: вернуть `crons = []` в `wrangler.toml` + `wrangler deploy`
-   (Worker перестанет дёргать прогон).
-3. Включить дайджест-на-push: в `replay_on_push.yml` вернуть
-   `if: github.actor != 'github-actions[bot]'` вместо `if: false` (коммит).
-4. Разбудить Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
+   **ОБОИХ** Worker'ов (`court-monitor-trigger` и `court-monitor-ural`) — крон
+   у каждой территории свой, выключенного эталона мало.
+3. Дайджест-на-push уже разбужен (16.08.2026): `replay_on_push.yml` стоит с
+   `if: github.actor != 'github-actions[bot]'`. Пока крон жив, условие
+   безвредно — он пушит под актором `github-actions[bot]`.
+4. Разбудить Mac: плист из `.disabled` + `launchctl load
+   ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
+
+⚠️ **Резерв обслуживает ОБЕ территории с 16.08.2026** (`ops/mac-local-run/parse_all.sh`
+→ `parse_and_push.sh <клон>` подряд; список клонов — `~/.config/court-monitor/territories`
+вне репозитория, регион клон определяет сам по файлу `REGION` в корне). До этого
+он был однотерриториальным, и при блоке Урал просто стоял. Тем же заходом
+закрыты три молчаливые поломки, любая из которых сделала бы флип холостым:
+(1) **список коммитимых файлов** вёлся руками и здесь, и в `update_cases.yml`, и
+разъехался — резерв не коммитил семь файлов трека «Иски банка» (появился
+25.07.2026, уже после усыпления резерва), то есть трек парсился и выбрасывался;
+теперь список не существует вовсе — [ops/stage_data_files.sh](ops/stage_data_files.sh)
+спрашивает пути у `court_monitor.config`, страж `test_data_files_staged.py`;
+(2) **маршруты судов мимо VPN** строились регекспом по `courts.py`, а после
+регионализации домены уехали в `regions/*.py` — находилось ШЕСТЬ строк из
+комментариев вместо 21 домена ХМАО (у Урала их 67), и суды шли через VPN мимо
+egress РФ; теперь домены из `get_region()`, пустой список фатален;
+(3) **`git push origin main` падал** (origin по https, учётных данных нет,
+SSH:22 закрыт) — адрес выводится из origin в `ssh://git@ssh.github.com:443/…`.
+Проверка из офиса, ничего не публикующая: `bash ops/mac-local-run/parse_all.sh --check`
+(должен показать 21 судебный IP у ХМАО и 67 у Урала). Настройки машины —
+`~/.config/court-monitor/{territories,env.<регион>,telegram,progress_token}`,
+см. [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
 
 Детали установки/отката Mac-звена — [ops/mac-local-run/README.md](ops/mac-local-run/README.md).
 
