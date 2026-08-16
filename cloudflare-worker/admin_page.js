@@ -1298,6 +1298,11 @@ async function loadGhRuns() {
         document.getElementById("runs-next").textContent = "автозапуск: " + txt;
         setTile("cron", "gray", escHtml(txt), document.getElementById("tile-cron-sub").innerHTML);
       }
+    } else if (d.next_cron_at === null && r.ok) {
+      // Крон выключен (флип на Mac-резерв): плитка обязана это СКАЗАТЬ, а не
+      // оставлять прежнее время — иначе она обещает запуск, которого не будет.
+      document.getElementById("runs-next").textContent = "автозапуск выключен";
+      setTile("cron", "gray", "выключен", "прогон делает Mac (резерв)");
     }
     if (!r.ok) {
       setTile("run", "gray", "—", "GitHub недоступен");

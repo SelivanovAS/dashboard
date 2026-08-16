@@ -181,3 +181,38 @@ def test_detect_compares_by_domain():
             f"Сравнение у «{anchor}» идёт без impDomainOf — присутствие будет "
             "молча перевыбираться на первую площадку домена."
         )
+
+
+# ===== Флип на Mac-резерв: выключенный крон не обещает запуск =====
+
+WORKER = os.path.join(ROOT, "cloudflare-worker", "worker.js")
+
+
+def _worker() -> str:
+    with open(WORKER, encoding="utf-8") as f:
+        return f.read()
+
+
+def test_empty_cron_utc_means_no_next_run():
+    """16.08.2026 крон выключен (флип на Mac-резерв). Плитка «Автозапуск»
+    считает время из vars.CRON_UTC, и при пустом значении обязана вернуть
+    null, а не фолбэк 3:30 — иначе админка обещает запуск, которого не будет,
+    ровно в те дни, когда юрист проверяет, ходит ли что-нибудь вообще."""
+    w = _worker()
+    m = re.search(r"function cronUtcParts\(\) \{(.*?)\n\}", w, re.S)
+    assert m, "не нашёл cronUtcParts — проводка плитки «Автозапуск» изменилась"
+    assert "if (!raw) return null" in m.group(1), \
+        "пустой CRON_UTC снова даёт фолбэк — плитка соврёт при crons = []"
+    m = re.search(r"function nextCronAt\(\) \{(.*?)\n\}", w, re.S)
+    assert m and "if (!parts) return null" in m.group(1), \
+        "nextCronAt не переживёт выключенный крон"
+
+
+def test_admin_says_autostart_is_off():
+    """И страница обязана это НАПИСАТЬ: без ветки плитка молча оставалась бы
+    с прошлым значением, то есть с датой запуска, которого не будет."""
+    a = _admin()
+    assert "d.next_cron_at === null" in a, \
+        "страница не отличает «крон выключен» от «сервер не ответил»"
+    assert "автозапуск выключен" in a
+    assert 'setTile("cron", "gray", "выключен"' in a
