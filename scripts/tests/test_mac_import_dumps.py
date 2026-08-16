@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -103,6 +104,21 @@ class TestDriverWiring:
         assert "owner_secret не подходит" in check and "push_secret подходит" in check, \
             "--check не проверяет секреты Worker'а"
         assert "ничего не менялось" in check
+
+    def test_breaker_settings_match_cloud(self):
+        """Предохранитель настроен под размер ДАМПА (5 отказов, проба каждые 3),
+        а не под боевой прогон: дефолты кода 3/30 в дампе на 25 строк означают
+        «суд снят навсегда» — 16.08.2026 так пропало 12 исков Верх-Исетского.
+        Значения обязаны совпадать в обоих каналах, иначе резерв тихо пойдёт с
+        дефолтами."""
+        yml = _read_repo(".github/workflows/import_cases.yml")
+        mac = _read_repo(IMPORTER)
+        for key in ("CARD_BREAKER_THRESHOLD", "CARD_BREAKER_PROBE_EVERY"):
+            cloud = re.search(rf'{key}:\s*"(\d+)"', yml)
+            local = re.search(rf'{key}="\$\{{{key}:-(\d+)\}}"', mac)
+            assert cloud and local, f"{key} задан не в обоих каналах"
+            assert cloud.group(1) == local.group(1), \
+                f"{key}: облако {cloud.group(1)}, резерв {local.group(1)}"
 
     def test_manual_run_prints_to_screen(self):
         """Юрист запускает руками и смотрит в терминал, а не в лог-файл;
