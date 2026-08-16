@@ -2745,8 +2745,15 @@ function impResultText(item) {
     // Ставим сразу после заведений: это про те же дела, а не корзина отсева.
     if (item.refilled) parts.push(item.refilled + " карточек дочитано");
     if (item.card_failed) {
-      parts.push("⚠ " + item.card_failed + " без карточки (суд не ответил) — "
-        + "вставьте дамп ещё раз или дождитесь прогона");
+      // Причина (403 / страница защиты / проверочный код / заглушка) важнее
+      // самого факта: по ней отличают «нас блокируют по адресу» от «портал
+      // лёг». Без неё все четыре беды выглядели одинаково.
+      parts.push("⚠ " + item.card_failed + " без карточки: "
+        + (item.card_fail_reason || "суд не ответил")
+        + " — вставьте дамп ещё раз или дождитесь прогона");
+    } else if (item.card_fail_reason) {
+      // Ответчиков в дампе не было, а иски банка отвалились ([FETCH FAIL]).
+      parts.push("⚠ карточки не читались: " + item.card_fail_reason);
     }
     if (item.already) parts.push(item.already + " уже в базе");
     if (item.excluded_result) parts.push(item.excluded_result + " отсеяно по итогу");

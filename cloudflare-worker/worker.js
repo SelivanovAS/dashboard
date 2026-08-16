@@ -1335,6 +1335,12 @@ async function handleImportResult(request, env) {
   if (typeof body.error === "string" && body.error) {
     record.error = body.error.slice(0, 500);
   }
+  // Почему суд не отдал карточки (403 / страница защиты / проверочный код /
+  // заглушка) — строка, а не счётчик: точная причина уже есть построчно, а
+  // сводке нужен один вывод. Числовой whitelist выше строки режет.
+  if (typeof body.card_fail_reason === "string" && body.card_fail_reason) {
+    record.card_fail_reason = body.card_fail_reason.slice(0, 200);
+  }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,
   });

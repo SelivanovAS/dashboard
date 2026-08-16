@@ -167,7 +167,9 @@ jobs:
                 bank_capped:(.bank_capped // 0),
                 fetch_fail:(.fetch_fail // 0),
                 rows:(.rows // 0), lines:(.lines // [])}
-               + (if .error then {error:.error} else {} end)' \
+               + (if .error then {error:.error} else {} end)
+               + (if (.card_fail_reason // "") != "" then
+                    {card_fail_reason:.card_fail_reason} else {} end)' \
               "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \

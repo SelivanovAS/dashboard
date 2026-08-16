@@ -70,6 +70,7 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from datetime import date, datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +91,9 @@ from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
     promote_material_record,
 )
-from court_monitor.netutil import fetch_card_checked, polite_delay  # noqa: E402
+from court_monitor.netutil import (  # noqa: E402
+    fetch_card_checked, fetch_fail_reason_ru, polite_delay,
+)
 from court_monitor.parsing import parse_case_card  # noqa: E402
 from court_monitor.parsing.cards import card_is_empty_shell  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
@@ -277,8 +280,11 @@ def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
     if not card_html:
         # Сетевой сбой/заглушка/код — отказ НЕ вечный, в кэш не пишем:
         # повторный импорт того же дампа дочитает.
+        reason = _note_card_failure(bank_state)
         return "fetch_fail", (
-            f"[FETCH FAIL] {num} — карточка не прочиталась, повторите импорт"
+            f"[FETCH FAIL] {num} — "
+            + (f"{reason}; " if reason else "карточка не прочиталась, ")
+            + "иск банка НЕ заведён, повторите импорт"
         ), None
     card_info = parse_case_card(card_html, court.base_url)
 
@@ -314,18 +320,20 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
     """Карточка для дела основной картотеки (банк-ответчик).
 
     Возвращает пару (карточка|None, причина), причина ∈ {"", "dry_run",
-    "failed"}. Пара, а не голый None: до 16.08.2026 все исходы сливались в
-    None, и «не пробовали» (dry-run) было неотличимо от «пробовали и не
+    "capped", "failed"}. Пара, а не голый None: до 16.08.2026 все исходы
+    сливались в None, и «не пробовали» было неотличимо от «пробовали и не
     вышло» — счётчик отказов построить было не из чего, а без него провал
     доезжал до оператора только строкой в свёртке «Отчёт построчно»
     (инцидент 16.08.2026: два импорта Ленинского р/с ЕКБ завели 5 дел
     пустышками, портал суда отдавал «Этот запрос заблокирован по
     соображениям безопасности» с HTTP 200, а сводка писала «+4 в картотеку»).
 
-    "failed" — один факт «карточки нет» на все причины: отказ загрузки,
-    заглушка, пропуск открытым предохранителем суда, кэп карточек. Точная
-    причина остаётся в WARNING прогона; оператору важно только, дочитывать
-    ли дамп повторно.
+    ⚠️ "capped" (кэп карточек / суд не в реестре) отделён от "failed"
+    намеренно: запроса не было, и `config.FETCH_DIAG` держит диагноз ЧУЖОЙ,
+    предыдущей карточки — назвав его причиной этой, отчёт соврал бы.
+    "failed" — запрос был: отказ загрузки, заглушка, проверочный код или
+    пропуск открытым предохранителем суда; точный класс лежит в FETCH_DIAG,
+    читать его надо СРАЗУ (следующий запрос затрёт).
 
     Отказ строку дампа НЕ роняет: у истцовой ветки `[FETCH FAIL]` дело просто
     не берут в трек, а здесь это иск ПРОТИВ банка — потерять его нельзя.
@@ -338,10 +346,10 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
     if dry_run:
         return None, "dry_run"
     if bank_state["cards"] >= MAX_BANK_CARDS_PER_IMPORT:
-        return None, "failed"
+        return None, "capped"
     court = fi_court_by_domain(domain, r.get("href_srv_num"))
     if court is None:
-        return None, "failed"
+        return None, "capped"
     cid, _, cuid = (r.get("link") or "").partition("|")
     bank_state["cards"] += 1
     polite_delay()
@@ -354,6 +362,27 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
     if card_is_empty_shell(card_info):
         return None, "failed"
     return card_info, ""
+
+
+def _note_card_failure(bank_state: dict) -> str:
+    """Записать причину только что провалившегося запроса и вернуть её текст.
+
+    Читает `config.FETCH_DIAG` СРАЗУ после отказа (следующий запрос затрёт) и
+    копит причины в `bank_state`: сводка импорта покажет самую частую. Пустая
+    строка — класс неизвестен, вызыватель оставит прежнюю формулировку.
+    """
+    reason = fetch_fail_reason_ru()
+    if reason:
+        bank_state.setdefault("fail_reasons", []).append(reason)
+    return reason
+
+
+def _top_card_fail_reason(bank_state: dict) -> str:
+    """Самая частая причина отказа за импорт — одна строка для сводки."""
+    reasons = bank_state.get("fail_reasons") or []
+    if not reasons:
+        return ""
+    return Counter(reasons).most_common(1)[0][0]
 
 
 def _apply_main_card(fi: dict, r: dict, card_info: dict, now_iso: str) -> None:
@@ -450,7 +479,8 @@ def import_rows(
     }
     new_entries: list[dict] = []
     bank_entries: list[dict] = []
-    bank_state = {"seen": None, "seen_dirty": False, "cards": 0}
+    bank_state = {"seen": None, "seen_dirty": False, "cards": 0,
+                  "fail_reasons": []}
     promoted_any = False
     refilled_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -510,13 +540,14 @@ def import_rows(
                 )
             else:
                 counters["already"] += 1
+                note = ""
                 if why == "failed":
                     counters["card_failed"] += 1
+                    reason = _note_card_failure(bank_state)
+                    note = ("; " + (reason or "карточка не открылась")
+                            + ", дозаполнит прогон")
                 lines.append(
-                    f"[ALREADY] {num} — уже отслеживается в этом суде"
-                    + ("; карточка не открылась, дозаполнит прогон"
-                       if why == "failed" else "")
-                )
+                    f"[ALREADY] {num} — уже отслеживается в этом суде{note}")
             continue
         # Истцовые строки → трек «Иски банка» (с 13.08.2026, разгон Урала).
         # При выключенном треке проваливаются в прежний [SKIPPED ROLE] —
@@ -586,7 +617,8 @@ def import_rows(
             _apply_main_card(entry["first_instance"], r, card_info, now_iso)
         elif why == "failed":
             counters["card_failed"] += 1
-            note = (" (карточка недоступна — дозаполнит прогон "
+            reason = _note_card_failure(bank_state)
+            note = (f" ({reason or 'карточка недоступна'} — дозаполнит прогон "
                     "или повторная вставка дампа)")
         # Служебный блок: кто и когда завёл дело (история импортов, бейдж
         # «импортировано» на фронте — задел).
@@ -626,6 +658,7 @@ def import_rows(
     if bank_state["seen_dirty"] and not dry_run:
         save_intake_seen(bank_state["seen"])
 
+    counters["card_fail_reason"] = _top_card_fail_reason(bank_state)
     return {"counters": counters, "lines": lines, "added_entries": new_entries,
             "added_bank_entries": bank_entries}
 
@@ -673,7 +706,7 @@ def main(argv: list[str] | None = None) -> int:
         "region": region.code,
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
-        "card_failed": 0, "refilled": 0,
+        "card_failed": 0, "refilled": 0, "card_fail_reason": "",
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
         "bank_dry_run": 0, "bank_capped": 0,
@@ -780,10 +813,14 @@ def main(argv: list[str] | None = None) -> int:
         # повод повторить импорт, и он не должен теряться среди корзин отсева.
         log.warning(
             "Карточки основной картотеки: %d дочитано | %d осталось без "
-            "карточки (суд не отдал) — дозаполнит прогон или повторная "
-            "вставка того же дампа",
+            "карточки — дозаполнит прогон или повторная вставка того же дампа",
             summary["refilled"], summary["card_failed"],
         )
+    if summary["card_fail_reason"]:
+        # Класс отказа (403 / страница защиты / проверочный код / заглушка) —
+        # единственное, по чему отличают «нас блокируют» от «портал лёг».
+        log.warning("Почему суд не отдал карточки: %s",
+                    summary["card_fail_reason"])
     bank_touched = sum(summary[k] for k in (
         "added_bank", "excluded_result", "excluded_writ", "already_spent",
         "seen_cached", "fetch_fail", "bank_dry_run", "bank_capped",
