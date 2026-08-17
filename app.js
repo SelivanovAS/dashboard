@@ -1632,6 +1632,14 @@ function syncMobileMineButton(){
 function scopeMineIcon(){
   return '<svg class="scope-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2-4.5-4.4 6.2-.9L12 3Z"></path></svg>';
 }
+// Пилюля «★ Мои» в шапках дайджеста и «Ближайших заседаний» (решение юриста
+// 17.08.2026): без неё выбранный раздел виден только по чипу вверху, а обе
+// карточки молчат, чей это список — свой или общий. Значок — тот же SVG, что
+// в чипе раздела: эмодзи и «★» в бейджах рисуются системным цветным шрифтом
+// мимо палитры и в тёмной теме выпадают пятном.
+function mineScopePillHtml(){
+  return `<span class="mine-scope-pill">${scopeMineIcon()}Мои</span>`;
+}
 function renderDatasetSwitch(){
   syncMobileMineButton();
   const box=document.getElementById('dataset-switch');
@@ -1873,11 +1881,15 @@ function renderAnalytics(){
   // на карточке (см. toggleUpcoming).
   const chevronHtml=`<button class="card-chevron-btn" id="upcoming-chevron" type="button" aria-label="Свернуть/развернуть" onclick="event.stopPropagation();toggleUpcoming();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>`;
   const upTitle=(bankViewActive&&!mineMode)?'Ближайшие заседания · иски банка':'Ближайшие заседания';
+  // В «Моих» подпись раздела — пилюлей, а не хвостом «· мои дела»: заголовок
+  // и так длинный, а пилюля видна краем глаза. Chevron не съедет — у него
+  // margin-left:auto.
+  const upMinePill=mineMode?mineScopePillHtml():'';
   // Свёрнутость восстанавливаем классами прямо в разметке (не после вставки
   // innerHTML): состояние переживает полный пересбор #analytics-row. Класс
   // нужен ОБЕИМ веткам (list и empty) — toggleUpcoming работает с любой.
   const upCollapsed=upcomingCollapsed();
-  let upHtml=`<div class="analytics-card${upCollapsed?' upcoming-collapsed':''}"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">${upTitle}</span>${chevronHtml}</div>`;
+  let upHtml=`<div class="analytics-card${upCollapsed?' upcoming-collapsed':''}"><div class="analytics-title up-title" onclick="toggleUpcoming()"><span class="up-title-label">${upTitle}</span>${upMinePill}${chevronHtml}</div>`;
 
   if(shownCases.length===0){
     const emptyText=mineMode?'По твоим делам ближайших заседаний нет':'Нет предстоящих заседаний';
@@ -5131,6 +5143,37 @@ let pendingShowBeacon = false;
 let _digestGeneralHtml = null;
 let _digestContext = null;
 let _digestViewMode = 'general';
+// Дата последнего дайджеста ({full, short, time}) — шапку перерисовывает и
+// setDigestView при смене раздела, а объекта data у него нет.
+let _digestTitleDate = null;
+
+// Шапка блока: «Дайджест» → пилюля «★ Мои» (в разделе «Мои») → зелёный бейдж
+// даты. Рисуется ЦЕЛИКОМ и из loadLastDigest, и из setDigestView: заголовок
+// строится при загрузке, а раздел переключается позже — без общего рендера
+// пилюля появлялась бы только при перезагрузке страницы.
+//
+// ⚠️ Пилюля идёт по РЕЖИМУ, а не по наличию своих событий: при пустом
+// watchlist (или когда по звёздам сегодня тихо) buildMineHtml отдаёт общий
+// дайджест с плашкой «показан общий дайджест» — плашка это и объясняет, а
+// шапка называет выбранный раздел. Гейти мы её по факту находок, у юриста с
+// нулём звёзд подпись не появилась бы вовсе и выглядела бы поломкой.
+function renderDigestTitle() {
+  const titleEl = document.getElementById('digest-title');
+  if (!titleEl) return;
+  titleEl.innerHTML = '';
+  titleEl.appendChild(document.createTextNode('Дайджест'));
+  if (_digestViewMode === 'mine') {
+    titleEl.insertAdjacentHTML('beforeend', mineScopePillHtml());
+  }
+  const date = _digestTitleDate;
+  if (date) {
+    const pill = document.createElement('span');
+    pill.className = 'digest-date-pill';
+    pill.textContent = date.full;
+    titleEl.appendChild(pill);
+    titleEl.title = `${date.full}, ${date.time}`;
+  }
+}
 // Regex номера российского дела: «2-1234/2026», «33-5678/2026», «2а-15/2025».
 // Допускаем буквы (а/КГ) после первого числа — встречается в категориях дел.
 // Покрывает три типичных формата номеров:
@@ -5261,17 +5304,8 @@ async function loadLastDigest() {
     // (либо стартовый ?mine=1 / сохранённый выбор, либо при первом клике).
     _digestContext = null;
 
-    const date = formatDigestDate(data.generated_at);
-    const titleEl = document.getElementById('digest-title');
-    titleEl.innerHTML = '';
-    titleEl.appendChild(document.createTextNode('Дайджест'));
-    if (date) {
-      const pill = document.createElement('span');
-      pill.className = 'digest-date-pill';
-      pill.textContent = date.full;
-      titleEl.appendChild(pill);
-      titleEl.title = `${date.full}, ${date.time}`;
-    }
+    _digestTitleDate = formatDigestDate(data.generated_at);
+    renderDigestTitle();
     document.getElementById('digest-meta').textContent = data.summary || '';
     block.hidden = false;
     currentDigestGeneratedAt = data.generated_at || null;
@@ -5596,7 +5630,6 @@ function buildMineHtml(generalHtml, ctx) {
 // _digestViewMode — производная от него проекция на вид дайджеста.
 async function setDigestView(mode) {
   const body = document.getElementById('digest-body');
-  const titleEl = document.getElementById('digest-title');
   if (!body) return;
   const next = mode === 'mine' ? 'mine' : 'general';
   _digestViewMode = next;
@@ -5610,12 +5643,9 @@ async function setDigestView(mode) {
       ? 'Показан только список твоих дел. Нажми, чтобы вернуть все.'
       : 'Показать только мои дела');
   });
-  // Удаляем устаревшую mine-pill в шапке, если она там осталась от старой
-  // версии (виден тоггл — pill избыточен и тесно становится на мобиле).
-  if (titleEl) {
-    const oldPill = titleEl.querySelector('.digest-mine-pill');
-    if (oldPill) oldPill.remove();
-  }
+  // Шапка называет выбранный раздел: пилюля «★ Мои» появляется и исчезает
+  // вместе с режимом (заголовок пересобирается целиком).
+  renderDigestTitle();
   if (next === 'general') {
     body.innerHTML = _digestGeneralHtml || '';
   } else {

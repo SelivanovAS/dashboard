@@ -1972,17 +1972,28 @@ tr.detail-row { display:none; }
   letter-spacing: 0;
   text-transform: none;
 }
-.digest-mine-pill {
-  display: inline-block;
+/* Признак выбранного раздела «★ Мои» в шапках дайджеста и «Ближайших
+   заседаний» (решение юриста 17.08.2026). Класс ОБЩИЙ для обеих карточек —
+   прежнее имя .digest-mine-pill врало бы про место. Цвет — токенами
+   (--amber-700 объявлен и в светлой, и в тёмной теме): литеральный фолбэк
+   var(--x,#hex) — тот самый класс дефектов, что чинили 14.08.2026, в тёмной
+   теме он молча ставит тёмно-коричневый текст на тёмный фон. */
+.mine-scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 2px 10px;
   border-radius: var(--radius-pill);
   background: rgba(245, 158, 11, 0.16);
-  color: var(--amber-700, #b45309);
+  color: var(--amber-700);
   font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
   letter-spacing: 0;
   text-transform: none;
 }
+/* Звезда внутри пилюли — тот же SVG, что в чипе раздела (scopeMineIcon),
+   но помельче: 16px рядом с 13px текстом перевешивают подпись. */
+.mine-scope-pill .scope-nav-icon { width: 13px; height: 13px; }
 .mine-digest-note {
   margin-bottom: 10px;
   padding: 8px 12px;

@@ -10,7 +10,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v170';
+const CACHE_VERSION = 'v171';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
