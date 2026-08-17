@@ -1199,8 +1199,9 @@ class TestBankDigestSection:
     # ── Правки по разбору дайджеста 07.08.2026 ──
 
     def test_grouped_by_importance(self):
-        """Группировка «по важности» (решение юриста 09.08.2026): решения →
-        ИЛ → завершения → новые иски → заседания (ближайшие сверху)."""
+        """Группировка «по важности» (решение юриста 17.08.2026): ИЛ →
+        решения → иные (сюда же завершения) → заседания (ближайшие
+        сверху) → новые иски последними."""
         h_far = _bank_change(["fi_hearing_new"], {"hearing_date": "20.09.2026"})
         h_far["case"] = "2-901/2026"
         h_near = _bank_change(["fi_hearing_next"],
@@ -1221,8 +1222,8 @@ class TestBankDigestSection:
         resolved["case"] = "2-906/2026"
         html = _digest([h_far, h_near, new_claim, transfer, writ, resolved])
         order = [html.index(n) for n in
-                 ("2-906/2026", "2-905/2026", "2-904/2026", "М-903/2026",
-                  "2-902/2026", "2-901/2026")]
+                 ("2-905/2026", "2-906/2026", "2-904/2026", "2-902/2026",
+                  "2-901/2026", "М-903/2026")]
         assert order == sorted(order), "порядок групп «по важности» нарушен"
         assert "ИСКИ БАНКА (6)" in html
         # Воздух (просьба юриста 10.08.2026): границы групп — «⸻»
@@ -1506,6 +1507,11 @@ class TestBankIntakeDigestFold:
         assert "2-500/2026" in html and "2-501/2026" in html
         assert html.count("взят на мониторинг") == 0
         assert "заведено 30 новых исков банка" in html
+        # Подхват — в конце секции (решение юриста 17.08.2026): свёртка
+        # ниже настоящих событий. Позиция считается по группам, и
+        # перестановка групп утащила бы её в середину молча.
+        assert html.index("заведено 30 новых исков банка") > max(
+            html.index("2-500/2026"), html.index("2-501/2026"))
 
     def test_case_with_registration_and_event_not_folded(self):
         """Заведено И получило решение тем же прогоном — подробно."""
@@ -2407,6 +2413,87 @@ class TestBankCalendarEventRendering:
                 == _bank_change_group({"type": ["fi_writ_issued"]}))
         assert (_bank_change_group({"type": ["fi_post_decision_hearing"]})
                 == _bank_change_group({"type": ["fi_hearing_new"]}))
+
+    def test_group_order_matches_lawyer_request(self):
+        """Страж всего порядка (решение юриста 17.08.2026): листы →
+        решения → иные (завершения тут же) → заседания → новые иски.
+        Без него следующая перестановка групп прошла бы молча."""
+        from court_monitor.digest.template import _bank_change_group
+        groups = [_bank_change_group({"type": [t]}) for t in (
+            "fi_writ_issued", "fi_resolved", "fi_returned",
+            "fi_hearing_new", "fi_bank_claim_registered")]
+        assert groups == sorted(groups) and len(set(groups)) == len(groups), (
+            f"порядок групп секции нарушен: {groups}")
+        # «Иные» — дефолт: незнакомый тип встаёт туда же, где завершения.
+        assert (_bank_change_group({"type": ["fi_objections_deadline_set"]})
+                == _bank_change_group({"type": ["fi_returned"]}))
+
+    def test_motivirovka_does_not_pull_case_out_of_writs(self):
+        """Мотивировочный fi_final_event поднимает дело в группу решений,
+        но дело с ЛИСТОМ в том же прогоне остаётся в группе листов —
+        ловушка гарда после перестановки (листы стали нулевой группой)."""
+        from court_monitor.digest.template import _bank_change_group
+        motiv = {"details": {"event": ("Изготовлено мотивированное решение "
+                                       "в окончательной форме. 06.08.2026")}}
+        assert (_bank_change_group({"type": ["fi_final_event"], **motiv})
+                == _bank_change_group({"type": ["fi_resolved"]}))
+        assert (_bank_change_group(
+            {"type": ["fi_writ_issued", "fi_final_event"], **motiv})
+            == _bank_change_group({"type": ["fi_writ_issued"]}))
+
+
+# ── Структурные инварианты групп секции «Иски банка» ─────────────────────────
+
+class TestBankGroupInvariants:
+    """Ловушки перестановки 17.08.2026: «иные» — ДЕФОЛТ и сидит в СЕРЕДИНЕ
+    порядка. Дефолт в середине ломает наивные приёмы (min() с дефолтом,
+    `len()` как индекс, «новая группа в конец»), а падают они тихо —
+    строка просто уезжает не в тот блок. Тесты ниже держат саму структуру,
+    а не отдельный тип."""
+
+    @staticmethod
+    def _mod():
+        from court_monitor.digest import template
+        return template
+
+    def test_other_group_owns_no_types(self):
+        """У «иных» не должно быть своего набора типов: заведи ему набор —
+        и дефолт молча сольётся с ним, а порядок останется прежним."""
+        t = self._mod()
+        assert t._BANK_GROUP_OTHER not in t._BANK_GROUP_ORDER
+
+    def test_intake_group_stays_last(self):
+        """Свёртка «заведено N новых исков» встаёт по числу дел с группой
+        МЕНЬШЕ intake — новая группа после него увела бы её из хвоста
+        секции, а юрист просил подхват именно в конце."""
+        t = self._mod()
+        assert t._BANK_GROUP_INTAKE == max(t._BANK_GROUP_ORDER)
+        assert t._BANK_GROUP_INTAKE > t._BANK_GROUP_OTHER
+
+    def test_group_sets_do_not_overlap(self):
+        """Тип в двух группах — молчаливая зависимость от порядка обхода."""
+        t = self._mod()
+        seen: set[str] = set()
+        for types in t._BANK_GROUP_ORDER.values():
+            dup = seen & types
+            assert not dup, f"тип в двух группах: {sorted(dup)}"
+            seen |= types
+
+    def test_hearing_and_writ_families_are_complete(self):
+        """Новый `fi_hearing_*`/`fi_writ_*`, забытый в наборах, упал бы в
+        «иные» и печатался бы среди сроков и жалоб. Проверяем по именам:
+        типы без этих префиксов (fi_post_decision_hearing,
+        fi_default_cancellation_hearing) — осознанные решения, не опечатки."""
+        t = self._mod()
+        known = set(t._BANK_TYPE_LABELS) | {
+            x for types in t._BANK_GROUP_ORDER.values() for x in types}
+        for typ in sorted(known):
+            if typ.startswith("fi_hearing_"):
+                assert t._bank_change_group({"type": [typ]}) == \
+                    t._BANK_GROUP_HEARINGS, f"{typ} не в группе заседаний"
+            elif typ.startswith("fi_writ_"):
+                assert t._bank_change_group({"type": [typ]}) == \
+                    t._BANK_GROUP_WRITS, f"{typ} не в группе листов"
 
 
 # ── Календарный проход collect_bank_calendar_events ──────────────────────────

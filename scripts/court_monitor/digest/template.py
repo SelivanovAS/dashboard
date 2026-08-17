@@ -1498,25 +1498,41 @@ def _bank_event_phrases(ch: dict) -> list[str]:
     return out
 
 
-# Группы «по важности» для сортировки секции (решение юриста 09.08.2026):
-# решения и акты → исполнительные листы → завершения → новые иски →
-# заседания (ближайшие сверху) → прочее. До этого 29 строк шли в порядке
-# очереди обработки прогона и не читались (разбор дайджеста 07.08.2026).
-_BANK_GROUP_ORDER = (
-    frozenset({"fi_resolved", "fi_act_text_published", "fi_act_published",
-               "fi_motivirovka_emitted"}),
+# Группы «по важности» для сортировки секции (решение юриста 17.08.2026,
+# прежний порядок — 09.08.2026): исполнительные листы → решения и акты →
+# иные → заседания (ближайшие сверху) → новые иски. Рабочая очередь юриста
+# начинается с листов (ради них трек и существует), а заведение дел — фон,
+# ему место в конце: там же встаёт строка-свёртка массового подхвата.
+# До 09.08.2026 строки шли в порядке очереди обработки прогона и не
+# читались вовсе (разбор дайджеста 07.08.2026).
+_BANK_GROUP_WRITS = 0
+_BANK_GROUP_DECISIONS = 1
+# «Иные» — ДЕФОЛТ функции ниже, своего набора типов у группы нет: сюда
+# падают завершения (возврат/отказ в принятии/передача/присоединение —
+# решение юриста 17.08.2026), сроки возражений, отмена заочного, жалобы,
+# смена статуса, немотивировочный fi_final_event.
+_BANK_GROUP_OTHER = 2
+_BANK_GROUP_HEARINGS = 3
+_BANK_GROUP_INTAKE = 4
+# ⚠️ Словарь, а не кортеж: «иные» сидят в СЕРЕДИНЕ порядка, и `len(...)`
+# индексом группы больше не работает. Индексы держим именованными
+# константами — новая группа в конце не должна сдвигать «иные».
+_BANK_GROUP_ORDER = {
     # Календарные события ожидания ИЛ — в группе листов: «вступило в силу»
     # и «лист завис» суть этапы той же цепочки «решение → сила → выдача».
-    frozenset({"fi_writ_issued", "fi_writ_status_changed",
-               "fi_legal_force_reached", "fi_writ_overdue"}),
-    frozenset({"fi_returned"}),
-    frozenset({"fi_bank_claim_registered", "fi_accepted_no_hearing"}),
-    frozenset({"fi_hearing_new", "fi_hearing_next", "fi_hearing_postponed",
-               "fi_hearing_recess", "fi_hearing_restart",
-               "fi_post_decision_hearing"}),
-)
-_BANK_GROUP_HEARINGS = 4
-_BANK_GROUP_OTHER = len(_BANK_GROUP_ORDER)
+    _BANK_GROUP_WRITS: frozenset({
+        "fi_writ_issued", "fi_writ_status_changed",
+        "fi_legal_force_reached", "fi_writ_overdue"}),
+    _BANK_GROUP_DECISIONS: frozenset({
+        "fi_resolved", "fi_act_text_published", "fi_act_published",
+        "fi_motivirovka_emitted"}),
+    _BANK_GROUP_HEARINGS: frozenset({
+        "fi_hearing_new", "fi_hearing_next", "fi_hearing_postponed",
+        "fi_hearing_recess", "fi_hearing_restart",
+        "fi_post_decision_hearing"}),
+    _BANK_GROUP_INTAKE: frozenset({
+        "fi_bank_claim_registered", "fi_accepted_no_hearing"}),
+}
 
 
 def _bank_change_group(ch: dict) -> int:
@@ -1524,19 +1540,21 @@ def _bank_change_group(ch: dict) -> int:
 
     Мотивировочный fi_final_event (детект по details["event"]) — та же
     группа, что решения: содержательно это «мотивировка изготовлена».
+    ⚠️ Гард сравнивает с группой РЕШЕНИЙ, а не с нулём: нулевая группа —
+    листы, и дело, получившее в одном прогоне и лист, и мотивировку,
+    уехало бы из листов в решения.
     """
     types = ch.get("type") or []
-    best = _BANK_GROUP_OTHER
-    for i, grp in enumerate(_BANK_GROUP_ORDER):
-        if any(t in grp for t in types):
-            best = min(best, i)
-    if (best > 0 and "fi_final_event" in types
+    # ⚠️ Сначала СОБИРАЕМ совпавшие группы и только потом берём старшую:
+    # «иные» сидят в середине порядка, и min() с дефолтом клампил бы
+    # заседания и новые иски (индексы больше «иных») в саму группу «иные».
+    matched = [i for i, grp in _BANK_GROUP_ORDER.items()
+               if any(t in grp for t in types)]
+    best = min(matched) if matched else _BANK_GROUP_OTHER
+    if (best > _BANK_GROUP_DECISIONS and "fi_final_event" in types
             and _is_motiv_event((ch.get("details") or {}).get("event") or "")):
-        best = 0
+        best = _BANK_GROUP_DECISIONS
     return best
-
-
-_BANK_GROUP_INTAKE = 3
 
 
 def split_bank_intake_fold(
@@ -1644,8 +1662,9 @@ def _bank_track_block(bank_changes: list[dict], *,
     ordered: list[dict | str] = [ch for _, ch in
                                  sorted(enumerate(detailed), key=_sort_key)]
     if folded:
-        # Свёрнутая строка — на месте группы «новые иски»: порядок «по
-        # важности» и разделители ⸻ отрабатывает тот же цикл ниже.
+        # Свёрнутая строка — на месте группы «новые иски» (с 17.08.2026 она
+        # последняя, т.е. свёртка закрывает секцию): порядок «по важности»
+        # и разделители ⸻ отрабатывает тот же цикл ниже.
         pos = len([ch for ch in ordered
                    if _bank_change_group(ch) < _BANK_GROUP_INTAKE])
         ordered.insert(pos, _bank_intake_fold_line(folded))
