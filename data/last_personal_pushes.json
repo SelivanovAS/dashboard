@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-08-14T04:00:41",
+  "generated_at": "2026-08-17T03:36:52",
   "title_default": "Мониторинг дел — обновление",
-  "body_default": "🆕 Новых: 5 · 📋 Изменений: 13",
+  "body_default": "📋 Изменений: 3",
   "owner_only": false,
   "items": [
     {
@@ -26,16 +26,16 @@
         "surggor--hmao.sudrf.ru|2-8468/2026",
         "surggor--hmao.sudrf.ru|2-8537/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 2",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
       "endpoint_tail": "bKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
       "is_owner": false,
-      "watchlist_size": 11,
+      "watchlist_size": 12,
       "watchlist": [
         "surggor--hmao.sudrf.ru|2-4101/2026",
         "surggor--hmao.sudrf.ru|2-3987/2026",
@@ -47,12 +47,13 @@
         "surggor--hmao.sudrf.ru|2-4440/2026",
         "surggor--hmao.sudrf.ru|2-4411/2026",
         "surggor--hmao.sudrf.ru|2-6180/2026",
-        "surggor--hmao.sudrf.ru|2-3989/2026"
+        "surggor--hmao.sudrf.ru|2-3989/2026",
+        "33-5771/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 7 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 4",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QJkgJi0AgUCS3AM4ZAXAmW7SNLcSlAJtcHQWNeXm2JIWiYqzdLa7CIGUKjmFxO6zzYJMo7cSb0EANlTPONFB7WVGRjiOxMcGqqbkLB5oDts7z0bvhZEiDgK23IEMuOMlJNahXCCAlmMlUNOOa2bNokgwI5oxlLrjkGgnQEDx01Y",
@@ -66,10 +67,10 @@
         "2-5609/2026",
         "2-713/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 6 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 3 · всего событий: 7",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QKQw727tK6X6ADP94fnPJUYhbEcqHT6oL6nndKw2p7n2Y6KCMW0i_U3P4bGWTukfa265NML8VXpd8AnFKL6LUfwWcZEcTV104i8X_ZkwYlxPpggadfa60ykuvC9M1e3olLGDfxKBINx7oItkhC3D1Lsv6nFdAfwq4SVtiPue52o",
@@ -79,23 +80,36 @@
       "watchlist": [
         "2-537/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 2",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QKsOc5rG-E2X_xvE_7uP7MjAvTrzRoQE_6Q4Gs5GDVlU8QCuXbhvMMcdmP7b7sAmJx3FbK4FDT51WoxNNSSbYMJ4zwGI7yK5oI51Hy35UkSfSbs8LznHOT2HTFg_S29hpNFmfTyuwgMvascEgbgPWGSWIm5-ApjGQYeW-vrDpWI",
       "endpoint_tail": "vascEgbgPWGSWIm5-ApjGQYeW-vrDpWI",
       "is_owner": false,
-      "watchlist_size": 1,
+      "watchlist_size": 14,
       "watchlist": [
-        "33-5546/2026"
+        "33-5546/2026",
+        "oktb--hmao.sudrf.ru|2-311/2026",
+        "surgray--hmao.sudrf.ru|2-1687/2026",
+        "surgray--hmao.sudrf.ru|2-1527/2026",
+        "surgray--hmao.sudrf.ru|2-1528/2026",
+        "surggor--hmao.sudrf.ru|2-7472/2026",
+        "surggor--hmao.sudrf.ru|2-4436/2026",
+        "surggor--hmao.sudrf.ru|2-8165/2026",
+        "surggor--hmao.sudrf.ru|2-7942/2026",
+        "surggor--hmao.sudrf.ru|2-7940/2026",
+        "surggor--hmao.sudrf.ru|2-6028/2026",
+        "surggor--hmao.sudrf.ru|2-7673/2026",
+        "kogalym--hmao.sudrf.ru|2-815/2026",
+        "langepas--hmao.sudrf.ru|2-453/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 2",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QLGYfW6JWyyZiKc45AIJKxN-UklPSQLdpiUgJWjSiVoc2n7SOPq-kPg8FO8A3-CWd_aCym1GThbROIYGjyZRrgV6MMBKlqcMHzaRdHqaBE-iK-vj3rfKfiU8nDnjxo4WOJz1py4OBLIWjDLHdGTr8HnVF0KhG955JORfnJDh8tY",
@@ -112,16 +126,16 @@
         "2-3626/2026",
         "2-310/2026",
         "2-3186/2026",
-        "М-239/2026",
+        "9-104/2026",
         "2-3730/2026",
         "2-406/2026",
         "2-2216/2026",
         "2-7354/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 7 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 4 · всего событий: 8",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://web.push.apple.com/QO74bl1BkImPve7CzdafxLVujoUGYSAdwZt0-cYLyXZ1_Dpk4497Jp-mMANBW-xW4P8pdwFOzqoQDudWxg5jbPPw_IiFuVr2y5ZJhjRetZGjQNHGVvGUgSKoLMkXb--79a0knIWYLrwUJ1UMkM_zVwwMaSaZezmB8BfwjqNE8bM",
@@ -129,10 +143,10 @@
       "is_owner": true,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "general",
-      "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 5 · 📋 Изменений: 13",
-      "click_url": "/sberbank_dashboard.html?digest=open"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/ca2c3vaGlpA:APA91bFuYNL0DiAunZmQktnrl1WlQ9qmNoQHXxw6zZnin49GctQVG4lvdZsfr8rbIlj3VfpZ7TGTarxX7BchReETQCcLKBYJAG9_qC6zjoHttqZK1kJlUhfbvbePCjhP7oQRFNGtn016",
@@ -140,10 +154,10 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "general",
-      "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 5 · 📋 Изменений: 13",
-      "click_url": "/sberbank_dashboard.html?digest=open"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/dhku8svsJAY:APA91bGOhXHwznuvUfUM6jYjx7XdX3uDxZUWPuGvy-wn77pYKcr8JHw9j6-KX53wnJh6MNpKSzcwmUak4FyJ30Eg1jstZitnMCa-dYxwvUieO-V9stRsdtqPwabE57YenlvNYUaMoUiF",
@@ -154,10 +168,10 @@
         "2-1394/2026",
         "2-2408/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 2",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/eMo8GfnIBbM:APA91bHNZ8Sc-DTjW4grEkYo1TKSBOf6HXflM4kGp20yGeemNhbUyDcvinFdwu-kSM0N3mJwKal1eUMTapYY3-WsWy6Pk58KY2Jg9Wgzmm-hoEsPIA2I9yNEPUo9Bt02zUUwgJG3aAvi",
@@ -167,10 +181,10 @@
       "watchlist": [
         "33-5179/2026"
       ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-5799/2026, 33-5797/2026, 33-5771/2026 и ещё 2",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/egDvQO7fZPc:APA91bH6yGYtXQdjkKHFnuitsEofc8l6CrJJcXiVkL97Of2JF-xktYGJmHpXvDsGzWFlGQZe16Y_sbVK8pf85XnDBIz3J5tnvHZ9fAOXL4zlFkeTsoR7srezoNtmNZTSeSheLWVfOsWp",
@@ -178,11 +192,11 @@
       "is_owner": false,
       "watchlist_size": 0,
       "watchlist": [],
-      "variant": "general",
-      "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 5 · 📋 Изменений: 13",
-      "click_url": "/sberbank_dashboard.html?digest=open"
+      "variant": "skip",
+      "title": null,
+      "body": null,
+      "click_url": null
     }
   ],
-  "updated_at": "2026-08-14T04:00:41"
+  "updated_at": "2026-08-17T03:36:52"
 }
