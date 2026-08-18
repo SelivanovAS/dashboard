@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-08-17T04:21:49",
+  "generated_at": "2026-08-18T04:41:12",
   "title_default": "Мониторинг дел — обновление",
-  "body_default": "🆕 Новых: 3 · 📋 Изменений: 6",
+  "body_default": "🆕 Новых: 1 · 📋 Изменений: 6",
   "owner_only": false,
   "items": [
     {
@@ -28,7 +28,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026 и ещё 1",
+      "body": "Изменения по 1 делу: 33-5888/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -52,7 +52,50 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026 и ещё 1",
+      "body": "Изменения по 1 делу: 33-5888/2026",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
+    },
+    {
+      "endpoint": "https://web.push.apple.com/QIyGf99FyeRvkxo4On262mF2G8vuxHeWNquKjtIfLDP9k_JcFhxXWdGiF--jWEgB3mu4hJSgxhh5huta7ZS335q_GLmHyPd2QzP9GMSFcLCthywrF6N-2bjDo0-KbcVrZ07RRgJywdmK9JSnZmV7k3BAkWxxaDXI4Li144f-t_0",
+      "endpoint_tail": "K9JSnZmV7k3BAkWxxaDXI4Li144f-t_0",
+      "is_owner": false,
+      "watchlist_size": 31,
+      "watchlist": [
+        "2-884/2026",
+        "2-441/2025",
+        "2-318/2026",
+        "2-201/2026",
+        "33-3793/2026",
+        "2-2263/2026",
+        "33-5177/2026",
+        "33-4241/2026",
+        "33-3979/2026",
+        "2-339/2026",
+        "ugorsk--hmao.sudrf.ru|2-617/2026",
+        "hmray--hmao.sudrf.ru|2-1989/2026",
+        "sovetsk--hmao.sudrf.ru|2-776/2026",
+        "uray--hmao.sudrf.ru|2-411/2026",
+        "bel--hmao.sudrf.ru|2-424/2026",
+        "uray--hmao.sudrf.ru|2-502/2026",
+        "rdj--hmao.sudrf.ru|2-537/2026",
+        "bel--hmao.sudrf.ru|2-355/2026",
+        "kondinsk--hmao.sudrf.ru|2-247/2026",
+        "uray--hmao.sudrf.ru|2-495/2026",
+        "rdj--hmao.sudrf.ru|2-521/2026",
+        "sovetsk--hmao.sudrf.ru|2-694/2026",
+        "ugorsk--hmao.sudrf.ru|2-304/2026",
+        "kogalym--hmao.sudrf.ru|2-772/2026",
+        "oktb--hmao.sudrf.ru|2-298/2026",
+        "oktb--hmao.sudrf.ru|2-299/2026",
+        "nyagan--hmao.sudrf.ru|2-475/2026",
+        "hmray--hmao.sudrf.ru|2-2505/2026",
+        "nyagan--hmao.sudrf.ru|2-858/2026",
+        "2-504/2026",
+        "bel--hmao.sudrf.ru|2-134/2026"
+      ],
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 2 делам: 33-5888/2026, 33-5468/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -69,7 +112,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 2 делам: 33-5888/2026, 2-713/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -82,7 +125,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 1 делу: 33-5888/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -108,7 +151,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 1 делу: 33-5888/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -134,7 +177,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 2 делам: 33-5888/2026, 2-53/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -145,7 +188,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 3 · 📋 Изменений: 6",
+      "body": "🆕 Новых: 1 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -156,7 +199,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 3 · 📋 Изменений: 6",
+      "body": "🆕 Новых: 1 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -170,7 +213,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 1 делу: 33-5888/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -183,7 +226,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-5852/2026, 33-5843/2026, 33-5841/2026",
+      "body": "Изменения по 1 делу: 33-5888/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -194,9 +237,9 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "🆕 Новых: 3 · 📋 Изменений: 6",
+      "body": "🆕 Новых: 1 · 📋 Изменений: 6",
       "click_url": "/sberbank_dashboard.html?digest=open"
     }
   ],
-  "updated_at": "2026-08-17T04:21:49"
+  "updated_at": "2026-08-18T04:41:12"
 }

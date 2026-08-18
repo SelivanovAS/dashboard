@@ -1,10 +1,9 @@
 {
  "version": 1,
- "updated_at": "2026-08-17T04:21:37",
+ "updated_at": "2026-08-18T04:41:05",
  "sources": {
   "appeal:oblsud": {
    "counts": [
-    23,
     23,
     23,
     23,
@@ -17,18 +16,18 @@
     25,
     22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Апелляция (Суд ХМАО-Югры)"
   },
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
-    18,
     18,
     19,
     19,
@@ -41,18 +40,18 @@
     20,
     19,
     0,
+    19,
     19
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Сургутский городской суд"
   },
   "fi:surgray--hmao.sudrf.ru": {
    "counts": [
-    19,
     20,
     20,
     20,
@@ -65,18 +64,18 @@
     20,
     20,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Сургутский районный суд"
   },
   "fi:vartovgor--hmao.sudrf.ru": {
    "counts": [
-    14,
     14,
     15,
     16,
@@ -89,18 +88,18 @@
     19,
     19,
     0,
-    22
+    22,
+    21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_count": 21,
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Нижневартовский городской суд"
   },
   "fi:vartovray--hmao.sudrf.ru": {
    "counts": [
-    0,
     20,
     20,
     20,
@@ -113,18 +112,18 @@
     20,
     20,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Нижневартовский районный суд"
   },
   "fi:hmray--hmao.sudrf.ru": {
    "counts": [
-    15,
     15,
     15,
     15,
@@ -137,12 +136,13 @@
     16,
     16,
     0,
+    17,
     17
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "last_count": 17,
    "label": "Ханты-Мансийский районный суд"
   },
@@ -159,14 +159,14 @@
     22,
     22,
     22,
-    22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "last_count": 22,
    "label": "Урайский городской суд"
   },
@@ -182,21 +182,20 @@
     15,
     15,
     15,
-    15,
     14,
     0,
+    14,
     14
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 14,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Няганский городской суд"
   },
   "fi:uganskray--hmao.sudrf.ru": {
    "counts": [
-    22,
     21,
     21,
     21,
@@ -209,13 +208,14 @@
     19,
     19,
     0,
+    19,
     19
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Нефтеюганский районный суд"
   },
   "fi:kogalym--hmao.sudrf.ru": {
@@ -231,15 +231,15 @@
     20,
     20,
     20,
-    20,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Когалымский городской суд"
   },
   "fi:kondinsk--hmao.sudrf.ru": {
@@ -255,15 +255,15 @@
     22,
     22,
     22,
-    22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Кондинский районный суд"
   },
   "fi:langepas--hmao.sudrf.ru": {
@@ -279,15 +279,15 @@
     24,
     24,
     24,
-    24,
     0,
+    24,
     24
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 24,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Лангепасский городской суд"
   },
   "fi:megion--hmao.sudrf.ru": {
@@ -303,15 +303,15 @@
     22,
     22,
     22,
-    22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Мегионский городской суд"
   },
   "fi:sovetsk--hmao.sudrf.ru": {
@@ -327,15 +327,15 @@
     21,
     21,
     21,
-    21,
     0,
+    21,
     21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 21,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Советский районный суд"
   },
   "fi:ugorsk--hmao.sudrf.ru": {
@@ -348,18 +348,18 @@
     17,
     17,
     17,
-    17,
     18,
     17,
     17,
     0,
+    17,
     17
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 17,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Югорский районный суд"
   },
   "fi:bel--hmao.sudrf.ru": {
@@ -367,7 +367,6 @@
     20,
     20,
     20,
-    20,
     19,
     19,
     19,
@@ -377,13 +376,14 @@
     19,
     19,
     0,
+    19,
     19
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Белоярский городской суд"
   },
   "fi:pth--hmao.sudrf.ru": {
@@ -399,15 +399,15 @@
     22,
     22,
     22,
-    22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Пыть-Яхский городской суд"
   },
   "fi:berezovo--hmao.sudrf.ru": {
@@ -423,15 +423,15 @@
     21,
     21,
     21,
-    21,
     0,
+    21,
     21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 21,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Берёзовский районный суд"
   },
   "fi:rdj--hmao.sudrf.ru": {
@@ -444,18 +444,18 @@
     23,
     23,
     23,
-    23,
     22,
     22,
     22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Радужнинский городской суд"
   },
   "fi:oktb--hmao.sudrf.ru": {
@@ -463,7 +463,6 @@
     25,
     25,
     25,
-    25,
     24,
     24,
     24,
@@ -473,13 +472,14 @@
     24,
     24,
     0,
+    24,
     24
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 24,
-   "last_run_at": "2026-08-17T04:21:37",
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Октябрьский районный суд"
   },
   "cassation:7kas:total": {
@@ -494,21 +494,20 @@
     25,
     25,
     25,
+    0,
+    0,
     25,
-    0,
-    0,
-    25
+    0
    ],
-   "zero_streak": 0,
+   "zero_streak": 1,
    "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 25,
-   "last_run_at": "2026-08-17T04:21:37",
+   "alerted_zero": true,
+   "last_count": 0,
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    6,
     6,
     6,
     5,
@@ -521,13 +520,14 @@
     1,
     0,
     0,
-    1
+    1,
+    0
    ],
-   "zero_streak": 0,
+   "zero_streak": 1,
    "fail_streak": 0,
-   "alerted_zero": false,
-   "last_count": 1,
-   "last_run_at": "2026-08-17T04:21:37",
+   "alerted_zero": true,
+   "last_count": 0,
+   "last_run_at": "2026-08-18T04:41:05",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -544,14 +544,15 @@
     23,
     23,
     0,
-    23
+    23,
+    24
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "label": "Нижневартовский районный суд (г. Покачи)",
-   "last_count": 23,
-   "last_run_at": "2026-08-17T04:21:37"
+   "last_count": 24,
+   "last_run_at": "2026-08-18T04:41:05"
   }
  }
 }
