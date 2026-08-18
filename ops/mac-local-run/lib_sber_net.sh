@@ -168,6 +168,22 @@ cm_clear_court_routes() {
   return 0
 }
 
+# ── Конфиг Worker'а территории ───────────────────────────────────────────────
+# Файл ~/.config/court-monitor/worker.<регион>: url= / owner_secret= /
+# push_secret=. Читается awk'ом, а НЕ `source` — env.<регион> уходит в
+# окружение прогона, и PUSH_SECRET+PUSH_WORKER_URL там включили бы вторую
+# доставку push с Mac. ОДНО место на импорт и пульт: копия парсинга уже была
+# классом молчаливых поломок. Печатает три строки (url, owner, push; пустые —
+# пустой строкой), код 1 — файла нет.
+cm_worker_conf() {  # $1 = каталог конфигов, $2 = код региона
+  local f="$1/worker.$2" url owner push
+  [ -f "$f" ] || return 1
+  url=$(awk -F= '/^url=/{print $2}' "$f" | tr -d '[:space:]')
+  owner=$(awk -F= '/^owner_secret=/{print $2}' "$f" | tr -d '[:space:]')
+  push=$(awk -F= '/^push_secret=/{print $2}' "$f" | tr -d '[:space:]')
+  printf '%s\n%s\n%s\n' "${url%/}" "$owner" "$push"
+}
+
 # ── Список клонов территорий ─────────────────────────────────────────────────
 # Файл ~/.config/court-monitor/territories: по строке на клон, «#» — коммент.
 # Нет файла → только ~/dashboard (прежняя установка не меняется). Печатает

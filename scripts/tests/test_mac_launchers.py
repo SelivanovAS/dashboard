@@ -62,7 +62,7 @@ class TestSightedRunToday:
     def test_sighted_today(self):
         ok, text = cloud_run_ok.sighted_run_today(
             {"sources": {"a": _src(self.TODAY, 24), "b": _src(self.TODAY, 0)}})
-        assert ok and "зрячий" in text
+        assert ok and "отработало" in text
 
     def test_blind_today_means_parse(self):
         """Слепой прогон (адрес раннера заблокирован) пишет нули по ВСЕМ
@@ -175,10 +175,12 @@ class TestDrivers:
 # ── Пульт ────────────────────────────────────────────────────────────────────
 
 class TestPult:
-    def test_menu_has_all_four_actions(self):
+    def test_menu_has_all_actions(self):
         text = _read("ops/mac-local-run/СберСуд-пульт.command")
         for label in ("Запустить парсинг сейчас", "Подобрать дампы сейчас",
-                      "Смотреть живой лог", "Проверка"):
+                      "Смотреть живой лог", "Проверка",
+                      "Включить/починить автоматику",
+                      "Открыть дашборд и админку"):
             assert label in text, f"из меню пропал пункт «{label}»"
 
     def test_manual_parse_bypasses_gate(self):
@@ -196,3 +198,68 @@ class TestPult:
         открывать пульт, а не умирать."""
         text = _read("ops/mac-local-run/Парсинг судов.command")
         assert "exec" in text and "СберСуд-пульт.command" in text
+
+    def test_interrupt_returns_to_menu(self):
+        """⌘. должен прерывать ТЕКУЩЕЕ действие (tail, парсинг) и возвращать в
+        меню — а не убивать пульт: из «живого лога» иначе не выйти вовсе."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "trap ':' INT" in text
+
+    def test_no_region_codes_in_header(self):
+        """Юрист читает «ХМАО-Югра», а не внутренний код hmao: имя даёт
+        get_region().name через cloud_run_ok --report; пульт сам коды не
+        печатает и не хардкодит."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "hmao:" not in text and "sverdlovsk_yanao" not in text
+        assert "get_region().name" in text
+
+    def test_holiday_asks_instead_of_silent_exit(self):
+        """[1] в выходной: штатный запуск тихо выходит «нерабочий день» — для
+        юриста это поломка. Пульт обязан спросить (зеркало ignore_calendar
+        облачной админки) и передать --ignore-calendar."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "is_russian_working_day" in text
+        assert "Всё равно прогнать" in text
+        assert "--ignore-calendar" in text
+
+    def test_header_is_cached(self):
+        """Шапка (питон + сеть, 3-5 с) считается в файл и пересобирается
+        только действиями, меняющими состояние, — иначе каждое нажатие в
+        меню ждало бы пересчёта."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "build_header" in text
+        assert text.count("build_header") >= 4, \
+            "после действий [1]/[2]/[5] шапка не пересобирается"
+
+    def test_live_log_follows_rotated_files(self):
+        """Логи ротируются через mv (tail>tmp && mv): tail -f держит старый
+        файл и молча замолкает — обязателен -F (следить по имени)."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "tail -n 8 -F" in text and "tail -n 0 -F" in text
+
+    def test_ignore_calendar_reaches_python(self):
+        """Флаг пульта обязан доехать до run_parse.py: календарь решает Python
+        (SKIP_NON_WORKING_DAYS), в shell своей копии календаря нет."""
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "--ignore-calendar) IGNORE_CALENDAR=1" in text
+        assert 'SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ]' in text
+
+
+class TestWorkerConfShared:
+    def test_import_uses_cm_worker_conf(self):
+        """Парсер конфига worker.<регион> — ОДИН (cm_worker_conf в lib):
+        копия awk-строк в каждом потребителе разъехалась бы, как разъезжались
+        списки файлов и доменов."""
+        imp = _read("ops/mac-local-run/import_dumps.sh")
+        assert "cm_worker_conf" in imp
+        assert "awk -F= '/^owner_secret=/" not in imp, \
+            "import_dumps парсит конфиг сам, мимо cm_worker_conf"
+        pult = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "cm_worker_conf" in pult
+        assert "awk -F= '/^owner_secret=/" not in pult
+
+    def test_lib_reads_without_source(self):
+        lib = _read("ops/mac-local-run/lib_sber_net.sh")
+        block = lib[lib.index("cm_worker_conf()"):]
+        block = block[:block.index("\n}")]
+        assert "awk -F=" in block and "source" not in block

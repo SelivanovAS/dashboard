@@ -58,25 +58,32 @@ def sighted_run_today(state: dict) -> tuple[bool, str]:
         if (src.get("last_count") or 0) > 0 and not src.get("fail_streak"):
             sighted += 1
     # Время не печатаем: last_run_at naive, а авторы разные (раннер пишет UTC,
-    # Mac — местное) — «в 04:41» только запутал бы юриста.
+    # Mac — местное) — «в 04:41» только запутал бы юриста. Формулировки — для
+    # шапки пульта, читает не программист.
     if sighted:
-        return True, f"✓ зрячий прогон сегодня был (источников с данными: {sighted})"
+        return True, "✓ облако сегодня отработало (суды отвечали)"
     if ran_today:
-        return False, "✗ прогон был, но СЛЕПОЙ (все источники по нулям) — адрес раннера заблокирован"
+        return False, "✗ прогон был, но СЛЕПОЙ — суды не пустили адрес; данных нет"
     return False, "— прогона сегодня ещё не было"
 
 
 def main(argv: list[str]) -> int:
+    # Имя территории — человеческое (get_region().name: «ХМАО-Югра»), а не
+    # внутренний код: строку читает юрист в шапке пульта и в логе гейта.
+    try:
+        from court_monitor import config
+        from court_monitor.regions import get_region
+        region = get_region().name or config.REGION
+    except Exception:  # noqa: BLE001
+        region = "территория"
     try:
         from court_monitor import config
         with open(config.PARSE_HEALTH_PATH, encoding="utf-8") as f:
             state = json.load(f)
-        region = config.REGION
     except Exception as e:  # noqa: BLE001 — нет файла/битый JSON = «не было»
-        state, region = {}, "?"
         if "--report" in argv:
             print(f"{region}: — журнал здоровья не читается ({type(e).__name__}) — считаем, что прогона не было")
-            return 1
+        return 1
     ok, text = sighted_run_today(state)
     if "--report" in argv:
         print(f"{region}: {text}")

@@ -174,11 +174,11 @@ class TestDriverWiring:
         assert "капчёвых судов нет" in text
 
     def test_config_is_read_without_source(self):
-        """Файл читается awk-ом, а не `source`: env.<регион> уходит в окружение
-        прогона, и PUSH_SECRET+PUSH_WORKER_URL там включили бы вторую доставку
-        push с Mac."""
+        """Конфиг worker.<регион> читается через cm_worker_conf (awk, а не
+        `source`: env.<регион> уходит в окружение прогона, и
+        PUSH_SECRET+PUSH_WORKER_URL там включили бы вторую доставку push)."""
         text = _read_repo(IMPORTER)
-        assert 'awk -F= \'/^push_secret=/' in text
+        assert "cm_worker_conf" in text
         assert ". $WORKER_CONF" not in text and 'source "$WORKER_CONF"' not in text
 
 

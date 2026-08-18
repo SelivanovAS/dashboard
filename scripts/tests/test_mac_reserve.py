@@ -157,7 +157,8 @@ class TestCheckMode:
     def test_stops_before_parsing_and_push(self, worker):
         assert "CHECK_ONLY" in worker
         gate = worker.index('if [ "$CHECK_ONLY" = "1" ]')
-        assert gate < worker.index("run_parse.py")
+        # Именно ВЫЗОВ run_parse (упоминания в комментариях не считаются).
+        assert gate < worker.index("run_parse.py >>")
         assert gate < worker.index("git push")
 
     def test_does_not_touch_working_tree(self, worker):
