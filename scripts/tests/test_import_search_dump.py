@@ -428,6 +428,67 @@ class TestImporterE2E:
         assert s["added"] == 1  # только 2-1001 (2-1006 не добавлялось заново)
         assert any("[PROMOTED] М-500/2026 → 2-1006/2026" in l for l in s["lines"])
 
+    @staticmethod
+    def _seed_bank_material(env, domain="akademicheskiy--svd.sudrf.ru"):
+        """М-запись в ТРЕКЕ «Иски банка» (не в основной картотеке)."""
+        env["bank"].write_text(json.dumps({
+            "version": 1, "track": "plaintiff_light",
+            "cases": [{
+                "id": "М-500/2026",
+                "current_stage": "first_instance",
+                "track": "plaintiff_light",
+                "bank_role": "Истец",
+                "plaintiff": "ПАО Сбербанк",
+                "defendant": "Иванов И.И.",
+                "first_instance": {"case_number": "М-500/2026",
+                                   "court_domain": domain,
+                                   "link": "1|aaaa-0000", "srv_num": 1},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+
+    def test_bank_track_material_promoted(self, import_env):
+        """Материал живёт в ТРЕКЕ «Иски банка»: комбо-строка обязана
+        переименовать его на месте, а не завести второе дело под 2-номером.
+        До 18.08.2026 индекс промоушена знал только основную картотеку."""
+        self._seed_bank_material(import_env)
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        bank = _bank_cases(import_env)
+        ids = [c["id"] for c in bank]
+        assert "М-500/2026" not in ids
+        assert ids.count("2-1006/2026") == 1
+        fi = {c["id"]: c for c in bank}["2-1006/2026"]["first_instance"]
+        assert fi["material_number"] == "М-500/2026"  # ★ на материале живёт
+        # В основную картотеку запись трека уехать не должна
+        main_ids = [c["id"] for c in json.loads(
+            import_env["json"].read_text(encoding="utf-8"))["cases"]]
+        assert "2-1006/2026" not in main_ids
+        s = _read_summary(import_env["gh_out"])
+        assert s["promoted"] == 1
+        assert any("[PROMOTED] М-500/2026 → 2-1006/2026" in l
+                   and "(иски банка)" in l for l in s["lines"])
+
+    def test_bank_promotion_saved_without_new_entries(self, import_env):
+        """Промоушен-только импорт обязан ЗАПИСАТЬ файл трека на диск.
+        Сохранение висело на одном лишь `bank_entries`, и переименование
+        жило бы только в памяти процесса."""
+        self._seed_bank_material(import_env)
+        _run(import_env)
+        # читаем файл заново — проверяем диск, а не объект в памяти
+        on_disk = [c["id"] for c in _bank_cases(import_env)]
+        assert "2-1006/2026" in on_disk
+        assert "М-500/2026" not in on_disk
+
+    def test_bank_material_in_other_court_not_promoted(self, import_env):
+        """Судо-зависимость сохраняется и для трека: чужой суд не трогаем."""
+        self._seed_bank_material(import_env, domain="alapaevsky--svd.sudrf.ru")
+        _run(import_env)
+        ids = [c["id"] for c in _bank_cases(import_env)]
+        assert "М-500/2026" in ids          # чужая запись не тронута
+        assert "2-1006/2026" not in ids     # и не переименована
+        s = _read_summary(import_env["gh_out"])
+        assert s["promoted"] == 0
+
     def test_imported_case_announced_once(self, import_env):
         """Импортированное дело объявляется новым в ближайшем дайджесте РОВНО
         один раз (runs.announce_imported_cases + import.announced)."""

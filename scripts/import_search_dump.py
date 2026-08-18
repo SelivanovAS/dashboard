@@ -485,16 +485,29 @@ def import_rows(
     # bank-файла): истцовые строки заводятся в трек, а переехавшее обжалование
     # живёт в основном cases.json — обе стороны обязаны давать [ALREADY].
     dedup_exact, dedup_wildcard = collect_fi_dedup_index(load_all_tracked())
+    # Трек «Иски банка» грузим ЗДЕСЬ, а не перед сохранением: его М-записи
+    # обязаны попасть в индекс промоушена, а сохранять надо ТОТ ЖЕ объект —
+    # повторный load_bank_file() после цикла перечитал бы файл с диска и затёр
+    # переименование (класс ошибки «архив не пересохранён», август 2026).
+    bank = load_bank_file()
+    bank_cases = bank.get("cases", [])
     # Индекс активных дел по (домен, id) — для промоушена М→2 (материал из
     # прошлого импорта возбуждён в дело; зеркало блока 3 main_json). Домен в
     # ключе: М-номера тоже не уникальны, чужой суд запись не переименовывает.
+    # ⚠️ Обе активные картотеки, с пометкой источника (образец —
+    # find_material_record в targeted_add): до 18.08.2026 индекс знал только
+    # основную, и строка «2-X ~ М-Y» для материала ТРЕКА промоушен не проходила,
+    # заводя вторую запись под 2-номером. Источник решает, какой файл сохранять.
     case_by_id: dict[tuple[str, str], dict] = {}
-    for c in cases:
-        dom = ((c.get("first_instance") or {})
-               .get("court_domain") or "").strip().lower()
-        cid = (c.get("id") or "").strip()
-        if dom and cid:
-            case_by_id[(dom, cid)] = c
+    case_owner: dict[tuple[str, str], str] = {}
+    for owner, lst in (("main", cases), ("bank", bank_cases)):
+        for c in lst:
+            dom = ((c.get("first_instance") or {})
+                   .get("court_domain") or "").strip().lower()
+            cid = (c.get("id") or "").strip()
+            if dom and cid and (dom, cid) not in case_by_id:
+                case_by_id[(dom, cid)] = c
+                case_owner[(dom, cid)] = owner
 
     lines: list[str] = []
     counters = {
@@ -513,6 +526,9 @@ def import_rows(
     bank_state = {"seen": None, "seen_dirty": False, "cards": 0,
                   "fail_reasons": []}
     promoted_any = False
+    # Отдельный флаг: сохранение трека висело на одном лишь `bank_entries`, и
+    # импорт, который ТОЛЬКО переименовал запись трека, файл бы не записал.
+    promoted_bank_any = False
     refilled_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -530,13 +546,28 @@ def import_rows(
                 and not is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard)):
             old = case_by_id.get((domain, mat))
             if old is not None:
+                owner = case_owner.get((domain, mat), "main")
                 counters["promoted"] += 1
-                promoted_any = True
-                lines.append(f"[PROMOTED] {mat} → {num} — материал возбуждён в дело, запись переименована")
+                # Счётчик ОБЩИЙ на обе картотеки (решение юриста): его проводка
+                # до оператора уже полная, а новый ключ пришлось бы вести через
+                # jq-пейлоад, whitelist Worker'а и админку — на этом проект
+                # дважды терял числа. Картотеку называет ТЕКСТ строки: строки
+                # едут мимо числового whitelist'а.
+                if owner == "bank":
+                    promoted_bank_any = True
+                else:
+                    promoted_any = True
+                lines.append(
+                    f"[PROMOTED] {mat} → {num} — материал возбуждён в дело, "
+                    "запись переименована"
+                    + (" (иски банка)" if owner == "bank" else "")
+                )
                 # Тело промоушена общее с точечным добавлением (linking.py).
                 promote_material_record(old, r)
                 case_by_id.pop((domain, mat), None)
                 case_by_id[(domain, num)] = old
+                case_owner.pop((domain, mat), None)
+                case_owner[(domain, num)] = owner
                 dedup_exact.discard((domain, mat))
                 dedup_exact.add((domain, num))
                 if bare != num:
@@ -684,12 +715,13 @@ def import_rows(
     elif dry_run:
         log.info("DRY-RUN: cases.json не изменён")
 
-    if bank_entries and not dry_run:
-        # Пара обязана грузиться склеенной (load_bank_file): save_bank_json
-        # перезаписывает events-файл целиком, и без склейки события
-        # существующих дел трека потерялись бы.
-        bank = load_bank_file()
-        bank["cases"] = bank_entries + bank.get("cases", [])
+    if (bank_entries or promoted_bank_any) and not dry_run:
+        # Пара грузится склеенной (load_bank_file) ВЫШЕ, до цикла строк:
+        # save_bank_json перезаписывает events-файл целиком, и без склейки
+        # события существующих дел трека потерялись бы. ⚠️ Перечитывать файл
+        # здесь нельзя — промоушен правит записи `bank_cases` по ссылке, и
+        # свежая загрузка затёрла бы переименование.
+        bank["cases"] = bank_entries + bank_cases
         save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     if bank_state["seen_dirty"] and not dry_run:
         save_intake_seen(bank_state["seen"])
