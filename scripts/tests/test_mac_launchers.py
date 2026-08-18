@@ -29,6 +29,7 @@ RESERVE = os.path.join(REPO_DIR, "ops", "mac-local-run")
 sys.path.insert(0, RESERVE)
 
 import cloud_run_ok  # noqa: E402
+import probe_sample  # noqa: E402
 
 PARSE_PLIST = os.path.join(RESERVE, "com.court-monitor.parse.plist")
 IMPORT_PLIST = os.path.join(RESERVE, "com.court-monitor.import.plist")
@@ -243,6 +244,71 @@ class TestPult:
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert "--ignore-calendar) IGNORE_CALENDAR=1" in text
         assert 'SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ]' in text
+
+
+class TestProbeSample:
+    """Состав выборочной пробы — решение юриста 18.08.2026: кассация + ВСЕ
+    апелляции + случайные 3 суда Свердловской обл. (обязательно с одним судом
+    Екатеринбурга) + 3 ЯНАО + 3 ХМАО."""
+
+    def test_composition(self):
+        targets = probe_sample.build_targets()
+        assert len(targets) == 13
+        labels = [l for l, _ in targets]
+        domains = [d for _, d in targets]
+        assert "7kas.sudrf.ru" in domains, "кассация выпала из пробы"
+        for ap in ("oblsud--hmao.sudrf.ru", "oblsud--svd.sudrf.ru",
+                   "oblsud--ynao.sudrf.ru"):
+            assert ap in domains, f"апелляция {ap} выпала из пробы"
+        for zone in ("Свердловская обл. ·", "ЯНАО ·", "ХМАО ·"):
+            assert sum(1 for l in labels if l.startswith(zone)) == 3, \
+                f"в зоне «{zone}» не три суда"
+
+    def test_ekb_court_is_guaranteed(self):
+        """В свердловской тройке обязателен суд Екатеринбурга — там основной
+        объём дел банка, и проба без ЕКБ ничего не говорит о главном."""
+        for _ in range(5):
+            labels = [l for l, _ in probe_sample.build_targets()]
+            svd = [l for l in labels if l.startswith("Свердловская обл.")]
+            assert any("Екатеринбург" in l for l in svd)
+
+    def test_sample_is_random(self):
+        """Тройки новые на каждый запуск — за неделю проверок покрывается
+        заметная часть реестра (одинаковая пятёрка выборок из 8·C(54,2)·C(12,3)
+        вариантов означала бы сломанный random)."""
+        draws = {tuple(d for _, d in probe_sample.build_targets())
+                 for _ in range(5)}
+        assert len(draws) > 1
+
+    def test_wired_into_pult_check(self):
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "probe_sample.py" in text
+        assert "Выборочная проба судов" in text
+
+
+class TestTerritoryChoice:
+    def test_menu_offers_single_territory(self):
+        """Отдельный запуск ХМАО и Урала (просьба юриста 18.08.2026): Enter —
+        обе, цифра — одна; одна территория идёт напрямую через parse_and_push,
+        не через parse_all."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "Какую территорию?" in text
+        assert 'parse_and_push.sh" "$ONE_REPO" --force --anywhere' in text
+
+    def test_colors_are_tty_gated(self):
+        """ANSI-цвет только в настоящем терминале: escape-мусор в пайпе теста
+        или логе launchd хуже отсутствия цвета."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert "[ -t 1 ]" in text
+        gate = text.index('if [ -t 1 ] && [ -n "${TERM:-}" ]; then')
+        assert text.index("C_OK=") > gate
+
+    def test_check_scripts_not_piped_through_paint(self):
+        """log() скриптов печатает на экран только при живом терминале —
+        пайп через paint выключил бы их вывод целиком."""
+        text = _read("ops/mac-local-run/СберСуд-пульт.command")
+        assert 'parse_all.sh" --check --anywhere | paint' not in text
+        assert 'import_all.sh" --check --anywhere | paint' not in text
 
 
 class TestWorkerConfShared:
