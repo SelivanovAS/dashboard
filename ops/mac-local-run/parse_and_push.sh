@@ -28,6 +28,7 @@
 CHECK_ONLY=0
 FORCE=0
 ANYWHERE=0
+IGNORE_CALENDAR=0
 REPO_ARG=""
 for arg in "$@"; do
   case "$arg" in
@@ -39,6 +40,10 @@ for arg in "$@"; do
     # Запуск вне сети Сбера (дом, выключенный корпоративный VPN): маршруты не
     # строим, суды спрашиваем напрямую — честная проба решает, есть ли доступ.
     --anywhere) ANYWHERE=1 ;;
+    # Прогнать и в нерабочий день (пульт спрашивает юриста «всё равно
+    # прогнать?») — зеркало галки ignore_calendar облачной админки. Календарь
+    # решает Python: здесь только проводка env для run_parse.py.
+    --ignore-calendar) IGNORE_CALENDAR=1 ;;
     -*)      echo "неизвестный ключ: $arg" >&2; exit 2 ;;
     # ПЕРВЫЙ позиционный побеждает: parse_all.sh передаёт путь клона первым
     # аргументом и добавляет свои «$@» следом — если бы побеждал последний,
@@ -227,7 +232,8 @@ REGION_CODE=$(cm_region_code "$PYTHON")
 cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 
 log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без секретов) ..."
-SKIP_NON_WORKING_DAYS=1 "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
+SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ] && echo 0 || echo 1) \
+  "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
 RC=$?
 if [ "$RC" -ne 0 ]; then
   die "парсинг завершился с кодом $RC (см. лог)"

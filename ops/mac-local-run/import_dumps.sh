@@ -129,16 +129,13 @@ if [ "${GATED:-0}" = "0" ]; then
   exit 0
 fi
 
-# ── Worker: адрес и секреты ──────────────────────────────────────────────────
-# Читаем awk-ом, а НЕ `source`: файл env.<регион> уходит в окружение прогона,
-# и PUSH_SECRET+PUSH_WORKER_URL там включили бы вторую доставку push с Mac.
+# ── Worker: адрес и секреты (общий парсер cm_worker_conf — как у пульта) ─────
 WORKER_CONF="$CONF_DIR/worker.$REGION_CODE"
 WORKER_URL=""; OWNER_SECRET=""; PUSH_SECRET=""
-if [ -f "$WORKER_CONF" ]; then
-  WORKER_URL=$(awk -F= '/^url=/{print $2}' "$WORKER_CONF" | tr -d '[:space:]')
-  OWNER_SECRET=$(awk -F= '/^owner_secret=/{print $2}' "$WORKER_CONF" | tr -d '[:space:]')
-  PUSH_SECRET=$(awk -F= '/^push_secret=/{print $2}' "$WORKER_CONF" | tr -d '[:space:]')
-  WORKER_URL="${WORKER_URL%/}"
+if CONF_LINES=$(cm_worker_conf "$CONF_DIR" "$REGION_CODE"); then
+  WORKER_URL=$(echo "$CONF_LINES" | sed -n 1p)
+  OWNER_SECRET=$(echo "$CONF_LINES" | sed -n 2p)
+  PUSH_SECRET=$(echo "$CONF_LINES" | sed -n 3p)
   # push_secret НЕОБЯЗАТЕЛЕН: Worker принимает и владельческий секрет
   # (importChannelAuthOk). PUSH_SECRET на машине юриста взять неоткуда — он
   # write-only и в Cloudflare, и в GitHub secrets, — а owner_secret у юриста
