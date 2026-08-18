@@ -1909,6 +1909,114 @@ class TestArchiveDedup:
         assert uc.dedupe_new_archive_entries([by_domain], [by_name]) == []
 
 
+class TestFiCaseByCourtNumber:
+    """Поиск «занявшего» номер — судо-зависимый.
+
+    Регрессия боевого прогона Урала 18.08.2026: промоушен М-971/2026 в
+    Асбестовском был заблокирован одноимённым иском Тагилстроевского суда,
+    лежащим в треке «Иски банка» (гард смотрел в индекс по голому номеру).
+    """
+
+    ASB = "asbestovsky--svd.sudrf.ru"
+    TAG = "tagilstroevsky--svd.sudrf.ru"
+
+    @staticmethod
+    def _case(cid: str, domain: str, **extra) -> dict:
+        case = {"id": cid, "current_stage": "first_instance",
+                "first_instance": {"case_number": cid, "court_domain": domain}}
+        case.update(extra)
+        return case
+
+    def test_same_number_other_court_not_found(self):
+        """Главный кейс: дело Тагилстроевского не «занимает» номер в
+        Асбестовском — промоушен обязан пройти."""
+        cases = [self._case("2-1145/2026", self.TAG, track="plaintiff_light")]
+        assert uc.fi_case_by_court_number(cases, self.ASB, "2-1145/2026") is None
+
+    def test_same_number_same_court_found(self):
+        cases = [self._case("2-1145/2026", self.ASB)]
+        found = uc.fi_case_by_court_number(cases, self.ASB, "2-1145/2026")
+        assert found is cases[0]
+
+    def test_bank_track_record_found_in_own_court(self):
+        """В бою «занявшим» оказалась запись трека — она обязана находиться,
+        когда суд ТОТ ЖЕ (иначе промоушен создаст дубль внутри суда)."""
+        cases = [self._case("2-1145/2026", self.TAG, track="plaintiff_light")]
+        assert uc.fi_case_by_court_number(cases, self.TAG, "2-1145/2026") is cases[0]
+
+    def test_self_excluded(self):
+        """Полупромоутнутая запись не должна блокировать сама себя."""
+        case = {"id": "М-971/2026", "current_stage": "first_instance",
+                "first_instance": {"case_number": "2-1145/2026",
+                                   "court_domain": self.ASB}}
+        assert uc.fi_case_by_court_number(
+            [case], self.ASB, "2-1145/2026", exclude=case) is None
+        assert uc.fi_case_by_court_number(
+            [case], self.ASB, "2-1145/2026") is case
+
+    def test_matches_fi_case_number_not_only_id(self):
+        case = {"id": "М-500/2026", "current_stage": "first_instance",
+                "first_instance": {"case_number": "2-777/2026",
+                                   "court_domain": self.ASB}}
+        assert uc.fi_case_by_court_number([case], self.ASB, "2-777/2026") is case
+
+    def test_domain_resolved_from_court_name(self):
+        """У дел «с апелляции» court_domain пуст — домен резолвится по
+        короткому имени суда, запись остаётся видимой гарду."""
+        from court_monitor.courts import FIRST_INSTANCE_COURTS
+        cfg = FIRST_INSTANCE_COURTS[0]
+        case = {"id": "2-6/2026", "first_instance": {"court": cfg.name}}
+        assert uc.fi_case_by_court_number([case], cfg.domain, "2-6/2026") is case
+
+    def test_empty_args_are_safe(self):
+        cases = [self._case("2-1145/2026", self.ASB)]
+        assert uc.fi_case_by_court_number(cases, "", "2-1145/2026") is None
+        assert uc.fi_case_by_court_number(cases, self.ASB, "") is None
+
+
+class TestCardPromotionGuardWiring:
+    """Проводка гарда промоушена по карточке в FI-цикле main_json.
+
+    Блок сидит внутри main_json, e2e-обвязки для неё в проекте нет — тест на
+    исходник по образцу TestNotAcceptedIntakeWiring.
+    """
+
+    @staticmethod
+    def _block() -> str:
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        i = src.index("# Промоушен материала по карточке")
+        return src[i:src.index("card_is_empty_shell", i)]
+
+    def test_guard_is_court_aware(self):
+        """Голый case_by_id больше не решает занятость — только пара."""
+        block = self._block()
+        assert "case_by_id.get(card_fi_num)" not in block
+        assert "is_fi_number_tracked(" in block
+        assert "fi_dedup_exact, fi_dedup_wildcard" in block
+
+    def test_guard_uses_current_court_domain(self):
+        assert "court_cfg.domain" in self._block()
+
+    def test_own_numbers_excluded(self):
+        """Полупромоутнутая запись не блокирует сама себя."""
+        block = self._block()
+        assert "_own_nums" in block
+        assert "material_number" in block
+
+    def test_promotion_feeds_dedup_index(self):
+        """Иначе два материала одного суда за прогон дадут дубль."""
+        assert "fi_dedup_exact.add((cur_dom, card_fi_num))" in self._block()
+
+    def test_warning_names_the_occupier(self):
+        """Разбор не должен требовать раскопок в JSON: суд обязан быть в тексте."""
+        block = self._block()
+        assert "fi_case_by_court_number(" in block
+        assert "того же суда" in block
+        assert "shorten_court_name(" in block
+
+
 class TestRotateColdArchive:
     def _with_tmp_archive(self, monkeypatch, tmp_path):
         monkeypatch.setattr(

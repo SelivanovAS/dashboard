@@ -1393,6 +1393,45 @@ def case_court_key(case: dict, name_to_domain: dict[str, str] | None = None) -> 
     return (domain, (case.get("id") or "").strip())
 
 
+def fi_case_by_court_number(
+    cases: list[dict], domain: str, number: str, exclude: dict | None = None
+) -> dict | None:
+    """Активная запись ЭТОГО суда под этим номером (id либо fi.case_number).
+
+    Нужна ТОЛЬКО чтобы назвать «занявшего» в предупреждении: сам гард стоит на
+    is_fi_number_tracked (множество пар — имён оно не хранит, зато видит архивы
+    и дела, заведённые этим же прогоном).
+
+    Ключ — пара, а не голый номер (см. case_court_key): индекс по id схлопывает
+    одноимённые записи разных судов, и «занявшим» оказывался случайный — так
+    иск Тагилстроевского суда заблокировал промоушен М-971/2026 в Асбестовском
+    (боевой прогон Урала 18.08.2026).
+
+    `exclude` — сама проверяемая запись: промоушен ищет ЧУЖОГО, иначе
+    полупромоутнутая запись (id ещё «М-», fi.case_number уже «2-») заблокирует
+    сама себя навсегда.
+    """
+    dom = (domain or "").strip().lower()
+    num = (number or "").strip()
+    if not dom or not num:
+        return None
+    ntd = _fi_name_to_domain()
+    for case in cases:
+        if exclude is not None and case is exclude:
+            continue
+        if case_court_key(case, ntd)[0] != dom:
+            continue
+        fi = case.get("first_instance") or {}
+        own = {
+            (case.get("id") or "").strip(),
+            (fi.get("case_number") or "").strip(),
+        }
+        own.discard("")
+        if num in own:
+            return case
+    return None
+
+
 def dedupe_new_archive_entries(
     archived_cases: list[dict], newly_archived: list[dict]
 ) -> list[dict]:

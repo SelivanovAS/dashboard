@@ -85,6 +85,7 @@ from court_monitor.lifecycle import (
 )
 from court_monitor.linking import (
     collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
+    fi_case_by_court_number,
     dedupe_new_archive_entries, find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, reactivate_bank_archived,
     relink_awaiting_relink_first_instance,
@@ -3393,12 +3394,57 @@ def main_json():
             and card_fi_num != cur_id
             and re.match(r'^\d+-\d+/\d{4}$', card_fi_num)
         ):
-            collide = case_by_id.get(card_fi_num)
-            if collide is not None and collide is not case_j:
-                log.warning(
-                    f"  Промоушен по карточке пропущен: {cur_id} → {card_fi_num} "
-                    f"(номер уже занят другим делом)"
+            # Номера дел НЕ уникальны между судами (см. collect_fi_dedup_index):
+            # ключ занятости — ПАРА «суд + номер». Голый case_by_id давал ложную
+            # коллизию с чужим судом (иск Тагилстроевского 2-1145/2026 блокировал
+            # промоушен М-971/2026 в Асбестовском, боевой прогон Урала
+            # 18.08.2026) и одновременно СЛЕПОТУ к своему: словарь схлопывает
+            # одноимённые записи. Индекс прогона видит и архивы, и дела,
+            # заведённые этим же прогоном (в cases они вливаются только в конце).
+            cur_dom = court_cfg.domain
+            # Собственные номера записи: полупромоутнутая запись (id ещё «М-»,
+            # fi.case_number уже «2-») иначе блокирует сама себя навсегда.
+            _own_nums = {
+                cur_id,
+                (fi.get("case_number") or "").strip(),
+                (fi.get("material_number") or "").strip(),
+            }
+            if card_fi_num not in _own_nums and is_fi_number_tracked(
+                card_fi_num, cur_dom, fi_dedup_exact, fi_dedup_wildcard
+            ):
+                # Занявшего ищем только ради текста: гард стоит на множестве пар,
+                # имён оно не хранит. Не нашёлся среди активных — номер держит
+                # архив или находка этого же прогона.
+                occupied_by = fi_case_by_court_number(
+                    cases, cur_dom, card_fi_num, exclude=case_j
                 )
+                if occupied_by is not None:
+                    _occ_fi = occupied_by.get("first_instance") or {}
+                    _occ_track = (
+                        "иски банка"
+                        if occupied_by.get("track") == "plaintiff_light"
+                        else "основная"
+                    )
+                    _occ_sides = " — ".join(
+                        p for p in (
+                            shorten_party_name(occupied_by.get("plaintiff") or ""),
+                            shorten_party_name(occupied_by.get("defendant") or ""),
+                        ) if p
+                    )
+                    log.warning(
+                        f"  Промоушен по карточке пропущен: {cur_id} → "
+                        f"{card_fi_num} — номер уже занят активным делом того же "
+                        f"суда ({shorten_court_name(_occ_fi.get('court') or '')}, "
+                        f"картотека «{_occ_track}»"
+                        + (f", {_occ_sides}" if _occ_sides else "")
+                        + "); проверьте вручную"
+                    )
+                else:
+                    log.warning(
+                        f"  Промоушен по карточке пропущен: {cur_id} → "
+                        f"{card_fi_num} — номер занят записью того же суда "
+                        f"({_short_court}) в архиве или заведённой этим прогоном"
+                    )
             else:
                 log.info(f"  Промоушен по карточке: {cur_id} → {card_fi_num}")
                 # М-номер сохраняем как алиас — иначе ★ юриста на материале
@@ -3411,6 +3457,13 @@ def main_json():
                 case_by_id[card_fi_num] = case_j
                 existing_ids.discard(cur_id)
                 existing_ids.add(card_fi_num)
+                # Гард выше стоит на индексе — держим его правдивым до конца
+                # прогона, иначе два материала одного суда, промоутящихся в
+                # один номер, дадут дубль. М-номер НЕ снимаем: он остаётся
+                # алиасом material_number, а его collect_fi_dedup_index
+                # индексирует наравне с номером дела — при пересборке он
+                # вернётся, и заведение дубля по нему обязано блокироваться.
+                fi_dedup_exact.add((cur_dom, card_fi_num))
                 # Метка для события «принято к производству, заседание не
                 # назначено» (см. search-time промоушен выше).
                 if not fi.get("accepted_emitted"):
