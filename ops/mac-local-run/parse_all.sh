@@ -26,19 +26,14 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER="$HERE/parse_and_push.sh"
 IMPORTER="$HERE/import_dumps.sh"
-LIST="$HOME/.config/court-monitor/territories"
-DEFAULT_REPO="/Users/aleksandrselivanov/dashboard"
+. "$HERE/lib_sber_net.sh"
 
+# Список клонов — cm_territories (общий с import_all.sh; копия списка уже
+# дважды была причиной молчаливых поломок резерва).
 repos=()
-if [ -f "$LIST" ]; then
-  while IFS= read -r line; do
-    line="${line%%#*}"                       # срезать комментарий
-    line="$(echo "$line" | xargs)"           # обрезать пробелы
-    [ -n "$line" ] || continue
-    repos+=("$line")
-  done < "$LIST"
-fi
-[ ${#repos[@]} -gt 0 ] || repos=("$DEFAULT_REPO")
+while IFS= read -r line; do
+  repos+=("$line")
+done < <(cm_territories)
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: территорий ${#repos[@]}"
 

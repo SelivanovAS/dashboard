@@ -168,6 +168,26 @@ cm_clear_court_routes() {
   return 0
 }
 
+# ── Список клонов территорий ─────────────────────────────────────────────────
+# Файл ~/.config/court-monitor/territories: по строке на клон, «#» — коммент.
+# Нет файла → только ~/dashboard (прежняя установка не меняется). Печатает
+# пути построчно. ОДНО место на оба драйвера (parse_all и import_all): копия
+# списка — ровно тот класс поломки, которым резерв уже болел (файлы данных,
+# домены судов, jq-пейлоад).
+cm_territories() {
+  local list="$HOME/.config/court-monitor/territories" line n=0
+  if [ -f "$list" ]; then
+    while IFS= read -r line; do
+      line="${line%%#*}"
+      line="$(echo "$line" | xargs)"
+      [ -n "$line" ] || continue
+      printf '%s\n' "$line"
+      n=$((n + 1))
+    done < "$list"
+  fi
+  [ "$n" -gt 0 ] || printf '%s\n' "/Users/aleksandrselivanov/dashboard"
+}
+
 # ── Алерт о сбое в Telegram ──────────────────────────────────────────────────
 # В облаке это делает шаг `if: failure()` в update_cases.yml; на Mac
 # уведомление на экране видно только если юрист за машиной — прогон идёт в

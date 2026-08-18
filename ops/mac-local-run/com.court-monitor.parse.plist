@@ -6,10 +6,24 @@
   Зовёт parse_all.sh — он прогоняет ВСЕ территории подряд (список клонов
   в ~/.config/court-monitor/territories; нет файла = только ~/dashboard).
 
-  Время — ЛОКАЛЬНОЕ (этот Mac на +05, Ханты-Мансийск). 08:00 местного ≈
-  06:00 МСК. LaunchAgent досрабатывает при пробуждении/входе, если в 08:00
-  Mac спал или ты не был залогинен. Поменять время — Hour/Minute ниже.
-  Weekday: 1=Пн … 5=Пт.
+  Время — ЛОКАЛЬНОЕ (этот Mac на +05). LaunchAgent досрабатывает при
+  пробуждении/входе, если в назначенный час Mac спал или ты не был
+  залогинен. Поменять время — Hour/Minute ниже. Weekday: 1=Пн … 5=Пт.
+
+  ⚠️ 09:00 и 11:00, а НЕ 08:00 — агент работает ВТОРЫМ СЛОЕМ, после облака.
+  Крон Cloudflare ходит в 03:00 UTC (Урал) и 03:30 UTC (ХМАО) = 08:00 и
+  08:30 местного, прогон занимает ~15-30 минут. Запускаться с ними в один час
+  нельзя: две машины сделали бы одну работу и обе запушили, а у Mac-коммита
+  маркер «(Mac-парсинг)», по которому replay_on_push рассылает дайджест, —
+  юрист и коллеги получили бы его дважды. Гейт в parse_and_push.sh
+  (cloud_run_ok.py по журналу здоровья) выпускает Mac ТОЛЬКО когда облачный
+  прогон был слепым (адрес раннера заблокирован — все источники по нулям)
+  или не состоялся; при зрячем облаке агент выходит за секунды без коммита.
+
+  Второй слот 11:00 — страховка «Mac спал в 09:00» (18.08.2026: агент не
+  сработал ни разу за день, runs = 0 — машина спала в момент слота, и
+  launchd пропуск не догнал). При удачном 09:00 или зрячем облаке гейт
+  превращает 11:00 в тихий «пропуск».
 -->
 <plist version="1.0">
 <dict>
@@ -24,11 +38,16 @@
 
     <key>StartCalendarInterval</key>
     <array>
-        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>EnvironmentVariables</key>
