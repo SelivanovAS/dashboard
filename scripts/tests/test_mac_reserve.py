@@ -134,10 +134,11 @@ class TestTerritories:
             "хост пробы захардкожен на ХМАО — форк стучался бы в чужой суд"
         assert "appeal_courts[0].domain" in lib
 
-    def test_driver_defaults_to_single_repo(self, driver):
-        """Файла territories нет → прежняя установка не меняется."""
-        assert "territories" in driver
-        assert 'repos=("$DEFAULT_REPO")' in driver
+    def test_driver_defaults_to_single_repo(self, lib):
+        """Файла territories нет → прежняя установка не меняется. Дефолт
+        живёт в cm_territories (общий для parse_all и import_all)."""
+        assert "court-monitor/territories" in lib
+        assert '"/Users/aleksandrselivanov/dashboard"' in lib
 
     def test_driver_survives_one_broken_territory(self, driver):
         """Лежащий Урал не должен лишать юриста дайджеста по ХМАО."""

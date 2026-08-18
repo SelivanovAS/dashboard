@@ -308,8 +308,17 @@
 3. Дайджест-на-push уже разбужен (16.08.2026): `replay_on_push.yml` стоит с
    `if: github.actor != 'github-actions[bot]'`. Пока крон жив, условие
    безвредно — он пушит под актором `github-actions[bot]`.
-4. Разбудить Mac: плист из `.disabled` + `launchctl load
-   ~/Library/LaunchAgents/com.court-monitor.parse.plist`.
+4. Mac уже разбужен (18.08.2026): агенты `com.court-monitor.parse` (будни
+   09:00 и 11:00) и `com.court-monitor.import` (будни 10:30–18:30 каждые
+   2 часа) загружены. **Гейт подстраховки** (`ops/mac-local-run/cloud_run_ok.py`,
+   зовёт parse_and_push ПОСЛЕ git pull и ДО пробы судов): зрячий облачный
+   прогон сегодня уже был → Mac тихо выходит (иначе двойной дайджест);
+   слепой (все источники журнала здоровья по нулям — адрес раннера
+   заблокирован) или прогона не было → Mac парсит сам. `--force` (пульт)
+   обходит гейт, `--anywhere` — работа вне сети Сбера (честная проба судов
+   решает). Пульт юриста — `ops/mac-local-run/СберСуд-пульт.command`
+   (парсинг/дампы руками + живой лог). Стражи —
+   [scripts/tests/test_mac_launchers.py](scripts/tests/test_mac_launchers.py).
 
 ⚠️ **Резерв обслуживает ОБЕ территории с 16.08.2026** (`ops/mac-local-run/parse_all.sh`
 → `parse_and_push.sh <клон>` подряд; список клонов — `~/.config/court-monitor/territories`
