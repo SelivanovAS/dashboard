@@ -25,6 +25,25 @@ PYTHON="/usr/bin/python3"
 CONF_DIR="$HOME/.config/court-monitor"
 AGENTS_DIR="$HOME/Library/LaunchAgents"
 
+# ── Цвет и заголовок окна (только в настоящем терминале) ─────────────────────
+# Вне tty (пайп теста, launchd) — голый текст: escape-мусор в логах хуже
+# отсутствия цвета. Красим ЗНАКИ статуса, не абзацы: ✓ зелёный, ✗ красный,
+# ⚠ и «?» жёлтые — статус читается с одного взгляда.
+if [ -t 1 ] && [ -n "${TERM:-}" ]; then
+  C_OK=$'\033[32m'; C_BAD=$'\033[31m'; C_WARN=$'\033[33m'
+  C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
+  printf '\033]0;СберСуд\007'   # имя вкладки Терминала
+else
+  C_OK=""; C_BAD=""; C_WARN=""; C_DIM=""; C_OFF=""
+fi
+
+paint() {  # красит статусные знаки в строках stdin
+  sed -e "s/✓/${C_OK}✓${C_OFF}/g" \
+      -e "s/✗/${C_BAD}✗${C_OFF}/g" \
+      -e "s/⚠/${C_WARN}⚠${C_OFF}/g" \
+      -e "s/дампов ждёт: \([1-9][0-9]*\)/дампов ждёт: ${C_WARN}\1${C_OFF}/g"
+}
+
 repos=()
 while IFS= read -r line; do
   repos+=("$line")
@@ -106,15 +125,15 @@ show_menu() {
     1) wd="понедельник" ;; 2) wd="вторник" ;; 3) wd="среда" ;; 4) wd="четверг" ;;
     5) wd="пятница" ;; 6) wd="суббота" ;; *) wd="воскресенье" ;;
   esac
-  echo "══════════════════════════ СберСуд · пульт резерва ══════════════════════════"
-  echo "Сегодня $wd, $(date '+%d.%m %H:%M')"
+  echo "${C_DIM}══════════════════════════${C_OFF} СберСуд · пульт резерва ${C_DIM}══════════════════════════${C_OFF}"
+  echo "${C_DIM}Сегодня $wd, $(date '+%d.%m %H:%M')${C_OFF}"
   echo
-  cat "$HEADER" 2>/dev/null
+  cat "$HEADER" 2>/dev/null | paint
   echo
-  echo "  [1] Запустить парсинг сейчас (обе территории, даже если облако отработало)"
+  echo "  [1] Запустить парсинг сейчас (спросит: обе территории или одна)"
   echo "  [2] Подобрать дампы сейчас (только потерянное облаком)"
   echo "  [3] Смотреть живой лог (что идёт прямо сейчас)"
-  echo "  [4] Проверка: сеть · суды · настройки"
+  echo "  [4] Проверка: проба судов · сеть · настройки"
   echo "  [5] Включить/починить автоматику"
   echo "  [6] Открыть дашборд и админку в браузере"
   echo "  [0] Выход"
@@ -150,13 +169,46 @@ print(1 if is_russian_working_day(datetime.date.today()) else 0)' 2>/dev/null); 
           esac
         fi
       fi
+      # Отдельный запуск территории (просьба юриста 18.08.2026): Enter — обе,
+      # цифра — только одна. Список строится из names — работает при любом
+      # числе территорий.
       echo
-      echo "Парсинг обеих территорий: 15–40 минут, строки бегут ниже."
+      echo "Какую территорию?"
+      echo "  Enter — все"
+      for k in "${!repos[@]}"; do
+        echo "  $((k + 1)) — только ${names[$k]}"
+      done
+      read -r -p "Выберите: " terr || terr=""
+      ONE_REPO=""; ONE_NAME=""
+      if [ -n "$terr" ]; then
+        idx=$((terr - 1)) 2>/dev/null || idx=-1
+        if [ "$idx" -ge 0 ] 2>/dev/null && [ "$idx" -lt "${#repos[@]}" ]; then
+          ONE_REPO="${repos[$idx]}"
+          ONE_NAME="${names[$idx]}"
+        else
+          echo "Не понял: «$terr». Отменено."; pause; continue
+        fi
+      fi
+      # Логи для tail — массивом ОТНОСИТЕЛЬНЫХ имён (в именах пробелы, голый
+      # глоб в подстановке разорвался бы по словам), tail из каталога
+      # симлинков — заголовки остаются короткими русскими.
+      tail_files=()
+      if [ -n "$ONE_NAME" ]; then
+        tail_files=("${ONE_NAME} — парсинг.log")
+      else
+        for f in "$LOGVIEW/"*"— парсинг.log"; do tail_files+=("$(basename "$f")"); done
+      fi
+      echo
+      echo "Парсинг: ${ONE_NAME:-все территории}. Это 10–40 минут, строки бегут ниже."
       echo "Прервать и вернуться в меню — ⌘. (уже сделанное не потеряется)."
       echo "──────────────────────────────────────────────────────────────"
-      ( cd "$LOGVIEW" && exec tail -n 0 -F *"— парсинг.log" ) 2>/dev/null &
+      ( cd "$LOGVIEW" && exec tail -n 0 -F "${tail_files[@]}" ) 2>/dev/null &
       TAIL_PID=$!
-      bash "$HERE/parse_all.sh" --force --anywhere $CAL_FLAG
+      if [ -n "$ONE_REPO" ]; then
+        bash "$HERE/parse_and_push.sh" "$ONE_REPO" --force --anywhere $CAL_FLAG
+      else
+        bash "$HERE/parse_all.sh" --force --anywhere $CAL_FLAG
+      fi
       kill "$TAIL_PID" 2>/dev/null
       echo "──────────────────────────────────────────────────────────────"
       echo "Готово. Если были изменения — дайджест соберёт и разошлёт GitHub."
@@ -182,8 +234,15 @@ print(1 if is_russian_working_day(datetime.date.today()) else 0)' 2>/dev/null); 
       ;;
     4)
       echo
+      echo "Выборочная проба судов (кассация · все апелляции · случайные 3+3+3"
+      echo "суда трёх зон, включая один суд Екатеринбурга) — ~20–30 секунд:"
+      echo "──────────────────────────────────────────────────────────────"
+      ( cd "${repos[0]}" && "$PYTHON" ops/mac-local-run/probe_sample.py 2>/dev/null ) | paint
+      echo
       echo "Проверка парсинга:"
       echo "──────────────────────────────────────────────────────────────"
+      # БЕЗ paint: log() скриптов печатает на экран только при живом
+      # терминале, а пайп его выключил бы — вывод пропал бы целиком.
       bash "$HERE/parse_all.sh" --check --anywhere
       echo
       echo "Проверка импорта дампов:"
