@@ -130,6 +130,7 @@ from court_monitor.linking import (  # noqa: F401 — ре-экспорт для
     reactivate_archived_first_instance, _cassation_card_to_block,
     link_cassation_cases, rotate_cold_archive, _fi_search_to_json_case,
     collect_existing_ids, case_court_key, dedupe_new_archive_entries,
+    fi_case_by_court_number,
 )
 # Патчабельные LLM-функции код фасада вызывает ТОЛЬКО как llm.X(...) —
 # тесты патчат court_monitor.digest.llm, патч виден во всех путях вызова.
