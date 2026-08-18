@@ -2017,6 +2017,52 @@ class TestCardPromotionGuardWiring:
         assert "shorten_court_name(" in block
 
 
+class TestSearchPromotionGuardWiring:
+    """Проводка гарда промоушена по СТРОКЕ ВЫДАЧИ (блок 3 main_json).
+
+    До 18.08.2026 эта ветка переименовывала безусловно — единственное место,
+    где промоушен шёл без проверки занятости. Если 2-номер уже заведён в том же
+    суде (импортёром/точечным добавлением), получались два активных дела с
+    одним (домен, id).
+    """
+
+    @staticmethod
+    def _block() -> str:
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        i = src.index("# Промоушен материала → 2-XXX")
+        return src[i:src.index("# Фильтр: только новые дела", i)]
+
+    def test_occupancy_checked_before_rename(self):
+        """Проверка обязана стоять ДО переименования, иначе она бесполезна."""
+        block = self._block()
+        assert "is_fi_number_tracked(" in block
+        i_guard = block.index("is_fi_number_tracked(")
+        i_rename = block.index('old["id"] = new_id')
+        assert i_guard < i_rename
+
+    def test_guard_is_court_aware(self):
+        assert "court.domain, fi_dedup_exact, fi_dedup_wildcard" in self._block()
+
+    def test_own_numbers_excluded(self):
+        """Полупромоутнутая запись не должна блокировать сама себя."""
+        assert "_own_nums" in self._block()
+
+    def test_material_number_stays_in_dedup_index(self):
+        """М-номер остаётся алиасом material_number и индексируется наравне с
+        номером дела — снимать его из индекса нельзя (обе ветки промоушена
+        ведут индекс одинаково)."""
+        block = self._block()
+        assert "fi_dedup_exact.discard(" not in block
+        assert "fi_dedup_exact.add((court.domain, new_id))" in block
+
+    def test_warning_names_the_occupier(self):
+        block = self._block()
+        assert "fi_case_by_court_number(" in block
+        assert "в том же суде" in block
+
+
 class TestRotateColdArchive:
     def _with_tmp_archive(self, monkeypatch, tmp_path):
         monkeypatch.setattr(

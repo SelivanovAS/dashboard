@@ -2913,6 +2913,36 @@ def main_json():
             if old_dom != court.domain:
                 continue
             new_id = r["case_number"]
+            # Занятость нового номера — ПАРОЙ «суд + номер», зеркало импортёра
+            # (import_search_dump: `not is_fi_number_tracked(num, domain, …)`) и
+            # карточной ветки промоушена ниже. Без проверки переименование шло
+            # безусловно: если 2-номер уже заведён в этом суде импортёром или
+            # точечным добавлением, получались два активных дела с одним
+            # (домен, id). Пропуск безопасен — фильтр new_fi ниже судо-зависим и
+            # отсеет строку как «уже отслеживается», дубля не будет, а попытка
+            # повторится следующим прогоном (М-записи не смарт-скипятся).
+            _own_nums = {
+                (old.get("id") or "").strip(),
+                ((old.get("first_instance") or {}).get("case_number") or "").strip(),
+                ((old.get("first_instance") or {}).get("material_number") or "").strip(),
+            }
+            if new_id not in _own_nums and is_fi_number_tracked(
+                new_id, court.domain, fi_dedup_exact, fi_dedup_wildcard
+            ):
+                _occ = fi_case_by_court_number(
+                    cases, court.domain, new_id, exclude=old
+                )
+                _occ_where = (
+                    f"активным делом ({shorten_court_name((_occ.get('first_instance') or {}).get('court') or '')}, "
+                    f"картотека «{'иски банка' if _occ.get('track') == 'plaintiff_light' else 'основная'}»)"
+                    if _occ is not None
+                    else "записью в архиве или заведённой этим прогоном"
+                )
+                log.warning(
+                    f"  Промоушен материала пропущен: {mat} → {new_id} — "
+                    f"номер уже занят {_occ_where} в том же суде; проверьте вручную"
+                )
+                continue
             log.info(f"  Промоушен материала: {mat} → {new_id}")
             old["id"] = new_id
             fi = old.setdefault("first_instance", {})
@@ -2938,7 +2968,12 @@ def main_json():
             case_by_id[new_id] = old
             existing_ids.discard(mat)
             existing_ids.add(new_id)
-            fi_dedup_exact.discard((court.domain, mat))
+            # М-номер из индекса НЕ снимаем (как и карточная ветка): он остаётся
+            # алиасом material_number, а collect_fi_dedup_index индексирует его
+            # наравне с номером дела — при следующей пересборке пара вернётся.
+            # Прежний discard делал индекс дырявее, чем он будет через минуту:
+            # строка выдачи с голым М-номером выглядела неотслеживаемой и могла
+            # завести дубль-материал.
             fi_dedup_exact.add((court.domain, new_id))
             _bare_new = new_id.split("(")[0].strip()
             if _bare_new != new_id:
