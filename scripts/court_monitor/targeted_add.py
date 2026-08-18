@@ -426,15 +426,24 @@ def save_state(state: dict) -> list[str]:
 
 # ── Сборка записей ───────────────────────────────────────────────────────────
 
-def build_main_entry(row: dict, operator: str, now_iso: str) -> dict:
+def build_main_entry(
+    row: dict, operator: str, now_iso: str, card_info: dict | None = None,
+) -> dict:
     """Запись основной картотеки — байт-в-байт зеркало импортёра дампов:
     _fi_search_to_json_case (events: [] → первый парс карточки идёт штатным
     first_parse со stale-гардами, паводка catch-up событий нет) + srv_num из
     href поверх конфига + блок import БЕЗ announced — announce_imported_cases
-    объявит дело «новым иском» ближайшим прогоном ровно один раз."""
+    объявит дело «новым иском» ближайшим прогоном ровно один раз.
+
+    `card_info` нужен только ради УИД: остальные поля записи намеренно берутся
+    со строки поиска. Единственный из четырёх каналов заведения, что не идёт
+    через build_json_entry, — потому УИД штампуется здесь отдельно."""
     entry = _fi_search_to_json_case(row)
     if row.get("href_srv_num"):
         entry["first_instance"]["srv_num"] = row["href_srv_num"]
+    uid_card = ((card_info or {}).get("УИД") or "").strip()
+    if uid_card:
+        entry["first_instance"]["judicial_uid"] = uid_card
     entry["import"] = {"operator": operator, "at": now_iso, "source": "targeted"}
     return entry
 
@@ -750,7 +759,7 @@ def process_item(
             f"[ADDED] {num} · Истец · {parties} · {court.name} → иски банка"
         ), case_number=num, court=court.name, court_domain=domain)
 
-    entry = build_main_entry(row, operator, now_iso)
+    entry = build_main_entry(row, operator, now_iso, card_info)
     state["main"].setdefault("cases", []).insert(0, entry)
     state["dirty"].add("main")
     note = "" if card_info else " (карточка недоступна — дозаполнит прогон)"

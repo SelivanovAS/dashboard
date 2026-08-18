@@ -101,7 +101,7 @@ def determine_bank_role(plaintiff: str, defendant: str) -> str | None:
 def build_json_entry(fi_row: dict, card_info: dict) -> dict:
     """Собрать JSON-запись для cases.json из поисковой строки + карточки."""
     case_number = fi_row["case_number"]
-    return {
+    entry = {
         "id": case_number,
         "current_stage": "first_instance",
         "plaintiff": fi_row["plaintiff"],
@@ -128,3 +128,13 @@ def build_json_entry(fi_row: dict, card_info: dict) -> dict:
         },
         "appeal": None,
     }
+    # УИД дела (сквозной для всех инстанций) — общая точка ТРЁХ каналов
+    # заведения: авто-подхват исков банка, импортёр дампов и точечное
+    # добавление в трек собирают запись здесь.
+    # ⚠️ Пустым ключ НЕ кладём: _apply_main_card импортёра накладывает результат
+    # безусловным fi.update(...), и пустая строка затёрла бы уже сохранённый
+    # УИД — контракт «update сохраняет ключи, которых он не кладёт».
+    uid_card = (card_info.get("УИД") or "").strip()
+    if uid_card:
+        entry["first_instance"]["judicial_uid"] = uid_card
+    return entry
