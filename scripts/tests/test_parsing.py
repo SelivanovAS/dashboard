@@ -215,6 +215,18 @@ class TestParseCaseCard:
         assert "архив" in info["Последнее событие"].lower()
         assert info["Дата события"] == "20.03.2026"
 
+    def test_first_instance_judicial_uid(self):
+        """УИД — сквозной идентификатор дела для всех инстанций. Парсер снимал
+        его всегда, но до 18.08.2026 это не проверялось ни одним ассертом."""
+        info = uc.parse_case_card(_read_fixture("case_card_first_instance.html"))
+        assert info["УИД"] == "86RS0014-01-2025-001234-56"
+
+    def test_truncated_card_still_has_uid(self):
+        """Карточка-«огрызок» УИД тоже несёт — на нём стоит детектор «живая
+        карточка, а не заглушка», поэтому писать УИД безопасно и с неё."""
+        info = uc.parse_case_card(_read_fixture("case_card_truncated.html"))
+        assert info["УИД"] == "86RS0005-01-2025-004661-44"
+
     def test_first_instance_hearing_date_and_time(self):
         html = _read_fixture("case_card_first_instance.html")
         info = uc.parse_case_card(html)
@@ -2015,6 +2027,86 @@ class TestCardPromotionGuardWiring:
         assert "fi_case_by_court_number(" in block
         assert "того же суда" in block
         assert "shorten_court_name(" in block
+
+
+class TestJudicialUidWiring:
+    """УИД дела 1-й инстанции: писатели и защита от затирания.
+
+    До 18.08.2026 парсер снимал УИД с каждой карточки, а FI-цикл его
+    выбрасывал — поле появлялось только бэкфиллом с апелляционной карточки,
+    и УИД-мост link_cassation_cases не видел ни дел стадии first_instance,
+    ни 1218 записей трека «Иски банка».
+    """
+
+    @staticmethod
+    def _runs_src() -> str:
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_fi_cycle_writes_uid(self):
+        assert 'fi["judicial_uid"] = uid_card' in self._runs_src()
+
+    def test_uid_written_after_empty_shell_gate(self):
+        """Писать УИД можно только после жёсткого гейта «страница без таблиц»."""
+        src = self._runs_src()
+        i_gate = src.index("if card_is_empty_shell(card_info):")
+        i_uid = src.index('fi["judicial_uid"] = uid_card', i_gate)
+        assert i_gate < i_uid
+
+    def test_fi_cycle_uid_is_fill_once(self):
+        """Дословно как у двух других писателей: непустое не перезаписываем —
+        УИД принадлежит ДЕЛУ, расхождение было бы сигналом бага."""
+        src = self._runs_src()
+        i_uid = src.index('fi["judicial_uid"] = uid_card')
+        head = src[i_uid - 200:i_uid]
+        assert 'not (fi.get("judicial_uid") or "").strip()' in head
+
+    @staticmethod
+    def _row() -> dict:
+        return {
+            "case_number": "2-1/2026", "plaintiff": "ПАО Сбербанк",
+            "defendant": "Иванов И.И.", "category": "прочие", "bank_role": "Истец",
+            "court": "Асбестовский городской суд",
+            "court_domain": "asbestovsky--svd.sudrf.ru",
+            "judge": "Петров П.П.", "filing_date": "01.08.2026",
+            "status": "В производстве", "result": "", "link": "1|abc",
+        }
+
+    def test_build_json_entry_stamps_uid(self):
+        """Общая точка ТРЁХ каналов заведения (авто-подхват исков банка,
+        импортёр дампов, точечное добавление в трек)."""
+        from court_monitor.target_search import build_json_entry
+        entry = build_json_entry(
+            self._row(), {"УИД": "86RS0014-01-2025-001234-56"})
+        assert entry["first_instance"]["judicial_uid"] == "86RS0014-01-2025-001234-56"
+
+    def test_build_json_entry_omits_empty_uid(self):
+        """⚠️ Ключа быть НЕ должно: _apply_main_card импортёра накладывает
+        результат безусловным fi.update(...), и пустая строка затёрла бы уже
+        сохранённый УИД."""
+        from court_monitor.target_search import build_json_entry
+        entry = build_json_entry(self._row(), {})
+        assert "judicial_uid" not in entry["first_instance"]
+
+    def test_empty_card_does_not_wipe_stored_uid(self):
+        """Регресс на ту же ловушку — в форме, в которой она проявилась бы."""
+        from court_monitor.target_search import build_json_entry
+        fi = {"case_number": "2-1/2026",
+              "judicial_uid": "86RS0014-01-2025-001234-56"}
+        fi.update(build_json_entry(self._row(), {})["first_instance"])
+        assert fi["judicial_uid"] == "86RS0014-01-2025-001234-56"
+
+    def test_targeted_main_entry_stamps_uid(self):
+        """Четвёртый канал — точечное добавление в основную картотеку — идёт
+        мимо build_json_entry, УИД штампуется у него отдельно."""
+        from court_monitor.targeted_add import build_main_entry
+        entry = build_main_entry(
+            self._row(), "Тест", "2026-08-18T10:00:00",
+            {"УИД": "86RS0014-01-2025-001234-56"})
+        assert entry["first_instance"]["judicial_uid"] == "86RS0014-01-2025-001234-56"
+        assert "judicial_uid" not in build_main_entry(
+            self._row(), "Тест", "2026-08-18T10:00:00")["first_instance"]
 
 
 class TestSearchPromotionGuardWiring:
