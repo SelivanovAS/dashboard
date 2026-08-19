@@ -10,20 +10,23 @@
   пробуждении/входе, если в назначенный час Mac спал или ты не был
   залогинен. Поменять время — Hour/Minute ниже. Weekday: 1=Пн … 5=Пт.
 
-  ⚠️ 09:00 и 11:00, а НЕ 08:00 — агент работает ВТОРЫМ СЛОЕМ, после облака.
-  Крон Cloudflare ходит в 03:00 UTC (Урал) и 03:30 UTC (ХМАО) = 08:00 и
-  08:30 местного, прогон занимает ~15-30 минут. Запускаться с ними в один час
-  нельзя: две машины сделали бы одну работу и обе запушили, а у Mac-коммита
-  маркер «(Mac-парсинг)», по которому replay_on_push рассылает дайджест, —
-  юрист и коллеги получили бы его дважды. Гейт в parse_and_push.sh
-  (cloud_run_ok.py по журналу здоровья) выпускает Mac ТОЛЬКО когда облачный
-  прогон был слепым (адрес раннера заблокирован — все источники по нулям)
-  или не состоялся; при зрячем облаке агент выходит за секунды без коммита.
+  ⏸ С 19.08.2026 облачный крон ВЫКЛЮЧЕН (crons = [] в wrangler.toml обеих
+  территорий — лотерея адресов раннеров), и этот агент — ОСНОВНОЙ путь
+  парсинга. Слоты каждые 30 минут с 08:00 до 11:00 (решение юриста
+  19.08.2026): лишние запуски бесплатны — гейт cloud_run_ok.py по журналу
+  здоровья видит уже состоявшийся зрячий прогон (свой же утренний или
+  облачный, если крон включат обратно) и выходит за секунды, а лок на клон
+  не пускает второй прогон параллельно первому. Плотная сетка добивает
+  сорвавшуюся пробу судов (19.08.2026 проба ХМАО дважды отбита сбросом
+  соединения — прошла с третьего раза) и «Mac проснулся позже».
 
-  Второй слот 11:00 — страховка «Mac спал в 09:00» (18.08.2026: агент не
-  сработал ни разу за день, runs = 0 — машина спала в момент слота, и
-  launchd пропуск не догнал). При удачном 09:00 или зрячем облаке гейт
-  превращает 11:00 в тихий «пропуск».
+  Ключ «anywhere» в аргументах (19.08.2026): агент больше не требует сети
+  Сбера. В офисе поведение прежнее (преflight «в сети Сбера» проверяется
+  первым и строит маршруты судов мимо VPN), вне офиса маршруты не строятся
+  и честная проба судов решает, есть ли доступ. Без ключа агент 19.08.2026
+  пропустил оба слота («не в сети Сбера» — Mac был дома), и всё
+  запускалось руками. (В XML-комментарии нельзя писать двойной дефис —
+  потому здесь ключ назван словом, а не как в аргументах ниже.)
 -->
 <plist version="1.0">
 <dict>
@@ -34,15 +37,41 @@
     <array>
         <string>/bin/bash</string>
         <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/parse_all.sh</string>
+        <string>--anywhere</string>
     </array>
 
     <key>StartCalendarInterval</key>
     <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
