@@ -122,11 +122,16 @@ class TestGateWiring:
 
 class TestAgentSchedules:
     def test_parse_slots(self):
-        """09:00 — после облачных кронов (08:00/08:30 + ~15-30 мин прогона);
-        11:00 — страховка «Mac спал в 09:00» (18.08.2026: runs=0 за день).
-        Гейт делает лишний слот тихим пропуском."""
+        """С 19.08.2026 облачный крон ВЫКЛЮЧЕН (crons = [] в wrangler.toml
+        обеих территорий) и агент — основной путь парсинга: слоты каждые
+        30 минут с 08:00 до 11:00 (решение юриста). Лишние запуски бесплатны
+        — гейт cloud_run_ok видит уже состоявшийся зрячий прогон, лок на клон
+        не пускает параллель; плотная сетка добивает сорвавшуюся пробу судов
+        (19.08.2026: проба ХМАО прошла с третьего раза) и поздний старт Mac."""
         assert _slots(PARSE_PLIST) == {
-            (w, h, 0) for w in range(1, 6) for h in (9, 11)}
+            (w, h, m) for w in range(1, 6)
+            for h, m in ((8, 0), (8, 30), (9, 0), (9, 30),
+                         (10, 0), (10, 30), (11, 0))}
 
     def test_import_slots(self):
         """Расписание юриста (18.08.2026): будни 10:30–18:30 каждые 2 часа —
@@ -139,6 +144,17 @@ class TestAgentSchedules:
             assert "parse_all.sh" in plistlib.load(f)["ProgramArguments"][1]
         with open(IMPORT_PLIST, "rb") as f:
             assert "import_all.sh" in plistlib.load(f)["ProgramArguments"][1]
+
+    def test_agents_run_anywhere(self):
+        """--anywhere у ОБОИХ агентов (19.08.2026): без флага агент требовал
+        сети Сбера — 19.08 оба слота пропущены («не в сети Сбера», Mac был
+        дома), парсинг и очередь дампов запускались руками. В офисе флаг
+        поведения не меняет (преflight «в сети Сбера» первым и строит
+        маршруты), вне офиса честная проба судов решает, есть ли доступ."""
+        for path in (PARSE_PLIST, IMPORT_PLIST):
+            with open(path, "rb") as f:
+                args = plistlib.load(f)["ProgramArguments"]
+            assert "--anywhere" in args, f"{os.path.basename(path)} без --anywhere"
 
     def test_import_agent_has_own_logs(self):
         with open(IMPORT_PLIST, "rb") as f:
