@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-18T04:41:06",
+  "updated_at": "2026-08-19T03:38:47",
   "cases": [
     {
       "id": "33-5888/2026",
@@ -45,7 +45,8 @@
         "act_date": "",
         "appellant": "",
         "events": []
-      }
+      },
+      "initial_bank_role": "Истец"
     },
     {
       "id": "33-5852/2026",
