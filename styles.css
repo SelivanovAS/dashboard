@@ -128,6 +128,11 @@
   --fg-3: var(--gray-600);   /* WCAG AA на белом ~7:1 (был gray-500 ~3.8:1) */
   --fg-4: var(--gray-500);   /* для совсем «тихого» текста, был gray-400 */
 
+  /* Шеврон селекта «Суд» (см. .court-select): цвет зашит в data-URI, var()
+     внутри url() не работает — поэтому токен объявлен в ОБЕИХ темах.
+     Цвет = --fg-2 соответствующей темы. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232d333d' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
   --bg-1: var(--white);       /* поверхности */
   --bg-2: #eceef2;            /* фон страницы — серее, чем gray-50 */
   --bg-3: var(--gray-100);    /* hover, чипы */
@@ -351,6 +356,9 @@
   --fg-2: #c5c8cf;
   --fg-3: #a8aeba;   /* было #8c92a0 — поднято для AA на тёмном bg-1 */
   --fg-4: #80868f;   /* было #6b7280 — слабый текст всё ещё читаем */
+
+  /* Шеврон селекта «Суд» — тёмный вариант (--fg-2 этой темы). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c5c8cf' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   --bg-1: #181c22;       /* поверхности (карточки, таблицы) */
   --bg-2: #0f1217;       /* фон страницы */
@@ -766,7 +774,12 @@ body {
 .filter-select { padding:7px 14px; border:1px solid var(--border); border-radius:var(--radius-pill); font-size:var(--fs-sm); background:var(--bg-1); color:var(--fg-1); cursor:pointer; font-family:var(--font-sans); font-weight:var(--fw-medium); transition:border-color 120ms var(--ease-out); }
 .filter-select:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 /* Фильтр «Суд»: нативный select в ряду сегментов. Ширину ограничиваем,
-   длинное имя браузер сам режет многоточием; полное имя — в title. */
+   длинное имя браузер сам режет многоточием; полное имя — в title.
+   Нативную стрелку браузеры рисуют мимо стиля (Safari — двойная «⌃⌄» на
+   прямоугольнике с прямыми углами, Chrome — прижимает к скруглению пилюли):
+   appearance:none снимает браузерный вид, стрелку даёт фоновый SVG токеном
+   --select-chevron (объявлен в обеих темах — var() внутри url() не работает). */
+.court-select { -webkit-appearance:none; appearance:none; background-image:var(--select-chevron); background-repeat:no-repeat; background-position:right 13px center; background-size:14px 14px; padding-right:34px; }
 .chip-bar-segments .court-select { max-width:300px; text-overflow:ellipsis; }
 
 /* ========== Chip filters ========== */

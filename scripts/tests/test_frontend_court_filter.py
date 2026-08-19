@@ -152,6 +152,15 @@ def test_css_rules_for_both_layouts():
     css = _read("styles.css")
     assert ".chip-bar-segments .court-select" in css
     assert ".sheet-body .court-select" in css
+    # Нативную стрелку браузеры рисуют мимо стиля (Safari — двойная «⌃⌄» на
+    # прямоугольнике): appearance:none обязателен, шеврон — токеном,
+    # объявленным в ОБЕИХ темах (var() внутри url() не работает).
+    rule = re.search(r"\.court-select \{[^}]*\}", css)
+    assert rule and "appearance:none" in rule.group(0)
+    assert "var(--select-chevron)" in rule.group(0)
+    dark_start = css.index(':root[data-theme="dark"]')
+    assert "--select-chevron:" in css[:dark_start], "нет светлого шеврона"
+    assert "--select-chevron:" in css[dark_start:], "нет тёмного шеврона"
 
 
 def test_cache_versions_in_sync():
