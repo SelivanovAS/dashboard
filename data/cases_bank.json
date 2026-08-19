@@ -4,7 +4,124 @@
   "archived_count": 26,
   "cases": [
     {
-      "id": "М-1816/2026",
+      "id": "М-7375/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Кириллова Татьяна Александровна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-7375/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Елшин Николай Александрович",
+        "filing_date": "17.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 18:14. 18.08.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "281404779|e60df8ae-ea69-43d0-b325-f705baa19de1",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2026-016118-80",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-19",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-08-19T09:32:43",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-5471/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Дмитриев Дмитрий Александрович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-5471/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Голубкина Т.В.",
+        "filing_date": "18.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 17:31. 18.08.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "281419223|a0004036-c751-48ba-ad69-65174af563e6",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2026-007940-82",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-19",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-08-19T09:32:58",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-5449/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Безоян Гакик Мисакович, ООО \"РУСЭШТИЯ\"",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-5449/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Безносов А.В.",
+        "filing_date": "17.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 12:53. 18.08.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "281362329|6be3ad83-5c35-4333-84dc-33fbf37f89a9",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0002-01-2026-007912-69",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-19",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-08-19T09:32:58",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "2-2143/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение №5940",
       "defendant": "Марипов Хусанбой Батиржанович",
@@ -12,24 +129,27 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-1816/2026",
+        "case_number": "2-2143/2026",
         "court": "Сургутский районный суд",
         "court_domain": "surgray--hmao.sudrf.ru",
         "judge": "Михайлова Е.Н.",
         "filing_date": "17.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 16:56. 17.08.2026",
-        "event_date": "17.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 09:00. каб. № 305. 18.08.2026",
+        "event_date": "23.09.2026",
+        "hearing_date": "23.09.2026",
+        "hearing_time": "09:00",
         "link": "281352413|7d854926-edd5-4828-8866-68f0940fa34c",
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-19",
+        "material_number": "М-1816/2026",
+        "accepted_pending_emit": false,
+        "judicial_uid": "86RS0005-01-2026-002901-05",
+        "legal_force_est": "2026-11-10"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -66,8 +186,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0005-01-2026-002900-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -104,9 +224,9 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18",
-        "intake_card_parse": true,
-        "legal_force_est": "2026-10-01"
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-10-01",
+        "judicial_uid": "86RS0002-01-2025-010133-83"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -143,8 +263,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-08-18",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0003-02-2026-000433-93"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -181,7 +301,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0004-01-2026-006575-94"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -258,7 +379,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007861-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -295,7 +417,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007860-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -332,7 +455,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007840-91"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -369,7 +493,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007839-94"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -406,7 +531,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007834-12"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -480,7 +606,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007742-94"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -678,7 +805,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0014-01-2026-000982-47"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -911,7 +1039,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0021-01-2026-000860-42"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1062,7 +1191,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0004-01-2026-015634-77"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1099,7 +1229,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0004-01-2026-015632-83"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1176,7 +1307,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "23RS0029-01-2026-002558-76"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1213,7 +1345,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0004-01-2026-015537-77"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1370,7 +1503,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0004-01-2026-015437-86"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1770,7 +1904,7 @@
         "default_judgment": true,
         "motivirovka_date": "09.07.2026",
         "default_copy_served_date": "21.07.2026",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "default_cancel_filed_emitted": "28.07.2026",
         "default_cancel_hearing_emitted": "10.08.2026",
         "act_text": "2-616/2026 86RS0007-01-2026-001618-62 ЗАОЧНОЕ РЕШЕНИЕ ИМЕНЕМ РОССИЙСКОЙ ФЕДЕРАЦИИ 9 июля 2026 года город Пыть-Ях Пыть-Яхский городской суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Дудыревой Ю.В., при секретаре Шваб К.Ю., рассмотрев в порядке заочного производства гражданское дело по иску ПАО Сбербанк к наследственному имуществу Рычкова Павла Николаевича, Рычковой Светлане Павловне, Максимовой Ольге Павловне, Рычкову Николаю Павловичу о взыскании задолженности по кредитному договору, УСТАНОВИЛ: ПАО \"Сбербанк\" обратилось в суд с иском к наследственному имуществу Рычкова П.Н. о взыскании задолженности по кредитному договору. Требования мотивированы тем, что ПАО Сбербанк и Рычков Павел Николаевич заключили договор от 11.08.2022 на предоставление возобновляемой кредитной линии посредством выдачи кредитной карты Сбербанка с предоставленным по ней кредитом и обслуживанием счета по данной карте в российских рублях. Указанный договор заключён в результате публичной оферты путем оформления Заемщиком заявления на получение кредитной карты Сбербанка. Во исполнение заключенного договора Заемщику была выдана кредитная карта МИР по эмиссионному контракту от 11.08.2022. Также Заемщику был открыт лицевой счет для отражения операций, проводимых с использованием кредитной карты в соответствии с заключенным договором. В соответствии с условиями выпуска и обслуживания кредитной карты ПАО Сбербанк, Условия в совокупности с Памяткой держателя карт ПАО Сбербанк, Памяткой по безопасности при использовании карт, Заявлением на получение карты, надлежащим образом заполненным и подписанным Заемщиком, Альбомом тарифов на услуги, предоставляемые ПАО Сбербанк физическим лицам, являются договором на выпуск и обслуживание банковской карты, открытие счета для учета операций с использованием карты и предоставление Заемщику возобновляемой кредитной линии для проведения операций по счету карты. Со всеми вышеуказанными документами Заемщик был ознакомлен и обязался их исполнять, о чем свидетельствует подпись в заявлении на получение карты. В соответствии с Условиями на сумму основного долга начисляются проценты за пользование кредитом по ставке и на условиях, определенных Тарифами Банка. Процентная ставка за пользование кредитом: 25.4 % годовых. Согласно Общим условиям, погашение кредита и уплата процентов за его использование осуществляется ежемесячно по частям (оплата суммы обязательного платежа) или полностью (оплата суммы общей задолженности) в соответствии с информацией, указанной в отчете, путем пополнения счета карты не позднее 30 календарных дней с даты формирования отчета по карте. Условиями предусмотрено, что за несвоевременное погашение обязательного платежа взимается неустойка в соответствии с Тарифами Банка. Сумма неустойки рассчитывается от остатка просроченного основного долга по ставке, установленной Тарифами Банка, и включается в сумму очередной обязательного платежа до полной оплаты Заемщиком всей суммы неустойки, рассчитанной по дату оплаты суммы просроченного основного долга в полном объеме. 29.06.2023 заемщик Рычков Павел Николаевич умер. Истец просит суд взыскать в пользу ПАО Сбербанк в пределах стоимости наследственного имущества Рычкова Павла Николаевича с наследников сумму задолженности по Кредитному договору от 11.08.2022 за период с 31.07.2023 по 16.12.2025 (включительно) в размере 95 652,90 руб., в том числе: - просроченные проценты - 30 585,55 руб., - просроченный основной долг - 65 067,35 руб., судебные расходы по оплате государственной пошлины в размере 4 000,00 руб. Всего взыскать 99 652 рублей 90 копеек. Определением суда к участию в деле привлечены в качестве ответчиков Рычкова С.П., Максимова О.П., Рычков Н.П. Дело рассмотрено в отсутствие истца ПАО \"Сбербанк\", ответчика Рычковой С.П., ответчика Максимовой О.П., ответчика Рычкова Н.П., по правилам ст.ст. 167, 233 ГПК РФ, извещались о времени и месте рассмотрения дела надлежащим образом. Изучив материалы дела, суд приходит к следующему. В соответствии со ст. 819 ГК РФ по кредитному договору банк или иная кредитная организация (кредитор) обязуются предоставить денежные средства заемщику в размере и на условиях, предусмотренных договором, а заемщик обязуется возвратить полученную денежную сумму и уплатить проценты на нее. В соответствие со ст. 810 ГК РФ заемщик обязан возвратить заимодавцу полученную сумму займа в срок и в порядке, которые предусмотрены законом. Заимодавец имеет право на получение с заемщика процентов на сумму займа в размере и в порядке, определенных договором (ст. 809 ГК РФ). Согласно ч. 2 ст. 811 ГК РФ если договором займа предусмотрено возвращение займа по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заемщик вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с причитающимися процентами. В соответствии со статьями 309, 310 Гражданского кодекса Российской Федерации обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, иных правовых актов, а при отсутствии таких условий и требований - в соответствии с обычаями или иными обычно предъявляемыми требованиями. Односторонний отказ от исполнения обязательства и одностороннее изменение его условий не допускаются, за исключением случаев, предусмотренных настоящим Кодексом, другими законами или иными правовыми актами. Как усматривается из материалов дела и установлено в судебном заседании, ПАО Сбербанк и Рычков Павел Николаевич заключили договор от 11.08.2022 на предоставление возобновляемой кредитной линии посредством выдачи кредитной карты Сбербанка с предоставленным по ней кредитом и обслуживанием счета по данной карте в российских рублях. Во исполнение заключенного договора Заемщику была выдана кредитная карта МИР по эмиссионному контракту от 11.08.2022. Также Заемщику был открыт лицевой счет для отражения операций, проводимых с использованием кредитной карты в соответствии с заключенным договором. В соответствии с условиями выпуска и обслуживания кредитной карты ПАО Сбербанк, Условия в совокупности с Памяткой держателя карт ПАО Сбербанк, Памяткой по безопасности при использовании карт, Заявлением на получение карты, надлежащим образом заполненным и подписанным Заемщиком, Альбомом тарифов на услуги, предоставляемые ПАО Сбербанк физическим лицам, являются договором на выпуск и обслуживание банковской карты, открытие счета для учета операций с использованием карты и предоставление Заемщику возобновляемой кредитной линии для проведения операций по счету карты. Со всеми вышеуказанными документами Заемщик был ознакомлен и обязался их исполнять, о чем свидетельствует подпись в заявлении на получение карты. В соответствии с Условиями на сумму основного долга начисляются проценты за пользование кредитом по ставке и на условиях, определенных Тарифами Банка.Процентная ставка за пользование кредитом: 25.4 % годовых. Согласно Общим условиям, погашение кредита и уплата процентов за его использование осуществляется ежемесячно по частям (оплата суммы обязательного платежа) или полностью (оплата суммы общей задолженности) в соответствии с информацией, указанной в отчете, путем пополнения счета карты не позднее 30 календарных дней с даты формирования отчета по карте. Условиями предусмотрено, что за несвоевременное погашение обязательного платежа взимается неустойка в соответствии с Тарифами Банка. Сумма неустойки рассчитывается от остатка просроченного основного долга по ставке, установленной Тарифами Банка, и включается в сумму очередной обязательного платежа до полной оплаты Заемщиком всей суммы неустойки, рассчитанной по дату оплаты суммы просроченного основного долга в полном объеме. 29.06.2023 заемщик Рычков Павел Николаевич умер. В соответствии со статьей 129 Гражданского кодекса Российской Федерации, объекты гражданских прав могут свободно отчуждаться или переходить от одного лица к другому в порядке универсального правопреемства (наследование, реорганизация юридическог",
@@ -1790,7 +1924,8 @@
         },
         "decision_date_vacated": "09.07.2026",
         "default_cancel_outcome_emitted": "cancelled",
-        "default_copy_served_emitted": "21.07.2026"
+        "default_copy_served_emitted": "21.07.2026",
+        "judicial_uid": "86RS0007-01-2026-001618-62"
       },
       "appeal": null,
       "initial_bank_role": "Истец",
@@ -2059,7 +2194,8 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-18"
+        "last_checked_at": "2026-08-19",
+        "judicial_uid": "86RS0002-01-2026-007437-39"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2139,8 +2275,9 @@
         "srv_num": 2,
         "material_number": "М-2-337/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-08-12",
-        "accepted_emitted": true
+        "last_checked_at": "2026-08-19",
+        "accepted_emitted": true,
+        "judicial_uid": "86RS0003-02-2026-000399-98"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2444,10 +2581,11 @@
         "link": "271283691|43f7fb00-e123-49d6-a813-e561f3058ef0",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-07",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-10-02"
+        "legal_force_est": "2026-10-02",
+        "judicial_uid": "86RS0020-01-2026-000308-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2523,10 +2661,11 @@
         "link": "267716510|149c4337-58e5-4ada-a9d5-86e6c1e5110b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-08-22"
+        "legal_force_est": "2026-08-22",
+        "judicial_uid": "86RS0020-01-2026-000172-25"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2561,10 +2700,11 @@
         "link": "266338601|9d9ebc48-d893-440c-8819-0d749a806bc8",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-05"
+        "legal_force_est": "2026-09-05",
+        "judicial_uid": "86RS0020-01-2026-000108-23"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2599,10 +2739,11 @@
         "link": "266085843|5b08a490-0a8b-41bd-aab6-40c4dcae3a6d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-11"
+        "legal_force_est": "2026-09-11",
+        "judicial_uid": "86RS0020-01-2026-000095-62"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2680,10 +2821,11 @@
         "link": "263944497|2f835c33-2cec-4faa-b2e8-6b83deef8198",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-01"
+        "legal_force_est": "2026-09-01",
+        "judicial_uid": "86RS0020-01-2026-000067-49"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3218,10 +3360,11 @@
         "link": "268269936|e223f23f-bcb8-473f-ba80-098b267c37b2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-06-23"
+        "legal_force_est": "2026-06-23",
+        "judicial_uid": "86RS0011-01-2026-000156-65"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3341,9 +3484,10 @@
         "link": "279545655|b51c7fd5-63e3-4ff8-820c-c7683ded3a96",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0021-01-2026-000813-86"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3371,17 +3515,18 @@
         "filing_date": "24.07.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 10:30. 28.07.2026",
-        "event_date": "17.08.2026",
-        "hearing_date": "17.08.2026",
-        "hearing_time": "10:30",
+        "last_event": "Судебное заседание. 08:30. 18.08.2026",
+        "event_date": "17.09.2026",
+        "hearing_date": "17.09.2026",
+        "hearing_time": "08:30",
         "link": "279184737|73aab9fb-8f88-439a-bba7-1467f403764d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-10-01"
+        "legal_force_est": "2026-11-03",
+        "judicial_uid": "86RS0021-01-2026-000795-43"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3454,13 +3599,14 @@
         "link": "277103236|068af30a-11ce-4f63-8f14-1772ab4a983a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-18",
         "decision_date": "03.08.2026",
         "resolved_emitted": true,
-        "default_judgment": true
+        "default_judgment": true,
+        "judicial_uid": "86RS0021-01-2026-000670-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3536,10 +3682,11 @@
         "link": "275845486|8337939f-31e1-45e7-874f-39a8958d9499",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-29"
+        "legal_force_est": "2026-09-29",
+        "judicial_uid": "86RS0021-01-2026-000636-35"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3658,7 +3805,7 @@
         "act_published": false,
         "act_date": "",
         "resolved_emitted": false,
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "default_judgment": true,
@@ -3674,7 +3821,8 @@
           "outcome": "cancelled",
           "outcome_date": "22.07.2026"
         },
-        "default_copy_served_emitted": "06.07.2026"
+        "default_copy_served_emitted": "06.07.2026",
+        "judicial_uid": "86RS0021-01-2026-000054-35"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5148,10 +5296,11 @@
         "link": "277508562|6afaad42-4dd7-4a2a-8b15-95ee73eb3412",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-26"
+        "legal_force_est": "2026-09-26",
+        "judicial_uid": "86RS0018-01-2026-000116-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5381,10 +5530,11 @@
         "link": "269050888|13ebdefb-3b16-4c0e-a738-15b218c53c5f",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-07-28"
+        "legal_force_est": "2026-07-28",
+        "judicial_uid": "86RS0014-01-2026-000423-75"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5843,7 +5993,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-19",
@@ -5851,7 +6001,8 @@
         "resolved_emitted": true,
         "default_judgment": true,
         "motivirovka_emitted": true,
-        "motivirovka_date": "04.08.2026"
+        "motivirovka_date": "04.08.2026",
+        "judicial_uid": "86RS0007-01-2026-003449-98"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -6066,12 +6217,13 @@
         "link": "277846469|e9dde0cc-04ae-4f4b-8136-839aedae7c3f",
         "act_published": true,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "legal_force_est": "2026-09-22",
         "act_text": "Дело № 2-2399/2026 (№2-1491/2026) УИД 86RS0007-01-2026-001464-39 О П Р Е Д Е Л Е Н И Е 05 августа 2026 года город Нефтеюганск Нефтеюганский районный суд Ханты-Мансийского автономного округа – Югры в составе: председательствующего судьи Ефремовой И.Б. при секретаре Шабалиной В.А. рассмотрев в открытом судебном заседании гражданское дело по исковому заявлению публичного акционерного общества «Сбербанк России» в лице филиала – Югорское отделение № 5940 к Карнаухову Матвею Андреевичу о взыскании задолженности по кредитному договору, обращении взыскания на заложенное имущество, возмещении понесенных судебных расходов У С Т А Н О В И Л: Публичное акционерное общество «Сбербанк России» в лице филиала – Югорское отделение № 5940 обратилось с исковыми требованиями к Карнаухову Матвею Андреевичу о взыскании задолженности по кредитному договору № , заключенному 03 сентября 2024 года, за период с 07 июля 2025 года по 05 декабря 2025 года в сумме 605 816 рублей 83 копейки, в том числе: - 542 936 рублей 07 копеек – просроченный основной долг; - 58 878 рублей 29 копеек – просроченные проценты; - 1 579 рублей 93 копейки – неустойка за просроченный основной долг; - 2 422 рубля 54 копейки – неустойка за просроченные проценты. Также истец просит взыскать с ответчика проценты в размере 23,6% годовых, начисляемых на остаток задолженности по кредитному договору № от 03 сентября 2024 года в размере 542 936 рублей 07 копеек, начиная с 06 декабря 2025 года по день фактического возврата кредита, возместить расходы по уплате государственной пошлины в сумме 37 116 рублей, обратить взыскание на заложенное имущество - автомобиль Datsun on-DO, 2019 года выпуска, идентификационный номер (VIN) № , путем продажи с публичных торгов, установив начальную цену в размере 503 000 рублей. Представитель истца дважды – 30 июля 2026 года и 05 августа 2026 года не явился в судебные заседания, о времени и месте судебных заседаний извещен. Согласно абз.7 ст.222 Гражданского процессуального кодекса Российской Федерации, суд оставляет заявление без рассмотрения, если истец, не просивший о разбирательстве дела в его отсутствие, не явился в суд по вторичному вызову. При указанных обстоятельствах, суд приходит к выводу о наличии оснований для оставления вышеуказанного гражданского дела без рассмотрения. Руководствуясь абз. 7 ст. 222 Гражданского процессуального кодекса Российской Федерации, суд О П Р Е Д Е Л И Л: Гражданское дело по исковому заявлению публичного акционерного общества «Сбербанк России» в лице филиала – Югорское отделение № 5940 к Карнаухову Матвею Андреевичу о взыскании задолженности по кредитному договору, обращении взыскания на заложенное имущество, возмещении понесенных судебных расходов оставить без рассмотрения. Возвратить публичному акционерному обществу «Сбербанк России» в лице Югорского отделения №5940 (ИНН № ) государственную пошлину в сумме 37 116 рублей, уплаченную 26 марта 2026 года по платежному поручению №37080. Суд по ходатайству истца отменяет свое определение об оставлении заявления без рассмотрения, если истец представит доказательства, подтверждающие уважительность причин неявки в судебное заседание и невозможности сообщения о них суду. Определение вступает в силу с момента его вынесения На определение может быть подана частная жалоба в срок 15 дней в суд Ханты-Мансийского автономного округа-Югры с подачей жалобы через Нефтеюганский районный суд. Судья Нефтеюганского районного суда опубликовано 03.07.2026 13:58, изменено 11.08.2026 17:13 function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = masking.maskedLetter.indexOf(placeholder[i]) >= 0; if ((matchesNumber && isInt) || (isCharsetPresent && matchesLetter && isLetter)) { newValue += strippedValue[j++]; } else if ((!isCharsetPresent && !isInt && matchesNumber) || (isCharsetPresent && ((matchesLetter && !isLetter) || (matchesNumber && !isInt)))) {",
-        "resolved_emitted": true
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0007-01-2026-001464-39"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -6755,10 +6907,11 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "legal_force_est": "2026-09-22"
+        "legal_force_est": "2026-09-22",
+        "judicial_uid": "86RS0007-01-2026-001627-35"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -7776,10 +7929,11 @@
         "link": "278659109|3b1ffc1e-78f0-42eb-b498-dc1bc524550a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-02",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0009-01-2026-000921-10"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -7938,10 +8092,11 @@
         "link": "268803129|1dd2538c-90de-4622-ae50-ddacfb4ee1cd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-08-29",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "72RS0025-01-2025-013857-70"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8182,17 +8337,18 @@
         "filing_date": "02.04.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Судебное заседание. 15:30. 112. 01.07.2026",
-        "event_date": "13.08.2026",
-        "hearing_date": "13.08.2026",
-        "hearing_time": "15:30",
+        "last_event": "Судебное заседание. 14:30. 112. 18.08.2026",
+        "event_date": "25.08.2026",
+        "hearing_date": "25.08.2026",
+        "hearing_time": "14:30",
         "link": "269130271|273cd6f0-b609-42da-a31f-0ab8b2103d0a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
-        "legal_force_est": "2026-09-29",
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-10-09",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0002-01-2025-010862-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8319,10 +8475,11 @@
         "link": "267156331|2cefe11f-78db-4685-9603-ce29c2874437",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-01",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0013-01-2026-000192-45"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8357,10 +8514,11 @@
         "link": "266341122|62559287-d9cc-4e79-8240-bf59642c0782",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-08-08",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0013-01-2026-000160-44"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8478,10 +8636,11 @@
         "link": "278336793|7a33fe5f-7478-4cc0-885a-9712d0dec6a5",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-01",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0010-01-2026-001187-32"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8592,10 +8751,11 @@
         "link": "268784630|cd902e92-34f8-4665-9db1-a906aea3827a",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-04",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-02",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0010-01-2026-000459-82"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8630,10 +8790,11 @@
         "link": "268686555|6e6affd6-c29f-4dfe-96fe-8144f02ae622",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-26",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0010-01-2026-000455-94"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8677,10 +8838,11 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-01",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0010-01-2026-000411-32"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8854,17 +9016,23 @@
         "court_domain": "vartovray--hmao.sudrf.ru",
         "judge": "Житинский А.В.",
         "filing_date": "06.04.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 14:00. 30.06.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 14:14. 18.08.2026",
         "event_date": "13.08.2026",
         "hearing_date": "13.08.2026",
         "hearing_time": "14:00",
         "link": "274502867|39b9999f-ef05-43fe-8404-08706e7517f3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
-        "legal_force_est": "2026-09-29"
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-09-29",
+        "judicial_uid": "86RS0003-01-2026-000526-58",
+        "decision_date": "13.08.2026",
+        "resolved_emitted": true,
+        "motivirovka_emitted": true,
+        "default_judgment": true,
+        "motivirovka_date": "13.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8899,8 +9067,9 @@
         "link": "274501545|aaafb2fc-c212-4271-acbb-e2b341c342b9",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
-        "legal_force_est": "2026-10-01"
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-10-01",
+        "judicial_uid": "86RS0003-01-2026-000398-54"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9054,8 +9223,9 @@
         "link": "274498462|dd163380-db1e-4b6e-b125-73a86ccb722b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
-        "legal_force_est": "2026-06-16"
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-06-16",
+        "judicial_uid": "86RS0003-01-2026-000033-82"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9134,8 +9304,9 @@
         "link": "274494485|b8adba22-3873-4496-9a7c-68027a279c71",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
-        "legal_force_est": "2026-05-08"
+        "last_checked_at": "2026-08-19",
+        "legal_force_est": "2026-05-08",
+        "judicial_uid": "86RS0003-01-2025-001623-49"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9170,9 +9341,10 @@
         "link": "279418463|d51e6d44-2224-43d8-b3c1-89f16b795fc3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-002709-96"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9207,9 +9379,10 @@
         "link": "279373952|aa7ff38e-aa66-4306-b17b-213f22ed58ca",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-002676-98"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9282,9 +9455,10 @@
         "link": "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-002663-40"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9826,10 +10000,11 @@
         "link": "276881338|d756edc8-eacc-466d-bb2a-f80e05408b06",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-29",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-002048-42"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9921,13 +10096,14 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "11.08.2026",
-        "writ_expected": false
+        "writ_expected": false,
+        "judicial_uid": "86RS0005-01-2026-001965-97"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -10003,13 +10179,14 @@
         "link": "274035015|036b0541-d0ef-46ed-a87b-e613b66b9de3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-26",
         "delo_id": 1540005,
         "srv_num": 1,
         "decision_date": "11.08.2026",
         "resolved_emitted": true,
-        "default_judgment": true
+        "default_judgment": true,
+        "judicial_uid": "86RS0005-01-2026-001951-42"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -10161,10 +10338,11 @@
         "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-02",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-001711-83"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -10367,10 +10545,11 @@
         "link": "268933004|a4ea52ca-329f-428e-8f8e-48f061d70d86",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-07-16",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-001081-33"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -11643,60 +11822,6 @@
         "act_date": "",
         "last_checked_at": "2026-07-31",
         "legal_force_est": "2026-11-10",
-        "delo_id": 1540005,
-        "srv_num": 1
-      },
-      "appeal": null,
-      "track": "plaintiff_light",
-      "initial_bank_role": "Истец",
-      "import": {
-        "operator": "manual",
-        "at": "2026-07-30T17:11:27",
-        "source": "search_sweep",
-        "announced": true
-      }
-    },
-    {
-      "id": "2-6481/2026",
-      "current_stage": "first_instance",
-      "plaintiff": "ПАО Сбербанк",
-      "defendant": "ООО Академпроект, Ракова Ирина Юрьевна",
-      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
-      "bank_role": "Истец",
-      "notes": "",
-      "first_instance": {
-        "case_number": "2-6481/2026",
-        "court": "Нижневартовский городской суд",
-        "court_domain": "vartovgor--hmao.sudrf.ru",
-        "judge": "Безносов А.В.",
-        "filing_date": "08.06.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Предварительное судебное заседание. 10:10. 113. 25.06.2026",
-        "event_date": "28.08.2026",
-        "hearing_date": "28.08.2026",
-        "hearing_time": "10:10",
-        "link": "274358280|21b0e810-f7a1-493a-9c06-27de297abcb1",
-        "act_published": false,
-        "act_date": "",
-        "writs": [
-          {
-            "issue_date": "08.06.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0002#2-6481/2026#2",
-            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
-            "status": "Выдан"
-          },
-          {
-            "issue_date": "16.06.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0002#2-6481/2026#1",
-            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
-            "status": "Выдан"
-          }
-        ],
-        "last_checked_at": "2026-07-31",
-        "legal_force_est": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1
       },
@@ -16249,10 +16374,11 @@
         "link": "277724256|5e2fba02-aa19-46ff-a4ea-c998e45ac859",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-08-18",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-001553-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -16439,10 +16565,11 @@
         "link": "275662643|c98d5290-646a-44b3-a992-c7dd9eb1a303",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-25",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-011234-85"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17436,10 +17563,11 @@
         "link": "272105616|740338a4-4e2f-416d-9a9a-45fd0d7bb572",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-001719-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17545,19 +17673,23 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Елшин Николай Александрович",
         "filing_date": "12.05.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Предварительное судебное заседание. 08:45. Зал судебного заседания 402. 26.05.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Судебное заседание. 08:46. Зал судебного заседания 402. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 18.08.2026",
         "event_date": "05.08.2026",
         "hearing_date": "05.08.2026",
-        "hearing_time": "08:45",
+        "hearing_time": "08:46",
         "link": "271268645|f08e2256-4362-429d-8450-c4767efc6be9",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "46RS0025-01-2026-000060-29",
+        "decision_date": "05.08.2026",
+        "resolved_emitted": true,
+        "default_judgment": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17677,10 +17809,11 @@
         "link": "270962647|cc41e0bb-c2ba-497d-b039-d1fbdd6d1078",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0009-01-2026-000095-63"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17753,12 +17886,13 @@
         "link": "270998486|7e51bb12-e434-4230-b4f4-b65433717ce2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
         "srv_num": 1,
         "decision_date": "06.08.2026",
-        "resolved_emitted": true
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0004-01-2026-008480-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -17831,10 +17965,11 @@
         "link": "271150751|7eabe880-d1cb-46b0-b00f-71242971527d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-11",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2025-013376-45"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -18449,10 +18584,11 @@
         "link": "269037374|6ed6a698-d112-4fcd-8955-2195b11ba552",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-005863-96"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -18942,19 +19078,20 @@
         "filing_date": "17.03.2026",
         "status": "Решено",
         "result": "Производство по делу ПРЕКРАЩЕНОСТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом",
-        "last_event": "Предварительное судебное заседание. 09:00. Зал судебного заседания 402. Производство по делу прекращено. СТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом. 13.05.2026",
-        "event_date": "30.07.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 15:42. 18.08.2026",
+        "event_date": "18.08.2026",
         "hearing_date": "30.07.2026",
         "hearing_time": "09:00",
         "link": "268241184|cc660916-87b6-47c2-80cc-57d477427081",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-12",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
         "decision_date": "30.07.2026",
-        "resolved_emitted": true
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0004-01-2026-004812-48"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -19235,10 +19372,11 @@
         "link": "267868922|945b592f-ad1a-48f0-ab3f-22b78321cf9d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-26",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-004414-78"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -19584,18 +19722,19 @@
         "judge": "Смирнова Юлия Николаевна",
         "filing_date": "03.03.2026",
         "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 12:00. Зал судебного заседания 407. 21.07.2026",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯСТОРОНЫ (не просившие о разбирательстве в их отсутствие) НЕ ЯВИЛИСЬ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Судебное заседание. 12:00. Зал судебного заседания 407. Иск (заявление, жалоба) оставлены без рассмотрения. СТОРОНЫ (не просившие о разбирательстве в их отсутствие) НЕ ЯВИЛИСЬ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 21.07.2026",
         "event_date": "18.08.2026",
         "hearing_date": "18.08.2026",
         "hearing_time": "12:00",
         "link": "267373863|3686ebe2-e110-4e37-8492-531b31748e3c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-02",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-003877-40"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -19769,10 +19908,11 @@
         "link": "267274163|cc451396-dc59-4cf3-9f8d-94bf32e22241",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "45RS0014-01-2025-000303-86"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -19929,10 +20069,11 @@
         "link": "267023002|546f2faa-ac1b-475b-86b2-70939ee286e2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-26",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-003405-98"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -20005,10 +20146,11 @@
         "link": "266858042|ff7de7b5-7d4f-49d0-8d10-2984819cd8fb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-18",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-003228-47"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -20043,10 +20185,11 @@
         "link": "266834817|8f1c57c0-18ea-4102-aa4e-7f6cb3a291d7",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-10-02",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-003160-57"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -20244,10 +20387,11 @@
         "link": "266458111|b61391ed-a2bb-4078-91c4-48b95b96730c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-002989-85"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -20412,10 +20556,11 @@
         "link": "266420071|7b2ac244-c2af-43dd-bee3-6c36b3b21037",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-18",
+        "last_checked_at": "2026-08-19",
         "legal_force_est": "2026-09-22",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-002942-32"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -21429,5 +21574,5 @@
       }
     }
   ],
-  "updated_at": "2026-08-19T03:38:47"
+  "updated_at": "2026-08-19T09:43:58"
 }
