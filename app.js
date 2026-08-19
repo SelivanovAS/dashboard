@@ -120,6 +120,45 @@ function shortCourt(name){
     .replace(/\s+г\.\s*Нижний\s+Тагил(?:\s+Свердловской\s+области)?/i,' Н. Тагила')
     .replace(/\s+г\.\s*Каменск-Уральского(?:\s+Свердловской\s+области)?/i,' Каменска-Ур.');
 }
+/* ---------- Фильтр «Суд» ---------- */
+// Ключ фильтра — нормализованное ИМЯ суда 1-й инстанции, НЕ court_domain и
+// НЕ srv_num. Проверено на данных 19.08.2026: srv_num у одного суда записан
+// то числом, то null (Сургутский городской: 7 дел с '1' + 35 с null — ключ
+// «домен|srv» раскалывает суд на два пункта), а фолбэк null→1 сливает два
+// суда домена vartovray--hmao (районный и Покачи оба живут с null). Имя же
+// заполнено всегда (в т.ч. у дел без домена, заведённых с выдачи апелляции)
+// и уникально в реестрах — Покачи отличается скобкой «(г. Покачи)».
+// Единственный дефект имени — ё/е-расхождение источников («Березовский» и
+// «Берёзовский» — реальные две строки одного суда) — снимается нормализацией.
+function courtFilterNorm(s){
+  return String(s||'').replace(/ё/g,'е').replace(/Ё/g,'Е').replace(/\s+/g,' ').trim().toLowerCase();
+}
+function courtFilterKey(c){
+  // Всегда суд 1-й инстанции, а не текущей стадии: коллеги думают «дела
+  // моего суда», и дело не должно «уезжать» из фильтра при апелляции.
+  return courtFilterNorm(c&&c.firstInstanceCourt);
+}
+// Пункты выпадашки по списку дел: [{key,label,short,count}], алфавит по
+// короткой подписи. Дела без имени суда пункта не дают. При ё/е-коллизии
+// подписью детерминированно становится вариант с «ё» (реестровое написание),
+// независимо от порядка дел в датасете.
+function courtFilterEntries(list){
+  const map=new Map();
+  (list||[]).forEach(c=>{
+    const key=courtFilterKey(c);
+    if(!key)return;
+    const name=String(c.firstInstanceCourt||'').replace(/\s+/g,' ').trim();
+    const cur=map.get(key);
+    if(!cur)map.set(key,{label:name,count:1});
+    else{
+      cur.count++;
+      if(/[ёЁ]/.test(name)&&!/[ёЁ]/.test(cur.label))cur.label=name;
+    }
+  });
+  return [...map.entries()]
+    .map(([key,e])=>({key,label:e.label,short:shortCourt(e.label),count:e.count}))
+    .sort((a,b)=>a.short.localeCompare(b.short,'ru'));
+}
 // Получатель исполнительного листа — почти всегда подразделение ФССП с очень
 // длинным официальным именем («Отделение судебных приставов по взысканию
 // задолженности с юридических лиц по г. Тюмени и Тюменскому району» — 105
@@ -1750,6 +1789,16 @@ function populateFilterOptions(){
   catSel.innerHTML='<option value="all">Все категории</option>'+[...cats].sort().map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
   // Текущее значение могло исчезнуть при смене картотеки → «Все категории».
   catSel.value=cats.has(catVal)||catVal==='all'?catVal:'all';
+  // Суды — тем же паттерном: только суды с делами активного датасета (весь
+  // реестр REGION_INFO.fi_courts не выводим — на Урале это 46 пустых пунктов).
+  const courts=courtFilterEntries(scopedDataset());
+  const courtSel=document.getElementById('filter-court');
+  if(courtSel){
+    const courtVal=courtSel.value;
+    courtSel.innerHTML='<option value="all">Все суды</option>'
+      +courts.map(e=>`<option value="${escHtml(e.key)}" title="${escHtml(e.label)}">${escHtml(e.short)} (${e.count})</option>`).join('');
+    courtSel.value=courts.some(e=>e.key===courtVal)||courtVal==='all'?courtVal:'all';
+  }
 }
 
 /* ========== Stats ========== */
@@ -2195,6 +2244,7 @@ function applyFilters(){
   const q=document.getElementById('search-input').value.toLowerCase();
   const st=document.getElementById('filter-status').value;
   const cat=document.getElementById('filter-category').value;
+  const court=document.getElementById('filter-court').value;
   const scope=activeScope();
   // Контекст каждого раздела живёт в собственных select'ах. Скрытые значения
   // других разделов сознательно не читаем — они сохраняются, но не фильтруют.
@@ -2210,8 +2260,11 @@ function applyFilters(){
     ?document.getElementById('filter-mine-source').value:'all';
   // Ленивый архив трека: первый клик чипа «Архив» в bank-режиме тянет
   // cases_bank_archive.json; по готовности фильтр пересчитается сам.
+  // Догруженные архив/список меняют состав датасета — перед пересчётом
+  // фильтров освежаем и опции (суды/категории), иначе суд, живущий только
+  // в архиве, не попадёт в выпадашку.
   if(scope==='bank'&&st==='archived'&&!bankArchiveLoaded&&!bankArchiveLoading){
-    ensureBankArchive().then(()=>applyFilters());
+    ensureBankArchive().then(()=>{populateFilterOptions();applyFilters();});
   }
   // «Мои» объединяют звёзды обеих картотек. Для composite-звёзд загружаем
   // и активный список, и архив банка: сохранённое дело не должно исчезнуть
@@ -2224,9 +2277,9 @@ function applyFilters(){
           if(!bankLoaded)return false;
           return !bankArchiveLoaded?ensureBankArchive().then(()=>true):true;
         })
-        .then(ok=>{if(ok!==false)applyFilters();});
+        .then(ok=>{if(ok!==false){populateFilterOptions();applyFilters();}});
     }else if(bankLoaded&&!bankArchiveLoaded&&!bankArchiveLoading){
-      ensureBankArchive().then(()=>applyFilters());
+      ensureBankArchive().then(()=>{populateFilterOptions();applyFilters();});
     }
   }
   filteredCases=activeDataset().filter(c=>{
@@ -2249,6 +2302,7 @@ function applyFilters(){
     if(bankControl!=='all'&&!bankControlMatches(c,bankControl))return false;
     if(rl!=='all'&&c.sberbankRole!==rl)return false;
     if(cat!=='all'&&c.category!==cat)return false;
+    if(court!=='all'&&courtFilterKey(c)!==court)return false;
     if(stg!=='all'&&stageGroup(c)!==stg)return false;
     if(q&&!caseSearchBlob(c).includes(q))return false;
     return true;
@@ -2659,6 +2713,22 @@ function renderChipBar(){
       +group('Роль',roleButtons(rl,'setMineRoleFilter'))
       +stageGroupHtml(stg,'setMineStageFilter',mineSrc,true);
   }
+  // Фильтр «Суд» — общий для всех трёх разделов, последней группой ряда 2.
+  // Видимый select строится КОПИЕЙ опций скрытого #filter-court (источник
+  // истины, наполняет populateFilterOptions) и обязан быть БЕЗ id: этот же
+  // HTML уходит и в #chip-bar-segments, и в мобильную шторку — id дал бы
+  // дубль. Синхронизация двух копий — атрибутом selected (renderChipBar
+  // пересобирается на каждый applyFilters). Группа не через group(): тот
+  // вшивает .seg-ctrl, а у select своя рамка .filter-select.
+  const courtSel=document.getElementById('filter-court');
+  if(courtSel&&(courtSel.options.length>2||courtSel.value!=='all')){
+    const cv=courtSel.value||'all';
+    const courtOpts=[...courtSel.options].map(o=>
+      `<option value="${escHtml(o.value)}" title="${escHtml(o.title||'')}"${o.value===cv?' selected':''}>${escHtml(o.textContent)}</option>`).join('');
+    const cvTitle=courtSel.selectedIndex>=0?(courtSel.options[courtSel.selectedIndex].title||''):'';
+    segmentsHtml+=`<div class="filter-group filter-group-court"><span class="filter-group-label">Суд</span>`
+      +`<select class="filter-select court-select" title="${escHtml(cvTitle)}" onchange="setCourtFilter(this.value)">${courtOpts}</select></div>`;
+  }
   if(barQuick)barQuick.innerHTML=quickHtml;
   if(barSegments)barSegments.innerHTML=segmentsHtml;
   // Legacy-разметка (#chip-bar): склеиваем обратно с разделителем.
@@ -2684,6 +2754,8 @@ function renderChipBar(){
     }
     const cat=document.getElementById('filter-category').value;
     if(cat&&cat!=='all')active++;
+    const courtVal=document.getElementById('filter-court').value;
+    if(courtVal&&courtVal!=='all')active++;
     if(active){countEl.textContent=active;countEl.style.display='inline-flex';}
     else countEl.style.display='none';
   }
@@ -2695,6 +2767,7 @@ function setBankControlFilter(v){document.getElementById('filter-bank-control').
 function setMineSourceFilter(v){document.getElementById('filter-mine-source').value=v;applyFilters();}
 function setMineRoleFilter(v){document.getElementById('filter-mine-role').value=v;applyFilters();}
 function setMineStageFilter(v){document.getElementById('filter-mine-stage').value=v;applyFilters();}
+function setCourtFilter(v){document.getElementById('filter-court').value=v;applyFilters();}
 function setMineFilter(v){
   setDatasetView(v?'mine':(bankViewActive?'bank':'main'));
 }
@@ -2735,6 +2808,7 @@ function resetFilters(){
   // Категория — тоже фильтр: до v132 «Сбросить» молча оставлял её активной
   // (видимого сеттера у неё нет, и юрист не мог понять, почему список неполон).
   document.getElementById('filter-category').value='all';
+  document.getElementById('filter-court').value='all';
   // Раздел не сбрасываем: верхний переключатель — навигация, не фильтр.
   applyFilters();
 }

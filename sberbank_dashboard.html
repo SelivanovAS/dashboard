@@ -70,7 +70,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=171">
+<link rel="stylesheet" href="styles.css?v=172">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -325,6 +325,13 @@
         <select class="filter-select" id="filter-category" style="display:none;" onchange="applyFilters()">
           <option value="all">Все категории</option>
         </select>
+        <!-- Суд 1-й ИНСТАНЦИИ дела (не суд текущей стадии): коллеги думают
+             «дела моего суда» независимо от того, где дело сейчас. Опции
+             наполняет populateFilterOptions из активного датасета; видимые
+             копии (ряд сегментов + мобильная шторка) рисует renderChipBar. -->
+        <select class="filter-select" id="filter-court" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все суды</option>
+        </select>
       </div>
     </div>
 
@@ -360,6 +367,6 @@
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=171" defer></script>
+<script src="app.js?v=172" defer></script>
 </body>
 </html>
