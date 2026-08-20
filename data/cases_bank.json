@@ -2,7 +2,86 @@
   "version": 1,
   "track": "plaintiff_light",
   "archived_count": 28,
+  "updated_at": "2026-08-20T08:03:24",
   "cases": [
+    {
+      "id": "2-699/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО \"Сбербанк\"",
+      "defendant": "Лещенко Павел Михайлович, действующий в интересах несовершеннолетнего Лещенко Ярослава Павловича, 24.03.2009 года рождения",
+      "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-699/2026",
+        "court": "Когалымский городской суд",
+        "court_domain": "kogalym--hmao.sudrf.ru",
+        "judge": "Руденко Яна Александровна",
+        "filing_date": "27.01.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Предварительное судебное заседание. 11:40. 204. 30.07.2026",
+        "event_date": "09.10.2026",
+        "hearing_date": "09.10.2026",
+        "hearing_time": "11:40",
+        "link": "263396061|b75d1553-abc4-4605-8b05-7e2ca129172f",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0008-01-2026-000129-14",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-20",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "Селиванов",
+        "at": "2026-08-20T08:01:23",
+        "source": "targeted",
+        "announced": true
+      }
+    },
+    {
+      "id": "2-312/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО \"Сбербанк\"",
+      "defendant": "Наследственное имущество Шульга Валентины Петровны",
+      "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-312/2026",
+        "court": "Мегионский городской суд",
+        "court_domain": "megion--hmao.sudrf.ru",
+        "judge": "Медведев Сергей Николаевич",
+        "filing_date": "29.12.2025",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Судебное заседание. 09:30. Зал судебного заседания №3. 17.07.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "18.08.2026",
+        "hearing_time": "09:30",
+        "link": "265684309|65ab20c4-81e9-4a56-914c-3975ad2cd03b",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0010-01-2025-002272-59",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-20",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "Селиванов",
+        "at": "2026-08-20T08:01:23",
+        "source": "targeted",
+        "announced": true
+      }
+    },
     {
       "id": "М-7445/2026",
       "current_stage": "first_instance",
@@ -21577,6 +21656,5 @@
         "announced": true
       }
     }
-  ],
-  "updated_at": "2026-08-20T08:19:38"
+  ]
 }
