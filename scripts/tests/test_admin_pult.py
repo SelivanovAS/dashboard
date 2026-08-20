@@ -41,10 +41,16 @@ import re
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(TESTS_DIR))
 ADMIN = os.path.join(ROOT, "cloudflare-worker", "admin_page.js")
+WORKER = os.path.join(ROOT, "cloudflare-worker", "worker.js")
 
 
 def _admin() -> str:
     with open(ADMIN, encoding="utf-8") as f:
+        return f.read()
+
+
+def _worker() -> str:
+    with open(WORKER, encoding="utf-8") as f:
         return f.read()
 
 
@@ -216,3 +222,46 @@ def test_admin_says_autostart_is_off():
         "страница не отличает «крон выключен» от «сервер не ответил»"
     assert "автозапуск выключен" in a
     assert 'setTile("cron", "gray", "выключен"' in a
+
+
+# ===== Mac-прогон в админке (20.08.2026, флип на Mac-резерв) =====
+
+def test_cron_utc_empty_means_no_cron():
+    """Пустая CRON_UTC = «крона нет». cfgVar подменяет фолбэком и ПУСТУЮ
+    строку — первый настоящий флип (20.08.2026) это вскрыл: при crons = []
+    плитка «Автозапуск» обещала «завтра 08:30». cronUtcParts обязан читать
+    переменную МИМО cfgVar (фолбэк — только когда переменной нет вовсе)."""
+    body = re.search(r"function cronUtcParts\(\) \{.*?\n\}", _worker(), re.S)
+    assert body, "Не нашёл cronUtcParts."
+    assert 'cfgVar("CRON_UTC"' not in body.group(0), (
+        "cronUtcParts снова читает CRON_UTC через cfgVar — пустая строка "
+        "превратится в фолбэк 3:30, и плитка обещает несуществующий запуск."
+    )
+    assert "RUNTIME_ENV.CRON_UTC" in body.group(0)
+
+
+def test_gh_runs_sees_mac_run():
+    """Плитка «Последний прогон» обязана видеть Mac-прогоны: их след в
+    Actions — ран replay_on_push.yml (его запускает пуш «(Mac-парсинг)»);
+    сам парсинг на Mac в GitHub не виден."""
+    w = _worker()
+    assert "replay_on_push.yml/runs" in w, "worker не спрашивает replay-раны"
+    assert "last_run" in w, "worker не отдаёт last_run"
+    a = _admin()
+    assert "d.last_run" in a, "плитка не читает last_run — Mac-прогон снова невидим"
+    sub = re.search(r"function ghRunSub\(.*?\n\}", a, re.S)
+    assert sub and '"mac"' in sub.group(0), "подпись плитки потеряла пометку «Mac»"
+
+
+def test_run_progress_card_is_pollless():
+    """Карточка «Ход последнего прогона»: разовый GET + кнопка, БЕЗ поллинга
+    (лимиты KV бьют записи — их шлёт пушер и так; чтения редкие), retry —
+    через общий loadErrorHtml."""
+    a = _admin()
+    assert "run-progress-card" in a
+    assert 'k === "runprog"' in a, "у карточки пропал «Повторить»"
+    body = re.search(r"async function loadRunProgress\(\) \{.*?\n\}", a, re.S)
+    assert body, "Не нашёл loadRunProgress."
+    assert "setTimeout" not in body.group(0), (
+        "в loadRunProgress появился таймер — карточка договорена БЕЗ поллинга"
+    )

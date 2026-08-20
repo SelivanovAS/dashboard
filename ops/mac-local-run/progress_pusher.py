@@ -19,9 +19,42 @@ import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
 LOG = os.path.join(HERE, "parse_and_push.log")
-URL = "https://court-monitor-trigger.7selivanov-a.workers.dev/run-progress"
 TOKEN_FILE = os.path.expanduser("~/.config/court-monitor/progress_token")
+
+
+def _region() -> str:
+    # Регион клона — файл REGION в корне форка (эталон ХМАО живёт без него).
+    # Тот же принцип, что config._region_from_file(), но без импорта пакета:
+    # пушер обязан оставаться некритичной мелочью без зависимостей.
+    try:
+        with open(os.path.join(REPO, "REGION"), encoding="utf-8") as f:
+            return f.read().strip() or "hmao"
+    except OSError:
+        return "hmao"
+
+
+def _worker_url() -> str:
+    # Воркер СВОЕЙ территории: до 20.08.2026 адрес был захардкожен на ХМАО,
+    # и вехи Урала уезжали в чужой KV — админка ХМАО показывала уральский
+    # прогон как свой, а админка Урала жила вчерашним. url= берём из
+    # ~/.config/court-monitor/worker.<регион> (тот же файл, что у
+    # import_dumps.sh); файла нет (эталон ХМАО) — прежний адрес.
+    conf = os.path.expanduser("~/.config/court-monitor/worker." + _region())
+    try:
+        with open(conf, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("url="):
+                    u = line.split("=", 1)[1].strip().rstrip("/")
+                    if u.startswith("https://"):
+                        return u + "/run-progress"
+    except OSError:
+        pass
+    return "https://court-monitor-trigger.7selivanov-a.workers.dev/run-progress"
+
+
+URL = _worker_url()
 
 # Вехи, которые интересно видеть в админке (не весь сырой лог).
 # «— \[» — фазовые заголовки log_phase («— [3/9] …»), «1 инст:» — строки
