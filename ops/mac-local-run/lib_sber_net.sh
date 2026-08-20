@@ -104,12 +104,42 @@ cm_setup_court_routes() {
 # ── Проба доступности суда ───────────────────────────────────────────────────
 # Хост берём из реестра региона (апелляция территории), а не хардкодом ХМАО:
 # на форке проба стучалась бы в чужой суд.
-cm_probe_court_host() {
-  local host
-  host=$("$1" -c 'import sys; sys.path.insert(0, "scripts");
-from court_monitor.regions import get_region; print(get_region().appeal_courts[0].domain)' 2>/dev/null)
-  [ -n "$host" ] || return 1
-  printf '%s\n' "$host"
+cm_probe_court_hosts() {  # $1 = python; канарейки построчно (апелляция первой)
+  # ОДНОГО хоста мало: sudrf «мигает» пер-хостово (20.08.2026 oblsud--svd
+  # молчал в 08:19 и ожил к 08:30 — Урал в итоге спарсился), и одиночная
+  # канарейка давала ложный отказ на всю территорию. Берём апелляцию + два
+  # первых включённых суда 1-й инст. региона: живой ХОТЬ ОДИН — сеть на
+  # sudrf пускает; мертвы все — это блок или не та сеть, а не мигание.
+  local hosts
+  hosts=$("$1" -c 'import sys; sys.path.insert(0, "scripts");
+from court_monitor.regions import get_region
+region = get_region()
+hosts = [region.appeal_courts[0].domain]
+hosts += [c.domain for c in region.first_instance_courts
+          if getattr(c, "enabled", True)][:2]
+print("\n".join(dict.fromkeys(hosts)))' 2>/dev/null)
+  [ -n "$hosts" ] || return 1
+  printf '%s\n' "$hosts"
+}
+
+# Проба «сеть пускает на sudrf»: перебор канареек через cm_court_reachable
+# (детект заглушек/страниц защиты и браузерный UA — там). Успех при первом
+# живом хосте: 0 + его имя на stdout. Все мертвы: 1 + диагностика по каждой.
+cm_any_court_reachable() {  # $1 = python; 0 → живой хост, 1 → диагностика
+  local python="$1" hosts host err diag=""
+  hosts=$(cm_probe_court_hosts "$python") || {
+    printf 'не смог определить суды для пробы (реестр региона не прочитался)'
+    return 1
+  }
+  for host in $hosts; do
+    if err=$(cm_court_reachable "$host" "$python"); then
+      printf '%s\n' "$host"
+      return 0
+    fi
+    diag="${diag:+$diag; }$host: ${err:-без ответа}"
+  done
+  printf 'все канарейки мертвы — %s' "$diag"
+  return 1
 }
 
 # ⚠️ Мало «ответил ли сервер»: страница защиты ГАС «Правосудие» приходит с
