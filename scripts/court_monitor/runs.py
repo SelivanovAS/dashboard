@@ -1202,7 +1202,7 @@ def main():
     # 7. Генерируем дайджест
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
-    save_digest_context(
+    digest_issue_key = save_digest_context(
         new_cases, changes, cases=cases,
         total_active_appeal=total_active_appeal,
         total_active_fi=0,
@@ -1224,6 +1224,7 @@ def main():
         digest,
         summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
         is_empty=not (new_cases or changes),
+        issue_key=digest_issue_key,
     )
     timings["telegram"] = time.perf_counter() - t0
 
@@ -4668,6 +4669,19 @@ def main_json():
         health_state, health_alerts = update_parse_health(
             health_obs, health_labels
         )
+        # Карточная сводка прогона — для гейта Mac-резерва (cloud_run_ok):
+        # журнал по источникам видит только ПОИСКИ, и «полузрячие» прогоны
+        # были неразличимы (20.08.2026: у ХМАО поиски ожили, но 52 карточки
+        # из 172 срезала сеть — недочитанное молча ждало завтра; у Урала
+        # наоборот — карточки ок, поиски слепые). Пишем сырые счётчики,
+        # интерпретация (пороги дочитки) — на читателе.
+        health_state["last_run"] = {
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "requests_ok": config.METRICS.get("requests_ok", 0),
+            "requests_failed": config.METRICS.get("requests_failed", 0),
+            "cards_breaker_skipped": config.METRICS.get("cards_breaker_skipped", 0),
+            "cards_blocked": config.METRICS.get("cards_blocked", 0),
+        }
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
             health_alerts.append(
@@ -5049,7 +5063,7 @@ def main_json():
     t0 = time.perf_counter()
     log_phase(9, 9, "Дайджест и доставка")
     log.info("Генерирую дайджест...")
-    save_digest_context(
+    digest_issue_key = save_digest_context(
         appeal_new_cases_csv, changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
         fi_changes=fi_changes,
@@ -5149,6 +5163,7 @@ def main_json():
         digest,
         summary=push_summary,
         is_empty=digest_is_empty,
+        issue_key=digest_issue_key,
     )
 
     # Привязываем LLM-разбор опубликованных актов к делам в cases.json,
@@ -5373,7 +5388,10 @@ def main_replay_last(push_all: bool = False):
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
-    save_last_digest(digest, summary=summary or "(replay)", is_empty=replay_is_empty)
+    save_last_digest(
+        digest, summary=summary or "(replay)", is_empty=replay_is_empty,
+        issue_key=str(ctx.get("saved_at") or ""),
+    )
 
     # Replay переигрывает дайджест на тех же данных — обновим разбор актов
     # в cases.json (актуально, если правили промпт и хотим, чтобы новый
@@ -5536,7 +5554,10 @@ def main_push_last_digest(owner_only: bool = False):
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
-    save_last_digest(digest, summary=summary, is_empty=is_empty)
+    save_last_digest(
+        digest, summary=summary, is_empty=is_empty,
+        issue_key=str(ctx.get("saved_at") or ""),
+    )
 
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
     title = (

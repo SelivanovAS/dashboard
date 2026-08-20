@@ -1376,7 +1376,10 @@ async function loadRunProgress() {
     if (!run) { card.style.display = "none"; return; }
     card.style.display = "";
     const src = run.source === "github" ? "облако" : "Mac";
-    let state = "завершён";
+    // Финальная веха «ERROR:» = прогон закончился сбоем (алерт конца окна,
+    // упавший парсинг) — подпись «завершён» читалась как успех (20.08.2026).
+    const lastLine = String((run.lines || []).slice(-1)[0] || "");
+    let state = lastLine.indexOf("ERROR:") >= 0 ? "сбой" : "завершён";
     if (!run.done) {
       const age = Date.now() - parseIso(run.updated_at || run.started_at || "");
       // Пушер шлёт батчи ~раз в минуту: полчаса тишины без done — прогон

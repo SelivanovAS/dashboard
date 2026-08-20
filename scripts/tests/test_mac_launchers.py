@@ -91,6 +91,56 @@ class TestSightedRunToday:
         assert not cloud_run_ok.sighted_run_today({})[0]
         assert not cloud_run_ok.sighted_run_today({"sources": {}})[0]
 
+    # ── Гейт-2.0: вторая ось — карточки (дочитка, 20.08.2026) ────────────────
+
+    def _lr(self, ok: int, failed: int, skipped: int = 0, at: str | None = None):
+        return {"at": at or self.TODAY, "requests_ok": ok,
+                "requests_failed": failed, "cards_breaker_skipped": skipped,
+                "cards_blocked": 0}
+
+    def test_half_sighted_run_retries_cards(self):
+        """Полузрячий прогон (ХМАО 20.08: поиски ожили, сеть срезала 52
+        карточки из 172) обязан отправляться на дочитку, а не ждать завтра."""
+        ok, text = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 24)},
+             "last_run": self._lr(128, 62, 52)})
+        assert not ok and "срезала карточки" in text
+
+    def test_minor_losses_do_not_retry(self):
+        """Оба порога сразу: штатные сбросы (19.08: 19%) и мелкие прогоны с
+        парой неудач не гоняют полный прогон заново."""
+        ok, _ = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 24)},
+             "last_run": self._lr(199, 31, 15)})   # 19% — доля ниже порога
+        assert ok
+        ok, _ = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 24)},
+             "last_run": self._lr(10, 9)})         # 47%, но лишь 9 штук
+        assert ok
+
+    def test_stale_last_run_is_ignored(self):
+        """Вчерашний last_run не судит сегодняшний день (прогона ещё не было
+        → его карточные потери ни при чём)."""
+        ok, _ = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 24)},
+             "last_run": self._lr(10, 999, at=self.OLD)})
+        assert ok
+
+    def test_no_last_run_block_keeps_old_behaviour(self):
+        """Старый журнал без блока last_run — поведение прежнее (зрячие
+        поиски = пропуск слота)."""
+        ok, text = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 24)}})
+        assert ok and "отработало" in text
+
+    def test_blind_text_says_searches(self):
+        """Формулировка слепого утра называет, что именно не удалось: юрист
+        20.08 прочитал «за утро так и не спарсилось» как полный провал при
+        доехавшем дайджесте."""
+        _, text = cloud_run_ok.sighted_run_today(
+            {"sources": {"a": _src(self.TODAY, 0)}})
+        assert "по поискам" in text and "мониторинг" in text
+
 
 # ── Проводка гейта в parse_and_push ──────────────────────────────────────────
 
