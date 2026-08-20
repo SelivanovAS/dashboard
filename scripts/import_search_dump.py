@@ -31,6 +31,9 @@
 
 Построчный отчёт:
     [ADDED]        — дело добавлено в cases.json
+    [ADDED OLD]    — дело против банка давно решено (старше FI_ARCHIVE_DAYS):
+                     заведено тихо сразу в архивное окно, «новым иском» не
+                     объявляется (зеркало завершённых-старых блока 3 main_json)
     [ADDED BANK]   — иск банка добавлен в трек (cases_bank.json)
     [PROMOTED]     — материал (М-…) из прошлого импорта возбуждён в дело:
                      существующая запись переименована (зеркало промоушена
@@ -38,6 +41,10 @@
     [ALREADY]      — уже отслеживается (все картотеки: активные + архивы +
                      трек исков банка)
     [SKIPPED ROLE] — банк третье лицо (или истец при выключенном треке)
+    [NOT ACCEPTED] — иск к производству не принят (возврат / отказ в принятии /
+                     передача по подсудности) — не заводим; с 18.08.2026 гейт
+                     двухрубежный: по строке выдачи И по карточке (выдача
+                     иногда отстаёт от карточки)
     [NO LINK]      — в дампе нет ссылки на карточку (cid|cuid) — дело
                      немониторимо, пропуск. Обычно это вставка «как текст»:
                      копируйте выделение страницы или сохраняйте «только HTML».
@@ -45,7 +52,9 @@
     [EXCLUDED RESULT] / [EXCLUDED WRIT] / [SPENT] — иск банка не взят в трек:
                      итог из списка исключений / уже выдан ИЛ на исполнение /
                      дело уже отработало цикл (правила bank_intake)
-    [SEEN]         — иск банка уже отклонялся ранее (негативный кэш)
+    [SEEN]         — строка уже отклонялась ранее (негативный кэш, с 18.08.2026
+                     общий для обеих веток: иски банка И карточные отказы
+                     ответчик-ветки)
     [FETCH FAIL]   — карточка иска банка не прочиталась (повторить импорт)
     [BANK CAPPED]  — потолок карточек за один импорт; повторите импорт того же
                      дампа — уже добавленное отсеет дедуп
@@ -85,7 +94,8 @@ from court_monitor.bank_intake import (  # noqa: E402 — правила при�
 from court_monitor.config import log  # noqa: E402
 from court_monitor.courts import fi_court_by_domain  # noqa: E402
 from court_monitor.lifecycle import (  # noqa: E402
-    FI_NOT_ACCEPTED_RU, fi_not_accepted_kind,
+    FI_NOT_ACCEPTED_RU, discovered_already_resolved_old, fi_not_accepted_kind,
+    is_case_archived,
 )
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
@@ -200,8 +210,11 @@ def resolve_court(court_domain: str) -> CourtConfig | None:
 
 
 def _bank_seen(bank_state: dict) -> dict:
-    """Негативный кэш отказников трека — ленивая загрузка на первый истцовый
-    ряд: дампы без исков банка не должны трогать файл вовсе."""
+    """Негативный кэш отказников — ленивая загрузка на первую строку, которой
+    он нужен: дампы без кандидатов не должны трогать файл вовсе. С 18.08.2026
+    кэш ОБЩИЙ для обеих веток: истцовой (отказы трека) и ответчик-ветки
+    (карточный not_accepted) — без него повтор того же дампа качал бы карточку
+    каждого отказника заново."""
     if bank_state["seen"] is None:
         bank_state["seen"] = load_intake_seen()
     return bank_state["seen"]
@@ -210,6 +223,14 @@ def _bank_seen(bank_state: dict) -> dict:
 def _bank_remember(bank_state: dict, domain: str, num: str, reason: str) -> None:
     if remember_rejection(_bank_seen(bank_state), domain, num, reason):
         bank_state["seen_dirty"] = True
+
+
+def _bank_seen_refresh(bank_state: dict, rec: dict) -> None:
+    """Продлить жизнь записи кэша: прунинг считает TTL «от последнего появления
+    в выдаче» (зеркало авто-подхвата, runs.py), а импортёр до 18.08.2026
+    last_seen не обновлял — записи живых отказников протухали от старой даты."""
+    rec["last_seen"] = date.today().isoformat()
+    bank_state["seen_dirty"] = True
 
 
 def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
@@ -246,6 +267,7 @@ def _import_bank_row(r: dict, operator: str, now_iso: str, dry_run: bool,
 
     rec = _bank_seen(bank_state).get(seen_key(domain, num))
     if rec:
+        _bank_seen_refresh(bank_state, rec)
         return "seen_cached", (
             f"[SEEN] {num} — уже отклонялся ранее "
             f"({rec.get('reason', '?')}), пропуск"
@@ -320,20 +342,24 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
     """Карточка для дела основной картотеки (банк-ответчик).
 
     Возвращает пару (карточка|None, причина), причина ∈ {"", "dry_run",
-    "capped", "failed"}. Пара, а не голый None: до 16.08.2026 все исходы
-    сливались в None, и «не пробовали» было неотличимо от «пробовали и не
-    вышло» — счётчик отказов построить было не из чего, а без него провал
+    "capped", "no_court", "failed"}. Пара, а не голый None: до 16.08.2026 все
+    исходы сливались в None, и «не пробовали» было неотличимо от «пробовали и
+    не вышло» — счётчик отказов построить было не из чего, а без него провал
     доезжал до оператора только строкой в свёртке «Отчёт построчно»
     (инцидент 16.08.2026: два импорта Ленинского р/с ЕКБ завели 5 дел
     пустышками, портал суда отдавал «Этот запрос заблокирован по
     соображениям безопасности» с HTTP 200, а сводка писала «+4 в картотеку»).
 
-    ⚠️ "capped" (кэп карточек / суд не в реестре) отделён от "failed"
-    намеренно: запроса не было, и `config.FETCH_DIAG` держит диагноз ЧУЖОЙ,
-    предыдущей карточки — назвав его причиной этой, отчёт соврал бы.
-    "failed" — запрос был: отказ загрузки, заглушка, проверочный код или
-    пропуск открытым предохранителем суда; точный класс лежит в FETCH_DIAG,
-    читать его надо СРАЗУ (следующий запрос затрёт).
+    ⚠️ "capped" (кэп карточек) отделён от "failed" намеренно: запроса не было,
+    и `config.FETCH_DIAG` держит диагноз ЧУЖОЙ, предыдущей карточки — назвав
+    его причиной этой, отчёт соврал бы. "failed" — запрос был: отказ загрузки,
+    заглушка, проверочный код или пропуск открытым предохранителем суда;
+    точный класс лежит в FETCH_DIAG, читать его надо СРАЗУ (следующий запрос
+    затрёт). "no_court" (суд/площадка не в реестре региона) до 18.08.2026
+    маппился в "capped" и обещал «дозаполнит повторная вставка» — ложь: без
+    записи в реестре карточку не дочитает никто, это дыра в конфиге, и она
+    обязана мозолить глаза (истцовая ветка тот же случай всегда называла
+    явно). FETCH_DIAG при no_court тоже не читать — запроса не было.
 
     Отказ строку дампа НЕ роняет: у истцовой ветки `[FETCH FAIL]` дело просто
     не берут в трек, а здесь это иск ПРОТИВ банка — потерять его нельзя.
@@ -349,7 +375,7 @@ def _fetch_main_card(r: dict, domain: str, bank_state: dict,
         return None, "capped"
     court = fi_court_by_domain(domain, r.get("href_srv_num"))
     if court is None:
-        return None, "capped"
+        return None, "no_court"
     cid, _, cuid = (r.get("link") or "").partition("|")
     bank_state["cards"] += 1
     polite_delay()
@@ -382,6 +408,36 @@ def _note_card_failure(bank_state: dict) -> str:
         kind = str(config.FETCH_DIAG.get("kind", ""))
         bank_state.setdefault("fail_reasons", []).append((kind, reason))
     return reason
+
+
+def _note_no_court(bank_state: dict, domain: str) -> str:
+    """Причина «суд/площадка не в реестре региона» — мимо FETCH_DIAG.
+
+    Запроса не было, и читать диагноз чужой карточки нельзя (см.
+    `_fetch_main_card`); причину собираем сами и копим тем же каналом
+    `fail_reasons` — до сводки она доедет через `_top_card_fail_reason`.
+    """
+    reason = f"суд {domain} не найден в реестре региона"
+    bank_state.setdefault("fail_reasons", []).append(("no_court", reason))
+    return reason
+
+
+def _card_resolved_old(case: dict, card_info: dict) -> bool:
+    """Дело по прочитанной карточке давно решено и без признаков жалобы —
+    кандидат «тихо сразу в архив» (карточное зеркало
+    `discovered_already_resolved_old`; правило одно — боевой `is_case_archived`,
+    своей копии окон здесь нет).
+
+    ⚠️ Флаги жалобы смотрим в САМОЙ карточке: `build_json_entry` их в запись
+    не переносит (это делает только `_stamp_appeal_flags` истцовой ветки), и
+    голый `is_case_archived` молча заархивировал бы обжалованное дело — а дело
+    с признаком жалобы обязано заводиться живым.
+    """
+    if any(card_info.get(k) for k in (
+            "_fi_appeal_filed", "_fi_sent_to_appeal",
+            "_fi_cassation_filed", "_fi_sent_to_cassation")):
+        return False
+    return is_case_archived(case)
 
 
 def _top_card_fail_reason(bank_state: dict) -> str:
@@ -516,6 +572,11 @@ def import_rows(
         # Карточка дела основной картотеки (с 16.08.2026): сколько записей
         # осталось без неё и сколько дочитано повторным дампом.
         "card_failed": 0, "refilled": 0,
+        # Давно решённые дела против банка (с 18.08.2026): заведены тихо сразу
+        # в архивное окно, «новым иском» не объявляются — зеркало
+        # завершённых-старых блока 3 main_json. В `added` не входят: «+N в
+        # картотеку» остаётся про живые дела.
+        "resolved_old": 0,
         # Трек «Иски банка» (истцовые строки, с 13.08.2026):
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
@@ -530,6 +591,10 @@ def import_rows(
     # импорт, который ТОЛЬКО переименовал запись трека, файл бы не записал.
     promoted_bank_any = False
     refilled_any = False
+    # Дочитка card-blind записи ТРЕКА (владелец «bank» по case_owner) обязана
+    # пересохранить cases_bank.json — тем же классом флага, что и промоушен:
+    # без него дочитанная карточка жила бы только в памяти процесса.
+    refilled_bank_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     for r in rows:
@@ -582,9 +647,14 @@ def import_rows(
             # стоял пустым до понедельника (инцидент 16.08.2026).
             # Запись ищем ТОЧНЫМ ключом: is_fi_number_tracked матчит и архивы,
             # и wildcard комбо-номеров, а трогать мы вправе только активное
-            # дело ЭТОГО суда. Трек «Иски банка» сюда не попадает по
-            # построению — case_by_id собран из основного cases.json.
-            target = case_by_id.get((domain, num)) or case_by_id.get((domain, bare))
+            # дело ЭТОГО суда. С 18.08.2026 case_by_id несёт ОБЕ активные
+            # картотеки (см. case_owner при сборке индекса) — владелец записи
+            # решает, какой файл пересохранять: дочитка card-blind записи
+            # ТРЕКА без флага refilled_bank_any молча терялась (сохранялся
+            # cases.json, а правка жила в объекте cases_bank.json).
+            key = (domain, num) if (domain, num) in case_by_id else (domain, bare)
+            target = case_by_id.get(key)
+            owner = case_owner.get(key, "main")
             fi_blind = (_card_blind_case(target, r)
                         if r.get("bank_role") == "Ответчик" else None)
             if fi_blind is None:
@@ -594,16 +664,31 @@ def import_rows(
             card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
             if card_info:
                 _apply_main_card(fi_blind, r, card_info, now_iso)
-                refilled_any = True
+                if owner == "bank":
+                    refilled_bank_any = True
+                else:
+                    refilled_any = True
+                    # Дочитанное дело оказалось давно решённым — гасим анонс:
+                    # иначе следующий прогон объявил бы его «новым иском»
+                    # (та же тишина, что у [ADDED OLD] ниже).
+                    imp = target.get("import")
+                    if (isinstance(imp, dict) and not imp.get("announced")
+                            and _card_resolved_old(target, card_info)):
+                        imp["announced"] = True
                 counters["refilled"] += 1
+                bank_tail = " (иски банка)" if owner == "bank" else ""
                 lines.append(
                     f"[REFILLED] {num} — карточка дочитана "
-                    "(дело было заведено без неё)"
+                    f"(дело было заведено без неё){bank_tail}"
                 )
             else:
                 counters["already"] += 1
                 note = ""
-                if why == "failed":
+                if why == "no_court":
+                    counters["card_failed"] += 1
+                    reason = _note_no_court(bank_state, domain)
+                    note = f"; {reason} — карточку не дочитает никто"
+                elif why == "failed":
                     counters["card_failed"] += 1
                     reason = _note_card_failure(bank_state)
                     note = ("; " + (reason or "карточка не открылась")
@@ -668,6 +753,60 @@ def import_rows(
         # судов (Камышловский/Красноуфимский) резолв по домену даёт сервер 1.
         if r.get("href_srv_num"):
             entry["first_instance"]["srv_num"] = r["href_srv_num"]
+        # Давно решённое дело (строка выдачи: терминальный статус + дата старше
+        # FI_ARCHIVE_DAYS) — не новая тяжба, а поздно всплывшее старьё. Зеркало
+        # завершённых-старых блока 3 main_json (с 18.08.2026): заводим ТИХО
+        # сразу в архивное окно, а не отказываем — иск против банка терять
+        # нельзя, и при поздней жалобе дело штатно реактивируется из архива.
+        # Карточку не качаем (бережём кэп: первый дамп нового суда полон
+        # старья); запись card-blind — ближайший прогон дочитает её один раз,
+        # стародатный фильтр заглушит древние события, и is_case_archived
+        # уведёт дело в архив с полной историей.
+        if discovered_already_resolved_old(r):
+            # Якорь архивации: дата решения (= hearing_date в схеме), зеркало
+            # main_json — без него окно считалось бы от пустоты и дело
+            # провисело бы активным.
+            entry["first_instance"]["hearing_date"] = (
+                r.get("result_date") or r.get("filing_date") or "")
+            entry["import"] = {"operator": operator, "at": now_iso,
+                               "source": "dump", "announced": True}
+            new_entries.append(entry)
+            dedup_exact.add((domain, num))
+            if bare != num:
+                dedup_exact.add((domain, bare))
+            counters["resolved_old"] += 1
+            lines.append(
+                f"[ADDED OLD] {num} — дело давно решено "
+                f"({r.get('result_date') or r.get('filing_date') or '?'}): "
+                "заведено сразу в архив, «новым иском» не объявляется"
+            )
+            continue
+        # Негативный кэш (с 18.08.2026 общий с истцовой веткой): отказник
+        # карточного not_accepted при повторной вставке того же дампа не
+        # должен заново жечь карточку.
+        rec = _bank_seen(bank_state).get(seen_key(domain, num))
+        if rec:
+            row_res = (r.get("result") or "").strip()
+            if row_res and not fi_not_accepted_kind(row_res):
+                # Самоочистка: в выдаче появился НЕтерминальный итог — дело
+                # ожило (возврат отменён по частной жалобе) и дошло до нового
+                # результата. Забываем отказ; карточка ниже перечитается и
+                # решит заново.
+                _bank_seen(bank_state).pop(seen_key(domain, num), None)
+                bank_state["seen_dirty"] = True
+            else:
+                # last_seen НЕ бампаем осознанно (в отличие от истцовой
+                # ветки): прунинг по TTL — единственный канал перечитать
+                # карточку дела, чей возврат отменили БЕЗ следа в выдаче
+                # (строка пуста и до, и после отмены). Раз в
+                # BANK_INTAKE_SEEN_TTL_DAYS кэш отпускает строку, и карточка
+                # проверяется заново.
+                counters["seen_cached"] += 1
+                lines.append(
+                    f"[SEEN] {num} — уже отклонялся ранее "
+                    f"({rec.get('reason', '?')}), пропуск"
+                )
+                continue
         # Карточку читаем и для исков ПРОТИВ банка (с 14.08.2026): истцовые
         # строки того же дампа её качали всегда, а дело основной картотеки
         # заводилось пустышкой — без даты заседания и хронологии — до
@@ -676,12 +815,30 @@ def import_rows(
         card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
         note = ""
         if card_info:
+            # Второй рубеж not_accepted — по карточке (с 18.08.2026, зеркало
+            # второго рубежа card_rejects истцовой ветки): выдача отстаёт от
+            # карточки, и возврат/отказ в принятии бывает виден только в ней.
+            kind = fi_not_accepted_kind(card_info.get("Результат") or "")
+            if kind:
+                counters["not_accepted"] += 1
+                _bank_remember(bank_state, domain, num, "not_accepted")
+                lines.append(
+                    f"[NOT ACCEPTED] {num} — "
+                    f"{FI_NOT_ACCEPTED_RU.get(kind, kind)}: "
+                    "к производству не принят (итог из карточки), не заводим"
+                )
+                continue
             _apply_main_card(entry["first_instance"], r, card_info, now_iso)
         elif why == "failed":
             counters["card_failed"] += 1
             reason = _note_card_failure(bank_state)
             note = (f" ({reason or 'карточка недоступна'} — дозаполнит прогон "
                     "или повторная вставка дампа)")
+        elif why == "no_court":
+            counters["card_failed"] += 1
+            reason = _note_no_court(bank_state, domain)
+            note = (f" ({reason} — карточку не дочитает никто, "
+                    "проверьте реестр региона)")
         elif why == "capped":
             # За кэпом карточек дело тоже заводится card-blind — без пометки
             # хвост большого дампа выглядел бы полноценно заведённым (ревью
@@ -690,14 +847,26 @@ def import_rows(
         # Служебный блок: кто и когда завёл дело (история импортов, бейдж
         # «импортировано» на фронте — задел).
         entry["import"] = {"operator": operator, "at": now_iso, "source": "dump"}
+        # Карточное зеркало resolved_old: строка выдачи молчала, а по карточке
+        # дело давно решено и без признаков жалобы — та же тишина, что выше.
+        old_by_card = bool(card_info) and _card_resolved_old(entry, card_info)
+        if old_by_card:
+            entry["import"]["announced"] = True
         new_entries.append(entry)
         dedup_exact.add((domain, num))
         if bare != num:
             dedup_exact.add((domain, bare))
-        counters["added"] += 1
-        lines.append(
-            f"[ADDED] {num} · {r.get('bank_role', '?')} · {parties}{note}"
-        )
+        if old_by_card:
+            counters["resolved_old"] += 1
+            lines.append(
+                f"[ADDED OLD] {num} — по карточке дело давно решено: "
+                "заведено сразу в архив, «новым иском» не объявляется"
+            )
+        else:
+            counters["added"] += 1
+            lines.append(
+                f"[ADDED] {num} · {r.get('bank_role', '?')} · {parties}{note}"
+            )
 
     for num in stats.get("subsidiary_cases", []):
         counters["subsidiary"] += 1
@@ -715,12 +884,14 @@ def import_rows(
     elif dry_run:
         log.info("DRY-RUN: cases.json не изменён")
 
-    if (bank_entries or promoted_bank_any) and not dry_run:
+    if (bank_entries or promoted_bank_any or refilled_bank_any) and not dry_run:
         # Пара грузится склеенной (load_bank_file) ВЫШЕ, до цикла строк:
         # save_bank_json перезаписывает events-файл целиком, и без склейки
         # события существующих дел трека потерялись бы. ⚠️ Перечитывать файл
         # здесь нельзя — промоушен правит записи `bank_cases` по ссылке, и
-        # свежая загрузка затёрла бы переименование.
+        # свежая загрузка затёрла бы переименование. refilled_bank_any — тем
+        # же классом: дочитка card-blind записи трека без пересохранения
+        # жила бы только в памяти процесса.
         bank["cases"] = bank_entries + bank_cases
         save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
     if bank_state["seen_dirty"] and not dry_run:
@@ -774,7 +945,8 @@ def main(argv: list[str] | None = None) -> int:
         "region": region.code,
         "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
-        "card_failed": 0, "refilled": 0, "card_fail_reason": "",
+        "card_failed": 0, "refilled": 0, "resolved_old": 0,
+        "card_fail_reason": "",
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
         "bank_dry_run": 0, "bank_capped": 0,
@@ -867,13 +1039,14 @@ def main(argv: list[str] | None = None) -> int:
 
     log.info("=" * 60)
     log.info(
-        "Импорт (%s, оператор %s): +%d новых | %d промоушенов М→2 | "
-        "%d уже в базе | %d не наша роль | %d не принято к производству | "
-        "%d без ссылки | %d дочки%s",
+        "Импорт (%s, оператор %s): +%d новых | %d давно решённых — сразу в "
+        "архив | %d промоушенов М→2 | %d уже в базе | %d не наша роль | "
+        "%d не принято к производству | %d без ссылки | %d из кэша отказов | "
+        "%d дочки%s",
         court.name, operator or "—",
-        summary["added"], summary["promoted"], summary["already"],
-        summary["skipped_role"], summary["not_accepted"],
-        summary["no_link"], summary["subsidiary"],
+        summary["added"], summary["resolved_old"], summary["promoted"],
+        summary["already"], summary["skipped_role"], summary["not_accepted"],
+        summary["no_link"], summary["seen_cached"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
     if summary["card_failed"] or summary["refilled"]:

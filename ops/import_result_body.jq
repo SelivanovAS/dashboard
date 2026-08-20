@@ -43,6 +43,10 @@
   card_failed: (.card_failed // 0),
   refilled: (.refilled // 0),
 
+  # Давно решённые дела против банка (18.08.2026): заведены тихо сразу в
+  # архивное окно, «новым иском» не объявляются; в added не входят.
+  resolved_old: (.resolved_old // 0),
+
   # Трек «Иски банка» (истцовые строки дампа, с 13.08.2026)
   added_bank: (.added_bank // 0),
   excluded_result: (.excluded_result // 0),
