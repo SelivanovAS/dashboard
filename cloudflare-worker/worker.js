@@ -780,7 +780,13 @@ function ghRepoApi() { return "https://api.github.com/repos/" + cfgVar("GH_REPO"
 // обещать «завтра в 08:30» при выключенном кроне — самая опасная ложь админки
 // в дни блока, когда юрист как раз проверяет, ходит ли что-нибудь вообще.
 function cronUtcParts() {
-  const raw = String(cfgVar("CRON_UTC", "3:30")).trim();
+  // ⚠️ НЕ через cfgVar: тот подменяет фолбэком и ПУСТУЮ строку, а пустая
+  // CRON_UTC — осознанное «крона нет». Первый настоящий флип (20.08.2026)
+  // это и вскрыл: при crons = [] и CRON_UTC = "" плитка «Автозапуск»
+  // обещала «завтра 08:30». Фолбэк — только когда переменной нет ВОВСЕ
+  // (старый деплой без [vars]).
+  const v = RUNTIME_ENV && RUNTIME_ENV.CRON_UTC;
+  const raw = String(v === undefined || v === null ? "3:30" : v).trim();
   if (!raw) return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(raw);
   return m ? [Number(m[1]), Number(m[2])] : [3, 30];

@@ -152,6 +152,18 @@ class TestTerritories:
         assert "|| rc=1" in driver
         assert "continue" in driver
 
+    def test_progress_pusher_targets_own_worker(self):
+        """Вехи прогона — в воркер СВОЕЙ территории: до 20.08.2026 адрес был
+        захардкожен на ХМАО, и вехи Урала уезжали в чужой KV — админка ХМАО
+        показывала уральский прогон как свой, а Урал жил вчерашним. url= из
+        ~/.config/court-monitor/worker.<регион>; эталон без файла живёт на
+        прежнем адресе."""
+        src = _read("ops/mac-local-run/progress_pusher.py")
+        assert "court-monitor/worker." in src, "пушер не читает файл территории"
+        assert "REGION" in src, "пушер не определяет регион клона"
+        assert 'return "https://court-monitor-trigger' in src, \
+            "фолбэк эталона (ХМАО без файла worker.hmao) пропал"
+
     def test_launchagent_calls_driver(self):
         plist = _read("ops/mac-local-run/com.court-monitor.parse.plist")
         assert "parse_all.sh" in plist
