@@ -25,7 +25,7 @@ import import_search_dump as isd  # noqa: E402
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.parsing.search import parse_first_instance_search  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
-from fixture_dates import recent_fi_card_html  # noqa: E402
+from fixture_dates import days_ago, recent_fi_card_html  # noqa: E402
 
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
 
@@ -851,8 +851,14 @@ class TestWorkflowWiring:
         # Сводка админки считает ОБА трека (образец — acResultText рядом).
         assert 'parts = ["+" + (item.added || 0) + " в картотеку"]' in admin
         assert 'item.added_bank' in admin and '" в иски банка"' in admin
-        for word in ("отсеяно по итогу", "ИЛ уже выдан", "уже в треке"):
+        # Две корзины вместо суммы «уже в треке» (18.08.2026): seen_cached
+        # стал общим для обеих веток, и подпись «в треке» врала бы про
+        # карточные отказы дел против банка.
+        for word in ("отсеяно по итогу", "ИЛ уже выдан",
+                     "отработавших (иски банка)", "из кэша отказов"):
             assert word in admin, f"в сводке нет корзины «{word}»"
+        assert '" уже в треке"' not in admin, \
+            "суммарная корзина «уже в треке» не должна вернуться"
         # Светофор свежести «+N из M» — тоже по обоим трекам.
         assert "(e.added || 0) + (e.added_bank || 0)" in admin
         assert "added_bank: record.added_bank || 0" in worker
@@ -987,6 +993,9 @@ class TestMainTrackCardRead:
         assert fi["events"] == []
         assert "last_checked_at" not in fi and "intake_card_parse" not in fi
         assert any("карточка недоступна" in l for l in s["lines"])
+        # Сетевой сбой — отказ НЕ вечный: card-blind заведение в негативный
+        # кэш не пишется (иначе повтор дампа не дочитал бы карточку).
+        assert not import_env["seen"].exists()
 
     def test_empty_shell_not_stamped(self, import_env, monkeypatch):
         """Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается."""
@@ -1228,6 +1237,41 @@ class TestCardBlindRefill:
         assert s["refilled"] == 0 and s["card_failed"] == 0
         assert self._defendant(import_env)["first_instance"]["events"] == []
 
+    def test_bank_record_refill_saves_bank_file(self, import_env):
+        """Кросс-трековый refill: с 18.08.2026 case_by_id несёт ОБЕ картотеки,
+        и дочитка card-blind записи ТРЕКА обязана пересохранить
+        cases_bank.json — раньше выставлялся только refilled_any, сохранялся
+        cases.json, а дочитанная карточка жила в памяти процесса и молча
+        терялась."""
+        import_env["bank"].write_text(json.dumps({
+            "version": 1, "track": "plaintiff_light",
+            "cases": [{
+                "id": "2-1001/2026",
+                "current_stage": "first_instance",
+                "track": "plaintiff_light",
+                "first_instance": {"case_number": "2-1001/2026",
+                                   "court_domain": "akademicheskiy--svd.sudrf.ru",
+                                   "link": "101|aaaa-0001"},
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        before = import_env["bank"].read_text(encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["refilled"] == 1
+        refill_lines = [l for l in s["lines"] if l.startswith("[REFILLED]")]
+        assert refill_lines and all("(иски банка)" in l for l in refill_lines)
+        # Файл трека пересохранён, запись дочитана (штамп + хронология).
+        assert import_env["bank"].read_text(encoding="utf-8") != before
+        bank_cases = json.loads(
+            import_env["bank"].read_text(encoding="utf-8"))["cases"]
+        rec = {c["id"]: c for c in bank_cases}["2-1001/2026"]
+        assert rec["first_instance"]["last_checked_at"]
+        assert rec["first_instance"]["intake_card_parse"] is True
+        # В основную картотеку дубль 2-1001 не завёлся.
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        assert "2-1001/2026" not in {c["id"] for c in data["cases"]}
+
 
 # ── Иск к производству не принят (с 14.08.2026) ──────────────────────────────
 
@@ -1245,10 +1289,29 @@ class TestNotAcceptedGate:
     номером (решение юриста).
     """
 
-    @staticmethod
-    def _run_dump(env) -> dict:
-        env["dump"].write_text(_fixture("search_fi_not_accepted.html"),
-                               encoding="utf-8")
+    # Даты фикстуры (14.08.2026) → «сколько дней назад»: строчный гейт
+    # «давно решённое — сразу в архив» (18.08.2026) меряет ВОЗРАСТ по «Дате
+    # решения», и со статичными датами граница класса (прекращено / «без
+    # рассмотрения») через пару месяцев начала бы уезжать в [ADDED OLD]
+    # вместо [ADDED] — тест ронялся бы ходом времени (тот же приём, что
+    # fixture_dates.recent_fi_card_html).
+    _DUMP_DATE_AGES = {
+        "17.06.2026": 45, "24.06.2026": 40,   # возврат
+        "10.06.2026": 50, "19.06.2026": 44,   # отказ в принятии
+        "05.06.2026": 55, "07.08.2026": 9,    # передача по подсудности
+        "12.05.2026": 58, "10.08.2026": 6,    # без рассмотрения (граница)
+        "02.06.2026": 56, "30.07.2026": 15,   # прекращено (граница)
+        "01.08.2026": 12,                     # живое дело
+    }
+
+    @classmethod
+    def _run_dump(cls, env) -> dict:
+        from fixture_dates import days_ago
+
+        html = _fixture("search_fi_not_accepted.html")
+        for old, age in cls._DUMP_DATE_AGES.items():
+            html = html.replace(old, days_ago(age))
+        env["dump"].write_text(html, encoding="utf-8")
         rc = _run(env)
         assert rc == isd.EXIT_OK
         return _read_summary(env["gh_out"])
@@ -1293,3 +1356,196 @@ class TestNotAcceptedGate:
         assert _jq_has_counter(_read_repo(IMPORT_BODY_JQ), "not_accepted")
         assert '"not_accepted"' in worker
         assert "item.not_accepted" in admin
+
+
+# ── Карточные фильтры ветки «банк-ответчик» (с 18.08.2026) ───────────────────
+
+def _defendant_dump_html(rows: list[dict]) -> str:
+    """Мини-дамп выдачи со строками «банк-ответчик» и управляемыми итогом и
+    датами (структура — зеркало search_fi_not_accepted.html)."""
+    tr = []
+    for i, r in enumerate(rows, start=1):
+        num = r["num"]
+        link = (f'<a href="modules.php?name=sud_delo&srv_num=1&name_op=case'
+                f'&case_id={910 + i}&case_uid=bbbb-91{i:02d}&delo_id=1540005">'
+                f'{num}</a>') if r.get("link", True) else num
+        tr.append(
+            f"<tr><td>{link}</td><td>{r.get('filed', '')}</td>"
+            f"<td>КАТЕГОРИЯ: Иски о взыскании сумм по договору займа, "
+            f"кредитному договору ИСТЕЦ (ЗАЯВИТЕЛЬ): Петров Пётр Петрович "
+            f"ОТВЕТЧИК: ПАО Сбербанк</td>"
+            f"<td>Иванова И.И.</td><td>{r.get('result_date', '')}</td>"
+            f"<td>{r.get('result', '')}</td></tr>")
+    return ("<html><body><table>"
+            "<tr><td>№ дела</td><td>Дата поступления</td>"
+            "<td>Категория / Стороны</td><td>Судья</td><td>Дата решения</td>"
+            "<td>Решение</td></tr>" + "".join(tr) + "</table></body></html>")
+
+
+class TestDefendantCardGates:
+    """Выравнивание веток импортёра (18.08.2026, разбор юриста): у дел ПРОТИВ
+    банка появились карточные фильтры приёма и общий негативный кэш — зеркало
+    истцовой ветки. Решения юриста: card-blind заведение при недоступной
+    карточке сохранено; давно решённые дела заводятся ТИХО сразу в архив, а не
+    отклоняются (при поздней жалобе реактивация из архива); класс not_accepted
+    остаётся узким (прекращение и «без рассмотрения» заводятся)."""
+
+    RETURNED_RESULT = ("Заявление ВОЗВРАЩЕНО заявителю"
+                       "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ")
+    SEEN_KEY = "akademicheskiy--svd.sudrf.ru|2-1001/2026"
+
+    @staticmethod
+    def _returned_card(env, monkeypatch):
+        """Карточка с возвратом: свежая фикстура с подменённым «Результатом» —
+        строка выдачи при этом итога НЕ несёт (выдача отстаёт от карточки)."""
+        calls = env["card_calls"]
+
+        def fake(url, context=None):
+            calls["n"] += 1
+            return recent_fi_card_html().replace(
+                "ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
+                TestDefendantCardGates.RETURNED_RESULT)
+
+        monkeypatch.setattr(isd, "fetch_card_checked", fake)
+
+    def test_card_not_accepted_rejected_and_cached(self, import_env,
+                                                   monkeypatch):
+        """Второй рубеж: итог виден только в карточке — до 18.08.2026 такое
+        дело заводилось активным, объявлялось «новым иском» и 60 дней занимало
+        картотеку."""
+        self._returned_card(import_env, monkeypatch)
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["not_accepted"] == 2 and s["added"] == 0   # 2-1001, 2-1006
+        assert not import_env["json"].exists()
+        lines = [l for l in s["lines"] if l.startswith("[NOT ACCEPTED]")]
+        assert len(lines) == 2
+        assert all("итог из карточки" in l for l in lines)
+        assert _seen_map(import_env)[self.SEEN_KEY]["reason"] == "not_accepted"
+
+    def test_repeat_dump_hits_cache_not_court(self, import_env, monkeypatch):
+        """Повтор того же дампа — [SEEN] без единого нового HTTP."""
+        self._returned_card(import_env, monkeypatch)
+        _run(import_env)
+        assert import_env["card_calls"]["n"] == 3   # 2 ответчика + иск банка
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert import_env["card_calls"]["n"] == 3
+        assert s["seen_cached"] == 3 and s["not_accepted"] == 0
+        assert any(l.startswith("[SEEN]") and "2-1001/2026" in l
+                   for l in s["lines"])
+
+    def test_cache_self_clean_when_case_revives(self, import_env, monkeypatch):
+        """Возврат отменён по частной жалобе, дело дошло до решения: в выдаче
+        появился НЕтерминальный итог → кэш забывает отказ, карточка
+        перечитывается, дело заводится (иначе [SEEN] глушил бы его до конца
+        TTL — оговорка решения 14.08.2026 про оживание под тем же номером)."""
+        self._returned_card(import_env, monkeypatch)
+        _run(import_env)
+        assert _seen_map(import_env)[self.SEEN_KEY]["reason"] == "not_accepted"
+
+        import_env["dump"].write_text(_defendant_dump_html([
+            {"num": "2-1001/2026", "filed": days_ago(40),
+             "result_date": days_ago(5),
+             "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО"},
+        ]), encoding="utf-8")
+        calls = import_env["card_calls"]
+        monkeypatch.setattr(isd, "fetch_card_checked", lambda url, context=None:
+                            calls.__setitem__("n", calls["n"] + 1)
+                            or recent_fi_card_html())
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["seen_cached"] == 0 and s["added"] == 1
+        assert self.SEEN_KEY not in _seen_map(import_env)
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        assert "2-1001/2026" in {c["id"] for c in data["cases"]}
+
+    def test_row_resolved_old_goes_straight_to_archive_window(self,
+                                                              import_env):
+        """Давно решённое дело из строки выдачи: тихо, без карточки, сразу в
+        архивное окно — зеркало завершённых-старых блока 3 main_json."""
+        old = days_ago(120)
+        import_env["dump"].write_text(_defendant_dump_html([
+            {"num": "2-8001/2026", "filed": days_ago(150), "result_date": old,
+             "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН"},
+        ]), encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        s = _read_summary(import_env["gh_out"])
+        assert s["resolved_old"] == 1 and s["added"] == 0
+        assert import_env["card_calls"]["n"] == 0       # карточку не качали
+        assert any(l.startswith("[ADDED OLD]") for l in s["lines"])
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        rec = {c["id"]: c for c in data["cases"]}["2-8001/2026"]
+        assert rec["import"]["announced"] is True
+        assert rec["first_instance"]["hearing_date"] == old
+        # «Новым иском» ближайший прогон его не объявит…
+        import update_cases as uc
+        assert uc.announce_imported_cases(data["cases"]) == []
+        # …а боевое архивное правило заберёт первым же прогоном.
+        from court_monitor.lifecycle import is_case_archived
+        assert is_case_archived(rec) is True
+
+    def test_card_resolved_old_quiet(self, import_env, monkeypatch):
+        """Строка выдачи молчит, а по карточке дело решено давно — та же
+        тишина, но запись уходит в архивное окно уже С карточкой."""
+        calls = import_env["card_calls"]
+
+        def old_card(url, context=None):
+            calls["n"] += 1
+            html = recent_fi_card_html()
+            # Состарить якорные даты карточки на 100 дней (коллизий нет:
+            # диапазоны 3-40 и 103-140 не пересекаются).
+            for age in (40, 39, 10, 8, 3):
+                html = html.replace(days_ago(age), days_ago(age + 100))
+            return html
+
+        monkeypatch.setattr(isd, "fetch_card_checked", old_card)
+        _run(import_env)
+        s = _read_summary(import_env["gh_out"])
+        assert s["resolved_old"] == 2 and s["added"] == 0   # 2-1001, 2-1006
+        data = json.loads(import_env["json"].read_text(encoding="utf-8"))
+        rec = {c["id"]: c for c in data["cases"]}["2-1001/2026"]
+        assert rec["import"]["announced"] is True
+        assert rec["first_instance"]["events"], "карточка обязана наложиться"
+
+    def test_appeal_flag_in_card_beats_age(self):
+        """Дело с признаком жалобы обязано заводиться живым: build_json_entry
+        флаги в запись не переносит, их смотрим в самой карточке."""
+        case = {"current_stage": "first_instance",
+                "first_instance": {"status": "Решено",
+                                   "hearing_date": days_ago(120)}}
+        assert isd._card_resolved_old(case, {}) is True
+        for marker in ("_fi_appeal_filed", "_fi_sent_to_appeal",
+                       "_fi_cassation_filed", "_fi_sent_to_cassation"):
+            assert isd._card_resolved_old(case, {marker: True}) is False
+
+    def test_no_court_is_an_honest_failure(self, import_env):
+        """«Суд не в реестре» до 18.08.2026 маппился в "capped" и обещал
+        «дозаполнит повторная вставка» — ложь: без записи в реестре карточку
+        не дочитает никто. FETCH_DIAG не читаем — запроса не было."""
+        state = {"seen": None, "seen_dirty": False, "cards": 0,
+                 "fail_reasons": []}
+        isd.config.FETCH_DIAG.clear()
+        isd.config.FETCH_DIAG.update({"kind": "http_403", "status": 403})
+        card, why = isd._fetch_main_card(
+            {"case_number": "2-1/2026", "link": "1|a"},
+            "chuzhoy--xxx.sudrf.ru", state, False)
+        assert card is None and why == "no_court"
+        assert state["cards"] == 0                       # запроса не было
+        reason = isd._note_no_court(state, "chuzhoy--xxx.sudrf.ru")
+        assert "не найден в реестре региона" in reason
+        # Причина — наша собственная, а не HTTP 403 из чужого диагноза.
+        assert isd._top_card_fail_reason(state) == reason
+
+    def test_resolved_old_reaches_operator(self):
+        """Проводка счётчика через три звена (урок 14.08.2026: каждое рвётся
+        молча)."""
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert _jq_has_counter(_read_repo(IMPORT_BODY_JQ), "resolved_old")
+        assert '"resolved_old"' in worker
+        assert "item.resolved_old" in admin
+        assert "давно решённых" in admin

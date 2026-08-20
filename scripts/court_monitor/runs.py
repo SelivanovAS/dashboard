@@ -79,6 +79,7 @@ from court_monitor.lifecycle import (
     _events_newly_match, _is_latest_session_event,
     _has_held_prior_hearing, _has_held_prior_session,
     fi_termination_details, fi_not_accepted_kind,
+    discovered_already_resolved_old as _discovered_already_resolved_old,
     _extract_return_reason, _RESTART_RE, _RECESS_RE, _SESSION_START_RX,
     _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
     _TERMINAL_FI_EVENT_RX, _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
@@ -1264,18 +1265,8 @@ def main():
     )
 
 
-def _discovered_already_resolved_old(fi: dict, now: datetime | None = None) -> bool:
-    """True, если дело 1-й инст. найдено поиском уже в терминальном статусе
-    («Решено»/«Возвращено») и его дата решения/поступления старше FI_ARCHIVE_DAYS.
-    Такие дела не подаём как «новый иск»: это не новая тяжба против банка, а давно
-    завершённое дело, поздно всплывшее в выдаче суда. Заводим сразу в архив."""
-    now = now or datetime.now()
-    if (fi.get("status") or "").strip() not in ("Решено", "Возвращено"):
-        return False
-    anchor = parse_date(fi.get("result_date") or "") or parse_date(fi.get("filing_date") or "")
-    if not anchor:
-        return False
-    return (now - anchor).days > config.FI_ARCHIVE_DAYS
+# _discovered_already_resolved_old переехал в lifecycle.discovered_already_resolved_old
+# (18.08.2026): правило стало общим с импортёром дампов — см. импорт-алиас выше.
 
 
 def _apel_csv_row_to_json_case(

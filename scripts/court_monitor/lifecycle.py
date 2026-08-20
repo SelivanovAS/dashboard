@@ -453,6 +453,24 @@ def fi_not_accepted_kind(result: str) -> str:
     return ""
 
 
+def discovered_already_resolved_old(fi: dict, now: datetime | None = None) -> bool:
+    """True, если дело 1-й инст. найдено поиском уже в терминальном статусе
+    («Решено»/«Возвращено») и его дата решения/поступления старше FI_ARCHIVE_DAYS.
+    Такие дела не подаём как «новый иск»: это не новая тяжба против банка, а давно
+    завершённое дело, поздно всплывшее в выдаче суда. Заводим сразу в архив.
+
+    Правило ОБЩЕЕ для каналов приёма по строке выдачи: блок 3 main_json
+    (автопоиск) и импортёр дампов капчёвых судов — две копии разъехались бы
+    молча (тот же урок, что FI_NOT_ACCEPTED_RU выше)."""
+    now = now or datetime.now()
+    if (fi.get("status") or "").strip() not in ("Решено", "Возвращено"):
+        return False
+    anchor = parse_date(fi.get("result_date") or "") or parse_date(fi.get("filing_date") or "")
+    if not anchor:
+        return False
+    return (now - anchor).days > config.FI_ARCHIVE_DAYS
+
+
 def fi_is_merged(fi: dict) -> bool:
     """Дело присоединено к другому (ст. 151 ГПК) по ТЕКУЩЕМУ состоянию карточки.
 

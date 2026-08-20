@@ -2749,6 +2749,10 @@ function impResultText(item) {
     // в свёртке «Отчёт построчно» — сводка бодро писала «+4 в картотеку».
     // Ставим сразу после заведений: это про те же дела, а не корзина отсева.
     if (item.refilled) parts.push(item.refilled + " карточек дочитано");
+    // Давно решённые дела против банка (18.08.2026): заведены тихо сразу в
+    // архивное окно и «новым иском» не объявляются — в «+N в картотеку» не
+    // входят, оператор обязан видеть их отдельной корзиной.
+    if (item.resolved_old) parts.push(item.resolved_old + " давно решённых — сразу в архив");
     // Потеря исков банка — САМОЕ важное в сводке и раньше называлась мягче
     // всего: «12 карточка не открылась» звучало технической мелочью, а
     // означало двенадцать НЕзаведённых дел (разбор 16.08.2026 — блок ГАС).
@@ -2772,8 +2776,11 @@ function impResultText(item) {
     if (item.already) parts.push(item.already + " уже в базе");
     if (item.excluded_result) parts.push(item.excluded_result + " отсеяно по итогу");
     if (item.excluded_writ) parts.push(item.excluded_writ + " ИЛ уже выдан");
-    var seen = (item.already_spent || 0) + (item.seen_cached || 0);
-    if (seen) parts.push(seen + " уже в треке");
+    // Две корзины, а не сумма «уже в треке»: seen_cached с 18.08.2026 общий
+    // для обеих веток (карточные отказы ответчик-ветки тоже кэшируются), и
+    // подпись «в треке» врала бы про дела против банка.
+    if (item.already_spent) parts.push(item.already_spent + " отработавших (иски банка)");
+    if (item.seen_cached) parts.push(item.seen_cached + " из кэша отказов");
     if (item.bank_capped) parts.push(item.bank_capped + " не влезло в потолок");
     if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
     if (item.not_accepted) parts.push(item.not_accepted + " к производству не принято");
