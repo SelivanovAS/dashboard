@@ -2044,6 +2044,70 @@ class TestDefaultCancellationArchiveAndRhythm:
         assert lifecycle.bank_legal_force_est(fi) == date(2026, 8, 25)
 
 
+class TestDefaultCancelWeeklyRhythm:
+    """Pending-отмена заочного БЕЗ даты заседания (или с прошедшей): первые
+    BANK_DEFAULT_CANCEL_DAILY_GRACE_DAYS от якоря (дата заседания, иначе дата
+    подачи) читаем ежедневно, дальше — недельный ритм. Прежний ранний выход
+    `return False, ""` читал такое дело каждым прогоном все 90 дн потолка
+    (2-3005/2026 Орджоникидзевского: заявление 21.07.2026, месяц ежедневных
+    чтений)."""
+
+    TODAY = date(2026, 8, 20)
+
+    def _pending(self, filed: str, checked_days_ago: int,
+                 hearing: str = "") -> dict:
+        return _track_case(
+            status="Решено",
+            last_checked_at=(
+                self.TODAY - timedelta(days=checked_days_ago)).isoformat(),
+            events=_default_events(filed=filed, hearing=hearing),
+        )
+
+    def test_fresh_application_parsed_daily(self):
+        """Свежее заявление: ст. 240 даёт суду 10 дней — дату ловим сразу."""
+        case = self._pending(filed="17.08.2026", checked_days_ago=1)
+        assert lifecycle.should_skip_case(case, self.TODAY) == (False, "")
+
+    def test_stalled_application_weekly(self):
+        case = self._pending(filed="31.07.2026", checked_days_ago=3)
+        skip, reason = lifecycle.should_skip_case(case, self.TODAY)
+        assert skip is True
+        assert reason == "default_cancel_weekly(3d/7d)"
+
+    def test_weekly_rhythm_parses_on_eighth_day(self):
+        case = self._pending(filed="31.07.2026", checked_days_ago=8)
+        assert lifecycle.should_skip_case(case, self.TODAY) == (False, "")
+
+    def test_passed_hearing_fresh_parsed_daily(self):
+        """Заседание прошло, результат не заполнен — свежий исход ловим
+        ежедневно: якорь — дата ЗАСЕДАНИЯ, а не давняя подача."""
+        case = self._pending(filed="20.07.2026", hearing="17.08.2026",
+                             checked_days_ago=1)
+        assert lifecycle.should_skip_case(case, self.TODAY) == (False, "")
+
+    def test_passed_hearing_stalled_weekly(self):
+        case = self._pending(filed="20.07.2026", hearing="31.07.2026",
+                             checked_days_ago=2)
+        skip, reason = lifecycle.should_skip_case(case, self.TODAY)
+        assert skip is True
+        assert reason == "default_cancel_weekly(2d/7d)"
+
+    def test_reason_translated(self):
+        assert "раз в 7 дн" in lifecycle.skip_reason_ru(
+            "default_cancel_weekly(3d/7d)")
+
+    def test_runs_wiring_counts_weekly(self):
+        """Без проводки новая причина утекла бы в «без движения» — и в плане
+        очереди, и в классификации скипов FI-цикла."""
+        path = os.path.join(SCRIPTS_DIR, "court_monitor", "runs.py")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        assert src.count('"default_cancel_weekly"') >= 2, (
+            "default_cancel_weekly должен стоять в ОБОИХ кортежах недельного "
+            "ритма (план очереди + классификация скипов FI-цикла)."
+        )
+
+
 class TestRepairVacatedDefaultJudgments:
     def test_vacated_case_returns_to_work(self):
         case = _track_case(

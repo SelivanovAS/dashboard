@@ -2997,13 +2997,24 @@ def should_skip_case(
     # заочного решения» не матчится ни _SESSION_START_RX, ни _HEARING_MARKERS_RX,
     # поэтому get_next_planned_date по нему вернёт None и общие ветки ниже
     # дело не притормозят (78 заочных дел в ХМАО, на Урале сотни). Скипаем
-    # ровно до дня заседания по заявлению.
+    # ровно до дня заседания по заявлению; пока даты нет (или она прошла без
+    # результата) — первые BANK_DEFAULT_CANCEL_DAILY_GRACE_DAYS от якоря
+    # читаем ежедневно (свежее заявление суд назначает быстро, свежий исход
+    # ловим сразу), дальше — недельный ритм: без него зависшее дело читалось
+    # бы каждым прогоном все 90 дн потолка (2-3005/2026 Урала — месяц подряд).
     if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
             and default_cancellation_pending(block, today)):
-        _cancel_hd = parse_date(
-            default_cancellation_state(block, today)["hearing_date"])
+        _cancel_st = default_cancellation_state(block, today)
+        _cancel_hd = parse_date(_cancel_st["hearing_date"])
         if _cancel_hd and _cancel_hd.date() > today:
             return True, f"default_cancel_hearing({_cancel_hd.date().isoformat()})"
+        _cancel_anchor = _cancel_hd or parse_date(_cancel_st["filed_date"])
+        if (_cancel_anchor and (today - _cancel_anchor.date()).days
+                > config.BANK_DEFAULT_CANCEL_DAILY_GRACE_DAYS):
+            days_since = (today - last_checked).days
+            if days_since < config.BANK_WRIT_CHECK_DAYS:
+                return True, (f"default_cancel_weekly({days_since}d/"
+                              f"{config.BANK_WRIT_CHECK_DAYS}d)")
         return False, ""
     if (stage == "first_instance" and is_bank_plaintiff_track(case_dict)
             and (block.get("status") or "").strip() in ("Решено", "Возвращено")):
@@ -3059,6 +3070,10 @@ def skip_reason_ru(reason: str) -> str:
     if m:
         return (f"заявление об отмене заочного решения — заседание "
                 f"{m.group(1)} ещё впереди")
+    m = re.match(r"default_cancel_weekly\((\d+)d/(\d+)d\)$", reason)
+    if m:
+        return (f"заявление об отмене заочного без даты рассмотрения — "
+                f"опрос раз в {m.group(2)} дн. (прошло {m.group(1)})")
     if reason == "material_pending_promotion":
         return "материал под М-номером, ждём промоушен"
     return reason

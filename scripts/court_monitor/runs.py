@@ -3202,10 +3202,12 @@ def main_json():
         _plan_skip, _plan_reason = should_skip_case(_c, today)
         if _plan_skip:
             # Недельный ритм исков банка (решённые ждут ИЛ/жалобу,
-            # присоединённые — отмену объединения) — отдельное слагаемое:
-            # раньше он сливался в «заседание в будущем», и юрист читал
-            # 39 отложенных writ_weekly-дел как отложенные по заседаниям.
-            if _plan_reason.startswith(("writ_weekly", "merged_weekly")):
+            # присоединённые — отмену объединения, зависшие отмены заочного —
+            # дату рассмотрения) — отдельное слагаемое: раньше он сливался в
+            # «заседание в будущем», и юрист читал 39 отложенных
+            # writ_weekly-дел как отложенные по заседаниям.
+            if _plan_reason.startswith(
+                    ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 fi_plan_writ_weekly += 1
             else:
                 fi_plan_skip += 1
@@ -3311,7 +3313,8 @@ def main_json():
                 # Заседание по заявлению об отмене заочного решения — такая же
                 # известная будущая активность, а не «без движения».
                 fi_skipped_future += 1
-            elif reason.startswith(("writ_weekly", "merged_weekly")):
+            elif reason.startswith(
+                    ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 # Недельный ритм исков банка — не «без движения»
                 # (см. одноимённое слагаемое в плане очереди выше).
                 fi_skipped_writ_weekly += 1
