@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([2101](../../scripts/court_monitor/runs.py#L2101)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| `--json` | `main_json` ([2110](../../scripts/court_monitor/runs.py#L2110)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([1097](../../scripts/court_monitor/runs.py#L1097)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([5591](../../scripts/court_monitor/runs.py#L5591)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([5267](../../scripts/court_monitor/runs.py#L5267)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([5448](../../scripts/court_monitor/runs.py#L5448)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1347](../../scripts/court_monitor/runs.py#L1347)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--digest-only` | `main_digest_only` ([5627](../../scripts/court_monitor/runs.py#L5627)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([5303](../../scripts/court_monitor/runs.py#L5303)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([5484](../../scripts/court_monitor/runs.py#L5484)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1356](../../scripts/court_monitor/runs.py#L1356)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально

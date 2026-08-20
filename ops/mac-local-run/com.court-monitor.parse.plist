@@ -12,13 +12,15 @@
 
   ⏸ С 19.08.2026 облачный крон ВЫКЛЮЧЕН (crons = [] в wrangler.toml обеих
   территорий — лотерея адресов раннеров), и этот агент — ОСНОВНОЙ путь
-  парсинга. Слоты каждые 30 минут с 08:00 до 11:00 (решение юриста
-  19.08.2026): лишние запуски бесплатны — гейт cloud_run_ok.py по журналу
-  здоровья видит уже состоявшийся зрячий прогон (свой же утренний или
-  облачный, если крон включат обратно) и выходит за секунды, а лок на клон
-  не пускает второй прогон параллельно первому. Плотная сетка добивает
-  сорвавшуюся пробу судов (19.08.2026 проба ХМАО дважды отбита сбросом
-  соединения — прошла с третьего раза) и «Mac проснулся позже».
+  парсинга. Слоты каждые 30 минут с 08:00 до 10:00 (решение юриста
+  20.08.2026, «один дайджест в день»): неполные попытки сохраняют данные и
+  копят новости молча, отправляет дайджест ЗАМЫКАЮЩАЯ попытка — удачная
+  (поиски зрячие И карточки ≥85% плана) либо слот 10:00 с тем, что
+  накопилось. Лишние запуски бесплатны — гейт cloud_run_ok.py выходит за
+  секунды, когда дайджест дня уже отправлен, а лок на клон не пускает второй
+  прогон параллельно первому. Слотов после 10:00 нет (решение юриста);
+  проспанный слот launchd доигрывает при пробуждении — дедлайн внутри
+  скрипта отправит накопленное сразу.
 
   Ключ «anywhere» в аргументах (19.08.2026): агент больше не требует сети
   Сбера. В офисе поведение прежнее (преflight «в сети Сбера» проверяется
@@ -67,16 +69,6 @@
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
-        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
-        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
-        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
-        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
-        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>EnvironmentVariables</key>

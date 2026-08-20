@@ -57,89 +57,138 @@ def _src(run_at: str, count: int, fail_streak: int = 0) -> dict:
             "fail_streak": fail_streak, "counts": [count]}
 
 
-class TestSightedRunToday:
+class TestRunVerdicts:
+    """Вердикты cloud_run_ok («один дайджест в день», 20.08.2026): удачная
+    попытка = поиски зрячие И карточки ≥85% плана (CARDS_READ_OK_RATIO,
+    решение юриста — сначала 75%, поправил на 85%)."""
+
     TODAY = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
     OLD = "2026-01-01T08:00:00"
 
-    def test_sighted_today(self):
-        ok, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24), "b": _src(self.TODAY, 0)}})
-        assert ok and "отработало" in text
+    def _lr(self, read: int, planned: int, at: str | None = None) -> dict:
+        return {"at": at or self.TODAY, "cards_read": read,
+                "cards_planned": planned}
 
-    def test_blind_today_means_parse(self):
-        """Слепой прогон (адрес раннера заблокирован) пишет нули по ВСЕМ
-        источникам — Mac обязан парсить сам."""
-        ok, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 0), "b": _src(self.TODAY, 0)}})
-        assert not ok and "СЛЕПОЙ" in text
+    def _state(self, count: int, fail: int = 0, lr: dict | None = None) -> dict:
+        st = {"sources": {"a": _src(self.TODAY, count, fail_streak=fail)}}
+        if lr is not None:
+            st["last_run"] = lr
+        return st
 
-    def test_no_run_today_means_parse(self):
-        ok, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.OLD, 24)}})
-        assert not ok and "не было" in text
+    def test_complete_when_sighted_and_cards_over_threshold(self):
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(24, lr=self._lr(160, 172)))
+        assert ok and "прочитано 160 из 172" in why
+
+    def test_threshold_is_inclusive_85(self):
+        ok, _ = cloud_run_ok.run_complete_today(
+            self._state(24, lr=self._lr(85, 100)))
+        assert ok, "85% — это уже удачная попытка (порог включительный)"
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(24, lr=self._lr(84, 100)))
+        assert not ok and "84%" in why
+
+    def test_half_read_run_is_incomplete(self):
+        """ХМАО 20.08: поиски ожили, но сеть срезала 52 карточки из 172 —
+        попытка неполная, дайджест не шлём, копим и дочитываем."""
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(24, lr=self._lr(120, 172)))
+        assert not ok and "из 172" in why
+
+    def test_blind_searches_incomplete(self):
+        """Формулировка называет, что не удалось: юрист 20.08 прочитал «не
+        спарсилось» при доехавших карточках как полный провал."""
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(0, lr=self._lr(170, 172)))
+        assert not ok and "СЛЕПЫЕ" in why and "170" in why
 
     def test_fetch_fail_is_not_sighted(self):
         """⚠️ Ловушка: при сетевом фейле update_parse_health бампает
-        last_run_at, но НЕ трогает last_count — остаётся вчерашний ненулевой.
-        Без проверки fail_streak провальный прогон сошёл бы за зрячий, гейт
-        промолчал бы, и слепое утро осталось бы без данных вовсе."""
-        ok, _ = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24, fail_streak=1)}})
+        last_run_at, но НЕ трогает last_count — без fail_streak провальный
+        прогон сошёл бы за зрячий."""
+        ok, _ = cloud_run_ok.run_complete_today(self._state(24, fail=1))
         assert not ok
 
-    def test_empty_or_missing_state(self):
-        assert not cloud_run_ok.sighted_run_today({})[0]
-        assert not cloud_run_ok.sighted_run_today({"sources": {}})[0]
+    def test_no_run_today(self):
+        ok, why = cloud_run_ok.run_complete_today(
+            {"sources": {"a": _src(self.OLD, 24)}})
+        assert not ok and "не было" in why
 
-    # ── Гейт-2.0: вторая ось — карточки (дочитка, 20.08.2026) ────────────────
-
-    def _lr(self, ok: int, failed: int, skipped: int = 0, at: str | None = None):
-        return {"at": at or self.TODAY, "requests_ok": ok,
-                "requests_failed": failed, "cards_breaker_skipped": skipped,
-                "cards_blocked": 0}
-
-    def test_half_sighted_run_retries_cards(self):
-        """Полузрячий прогон (ХМАО 20.08: поиски ожили, сеть срезала 52
-        карточки из 172) обязан отправляться на дочитку, а не ждать завтра."""
-        ok, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24)},
-             "last_run": self._lr(128, 62, 52)})
-        assert not ok and "срезала карточки" in text
-
-    def test_minor_losses_do_not_retry(self):
-        """Оба порога сразу: штатные сбросы (19.08: 19%) и мелкие прогоны с
-        парой неудач не гоняют полный прогон заново."""
-        ok, _ = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24)},
-             "last_run": self._lr(199, 31, 15)})   # 19% — доля ниже порога
-        assert ok
-        ok, _ = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24)},
-             "last_run": self._lr(10, 9)})         # 47%, но лишь 9 штук
+    def test_old_journal_without_cards_is_complete(self):
+        """Журнал без блока last_run (старый формат) — судим только по
+        поискам, как раньше."""
+        ok, _ = cloud_run_ok.run_complete_today(self._state(24))
         assert ok
 
     def test_stale_last_run_is_ignored(self):
-        """Вчерашний last_run не судит сегодняшний день (прогона ещё не было
-        → его карточные потери ни при чём)."""
-        ok, _ = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24)},
-             "last_run": self._lr(10, 999, at=self.OLD)})
+        """Вчерашний last_run не судит сегодняшний день."""
+        ok, _ = cloud_run_ok.run_complete_today(
+            self._state(24, lr=self._lr(1, 100, at=self.OLD)))
         assert ok
 
-    def test_no_last_run_block_keeps_old_behaviour(self):
-        """Старый журнал без блока last_run — поведение прежнее (зрячие
-        поиски = пропуск слота)."""
-        ok, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 24)}})
-        assert ok and "отработало" in text
 
-    def test_blind_text_says_searches(self):
-        """Формулировка слепого утра называет, что именно не удалось: юрист
-        20.08 прочитал «за утро так и не спарсилось» как полный провал при
-        доехавшем дайджесте."""
-        _, text = cloud_run_ok.sighted_run_today(
-            {"sources": {"a": _src(self.TODAY, 0)}})
-        assert "по поискам" in text and "мониторинг" in text
+class TestDeliveredGate:
+    """Гейт слота: пропуск ТОЛЬКО когда дайджест дня уже отправлен
+    (delivered_at) — иначе повторный маркер-коммит разослал бы его дважды."""
+
+    TODAY = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    def _ctx(self, delivered: bool, changes: int = 1, at: str | None = None) -> dict:
+        ctx = {"saved_at": at or self.TODAY,
+               "fi_changes": [{"case": f"2-{i}/2026"} for i in range(changes)]}
+        if delivered:
+            ctx["delivered_at"] = at or self.TODAY
+        return ctx
+
+    def test_delivered_today_skips(self):
+        skip, text = cloud_run_ok.gate({}, self._ctx(True))
+        assert skip and "отправлен" in text
+
+    def test_undelivered_complete_run_still_works(self):
+        """Удачная попытка без доставки (сорвался маркер-коммит) — слот
+        обязан работать и закрыть день доставкой."""
+        state = {"sources": {"a": _src(self.TODAY, 24)}}
+        skip, text = cloud_run_ok.gate(state, self._ctx(False))
+        assert not skip and "не отправлен" in text
+
+    def test_undelivered_incomplete_keeps_working(self):
+        skip, text = cloud_run_ok.gate(
+            {"sources": {"a": _src(self.TODAY, 0)}}, self._ctx(False))
+        assert not skip and "копим" in text
+
+    def test_yesterdays_delivery_does_not_skip(self):
+        old = "2026-01-01T09:00:00"
+        skip, _ = cloud_run_ok.gate({}, self._ctx(True, at=old))
+        assert not skip
+
+    def test_context_pending(self):
+        assert cloud_run_ok.context_pending(self._ctx(False))
+        assert not cloud_run_ok.context_pending(self._ctx(True)), \
+            "доставленное — не pending"
+        assert not cloud_run_ok.context_pending(self._ctx(False, changes=0)), \
+            "пустое накопление — нечего доставлять"
+        assert not cloud_run_ok.context_pending({})
+
+    def test_delta_keys_mirror_core(self):
+        """CTX_DELTA_KEYS — зеркало _CTX_DELTA_KEYS из digest/core.py: при
+        расхождении --has-pending молча ослепнет на новый вид дельты."""
+        import importlib
+        sys.path.insert(0, SCRIPTS_DIR)
+        core = importlib.import_module("court_monitor.digest.core")
+        assert tuple(cloud_run_ok.CTX_DELTA_KEYS) == tuple(core._CTX_DELTA_KEYS)
+
+
+class TestProgressLine:
+    TODAY = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    def test_numbers_and_searches(self):
+        state = {"sources": {"a": _src(self.TODAY, 24)},
+                 "last_run": {"at": self.TODAY, "cards_read": 120,
+                              "cards_planned": 172}}
+        line = cloud_run_ok.progress_line(state)
+        assert "120 из 172" in line and "69%" in line and "отвечали" in line
+        state["sources"]["a"] = _src(self.TODAY, 0)
+        assert "молчали" in cloud_run_ok.progress_line(state)
 
 
 # ── Проводка гейта в parse_and_push ──────────────────────────────────────────
@@ -165,7 +214,7 @@ class TestGateWiring:
 
     def test_skip_message_names_the_reason(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "Облако сегодня уже отработало" in text
+        assert "Дайджест дня уже отправлен" in text
         assert "пропуск" in text
 
 
@@ -177,16 +226,20 @@ class TestCanaryQuietRetries:
     неудачу дал 5 одинаковых сообщений за утро. Агентская ветка обязана
     молчать до конца окна и кричать один раз в день."""
 
-    def test_quiet_until_window_end_then_single_alert(self):
+    def test_quiet_until_deadline_then_deliver_or_single_alert(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "PROBE_ALERT_AFTER_MIN=655" in text, \
-            "порог 10:55 пропал — либо алерты вернутся на каждый слот, либо их не будет вовсе"
-        assert ".alerted-parse-" in text, "дневной дедуп алерта пропал"
+        assert "DELIVERY_DEADLINE_MIN=595" in text, \
+            "дедлайн 09:55 пропал — слот 10:00 перестанет быть замыкающим"
+        assert ".alerted-parse-" in text, "дневной дедуп алерта «утро потеряно» пропал"
         body = text[text.index("probe_failed()"):]
         body = body[:body.index('if PROBE_HOST=')]
         assert '"$FORCE" = "1"' in body, "ручной запуск (--force) обязан кричать сразу"
         assert "exit 0" in body, "тихая ветка обязана выходить без ошибки"
         assert "finish_pusher" in body, "pusher уже запущен к моменту пробы — его надо дождаться"
+        # Дедлайн при мёртвых судах: накопленное утро уезжает доставочным
+        # коммитом БЕЗ парсинга, а не пропадает до завтра.
+        assert "--has-pending" in body and "deliver_and_push" in body, \
+            "probe_failed потерял доставку накопленного на дедлайне"
 
     def test_import_agent_gets_anywhere_only_with_quiet_canary(self):
         """--anywhere у агентов появился вместе с тихой канарейкой: вернуть
@@ -195,20 +248,67 @@ class TestCanaryQuietRetries:
         assert ".alerted-dumps-" in text, "дневной дедуп алерта дампов пропал"
 
 
+# ── «Один дайджест в день»: проводка решения «слать или копить» ─────────────
+
+class TestOneDigestPerDay:
+    """Отправку решает СООБЩЕНИЕ КОММИТА: replay_on_push стреляет по
+    contains(message, 'Mac-парсинг'). Черновик обязан быть БЕЗ этой
+    подстроки, доставка — с ней, а штамп delivered_at — ДО коммита (иначе
+    следующий слот не узнает о доставке и продублирует дайджест)."""
+
+    def test_draft_message_has_no_marker_substring(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        draft = [l for l in text.splitlines() if "копим дайджест" in l and "COMMIT_MSG" in l]
+        assert draft, "черновое сообщение коммита пропало"
+        assert all("Mac-парсинг" not in l for l in draft), (
+            "в черновом сообщении подстрока «Mac-парсинг» — contains() гарда "
+            "replay_on_push разошлёт недособранное утро"
+        )
+
+    def test_delivery_message_keeps_marker(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert text.count("(Mac-парсинг)") >= 2, (
+            "маркер доставки должен стоять и в deliver_and_push, и в "
+            "замыкающем коммите после парсинга"
+        )
+
+    def test_mark_delivered_before_commit(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        decision = text.index('RUN_WHY=$(')
+        stamp = text.index("--mark-delivered", decision)
+        commit = text.index('COMMIT_MSG="📊 Обновление данных', decision)
+        assert stamp < commit, "штамп delivered_at обязан войти в доставочный коммит"
+
+    def test_verdict_deadline_and_force_all_deliver(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        block = text[text.index('RUN_WHY=$('):]
+        block = block[:block.index("if git diff --cached --quiet")]
+        assert '[ "$RUN_OK" = "1" ] && DELIVER=1' in block
+        assert '[ "$FORCE" = "1" ] && DELIVER=1' in block
+        assert "past_deadline && DELIVER=1" in block
+
+    def test_incomplete_attempt_sends_progress_alert(self):
+        """Решение юриста 20.08.2026: после КАЖДОЙ неполной попытки — алерт
+        «прочитано X из Y» (--progress), без дневного дедупа."""
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "попытка неполная" in text and "--progress" in text
+
+    def test_deadline_delivery_names_incompleteness(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "дайджест отправлен с тем, что дочиталось" in text
+
+
 # ── Расписания агентов (plistlib: в CI нет plutil) ───────────────────────────
 
 class TestAgentSchedules:
     def test_parse_slots(self):
-        """С 19.08.2026 облачный крон ВЫКЛЮЧЕН (crons = [] в wrangler.toml
-        обеих территорий) и агент — основной путь парсинга: слоты каждые
-        30 минут с 08:00 до 11:00 (решение юриста). Лишние запуски бесплатны
-        — гейт cloud_run_ok видит уже состоявшийся зрячий прогон, лок на клон
-        не пускает параллель; плотная сетка добивает сорвавшуюся пробу судов
-        (19.08.2026: проба ХМАО прошла с третьего раза) и поздний старт Mac."""
+        """«Один дайджест в день» (20.08.2026): слоты каждые 30 минут с 08:00
+        до 10:00, слот 10:00 — замыкающий (шлёт что есть). Слотов после 10:00
+        НЕТ — решение юриста; проспанный слот launchd доигрывает при
+        пробуждении, дедлайн внутри скрипта отправит накопленное сразу."""
         assert _slots(PARSE_PLIST) == {
             (w, h, m) for w in range(1, 6)
-            for h, m in ((8, 0), (8, 30), (9, 0), (9, 30),
-                         (10, 0), (10, 30), (11, 0))}
+            for h, m in ((8, 0), (8, 30), (9, 0), (9, 30), (10, 0))}
 
     def test_import_slots(self):
         """Расписание юриста (18.08.2026): будни 10:30–18:30 каждые 2 часа —

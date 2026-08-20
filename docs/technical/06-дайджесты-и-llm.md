@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([450](../../scripts/court_monitor/digest/core.py#L450)) — точка входа,
+`generate_digest` ([524](../../scripts/court_monitor/digest/core.py#L524)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -272,7 +272,7 @@ LLM реально «думает». Алгоритм:
 
 ## Разбор акта в карточке (`act_analysis`)
 
-`attach_act_analyses` ([262](../../scripts/court_monitor/digest/core.py#L262)) после рассылки
+`attach_act_analyses` ([336](../../scripts/court_monitor/digest/core.py#L336)) после рассылки
 сохраняет LLM-разбор опубликованных актов в поле `act_analysis` соответствующих
 дел в `cases.json` — чтобы юрист видел его в drawer'е дашборда дольше одного дня.
 Обновляются только дела с новым актом в этом прогоне.
@@ -288,12 +288,12 @@ LLM реально «думает». Алгоритм:
 
 ## Контекст и replay
 
-Перед отправкой `save_digest_context` ([54](../../scripts/court_monitor/digest/core.py#L54))
+Перед отправкой `save_digest_context` ([94](../../scripts/court_monitor/digest/core.py#L94))
 сохраняет снимок всех входных списков в `last_digest_context.json`. Это позволяет
 режиму `--replay-last` переиграть дайджест с обновлённым промптом, не запрашивая
 суды заново (LLM-пересказы при этом берутся из кэша — повторно не оплачиваются).
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
-[131](../../scripts/court_monitor/digest/core.py#L131)) для блока «Последний дайджест» на фронте.
+[205](../../scripts/court_monitor/digest/core.py#L205)) для блока «Последний дайджест» на фронте.
 
 > ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [76](../../scripts/court_monitor/digest/llm.py#L76),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались

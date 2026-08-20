@@ -175,10 +175,17 @@ class TestCheckMode:
 
     def test_stops_before_parsing_and_push(self, worker):
         assert "CHECK_ONLY" in worker
-        gate = worker.index('if [ "$CHECK_ONLY" = "1" ]')
-        # Именно ВЫЗОВ run_parse (упоминания в комментариях не считаются).
+        # Секция «--check: дальше не идём» стоит до ВЫЗОВА парсинга. Голый
+        # index("git push") больше не годится: раньше по ТЕКСТУ стоит
+        # определение deliver_and_push (доставка накопленного), которое
+        # выполняется только на доставке — вместо него проверяем, что ветка
+        # --check в probe_failed выходит ДО доставочной логики дедлайна.
+        gate = worker.index("--check: дальше не идём")
         assert gate < worker.index("run_parse.py >>")
-        assert gate < worker.index("git push")
+        body = worker[worker.index("probe_failed()"):]
+        body = body[:body.index("\n}")]
+        assert body.index('"$CHECK_ONLY" = "1"') < body.index("past_deadline"), \
+            "--check в probe_failed обязан выходить ДО доставочной ветки"
 
     def test_does_not_touch_working_tree(self, worker):
         """Диагностика не должна двигать рабочее дерево (rebase с autostash —

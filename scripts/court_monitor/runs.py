@@ -1202,10 +1202,15 @@ def main():
     # 7. Генерируем дайджест
     t0 = time.perf_counter()
     log.info("Генерирую дайджест...")
+    # Доставляет ли ЭТОТ процесс сам: в облаке токен есть (шлёт Telegram/push
+    # и закрывает контекст дня delivered_at), на Mac — нет (доставку решает
+    # обёртка parse_and_push выбором сообщения коммита → replay).
+    digest_will_deliver = bool(config.TELEGRAM_BOT_TOKEN)
     digest_issue_key = save_digest_context(
         new_cases, changes, cases=cases,
         total_active_appeal=total_active_appeal,
         total_active_fi=0,
+        will_deliver=digest_will_deliver,
     )
     digest = generate_digest(
         new_cases, changes, cases=cases,
@@ -1220,12 +1225,16 @@ def main():
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
     send_telegram(_telegram_digest_text(digest))
-    save_last_digest(
-        digest,
-        summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
-        is_empty=not (new_cases or changes),
-        issue_key=digest_issue_key,
-    )
+    # На Mac (без токена) дайджест — черновик дельты: на дашборд не пишем,
+    # его выпуск сохранит replay после доставочного коммита (полный, из
+    # накопленного контекста).
+    if digest_will_deliver:
+        save_last_digest(
+            digest,
+            summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
+            is_empty=not (new_cases or changes),
+            issue_key=digest_issue_key,
+        )
     timings["telegram"] = time.perf_counter() - t0
 
     # 9. Разделяем на активные и архивные (Решено + 30+ дней)
@@ -4681,6 +4690,20 @@ def main_json():
             "requests_failed": config.METRICS.get("requests_failed", 0),
             "cards_breaker_skipped": config.METRICS.get("cards_breaker_skipped", 0),
             "cards_blocked": config.METRICS.get("cards_blocked", 0),
+            # Карточки «прочитано/планировалось» — суммы пер-цикловых счётчиков
+            # (те же пары, что в строках «спарсено X из Y»; знаменатель — план
+            # БЕЗ законных пропусков по ритму/датам). По ним cloud_run_ok
+            # решает «удачна ли попытка» (порог ≥85%, решение юриста
+            # 20.08.2026) и печатает алерт-прогресс «прочитано X из Y».
+            "cards_read": (
+                fi_parsed + ap_skip_stats["parsed"]
+                + cass_parsed + cass_refresh_parsed
+            ),
+            "cards_planned": (
+                fi_total
+                + ap_skip_stats.get("planned", ap_skip_stats["total"])
+                + cass_eligible + cass_refresh_total
+            ),
         }
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
@@ -5063,6 +5086,15 @@ def main_json():
     t0 = time.perf_counter()
     log_phase(9, 9, "Дайджест и доставка")
     log.info("Генерирую дайджест...")
+    # Доставляет ли ЭТОТ процесс сам: в облаке токен есть (шлёт Telegram/push
+    # и закрывает контекст дня delivered_at), на Mac — нет: контекст копится,
+    # доставку решает обёртка parse_and_push выбором сообщения коммита
+    # (replay_on_push стреляет только по маркеру «(Mac-парсинг)»).
+    # ⚠️ Редкий гибрид: ручной ОБЛАЧНЫЙ прогон посреди Mac-накопления вольёт
+    # дельту и закроет день, но отправит ТОЛЬКО свою дельту (рендерит из
+    # памяти) — накопленное утро останется в данных дашборда, не в дайджесте.
+    # Крон выключен, кейс ручной и редкий — осознанно не усложняем.
+    digest_will_deliver = bool(config.TELEGRAM_BOT_TOKEN)
     digest_issue_key = save_digest_context(
         appeal_new_cases_csv, changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
@@ -5073,6 +5105,7 @@ def main_json():
         total_active_bank=total_active_bank,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
+        will_deliver=digest_will_deliver,
     )
     digest = generate_digest(
         appeal_new_cases_csv, changes, cases=csv_cases,
@@ -5157,14 +5190,17 @@ def main_json():
         )
         canonicalize_kv_watchlists(_alias_to_canonical)
 
-    # Сохраняем готовый дайджест для фронта (блок «Последний дайджест»).
+    # Сохраняем готовый дайджест для фронта (блок «Последний дайджест») —
+    # только доставляющий процесс: черновик-дельта Mac на дашборде вводил бы
+    # в заблуждение до отправки (полный выпуск запишет replay).
     digest_is_empty = not (push_new + push_changes + push_stages)
-    save_last_digest(
-        digest,
-        summary=push_summary,
-        is_empty=digest_is_empty,
-        issue_key=digest_issue_key,
-    )
+    if digest_will_deliver:
+        save_last_digest(
+            digest,
+            summary=push_summary,
+            is_empty=digest_is_empty,
+            issue_key=digest_issue_key,
+        )
 
     # Привязываем LLM-разбор опубликованных актов к делам в cases.json,
     # чтобы юрист видел его в drawer (и чтобы он жил дольше одного дня).
@@ -5390,7 +5426,7 @@ def main_replay_last(push_all: bool = False):
     )
     save_last_digest(
         digest, summary=summary or "(replay)", is_empty=replay_is_empty,
-        issue_key=str(ctx.get("saved_at") or ""),
+        issue_key=str(ctx.get("issue_key") or ctx.get("saved_at") or ""),
     )
 
     # Replay переигрывает дайджест на тех же данных — обновим разбор актов
@@ -5556,7 +5592,7 @@ def main_push_last_digest(owner_only: bool = False):
     )
     save_last_digest(
         digest, summary=summary, is_empty=is_empty,
-        issue_key=str(ctx.get("saved_at") or ""),
+        issue_key=str(ctx.get("issue_key") or ctx.get("saved_at") or ""),
     )
 
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
