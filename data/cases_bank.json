@@ -2,8 +2,47 @@
   "version": 1,
   "track": "plaintiff_light",
   "archived_count": 28,
-  "updated_at": "2026-08-20T08:08:38",
+  "updated_at": "2026-08-20T08:18:33",
   "cases": [
+    {
+      "id": "2-753/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО \"Сбербанк\"",
+      "defendant": "Наследственное имущество Койнова Никиты Сергеевича",
+      "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-753/2026",
+        "court": "Когалымский городской суд",
+        "court_domain": "kogalym--hmao.sudrf.ru",
+        "judge": "Руденко Яна Александровна",
+        "filing_date": "20.02.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Предварительное судебное заседание. 10:20. 204. 11.08.2026",
+        "event_date": "06.10.2026",
+        "hearing_date": "06.10.2026",
+        "hearing_time": "10:20",
+        "link": "266478326|839e5359-63a0-4c83-9213-6342428f2697",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0008-01-2026-000330-90",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-08-20",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "Селиванов",
+        "at": "2026-08-20T08:18:11",
+        "source": "targeted",
+        "announced": true
+      }
+    },
     {
       "id": "2-108/2026",
       "current_stage": "first_instance",
