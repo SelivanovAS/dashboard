@@ -267,6 +267,17 @@ def test_run_progress_card_is_pollless():
     )
 
 
+def test_run_progress_error_run_labeled_as_failure():
+    """Прогон с финальной вехой «ERROR:» (алерт конца окна, упавший парсинг)
+    подписывается «сбой», а не «завершён»: 20.08.2026 юрист прочитал
+    «завершён» у ERROR-строки как успех."""
+    body = re.search(r"async function loadRunProgress\(\) \{.*?\n\}", _admin(), re.S)
+    assert body, "Не нашёл loadRunProgress."
+    assert '"сбой"' in body.group(0) and "ERROR:" in body.group(0), (
+        "метка «сбой» для ERROR-финала пропала из карточки хода прогона"
+    )
+
+
 def test_admin_page_inner_js_parses():
     """Страница админки — ОДИН template literal: одинарный «слэш-n» во
     внутреннем JS превращается в настоящий перенос строки и синтакс-ошибкой

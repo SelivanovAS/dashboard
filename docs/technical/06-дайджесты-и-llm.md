@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([368](../../scripts/court_monitor/digest/core.py#L368)) — точка входа,
+`generate_digest` ([450](../../scripts/court_monitor/digest/core.py#L450)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -272,7 +272,7 @@ LLM реально «думает». Алгоритм:
 
 ## Разбор акта в карточке (`act_analysis`)
 
-`attach_act_analyses` ([180](../../scripts/court_monitor/digest/core.py#L180)) после рассылки
+`attach_act_analyses` ([262](../../scripts/court_monitor/digest/core.py#L262)) после рассылки
 сохраняет LLM-разбор опубликованных актов в поле `act_analysis` соответствующих
 дел в `cases.json` — чтобы юрист видел его в drawer'е дашборда дольше одного дня.
 Обновляются только дела с новым актом в этом прогоне.
@@ -293,7 +293,7 @@ LLM реально «думает». Алгоритм:
 режиму `--replay-last` переиграть дайджест с обновлённым промптом, не запрашивая
 суды заново (LLM-пересказы при этом берутся из кэша — повторно не оплачиваются).
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
-[99](../../scripts/court_monitor/digest/core.py#L99)) для блока «Последний дайджест» на фронте.
+[131](../../scripts/court_monitor/digest/core.py#L131)) для блока «Последний дайджест» на фронте.
 
 > ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [76](../../scripts/court_monitor/digest/llm.py#L76),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались

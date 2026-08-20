@@ -385,3 +385,33 @@ def test_folded_line_does_not_break_section_machine():
     assert "(1)" in заголовок, (
         f"Счётчик заголовка «{заголовок}» не пересчитан по факту строк."
     )
+
+
+# ===== Дневной накопитель: mine-фильтр на склеенных выпусках (20.08.2026) ====
+
+@pytest.mark.skipif(NODE is None, reason="node недоступен")
+def test_stacked_daily_issues_filter_both_parts():
+    """С 20.08.2026 last_digest.json копит выпуски дня: html = выпуск №1 +
+    «➕ Дополнение (ЧЧ:ММ)» + выпуск №2 (save_last_digest, issues). Mine-фильтр
+    обязан отфильтровать ОБА выпуска: повторные заголовки секций сбрасывают
+    state-machine, а не ломают её, и звёздное дело находится в каждом выпуске,
+    где упомянуто."""
+    src = _app_js()
+    stacked = DIGEST + "\n\n➕ <b>Дополнение (09:31)</b>\n\n" + DIGEST
+    script = _harness(src) + """
+const DIGEST = %s, CTX = %s, STARS = %s;
+const mine = new Set(STARS.map(canonCaseNumber));
+const out = filterGeneralHtmlByMine(DIGEST, mine);
+console.log(JSON.stringify(out.split(/\\n{2,}/).filter(Boolean)
+  .map((p) => p.split('\\n')[0])));
+""" % (json.dumps(stacked), json.dumps(CTX), json.dumps(["2-8373/2026"]))
+    lines = json.loads(_node(script))
+    nums = _numbers(lines)
+    assert nums.count("2-8373/2026") == 2, (
+        f"Звёздное дело должно уцелеть в ОБОИХ выпусках, получили {nums}: "
+        "склейка выпусков ломает фильтр «★ Мои»."
+    )
+    assert "2-6736/2026" not in nums and "М-7220/2026" not in nums, (
+        "Во втором выпуске уцелели дела без звезды — заголовок «➕ Дополнение» "
+        "сбил state-machine секций."
+    )
