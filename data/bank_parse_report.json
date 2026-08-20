@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "run_date": "2026-08-19",
+  "run_date": "2026-08-20",
   "smart_skip": true,
   "totals": {
-    "total": 525,
-    "parsed": 75,
-    "skip": 421,
-    "failed": 26,
+    "total": 527,
+    "parsed": 38,
+    "skip": 423,
+    "failed": 63,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 3
@@ -19,10 +19,62 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surggor--hmao.sudrf.ru|М-7375/2026",
+      "number": "М-7375/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-08-20"
+    },
+    {
+      "outcome": "fetch_http",
+      "reason": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "vartovgor--hmao.sudrf.ru|М-5471/2026",
+      "number": "М-5471/2026",
+      "court": "Нижневартовский городской суд",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-08-19"
+    },
+    {
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "vartovgor--hmao.sudrf.ru|М-5449/2026",
+      "number": "М-5449/2026",
+      "court": "Нижневартовский городской суд",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-08-19"
+    },
+    {
+      "outcome": "skip",
+      "reason": "future_hearing(23.09.2026)",
+      "reason_ru": "заседание 23.09.2026 ещё впереди",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surgray--hmao.sudrf.ru|2-2143/2026",
@@ -33,9 +85,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -51,9 +103,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -69,9 +121,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -102,7 +154,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -123,9 +175,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -141,9 +193,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -159,9 +211,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -169,17 +221,17 @@
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|М-5390/2026",
-      "number": "М-5390/2026",
+      "key": "vartovgor--hmao.sudrf.ru|2-8052/2026",
+      "number": "2-8052/2026",
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -195,9 +247,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -205,17 +257,17 @@
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|М-5386/2026",
-      "number": "М-5386/2026",
+      "key": "vartovgor--hmao.sudrf.ru|2-8051/2026",
+      "number": "2-8051/2026",
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -231,9 +283,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -286,8 +338,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -321,9 +373,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -444,7 +496,7 @@
       "court": "Югорский районный суд",
       "court_domain": "ugorsk--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -516,7 +568,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -534,7 +586,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -570,7 +622,7 @@
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -588,7 +640,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -651,16 +703,18 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_hearing_new"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
-      "key": "surggor--hmao.sudrf.ru|М-6988/2026",
-      "number": "М-6988/2026",
+      "key": "surggor--hmao.sudrf.ru|2-9246/2026",
+      "number": "2-9246/2026",
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -772,8 +826,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -789,9 +843,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -840,7 +894,7 @@
       "court": "Пыть-Яхский городской суд",
       "court_domain": "pth--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -951,9 +1005,9 @@
       "last_checked_at": "2026-08-04"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -987,9 +1041,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "suspended_weekly(1d/7d)",
+      "reason_ru": "без движения без срока, парсим раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1146,12 +1200,12 @@
       "court": "Октябрьский районный суд",
       "court_domain": "oktb--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1182,7 +1236,7 @@
       "court": "Октябрьский районный суд",
       "court_domain": "oktb--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -1200,7 +1254,7 @@
       "court": "Октябрьский районный суд",
       "court_domain": "oktb--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -1218,12 +1272,12 @@
       "court": "Октябрьский районный суд",
       "court_domain": "oktb--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1254,7 +1308,7 @@
       "court": "Октябрьский районный суд",
       "court_domain": "oktb--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -1276,8 +1330,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1294,8 +1348,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1348,8 +1402,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1438,8 +1492,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1456,8 +1510,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1473,9 +1527,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1492,8 +1546,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1510,8 +1564,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1527,9 +1581,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1545,16 +1599,14 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "future_hearing(17.09.2026)",
+      "reason_ru": "заседание 17.09.2026 ещё впереди",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_next"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "ugorsk--hmao.sudrf.ru|2-617/2026",
@@ -1583,9 +1635,9 @@
       "last_checked_at": "2026-08-11"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1602,8 +1654,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1619,9 +1671,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1638,8 +1690,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1688,12 +1740,12 @@
       "court": "Югорский районный суд",
       "court_domain": "ugorsk--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1728,8 +1780,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1764,8 +1816,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1782,8 +1834,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1800,8 +1852,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1836,15 +1888,15 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
       "events": [],
       "changed": false,
       "left_track": false,
-      "archived": false,
+      "archived": true,
       "key": "kondinsk--hmao.sudrf.ru|2-201/2026",
       "number": "2-201/2026",
       "court": "Кондинский районный суд",
@@ -1854,8 +1906,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1890,8 +1942,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1925,9 +1977,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2160,8 +2212,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2231,9 +2283,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "fetch_http",
+      "reason": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2250,8 +2302,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2268,8 +2320,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2286,8 +2338,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2304,8 +2356,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2321,9 +2373,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2340,8 +2392,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2429,9 +2481,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2466,8 +2518,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2484,8 +2536,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2502,8 +2554,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2520,8 +2572,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2591,14 +2643,16 @@
       "last_checked_at": "2026-08-12"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_hearing_next"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "uganskray--hmao.sudrf.ru|2-2603/2026",
@@ -2606,12 +2660,12 @@
       "court": "Нефтеюганский районный суд",
       "court_domain": "uganskray--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-03"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2627,9 +2681,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2646,8 +2700,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2664,8 +2718,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2682,8 +2736,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2700,8 +2754,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2732,12 +2786,12 @@
       "court": "Нефтеюганский районный суд",
       "court_domain": "uganskray--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2754,8 +2808,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2772,8 +2826,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2808,8 +2862,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2826,8 +2880,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2844,8 +2898,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2862,8 +2916,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2898,8 +2952,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2916,8 +2970,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2934,8 +2988,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2952,8 +3006,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2970,8 +3024,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2993,8 +3047,10 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_hearing_postponed"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "uganskray--hmao.sudrf.ru|2-1547/2026",
@@ -3002,12 +3058,12 @@
       "court": "Нефтеюганский районный суд",
       "court_domain": "uganskray--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3024,8 +3080,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3114,8 +3170,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3150,8 +3206,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3186,8 +3242,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3204,8 +3260,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3222,8 +3278,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3240,8 +3296,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3258,8 +3314,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3276,8 +3332,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3294,8 +3350,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3312,8 +3368,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3330,8 +3386,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3348,8 +3404,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3383,9 +3439,9 @@
       "last_checked_at": "2026-08-11"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3434,7 +3490,7 @@
       "court": "Лангепасский городской суд",
       "court_domain": "langepas--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -3474,8 +3530,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3506,12 +3562,12 @@
       "court": "Лангепасский городской суд",
       "court_domain": "langepas--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3564,8 +3620,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3599,16 +3655,14 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "future_hearing(25.08.2026)",
+      "reason_ru": "заседание 25.08.2026 ещё впереди",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_recess"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "rdj--hmao.sudrf.ru|2-334/2026",
@@ -3620,8 +3674,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3638,8 +3692,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3655,9 +3709,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3673,9 +3727,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3692,8 +3746,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3710,8 +3764,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3733,16 +3787,18 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_returned"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "megion--hmao.sudrf.ru|2-945/2026",
       "number": "2-945/2026",
       "court": "Мегионский городской суд",
       "court_domain": "megion--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "case_status": "Решено",
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -3796,7 +3852,7 @@
       "court": "Мегионский городской суд",
       "court_domain": "megion--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -3814,7 +3870,7 @@
       "court": "Мегионский городской суд",
       "court_domain": "megion--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -3823,21 +3879,24 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_resolved",
+        "fi_status_change"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "megion--hmao.sudrf.ru|2-529/2026",
       "number": "2-529/2026",
       "court": "Мегионский городской суд",
       "court_domain": "megion--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "case_status": "Решено",
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3907,18 +3966,14 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change",
-        "fi_final_event"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovray--hmao.sudrf.ru|2-412/2026",
@@ -3929,9 +3984,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3948,8 +4003,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3966,8 +4021,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3984,8 +4039,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4001,9 +4056,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4020,8 +4075,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4037,9 +4092,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4055,9 +4110,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4073,9 +4128,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4083,8 +4138,8 @@
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "surgray--hmao.sudrf.ru|М-1676/2026",
-      "number": "М-1676/2026",
+      "key": "surgray--hmao.sudrf.ru|2-2147/2026",
+      "number": "2-2147/2026",
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "В производстве",
@@ -4109,9 +4164,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_http",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "HTTP-ошибка при загрузке карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4199,9 +4254,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4236,8 +4291,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4271,9 +4326,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4289,9 +4344,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4308,8 +4363,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4326,8 +4381,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4344,8 +4399,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4361,9 +4416,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4380,8 +4435,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4397,9 +4452,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4416,8 +4471,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4433,9 +4488,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4452,8 +4507,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4469,9 +4524,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4487,9 +4542,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4505,9 +4560,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4524,8 +4579,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4578,8 +4633,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4595,9 +4650,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "parsed",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4614,8 +4669,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4650,8 +4705,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4847,9 +4902,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5027,9 +5082,9 @@
       "last_checked_at": "2026-08-12"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5063,9 +5118,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5208,24 +5263,6 @@
     },
     {
       "outcome": "skip",
-      "reason": "future_hearing(28.08.2026)",
-      "reason_ru": "заседание 28.08.2026 ещё впереди",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": true,
-      "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|2-6481/2026",
-      "number": "2-6481/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-07-31"
-    },
-    {
-      "outcome": "skip",
       "reason": "future_hearing(27.08.2026)",
       "reason_ru": "заседание 27.08.2026 ещё впереди",
       "detail": "",
@@ -5334,8 +5371,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5442,8 +5479,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5496,8 +5533,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5549,9 +5586,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(19.08.2026)",
-      "reason_ru": "заседание 19.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5568,8 +5605,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5640,8 +5677,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5676,8 +5713,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5694,8 +5731,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5730,8 +5767,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5784,8 +5821,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5820,8 +5857,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5856,8 +5893,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5910,8 +5947,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5982,8 +6019,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6018,8 +6055,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6054,8 +6091,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6072,8 +6109,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6126,8 +6163,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6144,8 +6181,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6162,8 +6199,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6180,8 +6217,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6198,15 +6235,15 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
       "events": [],
       "changed": false,
       "left_track": false,
-      "archived": false,
+      "archived": true,
       "key": "vartovgor--hmao.sudrf.ru|2-3586/2026",
       "number": "2-3586/2026",
       "court": "Нижневартовский городской суд",
@@ -6234,8 +6271,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6252,8 +6289,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6288,8 +6325,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6342,8 +6379,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6360,8 +6397,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6378,8 +6415,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6396,8 +6433,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6414,8 +6451,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6720,8 +6757,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7044,8 +7081,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7062,8 +7099,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7256,7 +7293,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -7346,7 +7383,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -7512,8 +7549,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7674,8 +7711,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7728,8 +7765,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7782,8 +7819,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7814,7 +7851,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -7853,17 +7890,14 @@
       "last_checked_at": "2026-07-27"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-6389/2026",
@@ -7875,8 +7909,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7925,7 +7959,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -7946,9 +7980,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7997,12 +8031,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8055,8 +8089,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8073,8 +8107,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8091,8 +8125,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8109,8 +8143,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8127,8 +8161,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8145,8 +8179,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8181,8 +8215,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8199,8 +8233,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8223,7 +8257,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": false,
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-5262/2026",
@@ -8231,12 +8265,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8325,8 +8359,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8343,8 +8377,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8397,8 +8431,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8432,14 +8466,14 @@
       "last_checked_at": "2026-07-27"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "writ_weekly(1d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": true,
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-4889/2026",
@@ -8487,8 +8521,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8505,8 +8539,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8523,8 +8557,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8541,8 +8575,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(1d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 1)",
+      "reason": "writ_weekly(2d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8573,12 +8607,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8595,8 +8629,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8613,8 +8647,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8631,8 +8665,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8691,7 +8725,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": true,
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-4429/2026",
@@ -8699,12 +8733,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8721,8 +8755,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8771,12 +8805,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8811,8 +8845,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8843,7 +8877,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -8879,7 +8913,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "parsed",
@@ -8897,7 +8931,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -8919,8 +8953,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8937,8 +8971,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8969,12 +9003,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9009,8 +9043,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9041,7 +9075,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "skip",
@@ -9063,8 +9097,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9117,8 +9151,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9153,8 +9187,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9207,8 +9241,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9243,8 +9277,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9279,8 +9313,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9297,8 +9331,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9333,8 +9367,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9351,8 +9385,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
+      "reason": "writ_weekly(3d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9369,8 +9403,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9387,8 +9421,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9405,8 +9439,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9432,49 +9466,49 @@
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "surggor--hmao.sudrf.ru|М-7375/2026",
-      "number": "М-7375/2026",
+      "key": "surggor--hmao.sudrf.ru|М-7445/2026",
+      "number": "М-7445/2026",
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "intake_new",
       "reason": "",
       "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Нижневартовский городской суд",
+      "detail": "Сургутский городской суд",
       "degraded": false,
       "force_parsed": false,
       "events": [],
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|М-5471/2026",
-      "number": "М-5471/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "key": "surggor--hmao.sudrf.ru|М-7437/2026",
+      "number": "М-7437/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     },
     {
       "outcome": "intake_new",
       "reason": "",
       "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Нижневартовский городской суд",
+      "detail": "Берёзовский районный суд",
       "degraded": false,
       "force_parsed": false,
       "events": [],
       "changed": false,
       "left_track": false,
       "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|М-5449/2026",
-      "number": "М-5449/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "key": "berezovo--hmao.sudrf.ru|М-389/2026",
+      "number": "М-389/2026",
+      "court": "Берёзовский районный суд",
+      "court_domain": "berezovo--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-08-19"
+      "last_checked_at": "2026-08-20"
     }
   ],
-  "updated_at": "2026-08-19T09:43:58"
+  "updated_at": "2026-08-20T08:19:38"
 }
