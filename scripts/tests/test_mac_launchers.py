@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import random
 import subprocess
 import sys
 
@@ -294,17 +295,29 @@ class TestProbeSample:
     Екатеринбурга) + 3 ЯНАО + 3 ХМАО."""
 
     def test_composition(self):
-        targets = probe_sample.build_targets()
-        assert len(targets) == 13
-        labels = [l for l, _ in targets]
-        domains = [d for _, d in targets]
-        assert "7kas.sudrf.ru" in domains, "кассация выпала из пробы"
-        for ap in ("oblsud--hmao.sudrf.ru", "oblsud--svd.sudrf.ru",
-                   "oblsud--ynao.sudrf.ru"):
-            assert ap in domains, f"апелляция {ap} выпала из пробы"
-        for zone in ("Свердловская обл. ·", "ЯНАО ·", "ХМАО ·"):
-            assert sum(1 for l in labels if l.startswith(zone)) == 3, \
-                f"в зоне «{zone}» не три суда"
+        """Цикл по сидам, не один запуск: постоянные присутствия делят домен
+        с родительским судом (Покачи, Пышма, Ачит), и жребий без дедупа по
+        домену давал зоне 2 строки вместо 3 на ~2% сидов — одиночный запуск
+        такое ловил раз в месяц (плавающее падение 20.08.2026)."""
+        state = random.getstate()
+        try:
+            for seed in range(300):
+                random.seed(seed)
+                targets = probe_sample.build_targets()
+                assert len(targets) == 13, \
+                    f"seed={seed}: целей {len(targets)}, а не 13"
+                labels = [l for l, _ in targets]
+                domains = [d for _, d in targets]
+                assert len(set(domains)) == 13, f"seed={seed}: домен задвоился"
+                assert "7kas.sudrf.ru" in domains, "кассация выпала из пробы"
+                for ap in ("oblsud--hmao.sudrf.ru", "oblsud--svd.sudrf.ru",
+                           "oblsud--ynao.sudrf.ru"):
+                    assert ap in domains, f"апелляция {ap} выпала из пробы"
+                for zone in ("Свердловская обл. ·", "ЯНАО ·", "ХМАО ·"):
+                    assert sum(1 for l in labels if l.startswith(zone)) == 3, \
+                        f"seed={seed}: в зоне «{zone}» не три суда"
+        finally:
+            random.setstate(state)
 
     def test_ekb_court_is_guaranteed(self):
         """В свердловской тройке обязателен суд Екатеринбурга — там основной

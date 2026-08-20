@@ -53,12 +53,26 @@ def build_targets() -> list[tuple[str, str]]:
         for c in region.appeal_courts:
             add(f"Апелляция · {c.name}", c.domain)
 
-    fi = [c for c in ural.first_instance_courts if c.enabled]
+    def uniq_by_domain(courts) -> list:
+        # Постоянное присутствие живёт на домене родительского суда (Покачи,
+        # Пышма, Ачит), а проба ходит на главную домена — это ОДНА цель.
+        # Без дедупа ДО жребия random.sample, вытащив обоих соседей по
+        # домену, давал зоне 2 строки вместо 3 (плавающее падение
+        # test_composition ~раз в 50 запусков).
+        out, seen_domains = [], set()
+        for c in courts:
+            if c.domain not in seen_domains:
+                seen_domains.add(c.domain)
+                out.append(c)
+        return out
+
+    fi = uniq_by_domain(c for c in ural.first_instance_courts if c.enabled)
     ekb = [c for c in fi if "Екатеринбург" in c.name]
     ynao = [c for c in fi if c.domain.endswith("--ynao.sudrf.ru")]
     svd = [c for c in fi
            if not c.domain.endswith("--ynao.sudrf.ru") and c not in ekb]
-    hmao_fi = [c for c in hmao.first_instance_courts if c.enabled]
+    hmao_fi = uniq_by_domain(
+        c for c in hmao.first_instance_courts if c.enabled)
 
     # Свердловская тройка: один суд ЕКБ гарантированно + два прочих области.
     trio = random.sample(ekb, 1) + random.sample(svd, 2)
