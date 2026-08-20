@@ -265,3 +265,45 @@ def test_run_progress_card_is_pollless():
     assert "setTimeout" not in body.group(0), (
         "в loadRunProgress появился таймер — карточка договорена БЕЗ поллинга"
     )
+
+
+def test_admin_page_inner_js_parses():
+    """Страница админки — ОДИН template literal: одинарный «слэш-n» во
+    внутреннем JS превращается в настоящий перенос строки и синтакс-ошибкой
+    убивает ВЕСЬ скрипт (инцидент 20.08.2026 «админка пустая»: join с
+    одинарным слэшем). grep такое не ловит — рендерим страницу настоящим
+    node для обеих ролей и парсим каждый её <script> через vm.Script."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    import pytest as _pytest
+    node = shutil.which("node")
+    if not node:
+        _pytest.skip("node недоступен — проверка рендера пропущена (есть в CI)")
+    with tempfile.TemporaryDirectory() as td:
+        shutil.copyfile(ADMIN, os.path.join(td, "admin_page.mjs"))
+        check = os.path.join(td, "check.mjs")
+        with open(check, "w", encoding="utf-8") as f:
+            f.write(
+                'import vm from "node:vm";\n'
+                'import { renderAdminHtml } from "./admin_page.mjs";\n'
+                'let failed = 0;\n'
+                'for (const role of ["owner", "operator"]) {\n'
+                '  const html = renderAdminHtml("dummy", role, {});\n'
+                '  const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)]'
+                '.map(m => m[1]);\n'
+                '  if (!scripts.length) { console.error(role + ": нет <script>"); failed = 1; }\n'
+                '  for (const src of scripts) {\n'
+                '    try { new vm.Script(src); }\n'
+                '    catch (e) { failed = 1; console.error(role + ": "'
+                ' + String(e.stack || e).split("\\n").slice(0, 4).join("\\n")); }\n'
+                '  }\n'
+                '}\n'
+                'process.exit(failed);\n'
+            )
+        r = subprocess.run([node, check], capture_output=True, text=True, cwd=td)
+        assert r.returncode == 0, (
+            "Внутренний JS админки не парсится — страница будет пустой:\n"
+            + r.stdout + r.stderr
+        )

@@ -1386,9 +1386,14 @@ async function loadRunProgress() {
     meta.textContent = src
       + (run.started_at ? " · старт " + relTime(run.started_at) : "")
       + " · " + state;
+    // ⚠️ В join обязателен ДВОЙНОЙ обратный слэш: страница — template literal,
+    // и одинарный слэш-n становится НАСТОЯЩИМ переносом строки внутри
+    // отдаваемого браузеру скрипта — разорванная строка убивает весь JS
+    // админки (инцидент 20.08.2026 «админка пустая»; страж —
+    // test_admin_page_inner_js_parses, конвенция файла — соседние join'ы).
     const tail = (run.lines || []).slice(-12).map(function (s) {
       return escHtml(String(s));
-    }).join("\n");
+    }).join("\\n");
     body.className = "";
     body.innerHTML = '<details class="fold"><summary>последние шаги (всего строк: '
       + (run.lines || []).length + ')</summary>'
