@@ -982,6 +982,21 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <div id="health-list" class="loading">Загрузка…</div>
         <div class="health-more" id="health-updated"></div>
       </div>
+      <!-- Ход последнего прогона: вехи, которые пушер шлёт в KV (с Mac или из
+           облака). Вернулся 20.08.2026 при флипе на Mac-резерв: парсинг больше
+           не виден в GitHub Actions, а этот канал и так пишется каждым
+           прогоном. БЕЗ поллинга — один GET при загрузке и по кнопке: лимиты
+           Cloudflare бьют ЗАПИСИ (инцидент 17.07.2026), а не редкие чтения.
+           Скрыта, пока в KV нет ни одного прогона. -->
+      <div class="card" id="run-progress-card" style="display:none;" data-owner-only>
+        <div class="card-head">
+          <span class="card-title">Ход последнего прогона</span>
+          <span class="run-meta" id="run-progress-meta"></span>
+          <span class="spacer"></span>
+          <button class="btn-outline btn-sm" type="button" onclick="loadRunProgress()">Обновить</button>
+        </div>
+        <div id="run-progress-body" class="loading">Загрузка…</div>
+      </div>
       <!-- Не операторский трек (решение юриста 02.08.2026): data-owner-only —
            второй рубеж к тому, что loadStaticData ему файл вообще не тянет. -->
       <div class="card" id="bank-parse-card" style="display:none;" data-owner-only>
@@ -1276,8 +1291,11 @@ function ghRunHref() {
 }
 function ghRunSub(run) {
   const num = String(run.run_number || "");
+  // Mac-прогон (replay после пуша «(Mac-парсинг)») помечаем источником: после
+  // флипа 19.08.2026 это боевой путь, и без пометки плитка читалась как облако.
+  const src = run.source === "mac" ? "Mac · " : "";
   // Стрелка ↗ — только владельцу: у оператора плитка не кликается (см. пульт).
-  return escHtml(relTime(run.run_started_at))
+  return src + escHtml(relTime(run.run_started_at))
     + (num ? " · #" + escHtml(num) + (IS_OWNER ? " ↗" : "") : "");
 }
 // Нерабочий ли сегодня день — считает Worker (isHoliday, тот же календарь, что
@@ -1308,10 +1326,12 @@ async function loadGhRuns() {
       setTile("run", "gray", "—", "GitHub недоступен");
       return;
     }
-    // Плитка «Последний прогон» — по последнему запуску основного workflow.
-    // Сервер отдаёт его отдельным полем main_run (в общем списке его могут
-    // вытеснить пары «Тесты+Pages»); фолбэк — поиск по списку.
-    const main = d.main_run || (d.runs || []).find(function (run) {
+    // Плитка «Последний прогон» — самый свежий из облачного (update_cases) и
+    // Mac-прогона (replay_on_push после пуша «(Mac-парсинг)»): сервер отдаёт
+    // его полем last_run (с 20.08.2026 — после флипа на Mac-резерв плитка
+    // иначе показывала вчерашний облачный). Фолбэки — на старые поля: пока
+    // Worker территории не передеплоен, страница живёт по-прежнему.
+    const main = d.last_run || d.main_run || (d.runs || []).find(function (run) {
       return String(run.path || "").indexOf("update_cases.yml") >= 0;
     });
     let hasActive = (d.runs || []).some(function (run) { return run.status !== "completed"; });
@@ -1334,6 +1354,50 @@ async function loadGhRuns() {
     // без F5 (список прогонов из админки убран, плитка — единственный статус).
     if (hasActive && !document.hidden) ghTimer = setTimeout(loadGhRuns, 15000);
   } catch (e) { /* сеть мигнула — плитка обновится следующим заходом */ }
+}
+// ── Карточка «Ход последнего прогона» (вехи пушера из KV) ────────────────────
+// Данные пишет progress_pusher с Mac (или gh_progress_pusher из облака) — этот
+// канал живёт с 13.07.2026 и не выключался; UI-читателя вернули 20.08.2026
+// после флипа на Mac-резерв. Читаем РАЗОВО и по кнопке, без поллинга:
+// KV-лимиты бьют записи, а не редкие чтения.
+async function loadRunProgress() {
+  const card = document.getElementById("run-progress-card");
+  const body = document.getElementById("run-progress-body");
+  const meta = document.getElementById("run-progress-meta");
+  if (!card || !IS_OWNER) return;
+  try {
+    const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    // current — идущий/последний прогон, prev — предыдущий (см. worker.js).
+    const run = (d && d.current && Array.isArray(d.current.lines) && d.current.lines.length)
+      ? d.current
+      : (d && d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length ? d.prev : null);
+    if (!run) { card.style.display = "none"; return; }
+    card.style.display = "";
+    const src = run.source === "github" ? "облако" : "Mac";
+    let state = "завершён";
+    if (!run.done) {
+      const age = Date.now() - parseIso(run.updated_at || run.started_at || "");
+      // Пушер шлёт батчи ~раз в минуту: полчаса тишины без done — прогон
+      // оборвался (Mac уснул, скрипт убит), честнее сказать это, чем «идёт».
+      state = (isNaN(age) || age > 30 * 60000) ? "не завершился" : "идёт";
+    }
+    meta.textContent = src
+      + (run.started_at ? " · старт " + relTime(run.started_at) : "")
+      + " · " + state;
+    const tail = (run.lines || []).slice(-12).map(function (s) {
+      return escHtml(String(s));
+    }).join("\n");
+    body.className = "";
+    body.innerHTML = '<details class="fold"><summary>последние шаги (всего строк: '
+      + (run.lines || []).length + ')</summary>'
+      + '<div class="fold-body"><pre class="log-pre">' + tail + '</pre></div></details>';
+  } catch (e) {
+    card.style.display = "";
+    body.className = "";
+    body.innerHTML = loadErrorHtml("Ход прогона не загрузился", "runprog", e);
+  }
 }
 async function dispatchWorkflow(workflow, inputs, flashEl) {
   flashEl.className = "action-flash";
@@ -3586,7 +3650,7 @@ async function refreshAll(btn) {
   if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
   const wlModal = document.getElementById("wl-modal");
   const renderable = IS_OWNER && !(wlModal && wlModal.open);
-  const jobs = [loadGhRuns()].concat(loadStaticData(!renderable));
+  const jobs = [loadGhRuns(), loadRunProgress()].concat(loadStaticData(!renderable));
   // «Обновить» чинит неудачную первую загрузку списка судов (для региона
   // без капчёвых судов это лишний fetch cases.json — безвредно).
   // Журнал импортов — только там, где секция вообще есть: два KV-list на
@@ -3624,6 +3688,7 @@ document.addEventListener("click", function (e) {
   const k = b.getAttribute("data-retry");
   if (k === "health") loadHealth();
   else if (k === "bank") loadBankParse();
+  else if (k === "runprog") loadRunProgress();
   // Полный (не logonly) заход осознанно: сбой первой загрузки оставляет без
   // данных И светофор свежести, а его чинит только карта import:last:*.
   // Это редкий ручной клик, а не тик поллера — два KV-list допустимы.
@@ -3636,6 +3701,7 @@ document.addEventListener("click", function (e) {
 // первой отрисовки.
 initTabs();
 loadGhRuns();
+loadRunProgress();    // разовый GET, внутри сам выходит у оператора
 loadImportCourts();   // журнал импортов тянет он сам — только если есть gated-суды
 // Плитку дайджеста владельцу рисует render(), оператору она не нужна вовсе.
 loadStaticData(false);

@@ -840,9 +840,16 @@ async function handleAdminGhRuns(request, env) {
     // Общий список + отдельно последний запуск основного workflow: пары
     // «Тесты+Pages» от частых пушей вытесняют его из первых 20 runs, а
     // плитке «Последний прогон» нужен именно он.
-    const [r, rMain] = await Promise.all([
+    const [r, rMain, rMac] = await Promise.all([
       fetch(ghRepoApi() + "/actions/runs?per_page=20", { headers: ghHeaders }),
       fetch(ghRepoApi() + "/actions/workflows/update_cases.yml/runs?per_page=1", { headers: ghHeaders })
+        .catch(() => null),
+      // Mac-резерв (боевой путь с 19.08.2026): сам парсинг идёт на Mac и в
+      // Actions не виден, но его пуш «(Mac-парсинг)» запускает
+      // replay_on_push.yml — этот ран и есть след Mac-прогона (дайджест +
+      // рассылка). Без него плитка «Последний прогон» показывала вчерашний
+      // облачный и Mac-утро выглядело так, будто прогона не было.
+      fetch(ghRepoApi() + "/actions/workflows/replay_on_push.yml/runs?per_page=1", { headers: ghHeaders })
         .catch(() => null),
     ]);
     if (!r.ok) {
@@ -866,9 +873,25 @@ async function handleAdminGhRuns(request, env) {
         mainRun = mapRun(jm.workflow_runs[0]);
       }
     }
+    let macRun = null;
+    if (rMac && rMac.ok) {
+      const jc = await rMac.json().catch(() => null);
+      if (jc && Array.isArray(jc.workflow_runs) && jc.workflow_runs.length) {
+        macRun = mapRun(jc.workflow_runs[0]);
+      }
+    }
+    if (mainRun) mainRun.source = "cloud";
+    if (macRun) macRun.source = "mac";
+    // Плитке «Последний прогон» нужен самый свежий, откуда бы он ни пришёл.
+    const newer = (a, b) => {
+      if (!a) return b;
+      if (!b) return a;
+      return String(a.run_started_at || "") >= String(b.run_started_at || "") ? a : b;
+    };
     return new Response(
       JSON.stringify({
-        runs, main_run: mainRun, next_cron_at: nextCronAt(),
+        runs, main_run: mainRun, last_run: newer(mainRun, macRun),
+        next_cron_at: nextCronAt(),
         today_non_working: todayNonWorking(),
       }),
       { headers: { "Content-Type": "application/json; charset=utf-8" } }
