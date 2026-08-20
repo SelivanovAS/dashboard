@@ -133,6 +133,13 @@ class TestTerritories:
         assert "oblsud--hmao.sudrf.ru" not in worker + lib, \
             "хост пробы захардкожен на ХМАО — форк стучался бы в чужой суд"
         assert "appeal_courts[0].domain" in lib
+        # Мульти-хост (20.08.2026): sudrf «мигает» пер-хостово, и одиночная
+        # канарейка давала ложный отказ на всю территорию (oblsud--svd молчал
+        # в 08:19, ожил в 08:30). Апелляция + суды 1-й инст., живой хоть один.
+        assert "cm_any_court_reachable" in lib
+        assert "first_instance_courts" in lib, \
+            "канарейка снова одиночная — вернутся ложные отказы при мигающем sudrf"
+        assert "cm_any_court_reachable" in worker
 
     def test_driver_defaults_to_single_repo(self, lib):
         """Файла territories нет → прежняя установка не меняется. Дефолт

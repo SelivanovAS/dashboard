@@ -101,7 +101,7 @@ class TestGateWiring:
         text = _read("ops/mac-local-run/parse_and_push.sh")
         pull = text.index("git pull --rebase")
         gate = text.index("cloud_run_ok.py --report")
-        probe = text.index("cm_probe_court_host")
+        probe = text.index("cm_any_court_reachable")
         assert pull < gate < probe
 
     def test_force_bypasses_gate_and_check_does_not_hit_it(self):
@@ -116,6 +116,32 @@ class TestGateWiring:
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert "Облако сегодня уже отработало" in text
         assert "пропуск" in text
+
+
+# ── Канарейка судов: тихие ретраи, один алерт в день ─────────────────────────
+
+class TestCanaryQuietRetries:
+    """Слоты агента идут каждые полчаса и сами добивают сорвавшуюся пробу
+    (20.08.2026 Урал: отказ в 08:19 → спарсился в 08:30), а алерт на КАЖДУЮ
+    неудачу дал 5 одинаковых сообщений за утро. Агентская ветка обязана
+    молчать до конца окна и кричать один раз в день."""
+
+    def test_quiet_until_window_end_then_single_alert(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "PROBE_ALERT_AFTER_MIN=655" in text, \
+            "порог 10:55 пропал — либо алерты вернутся на каждый слот, либо их не будет вовсе"
+        assert ".alerted-parse-" in text, "дневной дедуп алерта пропал"
+        body = text[text.index("probe_failed()"):]
+        body = body[:body.index('if PROBE_HOST=')]
+        assert '"$FORCE" = "1"' in body, "ручной запуск (--force) обязан кричать сразу"
+        assert "exit 0" in body, "тихая ветка обязана выходить без ошибки"
+        assert "finish_pusher" in body, "pusher уже запущен к моменту пробы — его надо дождаться"
+
+    def test_import_agent_gets_anywhere_only_with_quiet_canary(self):
+        """--anywhere у агентов появился вместе с тихой канарейкой: вернуть
+        алерт на каждую неудачу при 12 запусках в день — снова шторм."""
+        text = _read("ops/mac-local-run/import_dumps.sh")
+        assert ".alerted-dumps-" in text, "дневной дедуп алерта дампов пропал"
 
 
 # ── Расписания агентов (plistlib: в CI нет plutil) ───────────────────────────

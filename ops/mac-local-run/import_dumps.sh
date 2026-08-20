@@ -206,15 +206,16 @@ sber_preflight() {  # 0 — можно идти в суды
   fi
   # Коды: 0 — идём, 1 — мы не там (тихий пропуск), 2 — суды не отвечают.
   # Три состояния, а не два: «мы дома» — это не ошибка и алерта не стоит, а
-  # «мы в офисе, но суд молчит» — ошибка, о которой надо кричать. Причина
-  # остаётся в PREFLIGHT_ERR: её печатает вызыватель (в --check — строкой
-  # отчёта, в боевом пути — текстом ошибки).
-  PROBE_HOST=$(cm_probe_court_host "$PYTHON") || {
-    PREFLIGHT_ERR="не смог определить суд для пробы доступности"; return 2; }
-  if PREFLIGHT_ERR=$(cm_court_reachable "$PROBE_HOST" "$PYTHON"); then
-    log "Суд $PROBE_HOST доступен"
+  # «мы в офисе, но суды молчат» — проблема, о которой решает вызыватель.
+  # Причина остаётся в PREFLIGHT_ERR (в --check — строка отчёта, в боевом
+  # пути — текст алерта). Канарейка мульти-хост (20.08.2026,
+  # cm_any_court_reachable): sudrf «мигает» пер-хостово, и одиночный хост
+  # давал ложный отказ на весь импорт.
+  if PROBE_HOST=$(cm_any_court_reachable "$PYTHON"); then
+    log "Суд $PROBE_HOST доступен (канарейка)"
     return 0
   fi
+  PREFLIGHT_ERR="$PROBE_HOST"
   return 2
 }
 
@@ -276,39 +277,65 @@ if [ "$CHECK_ONLY" = "1" ]; then
 fi
 
 # ── Боевой путь ──────────────────────────────────────────────────────────────
-PREFLIGHT_ERR=""
-sber_preflight; PRE_RC=$?
-if [ "$PRE_RC" = "1" ]; then
-  log "Пропуск: шлюз $CM_SBER_GATEWAY не найден среди default-маршрутов (не в сети Сбера)"
-  exit 0
-elif [ "$PRE_RC" != "0" ]; then
-  # Мы там, где суды обязаны отвечать, а они не отвечают — это не рутина,
-  # об этом надо кричать (в облаке ту же роль играет шаг `if: failure()`).
-  die "суд $PROBE_HOST не отвечает: ${PREFLIGHT_ERR:-без диагноза} — импорт пропущен"
-fi
+# Порядок с 20.08.2026: СНАЧАЛА очередь, ПОТОМ суды. Cloudflare доступен из
+# любой сети (на sudrf он не ходит), а канарейка судов при пустой очереди
+# только шумела: 20.08 четыре слота подряд алертили «oblsud--svd не отвечает»,
+# хотя импортировать было нечего. Пустая очередь = тихий выход без единого
+# запроса к судам. KV-бюджет: +1-2 ЧТЕНИЯ на слот при недоступных судах
+# (лимит чтений 100k/день; инцидент 17.07.2026 был про ЗАПИСИ — их не
+# добавилось).
 
-# BANK_TRACK и кэпы в облаке живут Actions Variables — без файла территории
-# импорт пошёл бы с дефолтами кода, то есть иначе, чем в облаке.
-cm_load_territory_env "$PYTHON" "$CONF_DIR" log
-# Операторский импорт: ретраи полезны — запросов мало, повтор дороже
-# (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
-export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
-# Предохранитель под размер ДАМПА, а не боевого прогона — те же значения, что
-# у облака (env в import_cases.yml, страж test_breaker_settings_match_cloud):
-# дефолты кода (3 отказа, проба каждые 30 пропущенных) считаны на обход сотен
-# карточек, а в дампе на 25 строк «каждые 30» означает «никогда», и мигающий
-# суд не восстановится внутри импорта. 16.08.2026 это стоило дампа
-# Верх-Исетского: три отказа подряд сняли суд с обхода, 12 исков банка не
-# запрашивались вовсе.
-export CARD_BREAKER_THRESHOLD="${CARD_BREAKER_THRESHOLD:-5}"
-export CARD_BREAKER_PROBE_EVERY="${CARD_BREAKER_PROBE_EVERY:-3}"
+# Сеть/маршруты/канарейка + окружение территории + свежий git — общий хвост
+# обоих режимов, зовётся когда работа ТОЧНО есть. $1 = "manual" (--file: юрист
+# смотрит на экран — кричим сразу) или "queued", $2 = размер очереди (агент:
+# слоты дампов идут до 18:30 и добьют сами — лог + уведомление, алерт не чаще
+# раза в день, маркер .alerted-dumps-ДАТА рядом с логами).
+courts_gate() {
+  local mode="$1" queued="${2:-?}" marker
+  PREFLIGHT_ERR=""
+  sber_preflight; PRE_RC=$?
+  if [ "$PRE_RC" = "1" ]; then
+    log "Пропуск: шлюз $CM_SBER_GATEWAY не найден среди default-маршрутов (не в сети Сбера)"
+    exit 0
+  elif [ "$PRE_RC" != "0" ]; then
+    if [ "$mode" = "manual" ]; then
+      # Ручной запуск: юрист смотрит — кричим сразу, как раньше.
+      die "суды не отвечают: ${PREFLIGHT_ERR:-без диагноза} — импорт пропущен"
+    fi
+    log "Суды не отвечают: ${PREFLIGHT_ERR:-без диагноза} — очередь ($queued) подождёт следующего слота"
+    notify "Дампы ($queued) ждут: суды не отвечают"
+    marker="$LOG_DIR/.alerted-dumps-$(date +%Y%m%d)"
+    if [ ! -f "$marker" ]; then
+      rm -f "$LOG_DIR"/.alerted-dumps-* 2>/dev/null
+      : > "$marker"
+      alert_telegram "дампы ($queued шт.) ждут, а суды не отвечают — резерв повторит следующим слотом (алерт один в день)"
+    fi
+    exit 1
+  fi
 
-GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
-export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
+  # BANK_TRACK и кэпы в облаке живут Actions Variables — без файла территории
+  # импорт пошёл бы с дефолтами кода, то есть иначе, чем в облаке.
+  cm_load_territory_env "$PYTHON" "$CONF_DIR" log
+  # Операторский импорт: ретраи полезны — запросов мало, повтор дороже
+  # (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
+  export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
+  # Предохранитель под размер ДАМПА, а не боевого прогона — те же значения, что
+  # у облака (env в import_cases.yml, страж test_breaker_settings_match_cloud):
+  # дефолты кода (3 отказа, проба каждые 30 пропущенных) считаны на обход сотен
+  # карточек, а в дампе на 25 строк «каждые 30» означает «никогда», и мигающий
+  # суд не восстановится внутри импорта. 16.08.2026 это стоило дампа
+  # Верх-Исетского: три отказа подряд сняли суд с обхода, 12 исков банка не
+  # запрашивались вовсе.
+  export CARD_BREAKER_THRESHOLD="${CARD_BREAKER_THRESHOLD:-5}"
+  export CARD_BREAKER_PROBE_EVERY="${CARD_BREAKER_PROBE_EVERY:-3}"
 
-if ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
-  die "git pull --rebase не удался (см. лог)"
-fi
+  GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
+  export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
+
+  if ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
+    die "git pull --rebase не удался (см. лог)"
+  fi
+}
 
 post_body() {  # $1 = файл с JSON-телом (само тело не секрет — идёт аргументом)
   worker_cfg "/import-result"
@@ -402,6 +429,7 @@ run_import() {  # $1 = файл дампа, $2 = домен суда, $3 = оп�
 if [ -n "$FILE_ARG" ]; then
   [ -f "$FILE_ARG" ] || die "нет файла дампа: $FILE_ARG"
   [ -n "$COURT_ARG" ] || die "с --file обязателен --court <домен суда>"
+  courts_gate manual
   log "Локальный дамп: $FILE_ARG · суд $COURT_ARG"
   if run_import "$FILE_ARG" "$COURT_ARG" "${USER:-оператор} (Mac)" ""; then
     notify "Дамп импортирован ($COURT_ARG)"
@@ -437,10 +465,12 @@ jq -r --argjson now "$NOW" --argjson ttl "$DUMP_TTL" --argjson grace "$STARTED_G
 
 QUEUE=$(wc -l < "$TMP_DIR/queue.tsv" | tr -d ' ')
 if [ "$QUEUE" = "0" ]; then
-  log "Очередь пуста — необработанных дампов за сутки нет"
+  log "Очередь пуста — необработанных дампов за сутки нет (к судам не ходили)"
   exit 0
 fi
 log "К обработке дампов: $QUEUE"
+# Работа точно есть — теперь можно идти к судам (маршруты, канарейка, git).
+courts_gate queued "$QUEUE"
 
 rc=0
 done_n=0

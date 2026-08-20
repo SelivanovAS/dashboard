@@ -41,6 +41,41 @@ def _read_repo(rel: str) -> str:
         return f.read()
 
 
+class TestQueueBeforeCourts:
+    """Порядок с 20.08.2026: СНАЧАЛА очередь, ПОТОМ суды. Cloudflare доступен
+    из любой сети (на sudrf он не ходит), а канарейка судов при пустой
+    очереди только шумела: 20.08 четыре слота подряд алертили «oblsud--svd
+    не отвечает», хотя импортировать было нечего."""
+
+    def test_queue_is_read_before_courts_gate(self):
+        text = _read_repo(IMPORTER)
+        empty = text.index("Очередь пуста")
+        gate = text.index("courts_gate queued")
+        assert empty < gate, \
+            "канарейка судов снова стоит раньше проверки очереди — шум вернётся"
+
+    def test_empty_queue_exits_quietly(self):
+        text = _read_repo(IMPORTER)
+        block = text[text.index("Очередь пуста"):]
+        assert "exit 0" in block[:200], "пустая очередь обязана выходить тихо"
+
+    def test_manual_file_mode_still_dies_loudly(self):
+        """--file — ручной запуск: юрист смотрит на экран, отказ канарейки
+        обязан кричать сразу (courts_gate manual → die), а не молчать."""
+        text = _read_repo(IMPORTER)
+        assert "courts_gate manual" in text
+        gate_body = text[text.index("courts_gate() {"):]
+        gate_body = gate_body[:gate_body.index("\n}")]
+        assert '"$mode" = "manual"' in gate_body
+        assert "die" in gate_body
+
+    def test_dumps_alert_is_daily(self):
+        text = _read_repo(IMPORTER)
+        assert ".alerted-dumps-" in text, "дневной дедуп алерта дампов пропал"
+        assert 'rm -f "$LOG_DIR"/.alerted-dumps-*' in text, \
+            "старые маркеры не чистятся — каталог зарастёт"
+
+
 class TestSharedPreflight:
     """Преflight сети Сбера — ОДИН на парсинг и импорт: копия во втором
     скрипте разъехалась бы так же, как разъезжались списки файлов данных
