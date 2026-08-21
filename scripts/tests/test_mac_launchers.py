@@ -127,6 +127,68 @@ class TestRunVerdicts:
         assert ok
 
 
+class TestMorningCumulative:
+    """Накопительная сводка утра (21.08.2026): слоты пересчитывают план на
+    каждой попытке, и числа последней попытки юрист прочитал как итог дня —
+    «прочитано 119 из 362 (32%)» на дедлайне при реальных ~70% покрытия.
+    Ключ cards_read_today пишет блок 4e main_json (штампы last_checked_at за
+    сегодня). Хвост «за утро…» появляется ТОЛЬКО при повторной попытке
+    (total > read текущей): в первой total == read, и прежние формулировки
+    остаются побайтово — их стерегут тесты «…unchanged»."""
+
+    TODAY = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    def _state(self, read: int, planned: int, total: int | None = None,
+               sighted: bool = True) -> dict:
+        lr = {"at": self.TODAY, "cards_read": read, "cards_planned": planned}
+        if total is not None:
+            lr["cards_read_today"] = total
+        return {"sources": {"a": _src(self.TODAY, 24 if sighted else 0)},
+                "last_run": lr}
+
+    def test_progress_line_repeat_attempt_cumulative(self):
+        """Боевой кейс дедлайна 21.08: попытка 119/362 при 346 прочитанных
+        за утро — алерт обязан вести накопительный счёт."""
+        line = cloud_run_ok.progress_line(
+            self._state(119, 362, total=346, sighted=False))
+        assert "за утро прочитано 346 карточек" in line
+        assert "недочитано 243" in line
+        assert "эта попытка: 119 из 362" in line
+        assert line.endswith("поиски молчали")
+
+    def test_progress_line_first_attempt_unchanged(self):
+        line = cloud_run_ok.progress_line(self._state(340, 484, total=340))
+        assert line == "прочитано 340 из 484 карточек (70%), поиски отвечали"
+
+    def test_progress_line_old_journal_unchanged(self):
+        """Журнал без cards_read_today (до 21.08.2026) — прежняя строка."""
+        line = cloud_run_ok.progress_line(self._state(340, 484))
+        assert line == "прочитано 340 из 484 карточек (70%), поиски отвечали"
+
+    def test_incomplete_verdict_carries_cumulative(self):
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(119, 362, total=346))
+        assert not ok and "за утро всего 346" in why
+
+    def test_blind_verdict_carries_cumulative(self):
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(119, 362, total=346, sighted=False))
+        assert not ok and "СЛЕПЫЕ" in why and "за утро всего 346" in why
+
+    def test_success_single_attempt_unchanged(self):
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(160, 172, total=160))
+        assert ok
+        assert why == "прочитано 160 из 172 карточек, поиски отвечали"
+
+    def test_success_after_dochitka_carries_cumulative(self):
+        """Дочитка добила остаток (130 из 144 ≥ 85%): вердикт удачный,
+        дайджест уходит ДО дедлайна, сводка — накопительная."""
+        ok, why = cloud_run_ok.run_complete_today(
+            self._state(130, 144, total=470))
+        assert ok and "за утро всего 470" in why
+
+
 class TestDeliveredGate:
     """Гейт слота: пропуск ТОЛЬКО когда дайджест дня уже отправлен
     (delivered_at) — иначе повторный маркер-коммит разослал бы его дважды."""

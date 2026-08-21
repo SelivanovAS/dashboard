@@ -107,6 +107,21 @@ def cards_progress(state: dict) -> tuple[int, int] | None:
     return read, planned
 
 
+def cards_read_today_total(state: dict) -> int | None:
+    """Сколько карточек прочитано за СЕГОДНЯ всеми попытками (накопительно).
+
+    Ключ `cards_read_today` пишет блок 4e main_json (штампы last_checked_at
+    за сегодня по активным делам). None — прогона сегодня не было или журнал
+    старого формата (до 21.08.2026): формулировки тогда остаются прежними.
+    """
+    lr = (state or {}).get("last_run") or {}
+    if str(lr.get("at") or "")[:10] not in _today_dates():
+        return None
+    if "cards_read_today" not in lr:
+        return None
+    return int(lr.get("cards_read_today") or 0)
+
+
 def searches_state_today(state: dict) -> tuple[bool, bool]:
     """(прогон сегодня был, поиски зрячие)."""
     sources = (state or {}).get("sources") or {}
@@ -134,24 +149,39 @@ def run_complete_today(state: dict) -> tuple[bool, str]:
     if not ran_today:
         return False, "прогона сегодня ещё не было"
     cards = cards_progress(state)
+    # Хвост «за утро всего N» — только при ПОВТОРНОЙ попытке (накоплено
+    # больше, чем прочитала текущая): слоты пересчитывают план заново, и
+    # числа одной попытки юрист читает как итог дня (21.08.2026: «119 из
+    # 362» дедлайна выглядели провалом при реальных ~70% покрытия). В первой
+    # попытке total == read, и прежняя строка точнее.
+    total_today = cards_read_today_total(state)
     if not sighted:
         tail = ""
         if cards:
             read, planned = cards
-            tail = f" (карточки: прочитано {read} из {planned})"
+            tail = f" (карточки: прочитано {read} из {planned}"
+            if total_today is not None and total_today > read:
+                tail += f", за утро всего {total_today}"
+            tail += ")"
         return False, (
             "поиски СЛЕПЫЕ — новые дела не искались, суды не пустили адрес"
             + tail
         )
     if cards:
         read, planned = cards
+        cumulative = ""
+        if total_today is not None and total_today > read:
+            cumulative = f", за утро всего {total_today}"
         if planned > 0 and read / planned < CARDS_READ_OK_RATIO:
             pct = int(read / planned * 100)
             return False, (
                 f"прочитано {read} из {planned} карточек ({pct}% — "
-                f"порог {int(CARDS_READ_OK_RATIO * 100)}%)"
+                f"порог {int(CARDS_READ_OK_RATIO * 100)}%){cumulative}"
             )
-        return True, f"прочитано {read} из {planned} карточек, поиски отвечали"
+        return True, (
+            f"прочитано {read} из {planned} карточек{cumulative}, "
+            f"поиски отвечали"
+        )
     return True, "поиски отвечали (карточной сводки нет — старый журнал)"
 
 
@@ -159,10 +189,22 @@ def progress_line(state: dict) -> str:
     """Строка-прогресс для алерта после неполной попытки."""
     _, sighted = searches_state_today(state)
     cards = cards_progress(state)
+    total_today = cards_read_today_total(state)
     if cards:
         read, planned = cards
         pct = int(read / planned * 100) if planned else 100
-        base = f"прочитано {read} из {planned} карточек ({pct}%)"
+        if total_today is not None and total_today > read:
+            # Повторная попытка: ведём накопительную сводку утра — числа
+            # одной попытки с пересчитанным планом юрист читает как итог
+            # дня (21.08.2026). «Недочитано» — остаток плана ЭТОЙ попытки:
+            # с дочиткой слотов план и есть недочитанное на её старте.
+            remaining = max(planned - read, 0)
+            base = (
+                f"за утро прочитано {total_today} карточек, недочитано "
+                f"{remaining} (эта попытка: {read} из {planned}, {pct}%)"
+            )
+        else:
+            base = f"прочитано {read} из {planned} карточек ({pct}%)"
     else:
         base = "карточной сводки прогона нет"
     return base + (", поиски отвечали" if sighted else ", поиски молчали")
