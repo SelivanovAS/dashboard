@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([524](../../scripts/court_monitor/digest/core.py#L524)) — точка входа,
+`generate_digest` ([529](../../scripts/court_monitor/digest/core.py#L529)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -116,7 +116,7 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Пересказ судебного акта — `summarize_act_motivation`
 
-[Строка 871](../../scripts/court_monitor/digest/llm.py#L871). Единственное место, где
+[Строка 916](../../scripts/court_monitor/digest/llm.py#L916). Единственное место, где
 LLM реально «думает». Алгоритм:
 
 1. Берётся мотивировочная часть акта (`extract_motive_part`,
@@ -132,12 +132,12 @@ LLM реально «думает». Алгоритм:
    Если пересказ уже в кэше `.act_summaries.json` — возвращается он
    (повторно LLM не оплачивается, кэш переживает `--replay-last`).
 3. Иначе строится промпт (`_build_act_summary_prompt`,
-   [517](../../scripts/court_monitor/digest/llm.py#L517)) — один и тот же для
+   [562](../../scripts/court_monitor/digest/llm.py#L562)) — один и тот же для
    всех трёх провайдеров (единственное user-сообщение: роль, задача,
    позитивные правила формулировок, ХОРОШО/ПЛОХО-примеры, текст акта и
    якорь «Ответ (2-3 предложения):» в конце) — и вызывается
-   `_call_claude_simple` ([635](../../scripts/court_monitor/digest/llm.py#L635)),
-   `_call_gigachat_simple` ([677](../../scripts/court_monitor/digest/llm.py#L677)) или
+   `_call_claude_simple` ([680](../../scripts/court_monitor/digest/llm.py#L680)),
+   `_call_gigachat_simple` ([722](../../scripts/court_monitor/digest/llm.py#L722)) или
    `_call_openrouter_simple` (по `LLM_PROVIDER`). max_tokens: 700 у
    Claude/GigaChat, 4096 у OpenRouter — free reasoning-модели (DeepSeek R1,
    Nemotron и т.п.) тратят бюджет на размышления прямо в content и с
@@ -156,6 +156,16 @@ LLM реально «думает». Алгоритм:
    ответ и отбраковка чисткой логируются WARNING'ом с головой сырого
    ответа, счётчики видны в сводке прогона («LLM-пересказы актов: …,
    спасено фолбэком N, сбоев N (откат на excerpt)»).
+   ⚠️ Отдельный случай — **ключа у провайдера нет вовсе** (Mac-резерв:
+   боевой парсинг с 19.08.2026 идёт на машине юриста, где ключей LLM нет
+   намеренно — дайджест делает GitHub-replay). Это не отказ провайдера:
+   вызова не было. `missing_llm_key_name` (единственное место, где живёт
+   соответствие «провайдер → его ключ»; им же пользуется
+   `validate_environment`) выводит пересказ ДО вызова —
+   `METRICS["llm_summary_skipped_no_key"]`, отдельная строка сводки и один
+   `log.info` за процесс вместо WARNING на каждый акт. Гард стоит ПОСЛЕ
+   проверки кэша: пересказ, оплаченный replay'ем и закоммиченный в
+   `.act_summaries.json`, обязан отдаваться и без ключей.
 4. Ответ чистится (`_clean_summary`) и кладётся в кэш с моделью/датой.
    Чистка рассчитана на free-модели OpenRouter: вырезаются reasoning-блоки
    `<think>…</think>` (в т.ч. незакрытые и осиротевшие), code-fence,
@@ -194,12 +204,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 1124](../../scripts/court_monitor/digest/llm.py#L1124). При `DIGEST_POLISH=1`
+[Строка 1184](../../scripts/court_monitor/digest/llm.py#L1184). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([973](../../scripts/court_monitor/digest/llm.py#L973)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([1033](../../scripts/court_monitor/digest/llm.py#L1033)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([1080](../../scripts/court_monitor/digest/llm.py#L1080)): проверяется контракт
+([1140](../../scripts/court_monitor/digest/llm.py#L1140)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -286,6 +296,25 @@ LLM реально «думает». Алгоритм:
 номером, и обычный фолбэк «любой абзац с номером» выдал бы её за анализ).
 При обновлениях `cases_bank.json` пересохраняется повторно.
 
+С 21.08.2026 тело этого вызова — общий хелпер `_attach_bank_act_analyses`
+(runs.py), и зовут его ДВА места: `main_json` и `main_replay_last`. Под
+Mac-режимом разбор считает только replay, а он чинил одну картотеку — за тем
+и коммитит `cases.json` (`replay_on_push.yml`), — поэтому банк-трек оставался
+с `source="raw_act"`: сырым текстом мотивировки под заголовком «AI анализ»
+навсегда, пока по делу не выйдет новый акт (5 записей Урала за 20–21.08,
+вычищены разово). В коммит replay добавлены `cases_bank.json` +
+`cases_bank_events.json`.
+
+> ⚠️ Replay грузит трек через `load_bank_json` и отдаёт `save_bank_json`
+> ВЕСЬ загруженный dict: events-файл перезаписывается целиком из переданных
+> записей, а `version`/`track`/`archived_count` переживают только тем, что
+> копируются из того же dict.
+
+Второй предохранитель того же дефекта — гард «нет ключа LLM» перед ОБЕИМИ
+врезками attach в `main_json`: raw_act-фолбэк задумывался под редкий 429, а
+на машине без ключей отказ постоянный. Стражи —
+`scripts/tests/test_act_analysis_guards.py`.
+
 ## Контекст и replay
 
 Перед отправкой `save_digest_context` ([94](../../scripts/court_monitor/digest/core.py#L94))
@@ -295,7 +324,7 @@ LLM реально «думает». Алгоритм:
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
 [205](../../scripts/court_monitor/digest/core.py#L205)) для блока «Последний дайджест» на фронте.
 
-> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [76](../../scripts/court_monitor/digest/llm.py#L76),
+> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [121](../../scripts/court_monitor/digest/llm.py#L121),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались
 > вручную. Менять их структуру — только осознанно и с предупреждением; см.
 > «Чего НЕ делать» в [`CLAUDE.md`](../../CLAUDE.md).

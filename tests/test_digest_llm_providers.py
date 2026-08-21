@@ -26,17 +26,30 @@ from court_monitor import config as cm_config  # noqa: E402
 from court_monitor import runs as cm_runs  # noqa: E402
 from court_monitor.digest import core as cm_core  # noqa: E402
 from court_monitor.digest import llm as cm_llm  # noqa: E402
+from court_monitor import delivery as cm_delivery  # noqa: E402
 
 
 class _OpenRouterTestBase(unittest.TestCase):
     """Общий setUp: сброс мемо резолва модели, чтобы тесты не влияли
-    друг на друга (мемо живёт на процесс)."""
+    друг на друга (мемо живёт на процесс), + ключи ВСЕХ провайдеров.
+
+    Ключи обязательны: `summarize_act_motivation` с 21.08.2026 не ходит в
+    сеть, когда у текущего провайдера ключа нет (Mac-резерв), и патч
+    транспорта тесту уже не помогает — вызова просто не будет.
+    """
 
     def setUp(self):
         cm_llm._openrouter_resolved_model = None
+        cm_llm._llm_not_configured_reported = False
+        for name in ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY",
+                     "GIGACHAT_AUTH_KEY"):
+            patcher = patch.object(cm_config, name, "test-key")
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def tearDown(self):
         cm_llm._openrouter_resolved_model = None
+        cm_llm._llm_not_configured_reported = False
 
 
 def _fake_response(payload):
@@ -622,6 +635,81 @@ class ValidateEnvironmentOpenrouterTest(_OpenRouterTestBase):
              patch.object(cm_config, "TELEGRAM_BOT_TOKEN", "t"), \
              patch.object(cm_config, "TELEGRAM_CHAT_ID", "c"):
             cm_runs.validate_environment()  # не должно упасть
+
+
+class SummarizeNoKeyTest(_OpenRouterTestBase):
+    """Ключа провайдера нет вовсе (Mac-резерв, боевой путь с 19.08.2026).
+
+    Это НЕ отказ провайдера: вызова не было. Прежний код считал такой прогон
+    сбоем («сбоев 6 из 6») и поднимал 🩺-алерт о несуществующем 429, а
+    дайджест-черновик уходил с сырым текстом акта.
+    """
+
+    ACT = "Мотивировочная часть акта. " * 10
+
+    def setUp(self):
+        super().setUp()
+        for k in ("llm_summary_calls", "llm_summary_failed",
+                  "llm_summary_cache_hits", "llm_summary_skipped_no_key"):
+            cm_config.METRICS[k] = 0
+
+    def test_missing_key_skips_call_and_is_not_a_failure(self):
+        called = {"n": 0}
+        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
+             patch.object(cm_config, "OPENROUTER_API_KEY", ""), \
+             patch.object(cm_llm, "_call_openrouter_simple",
+                          lambda p, **kw: called.__setitem__(
+                              "n", called["n"] + 1) or "Пересказ."):
+            out = cm_llm.summarize_act_motivation(
+                self.ACT, case_meta={"stage": "appeal"}, use_cache=False)
+        self.assertIsNone(out)
+        self.assertEqual(called["n"], 0, "без ключа вызова быть не должно")
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 0)
+        self.assertEqual(cm_config.METRICS["llm_summary_calls"], 0)
+        self.assertEqual(cm_config.METRICS["llm_summary_skipped_no_key"], 1)
+
+    def test_cache_still_answers_without_key(self):
+        """Гард стоит ПОСЛЕ кэша: пересказ, оплаченный replay'ем и
+        закоммиченный в .act_summaries.json, обязан отдаваться и на машине
+        без ключей."""
+        with patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
+             patch.object(cm_config, "OPENROUTER_MODEL", "primary/model:free"), \
+             patch.object(cm_config, "OPENROUTER_API_KEY", ""):
+            # Ключ кэша неймспейсится «провайдер:модель» — считать его надо
+            # в том же окружении, иначе тест мимо кэша.
+            key = cm_llm._act_cache_key(self.ACT.strip())
+            with patch.object(cm_llm, "_load_act_summaries",
+                              lambda: {key: {"summary": "Готовый пересказ."}}):
+                out = cm_llm.summarize_act_motivation(
+                    self.ACT, case_meta={"stage": "appeal"}, use_cache=True)
+        self.assertEqual(out, "Готовый пересказ.")
+        self.assertEqual(cm_config.METRICS["llm_summary_skipped_no_key"], 0)
+        self.assertEqual(cm_config.METRICS["llm_summary_cache_hits"], 1)
+
+    def test_missing_key_name_matches_provider(self):
+        pairs = (
+            ("openrouter", "OPENROUTER_API_KEY"),
+            ("gigachat", "GIGACHAT_AUTH_KEY"),
+            ("claude", "ANTHROPIC_API_KEY"),
+        )
+        for provider, var in pairs:
+            with patch.object(cm_config, "LLM_PROVIDER", provider), \
+                 patch.object(cm_config, var, ""):
+                self.assertEqual(cm_llm.missing_llm_key_name(), var)
+                self.assertFalse(cm_llm.llm_is_configured())
+            with patch.object(cm_config, "LLM_PROVIDER", provider):
+                self.assertIsNone(cm_llm.missing_llm_key_name())
+                self.assertTrue(cm_llm.llm_is_configured())
+
+    def test_run_summary_names_the_skip(self):
+        """Сводка обязана сказать, что пересказов не делали: при пропуске
+        calls/failed нулевые, и штатная LLM-строка не печатается вовсе."""
+        cm_config.METRICS["llm_summary_skipped_no_key"] = 4
+        with patch.object(cm_delivery.log, "info") as minfo:
+            cm_delivery.log_run_summary("main-json", {"total": 1.0})
+        printed = "\n".join(str(c.args[0]) for c in minfo.call_args_list)
+        self.assertIn("LLM не настроен", printed)
+        self.assertIn("4", printed)
 
 
 if __name__ == "__main__":

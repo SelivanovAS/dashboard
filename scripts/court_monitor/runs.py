@@ -1075,14 +1075,10 @@ def validate_environment(require_anthropic: bool = True) -> None:
     """
     missing: list[str] = []
     if require_anthropic:
-        if config.LLM_PROVIDER == "gigachat":
-            if not config.GIGACHAT_AUTH_KEY:
-                missing.append("GIGACHAT_AUTH_KEY")
-        elif config.LLM_PROVIDER == "openrouter":
-            if not config.OPENROUTER_API_KEY:
-                missing.append("OPENROUTER_API_KEY")
-        elif not config.ANTHROPIC_API_KEY:
-            missing.append("ANTHROPIC_API_KEY")
+        # Соответствие «провайдер → его ключ» живёт одним местом в llm.py:
+        # тем же предикатом гейтятся пересказы актов и запись act_analysis.
+        if llm_key := llm.missing_llm_key_name():
+            missing.append(llm_key)
     if not config.TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
     if not config.TELEGRAM_CHAT_ID:
@@ -1556,6 +1552,49 @@ def _alert_llm_summary_failures() -> None:
         )
     except Exception as exc:
         log.warning(f"llm-summary: ошибка алерта: {exc}", exc_info=True)
+
+
+def _attach_bank_act_analyses(
+    bank_cases: list[dict], digest: str, fi_changes: list[dict], *,
+    is_empty: bool,
+) -> int:
+    """Привязать разбор акта к делам трека «Иски банка» (13.08.2026).
+
+    Банк-дела к моменту attach уже разложены из `cases` в отдельную
+    картотеку (split_bank_track, фаза 7c), и общий вызов их «не находит» —
+    «Почему» из банк-секции не доезжал до drawer'а. Гейт
+    `bank_act_why_eligible` общий с рендером банк-секции (только исход против
+    банка); `require_explained` — банк-дело печатается одной строкой с
+    номером, и обычный фолбэк «любой абзац с номером» выдал бы её за
+    «AI анализ».
+
+    Тело общее для main_json и main_replay_last: правило «кому положен
+    разбор» обязано быть одним — разъехавшиеся копии этот проект ловил
+    дважды. Возвращает число обновлённых дел (0 — сохранять нечего).
+    """
+    bank_act_chs = [ch for ch in (fi_changes or [])
+                    if ch.get("track") == "plaintiff_light"
+                    and bank_act_why_eligible(ch)]
+    if not bank_cases or not bank_act_chs:
+        return 0
+    updated = 0
+    for ch in bank_act_chs:
+        # Номера bank-дел НЕ уникальны между судами (потому bank_events_key
+        # композитный), а attach ищет дело по голому номеру — цели фильтруем
+        # по домену суда из details, иначе разбор прилип бы к делу-тёзке.
+        dom = ((ch.get("details") or {}).get("court_domain") or "").strip()
+        targets = [c for c in bank_cases
+                   if not dom
+                   or ((c.get("first_instance") or {})
+                       .get("court_domain") or "").strip() == dom]
+        updated += attach_act_analyses(
+            targets,
+            digest,
+            all_changes=[ch],
+            is_empty=is_empty,
+            require_explained=True,
+        )
+    return updated
 
 
 def _filter_ctx_fi_changes_echo(
@@ -5295,50 +5334,41 @@ def main_json():
     # чтобы юрист видел его в drawer (и чтобы он жил дольше одного дня).
     # Поле `act_analysis` обновляется только у дел с new_act (апел. или
     # касс.) / fi_act_text_published в этом прогоне; остальные не трогаем.
-    act_analyses_updated = attach_act_analyses(
-        cases,
-        digest,
-        all_changes=list(changes) + list(fi_changes),
-        cass_changes=cass_changes,
-        is_empty=digest_is_empty,
-    )
-    if act_analyses_updated:
-        # Дописываем поле в уже сохранённый ранее cases.json. save_json
-        # поверх — единственный безопасный способ донести изменение до
-        # фронта (atomic-write через временный файл уже встроен).
-        data["cases"] = cases
-        save_json(data, config.JSON_PATH)
+    #
+    # ⚠️ Пишем ТОЛЬКО когда LLM реально работала. Без ключа (Mac-резерв,
+    # боевой путь с 19.08.2026) attach откатывается на raw_act и кладёт в
+    # карточку СЫРОЙ текст мотивировки под заголовком «AI анализ» — и он
+    # остаётся там навсегда, пока по делу не выйдет новый акт. Фолбэк
+    # задумывался под редкий отказ провайдера (429), а на машине без ключей
+    # отказ постоянный. Пропуск безопасен: replay переигрывает тот же
+    # контекст на OpenRouter и пишет разбор в обе картотеки.
+    if (llm_key_missing := llm.missing_llm_key_name()):
+        log.info(
+            f"act_analysis: LLM не настроен (нет {llm_key_missing}) — "
+            f"разбор актов допишет replay"
+        )
+    else:
+        act_analyses_updated = attach_act_analyses(
+            cases,
+            digest,
+            all_changes=list(changes) + list(fi_changes),
+            cass_changes=cass_changes,
+            is_empty=digest_is_empty,
+        )
+        if act_analyses_updated:
+            # Дописываем поле в уже сохранённый ранее cases.json. save_json
+            # поверх — единственный безопасный способ донести изменение до
+            # фронта (atomic-write через временный файл уже встроен).
+            data["cases"] = cases
+            save_json(data, config.JSON_PATH)
 
-    # То же для банк-дел (13.08.2026): к моменту attach они уже разложены из
-    # `cases` в bank_active (split_bank_track, фаза 7c), и первый вызов их
-    # «не находит» — «Почему» из банк-секции не доезжал до drawer'а. Гейт
-    # bank_act_why_eligible общий с рендером банк-секции (только исход против
-    # банка); require_explained — банк-дело печатается одной строкой с
-    # номером, и обычный фолбэк «любой абзац с номером» выдал бы её за
-    # «AI анализ» (при отказе LLM сработает raw_act-фолбэк по details).
-    # Записи bank_active — склеенные dict'ы этого же прогона, повторный
-    # save_bank_json недеструктивен (payload байт-в-байт как в 7c).
-    bank_act_chs = [ch for ch in fi_changes
-                    if ch.get("track") == "plaintiff_light"
-                    and bank_act_why_eligible(ch)]
-    if bank_active and bank_act_chs:
-        # Номера bank-дел НЕ уникальны между судами (потому bank_events_key
-        # композитный), а attach ищет дело по голому номеру — цели фильтруем
-        # по домену суда из details, иначе разбор прилип бы к делу-тёзке.
-        bank_analyses_updated = 0
-        for _bch in bank_act_chs:
-            _dom = ((_bch.get("details") or {}).get("court_domain") or "").strip()
-            _targets = [c for c in bank_active
-                        if not _dom
-                        or ((c.get("first_instance") or {})
-                            .get("court_domain") or "").strip() == _dom]
-            bank_analyses_updated += attach_act_analyses(
-                _targets,
-                digest,
-                all_changes=[_bch],
-                is_empty=digest_is_empty,
-                require_explained=True,
-            )
+        # То же для банк-дел (13.08.2026): они уже разложены из `cases` в
+        # bank_active (split_bank_track, фаза 7c), и общий вызов их «не
+        # находит». Записи bank_active — склеенные dict'ы этого же прогона,
+        # повторный save_bank_json недеструктивен (payload байт-в-байт как
+        # в 7c).
+        bank_analyses_updated = _attach_bank_act_analyses(
+            bank_active, digest, fi_changes, is_empty=digest_is_empty)
         if bank_analyses_updated:
             save_bank_json(
                 {"version": 1, "track": "plaintiff_light",
@@ -5498,6 +5528,12 @@ def main_replay_last(push_all: bool = False):
         cass_changes=ctx.get("cass_changes", []),
         cass_discovered=ctx.get("cass_discovered", []),
     )
+    # Отказ провайдера пересказов виден именно здесь: replay — боевой путь
+    # дайджеста с 19.08.2026 (крон облака выключен), и только у него есть и
+    # OpenRouter, и TELEGRAM_BOT_TOKEN. На Mac этот же алерт срабатывал бы
+    # каждое утро и никуда не уходил — ни один настоящий 429 (инцидент
+    # 17.07.2026, ради которого алерт и делали) не был бы замечен.
+    _alert_llm_summary_failures()
     replay_is_empty = not (
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
@@ -5540,6 +5576,29 @@ def main_replay_last(push_all: bool = False):
             save_json(data, config.JSON_PATH)
     except Exception as exc:
         log.warning(f"act_analysis (replay): не удалось обновить cases.json: {exc}")
+
+    # То же для трека «Иски банка»: в cases.json этих дел нет, а под
+    # Mac-режимом replay — ЕДИНСТВЕННЫЙ путь, где разбор вообще считается
+    # (на машине юриста ключей LLM нет). Без этого блока «Почему» в карточке
+    # иска банка не появлялось бы вовсе.
+    try:
+        # ⚠️ Грузить обязательно load_bank_json (склеенные записи) и отдавать
+        # обратно ВЕСЬ загруженный dict: save_bank_json перезаписывает
+        # events-файл целиком из переданных записей, а version/track/
+        # archived_count переживают только тем, что копируются из того же
+        # dict (storage.save_bank_json).
+        bank_data = load_bank_json(
+            config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
+        bank_cases = bank_data.get("cases", []) or []
+        bank_updated = _attach_bank_act_analyses(
+            bank_cases, digest, list(ctx.get("fi_changes", [])),
+            is_empty=replay_is_empty)
+        if bank_updated:
+            save_bank_json(
+                bank_data, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
+    except Exception as exc:
+        log.warning(
+            f"act_analysis (replay): не удалось обновить cases_bank.json: {exc}")
 
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
     title = (
