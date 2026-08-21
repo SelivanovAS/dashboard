@@ -313,7 +313,12 @@ REGION_CODE=$(cm_region_code "$PYTHON")
 cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 
 log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без секретов) ..."
+# SKIP_CHECKED_TODAY — дочитка слотов: карточки со штампом «сегодня»
+# пропускаются, повторная попытка тратит запросы только на недочитанное
+# (21.08.2026: второй слот Урала сжёг ~105 из 119 удачных чтений на повторы
+# утренних карточек). --force гасит: юрист у пульта хочет полный свежий прогон.
 SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ] && echo 0 || echo 1) \
+SKIP_CHECKED_TODAY=$([ "$FORCE" = "1" ] && echo 0 || echo 1) \
   "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
 RC=$?
 if [ "$RC" -ne 0 ]; then

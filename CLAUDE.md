@@ -81,14 +81,14 @@
 | `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1150](scripts/court_monitor/lifecycle.py:1150) |
 | `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1177](scripts/court_monitor/lifecycle.py:1177) |
 | `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:1956](scripts/court_monitor/lifecycle.py:1956) |
-| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1779](scripts/court_monitor/runs.py:1779) |
+| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1796](scripts/court_monitor/runs.py:1796) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
 | `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:50](scripts/court_monitor/bank_intake.py:50) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
 | `_stamp_appeal_flags` (флаги жалобы + ДВИЖЕНИЕ жалобы + апеллянт из карточки в запись) | [scripts/court_monitor/bank_intake.py:280](scripts/court_monitor/bank_intake.py:280) |
 | `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1128](scripts/court_monitor/lifecycle.py:1128) |
-| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1722](scripts/court_monitor/runs.py:1722) |
-| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1888](scripts/court_monitor/runs.py:1888) |
+| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1739](scripts/court_monitor/runs.py:1739) |
+| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1905](scripts/court_monitor/runs.py:1905) |
 | `fi_not_accepted_kind` (иск к производству не принят: возврат / отказ в принятии / передача по подсудности — каналы приёма такое дело не заводят) | [scripts/court_monitor/lifecycle.py:441](scripts/court_monitor/lifecycle.py:441) |
 | `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:174](scripts/court_monitor/lifecycle.py:174) |
 | `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:501](scripts/court_monitor/lifecycle.py:501) |
@@ -128,7 +128,7 @@
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:545](scripts/court_monitor/runs.py:545) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2110](scripts/court_monitor/runs.py:2110) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2149](scripts/court_monitor/runs.py:2149) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:76](scripts/court_monitor/digest/llm.py:76) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:871](scripts/court_monitor/digest/llm.py:871) |
@@ -226,7 +226,16 @@
 > contains() по сообщению), а её новости копятся в last_digest_context.json
 > (`save_digest_context` мержит дельты дня, пока нет `delivered_at`; дельты
 > попыток дизъюнктны — события уже влиты, флаги поставлены); юристу уходит
-> алерт-прогресс «прочитано X из Y карточек». Удачная попытка, слот 10:00
+> алерт-прогресс «прочитано X из Y карточек». **С 21.08.2026 — дочитка**:
+> повторный слот пропускает карточки со штампом `last_checked_at` за сегодня
+> (`SKIP_CHECKED_TODAY` из parse_and_push.sh, `--force` гасит; гейт в
+> `should_skip_case`, причина `checked_today`) — до этого второй слот Урала
+> сжёг ~105 из 119 удачных чтений на повторы утренних карточек, а план
+> пересчитывался заново (484→362), и «прочитано 119 из 362 (32%)» дедлайна
+> читалось как провал дня при реальных ~70% покрытия; алерты повторных
+> попыток теперь ведут накопительный счёт («за утро прочитано T, недочитано
+> N» — ключ `cards_read_today` в `last_run`), первая попытка дня — прежние
+> формулировки побайтово. Удачная попытка, слот 10:00
 > (дедлайн `DELIVERY_DEADLINE_MIN`) или --force — доставка:
 > `--mark-delivered` + маркерный коммит «(Mac-парсинг)» → replay шлёт ОДИН
 > дайджест со всем накопленным; при мёртвых канарейках на дедлайне

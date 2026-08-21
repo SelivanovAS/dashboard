@@ -170,6 +170,31 @@ class TestTerritories:
         assert "parse_and_push.sh</string>" not in plist
 
 
+class TestDochitkaWiring:
+    """Дочитка слотов (21.08.2026): без гейта «уже прочитано сегодня» второй
+    слот Урала сжёг ~105 из 119 удачных чтений на повторы утренних карточек,
+    пока ~130 недочитанных остались ждать завтра. Слоты передают
+    SKIP_CHECKED_TODAY=1, --force его гасит (юрист у пульта хочет полный
+    свежий прогон); облачный workflow переменную не знает — его поведение
+    не меняется ни на байт."""
+
+    def test_slots_pass_flag_and_force_disables_it(self, worker):
+        code = _code(worker)
+        assert ('SKIP_CHECKED_TODAY=$([ "$FORCE" = "1" ] && echo 0 || echo 1)'
+                in code), "слоты не передают дочитку / --force её не гасит"
+
+    def test_flag_sits_on_run_parse_invocation(self, worker):
+        """Переменная обязана стоять в env-префиксе именно запуска парсинга —
+        экспорт в другом месте молча потеряется при перестановке строк."""
+        code = _code(worker)
+        tail = code[code.index("SKIP_CHECKED_TODAY"):]
+        assert "run_parse.py" in tail[:250]
+
+    def test_cloud_workflow_does_not_set_it(self):
+        yml = _read(".github/workflows/update_cases.yml")
+        assert "SKIP_CHECKED_TODAY" not in yml
+
+
 class TestCheckMode:
     """`--check` — проверить резерв из офиса, ничего не публикуя."""
 

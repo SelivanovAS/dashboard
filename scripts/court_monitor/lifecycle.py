@@ -2922,6 +2922,18 @@ def should_skip_case(
         block = case_dict.get("appeal") or {}
     elif stage == "cassation":
         block = case_dict.get("cassation") or {}
+    elif stage in ("awaiting_appeal", "cassation_pending"):
+        # Смарт-скипа у этих стадий нет ПО ПОСТРОЕНИЮ (карточку 1-й инст.
+        # читаем каждый прогон, ловим «направлено выше») — ветку ниже им
+        # давать нельзя: они начали бы скипаться по будущим датам. Но дочитку
+        # слотов (SKIP_CHECKED_TODAY) они уважать обязаны, иначе повторный
+        # слот перечитывает их первыми; штамп чтения живёт в блоке 1-й инст.
+        if config.SKIP_CHECKED_TODAY:
+            _fi_checked = str((case_dict.get("first_instance") or {})
+                              .get("last_checked_at") or "")[:10]
+            if _fi_checked == today.isoformat():
+                return True, "checked_today"
+        return False, ""
     else:
         return False, ""
 
@@ -2946,6 +2958,15 @@ def should_skip_case(
                 f"{last_checked_raw!r} — парсим принудительно"
             )
             last_checked = None
+    # Дочитка слотов Mac-резерва (SKIP_CHECKED_TODAY, ставит parse_and_push.sh
+    # без --force): карточка уже прочитана СЕГОДНЯ — повторный слот её не
+    # трогает, запросы идут на недочитанное. Непрочитанные карточки штампа не
+    # получают (заглушка/предохранитель/сеть не бумпают last_checked_at) и в
+    # плане остаются. Стоит ПОСЛЕ М-гарда осознанно: материалы под М-номером
+    # читаются каждым прогоном ради промоушена, их единицы. С веткой
+    # force-parse ниже не пересекается (там last_checked ≥ 21 дня назад).
+    if config.SKIP_CHECKED_TODAY and last_checked == today:
+        return True, "checked_today"
     if last_checked is None or (today - last_checked).days >= force_parse_days:
         # Известная будущая дата СИЛЬНЕЕ страховки force-parse (решение
         # юриста 14.08.2026): пока заседание впереди, читать карточку не за
@@ -3076,6 +3097,8 @@ def skip_reason_ru(reason: str) -> str:
                 f"опрос раз в {m.group(2)} дн. (прошло {m.group(1)})")
     if reason == "material_pending_promotion":
         return "материал под М-номером, ждём промоушен"
+    if reason == "checked_today":
+        return "карточка уже прочитана сегодня (дочитка слотов)"
     return reason
 
 

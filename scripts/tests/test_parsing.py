@@ -3368,6 +3368,99 @@ class TestSmartSkipSwitch:
         assert uc.should_skip_case(case, today)[0] is True
 
 
+# ── should_skip_case: дочитка слотов (SKIP_CHECKED_TODAY) ────────────────────
+
+class TestCheckedTodayDochitka:
+    """Дочитка утренних слотов Mac-резерва (21.08.2026): карточка со штампом
+    last_checked_at за СЕГОДНЯ пропускается, повторная попытка тратит
+    дефицитные при блоке запросы только на недочитанное. Второй слот Урала
+    без гейта сжёг ~105 из 119 удачных чтений на повторы утренних карточек,
+    пока ~130 недочитанных остались ждать завтра."""
+
+    ДЕНЬ = date(2026, 8, 21)
+
+    @staticmethod
+    def _case(last_checked: str | None, num: str = "2-200/2026") -> dict:
+        # Заседание прошло, будущей даты нет — «ежедневный класс», без
+        # дочитки такое дело читается каждым прогоном.
+        fi: dict = {"case_number": num,
+                    "events": [{"date": "10.08.2026",
+                                "text": "Судебное заседание. 10:00"}]}
+        if last_checked is not None:
+            fi["last_checked_at"] = last_checked
+        return {"id": num, "current_stage": "first_instance",
+                "first_instance": fi}
+
+    def test_read_today_skipped_when_enabled(self, monkeypatch):
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        case = self._case(self.ДЕНЬ.isoformat())
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is True
+        assert reason == "checked_today"
+
+    def test_default_off_keeps_daily_reread(self):
+        """Дефолт выключен: облачный крон и ручные прогоны перечитывают
+        «ежедневный класс», как раньше — переменную ставит ТОЛЬКО
+        parse_and_push.sh."""
+        from court_monitor import config
+        assert config.SKIP_CHECKED_TODAY is False
+        case = self._case(self.ДЕНЬ.isoformat())
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (False, "")
+
+    def test_unread_card_stays_in_plan(self, monkeypatch):
+        """Непрочитанные карточки штампа не получают (заглушка/предохранитель
+        не бумпают last_checked_at) — дочитка обязана их читать."""
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        case = self._case("2026-08-20")
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (False, "")
+
+    def test_material_guard_still_wins(self, monkeypatch):
+        """М-гард стоит ВЫШЕ осознанно: материалы читаются каждый прогон
+        ради промоушена М→2, их единицы."""
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        case = self._case(self.ДЕНЬ.isoformat(), num="М-200/2026")
+        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
+        assert skip is False
+        assert reason == "material_pending_promotion"
+
+    def test_smart_skip_off_bypasses_dochitka(self, monkeypatch):
+        """Полный прогон без smart-skip читает всё — и прочитанное сегодня."""
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        monkeypatch.setattr(config, "SMART_SKIP_CASES", False)
+        case = self._case(self.ДЕНЬ.isoformat())
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (False, "")
+
+    def test_reason_has_russian_label(self):
+        from court_monitor.lifecycle import skip_reason_ru
+        assert "дочитка" in skip_reason_ru("checked_today")
+
+    def test_stages_without_smart_skip_respect_dochitka(self, monkeypatch):
+        """awaiting_appeal/cassation_pending смарт-скипу не подчиняются по
+        построению (карточку 1-й инст. читаем каждый прогон, ловим
+        «направлено выше») — но дочитку уважают, иначе повторный слот
+        перечитывал бы их первыми. На Урале 21.08 таких дел было 6."""
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        for stage in ("awaiting_appeal", "cassation_pending"):
+            case = self._case(self.ДЕНЬ.isoformat())
+            case["current_stage"] = stage
+            assert uc.should_skip_case(case, self.ДЕНЬ) == \
+                (True, "checked_today"), stage
+            unread = self._case("2026-08-20")
+            unread["current_stage"] = stage
+            assert uc.should_skip_case(unread, self.ДЕНЬ) == (False, ""), stage
+
+    def test_stages_without_smart_skip_unchanged_by_default(self):
+        """Без флага прежнее поведение стадий-ожиданий: всегда парсим."""
+        case = self._case(self.ДЕНЬ.isoformat())
+        case["current_stage"] = "awaiting_appeal"
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (False, "")
+
+
 # ── Календарный гейт прогона (skip_non_working_day) ──────────────────────────
 
 class TestCalendarGate:

@@ -572,6 +572,7 @@ def update_active_cases(
     today = date.today()
     skipped_future = 0
     skipped_suspended = 0
+    skipped_checked_today = 0
     skipped_breaker = 0
     force_parsed = 0
     parsed = 0
@@ -589,6 +590,7 @@ def update_active_cases(
     # но без HTTP) — чтобы «сколько из скольких будет спарсено» было видно
     # в логе сразу, а не только в итоговой сводке.
     plan_skip = 0
+    plan_checked_today = 0
     for _c in cases:
         if is_archived(_c):
             continue
@@ -596,14 +598,25 @@ def update_active_cases(
         if skip_apel_nums and _num in skip_apel_nums:
             continue
         _ap_d = (json_appeal_by_num or {}).get(_num)
-        if _ap_d is not None and should_skip_case(
-                {"current_stage": "appeal", "appeal": _ap_d}, today)[0]:
-            plan_skip += 1
+        if _ap_d is None:
+            continue
+        _p_skip, _p_reason = should_skip_case(
+            {"current_stage": "appeal", "appeal": _ap_d}, today)
+        if _p_skip:
+            # Дочитка слотов — прочитанное утром, а не «заседание в будущем».
+            if _p_reason == "checked_today":
+                plan_checked_today += 1
+            else:
+                plan_skip += 1
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «активных дел».
-    planned_parse = planned_total - plan_skip
+    planned_parse = planned_total - plan_skip - plan_checked_today
     _plan_parts = []
     if plan_skip:
         _plan_parts.append(f"{plan_skip} отложено — заседание в будущем")
+    if plan_checked_today:
+        _plan_parts.append(
+            f"{plan_checked_today} прочитаны ранее сегодня — дочитка"
+        )
     if past_stage:
         _plan_parts.append(f"{past_stage} не парсим — апелляция уже пройдена")
     log.info(_format_queue_balance(
@@ -632,6 +645,9 @@ def update_active_cases(
             if skip:
                 if reason.startswith("future_hearing"):
                     skipped_future += 1
+                elif reason == "checked_today":
+                    # Дочитка слотов — не «без движения».
+                    skipped_checked_today += 1
                 else:
                     skipped_suspended += 1
                 log.debug(f"  skip {num}: {skip_reason_ru(reason)}")
@@ -1041,6 +1057,7 @@ def update_active_cases(
     return cases, changes, {
         "skipped_future": skipped_future,
         "skipped_suspended": skipped_suspended,
+        "skipped_checked_today": skipped_checked_today,
         "skipped_breaker": skipped_breaker,
         "force_parsed": force_parsed,
         "parsed": parsed,
@@ -2107,6 +2124,28 @@ def collect_bank_calendar_events(
     return emitted
 
 
+def _count_cards_read_today(cases: list, today_iso: str) -> int:
+    """Сколько карточек активных дел уже прочитано СЕГОДНЯ — штамп
+    last_checked_at за сегодня в блоках first_instance/appeal/cassation.
+
+    Питает накопительную сводку `cards_read_today` в last_run журнала
+    здоровья (блок 4e): утренние слоты Mac-резерва пересчитывают план заново
+    на каждой попытке, и «прочитано X из Y» одной попытки не отвечает на
+    вопрос «сколько всего дочитано за утро» — 21.08.2026 юрист прочитал
+    «119 из 362 (32%)» дедлайна как провал дня при реальных ~70% покрытия.
+    Считаем БЛОКИ, а не дела — в тех же единицах, что cards_read (карточки
+    1-й инст. и апелляции одного дела — два чтения). Срез [:10] — стойкость
+    к возможному полному таймстампу в чужих писателях штампа.
+    """
+    count = 0
+    for c in cases:
+        for key in ("first_instance", "appeal", "cassation"):
+            block = c.get(key) or {}
+            if str(block.get("last_checked_at") or "")[:10] == today_iso:
+                count += 1
+    return count
+
+
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -2309,6 +2348,7 @@ def main_json():
     cass_parsed = 0
     cass_skipped_future = 0
     cass_skipped_suspended = 0
+    cass_skipped_checked_today = 0
     cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
     # Ключи здоровья кассации — из региона (для ХМАО совпадают с историческими
     # "cassation:7kas:total"/"cassation:7kas:hmao", медианы не обнуляются).
@@ -2410,6 +2450,9 @@ def main_json():
                     if skip:
                         if "future_hearing" in reason:
                             cass_skipped_future += 1
+                        elif reason == "checked_today":
+                            # Дочитка слотов — не «без движения».
+                            cass_skipped_checked_today += 1
                         else:
                             cass_skipped_suspended += 1
                         log.debug(
@@ -2470,6 +2513,10 @@ def main_json():
     _cass_sum_parts = []
     if cass_skipped_future:
         _cass_sum_parts.append(f"{cass_skipped_future} отложено — заседание в будущем")
+    if cass_skipped_checked_today:
+        _cass_sum_parts.append(
+            f"{cass_skipped_checked_today} прочитаны ранее сегодня — дочитка"
+        )
     if cass_skipped_suspended:
         _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
     log.info(
@@ -2780,11 +2827,18 @@ def main_json():
 
     timings["appeal_update"] = time.perf_counter() - t0
 
-    ap_skip_total = ap_skip_stats["skipped_future"] + ap_skip_stats["skipped_suspended"]
+    ap_skip_total = (ap_skip_stats["skipped_future"]
+                     + ap_skip_stats["skipped_suspended"]
+                     + ap_skip_stats.get("skipped_checked_today", 0))
     _ap_sum_parts = []
     if ap_skip_stats["skipped_future"]:
         _ap_sum_parts.append(
             f"{ap_skip_stats['skipped_future']} отложено — заседание в будущем"
+        )
+    if ap_skip_stats.get("skipped_checked_today"):
+        _ap_sum_parts.append(
+            f"{ap_skip_stats['skipped_checked_today']} прочитаны ранее "
+            f"сегодня — дочитка"
         )
     if ap_skip_stats["skipped_suspended"]:
         _ap_sum_parts.append(f"{ap_skip_stats['skipped_suspended']} без движения")
@@ -3203,6 +3257,7 @@ def main_json():
     fi_plan_skip = 0
     fi_plan_no_card = 0
     fi_plan_writ_weekly = 0
+    fi_plan_checked_today = 0
     for _c in fi_active:
         _fi_b = _c.get("first_instance", {})
         if (_fi_b.get("court_domain", "") not in fi_court_map
@@ -3219,10 +3274,14 @@ def main_json():
             if _plan_reason.startswith(
                     ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 fi_plan_writ_weekly += 1
+            elif _plan_reason == "checked_today":
+                # Дочитка слотов: прочитанное сегодня — не «заседание в
+                # будущем», а уже сделанная работа утра.
+                fi_plan_checked_today += 1
             else:
                 fi_plan_skip += 1
     fi_plan_parse = (len(fi_active) - fi_plan_skip - fi_plan_writ_weekly
-                     - fi_plan_no_card)
+                     - fi_plan_checked_today - fi_plan_no_card)
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
     # «Всего» включает и дела «третье лицо» в cassation_watch — предикат
     # should_parse_fi_card их не пускает в очередь, но юристу они видны
@@ -3234,6 +3293,10 @@ def main_json():
     if fi_plan_writ_weekly:
         _plan_notes.append(
             f"{fi_plan_writ_weekly} иски банка — недельный ритм"
+        )
+    if fi_plan_checked_today:
+        _plan_notes.append(
+            f"{fi_plan_checked_today} прочитаны ранее сегодня — дочитка"
         )
     if fi_plan_no_card:
         _plan_notes.append(
@@ -3254,6 +3317,7 @@ def main_json():
     fi_skipped_future = 0
     fi_skipped_suspended = 0
     fi_skipped_writ_weekly = 0
+    fi_skipped_checked_today = 0
     fi_skipped_breaker = 0
     fi_force_parsed = 0
     fi_distrusted_date = 0
@@ -3328,6 +3392,9 @@ def main_json():
                 # Недельный ритм исков банка — не «без движения»
                 # (см. одноимённое слагаемое в плане очереди выше).
                 fi_skipped_writ_weekly += 1
+            elif reason == "checked_today":
+                # Дочитка слотов — прочитанное утром не «без движения».
+                fi_skipped_checked_today += 1
             else:
                 fi_skipped_suspended += 1
             bank_report.record(case_j, "skip", reason=reason,
@@ -4569,13 +4636,17 @@ def main_json():
     # строки «парсим Y» и «проверено X из Y»; скипы — пояснением в скобках.
     fi_total = fi_plan_parse
     fi_skip_total = (fi_skipped_future + fi_skipped_suspended
-                     + fi_skipped_writ_weekly)
+                     + fi_skipped_writ_weekly + fi_skipped_checked_today)
     _fi_sum_parts = []
     if fi_skipped_future:
         _fi_sum_parts.append(f"{fi_skipped_future} отложено — заседание в будущем")
     if fi_skipped_writ_weekly:
         _fi_sum_parts.append(
             f"{fi_skipped_writ_weekly} исков банка — недельный ритм"
+        )
+    if fi_skipped_checked_today:
+        _fi_sum_parts.append(
+            f"{fi_skipped_checked_today} прочитаны ранее сегодня — дочитка"
         )
     if fi_skipped_suspended:
         _fi_sum_parts.append(f"{fi_skipped_suspended} без движения")
@@ -4699,10 +4770,23 @@ def main_json():
                 fi_parsed + ap_skip_stats["parsed"]
                 + cass_parsed + cass_refresh_parsed
             ),
+            # Из кассационного слагаемого вычтена дочитка (checked_today):
+            # cass_eligible считает ВСЕ строки выдачи 7kas, и уже прочитанные
+            # утром карточки иначе раздували бы знаменатель повторного слота
+            # (FI и апелляция исключают дочитку ещё в своих планах).
             "cards_planned": (
                 fi_total
                 + ap_skip_stats.get("planned", ap_skip_stats["total"])
-                + cass_eligible + cass_refresh_total
+                + (cass_eligible - cass_skipped_checked_today)
+                + cass_refresh_total
+            ),
+            # Накопительная сводка утра для алертов слотов («один дайджест в
+            # день»): сколько карточек активных дел УЖЕ прочитано сегодня —
+            # всеми попытками, не только этой. Без него «прочитано 119 из 362»
+            # на дедлайне читалось как провал дня при реальных ~70% покрытия
+            # (21.08.2026, Урал).
+            "cards_read_today": _count_cards_read_today(
+                cases, today.isoformat()
             ),
         }
         save_parse_health(health_state)
