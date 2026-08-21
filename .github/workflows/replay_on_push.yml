@@ -113,6 +113,16 @@ jobs:
           if [ -f data/cases.json ]; then
             git add data/cases.json
           fi
+          # cases_bank.json + events: replay пишет разбор акта и в карточку
+          # иска банка (в cases.json этих дел нет). Под Mac-режимом это
+          # ЕДИНСТВЕННЫЙ путь появления «Почему» в банк-картотеке — на машине
+          # юриста ключей LLM нет, и её собственный прогон разбор не считает.
+          if [ -f data/cases_bank.json ]; then
+            git add data/cases_bank.json
+          fi
+          if [ -f data/cases_bank_events.json ]; then
+            git add data/cases_bank_events.json
+          fi
           # Кэш LLM-пересказов мотивировок: без коммита каждый повторный
           # replay заново оплачивает пересказ тех же актов.
           if [ -f data/.act_summaries.json ]; then

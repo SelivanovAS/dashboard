@@ -419,9 +419,14 @@ def attach_act_analyses(
             continue
         case = by_id.get(bare)
         if not case:
-            log.info(
-                f"act_analysis: дело {case_num} ({stage}) не нашлось "
-                "в cases.json — пропуск"
+            # DEBUG, а не INFO: штатная ситуация каждого прогона — общий
+            # вызов идёт по основной картотеке, а очередь несёт и банк-дела
+            # (их split_bank_track вынул фазой раньше), их подберёт вызов по
+            # треку. Текст без «в cases.json»: функция не знает, какой список
+            # ей передали, и во втором вызове ищут по cases_bank.json.
+            log.debug(
+                f"act_analysis: дело {case_num} ({stage}) вне переданной "
+                "картотеки — пропуск"
             )
             continue
 

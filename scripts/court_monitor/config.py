@@ -630,6 +630,7 @@ METRICS: dict[str, int] = {
     "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
     "llm_summary_failed": 0,          # пересказы актов: все попытки исчерпаны → откат на excerpt
     "llm_summary_fallback_saved": 0,  # пересказы актов: спасены фолбэк-моделью OpenRouter
+    "llm_summary_skipped_no_key": 0,  # пересказы актов: не делали — у провайдера нет ключа (Mac-резерв)
     "bank_intake_candidates": 0,  # строк «банк-истец», прошедших строковые фильтры
     "bank_intake_cards": 0,       # карточек кандидатов, прочитанных подхватом
     "bank_intake_added": 0,       # исков банка заведено подхватом за прогон

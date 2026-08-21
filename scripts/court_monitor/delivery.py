@@ -842,6 +842,15 @@ def log_run_summary(
             + (f", сбоев {config.METRICS['llm_summary_failed']} (откат на excerpt)"
                if config.METRICS["llm_summary_failed"] else "")
         )
+    if config.METRICS["llm_summary_skipped_no_key"]:
+        # Отдельная строка, а не суффикс к предыдущей: когда ключа нет,
+        # вызовов и сбоев ноль, и та строка не печатается вовсе — а знать,
+        # что черновик ушёл без пересказов, юрист обязан.
+        opt_lines.append(
+            "Пересказы актов: не делали, LLM не настроен "
+            f"({config.METRICS['llm_summary_skipped_no_key']} актов) — "
+            "пересказы сделает replay"
+        )
     lines = [
         "=" * 60,
         f"Сводка прогона ({mode})",

@@ -373,6 +373,9 @@ class TestSummarizeMetrics:
 
     def test_real_call_counted(self, monkeypatch):
         monkeypatch.setattr(cm_config, "LLM_PROVIDER", "claude")
+        # Ключ обязателен: без него пересказ пропускается ДО вызова
+        # (llm_summary_skipped_no_key), и патч транспорта не сработал бы.
+        monkeypatch.setattr(cm_config, "ANTHROPIC_API_KEY", "test-key")
         monkeypatch.setattr(
             cm_llm, "_call_claude_simple", lambda prompt: "Суд отказал банку."
         )

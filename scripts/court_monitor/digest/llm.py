@@ -28,6 +28,51 @@ from court_monitor.config import log
 from court_monitor.storage import _load_act_summaries, _save_act_summaries
 from court_monitor.textutil import _bare_case_number
 
+
+# ── Настроен ли LLM ──────────────────────────────────────────────────────────
+
+# Флаг «уже сказали, что LLM не настроен»: на прогоне без ключа предупреждение
+# иначе печаталось бы на каждый акт (6 одинаковых строк за утро).
+_llm_not_configured_reported = False
+
+
+def missing_llm_key_name() -> str | None:
+    """Имя незаданного ключа для текущего LLM_PROVIDER; None — ключ есть.
+
+    Единственное место, где живёт соответствие «провайдер → его ключ»:
+    отсюда его берут и `validate_environment` (ей нужно ИМЯ переменной для
+    сообщения об ошибке — потому предикат возвращает строку, а не bool), и
+    гарды пересказа/разбора актов. Копий не заводить: проект дважды ловил
+    молча разъехавшиеся дубли одного правила.
+
+    Практический смысл — Mac-резерв: ключей на машине юриста нет намеренно
+    (LLM-дайджест делает GitHub-replay), и без предиката прогон считал бы
+    ненастроенный провайдер отказом провайдера.
+    """
+    if config.LLM_PROVIDER == "gigachat":
+        return None if config.GIGACHAT_AUTH_KEY else "GIGACHAT_AUTH_KEY"
+    if config.LLM_PROVIDER == "openrouter":
+        return None if config.OPENROUTER_API_KEY else "OPENROUTER_API_KEY"
+    return None if config.ANTHROPIC_API_KEY else "ANTHROPIC_API_KEY"
+
+
+def llm_is_configured() -> bool:
+    """Есть ли ключ у текущего провайдера (обёртка над missing_llm_key_name)."""
+    return missing_llm_key_name() is None
+
+
+def _report_llm_not_configured(missing: str) -> None:
+    """Одна строка за процесс: почему пересказов не будет."""
+    global _llm_not_configured_reported
+    if _llm_not_configured_reported:
+        return
+    _llm_not_configured_reported = True
+    log.info(
+        f"LLM не настроен (нет {missing}) — пересказы мотивировок пропускаем, "
+        f"их сделает GitHub-replay"
+    )
+
+
 # ── GigaChat API — альтернативный провайдер для digest_only ───────────────────
 
 def _gigachat_access_token() -> str | None:
@@ -894,6 +939,10 @@ def summarize_act_motivation(
     нарастающей паузой, затем фолбэк-модель OPENROUTER_FALLBACK_MODEL
     (openrouter/free) с config.OPENROUTER_SUMMARY_FALLBACK_RETRIES
     попытками — и только потом None.
+
+    Если ключа текущего провайдера нет вовсе (Mac-резерв), пересказ
+    пропускается ДО вызова: `llm_summary_skipped_no_key` вместо
+    `llm_summary_failed`, одна строка в лог за процесс.
     """
     act = (act_text or "").strip()
     if not act or len(act) < 100:
@@ -906,6 +955,17 @@ def summarize_act_motivation(
         if cached_summary:
             config.METRICS["llm_summary_cache_hits"] += 1
             return cached_summary
+
+    # Ключа нет вовсе (Mac-резерв) — это не «сбой пересказа»: вызова не было,
+    # и считать его в llm_summary_failed нельзя, иначе черновой прогон каждое
+    # утро поднимает 🩺-алерт «сбоев N из N» о несуществующем отказе
+    # провайдера. Гард стоит ПОСЛЕ кэша осознанно: пересказ, оплаченный
+    # replay'ем и закоммиченный в .act_summaries.json, обязан отдаваться и на
+    # машине без ключей.
+    if missing_key := missing_llm_key_name():
+        config.METRICS["llm_summary_skipped_no_key"] += 1
+        _report_llm_not_configured(missing_key)
+        return None
 
     prompt = _build_act_summary_prompt(act, case_meta)
 
