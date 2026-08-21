@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-21T08:16:25",
+  "updated_at": "2026-08-21T09:58:48",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -7218,7 +7218,7 @@
             "posted_at": "18.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "material_number": "М-449/2026",
         "accepted_pending_emit": false,
         "resolved_emitted": true,
@@ -7330,7 +7330,7 @@
             "posted_at": "04.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "resolved_emitted": true,
         "decision_date": "02.06.2026",
         "motivirovka_emitted": true,
@@ -7397,7 +7397,7 @@
             "posted_at": "29.05.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "material_number": "М-440/2026",
         "resolved_emitted": true,
         "decision_date": "29.05.2026",
@@ -7479,7 +7479,7 @@
             "posted_at": "03.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "material_number": "М-3544/2026",
         "accepted_pending_emit": false,
         "resolved_emitted": true,
@@ -7718,8 +7718,9 @@
             "posted_at": "11.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-18",
-        "resolved_emitted": true
+        "last_checked_at": "2026-08-21",
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0002-01-2026-001148-88"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",
@@ -7917,7 +7918,7 @@
             "posted_at": "29.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-19",
+        "last_checked_at": "2026-08-21",
         "resolved_emitted": true,
         "motivirovka_emitted": true,
         "judicial_uid": "86RS0007-01-2026-000724-28"
@@ -7984,7 +7985,7 @@
             "posted_at": "08.05.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "resolved_emitted": true,
         "judicial_uid": "86RS0004-01-2026-008201-66"
       },
@@ -8326,8 +8327,9 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-08-18",
-        "motivirovka_emitted": true
+        "last_checked_at": "2026-08-21",
+        "motivirovka_emitted": true,
+        "judicial_uid": "86RS0002-01-2025-011911-84"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",
@@ -8459,7 +8461,7 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "judicial_uid": "86RS0004-01-2026-005103-48"
       },
       "appeal": null,
