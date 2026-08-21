@@ -1,7 +1,97 @@
 {
   "version": 1,
-  "updated_at": "2026-08-20T08:19:38",
+  "updated_at": "2026-08-21T08:16:25",
   "cases": [
+    {
+      "id": "33-5976/2026",
+      "current_stage": "appeal",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Андреева Лариса Анатольевна, Антонова Юлия Андреевна ИП",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-638/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "",
+        "judge": "Ким А.А.",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "events": []
+      },
+      "appeal": {
+        "case_number": "33-5976/2026",
+        "court": "Суд ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 5,
+        "judge_reporter": "",
+        "filing_date": "21.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "26885741|a68e080b-11f8-4771-b97b-3916a53d3731",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": []
+      }
+    },
+    {
+      "id": "33-5924/2026",
+      "current_stage": "appeal",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Финансовый уполномоченный по правам потребителей финансовых услуг Т.М. Савицкая",
+      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3158/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Свинова Елена Евгеньевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "events": []
+      },
+      "appeal": {
+        "case_number": "33-5924/2026",
+        "court": "Суд ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 5,
+        "judge_reporter": "",
+        "filing_date": "21.08.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "26881734|2979e7ae-ad59-48cc-bad1-6a8bdbe512cc",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": []
+      }
+    },
     {
       "id": "33-5911/2026",
       "current_stage": "appeal",
@@ -58,7 +148,7 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -117,7 +207,7 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20"
+        "last_checked_at": "2026-08-21"
       },
       "initial_bank_role": "Истец"
     },
@@ -177,7 +267,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -239,7 +329,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -301,7 +391,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -508,7 +598,7 @@
             "posted_at": "07.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Истец"
       },
@@ -570,7 +660,7 @@
             "posted_at": "07.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -653,7 +743,7 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -784,7 +874,7 @@
             "posted_at": "07.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -918,7 +1008,7 @@
             "posted_at": "18.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -1529,7 +1619,7 @@
             "posted_at": "31.07.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -1913,7 +2003,7 @@
             "posted_at": "24.07.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -2099,8 +2189,8 @@
         "filing_date": "21.07.2026",
         "status": "Решено",
         "result": "определение отменено полностью с разрешением вопроса по существу",
-        "last_event": "Составлено мотивированное апелляционное определение в окончательной форме. 15:50. 19.08.2026",
-        "event_date": "11.08.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 09:03. 20.08.2026",
+        "event_date": "20.08.2026",
         "hearing_date": "11.08.2026",
         "hearing_time": "15:20",
         "link": "26745160|2728aa86-b6f9-4ed0-9894-7ba9668503ed",
@@ -2131,9 +2221,16 @@
             "text": "Составлено мотивированное апелляционное определение в окончательной форме. 15:50. 19.08.2026",
             "name": "Составлено мотивированное апелляционное определение в окончательной форме",
             "posted_at": "19.08.2026"
+          },
+          {
+            "date": "20.08.2026",
+            "time": "09:03",
+            "text": "Дело сдано в отдел судебного делопроизводства. 09:03. 20.08.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "20.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Истец"
       },
@@ -2221,7 +2318,7 @@
             "posted_at": "11.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Истец"
       },
@@ -2314,7 +2411,7 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец",
         "act_analysis": {
@@ -2407,7 +2504,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": null
       },
       "initial_bank_role": "Истец"
@@ -2548,7 +2645,7 @@
             "posted_at": "05.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик",
         "act_analysis": {
@@ -2642,7 +2739,7 @@
             "posted_at": "05.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": true,
         "appellant_status": "Истец",
         "act_analysis": {
@@ -2820,7 +2917,7 @@
         ],
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -2913,7 +3010,7 @@
         ],
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
@@ -3278,7 +3375,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": null,
@@ -3507,7 +3604,7 @@
             "posted_at": "03.07.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": null,
@@ -4091,7 +4188,7 @@
             "posted_at": "05.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": true,
@@ -4496,8 +4593,8 @@
         "filing_date": "19.06.2026",
         "status": "Решено",
         "result": "РЕШЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
-        "last_event": "Составлено мотивированное апелляционное определение в окончательной форме. 16:00. 18.08.2026",
-        "event_date": "13.08.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 16:14. 20.08.2026",
+        "event_date": "20.08.2026",
         "hearing_date": "11.08.2026",
         "hearing_time": "11:40",
         "link": "26604658|848add7a-2926-4fa5-9523-771489dffd0d",
@@ -4528,9 +4625,16 @@
             "text": "Составлено мотивированное апелляционное определение в окончательной форме. 16:00. 18.08.2026",
             "name": "Составлено мотивированное апелляционное определение в окончательной форме",
             "posted_at": "18.08.2026"
+          },
+          {
+            "date": "20.08.2026",
+            "time": "16:14",
+            "text": "Дело сдано в отдел судебного делопроизводства. 16:14. 20.08.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "20.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": true,
@@ -5634,7 +5738,7 @@
             "posted_at": "05.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": false,
@@ -5741,7 +5845,7 @@
             "posted_at": "17.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": false,
@@ -5854,7 +5958,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": false,
@@ -6764,8 +6868,8 @@
         "filing_date": "29.05.2026",
         "status": "Решено",
         "result": "Жалоба, представление возвращены заявителю",
-        "last_event": "Дело сдано в отдел судебного делопроизводства. 09:02. 30.07.2026",
-        "event_date": "30.07.2026",
+        "last_event": "Передано в экспедицию. 15:13. 20.08.2026",
+        "event_date": "20.08.2026",
         "hearing_date": "23.07.2026",
         "hearing_time": "",
         "link": "24889732|ee225cd1-2b45-4acc-a4c3-f3735409d02d",
@@ -6793,9 +6897,16 @@
             "text": "Дело сдано в отдел судебного делопроизводства. 09:02. 30.07.2026",
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "30.07.2026"
+          },
+          {
+            "date": "20.08.2026",
+            "time": "15:13",
+            "text": "Передано в экспедицию. 15:13. 20.08.2026",
+            "name": "Передано в экспедицию",
+            "posted_at": "20.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": false,
@@ -7154,7 +7265,7 @@
             "posted_at": "11.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": true,
@@ -12880,7 +12991,7 @@
             "posted_at": "14.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20"
+        "last_checked_at": "2026-08-21"
       },
       "initial_bank_role": "Ответчик"
     },
@@ -15101,7 +15212,7 @@
           }
         ],
         "link": "11987605|3d335563-2e6f-47aa-8e5d-c2c5bc8a6ebb",
-        "last_checked_at": "2026-08-17",
+        "last_checked_at": "2026-08-21",
         "discovered_via_cassation": false
       }
     },
@@ -18303,7 +18414,7 @@
           }
         ],
         "link": "11826855|5f269b35-2a75-4ece-9769-24d381f81517",
-        "last_checked_at": "2026-08-19",
+        "last_checked_at": "2026-08-21",
         "discovered_via_cassation": false
       },
       "discovered_via_cassation": false
@@ -18680,7 +18791,7 @@
           }
         ],
         "link": "11959239|a616785d-7490-49de-af48-8e083c1899a5",
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "discovered_via_cassation": false
       }
     },
@@ -19712,7 +19823,7 @@
           }
         ],
         "link": "11906294|56b2190e-dab4-4d70-9be7-0e08a06785f1",
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "discovered_via_cassation": false
       }
     },
@@ -21116,7 +21227,7 @@
           }
         ],
         "link": "11561528|a41b20bc-491b-431c-87e2-bc48677cb74f",
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "discovered_via_cassation": true
       },
       "initial_bank_role": "Третье лицо"
@@ -21940,10 +22051,10 @@
         "filing_date": "14.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача дела судье. 14:27. 14.08.2026",
-        "event_date": "14.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Судебное заседание. 10:20. 20.08.2026",
+        "event_date": "08.09.2026",
+        "hearing_date": "08.09.2026",
+        "hearing_time": "10:20",
         "link": "26861022|5a05c4b0-7dca-4067-9a9c-172d6026b249",
         "act_published": false,
         "act_date": "",
@@ -21955,9 +22066,16 @@
             "text": "Передача дела судье. 14:27. 14.08.2026",
             "name": "Передача дела судье",
             "posted_at": "14.08.2026"
+          },
+          {
+            "date": "08.09.2026",
+            "time": "10:20",
+            "text": "Судебное заседание. 10:20. 20.08.2026",
+            "name": "Судебное заседание",
+            "posted_at": "20.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20"
+        "last_checked_at": "2026-08-21"
       },
       "initial_bank_role": "Ответчик",
       "archived_at": "2026-07-06"
@@ -22662,10 +22780,10 @@
         "filing_date": "14.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача дела судье. 11:20. 14.08.2026",
-        "event_date": "14.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Судебное заседание. 14:40. 20.08.2026",
+        "event_date": "08.09.2026",
+        "hearing_date": "08.09.2026",
+        "hearing_time": "14:40",
         "link": "26857266|1337580c-635e-4a52-ae42-f95197cc2a01",
         "act_published": false,
         "act_date": "",
@@ -22677,9 +22795,16 @@
             "text": "Передача дела судье. 11:20. 14.08.2026",
             "name": "Передача дела судье",
             "posted_at": "14.08.2026"
+          },
+          {
+            "date": "08.09.2026",
+            "time": "14:40",
+            "text": "Судебное заседание. 14:40. 20.08.2026",
+            "name": "Судебное заседание",
+            "posted_at": "20.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20"
+        "last_checked_at": "2026-08-21"
       },
       "initial_bank_role": "Ответчик",
       "archived_at": "2026-07-06"
@@ -23357,7 +23482,7 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-20",
+        "last_checked_at": "2026-08-21",
         "appellant_is_bank": false,
         "appellant_status": "Ответчик"
       },
