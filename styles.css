@@ -1046,6 +1046,12 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 /* «⏳ ждёт ИЛ N дн.» — приоритет внутри очереди «Ждут ИЛ». Пороги: до 30 дн
    норма, 30-60 присмотреться, дольше — просрочено (реальная выдача листа —
    +40..55 дн от решения, потолок ожидания на бэкенде 180 дн). */
+/* Пометка «лист не нужен» (21.08.2026): не срочность, а закрытая позиция —
+   поэтому нейтральный графит, а не тёплая шкала ожидания. Токены объявлены в
+   обеих темах (страж test_frontend_status_badges запрещает литеральные hex). */
+.badge-writ-waived { background: var(--role-badge-bg); color: var(--role-badge-fg); border-color: var(--role-badge-br); }
+.mc-track-waived { color: var(--fg-2); font-weight: 600; }
+.kv-waived { color: var(--fg-2); font-weight: 500; }
 .badge-await-writ.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
 .badge-await-writ.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
 .badge-await-writ.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }

@@ -255,7 +255,9 @@ def test_awaiting_writ_days_and_thresholds():
     """
     deps = "\n".join(_fn_src(n) for n in (
         "parseDate", "dayDiff", "classifyWritKind", "hasEnforcementWrit",
-        "awaitsWrit", "awaitingWritDays", "awaitingWritLevel",
+        # writWaivedInfo — зависимость awaitsWrit с 21.08.2026 (ручная
+        # пометка «лист не нужен»): без неё срез падает ReferenceError.
+        "writWaivedInfo", "awaitsWrit", "awaitingWritDays", "awaitingWritLevel",
     ))
     # Даты считаем от «сегодня» внутри node, чтобы тест не протухал.
     # Дату собираем из ЛОКАЛЬНЫХ компонентов: toISOString() отдаёт UTC и в
