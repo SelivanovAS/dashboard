@@ -1327,8 +1327,8 @@ const WRIT_WAIVE_REASONS = new Set(["debt_paid", "not_requested", "other"]);
 // Транспорт тот же, что у точечного добавления: KV-job + workflow_dispatch.
 // Строки не касаются shell и не упираются в лимит inputs.
 async function handleAdminWritWaiver(request, env) {
-  const denied = await requireAdminRole(request, env, ["owner", "operator"]);
-  if (denied) return denied;
+  const gate = requireAdminRole(request, env, ["owner", "operator"]);
+  if (gate.error) return gate.error;
   const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
   let body = null;
   try {
