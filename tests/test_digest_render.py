@@ -1172,3 +1172,89 @@ class RecessAndRestartGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SummaryLanguageGuardTest(unittest.TestCase):
+    """Гард латинских вкраплений в пересказе (21.08.2026).
+
+    Выпуск 21.08.2026 разослал юристу «послужили **Credit**ный договор» и
+    «доводы о **lack of** доказательств» (дело 2-3996/2026): бесплатная
+    модель OpenRouter сорвалась в code-switching, а прежний гард требовал
+    лишь ≥40% кириллицы и вкрапления пропускал.
+    """
+
+    def test_clean_russian_passes(self):
+        self.assertTrue(cm_llm.summary_language_ok(
+            "Суд удовлетворил иск о взыскании задолженности по кредитному "
+            "договору за счёт наследственного имущества умершего должника."))
+
+    def test_latin_inclusions_rejected(self):
+        for bad in (
+            "послужили Creditный договор и доказательства его неисполнения "
+            "умершим заемщиком по делу о наследстве",
+            "Доводы ответчика о lack of доказательств задолженности "
+            "отклонены судом первой инстанции полностью",
+        ):
+            self.assertFalse(cm_llm.summary_language_ok(bad), bad)
+
+    def test_whole_answer_in_english_rejected(self):
+        self.assertFalse(cm_llm.summary_language_ok(
+            "The court granted the claim in full and ordered the defendant "
+            "to pay the debt in the amount established by the agreement."))
+
+    def test_legitimate_abbreviations_pass(self):
+        # Аббревиатуры и бренды в кавычках — законная латиница.
+        for good in (
+            "Оплата подтверждена SMS-уведомлением и выпиской по счёту, "
+            "представленной банком в материалы дела",
+            "Карта Visa была выпущена банком на имя заёмщика, задолженность "
+            "подтверждена выпиской по счёту",
+            "Ответчик ООО «Renault Russia» привлечён к участию в деле в "
+            "качестве третьего лица судом",
+        ):
+            self.assertTrue(cm_llm.summary_language_ok(good), good)
+
+    def test_clean_summary_drops_latin_answer(self):
+        self.assertEqual(cm_llm._clean_summary(
+            "Суд признал, что послужили Creditный договор и просрочка "
+            "заемщика подтверждена выпиской по счёту банка полностью."), "")
+
+    def test_poisoned_cache_entry_is_refetched(self):
+        """Испорченный пересказ в кэше жил бы вечно: кэш-хит стоит ДО чисток.
+
+        Проверяем, что гард ловит его на чтении и заказывает новый вызов.
+        """
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tf:
+            cache_path = tf.name
+        os.unlink(cache_path)
+        calls: list[str] = []
+
+        def fake_claude(prompt, **kw):
+            calls.append(prompt)
+            return "Суд взыскал задолженность по кредитному договору с наследников."
+
+        try:
+            with patch.object(cm_config, "ACT_SUMMARIES_PATH", cache_path), \
+                 patch.object(cm_llm, "_call_claude_simple", fake_claude), \
+                 patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
+                 patch.object(cm_config, "LLM_PROVIDER", "claude"):
+                act_text = "Мотивировочная часть акта. " * 10
+                meta = {"stage": "first_instance", "bank_role": "Истец"}
+                # Засеваем кэш испорченным пересказом под настоящим ключом.
+                key = cm_llm._act_cache_key(act_text)
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump({key: {"summary": "Суд решил, что lack of "
+                                                "доказательств не доказан"}},
+                              f, ensure_ascii=False)
+                out = uc.summarize_act_motivation(act_text, case_meta=meta)
+                self.assertEqual(len(calls), 1, "испорченный кэш должен был "
+                                                "быть перезапрошен")
+                self.assertTrue(cm_llm.summary_language_ok(out), out)
+        finally:
+            for p in (cache_path, cache_path + ".tmp"):
+                try:
+                    os.unlink(p)
+                except FileNotFoundError:
+                    pass

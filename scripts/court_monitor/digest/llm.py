@@ -786,6 +786,39 @@ _THINK_CLOSE_RE = re.compile(
 _SUMMARY_HARD_LIMIT = 600
 
 
+# Латинские «слова» длиной от трёх букв, которые в русском судебном пересказе
+# законны. Всё прочее на латинице — признак code-switching бесплатной модели.
+# Бренды суды пишут в кавычках, и кавычечные вставки гард пропускает отдельно.
+_SUMMARY_LATIN_OK = frozenset({
+    "sms", "qr", "pin", "vin", "atm", "pos", "mir", "usd", "eur", "rub",
+    "visa", "mastercard", "unionpay", "sberbank", "id", "it", "ok",
+})
+_SUMMARY_LATIN_RUN_RE = re.compile(r"[A-Za-z]{3,}")
+_SUMMARY_QUOTED_RE = re.compile(r"[«\"'][^«»\"']*[»\"']")
+
+
+def summary_language_ok(s: str) -> bool:
+    """Похож ли пересказ на русский текст (гард против сбоя провайдера).
+
+    Два правила. (1) Доля кириллицы ≥ 40% — ловит ответ целиком не на русском.
+    (2) Ни одного латинского прогона от трёх букв вне белого списка и вне
+    кавычек — ловит code-switching, который первое правило пропускает:
+    выпуск 21.08.2026 разослал юристу «послужили Creditный договор» и «доводы
+    о lack of доказательств» (дело 2-3996/2026, модель OpenRouter free).
+    Названия в кавычках («Renault») законны — их суды цитируют дословно.
+    """
+    s = (s or "").strip()
+    if not s:
+        return False
+    if len(s) > 40:
+        cyr = sum(1 for ch in s if "а" <= ch.lower() <= "я" or ch in "ёЁ")
+        if cyr / len(s) < 0.4:
+            return False
+    bare = _SUMMARY_QUOTED_RE.sub(" ", s)
+    return not any(m.group(0).lower() not in _SUMMARY_LATIN_OK
+                   for m in _SUMMARY_LATIN_RUN_RE.finditer(bare))
+
+
 def _clean_summary(text: str) -> str:
     """Почистить ответ LLM: reasoning-блоки, code-fence, Markdown, кавычки,
     шаблонные префиксы, переносы строк, гарды языка и длины.
@@ -837,10 +870,8 @@ def _clean_summary(text: str) -> str:
     s = s.strip().strip('"').strip("'").strip("«»").strip()
 
     # Гард языка: ответ не по-русски → мусор (англоцентричная free-модель).
-    if len(s) > 40:
-        cyr = sum(1 for ch in s if "а" <= ch.lower() <= "я" or ch in "ёЁ")
-        if cyr / len(s) < 0.4:
-            return ""
+    if not summary_language_ok(s):
+        return ""
 
     # Гард длины: неукротимо длинный ответ режем по границе предложения.
     if len(s) > _SUMMARY_HARD_LIMIT:
@@ -952,6 +983,20 @@ def summarize_act_motivation(
     cache = _load_act_summaries() if use_cache else {}
     if use_cache and key in cache:
         cached_summary = (cache[key] or {}).get("summary")
+        if cached_summary and not summary_language_ok(cached_summary):
+            # Испорченный пересказ в кэше жил бы ВЕЧНО: кэш-хит стоит до всех
+            # чисток, и гард в _clean_summary его никогда не увидит. Так
+            # выпуск 21.08.2026 разослал «послужили Creditный договор»
+            # (2-3996/2026) — запись осталась бы в .act_summaries.json
+            # навсегда. Считаем промахом и перезапрашиваем; ключ вычищается
+            # при записи нового пересказа ниже. Версию «v3-detailed» в
+            # _act_cache_key НЕ бампаем — бамп заново оплатил бы все хорошие
+            # пересказы ради одного испорченного.
+            log.warning(
+                "Пересказ из кэша не по-русски (сбой провайдера) — "
+                "перезапрашиваем"
+            )
+            cached_summary = ""
         if cached_summary:
             config.METRICS["llm_summary_cache_hits"] += 1
             return cached_summary

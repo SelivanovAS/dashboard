@@ -73,6 +73,12 @@ jobs:
           # Порог свёртки «заведено N новых исков банка»: replay обязан
           # воспроизводить крон (у спящего резерва D2 это боевой дайджест).
           BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
+          # Свёртка «вступило в силу» и потолок перечня сторон (21.08.2026):
+          # replay обязан воспроизводить крон, иначе тестовый дайджест
+          # разойдётся с боевым.
+          BANK_FORCE_DIGEST_FOLD: ${{ vars.BANK_FORCE_DIGEST_FOLD || '3' }}
+          DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
+          DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
           # Провайдер пересказов — ТОТ ЖЕ, что у облачного крона (зеркало
           # update_cases.yml; решение юриста 19.08.2026 при флипе на Mac-резерв:
           # с выключенным облачным кроном replay — боевой путь дайджеста).

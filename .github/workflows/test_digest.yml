@@ -127,6 +127,12 @@ jobs:
           # Порог свёртки «заведено N новых исков банка»: replay обязан
           # воспроизводить крон, иначе тестовый дайджест разойдётся с боевым.
           BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
+          # Свёртка «вступило в силу» и потолок перечня сторон (21.08.2026):
+          # replay обязан воспроизводить крон, иначе тестовый дайджест
+          # разойдётся с боевым.
+          BANK_FORCE_DIGEST_FOLD: ${{ vars.BANK_FORCE_DIGEST_FOLD || '3' }}
+          DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
+          DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}

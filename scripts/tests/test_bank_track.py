@@ -1738,6 +1738,49 @@ class TestBankIntakeCapsWiring:
             assert "vars.BANK_INTAKE_DIGEST_FOLD" in m.group(1)
             assert re.search(r"\|\|\s*'25'", m.group(1))
 
+    def test_digest_slimming_knobs_forwarded_everywhere(self):
+        """Свёртка «вступило в силу» и потолок сторон (21.08.2026).
+
+        Три ручки сокращения дайджеста обязаны стоять во ВСЕХ трёх путях:
+        крон, тестовый дайджест и replay Mac-резерва. Иначе выпуск, собранный
+        replay'ем (боевой путь с 19.08.2026), разойдётся с кроновым.
+        """
+        import re
+        root = os.path.dirname(SCRIPTS_DIR)
+        knobs = {
+            "BANK_FORCE_DIGEST_FOLD": "3",
+            "DIGEST_PARTIES_MAX_LEN": "60",
+            "DIGEST_PARTIES_KEEP": "2",
+        }
+        for name in ("update_cases.yml", "test_digest.yml",
+                     "replay_on_push.yml"):
+            path = os.path.join(root, ".github", "workflows", name)
+            with open(path, encoding="utf-8") as f:
+                yml = f.read()
+            for knob, default in knobs.items():
+                m = re.search(rf"^\s*{knob}:\s*(.+)$", yml, re.M)
+                assert m, f"{name} не прокидывает {knob}"
+                assert f"vars.{knob}" in m.group(1), (
+                    f"{name}: {knob} берётся не из Variables")
+                assert re.search(rf"\|\|\s*'{default}'", m.group(1)), (
+                    f"{name}: у {knob} нет фолбэка '{default}'")
+
+    def test_slimming_thresholds_read_env(self):
+        import importlib
+        for knob, probe, default in (
+            ("BANK_FORCE_DIGEST_FOLD", "0", 3),
+            ("DIGEST_PARTIES_MAX_LEN", "0", 60),
+            ("DIGEST_PARTIES_KEEP", "5", 2),
+        ):
+            os.environ[knob] = probe
+            try:
+                importlib.reload(config)
+                assert getattr(config, knob) == int(probe), knob
+            finally:
+                os.environ.pop(knob, None)
+                importlib.reload(config)
+            assert getattr(config, knob) == default, knob
+
 
 # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ────────────────
 # Ответчик подаёт заявление об отмене в ТОТ ЖЕ суд 1-й инстанции; это не
