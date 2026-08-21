@@ -1604,13 +1604,152 @@ def _bank_intake_fold_line(folded: list[dict]) -> str:
             f"банка</b>{tail} — список на дашборде")
 
 
+def cap_parties(short_name: str) -> str:
+    """«A, B, C, D» → «A, B и ещё 2», если перечень длиннее потолка.
+
+    Только для компактной строки банк-секции (решение юриста 21.08.2026):
+    полный состав виден в карточке дела на дашборде, а в дайджесте строки
+    перестают «прыгать» по длине — замер 21.08.2026 дал 17 перечней длиннее
+    60 символов при медиане 24 и рекорде 238.
+
+    ⚠️ Зовётся ПОСЛЕ shorten_party_name, а не вместо неё: сокращалка чинит
+    сами имена (ТУ Росимущества, наследственные формулировки), потолок лишь
+    режет хвост перечня. И не внутри неё — её результат уходит в case_meta
+    LLM-пересказчика, где «и ещё 3» испортило бы пересказ.
+
+    Пороги — config.DIGEST_PARTIES_MAX_LEN / DIGEST_PARTIES_KEEP (0 = не
+    резать). Строка короче потолка не трогается, даже если сторон много.
+    """
+    limit = config.DIGEST_PARTIES_MAX_LEN
+    keep = config.DIGEST_PARTIES_KEEP
+    if limit <= 0 or keep <= 0 or len(short_name) <= limit:
+        return short_name
+    parts = [x.strip() for x in short_name.split(",") if x.strip()]
+    if len(parts) <= keep:
+        # Одно длинное имя резать нечем — обрезка по символам изуродовала бы
+        # его сильнее, чем помогла.
+        return short_name
+    hidden = len(parts) - keep
+    return (", ".join(parts[:keep])
+            + f" и ещё {hidden} "
+            + plural_ru(hidden, "сторона", "стороны", "сторон"))
+
+
+def split_bank_force_fold(
+    bank_changes: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Отделить дела «решение вступило в силу» для свёртки в одну строку.
+
+    Возвращает `(детализируемые, свёрнутые)`. Свёртываются записи, где
+    `fi_legal_force_reached` — ЕДИНСТВЕННЫЙ тип: дело, которое тем же прогоном
+    получило лист или новое заседание, обязано печататься подробно. Проверено
+    на боевых данных 21.08.2026: комбинаций этого типа с другими нет ни на
+    одной территории (14 записей Урала и 8 ХМАО — все «соло»), так что условие
+    не режет ничего живого.
+
+    Порог — `config.BANK_FORCE_DIGEST_FOLD` (0 = не сворачивать), условие
+    «больше порога». Просьба юриста 21.08.2026: событие КАЛЕНДАРНОЕ (наступает
+    по расчёту, а не по движению дела), и 14 одинаковых строк из 80 забивали
+    секцию, а на дашборде эти дела и так помечены бейджем «⏳ ждёт ИЛ».
+
+    ⚠️ В отличие от `split_bank_intake_fold`, номера свёрнутых дел ОСТАЮТСЯ в
+    HTML — строка-свёртка перечисляет их ссылками. Поэтому линтер и
+    `llm._collect_case_numbers` этот хелпер НЕ зовут: их проверка полноты
+    номеров проходит штатно. Задет только счётчик секции
+    (`_check_section_counters` считает обёрнутые номера, а не строки).
+    """
+    limit = config.BANK_FORCE_DIGEST_FOLD
+    if limit <= 0:
+        return list(bank_changes), []
+    foldable = [
+        ch for ch in bank_changes
+        if (ch.get("type") or []) == ["fi_legal_force_reached"]
+    ]
+    if len(foldable) <= limit:
+        return list(bank_changes), []
+    folded_ids = {id(ch) for ch in foldable}
+    detailed = [ch for ch in bank_changes if id(ch) not in folded_ids]
+    return detailed, foldable
+
+
+def _bank_force_fold_line(folded: list[dict]) -> str:
+    """Строка-свёртка «вступило в силу» + список номеров ССЫЛКАМИ.
+
+    Две строки одного абзаца: заголовок со счётчиком и перечень дел. Номера
+    обёрнуты `<a><b>` намеренно — юрист попросил «раскрыть счётчик», и список
+    прямо в дайджесте отвечает на это лучше любой свёртки на фронте: дела
+    кликабельны, ничего не теряется из виду. Побочно это же держит линтер
+    доволен — номера в HTML на месте.
+
+    Расчётная дата у всех дел прогона обычно ОДНА (событие наступает в день,
+    когда расчёт пересёк «сегодня»), поэтому она выносится в заголовок. Если
+    даты разошлись — печатаем их рядом с номерами, иначе строка соврала бы.
+    """
+    dates = {((ch.get("details") or {}).get("legal_force_date") or "").strip()
+             for ch in folded} - {""}
+    common = escape_html(next(iter(dates))) if len(dates) == 1 else ""
+    items: list[str] = []
+    for ch in folded:
+        d = ch.get("details") or {}
+        num = escape_html(ch.get("case", ""))
+        url = fi_card_url(d)
+        item = f'<a href="{url}"><b>{num}</b></a>' if url else f"<b>{num}</b>"
+        if not common:
+            dt = escape_html((d.get("legal_force_date") or "").strip())
+            if dt:
+                item += f" — {dt}"
+        items.append(item)
+    head = (f"✅ <b>{len(folded)} "
+            f"{plural_ru(len(folded), 'решение', 'решения', 'решений')} "
+            f"вступили в силу</b>"
+            + (f" (расч. {common})" if common else "")
+            + " — ожидаем ИЛ:")
+    return head + "\n" + ", ".join(items)
+
+
+# Нормализованные ярлыки classify_verdict_fi, при которых пересказ мотивировки
+# НЕ нужен (просьба юриста 21.08.2026): процессуальное закрытие без решения по
+# существу. Причина закрытия уже печатается в самой строке дела
+# (fi_closure_reason: «в связи с утверждением мирового соглашения», «истец не
+# явился в суд по вторичному вызову»), и LLM-пересказ такого определения
+# дублирует её водой — а секция «Иски банка» и так самая длинная.
+ACT_WHY_SKIP_VERDICTS = frozenset({
+    "прекращено", "оставлено без рассмотрения", "возвращено",
+})
+
+# Исходы, при которых банк-делу положен пересказ «Почему» — только ПРОТИВ банка
+# (решение юриста 21.08.2026). До этого гейт был ЧЁРНЫМ списком («всё, кроме
+# пустого и „в пользу банка“») и пропускал «частично в пользу банка»: дела
+# 2-3034/2026, 2-3689/2026, 2-4131/2026, 2-3996/2026 Кировского р/с ЕКБ получили
+# пересказ собственной победы. bank_side_outcome_fi даёт ровно 5 значений,
+# поэтому БЕЛЫЙ список исчерпывающ — новое значение не просочится молча.
+BANK_ACT_WHY_OUTCOMES = frozenset({"против банка", "частично против банка"})
+
+
+def act_why_worth_it(verdict_label: str) -> bool:
+    """Стоит ли вообще пересказывать мотивировку акта 1-й инстанции.
+
+    Гейт по НОРМАЛИЗОВАННОМУ ярлыку (classify_verdict_fi) — общий для
+    банк-секции и основной 3.6 «Опубликованные тексты решений». Пустой ярлык
+    даёт True: неизвестный исход — не повод молчать.
+
+    Апелляции и кассации предикат НЕ касается осознанно: там мотивировка
+    вышестоящего суда ценна при любом исходе — это позиция, которую юрист
+    цитирует.
+    """
+    return (verdict_label or "").strip().lower() not in ACT_WHY_SKIP_VERDICTS
+
+
 def bank_act_why_eligible(ch: dict) -> bool:
     """Положен ли банк-делу пересказ «Почему» (13.08.2026, решение юриста).
 
-    Только fi_act_text_published с текстом и исходом ПРОТИВ банка:
-    bank_outcome ∉ {"", "в пользу банка"} — bank_side_outcome_fi даёт ровно
-    5 значений, и предикат покрывает отказ/частичное/прекращение с учётом
-    роли. Полные удовлетворения не пересказываем — мотивировка шаблонна.
+    Только fi_act_text_published с текстом и исходом ПРОТИВ банка
+    (BANK_ACT_WHY_OUTCOMES) — победы, включая частичные, не пересказываем:
+    мотивировка шаблонна, а строка дела и так называет исход. Сверху —
+    общий с секцией 3.6 гейт act_why_worth_it: процессуальные закрытия
+    (мировое, без рассмотрения, прекращение) не пересказываются никогда,
+    их причина уже в строке.
+
     Общий гейт рендера банк-секции и attach_act_analyses в runs.py
     (второй должен молчать там, где молчит первый — иначе в drawer
     утекала бы строка события под видом «AI анализа»)."""
@@ -1619,7 +1758,9 @@ def bank_act_why_eligible(ch: dict) -> bool:
     d = ch.get("details") or {}
     if not (d.get("act_text") or "").strip():
         return False
-    return (d.get("bank_outcome") or "").strip() not in ("", "в пользу банка")
+    if not act_why_worth_it(d.get("verdict_label", "")):
+        return False
+    return (d.get("bank_outcome") or "").strip() in BANK_ACT_WHY_OUTCOMES
 
 
 def _bank_track_block(bank_changes: list[dict], *,
@@ -1647,6 +1788,15 @@ def _bank_track_block(bank_changes: list[dict], *,
             f"Дайджест: свёрнуто {len(folded)} заведений исков банка "
             f"(порог {config.BANK_INTAKE_DIGEST_FOLD})"
         )
+    # Свёртка «вступило в силу» — по остатку после intake (обе режут один
+    # список). Порядок между ними безразличен: классы событий не пересекаются
+    # (обе сворачивают записи с ЕДИНСТВЕННЫМ типом, и типы разные).
+    detailed, force_folded = split_bank_force_fold(detailed)
+    if force_folded:
+        log.info(
+            f"Дайджест: свёрнуто {len(force_folded)} дел «вступило в силу» "
+            f"(порог {config.BANK_FORCE_DIGEST_FOLD})"
+        )
 
     def _sort_key(pair: tuple[int, dict]) -> tuple[int, float, int]:
         idx, ch = pair
@@ -1659,28 +1809,48 @@ def _bank_track_block(bank_changes: list[dict], *,
             ts = hd.timestamp() if hd else float("inf")
         return (grp, ts, idx)
 
-    ordered: list[dict | str] = [ch for _, ch in
-                                 sorted(enumerate(detailed), key=_sort_key)]
+    # Строки-свёртки едут ПАРОЙ (группа важности, текст): групп теперь две —
+    # «вступило в силу» садится к листам, «новые иски» закрывают секцию, — и
+    # прежний голый str не различил бы, куда ставить разделитель «⸻».
+    ordered: list[dict | tuple[int, str]] = [
+        ch for _, ch in sorted(enumerate(detailed), key=_sort_key)
+    ]
+
+    def _insert_fold(grp: int, text: str) -> None:
+        """Вставить строку-свёртку в её группу важности (после всех старших)."""
+        pos = len([
+            ch for ch in ordered
+            if (_bank_change_group(ch) if isinstance(ch, dict) else ch[0]) < grp
+        ])
+        ordered.insert(pos, (grp, text))
+
+    if force_folded:
+        # fi_legal_force_reached принадлежит группе листов (_BANK_GROUP_WRITS,
+        # см. _BANK_GROUP_ORDER) — рабочая очередь юриста начинается с ИЛ
+        # (решение 17.08.2026), и свёртка обязана остаться там же.
+        _insert_fold(_BANK_GROUP_WRITS, _bank_force_fold_line(force_folded))
     if folded:
         # Свёрнутая строка — на месте группы «новые иски» (с 17.08.2026 она
         # последняя, т.е. свёртка закрывает секцию): порядок «по важности»
         # и разделители ⸻ отрабатывает тот же цикл ниже.
-        pos = len([ch for ch in ordered
-                   if _bank_change_group(ch) < _BANK_GROUP_INTAKE])
-        ordered.insert(pos, _bank_intake_fold_line(folded))
-    # Счётчик заголовка = число ПОДРОБНЫХ дел (линтер считает строки с
-    # номерами). Все дела свёрнуты — заголовок вовсе без (N): «(0)» рядом со
-    # строкой «заведено 116» читается как поломка, а секцию без счётчика
-    # _check_section_counters штатно пропускает.
-    block = [f"🏦 <b>ИСКИ БАНКА ({len(detailed)}):</b>" if detailed
+        _insert_fold(_BANK_GROUP_INTAKE, _bank_intake_fold_line(folded))
+    # Счётчик заголовка = число дел, чьи номера ЕСТЬ в HTML: подробные строки
+    # плюс свёрнутые «вступило в силу» (их строка перечисляет дела ссылками, и
+    # _check_section_counters считает именно обёрнутые номера). Заведения из
+    # intake-свёртки не в счёте — их номеров в HTML нет вовсе. Ноль — заголовок
+    # без (N): «(0)» рядом со строкой «заведено 116» читается как поломка, а
+    # секцию без счётчика _check_section_counters штатно пропускает.
+    header_n = len(detailed) + len(force_folded)
+    block = [f"🏦 <b>ИСКИ БАНКА ({header_n}):</b>" if header_n
              else "🏦 <b>ИСКИ БАНКА:</b>", ""]
     prev_grp: int | None = None
     for ch in ordered:
-        if isinstance(ch, str):
+        if isinstance(ch, tuple):
+            fold_grp, fold_text = ch
             if prev_grp is not None:
-                block.extend(["", "⸻", ""])
-            prev_grp = _BANK_GROUP_INTAKE
-            block.append(ch)
+                block.extend(["", "⸻", ""] if fold_grp != prev_grp else [""])
+            prev_grp = fold_grp
+            block.append(fold_text)
             continue
         grp = _bank_change_group(ch)
         # Воздух (просьба юриста 10.08.2026): пустая строка между КАЖДЫМ
@@ -1696,8 +1866,11 @@ def _bank_track_block(bank_changes: list[dict], *,
         prev_grp = grp
         num = escape_html(ch.get("case", ""))
         court = escape_html(shorten_court_name(ch.get("court", "")))
-        df = escape_html(shorten_party_name(
-            ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL))
+        # Порядок обязателен: сокращаем имена → режем хвост перечня →
+        # экранируем. cap_parties считает длину уже сокращённой строки, а
+        # escape_html поверх «и ещё 3 стороны» ничего не меняет.
+        df = escape_html(cap_parties(shorten_party_name(
+            ch.get("defendant", ""), keep_fio_full=_DIGEST_FIO_FULL)))
         d = ch.get("details") or {}
         url = fi_card_url(d)
         link = f'<a href="{url}"><b>{num}</b></a>' if url else f'<b>{num}</b>'
@@ -2384,23 +2557,31 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # Стороны прогоняем через shorten_party_name — LLM иначе тянет в
             # «Почему» громоздкие имена вроде «МТУ Росимущества в Тюменской
             # области, ХМАО-Югре, ЯНАО».
-            act_excerpt, act_kind = _act_summary_or_excerpt_with_kind(
-                d.get("act_text") or "",
-                {
-                    "stage": "first_instance",
-                    "bank_role": ch.get("bank_role", ""),
-                    "verdict_label": d.get("verdict_label", ""),
-                    "plaintiff": shorten_party_name(
-                        ch.get("plaintiff", ""), keep_fio_full=True
-                    ),
-                    "defendant": shorten_party_name(
-                        ch.get("defendant", ""), keep_fio_full=True
-                    ),
-                    "category": d.get("category", ""),
-                },
-                summarizer=act_summarizer,
-                max_excerpt_len=500,
-            )
+            # Процессуальные закрытия (мировое соглашение, оставление без
+            # рассмотрения, прекращение) не пересказываем — причина уже стоит
+            # в строке «Итог» (просьба юриста 21.08.2026). Гейт общий с
+            # банк-секцией: act_why_worth_it. Гасим и excerpt тоже — «строки,
+            # которая имеется», юристу достаточно.
+            if act_why_worth_it(d.get("verdict_label", "")):
+                act_excerpt, act_kind = _act_summary_or_excerpt_with_kind(
+                    d.get("act_text") or "",
+                    {
+                        "stage": "first_instance",
+                        "bank_role": ch.get("bank_role", ""),
+                        "verdict_label": d.get("verdict_label", ""),
+                        "plaintiff": shorten_party_name(
+                            ch.get("plaintiff", ""), keep_fio_full=True
+                        ),
+                        "defendant": shorten_party_name(
+                            ch.get("defendant", ""), keep_fio_full=True
+                        ),
+                        "category": d.get("category", ""),
+                    },
+                    summarizer=act_summarizer,
+                    max_excerpt_len=500,
+                )
+            else:
+                act_excerpt, act_kind = "", ""
             fi_block.append(f"{link} — {pl} vs {df}")
             itog_parts: list[str] = []
             if verdict:
@@ -2409,10 +2590,32 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 # же урок, что в банк-секции (разбор 07.08). Ключ опционален,
                 # старые контексты живут без скобок.
                 dd36 = escape_html(d.get("decision_date", "") or "")
-                itog_parts.append(
-                    f"<b>Итог:</b> {verdict}"
-                    + (f" (решение от {dd36})" if dd36 else "")
-                )
+                # Процессуальное закрытие: называем определение прямо и
+                # добавляем ПРИЧИНУ (21.08.2026). До этого 3.6 печатала голое
+                # «Итог: прекращено»: причину умели только 3.5 и банк-секция,
+                # а секции взаимоисключающие — дело с опубликованным текстом
+                # уходит ТОЛЬКО сюда, и «в связи с утверждением мирового
+                # соглашения» юрист не видел вовсе. Пересказ этих актов с того
+                # же дня выключен (act_why_worth_it), так что причина остаётся
+                # единственным объяснением — без неё правка отняла бы смысл.
+                closure_head_36 = _FI_CLOSURE_HEADS.get(
+                    (d.get("verdict_label") or "").strip())
+                if closure_head_36:
+                    reason_36 = fi_closure_reason(
+                        d.get("raw_result", ""), d.get("last_event", ""))
+                    # Дата — сразу за действием, причина замыкает строку:
+                    # две скобки подряд («(в связи с…) (определение от…)»)
+                    # читались как техническая сноска.
+                    itog_parts.append(
+                        f"<b>Итог:</b> {escape_html(closure_head_36)}"
+                        + (f" {dd36}" if dd36 else "")
+                        + (f" ({escape_html(reason_36)})" if reason_36 else "")
+                    )
+                else:
+                    itog_parts.append(
+                        f"<b>Итог:</b> {verdict}"
+                        + (f" (решение от {dd36})" if dd36 else "")
+                    )
             if bank_out:
                 itog_parts.append(f"<b>Для банка:</b> {bank_out}")
             if "fi_bank_role_changed" in ch["type"]:

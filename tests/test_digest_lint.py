@@ -417,3 +417,56 @@ class LintBankIntakeFoldTest(unittest.TestCase):
         self.assertIn("ИСКИ БАНКА (3)", html)
         self.assertIn("2-1000/2026", html)
         self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+
+class LintBankForceFoldTest(unittest.TestCase):
+    """Свёртка «вступило в силу» и линтер (просьба юриста 21.08.2026).
+
+    В отличие от intake-свёртки номера свёрнутых дел ОСТАЮТСЯ в HTML —
+    строка перечисляет их ссылками. Значит `_expected_number_alternatives`
+    и `llm._collect_case_numbers` менять не пришлось; задет только счётчик
+    секции: он прибавлял 1 за строку, а одна строка теперь несёт N дел.
+    """
+
+    @staticmethod
+    def _force(n: int) -> list[dict]:
+        return [
+            make_fi_change(["fi_legal_force_reached"],
+                           {"legal_force_date": "21.08.2026"},
+                           case=f"2-{700 + i}/2026", track="plaintiff_light")
+            for i in range(n)
+        ]
+
+    def test_folded_digest_is_clean(self):
+        ctx = _ctx(fi_changes=self._force(8))
+        html = render(**ctx)
+        self.assertIn("вступили в силу", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+    def test_section_counter_counts_cases_not_rows(self):
+        """Заголовок называет ДЕЛА: 8 свёрнутых лежат в одной строке."""
+        from court_monitor.digest.lint import _check_section_counters
+        ctx = _ctx(fi_changes=self._force(8))
+        html = render(**ctx)
+        self.assertIn("ИСКИ БАНКА (8)", html)
+        self.assertEqual(_check_section_counters(html), [])
+
+    def test_missing_folded_number_still_caught(self):
+        """Свёртка не глушит проверку полноты: подмена номера ловится."""
+        ctx = _ctx(fi_changes=self._force(8))
+        html = render(**ctx).replace("2-700/2026", "2-999/2026")
+        problems = uc.lint_digest_html(html, **ctx)
+        self.assertTrue(any("2-700/2026" in p for p in problems), problems)
+
+    def test_appeal_tail_number_not_double_counted(self):
+        """Регресс счётчика: строка новой апелляции несёт номер 1-й инстанции
+        ХВОСТОМ (голым, без <a><b>). Считай линтер все номера подряд — такая
+        строка дала бы 2 дела вместо одного."""
+        from court_monitor.digest.lint import _check_section_counters
+        html = (
+            '📥 <b>Новые дела в апелляции (1):</b>\n'
+            '\n'
+            '<a href="u"><b>33-100/2026</b></a> — Иванов vs Сбербанк '
+            '| дело 1 инст. 2-555/2026\n'
+        )
+        self.assertEqual(_check_section_counters(html), [])

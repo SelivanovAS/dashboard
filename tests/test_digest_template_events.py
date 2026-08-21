@@ -2460,13 +2460,39 @@ class BankActWhyTest(unittest.TestCase):
         self.assertEqual(len(rec.calls), 1)
         self.assertEqual(rec.calls[0][1].get("stage"), "first_instance")
 
-    def test_partial_outcome_prints_pochemu(self):
+    def test_partial_favorable_outcome_no_pochemu(self):
+        # Частичная победа банка пересказа не получает (просьба юриста
+        # 21.08.2026): выпуск 21.08 разослал четыре пересказа собственных
+        # побед — 2-3034/2026, 2-3689/2026, 2-4131/2026, 2-3996/2026
+        # Кировского р/с ЕКБ, все «удовлетворено частично». LLM не зовём —
+        # это ещё и деньги.
         rec = _RecordingSummarizer()
         html = render(
             fi_changes=[make_bank_act_change("частично в пользу банка")],
             act_summarizer=rec,
         )
-        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_БАНК</i>", html)
+        self.assertNotIn("Почему:", html)
+        self.assertEqual(rec.calls, [])
+        # Сама строка о публикации текста остаётся — юрист просил убрать
+        # только пересказ.
+        self.assertIn("текст решения", html)
+
+    def test_procedural_closure_no_pochemu(self):
+        # Мировое соглашение / оставление без рассмотрения / прекращение:
+        # причина закрытия уже печатается в строке дела, пересказ дублировал
+        # бы её водой (просьба юриста 21.08.2026). Исход «против банка» —
+        # bank_side_outcome_fi отдаёт его для закрытий ПО РОЛИ, так что без
+        # этого гейта белый список исходов такие дела бы пропустил.
+        for verdict in ("прекращено", "оставлено без рассмотрения",
+                        "возвращено"):
+            rec = _RecordingSummarizer()
+            html = render(
+                fi_changes=[make_bank_act_change(
+                    "против банка", details={"verdict_label": verdict})],
+                act_summarizer=rec,
+            )
+            self.assertNotIn("Почему:", html, verdict)
+            self.assertEqual(rec.calls, [], verdict)
 
     def test_favorable_outcome_no_pochemu(self):
         rec = _RecordingSummarizer()
@@ -2506,19 +2532,29 @@ class BankActWhyTest(unittest.TestCase):
 class BankActWhyEligibleTest(unittest.TestCase):
     """Юнит общего гейта bank_act_why_eligible (рендер + attach в runs.py)."""
 
-    def test_adverse_and_partial_eligible(self):
-        for outcome in ("против банка", "частично в пользу банка",
-                        "частично против банка"):
+    def test_adverse_outcomes_eligible(self):
+        # Белый список: пересказываем ТОЛЬКО проигрыши банка.
+        for outcome in ("против банка", "частично против банка"):
             self.assertTrue(cm_template.bank_act_why_eligible(
                 make_bank_act_change(outcome)), outcome)
 
     def test_favorable_empty_and_textless_not_eligible(self):
-        self.assertFalse(cm_template.bank_act_why_eligible(
-            make_bank_act_change("в пользу банка")))
-        self.assertFalse(cm_template.bank_act_why_eligible(
-            make_bank_act_change("")))
+        # «частично в пользу банка» — тоже победа (решение юриста 21.08.2026):
+        # прежний ЧЁРНЫЙ список пропускал её, потому что отсекал лишь полное
+        # «в пользу банка».
+        for outcome in ("в пользу банка", "частично в пользу банка", ""):
+            self.assertFalse(cm_template.bank_act_why_eligible(
+                make_bank_act_change(outcome)), outcome)
         self.assertFalse(cm_template.bank_act_why_eligible(
             make_bank_act_change(details={"act_text": ""})))
+
+    def test_procedural_closure_not_eligible(self):
+        for verdict in ("прекращено", "оставлено без рассмотрения",
+                        "возвращено"):
+            self.assertFalse(cm_template.bank_act_why_eligible(
+                make_bank_act_change(
+                    "против банка", details={"verdict_label": verdict})),
+                verdict)
 
     def test_other_types_not_eligible(self):
         self.assertFalse(cm_template.bank_act_why_eligible(
@@ -2624,3 +2660,164 @@ class DiscoveryActSourceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BankForceFoldTest(unittest.TestCase):
+    """Свёртка «✅ вступило в силу — ожидаем ИЛ» (просьба юриста 21.08.2026).
+
+    Событие календарное (наступает по расчёту, а не по движению дела) и на
+    обеих территориях самое массовое: выпуск 21.08.2026 дал 14 строк из 80 у
+    Урала и 8 из 26 у ХМАО. Свёртка перечисляет дела ССЫЛКАМИ — юрист просил
+    «раскрывающийся счётчик», и список прямо в строке отвечает на это лучше
+    любой свёртки на фронте.
+    """
+
+    @staticmethod
+    def _force_changes(n: int) -> list[dict]:
+        return [make_fi_change(["fi_legal_force_reached"],
+                               {"legal_force_date": "21.08.2026"},
+                               case=f"2-{100 + i}/2026",
+                               track="plaintiff_light")
+                for i in range(n)]
+
+    def _render(self, n: int, fold: int = 3) -> str:
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", fold):
+            return render(fi_changes=self._force_changes(n))
+
+    def test_at_threshold_renders_in_full(self):
+        # Условие «строго больше порога» — ровно порог печатается подельно.
+        html = self._render(3)
+        self.assertNotIn("вступили в силу", html)
+        self.assertEqual(html.count("вступило в силу"), 3)
+
+    def test_above_threshold_folds_into_one_line(self):
+        html = self._render(4)
+        self.assertIn("✅ <b>4 решения вступили в силу</b>", html)
+        self.assertIn("(расч. 21.08.2026)", html)
+        # Подробных строк не осталось, а номера — все на месте и обёрнуты.
+        self.assertNotIn("вступило в силу", html)
+        self.assertEqual(len(anchors(html)), 4)
+
+    def test_counter_line_carries_no_case_number(self):
+        # Иначе _check_section_counters посчитал бы саму строку-счётчик делом.
+        html = self._render(4)
+        head = next(ln for ln in html.split("\n") if ln.startswith("✅ <b>"))
+        self.assertFalse(cm_post._line_has_case_number(head), head)
+
+    def test_counter_line_is_not_a_section_header(self):
+        # ✅ не входит в _DIGEST_HEADER_RE: строка не должна оборвать счёт
+        # секции «🏦 ИСКИ БАНКА (N)».
+        html = self._render(4)
+        head = next(ln for ln in html.split("\n") if ln.startswith("✅ <b>"))
+        self.assertIsNone(cm_post._DIGEST_HEADER_RE.match(head), head)
+
+    def test_section_counter_still_counts_folded_cases(self):
+        # Номера свёрнутых дел в HTML есть, значит заголовок обязан их считать.
+        html = self._render(5)
+        self.assertIn("🏦 <b>ИСКИ БАНКА (5):</b>", html)
+
+    def test_mixed_type_case_stays_detailed(self):
+        # Дело, тем же прогоном получившее лист, печатается подробно.
+        changes = self._force_changes(4)
+        changes[0]["type"] = ["fi_legal_force_reached", "fi_writ_issued"]
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", 3):
+            html = render(fi_changes=changes)
+        # Свёртки нет вовсе: сворачиваемых осталось 3, это не больше порога.
+        self.assertNotIn("вступили в силу", html)
+
+    def test_zero_threshold_disables_fold(self):
+        html = self._render(10, fold=0)
+        self.assertNotIn("вступили в силу", html)
+        self.assertEqual(html.count("вступило в силу"), 10)
+
+    def test_replay_context_without_date(self):
+        # Старый контекст без legal_force_date — рендерится без «(расч. …)».
+        changes = [make_fi_change(["fi_legal_force_reached"], {},
+                                  case=f"2-{200 + i}/2026",
+                                  track="plaintiff_light")
+                   for i in range(4)]
+        for ch in changes:
+            ch["details"].pop("legal_force_date", None)
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", 3):
+            html = render(fi_changes=changes)
+        self.assertIn("✅ <b>4 решения вступили в силу</b>", html)
+        self.assertNotIn("(расч. ", html)
+
+
+class CapPartiesTest(unittest.TestCase):
+    """Потолок перечня сторон в компакт-строке банк-секции (юрист 21.08.2026)."""
+
+    def test_long_list_capped(self):
+        src = ("Администрация Нижнетуринского МО, Анциферова Е.С., "
+               "насл. имущество Клешнина М.А., Клешнина Ю.С., ТУ Росимущество")
+        out = cm_template.cap_parties(src)
+        self.assertEqual(
+            out, "Администрация Нижнетуринского МО, Анциферова Е.С. "
+                 "и ещё 3 стороны")
+
+    def test_short_list_untouched(self):
+        for src in ("Курбанова Н.И.", "Иванов И.И., Петров П.П."):
+            self.assertEqual(cm_template.cap_parties(src), src)
+
+    def test_single_long_name_not_cut(self):
+        # Резать одно длинное имя по символам нечем — отдаём как есть.
+        src = "Ф" * 120
+        self.assertEqual(cm_template.cap_parties(src), src)
+
+    def test_zero_limit_disables(self):
+        src = "А, Б, В, Г, Д, Е, Ж, З, И, К, Л, М, Н, О, П, Р, С, Т, У, Ф, Х"
+        with patch.object(cm_config, "DIGEST_PARTIES_MAX_LEN", 0):
+            self.assertEqual(cm_template.cap_parties(src), src)
+
+
+class Fi36ClosureReasonTest(unittest.TestCase):
+    """Секция 3.6 называет ПРИЧИНУ процессуального закрытия (юрист 21.08.2026).
+
+    3.5 и 3.6 взаимоисключающие: дело с опубликованным текстом уходит ТОЛЬКО
+    в 3.6, а причину («в связи с утверждением мирового соглашения») умели
+    печатать лишь 3.5 и банк-секция — в 3.6 стояло голое «Итог: прекращено».
+    Пересказ таких актов с того же дня выключен, поэтому без причины правка
+    отняла бы у юриста объяснение целиком.
+    """
+
+    @staticmethod
+    def _closure_change(verdict: str, raw: str, last_event: str) -> dict:
+        return make_fi_change(["fi_act_text_published"], {
+            "verdict_label": verdict,
+            "raw_result": raw,
+            "last_event": last_event,
+            "bank_outcome": "в пользу банка",
+            "decision_date": "12.08.2026",
+        })
+
+    def test_settlement_reason_printed_without_summary(self):
+        rec = _RecordingSummarizer()
+        html = render(fi_changes=[self._closure_change(
+            "прекращено",
+            "Производство по делу ПРЕКРАЩЕНО, В СВЯЗИ С УТВЕРЖДЕНИЕМ "
+            "МИРОВОГО СОГЛАШЕНИЯ",
+            "Производство по делу прекращено 12.08.2026",
+        )], act_summarizer=rec)
+        self.assertIn("производство по делу прекращено 12.08.2026 "
+                      "(в связи с утверждением мирового соглашения)", html)
+        self.assertNotIn("Почему:", html)
+        self.assertEqual(rec.calls, [], "LLM звать не надо — это деньги.")
+
+    def test_second_no_show_reason_printed(self):
+        html = render(fi_changes=[self._closure_change(
+            "оставлено без рассмотрения",
+            "Иск оставлен БЕЗ РАССМОТРЕНИЯ, ИСТЕЦ НЕ ЯВИЛСЯ В СУД ПО "
+            "ВТОРИЧНОМУ ВЫЗОВУ",
+            "Оставлено без рассмотрения 12.08.2026",
+        )], act_summarizer=_fake_summarizer)
+        self.assertIn("иск оставлен без рассмотрения", html)
+        self.assertIn("не явился в суд по вторичному вызову", html)
+
+    def test_ordinary_verdict_format_unchanged(self):
+        # Регресс: обычный исход печатается прежней формой «Итог: … (решение от …)».
+        html = render(fi_changes=[make_fi_change(["fi_act_text_published"], {
+            "verdict_label": "удовлетворено",
+            "bank_outcome": "против банка",
+            "decision_date": "12.08.2026",
+        })], act_summarizer=_fake_summarizer)
+        self.assertIn("<b>Итог:</b> удовлетворено (решение от 12.08.2026)", html)
