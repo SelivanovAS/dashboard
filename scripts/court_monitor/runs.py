@@ -4759,6 +4759,11 @@ def main_json():
             "at": datetime.now().isoformat(timespec="seconds"),
             "requests_ok": config.METRICS.get("requests_ok", 0),
             "requests_failed": config.METRICS.get("requests_failed", 0),
+            # Сколько запросов спасли повторы (слоты Mac ходят с
+            # FETCH_MAX_RETRIES=3 против мигающего блока sudrf, 21.08.2026):
+            # без этого числа эффект настройки виден только грепом по логу
+            # прогона, а сравнить утро с утром нечем.
+            "requests_retried": config.METRICS.get("requests_retried", 0),
             "cards_breaker_skipped": config.METRICS.get("cards_breaker_skipped", 0),
             "cards_blocked": config.METRICS.get("cards_blocked", 0),
             # Карточки «прочитано/планировалось» — суммы пер-цикловых счётчиков
