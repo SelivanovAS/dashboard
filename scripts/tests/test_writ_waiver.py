@@ -365,6 +365,16 @@ class TestWiring:
         assert 'record.kind !== "writ_waiver"' in js, (
             "пометка не должна красить светофор свежести дампов")
 
+    def test_worker_uses_role_gate_contract(self):
+        """requireAdminRole возвращает {role} | {error: Response}, а не сам
+        Response. Первая версия возвращала объект целиком — живой эндпоинт
+        отвечал 500 вместо 401, и тест «строка есть в файле» этого не ловил.
+        """
+        js = self._read("cloudflare-worker/worker.js")
+        body = js.split("async function handleAdminWritWaiver", 1)[1][:400]
+        assert "gate.error" in body, (
+            "гейт роли должен возвращать gate.error, иначе Worker падает в 500")
+
     def test_worker_roles_include_operator(self):
         """Решение юриста 21.08.2026: помечать может и оператор — о погашении
         узнаёт тот, кто ведёт дело."""
