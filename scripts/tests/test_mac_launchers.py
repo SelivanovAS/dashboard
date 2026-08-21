@@ -290,18 +290,18 @@ class TestCanaryQuietRetries:
 
     def test_quiet_until_deadline_then_deliver_or_single_alert(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "DELIVERY_DEADLINE_MIN=595" in text, \
-            "дедлайн 09:55 пропал — слот 10:00 перестанет быть замыкающим"
+        assert "DELIVERY_WINDOW_MIN=525" in text, \
+            "окно доставки 08:45 пропало — дайджест уйдёт не вовремя"
         assert ".alerted-parse-" in text, "дневной дедуп алерта «утро потеряно» пропал"
         body = text[text.index("probe_failed()"):]
         body = body[:body.index('if PROBE_HOST=')]
         assert '"$FORCE" = "1"' in body, "ручной запуск (--force) обязан кричать сразу"
         assert "exit 0" in body, "тихая ветка обязана выходить без ошибки"
         assert "finish_pusher" in body, "pusher уже запущен к моменту пробы — его надо дождаться"
-        # Дедлайн при мёртвых судах: накопленное утро уезжает доставочным
-        # коммитом БЕЗ парсинга, а не пропадает до завтра.
+        # Окно доставки при мёртвых судах: накопленное утро уезжает
+        # доставочным коммитом БЕЗ парсинга, а не пропадает до завтра.
         assert "--has-pending" in body and "deliver_and_push" in body, \
-            "probe_failed потерял доставку накопленного на дедлайне"
+            "probe_failed потерял доставку накопленного в окне"
 
     def test_import_agent_gets_anywhere_only_with_quiet_canary(self):
         """--anywhere у агентов появился вместе с тихой канарейкой: вернуть
@@ -341,21 +341,33 @@ class TestOneDigestPerDay:
         commit = text.index('COMMIT_MSG="📊 Обновление данных', decision)
         assert stamp < commit, "штамп delivered_at обязан войти в доставочный коммит"
 
-    def test_verdict_deadline_and_force_all_deliver(self):
+    def test_only_window_or_force_deliver(self):
+        """⚠️ Решение юриста 21.08.2026 «дайджест не раньше 08:45»: доставку
+        решает ОКНО, а удачный вердикт — больше нет. Со слотами от 06:00
+        прежняя ветка «RUN_OK → DELIVER=1» разослала бы дайджест в 06:30."""
         text = _read("ops/mac-local-run/parse_and_push.sh")
         block = text[text.index('RUN_WHY=$('):]
         block = block[:block.index("if git diff --cached --quiet")]
-        assert '[ "$RUN_OK" = "1" ] && DELIVER=1' in block
         assert '[ "$FORCE" = "1" ] && DELIVER=1' in block
-        assert "past_deadline && DELIVER=1" in block
+        assert "delivery_window_open && DELIVER=1" in block
+        assert 'RUN_OK" = "1" ] && DELIVER=1' not in block, (
+            "удачная попытка до 08:45 обязана оставаться черновиком — "
+            "иначе слот 06:00 отправит дайджест в 06:30"
+        )
 
     def test_incomplete_attempt_sends_progress_alert(self):
         """Решение юриста 20.08.2026: после КАЖДОЙ неполной попытки — алерт
-        «прочитано X из Y» (--progress), без дневного дедупа."""
+        «прочитано X из Y» (--progress), без дневного дедупа. Удачная попытка
+        до окна молчит: копить больше нечего, а шесть «всё прочитано» за утро
+        — тот же спам, от которого уходили 20.08."""
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert "попытка неполная" in text and "--progress" in text
+        block = text[text.index("Черновик запушен"):]
+        block = block[:block.index("\n  fi")]
+        assert '[ "$RUN_OK" != "1" ]' in block, \
+            "алерт-прогресс потерял гейт «попытка неполная»"
 
-    def test_deadline_delivery_names_incompleteness(self):
+    def test_window_delivery_names_incompleteness(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert "дайджест отправлен с тем, что дочиталось" in text
 
@@ -364,13 +376,26 @@ class TestOneDigestPerDay:
 
 class TestAgentSchedules:
     def test_parse_slots(self):
-        """«Один дайджест в день» (20.08.2026): слоты каждые 30 минут с 08:00
-        до 10:00, слот 10:00 — замыкающий (шлёт что есть). Слотов после 10:00
-        НЕТ — решение юриста; проспанный слот launchd доигрывает при
-        пробуждении, дедлайн внутри скрипта отправит накопленное сразу."""
+        """Расписание 21.08.2026 (решение юриста «парсинг с 06:00, дайджест
+        не раньше 08:45»): каждые 30 минут с 06:00 до 08:30 + доставочный
+        08:45. Он же ПОСЛЕДНИЙ — слот 09:00 юрист велел убрать, страховки
+        после окна нет; проспанный слот launchd доигрывает при пробуждении,
+        и окно внутри скрипта отправит накопленное сразу."""
         assert _slots(PARSE_PLIST) == {
             (w, h, m) for w in range(1, 6)
-            for h, m in ((8, 0), (8, 30), (9, 0), (9, 30), (10, 0))}
+            for h, m in ((6, 0), (6, 30), (7, 0), (7, 30),
+                         (8, 0), (8, 30), (8, 45))}
+
+    def test_delivery_slot_matches_window(self):
+        """Доставочный слот и окно в скрипте держать ПАРОЙ: слот раньше окна
+        превратил бы дайджест в черновик и отложил его до завтра."""
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        window = int(text.split("DELIVERY_WINDOW_MIN=")[1].split()[0])
+        last = max(h * 60 + m for _w, h, m in _slots(PARSE_PLIST))
+        assert last >= window, (
+            f"последний слот {last // 60}:{last % 60:02d} раньше окна "
+            f"{window // 60}:{window % 60:02d} — дайджест не уйдёт"
+        )
 
     def test_import_slots(self):
         """Расписание юриста (18.08.2026): будни 10:30–18:30 каждые 2 часа —

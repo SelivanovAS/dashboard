@@ -195,6 +195,40 @@ class TestDochitkaWiring:
         assert "SKIP_CHECKED_TODAY" not in yml
 
 
+class TestFlakyBlockTuning:
+    """Настройка под МИГАЮЩИЙ блок sudrf (разбор логов 21.08.2026). Логи
+    показали: таймаутов ноль, все 257 отказов дня — мгновенный Connection
+    reset by peer, размазанный лотереей по всем ~70 хостам. Ретраи были
+    выключены (дефолт 1, снят 26.07 под облачный крон), а предохранитель
+    считан под «суд лёг» — на мигании он срезал 215 карточек из 273 при 15
+    реальных отказах (ХМАО, слот 08:16). Значения те же, что давно работают
+    в ручных каналах (import_dumps.sh, import_cases.yml)."""
+
+    def test_slots_retry_and_soften_breaker(self, worker):
+        code = _code(worker)
+        run = code[code.index("FETCH_MAX_RETRIES"):]
+        assert "run_parse.py" in run[:200], \
+            "рычаги обязаны стоять в env-префиксе запуска парсинга"
+        assert "FETCH_MAX_RETRIES=3" in code, "ретраи слотов пропали"
+        assert "CARD_BREAKER_THRESHOLD=5" in code
+        assert "CARD_BREAKER_PROBE_EVERY=10" in code
+
+    def test_cloud_workflow_keeps_defaults(self):
+        """Облачный прогон остаётся на боевых дефолтах: там пропуск
+        безопасен (перечитается следующим кроном), а Mac-слотам недочитанное
+        задерживает дайджест ДНЯ."""
+        yml = _read(".github/workflows/update_cases.yml")
+        for var in ("FETCH_MAX_RETRIES", "CARD_BREAKER_THRESHOLD",
+                    "CARD_BREAKER_PROBE_EVERY"):
+            assert var not in yml, var
+
+    def test_retries_are_observable(self):
+        """Эффект настройки обязан быть виден в данных, а не только грепом
+        по логу: счётчик едет в last_run журнала здоровья."""
+        runs = _read("scripts/court_monitor/runs.py")
+        assert '"requests_retried": config.METRICS.get("requests_retried"' in runs
+
+
 class TestCheckMode:
     """`--check` — проверить резерв из офиса, ничего не публикуя."""
 
@@ -209,7 +243,7 @@ class TestCheckMode:
         assert gate < worker.index("run_parse.py >>")
         body = worker[worker.index("probe_failed()"):]
         body = body[:body.index("\n}")]
-        assert body.index('"$CHECK_ONLY" = "1"') < body.index("past_deadline"), \
+        assert body.index('"$CHECK_ONLY" = "1"') < body.index("delivery_window_open"), \
             "--check в probe_failed обязан выходить ДО доставочной ветки"
 
     def test_does_not_touch_working_tree(self, worker):
