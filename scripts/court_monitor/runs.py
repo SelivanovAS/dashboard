@@ -2013,6 +2013,29 @@ def split_bank_track(
             _fi.pop("writ_expected", None)
         else:
             _fi["writ_expected"] = False
+        # Ручная пометка «лист не нужен» (21.08.2026) самоисцеляется: лист
+        # всё-таки выдали — пометка больше не нужна и только путала бы. Сам
+        # штамп ставит человек через админку, здесь только снятие.
+        if lifecycle.bank_writ_waived(_fi) and (
+                any(lifecycle.classify_writ_kind(w, _fi) == "enforcement"
+                    for w in _fi.get("writs") or [])
+                or (_fi.get("status") or "").strip() != "Решено"):
+            # Второе условие — отмена заочного решения (ст. 241 ГПК): дело
+            # вернулось к рассмотрению, и пометка «долг погашен ПОСЛЕ решения»
+            # протухла вместе с самим решением.
+            _fi.pop("writ_waived", None)
+        # Подсказка админке: суд САМ сдал дело в архив, а листа на исполнение
+        # нет — почти наверняка его и не запрашивали. Признак живёт в
+        # «Движении дела», но в лёгкую запись события не попадают (они в
+        # отдельном cases_bank_events.json, и админка с фронтом их не грузят),
+        # поэтому считаем здесь и кладём готовой датой. Только подсказка, не
+        # решение: юрист подтверждает её кнопкой (проверено на данных — среди
+        # ждущих лист таких дел 4, все на Урале, ложных нет).
+        _court_arch = lifecycle.bank_court_archived_date(_fi)
+        if _court_arch:
+            _fi["court_archived_at"] = _court_arch
+        else:
+            _fi.pop("court_archived_at", None)
         # Расчётная дата вступления в силу — только там, где ждём лист: у
         # отказного дела эмит завершения уже заморозил decision_date, и без
         # этого гарда drawer показал бы «Вступило в силу (расч.)» на деле,
@@ -2022,6 +2045,16 @@ def split_bank_track(
             _fi["legal_force_est"] = _est.isoformat()
         else:
             _fi.pop("legal_force_est", None)
+        # Штамп очереди ожидания: дата, с которой ждём лист. Нужен админке —
+        # она строит по нему список «долго ждущих» ЧТЕНИЕМ, без собственной
+        # копии предиката (двух копий правила — в Python и в app.js — проекту
+        # уже хватило, см. комментарий у awaitsWrit).
+        # ⚠️ Строго ПОСЛЕ вычисления _est: выше по циклу переменной ещё нет, и
+        # штамп молча взял бы дату ПРЕДЫДУЩЕГО дела.
+        if lifecycle.bank_writ_awaited(_fi) and _est:
+            _fi["writ_awaited_since"] = _est.isoformat()
+        else:
+            _fi.pop("writ_awaited_since", None)
         # Признаки заочного производства (заочность, вручение копии, дата
         # мотивировки) — тоже в лёгкую запись: фронт bank-картотеки events
         # не грузит (ленивая ensureBankEvents), а бейдж «Заочное» и строка
@@ -2113,7 +2146,7 @@ def collect_bank_calendar_events(
         if (lifecycle.bank_case_left_track(c)
                 or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
             continue
-        if not lifecycle.bank_writ_expected(fi):
+        if not lifecycle.bank_writ_awaited(fi):
             continue
         if lifecycle.is_case_archived(c):
             continue

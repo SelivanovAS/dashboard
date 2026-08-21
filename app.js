@@ -2110,7 +2110,27 @@ function hasInterimWrit(c){
 function awaitsWrit(c){
   if(!c||!c._bankTrack||c.status!=='decided')return false;
   if(c._fi&&c._fi.writ_expected===false)return false;
+  // Ручная пометка «лист не нужен» (21.08.2026): добровольное погашение долга
+  // после решения из карточки суда не видно вовсе, юрист помечает дело из
+  // админки. Штамп готовый — своей копии правила в JS по-прежнему нет.
+  if(writWaivedInfo(c))return false;
   return !hasEnforcementWrit(c);
+}
+// Короткие подписи причин — зеркало WRIT_WAIVE_REASONS (lifecycle.py).
+const WRIT_WAIVE_LABELS={debt_paid:'долг погашен',not_requested:'не запрашиваем',other:'иное'};
+// Ручная пометка дела: {reason, at, by} или null. Пустой reason пометкой не
+// считается — так снятие можно записать пустым объектом.
+function writWaivedInfo(c){
+  const w=c&&c._fi&&c._fi.writ_waived;
+  return w&&w.reason?w:null;
+}
+function writWaivedBadgeHtml(c){
+  const w=writWaivedInfo(c);
+  if(!w)return '';
+  const why=WRIT_WAIVE_LABELS[w.reason]||'иное';
+  const at=w.at?formatDate(parseDate(w.at)):'';
+  const by=w.by?', отметил '+escHtml(w.by):'';
+  return `<span class="badge badge-compact badge-writ-waived" title="Исполнительный лист по делу не ожидается: ${escHtml(why)}${at?', '+escHtml(at):''}${by}">🚫 лист не нужен</span>`;
 }
 function awaitingWritDays(c){
   if(!awaitsWrit(c))return null;
@@ -2603,6 +2623,14 @@ function mcTrackLineHtml(c){
     const дата=даты.length?' '+formatDate(даты[даты.length-1]).replace(/\.\d{4}$/,''):'';
     const title=c.writs.map(w=>`${w.issue_date||''} ${w.status||''}`.trim()).filter(Boolean).join(', ');
     return `<span class="mc-track-writ" title="Исполнительные листы: ${escHtml(title)}">🧾 ИЛ${дата}</span>`;
+  }
+  // Пометка «лист не нужен» — ПОСЛЕ листов (выданный лист важнее отметки о
+  // ненадобности) и ДО ожидания: у помеченного дела awaitingWritDays уже null,
+  // и без своей ветки подвал карточки просто опустел бы.
+  const waived=writWaivedInfo(c);
+  if(waived){
+    const why=WRIT_WAIVE_LABELS[waived.reason]||'иное';
+    return `<span class="mc-track-waived" title="Исполнительный лист не ожидается: ${escHtml(why)}">🚫 лист не нужен</span>`;
   }
   const d=awaitingWritDays(c);
   const lvl=awaitingWritLevel(d);
@@ -3309,7 +3337,7 @@ function renderTable(){
     const drawerIdEsc=escHtml(caseCanonId(c)).replace(/'/g,'&#39;');
     // Срок возражений — сразу после «Обжалуется»: это дедлайн, он важнее
     // принадлежности к треку и статуса листа.
-    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
+    const metaBadges = [stageBadge, pendingBadge, objectionsBadgeHtml(c), writBadgeHtml(c), awaitingWritBadgeHtml(c), writWaivedBadgeHtml(c), newBadge, archived].filter(Boolean).join('');
     // Дело часто приходит как «2-857/2026 (2-7073/2025;)» — основной номер +
     // старый/связанный в скобках. Раскладываем на две строки, чтобы первая
     // строка была короткой: «осн.номер | бейдж», вторая — «(доп.номер)».
@@ -3982,8 +4010,14 @@ function renderDrawer(c){
       const сила=parseDate((c._fi&&c._fi.legal_force_est)||'');
       if(сила){
         const lvl=awaitingWritLevel(ожидание);
-        const хвост=lvl?` <span class="kv-await aw-${lvl}">ждёт ИЛ ${ожидание} дн.</span>`
-                      :` <span style="color:var(--slate-500);font-weight:500;">(ещё не в силе)</span>`;
+        const помечено=writWaivedInfo(c);
+        // ⚠️ Ветка пометки идёт ПЕРВОЙ: у помеченного дела awaitingWritDays
+        // возвращает null, уровень пустой — и хвост напечатал бы «(ещё не в
+        // силе)» на деле, вступившем в силу 171 день назад.
+        const хвост=помечено
+          ? ` <span class="kv-waived">лист не нужен — ${escHtml(WRIT_WAIVE_LABELS[помечено.reason]||'иное')}${помечено.at?', '+escHtml(formatDate(parseDate(помечено.at))):''}</span>`
+          : (lvl?` <span class="kv-await aw-${lvl}">ждёт ИЛ ${ожидание} дн.</span>`
+                : ` <span style="color:var(--slate-500);font-weight:500;">(ещё не в силе)</span>`);
         keyDates+=`<div class="kv-k">Вступило в силу</div><div class="kv-v kv-mono">${formatDate(сила)} <span style="color:var(--slate-500);font-weight:500;">(расч.)</span>${хвост}</div>`;
       }
     }
@@ -4179,7 +4213,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-body">
       <div class="drawer-hero">
-        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${objectionsBadgeHtml(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
+        <div class="hero-meta">${stageBadge}${pendingAppealBadge(c)}${objectionsBadgeHtml(c)}${defaultJudgmentBadgeHtml(c)}${writBadgeHtml(c)}${awaitingWritBadgeHtml(c)}${writWaivedBadgeHtml(c)}${roleBadge}${isNew?'<span class="badge-new">Новое</span>':''}${viewArchived(c)?'<span class="badge-archived">Архив</span>':''}</div>
         <div class="hero-parties">
           <div class="party-row"><span class="p-tag">Истец</span><span>${plHtml}${vm.plaintiffIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.plaintiffIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>
           <div class="party-row"><span class="p-tag">Ответ.</span><span>${dfHtml}${vm.defendantIsAppellant?' <span class="badge badge-appellant badge-compact">Апеллянт</span>':''}${vm.defendantIsCassator?' <span class="badge badge-cassator badge-compact">Кассатор</span>':''}</span></div>

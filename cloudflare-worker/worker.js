@@ -940,6 +940,14 @@ const DISPATCH_WORKFLOWS = {
     inputs: new Set(["job_key", "operator"]),
     roles: ["owner", "operator"],
   },
+  // Пометка «лист не нужен»: обе роли (решение юриста 21.08.2026) — о
+  // добровольном погашении долга узнаёт тот, кто ведёт дело, и ходить через
+  // владельца ради одной галочки незачем. Имя отметившего пишется в саму
+  // пометку, так что след остаётся.
+  "mark_writ.yml": {
+    inputs: new Set(["job_key", "operator"]),
+    roles: ["owner", "operator"],
+  },
 };
 
 // Один POST workflow_dispatch на GitHub API (ветка main). Общий для кнопок
@@ -1299,6 +1307,110 @@ async function handleAdminAddCase(request, env) {
   return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
 }
 
+
+// Потолок пачки пометок: первый заход юриста — разбор всех зависших дел
+// (на 21.08.2026 их 50 на двух территориях), с запасом.
+const WRIT_WAIVER_MAX_ITEMS = 60;
+// Коды причин — зеркало WRIT_WAIVE_REASONS (scripts/court_monitor/lifecycle.py)
+// и WRIT_WAIVE_LABELS (app.js). Список закрытый: свободного текста нет
+// намеренно — first_instance целиком уезжает на ПУБЛИЧНУЮ страницу Pages.
+const WRIT_WAIVE_REASONS = new Set(["debt_paid", "not_requested", "other"]);
+
+// POST /admin/writ-waiver — пометка «исполнительный лист не нужен».
+//
+// Зачем: иск удовлетворён, решение в силе, а лист не выдают, потому что
+// ответчик погасил долг добровольно. Из карточки суда это не видно ВООБЩЕ
+// (проверка 16 287 событий обеих территорий: «погаш»/«добровольн» — ноль
+// вхождений), знание есть только у юриста. Без пометки дело месяцами висит в
+// очереди «Ждут ИЛ» и шлёт напоминания — кейс 2-28/2026 ждал 171 день.
+//
+// Транспорт тот же, что у точечного добавления: KV-job + workflow_dispatch.
+// Строки не касаются shell и не упираются в лимит inputs.
+async function handleAdminWritWaiver(request, env) {
+  const denied = await requireAdminRole(request, env, ["owner", "operator"]);
+  if (denied) return denied;
+  const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
+  let body = null;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: "тело не JSON" }),
+      { status: 400, headers: jsonHeaders });
+  }
+  const action = String((body && body.action) || "set").trim() === "clear"
+    ? "clear" : "set";
+  const operator = String((body && body.operator) || "").trim().slice(0, 60);
+  const rawItems = Array.isArray(body && body.items) ? body.items : [];
+  if (!rawItems.length) {
+    return new Response(JSON.stringify({ ok: false, error: "пустая пачка" }),
+      { status: 400, headers: jsonHeaders });
+  }
+  if (rawItems.length > WRIT_WAIVER_MAX_ITEMS) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `за раз не больше ${WRIT_WAIVER_MAX_ITEMS} дел` }),
+      { status: 400, headers: jsonHeaders });
+  }
+  // Построчная валидация с номером строки: сюрпризов после отправки быть не
+  // должно (тот же принцип, что в /admin/add-case).
+  const items = [];
+  for (let i = 0; i < rawItems.length; i++) {
+    const it = rawItems[i] || {};
+    const num = String(it.case || it.case_id || "").trim();
+    const dom = String(it.court_domain || "").trim().toLowerCase();
+    const reason = String(it.reason || "").trim();
+    if (!num || !ADD_CASE_NUM_RE.test(num.split("(")[0].trim())) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: не похоже на номер дела` }),
+        { status: 400, headers: jsonHeaders });
+    }
+    // Домен обязателен: номера дел между судами не уникальны (51 совпадение
+    // на Урале, 15 в ХМАО) — без пары пометка ушла бы чужому делу.
+    if (!/^[a-z0-9][a-z0-9.-]*\.sudrf\.ru$/.test(dom)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: не указан суд дела` }),
+        { status: 400, headers: jsonHeaders });
+    }
+    if (action === "set" && !WRIT_WAIVE_REASONS.has(reason)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: причина не из списка` }),
+        { status: 400, headers: jsonHeaders });
+    }
+    items.push({ case_id: num, court_domain: dom, reason });
+  }
+  const uuid = crypto.randomUUID();
+  const jobKey = `import:writ:${uuid}`;
+  const ts = new Date().toISOString();
+  const logKey = `import:log:${ts}|${uuid}`;
+  const record = {
+    uuid, kind: "writ_waiver", items_count: items.length,
+    preview: `${action === "clear" ? "снять" : "пометить"}: ${items[0].case_id}`,
+    operator, ts, status: "dispatched", updated_at: ts,
+  };
+  const job = { kind: "writ_waiver", action, items, operator, ts };
+  await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {
+    expirationTtl: IMPORT_DUMP_TTL,
+  });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+    expirationTtl: IMPORT_LOG_TTL,
+  });
+  const res = await dispatchWorkflowOnGitHub(env, "mark_writ.yml", {
+    job_key: jobKey, operator,
+  });
+  if (!res.ok) {
+    record.status = "failed";
+    record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
+    record.updated_at = new Date().toISOString();
+    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+      expirationTtl: IMPORT_LOG_TTL,
+    });
+    return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
+      status: 502, headers: jsonHeaders,
+    });
+  }
+  console.log(`writ-waiver принят: ${jobKey} (${items.length} дел, ${action}, ${operator || "без имени"})`);
+  return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
+}
+
 // Выдача job-файла GitHub Action'у (Bearer PUSH_SECRET — шаблон /import-dump).
 async function handleAddCaseJobGet(request, env) {
   const auth = request.headers.get("Authorization") || "";
@@ -1307,7 +1419,10 @@ async function handleAddCaseJobGet(request, env) {
   }
   const url = new URL(request.url);
   const key = url.searchParams.get("key") || "";
-  if (!/^import:case:[0-9a-f-]{36}$/.test(key)) {
+  // Канал выдачи job'ов общий у двух пультовых операций: точечное добавление
+  // дел (import:case:) и пометка «лист не нужен» (import:writ:). Роут не
+  // переименовываем — на него завязаны add_cases.yml и его страж.
+  if (!/^import:(?:case|writ):[0-9a-f-]{36}$/.test(key)) {
     return new Response("Bad Request", { status: 400 });
   }
   const job = await env.PUSH_SUBSCRIPTIONS.get(key);
@@ -1333,7 +1448,7 @@ async function handleImportResult(request, env) {
     return new Response("Bad JSON", { status: 400 });
   }
   const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""))
-    || /^import:case:([0-9a-f-]{36})$/.exec(String(body.job_key || ""));
+    || /^import:(?:case|writ):([0-9a-f-]{36})$/.exec(String(body.job_key || ""));
   const status = String(body.status || "");
   if (!m || !["started", "done", "failed"].includes(status)) {
     return new Response("Bad Request", { status: 400 });
@@ -1374,7 +1489,9 @@ async function handleImportResult(request, env) {
                      "excluded_result", "excluded_writ", "already_spent",
                      "seen_cached", "bank_capped", "fetch_fail",
                      // счётчики точечного добавления (kind:"case")
-                     "items", "added_main", "added_bank", "reactivated", "refused", "not_found"]) {
+                     "items", "added_main", "added_bank", "reactivated", "refused", "not_found",
+                     // счётчики пометки «лист не нужен» (kind:"writ_waiver")
+                     "waived", "updated", "cleared"]) {
     if (typeof body[num] === "number") record[num] = body[num];
   }
   if (Array.isArray(body.lines)) {
@@ -1412,7 +1529,11 @@ async function handleImportResult(request, env) {
   // Через неделю оператор к нему не вернулся бы, и дела остались бы
   // ненайденными. Работа сделана, только когда карточки читались.
   const cardsUnread = (record.fetch_fail || 0) + (record.card_failed || 0);
-  if (status === "done" && record.court_domain && record.kind !== "case"
+  // ⚠️ Свежесть подтверждают только ДАМПЫ. Пультовые операции (точечное
+  // добавление, пометка «лист не нужен») идут по своим делам и суд целиком не
+  // обходят — список явный, чтобы следующий kind не бумпнул светофор молча.
+  if (status === "done" && record.court_domain
+      && record.kind !== "case" && record.kind !== "writ_waiver"
       && cardsUnread === 0) {
     await env.PUSH_SUBSCRIPTIONS.put(
       `import:last:${record.court_domain}`,
@@ -1600,6 +1721,9 @@ export default {
       return handleAdminAddCase(request, env);
     }
 
+    if (url.pathname === "/admin/writ-waiver" && request.method === "POST") {
+      return handleAdminWritWaiver(request, env);
+    }
     if (url.pathname === "/add-case-job" && request.method === "GET") {
       return handleAddCaseJobGet(request, env);
     }

@@ -1,0 +1,154 @@
+# Пометка «лист не нужен» из админки Worker'а (карточка «Ожидание
+# исполнительных листов»: POST /admin/writ-waiver → KV import:writ:<uuid> →
+# workflow_dispatch сюда). Поток: забрать job-файл с Worker'а (Bearer
+# PUSH_SECRET, свой User-Agent — урок бана Python-urllib 13–16.07.2026) →
+# scripts/mark_writ_waived.py → commit data/ → POST /import-result (итог в
+# общий журнал импортов админки).
+#
+# Зачем отдельный workflow, а не ветка в add_cases.yml: скрипт не ходит в сеть
+# и живёт на голом stdlib, поэтому шаг `pip install` не нужен вовсе — job
+# укладывается в ~40 секунд вместо минут. Чем короче job, тем меньше окно, в
+# котором он держит общую очередь записи в data/.
+#
+# ⚠ Все inputs передаются через env, НЕ через ${{ }} в run: — имя оператора
+# произвольно, интерполяция в shell была бы инъекцией. Сами строки пачки
+# вообще не касаются shell: они едут job-файлом через KV.
+name: "🚫 Пометка «лист не нужен»"
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_key:
+        description: 'KV-ключ задания (import:writ:<uuid>) — выдаёт Worker при приёме пачки'
+        required: true
+        type: string
+      operator:
+        description: 'Имя оператора (журнал импортов)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+# Общая группа записи в data/ с основным прогоном и импортёрами: параллельная
+# запись уронила бы push non-fast-forward'ом. cancel-in-progress выключен —
+# пачка ждёт очередь, не убивая прогон.
+concurrency:
+  group: cases-data-write
+  cancel-in-progress: false
+
+jobs:
+  mark:
+    runs-on: ubuntu-latest
+    # Сети нет, файл один — реально ~40 с. Потолок с запасом на очередь.
+    timeout-minutes: 10
+    env:
+      # Inputs — только через env (см. предупреждение в шапке).
+      JOB_KEY: ${{ inputs.job_key }}
+      OPERATOR: ${{ inputs.operator }}
+      PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+      PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # workers.dev режет пустой/дефолтный UA некоторых клиентов (ошибка 1010,
+      # инцидент живого лога 13–16.07.2026) — представляемся явно.
+      UA: court-monitor-writ/1.0
+      IMPORT_SUMMARY_PATH: /tmp/writ_waiver_summary.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Шага `pip install` здесь нет намеренно: mark_writ_waived.py работает
+      # только с config/storage/lifecycle, а они — чистый stdlib (то же
+      # свойство эксплуатирует ops/stage_data_files.sh).
+
+      - name: POST started (журнал импортов в админке)
+        run: |
+          jq -n --arg jk "$JOB_KEY" --arg ru "$RUN_URL" \
+            '{job_key:$jk, status:"started", run_url:$ru}' \
+          | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
+              -H "Authorization: Bearer $PUSH_SECRET" \
+              -H "Content-Type: application/json" \
+              --data @- || true
+
+      - name: Скачать задание с Worker'а
+        run: |
+          curl -f -s -m 60 -A "$UA" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            "$PUSH_WORKER_URL/add-case-job?key=$(python3 -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["JOB_KEY"]))')" \
+            -o /tmp/writ_waiver_job.json
+          SIZE=$(wc -c < /tmp/writ_waiver_job.json)
+          echo "Задание: $SIZE байт"
+          if [ "$SIZE" -lt 10 ]; then
+            echo "::error::Задание подозрительно мало ($SIZE байт) — вероятно истёк TTL 24 ч"
+            exit 1
+          fi
+
+      - name: Пометка «лист не нужен»
+        id: markwrit
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          REGION: ${{ vars.REGION }}
+          # Мастер-выключатель трека: при '0' файлов трека нет вовсе.
+          BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}
+        run: |
+          python3 scripts/mark_writ_waived.py --job /tmp/writ_waiver_job.json
+
+      - name: Commit данных
+        id: commit
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          bash ops/stage_data_files.sh
+          if git diff --cached --quiet; then
+            echo "Изменений нет — коммит не нужен"
+            exit 0
+          fi
+          N=$(jq -r '(.waived // 0) + (.updated // 0) + (.cleared // 0)' \
+            "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
+          git commit -m "🚫 Лист не нужен: ${N} дел (${OPERATOR:-без имени})"
+          # Ретраи: чужой push мог проскочить между checkout и push.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push
+
+      - name: POST итога в журнал импортов
+        if: always()
+        env:
+          MARK_OUTCOME: ${{ steps.markwrit.outcome }}
+          COMMIT_OUTCOME: ${{ steps.commit.outcome }}
+        run: |
+          # done — только когда И скрипт отработал, И коммит запушился: упавший
+          # push без этой сверки слал бы оператору «помечено N», хотя данные
+          # никуда не уехали.
+          STATUS=$([ "$MARK_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" = "success" ] && echo done || echo failed)
+          if [ "$MARK_OUTCOME" = "success" ] && [ "$COMMIT_OUTCOME" != "success" ] && [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            jq '.error = "пометки применены, но коммит не запушился (конфликт с параллельной записью) — повторите пачку: повторная пометка безопасна"' \
+              "$IMPORT_SUMMARY_PATH" > /tmp/writ_sum_err.json \
+              && mv /tmp/writ_sum_err.json "$IMPORT_SUMMARY_PATH"
+          fi
+          if [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            BODY=$(jq -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{job_key:$jk, status:$st, run_url:$ru,
+                items:(.items // 0),
+                waived:(.waived // 0), updated:(.updated // 0),
+                cleared:(.cleared // 0), refused:(.refused // 0),
+                not_found:(.not_found // 0), lines:(.lines // [])}
+               + (if .error then {error:.error} else {} end)' \
+              "$IMPORT_SUMMARY_PATH")
+          else
+            BODY=$(jq -n -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
+              '{job_key:$jk, status:$st, run_url:$ru,
+                error:"прогон упал до разбора задания (скачивание) — детали в run_url"}')
+          fi
+          echo "$BODY" | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
+            -H "Authorization: Bearer $PUSH_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @- || true

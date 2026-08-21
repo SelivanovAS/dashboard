@@ -508,7 +508,8 @@ def test_front_awaits_writ_excludes_denied_and_merged():
     до 31.07.2026 их было три разных, и ни одна не смотрела на исход.
     """
     deps = "\n".join(_fn_src(n) for n in (
-        "parseDate", "classifyWritKind", "hasEnforcementWrit", "awaitsWrit",
+        "parseDate", "classifyWritKind", "hasEnforcementWrit",
+        "writWaivedInfo", "awaitsWrit",
     ))
     script = deps + """
 const дело=(extra)=>Object.assign(
