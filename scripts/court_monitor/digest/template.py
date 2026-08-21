@@ -1658,12 +1658,40 @@ def split_bank_force_fold(
     номеров проходит штатно. Задет только счётчик секции
     (`_check_section_counters` считает обёрнутые номера, а не строки).
     """
+    return _split_bank_fold(bank_changes, "fi_legal_force_reached")
+
+
+def split_bank_overdue_fold(
+    bank_changes: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """То же для «⚠️ ИЛ не выдан N дн.» (эскалация 21.08.2026).
+
+    С переходом на лестницу порогов 30/60/90/120/150 напоминания перестали
+    быть одноразовыми, и в пиковые дни их набирается много: симуляция на
+    боевых данных дала до 8 дел за день у ХМАО и до 19 у Урала (решения
+    вступают в силу пачками — следствие массового импорта территории).
+    Свёртка держит секцию ровной: в обычный день 1-3 строки печатаются
+    подробно, всплеск схлопывается в одну со списком дел.
+    """
+    return _split_bank_fold(bank_changes, "fi_writ_overdue")
+
+
+def _split_bank_fold(
+    bank_changes: list[dict], solo_type: str,
+) -> tuple[list[dict], list[dict]]:
+    """Общее тело свёрток по ЕДИНСТВЕННОМУ типу события.
+
+    Условие «тип единственный» одинаково важно для обеих: дело, получившее тем
+    же прогоном лист, решение или заседание, обязано печататься подробно.
+    Порог общий — `config.BANK_FORCE_DIGEST_FOLD` (0 = не сворачивать),
+    условие «больше порога».
+    """
     limit = config.BANK_FORCE_DIGEST_FOLD
     if limit <= 0:
         return list(bank_changes), []
     foldable = [
         ch for ch in bank_changes
-        if (ch.get("type") or []) == ["fi_legal_force_reached"]
+        if (ch.get("type") or []) == [solo_type]
     ]
     if len(foldable) <= limit:
         return list(bank_changes), []
@@ -1704,6 +1732,34 @@ def _bank_force_fold_line(folded: list[dict]) -> str:
             f"вступили в силу</b>"
             + (f" (расч. {common})" if common else "")
             + " — ожидаем ИЛ:")
+    return head + "\n" + ", ".join(items)
+
+
+def _bank_overdue_fold_line(folded: list[dict]) -> str:
+    """Строка-свёртка «ИЛ не выдан» + список дел ССЫЛКАМИ, с числом дней.
+
+    Порядок — по УБЫВАНИЮ срока ожидания: это рабочая очередь, и дело,
+    зависшее на полгода, обязано стоять первым (рекорд на 21.08.2026 —
+    171 день). Число дней у каждого дела своё, поэтому в заголовок выносится
+    только порог, а не общая дата, как у свёртки «вступило в силу».
+    """
+    rows = sorted(
+        folded,
+        key=lambda ch: -int((ch.get("details") or {}).get("overdue_days") or 0),
+    )
+    items: list[str] = []
+    for ch in rows:
+        d = ch.get("details") or {}
+        num = escape_html(ch.get("case", ""))
+        url = fi_card_url(d)
+        item = f'<a href="{url}"><b>{num}</b></a>' if url else f"<b>{num}</b>"
+        days = d.get("overdue_days")
+        if days:
+            item += f" — {int(days)} дн."
+        items.append(item)
+    head = (f"⚠️ <b>{len(folded)} "
+            f"{plural_ru(len(folded), 'дело ждёт', 'дела ждут', 'дел ждут')} "
+            f"ИЛ дольше {config.BANK_WRIT_OVERDUE_ALERT_DAYS} дн.</b>:")
     return head + "\n" + ", ".join(items)
 
 
@@ -1797,6 +1853,12 @@ def _bank_track_block(bank_changes: list[dict], *,
             f"Дайджест: свёрнуто {len(force_folded)} дел «вступило в силу» "
             f"(порог {config.BANK_FORCE_DIGEST_FOLD})"
         )
+    detailed, overdue_folded = split_bank_overdue_fold(detailed)
+    if overdue_folded:
+        log.info(
+            f"Дайджест: свёрнуто {len(overdue_folded)} дел «ИЛ не выдан» "
+            f"(порог {config.BANK_FORCE_DIGEST_FOLD})"
+        )
 
     def _sort_key(pair: tuple[int, dict]) -> tuple[int, float, int]:
         idx, ch = pair
@@ -1817,13 +1879,25 @@ def _bank_track_block(bank_changes: list[dict], *,
     ]
 
     def _insert_fold(grp: int, text: str) -> None:
-        """Вставить строку-свёртку в её группу важности (после всех старших)."""
+        """Вставить строку-свёртку в её группу важности (после всех старших).
+
+        ⚠️ Позиция считается ПОСЛЕ уже вставленных свёрток той же группы —
+        иначе каждая следующая вытесняла бы предыдущую наверх, и порядок в
+        выводе оказывался бы обратным порядку вызовов (на этом попался
+        порядок «просрочка → вступило в силу» 21.08.2026).
+        """
         pos = len([
             ch for ch in ordered
-            if (_bank_change_group(ch) if isinstance(ch, dict) else ch[0]) < grp
+            if (_bank_change_group(ch) < grp if isinstance(ch, dict)
+                else ch[0] <= grp)
         ])
         ordered.insert(pos, (grp, text))
 
+    if overdue_folded:
+        # Просрочка — самое срочное в группе листов: вставляем ПЕРВОЙ, до
+        # свёртки «вступило в силу» (там дело только начало ждать, здесь —
+        # ждёт уже месяцами).
+        _insert_fold(_BANK_GROUP_WRITS, _bank_overdue_fold_line(overdue_folded))
     if force_folded:
         # fi_legal_force_reached принадлежит группе листов (_BANK_GROUP_WRITS,
         # см. _BANK_GROUP_ORDER) — рабочая очередь юриста начинается с ИЛ
@@ -1840,7 +1914,7 @@ def _bank_track_block(bank_changes: list[dict], *,
     # intake-свёртки не в счёте — их номеров в HTML нет вовсе. Ноль — заголовок
     # без (N): «(0)» рядом со строкой «заведено 116» читается как поломка, а
     # секцию без счётчика _check_section_counters штатно пропускает.
-    header_n = len(detailed) + len(force_folded)
+    header_n = len(detailed) + len(force_folded) + len(overdue_folded)
     block = [f"🏦 <b>ИСКИ БАНКА ({header_n}):</b>" if header_n
              else "🏦 <b>ИСКИ БАНКА:</b>", ""]
     prev_grp: int | None = None

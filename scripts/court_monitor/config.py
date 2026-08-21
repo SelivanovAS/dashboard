@@ -247,6 +247,35 @@ BANK_WRIT_OVERDUE_ALERT_DAYS = 30  # алерт дайджеста «ИЛ не �
                                    # awaitingWritBadgeHtml) и сильно раньше
                                    # архивного потолка 180 дн: смысл алерта —
                                    # успеть запросить лист, пока дело живо.
+BANK_WRIT_OVERDUE_REPEAT_DAYS = int(
+    os.environ.get("BANK_WRIT_OVERDUE_REPEAT_DAYS", "30") or 30
+)                                  # шаг ЭСКАЛАЦИИ напоминания об ИЛ (решение
+                                   # юриста 21.08.2026): пороги идут от
+                                   # BANK_WRIT_OVERDUE_ALERT_DAYS с этим шагом
+                                   # до архивного потолка — 30/60/90/120/150.
+                                   # До этого напоминание было ОДНОРАЗОВЫМ (гейт
+                                   # по значению est), и дело, зависшее без
+                                   # листа, молчало до самого архива: на
+                                   # 21.08.2026 таких набралось 50 (ХМАО 16,
+                                   # Урал 34), рекорд — 171 день. `0` возвращает
+                                   # прежнее «один раз за жизнь дела».
+
+
+def writ_overdue_steps() -> tuple[int, ...]:
+    """Пороги напоминания «ИЛ не выдан», в днях от вступления в силу.
+
+    Одно место, где живёт лестница: её перебирает календарный проход
+    (`collect_bank_calendar_events`) и на неё же смотрят тесты. Верхняя
+    граница — архивный потолок: после него дело уходит из трека, и напоминать
+    уже некому.
+    """
+    first = BANK_WRIT_OVERDUE_ALERT_DAYS
+    step = BANK_WRIT_OVERDUE_REPEAT_DAYS
+    if step <= 0:
+        return (first,)
+    return tuple(range(first, BANK_WRIT_WAIT_MAX_DAYS, step))
+
+
 BANK_CALENDAR_EVENTS_SINCE = date(2026, 8, 13)
                                 # Эпоха календарных событий трека
                                 # (fi_legal_force_reached / fi_writ_overdue):

@@ -92,6 +92,10 @@ jobs:
           # replay обязан воспроизводить крон, иначе тестовый дайджест
           # разойдётся с боевым.
           BANK_FORCE_DIGEST_FOLD: ${{ vars.BANK_FORCE_DIGEST_FOLD || '3' }}
+          # Шаг эскалации напоминания «ИЛ не выдан» (30/60/90/120/150).
+          # Только здесь: календарный проход живёт в main_json, replay
+          # рендерит уже собранный контекст и событий не эмитит.
+          BANK_WRIT_OVERDUE_REPEAT_DAYS: ${{ vars.BANK_WRIT_OVERDUE_REPEAT_DAYS || '30' }}
           DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
           DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM

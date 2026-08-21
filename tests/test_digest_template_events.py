@@ -2821,3 +2821,70 @@ class Fi36ClosureReasonTest(unittest.TestCase):
             "decision_date": "12.08.2026",
         })], act_summarizer=_fake_summarizer)
         self.assertIn("<b>Итог:</b> удовлетворено (решение от 12.08.2026)", html)
+
+
+class BankOverdueFoldTest(unittest.TestCase):
+    """Свёртка «⚠️ ИЛ не выдан» (эскалация 21.08.2026).
+
+    С лестницей порогов 30/60/90/120/150 напоминания перестали быть
+    одноразовыми, и в пиковые дни их набирается много: симуляция на боевых
+    данных дала до 8 дел за день у ХМАО и до 19 у Урала — решения вступают в
+    силу пачками. Механизм общий со свёрткой «вступило в силу».
+    """
+
+    @staticmethod
+    def _overdue(days_list: list[int]) -> list[dict]:
+        return [make_fi_change(["fi_writ_overdue"],
+                               {"overdue_days": d,
+                                "legal_force_date": "01.06.2026"},
+                               case=f"2-{400 + i}/2026",
+                               track="plaintiff_light")
+                for i, d in enumerate(days_list)]
+
+    def _render(self, days_list: list[int], fold: int = 3) -> str:
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", fold):
+            return render(fi_changes=self._overdue(days_list))
+
+    def test_ordinary_day_stays_detailed(self):
+        # Штатный день — 1-3 дела: печатаем подробно, со сторонами и судом.
+        html = self._render([171, 60])
+        self.assertNotIn("ждут ИЛ дольше", html)
+        self.assertEqual(html.count("ИЛ не выдан"), 2)
+
+    def test_spike_folds_into_one_line(self):
+        html = self._render([171, 157, 99, 97, 85])
+        self.assertIn("⚠️ <b>5 дел ждут ИЛ дольше 30 дн.</b>:", html)
+        self.assertNotIn("после вступления в силу", html)
+        self.assertEqual(len(anchors(html)), 5)
+
+    def test_longest_wait_first(self):
+        # Рабочая очередь: дело, зависшее на полгода, стоит первым.
+        html = self._render([60, 171, 90, 157])
+        line = next(ln for ln in html.split("\n") if "2-400/2026" in ln)
+        order = [int(m) for m in re.findall(r"— (\d+) дн\.", line)]
+        self.assertEqual(order, sorted(order, reverse=True), line)
+
+    def test_section_counter_counts_folded_cases(self):
+        html = self._render([171, 157, 99, 97, 85])
+        self.assertIn("🏦 <b>ИСКИ БАНКА (5):</b>", html)
+
+    def test_case_with_second_event_stays_detailed(self):
+        changes = self._overdue([171, 157, 99, 97])
+        changes[0]["type"] = ["fi_writ_overdue", "fi_writ_issued"]
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", 3):
+            html = render(fi_changes=changes)
+        # Сворачиваемых осталось 3 — не больше порога, свёртки нет.
+        self.assertNotIn("ждут ИЛ дольше", html)
+
+    def test_overdue_fold_precedes_force_fold(self):
+        """Просрочка срочнее «только что вступило в силу» — идёт выше."""
+        changes = self._overdue([171, 157, 99, 97])
+        changes += [make_fi_change(["fi_legal_force_reached"],
+                                   {"legal_force_date": "21.08.2026"},
+                                   case=f"2-{500 + i}/2026",
+                                   track="plaintiff_light")
+                    for i in range(4)]
+        with patch.object(cm_config, "BANK_FORCE_DIGEST_FOLD", 3):
+            html = render(fi_changes=changes)
+        self.assertLess(html.index("ждут ИЛ дольше"),
+                        html.index("вступили в силу"), html)
