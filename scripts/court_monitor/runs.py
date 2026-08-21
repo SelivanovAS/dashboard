@@ -2080,10 +2080,13 @@ def collect_bank_calendar_events(
     Идемпотентность — ЗНАЧЕНИЕМ est в fi["legal_force_emitted"] /
     fi["writ_overdue_emitted"]: сдвиг расчётной даты (поздняя мотивировка,
     вручение копии заочного) переобъявляет события с новой датой — осознанно.
+    У просрочки маркер составной («est|порог», см. config.writ_overdue_steps):
+    напоминание повторяется на 60/90/120/150 днях, у вступления в силу
+    остаётся одноразовым — эта дата наступает однажды.
 
     Анти-паводок — эпоха фичи config.BANK_CALENDAR_EVENTS_SINCE: событие
     эмитится, только если его наступление (для силы — сама est, для
-    просрочки — est + порог) случилось ПОСЛЕ эпохи; более раннее тихо
+    просрочки — est + ПЕРВЫЙ порог) случилось ПОСЛЕ эпохи; более раннее тихо
     получает маркер (бэклог деплоя юрист велел не объявлять — он виден в
     чипе «Ждут ИЛ»). Посев в migrate_stages тут не годится: он идёт на
     загрузке, РАНЬШЕ прохода, и в день наступления даты глушил бы событие.
@@ -2129,11 +2132,38 @@ def collect_bank_calendar_events(
             if est > since:
                 types.append("fi_legal_force_reached")
         overdue_days = (today - est).days
-        if (overdue_days >= config.BANK_WRIT_OVERDUE_ALERT_DAYS
-                and fi.get("writ_overdue_emitted") != est_iso):
-            fi["writ_overdue_emitted"] = est_iso
-            if est + timedelta(days=config.BANK_WRIT_OVERDUE_ALERT_DAYS) > since:
+        # ЭСКАЛАЦИЯ (21.08.2026): маркер помнит не только est, но и достигнутый
+        # порог — «2026-07-18|60». Прежний одноразовый гейт (маркер == est)
+        # напоминал о зависшем листе ровно раз, на 30-й день, и дальше дело
+        # молчало до архива на 180-й: на 21.08.2026 так молчали 50 дел обеих
+        # территорий, рекорд — 171 день без листа.
+        # ⚠️ Старое значение без «|» читается как «первый порог объявлен» —
+        # ровно то, что и произошло; отдельной миграции не нужно.
+        mark_est, _, mark_step = (
+            fi.get("writ_overdue_emitted") or "").partition("|")
+        if mark_est != est_iso:
+            # est пересчиталась (поздняя мотивировка, вручение копии) —
+            # лестница начинается заново, как и прежнее переобъявление.
+            done_step = 0
+        elif mark_step.isdigit():
+            done_step = int(mark_step)
+        else:
+            done_step = config.BANK_WRIT_OVERDUE_ALERT_DAYS if mark_est else 0
+        step = max((s for s in config.writ_overdue_steps()
+                    if s <= overdue_days), default=0)
+        if step and step > done_step:
+            fi["writ_overdue_emitted"] = f"{est_iso}|{step}"
+            # Эпоха гасит только ПЕРВЫЙ порог: она защищала от бэклога при
+            # вводе фичи 13.08.2026, а для эскалации этот бэклог — ровно те
+            # зависшие дела, ради которых её и завели. С эпохой на повторных
+            # порогах дело, вступившее в силу задолго до неё, не напомнило бы
+            # уже никогда (2-28/2026 Урала: 171 день, следующий порог 180 —
+            # это и есть архивация).
+            if (step > config.BANK_WRIT_OVERDUE_ALERT_DAYS
+                    or est + timedelta(days=step) > since):
                 types.append("fi_writ_overdue")
+                # В текст идёт ФАКТИЧЕСКОЕ число дней, а не порог: дело,
+                # перешагнувшее 60 на 80-й день, честно скажет «80 дн.».
                 details["overdue_days"] = overdue_days
         if not types:
             continue

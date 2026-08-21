@@ -470,3 +470,56 @@ class LintBankForceFoldTest(unittest.TestCase):
             '| дело 1 инст. 2-555/2026\n'
         )
         self.assertEqual(_check_section_counters(html), [])
+
+
+class LintBankOverdueFoldTest(unittest.TestCase):
+    """Свёртка «ИЛ не выдан» и линтер (эскалация 21.08.2026).
+
+    Как и у свёртки «вступило в силу», номера свёрнутых дел остаются в HTML —
+    строка перечисляет их ссылками. Проверяем, что счётчик секции сходится и
+    подмена номера по-прежнему ловится.
+    """
+
+    @staticmethod
+    def _overdue(days_list: list[int]) -> list[dict]:
+        return [
+            make_fi_change(["fi_writ_overdue"],
+                           {"overdue_days": d,
+                            "legal_force_date": "01.06.2026"},
+                           case=f"2-{800 + i}/2026", track="plaintiff_light")
+            for i, d in enumerate(days_list)
+        ]
+
+    def test_folded_digest_is_clean(self):
+        ctx = _ctx(fi_changes=self._overdue([171, 157, 99, 97, 85, 80]))
+        html = render(**ctx)
+        self.assertIn("ждут ИЛ дольше", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+    def test_section_counter_matches(self):
+        from court_monitor.digest.lint import _check_section_counters
+        ctx = _ctx(fi_changes=self._overdue([171, 157, 99, 97, 85, 80]))
+        html = render(**ctx)
+        self.assertIn("ИСКИ БАНКА (6)", html)
+        self.assertEqual(_check_section_counters(html), [])
+
+    def test_missing_number_still_caught(self):
+        ctx = _ctx(fi_changes=self._overdue([171, 157, 99, 97, 85, 80]))
+        html = render(**ctx).replace("2-800/2026", "2-999/2026")
+        problems = uc.lint_digest_html(html, **ctx)
+        self.assertTrue(any("2-800/2026" in p for p in problems), problems)
+
+    def test_both_folds_together_are_clean(self):
+        """Две свёртки в одной секции не мешают друг другу."""
+        fi = self._overdue([171, 157, 99, 97]) + [
+            make_fi_change(["fi_legal_force_reached"],
+                           {"legal_force_date": "21.08.2026"},
+                           case=f"2-{900 + i}/2026", track="plaintiff_light")
+            for i in range(5)
+        ]
+        ctx = _ctx(fi_changes=fi)
+        html = render(**ctx)
+        self.assertIn("ждут ИЛ дольше", html)
+        self.assertIn("вступили в силу", html)
+        self.assertIn("ИСКИ БАНКА (9)", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])

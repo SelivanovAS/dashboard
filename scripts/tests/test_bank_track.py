@@ -1765,6 +1765,32 @@ class TestBankIntakeCapsWiring:
                 assert re.search(rf"\|\|\s*'{default}'", m.group(1)), (
                     f"{name}: у {knob} нет фолбэка '{default}'")
 
+    def test_overdue_repeat_forwarded_to_run_workflow(self):
+        """Шаг эскалации «ИЛ не выдан» — в update_cases.yml.
+
+        Только туда: календарный проход живёт в main_json, а replay рендерит
+        уже собранный контекст и событий не эмитит.
+        """
+        import re
+        wf = self._workflow()
+        m = re.search(r"^\s*BANK_WRIT_OVERDUE_REPEAT_DAYS:\s*(.+)$", wf, re.M)
+        assert m, "update_cases.yml не прокидывает BANK_WRIT_OVERDUE_REPEAT_DAYS"
+        assert "vars.BANK_WRIT_OVERDUE_REPEAT_DAYS" in m.group(1)
+        assert re.search(r"\|\|\s*'30'", m.group(1))
+
+    def test_overdue_steps_ladder(self):
+        """Лестница порогов — один источник правды для прогона и тестов."""
+        import importlib
+        assert config.writ_overdue_steps() == (30, 60, 90, 120, 150)
+        os.environ["BANK_WRIT_OVERDUE_REPEAT_DAYS"] = "0"
+        try:
+            importlib.reload(config)
+            assert config.writ_overdue_steps() == (30,), (
+                "REPEAT=0 обязан возвращать прежнее «один раз за жизнь дела»")
+        finally:
+            os.environ.pop("BANK_WRIT_OVERDUE_REPEAT_DAYS", None)
+            importlib.reload(config)
+
     def test_slimming_thresholds_read_env(self):
         import importlib
         for knob, probe, default in (
@@ -2653,7 +2679,8 @@ class TestBankCalendarEvents:
         assert d["link"] == "111|aaaa-1111"
         fi = case["first_instance"]
         assert fi["legal_force_emitted"] == "2026-07-11"
-        assert fi["writ_overdue_emitted"] == "2026-07-11"
+        # Маркер составной с 21.08.2026: «est|достигнутый порог».
+        assert fi["writ_overdue_emitted"] == "2026-07-11|30"
 
     def test_force_only_before_threshold(self, monkeypatch):
         case = self._case(act_date="05.07.2026")  # est = 06.08, 7 дн назад
@@ -2676,7 +2703,8 @@ class TestBankCalendarEvents:
         assert (n, ch) == (0, [])
         fi = case["first_instance"]
         assert fi["legal_force_emitted"] == "2026-07-11"
-        assert fi["writ_overdue_emitted"] == "2026-07-11"
+        # Маркер составной с 21.08.2026: «est|достигнутый порог».
+        assert fi["writ_overdue_emitted"] == "2026-07-11|30"
 
     def test_overdue_crossing_after_epoch_alerts(self, monkeypatch):
         """est до эпохи, но 30-дневный порог пересечён ПОСЛЕ неё — свежая
@@ -2752,6 +2780,84 @@ class TestBankCalendarEvents:
         case = self._case()
         self._run([case], monkeypatch)
         assert self._run([case], monkeypatch) == (0, [])
+
+    # ── Эскалация напоминаний об ИЛ (решение юриста 21.08.2026) ──────────
+    # До неё «⚠️ ИЛ не выдан N дн.» приходило РОВНО ОДИН раз — на 30-й день,
+    # и дело, зависшее без листа, молчало до архива на 180-й. На 21.08.2026
+    # так молчали 50 дел обеих территорий, рекорд — 171 день ожидания.
+
+    def test_second_threshold_reminds_again(self, monkeypatch):
+        """На 60-м дне напоминание повторяется, между порогами — тишина."""
+        case = self._case()
+        self._run([case], monkeypatch)          # 33 дн. — первый порог
+        fi = case["first_instance"]
+        assert fi["writ_overdue_emitted"] == "2026-07-11|30"
+        # 50-й день: следующий порог не достигнут.
+        assert self._run([case], monkeypatch,
+                         today=date(2026, 8, 30)) == (0, [])
+        # 60-й день: вторая строка, с ФАКТИЧЕСКИМ числом дней.
+        n, ch = self._run([case], monkeypatch, today=date(2026, 9, 9))
+        assert n == 1 and ch[0]["type"] == ["fi_writ_overdue"]
+        assert ch[0]["details"]["overdue_days"] == 60
+        assert fi["writ_overdue_emitted"] == "2026-07-11|60"
+        # 61-й день — снова тишина до 90-го.
+        assert self._run([case], monkeypatch,
+                         today=date(2026, 9, 10)) == (0, [])
+
+    def test_legacy_marker_counts_as_first_threshold(self, monkeypatch):
+        """Старый маркер без «|» — это «первый порог объявлен».
+
+        Миграции нет намеренно: значение «2026-07-11» и означало ровно то,
+        что 30-дневное напоминание уже ушло. Дело не должно объявиться
+        повторно на 40-м дне только из-за смены формата.
+        """
+        case = self._case()
+        # В боевых данных маркеры стоят парой (оба пишутся одним проходом) —
+        # иначе тест поймал бы «вступило в силу», а не просрочку.
+        case["first_instance"]["legal_force_emitted"] = "2026-07-11"
+        case["first_instance"]["writ_overdue_emitted"] = "2026-07-11"
+        assert self._run([case], monkeypatch,
+                         today=date(2026, 8, 20)) == (0, [])
+        # А на 60-м — законно напомнит.
+        n, ch = self._run([case], monkeypatch, today=date(2026, 9, 9))
+        assert n == 1 and ch[0]["type"] == ["fi_writ_overdue"]
+
+    def test_epoch_gates_only_first_threshold(self, monkeypatch):
+        """Эпоха гасит бэклог на ПЕРВОМ пороге, но не хоронит дело навсегда.
+
+        Она защищала от паводка при вводе фичи 13.08.2026. Останься она на
+        повторных порогах — дело, вступившее в силу задолго до эпохи, не
+        напомнило бы уже никогда: у 2-28/2026 Урала (171 день) следующий
+        порог 180 совпадает с архивацией.
+        """
+        case = self._case()          # est 11.07.2026, эпоха 13.08.2026
+        assert self._run([case], monkeypatch,
+                         epoch=date(2026, 8, 13)) == (0, [])
+        n, ch = self._run([case], monkeypatch, epoch=date(2026, 8, 13),
+                          today=date(2026, 9, 9))
+        assert n == 1 and ch[0]["type"] == ["fi_writ_overdue"]
+
+    def test_repeat_days_zero_restores_single_shot(self, monkeypatch):
+        """BANK_WRIT_OVERDUE_REPEAT_DAYS=0 — прежнее «один раз за жизнь»."""
+        monkeypatch.setattr(config, "BANK_WRIT_OVERDUE_REPEAT_DAYS", 0)
+        case = self._case()
+        self._run([case], monkeypatch)
+        for day in (date(2026, 9, 9), date(2026, 10, 9), date(2026, 11, 9)):
+            assert self._run([case], monkeypatch, today=day) == (0, [])
+
+    def test_no_reminder_past_archive_ceiling(self, monkeypatch):
+        """Выше архивного потолка порогов нет — дело уже уходит из трека."""
+        assert max(config.writ_overdue_steps()) < config.BANK_WRIT_WAIT_MAX_DAYS
+
+    def test_est_shift_restarts_ladder(self, monkeypatch):
+        """Сдвиг est обнуляет лестницу: сроки считаются от новой даты."""
+        case = self._case()
+        self._run([case], monkeypatch, today=date(2026, 9, 9))  # порог 60
+        assert case["first_instance"]["writ_overdue_emitted"].endswith("|60")
+        case["first_instance"]["act_date"] = "01.07.2026"       # est → 04.08
+        n, ch = self._run([case], monkeypatch, today=date(2026, 9, 9))
+        assert n == 1 and ch[0]["details"]["overdue_days"] == 36
+        assert case["first_instance"]["writ_overdue_emitted"] == "2026-08-04|30"
 
     def test_est_shift_reemits_with_new_date(self, monkeypatch):
         """Сдвиг расчётной даты (поздняя мотивировка, вручение копии)
