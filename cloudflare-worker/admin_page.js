@@ -2976,6 +2976,35 @@ async function loadImportCourts() {
       + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
   }
 }
+// Дыра в реестре региона («суд ДОМЕН не найден в реестре») повтором НЕ
+// лечится: локальная машина пойдёт тем же кодом и отвергнет строку так же.
+// Обещать ей дочитку — врать; построчный отчёт это уже говорит («карточку не
+// дочитает никто, проверьте реестр региона»), и сводка обязана не спорить с ним.
+var IMP_NO_COURT_RE = /не найден в реестре/;
+function impNoCourtReason(item) {
+  return IMP_NO_COURT_RE.test(String(item.card_fail_reason || ""));
+}
+// Иск банка потерян целиком — вернуть строку может только повторный разбор
+// ТОГО ЖЕ дампа (он лежит в KV сутки, очередь резерва его и берёт).
+function impRetryPromise(item) {
+  if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
+  return "повторит локальная машина в течение дня";
+}
+// Дело заведено card-blind: его дочитает и повторный импорт, и ближайший
+// прогон — у записи нет last_checked_at, FI-цикл возьмёт её первой.
+function impRefillPromise(item) {
+  if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
+  return "дочитает локальная машина или ближайший прогон";
+}
+// Кто отработал запись. Метка появляется ТОЛЬКО у резерва: облако — дефолт,
+// и подписывать каждую строку истории «сделано облаком» значило бы засорить
+// список ради нулевой новости. Метка делает проверяемым обещание сводки
+// «повторит локальная машина»: видно, бралась машина за запись или нет.
+function impSourceLabel(item) {
+  if (item.source !== "mac") return "";
+  var when = relTime(item.updated_at || item.ts);
+  return "🖥 повтор с локальной машины" + (when ? " · " + when : "");
+}
 // Сводка дампового импорта. Раньше это была одна цепочка из 17 корзин через
 // « · », где заведения, штатный отсев и провалы, требующие повтора, стояли
 // вперемешку — оператор не мог за секунду ответить себе «получилось или
@@ -3009,10 +3038,18 @@ function impResultParts(item) {
   // всего: «12 карточка не открылась» звучало технической мелочью, а
   // означало двенадцать НЕзаведённых дел (разбор 16.08.2026 — блок ГАС).
   // Правила приёма в трек решаются только по карточке, поэтому без неё
-  // строка выбрасывается целиком, и вернуть её может лишь повторный дамп.
+  // строка выбрасывается целиком.
+  // ⚠️ Что делать дальше — с 23.08.2026 говорим правду: повтор УЖЕ стоит в
+  // очереди резерва (ops/mac-local-run/import_queue.jq берёт запись по
+  // fetch_fail/card_failed, агент ходит будни 10:30–18:30). Прежнее
+  // «повторите дамп, когда суд отвечает» писалось 16.08, до появления
+  // очереди, и звало оператора делать работу, которая сделается сама.
+  // Ручной запасной выход оставлен: Mac бывает выключен, а в пятницу вечером
+  // ближайший слот — только в понедельник.
   if (item.fetch_fail) {
-    problems.push("⛔ " + item.fetch_fail + " исков банка НЕ заведено "
-      + "(карточка не открылась) — повторите дамп, когда суд отвечает");
+    problems.push("⛔ " + item.fetch_fail + " исков банка не заведено "
+      + "(карточка не открылась) — " + impRetryPromise(item)
+      + "; если к вечеру не появятся, вставьте дамп заново");
   }
   if (item.card_failed) {
     // Причина (403 / страница защиты / проверочный код / заглушка) важнее
@@ -3020,10 +3057,11 @@ function impResultParts(item) {
     // лёг». Без неё все четыре беды выглядели одинаково.
     problems.push("⚠ " + item.card_failed + " без карточки: "
       + (item.card_fail_reason || "суд не ответил")
-      + " — вставьте дамп ещё раз или дождитесь прогона");
+      + " — " + impRefillPromise(item));
   } else if (item.card_fail_reason) {
     // Ответчиков в дампе не было, а иски банка отвалились ([FETCH FAIL]).
-    problems.push("⚠ карточки не читались: " + item.card_fail_reason);
+    problems.push("⚠ карточки не читались: " + item.card_fail_reason
+      + " — " + impRetryPromise(item));
   }
   if (item.already) skipped.push(item.already + " уже в базе");
   if (item.excluded_result) skipped.push(item.excluded_result + " отсеяно по итогу");
@@ -3049,10 +3087,16 @@ function impVerdict(item) {
   var unread = item.card_failed || 0;
   var got = "заведено " + nPlural(added, "дело", "дела", "дел");
   if (lost || unread) {
+    // Вердикт называет ИСХОД и того, кто доделает. Прежний «нужен повтор
+    // дампа» ставил задачу оператору, хотя запись уже стоит в очереди
+    // резерва; у дыры в реестре повтор бесполезен — там задача и правда его.
+    var tail = impNoCourtReason(item)
+      ? "нужен повтор дампа, но сперва проверьте реестр региона"
+      : "повтор подхватит локальная машина";
     return { kind: "bad", text: added
       ? "Заведено " + nPlural(added, "дело", "дела", "дел")
-        + ", но нужен повтор: карточки открылись не все"
-      : "Ничего не заведено — карточки не открылись, нужен повтор дампа" };
+        + ", но карточки открылись не все — " + tail
+      : "Ничего не заведено — карточки не открылись; " + tail };
   }
   if (added) return { kind: "ok", text: "Готово: " + got };
   return { kind: "none", text: "Готово: новых дел нет — всё уже в базе" };
@@ -3079,12 +3123,17 @@ function impResultText(item) {
 // Развёрнутая сводка — для живого статуса сразу после отправки, где у строки
 // есть вся ширина карточки. Порядок чтения: итог → что делать → детали.
 function impResultHtml(item) {
+  // Метка резерва нужна ВСЕМ каналам: у пачек своя ветка сводки, а вопрос
+  // «кто это сделал» у них тот же.
+  var src = impSourceLabel(item)
+    ? '<div class="imp-sum-line imp-sum-dim">' + escHtml(impSourceLabel(item)) + "</div>"
+    : "";
   if (item.kind === "case" || item.kind === "writ_waiver" || item.status !== "done") {
-    return escHtml(impResultText(item));
+    return escHtml(impResultText(item)) + src;
   }
   var g = impResultParts(item);
   var v = impVerdict(item);
-  var html = '<div class="imp-verdict is-' + v.kind + '">' + escHtml(v.text) + "</div>";
+  var html = '<div class="imp-verdict is-' + v.kind + '">' + escHtml(v.text) + "</div>" + src;
   function line(cls, title, arr) {
     if (!arr.length) return "";
     return '<div class="imp-sum-line ' + cls + '"><b>' + title + "</b> "
@@ -3124,6 +3173,16 @@ function acResultText(item) {
   if (added) parts.push("+" + added + " добавлено");
   if (item.reactivated) parts.push(item.reactivated + " возвращено из архива");
   if (item.promoted) parts.push(item.promoted + " материалов стали делами");
+  // ПОТЕРЯ — перед штатным отсевом: это единственная корзина, ради которой
+  // оператор возвращается к делу. В ссылочном режиме (капчёвые суды)
+  // непрочитанная карточка убивает строку целиком — роль банка решается
+  // только по ней. Повтор пачки уже стоит в очереди резерва (пачка живёт в
+  // KV сутки), поэтому обещаем машину, а не задачу оператору.
+  if (item.fetch_error) {
+    parts.push("⛔ " + nPlural(item.fetch_error,
+      "карточка не открылась", "карточки не открылись", "карточек не открылось")
+      + " — повторит локальная машина");
+  }
   if (item.already) parts.push(item.already + " уже в базе");
   if (item.not_found) parts.push(item.not_found + " не найдено");
   if (item.refused) parts.push(item.refused + " отказано");
@@ -3161,6 +3220,7 @@ function renderImportHistory(items) {
       + '<span class="imp-hist-court"><b>' + escHtml(court) + '</b></span>'
       + '<span>' + escHtml(it.operator || "без имени") + '</span>'
       + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
+      + (impSourceLabel(it) ? '<span class="imp-hist-meta">' + escHtml(impSourceLabel(it)) + '</span>' : '')
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
       + '</div>' + linesHtml + '</div>';
   }).join("");

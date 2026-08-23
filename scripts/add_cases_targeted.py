@@ -51,11 +51,17 @@ EXIT_NETWORK = 4
 EXIT_BAD_JOB = 5
 
 # Какие исходы строк в какой счётчик сводки идут. Всё прочее (refused,
-# fetch_error, нераспознанный ввод) считается «отказано» — построчная причина
-# видна в lines.
+# нераспознанный ввод) считается «отказано» — построчная причина видна в lines.
+# ⚠️ fetch_error СВОЙ счётчик с 23.08.2026, и это не косметика: он —
+# единственный машинный признак, что строка ПОТЕРЯНА и её надо переделать.
+# Пока он сливался в «отказано», сетевой сбой был неотличим от отказа по
+# правилам, и очередь резерва (ops/mac-local-run/import_queue.jq) не могла
+# выбрать пачку — до пачек локальная дочитка не доходила вовсе, хотя ссылочный
+# режим (единственный путь для капчёвых судов) без карточки теряет строку
+# ЦЕЛИКОМ: роль банка решается по карточке, card-blind записи там не выходит.
 _COUNTER_STATUSES = (
     ta.ST_ADDED_MAIN, ta.ST_ADDED_BANK, ta.ST_REACTIVATED,
-    ta.ST_PROMOTED, ta.ST_ALREADY, ta.ST_NOT_FOUND,
+    ta.ST_PROMOTED, ta.ST_ALREADY, ta.ST_NOT_FOUND, ta.ST_FETCH_ERROR,
 )
 
 
@@ -95,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         "dry_run": bool(args.dry_run),
         "items": 0, "added_main": 0, "added_bank": 0, "reactivated": 0,
         "promoted": 0, "already": 0, "refused": 0, "not_found": 0,
+        "fetch_error": 0,
         "lines": [],
     }
 
@@ -167,12 +174,21 @@ def main(argv: list[str] | None = None) -> int:
     log.info(
         "Точечное добавление (оператор %s): строк %d | +%d основная | "
         "+%d иски банка | %d из архива | %d промоушенов | %d уже в базе | "
-        "%d не найдено | %d отказано%s",
+        "%d не найдено | %d отказано | %d карточка не открылась%s",
         operator or "—", summary["items"], summary["added_main"],
         summary["added_bank"], summary["reactivated"], summary["promoted"],
         summary["already"], summary["not_found"], summary["refused"],
+        summary["fetch_error"],
         " | DRY-RUN" if args.dry_run else "",
     )
+    if summary["fetch_error"]:
+        # Отдельной строкой WARNING — зеркало дампового импортёра: провал
+        # чтения карточек не должен быть виден только в общей сводке.
+        log.warning(
+            "%d строк потеряно: карточка не открылась. Пачка остаётся в KV "
+            "сутки — её переделает очередь резерва на Mac",
+            summary["fetch_error"],
+        )
 
     if results and all(r["status"] == ta.ST_FETCH_ERROR for r in results):
         # Тотальный сбой сети — это НЕ продуктовый итог: журнал должен

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Court Monitor — импорт дампов капчёвых судов НА MAC (резерв канала оператора).
+# Court Monitor — разбор очереди ОПЕРАТОРСКИХ ИМПОРТОВ НА MAC (резерв).
 #
 # ЗАЧЕМ. Оператор решает проверочный код, вставляет выдачу суда в админку →
 # Worker кладёт дамп в KV и диспатчит import_cases.yml. Пока суды режут адреса
@@ -11,12 +11,22 @@
 # Сбера: тем же импортёром, по тем же эндпоинтам Worker'а, с тем же отчётом в
 # журнал админки (оператор ничего нового не делает).
 #
-# ПОТОК (зеркало .github/workflows/import_cases.yml):
-#   GET /admin/import-log  → какие дампы облако не смогло обработать
-#   GET /import-dump?key=  → сам дамп из KV (Bearer PUSH_SECRET)
-#   scripts/import_search_dump.py → ops/stage_data_files.sh → commit + push
-#   POST /import-result    → сводка оператору (пейлоад — ops/import_result_body.jq,
-#                            ОДИН файл с облаком: копия разъехалась бы молча)
+# КАНАЛОВ ДВА (с 23.08.2026). Второй — точечные пачки «Добавить дела»: они
+# умирают от блока ровно так же, а в ССЫЛОЧНОМ режиме (единственный путь для
+# капчёвых судов) даже хуже — роль банка решается только по карточке, и без
+# неё строка выбрасывается ЦЕЛИКОМ, card-blind записи там не выходит.
+# Пачки есть на ЛЮБОЙ территории, поэтому этот скрипт работает и там, где
+# капчёвых судов нет вовсе.
+#
+# ПОТОК (зеркало import_cases.yml и add_cases.yml):
+#   GET /admin/import-log  → что облако не смогло обработать (оба канала)
+#   GET /import-dump?key=  → сам дамп из KV        (канал дампов)
+#   GET /add-case-job?key= → задание пачки из KV   (канал пачек)
+#   scripts/import_search_dump.py | scripts/add_cases_targeted.py
+#       → ops/stage_data_files.sh → commit + push
+#   POST /import-result    → сводка оператору. Пейлоады — ops/import_result_body.jq
+#                            и ops/add_case_result_body.jq, ОДНИ файлы с облаком:
+#                            копия счётчиков разъехалась бы молча.
 #
 # ЗАПУСК (обычно — из parse_all.sh следом за парсингом территории):
 #   bash ops/mac-local-run/import_dumps.sh [путь-к-клону]
@@ -74,8 +84,14 @@ CONF_DIR="$HOME/.config/court-monitor"
 # workers.dev режет дефолтный UA некоторых клиентов (ошибка 1010 → 403 до
 # Worker'а; инцидент живого лога 13–16.07.2026) — представляемся явно.
 UA="court-monitor-import-mac/1.0"
-DUMP_TTL=86400          # столько живёт дамп в KV — старше не забрать
-STARTED_GRACE=900       # запись «идёт» моложе 15 мин — облачный джоб ещё жив
+DUMP_TTL=86400          # столько живёт дамп/задание в KV — старше не забрать
+STARTED_GRACE=900       # ДАМП «идёт» моложе 15 мин — облачный джоб ещё жив
+# У ПАЧЕК грейс свой и вчетверо больше: add_cases.yml стоит на
+# timeout-minutes: 45 (до 20 номеров × все открытые суды с вежливой паузой),
+# и дамповые 15 мин пустили бы Mac писать в те же файлы посреди живого
+# облачного джоба. Плюс запись может простоять в "dispatched" всё время
+# очереди cases-data-write — у группы GitHub живёт один pending.
+CASE_STARTED_GRACE=3000
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 ts()  { date '+%Y-%m-%d %H:%M:%S'; }
@@ -117,16 +133,19 @@ command -v jq >/dev/null 2>&1 || die "нужен jq (brew install jq) — им �
 
 # ── Территория: есть ли тут вообще капчёвые суды ─────────────────────────────
 # Дампы существуют только там, где поиск закрыт проверочным кодом (Свердловская
-# обл.). На ХМАО импортировать нечего — молча выходим, чтобы ежедневный
-# parse_all.sh не пугал юриста «нет настроек Worker'а».
+# обл.) — на ХМАО их не бывает.
+# ⚠️ Но выходить из-за этого НЕЛЬЗЯ (23.08.2026): в очереди теперь второй канал
+# — точечные пачки из админки, а их вкладка открыта ОБЕИМ ролям на ЛЮБОЙ
+# территории. Прежний ранний выход оставил бы ХМАО вовсе без локальной дочитки.
+# Тишину, ради которой он и стоял («не пугать юриста нехваткой настроек»),
+# держит гейт Worker-конфига ниже: нет worker.<регион> — тихий выход.
 REGION_CODE=$(cm_region_code "$PYTHON")
 [ -n "$REGION_CODE" ] || die "не смог определить регион клона $REPO"
 GATED=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
 from court_monitor.regions import get_region
 print(sum(1 for c in get_region().first_instance_courts if c.search_gated))' 2>/dev/null)
 if [ "${GATED:-0}" = "0" ]; then
-  log "Территория $REGION_CODE: капчёвых судов нет — дампы не импортируются, выход"
-  exit 0
+  log "Территория $REGION_CODE: капчёвых судов нет — дампов не ждём, только пачки"
 fi
 
 # ── Worker: адрес и секреты (общий парсер cm_worker_conf — как у пульта) ─────
@@ -251,22 +270,27 @@ if [ "$CHECK_ONLY" = "1" ]; then
     esac
     if resolve_worker_auth; then
       if [ "$AUTH_KIND" = "push_secret" ]; then
-        log "✓ доступ к дампам: подходит push_secret"
+        log "✓ доступ к заданиям: подходит push_secret"
       else
-        log "✓ доступ к дампам: идём владельческим секретом"
+        log "✓ доступ к заданиям: идём владельческим секретом"
         log "  (push_secret в файле не подошёл — это нормально, он не нужен)"
       fi
     else
-      log "✗ доступ к дампам: Worker не принял ни один секрет (401)"
+      log "✗ доступ к заданиям: Worker не принял ни один секрет (401)"
     fi
     if [ -n "$AUTH_KIND" ] && [ -s "$TMP_DIR/log.json" ]; then
       # Разбор отделён от подсчёта: битый ответ обязан быть виден. Раньше
       # ошибка jq уходила в /dev/null, и обрезанный журнал показывал «0».
       if queue=$(jq -r --argjson now "$(date +%s)" --argjson ttl "$DUMP_TTL" \
                     --argjson grace "$STARTED_GRACE" \
+                    --argjson cgrace "$CASE_STARTED_GRACE" \
                     -f "$REPO/ops/mac-local-run/import_queue.jq" \
                     "$TMP_DIR/log.json" 2>/dev/null); then
-        log "  дампов, которые резерв забрал бы прямо сейчас: $(printf '%s' "$queue" | grep -c . || true)"
+        # Каналы называем по отдельности: «5 в очереди» не отвечает на вопрос
+        # оператора «мой дамп подхватят?» — у пачек своя цена и свой грейс.
+        n_all=$(printf '%s' "$queue" | grep -c . || true)
+        n_case=$(printf '%s' "$queue" | grep -c '^case' || true)
+        log "  резерв забрал бы прямо сейчас: $n_all (из них точечных пачек: $n_case)"
       else
         log "  ✗ журнал пришёл битым — импорт бы не пошёл (ответ Worker'а не разобрался)"
       fi
@@ -342,39 +366,59 @@ post_body() {  # $1 = файл с JSON-телом (само тело не сек
   curl -s --compressed -m 20 -A "$UA" -X POST -K "$CURL_CFG" \
     -H "Content-Type: application/json" --data @"$1" -o /dev/null || true
 }
-post_status() {  # $1 = ключ дампа, $2 = статус
+# Имя ключа в теле отчёта решает КАНАЛ: у дампов dump_key, у точечных пачек
+# job_key. Worker принимает оба и по нему же различает канал
+# (handleImportResult, worker.js) — путать нельзя, иначе запись журнала не
+# найдётся и отчёт молча пропадёт (Worker ответит 404, а мы игнорируем код).
+key_field() {  # $1 = ключ (import:dump:… | import:case:…)
+  case "$1" in
+    import:case:*) echo "job_key" ;;
+    *)             echo "dump_key" ;;
+  esac
+}
+post_status() {  # $1 = ключ, $2 = статус
   # DRY-RUN не трогает журнал оператора вовсе: иначе холостая проверка
   # перевела бы запись в «идёт…» и оставила её такой навсегда.
   [ -n "$WORKER_URL" ] && [ "$DRY_RUN" != "1" ] || return 0
-  jq -n --arg dk "$1" --arg st "$2" '{dump_key:$dk, status:$st}' \
+  # source:"mac" — чтобы застрявшее «выполняется» называло держателя записи.
+  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg st "$2" \
+     '{($kf): $k, status:$st, source:"mac"}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
-post_error() {  # $1 = ключ дампа, $2 = текст
+post_error() {  # $1 = ключ, $2 = текст
   [ -n "$WORKER_URL" ] || return 0
-  jq -n --arg dk "$1" --arg er "$2" '{dump_key:$dk, status:"failed", error:$er}' \
+  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg er "$2" \
+     '{($kf): $k, status:"failed", error:$er, source:"mac"}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
 post_summary() {  # $1 = ключ дампа, $2 = статус, $3 = summary импортёра
   [ -n "$WORKER_URL" ] || return 0
   # Пейлоад ОДИН с облаком: ops/import_result_body.jq. Своя сборка здесь
   # означала бы молча разъехавшиеся счётчики — этим проект уже болел дважды.
-  jq -c --arg dk "$1" --arg st "$2" --arg ru "" \
+  jq -c --arg dk "$1" --arg st "$2" --arg ru "" --arg src mac \
      -f "$REPO/ops/import_result_body.jq" "$3" > "$TMP_DIR/body.json" \
     && post_body "$TMP_DIR/body.json"
 }
+post_case_summary() {  # $1 = ключ задания, $2 = статус, $3 = summary скрипта
+  [ -n "$WORKER_URL" ] || return 0
+  # Свой общий файл — у канала пачек другой ключ и другие счётчики.
+  jq -c --arg jk "$1" --arg st "$2" --arg ru "" --arg src mac \
+     -f "$REPO/ops/add_case_result_body.jq" "$3" > "$TMP_DIR/body.json" \
+    && post_body "$TMP_DIR/body.json"
+}
 
-# ── Коммит и пуш результата одного импорта ───────────────────────────────────
-commit_and_push() {  # $1 = имя суда, $2 = added, $3 = added_bank
-  local suffix=""
+# ── Коммит и пуш результата одной обработанной записи ────────────────────────
+# Общее тело обоих каналов: список файлов и ретраи push'а обязаны быть ОДНИ,
+# иначе разъедутся молча (этим проект уже болел — см. ops/stage_data_files.sh).
+commit_data() {  # $1 = сообщение коммита
   # Список файлов ОДИН с облаком: пути спрашиваются у court_monitor.config.
   bash ops/stage_data_files.sh >>"$LOG" 2>&1 || return 1
   if git diff --cached --quiet; then
     log "  изменений в данных нет — коммит не нужен"
     return 0
   fi
-  [ "$3" != "0" ] && suffix=" · 🏦 +$3 в трек"
   git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-      commit -m "📥 Импорт (Mac): $1 +$2$suffix" >>"$LOG" 2>&1 || return 1
+      commit -m "$1" >>"$LOG" 2>&1 || return 1
   # Ретраи: облачный джоб или парсинг могли запушить между pull и push.
   local i
   for i in 1 2 3; do
@@ -384,6 +428,14 @@ commit_and_push() {  # $1 = имя суда, $2 = added, $3 = added_bank
     sleep 3
   done
   git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1
+}
+commit_and_push() {  # $1 = имя суда, $2 = added, $3 = added_bank
+  local suffix=""
+  [ "$3" != "0" ] && suffix=" · 🏦 +$3 в трек"
+  commit_data "📥 Импорт (Mac): $1 +$2$suffix"
+}
+commit_and_push_case() {  # $1 = сколько дел добавлено пачкой
+  commit_data "📌 Точечное добавление (Mac): +$1"
 }
 
 # ── Один импорт: дамп-файл → cases.json → отчёт ──────────────────────────────
@@ -425,6 +477,50 @@ run_import() {  # $1 = файл дампа, $2 = домен суда, $3 = оп�
   [ "$status" = "done" ]
 }
 
+# ── Одна точечная пачка: job-JSON → cases.json → отчёт ───────────────────────
+# Зеркало run_import(), но канал другой: строки пачки (номера и ссылки на
+# карточки) уже лежат в KV, скрипт ходит к судам сам.
+#
+# ⚠️ Повторяем пачку ЦЕЛИКОМ, а не одни упавшие строки. Во-первых, уже
+# добавленное отсеет дедуп (стоит до карточки — лишнего HTTP нет). Во-вторых,
+# отчёт ПЕРЕЗАПИСЫВАЕТ счётчики записи журнала: повтор двух строк из двадцати
+# оставил бы оператору сводку «+2 добавлено» и спрятал исходные 18.
+run_add_cases() {  # $1 = файл задания, $2 = ключ|""
+  local job="$1" key="$2"
+  local summary="$TMP_DIR/case_summary.json" rc=0 added lost items status
+  local dry=""
+  rm -f "$summary"
+  [ "$DRY_RUN" = "1" ] && dry="--dry-run"
+  IMPORT_SUMMARY_PATH="$summary" "$PYTHON" scripts/add_cases_targeted.py \
+    --job "$job" $dry >>"$LOG" 2>&1 || rc=$?
+  if [ ! -s "$summary" ]; then
+    log "  ERROR: скрипт упал до разбора задания (код $rc)"
+    [ -n "$key" ] && post_error "$key" \
+      "резерв на Mac: скрипт упал до разбора задания (код $rc)"
+    return 1
+  fi
+  added=$(jq -r '(.added_main // 0) + (.added_bank // 0) + (.reactivated // 0) + (.promoted // 0)' "$summary")
+  lost=$(jq -r '.fetch_error // 0' "$summary")
+  items=$(jq -r '.items // 0' "$summary")
+  log "  итог: +$added из $items строк · $lost без карточки (код $rc)"
+
+  status=done
+  if [ "$rc" -ne 0 ]; then
+    status=failed
+  elif [ "$DRY_RUN" = "1" ]; then
+    log "  DRY-RUN: коммит и отчёт пропущены"
+    return 0
+  elif ! commit_and_push_case "$added"; then
+    # Зеркало облака: «done» только когда И скрипт отработал, И данные уехали.
+    status=failed
+    jq '.error = "резерв на Mac: пачка обработана, но коммит не запушился — повторите пачку, уже добавленное отсеет дедуп"' \
+      "$summary" > "$summary.tmp" && mv "$summary.tmp" "$summary"
+    log "  ERROR: коммит/push не удался"
+  fi
+  [ -n "$key" ] && post_case_summary "$key" "$status" "$summary"
+  [ "$status" = "done" ]
+}
+
 # ── Режим 1: локальный файл (Worker не участвует) ────────────────────────────
 if [ -n "$FILE_ARG" ]; then
   [ -f "$FILE_ARG" ] || die "нет файла дампа: $FILE_ARG"
@@ -459,16 +555,17 @@ fi
 # чтобы их проверял тест, а не только глаза).
 NOW=$(date +%s)
 jq -r --argjson now "$NOW" --argjson ttl "$DUMP_TTL" --argjson grace "$STARTED_GRACE" \
+   --argjson cgrace "$CASE_STARTED_GRACE" \
    -f "$REPO/ops/mac-local-run/import_queue.jq" "$TMP_DIR/log.json" \
    > "$TMP_DIR/queue.tsv" \
   || die "не разобрал журнал импортов (jq)"
 
 QUEUE=$(wc -l < "$TMP_DIR/queue.tsv" | tr -d ' ')
 if [ "$QUEUE" = "0" ]; then
-  log "Очередь пуста — необработанных дампов за сутки нет (к судам не ходили)"
+  log "Очередь пуста — необработанных записей за сутки нет (к судам не ходили)"
   exit 0
 fi
-log "К обработке дампов: $QUEUE"
+log "К обработке записей: $QUEUE"
 # Работа точно есть — теперь можно идти к судам (маршруты, канарейка, git).
 courts_gate queued "$QUEUE"
 
@@ -476,13 +573,59 @@ rc=0
 done_n=0
 # Читаем очередь с ОТДЕЛЬНОГО дескриптора: git/ssh внутри цикла иначе могли бы
 # съесть остаток файла со stdin, и часть дампов молча не обработалась бы.
-while IFS=$'\t' read -r uuid domain operator prev <&3; do
+while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
+  # ⚠️ Разбор ТЕРПИМ к старому формату очереди намеренно. LaunchAgent гоняет
+  # ЭТОТ скрипт (из клона-эталона) по ВСЕМ территориям, а import_queue.jq
+  # берётся из клона территории — между деплоем эталона и merge в форк они
+  # неизбежно разной версии. Прежняя очередь отдавала 4 поля без канала, и
+  # жёсткий разбор на 5 сдвинул бы их все: домен уехал бы в uuid, и работающий
+  # канал дампов территории сломался бы молча на весь период раскатки.
+  if [ "$f1" = "dump" ] || [ "$f1" = "case" ]; then
+    kind="$f1"; uuid="$f2"; domain="$f3"; operator="$f4"; prev="$f5"
+  else
+    kind="dump"; uuid="$f1"; domain="$f2"; operator="$f3"; prev="$f4"
+  fi
+  # Прочерк — способ передать пустое значение через TSV (см. dash в
+  # import_queue.jq): без него пустой домен пачки или оператор без имени
+  # схлопнули бы табы и сдвинули оставшиеся поля.
+  [ "$domain" = "-" ] && domain=""
+  [ "$operator" = "-" ] && operator=""
   [ -n "$uuid" ] || continue
-  key="import:dump:$uuid"
   # ⚠️ Фигурные скобки обязательны: `«$prev»` bash 3.2 в локали Терминала
   # разбирает как имя «prev»» (первый байт ёлочки — 0xC2 — приклеивается к
-  # имени), и при `set -u` прогон падает на первом же дампе. В локали C та же
+  # имени), и при `set -u` прогон падает на первой же записи. В локали C та же
   # строка работает — поэтому дефект пережил и bash -n, и репетицию.
+  if [ "$kind" = "case" ]; then
+    # Точечная пачка из админки: строки (номера/ссылки) лежат в KV заданием,
+    # суд у каждой строки может быть свой — домена у записи нет.
+    key="import:case:$uuid"
+    log "→ точечная пачка · оператор ${operator:-—} · в журнале «${prev:-?}» · $uuid"
+    job="$TMP_DIR/case_job.json"
+    post_status "$key" started
+    worker_cfg "/add-case-job?key=$key"
+    if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$job"; then
+      log "  ERROR: задание не скачалось — истёк TTL 24 ч или сеть"
+      post_error "$key" "резерв на Mac: задание не скачалось из KV (истёк TTL 24 ч?) — отправьте пачку заново"
+      rc=1
+      continue
+    fi
+    size=$(wc -c < "$job" | tr -d ' ')
+    if [ "$size" -lt 10 ]; then
+      log "  ERROR: задание подозрительно мало ($size байт)"
+      post_error "$key" "резерв на Mac: задание подозрительно мало ($size байт) — отправьте пачку заново"
+      rc=1
+      continue
+    fi
+    log "  задание: $size байт"
+    if run_add_cases "$job" "$key"; then
+      done_n=$((done_n + 1))
+    else
+      rc=1
+    fi
+    continue
+  fi
+
+  key="import:dump:$uuid"
   log "→ $domain · оператор ${operator:-—} · в журнале «${prev:-?}» · $uuid"
   dump="$TMP_DIR/dump.html"
   post_status "$key" started
@@ -510,9 +653,9 @@ done 3< "$TMP_DIR/queue.tsv"
 
 log "Готово: обработано $done_n из $QUEUE (код $rc)"
 if [ "$rc" -ne 0 ]; then
-  alert_telegram "часть дампов не обработана ($done_n из $QUEUE) — см. лог резерва"
+  alert_telegram "часть записей не обработана ($done_n из $QUEUE) — см. лог резерва"
   notify "Импорт: обработано $done_n из $QUEUE"
 else
-  notify "Импорт дампов: $done_n из $QUEUE"
+  notify "Очередь импортов: $done_n из $QUEUE"
 fi
 exit "$rc"

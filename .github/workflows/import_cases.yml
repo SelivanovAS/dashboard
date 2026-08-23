@@ -89,7 +89,7 @@ jobs:
       - name: POST started (журнал импортов в админке)
         run: |
           jq -n --arg dk "$DUMP_KEY" --arg ru "$RUN_URL" \
-            '{dump_key:$dk, status:"started", run_url:$ru}' \
+            '{dump_key:$dk, status:"started", run_url:$ru, source:"github"}' \
           | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
               -H "Authorization: Bearer $PUSH_SECRET" \
               -H "Content-Type: application/json" \
@@ -169,10 +169,10 @@ jobs:
             # разъехалась бы с маковской ровно так же, как разъезжались списки
             # файлов данных, — и счётчик молча пропал бы из сводки оператора.
             BODY=$(jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH")
+              --arg src github -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{dump_key:$dk, status:$st, run_url:$ru,
+              '{dump_key:$dk, status:$st, run_url:$ru, source:"github",
                 error:"прогон упал до разбора дампа (скачивание/зависимости) — детали в run_url"}')
           fi
           printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \

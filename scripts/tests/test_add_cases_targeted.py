@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -885,6 +886,44 @@ class TestWiring:
         assert 'kind !== "case"' in js.replace("record.kind", "kind")
         # кап пачки
         assert "ADD_CASE_MAX_ITEMS" in js
+
+    def test_targeted_counters_reach_operator(self):
+        """Сквозная проводка счётчиков пачки: jq-пейлоад → числовой whitelist
+        Worker'а → сводка админки. Рвётся молча в любом из трёх звеньев — этим
+        проект уже болел (счётчики трека «Иски банка», 14.08.2026).
+
+        Отдельно про fetch_error: до 23.08.2026 он сливался в «отказано», и
+        потерянная строка была неотличима от отказа по правилам — ни оператор,
+        ни очередь резерва узнать о ней не могли."""
+        body = _read("ops/add_case_result_body.jq")
+        worker = _read("cloudflare-worker/worker.js")
+        admin = _read("cloudflare-worker/admin_page.js")
+        shown = ("added_main", "added_bank", "reactivated", "promoted",
+                 "already", "not_found", "refused", "fetch_error")
+        # items едет ради полноты записи, но в строке сводки не печатается:
+        # размер пачки админка берёт из items_count (его ставит Worker при
+        # приёме, ещё до прогона) — поэтому третьего звена у него нет.
+        for key in shown + ("items",):
+            assert re.search(rf"{key}:\s*\(\s*\.{key}\s*//\s*0\s*\)", body), \
+                f"{key} не уезжает из отчёта"
+            assert f'"{key}"' in worker, f"{key} режет whitelist Worker'а"
+        for key in shown:
+            assert f"item.{key}" in admin, f"{key} не доходит до сводки админки"
+        # Пейлоад ОДИН у облака и резерва: копия разъехалась бы молча.
+        yml = _read(".github/workflows/add_cases.yml")
+        assert "-f ops/add_case_result_body.jq" in yml, \
+            "workflow собирает пейлоад сам — вторая копия списка счётчиков"
+        # Потеря названа потерей и обещает того, кто её переделает.
+        assert "карточка не открылась" in admin
+        assert "повторит локальная машина" in admin
+
+    def test_fetch_error_is_its_own_counter(self):
+        """ST_FETCH_ERROR обязан считаться отдельно от «отказано»: это признак
+        ПОТЕРИ строки (в ссылочном режиме роль банка решается только по
+        карточке, card-blind записи там не выходит), и по нему очередь резерва
+        выбирает пачку на повтор."""
+        assert ta.ST_FETCH_ERROR in cli._COUNTER_STATUSES
+        assert "fetch_error" in _read("scripts/add_cases_targeted.py")
 
     def test_admin_page_contract(self):
         js = _read("cloudflare-worker/admin_page.js")
