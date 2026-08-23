@@ -134,6 +134,64 @@ def test_run_sub_arrow_gated_by_owner():
     )
 
 
+# ── Операторская: свой сигнал вместо чужого здоровья (23.08.2026) ───────────
+# parse_health.json наполняется только по courts_for_search, а тот ИСКЛЮЧАЕТ
+# search_gated — то есть ровно суды оператора (на Урале 56 из 69). Плитка
+# «Парсеры: все N ok» описывала суды, которых он не ведёт, и читалась как «мои
+# суды в порядке». У оператора на её месте — состояние ЕГО канала: открываются
+# ли карточки (считается по журналу импортов, без единого лишнего запроса).
+
+def test_operator_gets_cards_tile_instead_of_parsers():
+    src = _admin()
+    pult = src.split('<div class="pult">', 1)[1].split("</main>", 1)[0]
+    assert "${isOperator ?" in pult, "Плитка потеряла ветку по роли."
+    block = pult.split("${isOperator ?", 1)[1].split("<button class=\"stat-card\" data-accent=\"gray\" data-href=\"cron\"", 1)[0]
+    assert 'id="tile-cards-value"' in block, "у оператора пропала плитка «Карточки судов»"
+    assert 'id="tile-health-value"' in block, "у владельца пропала плитка «Парсеры»"
+    # Кликабельность — только через data-goto/data-href (см. тест выше).
+    assert 'data-goto="#import"' in block, (
+        "плитка оператора должна вести на его вкладку, иначе она мертва")
+    assert "function renderCardsTile" in src
+
+
+def test_parser_health_names_its_scope():
+    """Карточка обязана говорить, что капчёвые суды в неё не входят."""
+    src = _admin()
+    body = src.split('document.getElementById("health-updated")', 1)[1][:500]
+    assert "открытым поиском" in body and "капчёвые" in body, (
+        "«все N ok» снова молчит про охват — оператор читает это как «мои "
+        "суды в порядке», хотя про них карточка не знает ничего")
+
+
+# ── «Мои суды»: очередь оператора, а не всей территории (23.08.2026) ─────────
+# Секрет operator ОДИН на всех сопровождающих, и каждый видел общую очередь на
+# все капчёвые суды, а автоподстановка выбирала самый просроченный из ВСЕХ —
+# почти наверняка чужой.
+
+def test_my_courts_are_local_and_optional():
+    src = _admin()
+    assert 'MY_COURTS_KEY = "admin_my_courts"' in src
+    assert "function myCourts" in src and "function saveMyCourts" in src
+    body = src.split("function renderImportFreshness", 1)[1][:6000]
+    assert "var hasMine = myCourtsCount() > 0" in body, (
+        "пустой набор обязан означать «все суды» — иначе оператор до первого "
+        "выбора увидит пустую очередь")
+    assert "hasMine ? rows.filter" in body, (
+        "бейджи и плитка «Импорты» должны считать по подсети оператора")
+    # Автоподстановка суда — из посчитанной подсети, а не из всего реестра.
+    assert "counted[0].key" in body
+
+
+def test_my_courts_edit_controls_are_not_in_summary():
+    """Кнопка внутри <summary> переключала бы саму свёртку (и вложенный
+    интерактив) — та же грабля, что в карточках подписчиков."""
+    src = _admin()
+    summary = re.search(r"<summary>Свежесть по судам[^<]*<span[^>]*></span>\s*</summary>", src)
+    assert summary, "не нашёл шапку свёртки светофора"
+    assert "<button" not in summary.group(0)
+    assert 'id="imp-my-bar"' in src
+
+
 # ── Постоянные судебные присутствия в форме импорта (14.08.2026) ─────────────
 # Скан площадок нашёл на Урале два реальных присутствия: Пышма у Камышловского
 # и Ачит у Красноуфимского (обе площадки в реестре с 16.07.2026). В админку они

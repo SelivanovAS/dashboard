@@ -916,6 +916,20 @@ class TestWorkflowWiring:
         assert "record.fetch_fail" in worker and "record.card_failed" in worker
         assert "cardsUnread === 0" in worker
 
+    def test_freshness_client_mirrors_server_gate(self):
+        """Клиентский фолбэк светофора обязан считать карточки так же, как
+        сервер. Гейт cardsUnread живёт в worker.js (import:last не пишется), но
+        админка подмешивает в светофор ещё и записи журнала — и делала это БЕЗ
+        проверки карточек. Запись со status:"done" новее карты, поэтому импорт
+        Верх-Исетского (+0 дел, 12 исков потеряно) всё равно красил суд зелёным
+        «импортирован сегодня»: серверная защита обходилась в браузере."""
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        body = admin.split("function renderImportFreshness", 1)[1][:3000]
+        assert "it.fetch_fail" in body and "it.card_failed" in body, (
+            "светофор засчитывает импорт, у которого карточки не читались")
+        # Пультовые операции светофор тоже не бумпают (зеркало whitelist'а).
+        assert 'it.kind === "case"' in body and 'it.kind === "writ_waiver"' in body
+
     def test_breaker_tuned_for_dump_size(self):
         """Дефолты предохранителя считаны на боевой обход сотен карточек:
         проба «каждые 30 пропущенных» в дампе на 25 строк = «никогда», и

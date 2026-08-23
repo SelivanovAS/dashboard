@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Пометка «лист не нужен» через админку — CLI для workflow add_cases.yml.
+"""Пометка «лист не нужен» через админку — CLI для workflow mark_writ.yml.
 
 Зачем. Иск банка удовлетворён, решение вступило в силу, а исполнительный лист
 не выдают — потому что ответчик погасил долг добровольно. Из карточки суда это
@@ -12,11 +12,11 @@
 2-28/2026 ждало лист 171 день.
 
 Единственный источник знания — человек, поэтому канал ручной: юрист жмёт
-кнопку в админке, Worker кладёт задание в KV (`import:waiver:<uuid>`) и
+кнопку в админке, Worker кладёт задание в KV (`import:writ:<uuid>`) и
 диспатчит workflow, тот скачивает job-файл и запускает этот скрипт.
 
 Формат job-файла (JSON):
-    {"kind": "waiver",
+    {"kind": "writ_waiver",
      "action": "set",             // "set" — пометить, "clear" — снять
      "operator": "Иванова",
      "items": [{"case_id": "2-28/2026 (2-438/2025;)",
@@ -111,6 +111,26 @@ def find_case(cases: list[dict], case_id: str, domain: str) -> dict | None:
     return None
 
 
+# Маркеры построчного отчёта — те же, что у остальных каналов ввода
+# (import_search_dump.py, targeted_add.py): оператор читает все три отчёта
+# одними глазами. ⚠️ Строки, а не словари: Worker кладёт их в журнал через
+# `body.lines.map(String)` (worker.js), и dict приезжал в админку как
+# «[object Object]».
+_LINE_MARKS = {
+    "waived": "WAIVED",
+    "updated": "UPDATED",
+    "cleared": "CLEARED",
+    "not_found": "NOT FOUND",
+}
+
+
+def report_line(case_id: str, status: str, note: str) -> str:
+    """Строка построчного отчёта: «[МАРКЕР] номер — пояснение»."""
+    mark = _LINE_MARKS.get(status, "REFUSED")
+    tail = f" — {note}" if note else ""
+    return f"[{mark}] {case_id or '?'}{tail}"
+
+
 def apply_item(case: dict, action: str, reason: str, operator: str,
                today: str) -> str:
     """Поставить/снять пометку. Возвращает исход строки для сводки."""
@@ -186,29 +206,30 @@ def main(argv: list[str] | None = None) -> int:
         reason = str(it.get("reason") or "").strip()
         if not case_id or not domain:
             summary["refused"] += 1
-            summary["lines"].append(
-                {"case": case_id or "?", "status": "bad_item",
-                 "note": "не указан номер дела или суд"})
+            summary["lines"].append(report_line(
+                case_id, "bad_item", "не указан номер дела или суд"))
             continue
         case = find_case(cases, case_id, domain)
         if case is None:
             summary["not_found"] += 1
-            summary["lines"].append(
-                {"case": case_id, "status": "not_found",
-                 "note": f"нет в треке «Иски банка» ({domain})"})
+            summary["lines"].append(report_line(
+                case_id, "not_found", f"нет в треке «Иски банка» ({domain})"))
             continue
         outcome = apply_item(case, action, reason, operator, today)
         if outcome in ("waived", "updated", "cleared"):
             changed += 1
             summary[outcome] += 1
-            note = lifecycle.writ_waive_reason_ru(
-                case.get("first_instance") or {})
+            # У снятия причины уже нет (ключ удалён) — пишем, что случилось
+            # с делом: оператор читает отчёт как список свершившегося.
+            note = ("дело вернулось в очередь ожидания ИЛ"
+                    if outcome == "cleared"
+                    else lifecycle.writ_waive_reason_ru(
+                        case.get("first_instance") or {}))
         else:
             summary["refused"] += 1
             note = ("причина не из списка" if outcome == "bad_reason"
                     else "пометки на деле не было")
-        summary["lines"].append(
-            {"case": case_id, "status": outcome, "note": note})
+        summary["lines"].append(report_line(case_id, outcome, note))
 
     if changed and not args.dry_run:
         save_bank_json(data, config.JSON_BANK_PATH,

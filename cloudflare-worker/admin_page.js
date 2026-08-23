@@ -57,18 +57,20 @@ export function renderAdminHtml(secret, role, cfg) {
   const IMPORT_CHIP = isOperator
     ? '<a class="chip-btn active" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="true" tabindex="0">Импорт</a>'
     : '<a class="chip-btn" href="#import" id="nav-import" role="tab" aria-controls="import" aria-selected="false" tabindex="-1">Импорт</a>';
-  // Секция «Импорт дел» — вкладка: первым — блок точечного добавления
-  // (обе роли, любой регион), ниже — импорт дампов капчёвых судов.
-  const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import">
-    <div class="section-head">
-      <span class="section-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      </span>
-      <h2 class="section-title">Импорт дел</h2>
-      <span class="section-counter" id="imp-court-count"></span>
-    </div>
-    <div class="card" id="ac-card">
-      <div class="imp-hint" style="margin-bottom:8px;"><b>Добавить дела точечно</b> — по одному делу в строке, до 20 за раз:
+  // ── Секция «Импорт дел» ────────────────────────────────────────────────────
+  // Порядок карточек решает РОЛЬ. У оператора еженедельная работа — дампы
+  // капчёвых судов, и раньше она уезжала вниз под блок точечного добавления
+  // (задача эпизодическая): рабочая очередь-светофор начиналась ниже первого
+  // экрана. У владельца дампов нет вовсе (.imp-form прячет loadImportCourts),
+  // поэтому ему прежний порядок.
+  // Имя оператора — ОДНО поле в шапке секции. Их было два (в каждой карточке)
+  // с двусторонней синхронизацией; поле обязано жить ВНЕ .imp-form, иначе на
+  // территории без капчёвых судов оно скрылось бы вместе с ней.
+  const AC_CARD = `<div class="card" id="ac-card">
+      <details class="fold ac-fold"${isOperator ? "" : " open"}>
+        <summary><b>Добавить дела точечно</b> — по номеру или ссылке</summary>
+        <div class="fold-body">
+      <div class="imp-hint" style="margin-bottom:8px;">По одному делу в строке, до 20 за раз:
         номер дела («2-1234/2026») или ссылка на карточку дела с сайта суда.
         Для судов с проверочным кодом работает только ссылка: откройте дело в
         браузере (код решается один раз) и скопируйте адрес карточки.</div>
@@ -78,9 +80,6 @@ export function renderAdminHtml(secret, role, cfg) {
       <div class="imp-row">
         <label>Суд для номеров
           <select id="ac-court"><option value="">определить автоматически</option></select>
-        </label>
-        <label>Ваше имя
-          <input type="text" id="ac-name" maxlength="60" placeholder="как вас записать в журнале">
         </label>
       </div>
       <div class="imp-row">
@@ -92,15 +91,22 @@ export function renderAdminHtml(secret, role, cfg) {
         <span class="imp-status" id="ac-status" role="status" aria-live="polite"></span>
       </div>
       <div class="imp-report" id="ac-report"></div>
-    </div>
-    <div class="card">
+        </div>
+      </details>
+    </div>`;
+  const DUMP_CARD = `<div class="card">
       <div class="imp-alert" id="imp-alert" style="display:none;"></div>
       <!-- На широком экране форма слева, рабочая очередь справа: иначе на
            1440px операторская — одна узкая колонка, и светофор «какой суд
            пора» не виден одновременно с формой. ≤1024 — обратно в одну. -->
       <div class="imp-grid">
       <div class="imp-form">
-        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную:</div>
+        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную — выдачу копирует человек.</div>
+        <!-- Шесть шагов нужны на первом импорте и мешают на двадцатом:
+             открыты, пока оператор ни разу не довёл импорт до «готово». -->
+        <details class="fold" id="imp-steps-fold">
+          <summary>Как это делается — 6 шагов</summary>
+          <div class="fold-body">
         <ol class="imp-steps">
           <li>выберите суд из списка;</li>
           <li>нажмите «Открыть поиск по суду»;</li>
@@ -110,14 +116,13 @@ export function renderAdminHtml(secret, role, cfg) {
             ссылки на дела; вместо вставки можно приложить файл «только HTML»;</li>
           <li>нажмите «Отправить на импорт».</li>
         </ol>
+          </div>
+        </details>
         <div class="imp-row">
           <label>Суд
             <select id="imp-court"><option value="">загружается…</option></select>
           </label>
           <a class="chip-btn" id="imp-court-link" href="#" target="_blank" rel="noopener noreferrer">Открыть поиск по суду</a>
-          <label>Ваше имя
-            <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
-          </label>
         </div>
         <div class="imp-paste" id="imp-paste" contenteditable="true"
           data-placeholder="Вставьте сюда скопированную страницу результатов (Ctrl+V / ⌘V) или перетащите файл «только HTML»…"></div>
@@ -145,6 +150,7 @@ export function renderAdminHtml(secret, role, cfg) {
         <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
         <div class="fold-body">
           <div class="imp-hint" style="margin-bottom:6px;">Регламент — импорт каждого суда раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху; клик по суду выбирает его в форме.</div>
+          <div class="imp-my-bar" id="imp-my-bar"></div>
           <div id="imp-freshness" class="empty">Загрузка…</div>
         </div>
       </details>
@@ -154,7 +160,20 @@ export function renderAdminHtml(secret, role, cfg) {
       </details>
       </div>
       </div>
+    </div>`;
+  const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import">
+    <div class="section-head">
+      <span class="section-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </span>
+      <h2 class="section-title">Импорт дел</h2>
+      <span class="section-counter" id="imp-court-count"></span>
+      <span class="spacer"></span>
+      <label class="imp-who">Вы:
+        <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
+      </label>
     </div>
+    ${isOperator ? DUMP_CARD + AC_CARD : AC_CARD + DUMP_CARD}
   </section>`;
   return `<!doctype html><html lang="ru" data-role="${role}"><head>
 <meta charset="utf-8">
@@ -772,7 +791,12 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   /* Подпись плитки переносим вместо обрезки: плитки идут в две колонки, и
      nowrap+ellipsis резал её на полуслове («из 6 судов · регламент раз в н…»,
      «push: 3 personal · 5 gener…»). Вторая строка сетку не ломает. */
-  .stat-sub { white-space:normal; overflow:visible; text-overflow:clip; }
+  /* Перенос на телефоне осознанный (подписи плиток длиннее ширины колонки),
+     но с потолком: причина отказа карточек — свободная фраза из
+     fetch_fail_reason_ru, и на четыре строки она растягивала весь ряд пульта.
+     Полный текст остаётся в title плитки. */
+  .stat-sub { white-space:normal; overflow:hidden; text-overflow:clip;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
   /* auto-fit сам даёт одну колонку ниже ~690px, но между 690 и 768 дал бы
      две — правило гарантирует уже проверенную мобильную раскладку. */
   .system-grid { grid-template-columns:1fr; }
@@ -844,8 +868,27 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 #ac-card .imp-row { margin-top:8px; }
 .ac-err { color:var(--danger-fg, #c0392b); }
 .imp-hint { font-size:var(--fs-xs); color:var(--fg-3); }
-.imp-status { font-size:var(--fs-sm); }
+/* Статус занимает свою строку под кнопкой: в него приезжает многострочная
+   сводка (вердикт + три группы), а в одном ряду с кнопкой и подсказкой она
+   расталкивала бы раскладку. :empty — чтобы пустой статус не давал пустую
+   строку во flex-ряду (тот же приём, что у .imp-selection). */
+.imp-status { font-size:var(--fs-sm); flex-basis:100%; }
+.imp-status:empty { display:none; }
 .imp-status .badge { vertical-align:baseline; }
+/* Вердикт — первое (а часто и единственное), что читает оператор после
+   отправки: получилось / переделывать / пусто. Цвета — токенами: литеральный
+   hex в правиле тёмного варианта не получает никогда. */
+.imp-verdict { display:block; margin-top:6px; font-size:var(--fs-md);
+  font-weight:var(--fw-semibold); line-height:1.35; }
+.imp-verdict.is-ok { color:var(--success-fg); }
+.imp-verdict.is-bad { color:var(--danger-fg); }
+.imp-verdict.is-none { color:var(--fg-3); }
+.imp-sum-line { margin-top:3px; font-size:var(--fs-xs); color:var(--fg-2);
+  line-height:1.45; }
+.imp-sum-line b { font-weight:var(--fw-semibold); color:var(--fg-3); }
+.imp-sum-bad { color:var(--danger-fg); }
+.imp-sum-bad b { color:var(--danger-fg); }
+.imp-sum-dim { color:var(--fg-4); }
 .imp-report { margin-top:6px; }
 .imp-hist-item { border-bottom:1px solid var(--divider); }
 .imp-hist-item:last-child { border-bottom:0; }
@@ -860,6 +903,33 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
   border-radius:var(--radius-md); background:var(--warning-bg); color:var(--warning-fg);
   font-size:var(--fs-sm); margin-bottom:12px; }
 .imp-paste.imp-dragover { border-style:solid; border-color:var(--accent); background:var(--accent-bg-soft); }
+/* Имя оператора — одно поле на вкладку, в шапке секции. */
+.imp-who { display:flex; align-items:center; gap:6px; font-size:var(--fs-xs);
+  color:var(--fg-3); white-space:nowrap; }
+.imp-who input { font-size:var(--fs-sm); padding:4px 8px; width:170px;
+  border:1px solid var(--border); border-radius:var(--radius-sm);
+  background:var(--bg-1); color:var(--fg-1); }
+.imp-who input:focus-visible { outline:none; box-shadow:var(--focus-ring); }
+/* Точечное добавление у оператора свёрнуто (эпизодическая задача), у
+   владельца раскрыто — это его единственный инструмент ввода. Маркер и
+   поведение — от общего details.fold, здесь только кегль заголовка: это
+   заголовок карточки, а не подпись внутри неё. */
+.ac-fold { margin-top:0; }
+.ac-fold > summary { color:var(--fg-2); font-size:var(--fs-md); }
+/* Панель набора «мои суды» над светофором. .spacer объявлен только внутри
+   .section-head/.card-head/.sub-row — строке нужен свой (та же грабля уже
+   документирована выше). */
+.imp-my-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--divider); }
+.imp-my-bar .spacer { flex:1; }
+.imp-my-bar:empty { display:none; }
+/* Строка в режиме выбора: галка вместо цветной точки, курсор — рука. */
+.imp-fresh-row.is-edit { cursor:pointer; gap:9px; align-items:center; }
+.imp-fresh-row.is-edit input { margin:0; accent-color:var(--accent); }
+.imp-fresh-row.is-edit .health-name { color:var(--fg-1); }
+/* «Прочие суды» — не моя очередь, поэтому приглушены и свёрнуты. */
+.imp-others { margin-top:8px; }
+.imp-others .health-row { opacity:0.75; }
 .imp-selection { font-size:var(--fs-xs); color:var(--fg-3); display:flex; gap:8px;
   align-items:center; flex-wrap:wrap; }
 .imp-selection:empty { display:none; }
@@ -880,6 +950,13 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
   border-radius:var(--radius); }
 #imp-freshness .health-name { flex:1 1 0; min-width:0; }
 .imp-fresh-meta { margin-left:auto; flex-shrink:0; } /* распорка вместо пустого health-spark */
+/* Пометка про карточки — ВСЕГДА своей строкой под именем (отступ = точка+gap,
+   как у мобильной меты). Ужать её в общую строку нельзя: .health-name
+   схлопывается многоточием раньше, чем сработает перенос, и имя суда — то
+   единственное, по чему оператор выбирает, куда идти, — исчезало первым. */
+.imp-fresh-row { flex-wrap:wrap; }
+.imp-fresh-warn { flex-basis:100%; margin-left:17px; color:var(--danger-fg);
+  font-size:var(--fs-xs); }
 
 /* Форма слева, рабочая очередь справа. min-width:0 обеим колонкам: зона
    вставки с таблицей суда внутри иначе распирает свой трек. */
@@ -907,6 +984,9 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
   #imp-court-link { align-self:flex-start; }
   /* Точечное добавление: 16px обязателен — iOS зумит поля мельче. */
   #ac-input { font-size:16px; }
+  /* Имя в шапке секции: своя строка во всю ширину, 16px против зума iOS. */
+  .imp-who { flex-basis:100%; }
+  .imp-who input { flex:1; width:auto; font-size:16px; }
   .imp-row #ac-send { width:100%; justify-content:center; }
 }
 </style>
@@ -963,11 +1043,21 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
       <div class="stat-value" id="tile-digest-value">…</div>
       <div class="stat-sub" id="tile-digest-sub"></div>
     </button>
-    <button class="stat-card" data-accent="gray" data-goto="#system">
+    <!-- Владельцу — здоровье автопоиска; оператору оно не про его работу:
+         parse_health наполняется только по courts_for_search, а тот исключает
+         search_gated, то есть ровно суды оператора (на Урале 56 из 69). Он
+         читал «все N ok» как «мои суды в порядке». На их месте — состояние
+         ЕГО канала: открываются ли карточки, считается по журналу импортов
+         без единого лишнего запроса. -->
+    ${isOperator ? `<button class="stat-card" data-accent="gray" data-goto="#import" title="Открывались ли карточки судов в последних импортах">
+      <div class="stat-label">Карточки судов</div>
+      <div class="stat-value" id="tile-cards-value">…</div>
+      <div class="stat-sub" id="tile-cards-sub"></div>
+    </button>` : `<button class="stat-card" data-accent="gray" data-goto="#system">
       <div class="stat-label">Парсеры</div>
       <div class="stat-value" id="tile-health-value">…</div>
       <div class="stat-sub" id="tile-health-sub"></div>
-    </button>
+    </button>`}
     <button class="stat-card" data-accent="gray" data-href="cron" title="Расписание автозапуска и ручной прогон в GitHub Actions" data-owner-only>
       <div class="stat-label">Автозапуск</div>
       <div class="stat-value" id="tile-cron-value">…</div>
@@ -1310,6 +1400,18 @@ function loadErrorHtml(text, retryKey, err) {
 }
 // Плитка пульта: значение/подпись/акцент. valueHtml приходит из наших же
 // рендеров (не из сырых данных) — вставляется как HTML.
+// Склонение по числу: «1 карточка · 2 карточки · 5 карточек». Сводки импорта
+// собирались без него и печатали «1 карточек дочитано» / «2 материалов стали
+// делами» — мелочь, но оператор читает эти строки каждый рабочий день.
+function plural(n, a, b, c) {
+  var m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return a;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return b;
+  return c;
+}
+// «N карточек дочитано» одной сборкой: число + согласованная форма.
+function nPlural(n, a, b, c) { return n + " " + plural(n, a, b, c); }
+
 function setTile(name, accent, valueHtml, subHtml) {
   const v = document.getElementById("tile-" + name + "-value");
   const s = document.getElementById("tile-" + name + "-sub");
@@ -1625,8 +1727,14 @@ async function loadHealth() {
       (nRed ? '<span class="badge badge-fail">' + nRed + ' сбой</span> ' : "")
       + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
       + '<span class="badge badge-ok">' + nGreen + ' ok</span>';
+    // ⚠️ Охват называем вслух: parse_health.json наполняется только по
+    // courts_for_search, а тот ИСКЛЮЧАЕТ search_gated — то есть все капчёвые
+    // суды (на Урале 56 из 69). Без этой строки «все N ok» читалось как «на
+    // территории всё в порядке», хотя про суды оператора карточка молчит.
     document.getElementById("health-updated").textContent =
-      "число результатов поиска по прогонам · обновлено " + relTime(d.updated_at);
+      "число результатов поиска по прогонам · только суды с открытым поиском"
+      + " (капчёвые сюда не входят — их канал ручной импорт) · обновлено "
+      + relTime(d.updated_at);
     // Плитка «Парсеры».
     if (nRed) {
       setTile("health", "red", nRed + ' <span class="warn-mark">✕</span> из ' + items.length,
@@ -2760,6 +2868,7 @@ var impDetectedHosts = [];     // sudrf-хосты текущей вставки
 var impDetectSeq = 0;          // защита от гонки async-чтения файла
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
 var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
+var impLastLogItems = [];      // кэш последних записей журнала (то же — для «моих судов»)
 var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
 var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
 // Ключ суда в форме импорта — «домен|srv_num», а не голый домен (14.08.2026).
@@ -2863,69 +2972,144 @@ async function loadImportCourts() {
       + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
   }
 }
+// Сводка дампового импорта. Раньше это была одна цепочка из 17 корзин через
+// « · », где заведения, штатный отсев и провалы, требующие повтора, стояли
+// вперемешку — оператор не мог за секунду ответить себе «получилось или
+// переделывать». Теперь корзины разложены по трём смыслам, а вердикт отвечает
+// на этот вопрос словами.
+//   parts    — что завелось. ⚠️ Имя массива и первое выражение держит страж
+//              test_bank_counters_reach_operator: сквозная проводка счётчиков
+//              рвётся молча в любом из трёх звеньев (jq → whitelist → сводка).
+//   problems — то, ради чего оператор возвращается к суду.
+//   skipped  — штатный отсев, читается как «так и должно быть».
+function impResultParts(item) {
+  var parts = ["+" + (item.added || 0) + " в картотеку"];
+  var problems = [];
+  var skipped = [];
+  if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
+  if (item.promoted) parts.push(nPlural(item.promoted,
+    "материал стал делом", "материала стали делами", "материалов стали делами"));
+  // Карточки основной картотеки (16.08.2026): суд может отдать блок-страницу
+  // вместо карточки, и дело заводится пустышкой. Раньше это было видно только
+  // в свёртке «Отчёт построчно». Ставим сразу после заведений: это про те же
+  // дела, а не корзина отсева.
+  if (item.refilled) parts.push(nPlural(item.refilled,
+    "карточка дочитана", "карточки дочитаны", "карточек дочитано"));
+  // Давно решённые дела против банка (18.08.2026): заведены тихо сразу в
+  // архивное окно и «новым иском» не объявляются — в «+N в картотеку» не
+  // входят, оператор обязан видеть их отдельной корзиной.
+  if (item.resolved_old) parts.push(nPlural(item.resolved_old,
+    "давно решённое дело", "давно решённых дела", "давно решённых дел")
+    + " — сразу в архив");
+  // Потеря исков банка — САМОЕ важное в сводке и раньше называлась мягче
+  // всего: «12 карточка не открылась» звучало технической мелочью, а
+  // означало двенадцать НЕзаведённых дел (разбор 16.08.2026 — блок ГАС).
+  // Правила приёма в трек решаются только по карточке, поэтому без неё
+  // строка выбрасывается целиком, и вернуть её может лишь повторный дамп.
+  if (item.fetch_fail) {
+    problems.push("⛔ " + item.fetch_fail + " исков банка НЕ заведено "
+      + "(карточка не открылась) — повторите дамп, когда суд отвечает");
+  }
+  if (item.card_failed) {
+    // Причина (403 / страница защиты / проверочный код / заглушка) важнее
+    // самого факта: по ней отличают «нас блокируют по адресу» от «портал
+    // лёг». Без неё все четыре беды выглядели одинаково.
+    problems.push("⚠ " + item.card_failed + " без карточки: "
+      + (item.card_fail_reason || "суд не ответил")
+      + " — вставьте дамп ещё раз или дождитесь прогона");
+  } else if (item.card_fail_reason) {
+    // Ответчиков в дампе не было, а иски банка отвалились ([FETCH FAIL]).
+    problems.push("⚠ карточки не читались: " + item.card_fail_reason);
+  }
+  if (item.already) skipped.push(item.already + " уже в базе");
+  if (item.excluded_result) skipped.push(item.excluded_result + " отсеяно по итогу");
+  if (item.excluded_writ) skipped.push(item.excluded_writ + " ИЛ уже выдан");
+  // Две корзины, а не сумма «уже в треке»: seen_cached с 18.08.2026 общий
+  // для обеих веток (карточные отказы ответчик-ветки тоже кэшируются), и
+  // подпись «в треке» врала бы про дела против банка.
+  if (item.already_spent) skipped.push(item.already_spent + " отработавших (иски банка)");
+  if (item.seen_cached) skipped.push(item.seen_cached + " из кэша отказов");
+  if (item.bank_capped) skipped.push(item.bank_capped + " не влезло в потолок");
+  if (item.skipped_role) skipped.push(item.skipped_role + " не наша роль (банк не ответчик)");
+  if (item.not_accepted) skipped.push(item.not_accepted + " к производству не принято");
+  if (item.no_link) skipped.push(item.no_link + " без ссылки");
+  if (item.subsidiary) skipped.push(nPlural(item.subsidiary,
+    "дочка Сбера", "дочки Сбера", "дочек Сбера"));
+  return { parts: parts, problems: problems, skipped: skipped };
+}
+// Вердикт одной фразой: получилось / переделывать / пусто. Это первое (а часто
+// и единственное), что оператор читает после отправки.
+function impVerdict(item) {
+  var added = (item.added || 0) + (item.added_bank || 0);
+  var lost = item.fetch_fail || 0;
+  var unread = item.card_failed || 0;
+  var got = "заведено " + nPlural(added, "дело", "дела", "дел");
+  if (lost || unread) {
+    return { kind: "bad", text: added
+      ? "Заведено " + nPlural(added, "дело", "дела", "дел")
+        + ", но нужен повтор: карточки открылись не все"
+      : "Ничего не заведено — карточки не открылись, нужен повтор дампа" };
+  }
+  if (added) return { kind: "ok", text: "Готово: " + got };
+  return { kind: "none", text: "Готово: новых дел нет — всё уже в базе" };
+}
 function impStatusBadge(status) {
   if (status === "done") return '<span class="badge badge-ok">готово</span>';
   if (status === "failed") return '<span class="badge badge-fail">сбой</span>';
   if (status === "started") return '<span class="badge badge-run">выполняется</span>';
   return '<span class="badge badge-skip">отправлено</span>';
 }
+// Однострочная склейка — для компактных строк «Истории импортов». Порядок
+// корзин прежний (заведения → проблемы → отсев), чтобы старые записи журнала
+// читались ровно так же, как читались вчера.
 function impResultText(item) {
   if (item.kind === "case") return acResultText(item);
+  if (item.kind === "writ_waiver") return wwResultText(item);
   if (item.status === "done") {
-    // Оба трека, а не один: до 14.08.2026 строка считала только основную
-    // картотеку, и импорт, заведший 4 иска банка и отсеявший 5, показывал
-    // «+1 добавлено» — оператор читал это как «страница пустая».
-    // Формулировки разводят картотеки словами: «в картотеку» — дела против
-    // банка, «в иски банка» — истцовые.
-    var parts = ["+" + (item.added || 0) + " в картотеку"];
-    if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
-    if (item.promoted) parts.push(item.promoted + " материалов стали делами");
-    // Карточки основной картотеки (16.08.2026): суд может отдать блок-страницу
-    // вместо карточки, и дело заводится пустышкой. Раньше это было видно только
-    // в свёртке «Отчёт построчно» — сводка бодро писала «+4 в картотеку».
-    // Ставим сразу после заведений: это про те же дела, а не корзина отсева.
-    if (item.refilled) parts.push(item.refilled + " карточек дочитано");
-    // Давно решённые дела против банка (18.08.2026): заведены тихо сразу в
-    // архивное окно и «новым иском» не объявляются — в «+N в картотеку» не
-    // входят, оператор обязан видеть их отдельной корзиной.
-    if (item.resolved_old) parts.push(item.resolved_old + " давно решённых — сразу в архив");
-    // Потеря исков банка — САМОЕ важное в сводке и раньше называлась мягче
-    // всего: «12 карточка не открылась» звучало технической мелочью, а
-    // означало двенадцать НЕзаведённых дел (разбор 16.08.2026 — блок ГАС).
-    // Правила приёма в трек решаются только по карточке, поэтому без неё
-    // строка выбрасывается целиком, и вернуть её может лишь повторный дамп.
-    if (item.fetch_fail) {
-      parts.push("⛔ " + item.fetch_fail + " исков банка НЕ заведено "
-        + "(карточка не открылась) — повторите дамп, когда суд отвечает");
-    }
-    if (item.card_failed) {
-      // Причина (403 / страница защиты / проверочный код / заглушка) важнее
-      // самого факта: по ней отличают «нас блокируют по адресу» от «портал
-      // лёг». Без неё все четыре беды выглядели одинаково.
-      parts.push("⚠ " + item.card_failed + " без карточки: "
-        + (item.card_fail_reason || "суд не ответил")
-        + " — вставьте дамп ещё раз или дождитесь прогона");
-    } else if (item.card_fail_reason) {
-      // Ответчиков в дампе не было, а иски банка отвалились ([FETCH FAIL]).
-      parts.push("⚠ карточки не читались: " + item.card_fail_reason);
-    }
-    if (item.already) parts.push(item.already + " уже в базе");
-    if (item.excluded_result) parts.push(item.excluded_result + " отсеяно по итогу");
-    if (item.excluded_writ) parts.push(item.excluded_writ + " ИЛ уже выдан");
-    // Две корзины, а не сумма «уже в треке»: seen_cached с 18.08.2026 общий
-    // для обеих веток (карточные отказы ответчик-ветки тоже кэшируются), и
-    // подпись «в треке» врала бы про дела против банка.
-    if (item.already_spent) parts.push(item.already_spent + " отработавших (иски банка)");
-    if (item.seen_cached) parts.push(item.seen_cached + " из кэша отказов");
-    if (item.bank_capped) parts.push(item.bank_capped + " не влезло в потолок");
-    if (item.skipped_role) parts.push(item.skipped_role + " не наша роль (банк не ответчик)");
-    if (item.not_accepted) parts.push(item.not_accepted + " к производству не принято");
-    if (item.no_link) parts.push(item.no_link + " без ссылки");
-    if (item.subsidiary) parts.push(item.subsidiary + " дочки");
-    return parts.join(" · ");
+    var g = impResultParts(item);
+    return g.parts.concat(g.problems, g.skipped).join(" · ");
   }
   if (item.status === "failed") return item.error || "ошибка — детали в журнале";
   return "";
+}
+// Развёрнутая сводка — для живого статуса сразу после отправки, где у строки
+// есть вся ширина карточки. Порядок чтения: итог → что делать → детали.
+function impResultHtml(item) {
+  if (item.kind === "case" || item.kind === "writ_waiver" || item.status !== "done") {
+    return escHtml(impResultText(item));
+  }
+  var g = impResultParts(item);
+  var v = impVerdict(item);
+  var html = '<div class="imp-verdict is-' + v.kind + '">' + escHtml(v.text) + "</div>";
+  function line(cls, title, arr) {
+    if (!arr.length) return "";
+    return '<div class="imp-sum-line ' + cls + '"><b>' + title + "</b> "
+      + escHtml(arr.join(" · ")) + "</div>";
+  }
+  html += line("imp-sum-bad", "Проблемы:", g.problems);
+  // Единственная корзина «+0 в картотеку» — не новость: вердикт уже сказал,
+  // что заводить было нечего, и строка под ним читалась как противоречие.
+  var nothing = g.parts.length === 1 && !(item.added || 0);
+  html += nothing ? "" : line("", "Заведено:", g.parts);
+  html += line("imp-sum-dim", "Пропущено:", g.skipped);
+  return html;
+}
+// Сводка пометок «лист не нужен» (kind:"writ_waiver") — общий журнал с
+// дампами. До 23.08.2026 своей ветки не было вовсе: запись уходила в дамповую
+// и печатала «+0 в картотеку», хотя счётчики waived/updated/cleared доезжали
+// до KV полностью — рвалось только отображение.
+function wwResultText(item) {
+  if (item.status === "failed") return item.error || "ошибка — детали в журнале";
+  if (item.status !== "done") return "";
+  var parts = [];
+  if (item.waived) parts.push(nPlural(item.waived,
+    "дело помечено", "дела помечено", "дел помечено"));
+  if (item.updated) parts.push(item.updated + " с обновлённой причиной");
+  if (item.cleared) parts.push(nPlural(item.cleared,
+    "пометка снята", "пометки сняты", "пометок снято"));
+  if (item.not_found) parts.push(item.not_found + " не найдено в треке");
+  if (item.refused) parts.push(item.refused + " отказано");
+  return parts.length ? parts.join(" · ") : "без изменений";
 }
 // Сводка записи точечного добавления (kind:"case") — общий журнал с дампами.
 function acResultText(item) {
@@ -2953,8 +3137,13 @@ function renderImportHistory(items) {
   el.innerHTML = items.slice(0, 20).map(function (it) {
     // Точечные добавления (kind:"case") живут в том же журнале: вместо суда —
     // маркер канала и размер пачки (суд у пачки может быть разный построчно).
+    // Суда у пультовых операций нет (у точечной пачки он построчно разный, у
+    // пометок его нет вовсе) — вместо него маркер канала и размер пачки.
+    // Без этой ветки writ_waiver печатался как безымянный суд «?».
     const court = it.kind === "case"
       ? ("📌 точечно · " + (it.items_count || "?") + " стр.")
+      : it.kind === "writ_waiver"
+      ? ("🚫 лист не нужен · " + nPlural(it.items_count || 0, "дело", "дела", "дел"))
       : (impCourtNameByDomain[it.court_domain] || it.court_domain || "?");
     // Построчный отчёт импортёра ([ADDED]/[ALREADY]/[SKIPPED ROLE]/…) хранится
     // в записи журнала — показываем свёрткой, как в live-блоке после отправки.
@@ -2983,6 +3172,7 @@ async function loadImportLog(logOnly) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
+    impLastLogItems = items;
     renderImportHistory(items);
     if (!logOnly) {
       // Кэшируем карту вечных ключей import:last:*: по ней светофор можно
@@ -3011,9 +3201,88 @@ async function loadImportLog(logOnly) {
 // прошедших до появления карты. Регламент — раз в неделю.
 var IMP_FRESH_WARN_DAYS = 7;
 var IMP_FRESH_STALE_DAYS = 14;
+// ── «Мои суды» ───────────────────────────────────────────────────────────────
+// Секрет оператора ОДИН на всех сопровождающих, и до 23.08.2026 каждый видел
+// общую очередь на все капчёвые суды территории (на Урале их 56), а
+// автоподстановка выбирала глобально самый просроченный суд — почти наверняка
+// чужой. Набор живёт в localStorage: админка у каждой территории на своём
+// origin, поэтому неймспейс ключу не нужен (так же плоско лежит admin_theme).
+// ПУСТОЙ набор = прежнее поведение, все суды: до первого выбора не меняется
+// ничего.
+var MY_COURTS_KEY = "admin_my_courts";
+var impMyCourts = null;
+var impMyEdit = false;
+function myCourts() {
+  if (impMyCourts) return impMyCourts;
+  var raw = [];
+  try { raw = JSON.parse(localStorage.getItem(MY_COURTS_KEY) || "[]"); } catch (e) { raw = []; }
+  impMyCourts = {};
+  (Array.isArray(raw) ? raw : []).forEach(function (k) { impMyCourts[String(k)] = true; });
+  return impMyCourts;
+}
+function myCourtsCount() { return Object.keys(myCourts()).length; }
+function saveMyCourts() {
+  try {
+    localStorage.setItem(MY_COURTS_KEY, JSON.stringify(Object.keys(myCourts())));
+  } catch (e) {}
+}
+// ── Карточки судов: последняя ПОПЫТКА дампа по каждому суду ─────────────────
+// Светофор свежести такие импорты не засчитывает (зеркало серверного гейта
+// ниже), и красный суд, импортированный сегодня, выглядел бы необъяснимо.
+// Отсюда же растёт операторская плитка «Карточки судов»: для капчёвого суда
+// чтение карточек — весь его канал мониторинга, а видно оно было только
+// внутри отчёта одного импорта.
+var impCardTrouble = {};
+function collectCardTrouble(items) {
+  var byDom = {};
+  (items || []).forEach(function (it) {
+    if (it.status !== "done" || !it.court_domain) return;
+    if (it.kind === "case" || it.kind === "writ_waiver") return;
+    var t = parseIso(it.updated_at || it.ts);
+    if (isNaN(t)) return;
+    if (byDom[it.court_domain] && byDom[it.court_domain].ts >= t) return;
+    byDom[it.court_domain] = {
+      ts: t,
+      unread: (it.fetch_fail || 0) + (it.card_failed || 0),
+      reason: it.card_fail_reason || "",
+    };
+  });
+  impCardTrouble = {};
+  Object.keys(byDom).forEach(function (d) {
+    if (byDom[d].unread > 0) impCardTrouble[d] = byDom[d];
+  });
+}
+// Плитка пульта «Карточки судов» — только у оператора (у владельца на её месте
+// «Парсеры»: у него открытый поиск и есть доступ к логам прогонов).
+function renderCardsTile(domains) {
+  if (!document.getElementById("tile-cards-value")) return;
+  // Домены — из той же подсети, по которой считают бейджи и плитка «Импорты»:
+  // чужой лежащий суд не моя забота (с пустым набором «моих» это все суды).
+  var bad = Object.keys(impCardTrouble).filter(function (d) {
+    return !domains || domains[d];
+  });
+  if (!bad.length) {
+    setTile("cards", "green", '<span class="dot dot-green"></span>читаются',
+      "по последним импортам журнала");
+    return;
+  }
+  var latest = bad[0];
+  bad.forEach(function (d) {
+    if (impCardTrouble[d].ts > impCardTrouble[latest].ts) latest = d;
+  });
+  var reason = impCardTrouble[latest].reason || "карточки не открылись";
+  setTile("cards", "red",
+    nPlural(bad.length, "суд не отдал", "суда не отдали", "судов не отдали"),
+    escHtml(reason));
+  // Причина в подписи обрезается тремя строками — полную оставляем в
+  // подсказке: по ней отличают «нас блокируют» от «портал лёг».
+  var card = document.getElementById("tile-cards-value").closest(".stat-card");
+  if (card) card.title = "Последний отказ: " + reason;
+}
 function renderImportFreshness(items, lastMap) {
   var el = document.getElementById("imp-freshness");
   if (!el || !impCourts.length) return;
+  collectCardTrouble(items);
   var byDomain = {};
   Object.keys(lastMap || {}).forEach(function (d) {
     var e = lastMap[d];
@@ -3027,9 +3296,18 @@ function renderImportFreshness(items, lastMap) {
     };
   });
   (items || []).forEach(function (it) {
-    // kind:"case" — точечное добавление: свежесть ДАМПОВОГО регламента оно
-    // не подтверждает (зеркало серверного гейта import:last в worker.js).
-    if (it.status !== "done" || !it.court_domain || it.kind === "case") return;
+    // kind:"case"/"writ_waiver" — пультовые операции: свежесть ДАМПОВОГО
+    // регламента они не подтверждают (зеркало серверного гейта import:last
+    // в worker.js).
+    if (it.status !== "done" || !it.court_domain) return;
+    if (it.kind === "case" || it.kind === "writ_waiver") return;
+    // ⚠️ Второе условие серверного гейта — карточки. Без него защита,
+    // написанная после инцидента 16.08.2026 (дамп Верх-Исетского завёл НОЛЬ:
+    // 12 исков банка отвалились по блок-странице ГАС), обходилась прямо
+    // здесь: import:last Worker такому импорту не пишет, зато запись журнала
+    // со status:"done" — новее, перекрывала карту, и суд красился зелёным
+    // «импортирован сегодня». Работа сделана, только когда карточки читались.
+    if ((it.fetch_fail || 0) + (it.card_failed || 0) > 0) return;
     var t = parseIso(it.updated_at || it.ts);
     if (isNaN(t)) return;
     if (!byDomain[it.court_domain] || byDomain[it.court_domain].ts < t) {
@@ -3040,66 +3318,148 @@ function renderImportFreshness(items, lastMap) {
   // различает, поэтому у суда и его присутствия дата общая. Для регламента
   // это честно (оператор берёт обе выдачи за один заход на сайт суда), а
   // строки в списке всё равно свои — иначе присутствие невидимо.
+  var mine = myCourts();
+  var hasMine = myCourtsCount() > 0;
   var rows = impCourts.map(function (c) {
     var e = byDomain[c.domain];
     var days = e ? (Date.now() - e.ts) / 86400000 : Infinity;
     var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
-    return { court: c, key: impCourtKey(c), e: e, days: days, level: level };
+    var key = impCourtKey(c);
+    return { court: c, key: key, e: e, days: days, level: level,
+             mine: !hasMine || !!mine[key], trouble: impCardTrouble[c.domain] || null };
   });
   // Просроченные и «ни разу» сверху, внутри уровня — самые давние первыми.
-  rows.sort(function (a, b) {
+  function byQueue(a, b) {
     if (a.level !== b.level) return b.level - a.level;
     return b.days - a.days;
-  });
-  var nRed = rows.filter(function (x) { return x.level === 2; }).length;
-  var nYellow = rows.filter(function (x) { return x.level === 1; }).length;
+  }
+  rows.sort(byQueue);
+  // Бейджи и плитка «Импорты» считают по МОЕЙ подсети: чужая просрочка — не
+  // моя рабочая очередь, а пульт должен показывать именно её.
+  var counted = hasMine ? rows.filter(function (x) { return x.mine; }) : rows;
+  var nRed = counted.filter(function (x) { return x.level === 2; }).length;
+  var nYellow = counted.filter(function (x) { return x.level === 1; }).length;
   document.getElementById("imp-fresh-badges").innerHTML =
     (nRed ? '<span class="badge badge-fail">' + nRed + ' давно/ни разу</span> ' : "")
     + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
-    + '<span class="badge badge-ok">' + (rows.length - nRed - nYellow) + ' ok</span>';
+    + '<span class="badge badge-ok">' + (counted.length - nRed - nYellow) + ' ok</span>';
   // Плитка «Импорты» в пульте — из тех же подсчётов, без лишних запросов.
+  var countedDomains = {};
+  counted.forEach(function (x) { countedDomains[x.court.domain] = true; });
+  renderCardsTile(countedDomains);
+  var scope = hasMine ? "моих судов" : "судов";
   if (nRed) {
     // Подписи короткие: плитка узкая (пульт из 5 колонок), и на десктопе
     // .stat-sub по-прежнему режет длинный текст многоточием.
-    setTile("import", "red", nRed + " просрочено", "из " + rows.length + " судов · раз в неделю");
+    setTile("import", "red", nRed + " просрочено", "из " + counted.length + " " + scope + " · раз в неделю");
   } else if (nYellow) {
-    setTile("import", "amber", nYellow + " скоро срок", "из " + rows.length + " судов · 8–14 дней");
+    setTile("import", "amber", nYellow + " скоро срок", "из " + counted.length + " " + scope + " · 8–14 дней");
   } else {
-    setTile("import", "green", '<span class="dot dot-green"></span>всё свежо', "все " + rows.length + " судов моложе 7 дней");
+    setTile("import", "green", '<span class="dot dot-green"></span>всё свежо',
+      "все " + counted.length + " " + scope + " моложе 7 дней");
   }
+  renderMyBar(rows);
   el.className = "";
-  el.innerHTML = rows.map(function (x) {
-    var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
-    // «+7 из 24» — сколько дел завели из скольких сберовских строк было на
-    // странице. rows появился в вечном ключе 02.08.2026: у импортов до этого
-    // его нет, поэтому падаем обратно на голое «+7».
-    var added = x.e && x.e.added
-      ? " · +" + x.e.added + (x.e.rows ? " из " + x.e.rows : "")
-      : "";
-    var note = x.e
-      ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "") + added
-      : "ни разу не импортировался";
-    return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
-      + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.key) + '">'
-      + '<span class="dot ' + dotCls + '"></span>'
-      + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
-      + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
-      + '</div>';
-  }).join("");
+  if (impMyEdit) {
+    // Режим выбора: список идёт РЕЕСТРОМ (по алфавиту), а не рабочей очередью
+    // — искать свой суд глазами проще по имени, чем по просрочке.
+    var alpha = rows.slice().sort(function (a, b) {
+      return a.court.name.localeCompare(b.court.name, "ru");
+    });
+    el.innerHTML = alpha.map(freshEditRow).join("");
+    return;
+  }
+  if (!hasMine) {
+    el.innerHTML = rows.map(freshRow).join("");
+  } else {
+    var mineRows = rows.filter(function (x) { return x.mine; });
+    var others = rows.filter(function (x) { return !x.mine; });
+    el.innerHTML = (mineRows.length ? mineRows.map(freshRow).join("")
+        : '<div class="health-more">В «моих судах» пусто — нажмите «Изменить».</div>')
+      + (others.length
+        ? '<details class="fold imp-others"><summary>Прочие суды ('
+          + others.length + ')</summary><div class="fold-body">'
+          + others.map(freshRow).join("") + "</div></details>"
+        : "");
+  }
   // Первый рендер светофора выбирает в форме самый просроченный суд: список
   // отсортирован рабочей очередью, а селект до этого показывал первый суд
-  // реестра — оператор каждый раз перевыбирал вручную.
-  // impCourtTouched НЕ ставим: автоопределение суда по вставке должно
-  // по-прежнему иметь право переключить селект молча.
-  if (!impFreshAutoPicked && !impCourtTouched && rows.length) {
+  // реестра — оператор каждый раз перевыбирал вручную. С «моими судами» —
+  // самый просроченный ИЗ МОИХ, иначе подставлялся бы чужой.
+  if (!impFreshAutoPicked && !impCourtTouched && counted.length) {
     impFreshAutoPicked = true;
     var sel = document.getElementById("imp-court");
-    if (sel && rows[0].key !== sel.value) {
-      sel.value = rows[0].key;
+    if (sel && counted[0].key !== sel.value) {
+      sel.value = counted[0].key;
       syncImportCourtLink();
       impRenderSelection();
     }
   }
+}
+// Одна строка светофора.
+function freshRow(x) {
+  var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
+  // «+7 из 24» — сколько дел завели из скольких сберовских строк было на
+  // странице. rows появился в вечном ключе 02.08.2026: у импортов до этого
+  // его нет, поэтому падаем обратно на голое «+7».
+  var added = x.e && x.e.added
+    ? " · +" + x.e.added + (x.e.rows ? " из " + x.e.rows : "")
+    : "";
+  var note = x.e
+    ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "") + added
+    : "ни разу не импортировался";
+  // Почему суд красный, хотя импорт был: карточки не открылись, и регламент
+  // такой импорт не засчитывает (гейт cardsUnread). Без пометки красный цвет
+  // читался как ошибка светофора.
+  // ⚠️ Отдельным элементом, а не хвостом меты: мета говорит про последний
+  // ЗАСЧИТАННЫЙ импорт, а пометка — про последнюю ПОПЫТКУ, и это разные дни.
+  // Склейка в одну фразу читалась так, будто карточки не открылись тогда же.
+  var trouble = x.trouble
+    ? '<span class="imp-fresh-warn" title="'
+      + escHtml(x.trouble.reason || "суд не отдал карточки")
+      + '">⚠ ' + escHtml(relTime(new Date(x.trouble.ts).toISOString()))
+      + ' карточки не читались</span>'
+    : "";
+  return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
+    + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.key) + '">'
+    + '<span class="dot ' + dotCls + '"></span>'
+    + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
+    + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
+    + trouble
+    + '</div>';
+}
+// Та же строка в режиме выбора «моих судов»: label + checkbox, чтобы работало
+// нативно (клик по имени переключает галку) и не конфликтовало с делегатом
+// выбора суда — он в режиме правки выключен.
+function freshEditRow(x) {
+  return '<label class="health-row imp-fresh-row is-edit">'
+    + '<input type="checkbox" class="imp-my-box" data-key="' + escHtml(x.key) + '"'
+    + (myCourts()[x.key] ? " checked" : "") + ">"
+    + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
+    + '</label>';
+}
+// Панель управления набором «моих судов» над списком. ⚠️ Не в <summary>
+// свёртки: кнопка внутри summary переключала бы саму свёртку (и вложенный
+// интерактив — та же грабля, что в карточках подписчиков).
+function renderMyBar(rows) {
+  var bar = document.getElementById("imp-my-bar");
+  if (!bar) return;
+  var n = myCourtsCount();
+  if (impMyEdit) {
+    bar.innerHTML = '<span class="imp-hint">Отметьте суды, которые ведёте вы —'
+      + ' очередь и пульт будут считать по ним. Список хранится в этом браузере.</span>'
+      + '<span class="spacer"></span>'
+      + '<button class="btn-outline btn-sm" type="button" data-act="clear">Снять все</button>'
+      + '<button class="btn-primary btn-sm" type="button" data-act="done">Готово</button>';
+    return;
+  }
+  bar.innerHTML = (n
+      ? '<span class="imp-hint"><b>Мои суды: ' + n + '</b> из ' + rows.length + '</span>'
+      : '<span class="imp-hint">Показаны все ' + rows.length
+        + ' судов территории. Отметьте свои — очередь станет вашей.</span>')
+    + '<span class="spacer"></span>'
+    + '<button class="btn-outline btn-sm" type="button" data-act="edit">'
+    + (n ? "Изменить мои суды" : "Отметить мои суды") + "</button>";
 }
 // Клик по строке светофора = выбрать суд в форме импорта: светофор работает
 // рабочей очередью («какой суд пора обновить — тот и импортирую»). Слушатели —
@@ -3139,13 +3499,39 @@ function impElapsedText(startedAt) {
   var m = Math.floor(s / 60);
   return m ? m + " мин " + (s % 60) + " с" : s + " с";
 }
+// Ожидание импорта — секундный тикер поверх 30-секундного поллинга. Тикер
+// НЕ ходит в сеть: он перерисовывает только строку прошедшего времени. Без
+// него после «страница принята» статус стоял немым ровно 30 секунд до первого
+// тика поллинга, и оператор не понимал, ушло ли вообще (реже 30 с опрашивать
+// нельзя — каждый тик стоит KV-операций, лимит lists общий на аккаунт).
+var impWaitState = { st: "dispatched", startedAt: 0 };
+var impWaitTimer = null;
+function impRenderWaiting() {
+  var st = impWaitState.st;
+  impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
+    + (st === "started" ? "выполняется" : "в очереди") + " · "
+    + impElapsedText(impWaitState.startedAt));
+}
+function impStartTicker(startedAt) {
+  impStopTicker();
+  impWaitState = { st: "dispatched", startedAt: startedAt };
+  impRenderWaiting();
+  impWaitTimer = setInterval(function () {
+    if (!impSending) { impStopTicker(); return; }
+    impRenderWaiting();
+  }, 1000);
+}
+function impStopTicker() {
+  if (impWaitTimer) { clearInterval(impWaitTimer); impWaitTimer = null; }
+}
 function impPollResult(key, startedAt) {
   clearTimeout(impPollTimer);
   impPollTimer = setTimeout(async function () {
     const items = await loadImportLog(true);
     const mine = (items || []).find(function (it) { return it.uuid === key; });
     if (mine && (mine.status === "done" || mine.status === "failed")) {
-      impSetStatus(impStatusBadge(mine.status) + " " + escHtml(impResultText(mine)));
+      impStopTicker();
+      impSetStatus(impStatusBadge(mine.status) + " " + impResultHtml(mine));
       const rep = document.getElementById("imp-report");
       if (Array.isArray(mine.lines) && mine.lines.length) {
         rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
@@ -3158,6 +3544,8 @@ function impPollResult(key, startedAt) {
       // и блокировало отправку, а кнопки «очистить» на странице нет.
       // При failed вставку НЕ трогаем — дамп нужен для повторной попытки.
       if (mine.status === "done") {
+        // Импорт доведён до конца — инструкция больше не разворачивается сама.
+        try { localStorage.setItem("admin_imp_steps_seen", "1"); } catch (e) {}
         document.getElementById("imp-paste").innerHTML = "";
         impSetFile(null);          // внутри — impRenderSelection()
         impRunDetect();            // сбросить impDetectedHosts и заметку суда
@@ -3172,17 +3560,16 @@ function impPollResult(key, startedAt) {
       return;
     }
     if (Date.now() - startedAt > 5 * 60 * 1000) {
+      impStopTicker();
       impSetStatus('<span class="badge badge-fail">нет ответа ~5 мин</span> '
         + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.');
       impSending = false;
       impUpdateSendState();
       return;
     }
-    // Ожидание до 5 минут: живой статус с прошедшим временем (обновляется
-    // на тике 30 с), чтобы не выглядеть зависшим.
-    var st = (mine && mine.status === "started") ? "started" : "dispatched";
-    impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
-      + (st === "started" ? "выполняется" : "в очереди") + " · " + impElapsedText(startedAt));
+    // Ожидание до 5 минут: живой статус с прошедшим временем.
+    impWaitState.st = (mine && mine.status === "started") ? "started" : "dispatched";
+    impRenderWaiting();
     impPollResult(key, startedAt);
   }, 30000);
 }
@@ -3363,15 +3750,18 @@ async function impSend() {
     });
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok) {
-      impSetStatus(impStatusBadge("dispatched") + " страница принята, импорт в очереди…");
+      var startedAt = Date.now();
+      impStartTicker(startedAt);
       loadImportLog();
-      impPollResult(d.key, Date.now());
+      impPollResult(d.key, startedAt);
     } else {
+      impStopTicker();
       impSetStatus('<span class="badge badge-fail">✕</span> ' + escHtml(d.error || ("HTTP " + r.status)));
       impSending = false;
       impUpdateSendState();
     }
   } catch (e) {
+    impStopTicker();
     impSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
     impSending = false;
     impUpdateSendState();
@@ -3389,13 +3779,45 @@ document.getElementById("imp-court").addEventListener("change", function () {
 (function () {
   var fresh = document.getElementById("imp-freshness");
   fresh.addEventListener("click", function (e) {
+    // В режиме правки «моих судов» строка — это label с галкой: выбирать по
+    // ней суд в форме нельзя, иначе клик делал бы сразу два дела.
+    if (impMyEdit) return;
     var row = e.target.closest(".imp-fresh-row");
     if (row) { impCourtTouched = true; impPickCourt(row.getAttribute("data-domain")); }
   });
   fresh.addEventListener("keydown", function (e) {
+    if (impMyEdit) return;
     if (e.key !== "Enter" && e.key !== " ") return;
     var row = e.target.closest(".imp-fresh-row");
     if (row) { e.preventDefault(); impCourtTouched = true; impPickCourt(row.getAttribute("data-domain")); }
+  });
+  // Галки набора «мои суды»: пишем сразу, без кнопки «сохранить» — «Готово»
+  // только выходит из режима. Перерисовки списка на каждый клик нет намеренно
+  // (56 строк, и она сбрасывала бы позицию прокрутки под рукой).
+  fresh.addEventListener("change", function (e) {
+    var box = e.target.closest(".imp-my-box");
+    if (!box) return;
+    var key = box.getAttribute("data-key");
+    if (box.checked) myCourts()[key] = true; else delete myCourts()[key];
+    saveMyCourts();
+  });
+  var myBar = document.getElementById("imp-my-bar");
+  myBar.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-act");
+    if (act === "clear") {
+      impMyCourts = {};
+      saveMyCourts();
+    }
+    impMyEdit = (act === "edit");
+    // Набор изменился — автоподстановка суда обязана переиграться: на первом
+    // рендере она выбрала самый просроченный из ВСЕХ, а теперь очередь своя.
+    // Ручной выбор при этом остаётся в силе (impCourtTouched не трогаем).
+    if (!impMyEdit) impFreshAutoPicked = false;
+    // Перерисовываем из кэша журнала: свежих данных правка набора не требует,
+    // а лишний /admin/import-log — это KV-list (лимит общий на аккаунт).
+    renderImportFreshness(impLastLogItems, impLastFreshMap);
   });
   var paste = document.getElementById("imp-paste");
   paste.addEventListener("input", impRunDetect);
@@ -3433,6 +3855,27 @@ document.getElementById("imp-court").addEventListener("change", function () {
 impUpdateSendState();
 try {
   document.getElementById("imp-name").value = localStorage.getItem("admin_operator_name") || "";
+} catch (e) {}
+// Свёрнутость светофора помним: он открыт по умолчанию (рабочая очередь), но
+// оператор, у которого все суды зелёные, вправе его закрыть — и не открывать
+// заново на каждой перезагрузке.
+(function () {
+  var f = document.getElementById("imp-fresh-fold");
+  if (!f) return;
+  try {
+    if (localStorage.getItem("admin_imp_fresh_open") === "0") f.open = false;
+  } catch (e) {}
+  f.addEventListener("toggle", function () {
+    try { localStorage.setItem("admin_imp_fresh_open", f.open ? "1" : "0"); } catch (e) {}
+  });
+})();
+// Инструкция из шести шагов раскрыта, пока оператор ни разу не довёл импорт до
+// «готово»: на первом заходе она и есть регламент, на двадцатом — шум.
+try {
+  if (!localStorage.getItem("admin_imp_steps_seen")) {
+    var sf = document.getElementById("imp-steps-fold");
+    if (sf) sf.open = true;
+  }
 } catch (e) {}
 
 // ── Точечное добавление дел (блок «Добавить дела», обе роли) ─────────────────
@@ -3613,12 +4056,6 @@ function wwShortCourt(name) {
     .replace(/\s*город(ского|ской)\s*/i, " ")
     .trim();
 }
-function wwPlural(n, a, b, c) {
-  var m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return a;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return b;
-  return c;
-}
 function wwKey(r) { return r.domain + "|" + r.id; }
 function wwRowByKey(k) {
   return wwRows.filter(function (r) { return wwKey(r) === k; })[0] || null;
@@ -3742,7 +4179,7 @@ function updateWaitActions() {
   box.style.display = n ? "" : "none";
   btn.disabled = !n;
   btn.textContent = n
-    ? "Отправить " + n + " " + wwPlural(n, "пометку", "пометки", "пометок")
+    ? "Отправить " + n + " " + plural(n, "пометку", "пометки", "пометок")
     : "Отправить пометки";
 }
 // Модалка выбора причины — по образцу #wl-modal (вкладка подписчиков):
@@ -3849,7 +4286,8 @@ async function acSend() {
   if (acSending) return;
   var st = acLines();
   if (!st.items.length || st.errors.length || st.items.length > AC_MAX_ITEMS) return;
-  var name = (document.getElementById("ac-name").value || "").trim();
+  // Имя — одно на всю вкладку (шапка секции): раньше полей было два.
+  var name = (document.getElementById("imp-name").value || "").trim();
   if (!name) {
     acSetStatus('<span class="badge badge-fail">укажите ваше имя</span>');
     return;
@@ -3937,17 +4375,6 @@ function acPollResult(key, startedAt) {
   input.addEventListener("input", acUpdateState);
   document.getElementById("ac-court").addEventListener("change", acUpdateState);
   document.getElementById("ac-send").addEventListener("click", acSend);
-  var acName = document.getElementById("ac-name");
-  try { acName.value = localStorage.getItem("admin_operator_name") || ""; } catch (e) {}
-  // Имя общее с формой дампов: заполнил в одной — появилось в другой.
-  acName.addEventListener("input", function () {
-    var impName = document.getElementById("imp-name");
-    if (impName) impName.value = acName.value;
-  });
-  var impName = document.getElementById("imp-name");
-  if (impName) {
-    impName.addEventListener("input", function () { acName.value = impName.value; });
-  }
   acUpdateState();
 })();
 
