@@ -955,7 +955,11 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
    схлопывается многоточием раньше, чем сработает перенос, и имя суда — то
    единственное, по чему оператор выбирает, куда идти, — исчезало первым. */
 .imp-fresh-row { flex-wrap:wrap; }
-.imp-fresh-warn { flex-basis:100%; margin-left:17px; color:var(--danger-fg);
+/* Тихая, как мета: это ОБЪЯСНЕНИЕ красной точки, а не отдельная тревога.
+   На боевом реестре пометку носят 10 строк из 54 (до четырёх подряд), и
+   красным они превращали рабочую очередь в стену алярма — счётчик наверху
+   («N судов не отдали») тревогу и так поднимает. */
+.imp-fresh-warn { flex-basis:100%; margin-left:17px; color:var(--fg-3);
   font-size:var(--fs-xs); }
 
 /* Форма слева, рабочая очередь справа. min-width:0 обеим колонкам: зона
@@ -3370,11 +3374,11 @@ function renderImportFreshness(items, lastMap) {
     return;
   }
   if (!hasMine) {
-    el.innerHTML = rows.map(freshRow).join("");
+    el.innerHTML = freshList(rows);
   } else {
     var mineRows = rows.filter(function (x) { return x.mine; });
     var others = rows.filter(function (x) { return !x.mine; });
-    el.innerHTML = (mineRows.length ? mineRows.map(freshRow).join("")
+    el.innerHTML = (mineRows.length ? freshList(mineRows)
         : '<div class="health-more">В «моих судах» пусто — нажмите «Изменить».</div>')
       + (others.length
         ? '<details class="fold imp-others"><summary>Прочие суды ('
@@ -3396,6 +3400,22 @@ function renderImportFreshness(items, lastMap) {
     }
   }
 }
+// Список — первые FRESH_VISIBLE строк рабочей очереди + свёртка с остальными
+// (зеркало карточки «Здоровье парсеров»: там тот же приём с VISIBLE = 8).
+// ⚠️ Без потолка на настоящем реестре Урала (54 капчёвых суда) вкладка на
+// телефоне вырастала до 6,3 экрана, из них 4,3 — один список: оператор
+// пролистывал всю территорию до истории импортов. Проверено на боевом
+// реестре 23.08.2026; на фикстуре из 14 судов проблема не проявлялась.
+var FRESH_VISIBLE = 12;
+function freshList(arr) {
+  var head = arr.slice(0, FRESH_VISIBLE).map(freshRow).join("");
+  var rest = arr.slice(FRESH_VISIBLE);
+  if (!rest.length) return head;
+  return head + '<details class="fold imp-others"><summary>Остальные '
+    + rest.length + " " + plural(rest.length, "суд", "суда", "судов")
+    + '</summary><div class="fold-body">'
+    + rest.map(freshRow).join("") + "</div></details>";
+}
 // Одна строка светофора.
 function freshRow(x) {
   var dotCls = x.level === 2 ? "dot-red" : x.level === 1 ? "dot-amber" : "dot-green";
@@ -3414,11 +3434,16 @@ function freshRow(x) {
   // ⚠️ Отдельным элементом, а не хвостом меты: мета говорит про последний
   // ЗАСЧИТАННЫЙ импорт, а пометка — про последнюю ПОПЫТКУ, и это разные дни.
   // Склейка в одну фразу читалась так, будто карточки не открылись тогда же.
+  // ⚠️ Слово «попытка» обязательно: у суда, который ни разу не импортировался
+  // успешно, мета говорит «ни разу не импортировался», и без него две строки
+  // читались как противоречие («ни разу» + «16 дн назад карточки не
+  // читались»). Оно же чинит фразу, когда relTime отдаёт не «N дн назад», а
+  // абсолютную дату: «попытка 23.07.2026: …» вместо «23.07.2026 карточки…».
   var trouble = x.trouble
     ? '<span class="imp-fresh-warn" title="'
       + escHtml(x.trouble.reason || "суд не отдал карточки")
-      + '">⚠ ' + escHtml(relTime(new Date(x.trouble.ts).toISOString()))
-      + ' карточки не читались</span>'
+      + '">⚠ попытка ' + escHtml(relTime(new Date(x.trouble.ts).toISOString()))
+      + ': карточки не читались</span>'
     : "";
   return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
     + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.key) + '">'
@@ -3455,8 +3480,8 @@ function renderMyBar(rows) {
   }
   bar.innerHTML = (n
       ? '<span class="imp-hint"><b>Мои суды: ' + n + '</b> из ' + rows.length + '</span>'
-      : '<span class="imp-hint">Показаны все ' + rows.length
-        + ' судов территории. Отметьте свои — очередь станет вашей.</span>')
+      : '<span class="imp-hint">Судов на территории: ' + rows.length
+        + '. Отметьте свои — очередь станет вашей.</span>')
     + '<span class="spacer"></span>'
     + '<button class="btn-outline btn-sm" type="button" data-act="edit">'
     + (n ? "Изменить мои суды" : "Отметить мои суды") + "</button>";
