@@ -3846,6 +3846,33 @@ function buildWritsSectionHtml(c){
   </div>`;
 }
 
+// Дата последнего УСПЕШНОГО чтения карточки выбранной инстанции. Не подменяем
+// её общим updated_at файла: парсер мог обновить набор данных, но не открыть
+// конкретный сайт суда. Ручная сборка DD.MM.YYYY исключает сдвиг даты из-за TZ.
+function courtCheckDate(raw){
+  const iso=parseDate(String(raw||'').trim());
+  const m=iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return '';
+  const y=Number(m[1]),month=Number(m[2]),day=Number(m[3]);
+  const dt=new Date(Date.UTC(y,month-1,day));
+  if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==month-1||dt.getUTCDate()!==day)return '';
+  return`${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function drawerFreshnessHtml(stageData){
+  const checked=courtCheckDate(stageData&&stageData.last_checked_at);
+  const icon=checked
+    ?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>'
+    :'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  const longLabel=checked?'Проверено на сайте суда':'Проверка сайта суда';
+  const shortLabel=checked?'Проверено на сайте':'Проверка сайта';
+  return`<div class="drawer-freshness${checked?'':' is-missing'}" aria-live="polite">
+    <span class="drawer-freshness-icon">${icon}</span>
+    <span class="drawer-freshness-label"><span class="drawer-freshness-long">${longLabel}</span><span class="drawer-freshness-short">${shortLabel}</span></span>
+    <span class="drawer-freshness-date">${checked||'не зафиксирована'}</span>
+  </div>`;
+}
+
 function renderDrawer(c){
   const vm=prepareCaseViewModel(c);
   const isNew=isNewCase(c);
@@ -4222,6 +4249,8 @@ function renderDrawer(c){
       </div>
 
       ${tabsHtml}
+
+      ${drawerFreshnessHtml(stageData)}
 
       <div class="drawer-section">
         <div class="drawer-section-title">Ключевые даты</div>

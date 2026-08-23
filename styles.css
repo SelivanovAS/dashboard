@@ -147,6 +147,8 @@
   --accent-active: var(--sber-green-700);
   --accent-bg-soft: var(--sber-green-50);
   --accent-bg-strong: var(--sber-green-100);
+  --freshness-bg: #f4f8f5;
+  --freshness-border: #dce8df;
   --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
 
   /* Активный сегмент (#dataset-switch, роль/инстанция, шторка фильтров).
@@ -387,6 +389,8 @@
   --accent-active: #2aa540;
   --accent-bg-soft: rgba(47, 191, 74, 0.10);
   --accent-bg-strong: rgba(47, 191, 74, 0.20);
+  --freshness-bg: #18251f;
+  --freshness-border: #2d4037;
   --focus-ring: 0 0 0 3px rgba(47, 191, 74, 0.40);
 
   /* Активный сегмент: приглушённый зелёный со светлым текстом (решение
@@ -1387,6 +1391,19 @@ tr.detail-row { display:none; }
 .drawer-tab.tab-ap .tab-badge { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); }
 .drawer-tab.tab-cs .tab-badge { background:var(--stage-cass-bg); color:var(--stage-cass-fg); }
 
+/* Последняя успешная проверка карточки выбранной инстанции. Отдельная тихая
+   поверхность не даёт служебной дате потеряться среди «Ключевых дат», но и
+   не изображает срочность: возраст проверки здесь намеренно не оценивается. */
+.drawer-freshness { min-height:38px; box-sizing:border-box; display:flex; align-items:center; gap:8px; margin-bottom:18px; padding:8px 10px; border:1px solid var(--freshness-border); border-radius:10px; background:var(--freshness-bg); }
+.drawer-freshness-icon { width:20px; height:20px; flex:0 0 20px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent); }
+.drawer-freshness-icon svg { width:16px; height:16px; }
+.drawer-freshness-label { min-width:0; flex:1 1 auto; color:var(--fg-3); font-size:var(--fs-sm); font-weight:var(--fw-medium); line-height:1.35; white-space:nowrap; }
+.drawer-freshness-short { display:none; }
+.drawer-freshness-date { margin-left:auto; color:var(--fg-1); font-family:var(--font-mono); font-size:14px; font-weight:var(--fw-semibold); font-variant-numeric:tabular-nums; line-height:1.35; white-space:nowrap; }
+.drawer-freshness.is-missing { background:var(--bg-3); border-color:var(--border); }
+.drawer-freshness.is-missing .drawer-freshness-icon { color:var(--fg-4); }
+.drawer-freshness.is-missing .drawer-freshness-date { color:var(--fg-3); font-family:var(--font-sans); font-size:var(--fs-sm); font-weight:var(--fw-medium); }
+
 /* Timeline */
 .timeline { position:relative; padding-left:18px; }
 .timeline::before { content:''; position:absolute; left:5px; top:4px; bottom:4px; width:2px; background:var(--border); }
@@ -1887,6 +1904,14 @@ tr.detail-row { display:none; }
       0 2px 8px rgba(13, 17, 22, 0.08);
   }
   .drawer-footer .btn-watch .btn-watch-star { font-size:22px; margin-right:4px; }
+}
+
+@media (max-width:350px) {
+  .drawer-freshness { gap:6px; padding-inline:8px; }
+  .drawer-freshness-long { display:none; }
+  .drawer-freshness-short { display:inline; }
+  .drawer-freshness-label { font-size:var(--fs-xs); }
+  .drawer-freshness-date { font-size:var(--fs-sm); }
 }
 
 /* Fallback для движков без backdrop-filter (старый Android WebView, Samsung
