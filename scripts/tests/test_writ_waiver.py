@@ -329,6 +329,32 @@ class TestCLI:
             assert code == 5 and s.get("error")
 
 
+    def test_report_lines_are_strings(self):
+        """Построчный отчёт — СТРОКИ, как у двух других каналов ввода.
+
+        Скрипт складывал в lines словари, а Worker кладёт их в журнал через
+        `body.lines.map(String)` — оператор видел в свёртке «Отчёт построчно»
+        N строк «[object Object]» (найдено разбором операторской 23.08.2026).
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            base, events = self._prepare(td)
+            code, s = self._run(
+                {"action": "set", "operator": "Тест",
+                 "items": [{"case_id": "2-100/2026",
+                            "court_domain": "surggor--hmao.sudrf.ru",
+                            "reason": "debt_paid"},
+                           {"case_id": "9-999/2026",
+                            "court_domain": "surggor--hmao.sudrf.ru",
+                            "reason": "debt_paid"}]},
+                base, events, td)
+        assert code == 0
+        assert s["lines"] and all(isinstance(x, str) for x in s["lines"]), s["lines"]
+        # Маркеры в стиле остальных каналов ([ADDED]/[REFUSED]/…).
+        assert any(x.startswith("[WAIVED] 2-100/2026") for x in s["lines"]), s["lines"]
+        assert any(x.startswith("[NOT FOUND] 9-999/2026") for x in s["lines"]), s["lines"]
+
+
 # ── Проводка: workflow, Worker, админка, фронт ───────────────────────────────
 
 class TestWiring:
@@ -390,6 +416,22 @@ class TestWiring:
         # Список строится ЧТЕНИЕМ штампа — своей копии предиката очереди нет.
         assert "writ_awaited_since" in js
         assert "classifyWritKind" not in js.split("collectWaitRow", 1)[1][:4000]
+
+    def test_admin_summary_has_its_own_branch(self):
+        """Запись kind:"writ_waiver" не должна рисоваться дамповой сводкой.
+
+        До 23.08.2026 impResultText ветвился только на kind:"case", и пометки
+        приезжали в журнал строкой «готово ? · Имя · +0 в картотеку»: счётчики
+        waived/updated/cleared доезжали до KV, но третье звено их не читало.
+        """
+        js = self._read("cloudflare-worker/admin_page.js")
+        assert 'item.kind === "writ_waiver"' in js, (
+            "сводка пометок идёт дамповой веткой и печатает «+0 в картотеку»")
+        assert "function wwResultText" in js
+        for counter in ("item.waived", "item.cleared"):
+            assert counter in js, f"{counter} не доходит до глаз оператора"
+        # Суда у записи нет — в истории она подписывается каналом, а не «?».
+        assert "лист не нужен" in js.split("function renderImportHistory", 1)[1][:1500]
 
     def test_queue_loads_for_both_roles(self):
         """Карточка не должна зависеть от пайплайна подписчиков.
