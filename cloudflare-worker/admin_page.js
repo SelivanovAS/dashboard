@@ -2051,8 +2051,25 @@ async function fetchAll() {
       wwWaived.push(row);
       return;
     }
-    if (!fi.writ_awaited_since) return;
-    row.days = wwDaysSince(fi.writ_awaited_since);
+    // Штамп очереди ставит прогон (split_bank_track). ФОЛБЭК нужен, пока
+    // прогон после деплоя ещё не отработал: без него карточка пустая и
+    // прячется — фичей нельзя пользоваться до следующего утра.
+    // Приближение грубее штампа: «нет ни одного листа» вместо «нет листа НА
+    // ИСПОЛНЕНИЕ» — дела с обеспечительными листами (их 3 на две территории)
+    // могут показаться лишний раз. Уточнять нечем: классификация листа живёт
+    // в Python, а тащить её третьей копией в админку хуже, чем показать
+    // лишнюю строку один раз.
+    var since = fi.writ_awaited_since;
+    var approx = false;
+    if (!since && fi.legal_force_est && fi.writ_expected !== false
+        && String(fi.status || "") === "Решено"
+        && !(fi.writs || []).length) {
+      since = fi.legal_force_est;
+      approx = true;
+    }
+    if (!since) return;
+    row.days = wwDaysSince(since);
+    row.approx = approx;
     if (row.days === null) return;
     wwRows.push(row);
   }
@@ -2064,7 +2081,10 @@ async function fetchAll() {
     wwRows.sort(function (a, b) { return b.days - a.days; });
     var long = wwRows.filter(function (r) { return r.days >= WW_LONG_WAIT_DAYS; });
     var shown = long.length ? long : wwRows.slice(0, 10);
-    document.getElementById("ww-meta").textContent = "ждут лист: " + wwRows.length;
+    var approxN = wwRows.filter(function (r) { return r.approx; }).length;
+    document.getElementById("ww-meta").textContent = "ждут лист: " + wwRows.length
+      + (approxN === wwRows.length && approxN
+         ? " (приблизительно — до ближайшего прогона)" : "");
     var hints = wwRows.filter(function (r) { return r.archAt; }).length;
     document.getElementById("ww-badges").innerHTML = hints
       ? '<span class="ww-hint-badge" title="Суд сдал дело в архив, а листа нет — вероятно, его не запрашивали">' + hints + " с подсказкой</span>"
