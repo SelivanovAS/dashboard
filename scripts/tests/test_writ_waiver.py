@@ -391,18 +391,41 @@ class TestWiring:
         assert "writ_awaited_since" in js
         assert "classifyWritKind" not in js.split("collectWaitRow", 1)[1][:4000]
 
-    def test_admin_calls_render_after_loading_data(self):
-        """Вызов renderWaitCard обязан стоять после разбора cases_bank*.json.
+    def test_queue_loads_for_both_roles(self):
+        """Карточка не должна зависеть от пайплайна подписчиков.
 
-        collectWaitRow только НАПОЛНЯЕТ списки, рисует карточку renderWaitCard.
-        При первом деплое вызов потерялся: данные собирались (wwRows непуст), а
-        карточка оставалась скрытой со строкой «Загрузка…» — юрист её не видел.
+        Три захода подряд ушли на одну связку: сначала функции были заперты
+        внутри fetchAll, потом потерялся вызов рендера, потом выяснилось, что
+        у оператора fetchAll не вызывается вовсе (render() под if (IS_OWNER))
+        и вдобавок падает на owner-only /admin/data. Теперь у очереди своя
+        загрузка, подключённая к loadStaticData БЕЗ гарда роли.
         """
         js = self._read("cloudflare-worker/admin_page.js")
-        i = js.index("addBankCases(results[6], true)")
-        tail = js[i:i + 600]
-        assert "renderWaitCard()" in tail, (
-            "после загрузки банк-картотеки карточку никто не рисует")
+        assert "async function loadWritQueue()" in js
+        # Вызов стоит в общем для обеих ролей списке задач.
+        i = js.index("function loadStaticData(")
+        body = js[i:i + 900]
+        assert "loadWritQueue()" in body, (
+            "loadWritQueue не вызывается из loadStaticData — оператор снова "
+            "не увидит карточку")
+        call = body[body.index("loadWritQueue()") - 200:body.index("loadWritQueue()")]
+        assert "IS_OWNER" not in call.split("const jobs")[-1], (
+            "вызов loadWritQueue не должен стоять под гардом IS_OWNER")
+
+    def test_queue_not_tied_to_subscribers_pipeline(self):
+        """Сбор очереди не живёт внутри fetchAll (пайплайн подписчиков)."""
+        js = self._read("cloudflare-worker/admin_page.js")
+        i = js.index("async function fetchAll()")
+        j = js.index("async function render(", i)
+        assert "collectWaitRow" not in js[i:j], (
+            "сбор очереди снова внутри fetchAll — у оператора он не выполнится")
+
+    def test_card_has_no_owner_gate(self):
+        js = self._read("cloudflare-worker/admin_page.js")
+        i = js.index('id="ww-card"')
+        head = js[max(0, i - 200):i + 120]
+        assert "data-owner-only" not in head, (
+            "карточка должна быть доступна обеим ролям")
 
     def test_admin_helpers_share_one_scope(self):
         """Функции карточки и обработчики кликов обязаны жить в ОДНОЙ области.
