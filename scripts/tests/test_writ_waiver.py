@@ -391,6 +391,23 @@ class TestWiring:
         assert "writ_awaited_since" in js
         assert "classifyWritKind" not in js.split("collectWaitRow", 1)[1][:4000]
 
+    def test_admin_helpers_share_one_scope(self):
+        """Функции карточки и обработчики кликов обязаны жить в ОДНОЙ области.
+
+        Первая версия объявляла wwRows/renderWaitCard внутри fetchAll (отступ
+        2), а wwSend и слушатели — на верхнем уровне: они друг друга не
+        видели, и карточка не работала. Проверяем по отступу объявления.
+        """
+        js = self._read("cloudflare-worker/admin_page.js")
+        for name in ("var wwRows", "function renderWaitCard",
+                     "function collectWaitRow", "async function wwSend",
+                     "function updateWaitActions"):
+            i = js.index(name)
+            line_start = js.rfind("\n", 0, i) + 1
+            assert i == line_start, (
+                f"{name} объявлена с отступом — значит внутри другой функции, "
+                "и обработчики кликов её не увидят")
+
     def test_front_reads_the_mark(self):
         js = self._read("app.js")
         assert "writWaivedInfo" in js
