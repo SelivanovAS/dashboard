@@ -575,20 +575,34 @@ a { color: var(--accent); }
 /* Очередь ожидания ИЛ и пометка «лист не нужен» (21.08.2026). Строка —
    номер, суд, срок ожидания, подсказка и выбор причины; помеченные лежат
    свёрнутым списком ниже. */
-.ww-row { display:flex; align-items:center; gap:8px; padding:6px 0;
+.ww-row { display:flex; align-items:baseline; gap:8px; padding:5px 0;
           border-bottom:1px solid var(--border); font-size:var(--fs-sm); }
 .ww-row:last-child { border-bottom:0; }
-.ww-row.is-picked { background:var(--amber-50, rgba(245,158,11,.08)); }
-.ww-num { font-weight:600; min-width:132px; }
+.ww-row.is-picked { background:var(--amber-50, rgba(245,158,11,.10)); }
+/* Номер не сжимается (по нему юрист узнаёт дело), суд отдаёт место первым —
+   ellipsis, как в .health-name. Срок и кнопка прижаты вправо. */
+.ww-num { font-weight:var(--fw-semibold); flex-shrink:0; max-width:46%;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ww-court { color:var(--fg-2); flex:1; min-width:0; overflow:hidden;
             text-overflow:ellipsis; white-space:nowrap; }
-.ww-days { color:var(--fg-3); font-variant-numeric:tabular-nums; }
-.ww-hint { color:var(--amber-600, #d97706); cursor:help; }
-.ww-hint-badge { color:var(--amber-600, #d97706); font-size:var(--fs-xs); }
-.ww-reason { font-size:var(--fs-xs); max-width:210px; }
+.ww-days { color:var(--fg-3); font-variant-numeric:tabular-nums; flex-shrink:0;
+           font-size:var(--fs-xs); }
+.ww-hint { color:var(--warning-fg); cursor:help; flex-shrink:0; }
+.ww-hint-badge { color:var(--warning-fg); font-size:var(--fs-2xs); }
+.ww-mark { flex-shrink:0; width:24px; height:24px; line-height:1; padding:0;
+           border:1px solid var(--border); border-radius:var(--radius-md);
+           background:var(--bg-1); color:var(--fg-2); cursor:pointer;
+           font-size:var(--fs-sm); align-self:center; }
+.ww-mark:hover { border-color:var(--accent); color:var(--accent); }
+.ww-row.is-picked .ww-mark { border-color:var(--accent); color:var(--accent);
+                             font-weight:var(--fw-semibold); }
 .ww-row.is-waived .ww-court { color:var(--fg-3); }
 .ww-actions { display:flex; align-items:center; gap:10px; padding-top:10px;
               flex-wrap:wrap; }
+.ww-modal-case { color:var(--fg-2); font-size:var(--fs-sm); margin-bottom:10px; }
+.ww-opt { display:block; padding:7px 0; font-size:var(--fs-sm); cursor:pointer; }
+.ww-opt input { margin-right:8px; }
+.ww-dlg { width:min(420px, calc(100vw - 32px)); }
 
 /* Details-свёртки */
 details.fold { margin-top:8px; }
@@ -1153,6 +1167,19 @@ ${IMPORT_SECTION}
 
 </main>
 
+<!-- Причина пометки «лист не нужен». Модалка, а не контрол в строке:
+     колонка сетки ~460px, широкий селект туда не влезает (первая версия
+     схлопывала суд и обрезала список). data-owner-only НЕТ — помечает и
+     оператор. -->
+<dialog class="wl ww-dlg" id="ww-modal">
+  <div class="wl-head">Лист не нужен</div>
+  <div class="ww-modal-case" id="ww-modal-case"></div>
+  <div id="ww-modal-reasons"></div>
+  <div class="wl-foot">
+    <button class="btn-outline" type="button" id="ww-modal-cancel">Отмена</button>
+    <button class="btn-primary" type="button" id="ww-modal-ok">Пометить</button>
+  </div>
+</dialog>
 <dialog class="wl" id="wl-modal" data-owner-only>
   <div class="wl-head">Watchlist: <span id="wl-who"></span></div>
   <input class="wl-search" id="wl-search" type="text" placeholder="Поиск: номер дела, сторона или суд…">
@@ -2024,9 +2051,6 @@ async function fetchAll() {
           bank: true,
         };
         if (archived) { payload.archived = true; payload.archived_at = c.archived_at || ""; }
-        // Заодно собираем очередь ожидания ИЛ — второго скачивания
-        // cases_bank.json не делаем, файл территории весит мегабайты.
-        if (!archived) collectWaitRow(c);
         addAlias(casesMap, comp, payload);
         addAlias(casesMap, bare, payload);
         addAlias(casesMap, c.first_instance && c.first_instance.case_number, payload);
@@ -2035,11 +2059,6 @@ async function fetchAll() {
   }
   await addBankCases(results[5], false);
   await addBankCases(results[6], true);
-  // ⚠️ Вызов обязателен именно здесь: collectWaitRow только НАПОЛНЯЕТ списки
-  // во время разбора cases_bank*.json, а рисует карточку renderWaitCard. Без
-  // него данные собраны (wwRows непуст), но карточка остаётся скрытой со
-  // строкой «Загрузка…» — ровно так фича и не заработала при первом деплое.
-  try { renderWaitCard(); } catch (e) { console.warn("ww-card:", e); }
   // Журнал последней push-рассылки: endpoint → запись.
   const pushesMap = new Map();
   let pushesGeneratedAt = "";
@@ -3560,15 +3579,26 @@ function acUpdateState() {
 // Признак очереди — ГОТОВЫЙ штамп first_instance.writ_awaited_since (его
 // ставит split_bank_track на прогоне): своей копии предиката очереди в
 // админке нет, иначе правило жило бы в трёх местах сразу.
+//
+// ⚠️ Всё, что ниже, живёт на ВЕРХНЕМ уровне и не зависит от роли: карточка
+// доступна обеим (пометку ставит и оператор). Первая версия собирала очередь
+// внутри fetchAll — пайплайна подписчиков, который у оператора не вызывается
+// и падает на owner-only /admin/data; это стоило трёх заходов подряд.
 var wwRows = [];      // ждут лист
 var wwWaived = [];    // уже помечены
 var wwBasket = {};    // лоток: ключ «домен|номер» → код причины
+var wwClearQueue = [];
+var wwModalKey = "";  // дело, открытое в модалке
 var WW_LONG_WAIT_DAYS = 60;   // второй порог лестницы напоминаний (30/60/90)
 var WW_REASONS = [
   ["debt_paid", "долг погашен после решения"],
   ["not_requested", "лист решили не запрашивать"],
   ["other", "иное"]
 ];
+function wwReasonLabel(code) {
+  var p = WW_REASONS.filter(function (x) { return x[0] === code; })[0];
+  return p ? p[1] : "иное";
+}
 function wwDaysSince(iso) {
   if (!iso) return null;
   var d = new Date(iso + "T00:00:00");
@@ -3577,8 +3607,11 @@ function wwDaysSince(iso) {
   return Math.round((t - d) / 86400000);
 }
 function wwShortCourt(name) {
-  return String(name || "").replace(/\s*районный суд\s*/i, " р/с ")
-    .replace(/\s*городской суд\s*/i, " гор. ").trim();
+  return String(name || "")
+    .replace(/\s*районный суд\s*/i, " р/с ")
+    .replace(/\s*городской суд\s*/i, " гор. ")
+    .replace(/\s*город(ского|ской)\s*/i, " ")
+    .trim();
 }
 function wwPlural(n, a, b, c) {
   var m10 = n % 10, m100 = n % 100;
@@ -3587,6 +3620,9 @@ function wwPlural(n, a, b, c) {
   return c;
 }
 function wwKey(r) { return r.domain + "|" + r.id; }
+function wwRowByKey(k) {
+  return wwRows.filter(function (r) { return wwKey(r) === k; })[0] || null;
+}
 function collectWaitRow(c) {
   var fi = (c && c.first_instance) || {};
   var row = {
@@ -3601,14 +3637,11 @@ function collectWaitRow(c) {
     wwWaived.push(row);
     return;
   }
-  // Штамп очереди ставит прогон (split_bank_track). ФОЛБЭК нужен, пока
-  // прогон после деплоя ещё не отработал: без него карточка пустая и
-  // прячется — фичей нельзя пользоваться до следующего утра.
-  // Приближение грубее штампа: «нет ни одного листа» вместо «нет листа НА
-  // ИСПОЛНЕНИЕ» — дела с обеспечительными листами (их 3 на две территории)
-  // могут показаться лишний раз. Уточнять нечем: классификация листа живёт
-  // в Python, а тащить её третьей копией в админку хуже, чем показать
-  // лишнюю строку один раз.
+  // Штамп очереди ставит прогон. ФОЛБЭК нужен, пока прогон после деплоя ещё
+  // не отработал: без него карточка пустая и прячется. Приближение грубее
+  // штампа («нет ни одного листа» вместо «нет листа НА ИСПОЛНЕНИЕ») — дела с
+  // обеспечительными листами могут показаться лишний раз; тащить
+  // классификацию листа третьей копией в админку было бы хуже.
   var since = fi.writ_awaited_since;
   var approx = false;
   if (!since && fi.legal_force_est && fi.writ_expected !== false
@@ -3623,6 +3656,26 @@ function collectWaitRow(c) {
   if (row.days === null) return;
   wwRows.push(row);
 }
+// Своя загрузка картотеки — по образцу loadHealth(). Отдельный fetch, а не
+// врезка в чужой пайплайн: у владельца тот же URL уже лежит в HTTP-кэше
+// браузера, у оператора это единственный путь.
+async function loadWritQueue() {
+  wwRows = []; wwWaived = [];
+  var list = document.getElementById("ww-list");
+  try {
+    var r = await fetch(BANK_URL, { cache: "no-cache" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    var d = await r.json();
+    (d.cases || []).forEach(collectWaitRow);
+  } catch (e) {
+    // 404 = территория без трека исков банка: карточку просто не показываем.
+    var card = document.getElementById("ww-card");
+    if (card) card.style.display = "none";
+    if (String(e && e.message) !== "HTTP 404") console.warn("ww-card:", e);
+    return;
+  }
+  renderWaitCard();
+}
 function renderWaitCard() {
   var card = document.getElementById("ww-card");
   if (!card) return;
@@ -3632,27 +3685,28 @@ function renderWaitCard() {
   var long = wwRows.filter(function (r) { return r.days >= WW_LONG_WAIT_DAYS; });
   var shown = long.length ? long : wwRows.slice(0, 10);
   var approxN = wwRows.filter(function (r) { return r.approx; }).length;
-  document.getElementById("ww-meta").textContent = "ждут лист: " + wwRows.length
-    + (approxN === wwRows.length && approxN
-       ? " (приблизительно — до ближайшего прогона)" : "");
+  document.getElementById("ww-meta").textContent = "ждут: " + wwRows.length
+    + (approxN === wwRows.length && approxN ? " (примерно — до прогона)" : "");
   var hints = wwRows.filter(function (r) { return r.archAt; }).length;
   document.getElementById("ww-badges").innerHTML = hints
     ? '<span class="ww-hint-badge" title="Суд сдал дело в архив, а листа нет — вероятно, его не запрашивали">' + hints + " с подсказкой</span>"
     : "";
   var html = shown.map(function (r) {
-    var picked = wwBasket[wwKey(r)];
+    var k = wwKey(r);
+    var picked = wwBasket[k];
     var hint = r.archAt
-      ? ' <span class="ww-hint" title="Суд сдал дело в архив ' + escHtml(r.archAt) + ', а листа нет — вероятно, его и не будет">&#9888;</span>'
+      ? '<span class="ww-hint" title="Суд сдал дело в архив ' + escHtml(r.archAt) + ', а листа нет — вероятно, его и не будет">&#9888;</span>'
       : "";
-    var opts = WW_REASONS.map(function (p) {
-      return '<option value="' + p[0] + '"' + (picked === p[0] ? " selected" : "") + ">" + p[1] + "</option>";
-    }).join("");
-    var sel = '<select class="ww-reason" data-k="' + escHtml(wwKey(r)) + '">'
-      + '<option value="">— лист не нужен: причина —</option>' + opts + "</select>";
+    var btn = '<button class="ww-mark" data-k="' + escHtml(k) + '" title="'
+      + (picked ? "Помечено: " + escHtml(wwReasonLabel(picked)) + ". Нажмите, чтобы изменить"
+                : "Пометить: лист не нужен")
+      + '">' + (picked ? "&#10003;" : "&#43;") + "</button>";
     return '<div class="ww-row' + (picked ? " is-picked" : "") + '">'
-      + '<span class="ww-num">' + escHtml(r.id) + "</span>"
-      + '<span class="ww-court">' + escHtml(wwShortCourt(r.court)) + "</span>"
-      + '<span class="ww-days">' + r.days + " дн.</span>" + hint + sel + "</div>";
+      + '<span class="ww-num" title="' + escHtml(r.id) + '">' + escHtml(r.id) + "</span>"
+      + '<span class="ww-court" title="' + escHtml(r.court) + '">' + escHtml(wwShortCourt(r.court)) + "</span>"
+      + hint
+      + '<span class="ww-days">' + r.days + "&nbsp;дн.</span>"
+      + btn + "</div>";
   }).join("");
   if (long.length && wwRows.length > long.length) {
     html += '<div class="health-more">Показаны ждущие дольше ' + WW_LONG_WAIT_DAYS
@@ -3669,13 +3723,12 @@ function renderWaivedList() {
   if (!wrap) return;
   if (!wwWaived.length) { wrap.innerHTML = ""; return; }
   var rows = wwWaived.map(function (r) {
-    var pair = WW_REASONS.filter(function (p) { return p[0] === r.reason; })[0];
-    var why = pair ? pair[1] : "иное";
     return '<div class="ww-row is-waived">'
-      + '<span class="ww-num">' + escHtml(r.id) + "</span>"
-      + '<span class="ww-court">' + escHtml(why) + "</span>"
+      + '<span class="ww-num" title="' + escHtml(r.id) + '">' + escHtml(r.id) + "</span>"
+      + '<span class="ww-court" title="' + escHtml(r.by ? "отметил " + r.by : "") + '">'
+      + escHtml(wwReasonLabel(r.reason)) + "</span>"
       + '<span class="ww-days">' + escHtml(r.at || "") + "</span>"
-      + '<button class="btn btn-sm ww-clear" data-k="' + escHtml(wwKey(r)) + '">вернуть в очередь</button>'
+      + '<button class="ww-mark ww-clear" data-k="' + escHtml(wwKey(r)) + '" title="Вернуть дело в очередь ожидания">&#8635;</button>'
       + "</div>";
   }).join("");
   wrap.innerHTML = '<details class="fold"><summary>Помечено «лист не нужен» ('
@@ -3692,7 +3745,31 @@ function updateWaitActions() {
     ? "Отправить " + n + " " + wwPlural(n, "пометку", "пометки", "пометок")
     : "Отправить пометки";
 }
-
+// Модалка выбора причины — по образцу #wl-modal (вкладка подписчиков):
+// широкий контрол в строку карточки не влезает (колонка сетки ~460px), да и
+// причина заслуживает осознанного выбора, а не случайного клика в списке.
+function wwOpenModal(k) {
+  var row = wwRowByKey(k);
+  if (!row) return;
+  wwModalKey = k;
+  var dlg = document.getElementById("ww-modal");
+  if (!dlg) return;
+  document.getElementById("ww-modal-case").textContent =
+    row.id + " · " + wwShortCourt(row.court) + " · ждёт " + row.days + " дн.";
+  var cur = wwBasket[k] || "";
+  document.getElementById("ww-modal-reasons").innerHTML = WW_REASONS.map(function (p, i) {
+    return '<label class="ww-opt"><input type="radio" name="ww-reason-radio" value="' + p[0] + '"'
+      + (cur === p[0] || (!cur && i === 0) ? " checked" : "") + "> " + p[1] + "</label>";
+  }).join("");
+  dlg.showModal();
+}
+function wwApplyModal() {
+  var dlg = document.getElementById("ww-modal");
+  var sel = dlg ? dlg.querySelector('input[name="ww-reason-radio"]:checked') : null;
+  if (sel && wwModalKey) wwBasket[wwModalKey] = sel.value;
+  if (dlg) dlg.close();
+  renderWaitCard();
+}
 // ── Отправка пометок «лист не нужен» ────────────────────────────────────────
 // Пачкой, одним POST: первый заход юриста — это разбор всех зависших дел, и по
 // диспатчу на клик получилось бы полсотни гонок за общую очередь записи в
@@ -3739,19 +3816,16 @@ async function wwSend(action) {
   }
 }
 // Делегирование: список перерисовывается целиком при каждом изменении лотка.
-document.addEventListener("change", function (e) {
-  var sel = e.target && e.target.closest ? e.target.closest(".ww-reason") : null;
-  if (!sel) return;
-  var k = sel.getAttribute("data-k");
-  if (sel.value) wwBasket[k] = sel.value; else delete wwBasket[k];
-  var row = sel.closest(".ww-row");
-  if (row) row.classList.toggle("is-picked", !!sel.value);
-  updateWaitActions();
-});
 document.addEventListener("click", function (e) {
   var t = e.target;
   if (!t || !t.closest) return;
   if (t.closest("#ww-send")) { wwSend("set"); return; }
+  if (t.closest("#ww-modal-ok")) { wwApplyModal(); return; }
+  if (t.closest("#ww-modal-cancel")) {
+    var dlg = document.getElementById("ww-modal");
+    if (dlg) dlg.close();
+    return;
+  }
   if (t.closest("#ww-reset")) {
     wwBasket = {};
     renderWaitCard();
@@ -3759,11 +3833,16 @@ document.addEventListener("click", function (e) {
     if (st) st.textContent = "";
     return;
   }
+  // ⚠️ .ww-clear проверяем ДО .ww-mark: у кнопки возврата оба класса, иначе
+  // «вернуть в очередь» открывало бы модалку пометки.
   var clr = t.closest(".ww-clear");
   if (clr) {
     wwClearQueue = [clr.getAttribute("data-k")];
     wwSend("clear");
+    return;
   }
+  var mark = t.closest(".ww-mark");
+  if (mark) wwOpenModal(mark.getAttribute("data-k"));
 });
 
 async function acSend() {
@@ -3900,7 +3979,12 @@ const STATIC_STALE_MS = 10 * 60 * 1000;
 // плитки «Автозапуск» пустым значением.
 function loadStaticData(withDigest) {
   lastStaticLoadAt = Date.now();
-  const jobs = [loadHealth()];
+  // ⚠️ loadWritQueue — БЕЗ гарда IS_OWNER: пометку «лист не нужен» ставит и
+  // оператор (о погашении долга узнаёт тот, кто ведёт дело). Раньше очередь
+  // собиралась внутри fetchAll — пайплайна ПОДПИСЧИКОВ, который у оператора
+  // не вызывается вовсе и вдобавок падает на owner-only /admin/data. Это
+  // стоило трёх заходов подряд; теперь карточка ни от чего чужого не зависит.
+  const jobs = [loadHealth(), loadWritQueue()];
   // Иски банка — не операторский трек: карточка у него скрыта, и файл (на
   // Урале — сотни килобайт) не запрашиваем вовсе, а не «грузим и прячем».
   if (IS_OWNER) jobs.push(loadBankParse());
