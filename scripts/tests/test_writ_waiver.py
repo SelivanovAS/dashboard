@@ -391,6 +391,19 @@ class TestWiring:
         assert "writ_awaited_since" in js
         assert "classifyWritKind" not in js.split("collectWaitRow", 1)[1][:4000]
 
+    def test_admin_calls_render_after_loading_data(self):
+        """Вызов renderWaitCard обязан стоять после разбора cases_bank*.json.
+
+        collectWaitRow только НАПОЛНЯЕТ списки, рисует карточку renderWaitCard.
+        При первом деплое вызов потерялся: данные собирались (wwRows непуст), а
+        карточка оставалась скрытой со строкой «Загрузка…» — юрист её не видел.
+        """
+        js = self._read("cloudflare-worker/admin_page.js")
+        i = js.index("addBankCases(results[6], true)")
+        tail = js[i:i + 600]
+        assert "renderWaitCard()" in tail, (
+            "после загрузки банк-картотеки карточку никто не рисует")
+
     def test_admin_helpers_share_one_scope(self):
         """Функции карточки и обработчики кликов обязаны жить в ОДНОЙ области.
 
