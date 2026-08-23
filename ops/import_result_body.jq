@@ -19,15 +19,20 @@
 # Вход  — summary-JSON импортёра (env IMPORT_SUMMARY_PATH).
 # Аргументы — --arg dk <ключ дампа> --arg st <started|done|failed>
 #             --arg ru <URL прогона; пусто у Mac — Worker берёт только https://>
+#             --arg src <github|mac — кто отработал запись>
 #
 # Пример:
 #   jq -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-#      -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH"
+#      --arg src github -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH"
 # =============================================================================
 {
   dump_key: $dk,
   status: $st,
   run_url: $ru,
+  # Кто отработал запись. Сводка админки обещает оператору «повторит локальная
+  # машина» — маркер делает обещание проверяемым. Worker принимает только два
+  # значения (белый список), метку рисует лишь резерв: облако — дефолт.
+  source: $src,
 
   # Основная картотека (дела ПРОТИВ банка)
   added: (.added // 0),

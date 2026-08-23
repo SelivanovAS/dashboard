@@ -1413,8 +1413,14 @@ async function handleAdminWritWaiver(request, env) {
 
 // Выдача job-файла GitHub Action'у (Bearer PUSH_SECRET — шаблон /import-dump).
 async function handleAddCaseJobGet(request, env) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!env.PUSH_SECRET || auth !== `Bearer ${env.PUSH_SECRET}`) {
+  // Тот же канальный гейт, что у выдачи дампов (importChannelAuthOk): кроме
+  // PUSH_SECRET принимаем владельческий. Иначе резерв на Mac пачку не
+  // заберёт — PUSH_SECRET на машине юриста взять НЕОТКУДА (write-only и в
+  // Cloudflare, и в GitHub secrets). Границу доверия это не двигает:
+  // владельческим секретом и так открыта вся админка, включая запуск
+  // workflow. 16.08.2026 эту правку сделали /import-dump, а этот роут забыли
+  // — из-за чего локальная дочитка пачек не работала вовсе (23.08.2026).
+  if (!importChannelAuthOk(request, env)) {
     return new Response("Unauthorized", { status: 401 });
   }
   const url = new URL(request.url);
@@ -1488,8 +1494,13 @@ async function handleImportResult(request, env) {
                      // import_cases.yml — что не перечислено там, сюда не доедет.
                      "excluded_result", "excluded_writ", "already_spent",
                      "seen_cached", "bank_capped", "fetch_fail",
-                     // счётчики точечного добавления (kind:"case")
+                     // счётчики точечного добавления (kind:"case").
+                     // ⚠️ fetch_error — не косметика: по нему очередь резерва
+                     // (ops/mac-local-run/import_queue.jq) узнаёт пачку,
+                     // которую надо переделать. Без ключа пачка с потерянной
+                     // строкой выглядела бы успешной (23.08.2026).
                      "items", "added_main", "added_bank", "reactivated", "refused", "not_found",
+                     "fetch_error",
                      // счётчики пометки «лист не нужен» (kind:"writ_waiver")
                      "waived", "updated", "cleared"]) {
     if (typeof body[num] === "number") record[num] = body[num];
@@ -1513,6 +1524,14 @@ async function handleImportResult(request, env) {
     record.card_fail_reason = body.card_fail_reason.slice(0, 200);
   } else if (typeof body.card_fail_reason === "string") {
     delete record.card_fail_reason;
+  }
+  // Кто отработал запись — облако или резерв на Mac (23.08.2026). Сводка
+  // обещает оператору «повторит локальная машина», и обещание должно быть
+  // проверяемым: без маркера видно только, что счётчики поменялись, а кем —
+  // нет. ⚠️ БЕЛЫЙ СПИСОК значений, а не slice: поле идёт в рендер админки, и
+  // произвольная строка из тела запроса там не нужна.
+  if (body.source === "github" || body.source === "mac") {
+    record.source = body.source;
   }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,

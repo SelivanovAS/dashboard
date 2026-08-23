@@ -137,9 +137,13 @@ class TestDriverWiring:
         check = text[text.index('if [ "$CHECK_ONLY" = "1" ]'):]
         assert "проверяйте из офиса" in check, "--check требует сеть Сбера"
         assert "owner_secret не подходит" in check, "--check не проверяет секрет админки"
-        assert "доступ к дампам" in check, "--check не проверяет доступ к дампам"
+        assert "доступ к заданиям" in check, \
+            "--check не проверяет доступ к заданиям (дампы + пачки)"
         assert "журнал пришёл битым" in check, \
             "битый ответ Worker'а снова превратится в честный на вид ноль"
+        # Каналы названы по отдельности: «5 в очереди» не отвечает на вопрос
+        # оператора «мой дамп подхватят?».
+        assert "точечных пачек" in check
         assert "ничего не менялось" in check
 
     @pytest.mark.parametrize("script", [IMPORTER, PARSER, DRIVER, LIB,
@@ -201,12 +205,57 @@ class TestDriverWiring:
         из-под launchd stdout не терминал — там остаётся только лог."""
         assert "[ -t 1 ]" in _read_repo(IMPORTER)
 
-    def test_territory_without_captcha_courts_exits(self):
-        """У ХМАО капчёвых судов нет — дампов не бывает, и ежедневный
-        parse_all.sh не должен пугать «нет настроек Worker'а»."""
+    def test_territory_without_captcha_courts_still_drains_batches(self):
+        """У ХМАО капчёвых судов нет — дампов не бывает, но точечные пачки есть
+        (вкладка открыта обеим ролям на любой территории). До 23.08.2026 скрипт
+        тут выходил сразу и оставлял территорию вовсе без локальной дочитки.
+        Тишину держит гейт Worker-конфига, а не отсутствие капчёвых судов."""
         text = _read_repo(IMPORTER)
         assert "search_gated" in text
         assert "капчёвых судов нет" in text
+        gate = text.split("капчёвых судов нет")[1][:200]
+        assert "exit 0" not in gate, (
+            "ранний выход вернулся — ХМАО останется без дочитки пачек")
+        # Тихий выход по отсутствию настроек Worker'а обязан остаться.
+        assert "url/owner_secret" in text
+
+    def test_batch_channel_is_wired(self):
+        """Канал пачек: своё задание из KV, свой скрипт, свой общий пейлоад."""
+        text = _read_repo(IMPORTER)
+        assert "/add-case-job?key=" in text
+        assert "import:case:" in text
+        assert "add_cases_targeted.py" in text
+        assert "ops/add_case_result_body.jq" in text
+        # Ключ в теле отчёта решает канал: job_key у пачек, dump_key у дампов.
+        assert "job_key" in text and "dump_key" in text
+        # Свой грейс — дамповые 15 мин пустили бы Mac в живой облачный джоб.
+        assert "CASE_STARTED_GRACE" in text
+        assert "cgrace" in text
+
+    def test_queue_reader_survives_the_old_row_format(self):
+        """LaunchAgent гоняет скрипт КЛОНА-ЭТАЛОНА по всем территориям, а
+        import_queue.jq берётся из клона территории — между деплоем эталона и
+        merge в форк они разной версии. Старая очередь отдавала 4 поля без
+        канала; жёсткий разбор на 5 сдвинул бы их все (домен уехал бы в uuid) и
+        сломал бы работающий канал дампов на весь период раскатки."""
+        text = _read_repo(IMPORTER)
+        assert 'read -r f1 f2 f3 f4 f5' in text, (
+            "поля читаются напрямую в kind/uuid — старый формат перепутается")
+        assert '"$f1" = "dump" ] || [ "$f1" = "case"' in text
+        assert 'kind="dump"; uuid="$f1"' in text, "нет отката на старый формат"
+
+    def test_reports_name_the_reserve_as_the_source(self):
+        """Сводка обещает оператору «повторит локальная машина» — обещание
+        должно быть проверяемым: без маркера видно только, что счётчики
+        поменялись, а кем — нет."""
+        text = _read_repo(IMPORTER)
+        assert 'source:"mac"' in text
+        assert "--arg src mac" in text
+        worker = _read_repo("cloudflare-worker/worker.js")
+        assert 'body.source === "mac"' in worker, "Worker режет маркер"
+        assert "record.source = body.source" in worker
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert "локальной машины" in admin
 
     def test_config_is_read_without_source(self):
         """Конфиг worker.<регион> читается через cm_worker_conf (awk, а не
@@ -248,8 +297,36 @@ JOURNAL = {"items": [
     # старше TTL KV: дампа в хранилище уже нет
     _record("expired", ts="2026-08-14T09:00:00.000Z",
             updated_at="2026-08-14T09:00:00.000Z", card_failed=3),
-    # точечное добавление — другой канал и другой скрипт
-    _record("targeted", kind="case", refused=2),
+    # ── Второй канал: точечные пачки «Добавить дела» (kind:"case") ──────────
+    # Признак потери у них свой (fetch_error), домена у записи может не быть.
+    # Облако довело с потерей строки — забираем.
+    _record("case-lost", kind="case", court_domain="", fetch_error=1,
+            added_main=3),
+    # Довело чисто — трогать нечего.
+    _record("case-clean", kind="case", court_domain="", fetch_error=0,
+            added_main=4),
+    # Тотальный сетевой сбой (EXIT_NETWORK) — статус терминальный, гонки нет.
+    _record("case-failed", kind="case", court_domain="", status="failed"),
+    # Облачный джоб пачки идёт 20 мин — по дамповым 15 мин его бы уже отобрали,
+    # а у add_cases.yml timeout 45: не мешаем.
+    _record("case-running", kind="case", court_domain="", status="started",
+            ts="2026-08-16T09:40:00.000Z",
+            updated_at="2026-08-16T09:40:00.000Z"),
+    # «Идёт» два часа — облако точно умерло, забираем.
+    _record("case-stuck", kind="case", court_domain="", status="started",
+            ts="2026-08-16T08:00:00.000Z",
+            updated_at="2026-08-16T08:00:00.000Z"),
+    # Стоит в очереди cases-data-write два часа: у группы GitHub живёт один
+    # pending, и «dispatched» — тоже застревание.
+    _record("case-pending", kind="case", court_domain="", status="dispatched",
+            ts="2026-08-16T08:00:00.000Z",
+            updated_at="2026-08-16T08:00:00.000Z"),
+    # Только что отправлена — облако ещё даже не начало.
+    _record("case-justsent", kind="case", court_domain="", status="dispatched",
+            ts="2026-08-16T09:58:00.000Z",
+            updated_at="2026-08-16T09:58:00.000Z"),
+    # Пультовая пометка «лист не нужен» — к судам не ходит, дочитывать нечего.
+    _record("writ", kind="writ_waiver", status="failed"),
 ]}
 
 
@@ -262,14 +339,18 @@ def selected(tmp_path_factory) -> list[str]:
     out = subprocess.run(
         ["jq", "-r", "--argjson", "now", str(NOW),
          "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+         "--argjson", "cgrace", "3000",
          "-f", QUEUE_JQ, str(path)],
         cwd=REPO_DIR, capture_output=True, text=True, check=True)
-    return [l.split("\t")[0] for l in out.stdout.splitlines() if l.strip()]
+    return [l.split("\t")[1] for l in out.stdout.splitlines() if l.strip()]
 
 
 class TestQueueSelection:
     def test_takes_only_impaired_dumps(self, selected):
-        assert set(selected) == {"lost", "blind", "failed", "stuck"}
+        assert set(selected) == {
+            "lost", "blind", "failed", "stuck",
+            "case-lost", "case-failed", "case-stuck", "case-pending",
+        }
 
     def test_clean_import_is_not_redone(self, selected):
         """Успешный отчёт обнуляет fetch_fail/card_failed — на этом держится
@@ -284,8 +365,45 @@ class TestQueueSelection:
         """Дампа старше суток в KV уже нет — брать нечего."""
         assert "expired" not in selected
 
-    def test_targeted_add_is_another_channel(self, selected):
-        assert "targeted" not in selected
+    def test_targeted_batches_are_picked_up(self, selected):
+        """До 23.08.2026 пачки выкидывались строкой select(kind != "case"), и
+        локальной дочитки у них не было вовсе: в ссылочном режиме (капчёвые
+        суды) непрочитанная карточка теряет строку ЦЕЛИКОМ — роль банка
+        решается только по ней, card-blind записи не выходит."""
+        assert "case-lost" in selected, "потерянная строка пачки не переделается"
+        assert "case-failed" in selected, "тотальный сбой сети не переделается"
+
+    def test_clean_batch_is_not_redone(self, selected):
+        """Идемпотентность та же, что у дампов: успешный отчёт обнуляет
+        fetch_error, и следующий заход запись не выберет."""
+        assert "case-clean" not in selected
+
+    def test_running_batch_gets_a_longer_grace(self, selected):
+        """У add_cases.yml timeout-minutes: 45 против 15 у дампов — пачка из 20
+        номеров честно идёт полчаса. С дамповым грейсом (15 мин) Mac полез бы
+        писать в те же файлы посреди живого облачного джоба."""
+        assert "case-running" not in selected, "20-минутный джоб пачки ещё жив"
+        assert "case-stuck" in selected, "двухчасовой «идёт» — облако умерло"
+
+    def test_batch_pending_in_github_queue_is_taken(self, selected):
+        """У группы cases-data-write живёт ОДИН pending: запись может простоять
+        в «dispatched» всё время очереди, и без своей ветки её никто не поднял
+        бы. Только что отправленную не трогаем — облако ещё возьмётся."""
+        assert "case-pending" in selected
+        assert "case-justsent" not in selected
+
+    def test_writ_waiver_is_never_taken(self, selected):
+        """Пультовая пометка «лист не нужен» к судам не ходит — дочитывать в
+        ней нечего, а счётчики у неё свои."""
+        assert "writ" not in selected
+
+    def test_row_names_the_channel_first(self, selected):
+        """Первое поле строки — канал: по нему скрипт выбирает и эндпоинт
+        выдачи задания, и скрипт обработки."""
+        # проверяется в test_row_carries_court_and_operator целиком; здесь —
+        # что оба канала действительно попали в один список
+        assert any(u.startswith("case-") for u in selected)
+        assert any(not u.startswith("case-") for u in selected)
 
     def test_row_carries_court_and_operator(self, tmp_path):
         """Домен и имя оператора едут в строке: импортёру нужен суд, а журналу
@@ -298,7 +416,34 @@ class TestQueueSelection:
         out = subprocess.run(
             ["jq", "-r", "--argjson", "now", str(NOW),
              "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+             "--argjson", "cgrace", "3000",
              "-f", QUEUE_JQ, str(path)],
             cwd=REPO_DIR, capture_output=True, text=True, check=True)
         assert out.stdout.strip().split("\t") == [
-            "lost", "lost.sudrf.ru", "Оператор", "done"]
+            "dump", "lost", "lost.sudrf.ru", "Оператор", "done"]
+
+    def test_empty_fields_travel_as_a_dash(self, tmp_path):
+        """⚠️ Пустое поле в TSV читать нечем: `IFS=$'\t' read` схлопывает подряд
+        идущие табы (таб — IFS-пробел), и одно пустое значение сдвигает ВСЕ
+        следующие. У дампов это уже врало — оператор без имени отдавал строку,
+        где в его поле оказывался статус; у пачек домен пуст всегда."""
+        if not shutil.which("jq"):
+            pytest.skip("jq не установлен")
+        rec = _record("case-x", kind="case", court_domain="", operator="",
+                      fetch_error=1)
+        path = tmp_path / "journal.json"
+        path.write_text(json.dumps({"items": [rec]}, ensure_ascii=False),
+                        encoding="utf-8")
+        out = subprocess.run(
+            ["jq", "-r", "--argjson", "now", str(NOW),
+             "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+             "--argjson", "cgrace", "3000",
+             "-f", QUEUE_JQ, str(path)],
+            cwd=REPO_DIR, capture_output=True, text=True, check=True)
+        fields = out.stdout.strip().split("\t")
+        assert fields == ["case", "case-x", "-", "-", "done"], (
+            "пустые поля обязаны ехать прочерком, иначе шелл сдвинет колонки")
+        # Обратное преобразование обязано быть в скрипте.
+        text = _read_repo(IMPORTER)
+        assert '[ "$domain" = "-" ] && domain=""' in text
+        assert '[ "$operator" = "-" ] && operator=""' in text

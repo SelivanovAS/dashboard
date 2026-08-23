@@ -75,7 +75,7 @@ jobs:
       - name: POST started (журнал импортов в админке)
         run: |
           jq -n --arg jk "$JOB_KEY" --arg ru "$RUN_URL" \
-            '{job_key:$jk, status:"started", run_url:$ru}' \
+            '{job_key:$jk, status:"started", run_url:$ru, source:"github"}' \
           | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
               -H "Authorization: Bearer $PUSH_SECRET" \
               -H "Content-Type: application/json" \
@@ -144,18 +144,15 @@ jobs:
               && mv /tmp/add_sum_err.json "$IMPORT_SUMMARY_PATH"
           fi
           if [ -s "$IMPORT_SUMMARY_PATH" ]; then
+            # Пейлоад ОДИН с резервом на Mac: ops/add_case_result_body.jq.
+            # Своя сборка здесь означала бы молча разъехавшиеся счётчики —
+            # этим проект уже болел дважды (см. шапку фильтра).
             BODY=$(jq -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{job_key:$jk, status:$st, run_url:$ru,
-                items:(.items // 0),
-                added_main:(.added_main // 0), added_bank:(.added_bank // 0),
-                reactivated:(.reactivated // 0), promoted:(.promoted // 0),
-                already:(.already // 0), refused:(.refused // 0),
-                not_found:(.not_found // 0), lines:(.lines // [])}
-               + (if .error then {error:.error} else {} end)' \
+              --arg src github -f ops/add_case_result_body.jq \
               "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{job_key:$jk, status:$st, run_url:$ru,
+              '{job_key:$jk, status:$st, run_url:$ru, source:"github",
                 error:"прогон упал до разбора задания (скачивание/зависимости) — детали в run_url"}')
           fi
           printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \
