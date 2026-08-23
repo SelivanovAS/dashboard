@@ -2035,6 +2035,11 @@ async function fetchAll() {
   }
   await addBankCases(results[5], false);
   await addBankCases(results[6], true);
+  // ⚠️ Вызов обязателен именно здесь: collectWaitRow только НАПОЛНЯЕТ списки
+  // во время разбора cases_bank*.json, а рисует карточку renderWaitCard. Без
+  // него данные собраны (wwRows непуст), но карточка остаётся скрытой со
+  // строкой «Загрузка…» — ровно так фича и не заработала при первом деплое.
+  try { renderWaitCard(); } catch (e) { console.warn("ww-card:", e); }
   // Журнал последней push-рассылки: endpoint → запись.
   const pushesMap = new Map();
   let pushesGeneratedAt = "";
