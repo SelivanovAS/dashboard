@@ -228,13 +228,21 @@ resolve_worker_auth() {
 sber_preflight() {  # 0 — можно идти в суды
   if cm_in_sber_network; then
     log "Сеть Сбера подтверждена (шлюз $CM_SBER_GATEWAY)"
-    cm_setup_court_routes "$PYTHON" log \
-      || die "не удалось получить домены судов из реестра региона — маршруты не построить"
+    if [ "${CM_COURT_ROUTES_READY:-0}" = "1" ]; then
+      log "Маршруты территорий уже подготовлены общим драйвером"
+    else
+      cm_setup_court_routes "$PYTHON" log \
+        || die "не удалось получить домены судов из реестра региона — маршруты не построить"
+    fi
   elif [ "$ANYWHERE" = "1" ]; then
     # Маршруты офиса, оставшиеся в таблице, вне сети Сбера ведут в никуда —
     # суды перестали бы открываться вообще, а выглядело бы это как блок.
     log "Не в сети Сбера, но задан --anywhere: маршруты не строим, спрашиваем суд напрямую"
-    cm_clear_court_routes "$PYTHON" log
+    if [ "${CM_COURT_ROUTES_READY:-0}" = "1" ]; then
+      log "Маршруты территорий уже подготовлены общим драйвером"
+    else
+      cm_clear_court_routes "$PYTHON" log
+    fi
   else
     return 1
   fi

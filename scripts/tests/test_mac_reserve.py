@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -40,6 +41,25 @@ def _code(text: str) -> str:
     return "\n".join(out)
 
 
+def _fake_region_repo(root: Path, name: str, region: str) -> Path:
+    repo = root / name
+    (repo / ".git").mkdir(parents=True)
+    pkg = repo / "scripts" / "court_monitor"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "config.py").write_text(
+        'REGION = open("REGION", encoding="utf-8").read().strip()\n',
+        encoding="utf-8",
+    )
+    (repo / "REGION").write_text(region + "\n", encoding="utf-8")
+    return repo
+
+
+def _write_executable(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
 @pytest.fixture(scope="module")
 def worker() -> str:
     return _read("ops/mac-local-run/parse_and_push.sh")
@@ -48,6 +68,11 @@ def worker() -> str:
 @pytest.fixture(scope="module")
 def driver() -> str:
     return _read("ops/mac-local-run/parse_all.sh")
+
+
+@pytest.fixture(scope="module")
+def importer() -> str:
+    return _read("ops/mac-local-run/import_dumps.sh")
 
 
 @pytest.fixture(scope="module")
@@ -151,6 +176,221 @@ class TestTerritories:
         """Лежащий Урал не должен лишать юриста дайджеста по ХМАО."""
         assert "|| rc=1" in driver
         assert "continue" in driver
+
+    def test_parallel_defaults_are_explicit(self, driver):
+        """Боевой драйвер запускает длинный Урал первым, а ХМАО — через
+        десять минут. Все три значения остаются env-переключателями, чтобы
+        откат на прежний последовательный режим не требовал правки кода."""
+        assert 'CM_PARALLEL_TERRITORIES:-1' in driver
+        assert 'CM_PARALLEL_STAGGER_SECONDS:-600' in driver
+        assert 'CM_PARALLEL_FIRST_REGION:-sverdlovsk_yanao' in driver
+
+    def test_shared_routes_are_prepared_before_parallel_workers(
+        self, driver, worker, importer,
+    ):
+        """Оба реестра сейчас сходятся на один IP ГАС. Два ребёнка не
+        должны одновременно делать route delete/add одного host-route."""
+        prepare = driver.index("prepare_shared_routes")
+        launch = driver.index("run_parallel_parsers", prepare)
+        assert prepare < launch
+        assert "collect_shared_court_ips" in driver
+        assert "sort -u" in driver
+        assert driver.count("cm_install_court_routes driver_log") == 1
+        assert 'CM_COURT_ROUTES_READY=1' in driver
+        assert 'CM_COURT_ROUTES_READY:-0' in worker
+        assert 'CM_COURT_ROUTES_READY:-0' in importer
+
+    def test_parallel_workers_finish_before_any_import(self, driver):
+        """Импорт тоже читает карточки и использует git/index клона: он
+        начинается только после wait всех территориальных парсеров."""
+        parallel = driver.index("run_parallel_parsers()")
+        wait_loop = driver.index('wait "${parser_pids[$i]}"', parallel)
+        imports = driver.index("run_imports()", wait_loop)
+        assert parallel < wait_loop < imports
+
+    def test_check_and_feature_flag_keep_sequential_fallback(self, driver):
+        assert 'PARALLEL" != "1"' in driver
+        assert 'CHECK_ONLY" = "1"' in driver
+        assert "run_sequential" in driver
+
+    def test_parent_forwards_stop_to_parallel_children(self, driver):
+        assert "stop_parallel_children" in driver
+        assert "trap 'stop_parallel_children" in driver
+        assert 'pkill -TERM -P "$pid"' in driver
+
+    def test_shared_route_union_installs_each_ip_once(self, tmp_path: Path):
+        """Общая фаза не просто последовательна: совпавший IP двух
+        реестров попадает в route add ровно один раз."""
+        hmao = _fake_region_repo(tmp_path, "hmao", "hmao")
+        ural = _fake_region_repo(tmp_path, "ural", "sverdlovsk_yanao")
+        territories = tmp_path / "territories"
+        territories.write_text(f"{hmao}\n{ural}\n", encoding="utf-8")
+
+        worker = tmp_path / "worker.sh"
+        importer_script = tmp_path / "importer.sh"
+        _write_executable(worker, "#!/bin/bash\nexit 0\n")
+        _write_executable(importer_script, "#!/bin/bash\nexit 0\n")
+
+        fake_python = tmp_path / "python.sh"
+        _write_executable(
+            fake_python,
+            "#!/bin/bash\n"
+            'region=$(tr -d "\\n" < REGION)\n'
+            'if [ "${1:-}" = "-c" ]; then printf "%s\\n" "$region"; exit 0; fi\n'
+            'if [ "$region" = "hmao" ]; then\n'
+            '  printf "2/2\\n10.0.0.1\\n10.0.0.2\\n"\n'
+            'else\n'
+            '  printf "2/2\\n10.0.0.2\\n10.0.0.3\\n"\n'
+            'fi\n',
+        )
+
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        _write_executable(
+            fake_bin / "netstat",
+            "#!/bin/bash\nprintf 'default 10.217.111.250\\n'\n",
+        )
+        _write_executable(
+            fake_bin / "sudo",
+            "#!/bin/bash\n"
+            'printf "%s\\n" "$*" >> "$CM_TEST_ROUTE_TRACE"\n',
+        )
+        route_trace = tmp_path / "routes"
+
+        env = os.environ.copy()
+        env.update({
+            "PATH": f"{fake_bin}:{env.get('PATH', '')}",
+            "CM_TERRITORIES_FILE": str(territories),
+            "CM_WORKER": str(worker),
+            "CM_IMPORTER": str(importer_script),
+            "CM_PYTHON": str(fake_python),
+            "CM_TEST_ROUTE_TRACE": str(route_trace),
+            "CM_PARALLEL_TERRITORIES": "1",
+            "CM_PARALLEL_STAGGER_SECONDS": "0",
+        })
+        result = subprocess.run(
+            ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        add_ips = [
+            line.split("-host ", 1)[1].split()[0]
+            for line in route_trace.read_text(encoding="utf-8").splitlines()
+            if " add -host " in line
+        ]
+        assert add_ips == ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+        assert "уникальных IP 3" in result.stdout
+
+    def test_parallel_runtime_waits_before_imports(self, tmp_path: Path):
+        """Небольшой сквозной тест самого Bash-драйвера: два fake-клона
+        стартуют конкурентно, Урал выбирается первым независимо от порядка
+        territories, а импорты не пересекаются с парсерами."""
+
+        hmao = _fake_region_repo(tmp_path, "hmao", "hmao")
+        ural = _fake_region_repo(tmp_path, "ural", "sverdlovsk_yanao")
+        territories = tmp_path / "territories"
+        territories.write_text(f"{hmao}\n{ural}\n", encoding="utf-8")
+        trace = tmp_path / "trace"
+
+        worker = tmp_path / "worker.sh"
+        _write_executable(worker,
+            "#!/bin/bash\n"
+            'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'printf "parse-start:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
+            'sleep 0.1\n'
+            'printf "parse-end:%s\\n" "$region" >> "$CM_TEST_TRACE"\n',
+        )
+        importer = tmp_path / "importer.sh"
+        _write_executable(importer,
+            "#!/bin/bash\n"
+            'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'printf "import:%s\\n" "$region" >> "$CM_TEST_TRACE"\n',
+        )
+
+        env = os.environ.copy()
+        env.update({
+            "CM_TERRITORIES_FILE": str(territories),
+            "CM_WORKER": str(worker),
+            "CM_IMPORTER": str(importer),
+            "CM_TEST_TRACE": str(trace),
+            "CM_PARALLEL_TERRITORIES": "1",
+            "CM_PARALLEL_STAGGER_SECONDS": "0",
+            # Маршрутная фаза тестируется контрактом выше; здесь проверяем
+            # только оркестрацию процессов без sudo/DNS машины разработчика.
+            "CM_COURT_ROUTES_READY": "1",
+        })
+        result = subprocess.run(
+            ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        lines = trace.read_text(encoding="utf-8").splitlines()
+        first_import = next(i for i, line in enumerate(lines)
+                            if line.startswith("import:"))
+        parse_ends = [i for i, line in enumerate(lines)
+                      if line.startswith("parse-end:")]
+        assert len(parse_ends) == 2 and max(parse_ends) < first_import
+        assert "порядок парсеров: sverdlovsk_yanao → hmao" in result.stdout
+
+    def test_parallel_failure_does_not_cancel_the_other_territory(
+        self, tmp_path: Path,
+    ):
+        """Ненулевой exit Урала не убивает живой ХМАО; родитель
+        всё равно ждёт его конца до импортов и возвращает ошибку."""
+
+        hmao = _fake_region_repo(tmp_path, "hmao", "hmao")
+        ural = _fake_region_repo(tmp_path, "ural", "sverdlovsk_yanao")
+        territories = tmp_path / "territories"
+        territories.write_text(f"{hmao}\n{ural}\n", encoding="utf-8")
+        trace = tmp_path / "trace"
+
+        worker = tmp_path / "worker.sh"
+        _write_executable(worker,
+            "#!/bin/bash\n"
+            'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'printf "parse-start:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
+            'if [ "$region" = "sverdlovsk_yanao" ]; then exit 7; fi\n'
+            'sleep 0.1\n'
+            'printf "parse-end:%s\\n" "$region" >> "$CM_TEST_TRACE"\n',
+        )
+        importer_script = tmp_path / "importer.sh"
+        _write_executable(importer_script,
+            "#!/bin/bash\n"
+            'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'printf "import:%s\\n" "$region" >> "$CM_TEST_TRACE"\n',
+        )
+
+        env = os.environ.copy()
+        env.update({
+            "CM_TERRITORIES_FILE": str(territories),
+            "CM_WORKER": str(worker),
+            "CM_IMPORTER": str(importer_script),
+            "CM_TEST_TRACE": str(trace),
+            "CM_PARALLEL_TERRITORIES": "1",
+            "CM_PARALLEL_STAGGER_SECONDS": "0",
+            "CM_COURT_ROUTES_READY": "1",
+        })
+        result = subprocess.run(
+            ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 1, result.stderr + result.stdout
+        lines = trace.read_text(encoding="utf-8").splitlines()
+        hmao_end = lines.index("parse-end:hmao")
+        first_import = next(i for i, line in enumerate(lines)
+                            if line.startswith("import:"))
+        assert hmao_end < first_import
+        assert sum(line.startswith("import:") for line in lines) == 2
+        assert "завершился с кодом 7" in result.stdout
 
     def test_progress_pusher_targets_own_worker(self):
         """Вехи прогона — в воркер СВОЕЙ территории: до 20.08.2026 адрес был

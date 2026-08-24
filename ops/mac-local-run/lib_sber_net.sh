@@ -79,13 +79,9 @@ print("\n".join(sorted(ips)))
 PYROUTE
 }
 
-cm_setup_court_routes() {
-  local python="$1" logfn="${2:-:}" out stat ips ip err
-  out=$(cm_court_ips "$python")
-  stat=$(echo "$out" | head -1)
-  ips=$(echo "$out" | tail -n +2)
+cm_install_court_routes() {  # $1 = logfn, $2 = IP построчно
+  local logfn="${1:-:}" ips="$2" ip err
   [ -n "$ips" ] || return 1
-  "$logfn" "Доменов судов region-реестра отрезолвлено: $stat → уникальных IP: $(echo "$ips" | wc -l | tr -d ' ') (IP может быть один — общий балансировщик ГАС)"
   for ip in $ips; do
     # Пересоздаём маршрут заново каждый прогон: старый мог остаться в таблице,
     # но битым после смены IP en0 (route висит, а connect даёт EADDRNOTAVAIL).
@@ -99,6 +95,16 @@ cm_setup_court_routes() {
       "$logfn" "  WARN: не смог поставить маршрут $ip: ${err:-без вывода} (sudoers не настроен? см. README)"
     fi
   done
+}
+
+cm_setup_court_routes() {
+  local python="$1" logfn="${2:-:}" out stat ips
+  out=$(cm_court_ips "$python")
+  stat=$(echo "$out" | head -1)
+  ips=$(echo "$out" | tail -n +2)
+  [ -n "$ips" ] || return 1
+  "$logfn" "Доменов судов region-реестра отрезолвлено: $stat → уникальных IP: $(echo "$ips" | wc -l | tr -d ' ') (IP может быть один — общий балансировщик ГАС)"
+  cm_install_court_routes "$logfn" "$ips"
 }
 
 # ── Проба доступности суда ───────────────────────────────────────────────────
@@ -185,10 +191,8 @@ cm_court_reachable() {  # $1 = хост, $2 = python; печатает диаг�
 # Нужно вне сети Сбера: маршруты, поставленные в офисе, остаются в таблице и
 # ведут в недоступный шлюз — суды перестают открываться вообще, а причина
 # выглядит как «нас блокируют». sudoers разрешает delete без пароля.
-cm_clear_court_routes() {
-  local python="$1" logfn="${2:-:}" ips ip n=0
-  ips=$(cm_court_ips "$python" | tail -n +2)
-  [ -n "$ips" ] || return 0
+cm_remove_court_routes() {  # $1 = logfn, $2 = IP построчно
+  local logfn="${1:-:}" ips="$2" ip n=0
   for ip in $ips; do
     if netstat -rn -f inet | awk -v i="$ip" '$1==i{f=1} END{exit !f}'; then
       sudo -n /sbin/route -n delete -host "$ip" >/dev/null 2>&1 && n=$((n + 1))
@@ -196,6 +200,13 @@ cm_clear_court_routes() {
   done
   [ "$n" -gt 0 ] && "$logfn" "Сняты маршруты судов через шлюз Сбера: $n (мы не в офисной сети)"
   return 0
+}
+
+cm_clear_court_routes() {
+  local python="$1" logfn="${2:-:}" ips
+  ips=$(cm_court_ips "$python" | tail -n +2)
+  [ -n "$ips" ] || return 0
+  cm_remove_court_routes "$logfn" "$ips"
 }
 
 # ── Конфиг Worker'а территории ───────────────────────────────────────────────
@@ -221,7 +232,9 @@ cm_worker_conf() {  # $1 = каталог конфигов, $2 = код реги
 # списка — ровно тот класс поломки, которым резерв уже болел (файлы данных,
 # домены судов, jq-пейлоад).
 cm_territories() {
-  local list="$HOME/.config/court-monitor/territories" line n=0
+  # Override нужен не только тестам: аварийный оператор может проверить
+  # новый список клонов отдельным файлом, не трогая боевую установку.
+  local list="${CM_TERRITORIES_FILE:-$HOME/.config/court-monitor/territories}" line n=0
   if [ -f "$list" ]; then
     while IFS= read -r line; do
       line="${line%%#*}"
