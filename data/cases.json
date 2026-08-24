@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-24T08:25:42",
+  "updated_at": "2026-08-24T09:42:13",
   "cases": [
     {
       "id": "33-5976/2026",
@@ -1580,7 +1580,8 @@
           "model": "openrouter:nvidia/nemotron-3-super-120b-a12b:free"
         },
         "sent_to_appeal": true,
-        "sent_to_appeal_date": "11.08.2026"
+        "sent_to_appeal_date": "11.08.2026",
+        "judicial_uid": "86RS0021-01-2026-000529-65"
       },
       "appeal": {
         "case_number": "33-5994/2026",
@@ -1599,7 +1600,16 @@
         "act_published": false,
         "act_date": "",
         "appellant": "",
-        "events": []
+        "events": [
+          {
+            "date": "21.08.2026",
+            "time": "12:23",
+            "text": "Передача дела судье. 12:23. 21.08.2026",
+            "name": "Передача дела судье",
+            "posted_at": "21.08.2026"
+          }
+        ],
+        "last_checked_at": "2026-08-24"
       },
       "initial_bank_role": "Истец",
       "import": {
@@ -15193,7 +15203,7 @@
           }
         ],
         "link": "11987605|3d335563-2e6f-47aa-8e5d-c2c5bc8a6ebb",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-24",
         "discovered_via_cassation": false
       }
     },
@@ -18772,7 +18782,7 @@
           }
         ],
         "link": "11959239|a616785d-7490-49de-af48-8e083c1899a5",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-24",
         "discovered_via_cassation": false
       }
     },
