@@ -3,10 +3,10 @@
   "run_date": "2026-08-24",
   "smart_skip": true,
   "totals": {
-    "total": 526,
+    "total": 525,
     "parsed": 0,
     "skip": 308,
-    "failed": 218,
+    "failed": 217,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -49,9 +49,9 @@
       "last_checked_at": "2026-08-20"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -157,9 +157,9 @@
       "last_checked_at": "2026-08-21"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1039,9 +1039,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1255,9 +1255,9 @@
       "last_checked_at": "2026-08-07"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1291,9 +1291,9 @@
       "last_checked_at": "2026-08-07"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1543,9 +1543,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1579,9 +1579,9 @@
       "last_checked_at": "2026-08-14"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1615,9 +1615,9 @@
       "last_checked_at": "2026-08-10"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3757,9 +3757,9 @@
       "last_checked_at": "2026-08-06"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5809,9 +5809,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7987,9 +7987,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9031,9 +9031,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9245,24 +9245,6 @@
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-07-27"
-    },
-    {
-      "outcome": "court_breaker",
-      "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-4144/2026",
-      "number": "2-4144/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-08-17"
     },
     {
       "outcome": "skip",
@@ -9481,5 +9463,5 @@
       "last_checked_at": "2026-08-21"
     }
   ],
-  "updated_at": "2026-08-24T08:25:42"
+  "updated_at": "2026-08-24T09:42:13"
 }
