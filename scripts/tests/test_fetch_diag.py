@@ -64,6 +64,8 @@ class _Resp:
 def _clean_state(monkeypatch):
     config.FETCH_DIAG.clear()
     config.CARD_BREAKER.clear()
+    config.FETCH_TIMINGS.clear()
+    config.FETCH_FAIL_KINDS.clear()
     for k in config.METRICS:
         config.METRICS[k] = 0
     monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 1)
@@ -197,3 +199,100 @@ class TestProbeClassification:
         page = OUTAGE_PAGE.replace(
             "</body>", "<footer>(C) 2006 ГАС Правосудие</footer></body>")
         assert classify_response(200, page, CARD_URL)[0] == OUTAGE
+
+
+class TestFetchObservability:
+    """Сколько шло и почему не вышло — иначе режимы отказа неразличимы.
+
+    24.08.2026 за одно утро портал успел побывать в двух состояниях: отвечал
+    за 26–58 с при таймауте 30 с, а с обеда стал отдавать заглушку с HTTP 200.
+    Оба раза система знала только «запрос не удался», и разбирать пришлось
+    вручную curl'ом — при том что лечатся они по-разному.
+    """
+
+    def test_success_records_timing_and_no_failure(self, monkeypatch):
+        _serve(monkeypatch, 200, "<html><table></table></html>")
+        assert fetch_page(CARD_URL)
+        assert len(config.FETCH_TIMINGS) == 1
+        assert config.FETCH_TIMINGS[0] >= 0
+        assert config.FETCH_FAIL_KINDS == {}
+
+    def test_failure_counted_under_the_diag_kind(self, monkeypatch):
+        """Класс берётся из _set_diag — второй копии правил быть не должно."""
+        _serve(monkeypatch, 403, BLOCK_PAGE)
+        assert fetch_page(CARD_URL) == ""
+        assert config.FETCH_DIAG["kind"] == "http_403"
+        assert config.FETCH_FAIL_KINDS == {"http_403": 1}
+        assert config.FETCH_TIMINGS == [], "у отказа времени ответа нет"
+
+    def test_kinds_accumulate_across_requests(self, monkeypatch):
+        """FETCH_DIAG живёт до следующего запроса — сводка обязана пережить
+        весь обход, иначе считать нечего."""
+        _serve(monkeypatch, 403, BLOCK_PAGE)
+        fetch_page(CARD_URL)
+        fetch_page(CARD_URL)
+
+        def boom(url, timeout=30):
+            raise requests.ConnectionError("нет соединения")
+        monkeypatch.setattr(netutil.session, "get", boom)
+        fetch_page(CARD_URL)
+        assert config.FETCH_FAIL_KINDS == {"http_403": 2, "network": 1}
+
+    def test_card_level_classes_counted_too(self, monkeypatch):
+        """Заглушка портала приходит с HTTP 200 — на уровне fetch_page это
+        успех, и без учёта карточных классов авария была бы невидима."""
+        _serve(monkeypatch, 200, "<html>Информация временно недоступна</html>")
+        assert fetch_card_checked(CARD_URL) == ""
+        assert config.FETCH_FAIL_KINDS.get("blocked") == 1
+
+    def test_latency_summary_percentiles(self, monkeypatch):
+        config.FETCH_TIMINGS.extend([1.0, 2.0, 3.0, 40.0, 50.0])
+        s = netutil.fetch_latency_summary()
+        assert s["n"] == 5
+        assert s["p50"] == 3.0
+        assert s["max"] == 50.0
+
+    def test_latency_summary_empty_without_samples(self):
+        assert netutil.fetch_latency_summary() == {}
+
+
+class TestObservabilityWiring:
+    """Числа обязаны доезжать до last_run — читателя (пульт, cloud_run_ok)
+    у них два, и оба ходят туда, а не в METRICS."""
+
+    def test_last_run_carries_latency_and_kinds(self):
+        runs = _read_runs()
+        for key in ('"latency": fetch_latency_summary()',
+                    '"fail_kinds": dict(config.FETCH_FAIL_KINDS)',
+                    '"courts_unavailable"', '"courts_outage"',
+                    '"cards_unreachable"'):
+            assert key in runs, key
+
+    def test_timeout_has_env_lever(self):
+        """24.08.2026 таймаут был литералом, и покрутить его в аварийное утро
+        можно было только правкой кода с коммитом."""
+        cfg = _read_config()
+        assert 'FETCH_TIMEOUT_CONNECT = float(os.environ.get(' in cfg
+        assert 'FETCH_TIMEOUT_READ = float(os.environ.get(' in cfg
+        net = _read_netutil()
+        assert "config.FETCH_TIMEOUT_CONNECT" in net
+        assert "config.FETCH_TIMEOUT_READ" in net
+        assert "timeout=(10, 65)" not in net, "литерал вернулся вместо рычага"
+
+
+def _read_repo(rel: str) -> str:
+    with open(os.path.join(os.path.dirname(SCRIPTS_DIR), rel),
+              encoding="utf-8") as f:
+        return f.read()
+
+
+def _read_runs() -> str:
+    return _read_repo("scripts/court_monitor/runs.py")
+
+
+def _read_config() -> str:
+    return _read_repo("scripts/court_monitor/config.py")
+
+
+def _read_netutil() -> str:
+    return _read_repo("scripts/court_monitor/netutil.py")

@@ -26,6 +26,7 @@ will_deliver в save_digest_context).
                                  карточек (Z%), поиски …» — тело алерта
   cloud_run_ok.py --has-pending  0 = в накоплении есть неотправленные новости
   cloud_run_ok.py --mark-delivered  проставить delivered_at (идемпотентно)
+  cloud_run_ok.py --unmark-delivered  снять delivered_at (пуш не удался)
 
 ДАННЫЕ. Журнал здоровья data/parse_health.json: `sources` — поиски (источник
 «зрячий сегодня» = last_run_at за сегодня И last_count > 0 И fail_streak == 0;
@@ -142,6 +143,28 @@ def searches_state_today(state: dict) -> tuple[bool, bool]:
     return ran_today, bool(sighted)
 
 
+def unavailability_tail(state: dict) -> str:
+    """Хвост «портал недоступен» для вердикта и алерта (пусто — если нечего).
+
+    ⚠️ Знаменатель прочитанного этим хвостом НЕ уменьшается, и это решение,
+    а не недосмотр (24.08.2026). Соблазн считать «36 из 36 доступных» вместо
+    «36 из 323» отвергнут: вердикт влияет ТОЛЬКО на текст алерта (на доставку
+    с 21.08 не влияет), и «удачный прогон» в день полного аутейджа заглушил бы
+    предупреждение ровно тогда, когда оно нужнее всего. Процент обязан
+    отражать полноту ДАННЫХ у юриста, а вина портала — жить отдельной строкой.
+    """
+    lr = (state or {}).get("last_run") or {}
+    cards = int(lr.get("cards_unreachable") or 0)
+    courts = int(lr.get("courts_unavailable") or 0)
+    if not cards and not courts:
+        return ""
+    outage = int(lr.get("courts_outage") or 0)
+    tail = f"; {cards} карточек не запрошено — {courts} судов сняты с обхода"
+    if outage:
+        tail += f" (заглушка портала у {outage})"
+    return tail
+
+
 def run_complete_today(state: dict) -> tuple[bool, str]:
     """Удачна ли сегодняшняя попытка: поиски зрячие И карточки ≥ порога.
 
@@ -181,6 +204,7 @@ def run_complete_today(state: dict) -> tuple[bool, str]:
             return False, (
                 f"прочитано {read} из {planned} карточек ({pct}% — "
                 f"порог {int(CARDS_READ_OK_RATIO * 100)}%){cumulative}"
+                + unavailability_tail(state)
             )
         return True, (
             f"прочитано {read} из {planned} карточек{cumulative}, "
@@ -211,7 +235,8 @@ def progress_line(state: dict) -> str:
             base = f"прочитано {read} из {planned} карточек ({pct}%)"
     else:
         base = "карточной сводки прогона нет"
-    return base + (", поиски отвечали" if sighted else ", поиски молчали")
+    return (base + (", поиски отвечали" if sighted else ", поиски молчали")
+            + unavailability_tail(state))
 
 
 def gate(state: dict, ctx: dict) -> tuple[bool, str]:
@@ -244,6 +269,30 @@ def _mark_delivered() -> int:
     return 0
 
 
+def _unmark_delivered() -> int:
+    """Снять delivered_at: пуш не удался, день обязан остаться открытым.
+
+    Штамп ставится ДО пуша (иначе маркер «(Mac-парсинг)» уехал бы без него и
+    replay разослал бы дайджест мимо отметки). Если пуш затем упал, локальный
+    штамп закрывает день, а дайджест никуда не ушёл — 24.08.2026 этот
+    сценарий был в одном шаге от реализации. Идемпотентно: штампа нет — 0.
+    """
+    from court_monitor import config
+    path = config.LAST_DIGEST_CONTEXT_PATH
+    ctx = _load_json(path)
+    if not ctx:
+        print("контекст дайджеста не читается — штамп не снят")
+        return 1
+    if not ctx.pop("delivered_at", None):
+        return 0
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(ctx, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+    print("штамп доставки снят — день снова открыт")
+    return 0
+
+
 def _region_name() -> str:
     # Имя территории — человеческое (get_region().name), его читает юрист.
     try:
@@ -257,6 +306,8 @@ def _region_name() -> str:
 def main(argv: list[str]) -> int:
     if "--mark-delivered" in argv:
         return _mark_delivered()
+    if "--unmark-delivered" in argv:
+        return _unmark_delivered()
     if "--has-pending" in argv:
         return 0 if context_pending(_context()) else 1
     state = _health_state()

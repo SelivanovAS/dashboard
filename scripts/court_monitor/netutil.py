@@ -38,11 +38,38 @@ def _set_diag(kind: str, url: str, **extra) -> None:
     """Записать класс последнего ответа в config.FETCH_DIAG (одна точка).
 
     Диагноз перезаписывается КАЖДЫМ запросом — читать его надо сразу после
-    вызова fetch_*, пока следующий не затёр.
+    вызова fetch_*, пока следующий не затёр. Поэтому же здесь, и только здесь,
+    ведётся НАКОПИТЕЛЬНЫЙ счёт отказов по классам: FETCH_DIAG живёт до
+    следующего запроса, а сводка прогона должна пережить весь обход.
     """
     config.FETCH_DIAG.clear()
     config.FETCH_DIAG.update(
         {"kind": kind, "host": urlsplit(url).netloc or url, **extra})
+    if kind not in ("ok", "empty"):
+        config.FETCH_FAIL_KINDS[kind] = config.FETCH_FAIL_KINDS.get(kind, 0) + 1
+
+
+def fetch_latency_summary() -> dict:
+    """Персентили времени ответа за прогон (пусто — если замеров не было).
+
+    Считаем по УСПЕШНЫМ ответам: у отказа времени нет — есть только потолок
+    таймаута, и подмешивать его значило бы мерить свою настройку, а не портал.
+    """
+    xs = sorted(config.FETCH_TIMINGS)
+    if not xs:
+        return {}
+
+    def pct(p: float) -> float:
+        # Ближайший ранг: выборка маленькая (сотни), интерполяция тут ничего
+        # не уточняет, а объяснять её в разборе инцидента пришлось бы.
+        return xs[min(len(xs) - 1, int(p * len(xs)))]
+
+    return {
+        "n": len(xs),
+        "p50": round(pct(0.50), 1),
+        "p90": round(pct(0.90), 1),
+        "max": round(xs[-1], 1),
+    }
 
 
 # Страница защиты ГАС «Правосудие» печатает в теле наш адрес и букву правила:
@@ -128,10 +155,15 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             # чего портал разорвал соединение без ответа, — ждать дольше
             # нечего, дожидаться уже некого. Отсюда 65: весь наблюдавшийся
             # разброс плюс поля, и ни секунды сверх предела портала.
+            # Значения — в config (FETCH_TIMEOUT_CONNECT/READ, env-рычаг):
+            # в такое утро крутить их правкой кода с коммитом — не вариант.
             # На здоровом дне правка невидима: таймаут — потолок, а не
             # задержка, быстрый ответ возвращается быстро.
-            r = session.get(url, timeout=(10, 65))
+            _t0 = time.monotonic()
+            r = session.get(url, timeout=(config.FETCH_TIMEOUT_CONNECT,
+                                          config.FETCH_TIMEOUT_READ))
             r.raise_for_status()
+            config.FETCH_TIMINGS.append(time.monotonic() - _t0)
             config.METRICS["requests_ok"] += 1
             if attempt > 1:
                 config.METRICS["requests_retried"] += 1

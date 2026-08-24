@@ -77,6 +77,21 @@ REPO="${REPO_ARG:-${CM_REPO:-/Users/aleksandrselivanov/dashboard}}"
 PYTHON="/usr/bin/python3"
 LOG_DIR="$REPO/ops/mac-local-run"
 LOG="$LOG_DIR/import_dumps.log"
+# ── Ротация лога по дням ─────────────────────────────────────────────────────
+# Лог писался ОДНИМ файлом с 3 июля: разбор «что было сегодня» каждый раз
+# требовал скрипта по маркеру «Старт», а файл рос без предела. Дата файла не
+# сегодняшняя → уносим в <имя>-ГГГГММДД.log, старше CM_LOG_KEEP_DAYS удаляем.
+CM_LOG_KEEP_DAYS="${CM_LOG_KEEP_DAYS:-14}"
+cm_rotate_log() {  # $1 = путь к логу
+  local log="$1" day
+  [ -f "$log" ] || return 0
+  day=$(date -r "$log" +%Y%m%d 2>/dev/null) || return 0
+  [ "$day" = "$(date +%Y%m%d)" ] && return 0
+  mv "$log" "${log%.log}-$day.log" 2>/dev/null || return 0
+  find "$(dirname "$log")" -name "$(basename "${log%.log}")-*.log" \
+       -mtime "+$CM_LOG_KEEP_DAYS" -delete 2>/dev/null || true
+}
+cm_rotate_log "$LOG"
 # Лок ОБЩИЙ с parse_and_push.sh: импорт и парсинг одного клона пишут в один
 # индекс git — параллельный запуск дал бы «index.lock» и потерянный коммит.
 LOCK="$LOG_DIR/.run.lock"

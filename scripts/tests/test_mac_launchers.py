@@ -314,13 +314,22 @@ class TestCanaryQuietRetries:
 
 class TestOneDigestPerDay:
     """Отправку решает СООБЩЕНИЕ КОММИТА: replay_on_push стреляет по
-    contains(message, 'Mac-парсинг'). Черновик обязан быть БЕЗ этой
-    подстроки, доставка — с ней, а штамп delivered_at — ДО коммита (иначе
-    следующий слот не узнает о доставке и продублирует дайджест)."""
+    contains(message, 'Mac-парсинг'). Черновик обязан быть БЕЗ этой подстроки,
+    доставка — с ней, а штамп delivered_at обязан входить В доставочный коммит
+    (иначе следующий слот не узнает о доставке и продублирует дайджест).
+
+    ⚠️ 24.08.2026 порядок изменён: штамп ставится ПОСЛЕ того, как данные уже
+    успешно запушены. Прежнее «штамп → коммит → push» при упавшем пуше
+    оставляло delivered_at в локальном контексте — день закрыт, дайджест не
+    отправлен, следующие слоты выходят по гейту. Внутри доставочной фазы
+    порядок прежний: штамп → коммит с маркером → push."""
 
     def test_draft_message_has_no_marker_substring(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        draft = [l for l in text.splitlines() if "копим дайджест" in l and "COMMIT_MSG" in l]
+        # Сообщение с 24.08.2026 инлайнится прямо в git commit -m, отдельной
+        # переменной COMMIT_MSG больше нет — ищем по самой формулировке.
+        draft = [l for l in text.splitlines()
+                 if "копим дайджест" in l and "commit -m" in l]
         assert draft, "черновое сообщение коммита пропало"
         assert all("Mac-парсинг" not in l for l in draft), (
             "в черновом сообщении подстрока «Mac-парсинг» — contains() гарда "
@@ -334,12 +343,21 @@ class TestOneDigestPerDay:
             "замыкающем коммите после парсинга"
         )
 
-    def test_mark_delivered_before_commit(self):
+    def test_stamp_after_data_push_but_inside_delivery_commit(self):
+        """Два инварианта разом, и они не противоречат друг другу.
+
+        (1) Штамп ставится ПОСЛЕ успешного пуша ДАННЫХ: упавший пуш не должен
+        закрывать день (24.08.2026 — юрист уходил из сети в минуту окна, оба
+        прогона пришлось гасить руками). (2) Но внутри доставочной фазы штамп
+        по-прежнему ДО коммита с маркером — replay читает контекст из того же
+        коммита, и без штампа дайджест ушёл бы мимо отметки.
+        """
         text = _read("ops/mac-local-run/parse_and_push.sh")
         decision = text.index('RUN_WHY=$(')
-        stamp = text.index("--mark-delivered", decision)
-        commit = text.index('COMMIT_MSG="📊 Обновление данных', decision)
-        assert stamp < commit, "штамп delivered_at обязан войти в доставочный коммит"
+        push_data = text.index('die "git push данных не удался', decision)
+        stamp = text.index("--mark-delivered", push_data)
+        commit = text.index("(Mac-парсинг)", stamp)
+        assert push_data < stamp < commit
 
     def test_only_window_or_force_deliver(self):
         """⚠️ Решение юриста 21.08.2026 «дайджест не раньше 08:45»: доставку
@@ -621,3 +639,56 @@ class TestWorkerConfShared:
         block = lib[lib.index("cm_worker_conf()"):]
         block = block[:block.index("\n}")]
         assert "awk -F=" in block and "source" not in block
+
+
+class TestUnavailabilityTail:
+    """«11%» не должно читаться как поломка системы, когда лёг портал.
+
+    24.08.2026 по ХМАО вердикт был «прочитано 36 из 323 (11% — порог 85%)»,
+    хотя апелляция дала 34 из 34, кассация 2 из 2, а все 20 судов 1-й
+    инстанции отдавали заглушку: прочитано было 100% доступного.
+    """
+
+    def test_tail_names_courts_and_cards(self):
+        state = {"last_run": {"cards_unreachable": 287,
+                              "courts_unavailable": 20, "courts_outage": 20}}
+        tail = cloud_run_ok.unavailability_tail(state)
+        assert "287" in tail and "20" in tail and "заглушка портала" in tail
+
+    def test_tail_silent_without_numbers(self):
+        """Строки обычного дня обязаны остаться побайтово прежними."""
+        assert cloud_run_ok.unavailability_tail({"last_run": {}}) == ""
+        assert cloud_run_ok.unavailability_tail({}) == ""
+
+    def test_outage_part_optional(self):
+        """Суд могли снять и по отказам карточек, а не по заглушке поиска."""
+        state = {"last_run": {"cards_unreachable": 5, "courts_unavailable": 1}}
+        tail = cloud_run_ok.unavailability_tail(state)
+        assert tail and "заглушка портала" not in tail
+
+    def test_denominator_stays_full(self):
+        """⚠️ Знаменатель НЕ уменьшается — решение 24.08.2026: вердикт правит
+        только текст алерта, и «удачный прогон» в день полного аутейджа
+        заглушил бы предупреждение ровно тогда, когда оно нужнее всего."""
+        import datetime as _dt
+        # cards_progress читает только СЕГОДНЯШНИЙ блок — без штампа `at`
+        # сводка считается отсутствующей и знаменатель проверить нечем.
+        state = {"last_run": {"at": _dt.date.today().isoformat(),
+                              "cards_read": 36, "cards_planned": 323,
+                              "cards_unreachable": 287,
+                              "courts_unavailable": 20, "courts_outage": 20}}
+        line = cloud_run_ok.progress_line(state)
+        assert "36 из 323" in line, "знаменатель ужали — предупреждение замолчит"
+        assert "287 карточек не запрошено" in line
+
+    def test_unmark_is_idempotent(self, tmp_path, monkeypatch):
+        ctx = tmp_path / "ctx.json"
+        ctx.write_text(json.dumps({"issues": []}), encoding="utf-8")
+        from court_monitor import config as cm_config
+        monkeypatch.setattr(cm_config, "LAST_DIGEST_CONTEXT_PATH", str(ctx))
+        assert cloud_run_ok._unmark_delivered() == 0  # штампа не было
+        data = json.loads(ctx.read_text(encoding="utf-8"))
+        data["delivered_at"] = "2026-08-24T09:42:18"
+        ctx.write_text(json.dumps(data), encoding="utf-8")
+        assert cloud_run_ok._unmark_delivered() == 0
+        assert "delivered_at" not in json.loads(ctx.read_text(encoding="utf-8"))

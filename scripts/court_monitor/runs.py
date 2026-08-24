@@ -94,7 +94,7 @@ from court_monitor.linking import (
     resolve_bank_merged_targets,
 )
 from court_monitor.netutil import (
-    card_breaker_allows, card_breaker_preopen,
+    card_breaker_allows, card_breaker_preopen, fetch_latency_summary,
     fetch_card_checked, fetch_page, polite_delay, session,
 )
 from court_monitor.parsing import (
@@ -4895,6 +4895,26 @@ def main_json():
             "cards_read_today": _count_cards_read_today(
                 cases, today.isoformat()
             ),
+            # ── Наблюдаемость сети (24.08.2026) ──────────────────────────
+            # Персентили времени ответа и разбивка отказов по классам. Без
+            # них «портал тормозит» (26–58 с при таймауте 30 с), «портал лёг»
+            # (HTTP 200 с заглушкой) и «нас блокируют по адресу» неразличимы
+            # по данным, хотя лечатся по-разному, — а разбирались вручную
+            # curl'ом. Пишем сырое, интерпретация на читателе.
+            "latency": fetch_latency_summary(),
+            "fail_kinds": dict(config.FETCH_FAIL_KINDS),
+            # Недоступность портала отдельно от нашей недоработки: сколько
+            # судов снято с обхода, из них по заглушке на странице ПОИСКА
+            # (канарейка card_breaker_preopen), и сколько карточек мы из-за
+            # этого не запрашивали. Знаменатель cards_planned намеренно НЕ
+            # уменьшаем — см. пояснение в cloud_run_ok.progress_line.
+            "courts_unavailable": sum(
+                1 for e in config.CARD_BREAKER.values() if e.get("open")
+            ),
+            "courts_outage": sum(
+                1 for e in config.CARD_BREAKER.values() if e.get("preopened")
+            ),
+            "cards_unreachable": config.METRICS.get("cards_breaker_skipped", 0),
         }
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
