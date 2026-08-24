@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import statistics
+import tempfile
 from datetime import datetime
 
 from court_monitor import config
@@ -34,9 +35,51 @@ def load_parse_health() -> dict:
 
 
 def save_parse_health(state: dict) -> None:
-    os.makedirs(os.path.dirname(config.PARSE_HEALTH_PATH) or ".", exist_ok=True)
-    with open(config.PARSE_HEALTH_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=1)
+    """Атомарно сохранить итоговый публичный журнал здоровья.
+
+    Непрерывная телеметрия живёт отдельно, но финальный ``parse_health.json``
+    тоже нельзя оставлять обрезанным при сне Mac/заполненном диске: его читают
+    гейт доставки и админка. Временный файл создаём в том же каталоге, затем
+    fsync + replace. Ошибку не глотаем — вызывающий уже умеет превратить её в
+    WARNING, а прежний валидный журнал при этом остаётся на месте.
+    """
+    path = config.PARSE_HEALTH_PATH
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    tmp = ""
+    try:
+        fd, tmp = tempfile.mkstemp(
+            prefix=f".{os.path.basename(path)}.{os.getpid()}.",
+            suffix=".tmp",
+            dir=directory,
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        tmp = ""
+        # После replace данные уже консистентны. fsync каталога —
+        # best-effort усиление на случай внезапного отключения питания.
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        try:
+            dir_fd = os.open(directory, flags)
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(dir_fd)
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def update_parse_health(

@@ -60,6 +60,31 @@ _CTX_DELTA_KEYS = (
 )
 
 
+def _ack_parse_context_wal(issue_key: str) -> None:
+    """Durably acknowledge the Mac parse snapshot after context is safe."""
+    txn_id = config.PARSE_TXN_ID
+    ack_file = config.PARSE_TXN_ACK_FILE
+    if not txn_id and not ack_file:
+        return
+    if not txn_id or not ack_file:
+        raise RuntimeError("parse transaction ACK configured incompletely")
+    try:
+        save_json(
+            {
+                "version": 1,
+                "txn_id": txn_id,
+                "issue_key": issue_key,
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+            },
+            ack_file,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "не удалось подтвердить WAL контекста дайджеста"
+        ) from exc
+    log.info(f"Контекст дайджеста подтверждён parse-txn: {txn_id}")
+
+
 def _load_prev_context() -> dict | None:
     if not os.path.exists(config.LAST_DIGEST_CONTEXT_PATH):
         return None
@@ -156,7 +181,11 @@ def save_digest_context(
     ):
         if not any(payload[k] for k in _CTX_DELTA_KEYS):
             log.info("Контекст дайджеста: дельта пуста — накопление дня не тронуто")
-            return str(prev.get("issue_key") or prev.get("saved_at") or saved_at)
+            issue_key = str(
+                prev.get("issue_key") or prev.get("saved_at") or saved_at
+            )
+            _ack_parse_context_wal(issue_key)
+            return issue_key
         payload = _merge_day_context(prev, payload)
         payload["saved_at"] = saved_at
         issue_key = str(prev.get("issue_key") or prev.get("saved_at") or saved_at)
@@ -169,9 +198,17 @@ def save_digest_context(
         save_json(payload, config.LAST_DIGEST_CONTEXT_PATH)
         log.info(f"Контекст дайджеста сохранён: {config.LAST_DIGEST_CONTEXT_PATH}")
     except Exception as exc:
-        # Сохранение контекста — вспомогательная операция, не должна ронять
-        # основной прогон. Ошибку залогируем и поедем дальше.
+        # Для облачного legacy-пути контекст остаётся best-effort. Для Mac
+        # это write-ahead условие доставки: если свежая дельта не записалась,
+        # старый сегодняшний файл прошёл бы freshness-гейт и replay отправил
+        # неполный выпуск, а события уже были бы влиты в cases навсегда.
         log.warning(f"Не удалось сохранить контекст дайджеста: {exc}")
+        if config.DIGEST_CONTEXT_REQUIRED:
+            raise RuntimeError(
+                "обязательный контекст дайджеста не сохранён"
+            ) from exc
+    else:
+        _ack_parse_context_wal(issue_key)
     return issue_key
 
 

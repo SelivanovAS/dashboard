@@ -28,12 +28,15 @@ import json
 import os
 import sys
 
+import pytest
+
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
 from court_monitor import config  # noqa: E402
 from court_monitor.digest.core import save_digest_context  # noqa: E402
+from court_monitor.digest import core as digest_core  # noqa: E402
 
 
 def _setup(tmp_path, monkeypatch):
@@ -113,6 +116,40 @@ def test_empty_delta_keeps_file_untouched(tmp_path, monkeypatch):
     assert k1 == k2
 
 
+def test_mac_parse_transaction_ack_follows_durable_context(
+    tmp_path, monkeypatch,
+):
+    path = _setup(tmp_path, monkeypatch)
+    ack = tmp_path / "parse_txn.ack.json"
+    monkeypatch.setattr(config, "PARSE_TXN_ID", "txn-123")
+    monkeypatch.setattr(config, "PARSE_TXN_ACK_FILE", str(ack))
+
+    issue_key = save_digest_context(
+        [], [], fi_changes=[_ch("2-1/2026")]
+    )
+
+    assert path.exists()
+    payload = _read(ack)
+    assert payload["txn_id"] == "txn-123"
+    assert payload["issue_key"] == issue_key
+
+
+def test_empty_delta_still_acknowledges_existing_context_wal(
+    tmp_path, monkeypatch,
+):
+    path = _setup(tmp_path, monkeypatch)
+    issue_key = save_digest_context([], [], fi_changes=[_ch("2-1/2026")])
+    before = path.read_bytes()
+    ack = tmp_path / "parse_txn.ack.json"
+    monkeypatch.setattr(config, "PARSE_TXN_ID", "txn-empty")
+    monkeypatch.setattr(config, "PARSE_TXN_ACK_FILE", str(ack))
+
+    assert save_digest_context([], []) == issue_key
+
+    assert path.read_bytes() == before
+    assert _read(ack)["txn_id"] == "txn-empty"
+
+
 def test_exact_duplicate_entry_not_doubled(tmp_path, monkeypatch):
     path = _setup(tmp_path, monkeypatch)
     save_digest_context([], [], fi_changes=[_ch("2-1/2026")])
@@ -141,3 +178,24 @@ def test_cases_snapshot_is_latest_not_merged(tmp_path, monkeypatch):
     save_digest_context([], [], cases=[{"id": "b"}], fi_changes=[_ch("2-2/2026")])
     d = _read(path)
     assert d["cases"] == [{"id": "b"}]
+
+
+def test_mac_required_context_failure_is_fatal(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(config, "DIGEST_CONTEXT_REQUIRED", True)
+    monkeypatch.setattr(
+        digest_core, "save_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    with pytest.raises(RuntimeError, match="обязательный контекст"):
+        save_digest_context([], [], fi_changes=[_ch("2-1/2026")])
+
+
+def test_cloud_context_failure_remains_best_effort(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(config, "DIGEST_CONTEXT_REQUIRED", False)
+    monkeypatch.setattr(
+        digest_core, "save_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    assert save_digest_context([], [], fi_changes=[_ch("2-1/2026")])

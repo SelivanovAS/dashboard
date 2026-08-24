@@ -81,14 +81,14 @@
 | `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1150](scripts/court_monitor/lifecycle.py:1150) |
 | `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1177](scripts/court_monitor/lifecycle.py:1177) |
 | `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:2038](scripts/court_monitor/lifecycle.py:2038) |
-| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1835](scripts/court_monitor/runs.py:1835) |
+| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1885](scripts/court_monitor/runs.py:1885) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
 | `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:50](scripts/court_monitor/bank_intake.py:50) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
 | `_stamp_appeal_flags` (флаги жалобы + ДВИЖЕНИЕ жалобы + апеллянт из карточки в запись) | [scripts/court_monitor/bank_intake.py:280](scripts/court_monitor/bank_intake.py:280) |
 | `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1128](scripts/court_monitor/lifecycle.py:1128) |
-| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1778](scripts/court_monitor/runs.py:1778) |
-| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1944](scripts/court_monitor/runs.py:1944) |
+| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1828](scripts/court_monitor/runs.py:1828) |
+| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:1994](scripts/court_monitor/runs.py:1994) |
 | `fi_not_accepted_kind` (иск к производству не принят: возврат / отказ в принятии / передача по подсудности — каналы приёма такое дело не заводят) | [scripts/court_monitor/lifecycle.py:441](scripts/court_monitor/lifecycle.py:441) |
 | `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:174](scripts/court_monitor/lifecycle.py:174) |
 | `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:501](scripts/court_monitor/lifecycle.py:501) |
@@ -106,20 +106,20 @@
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
 | `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:2008](scripts/court_monitor/lifecycle.py:2008) |
 | `FETCH_DIAG` (класс последнего сетевого ответа: http_NNN/blocked/captcha/breaker) | [scripts/court_monitor/config.py:642](scripts/court_monitor/config.py:642) |
-| `fetch_fail_reason_ru` (причина отказа по-русски, одно место на все каналы) | [scripts/court_monitor/netutil.py:111](scripts/court_monitor/netutil.py:111) |
-| `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:307](scripts/court_monitor/netutil.py:307) |
-| `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:225](scripts/court_monitor/netutil.py:225) |
+| `fetch_fail_reason_ru` (причина отказа по-русски, одно место на все каналы) | [scripts/court_monitor/netutil.py:241](scripts/court_monitor/netutil.py:241) |
+| `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:526](scripts/court_monitor/netutil.py:526) |
+| `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:444](scripts/court_monitor/netutil.py:444) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:422](scripts/court_monitor/parsing/search.py:422) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:174](scripts/court_monitor/config.py:174) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
-| `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:42](scripts/court_monitor/health.py:42) |
+| `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:85](scripts/court_monitor/health.py:85) |
 | `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:2150](scripts/court_monitor/lifecycle.py:2150) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:441](scripts/court_monitor/linking.py:441) |
 | `reactivate_bank_archived` (возврат из bank-архива; гейт «уже в активных» по case_court_key + мутация архива на месте — счётчик обязан пересохранить архив, иначе клоны) | [scripts/court_monitor/linking.py:451](scripts/court_monitor/linking.py:451) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
 | `rotate_cold_archive` (горячий → холодный архив) | [scripts/court_monitor/linking.py:1191](scripts/court_monitor/linking.py:1191) |
 | `class TableExtractor(HTMLParser)` — парсер карточек дела | [scripts/court_monitor/parsing/tables.py:13](scripts/court_monitor/parsing/tables.py:13) |
-| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:269](scripts/court_monitor/parsing/cards.py:269) |
+| `parse_case_card` — карточка 1-й инст./апелляции | [scripts/court_monitor/parsing/cards.py:271](scripts/court_monitor/parsing/cards.py:271) |
 | `parse_cassation_search_page` — поиск 7kas (HMAO-фильтр) | [scripts/court_monitor/parsing/cassation.py:50](scripts/court_monitor/parsing/cassation.py:50) |
 | `classify_cassation_outcome` — детерм. enum исхода | [scripts/court_monitor/parsing/cassation.py:180](scripts/court_monitor/parsing/cassation.py:180) |
 | `_extract_cassation_act_text` (секция `cont_doc1`) + `parse_cassation_card` | [scripts/court_monitor/parsing/cassation.py:361](scripts/court_monitor/parsing/cassation.py:361) |
@@ -127,8 +127,8 @@
 | `link_cases` (FI ↔ апелляция) | [scripts/court_monitor/linking.py:54](scripts/court_monitor/linking.py:54) |
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
-| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:545](scripts/court_monitor/runs.py:545) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2251](scripts/court_monitor/runs.py:2251) |
+| `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:571](scripts/court_monitor/runs.py:571) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2301](scripts/court_monitor/runs.py:2301) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:121](scripts/court_monitor/digest/llm.py:121) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:947](scripts/court_monitor/digest/llm.py:947) |
@@ -252,28 +252,35 @@
 > больше НЕ влияет (только на формулировки алертов): со слотами от 06:00
 > прежняя ветка «удачная попытка → доставка» разослала бы дайджест в 06:30,
 > а удачная попытка ДО окна теперь и молчит — «всё прочитано» шесть раз за
-> утро было бы спамом. **Доставка идёт ДВУМЯ фазами (24.08.2026):** сначала
-> данные черновым коммитом и пуш, и только на успешном пуше — `--mark-delivered`
-> + отдельный маркерный коммит. Прежний порядок (штамп → коммит → пуш) при
-> упавшем пуше оставлял `delivered_at` в ЛОКАЛЬНОМ контексте: день закрыт, а
-> дайджест не отправлен, и все следующие слоты выходят по гейту — 24.08 этот
-> сценарий был в одном шаге (юрист уходил из сети в минуту окна, оба прогона
-> гасили руками). Упавший пуш ДОСТАВКИ откатывает штамп
-> (`cloud_run_ok.py --unmark-delivered`, общий хелпер `unmark_delivery_and_die`
-> — им же пользуется ветка «суды не ответили»). ⚠️ Внутри доставочной фазы
-> порядок прежний: штамп ДО коммита с маркером (replay читает контекст из того
-> же коммита). ⚠️ Пустой дифф фазы 1 НЕ обрывает прогон — ранние слоты данные
-> уже опубликовали, а накопленный контекст доставить всё равно надо.
-> **Ретраи и предохранитель слотов сняты 24.08.2026** — прогон идёт на дефолтах
-> кода (1 / 3 / 30). Значения 3/5/10 ставились 21.08 под МИГАЮЩИЙ блок
+> утро было бы спамом. **Доставка идёт ДВУМЯ фазами и с durable journal
+> (24.08.2026):** сначала данные черновым коммитом и пуш, затем
+> `.runtime/delivery_txn.json` создаётся ДО `delivered_at`, штамп входит в
+> отдельный marker-коммит и только подтверждённый на remote marker закрывает
+> транзакцию. Потерянный ответ `git push` проверяется по marker SHA: если SHA
+> уже предок `main`, повтор запрещён; если remote достоверно не содержит SHA,
+> условный откат снимает только штамп того же `delivery_id`; если remote
+> недоступен, новый marker блокируется до следующей сверки. Так SIGKILL/сон и
+> неоднозначный push не превращают локальный «день закрыт» в потерянный или
+> повторный workflow. Обе доставочные ветки идут через `deliver_and_push`.
+> ⚠️ Внутри доставочной фазы порядок прежний: штамп ДО коммита с маркером
+> (replay читает контекст из того же коммита). ⚠️ Пустой дифф фазы 1 НЕ
+> обрывает прогон — ранние слоты данные уже опубликовали, а накопленный
+> контекст доставить всё равно надо.
+> **Ретраи Mac теперь избирательные (24.08.2026):** слот задаёт потолок
+> `FETCH_MAX_RETRIES=3`, но `netutil.should_retry_fetch` повторяет только
+> быстрый `connection_reset`/HTTP 500, 502, 503, 504 не дольше 5 секунд.
+> ReadTimeout, connect-timeout, TLS/DNS, 4xx, CAPTCHA и HTTP-200-заглушка
+> завершаются после первой попытки; breaker остаётся на дефолтах 3 / 30.
+> Прежние значения 3/5/10 ставились 21.08 под МИГАЮЩИЙ блок
 > (таймаутов ноль, все 257 отказов дня мгновенный `Connection reset by peer`
 > лотереей по ~70 хостам; предохранитель, считанный под «суд лёг», срезал 215
 > карточек из 273 при 15 реальных отказах). 24.08 режим оказался обратным:
 > reset ноль, все отказы — ReadTimeout, суды отвечали за 26–58 с при таймауте
 > 30 с, и повтор после таймаута заведомо мимо — 40 промахов × 105 с сожгли
 > 70 минут из 100 при 20 прочитанных карточках из 287. Оба режима описаны
-> комментарием у места запуска, страж — `TestSlotFetchTuning`; спасённые
-> повторы по-прежнему видны ключом `requests_retried` в `last_run`. Гейт слота —
+> комментарием у места запуска, страж — `TestSlotFetchTuning`; повторы,
+> дошедшие до HTTP-ответа, видны ключом `requests_retried` в `last_run`
+> (это не гарантия семантически валидной страницы). Гейт слота —
 > «дайджест дня уже отправлен» (`delivered_at`; облачный ручной прогон ставит
 > его сам через `will_deliver`). last_digest.json на дашборде ведёт выпуски
 > дня (issues, ключ — `issue_key` контекста); Mac-черновики его НЕ пишут —

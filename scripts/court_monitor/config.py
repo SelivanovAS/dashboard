@@ -398,11 +398,37 @@ REQUEST_DELAY = (2, 3)  # Задержка между запросами к су
 # пробам/импортам их workflow возвращают 3 через env — там запросов мало,
 # а повтор запуска — ручной труд оператора.
 FETCH_MAX_RETRIES = int(os.environ.get("FETCH_MAX_RETRIES", "1"))
+# Ретрай разрешён только БЫСТРЫМ отказам (см. netutil.should_retry_fetch).
+# 21.08 мгновенный connection_reset был мигающим и повтор спасал карточки;
+# 24.08 ReadTimeout длился 30–65 с, и такой же повтор лишь удваивал простой.
+# Порог не превращает max retries в общий режим: неразрешённые классы
+# завершаются после первой попытки независимо от FETCH_MAX_RETRIES.
+FETCH_RETRY_FAST_MAX_SECONDS = float(
+    os.environ.get("FETCH_RETRY_FAST_MAX_SECONDS", "5")
+)
 # Таймаут запроса к суду — РАЗДЕЛЬНЫЙ (connect, read), см. netutil.fetch_page.
 # Env-рычаг заведён 24.08.2026: в то утро портал отвечал за 26–58 с при жёстко
 # зашитых 30 с, и покрутить число можно было только правкой кода с коммитом.
 FETCH_TIMEOUT_CONNECT = float(os.environ.get("FETCH_TIMEOUT_CONNECT", "10"))
 FETCH_TIMEOUT_READ = float(os.environ.get("FETCH_TIMEOUT_READ", "65"))
+# Локальный аварийный checkpoint Mac-прогона. Имя намеренно НЕ оканчивается
+# на ``_PATH``: ops/stage_data_files.sh автоматически индексирует все такие
+# константы, а телеметрия незавершённого процесса не является судебными
+# данными и не должна попадать в git. Пусто вне Mac-обёртки = no-op.
+PARSE_TELEMETRY_FILE = os.environ.get("PARSE_TELEMETRY_FILE", "")
+# Mac не имеет права публиковать обновлённые картотеки без соответствующей
+# дельты дайджеста: события уже вольются в cases и на следующем прогоне не
+# возникнут повторно. Облако исторически оставляет контекст best-effort;
+# локальная обёртка включает строгий режим явно.
+DIGEST_CONTEXT_REQUIRED = os.environ.get(
+    "DIGEST_CONTEXT_REQUIRED", "0"
+).strip().lower() not in ("", "0", "false", "no")
+# Mac-обёртка держит снимок data-файлов до парсинга. После
+# durable-записи дневного контекста save_digest_context публикует
+# локальный ACK с тем же txn-id. Имена намеренно не оканчиваются
+# на *_PATH: ops/stage_data_files.sh считает такие имена публичными data-файлами.
+PARSE_TXN_ID = os.environ.get("PARSE_TXN_ID", "").strip()
+PARSE_TXN_ACK_FILE = os.environ.get("PARSE_TXN_ACK_FILE", "").strip()
 # Пер-суд предохранитель карточек (аутейдж Сургутского 29.07.2026: заглушка
 # на каждой карточке — прогон впустую молотил polite_delay + HTTP по всем
 # делам суда). Столько НЕ прочитанных карточек ПОДРЯД (заглушка, проверочный
@@ -727,6 +753,10 @@ FETCH_DIAG: dict = {}
 # уцелеют. Обе структуры чистятся там же, вместе с CARD_BREAKER/FETCH_DIAG.
 FETCH_TIMINGS: list[float] = []      # секунды успешных ответов fetch_page
 FETCH_FAIL_KINDS: dict[str, int] = {}  # отказы по классам _set_diag
+# Длительность НЕУСПЕШНЫХ попыток по точному классу. Нужна отдельно от
+# FETCH_TIMINGS: быстрый connection_reset и 65-секундный read_timeout требуют
+# противоположной политики повторов, хотя прежде оба назывались ``network``.
+FETCH_FAIL_TIMINGS: dict[str, list[float]] = {}
 
 
 def _metrics_reset() -> None:
@@ -736,3 +766,4 @@ def _metrics_reset() -> None:
     FETCH_DIAG.clear()
     FETCH_TIMINGS.clear()
     FETCH_FAIL_KINDS.clear()
+    FETCH_FAIL_TIMINGS.clear()

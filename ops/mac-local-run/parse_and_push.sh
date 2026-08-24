@@ -65,6 +65,13 @@ SBER_GATEWAY="$CM_SBER_GATEWAY"        # шлюз сети Сбера (egress Р
 PYTHON="/usr/bin/python3"
 LOG_DIR="$REPO/ops/mac-local-run"
 LOG="$LOG_DIR/parse_and_push.log"
+DELIVERY_TXN_TOOL="$REPO/ops/mac-local-run/delivery_txn.py"
+DELIVERY_TXN_JOURNAL="$LOG_DIR/.runtime/delivery_txn.json"
+PARSE_TXN_TOOL="$REPO/ops/mac-local-run/parse_txn.py"
+PARSE_TXN_JOURNAL="$LOG_DIR/.runtime/parse_txn.json"
+PARSE_TXN_ACK_FILE="$LOG_DIR/.runtime/parse_txn.ack.json"
+RUN_LOCK_TOOL="$REPO/ops/mac-local-run/run_lock.py"
+DELIVERY_CONTEXT_PATH="data/last_digest_context.json"
 # ── Ротация лога по дням ─────────────────────────────────────────────────────
 # Лог писался ОДНИМ файлом с 3 июля: разбор «что было сегодня» каждый раз
 # требовал скрипта по маркеру «Старт», а файл рос без предела. Дата файла не
@@ -97,10 +104,13 @@ notify() {  # $1 = текст уведомления macOS (+ Telegram, если
 alert_telegram() {  # $1 = текст (тело — cm_alert_telegram, общее с импортом)
   cm_alert_telegram "$CONF_DIR" "Mac-парсинг ($(basename "$REPO"))" "$1"
 }
+release_run_lock() {
+  "$PYTHON" "$RUN_LOCK_TOOL" release "$LOCK" "$$" >/dev/null 2>&1 || true
+}
 die() {  # $1 = текст → в лог, уведомление, Telegram, выход 1
   log "ERROR: $1"; notify "Ошибка: $1"; alert_telegram "$1"
   finish_pusher   # дать pusher'у дослать «ERROR:» в админку (он выйдет сам)
-  rmdir "$LOCK" 2>/dev/null; exit 1
+  exit 1
 }
 
 # ── Онлайн-вехи в админку Worker (блок «🛰 Парсинг»; некритичная функция) ─────
@@ -125,13 +135,280 @@ finish_pusher() {
   kill "$PUSHER_PID" 2>/dev/null; PUSHER_PID=""
 }
 
+# ── Транзакция доставочного marker-коммита ───────────────────────────────────
+# delivered_at обязан попасть в ТОТ ЖЕ коммит, который запускает replay. Между
+# штампом и подтверждённым push есть несколько crash-boundary (stage, commit,
+# SIGKILL, потерянный ответ git push). Локальный journal создаётся ДО штампа и
+# не даёт следующему слоту принять «локально закрыто» за «принято GitHub».
+#
+# rollback всегда условный по delivery_id: запоздавшая транзакция не вправе
+# снять штамп уже другого выпуска. Ошибки отката не глотаем — в такой ситуации
+# безопаснее остановиться с journal, чем соврать «день снова открыт».
+rollback_delivery_transaction() {  # $1 = delivery_id, $2 = причина
+  local delivery_id="$1" reason="$2" diff_rc
+  log "Delivery rollback ($delivery_id): $reason"
+  if ! "$PYTHON" ops/mac-local-run/cloud_run_ok.py \
+      --unmark-delivered --delivery-id "$delivery_id" >>"$LOG" 2>&1; then
+    log "Delivery rollback НЕ завершён: условный unmark не удался"
+    return 1
+  fi
+  if ! git add -- "$DELIVERY_CONTEXT_PATH" >>"$LOG" 2>&1; then
+    log "Delivery rollback НЕ завершён: контекст после unmark не добавлен в index"
+    return 1
+  fi
+  git diff --cached --quiet -- "$DELIVERY_CONTEXT_PATH"
+  diff_rc=$?
+  if [ "$diff_rc" -eq 1 ]; then
+    if ! git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
+        commit --only -m "↩️ Откат штампа доставки $(date +'%d.%m.%Y %H:%M') (Mac, push не подтверждён)" \
+        -- "$DELIVERY_CONTEXT_PATH" \
+        >>"$LOG" 2>&1; then
+      log "Delivery rollback НЕ завершён: компенсирующий commit не создан"
+      return 1
+    fi
+  elif [ "$diff_rc" -ne 0 ]; then
+    log "Delivery rollback НЕ завершён: git diff вернул $diff_rc"
+    return 1
+  fi
+  if ! "$PYTHON" "$DELIVERY_TXN_TOOL" clear \
+      "$DELIVERY_TXN_JOURNAL" "$delivery_id" >>"$LOG" 2>&1; then
+    log "Delivery rollback НЕ завершён: journal не очищен"
+    return 1
+  fi
+  log "Delivery rollback завершён: штамп снят, день снова открыт"
+  return 0
+}
+
+rollback_delivery_and_die() {  # $1 = delivery_id, $2 = причина
+  local delivery_id="$1" reason="$2"
+  if rollback_delivery_transaction "$delivery_id" "$reason"; then
+    die "$reason — штамп снят, день остался открытым (см. лог)"
+  fi
+  die "$reason — ОТКАТ НЕ ПОДТВЕРЖДЁН, journal сохранён; новый marker запрещён (см. лог)"
+}
+
+clear_accepted_delivery_or_die() {  # $1 = delivery_id
+  local delivery_id="$1"
+  if ! "$PYTHON" "$DELIVERY_TXN_TOOL" clear \
+      "$DELIVERY_TXN_JOURNAL" "$delivery_id" >>"$LOG" 2>&1; then
+    # Remote уже принял marker. Ни при каких обстоятельствах здесь не unmark:
+    # replay мог уже начаться, а повтор создал бы второй дневной дайджест.
+    die "marker $delivery_id принят GitHub, но journal не очищен; штамп НЕ снимаю"
+  fi
+}
+
+confirm_ambiguous_delivery() {  # $1 = delivery_id, $2 = marker SHA, $3 = причина
+  local delivery_id="$1" marker_sha="$2" reason="$3" remote_state remote_rc
+  remote_state=$("$PYTHON" "$DELIVERY_TXN_TOOL" remote-state \
+      "$REPO" "$GIT_URL" "$marker_sha" 2>>"$LOG")
+  remote_rc=$?
+  log "Delivery remote-state ($marker_sha): ${remote_state:-unknown}, rc=$remote_rc"
+  case "$remote_rc" in
+    0)
+      # git push мог вернуть ошибку уже ПОСЛЕ приёма commit. Marker либо сам
+      # main, либо его предок (workflow успел дописать replay-коммит).
+      clear_accepted_delivery_or_die "$delivery_id"
+      log "Неоднозначный push подтверждён по remote: marker принят"
+      return 0
+      ;;
+    1)
+      rollback_delivery_and_die "$delivery_id" \
+        "$reason; remote подтверждает отсутствие marker-коммита"
+      ;;
+    *)
+      # Не знаем, принял ли GitHub commit. At-least-once rollback здесь опасен:
+      # принятый marker уже мог запустить replay. Оставляем stamp+journal; новый
+      # слот сначала повторит эту проверку, и только потом дойдёт до daily gate.
+      die "$reason — исход push НЕИЗВЕСТЕН; штамп не снимаю, journal сохранён"
+      ;;
+  esac
+}
+
+reconcile_delivery_transaction() {
+  local line read_rc status delivery_id marker_sha pre_sha remote_state remote_rc
+  local head_sha work_diff_rc index_diff_rc
+  line=$("$PYTHON" "$DELIVERY_TXN_TOOL" read "$DELIVERY_TXN_JOURNAL" 2>>"$LOG")
+  read_rc=$?
+  if [ "$read_rc" -eq 1 ]; then
+    return 0  # journal нет — штатный старт
+  fi
+  if [ "$read_rc" -ne 0 ]; then
+    die "delivery journal не читается — автоматическое продолжение опасно"
+  fi
+  IFS='|' read -r status delivery_id marker_sha pre_sha <<< "$line"
+  if [ -z "$delivery_id" ]; then
+    die "delivery journal не содержит delivery_id"
+  fi
+  log "Найдена незавершённая delivery-транзакция: status=$status id=$delivery_id marker=${marker_sha:-—}"
+  case "$status" in
+    prepared)
+      # Скрипт ещё не дошёл до push: crash случился после journal/mark/stage
+      # либо сразу после локального commit, но ДО записи marker SHA. Поэтому
+      # безопасно условно снять stamp и, если commit успел появиться, создать
+      # поверх него компенсирующий commit.
+      #
+      # Особая граница — SIGKILL МЕЖДУ prepare и mark: delivery_id в контексте
+      # ещё нет, поэтому conditional unmark закономерно отказал бы mismatch.
+      # Доказываем именно это состояние тройкой: HEAD всё ещё pre_sha, а путь
+      # контекста чист и в working tree, и в index. Тогда снимать нечего —
+      # достаточно условно удалить journal. Любое отличие идёт через rollback.
+      head_sha=$(git rev-parse HEAD 2>>"$LOG") \
+        || die "prepared recovery: не удалось определить HEAD"
+      git diff --quiet -- "$DELIVERY_CONTEXT_PATH"
+      work_diff_rc=$?
+      git diff --cached --quiet -- "$DELIVERY_CONTEXT_PATH"
+      index_diff_rc=$?
+      if [ -n "$pre_sha" ] && [ "$head_sha" = "$pre_sha" ] \
+          && [ "$work_diff_rc" -eq 0 ] && [ "$index_diff_rc" -eq 0 ]; then
+        if ! "$PYTHON" "$DELIVERY_TXN_TOOL" clear \
+            "$DELIVERY_TXN_JOURNAL" "$delivery_id" >>"$LOG" 2>&1; then
+          die "prepared recovery до mark: чистый journal не удалось удалить"
+        fi
+        log "Startup recovery: crash был до mark, штампа нет — journal очищен"
+        return 0
+      fi
+      if ! rollback_delivery_transaction "$delivery_id" \
+          "startup recovery подготовленной транзакции (pre_sha=${pre_sha:-—})"; then
+        die "prepared delivery-транзакцию не удалось откатить; journal сохранён"
+      fi
+      ;;
+    committed)
+      if [ -z "$marker_sha" ]; then
+        die "committed delivery journal не содержит marker SHA"
+      fi
+      remote_state=$("$PYTHON" "$DELIVERY_TXN_TOOL" remote-state \
+          "$REPO" "$GIT_URL" "$marker_sha" 2>>"$LOG")
+      remote_rc=$?
+      log "Startup delivery remote-state ($marker_sha): ${remote_state:-unknown}, rc=$remote_rc"
+      case "$remote_rc" in
+        0)
+          clear_accepted_delivery_or_die "$delivery_id"
+          log "Startup recovery: GitHub уже принял marker, локальный штамп сохранён"
+          ;;
+        1)
+          if ! rollback_delivery_transaction "$delivery_id" \
+              "startup recovery: remote не содержит marker $marker_sha"; then
+            die "отсутствующий на remote marker не удалось откатить; journal сохранён"
+          fi
+          ;;
+        *)
+          die "не удалось установить судьбу marker $marker_sha; штамп не снимаю, journal сохранён"
+          ;;
+      esac
+      ;;
+    *)
+      die "неизвестный status=$status в delivery journal"
+      ;;
+  esac
+}
+
+reconcile_parse_transaction() {
+  local result rc
+  result=$("$PYTHON" "$PARSE_TXN_TOOL" recover \
+      "$PARSE_TXN_JOURNAL" "$PARSE_TXN_ACK_FILE" 2>>"$LOG")
+  rc=$?
+  if [ "$rc" -eq 1 ]; then
+    return 0  # snapshot нет — штатный старт
+  fi
+  if [ "$rc" -ne 0 ]; then
+    die "parse snapshot не удалось восстановить; pull/парсинг запрещены"
+  fi
+  log "Startup parse-txn recovery: ${result:-завершён}"
+}
+
+# ЕДИНСТВЕННАЯ воронка двух доставочных веток: обычный финиш парсинга и
+# доставка накопленного контекста, когда канарейки судов молчат.
+deliver_and_push() {  # $1 = что доставляем (для лога)
+  local purpose="$1" delivery_id pre_sha mark_output mark_rc diff_rc marker_sha
+
+  delivery_id=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --delivery-id 2>>"$LOG")
+  if [ $? -ne 0 ] || [ -z "$delivery_id" ]; then
+    die "не удалось получить delivery_id текущего контекста"
+  fi
+  pre_sha=$(git rev-parse HEAD 2>>"$LOG") || die "не удалось определить SHA до доставки"
+
+  # Crash-boundary №1: journal обязан существовать раньше delivered_at.
+  "$PYTHON" "$DELIVERY_TXN_TOOL" prepare \
+      "$DELIVERY_TXN_JOURNAL" "$delivery_id" "$pre_sha" >>"$LOG" 2>&1 \
+    || die "не удалось подготовить delivery journal для $delivery_id"
+
+  mark_output=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --mark-delivered 2>>"$LOG")
+  mark_rc=$?
+  [ -n "$mark_output" ] && log "Delivery mark: $mark_output"
+  if [ "$mark_rc" -ne 0 ]; then
+    # Даже при rc!=0 os.replace внутри cloud_run_ok мог уже опубликовать stamp,
+    # а поздний fsync/другая ошибка — вернуть failure. Journal НЕ удаляем:
+    # startup recovery отличит чистое состояние до mark от состоявшегося stamp
+    # и условно откатит именно этот delivery_id.
+    die "не удалось подтвердить delivered_at; prepared journal сохранён для recovery"
+  fi
+  if [ "$mark_output" != "$delivery_id" ]; then
+    rollback_delivery_and_die "$delivery_id" \
+      "mark-delivered вернул чужой delivery_id: ${mark_output:-—}"
+  fi
+
+  git add -- "$DELIVERY_CONTEXT_PATH" >>"$LOG" 2>&1 \
+    || rollback_delivery_and_die "$delivery_id" "не удалось добавить контекст доставки в index"
+  git diff --cached --quiet -- "$DELIVERY_CONTEXT_PATH"
+  diff_rc=$?
+  if [ "$diff_rc" -eq 0 ]; then
+    # Нормальный гейт не допускает сюда уже опубликованный stamp. Но если это
+    # recovery/manual force, доказываем судьбу HEAD, а не объявляем успех по
+    # одному локальному delivered_at.
+    marker_sha=$(git rev-parse HEAD 2>>"$LOG") \
+      || rollback_delivery_and_die "$delivery_id" "не удалось определить существующий marker SHA"
+    if ! git log -1 --format=%B "$marker_sha" 2>>"$LOG" | grep -q '(Mac-парсинг)'; then
+      rollback_delivery_and_die "$delivery_id" \
+        "штамп уже стоял, но HEAD не является доставочным marker-коммитом"
+    fi
+    "$PYTHON" "$DELIVERY_TXN_TOOL" committed \
+        "$DELIVERY_TXN_JOURNAL" "$delivery_id" "$marker_sha" >>"$LOG" 2>&1 \
+      || rollback_delivery_and_die "$delivery_id" "не удалось записать существующий marker SHA"
+    confirm_ambiguous_delivery "$delivery_id" "$marker_sha" \
+      "существующий marker требует проверки remote"
+    return 0
+  elif [ "$diff_rc" -ne 1 ]; then
+    rollback_delivery_and_die "$delivery_id" "git diff доставки вернул $diff_rc"
+  fi
+
+  git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
+      commit --only -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M') (Mac-парсинг)" \
+      -- "$DELIVERY_CONTEXT_PATH" \
+      >>"$LOG" 2>&1 \
+    || rollback_delivery_and_die "$delivery_id" "git commit доставки не удался"
+  marker_sha=$(git rev-parse HEAD 2>>"$LOG") \
+    || rollback_delivery_and_die "$delivery_id" "не удалось определить marker SHA после commit"
+  "$PYTHON" "$DELIVERY_TXN_TOOL" committed \
+      "$DELIVERY_TXN_JOURNAL" "$delivery_id" "$marker_sha" >>"$LOG" 2>&1 \
+    || rollback_delivery_and_die "$delivery_id" "не удалось записать marker SHA в journal"
+
+  if git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1; then
+    clear_accepted_delivery_or_die "$delivery_id"
+  else
+    confirm_ambiguous_delivery "$delivery_id" "$marker_sha" \
+      "git push доставки вернул ошибку"
+  fi
+  log "Доставка ($purpose): marker $marker_sha принят — GitHub соберёт дайджест"
+  return 0
+}
+
 # ── Один экземпляр за раз ─────────────────────────────────────────────────────
 mkdir -p "$LOG_DIR"
-if ! mkdir "$LOCK" 2>/dev/null; then
-  log "Другой прогон уже идёт ($LOCK) — выход"
+# Обычный mkdir-lock после SIGKILL/потери питания остаётся навсегда и
+# не пускает startup recovery. Owner хранит PID + OS start-time:
+# живой владелец даёт тихий skip, мёртвый/reused PID атомарно вытесняется.
+"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" >>"$LOG" 2>&1
+LOCK_RC=$?
+if [ "$LOCK_RC" -eq 1 ]; then
+  log "Другой живой прогон уже идёт ($LOCK) — выход"
   exit 0
+elif [ "$LOCK_RC" -ne 0 ]; then
+  log "ERROR: не удалось захватить/recover lock ($LOCK), rc=$LOCK_RC"
+  notify "Ошибка lock Mac-парсинга"
+  alert_telegram "не удалось захватить/recover lock: rc=$LOCK_RC"
+  exit 1
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+trap 'release_run_lock' EXIT
 
 # ── Ротация лога: держим историю нескольких прогонов, но не даём расти вечно ──
 if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 4000 ]; then
@@ -142,6 +419,13 @@ log "=================================================================="
 log "Старт parse_and_push (pid $$)"
 
 cd "$REPO" || die "нет каталога $REPO"
+
+# Обрыв прошлого Python-процесса мог оставить one-shot флаги в data
+# раньше дневного контекста. Восстанавливаем/подтверждаем снимок ДО
+# сетевого preflight, pull и дневного гейта. --check строго read-only.
+if [ "$CHECK_ONLY" != "1" ]; then
+  reconcile_parse_transaction
+fi
 
 # ── Preflight: мы в сети Сбера? ──────────────────────────────────────────────
 # Признак — шлюз Сбера присутствует среди default-маршрутов (в т.ч. когда VPN
@@ -171,6 +455,13 @@ start_pusher
 GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
 export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
 log "git через $GIT_URL"
+
+# ── Довести незавершённую доставку ДО pull и дневного гейта ──────────────────
+# Иначе локальный delivered_at после SIGKILL заставил бы gate молча пропустить
+# день, хотя marker не дошёл до GitHub. --check остаётся строго read-only.
+if [ "$CHECK_ONLY" != "1" ]; then
+  reconcile_delivery_transaction
+fi
 
 # ── Подтянуть вчерашние replay-коммиты GitHub (иначе push отклонят) ───────────
 # При --check репозиторий не трогаем вовсе: диагностика не должна двигать
@@ -237,45 +528,6 @@ delivery_window_open() {
   [ $(( 10#$(date +%H) * 60 + 10#$(date +%M) )) -ge "$DELIVERY_WINDOW_MIN" ]
 }
 
-# Откат штампа доставки: пуш не удался. Без него delivered_at остаётся в
-# локальном контексте, день считается закрытым, а дайджест не отправлен — и
-# следующие слоты молча выходят по гейту. 24.08.2026 этот сценарий был в одном
-# шаге от реализации (юрист уходил из сети в момент окна доставки). Наружу не
-# возвращается: заканчивается die. $1 — что именно не запушилось.
-unmark_delivery_and_die() {
-  "$PYTHON" ops/mac-local-run/cloud_run_ok.py --unmark-delivered >>"$LOG" 2>&1 || true
-  bash ops/stage_data_files.sh >>"$LOG" 2>&1 || true
-  git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-      commit -m "↩️ Откат штампа доставки $(date +'%d.%m.%Y %H:%M') (Mac, пуш не удался)" \
-      >>"$LOG" 2>&1 || true
-  die "$1 — штамп снят, день остался открытым (см. лог)"
-}
-
-# Доставочный коммит: штамп delivered_at + маркер «(Mac-парсинг)» → replay
-# соберёт дайджест из НАКОПЛЕННОГО контекста и разошлёт. Наружу не
-# возвращается. $1 — что доставляем (для лога).
-deliver_and_push() {
-  "$PYTHON" ops/mac-local-run/cloud_run_ok.py --mark-delivered >>"$LOG" 2>&1 \
-    || die "не удалось проставить delivered_at в контекст дайджеста"
-  bash ops/stage_data_files.sh >>"$LOG" 2>&1 || die "не удалось собрать файлы данных"
-  if git diff --cached --quiet; then
-    # Штамп обязан менять контекст; пусто = он уже стоял и закоммичен раньше.
-    log "Доставка ($1): изменений нет — штамп уже закоммичен. Готово"
-    finish_pusher
-    exit 0
-  fi
-  git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-      commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M') (Mac-парсинг)" >>"$LOG" 2>&1 \
-      || die "git commit не удался"
-  git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 \
-    || unmark_delivery_and_die "git push доставки не удался"
-  log "Доставка ($1): запушено — GitHub соберёт дайджест и разошлёт"
-  notify "Дайджест отправляется"
-  log "Готово"
-  finish_pusher
-  exit 0
-}
-
 probe_failed() {  # $1 = диагностика канареек; наружу не возвращается
   local diag="$1" marker
   log "Канарейки не ответили: $diag"
@@ -296,6 +548,10 @@ probe_failed() {  # $1 = диагностика канареек; наружу �
       # это без парсинга: доставочный коммит несёт один штамп delivered_at.
       alert_telegram "суды к окну доставки так и не ответили — отправляю дайджест с накопленным: $("$PYTHON" ops/mac-local-run/cloud_run_ok.py --progress 2>/dev/null || echo 'без сводки')"
       deliver_and_push "накопленное утро, суды молчат"
+      notify "Дайджест отправляется"
+      log "Готово"
+      finish_pusher
+      exit 0
     fi
     marker="$LOG_DIR/.alerted-parse-$(date +%Y%m%d)"
     if [ ! -f "$marker" ]; then
@@ -348,15 +604,26 @@ fi
 REGION_CODE=$(cm_region_code "$PYTHON")
 cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 
+# Crash-consistency «data ↔ дневной контекст». Список тот же, что у
+# staging ниже; сам last_digest_context из snapshot исключён как WAL.
+# Manifest публикуется только после durable-копий всех файлов.
+DATA_FILE_LIST=$(bash ops/stage_data_files.sh --list 2>>"$LOG") \
+  || die "не удалось получить список файлов данных"
+PARSE_TXN_ID=$("$PYTHON" "$PARSE_TXN_TOOL" prepare \
+    "$PARSE_TXN_JOURNAL" "$PARSE_TXN_ACK_FILE" "$REPO" \
+    "$DELIVERY_CONTEXT_PATH" 2>>"$LOG" <<< "$DATA_FILE_LIST") \
+  || die "не удалось подготовить parse snapshot"
+[ -n "$PARSE_TXN_ID" ] || die "parse snapshot не вернул txn_id"
+
 log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без секретов) ..."
 # SKIP_CHECKED_TODAY — дочитка слотов: карточки со штампом «сегодня»
 # пропускаются, повторная попытка тратит запросы только на недочитанное
 # (21.08.2026: второй слот Урала сжёг ~105 из 119 удачных чтений на повторы
 # утренних карточек). --force гасит: юрист у пульта хочет полный свежий прогон.
 #
-# ⚠️ РЕТРАИ И ПРЕДОХРАНИТЕЛЬ: рычагов здесь НЕТ намеренно — слоты идут на
-# дефолтах кода (config.py: 1 попытка, порог 3, проба каждые 30). Это откат
-# 24.08.2026, и вот почему значения нельзя вернуть «просто так»: у sudrf два
+# ⚠️ РЕТРАИ И ПРЕДОХРАНИТЕЛЬ: предохранитель остаётся на дефолтах кода
+# (порог 3, проба каждые 30), а максимум попыток здесь снова 3 — но теперь
+# это только ПОТОЛОК для точной политики netutil.should_retry_fetch. У sudrf два
 # ПРОТИВОПОЛОЖНЫХ режима отказа, и лекарство от одного — яд для другого.
 #   21.08.2026, МИГАЮЩИЙ блок: таймаутов ноль, все 257 отказов дня —
 #   мгновенный Connection reset by peer лотереей по ~70 хостам (тот же суд
@@ -369,18 +636,39 @@ log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без с
 #   просто медленнее нашего таймаута. Повтор после таймаута — ещё 30 с против
 #   того же распределения, то есть заведомо мимо: 40 промахов × 105 с сожгли
 #   70 минут из 100, прогон прочитал 20 карточек из 287.
-# Какой сегодня режим — константой не угадать, это должен решать код:
-# раздельный connect/read-таймаут (сейчас в fetch_page жёсткие 30 с на оба) +
-# ретрай только по БЫСТРЫМ отказам. Пока этого нет, дешевле промахиваться
-# быстро: пропущенная карточка перечитается следующим слотом, а потерянные
-# минуты внутри слота не возвращает никто.
+# Какой сегодня режим — константой не угадываем: код видит точный класс и
+# elapsed. Быстрый reset/5xx можно повторить; ReadTimeout, connect-timeout,
+# CAPTCHA, 4xx и HTTP-200-заглушка завершаются после одной попытки. Поэтому
+# сегодняшнее медленное утро не станет длиннее, а мигающий reset получит ещё
+# две дешёвые возможности вернуть карточку.
+PARSE_TELEMETRY_FILE="$REPO/ops/mac-local-run/.runtime/parse_telemetry.json" \
+DIGEST_CONTEXT_REQUIRED=1 \
+PARSE_TXN_ID="$PARSE_TXN_ID" \
+PARSE_TXN_ACK_FILE="$PARSE_TXN_ACK_FILE" \
+FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}" \
 SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ] && echo 0 || echo 1) \
 SKIP_CHECKED_TODAY=$([ "$FORCE" = "1" ] && echo 0 || echo 1) \
   "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
 RC=$?
 if [ "$RC" -ne 0 ]; then
+  PARSE_RECOVERY=$("$PYTHON" "$PARSE_TXN_TOOL" recover \
+      "$PARSE_TXN_JOURNAL" "$PARSE_TXN_ACK_FILE" 2>>"$LOG")
+  PARSE_RECOVERY_RC=$?
+  if [ "$PARSE_RECOVERY_RC" -ne 0 ]; then
+    die "парсинг rc=$RC; parse snapshot не восстановлен — см. лог"
+  fi
+  log "Парсинг rc=$RC; parse-txn: ${PARSE_RECOVERY:-завершён}"
   die "парсинг завершился с кодом $RC (см. лог)"
 fi
+PARSE_FINISH=$("$PYTHON" "$PARSE_TXN_TOOL" finish \
+    "$PARSE_TXN_JOURNAL" "$PARSE_TXN_ACK_FILE" "$PARSE_TXN_ID" 2>>"$LOG")
+PARSE_FINISH_RC=$?
+if [ "$PARSE_FINISH_RC" -eq 3 ]; then
+  die "парсер вернул 0, но изменил data без WAL; snapshot откачен"
+elif [ "$PARSE_FINISH_RC" -ne 0 ]; then
+  die "не удалось закрыть parse snapshot; следующий старт выполнит recovery"
+fi
+log "Parse-txn: ${PARSE_FINISH:-завершён}"
 log "Парсинг завершён"
 
 # ── Коммит и пуш ──────────────────────────────────────────────
@@ -388,6 +676,22 @@ log "Парсинг завершён"
 # court_monitor.config. Прежний ручной список здесь разъехался с workflow —
 # не коммитились семь файлов трека «Иски банка» (он появился 25.07.2026,
 # уже после того, как резерв усыпили), и флип выбросил бы весь трек.
+DATA_FILES=()
+while IFS= read -r data_path; do
+  [ -n "$data_path" ] || continue
+  case "$data_path" in
+    *\**)
+      # Те же глобы холодных архивов, что раскрывает stage_data_files.sh.
+      for data_file in $data_path; do
+        [ -e "$data_file" ] && DATA_FILES+=("$data_file")
+      done
+      ;;
+    *)
+      [ -e "$data_path" ] && DATA_FILES+=("$data_path")
+      ;;
+  esac
+done <<< "$DATA_FILE_LIST"
+[ "${#DATA_FILES[@]}" -gt 0 ] || die "список существующих файлов данных пуст"
 bash ops/stage_data_files.sh >>"$LOG" 2>&1 || die "не удалось собрать файлы данных"
 
 # ── «Один дайджест в день»: слать или копить? ────────────────────────────────
@@ -418,11 +722,15 @@ delivery_window_open && DELIVER=1
 # ⚠️ Пустой дифф здесь НЕ повод выйти из скрипта: ранние слоты уже опубликовали
 # данные, а доставить накопленный контекст всё равно надо — поэтому пропускаем
 # только коммит и отдаём управление фазе 2.
-if git diff --cached --quiet; then
+# Scope обязателен и у черновика: пользователь мог заранее оставить в index
+# свою работу. Обычный `git commit` включал её в data-push; marker/rollback уже
+# защищены `--only`, теперь тот же инвариант действует на обеих фазах.
+if git diff --cached --quiet -- "${DATA_FILES[@]}"; then
   log "Данных к публикации нет (нерабочий день или без движения)"
 else
   git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-      commit -m "📊 Данные обновлены $(date +'%d.%m.%Y %H:%M') (Mac, копим дайджест)" \
+      commit --only -m "📊 Данные обновлены $(date +'%d.%m.%Y %H:%M') (Mac, копим дайджест)" \
+      -- "${DATA_FILES[@]}" \
       >>"$LOG" 2>&1 || die "git commit данных не удался"
   git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 || die "git push данных не удался (см. лог)"
 fi
@@ -449,32 +757,12 @@ if [ "$DELIVER" != "1" ]; then
   exit 0
 fi
 
-"$PYTHON" ops/mac-local-run/cloud_run_ok.py --mark-delivered >>"$LOG" 2>&1 \
-  || die "не удалось проставить delivered_at в контекст дайджеста"
-bash ops/stage_data_files.sh >>"$LOG" 2>&1 || die "не удалось собрать файлы данных"
-
-if git diff --cached --quiet; then
-  # Штамп идемпотентен: дайджест дня уже доставлен более ранним прогоном.
-  log "Штамп доставки уже стоял — дайджест за сегодня отправлен раньше"
-  log "Готово"
-  finish_pusher
-  exit 0
-fi
-
-git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-    commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M') (Mac-парсинг)" \
-    >>"$LOG" 2>&1 || die "git commit доставки не удался"
-
-if git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1; then
-  log "Запушено — GitHub соберёт дайджест и разошлёт (${RUN_WHY:-вердикт не прочитался})"
-  notify "Готово: данные обновлены, дайджест собирается"
-  if [ "$RUN_OK" != "1" ] && [ "$FORCE" != "1" ]; then
-    # Окно доставки с неполной попыткой: юрист должен знать, что дайджест
-    # неполный (это последний слот утра — дочитывать больше некогда).
-    alert_telegram "дайджест отправлен с тем, что дочиталось за утро — $("$PYTHON" ops/mac-local-run/cloud_run_ok.py --progress 2>/dev/null || echo 'без сводки')"
-  fi
-else
-  unmark_delivery_and_die "git push доставки не удался"
+deliver_and_push "обычный финиш; ${RUN_WHY:-вердикт не прочитался}"
+notify "Готово: данные обновлены, дайджест собирается"
+if [ "$RUN_OK" != "1" ] && [ "$FORCE" != "1" ]; then
+  # Окно доставки с неполной попыткой: юрист должен знать, что дайджест
+  # неполный (это последний слот утра — дочитывать больше некогда).
+  alert_telegram "дайджест отправлен с тем, что дочиталось за утро — $("$PYTHON" ops/mac-local-run/cloud_run_ok.py --progress 2>/dev/null || echo 'без сводки')"
 fi
 
 log "Готово"

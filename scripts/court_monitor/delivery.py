@@ -795,8 +795,11 @@ def log_run_summary(
     # была видна развёрнутой; вне GitHub Actions / вне группы — no-op.
     ghlog.end_group()
     extras = extras or {}
+    # HTTP 200 с CAPTCHA/заглушкой — транспортно успешный ответ, но не
+    # прочитанная страница. Слово «ок» скрывало этот слой; semantic-классы
+    # живут отдельно в checkpoint/last_run.fail_kinds.
     req_line = (
-        f"Запросы: {config.METRICS['requests_ok']} ок / "
+        f"Транспорт: {config.METRICS['requests_ok']} успешных HTTP-ответов / "
         f"{config.METRICS['requests_failed']} сбоев"
     )
     if config.METRICS["requests_retried"]:

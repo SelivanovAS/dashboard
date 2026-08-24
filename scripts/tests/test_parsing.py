@@ -1999,7 +1999,7 @@ class TestCardPromotionGuardWiring:
         with open(path, encoding="utf-8") as f:
             src = f.read()
         i = src.index("# Промоушен материала по карточке")
-        return src[i:src.index("card_is_empty_shell", i)]
+        return src[i:src.index("# Первый парс заведённого дела", i)]
 
     def test_guard_is_court_aware(self):
         """Голый case_by_id больше не решает занятость — только пара."""

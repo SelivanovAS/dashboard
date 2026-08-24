@@ -5,14 +5,18 @@
 
 from __future__ import annotations
 
+import errno
+import math
 import random
 import re
+import socket
 import time
+from http.client import RemoteDisconnected
 from urllib.parse import urlsplit
 
 import requests
 
-from court_monitor import config
+from court_monitor import config, telemetry
 from court_monitor.config import log
 
 session = requests.Session()
@@ -45,8 +49,121 @@ def _set_diag(kind: str, url: str, **extra) -> None:
     config.FETCH_DIAG.clear()
     config.FETCH_DIAG.update(
         {"kind": kind, "host": urlsplit(url).netloc or url, **extra})
-    if kind not in ("ok", "empty"):
+    if kind != "ok":
         config.FETCH_FAIL_KINDS[kind] = config.FETCH_FAIL_KINDS.get(kind, 0) + 1
+        elapsed = extra.get("elapsed")
+        if isinstance(elapsed, (int, float)):
+            config.FETCH_FAIL_TIMINGS.setdefault(kind, []).append(float(elapsed))
+
+
+def _exception_chain(exc: BaseException):
+    """Обойти реальные вложенные исключения requests/urllib3 без парсинга текста."""
+    pending = [exc]
+    seen: set[int] = set()
+    while pending:
+        cur = pending.pop()
+        if id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        yield cur
+        for linked in (getattr(cur, "__cause__", None),
+                       getattr(cur, "__context__", None)):
+            if isinstance(linked, BaseException):
+                pending.append(linked)
+        # urllib3 прячет первопричину не только в args/cause: MaxRetryError
+        # использует `.reason`, NameResolutionError — `._reason`. Без этого
+        # реальные DNS/reset-цепочки requests схлопывались в connection_error,
+        # хотя упрощённые unit-исключения классифицировались правильно.
+        for attr in ("reason", "_reason", "original_error"):
+            linked = getattr(cur, attr, None)
+            if isinstance(linked, BaseException):
+                pending.append(linked)
+        for arg in getattr(cur, "args", ()):
+            if isinstance(arg, BaseException):
+                pending.append(arg)
+
+
+def transport_fail_kind(exc: requests.RequestException) -> str:
+    """Единственная классификация транспортного отказа fetch_page.
+
+    Порядок load-bearing: специализированные requests-классы проверяются до
+    общих Timeout/ConnectionError, затем разбирается цепочка urllib3/socket.
+    Downstream получает готовый kind и ничего не классифицирует повторно.
+    """
+    if isinstance(exc, requests.ReadTimeout):
+        return "read_timeout"
+    if isinstance(exc, requests.ConnectTimeout):
+        return "connect_timeout"
+    if isinstance(exc, requests.exceptions.SSLError):
+        return "tls_error"
+    if isinstance(exc, requests.exceptions.ProxyError):
+        return "proxy_error"
+    if isinstance(exc, requests.exceptions.TooManyRedirects):
+        return "redirect_error"
+    chain = list(_exception_chain(exc))
+    if any(isinstance(x, socket.gaierror) for x in chain):
+        return "dns_error"
+    reset_errnos = {errno.ECONNRESET, errno.ECONNABORTED, errno.EPIPE}
+    if any(
+        isinstance(x, (ConnectionResetError, ConnectionAbortedError,
+                       BrokenPipeError, RemoteDisconnected))
+        or (isinstance(x, OSError) and getattr(x, "errno", None) in reset_errnos)
+        for x in chain
+    ):
+        return "connection_reset"
+    # ChunkedEncodingError commonly wraps urllib3.ProtocolError and the real
+    # ConnectionResetError. Only an unqualified corrupt/truncated body is the
+    # generic response_error; a proved reset gets the selective fast retry.
+    if isinstance(exc, (
+        requests.exceptions.ChunkedEncodingError,
+        requests.exceptions.ContentDecodingError,
+    )):
+        return "response_error"
+    if isinstance(exc, requests.ConnectionError):
+        return "connection_error"
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+    return "request_error"
+
+
+_FAST_RETRY_KINDS = frozenset({
+    "connection_reset",
+    "http_500", "http_502", "http_503", "http_504",
+})
+
+
+def should_retry_fetch(kind: str, elapsed: float, attempt: int) -> bool:
+    """Повторять только быстрый, plausibly transient отказ.
+
+    ``FETCH_MAX_RETRIES`` — потолок, а не приказ повторять всё подряд.
+    Долгий ReadTimeout, connect-timeout, TLS/DNS, 4xx, CAPTCHA и семантическая
+    заглушка завершаются с первой попытки. Мгновенный reset и быстрый 5xx
+    можно безопасно добрать: именно reset мигал по тем же хостам 21.08.2026.
+    Порог elapsed страхует от reset после долгой частичной передачи ответа.
+    """
+    return (
+        attempt < config.FETCH_MAX_RETRIES
+        and kind in _FAST_RETRY_KINDS
+        and 0 <= float(elapsed) <= config.FETCH_RETRY_FAST_MAX_SECONDS
+    )
+
+
+def _latency_summary(values: list[float]) -> dict:
+    """Nearest-rank percentiles; корректно и для чётного размера выборки."""
+    xs = sorted(values)
+    if not xs:
+        return {}
+
+    def pct(p: float) -> float:
+        idx = max(0, math.ceil(p * len(xs)) - 1)
+        return xs[min(len(xs) - 1, idx)]
+
+    return {
+        "n": len(xs),
+        "p50": round(pct(0.50), 1),
+        "p90": round(pct(0.90), 1),
+        "max": round(xs[-1], 1),
+    }
 
 
 def fetch_latency_summary() -> dict:
@@ -55,20 +172,15 @@ def fetch_latency_summary() -> dict:
     Считаем по УСПЕШНЫМ ответам: у отказа времени нет — есть только потолок
     таймаута, и подмешивать его значило бы мерить свою настройку, а не портал.
     """
-    xs = sorted(config.FETCH_TIMINGS)
-    if not xs:
-        return {}
+    return _latency_summary(config.FETCH_TIMINGS)
 
-    def pct(p: float) -> float:
-        # Ближайший ранг: выборка маленькая (сотни), интерполяция тут ничего
-        # не уточняет, а объяснять её в разборе инцидента пришлось бы.
-        return xs[min(len(xs) - 1, int(p * len(xs)))]
 
+def fetch_failure_latency_summary() -> dict:
+    """Перцентили времени отказа по точному классу за текущий прогон."""
     return {
-        "n": len(xs),
-        "p50": round(pct(0.50), 1),
-        "p90": round(pct(0.90), 1),
-        "max": round(xs[-1], 1),
+        kind: summary
+        for kind, values in sorted(config.FETCH_FAIL_TIMINGS.items())
+        if (summary := _latency_summary(values))
     }
 
 
@@ -104,6 +216,24 @@ _FAIL_REASON_RU = {
     "breaker": "суд снят с обхода после нескольких неудач подряд",
     "empty": "суд вернул пустой ответ",
     "empty_shell": "вместо карточки пришла страница без данных",
+    "empty_act": "страница судебного акта не содержит текста",
+    "captcha_search": "поиск суда закрыт проверочным кодом",
+    "outage_search": "вместо поиска суд вернул заглушку портала",
+    "empty_search": "поиск суда вернул страницу без распознанных дел",
+    "degraded_card": "суд вернул неполную карточку без движения дела",
+    "unparsed_card": "карточка суда не распознана парсером",
+    "read_timeout": "суд не отдал данные до таймаута чтения",
+    "connect_timeout": "соединение с судом не установилось вовремя",
+    "connection_reset": "суд оборвал соединение",
+    "connection_error": "соединение с судом не установлено",
+    "dns_error": "адрес суда не разрешился через DNS",
+    "tls_error": "ошибка защищённого соединения TLS",
+    "proxy_error": "ошибка прокси или сетевого маршрута",
+    "redirect_error": "суд зациклил перенаправления",
+    "response_error": "суд оборвал или повредил передачу ответа",
+    "timeout": "сетевой таймаут",
+    "request_error": "сетевая ошибка запроса",
+    # Старые сохранённые диагнозы/тестовые фикстуры остаются читаемыми.
     "network": "сеть недоступна или таймаут",
 }
 
@@ -130,6 +260,50 @@ def fetch_fail_reason_ru(diag: dict | None = None) -> str:
     return f"{text} (наш адрес {ip})" if ip else text
 
 
+def mark_last_fetch_semantic(
+    kind: str,
+    url: str,
+    *,
+    context: str | None = None,
+    **details,
+) -> None:
+    """Уточнить semantic verdict последнего fetch_page без нового запроса.
+
+    Поиски кассации/апелляции/FI валидируются уже в runs.py: только после
+    parse_* и детекторов видно, был HTTP 200 настоящей выдачей, CAPTCHA или
+    заглушкой. Берём request_id из единого FETCH_DIAG сразу после fetch_page;
+    telemetry.classify_semantic заменяет verdict, но не двигает transport
+    counters. Полного URL и HTML в checkpoint не передаём.
+    """
+    host = urlsplit(url).netloc or url
+    diag = config.FETCH_DIAG
+    request_id = (
+        str(diag.get("request_id") or "")
+        if str(diag.get("host") or "") == host
+        else ""
+    )
+    # Semantic-отказ должен быть виден не только в локальном checkpoint, но и
+    # в публичном last_run.fail_kinds/failure_latency. Валидный ответ оставляет
+    # transport-diag ``ok``; ошибочный заменяет его тем же request_id и
+    # исходным elapsed, не создавая второй HTTP-запрос.
+    if kind not in (
+        "ok", "valid", "valid_card", "valid_search", "valid_act",
+    ):
+        preserved = {
+            key: diag[key]
+            for key in ("status", "elapsed", "attempt", "request_id")
+            if key in diag
+        }
+        _set_diag(kind, url, context=context, **preserved, **details)
+    telemetry.classify_semantic(
+        request_id or None,
+        kind,
+        host=host,
+        context=context or "",
+        **details,
+    )
+
+
 def fetch_page(url: str, *, context: str | None = None) -> str:
     """Скачать страницу с сайта суда (win-1251) с повторными попытками.
 
@@ -142,7 +316,19 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
     raise_for_status отдаёт только исключение).
     """
     ctx = f" ({context})" if context else ""
+    host = urlsplit(url).netloc or url
+    # Один id на логический fetch_page; все физические ретраи передают его
+    # дальше. При выключенной локальной телеметрии begin_fetch — no-op и
+    # возвращает пустую строку.
+    request_id = ""
     for attempt in range(1, config.FETCH_MAX_RETRIES + 1):
+        request_id = telemetry.begin_fetch(
+            host,
+            context or "",
+            attempt=attempt,
+            max_attempts=config.FETCH_MAX_RETRIES,
+            request_id=request_id or None,
+        )
         try:
             # ⚠️ Таймаут РАЗДЕЛЬНЫЙ (connect, read) — это разные события, и
             # одна мерка на оба неверна. Соединение с судом встаёт за 0,05 с,
@@ -163,7 +349,8 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             r = session.get(url, timeout=(config.FETCH_TIMEOUT_CONNECT,
                                           config.FETCH_TIMEOUT_READ))
             r.raise_for_status()
-            config.FETCH_TIMINGS.append(time.monotonic() - _t0)
+            elapsed = time.monotonic() - _t0
+            config.FETCH_TIMINGS.append(elapsed)
             config.METRICS["requests_ok"] += 1
             if attempt > 1:
                 config.METRICS["requests_retried"] += 1
@@ -173,31 +360,63 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
                 # исчезал бы бесследно (вызыватели молча скипают "").
                 host = urlsplit(url).netloc or url
                 log.warning(f"Пустой ответ (HTTP {r.status_code}): {host}{ctx}")
-            _set_diag("ok" if text else "empty", url, status=r.status_code)
+            _set_diag(
+                "ok" if text else "empty", url, status=r.status_code,
+                elapsed=elapsed, context=context, attempt=attempt,
+                request_id=request_id,
+            )
+            telemetry.finish_fetch_transport(
+                request_id,
+                f"http_{r.status_code}",
+                elapsed,
+                attempt=attempt,
+                status=r.status_code,
+            )
+            if not text:
+                telemetry.classify_semantic(
+                    request_id, "empty", host=host, context=context or ""
+                )
             return text
         except requests.RequestException as e:
+            elapsed = time.monotonic() - _t0
             status = getattr(getattr(e, "response", None), "status_code", None)
-            _set_diag(f"http_{status}" if status else "network", url,
-                      status=status, error=type(e).__name__,
+            kind = f"http_{status}" if status else transport_fail_kind(e)
+            will_retry = should_retry_fetch(kind, elapsed, attempt)
+            _set_diag(kind, url,
+                      status=status, error=type(e).__name__, elapsed=elapsed,
+                      context=context, attempt=attempt, request_id=request_id,
                       **(block_page_marks(getattr(e.response, "text", ""))
                          if status else {}))
-            if attempt < config.FETCH_MAX_RETRIES:
+            telemetry.finish_fetch_transport(
+                request_id,
+                kind,
+                elapsed,
+                attempt=attempt,
+                will_retry=will_retry,
+                status=status,
+                error=type(e).__name__,
+            )
+            if will_retry:
                 # Промежуточная попытка: хост + контекст + класс ошибки, без
                 # простыни с полным URL (он уйдёт в финальный ERROR, если все
                 # попытки исчерпаются).
                 wait = attempt * 5
-                host = urlsplit(url).netloc or url
                 log.warning(
                     f"Попытка {attempt}/{config.FETCH_MAX_RETRIES}: {host}{ctx} — "
-                    f"{type(e).__name__}, повтор через {wait}с..."
+                    f"{kind} за {elapsed:.1f}с, повтор через {wait}с..."
                 )
                 time.sleep(wait)
             else:
                 config.METRICS["requests_failed"] += 1
+                no_retry = (
+                    f"; класс {kind} не ретраим"
+                    if attempt < config.FETCH_MAX_RETRIES else ""
+                )
                 log.error(
                     f"Ошибка загрузки {url}{ctx} "
-                    f"после {config.FETCH_MAX_RETRIES} попыток: {e}"
+                    f"после {attempt} попыток{no_retry}: {e}"
                 )
+                break
     return ""
 
 
@@ -332,11 +551,19 @@ def fetch_card_checked(url: str, *, context: str | None = None,
         # Запроса не было вовсе — иначе оператор прочитал бы в отчёте диагноз
         # ПРЕДЫДУЩЕЙ карточки и решил, что этой суд ответил сам.
         _set_diag("breaker", url)
+        telemetry.classify_semantic(
+            None, "breaker", host=host, context=context or ""
+        )
         return ""
     html = fetch_page(url, context=context)
     if not html:
         _card_breaker_fail(host, "сеть/пустой ответ")
         return ""
+    # fetch_page оставляет id/elapsed последней HTTP-попытки в едином
+    # FETCH_DIAG. Semantic verdict ниже уточняет ЭТОТ ответ и не создаёт
+    # вторую попытку в checkpoint.
+    request_id = str(config.FETCH_DIAG.get("request_id") or "")
+    elapsed = config.FETCH_DIAG.get("elapsed")
     # Ленивый импорт: netutil — низкоуровневый слой, тащить parsing (courts,
     # tables) на уровень модуля значило бы завязать сеть на парсеры.
     from court_monitor.parsing.search import (
@@ -347,7 +574,13 @@ def fetch_card_checked(url: str, *, context: str | None = None,
     if detect_captcha_challenge_card(html):
         config.METRICS["cards_captcha"] += 1
         log.warning(f"Карточка закрыта проверочным кодом{ctx}: {url}")
-        _set_diag("captcha", url, status=200)
+        _set_diag(
+            "captcha", url, status=200, request_id=request_id,
+            elapsed=elapsed, context=context,
+        )
+        telemetry.classify_semantic(
+            request_id or None, "captcha", host=host, context=context or ""
+        )
         _card_breaker_fail(host, "проверочный код")
         return ""
     if looks_like_non_card_page(html, url):
@@ -360,8 +593,21 @@ def fetch_card_checked(url: str, *, context: str | None = None,
             f"Карточка не получена — портал недоступен/заглушка{ctx}: {url}"
             + (f" (наш адрес {marks['ip']})" if marks.get("ip") else "")
         )
-        _set_diag("blocked", url, status=200, **marks)
+        _set_diag(
+            "blocked", url, status=200, request_id=request_id,
+            elapsed=elapsed, context=context, **marks,
+        )
+        telemetry.classify_semantic(
+            request_id or None,
+            "blocked",
+            host=host,
+            context=context or "",
+            **marks,
+        )
         _card_breaker_fail(host, "заглушка/блок портала")
         return ""
     _card_breaker_ok(host)
+    telemetry.classify_semantic(
+        request_id or None, "valid_card", host=host, context=context or ""
+    )
     return html
