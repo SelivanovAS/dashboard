@@ -107,8 +107,8 @@
 | `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:2008](scripts/court_monitor/lifecycle.py:2008) |
 | `FETCH_DIAG` (класс последнего сетевого ответа: http_NNN/blocked/captcha/breaker) | [scripts/court_monitor/config.py:642](scripts/court_monitor/config.py:642) |
 | `fetch_fail_reason_ru` (причина отказа по-русски, одно место на все каналы) | [scripts/court_monitor/netutil.py:84](scripts/court_monitor/netutil.py:84) |
-| `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:262](scripts/court_monitor/netutil.py:262) |
-| `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:180](scripts/court_monitor/netutil.py:180) |
+| `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:275](scripts/court_monitor/netutil.py:275) |
+| `card_breaker_allows` (пер-суд предохранитель карточек: гейт пропуск/проба) | [scripts/court_monitor/netutil.py:193](scripts/court_monitor/netutil.py:193) |
 | `looks_like_outage_page` (URL-независимый детект заглушки — канарейка) | [scripts/court_monitor/parsing/search.py:422](scripts/court_monitor/parsing/search.py:422) |
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:174](scripts/court_monitor/config.py:174) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
