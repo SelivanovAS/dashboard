@@ -119,7 +119,8 @@ class TestDriverWiring:
         зовёт только parse_all.sh, и вручную юрист ничего не запускает."""
         text = _read_repo(DRIVER)
         assert "import_dumps.sh" in text, "драйвер не зовёт импорт дампов"
-        assert 'bash "$IMPORTER" "$repo" "$@" ||' in text, \
+        assert 'bash "$IMPORTER" "$repo" "$@"' in text
+        assert re.search(r'run_importer "\$repo" "\$@"\s*\\\s*\|\| echo', text), \
             "отказ импорта обязан быть НЕ фатальным — дайджест важнее очереди"
 
     def test_readme_documents_the_machine_config(self):
