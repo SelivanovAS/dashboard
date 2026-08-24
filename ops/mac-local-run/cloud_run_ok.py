@@ -12,10 +12,11 @@
 то, продолжать ли дочитывать. Неполные попытки сохраняют данные и копят
 новости в контексте дайджеста (save_digest_context мержит дельты), ничего не
 отправляя; отправку решает parse_and_push ВЫБОРОМ СООБЩЕНИЯ КОММИТА —
-replay_on_push стреляет только по маркеру «(Mac-парсинг)». Факт отправки —
-`delivered_at` в data/last_digest_context.json (ставит --mark-delivered перед
-доставочным коммитом; облачный прогон, доставляющий сам, ставит его через
-will_deliver в save_digest_context).
+replay_on_push стреляет только по маркеру «(Mac-парсинг)». Локальный факт
+закрытия дня — `delivered_at` в data/last_digest_context.json. Перед ним
+создаётся durable delivery journal; после marker-коммита его SHA сверяется с
+remote, поэтому потерянный ответ `git push` не превращается ни в пропущенный,
+ни в повторный marker. Сам Telegram/Web Push отправляет уже GitHub workflow.
 
 РЕЖИМЫ (запуск из корня КЛОНА — регион и пути берутся из него):
   cloud_run_ok.py [--report]     гейт слота: 0 = дайджест сегодня уже
@@ -25,8 +26,13 @@ will_deliver в save_digest_context).
   cloud_run_ok.py --progress     печатает строку-прогресс «прочитано X из Y
                                  карточек (Z%), поиски …» — тело алерта
   cloud_run_ok.py --has-pending  0 = в накоплении есть неотправленные новости
-  cloud_run_ok.py --mark-delivered  проставить delivered_at (идемпотентно)
-  cloud_run_ok.py --unmark-delivered  снять delivered_at (пуш не удался)
+  cloud_run_ok.py --delivery-id напечатать ID текущего выпуска, не меняя
+                                 контекст (для journal до mark)
+  cloud_run_ok.py --mark-delivered  проставить delivered_at и напечатать
+                                 стабильный delivery_id (идемпотентно)
+  cloud_run_ok.py --unmark-delivered --delivery-id ID
+                                 снять delivered_at только у
+                                 указанного выпуска (пуш не удался)
 
 ДАННЫЕ. Журнал здоровья data/parse_health.json: `sources` — поиски (источник
 «зрячий сегодня» = last_run_at за сегодня И last_count > 0 И fail_streak == 0;
@@ -44,12 +50,14 @@ import datetime as dt
 import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 
 # Порог «удачной попытки» по карточкам — решение юриста 20.08.2026 (сначала
-# назвал 75%, затем поправил на 85%). Ниже порога — данные сохраняются, но
-# дайджест не шлём: следующий слот дочитает, дельты сложатся.
+# назвал 75%, затем поправил на 85%). С 21.08 он влияет только на вердикт и
+# решение следующего слота дочитывать; окно 08:45 доставляет накопленное даже
+# ниже порога, чтобы не потерять единственный дневной выпуск.
 CARDS_READ_OK_RATIO = 0.85
 
 # Дельта-списки контекста (зеркало _CTX_DELTA_KEYS из digest/core.py — при
@@ -84,6 +92,65 @@ def _health_state() -> dict:
 def _context() -> dict:
     from court_monitor import config
     return _load_json(config.LAST_DIGEST_CONTEXT_PATH) or {}
+
+
+def _context_delivery_id(ctx: dict) -> str | None:
+    """Стабильный ID доставки: территория + ключ выпуска.
+
+    `issue_key` не двигается между утренними попытками, а код
+    региона разводит два клона. Fallback к `saved_at` здесь опасен:
+    сломанный/старый контекст получил бы новый ID и мог уйти в
+    replay повторно. По той же причине контекст обязан быть сохранён
+    сегодня: если запись свежей дельты упала, вчерашний файл нельзя
+    пометить сегодняшним delivered_at и отправить второй раз.
+    """
+    from court_monitor import config
+
+    if str((ctx or {}).get("saved_at") or "")[:10] not in _today_dates():
+        return None
+    issue_key = str((ctx or {}).get("issue_key") or "").strip()
+    if not issue_key:
+        return None
+    return f"{config.REGION}:{issue_key}"
+
+
+def _save_context(path: str, ctx: dict) -> None:
+    """Durable-атомарно заменить контекст; общая воронка mark/unmark."""
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    tmp = ""
+    try:
+        fd, tmp = tempfile.mkstemp(
+            prefix=f".{os.path.basename(path)}.{os.getpid()}.",
+            suffix=".tmp",
+            dir=directory,
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(ctx, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        tmp = ""
+        try:
+            dir_fd = os.open(
+                directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            )
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(dir_fd)
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def delivered_today(ctx: dict) -> bool:
@@ -128,19 +195,44 @@ def cards_read_today_total(state: dict) -> int | None:
 
 
 def searches_state_today(state: dict) -> tuple[bool, bool]:
-    """(прогон сегодня был, поиски зрячие)."""
+    """(прогон сегодня был, поиски зрячие).
+
+    Единственная зрячая апелляция/кассация не имеет права закрыть
+    аварию всех поисков 1-й инстанции: именно они заводят новые иски.
+    Если сегодняшних FI-наблюдений нет вовсе (например, все суды
+    территории search_gated), сохраняем legacy-оценку по остальным источникам.
+    """
     sources = (state or {}).get("sources") or {}
     today = _today_dates()
     ran_today = False
-    sighted = 0
-    for src in sources.values():
+    sighted = False
+    fi_ran = False
+    fi_sighted = False
+    for key, src in sources.items():
         at = str(src.get("last_run_at") or "")
         if at[:10] not in today:
             continue
         ran_today = True
-        if (src.get("last_count") or 0) > 0 and not src.get("fail_streak"):
-            sighted += 1
-    return ran_today, bool(sighted)
+        ok = (src.get("last_count") or 0) > 0 and not src.get("fail_streak")
+        sighted = sighted or ok
+        if str(key).startswith("fi:"):
+            fi_ran = True
+            fi_sighted = fi_sighted or ok
+    return ran_today, (fi_sighted if fi_ran else sighted)
+
+
+def _counted(
+    number: int,
+    nouns: tuple[str, str, str],
+    predicates: tuple[str, str, str] | None = None,
+) -> str:
+    """Русская счётная форма: 1 карточка, 2 карточки, 5 карточек."""
+    n = abs(int(number))
+    form = 2 if 11 <= n % 100 <= 14 else (0 if n % 10 == 1 else (
+        1 if 2 <= n % 10 <= 4 else 2
+    ))
+    text = f"{number} {nouns[form]}"
+    return f"{text} {predicates[form]}" if predicates else text
 
 
 def unavailability_tail(state: dict) -> str:
@@ -155,13 +247,43 @@ def unavailability_tail(state: dict) -> str:
     """
     lr = (state or {}).get("last_run") or {}
     cards = int(lr.get("cards_unreachable") or 0)
-    courts = int(lr.get("courts_unavailable") or 0)
-    if not cards and not courts:
+    other_unread = int(lr.get("cards_unread_other") or 0)
+    # Старый журнал знает только состояние breaker на ФИНИШЕ. Новый хранит
+    # накопительное число судов, где хотя бы одну карточку реально пропустили
+    # без HTTP: суд мог ожить на half-open пробе и к финалу уже быть закрыт.
+    courts = int(
+        lr.get("courts_with_unrequested", lr.get("courts_unavailable")) or 0
+    )
+    if not cards and not courts and not other_unread:
         return ""
     outage = int(lr.get("courts_outage") or 0)
-    tail = f"; {cards} карточек не запрошено — {courts} судов сняты с обхода"
-    if outage:
-        tail += f" (заглушка портала у {outage})"
+    tail = ""
+    if cards:
+        cards_phrase = _counted(
+            cards,
+            ("карточка", "карточки", "карточек"),
+            ("не запрошена", "не запрошены", "не запрошено"),
+        )
+        tail = f"; {cards_phrase}"
+    if courts:
+        courts_phrase = _counted(courts, ("суд", "суда", "судов"))
+        tail += (
+            f" — снято с обхода: {courts_phrase}"
+            if tail else f"; снято с обхода: {courts_phrase}"
+        )
+    if outage and tail:
+        outage_phrase = _counted(outage, ("суда", "судов", "судов"))
+        tail += f" (заглушка портала замечена у {outage_phrase})"
+    if other_unread:
+        other_phrase = _counted(
+            other_unread,
+            ("карточка", "карточки", "карточек"),
+            ("не прочитана", "не прочитаны", "не прочитано"),
+        )
+        tail += (
+            f"; ещё {other_phrase} по другим причинам"
+            if tail else f"; {other_phrase} по другим причинам"
+        )
     return tail
 
 
@@ -259,23 +381,51 @@ def _mark_delivered() -> int:
     if not ctx:
         print("контекст дайджеста не читается — штамп не поставлен")
         return 1
-    if delivered_today(ctx):
-        return 0  # идемпотентно: повторный вызов не двигает штамп
-    ctx["delivered_at"] = dt.datetime.now().isoformat(timespec="seconds")
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(ctx, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    delivery_id = _context_delivery_id(ctx)
+    if not delivery_id:
+        print(
+            "контекст не свежий или в нём нет issue_key — "
+            "delivery_id не построен, штамп не поставлен"
+        )
+        return 1
+    stored_id = str(ctx.get("delivery_id") or "")
+    if stored_id and stored_id != delivery_id:
+        print(
+            "delivery_id контекста не совпал с issue_key — "
+            "штамп не изменён"
+        )
+        return 1
+    changed = False
+    if not stored_id:
+        # Backfill для контекста, закрытого до появления delivery_id:
+        # delivered_at не двигаем, только даём выпуску имя.
+        ctx["delivery_id"] = delivery_id
+        changed = True
+    if not delivered_today(ctx):
+        ctx["delivered_at"] = dt.datetime.now().isoformat(timespec="seconds")
+        changed = True
+    if changed:
+        try:
+            _save_context(path, ctx)
+        except OSError as exc:
+            print(f"не удалось сохранить штамп доставки: {exc}")
+            return 1
+    print(delivery_id)
     return 0
 
 
-def _unmark_delivered() -> int:
+def _unmark_delivered(expected_delivery_id: str | None = None) -> int:
     """Снять delivered_at: пуш не удался, день обязан остаться открытым.
 
     Штамп ставится ДО пуша (иначе маркер «(Mac-парсинг)» уехал бы без него и
     replay разослал бы дайджест мимо отметки). Если пуш затем упал, локальный
     штамп закрывает день, а дайджест никуда не ушёл — 24.08.2026 этот
-    сценарий был в одном шаге от реализации. Идемпотентно: штампа нет — 0.
+    сценарий был в одном шаге от реализации. Откат условный:
+    снимаем только тот штамп, чей delivery_id записала транзакция.
+    Иначе запоздавший rollback мог бы открыть уже следующий выпуск.
+
+    Повтор того же отката идемпотентен: delivery_id остаётся в
+    контексте, а уже снятого delivered_at нет.
     """
     from court_monitor import config
     path = config.LAST_DIGEST_CONTEXT_PATH
@@ -283,12 +433,24 @@ def _unmark_delivered() -> int:
     if not ctx:
         print("контекст дайджеста не читается — штамп не снят")
         return 1
+    expected_delivery_id = str(expected_delivery_id or "").strip()
+    stored_id = str(ctx.get("delivery_id") or "").strip()
+    if not expected_delivery_id:
+        print("delivery_id для отката не указан — штамп не снят")
+        return 1
+    if stored_id != expected_delivery_id:
+        print(
+            f"delivery_id не совпал: в контексте {stored_id or '—'}, "
+            f"откат ждал {expected_delivery_id} — штамп не снят"
+        )
+        return 1
     if not ctx.pop("delivered_at", None):
         return 0
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(ctx, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
+    try:
+        _save_context(path, ctx)
+    except OSError as exc:
+        print(f"не удалось сохранить откат штампа доставки: {exc}")
+        return 1
     print("штамп доставки снят — день снова открыт")
     return 0
 
@@ -307,7 +469,22 @@ def main(argv: list[str]) -> int:
     if "--mark-delivered" in argv:
         return _mark_delivered()
     if "--unmark-delivered" in argv:
-        return _unmark_delivered()
+        try:
+            delivery_id = argv[argv.index("--delivery-id") + 1]
+        except (ValueError, IndexError):
+            print("--unmark-delivered требует --delivery-id ID")
+            return 2
+        return _unmark_delivered(delivery_id)
+    if "--delivery-id" in argv:
+        delivery_id = _context_delivery_id(_context())
+        if not delivery_id:
+            print(
+                "контекст дайджеста не свежий, не читается или "
+                "в нём нет issue_key"
+            )
+            return 1
+        print(delivery_id)
+        return 0
     if "--has-pending" in argv:
         return 0 if context_pending(_context()) else 1
     state = _health_state()

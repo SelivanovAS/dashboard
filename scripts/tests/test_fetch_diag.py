@@ -13,10 +13,12 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 
 import pytest
 import requests
+from urllib3 import exceptions as urllib3_exc
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
@@ -66,6 +68,7 @@ def _clean_state(monkeypatch):
     config.CARD_BREAKER.clear()
     config.FETCH_TIMINGS.clear()
     config.FETCH_FAIL_KINDS.clear()
+    config.FETCH_FAIL_TIMINGS.clear()
     for k in config.METRICS:
         config.METRICS[k] = 0
     monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 1)
@@ -106,7 +109,7 @@ class TestFetchPageDiag:
             raise requests.ConnectionError("нет соединения")
         monkeypatch.setattr(netutil.session, "get", boom)
         assert fetch_page(CARD_URL) == ""
-        assert config.FETCH_DIAG["kind"] == "network"
+        assert config.FETCH_DIAG["kind"] == "connection_error"
         assert config.FETCH_DIAG["status"] is None
 
     def test_success_marks_ok(self, monkeypatch):
@@ -145,6 +148,10 @@ class TestReasonRu:
         ({"kind": "http_403"}, "суд отвечает HTTP 403 — адрес заблокирован"),
         ({"kind": "http_502"}, "суд отвечает HTTP 502"),
         ({"kind": "captcha"}, "карточка закрыта проверочным кодом"),
+        ({"kind": "empty_search"},
+         "поиск суда вернул страницу без распознанных дел"),
+        ({"kind": "unparsed_card"},
+         "карточка суда не распознана парсером"),
         ({"kind": "breaker"},
          "суд снят с обхода после нескольких неудач подряд"),
         ({"kind": "network"}, "сеть недоступна или таймаут"),
@@ -236,7 +243,9 @@ class TestFetchObservability:
             raise requests.ConnectionError("нет соединения")
         monkeypatch.setattr(netutil.session, "get", boom)
         fetch_page(CARD_URL)
-        assert config.FETCH_FAIL_KINDS == {"http_403": 2, "network": 1}
+        assert config.FETCH_FAIL_KINDS == {
+            "http_403": 2, "connection_error": 1,
+        }
 
     def test_card_level_classes_counted_too(self, monkeypatch):
         """Заглушка портала приходит с HTTP 200 — на уровне fetch_page это
@@ -252,6 +261,138 @@ class TestFetchObservability:
         assert s["p50"] == 3.0
         assert s["max"] == 50.0
 
+    def test_nearest_rank_is_not_shifted_for_even_sample(self):
+        config.FETCH_TIMINGS.extend([1.0, 2.0])
+        s = netutil.fetch_latency_summary()
+        assert s["p50"] == 1.0
+
+    def test_failure_latency_is_recorded_by_exact_kind(self, monkeypatch):
+        ticks = iter([10.0, 75.0])
+        monkeypatch.setattr(netutil.time, "monotonic", lambda: next(ticks))
+
+        def boom(url, timeout=30):
+            raise requests.ReadTimeout("молчание суда")
+
+        monkeypatch.setattr(netutil.session, "get", boom)
+        assert fetch_page(CARD_URL) == ""
+        assert config.FETCH_FAIL_KINDS == {"read_timeout": 1}
+        assert netutil.fetch_failure_latency_summary() == {
+            "read_timeout": {"n": 1, "p50": 65.0, "p90": 65.0, "max": 65.0}
+        }
+
+    @pytest.mark.parametrize("kind, elapsed, expected", [
+        ("connection_reset", 0.2, True),
+        ("connection_reset", 12.0, False),
+        ("http_503", 1.0, True),
+        ("read_timeout", 1.0, False),
+        ("connect_timeout", 1.0, False),
+        ("http_403", 0.1, False),
+    ])
+    def test_retry_policy_uses_kind_and_elapsed(
+        self, monkeypatch, kind, elapsed, expected,
+    ):
+        monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 3)
+        monkeypatch.setattr(config, "FETCH_RETRY_FAST_MAX_SECONDS", 5.0)
+        assert netutil.should_retry_fetch(kind, elapsed, 1) is expected
+
+    def test_fast_reset_retries_but_is_one_logical_result(
+        self, monkeypatch,
+    ):
+        monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 3)
+        monkeypatch.setattr(config, "FETCH_RETRY_FAST_MAX_SECONDS", 5.0)
+        calls = {"n": 0}
+
+        def flicker(url, timeout=30):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise requests.ConnectionError(ConnectionResetError(54, "reset"))
+            return _Resp(200, "<html><table></table></html>")
+
+        monkeypatch.setattr(netutil.session, "get", flicker)
+        assert fetch_page(CARD_URL)
+        assert calls["n"] == 2
+        assert config.FETCH_FAIL_KINDS == {"connection_reset": 1}
+        assert config.METRICS["requests_failed"] == 0
+        assert config.METRICS["requests_retried"] == 1
+
+    def test_read_timeout_never_retries_even_when_max_is_three(
+        self, monkeypatch,
+    ):
+        monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 3)
+        calls = {"n": 0}
+
+        def slow_fail(url, timeout=30):
+            calls["n"] += 1
+            raise requests.ReadTimeout("slow court")
+
+        monkeypatch.setattr(netutil.session, "get", slow_fail)
+        assert fetch_page(CARD_URL) == ""
+        assert calls["n"] == 1
+        assert config.FETCH_FAIL_KINDS == {"read_timeout": 1}
+        assert config.METRICS["requests_failed"] == 1
+
+    def test_search_semantic_failure_reaches_public_breakdown(
+        self, monkeypatch,
+    ):
+        _serve(monkeypatch, 200, OUTAGE_PAGE)
+        assert fetch_page(CARD_URL)
+        netutil.mark_last_fetch_semantic(
+            "outage_search", CARD_URL, context="поиск суда"
+        )
+        assert config.FETCH_FAIL_KINDS == {"outage_search": 1}
+        assert config.FETCH_DIAG["kind"] == "outage_search"
+        assert netutil.fetch_failure_latency_summary()["outage_search"]["n"] == 1
+
+    @pytest.mark.parametrize("exc, expected", [
+        (requests.ReadTimeout(), "read_timeout"),
+        (requests.ConnectTimeout(), "connect_timeout"),
+        (requests.exceptions.SSLError(), "tls_error"),
+        (requests.exceptions.ProxyError(), "proxy_error"),
+        (requests.exceptions.TooManyRedirects(), "redirect_error"),
+        (requests.exceptions.ChunkedEncodingError(), "response_error"),
+        (requests.exceptions.ContentDecodingError(), "response_error"),
+        (requests.ConnectionError(socket.gaierror(-2, "dns")), "dns_error"),
+        (requests.ConnectionError(ConnectionResetError(54, "reset")),
+         "connection_reset"),
+        (requests.ConnectionError("other"), "connection_error"),
+        (requests.Timeout(), "timeout"),
+        (requests.RequestException(), "request_error"),
+    ])
+    def test_transport_failure_classes_are_exact(self, exc, expected):
+        assert netutil.transport_fail_kind(exc) == expected
+
+    def test_real_urllib3_dns_reason_is_not_lost(self):
+        resolution = urllib3_exc.NameResolutionError(
+            "court.test", None, socket.gaierror(-2, "Name or service not known")
+        )
+        wrapped = requests.ConnectionError(
+            urllib3_exc.MaxRetryError(None, "/modules.php", resolution)
+        )
+        assert netutil.transport_fail_kind(wrapped) == "dns_error"
+
+    def test_real_urllib3_reset_reason_gets_fast_retry_class(self):
+        protocol = urllib3_exc.ProtocolError(
+            "Connection aborted", ConnectionResetError(54, "reset")
+        )
+        wrapped = requests.ConnectionError(
+            urllib3_exc.MaxRetryError(None, "/modules.php", protocol)
+        )
+        assert netutil.transport_fail_kind(wrapped) == "connection_reset"
+
+    def test_chunked_response_wrapping_reset_keeps_reset_class(self):
+        """Реальный requests часто заворачивает reset во время чтения body
+        в ChunkedEncodingError; внешний класс не должен скрыть первопричину."""
+        protocol = urllib3_exc.ProtocolError(
+            "Response ended prematurely", ConnectionResetError(54, "reset")
+        )
+        wrapped = requests.exceptions.ChunkedEncodingError(protocol)
+        assert netutil.transport_fail_kind(wrapped) == "connection_reset"
+
+    def test_empty_http_body_is_a_failure_class(self, monkeypatch):
+        _serve(monkeypatch, 200, "")
+        assert fetch_page(CARD_URL) == ""
+        assert config.FETCH_FAIL_KINDS == {"empty": 1}
+
     def test_latency_summary_empty_without_samples(self):
         assert netutil.fetch_latency_summary() == {}
 
@@ -264,8 +405,9 @@ class TestObservabilityWiring:
         runs = _read_runs()
         for key in ('"latency": fetch_latency_summary()',
                     '"fail_kinds": dict(config.FETCH_FAIL_KINDS)',
-                    '"courts_unavailable"', '"courts_outage"',
-                    '"cards_unreachable"'):
+                    '"courts_unavailable"', '"courts_with_unrequested"',
+                    '"courts_outage"',
+                    '"cards_unreachable"', '"cards_unread_other"'):
             assert key in runs, key
 
     def test_timeout_has_env_lever(self):

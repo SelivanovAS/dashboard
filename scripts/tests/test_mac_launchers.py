@@ -252,6 +252,36 @@ class TestProgressLine:
         state["sources"]["a"] = _src(self.TODAY, 0)
         assert "молчали" in cloud_run_ok.progress_line(state)
 
+    def test_appeal_cannot_mask_blind_first_instance_searches(self):
+        state = {
+            "sources": {
+                "fi:one.test": _src(self.TODAY, 0),
+                "fi:two.test": _src(self.TODAY, 0),
+                "appeal:ok.test": _src(self.TODAY, 22),
+            },
+            "last_run": {
+                "at": self.TODAY,
+                "cards_read": 20,
+                "cards_planned": 20,
+            },
+        }
+        ran, sighted = cloud_run_ok.searches_state_today(state)
+        assert ran and not sighted
+        assert "молчали" in cloud_run_ok.progress_line(state)
+        ok, why = cloud_run_ok.run_complete_today(state)
+        assert not ok and "СЛЕПЫЕ" in why
+
+    def test_non_fi_sources_remain_valid_when_no_fi_search_is_configured(self):
+        state = {
+            "sources": {"appeal:ok.test": _src(self.TODAY, 22)},
+            "last_run": {
+                "at": self.TODAY,
+                "cards_read": 20,
+                "cards_planned": 20,
+            },
+        }
+        assert cloud_run_ok.searches_state_today(state) == (True, True)
+
 
 # ── Проводка гейта в parse_and_push ──────────────────────────────────────────
 
@@ -265,6 +295,24 @@ class TestGateWiring:
         gate = text.index("cloud_run_ok.py --report")
         probe = text.index("cm_any_court_reachable")
         assert pull < gate < probe
+
+    def test_stale_lock_and_parse_snapshot_recover_before_pull(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        lock = text.index('"$RUN_LOCK_TOOL" acquire')
+        recovery = text.index("  reconcile_parse_transaction")
+        pull = text.index("git pull --rebase")
+        assert lock < recovery < pull
+        assert 'trap \'release_run_lock\' EXIT' in text
+
+    def test_parser_is_bracketed_by_snapshot_and_wal_ack(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        prepare = text.index('"$PARSE_TXN_TOOL" prepare')
+        parser = text.index('"$PYTHON" ops/mac-local-run/run_parse.py')
+        finish = text.index('"$PARSE_TXN_TOOL" finish', parser)
+        assert prepare < parser < finish
+        env = text[prepare:parser]
+        assert 'PARSE_TXN_ID="$PARSE_TXN_ID"' in env
+        assert 'PARSE_TXN_ACK_FILE="$PARSE_TXN_ACK_FILE"' in env
 
     def test_force_bypasses_gate_and_check_does_not_hit_it(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
@@ -329,7 +377,7 @@ class TestOneDigestPerDay:
         # Сообщение с 24.08.2026 инлайнится прямо в git commit -m, отдельной
         # переменной COMMIT_MSG больше нет — ищем по самой формулировке.
         draft = [l for l in text.splitlines()
-                 if "копим дайджест" in l and "commit -m" in l]
+                 if "копим дайджест" in l and "commit --only -m" in l]
         assert draft, "черновое сообщение коммита пропало"
         assert all("Mac-парсинг" not in l for l in draft), (
             "в черновом сообщении подстрока «Mac-парсинг» — contains() гарда "
@@ -343,6 +391,15 @@ class TestOneDigestPerDay:
             "замыкающем коммите после парсинга"
         )
 
+    def test_draft_commit_cannot_consume_unrelated_staged_work(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        phase = text[text.index("# ── Фаза 1: данные"):
+                     text.index("# ── Фаза 2: доставка")]
+        assert 'git diff --cached --quiet -- "${DATA_FILES[@]}"' in phase
+        assert 'commit --only -m "📊 Данные обновлены' in phase
+        assert '-- "${DATA_FILES[@]}"' in phase
+        assert "if git diff --cached --quiet; then" not in phase
+
     def test_stamp_after_data_push_but_inside_delivery_commit(self):
         """Два инварианта разом, и они не противоречат друг другу.
 
@@ -355,9 +412,76 @@ class TestOneDigestPerDay:
         text = _read("ops/mac-local-run/parse_and_push.sh")
         decision = text.index('RUN_WHY=$(')
         push_data = text.index('die "git push данных не удался', decision)
-        stamp = text.index("--mark-delivered", push_data)
-        commit = text.index("(Mac-парсинг)", stamp)
-        assert push_data < stamp < commit
+        delivery_call = text.index('deliver_and_push "обычный финиш', push_data)
+        assert push_data < delivery_call, "delivery helper вызван до push данных"
+
+        fn = text[text.index("deliver_and_push() {"):]
+        fn = fn[:fn.index("\n}")]
+        journal = fn.index('"$DELIVERY_TXN_TOOL" prepare')
+        stamp = fn.index("--mark-delivered")
+        commit = fn.index("(Mac-парсинг)", stamp)
+        assert journal < stamp < commit, (
+            "journal обязан появиться до штампа, а штамп — "
+            "внутри marker-коммита"
+        )
+
+    def test_delivery_recovery_precedes_pull_and_daily_gate(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        recovery = text.index("  reconcile_delivery_transaction")
+        pull = text.index("git pull --rebase --autostash")
+        gate = text.index("cloud_run_ok.py --report")
+        assert recovery < pull < gate
+
+    def test_prepared_crash_before_mark_clears_without_false_unmark(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        recovery = text[text.index("reconcile_delivery_transaction() {"):]
+        recovery = recovery[:recovery.index("\n}")]
+        prepared = recovery[recovery.index("prepared)"):]
+        prepared = prepared[:prepared.index("committed)")]
+        assert 'head_sha=$(git rev-parse HEAD' in prepared
+        assert 'git diff --quiet -- "$DELIVERY_CONTEXT_PATH"' in prepared
+        assert 'git diff --cached --quiet -- "$DELIVERY_CONTEXT_PATH"' in prepared
+        clean_clear = prepared.index('"$DELIVERY_TXN_TOOL" clear')
+        unmark = prepared.index("rollback_delivery_transaction", clean_clear)
+        assert clean_clear < unmark, (
+            "crash между journal и mark нельзя пытаться unmark: "
+            "delivery_id в контексте ещё нет"
+        )
+
+    def test_both_delivery_paths_use_one_helper(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        assert text.count("deliver_and_push() {") == 1
+        assert text.count('deliver_and_push "') == 2, (
+            "обычная и canary-fallback ветки должны идти через одну транзакцию"
+        )
+        assert text.count("--mark-delivered") == 1, (
+            "кроме единого helper копий mark быть не должно"
+        )
+        # Helper теперь возвращается: canary-fallback обязан
+        # закончить ветку, а обычный path — дойти до финального log.
+        canary = text[text.index('deliver_and_push "накопленное утро'):]
+        assert "exit 0" in "\n".join(canary.splitlines()[:6])
+        normal = text[text.index('deliver_and_push "обычный финиш'):]
+        assert 'notify "Готово: данные обновлены' in normal
+        assert 'log "Готово"' in normal and "finish_pusher" in normal
+
+    def test_marker_sha_is_journaled_before_push(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        fn = text[text.index("deliver_and_push() {"):]
+        fn = fn[:fn.index("\n}")]
+        commit = fn.index('commit --only -m "📊')
+        marker_sha = fn.index("marker_sha=$(git rev-parse HEAD", commit)
+        journal = fn.index('"$DELIVERY_TXN_TOOL" committed', marker_sha)
+        push = fn.index('git push "$GIT_URL" HEAD:main', journal)
+        assert commit < marker_sha < journal < push
+
+    def test_rollback_commit_is_scoped_to_digest_context(self):
+        text = _read("ops/mac-local-run/parse_and_push.sh")
+        rb = text[text.index("rollback_delivery_transaction() {"):]
+        rb = rb[:rb.index("\n}")]
+        assert 'git add -- "$DELIVERY_CONTEXT_PATH"' in rb
+        assert 'commit --only -m "↩️' in rb
+        assert '-- "$DELIVERY_CONTEXT_PATH"' in rb
 
     def test_only_window_or_force_deliver(self):
         """⚠️ Решение юриста 21.08.2026 «дайджест не раньше 08:45»: доставку
@@ -650,10 +774,16 @@ class TestUnavailabilityTail:
     """
 
     def test_tail_names_courts_and_cards(self):
-        state = {"last_run": {"cards_unreachable": 287,
-                              "courts_unavailable": 20, "courts_outage": 20}}
+        state = {"last_run": {"cards_unreachable": 283,
+                              "cards_unread_other": 4,
+                              "courts_unavailable": 0,
+                              "courts_with_unrequested": 20,
+                              "courts_outage": 20}}
         tail = cloud_run_ok.unavailability_tail(state)
-        assert "287" in tail and "20" in tail and "заглушка портала" in tail
+        assert "283 карточки не запрошены" in tail and "20 судов" in tail
+        assert "заглушка портала замечена" in tail
+        assert "ещё 4 карточки не прочитаны" in tail
+        assert "по другим причинам" in tail
 
     def test_tail_silent_without_numbers(self):
         """Строки обычного дня обязаны остаться побайтово прежними."""
@@ -666,6 +796,12 @@ class TestUnavailabilityTail:
         tail = cloud_run_ok.unavailability_tail(state)
         assert tail and "заглушка портала" not in tail
 
+    def test_other_unread_is_visible_without_open_breaker(self):
+        state = {"last_run": {"cards_unread_other": 3}}
+        tail = cloud_run_ok.unavailability_tail(state)
+        assert "3 карточки не прочитаны" in tail
+        assert "по другим причинам" in tail
+
     def test_denominator_stays_full(self):
         """⚠️ Знаменатель НЕ уменьшается — решение 24.08.2026: вердикт правит
         только текст алерта, и «удачный прогон» в день полного аутейджа
@@ -675,20 +811,179 @@ class TestUnavailabilityTail:
         # сводка считается отсутствующей и знаменатель проверить нечем.
         state = {"last_run": {"at": _dt.date.today().isoformat(),
                               "cards_read": 36, "cards_planned": 323,
-                              "cards_unreachable": 287,
-                              "courts_unavailable": 20, "courts_outage": 20}}
+                              "cards_unreachable": 283,
+                              "cards_unread_other": 4,
+                              "courts_unavailable": 0,
+                              "courts_with_unrequested": 20,
+                              "courts_outage": 20}}
         line = cloud_run_ok.progress_line(state)
         assert "36 из 323" in line, "знаменатель ужали — предупреждение замолчит"
-        assert "287 карточек не запрошено" in line
+        assert "283 карточки не запрошены" in line
+        assert "ещё 4 карточки не прочитаны" in line
 
-    def test_unmark_is_idempotent(self, tmp_path, monkeypatch):
+
+
+class TestDeliveryIdentity:
+    """Rollback обязан снимать штамп именно своего выпуска.
+
+    Без delivery_id запоздавшая ошибка push могла бы снять
+    delivered_at уже нового контекста и разрешить дубль.
+    """
+
+    @staticmethod
+    def _setup_ctx(tmp_path, monkeypatch, *, issue_key="2026-08-24T08:25:42"):
         ctx = tmp_path / "ctx.json"
-        ctx.write_text(json.dumps({"issues": []}), encoding="utf-8")
+        ctx.write_text(json.dumps({
+            "saved_at": issue_key,
+            "issue_key": issue_key,
+            "fi_changes": [{"case": "2-1/2026"}],
+        }), encoding="utf-8")
         from court_monitor import config as cm_config
         monkeypatch.setattr(cm_config, "LAST_DIGEST_CONTEXT_PATH", str(ctx))
-        assert cloud_run_ok._unmark_delivered() == 0  # штампа не было
+        monkeypatch.setattr(cm_config, "REGION", "hmao")
+        return ctx
+
+    def test_mark_prints_stable_id_and_is_idempotent(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        expected = "hmao:2026-08-24T08:25:42"
+
+        assert cloud_run_ok._mark_delivered() == 0
+        assert capsys.readouterr().out.strip() == expected
+        first = json.loads(ctx.read_text(encoding="utf-8"))
+        first_bytes = ctx.read_bytes()
+        assert first["delivery_id"] == expected
+        assert first.get("delivered_at")
+
+        assert cloud_run_ok._mark_delivered() == 0
+        assert capsys.readouterr().out.strip() == expected
+        assert ctx.read_bytes() == first_bytes, (
+            "повторный mark сдвинул штамп или переписал контекст"
+        )
+
+    def test_mark_fails_closed_without_issue_key(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
         data = json.loads(ctx.read_text(encoding="utf-8"))
-        data["delivered_at"] = "2026-08-24T09:42:18"
+        data.pop("issue_key")
         ctx.write_text(json.dumps(data), encoding="utf-8")
-        assert cloud_run_ok._unmark_delivered() == 0
-        assert "delivered_at" not in json.loads(ctx.read_text(encoding="utf-8"))
+        before = ctx.read_bytes()
+
+        assert cloud_run_ok._mark_delivered() == 1
+        assert "issue_key" in capsys.readouterr().out
+        assert ctx.read_bytes() == before
+
+    def test_unmark_requires_exact_delivery_id(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        expected = "hmao:2026-08-24T08:25:42"
+        assert cloud_run_ok._mark_delivered() == 0
+        capsys.readouterr()
+        before = ctx.read_bytes()
+
+        assert cloud_run_ok._unmark_delivered("hmao:чужой-выпуск") == 1
+        assert "не совпал" in capsys.readouterr().out
+        assert ctx.read_bytes() == before
+        assert cloud_run_ok._unmark_delivered() == 1
+        assert "не указан" in capsys.readouterr().out
+        assert ctx.read_bytes() == before
+
+        assert cloud_run_ok._unmark_delivered(expected) == 0
+        assert "штамп доставки снят" in capsys.readouterr().out
+        rolled_back = json.loads(ctx.read_text(encoding="utf-8"))
+        assert "delivered_at" not in rolled_back
+        assert rolled_back["delivery_id"] == expected
+
+        # Повтор того же rollback не должен ложно стать аварией.
+        assert cloud_run_ok._unmark_delivered(expected) == 0
+
+    def test_cli_unmark_requires_delivery_id(self, capsys):
+        assert cloud_run_ok.main(["--unmark-delivered"]) == 2
+        assert "--delivery-id ID" in capsys.readouterr().out
+
+    def test_cli_delivery_id_is_read_only(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        before = ctx.read_bytes()
+        assert cloud_run_ok.main(["--delivery-id"]) == 0
+        assert capsys.readouterr().out.strip() == "hmao:2026-08-24T08:25:42"
+        assert ctx.read_bytes() == before
+
+    def test_same_issue_key_is_isolated_by_region(
+        self, tmp_path, monkeypatch,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        from court_monitor import config as cm_config
+
+        hmao_id = cloud_run_ok._context_delivery_id(
+            json.loads(ctx.read_text(encoding="utf-8"))
+        )
+        monkeypatch.setattr(cm_config, "REGION", "sverdlovsk_yanao")
+        ural_id = cloud_run_ok._context_delivery_id(
+            json.loads(ctx.read_text(encoding="utf-8"))
+        )
+
+        assert hmao_id == "hmao:2026-08-24T08:25:42"
+        assert ural_id == "sverdlovsk_yanao:2026-08-24T08:25:42"
+        assert ural_id != hmao_id
+
+    def test_cli_delivery_id_fails_without_issue_key(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        ctx.write_text(json.dumps({"saved_at": "2026-08-24T08:25:42"}),
+                       encoding="utf-8")
+        assert cloud_run_ok.main(["--delivery-id"]) == 1
+        assert "issue_key" in capsys.readouterr().out
+
+    def test_stale_context_cannot_be_marked_as_today(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        yesterday = (
+            cloud_run_ok.dt.datetime.now() - cloud_run_ok.dt.timedelta(days=1)
+        ).isoformat(timespec="seconds")
+        ctx = self._setup_ctx(tmp_path, monkeypatch, issue_key=yesterday)
+        before = ctx.read_bytes()
+
+        assert cloud_run_ok.main(["--delivery-id"]) == 1
+        assert "не свежий" in capsys.readouterr().out
+        assert cloud_run_ok._mark_delivered() == 1
+        assert "delivery_id не построен" in capsys.readouterr().out
+        assert ctx.read_bytes() == before, (
+            "вчерашний контекст получил сегодняшний stamp и уйдёт повторно"
+        )
+
+    def test_unmark_save_failure_is_nonzero(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        self._setup_ctx(tmp_path, monkeypatch)
+        expected = "hmao:2026-08-24T08:25:42"
+        assert cloud_run_ok._mark_delivered() == 0
+        capsys.readouterr()
+
+        def _cannot_save(_path, _ctx):
+            raise OSError("диск недоступен")
+
+        monkeypatch.setattr(cloud_run_ok, "_save_context", _cannot_save)
+        assert cloud_run_ok._unmark_delivered(expected) == 1
+        assert "не удалось сохранить откат" in capsys.readouterr().out
+
+    def test_partial_mark_write_preserves_previous_context(
+        self, tmp_path, monkeypatch, capsys,
+    ):
+        ctx = self._setup_ctx(tmp_path, monkeypatch)
+        before = ctx.read_bytes()
+
+        def _partial_then_fail(_value, stream, **_kwargs):
+            stream.write('{"delivery_id":')
+            raise OSError("disk full")
+
+        monkeypatch.setattr(cloud_run_ok.json, "dump", _partial_then_fail)
+        assert cloud_run_ok._mark_delivered() == 1
+        assert "не удалось сохранить штамп" in capsys.readouterr().out
+        assert ctx.read_bytes() == before
+        assert not list(tmp_path.glob(".ctx.json.*.tmp"))

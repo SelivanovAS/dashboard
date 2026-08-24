@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog, lifecycle
+from court_monitor import config, ghlog, lifecycle, telemetry
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -95,7 +95,9 @@ from court_monitor.linking import (
 )
 from court_monitor.netutil import (
     card_breaker_allows, card_breaker_preopen, fetch_latency_summary,
-    fetch_card_checked, fetch_page, polite_delay, session,
+    fetch_failure_latency_summary,
+    fetch_card_checked, fetch_page, mark_last_fetch_semantic,
+    polite_delay, session,
 )
 from court_monitor.parsing import (
     parse_case_card, parse_search_page, parse_first_instance_search,
@@ -129,6 +131,23 @@ def log_phase(num: int, total: int, title: str) -> None:
     # остаётся внутри группы без изменений (контракт progress_pusher).
     ghlog.start_group(f"— [{num}/{total}] {title} —")
     log.info(f"— [{num}/{total}] {title} —")
+    telemetry.set_phase(num, total, title)
+
+
+def _search_semantic_kind(rows: int, *, captcha: bool, outage: bool) -> str:
+    """Вердикт HTTP-200 поиска без ложного ``valid`` на неизвестной странице.
+
+    Ноль распознанных строк может быть законной пустой выдачей, новой
+    заглушкой или сменой вёрстки. Пока структура не доказана отдельным
+    валидатором, называем наблюдаемый факт ``empty_search``; health-history
+    уже решает, является ли этот ноль аварией. Известные CAPTCHA/outage имеют
+    более точный класс.
+    """
+    if captcha:
+        return "captcha_search"
+    if outage:
+        return "outage_search"
+    return "valid_search" if rows > 0 else "empty_search"
 
 
 def fi_health_key(court) -> str:
@@ -522,6 +541,13 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
             continue
         card_info = parse_case_card(card_html, f"https://{fi.get('court_domain', '')}")
         if card_is_empty_shell(card_info):
+            mark_last_fetch_semantic(
+                "empty_shell", url,
+                context=(
+                    f"апеллянт {num}, "
+                    f"{shorten_court_name(fi.get('court') or '')}"
+                ),
+            )
             stats["failed"] += 1
             continue
         fi["appeal_appellant_checked_at"] = date.today().isoformat()
@@ -574,6 +600,7 @@ def update_active_cases(
     skipped_suspended = 0
     skipped_checked_today = 0
     skipped_breaker = 0
+    breaker_hosts: set[str] = set()
     force_parsed = 0
     parsed = 0
     eligible_total = 0  # активные не-архивные не-skip_apel — те, по кому решаем парсить или skip
@@ -610,6 +637,7 @@ def update_active_cases(
                 plan_skip += 1
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «активных дел».
     planned_parse = planned_total - plan_skip - plan_checked_today
+    telemetry.set_coverage("appeal", 0, planned_parse, processed=0)
     _plan_parts = []
     if plan_skip:
         _plan_parts.append(f"{plan_skip} отложено — заседание в будущем")
@@ -662,6 +690,10 @@ def update_active_cases(
                 f"Апелляция: проверено {checked} из {planned_parse} "
                 f"(изменений {len(changes)})"
             )
+            telemetry.set_coverage(
+                "appeal", parsed, planned_parse, processed=checked,
+                breaker_skipped=skipped_breaker,
+            )
 
         cid, cuid = case_id_uid(case.get("Ссылка", ""))
         if not cid or not cuid:
@@ -678,6 +710,7 @@ def update_active_cases(
         # (card_breaker_allows — гейт мутирующий, fetch ниже его не повторяет).
         if not card_breaker_allows(_ap_court.domain):
             skipped_breaker += 1
+            breaker_hosts.add(_ap_court.domain)
             log.debug(
                 f"  skip {case['Номер дела']}: суд отключён предохранителем"
             )
@@ -695,6 +728,9 @@ def update_active_cases(
         # Второй рубеж (как в FI-цикле): страница вовсе без таблиц — не
         # карточка, успешной проверкой не считаем и last_checked_at не бумпаем.
         if card_is_empty_shell(card_info):
+            mark_last_fetch_semantic(
+                "empty_shell", url, context=case["Номер дела"]
+            )
             continue
         # Огрызок (<6 таблиц и движение не распозналось — sudrf отдал
         # вкладку «обжалование» вместо «ДЕЛО»): прочитанной НЕ считаем —
@@ -707,9 +743,13 @@ def update_active_cases(
         # ритм suspended_weekly. ⚠️ В FI-цикле аналогичного continue НЕТ
         # намеренно: у suspended-исков банка огрызок штатен, continue
         # сломал бы недельный ритм опроса (там — mark_degraded + 🩺-порог).
-        if _warn_if_card_degraded(
+        _ap_degraded = _warn_if_card_degraded(
             card_info, case["Номер дела"], case_block=ap_dict_skip
-        ) == "degraded":
+        )
+        if _ap_degraded == "degraded":
+            mark_last_fetch_semantic(
+                "degraded_card", url, context=case["Номер дела"],
+            )
             continue
         parsed += 1
 
@@ -1053,12 +1093,17 @@ def update_active_cases(
         else:
             log.debug(f"  {case['Номер дела']}: без изменений")
 
+    telemetry.set_coverage(
+        "appeal", parsed, planned_parse, processed=checked,
+        breaker_skipped=skipped_breaker,
+    )
     save_digested_acts(_digested_acts)
     return cases, changes, {
         "skipped_future": skipped_future,
         "skipped_suspended": skipped_suspended,
         "skipped_checked_today": skipped_checked_today,
         "skipped_breaker": skipped_breaker,
+        "breaker_hosts": sorted(breaker_hosts),
         "force_parsed": force_parsed,
         "parsed": parsed,
         "planned": planned_parse,
@@ -1179,7 +1224,12 @@ def main():
                 card_html = fetch_card_checked(url, context=nc["Номер дела"])
                 if card_html:
                     card_info = parse_case_card(card_html)
-                    _warn_if_card_degraded(card_info, nc["Номер дела"])
+                    if _warn_if_card_degraded(
+                        card_info, nc["Номер дела"]
+                    ) == "degraded":
+                        mark_last_fetch_semantic(
+                            "degraded_card", url, context=nc["Номер дела"],
+                        )
                     nc["Последнее событие"] = card_info.get("Последнее событие", "")
                     nc["Дата события"] = card_info.get("Дата события", "")
                     nc["Время заседания"] = card_info.get("Время заседания", "")
@@ -2290,6 +2340,8 @@ def main_json():
 
     _metrics_reset()
     validate_environment()
+    if config.PARSE_TELEMETRY_FILE:
+        telemetry.begin_run(config.PARSE_TELEMETRY_FILE, config.REGION)
 
     timings: dict[str, float] = {}
     t_total_start = time.perf_counter()
@@ -2447,11 +2499,13 @@ def main_json():
     cass_changes: list[dict] = []
     cass_discovered: list[dict] = []
     cass_eligible = 0
+    cass_planned = 0
     cass_parsed = 0
     cass_skipped_future = 0
     cass_skipped_suspended = 0
     cass_skipped_checked_today = 0
     cass_resurrected_count = 0  # восстановлено из архива по матчу 7kas
+    cass_breaker_before = config.METRICS.get("cards_breaker_skipped", 0)
     # Ключи здоровья кассации — из региона (для ХМАО совпадают с историческими
     # "cassation:7kas:total"/"cassation:7kas:hmao", медианы не обнуляются).
     _region = get_region()
@@ -2465,26 +2519,48 @@ def main_json():
             "(первая страница выдачи 7kas)"
         )
         polite_delay()
-        cass_search_html = fetch_page(CASSATION_COURT.search_url(), context="поиск 7kas")
+        cass_search_url = CASSATION_COURT.search_url()
+        cass_search_html = fetch_page(cass_search_url, context="поиск 7kas")
         if not cass_search_html:
             health_obs[_ck_total] = None
         if cass_search_html:
             cass_search_results = parse_cassation_search_page(cass_search_html)
             # 0 строк + маркеры проверочного кода → поиск 7kas закрыт CAPTCHA.
-            if not cass_search_results and detect_captcha_challenge(cass_search_html):
+            cass_search_captcha = (
+                not cass_search_results
+                and detect_captcha_challenge(cass_search_html)
+            )
+            if cass_search_captcha:
                 fi_challenge[CASSATION_COURT.domain] = (
                     f"Кассация ({CASSATION_COURT.name})"
                 )
             # Канарейка предохранителя: выдача 7kas пришла заглушкой →
             # карточки кассации не запрашиваем (пре-открытие).
-            if not cass_search_results and looks_like_outage_page(cass_search_html):
+            cass_search_outage = (
+                not cass_search_results
+                and looks_like_outage_page(cass_search_html)
+            )
+            if cass_search_outage:
                 card_breaker_preopen(
                     CASSATION_COURT.domain, "заглушка на странице поиска"
                 )
+            mark_last_fetch_semantic(
+                _search_semantic_kind(
+                    len(cass_search_results),
+                    captcha=cass_search_captcha,
+                    outage=cass_search_outage,
+                ),
+                cass_search_url,
+                context="поиск 7kas",
+                rows=len(cass_search_results),
+            )
             # «Наши» строки выдачи = сматчились с FI-реестром активного региона
             # (fi_court_config ставит parse_cassation_search_page через
             # match_hmao_first_instance — легаси-имя, матчер регион-зависимый).
             hmao_results = [r for r in cass_search_results if r["fi_court_config"]]
+            telemetry.set_coverage(
+                "cassation_search", 0, len(hmao_results), processed=0
+            )
             # Отдельные источники: total ловит поломку парсера выдачи КСОЮ,
             # matched — слетевший матчер судов (класс бага «Берёзовский», ё/е).
             health_obs[_ck_total] = len(cass_search_results)
@@ -2543,8 +2619,12 @@ def main_json():
 
             today_for_skip = date.today()
             cass_finds: list[dict] = []
+            cass_eligible = len(hmao_results)
+            cass_plan: list[dict] = []
+            # План фиксируем ДО первого HTTP. Если исключение оборвёт цикл
+            # посередине, знаменатель останется полным и 85%-вердикт не сможет
+            # объявить частичный обход успешным.
             for r in hmao_results:
-                cass_eligible += 1
                 fi_num_search = (r.get("fi_case_number") or "").strip()
                 existing_case = cass_fi_index.get(fi_num_search) if fi_num_search else None
                 if existing_case and existing_case.get("current_stage") == "cassation":
@@ -2562,6 +2642,10 @@ def main_json():
                             f"({fi_num_search}): {skip_reason_ru(reason)}"
                         )
                         continue
+                cass_plan.append(r)
+            cass_planned = len(cass_plan)
+
+            for r in cass_plan:
                 polite_delay()
                 card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
                 card_html = fetch_card_checked(
@@ -2575,11 +2659,19 @@ def main_json():
                     continue
                 info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
                 if not info:
+                    mark_last_fetch_semantic(
+                        "unparsed_card", card_url,
+                        context=r["cassation_internal_number"],
+                    )
                     log.warning(
                         f"  7kas: не удалось распарсить карточку "
                         f"{r['cassation_internal_number']}"
                     )
                     continue
+                # Карточка прочитана и распознана независимо от бизнес-фильтра
+                # Сбера. Ложное совпадение поисковой строки не является
+                # непрочитанной карточкой и не должно портить coverage.
+                cass_parsed += 1
                 if not info.get("sber_present"):
                     log.info(
                         f"  7kas: пропуск {r['cassation_internal_number']} — "
@@ -2595,7 +2687,6 @@ def main_json():
                 if not info.get("fi_case_number") and r.get("fi_case_number"):
                     info["fi_case_number"] = r["fi_case_number"]
                 cass_finds.append(info)
-                cass_parsed += 1
 
             # Передаём горячий архив: касс. жалоба на архивное дело (ушло из
             # cassation_watch по 120-дневному окну до регистрации на 7kas)
@@ -2612,6 +2703,10 @@ def main_json():
         # она идёт первой — тем важнее дойти до апелляции и 1-й инст. ниже).
         # Просто логируем и идём дальше с пустыми cass_changes/cass_discovered.
         log.warning(f"7kas: ошибка прогона: {exc}", exc_info=True)
+    cass_skipped_breaker = max(
+        config.METRICS.get("cards_breaker_skipped", 0) - cass_breaker_before,
+        0,
+    )
     _cass_sum_parts = []
     if cass_skipped_future:
         _cass_sum_parts.append(f"{cass_skipped_future} отложено — заседание в будущем")
@@ -2621,9 +2716,20 @@ def main_json():
         )
     if cass_skipped_suspended:
         _cass_sum_parts.append(f"{cass_skipped_suspended} без движения")
+    if cass_skipped_breaker:
+        _cass_sum_parts.append(
+            f"{cass_skipped_breaker} пропущено предохранителем — суд недоступен"
+        )
     log.info(
-        f"Кассация: спарсено {cass_parsed} из {cass_eligible} карточек региона"
+        f"Кассация: спарсено {cass_parsed} из {cass_planned} карточек региона"
         + (f" ({'; '.join(_cass_sum_parts)})" if _cass_sum_parts else "")
+    )
+    telemetry.set_coverage(
+        "cassation_search",
+        cass_parsed,
+        cass_planned,
+        processed=cass_eligible,
+        breaker_skipped=cass_skipped_breaker,
     )
     timings["cassation"] = time.perf_counter() - t0
 
@@ -2641,6 +2747,9 @@ def main_json():
     cass_refresh_fresh = 0
     cass_refresh_parsed = 0
     cass_refresh_force_parsed = 0
+    cass_refresh_breaker_before = config.METRICS.get(
+        "cards_breaker_skipped", 0
+    )
     log.info(
         "Кассация, шаг 2/2 — обход своих дел, "
         "ушедших с первой страницы выдачи"
@@ -2668,6 +2777,9 @@ def main_json():
             _plan_total += 1
             if should_skip_case(_c, today_for_refresh)[0]:
                 _plan_skip += 1
+        # Полный denominator готов до первого HTTP. При исключении внутри
+        # основного цикла необработанный хвост останется видимым как unread.
+        cass_refresh_total = max(_plan_total - _plan_skip, 0)
         # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
         _plan_parts = []
         if _plan_fresh:
@@ -2683,6 +2795,9 @@ def main_json():
             _plan_total + _plan_fresh + _plan_no_link,
             _plan_total - _plan_skip, _plan_parts,
         ))
+        telemetry.set_coverage(
+            "cassation_refresh", 0, _plan_total - _plan_skip, processed=0
+        )
         for case in cases:
             if case.get("current_stage") != "cassation":
                 continue
@@ -2713,9 +2828,6 @@ def main_json():
                     f"({fi_saved}): {skip_reason_ru(reason)}"
                 )
                 continue
-            # Счётчик — ПОСЛЕ smart-skip: сводка «спарсено X из Y» ниже
-            # считает в знаменателе план (без отложенных), как строка плана.
-            cass_refresh_total += 1
             planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
             if planned_fp and planned_fp >= today_for_refresh:
                 cass_refresh_force_parsed += 1
@@ -2739,6 +2851,10 @@ def main_json():
                 continue
             info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
             if not info:
+                mark_last_fetch_semantic(
+                    "unparsed_card", card_url,
+                    context=cass.get("case_number") or "?",
+                )
                 log.warning(
                     f"  7kas refresh: не удалось распарсить "
                     f"{cass.get('case_number') or '?'}"
@@ -2763,6 +2879,11 @@ def main_json():
             cass_changes.extend(more_changes)
     except Exception as exc:
         log.warning(f"7kas refresh: ошибка прогона: {exc}", exc_info=True)
+    cass_refresh_skipped_breaker = max(
+        config.METRICS.get("cards_breaker_skipped", 0)
+        - cass_refresh_breaker_before,
+        0,
+    )
     _refresh_sum_parts = []
     if cass_refresh_skipped_future:
         _refresh_sum_parts.append(
@@ -2774,10 +2895,20 @@ def main_json():
         _refresh_sum_parts.append(f"форс-парс {cass_refresh_force_parsed}")
     if cass_refresh_fresh:
         _refresh_sum_parts.append(f"{cass_refresh_fresh} уже обновлены шагом 1")
+    if cass_refresh_skipped_breaker:
+        _refresh_sum_parts.append(
+            f"{cass_refresh_skipped_breaker} пропущено предохранителем — "
+            "суд недоступен"
+        )
     log.info(
         f"7kas refresh: спарсено {cass_refresh_parsed} "
         f"из {cass_refresh_total} карточек"
         + (f" ({'; '.join(_refresh_sum_parts)})" if _refresh_sum_parts else "")
+    )
+    telemetry.set_coverage(
+        "cassation_refresh", cass_refresh_parsed, cass_refresh_total,
+        processed=cass_refresh_total,
+        breaker_skipped=cass_refresh_skipped_breaker,
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
 
@@ -2835,9 +2966,13 @@ def main_json():
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
         log.info(f"Загружаю страницу поиска апелляции {_ap_tag}({_ap_court.name})...")
+        _ap_search_url = _ap_court.search_url()
+        _ap_search_context = (
+            f"поиск апелляции ({shorten_court_name(_ap_court.name)})"
+        )
         search_html = fetch_page(
-            _ap_court.search_url(),
-            context=f"поиск апелляции ({shorten_court_name(_ap_court.name)})",
+            _ap_search_url,
+            context=_ap_search_context,
         )
         hk = _appeal_health_key(_ap_court)
         health_labels[hk] = f"Апелляция ({_ap_court.name})"
@@ -2849,12 +2984,28 @@ def main_json():
         health_obs[hk] = len(search_cases)
         # 0 дел + маркеры проверочного кода → поиск апелляции закрыт CAPTCHA,
         # а не «дел нет» (симметрично детекту по судам 1-й инст. ниже).
-        if not search_cases and detect_captcha_challenge(search_html):
+        _ap_search_captcha = (
+            not search_cases and detect_captcha_challenge(search_html)
+        )
+        if _ap_search_captcha:
             fi_challenge[_ap_court.domain] = f"Апелляция ({_ap_court.name})"
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности →
         # карточки апел-суда не запрашиваем (пре-открытие до первой траты).
-        if not search_cases and looks_like_outage_page(search_html):
+        _ap_search_outage = (
+            not search_cases and looks_like_outage_page(search_html)
+        )
+        if _ap_search_outage:
             card_breaker_preopen(_ap_court.domain, "заглушка на странице поиска")
+        mark_last_fetch_semantic(
+            _search_semantic_kind(
+                len(search_cases),
+                captcha=_ap_search_captcha,
+                outage=_ap_search_outage,
+            ),
+            _ap_search_url,
+            context=_ap_search_context,
+            rows=len(search_cases),
+        )
         log.info(
             f"Апелляция ({shorten_court_name(_ap_court.name)}): {len(search_cases)} "
             f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
@@ -3014,7 +3165,9 @@ def main_json():
         # Тайминг суда — после polite_delay, чтобы случайная задержка
         # не зашумляла метрику «какой суд тормозит».
         _t_court = time.perf_counter()
-        search_html = fetch_page(court.search_url(), context=shorten_court_name(court.name))
+        _fi_search_url = court.search_url()
+        _fi_search_context = shorten_court_name(court.name)
+        search_html = fetch_page(_fi_search_url, context=_fi_search_context)
         if not search_html:
             health_obs[health_key] = None
             log.warning(
@@ -3041,15 +3194,29 @@ def main_json():
         # на первой странице.
         page_empty = not all_rows
         # 0 строк + маркеры проверочного кода → суд закрыт CAPTCHA, а не «нет дел».
-        if page_empty and detect_captcha_challenge(search_html):
+        _fi_search_captcha = (
+            page_empty and detect_captcha_challenge(search_html)
+        )
+        if _fi_search_captcha:
             fi_challenge[court.domain] = court.name
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности
         # (аутейдж портала) → карточки этого суда не запрашиваем — фаза
         # поиска идёт раньше FI-цикла, пре-открытие не тратит ни карточки.
         # ⚠️ Капча выше предохранитель НЕ открывает: у капчёвых судов поиск
         # закрыт штатно, а карточки живут и мониторятся (search_gated).
-        if page_empty and looks_like_outage_page(search_html):
+        _fi_search_outage = page_empty and looks_like_outage_page(search_html)
+        if _fi_search_outage:
             card_breaker_preopen(court.domain, "заглушка на странице поиска")
+        mark_last_fetch_semantic(
+            _search_semantic_kind(
+                len(all_rows),
+                captcha=_fi_search_captcha,
+                outage=_fi_search_outage,
+            ),
+            _fi_search_url,
+            context=_fi_search_context,
+            rows=len(all_rows),
+        )
         fi_results_by_court.append((court, fi_results))
 
         # Промоушен материала → 2-XXX до фильтра new_fi. Идём по ВСЕМ ролям:
@@ -3421,9 +3588,14 @@ def main_json():
     fi_skipped_writ_weekly = 0
     fi_skipped_checked_today = 0
     fi_skipped_breaker = 0
+    fi_breaker_hosts: set[str] = set()
     fi_force_parsed = 0
     fi_distrusted_date = 0
     fi_parsed = 0
+    telemetry.set_coverage(
+        "first_instance", 0, fi_plan_parse, processed=0,
+        breaker_skipped=0,
+    )
     # Пер-кейсовый отчёт парсинга bank-трека: какой иск банка парсили /
     # пропустили и почему → data/bank_parse_report.json (запись в фазе 7c) →
     # карточка «Парсинг исков банка» в админке. Методы аккумулятора сами
@@ -3509,6 +3681,10 @@ def main_json():
                 f"1 инст: проверено {fi_checked} из {fi_plan_parse} "
                 f"(изменений {len(fi_changes)})"
             )
+            telemetry.set_coverage(
+                "first_instance", fi_parsed, fi_plan_parse,
+                processed=fi_checked, breaker_skipped=fi_skipped_breaker,
+            )
         # Предохранитель: суд отключён (N карточек подряд не прочитано либо
         # заглушка на его странице поиска — канарейка) — HTTP и polite_delay
         # не тратим, last_checked_at не бумпается. Каждая K-я карточка идёт
@@ -3516,6 +3692,7 @@ def main_json():
         # его не повторяет: breaker_gate=False).
         if not card_breaker_allows(court_cfg.domain):
             fi_skipped_breaker += 1
+            fi_breaker_hosts.add(court_cfg.domain)
             bank_report.record(case_j, "court_breaker")
             log.debug(f"  {fi_num_log}: суд отключён предохранителем — пропуск")
             continue
@@ -3575,10 +3752,32 @@ def main_json():
                 fi_court_seconds.get(court_cfg.name, 0.0) + _dt_card
             )
             fi_court_cards[court_cfg.name] = fi_court_cards.get(court_cfg.name, 0) + 1
-        if _warn_if_card_degraded(
+
+        # Страница вовсе без таблиц — не карточка. Проверяем это
+        # ДО degraded-детектора, чтобы один HTTP-200 не попал в
+        # публичную сводку дважды: как degraded_card и empty_shell.
+        if card_is_empty_shell(card_info):
+            mark_last_fetch_semantic(
+                "empty_shell", url,
+                context=f"{fi['case_number']}, {_short_court}",
+            )
+            bank_report.record(case_j, "empty_shell")
+            continue
+
+        _fi_degraded = _warn_if_card_degraded(
             card_info, fi["case_number"], case_block=fi, court=_short_court
-        ):
+        )
+        if _fi_degraded:
             bank_report.mark_degraded(case_j)
+        if _fi_degraded == "degraded":
+            mark_last_fetch_semantic(
+                "degraded_card", url,
+                context=f"{fi['case_number']}, {_short_court}",
+            )
+            # Generic огрызок не является прочитанной карточкой: не бумпаем
+            # last_checked_at и перечитываем следующим слотом. Ожидаемый
+            # suspended-огрызок сюда не попадает — его недельный ритм остаётся.
+            continue
 
         # Промоушен материала по карточке: М-XXXX → постоянный 2-XXXX.
         # Комбо-промоушен в списке поиска (выше) срабатывает только когда суд
@@ -3684,13 +3883,6 @@ def main_json():
                 if fi.get("termination_emitted"):
                     fi["termination_emitted"] = False
                     fi["resolved_emitted"] = False
-
-        # Второй рубеж после fetch_card_checked: страница вовсе без таблиц —
-        # не карточка. Успешной проверкой не считаем и дату не бумпаем (см.
-        # card_is_empty_shell; аутейдж sudrf 20.07.2026).
-        if card_is_empty_shell(card_info):
-            bank_report.record(case_j, "empty_shell")
-            continue
 
         # Первый парс заведённого дела — до бампа last_checked_at (ниже он
         # уже не отличим от рутинного прогона). По этому флагу дайджест
@@ -4768,6 +4960,10 @@ def main_json():
         f"1 инст: спарсено {fi_parsed} из {fi_total} карточек"
         + (f" ({'; '.join(_fi_sum_parts)})" if _fi_sum_parts else "")
     )
+    telemetry.set_coverage(
+        "first_instance", fi_parsed, fi_total, processed=fi_checked,
+        breaker_skipped=fi_skipped_breaker,
+    )
     if fi_court_seconds:
         # Префикс «1 инст:» — в KEY_RE progress_pusher'а: строка уедет
         # вехой в блок «🛰 Парсинг» админки.
@@ -4857,14 +5053,36 @@ def main_json():
         # из 172 срезала сеть — недочитанное молча ждало завтра; у Урала
         # наоборот — карточки ок, поиски слепые). Пишем сырые счётчики,
         # интерпретация (пороги дочитки) — на читателе.
+        _cards_read = (
+            fi_parsed + ap_skip_stats["parsed"]
+            + cass_parsed + cass_refresh_parsed
+        )
+        _cards_planned = (
+            fi_total
+            + ap_skip_stats.get("planned", ap_skip_stats["total"])
+            + cass_planned
+            + cass_refresh_total
+        )
+        # Только пропуски ГЛАВНЫХ карточных планов. Глобальный METRICS также
+        # включает вспомогательные intake/backfill/акты, которых нет в
+        # cards_planned, и потому не годится для арифметики покрытия.
+        _cards_unrequested = (
+            fi_skipped_breaker
+            + ap_skip_stats.get("skipped_breaker", 0)
+            + cass_skipped_breaker
+            + cass_refresh_skipped_breaker
+        )
+        _planned_breaker_hosts = set(fi_breaker_hosts)
+        _planned_breaker_hosts.update(ap_skip_stats.get("breaker_hosts", []))
+        if cass_skipped_breaker or cass_refresh_skipped_breaker:
+            _planned_breaker_hosts.add(CASSATION_COURT.domain)
         health_state["last_run"] = {
             "at": datetime.now().isoformat(timespec="seconds"),
             "requests_ok": config.METRICS.get("requests_ok", 0),
             "requests_failed": config.METRICS.get("requests_failed", 0),
-            # Сколько запросов спасли повторы (слоты Mac ходят с
-            # FETCH_MAX_RETRIES=3 против мигающего блока sudrf, 21.08.2026):
-            # без этого числа эффект настройки виден только грепом по логу
-            # прогона, а сравнить утро с утром нечем.
+            # Сколько transport-запросов получили HTTP после повтора. Это не
+            # обязательно прочитанная карточка: ответ ещё может оказаться
+            # CAPTCHA/заглушкой на semantic-слое.
             "requests_retried": config.METRICS.get("requests_retried", 0),
             "cards_breaker_skipped": config.METRICS.get("cards_breaker_skipped", 0),
             "cards_blocked": config.METRICS.get("cards_blocked", 0),
@@ -4873,20 +5091,8 @@ def main_json():
             # БЕЗ законных пропусков по ритму/датам). По ним cloud_run_ok
             # решает «удачна ли попытка» (порог ≥85%, решение юриста
             # 20.08.2026) и печатает алерт-прогресс «прочитано X из Y».
-            "cards_read": (
-                fi_parsed + ap_skip_stats["parsed"]
-                + cass_parsed + cass_refresh_parsed
-            ),
-            # Из кассационного слагаемого вычтена дочитка (checked_today):
-            # cass_eligible считает ВСЕ строки выдачи 7kas, и уже прочитанные
-            # утром карточки иначе раздували бы знаменатель повторного слота
-            # (FI и апелляция исключают дочитку ещё в своих планах).
-            "cards_planned": (
-                fi_total
-                + ap_skip_stats.get("planned", ap_skip_stats["total"])
-                + (cass_eligible - cass_skipped_checked_today)
-                + cass_refresh_total
-            ),
+            "cards_read": _cards_read,
+            "cards_planned": _cards_planned,
             # Накопительная сводка утра для алертов слотов («один дайджест в
             # день»): сколько карточек активных дел УЖЕ прочитано сегодня —
             # всеми попытками, не только этой. Без него «прочитано 119 из 362»
@@ -4902,6 +5108,7 @@ def main_json():
             # по данным, хотя лечатся по-разному, — а разбирались вручную
             # curl'ом. Пишем сырое, интерпретация на читателе.
             "latency": fetch_latency_summary(),
+            "failure_latency": fetch_failure_latency_summary(),
             "fail_kinds": dict(config.FETCH_FAIL_KINDS),
             # Недоступность портала отдельно от нашей недоработки: сколько
             # судов снято с обхода, из них по заглушке на странице ПОИСКА
@@ -4911,10 +5118,22 @@ def main_json():
             "courts_unavailable": sum(
                 1 for e in config.CARD_BREAKER.values() if e.get("open")
             ),
+            # В отличие от courts_unavailable это накопительный счётчик
+            # прогона: half-open проба могла оживить суд к финалу, но уже
+            # пропущенные без HTTP карточки от этого не становятся
+            # запрошенными. Именно этот знаменатель печатает Mac-вердикт.
+            "courts_with_unrequested": len(_planned_breaker_hosts),
             "courts_outage": sum(
                 1 for e in config.CARD_BREAKER.values() if e.get("preopened")
             ),
-            "cards_unreachable": config.METRICS.get("cards_breaker_skipped", 0),
+            "cards_unreachable": _cards_unrequested,
+            # Остаток нельзя называть «не запрошено»: сюда входят реальные
+            # HTTP-отказы, CAPTCHA/заглушки карточек и другие исходы плана.
+            # 24.08 прежний хвост приписал предохранителю весь остаток
+            # cards_planned - cards_read, хотя часть карточек запросили.
+            "cards_unread_other": max(
+                _cards_planned - _cards_read - _cards_unrequested, 0
+            ),
         }
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
@@ -5502,6 +5721,20 @@ def main_json():
             "JSON total": len(cases),
         },
     )
+    telemetry.complete_run(
+        cards_read=(
+            fi_parsed + ap_skip_stats["parsed"]
+            + cass_parsed + cass_refresh_parsed
+        ),
+        cards_planned=(
+            fi_total
+            + ap_skip_stats.get("planned", ap_skip_stats["total"])
+            + cass_planned
+            + cass_refresh_total
+        ),
+    )
+
+
 def main_replay_last(push_all: bool = False):
     """Прогнать дайджест заново из LAST_DIGEST_CONTEXT_PATH.
 

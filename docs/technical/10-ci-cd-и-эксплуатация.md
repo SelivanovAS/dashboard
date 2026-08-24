@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([2251](../../scripts/court_monitor/runs.py#L2251)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([1110](../../scripts/court_monitor/runs.py#L1110)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([5858](../../scripts/court_monitor/runs.py#L5858)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([5505](../../scripts/court_monitor/runs.py#L5505)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([5715](../../scripts/court_monitor/runs.py#L5715)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1369](../../scripts/court_monitor/runs.py#L1369)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([2301](../../scripts/court_monitor/runs.py#L2301)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([1155](../../scripts/court_monitor/runs.py#L1155)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([6091](../../scripts/court_monitor/runs.py#L6091)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([5738](../../scripts/court_monitor/runs.py#L5738)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([5948](../../scripts/court_monitor/runs.py#L5948)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1419](../../scripts/court_monitor/runs.py#L1419)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -55,8 +55,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([1069](../../scripts/court_monitor/runs.py#L1069)) проверяет
-наличие ключей на старте; `check_court_available` ([1097](../../scripts/court_monitor/runs.py#L1097))
+`validate_environment` ([1114](../../scripts/court_monitor/runs.py#L1114)) проверяет
+наличие ключей на старте; `check_court_available` ([1142](../../scripts/court_monitor/runs.py#L1142))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -70,10 +70,16 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 > [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
 
 Цепочка: `parse_and_push.sh` (Mac: preflight сети → маршрут судов мимо VPN →
-`run_parse.py` = `main_json` без секретов → коммит `📊 Обновление данных …
-(Mac-парсинг)` → push) → `replay_on_push.yml` (GitHub: Claude-дайджест +
-Telegram + Web Push). Ход парсинга виден в ярлыке «Парсинг судов.command» на
-Mac и в блоке «🛰 Парсинг» админки Worker.
+`run_parse.py` = `main_json` без секретов → черновой push данных → локальный
+delivery journal → `delivered_at` + отдельный marker-коммит
+`📊 Обновление данных … (Mac-парсинг)` → подтверждение marker SHA на remote)
+→ `replay_on_push.yml` (GitHub: LLM-дайджест + Telegram + Web Push). При
+потерянном ответе `git push` journal проверяет, является ли marker SHA предком
+актуального `main`: принятый marker не повторяется, отсутствующий получает
+условный rollback, недоступный remote оставляет транзакцию закрытой до
+следующего старта. Ход парсинга виден в ярлыке «Парсинг судов.command» на Mac
+и в блоке «🛰 Парсинг» админки Worker; посмертный сетевой снимок — локально в
+`ops/mac-local-run/.runtime/parse_telemetry.json`.
 
 ## GitHub Actions
 
@@ -221,7 +227,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   инст. (5/9) пишет время каждого суда в пер-судовую строку, фаза карточек
   1-й инст. (6/9) — строку «1 инст: медленные суды — …»
   (топ-3 по времени обхода карточек, включая ретраи).
-- `send_crash_alert` ([904](../../scripts/court_monitor/delivery.py#L904)) — падение
+- `send_crash_alert` ([907](../../scripts/court_monitor/delivery.py#L907)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в

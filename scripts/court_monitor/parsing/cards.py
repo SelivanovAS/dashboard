@@ -17,7 +17,9 @@ from court_monitor.lifecycle import (
     _SUSPENDED_RX, _TERMINAL_FI_EVENT_RX, extract_result_from_event,
 )
 from court_monitor.courts import BASE_URL
-from court_monitor.netutil import fetch_card_checked, polite_delay
+from court_monitor.netutil import (
+    fetch_card_checked, mark_last_fetch_semantic, polite_delay,
+)
 from court_monitor.parsing.search import determine_bank_role_from_participants
 from court_monitor.parsing.tables import extract_tables, cell_text, cell_href
 from court_monitor.textutil import (
@@ -1021,7 +1023,14 @@ def fetch_act_text(act_url: str, *, context: str | None = None) -> str:
     # Убираем script/style + теги, схлопываем пробелы
     text = _HTML_SCRIPT_RE.sub('', html)
     text = _HTML_STYLE_RE.sub('', text)
-    return _strip_html(text)[:5000]  # Сырой текст, обрезается позже
+    text = _strip_html(text)[:5000]  # Сырой текст, обрезается позже
+    # fetch_card_checked знает лишь, что HTTP-200 похож на
+    # карточку. Здесь уточняем тот же request_id как страницу
+    # акта с текстом либо пустую — без фиктивного второго HTTP.
+    mark_last_fetch_semantic(
+        "valid_act" if text else "empty_act", act_url, context=context,
+    )
+    return text
 
 
 # Hidden div на карточке 7kas, в котором размещается полный текст определения

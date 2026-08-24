@@ -157,7 +157,10 @@ class TestFetchPageContext:
         monkeypatch.setattr(
             cm_netutil.session, "get",
             lambda *a, **k: (_ for _ in ()).throw(
-                requests.ConnectionError("соединение сброшено")
+                requests.ConnectionError(
+                    "соединение сброшено",
+                    ConnectionResetError(54, "Connection reset by peer"),
+                )
             ),
         )
 
@@ -179,7 +182,7 @@ class TestFetchPageContext:
         with caplog.at_level(logging.WARNING, logger="court-monitor"):
             cm_netutil.fetch_page("https://oblsud.hmao.sudrf.ru/search")
         warn = next(r for r in caplog.records if r.levelno == logging.WARNING)
-        assert "oblsud.hmao.sudrf.ru — ConnectionError" in warn.getMessage()
+        assert "oblsud.hmao.sudrf.ru — connection_reset" in warn.getMessage()
 
 
 # ── фаза 5: топ медленных судов ──────────────────────────────────────────────
@@ -308,7 +311,7 @@ class TestRunSummaryOptionalLines:
     def test_zero_metrics_no_optional_lines(self, caplog):
         with caplog.at_level(logging.INFO, logger="court-monitor"):
             cm_delivery.log_run_summary("test", {})
-        assert "Запросы: 0 ок / 0 сбоев" in caplog.text
+        assert "Транспорт: 0 успешных HTTP-ответов / 0 сбоев" in caplog.text
         assert "Карточек-огрызков" not in caplog.text
         assert "Web Push:" not in caplog.text
         assert "LLM-пересказы" not in caplog.text

@@ -15,7 +15,7 @@
 
 ## Три режима генерации (флаги)
 
-`generate_digest` ([529](../../scripts/court_monitor/digest/core.py#L529)) — точка входа,
+`generate_digest` ([566](../../scripts/court_monitor/digest/core.py#L566)) — точка входа,
 которая выбирает режим:
 
 | Режим | Когда | Как работает |
@@ -37,7 +37,7 @@
 детектора здоровья парсеров). Выключатель: `DIGEST_LINT=0`.
 
 Провайдер LLM выбирается переменной `LLM_PROVIDER`
-([строка 474](../../scripts/court_monitor/config.py#L474)): `claude` по
+([строка 500](../../scripts/court_monitor/config.py#L500)): `claude` по
 умолчанию, `gigachat` или `openrouter`.
 Основной мониторинг работает на Claude; GigaChat и OpenRouter доступны из
 тестового workflow `test_digest.yml` (inputs `llm_provider` + `llm_model`).
@@ -278,11 +278,11 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([595](../../scripts/court_monitor/config.py#L595)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([621](../../scripts/court_monitor/config.py#L621)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
-`attach_act_analyses` ([336](../../scripts/court_monitor/digest/core.py#L336)) после рассылки
+`attach_act_analyses` ([373](../../scripts/court_monitor/digest/core.py#L373)) после рассылки
 сохраняет LLM-разбор опубликованных актов в поле `act_analysis` соответствующих
 дел в `cases.json` — чтобы юрист видел его в drawer'е дашборда дольше одного дня.
 Обновляются только дела с новым актом в этом прогоне.
@@ -317,12 +317,12 @@ Mac-режимом разбор считает только replay, а он чи
 
 ## Контекст и replay
 
-Перед отправкой `save_digest_context` ([94](../../scripts/court_monitor/digest/core.py#L94))
+Перед отправкой `save_digest_context` ([119](../../scripts/court_monitor/digest/core.py#L119))
 сохраняет снимок всех входных списков в `last_digest_context.json`. Это позволяет
 режиму `--replay-last` переиграть дайджест с обновлённым промптом, не запрашивая
 суды заново (LLM-пересказы при этом берутся из кэша — повторно не оплачиваются).
 Готовый HTML кладётся в `last_digest.json` (`save_last_digest`,
-[205](../../scripts/court_monitor/digest/core.py#L205)) для блока «Последний дайджест» на фронте.
+[242](../../scripts/court_monitor/digest/core.py#L242)) для блока «Последний дайджест» на фронте.
 
 > ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [121](../../scripts/court_monitor/digest/llm.py#L121),
 > `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались

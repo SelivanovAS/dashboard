@@ -196,8 +196,7 @@ class TestDochitkaWiring:
 
 
 class TestSlotFetchTuning:
-    """Слоты идут на ДЕФОЛТАХ кода: ни ретраев, ни смягчённого
-    предохранителя в env-префиксе быть не должно (откат 24.08.2026).
+    """Mac даёт три попытки только точной политике быстрых отказов.
 
     История — два ПРОТИВОПОЛОЖНЫХ режима отказа sudrf, и лекарство от одного
     оказалось ядом для другого:
@@ -213,19 +212,23 @@ class TestSlotFetchTuning:
     же распределения, заведомо мимо: 40 промахов × 105 с сожгли 70 минут из
     100, прогон прочитал 20 карточек из 287.
 
-    Поэтому режим не угадывают константой: развилку должен решать код
-    (раздельный connect/read-таймаут + ретрай только по БЫСТРЫМ отказам).
-    Пока его нет — промахиваемся быстро."""
+    Поэтому режим не угадывают константой: развилку теперь решает код по
+    точному классу и elapsed. ReadTimeout остаётся одной попыткой."""
 
-    def test_slots_run_on_code_defaults(self, worker):
+    def test_slots_only_raise_retry_ceiling(self, worker):
         code = _code(worker)
-        for lever in ("FETCH_MAX_RETRIES=", "CARD_BREAKER_THRESHOLD=",
-                      "CARD_BREAKER_PROBE_EVERY="):
+        assert 'FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"' in worker
+        for lever in ("CARD_BREAKER_THRESHOLD=", "CARD_BREAKER_PROBE_EVERY="):
             assert lever not in code, (
-                f"{lever} вернулся в слоты. Прежде чем ставить рычаг снова — "
-                "прочитать докстринг: значения помогают ровно в одном из двух "
-                "режимов отказа и утраивают цену промаха во втором"
+                f"{lever} вернулся в слоты без адаптивной breaker-политики"
             )
+
+    def test_retry_ceiling_is_guarded_by_exact_policy(self):
+        net = _read("scripts/court_monitor/netutil.py")
+        assert "def should_retry_fetch(" in net
+        assert '"connection_reset"' in net
+        assert "FETCH_RETRY_FAST_MAX_SECONDS" in net
+        assert "will_retry = should_retry_fetch(kind, elapsed, attempt)" in net
 
     def test_rationale_survives_next_to_the_knob(self, worker):
         """Обоснование обязано жить рядом с местом запуска: без него откат
@@ -357,12 +360,11 @@ class TestDeliveryOrder:
     """
 
     def test_stamp_comes_after_the_data_push(self, worker):
-        # Якоря — по сырому тексту: фазы размечены комментариями, а _code их
-        # вырезает. Ищем штамп ПОСЛЕ пуша данных, а не первый в файле:
-        # deliver_and_push (ветка «суды не ответили») объявлена выше.
+        # Helper объявлен выше, поэтому сравниваем push данных
+        # с местом его вызова, а не с телом функции.
         push_data = worker.index('die "git push данных не удался')
-        mark = worker.index("cloud_run_ok.py --mark-delivered", push_data)
-        assert mark > push_data, "штамп снова ставится до пуша данных"
+        delivery_call = worker.index('deliver_and_push "обычный финиш', push_data)
+        assert delivery_call > push_data, "штамп снова ставится до push данных"
 
     def test_draft_message_has_no_replay_marker(self, worker):
         """Гард replay_on_push — contains() по сообщению head_commit: маркер
@@ -376,11 +378,12 @@ class TestDeliveryOrder:
 
     def test_failed_delivery_push_rolls_the_stamp_back(self, worker):
         code = _code(worker)
-        assert "unmark_delivery_and_die()" in code, "хелпера отката нет"
-        assert "--unmark-delivered" in code
-        # Оба доставочных пути (обычный финиш и ветка «суды не ответили»)
-        # обязаны звать откат: правило одно, копий быть не должно.
-        assert code.count("unmark_delivery_and_die ") >= 2
+        assert "rollback_delivery_and_die()" in code, "хелпера отката нет"
+        assert "--unmark-delivered --delivery-id" in code
+        assert "|| true" not in code[code.index("rollback_delivery_transaction()"):
+                                      code.index("clear_accepted_delivery_or_die()")], (
+            "ошибка conditional rollback снова проглатывается"
+        )
 
     def test_empty_diff_does_not_skip_delivery(self, worker):
         """Ранние слоты уже опубликовали данные: пустой дифф фазы 1 не повод
@@ -396,7 +399,9 @@ class TestDeliveryOrder:
         # закоммичен более ранним прогоном.
         phase1 = worker.split("── Фаза 1: данные", 1)[1]
         phase1 = phase1.split("── Фаза 2: доставка", 1)[0]
-        branch = phase1.split("if git diff --cached --quiet; then", 1)[1]
+        branch = phase1.split(
+            'if git diff --cached --quiet -- "${DATA_FILES[@]}"; then', 1
+        )[1]
         branch = branch.split("else", 1)[0]
         assert "Данных к публикации нет" in branch
         assert "exit" not in branch, \
@@ -405,7 +410,10 @@ class TestDeliveryOrder:
     def test_unmark_mode_exists(self):
         src = _read("ops/mac-local-run/cloud_run_ok.py")
         assert 'if "--unmark-delivered" in argv:' in src
-        assert "def _unmark_delivered()" in src
+        assert "def _unmark_delivered(expected_delivery_id" in src
+        assert 'argv.index("--delivery-id")' in src, (
+            "rollback без delivery_id может снять штамп чужого выпуска"
+        )
 
 
 class TestLogRotation:
