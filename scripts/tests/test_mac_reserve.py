@@ -344,3 +344,91 @@ class TestHonestCourtProbe:
         assert "PRE_RC" in text and 'PRE_RC" = "1"' in text
         assert "PREFLIGHT_ERR" in text
         assert "--anywhere" in text, "нет способа проверить резерв вне офиса"
+
+
+class TestDeliveryOrder:
+    """Штамп доставки — ПОСЛЕ успешного пуша, иначе день горит молча.
+
+    Прежний порядок был «--mark-delivered → коммит → push». Упавший пуш
+    оставлял delivered_at в локальном контексте: день считается доставленным,
+    дайджест не ушёл, и все следующие слоты выходят по гейту. 24.08.2026 этот
+    сценарий был в одном шаге от реализации — юрист уходил из сети ровно в
+    минуту открытия окна доставки, и оба прогона пришлось экстренно гасить.
+    """
+
+    def test_stamp_comes_after_the_data_push(self, worker):
+        # Якоря — по сырому тексту: фазы размечены комментариями, а _code их
+        # вырезает. Ищем штамп ПОСЛЕ пуша данных, а не первый в файле:
+        # deliver_and_push (ветка «суды не ответили») объявлена выше.
+        push_data = worker.index('die "git push данных не удался')
+        mark = worker.index("cloud_run_ok.py --mark-delivered", push_data)
+        assert mark > push_data, "штамп снова ставится до пуша данных"
+
+    def test_draft_message_has_no_replay_marker(self, worker):
+        """Гард replay_on_push — contains() по сообщению head_commit: маркер
+        в черновом коммите разослал бы недособранное утро."""
+        draft = "📊 Данные обновлены $(date +'%d.%m.%Y %H:%M') (Mac, копим дайджест)"
+        assert draft in worker
+        assert "Mac-парсинг" not in draft
+
+    def test_delivery_commit_carries_the_marker(self, worker):
+        assert "(Mac-парсинг)\"" in worker or "(Mac-парсинг)\" " in worker
+
+    def test_failed_delivery_push_rolls_the_stamp_back(self, worker):
+        code = _code(worker)
+        assert "unmark_delivery_and_die()" in code, "хелпера отката нет"
+        assert "--unmark-delivered" in code
+        # Оба доставочных пути (обычный финиш и ветка «суды не ответили»)
+        # обязаны звать откат: правило одно, копий быть не должно.
+        assert code.count("unmark_delivery_and_die ") >= 2
+
+    def test_empty_diff_does_not_skip_delivery(self, worker):
+        """Ранние слоты уже опубликовали данные: пустой дифф фазы 1 не повод
+        выйти из скрипта — накопленный контекст всё равно надо доставить.
+
+        Прежняя ветка стояла ПОСЛЕ штампа и выходила по exit 0; с новым
+        порядком тот же выход означал бы «данных нет — и доставки не будет».
+        """
+        assert 'log "Изменений нет — коммит не нужен' not in worker, \
+            "вернулся ранний выход, обрывающий прогон до доставки"
+        # Срез строго по фазе 1: проверок пустого диффа в скрипте три, и
+        # первая (в deliver_and_push) выходит законно — там штамп уже
+        # закоммичен более ранним прогоном.
+        phase1 = worker.split("── Фаза 1: данные", 1)[1]
+        phase1 = phase1.split("── Фаза 2: доставка", 1)[0]
+        branch = phase1.split("if git diff --cached --quiet; then", 1)[1]
+        branch = branch.split("else", 1)[0]
+        assert "Данных к публикации нет" in branch
+        assert "exit" not in branch, \
+            "пустой дифф данных снова обрывает прогон до доставки"
+
+    def test_unmark_mode_exists(self):
+        src = _read("ops/mac-local-run/cloud_run_ok.py")
+        assert 'if "--unmark-delivered" in argv:' in src
+        assert "def _unmark_delivered()" in src
+
+
+class TestLogRotation:
+    """Лог писался ОДНИМ файлом с 3 июля: разбор «что было сегодня» каждый раз
+    требовал скрипта по маркеру «Старт», а файл рос без предела."""
+
+    @pytest.mark.parametrize("rel", [
+        "ops/mac-local-run/parse_and_push.sh",
+        "ops/mac-local-run/import_dumps.sh",
+    ])
+    def test_log_rotated_daily(self, rel):
+        code = _code(_read(rel))
+        assert "cm_rotate_log" in code, rel
+        assert 'cm_rotate_log "$LOG"' in code, rel
+
+    def test_rotation_keeps_a_window(self, worker):
+        assert "CM_LOG_KEEP_DAYS" in _code(worker)
+
+
+class TestLockBehaviourDocumented:
+    """Занятая территория цикл НЕ прерывает — 24.08.2026 слот 08:00 так
+    подхватил Урал параллельно ручному прогону ХМАО. Поведение полезное, но
+    неочевидное, и в комментариях его не было."""
+
+    def test_driver_explains_per_clone_lock(self, driver):
+        assert "ПОКЛОНОВЫЙ" in driver or "поклоновый" in driver.lower()
