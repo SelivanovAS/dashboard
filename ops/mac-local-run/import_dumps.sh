@@ -156,9 +156,14 @@ command -v jq >/dev/null 2>&1 || die "нужен jq (brew install jq) — им �
 # держит гейт Worker-конфига ниже: нет worker.<регион> — тихий выход.
 REGION_CODE=$(cm_region_code "$PYTHON")
 [ -n "$REGION_CODE" ] || die "не смог определить регион клона $REPO"
+# Считаем ОБЕ инстанции: с 25.08.2026 проверочный код бывает и на апелляции
+# (Свердловский облсуд), а территория, где закрыта только она, иначе выглядела
+# бы «без капчёвых судов» и молча перестала бы ждать дампы.
 GATED=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
 from court_monitor.regions import get_region
-print(sum(1 for c in get_region().first_instance_courts if c.search_gated))' 2>/dev/null)
+r = get_region()
+print(sum(1 for c in list(r.first_instance_courts) + list(r.appeal_courts)
+         if c.search_gated))' 2>/dev/null)
 if [ "${GATED:-0}" = "0" ]; then
   log "Территория $REGION_CODE: капчёвых судов нет — дампов не ждём, только пачки"
 fi

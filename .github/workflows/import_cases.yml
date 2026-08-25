@@ -1,9 +1,12 @@
 # Импорт дел капчёвого суда из дампа выдачи, который оператор сдал в админку
 # Worker'а (POST /admin/import-dump → KV → workflow_dispatch сюда).
 # Поток: забрать дамп с Worker'а (Bearer PUSH_SECRET, свой User-Agent — урок
-# бана Python-urllib 13–16.07.2026) → scripts/import_search_dump.py (офлайн,
-# суды не трогает) → commit cases.json → POST /import-result (итог оператору
-# в админку). Карточки добавленных дел дозаполнит ближайший основной прогон.
+# бана Python-urllib 13–16.07.2026) → scripts/import_search_dump.py → commit
+# данных → POST /import-result (итог оператору в админку).
+# Суд выбирается ДОМЕНОМ, а ветку импортёр выбирает сам по реестру региона:
+# 1-я инстанция (карточки читаются по истцовым строкам) или АПЕЛЛЯЦИЯ
+# (с 25.08.2026 — Свердловский облсуд закрыл поиск проверочным кодом; там
+# карточка обязательна: номер дела 1-й инстанции живёт только в ней).
 #
 # ⚠ Все inputs и строки отчёта передаются через env/файлы, НЕ через ${{ }} в
 # run: — имя оператора и содержимое дампа произвольны, интерполяция в shell
@@ -18,7 +21,7 @@ on:
         required: true
         type: string
       court_domain:
-        description: 'Домен суда, напр. akademicheskiy--svd.sudrf.ru'
+        description: 'Домен суда: 1-я инст. (akademicheskiy--svd.sudrf.ru) или апелляция (oblsud--svd.sudrf.ru)'
         required: true
         type: string
       operator:
@@ -124,14 +127,13 @@ jobs:
         run: |
           git config user.name "Court Monitor Bot"
           git config user.email "bot@court-monitor.local"
-          git add data/cases.json
-          # Файлы трека «Иски банка» и негативный кэш отказников: появляются
-          # только когда дамп нёс истцовые строки (первый импорт территории
-          # создаёт их с нуля).
-          for f in data/cases_bank.json data/cases_bank_events.json \
-                   data/.bank_intake_seen.json; do
-            [ -f "$f" ] && git add "$f"
-          done
+          # Список файлов НЕ ведём руками: пути спрашиваются у
+          # court_monitor.config (ops/stage_data_files.sh — тот же скрипт, что
+          # у прогона и у резерва на Mac). Ручной перечень здесь уже был бы
+          # неполон: ветка апелляции (25.08.2026) пишет ещё и CSV, а обход
+          # карточек апелляции в прогоне идёт ПО СТРОКАМ CSV — незакоммиченная
+          # строка означала бы дело, которое никто больше не перечитает.
+          bash ops/stage_data_files.sh
           if git diff --cached --quiet; then
             echo "Изменений нет (добавлено 0 дел) — коммит не нужен"
             exit 0

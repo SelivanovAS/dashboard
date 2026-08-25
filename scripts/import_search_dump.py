@@ -59,6 +59,19 @@
     [BANK CAPPED]  — потолок карточек за один импорт; повторите импорт того же
                      дампа — уже добавленное отсеет дедуп
 
+ВЕТКА АПЕЛЛЯЦИИ (с 25.08.2026; Свердловский облсуд закрыл поиск кодом —
+карточки при этом открыты, как и у судов 1-й инстанции). Ветку выбирает
+`court_type` суда из реестра региона, канал и гейты общие. Отличие: карточка
+ОБЯЗАТЕЛЬНА — номер дела 1-й инстанции живёт только в ней, а без него запись
+не с чем связывать. Свои маркеры:
+    [ADDED APPEAL] — новое дело апелляции (дела 1-й инстанции у нас нет)
+    [LINKED]       — апелляция влита в известное дело 1-й инстанции
+                     (link_cases, стадия дела → appeal)
+    [FETCH FAIL]   — карточка не открылась, строка ПОТЕРЯНА (дело не заведено):
+                     повтор дампа подхватит очередь резерва на Mac
+Пишутся ДВА файла: cases.json и CSV (обход карточек апелляции в прогоне идёт
+по строкам CSV — дело без строки не перечитал бы никто).
+
 JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import_cases.yml
 возвращает её оператору через POST /import-result Worker'а.
 
@@ -66,6 +79,8 @@ JSON-сводка пишется в $GITHUB_OUTPUT (ключ summary) — import
     python3 scripts/import_search_dump.py dump.html \
         --court-domain akademicheskiy--svd.sudrf.ru \
         --operator "Иванова" [--dry-run]
+    python3 scripts/import_search_dump.py appeal.html \
+        --court-domain oblsud--svd.sudrf.ru --operator "Иванова" 
 
 Коды выхода: 0 — ок (даже если добавлено 0); 2 — дамп оказался страницей
 проверочного кода; 3 — таблица результатов не найдена (битый дамп);
@@ -87,6 +102,9 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from court_monitor import config  # noqa: E402
+from court_monitor.appeal_intake import (  # noqa: E402 — ветка апелляции
+    appeal_row_to_json_case, enrich_appeal_row_from_card,
+)
 from court_monitor.bank_intake import (  # noqa: E402 — правила приёма в трек
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -94,12 +112,12 @@ from court_monitor.bank_intake import (  # noqa: E402 — правила при�
 from court_monitor.config import log  # noqa: E402
 from court_monitor.courts import fi_court_by_domain  # noqa: E402
 from court_monitor.lifecycle import (  # noqa: E402
-    FI_NOT_ACCEPTED_RU, discovered_already_resolved_old, fi_not_accepted_kind,
-    is_case_archived,
+    FI_NOT_ACCEPTED_RU, dedupe_orphan_by_base_number,
+    discovered_already_resolved_old, fi_not_accepted_kind, is_case_archived,
 )
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
-    promote_material_record,
+    link_cases, promote_material_record,
 )
 from court_monitor.netutil import (  # noqa: E402
     fetch_card_checked, fetch_fail_reason_ru, polite_delay,
@@ -108,13 +126,16 @@ from court_monitor.parsing import parse_case_card  # noqa: E402
 from court_monitor.parsing.cards import card_is_empty_shell  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
-    parse_first_instance_search,
+    parse_first_instance_search, parse_search_page,
 )
 from court_monitor.parsing.tables import extract_tables  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
 from court_monitor.regions.base import CourtConfig  # noqa: E402
 from court_monitor.target_search import build_json_entry  # noqa: E402
-from court_monitor.storage import load_json, save_bank_json, save_json  # noqa: E402
+from court_monitor.storage import (  # noqa: E402
+    load_csv, load_json, save_bank_json, save_csv, save_json,
+)
+from court_monitor.textutil import _bare_case_number  # noqa: E402
 # Прецедент импорта scripts→scripts — collect_bank_claims.py: зависимости
 # односторонние, court_monitor из scripts/*.py не импортирует.
 from import_bank_registry import load_all_tracked, load_bank_file  # noqa: E402
@@ -200,10 +221,17 @@ def detect_card_delo_ids(html: str) -> set[str]:
 
 
 def resolve_court(court_domain: str) -> CourtConfig | None:
-    """CourtConfig 1-й инст. активного региона по домену (первый сервер при
-    двухсерверном домене — фактический srv_num возьмётся из href дампа)."""
+    """CourtConfig активного региона по домену (первый сервер при
+    двухсерверном домене — фактический srv_num возьмётся из href дампа).
+
+    Ищем в реестре 1-й инстанции, затем среди апел-судов: с 25.08.2026
+    проверочный код появился и на апелляции (Свердловский облсуд), и её дамп
+    идёт тем же каналом. `court_type` найденного суда и есть переключатель
+    ветки импорта.
+    """
     dom = (court_domain or "").strip().lower()
-    for c in get_region().first_instance_courts:
+    region = get_region()
+    for c in list(region.first_instance_courts) + list(region.appeal_courts):
         if c.domain.lower() == dom:
             return c
     return None
@@ -902,6 +930,209 @@ def import_rows(
             "added_bank_entries": bank_entries}
 
 
+# ── Ветка апелляции: дамп выдачи капчёвого апел-суда (25.08.2026) ────────────
+# Свердловский областной суд закрыл поиск проверочным кодом; карточки при этом
+# открыты (в тот же прогон прочитано 69 карточек из 118 дел стадии appeal) —
+# ровно та же модель, что у 54 судов 1-й инстанции области. Отдельного скрипта
+# и отдельного workflow не заводим: вся проводка (админка → Worker → KV →
+# import_cases.yml → отчёт → очередь резерва на Mac) уже работает ПО ДОМЕНУ,
+# и ветка выбирается типом суда из реестра региона.
+#
+# Отличие от ветки 1-й инстанции: карточка здесь ОБЯЗАТЕЛЬНА. Номер дела
+# 1-й инстанции суд публикует только в ней, а без него новую запись не с чем
+# связывать — card-blind заведение дало бы вечного двойника уже известного
+# дела (link_cases в прогоне не поможет: он питается той же выдачей, что за
+# кодом). Поэтому нечитаемая карточка = строка потеряна, счётчик `fetch_fail`,
+# и очередь резерва (ops/mac-local-run/import_queue.jq берёт запись по
+# fetch_fail) переделает дамп с машины юриста в тот же день.
+MAX_APPEAL_CARDS_PER_IMPORT = 100
+
+
+def _appeal_known_numbers(*case_lists) -> tuple[set, set]:
+    """Индекс уже отслеживаемых апелляций: (точные пары, wildcard-номера).
+
+    Точный ключ — (домен апел-суда, номер) и его bare-форма: номера 33-…/YYYY
+    между двумя апел-судами региона (Свердловский облсуд + Суд ЯНАО) НЕ
+    уникальны, глобальный индекс по номеру давал бы ложное «уже отслеживается».
+    Wildcard — номера легаси-блоков без `court_domain` (данные до миграции
+    migrate_appeal_court_fields): домена у них нет, сверяем по голому номеру,
+    как это делает lookup ("", num) в link_cases.
+    """
+    exact: set = set()
+    wildcard: set = set()
+    for lst in case_lists:
+        for c in lst or []:
+            ap = c.get("appeal") or {}
+            num = (ap.get("case_number") or "").strip()
+            if not num:
+                continue
+            dom = (ap.get("court_domain") or "").strip().lower()
+            forms = {num, _bare_case_number(num)}
+            if dom:
+                exact.update((dom, f) for f in forms if f)
+            else:
+                wildcard.update(f for f in forms if f)
+    return exact, wildcard
+
+
+def _appeal_already_tracked(domain: str, num: str, csv_existing: set,
+                            exact: set, wildcard: set) -> bool:
+    """Дело апелляции уже в базе (CSV, JSON-активные или JSON-архив)?"""
+    forms = {num, _bare_case_number(num)}
+    if forms & csv_existing:
+        return True
+    if any((domain, f) in exact for f in forms if f):
+        return True
+    return bool(forms & wildcard)
+
+
+def _fetch_appeal_card(court: CourtConfig, link: str, num: str,
+                       state: dict, dry_run: bool) -> tuple[dict | None, str]:
+    """Карточка апел. дела. Пара (карточка|None, причина) — как _fetch_main_card.
+
+    Причина ∈ {"", "dry_run", "capped", "failed"}: «не пробовали» обязано
+    отличаться от «пробовали и не вышло», иначе счётчик потерь строить не из
+    чего (урок дампа Ленинского р/с ЕКБ 16.08.2026).
+    """
+    if dry_run:
+        return None, "dry_run"
+    if state["cards"] >= MAX_APPEAL_CARDS_PER_IMPORT:
+        return None, "capped"
+    cid, _, cuid = (link or "").partition("|")
+    state["cards"] += 1
+    polite_delay()
+    card_html = fetch_card_checked(court.card_url(cid, cuid), context=num)
+    if not card_html:
+        return None, "failed"
+    card_info = parse_case_card(card_html, court.base_url)
+    if card_is_empty_shell(card_info):
+        # Заглушка sudrf (HTTP 200, ноль таблиц) карточкой не считается.
+        # Диагноз этого же запроса — иначе fetch_fail_reason_ru промолчит и
+        # админка подставит ложное «суд не ответил».
+        config.FETCH_DIAG["kind"] = "empty_shell"
+        return None, "failed"
+    return card_info, ""
+
+
+def import_appeal_rows(
+    court: CourtConfig, rows: list[dict], operator: str, dry_run: bool,
+) -> dict:
+    """Завести дела апелляции из дампа выдачи. Возвращает summary-dict.
+
+    Шаги на строку: дедуп по всем картотекам → карточка (единственный онлайн-
+    шаг) → номер дела 1-й инстанции → запись → БОЕВОЙ link_cases, который либо
+    вливает апелляцию в известное дело 1-й инстанции, либо оставляет её
+    самостоятельной записью с id номера 1-й инстанции.
+
+    ⚠️ Пишем ДВА файла: cases.json и CSV. Строка CSV не косметика — обход
+    карточек апелляции в прогоне (`update_active_cases`) идёт ПО СТРОКАМ CSV,
+    и дело без строки не перечиталось бы никогда.
+    """
+    data = load_json(config.JSON_PATH)
+    cases = data.get("cases", [])
+    archive = load_json(config.JSON_ARCHIVE_PATH)
+    csv_cases = load_csv(config.CSV_PATH)
+    csv_archived = load_csv(config.CSV_ARCHIVE_PATH)
+    csv_existing = {
+        (c.get("Номер дела") or "").strip()
+        for c in csv_cases + csv_archived
+        if c.get("Номер дела")
+    }
+    exact, wildcard = _appeal_known_numbers(cases, archive.get("cases", []))
+
+    lines: list[str] = []
+    counters = {
+        "added": 0, "linked": 0, "already": 0, "no_link": 0,
+        "fetch_fail": 0,
+    }
+    state = {"cards": 0, "fail_reasons": []}
+    new_rows: list[dict] = []
+    now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    for r in rows:
+        num = (r.get("Номер дела") or "").strip()
+        if not num:
+            continue
+        if _appeal_already_tracked(court.domain, num, csv_existing,
+                                   exact, wildcard):
+            counters["already"] += 1
+            lines.append(f"[ALREADY] {num} — уже отслеживается")
+            continue
+        link = (r.get("Ссылка") or "").strip()
+        if "|" not in link:
+            # Вставка «как текст»: без case_id|case_uid карточка недостижима,
+            # мониторить нечего (зеркало [NO LINK] ветки 1-й инстанции).
+            counters["no_link"] += 1
+            lines.append(
+                f"[NO LINK] {num} — в дампе нет ссылки на карточку; "
+                f"копируйте выделение страницы или файл «только HTML»"
+            )
+            continue
+
+        card_info, why = _fetch_appeal_card(court, link, num, state, dry_run)
+        if card_info is None and why == "dry_run":
+            lines.append(f"[DRY RUN] {num} — будет заведено (карточка не читалась)")
+            continue
+        if card_info is None:
+            counters["fetch_fail"] += 1
+            reason = (
+                "кэп карточек за импорт — повторите тот же дамп"
+                if why == "capped" else _note_card_failure(state)
+                or "карточка не открылась"
+            )
+            lines.append(f"[FETCH FAIL] {num} — {reason}; дело НЕ заведено")
+            continue
+
+        fi_num = (enrich_appeal_row_from_card(r, card_info) or "").strip()
+        r["_appeal_domain"] = court.domain
+        case = appeal_row_to_json_case(
+            r, {(court.domain, num): fi_num} if fi_num else None, court=court,
+        )
+        # Служебный блок импорта: ближайший прогон объявит дело один раз в
+        # секции «📥 Новые дела» апелляции (announce_imported_appeal_cases).
+        # ⚠️ У СЛИТОГО с известной 1-й инстанцией дела блок исчезает вместе с
+        # записью-сиротой — и это ровно то поведение, которое нужно: наверх
+        # уехало уже известное дело, «новым» его объявлять нельзя.
+        case["import"] = {
+            "operator": operator, "at": now_iso, "source": "dump_appeal",
+        }
+        cases.insert(0, case)
+        before = len(cases)
+        # Боевая связка, та же, что в прогоне: своей копии правил здесь нет.
+        cases = link_cases(cases, {(court.domain, num): fi_num} if fi_num else {})
+        merged = len(cases) < before
+        new_rows.append(r)
+        # Индекс пополняем СРАЗУ: строка, задвоенная внутри одного дампа
+        # (оператор скопировал страницу дважды), иначе завела бы вторую запись —
+        # дедуп-снимок брался до цикла.
+        exact.add((court.domain, num))
+        csv_existing.add(num)
+        if merged:
+            counters["linked"] += 1
+            lines.append(
+                f"[LINKED] {num} → дело 1-й инстанции {fi_num}: апелляция "
+                f"добавлена в существующую запись"
+            )
+        else:
+            counters["added"] += 1
+            tail = f" (1 инст. {fi_num})" if fi_num else " (номер 1-й инст. суд ещё не проставил)"
+            lines.append(f"[ADDED APPEAL] {num}{tail}")
+
+    if not dry_run and new_rows:
+        # Щит от сирот — тот же, что после link_cases в прогоне.
+        merged_orphans = dedupe_orphan_by_base_number(cases)
+        if merged_orphans:
+            log.info("Дедуп сирот после связки: слито %d", merged_orphans)
+        data["cases"] = cases
+        save_json(data, config.JSON_PATH)
+        # Новые строки — В НАЧАЛО, как делает прогон
+        # (`csv_cases = appeal_new_cases_csv + csv_cases`).
+        save_csv(new_rows + csv_cases, config.CSV_PATH)
+
+    counters["card_fail_reason"] = _top_card_fail_reason(state)
+    return {"counters": counters, "lines": lines}
+
+
 def write_github_output(summary: dict) -> None:
     """JSON-сводка для import_cases.yml: одной строкой в $GITHUB_OUTPUT (ключ
     summary) и файлом $IMPORT_SUMMARY_PATH. Файл — основной канал: workflow
@@ -923,6 +1154,63 @@ def write_github_output(summary: dict) -> None:
                 f.write(payload + "\n")
         except OSError as e:
             log.warning(f"IMPORT_SUMMARY_PATH недоступен: {e}")
+
+
+def _main_appeal(court: CourtConfig, html: str, operator: str,
+                 dry_run: bool, summary: dict) -> int:
+    """Хвост main() для дампа апелляции: разбор выдачи → приём → сводка.
+
+    Общие гейты (проверочный код в дампе, чужой хост, чужой раздел по delo_id)
+    отработали выше — они одинаковы для обеих инстанций.
+    """
+    rows = parse_search_page(html)
+    summary["rows"] = len(rows)
+
+    if not rows:
+        if _NO_DATA_MARK in html.lower():
+            log.info("Выдача пуста («данных по запросу не обнаружено») — добавлять нечего")
+            summary["lines"] = ["Выдача пуста — «данных по запросу не обнаружено»"]
+            write_github_output(summary)
+            return EXIT_OK
+        if _find_results_table(extract_tables(html)) is None:
+            msg = (
+                "Таблица результатов не найдена в дампе. Сохраните страницу "
+                "как «только HTML» или скопируйте выделение страницы выдачи "
+                "целиком (вставка простым текстом не годится)."
+            )
+            log.error(msg)
+            summary["error"] = msg
+            write_github_output(summary)
+            return EXIT_NO_TABLE
+        log.info("Таблица найдена, но сберовских дел в ней нет")
+
+    result = import_appeal_rows(court, rows, operator, dry_run)
+    summary.update(result["counters"])
+    summary["lines"] = result["lines"][:100]
+
+    log.info("=" * 60)
+    log.info(
+        "Импорт апелляции (%s, оператор %s): +%d новых дел | %d связано с "
+        "1-й инстанцией | %d уже в базе | %d без ссылки | %d потеряно "
+        "(карточка не открылась)%s",
+        court.name, operator or "—",
+        summary["added"], summary["linked"], summary["already"],
+        summary["no_link"], summary["fetch_fail"],
+        " | DRY-RUN" if dry_run else "",
+    )
+    if summary["fetch_fail"]:
+        # Потеря строки целиком: номер дела 1-й инстанции живёт только в
+        # карточке, и без неё связывать запись не с чем. Повтор дампа
+        # подхватит очередь резерва на Mac (import_queue.jq берёт по
+        # fetch_fail), но оператор обязан видеть это в логе прогона.
+        log.warning(
+            "Апелляция: %d %s не заведено — карточка не открылась (%s)",
+            summary["fetch_fail"],
+            "дело" if summary["fetch_fail"] == 1 else "дел",
+            summary["card_fail_reason"] or "причина не определена",
+        )
+    write_github_output(summary)
+    return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -950,12 +1238,17 @@ def main(argv: list[str] | None = None) -> int:
         "added_bank": 0, "excluded_result": 0, "excluded_writ": 0,
         "already_spent": 0, "seen_cached": 0, "fetch_fail": 0,
         "bank_dry_run": 0, "bank_capped": 0,
+        # Ветка апелляции: сколько дел приклеилось к известной 1-й инстанции.
+        "linked": 0,
         "lines": [],
     }
 
     court = resolve_court(args.court_domain)
     if court is None:
-        known = ", ".join(c.domain for c in region.first_instance_courts[:8])
+        known = ", ".join(
+            [c.domain for c in region.appeal_courts]
+            + [c.domain for c in region.first_instance_courts[:6]]
+        )
         msg = (
             f"Суд {args.court_domain!r} не найден в реестре региона "
             f"{region.code!r} (первые домены: {known}…)"
@@ -1001,15 +1294,26 @@ def main(argv: list[str] | None = None) -> int:
     card_delo_ids = detect_card_delo_ids(html)
     if card_delo_ids and str(court.delo_id) not in card_delo_ids:
         found = ", ".join(sorted(card_delo_ids))
+        _section_ru = (
+            "раздел апелляционных гражданских дел"
+            if court.court_type == "appeal"
+            else "раздел гражданских дел 1-й инстанции"
+        )
         msg = (
             f"Дамп похож на выдачу другого раздела (в ссылках карточек "
             f"delo_id={found}, у выбранного суда {court.delo_id}) — откройте "
-            "раздел гражданских дел 1-й инстанции и повторите поиск."
+            f"{_section_ru} и повторите поиск."
         )
         log.error(msg)
         summary["error"] = msg
         write_github_output(summary)
         return EXIT_WRONG_COURT
+
+    # ── Развилка по типу суда ────────────────────────────────────────────
+    # Апелляция: своя выдача (parse_search_page, роли не делим — наверх едут
+    # дела с любой ролью банка, как и в боевом поиске апелляции) и свой приём.
+    if court.court_type == "appeal":
+        return _main_appeal(court, html, operator, args.dry_run, summary)
 
     stats: dict = {}
     rows = parse_first_instance_search(html, court, stats=stats, keep_all_roles=True)

@@ -248,3 +248,39 @@ class TestRelinkAwaitingAppeal:
         assert found == 0
         assert len(new_csv) == 1
         assert n.card_urls == []
+
+
+class TestGatedAppealSkip:
+    """Апелляция под проверочным кодом (Свердловский облсуд с 25.08.2026).
+
+    Целевой запрос идёт ТОЙ ЖЕ поисковой формой, что и обычный поиск, — под
+    кодом он вернёт ту же страницу-капчу. Гейт по ФАКТУ прогона (домены,
+    чей поиск оказался закрыт), а не по флагу конфига: снимут код — дослинк
+    заработает тем же прогоном.
+    """
+
+    def test_gated_domain_skipped_without_http(self, net):
+        n = net(_search_html([ROW]), card_fi="2-500/2026")
+        fi_nums: dict = {}
+        found = cm_runs.relink_awaiting_appeal(
+            [_awaiting_case("2-500/2026")], set(), [], fi_nums,
+            skip_domains={AP1.domain},
+        )
+        assert found == 0
+        assert n.search_urls == [] and n.card_urls == []
+        assert fi_nums == {}
+
+    def test_other_domain_still_linked(self, net):
+        """Чужой закрытый суд не глушит открытый: гейт пер-судовый."""
+        net(_search_html([ROW]), card_fi="2-500/2026")
+        found = cm_runs.relink_awaiting_appeal(
+            [_awaiting_case("2-500/2026")], set(), [], {},
+            skip_domains={"oblsud--ynao.sudrf.ru"},
+        )
+        assert found == 1
+
+    def test_default_argument_keeps_old_behaviour(self, net):
+        """Без параметра — поведение прежнее байт-в-байт (ХМАО не задет)."""
+        net(_search_html([ROW]), card_fi="2-500/2026")
+        assert cm_runs.relink_awaiting_appeal(
+            [_awaiting_case("2-500/2026")], set(), [], {}) == 1

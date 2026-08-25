@@ -172,7 +172,8 @@ def test_my_courts_are_local_and_optional():
     src = _admin()
     assert 'MY_COURTS_KEY = "admin_my_courts"' in src
     assert "function myCourts" in src and "function saveMyCourts" in src
-    body = src.split("function renderImportFreshness", 1)[1][:6000]
+    # Окно с запасом: функция подросла закреплённой апелляцией (25.08.2026).
+    body = src.split("function renderImportFreshness", 1)[1][:8000]
     assert "var hasMine = myCourtsCount() > 0" in body, (
         "пустой набор обязан означать «все суды» — иначе оператор до первого "
         "выбора увидит пустую очередь")
@@ -412,3 +413,59 @@ def test_admin_page_inner_js_parses():
             "Внутренний JS админки не парсится — страница будет пустой:\n"
             + r.stdout + r.stderr
         )
+
+
+# ── Капчёвая апелляция в списке дампов (25.08.2026) ─────────────────────────
+# Свердловский облсуд закрыл поиск проверочным кодом, и его выдачу теперь тоже
+# приносит оператор. Решение юриста: суд стоит ПЕРВЫМ и виден ВСЕМ операторам —
+# он один на территорию, и попади он в чужую подсеть «моих судов», дамп не
+# сделал бы никто.
+
+def test_appeal_courts_pinned_first_in_dump_list():
+    src = _admin()
+    body = src.split("async function loadImportCourts", 1)[1][:4500]
+    assert "acRegion.appeal_courts" in body, (
+        "список дампов снова строится только из fi_courts — капчёвую "
+        "апелляцию оператор не увидит")
+    assert "gatedAppeal.concat(gated)" in body, (
+        "апелляция обязана идти ПЕРВОЙ строкой выпадающего списка")
+    assert "pinned: true" in body
+
+
+def test_appeal_row_is_labelled_as_appeal():
+    """Подпись решает, какой раздел сайта открывать: у апелляции своя
+    картотека (delo_id=5)."""
+    src = _admin()
+    assert "function impCourtLabel" in src
+    assert "— апелляция" in src
+    assert "escHtml(impCourtLabel(x.court))" in src, (
+        "строка светофора снова печатает голое имя суда")
+
+
+def test_pinned_court_ignores_my_courts_filter():
+    src = _admin()
+    body = src.split("function renderImportFreshness", 1)[1][:8000]
+    assert "mine: !!c.pinned || !hasMine || !!mine[key]" in body, (
+        "закреплённый суд выпал из подсети оператора — у большинства он "
+        "окажется в свёртке «Прочие суды» и дамп не сделает никто")
+    assert "a.court.pinned ? -1 : 1" in body, (
+        "закреплённый суд перестал быть первым в очереди светофора")
+
+
+def test_court_link_uses_court_delo_id():
+    """Жёсткий delo_id=1540005 уводил бы оператора апелляции в чужой раздел."""
+    src = _admin()
+    body = src.split("function impCourtLink", 1)[1][:900]
+    assert "(c && c.delo_id)" in body
+    assert "&delo_id=1540005&name_op=sf" not in body
+
+
+def test_appeal_losses_named_by_channel():
+    """Счётчики у каналов общие, смысл разный: «карточка не открылась» в
+    дампе апелляции значит «потеряно ДЕЛО АПЕЛЛЯЦИИ», а не «иск банка»."""
+    src = _admin()
+    assert "function impIsAppeal" in src
+    body = src.split("function impResultParts", 1)[1][:4000]
+    assert 'isAp ? " дел апелляции не заведено "' in body
+    assert "item.linked" in body, (
+        "счётчик связанных дел не доезжает до сводки — третье звено проводки")
