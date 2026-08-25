@@ -227,8 +227,22 @@ class RegionConfig:
             "name": self.name,
             "name_short": self.name_short or self.name,
             "digest_title": self.digest_title,
+            # Апел-суды: кроме подписи и ссылок фронта отсюда же строится
+            # dropdown дампов в админке — у апелляции тоже бывает проверочный
+            # код (Свердловский облсуд, 25.08.2026). srv_num — для ссылки
+            # «Открыть поиск по суду», delo_id (5) — чтобы та вела в раздел
+            # апелляции, а не гражданских дел 1-й инстанции.
+            # ⚠️ В fi_courts апелляцию НЕ подмешивать: из того массива питаются
+            # точечное добавление и пометка «лист не нужен», и обе отвергают
+            # ссылки апелляции осознанно.
             "appeal_courts": [
-                {"name": c.name, "domain": c.domain, "delo_id": c.delo_id}
+                {
+                    "name": c.name,
+                    "domain": c.domain,
+                    "delo_id": c.delo_id,
+                    "search_gated": c.search_gated,
+                    "srv_num": c.srv_num,
+                }
                 for c in self.appeal_courts
             ],
             # Суды 1-й инст. — источник dropdown'а секции «Импорт дел» в

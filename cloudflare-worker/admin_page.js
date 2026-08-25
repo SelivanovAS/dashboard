@@ -2901,9 +2901,15 @@ function initTabs() {
 })();
 
 // ── Секция «Импорт дел» (капчёвые суды; обе роли) ────────────────────────────
-// Источник dropdown'а — region.fi_courts из cases.json (search_gated=True).
-// Секция скрыта, если gated-судов в регионе нет (у ХМАО прячется сама).
-var impCourts = [];            // [{name, domain, search_gated, srv_num}]
+// Источник dropdown'а — cases.json: region.appeal_courts + region.fi_courts со
+// search_gated=True. Апелляция идёт ПЕРВОЙ и закреплена (pinned) — с
+// 25.08.2026 код закрыл и её (Свердловский облсуд), а суд этот один на
+// территорию. Секция скрыта, если капчёвых судов в регионе нет вовсе
+// (у ХМАО прячется сама).
+var impCourts = [];            // [{name, domain, search_gated, srv_num, delo_id, pinned}]
+// Домены апел-судов территории: по ним сводка результата говорит про ДЕЛА
+// АПЕЛЛЯЦИИ, а не про иски банка (счётчики у каналов общие, смысл — разный).
+var impAppealDomains = {};
 var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
 var acRegion = null;           // весь region-блок cases.json — точечному добавлению
 var impPollTimer = null;
@@ -2925,6 +2931,12 @@ var impDetectedCaseLinks = 0;  // ссылок на карточки дел во
 // фактическую площадку дела импортёр берёт из href карточек (_stamp_court_ids),
 // а хост и delo_id у площадок совпадают.
 function impCourtKey(c) { return c.domain + "|" + String(c.srv_num || 1); }
+// Оператор по подписи выбирает, какой раздел сайта открывать: у апелляции своя
+// картотека (delo_id=5), и «Свердловский областной суд» без пометки читался бы
+// как суд 1-й инстанции.
+function impCourtLabel(c) {
+  return (c && c.name ? c.name : "") + (c && c.pinned ? " — апелляция" : "");
+}
 function impDomainOf(key) { return String(key || "").split("|")[0]; }
 // Ссылка «Открыть поиск по суду». srv_num обязателен: голая ссылка уводила
 // оператора на первую площадку домена, а часть судов реестра заведена ТОЛЬКО
@@ -2938,8 +2950,13 @@ function impCourtLink(key) {
     if (impCourtKey(impCourts[i]) === key) { c = impCourts[i]; break; }
     if (!c && impCourts[i].domain === dom) c = impCourts[i];
   }
+  // delo_id — у суда, а не константой: 1540005 это гражданские дела 1-й
+  // инстанции, а у апелляции раздел свой (5), и жёсткая константа уводила бы
+  // оператора в чужую картотеку.
   return "https://" + dom + "/modules.php?name=sud_delo&srv_num="
-    + encodeURIComponent(String((c && c.srv_num) || 1)) + "&delo_id=1540005&name_op=sf";
+    + encodeURIComponent(String((c && c.srv_num) || 1))
+    + "&delo_id=" + encodeURIComponent(String((c && c.delo_id) || 1540005))
+    + "&name_op=sf";
 }
 // Синхронизация ссылки «Открыть сайт суда» с выбранным судом. На верхнем
 // уровне, а не внутри loadImportCourts: её зовут change селекта, клик по
@@ -2969,12 +2986,27 @@ async function loadImportCourts() {
     const fi = (acRegion && Array.isArray(acRegion.fi_courts)) ? acRegion.fi_courts : [];
     wwSetRegionCourts(fi);
     const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
-    fi.forEach(function (c) {
+    // Апелляция под проверочным кодом (Свердловский облсуд с 25.08.2026) —
+    // такой же капчёвый суд, только раздел другой. Закреплена ПЕРВОЙ и вне
+    // фильтра «мои суды» (решение юриста): апел-суд на территории один на
+    // всех операторов, и попади он в чужую подсеть — дамп не сделал бы никто.
+    // ⚠️ В fi_courts её подмешивать нельзя: тот же массив кормит точечное
+    // добавление и пометку «лист не нужен», а они ссылки апелляции отвергают.
+    const ap = (acRegion && Array.isArray(acRegion.appeal_courts)) ? acRegion.appeal_courts : [];
+    const gatedAppeal = ap.filter(function (c) {
+      return c && c.search_gated && c.domain;
+    }).map(function (c) {
+      return { name: c.name, domain: c.domain, srv_num: c.srv_num || 1,
+               delo_id: c.delo_id, search_gated: true, pinned: true };
+    });
+    impAppealDomains = {};
+    ap.forEach(function (c) { if (c && c.domain) impAppealDomains[c.domain] = true; });
+    fi.concat(ap).forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
     });
     acFillCourts(fi);
     acUpdateState(); // ссылки могли ждать реестра для клиентской проверки
-    if (!gated.length) {
+    if (!gated.length && !gatedAppeal.length) {
       // Регион без капчёвых судов (ХМАО): дамповая часть не нужна, но
       // вкладка живёт — точечное добавление и общая история работают всем.
       var form = document.querySelector("#import .imp-form");
@@ -2998,10 +3030,10 @@ async function loadImportCourts() {
     // постоянные судебные присутствия (Пышма у Камышловского, Ачит у
     // Красноуфимского) — отдельные площадки того же сайта со своей
     // картотекой, и их дела не импортировал никто. Ключ строки — «домен|srv».
-    impCourts = gated.slice();
+    impCourts = gatedAppeal.concat(gated);
     const sel = document.getElementById("imp-court");
     sel.innerHTML = impCourts.map(function (c) {
-      return '<option value="' + escHtml(impCourtKey(c)) + '">' + escHtml(c.name) + '</option>';
+      return '<option value="' + escHtml(impCourtKey(c)) + '">' + escHtml(impCourtLabel(c)) + '</option>';
     }).join("");
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
     syncImportCourtLink();
@@ -3057,10 +3089,23 @@ function impSourceLabel(item) {
 //              рвётся молча в любом из трёх звеньев (jq → whitelist → сводка).
 //   problems — то, ради чего оператор возвращается к суду.
 //   skipped  — штатный отсев, читается как «так и должно быть».
+// Дамп апелляции (капчёвый апел-суд): счётчики у каналов ОБЩИЕ, а смысл
+// разный — «карточка не открылась» здесь значит «потеряно дело апелляции», а
+// не «иск банка». Отличаем по домену записи: реестр апел-судов территории
+// админка уже держит (impAppealDomains).
+function impIsAppeal(item) {
+  return !!(item && item.court_domain && impAppealDomains[item.court_domain]);
+}
 function impResultParts(item) {
   var parts = ["+" + (item.added || 0) + " в картотеку"];
   var problems = [];
   var skipped = [];
+  var isAp = impIsAppeal(item);
+  // Дело уехало наверх по УЖЕ известному нам делу 1-й инстанции: не новое,
+  // но и не «уже в базе» — апелляция добавлена в существующую запись.
+  if (item.linked) parts.push(nPlural(item.linked,
+    "дело связано с 1-й инстанцией", "дела связаны с 1-й инстанцией",
+    "дел связано с 1-й инстанцией"));
   if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
   if (item.promoted) parts.push(nPlural(item.promoted,
     "материал стал делом", "материала стали делами", "материалов стали делами"));
@@ -3089,7 +3134,8 @@ function impResultParts(item) {
   // Ручной запасной выход оставлен: Mac бывает выключен, а в пятницу вечером
   // ближайший слот — только в понедельник.
   if (item.fetch_fail) {
-    problems.push("⛔ " + item.fetch_fail + " исков банка не заведено "
+    problems.push("⛔ " + item.fetch_fail
+      + (isAp ? " дел апелляции не заведено " : " исков банка не заведено ")
       + "(карточка не открылась) — " + impRetryPromise(item)
       + "; если к вечеру не появятся, вставьте дамп заново");
   }
@@ -3432,10 +3478,17 @@ function renderImportFreshness(items, lastMap) {
     var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
     var key = impCourtKey(c);
     return { court: c, key: key, e: e, days: days, level: level,
-             mine: !hasMine || !!mine[key], trouble: impCardTrouble[c.domain] || null };
+             // Закреплённый суд (апелляция) считается «моим» у КАЖДОГО
+             // оператора: он один на территорию, и в чужой подсети остался бы
+             // без дампа вовсе.
+             mine: !!c.pinned || !hasMine || !!mine[key],
+             trouble: impCardTrouble[c.domain] || null };
   });
   // Просроченные и «ни разу» сверху, внутри уровня — самые давние первыми.
   function byQueue(a, b) {
+    // Закреплённые (апелляция) — всегда первыми, даже когда свежие: это
+    // отдельный раздел сайта, и в хвосте очереди о нём просто забывали бы.
+    if (!!a.court.pinned !== !!b.court.pinned) return a.court.pinned ? -1 : 1;
     if (a.level !== b.level) return b.level - a.level;
     return b.days - a.days;
   }
@@ -3470,6 +3523,7 @@ function renderImportFreshness(items, lastMap) {
     // Режим выбора: список идёт РЕЕСТРОМ (по алфавиту), а не рабочей очередью
     // — искать свой суд глазами проще по имени, чем по просрочке.
     var alpha = rows.slice().sort(function (a, b) {
+      if (!!a.court.pinned !== !!b.court.pinned) return a.court.pinned ? -1 : 1;
       return a.court.name.localeCompare(b.court.name, "ru");
     });
     el.innerHTML = alpha.map(freshEditRow).join("");
@@ -3550,7 +3604,7 @@ function freshRow(x) {
   return '<div class="health-row imp-fresh-row" role="button" tabindex="0"'
     + ' title="Выбрать этот суд в форме импорта" data-domain="' + escHtml(x.key) + '">'
     + '<span class="dot ' + dotCls + '"></span>'
-    + '<span class="health-name">' + escHtml(x.court.name) + '</span>'
+    + '<span class="health-name">' + escHtml(impCourtLabel(x.court)) + '</span>'
     + '<span class="run-meta imp-fresh-meta">' + note + '</span>'
     + trouble
     + '</div>';
@@ -3559,6 +3613,14 @@ function freshRow(x) {
 // нативно (клик по имени переключает галку) и не конфликтовало с делегатом
 // выбора суда — он в режиме правки выключен.
 function freshEditRow(x) {
+  // Закреплённый суд из набора не выключается: снявший его оператор перестал
+  // бы видеть апелляцию совсем, а ведёт её территория, а не человек.
+  if (x.court.pinned) {
+    return '<div class="health-row imp-fresh-row is-edit">'
+      + '<span class="dot dot-green"></span>'
+      + '<span class="health-name">' + escHtml(impCourtLabel(x.court)) + '</span>'
+      + '<span class="run-meta">всегда в очереди</span></div>';
+  }
   return '<label class="health-row imp-fresh-row is-edit">'
     + '<input type="checkbox" class="imp-my-box" data-key="' + escHtml(x.key) + '"'
     + (myCourts()[x.key] ? " checked" : "") + ">"

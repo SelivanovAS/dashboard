@@ -61,9 +61,12 @@ class TestRegionConfigDerived:
         и ссылки апелляции/кассации)."""
         info = get_region("hmao").public_info()
         assert info["code"] == "hmao"
+        # search_gated/srv_num — с 25.08.2026: капча бывает и на апелляции,
+        # и оттуда же строится dropdown дампов админки (у ХМАО апелляция
+        # открыта — флаг False).
         assert info["appeal_courts"] == [
             {"name": "Суд ХМАО-Югры", "domain": "oblsud--hmao.sudrf.ru",
-             "delo_id": 5},
+             "delo_id": 5, "search_gated": False, "srv_num": 1},
         ]
         assert info["cassation"]["domain"] == "7kas.sudrf.ru"
         assert info["cassation"]["new"] == 2800001

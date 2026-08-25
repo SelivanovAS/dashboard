@@ -222,6 +222,16 @@ class TestDriverWiring:
         # Тихий выход по отсутствию настроек Worker'а обязан остаться.
         assert "url/owner_secret" in text
 
+    def test_gated_count_includes_appeal_courts(self):
+        """С 25.08.2026 проверочный код бывает и на АПЕЛЛЯЦИИ (Свердловский
+        облсуд). Территория, где закрыта только она, при счёте по одной
+        1-й инстанции выглядела бы «без капчёвых судов» — и очередь молча
+        перестала бы ждать дампы."""
+        text = _read_repo(IMPORTER)
+        block = text.split("GATED=", 1)[1][:400]
+        assert "appeal_courts" in block, (
+            "счёт капчёвых судов снова только по 1-й инстанции")
+
     def test_batch_channel_is_wired(self):
         """Канал пачек: своё задание из KV, свой скрипт, свой общий пейлоад."""
         text = _read_repo(IMPORTER)

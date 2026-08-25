@@ -102,6 +102,13 @@ from court_monitor.netutil import (
     fetch_card_checked, fetch_page, mark_last_fetch_semantic,
     polite_delay, run_deadline_reached, session, start_run_deadline,
 )
+# Конвертеры строки выдачи апелляции живут в общем модуле (зеркало
+# bank_intake): их зовёт и импортёр дампов капчёвого апел-суда, а тянуть
+# в scripts/*.py весь runs.py (дайджест + доставка) нельзя. Прежние
+# приватные имена ре-экспортируются ниже — вызовы и патчи тестов целы.
+from court_monitor.appeal_intake import (
+    appeal_case_to_row, appeal_row_to_json_case, enrich_appeal_row_from_card,
+)
 from court_monitor.parsing import (
     parse_case_card, parse_search_page, parse_first_instance_search,
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
@@ -251,29 +258,8 @@ def _card_breaker_alert_lines(host_names: dict[str, str]) -> list[str]:
     return lines
 
 
-def _enrich_appeal_row_from_card(nc: dict, card_info: dict) -> str:
-    """Обогатить CSV-строку апел. дела данными его карточки (parse_case_card).
-
-    Общий код поиска апелляции и целевого дослинка (relink_awaiting_appeal).
-    Возвращает «Номер дела 1 инстанции» с карточки ("" — суд ещё не проставил).
-    """
-    _warn_if_card_degraded(card_info, nc["Номер дела"])
-    nc["Последнее событие"] = card_info.get("Последнее событие", "")
-    nc["Дата события"] = card_info.get("Дата события", "")
-    nc["Время заседания"] = card_info.get("Время заседания", "")
-    nc["Статус"] = card_info.get("Статус", "В производстве")
-    nc["Результат"] = card_info.get("Результат", "")
-    nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
-    if card_info.get("Судья 1 инстанции"):
-        nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
-    if card_info.get("Судья-докладчик"):
-        nc["Судья-докладчик"] = card_info["Судья-докладчик"]
-    # Номер 1-й инст. — и В СТРОКУ (13.08.2026): секция «Новые дела»
-    # дайджеста печатает его в шапке дела, юрист сразу видит, какое дело
-    # поехало наверх. В CSV колонка не уедет (CSV_COLUMNS фиксирован,
-    # extrasaction="ignore"), а digest-контекст и replay ключ сохранят.
-    nc["Номер дела 1 инстанции"] = card_info.get("Номер дела 1 инстанции", "")
-    return card_info.get("Номер дела 1 инстанции", "")
+# Ре-экспорт под прежним приватным именем (тело — в appeal_intake.py).
+_enrich_appeal_row_from_card = enrich_appeal_row_from_card
 
 
 def _courts_look_same(fi_court: str, row_court: str) -> bool:
@@ -295,6 +281,7 @@ def relink_awaiting_appeal(
     csv_existing: set,
     appeal_new_cases_csv: list[dict],
     appeal_fi_numbers: dict[tuple[str, str], str],
+    skip_domains: set[str] | None = None,
 ) -> int:
     """Целевой дослинк «застрявших» awaiting_appeal с апелляцией.
 
@@ -316,6 +303,13 @@ def relink_awaiting_appeal(
     Найденные дела вливаются ШТАТНЫМ путём: строка → appeal_new_cases_csv,
     номер 1-й инст. → appeal_fi_numbers — дальше их подхватят
     _apel_csv_row_to_json_case и link_cases, как дела из обычного поиска.
+
+    skip_domains — апел-суды, чей поиск в ЭТОМ прогоне оказался за проверочным
+    кодом (Свердловский облсуд с 25.08.2026). Целевой запрос идёт той же
+    поисковой формой, что и обычный поиск, — под кодом он вернёт ту же
+    страницу-капчу, поэтому кандидатов таких судов пропускаем БЕЗ HTTP.
+    Связку по ним делает дамп выдачи (scripts/import_search_dump.py).
+
     Возвращает число дослинкованных дел.
     """
     candidates = []
@@ -343,12 +337,16 @@ def relink_awaiting_appeal(
         f"направлено в апел. суд, но карточка апелляции ещё не найдена"
     )
     found = 0
+    gated_skipped = 0
     for c in candidates:
         fi = c.get("first_instance") or {}
         fi_num = _bare_case_number(c.get("id") or "")
         if not fi_num:
             continue
         ap_court = appeal_court_for_fi_domain(fi.get("court_domain") or "")
+        if skip_domains and ap_court.domain in skip_domains:
+            gated_skipped += 1
+            continue
         polite_delay()
         html = fetch_page(
             ap_court.search_by_fi_number_url(fi_num),
@@ -395,6 +393,12 @@ def relink_awaiting_appeal(
                 f"({shorten_court_name(ap_court.name)}): дослинковано"
             )
             break
+    if gated_skipped:
+        log.info(
+            f"Дослинк апелляции: {gated_skipped} "
+            f"{plural_ru(gated_skipped, 'дело', 'дела', 'дел')} пропущено — "
+            f"поиск апел. суда за проверочным кодом, связку сделает дамп выдачи"
+        )
     if found:
         log.info(
             f"Дослинк апелляции: найдено {found} "
@@ -1408,78 +1412,8 @@ def main():
 # (18.08.2026): правило стало общим с импортёром дампов — см. импорт-алиас выше.
 
 
-def _apel_csv_row_to_json_case(
-    row: dict,
-    fi_number_lookup: dict[tuple[str, str], str] | None = None,
-) -> dict:
-    """Конвертировать CSV-строку апел. дела (после обогащения parse_case_card)
-    в JSON-структуру для cases.json. Без этой конверсии новое апел. дело
-    оседает только в CSV: link_cases ищет апел. в существующем JSON-индексе
-    и молча пропускает то, чего там ещё нет.
-
-    fi_number_lookup — словарь {(домен_апел_суда, номер_апелляции) →
-    номер_1_инст}, который main_json собирает по результатам парсинга апел.
-    карточек (ключ составной: номера 33-… между двумя апел-судами региона не
-    уникальны). Если запись есть, кладём её в first_instance.case_number сразу,
-    чтобы новое дело с самого начала имело корректный якорь для
-    link_cassation_cases (иначе кассация на 7kas не находит существующее дело
-    по `fi_case_number` и создаёт двойник через discovery — см. кейс
-    33-1643/2026 ↔ 8Г-7248/2026). Без словаря — поведение прежнее (`""`).
-
-    Суд апелляции — из сервисного ключа строки `_appeal_domain` (проставляет
-    поиск апелляции); без него — первый апел-суд региона (legacy)."""
-    case_num = (row.get("Номер дела") or "").strip()
-    ap_court = appeal_court_by_domain(row.get("_appeal_domain"))
-    fi_case_number = ""
-    if fi_number_lookup and case_num:
-        fi_case_number = (
-            fi_number_lookup.get((ap_court.domain, case_num)) or ""
-        ).strip()
-    return {
-        "id": case_num,
-        "current_stage": "appeal",
-        "plaintiff": row.get("Истец", ""),
-        "defendant": row.get("Ответчик", ""),
-        "category": row.get("Категория", ""),
-        "bank_role": row.get("Роль банка", ""),
-        "notes": row.get("Заметки", ""),
-        "first_instance": {
-            "case_number": fi_case_number,
-            "court": row.get("Суд 1 инстанции", ""),
-            "court_domain": "",
-            "judge": row.get("Судья 1 инстанции", ""),
-            "filing_date": "",
-            "status": "",
-            "result": "",
-            "last_event": "",
-            "event_date": "",
-            "hearing_date": "",
-            "hearing_time": "",
-            "link": "",
-            "act_published": False,
-            "act_date": "",
-            "events": [],
-        },
-        "appeal": {
-            "case_number": case_num,
-            "court": ap_court.name,
-            "court_domain": ap_court.domain,
-            "delo_id": ap_court.delo_id,
-            "judge_reporter": row.get("Судья-докладчик", ""),
-            "filing_date": row.get("Дата поступления", ""),
-            "status": row.get("Статус", "В производстве"),
-            "result": row.get("Результат", ""),
-            "last_event": row.get("Последнее событие", ""),
-            "event_date": row.get("Дата события", ""),
-            "hearing_date": row.get("Дата заседания", ""),
-            "hearing_time": row.get("Время заседания", ""),
-            "link": row.get("Ссылка", ""),
-            "act_published": row.get("Акт опубликован", "Нет") == "Да",
-            "act_date": row.get("Дата публикации акта", ""),
-            "appellant": row.get("Апеллянт", ""),
-            "events": [],
-        },
-    }
+# Ре-экспорт под прежним приватным именем (тело — в appeal_intake.py).
+_apel_csv_row_to_json_case = appeal_row_to_json_case
 
 
 def main_backfill_appeal_anchors():
@@ -1941,11 +1875,47 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
         # к подтяжкам на случай ручной правки файла.
         if lifecycle.is_bank_plaintiff_track(c):
             continue
+        # Дела АПЕЛЛЯЦИИ (дамп капчёвого апел-суда, 25.08.2026) — свой канал
+        # announce_imported_appeal_cases: секция «📥 Новые иски» рендерится по
+        # блоку first_instance, а у дела «с апелляции» он стаб (ни суда, ни
+        # события, ни ссылки) — строка вышла бы пустой. Импорт 1-й инстанции
+        # сюда доходит всегда: link_cases стоит НИЖЕ этого блока, и стадию
+        # `appeal` дело получает уже после анонса.
+        if c.get("current_stage") == "appeal":
+            continue
         imp = c.get("import")
         if isinstance(imp, dict) and not imp.get("announced"):
             imp["announced"] = True
             to_announce.append(c)
     return to_announce
+
+
+def announce_imported_appeal_cases(cases: list[dict]) -> list[dict]:
+    """Дела апелляции, заведённые дампом между прогонами, → строки к анонсу.
+
+    Зеркало announce_imported_cases для второго капчёвого канала: поиск
+    Свердловского облсуда закрыт проверочным кодом с 25.08.2026, дела заводит
+    дамп выдачи, и без этого блока они заходили бы в картотеку «тихо».
+    Решение юриста: объявлять РОВНО ОДИН РАЗ, в апелляционной секции
+    «📥 Новые дела».
+
+    Возвращает СТРОКИ выдачи (appeal_case_to_row), а не дела: секция дайджеста
+    рендерится по строкам. Дела, приклеенные импортёром к уже известной
+    1-й инстанции, сюда не попадают вовсе: link_cases вливает апелляцию в
+    запись 1-й инстанции, а сироту с блоком `import` удаляет — объявлять
+    нечего и не нужно (наверх уехало известное дело, «новым» оно не стало).
+    """
+    rows: list[dict] = []
+    for c in cases:
+        if c.get("current_stage") != "appeal":
+            continue
+        if lifecycle.is_bank_plaintiff_track(c):
+            continue
+        imp = c.get("import")
+        if isinstance(imp, dict) and not imp.get("announced"):
+            imp["announced"] = True
+            rows.append(appeal_case_to_row(c))
+    return rows
 
 
 def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
@@ -3164,6 +3134,12 @@ def main_json():
     # двумя апел-судами региона (Свердловский облсуд + Суд ЯНАО) НЕ уникальны —
     # голый номер дал бы коллизию связки (link_cases).
     appeal_fi_numbers: dict[tuple[str, str], str] = {}
+    # Апел-суды, чей поиск В ЭТОМ ПРОГОНЕ оказался за проверочным кодом —
+    # ЛЮБЫЕ, помеченные и нет: дослинк ниже ходит той же поисковой формой,
+    # и под кодом он бесполезен в обоих случаях (флаг решает только,
+    # поднимать ли тревогу). Гейт по ФАКТУ, а не по конфигу: сняли код —
+    # дослинк заработает тем же прогоном, без коммита и деплоя.
+    appeal_search_gated_now: set[str] = set()
 
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
@@ -3201,7 +3177,21 @@ def main_json():
             not search_cases and detect_captcha_challenge(search_html)
         )
         if _ap_search_captcha:
-            fi_challenge[_ap_court.domain] = f"Апелляция ({_ap_court.name})"
+            appeal_search_gated_now.add(_ap_court.domain)
+            if _ap_court.search_gated:
+                # Код здесь ОЖИДАЕМ (см. CourtConfig.search_gated у апелляции):
+                # тревогу не поднимаем и ноль в журнал здоровья не пишем —
+                # иначе детектор молчаливой поломки каждое утро объявлял бы
+                # штатный режим аварией. Дела заводит дамп выдачи.
+                health_obs[hk] = None
+                log.info(
+                    f"Апелляция ({shorten_court_name(_ap_court.name)}): поиск "
+                    f"за проверочным кодом — штатный режим, дела заводит дамп "
+                    f"выдачи (секция «Импорт» админки)"
+                )
+            else:
+                # Новый суд под кодом — это авария: пусть кричит.
+                fi_challenge[_ap_court.domain] = f"Апелляция ({_ap_court.name})"
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности →
         # карточки апел-суда не запрашиваем (пре-открытие до первой траты).
         _ap_search_outage = (
@@ -3240,7 +3230,11 @@ def main_json():
             f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
         )
 
-        if not search_cases and csv_active_count > 0:
+        # ⚠️ Гейт по (капча + флаг): у помеченного суда ноль строк объяснён
+        # проверочным кодом, и ежедневный алярм только приучал бы его
+        # игнорировать. Любой другой ноль по-прежнему кричит.
+        if (not search_cases and csv_active_count > 0
+                and not (_ap_search_captcha and _ap_court.search_gated)):
             warn = (
                 f"⚠️ Парсинг апелляции ({_ap_court.name}) вернул 0 дел, "
                 f"но в CSV {csv_active_count} активных."
@@ -3276,7 +3270,8 @@ def main_json():
     # 1-й инст. → результат вливается в appeal_new_cases_csv/appeal_fi_numbers
     # и дальше идёт штатным путём link_cases.
     relink_awaiting_appeal(
-        cases, csv_existing, appeal_new_cases_csv, appeal_fi_numbers
+        cases, csv_existing, appeal_new_cases_csv, appeal_fi_numbers,
+        skip_domains=appeal_search_gated_now,
     )
 
     timings["appeal_new"] = time.perf_counter() - t0
@@ -5620,6 +5615,24 @@ def main_json():
         apel_new_json = [_apel_csv_row_to_json_case(r, appeal_fi_numbers) for r in appeal_new_cases_csv]
         cases = apel_new_json + cases
         log.info(f"Добавлено {len(apel_new_json)} апел. дел в JSON")
+
+    # ── 6c. Анонс дел апелляции, заведённых дампом капчёвого апел-суда ──
+    # ⚠️ Блок стоит ЗДЕСЬ, а не рядом с 6a, по двум причинам, и обе ломаются
+    # при переносе: (1) выше по прогону строки appeal_new_cases_csv уже
+    # уехали в CSV (`csv_cases = appeal_new_cases_csv + csv_cases`, фаза 4a) —
+    # значит дописывать их к списку безопасно, второго ряда в CSV дело не
+    # получит; (2) блок 6b выше конвертирует ЭТОТ ЖЕ список в JSON-дела, а
+    # импортированные дела в cases уже лежат — попади они в список раньше,
+    # получили бы полноценный дубль записи.
+    apel_imported_new = announce_imported_appeal_cases(cases)
+    if apel_imported_new:
+        log.info(
+            f"Дела апелляции из дампа к анонсу в дайджесте: "
+            f"{len(apel_imported_new)} "
+            f"({', '.join(r['Номер дела'] for r in apel_imported_new[:5])}"
+            f"{'…' if len(apel_imported_new) > 5 else ''})"
+        )
+        appeal_new_cases_csv = appeal_new_cases_csv + apel_imported_new
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию

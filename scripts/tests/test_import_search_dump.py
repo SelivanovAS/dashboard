@@ -824,16 +824,22 @@ class TestWorkflowWiring:
 
     def test_bank_track_wiring(self):
         """Проводка ветки истцовых строк: BANK_TRACK из Variables, таймаут
-        с запасом на карточки, bank-файлы в коммите, added_bank в журнале.
+        с запасом на карточки, файлы данных в коммите, added_bank в журнале.
         Любой из четырёх пропусков ломает канал молча: флаг не доезжает /
         джоб отстреливается на 100 карточках / данные трека не коммитятся /
-        оператор не видит «+N в трек» в админке."""
+        оператор не видит «+N в трек» в админке.
+
+        ⚠️ Файлы в коммите проверяются ЧЕРЕЗ ОБЩИЙ СКРИПТ, а не перечнем:
+        25.08.2026 ручной список уже стал неполон (ветка апелляции пишет ещё и
+        CSV), и это ровно тот класс поломок, ради которого ops/stage_data_files.sh
+        и заведён — пути он спрашивает у court_monitor.config. Полноту самого
+        скрипта стережёт scripts/tests/test_data_files_staged.py."""
         yml = _read_repo(".github/workflows/import_cases.yml")
         assert "BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}" in yml
         assert "timeout-minutes: 45" in yml
-        for f in ("data/cases_bank.json", "data/cases_bank_events.json",
-                  "data/.bank_intake_seen.json"):
-            assert f in yml, f"{f} не попадает в commit-шаг import_cases.yml"
+        assert "bash ops/stage_data_files.sh" in yml, (
+            "commit-шаг импорта обязан ставить файлы общим скриптом — ручной "
+            "перечень разъезжается молча")
         assert _jq_has_counter(_read_repo(IMPORT_BODY_JQ), "added_bank")
 
     def test_bank_counters_reach_operator(self):

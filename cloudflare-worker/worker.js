@@ -1501,6 +1501,9 @@ async function handleImportResult(request, env) {
                      // import_cases.yml — что не перечислено там, сюда не доедет.
                      "excluded_result", "excluded_writ", "already_spent",
                      "seen_cached", "bank_capped", "fetch_fail",
+                     // ветка апелляции (дамп капчёвого апел-суда, 25.08.2026):
+                     // дела, приклеенные к известной 1-й инстанции.
+                     "linked",
                      // счётчики точечного добавления (kind:"case").
                      // ⚠️ fetch_error — не косметика: по нему очередь резерва
                      // (ops/mac-local-run/import_queue.jq) узнаёт пачку,
