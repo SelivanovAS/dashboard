@@ -22,6 +22,8 @@
 # вручную:
 #   bash ops/mac-local-run/parse_and_push.sh [путь-к-клону]
 #   bash ops/mac-local-run/parse_and_push.sh --check   # только диагностика
+#   bash ops/mac-local-run/parse_and_push.sh [клон] --deliver-pending
+#       # доставить свежий pending-контекст без пробы судов и без парсинга
 # =============================================================================
 
 # ── Аргументы ────────────────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ CHECK_ONLY=0
 FORCE=0
 ANYWHERE=0
 IGNORE_CALENDAR=0
+DELIVER_PENDING_ONLY=0
 REPO_ARG=""
 for arg in "$@"; do
   case "$arg" in
@@ -44,6 +47,10 @@ for arg in "$@"; do
     # прогнать?») — зеркало галки ignore_calendar облачной админки. Календарь
     # решает Python: здесь только проводка env для run_parse.py.
     --ignore-calendar) IGNORE_CALENDAR=1 ;;
+    # Служебная фаза родительского parse_all.sh после wait обеих территорий:
+    # ни маршрутов, ни канареек, ни run_parse.py — только pending-контекст через
+    # ту же exact-once доставочную транзакцию, что и обычный финиш.
+    --deliver-pending) DELIVER_PENDING_ONLY=1 ;;
     -*)      echo "неизвестный ключ: $arg" >&2; exit 2 ;;
     # ПЕРВЫЙ позиционный побеждает: parse_all.sh передаёт путь клона первым
     # аргументом и добавляет свои «$@» следом — если бы побеждал последний,
@@ -52,6 +59,11 @@ for arg in "$@"; do
     *)       [ -n "$REPO_ARG" ] || REPO_ARG="$arg" ;;
   esac
 done
+if [ "$DELIVER_PENDING_ONLY" = "1" ] \
+  && { [ "$CHECK_ONLY" = "1" ] || [ "$FORCE" = "1" ]; }; then
+  echo "--deliver-pending нельзя совмещать с --check или --force" >&2
+  exit 2
+fi
 
 # ── Общий слой сети Сбера (маршруты, преflight, ssh-адрес) ───────────────────
 # Тот же файл подключает import_dumps.sh: копия преflight'а во втором скрипте
@@ -316,8 +328,8 @@ reconcile_parse_transaction() {
   log "Startup parse-txn recovery: ${result:-завершён}"
 }
 
-# ЕДИНСТВЕННАЯ воронка двух доставочных веток: обычный финиш парсинга и
-# доставка накопленного контекста, когда канарейки судов молчат.
+# ЕДИНСТВЕННАЯ воронка трёх доставочных веток: обычный финиш парсинга,
+# доставка накопленного при мёртвых канарейках и финальный sweep родителя.
 deliver_and_push() {  # $1 = что доставляем (для лога)
   local purpose="$1" delivery_id pre_sha mark_output mark_rc diff_rc marker_sha
 
@@ -392,6 +404,33 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
   return 0
 }
 
+prepare_git_transport() {
+  # origin у клона — https, учётных данных на машине нет («could not read
+  # Username»), а SSH:22 к github.com в этой сети закрыт. Единственный рабочий
+  # путь — ssh.github.com:443; URL выводим из origin, чтобы форк и эталон
+  # обслуживались одним кодом.
+  GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
+  export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
+  log "git через $GIT_URL"
+}
+
+sync_git_and_delivery_state() {
+  prepare_git_transport
+
+  # Незавершённую доставку доводим ДО pull и дневного гейта. Иначе локальный
+  # delivered_at после SIGKILL заставил бы gate молча пропустить день, хотя
+  # marker не дошёл до GitHub. --check остаётся строго read-only.
+  if [ "$CHECK_ONLY" != "1" ]; then
+    reconcile_delivery_transaction
+  fi
+
+  # Подтягиваем replay-коммиты GitHub. При --check репозиторий не трогаем:
+  # rebase с autostash — уже изменение рабочего дерева.
+  if [ "$CHECK_ONLY" != "1" ] && ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
+    die "git pull --rebase не удался (см. лог)"
+  fi
+}
+
 # ── Один экземпляр за раз ─────────────────────────────────────────────────────
 mkdir -p "$LOG_DIR"
 # Обычный mkdir-lock после SIGKILL/потери питания остаётся навсегда и
@@ -427,6 +466,45 @@ if [ "$CHECK_ONLY" != "1" ]; then
   reconcile_parse_transaction
 fi
 
+# ── Финальная доставка родителя: БЕЗ судов и БЕЗ повторного парсинга ──────────
+# parse_all.sh зовёт этот режим только после wait обеих территорий. Сегодняшний
+# инцидент: Урал закончил до 08:45 и оставил черновик, ХМАО держал единственный
+# LaunchAgent занятым после 08:45, поэтому отдельный календарный слот не встал в
+# очередь. Здесь мы подтягиваем remote, проверяем свежий pending-контекст и
+# пропускаем его через СУЩЕСТВУЮЩИЙ deliver_and_push. Вторая реализация
+# delivered_at/marker/push запрещена.
+if [ "$DELIVER_PENDING_ONLY" = "1" ]; then
+  if ! cm_delivery_window_open; then
+    log "Delivery-sweep: окно 08:45 ещё не открыто — без действий"
+    exit 0
+  fi
+
+  sync_git_and_delivery_state
+  if CLOUD_STATUS=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --report 2>/dev/null); then
+    log "Delivery-sweep: дайджест уже отправлен ($CLOUD_STATUS) — без действий"
+    exit 0
+  fi
+  if ! "$PYTHON" ops/mac-local-run/cloud_run_ok.py --has-pending >/dev/null 2>&1; then
+    log "Delivery-sweep: свежего pending-контекста нет (${CLOUD_STATUS:-статус не прочитался})"
+    exit 0
+  fi
+
+  # Pending обязан уже входить в черновой commit данных. Локально изменённый
+  # контекст означал бы, что фаза 1 не завершилась; marker без её данных мог бы
+  # запустить дайджест по состоянию, которого ещё нет на GitHub. Локальный
+  # ЧИСТЫЙ, но ещё не запушенный commit допустим: marker-push доставит оба.
+  CONTEXT_STATE=$(git status --porcelain -- "$DELIVERY_CONTEXT_PATH") \
+    || die "delivery-sweep не смог проверить состояние контекста"
+  [ -z "$CONTEXT_STATE" ] \
+    || die "delivery-sweep отказался от локально незафиксированного контекста"
+
+  log "Delivery-sweep: найден свежий pending-контекст — отправляем без парсинга"
+  deliver_and_push "финальный sweep после завершения территорий"
+  notify "Дайджест отправляется ($(basename "$REPO"))"
+  log "Готово"
+  exit 0
+fi
+
 # ── Preflight: мы в сети Сбера? ──────────────────────────────────────────────
 # Признак — шлюз Сбера присутствует среди default-маршрутов (в т.ч. когда VPN
 # поднят и добавляет свой второй default). Если нет — мы не в офисной сети,
@@ -450,29 +528,7 @@ else
 fi
 
 start_pusher
-
-# ── Адрес для git по ssh:443 ─────────────────────────────────────────────────
-# origin у клона — https, учётных данных на машине нет («could not read
-# Username»), а SSH:22 к github.com в этой сети закрыт. Единственный рабочий
-# путь — ssh.github.com:443; URL выводим из origin, чтобы форк и эталон
-# обслуживались одним кодом.
-GIT_URL=$(cm_git_ssh_url) || die "не смог вывести ssh-адрес из origin ($GIT_URL)"
-export GIT_SSH_COMMAND="$(cm_git_ssh_command)"
-log "git через $GIT_URL"
-
-# ── Довести незавершённую доставку ДО pull и дневного гейта ──────────────────
-# Иначе локальный delivered_at после SIGKILL заставил бы gate молча пропустить
-# день, хотя marker не дошёл до GitHub. --check остаётся строго read-only.
-if [ "$CHECK_ONLY" != "1" ]; then
-  reconcile_delivery_transaction
-fi
-
-# ── Подтянуть вчерашние replay-коммиты GitHub (иначе push отклонят) ───────────
-# При --check репозиторий не трогаем вовсе: диагностика не должна двигать
-# рабочее дерево (rebase с autostash — уже изменение).
-if [ "$CHECK_ONLY" != "1" ] && ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
-  die "git pull --rebase не удался (см. лог)"
-fi
+sync_git_and_delivery_state
 
 # ── Гейт «один дайджест в день»: дайджест уже отправлен? ─────────────────────
 # Решение юриста 20.08.2026 + окно доставки 21.08.2026: слоты 06:00–08:45
@@ -531,11 +587,6 @@ fi
 # дайджест не раньше 08:45»): до 08:45 доставки НЕ БЫВАЕТ, даже когда попытка
 # удачна, — иначе слот 06:30 разослал бы дайджест в 07:00. Первый слот,
 # ЗАВЕРШИВШИЙСЯ после 08:45, отправляет всё накопленное с 06:00.
-DELIVERY_WINDOW_MIN=525   # 08:45 местного: раньше дайджест не уходит
-delivery_window_open() {
-  [ $(( 10#$(date +%H) * 60 + 10#$(date +%M) )) -ge "$DELIVERY_WINDOW_MIN" ]
-}
-
 probe_failed() {  # $1 = диагностика канареек; наружу не возвращается
   local diag="$1" marker
   log "Канарейки не ответили: $diag"
@@ -550,7 +601,7 @@ probe_failed() {  # $1 = диагностика канареек; наружу �
   if [ "$FORCE" = "1" ]; then
     die "суды не отвечают ($diag) — парсинг пропущен"
   fi
-  if delivery_window_open; then
+  if cm_delivery_window_open; then
     if "$PYTHON" ops/mac-local-run/cloud_run_ok.py --has-pending >/dev/null 2>&1; then
       # Утро что-то накопило черновыми попытками — в окне доставки отправляем
       # это без парсинга: доставочный коммит несёт один штамп delivered_at.
@@ -719,7 +770,7 @@ RUN_OK=0
 RUN_WHY=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --run-complete 2>/dev/null) && RUN_OK=1
 DELIVER=0
 [ "$FORCE" = "1" ] && DELIVER=1
-delivery_window_open && DELIVER=1
+cm_delivery_window_open && DELIVER=1
 
 # ── Фаза 1: данные ───────────────────────────────────────────────────────────
 # Сначала публикуем ДАННЫЕ и только потом, отдельным коммитом, штамп доставки.

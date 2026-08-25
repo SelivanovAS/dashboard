@@ -9,7 +9,8 @@
 #
 # Домены регионов могут резолвиться в один IP. Поэтому parse_all готовит
 # маршруты последовательно ДО детей и передаёт CM_COURT_ROUTES_READY=1.
-# Импорты начинаются только после wait обоих парсеров и идут последовательно.
+# После wait обоих парсеров родитель, если уже 08:45, делает delivery-sweep по
+# контекстам БЕЗ повторного парсинга. Только затем начинаются импорты.
 #
 # Мгновенный откат:
 #   CM_PARALLEL_TERRITORIES=0 bash ops/mac-local-run/parse_all.sh ...
@@ -21,6 +22,15 @@
 # --check намеренно последовательный и без десятиминутной задержки.
 # =============================================================================
 set -u
+
+# launchd запускает календарный слот, но сам по себе не держит Mac бодрствующим.
+# Assertion живёт ровно пока жив этот родительский драйвер: экран может погаснуть,
+# а idle sleep не прервёт парсеры, их десятиминутный stagger и последующие импорты.
+# На Linux/другой системе без штатного macOS utility поведение не меняется.
+if [ -x /usr/bin/caffeinate ]; then
+  /usr/bin/caffeinate -i -w "$$" >/dev/null 2>&1 &
+  echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: idle sleep заблокирован до конца прогона"
+fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER="${CM_WORKER:-$HERE/parse_and_push.sh}"
@@ -69,6 +79,7 @@ parser_repos=()
 parser_pids=()
 parser_pid_repos=()
 shared_court_ips=""
+delivery_sweep_ran=0
 
 driver_log() { echo "  маршруты: $*"; }
 
@@ -220,32 +231,57 @@ run_imports() {
   done
 }
 
-run_sequential() {
+run_sequential_parsers() {
   local repo
   for repo in "${valid_repos[@]}"; do
-    echo "  → $repo"
+    echo "  → $repo (последовательный парсер)"
     run_worker "$repo" "$@" || rc=1
-    echo "  → $repo (дампы)"
-    run_importer "$repo" "$@" \
-      || echo "  ПРЕДУПРЕЖДЕНИЕ: импорт дампов не доработал ($repo)"
+  done
+}
+
+run_delivery_sweep() {
+  local repo
+  [ "$CHECK_ONLY" = "1" ] && return 0
+  [ "$delivery_sweep_ran" = "1" ] && return 0
+  if ! cm_delivery_window_open; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: delivery-sweep пока не нужен — окно 08:45 не открыто"
+    return 0
+  fi
+
+  # Отмечаем попытку ДО обхода: второй вызов после импортов нужен только когда
+  # первый был раньше окна, а не как немедленный retry неясного git-исхода.
+  delivery_sweep_ran=1
+  echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: финальный delivery-sweep после всех парсеров"
+  for repo in "${valid_repos[@]}"; do
+    echo "  → $repo (pending-контекст, без парсинга)"
+    if ! run_worker "$repo" --deliver-pending; then
+      echo "  ОШИБКА: delivery-sweep не завершён ($repo)"
+      rc=1
+    fi
   done
 }
 
 if [ "${#valid_repos[@]}" -lt 2 ] \
   || [ "$PARALLEL" != "1" ] \
   || [ "$CHECK_ONLY" = "1" ]; then
-  run_sequential "$@"
+  run_sequential_parsers "$@"
 else
   order_parser_repos
   if prepare_shared_routes; then
     routes_ready=1
     run_parallel_parsers "$@"
-    run_imports "$@"
   else
     echo "  ПРЕДУПРЕЖДЕНИЕ: общие маршруты не подготовлены — последовательный fallback"
-    run_sequential "$@"
+    run_sequential_parsers "$@"
   fi
 fi
+
+# Главный sweep стоит сразу после barrier двух территорий, чтобы доставка не
+# зависела от очередей импорта. Повтор после импортов сработает только если
+# первый check был до 08:45, а за время импортов окно успело открыться.
+run_delivery_sweep
+run_imports "$@"
+run_delivery_sweep
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: готово (код $rc)"
 exit "$rc"

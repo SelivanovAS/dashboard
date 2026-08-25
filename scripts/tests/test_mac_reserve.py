@@ -185,6 +185,23 @@ class TestTerritories:
         assert 'CM_PARALLEL_STAGGER_SECONDS:-600' in driver
         assert 'CM_PARALLEL_FIRST_REGION:-sverdlovsk_yanao' in driver
 
+    def test_driver_prevents_idle_sleep_only_for_its_lifetime(self, driver):
+        """Календарный LaunchAgent может начать прогон и снова уснуть через
+        минуту. Штатный macOS assertion привязан к PID родителя: экран не
+        удерживается включённым, а после завершения драйвера assertion исчезает."""
+        assert '[ -x /usr/bin/caffeinate ]' in driver
+        assert '/usr/bin/caffeinate -i -w "$$" >/dev/null 2>&1 &' in driver
+        assert '/usr/bin/caffeinate -d' not in driver
+
+    def test_delivery_window_is_one_shared_policy(self, driver, worker, lib):
+        """Родитель и воркер обязаны видеть одну границу 08:45. Две копии
+        константы вернули бы сегодняшний класс инцидента при первом расхождении."""
+        assert 'CM_DELIVERY_WINDOW_MIN="${CM_DELIVERY_WINDOW_MIN:-525}"' in lib
+        assert "cm_delivery_window_open()" in lib
+        assert "cm_delivery_window_open" in driver
+        assert "cm_delivery_window_open" in worker
+        assert "DELIVERY_WINDOW_MIN=" not in _code(driver + worker)
+
     def test_shared_routes_are_prepared_before_parallel_workers(
         self, driver, worker, importer,
     ):
@@ -202,16 +219,24 @@ class TestTerritories:
 
     def test_parallel_workers_finish_before_any_import(self, driver):
         """Импорт тоже читает карточки и использует git/index клона: он
-        начинается только после wait всех территориальных парсеров."""
-        parallel = driver.index("run_parallel_parsers()")
-        wait_loop = driver.index('wait "${parser_pids[$i]}"', parallel)
-        imports = driver.index("run_imports()", wait_loop)
-        assert parallel < wait_loop < imports
+        начинается только после wait всех территориальных парсеров и финальной
+        проверки pending-контекстов."""
+        parallel_fn = driver[driver.index("run_parallel_parsers()"):
+                             driver.index("run_imports()")]
+        assert 'wait "${parser_pids[$i]}"' in parallel_fn
+        main = driver[driver.index('if [ "${#valid_repos[@]}"'):]
+        parallel = main.index('run_parallel_parsers "$@"')
+        sweep = main.index("run_delivery_sweep", parallel)
+        imports = main.index('run_imports "$@"', sweep)
+        assert parallel < sweep < imports
 
     def test_check_and_feature_flag_keep_sequential_fallback(self, driver):
         assert 'PARALLEL" != "1"' in driver
         assert 'CHECK_ONLY" = "1"' in driver
-        assert "run_sequential" in driver
+        assert "run_sequential_parsers" in driver
+        sweep = driver[driver.index("run_delivery_sweep()"):
+                       driver.index("\n}", driver.index("run_delivery_sweep()"))]
+        assert '[ "$CHECK_ONLY" = "1" ] && return 0' in sweep
 
     def test_parent_forwards_stop_to_parallel_children(self, driver):
         assert "stop_parallel_children" in driver
@@ -267,6 +292,8 @@ class TestTerritories:
             "CM_TEST_ROUTE_TRACE": str(route_trace),
             "CM_PARALLEL_TERRITORIES": "1",
             "CM_PARALLEL_STAGGER_SECONDS": "0",
+            # Этот тест только про union маршрутов: sweep проверяется ниже.
+            "CM_DELIVERY_WINDOW_MIN": "1440",
         })
         result = subprocess.run(
             ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
@@ -299,6 +326,10 @@ class TestTerritories:
         _write_executable(worker,
             "#!/bin/bash\n"
             'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'if [ "${2:-}" = "--deliver-pending" ]; then\n'
+            '  printf "sweep:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
+            '  exit 0\n'
+            'fi\n'
             'printf "parse-start:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
             'sleep 0.1\n'
             'printf "parse-end:%s\\n" "$region" >> "$CM_TEST_TRACE"\n',
@@ -321,6 +352,8 @@ class TestTerritories:
             # Маршрутная фаза тестируется контрактом выше; здесь проверяем
             # только оркестрацию процессов без sudo/DNS машины разработчика.
             "CM_COURT_ROUTES_READY": "1",
+            # Детерминированно открываем окно вместо зависимости от часов CI.
+            "CM_DELIVERY_WINDOW_MIN": "0",
         })
         result = subprocess.run(
             ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
@@ -335,7 +368,10 @@ class TestTerritories:
                             if line.startswith("import:"))
         parse_ends = [i for i, line in enumerate(lines)
                       if line.startswith("parse-end:")]
-        assert len(parse_ends) == 2 and max(parse_ends) < first_import
+        sweeps = [i for i, line in enumerate(lines) if line.startswith("sweep:")]
+        assert len(parse_ends) == 2 and len(sweeps) == 2
+        assert max(parse_ends) < min(sweeps) < first_import
+        assert {lines[i] for i in sweeps} == {"sweep:hmao", "sweep:sverdlovsk_yanao"}
         assert "порядок парсеров: sverdlovsk_yanao → hmao" in result.stdout
 
     def test_parallel_failure_does_not_cancel_the_other_territory(
@@ -354,6 +390,10 @@ class TestTerritories:
         _write_executable(worker,
             "#!/bin/bash\n"
             'region=$(tr -d "\\n" < "$1/REGION")\n'
+            'if [ "${2:-}" = "--deliver-pending" ]; then\n'
+            '  printf "sweep:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
+            '  exit 0\n'
+            'fi\n'
             'printf "parse-start:%s\\n" "$region" >> "$CM_TEST_TRACE"\n'
             'if [ "$region" = "sverdlovsk_yanao" ]; then exit 7; fi\n'
             'sleep 0.1\n'
@@ -375,6 +415,7 @@ class TestTerritories:
             "CM_PARALLEL_TERRITORIES": "1",
             "CM_PARALLEL_STAGGER_SECONDS": "0",
             "CM_COURT_ROUTES_READY": "1",
+            "CM_DELIVERY_WINDOW_MIN": "0",
         })
         result = subprocess.run(
             ["bash", os.path.join(RESERVE_DIR, "parse_all.sh")],
@@ -386,9 +427,11 @@ class TestTerritories:
         assert result.returncode == 1, result.stderr + result.stdout
         lines = trace.read_text(encoding="utf-8").splitlines()
         hmao_end = lines.index("parse-end:hmao")
+        sweeps = [i for i, line in enumerate(lines) if line.startswith("sweep:")]
         first_import = next(i for i, line in enumerate(lines)
                             if line.startswith("import:"))
-        assert hmao_end < first_import
+        assert len(sweeps) == 2
+        assert hmao_end < min(sweeps) < first_import
         assert sum(line.startswith("import:") for line in lines) == 2
         assert "завершился с кодом 7" in result.stdout
 
@@ -510,7 +553,7 @@ class TestCheckMode:
         assert gate < worker.index("run_parse.py >>")
         body = worker[worker.index("probe_failed()"):]
         body = body[:body.index("\n}")]
-        assert body.index('"$CHECK_ONLY" = "1"') < body.index("delivery_window_open"), \
+        assert body.index('"$CHECK_ONLY" = "1"') < body.index("cm_delivery_window_open"), \
             "--check в probe_failed обязан выходить ДО доставочной ветки"
 
     def test_does_not_touch_working_tree(self, worker):
