@@ -1427,10 +1427,8 @@ def bank_writ_awaited(fi: dict) -> bool:
     пометка юриста. Именно этот предикат гейтит очередь ожидания: напоминания
     дайджеста и штамп для фронта.
 
-    ⚠️ `bank_writ_expected` сознательно оставлен без пометки: он управляет ещё
-    и архивным окном `BANK_DENIED_ARCHIVE_DAYS`=30 (`_is_bank_track_archived`),
-    а юрист просил помеченное дело из картотеки не выдёргивать — оно должно
-    уйти в архив своим чередом, по потолку ожидания в 180 дней.
+    `bank_writ_expected` сознательно оставлен без пометки: это судебный факт,
+    а ручное закрытие хранится отдельно и аудируется по автору/дате.
     """
     return bank_writ_expected(fi) and not bank_writ_waived(fi)
 
@@ -1443,6 +1441,7 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     выдача), дело уходило бы в архив ровно в окне ожидания ИЛ.
 
     - признак жалобы/направления выше → не архивируем (дело покинет трек);
+    - ручная пометка «ИЛ не нужен» → архивируем сразу (решение 25.08.2026);
     - присоединено к другому делу: BANK_MERGED_ARCHIVE_DAYS (30) от даты
       определения — окно на отмену объединения (статус карточки при этом
       остаётся «В производстве», до общих веток дело бы не дошло);
@@ -1470,6 +1469,12 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     # BANK_DEFAULT_CANCEL_PENDING_MAX_DAYS внутри самого предиката.
     if default_cancellation_pending(fi):
         return False
+    # Ручное действие юриста — именно закрытие, а не просто подавление KPI:
+    # workflow переносит запись в bank-архив сразу, а этот гейт не даёт
+    # reactivate_bank_archived вернуть её на следующем регулярном прогоне.
+    # Жалобы и заявление об отмене проверены выше и имеют приоритет.
+    if bank_writ_waived(fi):
+        return True
     status = (fi.get("status") or "").strip()
     if fi.get("merged") or fi_is_merged(fi):
         anchor = (parse_date(fi.get("merged_at") or "")

@@ -591,9 +591,9 @@ a { color: var(--accent); }
 .health-note { color:var(--warning-fg); font-size:var(--fs-2xs); flex-shrink:0; }
 .health-more { color:var(--fg-3); font-size:var(--fs-xs); padding-top:8px; }
 
-/* Очередь ожидания ИЛ и пометка «лист не нужен» (21.08.2026). Строка —
-   номер, суд, срок ожидания, подсказка и выбор причины; помеченные лежат
-   свёрнутым списком ниже. */
+/* Закрытие дел, по которым ИЛ не нужен. Основной путь — ручная форма
+   «суд + номер»; список ниже содержит только редкие подсказки суда, а не
+   сотни строк всей очереди ожидания. */
 .ww-row { display:flex; align-items:baseline; gap:8px; padding:5px 0;
           border-bottom:1px solid var(--border); font-size:var(--fs-sm); }
 .ww-row:last-child { border-bottom:0; }
@@ -618,10 +618,26 @@ a { color: var(--accent); }
 .ww-row.is-waived .ww-court { color:var(--fg-3); }
 .ww-actions { display:flex; align-items:center; gap:10px; padding-top:10px;
               flex-wrap:wrap; }
+.ww-manual { padding:10px 0 12px; border-bottom:1px solid var(--divider); }
+.ww-manual-grid { display:grid; grid-template-columns:minmax(190px,1.5fr)
+                  minmax(130px,.9fr) minmax(180px,1.15fr) minmax(145px,.9fr);
+                  gap:8px; margin-top:9px; align-items:end; }
+.ww-manual-grid label { display:flex; flex-direction:column; gap:4px;
+                        min-width:0; color:var(--fg-3); font-size:var(--fs-xs); }
+.ww-manual-grid input, .ww-manual-grid select { width:100%; min-width:0; }
+.ww-hints-title { color:var(--fg-2); font-size:var(--fs-sm);
+                  font-weight:var(--fw-semibold); padding-top:11px; }
 .ww-modal-case { color:var(--fg-2); font-size:var(--fs-sm); margin-bottom:10px; }
 .ww-opt { display:block; padding:7px 0; font-size:var(--fs-sm); cursor:pointer; }
 .ww-opt input { margin-right:8px; }
 .ww-dlg { width:min(420px, calc(100vw - 32px)); }
+@media (max-width:900px) {
+  .ww-manual-grid { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:560px) {
+  .ww-manual-grid { grid-template-columns:1fr; }
+  .ww-manual .btn-primary { width:100%; }
+}
 
 /* Details-свёртки */
 details.fold { margin-top:8px; }
@@ -1135,21 +1151,46 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <div id="bank-parse-list" class="loading">Загрузка…</div>
         <div class="health-more" id="bank-parse-note"></div>
       </div>
-      <!-- Очередь ожидания ИЛ + пометка «лист не нужен» (21.08.2026).
-           Доступна обеим ролям: о добровольном погашении долга узнаёт тот,
-           кто ведёт дело. Список строится ЧТЕНИЕМ штампа writ_awaited_since —
-           своей копии предиката очереди в JS нет. -->
+      <!-- Ручное закрытие дел, по которым ИЛ не нужен. Доступно обеим ролям:
+           о добровольном погашении долга узнаёт тот, кто ведёт дело. Вся
+           очередь больше не выводится: остаются только подсказки суда. -->
       <div class="card" id="ww-card" style="display:none;">
         <div class="card-head">
-          <span class="card-title">Ожидание исполнительных листов</span>
+          <span class="card-title">Закрыть дело — ИЛ не нужен</span>
           <span class="run-meta" id="ww-meta"></span>
           <span class="spacer"></span>
           <span id="ww-badges"></span>
         </div>
+        <div class="ww-manual">
+          <div class="imp-hint">Выберите суд и введите номер дела. После подтверждения дело исчезнет из активной картотеки и перейдёт в архив; действие можно отменить ниже.</div>
+          <div class="ww-manual-grid">
+            <label>Суд
+              <select id="ww-court"><option value="">загружается…</option></select>
+            </label>
+            <label>Номер дела
+              <input type="text" id="ww-case" spellcheck="false" placeholder="2-1234/2026">
+            </label>
+            <label>Почему ИЛ не нужен
+              <select id="ww-reason">
+                <option value="debt_paid">долг погашен после решения</option>
+                <option value="not_requested">лист решили не запрашивать</option>
+                <option value="other">иное</option>
+              </select>
+            </label>
+            <label>Кто закрывает
+              <input type="text" id="ww-name" maxlength="60" placeholder="ваше имя">
+            </label>
+          </div>
+          <div class="ww-actions">
+            <button class="btn btn-primary" id="ww-manual-send" disabled>Закрыть и отправить в архив</button>
+            <span class="run-meta" id="ww-manual-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="ww-hints-title" id="ww-hints-title">Подсказки суда</div>
         <div id="ww-list" class="loading">Загрузка…</div>
         <div id="ww-waived-wrap"></div>
         <div class="ww-actions" id="ww-actions" style="display:none;">
-          <button class="btn btn-primary" id="ww-send" disabled>Отправить пометки</button>
+          <button class="btn btn-primary" id="ww-send" disabled>Закрыть выбранные</button>
           <button class="btn" id="ww-reset">Очистить</button>
           <span class="run-meta" id="ww-status"></span>
         </div>
@@ -1266,12 +1307,12 @@ ${IMPORT_SECTION}
      схлопывала суд и обрезала список). data-owner-only НЕТ — помечает и
      оператор. -->
 <dialog class="wl ww-dlg" id="ww-modal">
-  <div class="wl-head">Лист не нужен</div>
+  <div class="wl-head">Закрыть дело — ИЛ не нужен</div>
   <div class="ww-modal-case" id="ww-modal-case"></div>
   <div id="ww-modal-reasons"></div>
   <div class="wl-foot">
     <button class="btn-outline" type="button" id="ww-modal-cancel">Отмена</button>
-    <button class="btn-primary" type="button" id="ww-modal-ok">Пометить</button>
+    <button class="btn-primary" type="button" id="ww-modal-ok">Добавить к закрытию</button>
   </div>
 </dialog>
 <dialog class="wl" id="wl-modal" data-owner-only>
@@ -2926,6 +2967,7 @@ async function loadImportCourts() {
     // реестра (апелляция/кассация/чужой регион) и селект судов для номеров.
     acRegion = (j && j.region) || null;
     const fi = (acRegion && Array.isArray(acRegion.fi_courts)) ? acRegion.fi_courts : [];
+    wwSetRegionCourts(fi);
     const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
     fi.forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
@@ -3147,7 +3189,7 @@ function impResultHtml(item) {
   html += line("imp-sum-dim", "Пропущено:", g.skipped);
   return html;
 }
-// Сводка пометок «лист не нужен» (kind:"writ_waiver") — общий журнал с
+// Сводка закрытий «лист не нужен» (kind:"writ_waiver") — общий журнал с
 // дампами. До 23.08.2026 своей ветки не было вовсе: запись уходила в дамповую
 // и печатала «+0 в картотеку», хотя счётчики waived/updated/cleared доезжали
 // до KV полностью — рвалось только отображение.
@@ -3156,10 +3198,10 @@ function wwResultText(item) {
   if (item.status !== "done") return "";
   var parts = [];
   if (item.waived) parts.push(nPlural(item.waived,
-    "дело помечено", "дела помечено", "дел помечено"));
-  if (item.updated) parts.push(item.updated + " с обновлённой причиной");
+    "дело закрыто", "дела закрыты", "дел закрыто"));
+  if (item.updated) parts.push(item.updated + " закрытых с обновлённой причиной");
   if (item.cleared) parts.push(nPlural(item.cleared,
-    "пометка снята", "пометки сняты", "пометок снято"));
+    "закрытие отменено", "закрытия отменены", "закрытий отменено"));
   if (item.not_found) parts.push(item.not_found + " не найдено в треке");
   if (item.refused) parts.push(item.refused + " отказано");
   return parts.length ? parts.join(" · ") : "без изменений";
@@ -4103,21 +4145,25 @@ function acUpdateState() {
 }
 
 
-// ── Очередь ожидания ИЛ и пометка «лист не нужен» (21.08.2026) ─────────
-// Признак очереди — ГОТОВЫЙ штамп first_instance.writ_awaited_since (его
-// ставит split_bank_track на прогоне): своей копии предиката очереди в
-// админке нет, иначе правило жило бы в трёх местах сразу.
+// ── Закрытие дела: исполнительный лист не нужен ─────────────────────────
+// Основной путь — ручной ввод номера + выбор суда. Очередь ожидания нужна
+// только для счётчика и редких подсказок court_archived_at; выводить все
+// сотни строк нет смысла. Признак очереди по-прежнему читаем готовым штампом
+// first_instance.writ_awaited_since — свою копию Python-правила не заводим.
 //
 // ⚠️ Всё, что ниже, живёт на ВЕРХНЕМ уровне и не зависит от роли: карточка
 // доступна обеим (пометку ставит и оператор). Первая версия собирала очередь
 // внутри fetchAll — пайплайна подписчиков, который у оператора не вызывается
 // и падает на owner-only /admin/data; это стоило трёх заходов подряд.
-var wwRows = [];      // ждут лист
-var wwWaived = [];    // уже помечены
+var wwRows = [];      // ждут лист (на экран попадут только строки-подсказки)
+var wwWaived = [];    // уже закрыты вручную, в т.ч. в bank-архиве
+var wwCourts = {};    // «домен|srv_num» → подпись; только суды из bank-трека
+var wwRegionCourts = {}; // тот же ключ → точная подпись реестра (включая п.п.)
 var wwBasket = {};    // лоток: ключ «домен|номер» → код причины
 var wwClearQueue = [];
 var wwModalKey = "";  // дело, открытое в модалке
-var WW_LONG_WAIT_DAYS = 60;   // второй порог лестницы напоминаний (30/60/90)
+var WW_HINT_VISIBLE = 12;
+var WW_NUM_RE = /^(?:[А-ЯA-Z]+|\\d+)-(?:\\d+-)?\\d+\\/\\d{4}$/;
 var WW_REASONS = [
   ["debt_paid", "долг погашен после решения"],
   ["not_requested", "лист решили не запрашивать"],
@@ -4136,22 +4182,61 @@ function wwDaysSince(iso) {
 }
 function wwShortCourt(name) {
   return String(name || "")
-    .replace(/\s*районный суд\s*/i, " р/с ")
-    .replace(/\s*городской суд\s*/i, " гор. ")
-    .replace(/\s*город(ского|ской)\s*/i, " ")
+    .replace(/\\s*районный суд\\s*/i, " р/с ")
+    .replace(/\\s*городской суд\\s*/i, " гор. ")
+    .replace(/\\s*город(ского|ской)\\s*/i, " ")
     .trim();
 }
-function wwKey(r) { return r.domain + "|" + r.id; }
+function wwSrv(fi) { return String((fi && fi.srv_num) || 1); }
+function wwKey(r) { return r.domain + "|" + r.srv + "|" + r.id; }
+function wwItemFromKey(k, reason) {
+  var p = String(k || "").split("|");
+  return {
+    case: p.slice(2).join("|"), court_domain: p[0] || "",
+    court_srv_num: p[1] || "1", reason: reason || ""
+  };
+}
 function wwRowByKey(k) {
   return wwRows.filter(function (r) { return wwKey(r) === k; })[0] || null;
 }
-function collectWaitRow(c) {
+function wwRegisterCourt(row) {
+  var key = row.domain + "|" + row.srv;
+  if (!wwCourts[key]) wwCourts[key] = row.court || row.domain;
+}
+function wwSetRegionCourts(fi) {
+  wwRegionCourts = {};
+  (fi || []).forEach(function (c) {
+    if (!c || !c.domain) return;
+    wwRegionCourts[c.domain + "|" + String(c.srv_num || 1)] = c.name || c.domain;
+  });
+  wwFillCourts();
+}
+function wwFillCourts() {
+  var sel = document.getElementById("ww-court");
+  if (!sel) return;
+  var prev = sel.value;
+  var labels = {};
+  Object.keys(wwCourts).forEach(function (k) { labels[k] = wwCourts[k]; });
+  // Реестр точнее bank-записи: «Камышловский районный суд (п.п. Пышма)»
+  // иначе выглядел бы точным дублем основной площадки того же домена.
+  Object.keys(wwRegionCourts).forEach(function (k) { labels[k] = wwRegionCourts[k]; });
+  var keys = Object.keys(labels).sort(function (a, b) {
+    return String(labels[a]).localeCompare(String(labels[b]), "ru");
+  });
+  sel.innerHTML = '<option value="">выберите суд</option>' + keys.map(function (k) {
+    return '<option value="' + escHtml(k) + '">' + escHtml(labels[k]) + "</option>";
+  }).join("");
+  if (prev && labels[prev]) sel.value = prev;
+}
+function collectWaitRow(c, fromArchive) {
   var fi = (c && c.first_instance) || {};
   var row = {
     id: c.id || "", domain: String(fi.court_domain || "").trim(),
-    court: fi.court || "", archAt: fi.court_archived_at || ""
+    srv: wwSrv(fi), court: fi.court || "", archAt: fi.court_archived_at || "",
+    archived: !!fromArchive
   };
   if (!row.id || !row.domain) return;
+  wwRegisterCourt(row);
   if (fi.writ_waived && fi.writ_waived.reason) {
     row.reason = fi.writ_waived.reason;
     row.at = fi.writ_waived.at || "";
@@ -4159,6 +4244,7 @@ function collectWaitRow(c) {
     wwWaived.push(row);
     return;
   }
+  if (fromArchive) return;
   // Штамп очереди ставит прогон. ФОЛБЭК нужен, пока прогон после деплоя ещё
   // не отработал: без него карточка пустая и прячется. Приближение грубее
   // штампа («нет ни одного листа» вместо «нет листа НА ИСПОЛНЕНИЕ») — дела с
@@ -4182,13 +4268,24 @@ function collectWaitRow(c) {
 // врезка в чужой пайплайн: у владельца тот же URL уже лежит в HTTP-кэше
 // браузера, у оператора это единственный путь.
 async function loadWritQueue() {
-  wwRows = []; wwWaived = [];
+  wwRows = []; wwWaived = []; wwCourts = {};
   var list = document.getElementById("ww-list");
   try {
     var r = await fetch(BANK_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     var d = await r.json();
-    (d.cases || []).forEach(collectWaitRow);
+    (d.cases || []).forEach(function (c) { collectWaitRow(c, false); });
+    // Закрытые вручную дела сразу переезжают в bank-архив. Грузим его для
+    // прозрачного аудита и кнопки отмены; 404 допустим на новой территории.
+    try {
+      var ar = await fetch(BANK_ARCHIVE_URL, { cache: "no-cache" });
+      if (ar.ok) {
+        var ad = await ar.json();
+        (ad.cases || []).forEach(function (c) { collectWaitRow(c, true); });
+      }
+    } catch (archiveError) {
+      console.warn("ww-archive:", archiveError);
+    }
   } catch (e) {
     // 404 = территория без трека исков банка: карточку просто не показываем.
     var card = document.getElementById("ww-card");
@@ -4196,23 +4293,26 @@ async function loadWritQueue() {
     if (String(e && e.message) !== "HTTP 404") console.warn("ww-card:", e);
     return;
   }
+  wwFillCourts();
   renderWaitCard();
 }
 function renderWaitCard() {
   var card = document.getElementById("ww-card");
   if (!card) return;
-  if (!wwRows.length && !wwWaived.length) { card.style.display = "none"; return; }
   card.style.display = "";
   wwRows.sort(function (a, b) { return b.days - a.days; });
-  var long = wwRows.filter(function (r) { return r.days >= WW_LONG_WAIT_DAYS; });
-  var shown = long.length ? long : wwRows.slice(0, 10);
+  var hints = wwRows.filter(function (r) { return r.archAt; });
+  var shown = hints.slice(0, WW_HINT_VISIBLE);
   var approxN = wwRows.filter(function (r) { return r.approx; }).length;
-  document.getElementById("ww-meta").textContent = "ждут: " + wwRows.length
+  document.getElementById("ww-meta").textContent = "ждут ИЛ: " + wwRows.length
     + (approxN === wwRows.length && approxN ? " (примерно — до прогона)" : "");
-  var hints = wwRows.filter(function (r) { return r.archAt; }).length;
-  document.getElementById("ww-badges").innerHTML = hints
-    ? '<span class="ww-hint-badge" title="Суд сдал дело в архив, а листа нет — вероятно, его не запрашивали">' + hints + " с подсказкой</span>"
+  document.getElementById("ww-badges").innerHTML = hints.length
+    ? '<span class="ww-hint-badge" title="Суд сдал дело в архив, а листа нет — вероятно, его не запрашивали">' + hints.length + " " + plural(hints.length, "подсказка", "подсказки", "подсказок") + "</span>"
     : "";
+  var title = document.getElementById("ww-hints-title");
+  if (title) title.textContent = hints.length
+    ? "Подсказки суда: дело передано в архив, а ИЛ не выдан"
+    : "Подсказки суда";
   var html = shown.map(function (r) {
     var k = wwKey(r);
     var picked = wwBasket[k];
@@ -4221,7 +4321,7 @@ function renderWaitCard() {
       : "";
     var btn = '<button class="ww-mark" data-k="' + escHtml(k) + '" title="'
       + (picked ? "Помечено: " + escHtml(wwReasonLabel(picked)) + ". Нажмите, чтобы изменить"
-                : "Пометить: лист не нужен")
+                : "Закрыть это дело: лист не нужен")
       + '">' + (picked ? "&#10003;" : "&#43;") + "</button>";
     return '<div class="ww-row' + (picked ? " is-picked" : "") + '">'
       + '<span class="ww-num" title="' + escHtml(r.id) + '">' + escHtml(r.id) + "</span>"
@@ -4230,31 +4330,33 @@ function renderWaitCard() {
       + '<span class="ww-days">' + r.days + "&nbsp;дн.</span>"
       + btn + "</div>";
   }).join("");
-  if (long.length && wwRows.length > long.length) {
-    html += '<div class="health-more">Показаны ждущие дольше ' + WW_LONG_WAIT_DAYS
-      + " дней (" + long.length + " из " + wwRows.length + ")</div>";
+  if (hints.length > shown.length) {
+    html += '<div class="health-more">Показаны первые ' + shown.length
+      + " из " + hints.length + " подсказок</div>";
   }
   var list = document.getElementById("ww-list");
   list.className = "";
-  list.innerHTML = html || '<div class="health-more">Очередь пуста</div>';
+  list.innerHTML = html || '<div class="health-more">Сейчас подсказок нет. Любое известное дело можно закрыть по номеру в форме выше.</div>';
   renderWaivedList();
   updateWaitActions();
+  wwManualUpdate();
 }
 function renderWaivedList() {
   var wrap = document.getElementById("ww-waived-wrap");
   if (!wrap) return;
   if (!wwWaived.length) { wrap.innerHTML = ""; return; }
+  wwWaived.sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
   var rows = wwWaived.map(function (r) {
     return '<div class="ww-row is-waived">'
       + '<span class="ww-num" title="' + escHtml(r.id) + '">' + escHtml(r.id) + "</span>"
       + '<span class="ww-court" title="' + escHtml(r.by ? "отметил " + r.by : "") + '">'
       + escHtml(wwReasonLabel(r.reason)) + "</span>"
       + '<span class="ww-days">' + escHtml(r.at || "") + "</span>"
-      + '<button class="ww-mark ww-clear" data-k="' + escHtml(wwKey(r)) + '" title="Вернуть дело в очередь ожидания">&#8635;</button>'
+      + '<button class="ww-mark ww-clear" data-k="' + escHtml(wwKey(r)) + '" title="Отменить закрытие и вернуть дело в активные">&#8635;</button>'
       + "</div>";
   }).join("");
-  wrap.innerHTML = '<details class="fold"><summary>Помечено «лист не нужен» ('
-    + wwWaived.length + ")</summary>" + rows + "</details>";
+  wrap.innerHTML = '<details class="fold"><summary>Закрыто вручную — ИЛ не нужен ('
+    + wwWaived.length + ')</summary><div class="fold-body">' + rows + "</div></details>";
 }
 function updateWaitActions() {
   var n = Object.keys(wwBasket).length;
@@ -4264,8 +4366,8 @@ function updateWaitActions() {
   box.style.display = n ? "" : "none";
   btn.disabled = !n;
   btn.textContent = n
-    ? "Отправить " + n + " " + plural(n, "пометку", "пометки", "пометок")
-    : "Отправить пометки";
+    ? "Закрыть " + n + " " + plural(n, "дело", "дела", "дел")
+    : "Закрыть выбранные";
 }
 // Модалка выбора причины — по образцу #wl-modal (вкладка подписчиков):
 // широкий контрол в строку карточки не влезает (колонка сетки ~460px), да и
@@ -4292,55 +4394,104 @@ function wwApplyModal() {
   if (dlg) dlg.close();
   renderWaitCard();
 }
-// ── Отправка пометок «лист не нужен» ────────────────────────────────────────
-// Пачкой, одним POST: первый заход юриста — это разбор всех зависших дел, и по
-// диспатчу на клик получилось бы полсотни гонок за общую очередь записи в
-// data/ (у GitHub concurrency-группы живёт ОДИН pending — вторая пачка молча
-// отменяется).
-var wwClearQueue = [];
-async function wwSend(action) {
-  var nameEl = document.getElementById("imp-name");
-  var name = (nameEl && nameEl.value) || "";
+// ── Отправка закрытий ───────────────────────────────────────────────────────
+// Подсказки можно закрыть пачкой; ручная форма отправляет одно дело. Оба пути
+// сходятся здесь и используют относительный endpoint текущего Worker'а.
+// Именно ошибочный вызов через API + ... (переменная нигде не объявлена) давал Safari
+// «Can't find variable: API» ещё до сетевого запроса.
+function wwNormalizeNumber(raw) {
+  return String(raw || "").replace(/\\u00a0/g, " ")
+    .replace(/^\\s*(?:№|N)\\s*/i, "").split("(")[0].replace(/\\s+/g, "");
+}
+function wwOperatorName() {
+  var el = document.getElementById("ww-name");
+  var name = (el && el.value || "").trim();
   try { name = name || localStorage.getItem("admin_operator_name") || ""; } catch (e) {}
-  var items = [];
-  if (action === "clear") {
-    items = wwClearQueue.map(function (k) {
-      var p = k.split("|");
-      return { case: p[1], court_domain: p[0], reason: "" };
-    });
-  } else {
-    items = Object.keys(wwBasket).map(function (k) {
-      var p = k.split("|");
-      return { case: p[1], court_domain: p[0], reason: wwBasket[k] };
-    });
+  return name.trim();
+}
+function wwRememberName() {
+  var el = document.getElementById("ww-name");
+  var name = (el && el.value || "").trim();
+  try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
+  var shared = document.getElementById("imp-name");
+  if (shared) shared.value = name;
+  wwManualUpdate();
+}
+function wwManualUpdate() {
+  var btn = document.getElementById("ww-manual-send");
+  var numEl = document.getElementById("ww-case");
+  var courtEl = document.getElementById("ww-court");
+  if (!btn || !numEl || !courtEl) return;
+  var num = wwNormalizeNumber(numEl.value);
+  btn.disabled = !(WW_NUM_RE.test(num) && courtEl.value && wwOperatorName());
+}
+async function wwPost(action, items, st, btn) {
+  if (!items.length) return false;
+  var name = wwOperatorName();
+  if (!name) {
+    if (st) st.textContent = "Укажите, кто закрывает дело.";
+    return false;
   }
-  if (!items.length) return;
-  var st = document.getElementById("ww-status");
-  var btn = document.getElementById("ww-send");
+  try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
   if (btn) btn.disabled = true;
   if (st) st.textContent = "Отправляем…";
   try {
-    var r = await fetch(API + "/admin/writ-waiver?secret=" + encodeURIComponent(SECRET), {
+    var r = await fetch("/admin/writ-waiver?secret=" + encodeURIComponent(SECRET), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: action || "set", operator: name, items: items }),
     });
     var j = await r.json().catch(function () { return {}; });
     if (!r.ok || !j.ok) throw new Error(j.error || ("HTTP " + r.status));
+    if (st) st.textContent = action === "clear"
+      ? "Принято. Закрытие будет отменено после завершения задания."
+      : "Принято. Дело будет перенесено в архив; ход виден в журнале импортов.";
+    loadImportLog(true);
+    return true;
+  } catch (e) {
+    if (st) st.textContent = "Не отправилось: " + (e && e.message ? e.message : e);
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+    wwManualUpdate();
+  }
+}
+async function wwSend(action) {
+  var items = action === "clear"
+    ? wwClearQueue.map(function (k) { return wwItemFromKey(k, ""); })
+    : Object.keys(wwBasket).map(function (k) { return wwItemFromKey(k, wwBasket[k]); });
+  var st = document.getElementById("ww-status");
+  var btn = document.getElementById("ww-send");
+  if (await wwPost(action, items, st, btn)) {
     wwBasket = {};
     wwClearQueue = [];
     updateWaitActions();
-    if (st) st.textContent = "Принято. Данные на дашборде обновятся через минуту-другую — ход виден в журнале импортов.";
-    loadImportLog(true);
-  } catch (e) {
-    if (st) st.textContent = "Не отправилось: " + (e && e.message ? e.message : e);
-    if (btn) btn.disabled = false;
+  }
+}
+async function wwManualSend() {
+  var court = document.getElementById("ww-court");
+  var numEl = document.getElementById("ww-case");
+  var reason = document.getElementById("ww-reason");
+  var st = document.getElementById("ww-manual-status");
+  var btn = document.getElementById("ww-manual-send");
+  var num = wwNormalizeNumber(numEl && numEl.value);
+  if (!court || !court.value || !WW_NUM_RE.test(num)) {
+    if (st) st.textContent = "Выберите суд и проверьте номер дела.";
+    return;
+  }
+  var p = court.value.split("|");
+  var item = { case: num, court_domain: p[0], court_srv_num: p[1] || "1",
+               reason: (reason && reason.value) || "debt_paid" };
+  if (await wwPost("set", [item], st, btn)) {
+    numEl.value = "";
+    wwManualUpdate();
   }
 }
 // Делегирование: список перерисовывается целиком при каждом изменении лотка.
 document.addEventListener("click", function (e) {
   var t = e.target;
   if (!t || !t.closest) return;
+  if (t.closest("#ww-manual-send")) { wwManualSend(); return; }
   if (t.closest("#ww-send")) { wwSend("set"); return; }
   if (t.closest("#ww-modal-ok")) { wwApplyModal(); return; }
   if (t.closest("#ww-modal-cancel")) {
@@ -4366,6 +4517,28 @@ document.addEventListener("click", function (e) {
   var mark = t.closest(".ww-mark");
   if (mark) wwOpenModal(mark.getAttribute("data-k"));
 });
+
+// Ручная форма доступна и owner, и operator. Имя синхронизируем с полем
+// вкладки «Импорт», чтобы один человек не представлялся странице дважды.
+(function () {
+  var num = document.getElementById("ww-case");
+  var court = document.getElementById("ww-court");
+  var name = document.getElementById("ww-name");
+  if (!num || !court || !name) return;
+  try { name.value = localStorage.getItem("admin_operator_name") || ""; } catch (e) {}
+  num.addEventListener("input", wwManualUpdate);
+  num.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !document.getElementById("ww-manual-send").disabled) wwManualSend();
+  });
+  court.addEventListener("change", wwManualUpdate);
+  name.addEventListener("input", wwRememberName);
+  var shared = document.getElementById("imp-name");
+  if (shared) shared.addEventListener("input", function () {
+    name.value = shared.value;
+    wwManualUpdate();
+  });
+  wwManualUpdate();
+})();
 
 async function acSend() {
   if (acSending) return;
