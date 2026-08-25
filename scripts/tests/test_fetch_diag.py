@@ -29,6 +29,9 @@ from court_monitor import config, netutil  # noqa: E402
 from court_monitor.netutil import (  # noqa: E402
     block_page_marks, fetch_card_checked, fetch_fail_reason_ru, fetch_page,
 )
+from court_monitor.parsing import (  # noqa: E402
+    classify_non_card_page, classify_outage_page,
+)
 from fixture_dates import recent_fi_card_html  # noqa: E402
 from probe_court_access import (  # noqa: E402
     BLOCKED, CAPTCHA, EMPTY, FAIL, OK, OUTAGE, classify_response,
@@ -72,7 +75,9 @@ def _clean_state(monkeypatch):
     for k in config.METRICS:
         config.METRICS[k] = 0
     monkeypatch.setattr(config, "FETCH_MAX_RETRIES", 1)
+    monkeypatch.setattr(config, "CARD_BREAKER_MODE", "count")
     monkeypatch.setattr(netutil.time, "sleep", lambda *_: None)
+    netutil.start_run_deadline(0)
     yield
     config.FETCH_DIAG.clear()
     config.CARD_BREAKER.clear()
@@ -123,14 +128,14 @@ class TestFetchCardCheckedDiag:
         """Внешне успех: код 200, отличает только тело."""
         _serve(monkeypatch, 200, BLOCK_PAGE)
         assert fetch_card_checked(CARD_URL) == ""
-        assert config.FETCH_DIAG["kind"] == "blocked"
+        assert config.FETCH_DIAG["kind"] == "waf_block"
         assert config.FETCH_DIAG["ip"] == "43.245.226.66"
         assert config.METRICS["cards_blocked"] == 1
 
     def test_captcha(self, monkeypatch):
         _serve(monkeypatch, 200, CAPTCHA_PAGE)
         assert fetch_card_checked(CARD_URL) == ""
-        assert config.FETCH_DIAG["kind"] == "captcha"
+        assert config.FETCH_DIAG["kind"] == "captcha_card"
 
     def test_breaker_skip_does_not_inherit_previous_diag(self, monkeypatch):
         """Открытый предохранитель пропускает карточку БЕЗ запроса. Без своего
@@ -138,7 +143,7 @@ class TestFetchCardCheckedDiag:
         _serve(monkeypatch, 200, BLOCK_PAGE)
         for _ in range(config.CARD_BREAKER_THRESHOLD):
             fetch_card_checked(CARD_URL)
-        assert config.FETCH_DIAG["kind"] == "blocked"
+        assert config.FETCH_DIAG["kind"] == "waf_block"
         assert fetch_card_checked(CARD_URL) == ""
         assert config.FETCH_DIAG["kind"] == "breaker"
 
@@ -148,6 +153,11 @@ class TestReasonRu:
         ({"kind": "http_403"}, "суд отвечает HTTP 403 — адрес заблокирован"),
         ({"kind": "http_502"}, "суд отвечает HTTP 502"),
         ({"kind": "captcha"}, "карточка закрыта проверочным кодом"),
+        ({"kind": "captcha_card"}, "карточка закрыта проверочным кодом"),
+        ({"kind": "waf_block"},
+         "суд заблокировал запрос (страница защиты ГАС)"),
+        ({"kind": "portal_placeholder"},
+         "вместо карточки пришла заглушка портала"),
         ({"kind": "empty_search"},
          "поиск суда вернул страницу без распознанных дел"),
         ({"kind": "unparsed_card"},
@@ -190,6 +200,18 @@ class TestProbeClassification:
 
     def test_real_card_is_ok(self):
         assert classify_response(200, recent_fi_card_html(), CARD_URL)[0] == OK
+
+    def test_semantic_classifier_keeps_waf_and_portal_outage_separate(self):
+        assert classify_outage_page(BLOCK_PAGE) == "waf_block"
+        assert classify_outage_page(OUTAGE_PAGE) == "portal_placeholder"
+        assert classify_non_card_page(BLOCK_PAGE, CARD_URL) == "waf_block"
+        assert classify_non_card_page(OUTAGE_PAGE, CARD_URL) == (
+            "portal_placeholder"
+        )
+
+    def test_unknown_service_page_is_not_misnamed_as_portal_outage(self):
+        page = "<html><body>Служебная страница</body></html>"
+        assert classify_non_card_page(page, CARD_URL) == "non_card_page"
 
     def test_page_without_tables_is_empty_shell(self):
         """Ни маркеров блока, ни капчи, ни таблиц — отдельный класс: так
@@ -252,7 +274,7 @@ class TestFetchObservability:
         успех, и без учёта карточных классов авария была бы невидима."""
         _serve(monkeypatch, 200, "<html>Информация временно недоступна</html>")
         assert fetch_card_checked(CARD_URL) == ""
-        assert config.FETCH_FAIL_KINDS.get("blocked") == 1
+        assert config.FETCH_FAIL_KINDS.get("portal_placeholder") == 1
 
     def test_latency_summary_percentiles(self, monkeypatch):
         config.FETCH_TIMINGS.extend([1.0, 2.0, 3.0, 40.0, 50.0])
@@ -405,8 +427,11 @@ class TestObservabilityWiring:
         runs = _read_runs()
         for key in ('"latency": fetch_latency_summary()',
                     '"fail_kinds": dict(config.FETCH_FAIL_KINDS)',
+                    '"breaker": _breaker',
                     '"courts_unavailable"', '"courts_with_unrequested"',
                     '"courts_outage"',
+                    '"cards_breaker_recovered"',
+                    '"cards_breaker_unrequested"',
                     '"cards_unreachable"', '"cards_unread_other"'):
             assert key in runs, key
 
@@ -420,6 +445,33 @@ class TestObservabilityWiring:
         assert "config.FETCH_TIMEOUT_CONNECT" in net
         assert "config.FETCH_TIMEOUT_READ" in net
         assert "timeout=(10, 65)" not in net, "литерал вернулся вместо рычага"
+
+    def test_run_deadline_stops_before_http_without_blame(self, monkeypatch):
+        calls = {"n": 0}
+
+        def should_not_run(*_args, **_kwargs):
+            calls["n"] += 1
+            raise AssertionError("HTTP начался после общего дедлайна")
+
+        monkeypatch.setattr(netutil.session, "get", should_not_run)
+        monkeypatch.setattr(netutil.time, "monotonic", lambda: 100.0)
+        netutil._RUN_DEADLINE_AT = 99.0
+        assert fetch_card_checked(CARD_URL, breaker_gate=False) == ""
+        assert calls["n"] == 0
+        assert config.FETCH_DIAG["kind"] == "run_deadline"
+        assert config.FETCH_FAIL_KINDS == {}
+        assert config.CARD_BREAKER == {}
+
+    def test_run_deadline_is_wired_to_full_run(self):
+        cfg = _read_config()
+        net = _read_netutil()
+        runs = _read_runs()
+        assert 'RUN_DEADLINE_SECONDS = float(os.environ.get(' in cfg
+        main_json = runs[runs.index("def main_json():"):]
+        main_json = main_json[:main_json.index("\ndef main_replay_last(")]
+        assert "start_run_deadline()" in main_json
+        assert "run_deadline_reached()" in net
+        assert 'status=("deadline_reached"' in runs
 
 
 def _read_repo(rel: str) -> str:

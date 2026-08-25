@@ -411,11 +411,21 @@ FETCH_RETRY_FAST_MAX_SECONDS = float(
 # зашитых 30 с, и покрутить число можно было только правкой кода с коммитом.
 FETCH_TIMEOUT_CONNECT = float(os.environ.get("FETCH_TIMEOUT_CONNECT", "10"))
 FETCH_TIMEOUT_READ = float(os.environ.get("FETCH_TIMEOUT_READ", "65"))
+# Общий бюджет полного прогона. 55 минут сохраняют наблюдавшийся максимум
+# Урала (53 мин), но не дают десяткам лежащих хостов растянуть одну попытку на
+# несколько часов. По истечении новые HTTP не начинаются; финальные фазы
+# сохраняют уже прочитанные данные и честный неполный контекст.
+RUN_DEADLINE_SECONDS = float(os.environ.get("RUN_DEADLINE_SECONDS", "3300"))
 # Локальный аварийный checkpoint Mac-прогона. Имя намеренно НЕ оканчивается
 # на ``_PATH``: ops/stage_data_files.sh автоматически индексирует все такие
 # константы, а телеметрия незавершённого процесса не является судебными
 # данными и не должна попадать в git. Пусто вне Mac-обёртки = no-op.
 PARSE_TELEMETRY_FILE = os.environ.get("PARSE_TELEMETRY_FILE", "")
+# Атомарный отпечаток preflight Mac-обёртки (VPN/маршрут/выход + реальные
+# search/card probes). Имя без *_PATH по той же причине: это runtime, не data.
+PARSE_NETWORK_FINGERPRINT_FILE = os.environ.get(
+    "PARSE_NETWORK_FINGERPRINT_FILE", ""
+)
 # Mac не имеет права публиковать обновлённые картотеки без соответствующей
 # дельты дайджеста: события уже вольются в cases и на следующем прогоне не
 # возникнут повторно. Облако исторически оставляет контекст best-effort;
@@ -443,6 +453,41 @@ CARD_BREAKER_THRESHOLD = int(os.environ.get("CARD_BREAKER_THRESHOLD", "3"))
 # (пре-открытие по заглушке на странице ПОИСКА при живых карточках
 # самоисправится первой же пробой). 0 — без проб.
 CARD_BREAKER_PROBE_EVERY = int(os.environ.get("CARD_BREAKER_PROBE_EVERY", "30"))
+# Профиль half-open. ``count`` сохраняет прежнюю механику «каждая K-я
+# карточка» для коротких batch-утилит (прежде всего импортов дампов 5/3), где
+# между строками просто не успевает пройти временной cooldown. Полный утренний
+# прогон явно включает ``time`` в parse_and_push/update_cases workflow: там
+# десятки независимых судов дают полезную работу, пока один хост остывает.
+CARD_BREAKER_MODE = os.environ.get("CARD_BREAKER_MODE", "count").strip().lower()
+
+# Time-based профиль различает не только текст диагноза, но и ОПЕРАЦИОННЫЙ
+# смысл отказа. Пороги считаются по подряд идущим ЛОГИЧЕСКИМ карточкам: ретраи
+# одной fetch_page остаются одной неудачей для breaker. Все значения — env-
+# рычаги на аварийное утро; FETCH_MAX_RETRIES они не меняют.
+CARD_BREAKER_FAST_THRESHOLD = int(
+    os.environ.get("CARD_BREAKER_FAST_THRESHOLD", "3")
+)
+CARD_BREAKER_SLOW_THRESHOLD = int(
+    os.environ.get("CARD_BREAKER_SLOW_THRESHOLD", "2")
+)
+CARD_BREAKER_OUTAGE_THRESHOLD = int(
+    os.environ.get("CARD_BREAKER_OUTAGE_THRESHOLD", "2")
+)
+CARD_BREAKER_BLOCK_THRESHOLD = int(
+    os.environ.get("CARD_BREAKER_BLOCK_THRESHOLD", "2")
+)
+CARD_BREAKER_FAST_COOLDOWN_SECONDS = float(
+    os.environ.get("CARD_BREAKER_FAST_COOLDOWN_SECONDS", "60")
+)
+CARD_BREAKER_OUTAGE_COOLDOWN_SECONDS = float(
+    os.environ.get("CARD_BREAKER_OUTAGE_COOLDOWN_SECONDS", "180")
+)
+CARD_BREAKER_SLOW_COOLDOWN_SECONDS = float(
+    os.environ.get("CARD_BREAKER_SLOW_COOLDOWN_SECONDS", "300")
+)
+CARD_BREAKER_BLOCK_COOLDOWN_SECONDS = float(
+    os.environ.get("CARD_BREAKER_BLOCK_COOLDOWN_SECONDS", "600")
+)
 # Пер-кейсовый smart-skip (should_skip_case): пропуск карточек с известной
 # будущей датой (заседание / «без движения»). Выставляется в main_json из
 # флага --smart-skip / env SKIP_NON_WORKING_DAYS: крон передаёт его всегда,
@@ -705,7 +750,9 @@ METRICS: dict[str, int] = {
     "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
     "cards_captcha": 0,      # карточек, закрытых проверочным кодом (fetch_card_checked)
     "cards_blocked": 0,      # карточек-заглушек: портал недоступен/антибот-блок (looks_like_non_card_page)
-    "cards_breaker_skipped": 0,  # карточек пропущено предохранителем отключённого суда (card_breaker_allows)
+    "cards_breaker_skipped": 0,  # срабатываний гейта без HTTP (включая позже дочитанные)
+    "cards_breaker_unrequested": 0,  # карточек осталось без HTTP к финалу основных планов
+    "cards_breaker_recovered": 0,  # отложенных карточек дочитано после half-open
     "movement_odd_width": 0,  # строк «Движения дела» с шириной не по шапке — колонки не разложены (только legacy text)
     "push_sent": 0,          # Web Push: доставлено подписчикам
     "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
@@ -720,19 +767,18 @@ METRICS: dict[str, int] = {
 }
 
 
-# Состояние пер-суд предохранителя карточек: {хост суда: {"fails": подряд
-# не прочитанных карточек, "open": суд отключён, "reason": причина последнего
-# фейла, "skipped": пропущено карточек, "probes": half-open проб,
-# "preopened": открыт канарейкой (заглушка на странице поиска)}}. Живёт один
-# прогон; мутируют только хелперы netutil.card_breaker_* (единая точка),
-# runs.py читает для 🩺-алертов блока 4e.
+# Состояние пер-суд предохранителя: точный kind/family, closed/open/half_open,
+# next_probe_at, счётчики отложенной очереди и проб. Живёт один прогон;
+# мутируют только netutil.card_breaker_* / DeferredCardQueue, runs.py читает
+# для покрытия, last_run и 🩺-алертов блока 4e.
 CARD_BREAKER: dict[str, dict] = {}
 
 
 # Класс ПОСЛЕДНЕГО сетевого ответа: {"kind": ..., "status": HTTP-код|None,
 # "host": хост, "ip": наш адрес со страницы защиты, "rule": буква правила}.
 # Заполняют netutil.fetch_page (сеть/код) и fetch_card_checked (уточнение:
-# капча/блок/предохранитель) — единственные мутирующие точки.
+# captcha_card/waf_block/portal_placeholder/non_card_page/breaker) —
+# единственные мутирующие точки.
 #
 # Зачем: до 16.08.2026 отказ карточки был безымянным. 403, страница защиты ГАС
 # «Правосудие» с HTTP 200, проверочный код, заглушка портала и таймаут давали

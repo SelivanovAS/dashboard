@@ -168,11 +168,15 @@ def context_pending(ctx: dict) -> bool:
 
 
 def cards_progress(state: dict) -> tuple[int, int] | None:
-    """(прочитано, планировалось) сегодняшнего прогона; None — данных нет
-    (прогона не было / старый журнал без блока last_run)."""
+    """Стабильное дневное покрытие, fallback — последняя попытка."""
     lr = (state or {}).get("last_run") or {}
     if str(lr.get("at") or "")[:10] not in _today_dates():
         return None
+    if "cards_planned_today" in lr:
+        return (
+            int(lr.get("cards_read_today") or 0),
+            int(lr.get("cards_planned_today") or 0),
+        )
     read = int(lr.get("cards_read") or 0)
     planned = int(lr.get("cards_planned") or 0)
     if planned <= 0 and read <= 0 and "cards_planned" not in lr:
@@ -220,6 +224,89 @@ def searches_state_today(state: dict) -> tuple[bool, bool]:
             fi_ran = True
             fi_sighted = fi_sighted or ok
     return ran_today, (fi_sighted if fi_ran else sighted)
+
+
+def searches_by_instance_today(state: dict) -> dict[str, dict[str, int]]:
+    """Поисковые источники сегодня, отдельно по трём инстанциям."""
+    out = {
+        name: {"ran": 0, "ok": 0, "failed": 0, "empty": 0}
+        for name in ("first_instance", "appeal", "cassation")
+    }
+    today = _today_dates()
+    for key, src in ((state or {}).get("sources") or {}).items():
+        key = str(key)
+        if key.startswith("fi:"):
+            name = "first_instance"
+        elif key.startswith("appeal:"):
+            name = "appeal"
+        elif key.startswith("cassation:"):
+            # total — реальный HTTP источника, matched — производный фильтр
+            # той же страницы. Не считаем один запрос двумя судами.
+            if not key.endswith(":total"):
+                continue
+            name = "cassation"
+        else:
+            continue
+        if str((src or {}).get("last_run_at") or "")[:10] not in today:
+            continue
+        row = out[name]
+        row["ran"] += 1
+        if int((src or {}).get("fail_streak") or 0) > 0:
+            row["failed"] += 1
+        elif int((src or {}).get("last_count") or 0) > 0:
+            row["ok"] += 1
+        else:
+            row["empty"] += 1
+    return out
+
+
+_INSTANCE_LABELS = {
+    "first_instance": "1-я инст.",
+    "appeal": "апелляция",
+    "cassation": "кассация",
+}
+
+
+def instance_searches_line(state: dict) -> str:
+    rows = searches_by_instance_today(state)
+    if not any(row["ran"] for row in rows.values()):
+        return ""  # старый журнал без префиксов инстанций
+    parts = []
+    for name in ("first_instance", "appeal", "cassation"):
+        row = rows[name]
+        if not row["ran"]:
+            value = "—"
+        else:
+            value = f"{row['ok']}/{row['ran']}"
+            problems = []
+            if row["failed"]:
+                problems.append(f"ошибка {row['failed']}")
+            if row["empty"]:
+                problems.append(f"без результатов {row['empty']}")
+            if problems:
+                value += f" ({', '.join(problems)})"
+        parts.append(f"{_INSTANCE_LABELS[name]} {value}")
+    return "поиск: " + "; ".join(parts)
+
+
+def instance_cards_line(state: dict) -> str:
+    lr = (state or {}).get("last_run") or {}
+    instances = lr.get("instances") if isinstance(lr.get("instances"), dict) else {}
+    if not instances:
+        return ""
+    parts = []
+    for name in ("first_instance", "appeal", "cassation"):
+        row = instances.get(name) if isinstance(instances.get(name), dict) else {}
+        read = int(row.get("read_today", row.get("read", 0)) or 0)
+        planned = int(row.get("planned_today", row.get("planned", 0)) or 0)
+        parts.append(f"{_INSTANCE_LABELS[name]} {read}/{planned}")
+    return "карточки за день: " + "; ".join(parts)
+
+
+def _instance_tail(state: dict) -> str:
+    parts = [instance_cards_line(state), instance_searches_line(state)]
+    body = "; ".join(part for part in parts if part)
+    return f"; {body}" if body else ""
 
 
 def _counted(
@@ -315,7 +402,7 @@ def run_complete_today(state: dict) -> tuple[bool, str]:
             tail += ")"
         return False, (
             "поиски СЛЕПЫЕ — новые дела не искались, суды не пустили адрес"
-            + tail
+            + tail + _instance_tail(state)
         )
     if cards:
         read, planned = cards
@@ -327,13 +414,16 @@ def run_complete_today(state: dict) -> tuple[bool, str]:
             return False, (
                 f"прочитано {read} из {planned} карточек ({pct}% — "
                 f"порог {int(CARDS_READ_OK_RATIO * 100)}%){cumulative}"
-                + unavailability_tail(state)
+                + unavailability_tail(state) + _instance_tail(state)
             )
         return True, (
             f"прочитано {read} из {planned} карточек{cumulative}, "
-            f"поиски отвечали"
+            f"поиски отвечали" + _instance_tail(state)
         )
-    return True, "поиски отвечали (карточной сводки нет — старый журнал)"
+    return True, (
+        "поиски отвечали (карточной сводки нет — старый журнал)"
+        + _instance_tail(state)
+    )
 
 
 def progress_line(state: dict) -> str:
@@ -359,7 +449,7 @@ def progress_line(state: dict) -> str:
     else:
         base = "карточной сводки прогона нет"
     return (base + (", поиски отвечали" if sighted else ", поиски молчали")
-            + unavailability_tail(state))
+            + unavailability_tail(state) + _instance_tail(state))
 
 
 def gate(state: dict, ctx: dict) -> tuple[bool, str]:

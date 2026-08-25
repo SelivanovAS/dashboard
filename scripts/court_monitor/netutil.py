@@ -11,7 +11,10 @@ import random
 import re
 import socket
 import time
+from collections import OrderedDict, deque
+from dataclasses import dataclass, field
 from http.client import RemoteDisconnected
+from typing import Any, Iterable
 from urllib.parse import urlsplit
 
 import requests
@@ -30,15 +33,56 @@ session.headers.update({
     "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5",
 })
 
+_RUN_DEADLINE_AT = 0.0
+_RUN_DEADLINE_REPORTED = False
+
+
+def start_run_deadline(seconds: float | None = None) -> None:
+    """Начать общий monotonic-бюджет; 0 выключает ограничение."""
+    global _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED
+    budget = config.RUN_DEADLINE_SECONDS if seconds is None else float(seconds)
+    _RUN_DEADLINE_AT = time.monotonic() + budget if budget > 0 else 0.0
+    _RUN_DEADLINE_REPORTED = False
+
+
+def run_deadline_remaining() -> float | None:
+    if _RUN_DEADLINE_AT <= 0:
+        return None
+    return max(_RUN_DEADLINE_AT - time.monotonic(), 0.0)
+
+
+def run_deadline_reached() -> bool:
+    return _RUN_DEADLINE_AT > 0 and time.monotonic() >= _RUN_DEADLINE_AT
+
+
+def _report_run_deadline_once() -> None:
+    global _RUN_DEADLINE_REPORTED
+    if _RUN_DEADLINE_REPORTED:
+        return
+    _RUN_DEADLINE_REPORTED = True
+    log.warning(
+        f"Общий лимит прогона {config.RUN_DEADLINE_SECONDS:.0f} с исчерпан: "
+        "новые запросы не начинаем, сохраняем уже прочитанное"
+    )
+
 
 
 
 def polite_delay():
     """Случайная задержка между запросами."""
-    time.sleep(random.uniform(*config.REQUEST_DELAY))
+    if run_deadline_reached():
+        _report_run_deadline_once()
+        return
+    delay = random.uniform(*config.REQUEST_DELAY)
+    remaining = run_deadline_remaining()
+    if remaining is not None:
+        # Не тратим последние секунды бюджета только на courtesy sleep.
+        delay = min(delay, max(remaining - 0.1, 0.0))
+    if delay > 0:
+        time.sleep(delay)
 
 
-def _set_diag(kind: str, url: str, **extra) -> None:
+def _set_diag(kind: str, url: str, *, record_failure: bool = True, **extra) -> None:
     """Записать класс последнего ответа в config.FETCH_DIAG (одна точка).
 
     Диагноз перезаписывается КАЖДЫМ запросом — читать его надо сразу после
@@ -49,7 +93,7 @@ def _set_diag(kind: str, url: str, **extra) -> None:
     config.FETCH_DIAG.clear()
     config.FETCH_DIAG.update(
         {"kind": kind, "host": urlsplit(url).netloc or url, **extra})
-    if kind != "ok":
+    if kind != "ok" and record_failure:
         config.FETCH_FAIL_KINDS[kind] = config.FETCH_FAIL_KINDS.get(kind, 0) + 1
         elapsed = extra.get("elapsed")
         if isinstance(elapsed, (int, float)):
@@ -211,8 +255,13 @@ def block_page_marks(html: str) -> dict:
 # Человеческие формулировки классов отказа — ОДНО место на все каналы
 # (импорт дампа, точечное добавление, отчёт парсинга трека).
 _FAIL_REASON_RU = {
-    "captcha": "карточка закрыта проверочным кодом",
-    "blocked": "суд заблокировал запрос (страница защиты ГАС)",
+    "captcha": "карточка закрыта проверочным кодом",  # legacy
+    "captcha_card": "карточка закрыта проверочным кодом",
+    "blocked": "суд заблокировал запрос (страница защиты ГАС)",  # legacy
+    "waf_block": "суд заблокировал запрос (страница защиты ГАС)",
+    "waf_search": "поиск суда заблокирован защитой ГАС",
+    "portal_placeholder": "вместо карточки пришла заглушка портала",
+    "non_card_page": "вместо карточки пришла неопознанная служебная страница",
     "breaker": "суд снят с обхода после нескольких неудач подряд",
     "empty": "суд вернул пустой ответ",
     "empty_shell": "вместо карточки пришла страница без данных",
@@ -233,6 +282,7 @@ _FAIL_REASON_RU = {
     "response_error": "суд оборвал или повредил передачу ответа",
     "timeout": "сетевой таймаут",
     "request_error": "сетевая ошибка запроса",
+    "run_deadline": "общий лимит времени прогона исчерпан",
     # Старые сохранённые диагнозы/тестовые фикстуры остаются читаемыми.
     "network": "сеть недоступна или таймаут",
 }
@@ -322,6 +372,17 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
     # возвращает пустую строку.
     request_id = ""
     for attempt in range(1, config.FETCH_MAX_RETRIES + 1):
+        remaining = run_deadline_remaining()
+        if remaining is not None and remaining <= 0:
+            _report_run_deadline_once()
+            # Запроса не было: это не transport failure суда и не должно
+            # открывать breaker. Диагноз нужен вызывающему, чтобы тоже не
+            # приписать пропуск хосту.
+            _set_diag(
+                "run_deadline", url, record_failure=False,
+                context=context, attempt=attempt,
+            )
+            return ""
         request_id = telemetry.begin_fetch(
             host,
             context or "",
@@ -346,8 +407,17 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             # На здоровом дне правка невидима: таймаут — потолок, а не
             # задержка, быстрый ответ возвращается быстро.
             _t0 = time.monotonic()
-            r = session.get(url, timeout=(config.FETCH_TIMEOUT_CONNECT,
-                                          config.FETCH_TIMEOUT_READ))
+            connect_timeout = config.FETCH_TIMEOUT_CONNECT
+            read_timeout = config.FETCH_TIMEOUT_READ
+            if remaining is not None and remaining < connect_timeout + read_timeout:
+                # requests не имеет total-timeout. Делим остаток так, чтобы
+                # худший connect+read не вышел далеко за общий дедлайн.
+                connect_timeout = min(connect_timeout, max(remaining - 0.1, 0.1))
+                read_timeout = min(
+                    read_timeout,
+                    max(remaining - connect_timeout, 0.1),
+                )
+            r = session.get(url, timeout=(connect_timeout, read_timeout))
             r.raise_for_status()
             elapsed = time.monotonic() - _t0
             config.FETCH_TIMINGS.append(elapsed)
@@ -405,7 +475,11 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
                     f"Попытка {attempt}/{config.FETCH_MAX_RETRIES}: {host}{ctx} — "
                     f"{kind} за {elapsed:.1f}с, повтор через {wait}с..."
                 )
-                time.sleep(wait)
+                remaining = run_deadline_remaining()
+                if remaining is not None:
+                    wait = min(wait, max(remaining, 0.0))
+                if wait > 0:
+                    time.sleep(wait)
             else:
                 config.METRICS["requests_failed"] += 1
                 no_retry = (
@@ -424,103 +498,503 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
 # Аутейдж Сургутского городского 29.07.2026: суд отдавал заглушку на каждой
 # карточке, а прогон впустую молотил polite_delay + HTTP по всем его делам.
 # Состояние — config.CARD_BREAKER (живёт один прогон, сброс в _metrics_reset),
-# ключ — хост суда из URL карточки: одна точка в fetch_card_checked накрывает
-# все вызовы (FI-цикл, апелляция, кассация 7kas, тексты актов, бэкфиллы,
-# ручные скрипты). Мутируют состояние ТОЛЬКО хелперы ниже.
+# ключ — хост суда. ``count`` оставлен batch-импортам; полный прогон использует
+# ``time`` и откладывает карточки хоста до next_probe_at, продолжая другие суды.
+
+_BREAKER_FAST_KINDS = frozenset({
+    "connection_reset", "response_error",
+    "http_500", "http_502", "http_503", "http_504",
+})
+_BREAKER_SLOW_KINDS = frozenset({
+    "read_timeout", "connect_timeout", "timeout", "connection_error",
+    "dns_error", "tls_error", "proxy_error", "redirect_error",
+    "request_error", "empty",
+})
+_BREAKER_OUTAGE_KINDS = frozenset({
+    "portal_placeholder", "outage_search", "non_card_page",
+})
+_BREAKER_BLOCK_KINDS = frozenset({
+    "waf_block", "waf_search", "http_403", "captcha_card",
+})
+_BREAKER_PARSER_KINDS = frozenset({
+    "empty_shell", "empty_search", "unparsed_card", "degraded_card",
+    "captcha_search",
+})
+
+
+def card_breaker_time_mode() -> bool:
+    """True только для полного time-based профиля; неизвестное = count-safe."""
+    return str(config.CARD_BREAKER_MODE or "").strip().lower() == "time"
+
+
+def card_breaker_policy(kind: str) -> dict[str, Any]:
+    """Одна таблица operational-policy по уже готовому точному ``kind``.
+
+    Классификация транспорта остаётся в transport_fail_kind, семантики — в
+    parsing.search; здесь нет анализа текста исключений/HTML, только политика.
+    """
+    if kind in _BREAKER_PARSER_KINDS:
+        return {"family": "parser_quality", "threshold": 0, "cooldown": 0.0}
+    if kind in _BREAKER_FAST_KINDS or kind.startswith("http_5"):
+        return {
+            "family": "fast_transient",
+            "threshold": config.CARD_BREAKER_FAST_THRESHOLD,
+            "cooldown": config.CARD_BREAKER_FAST_COOLDOWN_SECONDS,
+        }
+    if kind in _BREAKER_OUTAGE_KINDS:
+        return {
+            "family": "portal_outage",
+            "threshold": config.CARD_BREAKER_OUTAGE_THRESHOLD,
+            "cooldown": config.CARD_BREAKER_OUTAGE_COOLDOWN_SECONDS,
+        }
+    if kind in _BREAKER_BLOCK_KINDS:
+        return {
+            "family": "access_block",
+            "threshold": config.CARD_BREAKER_BLOCK_THRESHOLD,
+            "cooldown": config.CARD_BREAKER_BLOCK_COOLDOWN_SECONDS,
+        }
+    if kind in _BREAKER_SLOW_KINDS:
+        return {
+            "family": "slow_unavailable",
+            "threshold": config.CARD_BREAKER_SLOW_THRESHOLD,
+            "cooldown": config.CARD_BREAKER_SLOW_COOLDOWN_SECONDS,
+        }
+    return {
+        "family": "unknown",
+        "threshold": config.CARD_BREAKER_THRESHOLD,
+        "cooldown": config.CARD_BREAKER_SLOW_COOLDOWN_SECONDS,
+    }
+
+
+_BREAKER_ENTRY_DEFAULTS = {
+    "fails": 0,
+    "open": False,
+    "state": "closed",
+    "kind": "",
+    "family": "",
+    "reason": "",
+    "skipped": 0,
+    "gate_hits": 0,
+    "probes": 0,
+    "probe_successes": 0,
+    "probe_failures": 0,
+    "preopened": False,
+    "opened_count": 0,
+    "recoveries": 0,
+    "opened_at": 0.0,
+    "next_probe_at": 0.0,
+    "cooldown_seconds": 0.0,
+    "deferred_total": 0,
+    "deferred_remaining": 0,
+    "deferred_recovered": 0,
+    "opened_kinds": None,
+}
 
 
 def _card_breaker_entry(host: str) -> dict:
-    return config.CARD_BREAKER.setdefault(host, {
-        "fails": 0, "open": False, "reason": "",
-        "skipped": 0, "probes": 0, "preopened": False,
-    })
+    entry = config.CARD_BREAKER.setdefault(host, {})
+    for key, value in _BREAKER_ENTRY_DEFAULTS.items():
+        if key not in entry:
+            entry[key] = {} if key == "opened_kinds" else value
+    # Старые/тестовые сиды состояния не знают накопительной разбивки. None
+    # здесь допустим как значение дефолта, но наружу всегда отдаём словарь.
+    if not isinstance(entry.get("opened_kinds"), dict):
+        entry["opened_kinds"] = {}
+    return entry
 
 
 def card_breaker_open(host: str) -> bool:
-    """READ-ONLY: True, если предохранитель хоста открыт (суд отключён)."""
+    """READ-ONLY: True, если предохранитель хоста открыт/half-open."""
     return bool(config.CARD_BREAKER.get(host, {}).get("open"))
 
 
-def card_breaker_allows(host: str) -> bool:
-    """МУТИРУЮЩИЙ гейт «фетчить карточку или пропустить».
+def card_breaker_probe_ready(host: str, *, now: float | None = None) -> bool:
+    """READ-ONLY: срок единственной time-based half-open пробы наступил."""
+    if not card_breaker_time_mode():
+        return False
+    entry = config.CARD_BREAKER.get(host) or {}
+    if not entry.get("open") or entry.get("state", "open") != "open":
+        return False
+    clock = time.monotonic() if now is None else float(now)
+    return clock >= float(entry.get("next_probe_at") or 0.0)
 
-    Ровно ОДИН вызов на попытку карточки: либо внутри fetch_card_checked
-    (breaker_gate=True, дефолт), либо пре-чеком горячего цикла ДО
-    polite_delay (тогда fetch зовётся с breaker_gate=False) — двойной вызов
-    задваивал бы счётчик пропусков и ломал каденс half-open проб.
-    Закрытый предохранитель → True. Открытый: пропуск с инкрементом
-    счётчиков, кроме каждой K-й карточки (config.CARD_BREAKER_PROBE_EVERY) —
-    она пропускается как проба: успех закроет предохранитель
-    (_card_breaker_ok), и хвост суда дочитается этим же прогоном.
+
+def card_breaker_summary() -> dict[str, Any]:
+    """Санитизированная сводка состояния для checkpoint/last_run."""
+    now = time.monotonic()
+    hosts: list[dict[str, Any]] = []
+    by_kind: dict[str, int] = {}
+    for host, raw in sorted(config.CARD_BREAKER.items()):
+        entry = _card_breaker_entry(host)
+        for kind, count in (entry.get("opened_kinds") or {}).items():
+            by_kind[kind] = by_kind.get(kind, 0) + int(count or 0)
+        if not (entry.get("opened_count") or entry.get("preopened")
+                or entry.get("deferred_total") or entry.get("probes")):
+            continue
+        next_in = 0.0
+        if entry.get("open") and card_breaker_time_mode():
+            next_in = max(float(entry.get("next_probe_at") or 0.0) - now, 0.0)
+        hosts.append({
+            "host": host,
+            "state": entry.get("state") or ("open" if entry.get("open") else "closed"),
+            "kind": entry.get("kind") or "",
+            "family": entry.get("family") or "",
+            "reason": entry.get("reason") or "",
+            "preopened": bool(entry.get("preopened")),
+            "skipped": int(entry.get("skipped") or 0),
+            "probes": int(entry.get("probes") or 0),
+            "deferred_total": int(entry.get("deferred_total") or 0),
+            "deferred_remaining": int(entry.get("deferred_remaining") or 0),
+            "deferred_recovered": int(entry.get("deferred_recovered") or 0),
+            "cooldown_seconds": float(entry.get("cooldown_seconds") or 0.0),
+            "next_probe_in_seconds": round(next_in, 1),
+        })
+    return {
+        "mode": "time" if card_breaker_time_mode() else "count",
+        "opened_hosts": sum(
+            1 for e in config.CARD_BREAKER.values()
+            if e.get("opened_count") or e.get("preopened")
+        ),
+        "open_hosts": sum(1 for e in config.CARD_BREAKER.values() if e.get("open")),
+        "recovered_hosts": sum(
+            1 for e in config.CARD_BREAKER.values() if e.get("recoveries")
+        ),
+        "deferred_total": sum(
+            int(e.get("deferred_total") or 0) for e in config.CARD_BREAKER.values()
+        ),
+        "deferred_remaining": sum(
+            int(e.get("deferred_remaining") or 0) for e in config.CARD_BREAKER.values()
+        ),
+        "deferred_recovered": sum(
+            int(e.get("deferred_recovered") or 0) for e in config.CARD_BREAKER.values()
+        ),
+        "probes": sum(int(e.get("probes") or 0) for e in config.CARD_BREAKER.values()),
+        "probe_successes": sum(
+            int(e.get("probe_successes") or 0) for e in config.CARD_BREAKER.values()
+        ),
+        "probe_failures": sum(
+            int(e.get("probe_failures") or 0) for e in config.CARD_BREAKER.values()
+        ),
+        "by_kind": dict(sorted(by_kind.items())),
+        "hosts": hosts,
+    }
+
+
+def _publish_breaker_snapshot() -> None:
+    # События open/probe/recovery редки. Пер-карточные defer здесь намеренно
+    # не fsync'аем: сотни пропусков не должны превратить telemetry в bottleneck.
+    telemetry.set_breaker_snapshot(card_breaker_summary())
+
+
+def _open_card_breaker(host: str, entry: dict, kind: str, *,
+                       preopened: bool = False, reason: str = "",
+                       reopened: bool = False) -> None:
+    policy = card_breaker_policy(kind)
+    now = time.monotonic()
+    entry["open"] = True
+    entry["state"] = "open"
+    entry["kind"] = kind
+    entry["family"] = policy["family"]
+    entry["reason"] = reason or fetch_fail_reason_ru({"kind": kind}) or kind
+    entry["cooldown_seconds"] = float(policy["cooldown"])
+    entry["opened_at"] = now
+    entry["next_probe_at"] = (
+        now + float(policy["cooldown"]) if card_breaker_time_mode() else 0.0
+    )
+    entry["preopened"] = bool(entry.get("preopened") or preopened)
+    if not reopened:
+        entry["opened_count"] = int(entry.get("opened_count") or 0) + 1
+    opened_kinds = entry.setdefault("opened_kinds", {})
+    opened_kinds[kind] = int(opened_kinds.get(kind, 0)) + 1
+    _publish_breaker_snapshot()
+
+
+def card_breaker_allows(host: str, *, allow_half_open: bool = True) -> bool:
+    """МУТИРУЮЩИЙ гейт «фетчить карточку или отложить/пропустить».
+
+    В ``time``-профиле разрешает ровно одну пробу после ``next_probe_at``;
+    очередь основного прогона держит остальные карточки хоста. Конкретная
+    ``DeferredCardQueue`` передаёт ``allow_half_open=False`` после первой
+    неудачной пробы этого хоста в своей фазе — иначе множество лежащих хостов
+    могло само переждать cooldown и бесконечно запускать новые круги проб.
+    В ``count`` сохраняется прежняя K-я проба коротких batch-импортов.
     """
     if not config.CARD_BREAKER_THRESHOLD:
         return True
     entry = config.CARD_BREAKER.get(host)
     if not entry or not entry.get("open"):
         return True
-    entry["skipped"] += 1
-    every = config.CARD_BREAKER_PROBE_EVERY
-    if every and entry["skipped"] % every == 0:
+    entry = _card_breaker_entry(host)
+    entry["gate_hits"] += 1
+
+    allow_probe = False
+    if card_breaker_time_mode():
+        allow_probe = allow_half_open and card_breaker_probe_ready(host)
+    else:
+        every = config.CARD_BREAKER_PROBE_EVERY
+        allow_probe = bool(every and entry["gate_hits"] % every == 0)
+
+    if allow_probe:
+        entry["state"] = "half_open"
         entry["probes"] += 1
         log.debug(f"Предохранитель {host}: half-open проба #{entry['probes']}")
+        _publish_breaker_snapshot()
         return True
+
+    entry["skipped"] += 1
     config.METRICS["cards_breaker_skipped"] += 1
     return False
 
 
-def _card_breaker_fail(host: str, reason: str) -> None:
-    """Учесть не прочитанную карточку хоста; на пороге — отключить суд."""
+def _card_breaker_fail(host: str, kind: str, *, reason: str = "") -> None:
+    """Учесть один финальный logical failure карточки по точному классу."""
     if not config.CARD_BREAKER_THRESHOLD or not host:
         return
+    policy = card_breaker_policy(kind)
+    threshold = (
+        int(policy["threshold"])
+        if card_breaker_time_mode() else config.CARD_BREAKER_THRESHOLD
+    )
+    if threshold <= 0:
+        return
     entry = _card_breaker_entry(host)
-    entry["fails"] += 1
-    entry["reason"] = reason
-    if not entry["open"] and entry["fails"] >= config.CARD_BREAKER_THRESHOLD:
-        entry["open"] = True
-        probe_note = (
-            f", проба каждые {config.CARD_BREAKER_PROBE_EVERY} карточек"
-            if config.CARD_BREAKER_PROBE_EVERY else ""
+
+    # Провальная half-open проба (или явный ungated fetch при уже открытом
+    # breaker) запускает новый cooldown. Не смешиваем её с новым threshold.
+    if entry.get("open"):
+        if entry.get("state") == "half_open":
+            entry["probe_failures"] += 1
+        entry["fails"] = max(int(entry.get("fails") or 0), threshold)
+        _open_card_breaker(
+            host, entry, kind, reopened=True, reason=reason,
+            preopened=bool(entry.get("preopened")),
         )
         log.warning(
-            f"Суд {host}: {entry['fails']} карточек подряд не прочитано "
-            f"({reason}) — обход приостановлен до конца прогона{probe_note}"
+            f"Суд {host}: half-open проба не прошла ({entry['reason']}) — "
+            + (f"следующая через {entry['cooldown_seconds']:.0f}с"
+               if card_breaker_time_mode() else "суд остаётся снят с обхода")
         )
+        return
+
+    # В полном time-профиле разные operational families не складываются:
+    # CAPTCHA после reset не должна внезапно достигать timeout-порога и
+    # получать чужой cooldown. Count-профиль импортов намеренно сохраняет
+    # прежнее правило «любые N непрочитанных карточек подряд» (5/3).
+    if (card_breaker_time_mode() and entry.get("family")
+            and entry.get("family") != policy["family"]):
+        entry["fails"] = 0
+    entry["family"] = policy["family"]
+    entry["kind"] = kind
+    entry["fails"] += 1
+    entry["reason"] = reason or fetch_fail_reason_ru({"kind": kind}) or kind
+    if entry["fails"] < threshold:
+        return
+
+    _open_card_breaker(host, entry, kind, reason=entry["reason"])
+    probe_note = (
+        f", half-open через {entry['cooldown_seconds']:.0f}с"
+        if card_breaker_time_mode()
+        else (f", проба каждые {config.CARD_BREAKER_PROBE_EVERY} карточек"
+              if config.CARD_BREAKER_PROBE_EVERY else "")
+    )
+    log.warning(
+        f"Суд {host}: {entry['fails']} карточек подряд не прочитано "
+        f"({entry['reason']}) — обход приостановлен{probe_note}"
+    )
+
+
+def card_breaker_note_failure(host: str, kind: str, *, reason: str = "") -> None:
+    """Публичная проводка точного отказа поиска в тот же breaker-policy."""
+    if kind == "run_deadline":
+        return  # запроса не было — суд не виноват и breaker не открываем
+    _card_breaker_fail(host, kind, reason=reason)
 
 
 def _card_breaker_ok(host: str) -> None:
-    """Успешная карточка: сброс счётчика; открытый предохранитель — закрыть."""
+    """Успешная карточка: сброс серии; half-open закрывает предохранитель."""
     entry = config.CARD_BREAKER.get(host)
     if not entry:
         return
+    entry = _card_breaker_entry(host)
+    was_open = bool(entry.get("open"))
+    was_probe = entry.get("state") == "half_open"
     entry["fails"] = 0
-    if entry.get("open"):
-        entry["open"] = False
+    entry["open"] = False
+    entry["state"] = "closed"
+    entry["next_probe_at"] = 0.0
+    if was_open:
+        entry["recoveries"] += 1
+        if was_probe:
+            entry["probe_successes"] += 1
         log.info(f"Суд {host}: снова отдаёт карточки — обход возобновлён")
+        _publish_breaker_snapshot()
 
 
-def card_breaker_preopen(host: str, reason: str) -> None:
-    """Канарейка: открыть предохранитель заранее, не потратив ни карточки.
-
-    Зовётся из фазы поиска main_json: страница ПОИСКА суда грузится раньше
-    обхода карточек, и заглушка на ней (looks_like_outage_page) означает
-    «портал лежит». ⚠️ Только заглушка — капча на поиске предохранитель НЕ
-    открывает: это штатный режим капчёвых судов (search_gated: поиск закрыт,
-    карточки живут и мониторятся). Если карточки вопреки канарейке живы —
-    первая же half-open проба (card_breaker_allows) вернёт суд в обход.
-    """
+def card_breaker_preopen(host: str, kind: str, *, reason: str = "") -> None:
+    """Канарейка поиска: открыть breaker точным outage/WAF-классом."""
     if not config.CARD_BREAKER_THRESHOLD or not host:
         return
     entry = _card_breaker_entry(host)
     if entry["open"]:
         return
-    entry["open"] = True
-    entry["preopened"] = True
-    entry["reason"] = reason
+    _open_card_breaker(host, entry, kind, preopened=True, reason=reason)
     probe_note = (
-        f", проба каждые {config.CARD_BREAKER_PROBE_EVERY} карточек"
-        if config.CARD_BREAKER_PROBE_EVERY else ""
+        f", half-open через {entry['cooldown_seconds']:.0f}с"
+        if card_breaker_time_mode()
+        else (f", проба каждые {config.CARD_BREAKER_PROBE_EVERY} карточек"
+              if config.CARD_BREAKER_PROBE_EVERY else "")
     )
-    log.warning(f"Суд {host}: {reason} — карточки не запрашиваем{probe_note}")
+    log.warning(
+        f"Суд {host}: {entry['reason']} — карточки пока не запрашиваем{probe_note}"
+    )
+
+
+def card_breaker_note_deferred(host: str) -> None:
+    entry = _card_breaker_entry(host)
+    entry["deferred_total"] += 1
+    entry["deferred_remaining"] += 1
+
+
+def card_breaker_note_deferred_finished(host: str, *, recovered: bool) -> None:
+    entry = _card_breaker_entry(host)
+    entry["deferred_remaining"] = max(entry["deferred_remaining"] - 1, 0)
+    if recovered:
+        entry["deferred_recovered"] += 1
+        config.METRICS["cards_breaker_recovered"] += 1
+
+
+@dataclass
+class DeferredCardWork:
+    """Одна business-единица карточной очереди без судебного содержимого."""
+
+    value: Any
+    visits: int = 0
+    host: str = ""
+    ever_deferred: bool = False
+    pending_deferred: bool = False
+    queued: bool = False
+    requested: bool = False
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def first_visit(self) -> bool:
+        return self.visits == 1
+
+
+class DeferredCardQueue:
+    """No-sleep очередь: после основного прохода даёт только due half-open.
+
+    Значение ``value`` непрозрачно для сети. Вызывающий обязан отметить
+    реальный HTTP через ``mark_attempted`` и закончить вынутую карточку через
+    ``finish`` либо вернуть её ``defer``. Поэтому одна и та же business-логика
+    используется и на первом проходе, и после восстановления суда.
+    """
+
+    def __init__(self, values: Iterable[Any], *, stage: str = ""):
+        self.stage = stage
+        self._ready = deque(DeferredCardWork(v) for v in values)
+        self._deferred: OrderedDict[str, deque[DeferredCardWork]] = OrderedDict()
+        # ``probe_failures`` живёт весь прогон, а лимит нужен на ФАЗУ. Снимок
+        # при создании очереди отделяет провал предыдущей фазы от нового.
+        self._probe_failures_at_start = {
+            host: int(entry.get("probe_failures") or 0)
+            for host, entry in config.CARD_BREAKER.items()
+        }
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> DeferredCardWork:
+        if run_deadline_reached():
+            _report_run_deadline_once()
+            raise StopIteration
+        if not self._ready:
+            self._schedule_recoverable()
+        if not self._ready:
+            raise StopIteration
+        work = self._ready.popleft()
+        work.visits += 1
+        return work
+
+    def _failed_probe_in_phase(self, host: str) -> bool:
+        entry = config.CARD_BREAKER.get(host) or {}
+        baseline = self._probe_failures_at_start.setdefault(
+            host, int(entry.get("probe_failures") or 0)
+        )
+        return int(entry.get("probe_failures") or 0) > baseline
+
+    def allows(self, host: str) -> bool:
+        """Гейт очереди: не более одной НЕУДАЧНОЙ half-open пробы за фазу.
+
+        Успех не увеличивает ``probe_failures`` и сразу закрывает breaker, так
+        что восстановившийся хост по-прежнему дочитывается целиком.
+        """
+        return card_breaker_allows(
+            host, allow_half_open=not self._failed_probe_in_phase(host)
+        )
+
+    def _schedule_recoverable(self) -> None:
+        if not card_breaker_time_mode():
+            return
+        for host in list(self._deferred):
+            queue = self._deferred.get(host)
+            if not queue:
+                self._deferred.pop(host, None)
+                continue
+            if not card_breaker_open(host):
+                self._deferred.pop(host, None)
+                while queue:
+                    work = queue.popleft()
+                    work.queued = False
+                    self._ready.append(work)
+                return
+            # Провальная проба исчерпала бюджет этого хоста в данной фазе.
+            # Даже если обход других хостов уже пережил новый cooldown, второй
+            # круг не запускаем: остаток честно уйдёт в следующий прогон.
+            if self._failed_probe_in_phase(host):
+                continue
+            if card_breaker_probe_ready(host):
+                work = queue.popleft()
+                work.queued = False
+                if not queue:
+                    self._deferred.pop(host, None)
+                self._ready.append(work)
+                return
+
+    def defer(self, work: DeferredCardWork, host: str) -> bool:
+        """Вернуть работу в очередь. False в count-профиле = старый skip."""
+        if not card_breaker_time_mode():
+            return False
+        work.host = host
+        if not work.pending_deferred:
+            work.pending_deferred = True
+            work.ever_deferred = True
+            card_breaker_note_deferred(host)
+        if not work.queued:
+            self._deferred.setdefault(host, deque()).append(work)
+            work.queued = True
+        return True
+
+    @staticmethod
+    def mark_attempted(work: DeferredCardWork) -> None:
+        work.requested = True
+
+    @staticmethod
+    def finish(work: DeferredCardWork, *, recovered: bool) -> None:
+        if not work.pending_deferred:
+            return
+        work.pending_deferred = False
+        work.queued = False
+        card_breaker_note_deferred_finished(work.host, recovered=recovered)
+
+    def unresolved(self) -> list[DeferredCardWork]:
+        return [work for queue in self._deferred.values() for work in queue]
+
+    def unresolved_unrequested(self) -> list[DeferredCardWork]:
+        return [work for work in self.unresolved() if not work.requested]
+
+    def checkpoint(self) -> None:
+        _publish_breaker_snapshot()
 
 
 def fetch_card_checked(url: str, *, context: str | None = None,
@@ -557,7 +1031,13 @@ def fetch_card_checked(url: str, *, context: str | None = None,
         return ""
     html = fetch_page(url, context=context)
     if not html:
-        _card_breaker_fail(host, "сеть/пустой ответ")
+        if config.FETCH_DIAG.get("kind") == "run_deadline":
+            return ""
+        # fetch_page уже записал точный transport-kind; читаем СРАЗУ, пока
+        # следующий запрос не перезаписал единственный FETCH_DIAG.
+        _card_breaker_fail(
+            host, str(config.FETCH_DIAG.get("kind") or "request_error")
+        )
         return ""
     # fetch_page оставляет id/elapsed последней HTTP-попытки в едином
     # FETCH_DIAG. Semantic verdict ниже уточняет ЭТОТ ответ и не создаёт
@@ -567,23 +1047,24 @@ def fetch_card_checked(url: str, *, context: str | None = None,
     # Ленивый импорт: netutil — низкоуровневый слой, тащить parsing (courts,
     # tables) на уровень модуля значило бы завязать сеть на парсеры.
     from court_monitor.parsing.search import (
+        classify_non_card_page,
         detect_captcha_challenge_card,
-        looks_like_non_card_page,
     )
     ctx = f" ({context})" if context else ""
     if detect_captcha_challenge_card(html):
         config.METRICS["cards_captcha"] += 1
         log.warning(f"Карточка закрыта проверочным кодом{ctx}: {url}")
         _set_diag(
-            "captcha", url, status=200, request_id=request_id,
+            "captcha_card", url, status=200, request_id=request_id,
             elapsed=elapsed, context=context,
         )
         telemetry.classify_semantic(
-            request_id or None, "captcha", host=host, context=context or ""
+            request_id or None, "captcha_card", host=host, context=context or ""
         )
-        _card_breaker_fail(host, "проверочный код")
+        _card_breaker_fail(host, "captcha_card")
         return ""
-    if looks_like_non_card_page(html, url):
+    non_card_kind = classify_non_card_page(html, url)
+    if non_card_kind:
         config.METRICS["cards_blocked"] += 1
         # Страница защиты ГАС приходит с HTTP 200 — по коду её не отличить от
         # успеха, диагноз ставится по телу. Наш адрес из него забираем: он и
@@ -594,17 +1075,17 @@ def fetch_card_checked(url: str, *, context: str | None = None,
             + (f" (наш адрес {marks['ip']})" if marks.get("ip") else "")
         )
         _set_diag(
-            "blocked", url, status=200, request_id=request_id,
+            non_card_kind, url, status=200, request_id=request_id,
             elapsed=elapsed, context=context, **marks,
         )
         telemetry.classify_semantic(
             request_id or None,
-            "blocked",
+            non_card_kind,
             host=host,
             context=context or "",
             **marks,
         )
-        _card_breaker_fail(host, "заглушка/блок портала")
+        _card_breaker_fail(host, non_card_kind)
         return ""
     _card_breaker_ok(host)
     telemetry.classify_semantic(

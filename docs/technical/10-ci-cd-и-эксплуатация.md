@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([2301](../../scripts/court_monitor/runs.py#L2301)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([1155](../../scripts/court_monitor/runs.py#L1155)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([6091](../../scripts/court_monitor/runs.py#L6091)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([5738](../../scripts/court_monitor/runs.py#L5738)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([5948](../../scripts/court_monitor/runs.py#L5948)) | Повторно разослать уже сохранённый дайджест. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1419](../../scripts/court_monitor/runs.py#L1419)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([2368](../../scripts/court_monitor/runs.py#L2368)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([1220](../../scripts/court_monitor/runs.py#L1220)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([6461](../../scripts/court_monitor/runs.py#L6461)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([6108](../../scripts/court_monitor/runs.py#L6108)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6318](../../scripts/court_monitor/runs.py#L6318)) | Повторно разослать уже сохранённый дайджест. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1485](../../scripts/court_monitor/runs.py#L1485)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -50,13 +50,17 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `LLM_PROVIDER` | `claude` (по умолч.) / `gigachat`. |
 | `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
 | `SKIP_NON_WORKING_DAYS` | `1` → smart-skip (передаёт крон). |
+| `FETCH_MAX_RETRIES` | Потолок попыток одного логического запроса. Дефолт 1; Mac ставит 3, но повтор разрешает только точная fast-policy (`connection_reset`/ошибка ответа/5xx до 5 с). |
+| `FETCH_TIMEOUT_CONNECT`, `FETCH_TIMEOUT_READ` | Таймаут соединения/чтения, дефолты 10/65 с. |
+| `CARD_BREAKER_MODE` | `time` для полного утреннего прогона; `count` для коротких batch-импортов. Не меняет `FETCH_MAX_RETRIES`. |
+| `CARD_BREAKER_*_THRESHOLD`, `CARD_BREAKER_*_COOLDOWN_SECONDS` | Порог и cooldown по семантической семье: fast 3/60 с, outage 2/180 с, slow 2/300 с, block 2/600 с. Подробно — [04](04-сбор-данных-и-парсеры.md). |
 | `LOG_LEVEL` | Уровень логов (`DEBUG`/`INFO`/`WARNING`/`ERROR`, по умолч. `INFO`). `DEBUG` включает пер-кейсовые skip-строки, «без изменений», полные списки не-HMAO судов и диагностику нераспарсенных дат. |
 | `JSON_PATH`, `CSV_PATH`, `DIGESTED_ACTS_PATH`, `CASSATION_ACTS_PATH`, `PARSE_HEALTH_PATH`, … | Переопределение путей к файлам данных. |
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([1114](../../scripts/court_monitor/runs.py#L1114)) проверяет
-наличие ключей на старте; `check_court_available` ([1142](../../scripts/court_monitor/runs.py#L1142))
+`validate_environment` ([1179](../../scripts/court_monitor/runs.py#L1179)) проверяет
+наличие ключей на старте; `check_court_available` ([1207](../../scripts/court_monitor/runs.py#L1207))
 — доступность сайта суда.
 
 ## Ежедневный прогон (временная схема D2, с 03.07.2026)
@@ -85,7 +89,14 @@ delivery journal → `delivered_at` + отдельный marker-коммит
 условный rollback, недоступный remote оставляет транзакцию закрытой до
 следующего старта. Ход парсинга виден в ярлыке «Парсинг судов.command» на Mac
 и в блоке «🛰 Парсинг» админки Worker; посмертный сетевой снимок — локально в
-`ops/mac-local-run/.runtime/parse_telemetry.json`.
+`ops/mac-local-run/.runtime/parse_telemetry.json`. Перед Python-прогоном
+`network_fingerprint.py` параллельно проверяет реальные страницы `sud_delo`
+(поиски трёх инстанций + известная карточка), а не быстрый корень сайта, и
+пишет `network_fingerprint.json`: активные VPN-интерфейсы, тип маршрута до
+sudrf, ID выхода и исходы проб. Отпечаток вкладывается в попытку telemetry.
+Парсер ограничен общим monotonic-бюджетом 3300 с: после 55 минут новые HTTP
+не начинаются, а уже прочитанные данные доходят до сохранения и попытка
+закрывается статусом `deadline_reached`.
 
 Параллельная часть не делит mutable-состояние: git-индекс, данные, lock, логи,
 telemetry и delivery journal живут в каталоге своего клона. Общий только host-route,
@@ -242,7 +253,18 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   инст. (5/9) пишет время каждого суда в пер-судовую строку, фаза карточек
   1-й инст. (6/9) — строку «1 инст: медленные суды — …»
   (топ-3 по времени обхода карточек, включая ретраи).
-- `send_crash_alert` ([907](../../scripts/court_monitor/delivery.py#L907)) — падение
+- **Атомарный checkpoint сети и breaker:** Mac пишет
+  `ops/mac-local-run/.runtime/parse_telemetry.json` на старте/фазах/HTTP-
+  попытках и переходах breaker. В `current.breaker` видны точные классы,
+  cooldown, half-open пробы, сколько отложено/дочитано/осталось; завершённый
+  итог дублируется в `data/parse_health.json → last_run.breaker`. Судебного
+  HTML и полных URL карточек в checkpoint нет. История не ограничена тремя
+  запусками: в файле остаются все попытки текущего дня, а `daily.network`
+  агрегирует исходы по хостам, `daily.recovery` — открытия/пробы/восстановления.
+  Дневное покрытие строится как union стабильных ID
+  `planned_case_ids_today` / `read_case_ids_today` по 1-й инстанции,
+  апелляции и кассации, поэтому планы дочиток можно сравнивать напрямую.
+- `send_crash_alert` ([918](../../scripts/court_monitor/delivery.py#L918)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в

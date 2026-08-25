@@ -127,84 +127,20 @@ cm_setup_court_routes() {
   cm_install_court_routes "$logfn" "$ips"
 }
 
-# ── Проба доступности суда ───────────────────────────────────────────────────
-# Хост берём из реестра региона (апелляция территории), а не хардкодом ХМАО:
-# на форке проба стучалась бы в чужой суд.
-cm_probe_court_hosts() {  # $1 = python; канарейки построчно (апелляция первой)
-  # ОДНОГО хоста мало: sudrf «мигает» пер-хостово (20.08.2026 oblsud--svd
-  # молчал в 08:19 и ожил к 08:30 — Урал в итоге спарсился), и одиночная
-  # канарейка давала ложный отказ на всю территорию. Берём апелляцию + два
-  # первых включённых суда 1-й инст. региона: живой ХОТЬ ОДИН — сеть на
-  # sudrf пускает; мертвы все — это блок или не та сеть, а не мигание.
-  local hosts
-  hosts=$("$1" -c 'import sys; sys.path.insert(0, "scripts");
-from court_monitor.regions import get_region
-region = get_region()
-hosts = [region.appeal_courts[0].domain]
-hosts += [c.domain for c in region.first_instance_courts
-          if getattr(c, "enabled", True)][:2]
-print("\n".join(dict.fromkeys(hosts)))' 2>/dev/null)
-  [ -n "$hosts" ] || return 1
-  printf '%s\n' "$hosts"
-}
-
-# Проба «сеть пускает на sudrf»: перебор канареек через cm_court_reachable
-# (детект заглушек/страниц защиты и браузерный UA — там). Успех при первом
-# живом хосте: 0 + его имя на stdout. Все мертвы: 1 + диагностика по каждой.
-cm_any_court_reachable() {  # $1 = python; 0 → живой хост, 1 → диагностика
-  local python="$1" hosts host err diag=""
-  hosts=$(cm_probe_court_hosts "$python") || {
-    printf 'не смог определить суды для пробы (реестр региона не прочитался)'
-    return 1
-  }
-  for host in $hosts; do
-    if err=$(cm_court_reachable "$host" "$python"); then
-      printf '%s\n' "$host"
-      return 0
-    fi
-    diag="${diag:+$diag; }$host: ${err:-без ответа}"
-  done
-  printf 'все канарейки мертвы — %s' "$diag"
-  return 1
-}
-
-# ⚠️ Мало «ответил ли сервер»: страница защиты ГАС «Правосудие» приходит с
-# HTTP 200 и телом ~1 КБ («Этот запрос заблокирован по соображениям
-# безопасности (G) : ip: …»). Прежняя проба считала её успехом, и прогон шёл
-# читать карточки, которых нет, — ровно то, что случилось с облаком 16.08.2026.
-# Судим по РАЗМЕРУ, а не по тексту: страницы судов в win-1251, и русский
-# маркер в UTF-8-скрипте не совпал бы. Настоящая главная страница суда —
-# десятки КБ, заглушка и блок-страница — около одного.
-CM_COURT_MIN_BYTES="${CM_COURT_MIN_BYTES:-4096}"
-
-# ⚠️ Подпись клиента (User-Agent) решает: WAF судов отдаёт `curl/…` и
-# `python-requests/…` ровно тот же 403, что и заблокированному адресу.
-# Замер 16.08.2026 с домашнего интернета юриста: голый curl → 403 (1330 б),
-# браузерная подпись → 200 (197 КБ той же страницы). Проба без подписи
-# объявляла бы блоком ЛЮБОЙ прогон, в том числе из офиса. Берём подпись у
-# самого парсера — одно место правды, а не вторая копия строки.
-cm_court_ua() {
-  "$1" -c 'import sys; sys.path.insert(0, "scripts");
-from court_monitor.netutil import session; print(session.headers.get("User-Agent", ""))' 2>/dev/null
-}
-
-cm_court_reachable() {  # $1 = хост, $2 = python; печатает диагностику, 0 = живой
-  local out code size ua
-  ua=$(cm_court_ua "${2:-python3}")
-  [ -n "$ua" ] || ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  out=$(curl -sS -o /dev/null -w '%{http_code} %{size_download}' -A "$ua" \
-        --connect-timeout 15 --max-time 45 "https://$1/" 2>&1) || {
-    printf '%s' "$out"; return 1; }
-  code=${out%% *}
-  size=${out##* }
-  if [ "$code" != "200" ]; then
-    printf 'суд ответил HTTP %s' "$code"; return 1
+# ── Проба доступности + сетевой отпечаток ────────────────────────────────────
+# Корень сайта больше не канарейка: он отвечал за 0,2 с, когда реальные
+# страницы поиска/карточек готовились 26–58 с. Python-хелпер параллельно
+# проверяет настоящие sud_delo URL кассации, каждой апелляции, FI-поиска и
+# одной карточки, а также пишет маршрут/VPN/ID выхода. Жив хотя бы один
+# реальный endpoint → прогон полезен (например, поиск лежит, карточки можно
+# дочитать, или наоборот). $2 необязателен — путь атомарного JSON-отпечатка.
+cm_any_court_reachable() {  # $1 = python, $2 = fingerprint.json
+  local python="$1" output="${2:-}"
+  if [ -n "$output" ]; then
+    "$python" ops/mac-local-run/network_fingerprint.py --output "$output"
+  else
+    "$python" ops/mac-local-run/network_fingerprint.py
   fi
-  if [ "${size:-0}" -lt "$CM_COURT_MIN_BYTES" ]; then
-    printf 'ответ всего %s байт — это не страница суда, а заглушка или страница защиты ГАС (нас блокируют по адресу)' "$size"
-    return 1
-  fi
-  return 0
 }
 
 # ── Снять host-маршруты судов ────────────────────────────────────────────────

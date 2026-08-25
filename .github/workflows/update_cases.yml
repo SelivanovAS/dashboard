@@ -150,6 +150,9 @@ jobs:
           # Логи и так флашатся построчно (StreamHandler/ghlog); это страховка
           # для «голых» print из зависимостей под pipe-буферизацией.
           PYTHONUNBUFFERED: "1"
+          # Полный многосудовый обход: открытый хост остывает по времени,
+          # пока очередь продолжает другие суды. FETCH_MAX_RETRIES не растёт.
+          CARD_BREAKER_MODE: "time"
         run: |
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 GROUP CHAT: digest will go to corporate group"

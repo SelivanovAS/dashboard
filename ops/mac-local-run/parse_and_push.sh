@@ -82,6 +82,7 @@ DELIVERY_TXN_JOURNAL="$LOG_DIR/.runtime/delivery_txn.json"
 PARSE_TXN_TOOL="$REPO/ops/mac-local-run/parse_txn.py"
 PARSE_TXN_JOURNAL="$LOG_DIR/.runtime/parse_txn.json"
 PARSE_TXN_ACK_FILE="$LOG_DIR/.runtime/parse_txn.ack.json"
+NETWORK_FINGERPRINT_FILE="$LOG_DIR/.runtime/network_fingerprint.json"
 RUN_LOCK_TOOL="$REPO/ops/mac-local-run/run_lock.py"
 DELIVERY_CONTEXT_PATH="data/last_digest_context.json"
 # ── Ротация лога по дням ─────────────────────────────────────────────────────
@@ -634,8 +635,8 @@ probe_failed() {  # $1 = диагностика канареек; наружу �
   finish_pusher
   exit 0
 }
-if PROBE_HOST=$(cm_any_court_reachable "$PYTHON"); then
-  log "Суд $PROBE_HOST доступен (канарейка)"
+if PROBE_HOST=$(cm_any_court_reachable "$PYTHON" "$NETWORK_FINGERPRINT_FILE"); then
+  log "Сетевая проба пройдена: $PROBE_HOST"
 else
   probe_failed "$PROBE_HOST"
 fi
@@ -700,11 +701,15 @@ log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без с
 # CAPTCHA, 4xx и HTTP-200-заглушка завершаются после одной попытки. Поэтому
 # сегодняшнее медленное утро не станет длиннее, а мигающий reset получит ещё
 # две дешёвые возможности вернуть карточку.
+# Полный многосудовый обход: cooldown измеряется временем, пока очередь
+# продолжает другие хосты. Batch-импорты отдельно фиксируют count (5/3).
 PARSE_TELEMETRY_FILE="$REPO/ops/mac-local-run/.runtime/parse_telemetry.json" \
+PARSE_NETWORK_FINGERPRINT_FILE="$NETWORK_FINGERPRINT_FILE" \
 DIGEST_CONTEXT_REQUIRED=1 \
 PARSE_TXN_ID="$PARSE_TXN_ID" \
 PARSE_TXN_ACK_FILE="$PARSE_TXN_ACK_FILE" \
 FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}" \
+CARD_BREAKER_MODE="${CARD_BREAKER_MODE:-time}" \
 SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ] && echo 0 || echo 1) \
 SKIP_CHECKED_TODAY=$([ "$FORCE" = "1" ] && echo 0 || echo 1) \
   "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1

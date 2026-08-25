@@ -129,6 +129,27 @@ def test_semantic_reclassification_replaces_previous_kind(tmp_path):
     }
 
 
+def test_breaker_snapshot_is_persisted_without_case_payload(tmp_path):
+    path = tmp_path / "parse_telemetry.json"
+    telemetry.begin_run(str(path), "hmao", run_id="breaker-run")
+    telemetry.set_breaker_snapshot({
+        "mode": "time",
+        "open_hosts": 1,
+        "by_kind": {"portal_placeholder": 1},
+        "hosts": [{
+            "host": "court.test",
+            "kind": "portal_placeholder",
+            "next_probe_in_seconds": 180.0,
+            "deferred_remaining": 4,
+        }],
+    })
+
+    breaker = _read(path)["current"]["breaker"]
+    assert breaker["mode"] == "time"
+    assert breaker["by_kind"] == {"portal_placeholder": 1}
+    assert breaker["hosts"][0]["deferred_remaining"] == 4
+
+
 def test_replace_failure_preserves_old_json_and_never_raises(
     tmp_path, monkeypatch, caplog
 ):
@@ -204,7 +225,7 @@ os._exit(17)
     assert old["interruption_detected_at"]
 
 
-def test_history_is_bounded_and_complete_status_is_kept(tmp_path):
+def test_history_keeps_every_attempt_of_current_day(tmp_path):
     path = tmp_path / "parse_telemetry.json"
     for i in range(6):
         telemetry.begin_run(str(path), "hmao", run_id=f"run-{i}")
@@ -212,10 +233,80 @@ def test_history_is_bounded_and_complete_status_is_kept(tmp_path):
     telemetry.begin_run(str(path), "hmao", run_id="run-final")
 
     data = _read(path)
-    assert len(data["history"]) == telemetry.HISTORY_LIMIT
+    assert len(data["history"]) == 6
     assert data["history"][0]["run_id"] == "run-5"
     assert data["history"][0]["status"] == "completed"
     assert data["history"][0]["summary"]["cards_read"] == 5
+    assert data["daily"]["attempt_count"] == 7
+
+
+def test_daily_case_sets_are_union_not_sum_of_changing_plans(tmp_path):
+    path = tmp_path / "parse_telemetry.json"
+    telemetry.begin_run(str(path), "hmao", run_id="attempt-1")
+    telemetry.register_planned_case_ids(
+        "first_instance", ["a.test|2-1/2026", "b.test|2-2/2026"]
+    )
+    telemetry.mark_case_read("first_instance", "a.test|2-1/2026")
+    telemetry.set_coverage("first_instance", 1, 2)
+    telemetry.complete_run()
+
+    telemetry.begin_run(str(path), "hmao", run_id="attempt-2")
+    # Дочитка пересчитала план: уже прочитанное дело из знаменателя выпало,
+    # новое появилось. День должен дать 2/3, а не сумму 2/3 случайно по counts.
+    telemetry.register_planned_case_ids(
+        "first_instance", ["b.test|2-2/2026", "c.test|2-3/2026"]
+    )
+    telemetry.mark_case_read("first_instance", "b.test|2-2/2026")
+    telemetry.set_coverage("first_instance", 1, 2)
+
+    daily = _read(path)["daily"]
+    assert daily["planned_case_ids_today"]["first_instance"] == [
+        "a.test|2-1/2026", "b.test|2-2/2026", "c.test|2-3/2026",
+    ]
+    assert daily["read_case_ids_today"]["first_instance"] == [
+        "a.test|2-1/2026", "b.test|2-2/2026",
+    ]
+    assert daily["coverage"]["first_instance"] == {"read": 2, "planned": 3}
+
+
+def test_daily_network_aggregates_hosts_errors_and_recovery(tmp_path):
+    path = tmp_path / "parse_telemetry.json"
+    telemetry.begin_run(str(path), "hmao", run_id="attempt-1")
+    rid = telemetry.begin_fetch("a.test", "2-1/2026")
+    telemetry.finish_fetch_transport(rid, "read_timeout", 65.0)
+    telemetry.set_breaker_snapshot({
+        "probes": 1, "probe_failures": 1, "probe_successes": 0,
+        "deferred_total": 3, "deferred_recovered": 0,
+        "deferred_remaining": 3, "by_kind": {"read_timeout": 1},
+        "hosts": [{"host": "a.test", "state": "open",
+                   "kind": "read_timeout", "probes": 1,
+                   "deferred_total": 3, "deferred_recovered": 0,
+                   "deferred_remaining": 3}],
+    })
+    telemetry.complete_run()
+
+    telemetry.begin_run(str(path), "hmao", run_id="attempt-2")
+    rid = telemetry.begin_fetch("a.test", "2-1/2026")
+    telemetry.finish_fetch_transport(rid, "http_200", 1.0, status=200)
+    telemetry.classify_semantic(rid, "valid_card", host="a.test")
+    telemetry.set_breaker_snapshot({
+        "probes": 1, "probe_failures": 0, "probe_successes": 1,
+        "deferred_total": 3, "deferred_recovered": 3,
+        "deferred_remaining": 0, "by_kind": {},
+        "hosts": [{"host": "a.test", "state": "closed", "kind": "",
+                   "probes": 1, "deferred_total": 3,
+                   "deferred_recovered": 3, "deferred_remaining": 0}],
+    })
+
+    daily = _read(path)["daily"]
+    assert daily["network"]["transport_outcomes"] == {
+        "http_200": 1, "read_timeout": 1,
+    }
+    assert daily["network"]["by_host"]["a.test"]["attempts_completed"] == 2
+    assert daily["recovery"]["opened_hosts"] == ["a.test"]
+    assert daily["recovery"]["recovered_hosts"] == ["a.test"]
+    assert daily["recovery"]["probe_failures"] == 1
+    assert daily["recovery"]["probe_successes"] == 1
 
 
 def test_calls_before_begin_are_noop(tmp_path):
@@ -360,8 +451,8 @@ def test_fetch_card_http_200_blocked_is_not_double_counted(
     assert net["attempts_started"] == 1
     assert net["attempts_completed"] == 1
     assert net["transport_outcomes"] == {"http_200": 1}
-    assert net["semantic_outcomes"] == {"blocked": 1}
-    assert config.FETCH_DIAG["kind"] == "blocked"
+    assert net["semantic_outcomes"] == {"waf_block": 1}
+    assert config.FETCH_DIAG["kind"] == "waf_block"
     assert config.FETCH_DIAG["request_id"].startswith("card-run:")
     # В checkpoint нет ни тела страницы, ни полного URL карточки.
     raw = path.read_text(encoding="utf-8")
@@ -469,7 +560,9 @@ def test_production_wiring_uses_local_env_and_all_stage_checkpoints():
         os.path.join(REPO, "scripts/court_monitor/runs.py"), encoding="utf-8"
     ) as f:
         source = f.read()
-    assert "telemetry.begin_run(config.PARSE_TELEMETRY_FILE, config.REGION)" in source
+    assert "telemetry.begin_run(" in source
+    assert "config.PARSE_TELEMETRY_FILE" in source
+    assert "config.REGION" in source
     assert "telemetry.complete_run(" in source
     # Три search-пути + второй рубеж пустой карточки в FI/appeal hot loops.
     assert source.count("mark_last_fetch_semantic(") >= 5
@@ -501,8 +594,9 @@ def test_cassation_coverage_plan_is_fixed_before_http_and_business_filter():
     end = source.index("# Передаём горячий архив", start)
     block = source[start:end]
     assert block.index("cass_planned = len(cass_plan)") < block.index(
-        "for r in cass_plan:"
+        "cass_queue = DeferredCardQueue("
     )
+    assert "for _work in cass_queue:" in block
     assert block.index("cass_parsed += 1") < block.index(
         'if not info.get("sber_present")'
     )
