@@ -948,6 +948,7 @@ class TestWorkflowWiring:
         проба «каждые 30 пропущенных» в дампе на 25 строк = «никогда», и
         мигающий блок убивал остаток дампа безвозвратно."""
         yml = _read_repo(".github/workflows/import_cases.yml")
+        assert 'CARD_BREAKER_MODE: "count"' in yml
         assert 'CARD_BREAKER_THRESHOLD: "5"' in yml
         assert 'CARD_BREAKER_PROBE_EVERY: "3"' in yml
 

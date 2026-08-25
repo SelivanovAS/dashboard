@@ -413,10 +413,39 @@ _ANTIBOT_TEXT_MARKERS = (
     "слишком много запросов",
     "too many requests",
 )
+# Точная страница защиты ГАС «Правосудие» (HTTP 200 или 403). Раньше она и
+# штатная заглушка «Информация временно недоступна» схлопывались в ``blocked``
+# и получали одну breaker-политику, хотя первое означает блок нашего адреса,
+# второе — аутейдж самого портала.
+_WAF_TEXT_MARKERS = (
+    "запрос заблокирован по соображениям безопасности",
+    "request blocked for security reasons",
+)
 # Единственный живой якорь настоящей карточки — лейбл УИД в таблице «ДЕЛО»
 # (см. parse_case_card). Маркер name_op=case в ТЕЛЕ карточек не встречается
 # (проверено по всем фикстурам: 0 вхождений) — в якоря его не брать.
 _CARD_UID_ANCHOR = "уникальный идентификатор"
+
+
+def classify_outage_page(html: str) -> str:
+    """Точный класс строгой URL-независимой заглушки, иначе ``""``.
+
+    Возвращает ``waf_block`` для защиты адреса/антибот-разметки и
+    ``portal_placeholder`` для штатной заглушки недоступности sudrf.
+    Это единственная классификация этих страниц; boolean-обёртки ниже нужны
+    только старым вызывающим и не содержат своих правил.
+    """
+    if not html:
+        return ""
+    low = html.lower()
+    if _NO_DATA_MARK in low:
+        return ""
+    if (any(m in low for m in _WAF_TEXT_MARKERS)
+            or any(m in low for m in _ANTIBOT_MARKUP_MARKERS)):
+        return "waf_block"
+    if sum(1 for m in _OUTAGE_MARKERS if m in low) >= 2:
+        return "portal_placeholder"
+    return ""
 
 
 def looks_like_outage_page(html: str) -> bool:
@@ -431,14 +460,32 @@ def looks_like_outage_page(html: str) -> bool:
     (netutil.card_breaker_preopen). «Данных по запросу не обнаружено» —
     легитимно пустая выдача, не заглушка.
     """
+    return bool(classify_outage_page(html))
+
+
+def classify_non_card_page(html: str, url: str = "") -> str:
+    """Точный semantic-класс ответа вместо карточки, иначе ``""``.
+
+    ``non_card_page`` — структурный fallback без доказанной причины: его
+    нельзя называть ни падением портала, ни WAF. Так оператор и breaker не
+    получают более уверенный диагноз, чем реально дала страница.
+    """
+    strict = classify_outage_page(html)
+    if strict:
+        return strict
     if not html:
-        return False
+        return ""
     low = html.lower()
-    if _NO_DATA_MARK in low:
-        return False
-    if sum(1 for m in _OUTAGE_MARKERS if m in low) >= 2:
-        return True
-    return any(m in low for m in _ANTIBOT_MARKUP_MARKERS)
+    if _NO_DATA_MARK in low or "name_op=case" not in (url or ""):
+        return ""
+    if _CARD_UID_ANCHOR in low:
+        return ""
+    if any(m in low for m in _OUTAGE_MARKERS):
+        return "portal_placeholder"
+    if (any(m in low for m in _ANTIBOT_TEXT_MARKERS)
+            or any(m in low for m in _WAF_TEXT_MARKERS)):
+        return "waf_block"
+    return "non_card_page" if low.count("<table") <= 1 else ""
 
 
 def looks_like_non_card_page(html: str, url: str = "") -> bool:
@@ -463,26 +510,7 @@ def looks_like_non_card_page(html: str, url: str = "") -> bool:
     Легитимная компактная карточка-«огрызок» (4 таблицы + УИД, напр.
     case_card_truncated.html) сюда тоже НЕ попадает — остаётся в cards_degraded.
     """
-    if looks_like_outage_page(html):
-        return True
-    if not html:
-        return False
-    low = html.lower()
-    if _NO_DATA_MARK in low:
-        return False
-    if "name_op=case" not in (url or ""):
-        return False
-    has_uid = _CARD_UID_ANCHOR in low
-    if has_uid:
-        return False
-    # Одиночная фраза недоступности (≥2 уже поймал looks_like_outage_page).
-    if any(m in low for m in _OUTAGE_MARKERS):
-        return True
-    if any(m in low for m in _ANTIBOT_TEXT_MARKERS):
-        return True
-    # Число тегов <table> без полного парса: у настоящих карточек их ≥4
-    # (даже у «огрызков»), у заглушек — 0-1.
-    return low.count("<table") <= 1
+    return bool(classify_non_card_page(html, url))
 
 
 def find_fi_case_link(html: str, case_number: str) -> str:

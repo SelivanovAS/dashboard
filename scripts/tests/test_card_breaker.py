@@ -65,6 +65,7 @@ class _Net:
 def net(monkeypatch):
     n = _Net(OUTAGE_HTML)
     monkeypatch.setattr(netutil, "fetch_page", n.fetch)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_MODE", "count")
     monkeypatch.setattr(cm_config, "CARD_BREAKER_THRESHOLD", 5)
     monkeypatch.setattr(cm_config, "CARD_BREAKER_PROBE_EVERY", 5)
     monkeypatch.setitem(cm_config.METRICS, "cards_breaker_skipped", 0)
@@ -110,7 +111,9 @@ class TestCardBreakerCore:
         for _ in range(2):
             netutil.fetch_card_checked(CARD_URL)
         assert netutil.card_breaker_open(HOST) is True
-        assert cm_config.CARD_BREAKER[HOST]["reason"] == "проверочный код"
+        assert cm_config.CARD_BREAKER[HOST]["reason"] == (
+            "карточка закрыта проверочным кодом"
+        )
 
     def test_hosts_independent(self, net):
         other_url = CARD_URL.replace(HOST, "hmankord--hmao.sudrf.ru")
@@ -199,7 +202,7 @@ class TestCardBreakerCanary:
         assert uc.looks_like_outage_page("") is False
 
     def test_preopen_blocks_cards_and_probe_recovers(self, net):
-        netutil.card_breaker_preopen(HOST, "заглушка на странице поиска")
+        netutil.card_breaker_preopen(HOST, "outage_search")
         assert netutil.card_breaker_open(HOST) is True
         assert cm_config.CARD_BREAKER[HOST]["preopened"] is True
         # Ни одной потраченной карточки до первой пробы…
@@ -213,10 +216,198 @@ class TestCardBreakerCanary:
 
     def test_preopen_disabled_by_threshold_zero(self, net, monkeypatch):
         monkeypatch.setattr(cm_config, "CARD_BREAKER_THRESHOLD", 0)
-        netutil.card_breaker_preopen(HOST, "заглушка на странице поиска")
+        netutil.card_breaker_preopen(HOST, "outage_search")
         assert netutil.card_breaker_open(HOST) is False
         netutil.fetch_card_checked(CARD_URL)
         assert net.calls == 1
+
+
+@pytest.fixture
+def time_breaker(monkeypatch):
+    """Детерминированные часы и короткая policy для time-based тестов."""
+    clock = {"now": 100.0}
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_MODE", "time")
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_THRESHOLD", 3)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_FAST_THRESHOLD", 2)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_SLOW_THRESHOLD", 2)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_OUTAGE_THRESHOLD", 2)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_BLOCK_THRESHOLD", 2)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_FAST_COOLDOWN_SECONDS", 10.0)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_OUTAGE_COOLDOWN_SECONDS", 20.0)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_SLOW_COOLDOWN_SECONDS", 30.0)
+    monkeypatch.setattr(cm_config, "CARD_BREAKER_BLOCK_COOLDOWN_SECONDS", 40.0)
+    monkeypatch.setattr(netutil.time, "monotonic", lambda: clock["now"])
+    for key in (
+        "cards_breaker_skipped", "cards_breaker_recovered",
+        "cards_breaker_unrequested",
+    ):
+        monkeypatch.setitem(cm_config.METRICS, key, 0)
+    return clock
+
+
+class TestCardBreakerTimeBased:
+    """Half-open зависит от времени и точного класса, а не размера суда."""
+
+    def test_only_one_probe_after_deadline_and_failure_restarts_cooldown(
+        self, time_breaker,
+    ):
+        netutil.card_breaker_preopen(HOST, "portal_placeholder")
+        assert netutil.card_breaker_allows(HOST) is False
+        time_breaker["now"] = 119.9
+        assert netutil.card_breaker_allows(HOST) is False
+
+        time_breaker["now"] = 120.0
+        assert netutil.card_breaker_allows(HOST) is True
+        # Пока первая проба не закончилась, второй запрос не проскочит.
+        assert netutil.card_breaker_allows(HOST) is False
+        netutil.card_breaker_note_failure(HOST, "portal_placeholder")
+
+        entry = cm_config.CARD_BREAKER[HOST]
+        assert entry["probe_failures"] == 1
+        assert entry["state"] == "open"
+        assert entry["next_probe_at"] == 140.0
+        assert netutil.card_breaker_allows(HOST) is False
+
+    def test_mixed_failure_families_do_not_reach_each_others_threshold(
+        self, time_breaker,
+    ):
+        netutil.card_breaker_note_failure(HOST, "connection_reset")
+        assert cm_config.CARD_BREAKER[HOST]["fails"] == 1
+        netutil.card_breaker_note_failure(HOST, "captcha_card")
+        entry = cm_config.CARD_BREAKER[HOST]
+        assert entry["family"] == "access_block"
+        assert entry["fails"] == 1
+        assert entry["open"] is False
+
+        netutil.card_breaker_note_failure(HOST, "captcha_card")
+        entry = cm_config.CARD_BREAKER[HOST]
+        assert entry["open"] is True
+        assert entry["kind"] == "captcha_card"
+        assert entry["cooldown_seconds"] == 40.0
+
+    def test_parser_quality_never_opens_transport_breaker(self, time_breaker):
+        for _ in range(20):
+            netutil.card_breaker_note_failure(HOST, "empty_shell")
+        assert netutil.card_breaker_open(HOST) is False
+
+    def test_other_hosts_supply_useful_work_until_due_probe(
+        self, time_breaker,
+    ):
+        """Малому суду не нужны 30 следующие карточек: достаточно времени,
+        прошедшего на работе с другим хостом."""
+        netutil.card_breaker_preopen(HOST, "connection_reset")
+        queue = netutil.DeferredCardQueue(
+            [(HOST, "a1"), ("other.test", "b"), (HOST, "a2")],
+            stage="unit",
+        )
+
+        first = next(queue)
+        assert queue.allows(HOST) is False
+        assert queue.defer(first, HOST) is True
+
+        useful = next(queue)
+        assert useful.value == ("other.test", "b")
+        assert queue.allows("other.test") is True
+        time_breaker["now"] = 110.0  # полезная работа заняла cooldown
+
+        probe = next(queue)
+        assert queue.allows(HOST) is True
+        netutil._card_breaker_ok(HOST)
+        queue.finish(probe, recovered=True)
+
+        recovered = next(queue)
+        assert recovered.value == (HOST, "a1")
+        assert queue.allows(HOST) is True
+        queue.finish(recovered, recovered=True)
+        with pytest.raises(StopIteration):
+            next(queue)
+
+        assert queue.unresolved() == []
+        assert cm_config.METRICS["cards_breaker_recovered"] == 1
+        summary = netutil.card_breaker_summary()
+        assert summary["probe_successes"] == 1
+        assert summary["deferred_recovered"] == 1
+
+    def test_stage_does_not_sleep_when_cooldown_is_not_due(
+        self, time_breaker, monkeypatch,
+    ):
+        monkeypatch.setattr(
+            netutil.time, "sleep",
+            lambda *_: pytest.fail("deferred sweep must not sleep"),
+        )
+        netutil.card_breaker_preopen(HOST, "portal_placeholder")
+        queue = netutil.DeferredCardQueue(["a", "b"], stage="unit")
+        for work in queue:
+            assert queue.allows(HOST) is False
+            queue.defer(work, HOST)
+
+        assert len(queue.unresolved_unrequested()) == 2
+        assert cm_config.METRICS["cards_breaker_skipped"] == 2
+
+    def test_failed_probe_is_capped_once_per_host_and_phase(
+        self, time_breaker,
+    ):
+        """Новый cooldown внутри той же фазы не даёт вторую пробу."""
+        netutil.card_breaker_preopen(HOST, "portal_placeholder")
+        queue = netutil.DeferredCardQueue(["a", "b"], stage="unit")
+        time_breaker["now"] = 120.0
+
+        probe = next(queue)
+        assert queue.allows(HOST) is True
+        queue.mark_attempted(probe)
+        time_breaker["now"] = 121.0
+        netutil.card_breaker_note_failure(HOST, "portal_placeholder")
+        queue.defer(probe, HOST)
+
+        # Cooldown давно истёк, но бюджет этой фазы уже исчерпан.
+        time_breaker["now"] = 1000.0
+        second = next(queue)
+        assert queue.allows(HOST) is False
+        queue.defer(second, HOST)
+        with pytest.raises(StopIteration):
+            next(queue)
+
+        entry = cm_config.CARD_BREAKER[HOST]
+        assert entry["probes"] == 1
+        assert entry["probe_failures"] == 1
+        assert len(queue.unresolved()) == 2
+
+        # Лимит именно на фазу: новая очередь получает одну новую пробу.
+        next_phase = netutil.DeferredCardQueue(["c"], stage="next")
+        next_work = next(next_phase)
+        assert next_phase.allows(HOST) is True
+        next_phase.mark_attempted(next_work)
+
+    def test_many_dead_hosts_do_not_start_a_second_probe_round(
+        self, time_breaker,
+    ):
+        """Регрессия сегодняшнего сценария: круг проб длиннее cooldown."""
+        hosts = [f"dead-{idx}.test" for idx in range(3)]
+        for host in hosts:
+            netutil.card_breaker_preopen(host, "portal_placeholder")
+        queue = netutil.DeferredCardQueue(hosts, stage="many-dead-hosts")
+        time_breaker["now"] = 120.0
+
+        attempted = []
+        for work in queue:
+            host = work.value
+            assert queue.allows(host) is True
+            queue.mark_attempted(work)
+            attempted.append(host)
+            # 3 хоста × 11 с > cooldown 20 с: без фазового лимита первый
+            # хост снова становился due и очередь не завершалась.
+            time_breaker["now"] += 11.0
+            netutil.card_breaker_note_failure(host, "portal_placeholder")
+            queue.defer(work, host)
+
+        assert attempted == hosts
+        assert sum(
+            int(cm_config.CARD_BREAKER[h]["probes"]) for h in hosts
+        ) == len(hosts)
+        assert sum(
+            int(cm_config.CARD_BREAKER[h]["probe_failures"]) for h in hosts
+        ) == len(hosts)
+        assert len(queue.unresolved()) == len(hosts)
 
 
 class TestCardBreakerReporting:
@@ -255,7 +446,7 @@ class TestCardBreakerReporting:
         assert len(lines) == 2
         assert "Сургутский городской суд" in lines[0]
         assert "снят с обхода" in lines[0]
-        assert "пропущено 40" in lines[0]
+        assert "отложено 40" in lines[0]
         # Незнакомый хост печатается как есть; закрывшийся — «возобновлён».
         assert "b--hmao.sudrf.ru" in lines[1]
         assert "возобновлён" in lines[1]
@@ -280,7 +471,7 @@ class TestCardBreakerWiring:
     def test_fi_cycle_gate_before_delay_then_ungated_fetch(self):
         src = self._runs_src()
         i_skip = src.index('bank_report.record(case_j, "skip"')
-        i_gate = src.index("if not card_breaker_allows(court_cfg.domain):")
+        i_gate = src.index("if not fi_queue.allows(court_cfg.domain):")
         i_delay = src.index("polite_delay()", i_gate)
         i_fetch = src.index("breaker_gate=False", i_gate)
         assert i_skip < i_gate < i_delay < i_fetch
@@ -290,18 +481,26 @@ class TestCardBreakerWiring:
 
     def test_appeal_cycle_gate_wired(self):
         src = self._runs_src()
-        i_gate = src.index("if not card_breaker_allows(_ap_court.domain):")
+        i_gate = src.index("if not appeal_queue.allows(_ap_court.domain):")
         i_delay = src.index("polite_delay()", i_gate)
         i_fetch = src.index("breaker_gate=False", i_gate)
         assert i_gate < i_delay < i_fetch
+
+    def test_all_deferred_phases_use_their_own_probe_budget(self):
+        src = self._runs_src()
+        assert "if not appeal_queue.allows(_ap_court.domain):" in src
+        assert "if not cass_queue.allows(CASSATION_COURT.domain):" in src
+        assert "if not cass_refresh_queue.allows(CASSATION_COURT.domain):" in src
+        assert "if not fi_queue.allows(court_cfg.domain):" in src
 
     def test_search_canaries_wired_for_all_sources(self):
         """Пре-открытие по заглушке на поиске — во всех трёх фазах:
         суды 1-й инст., апелляция, кассация 7kas."""
         src = self._runs_src()
-        assert "card_breaker_preopen(court.domain" in src
-        assert "card_breaker_preopen(_ap_court.domain" in src
-        assert "CASSATION_COURT.domain, \"заглушка на странице поиска\"" in src
+        assert "card_breaker_preopen(" in src
+        assert "court.domain," in src
+        assert "_ap_court.domain," in src
+        assert "CASSATION_COURT.domain, _cass_semantic" in src
 
     def test_alert_lines_wired_into_4e(self):
         src = self._runs_src()

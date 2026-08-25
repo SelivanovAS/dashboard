@@ -65,6 +65,7 @@ jobs:
       # замер с машины юриста: один запрос отбит, следующие восемь прошли.
       # Порог 5 + проба каждые 3: мигающий суд восстанавливается внутри
       # импорта, лежащий не получает все 100 бесполезных запросов.
+      CARD_BREAKER_MODE: "count"
       CARD_BREAKER_THRESHOLD: "5"
       CARD_BREAKER_PROBE_EVERY: "3"
       PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}

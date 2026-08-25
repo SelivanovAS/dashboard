@@ -157,13 +157,15 @@ class TestTerritories:
     def test_probe_host_from_region(self, worker, lib):
         assert "oblsud--hmao.sudrf.ru" not in worker + lib, \
             "хост пробы захардкожен на ХМАО — форк стучался бы в чужой суд"
-        assert "appeal_courts[0].domain" in lib
-        # Мульти-хост (20.08.2026): sudrf «мигает» пер-хостово, и одиночная
-        # канарейка давала ложный отказ на всю территорию (oblsud--svd молчал
-        # в 08:19, ожил в 08:30). Апелляция + суды 1-й инст., живой хоть один.
+        fingerprint = _read("ops/mac-local-run/network_fingerprint.py")
+        assert "APPEAL_COURTS" in fingerprint
+        assert "courts_for_search" in fingerprint
+        assert "CASSATION_COURT" in fingerprint
+        # Мульти-endpoint (25.08.2026): корень сайта больше не доказательство.
+        # Проверяются реальные поиски трёх инстанций + известная карточка.
         assert "cm_any_court_reachable" in lib
-        assert "first_instance_courts" in lib, \
-            "канарейка снова одиночная — вернутся ложные отказы при мигающем sudrf"
+        assert "search_url()" in fingerprint
+        assert "fi_card_url(fi)" in fingerprint
         assert "cm_any_court_reachable" in worker
 
     def test_driver_defaults_to_single_repo(self, lib):
@@ -501,6 +503,7 @@ class TestSlotFetchTuning:
     def test_slots_only_raise_retry_ceiling(self, worker):
         code = _code(worker)
         assert 'FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"' in worker
+        assert 'CARD_BREAKER_MODE="${CARD_BREAKER_MODE:-time}"' in worker
         for lever in ("CARD_BREAKER_THRESHOLD=", "CARD_BREAKER_PROBE_EVERY="):
             assert lever not in code, (
                 f"{lever} вернулся в слоты без адаптивной breaker-политики"
@@ -523,14 +526,15 @@ class TestSlotFetchTuning:
         assert "24.08.2026" in head and "21.08.2026" in head, \
             "в комментарии перед запуском пропала история двух режимов"
 
-    def test_cloud_workflow_keeps_defaults(self):
-        """Облачный прогон остаётся на боевых дефолтах: там пропуск
-        безопасен (перечитается следующим кроном), а Mac-слотам недочитанное
-        задерживает дайджест ДНЯ."""
+    def test_cloud_workflow_uses_time_mode_without_raising_limits(self):
+        """Облако и Mac используют одну временную policy; пороги и число
+        HTTP-ретраев workflow по-прежнему не поднимает."""
         yml = _read(".github/workflows/update_cases.yml")
+        assert 'CARD_BREAKER_MODE: "time"' in yml
+        executable = _code(yml)
         for var in ("FETCH_MAX_RETRIES", "CARD_BREAKER_THRESHOLD",
                     "CARD_BREAKER_PROBE_EVERY"):
-            assert var not in yml, var
+            assert var not in executable, var
 
     def test_retries_are_observable(self):
         """Эффект настройки обязан быть виден в данных, а не только грепом
@@ -605,16 +609,19 @@ class TestHonestCourtProbe:
     тот провал, из-за которого встало облако 16.08.2026, только молча."""
 
     def test_probe_checks_code_and_size(self, lib):
-        body = lib[lib.index("cm_court_reachable()"):]
-        body = body[:body.index("\n}")]
-        assert "%{http_code}" in body and "%{size_download}" in body, \
-            "проба снова смотрит только на код возврата curl"
-        assert 'code" != "200"' in body, "HTTP 403 опять сойдёт за успех"
-        assert "CM_COURT_MIN_BYTES" in body, \
-            "страница защиты ГАС (HTTP 200, ~1 КБ) снова пройдёт за живой суд"
+        body = _read("ops/mac-local-run/network_fingerprint.py")
+        assert "response.raise_for_status()" in body
+        assert "classify_non_card_page" in body
+        assert "classify_outage_page" in body
+        assert "detect_captcha_challenge_card" in body
+        assert "transport_fail_kind" in body
 
     def test_size_threshold_is_declared(self, lib):
-        assert "CM_COURT_MIN_BYTES=" in lib
+        body = _read("ops/mac-local-run/network_fingerprint.py")
+        assert "search_url()" in body
+        assert "fi_card_url(fi)" in body
+        assert 'target.page_type == "card"' in body
+        assert "detect_captcha_challenge(html)" in body
 
     def test_stale_office_routes_are_dropped(self, lib):
         """Маршруты, поставленные в офисе, вне сети Сбера ведут в никуда: суды

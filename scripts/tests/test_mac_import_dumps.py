@@ -43,7 +43,7 @@ def _read_repo(rel: str) -> str:
 
 class TestQueueBeforeCourts:
     """Порядок с 20.08.2026: СНАЧАЛА очередь, ПОТОМ суды. Cloudflare доступен
-    из любой сети (на sudrf он не ходит), а канарейка судов при пустой
+    из любой сети (на sudrf он не ходит), а сетевая проба судов при пустой
     очереди только шумела: 20.08 четыре слота подряд алертили «oblsud--svd
     не отвечает», хотя импортировать было нечего."""
 
@@ -52,7 +52,7 @@ class TestQueueBeforeCourts:
         empty = text.index("Очередь пуста")
         gate = text.index("courts_gate queued")
         assert empty < gate, \
-            "канарейка судов снова стоит раньше проверки очереди — шум вернётся"
+            "сетевая проба судов снова стоит раньше проверки очереди — шум вернётся"
 
     def test_empty_queue_exits_quietly(self):
         text = _read_repo(IMPORTER)
@@ -60,7 +60,7 @@ class TestQueueBeforeCourts:
         assert "exit 0" in block[:200], "пустая очередь обязана выходить тихо"
 
     def test_manual_file_mode_still_dies_loudly(self):
-        """--file — ручной запуск: юрист смотрит на экран, отказ канарейки
+        """--file — ручной запуск: юрист смотрит на экран, отказ сетевой пробы
         обязан кричать сразу (courts_gate manual → die), а не молчать."""
         text = _read_repo(IMPORTER)
         assert "courts_gate manual" in text
@@ -194,6 +194,8 @@ class TestDriverWiring:
         дефолтами."""
         yml = _read_repo(".github/workflows/import_cases.yml")
         mac = _read_repo(IMPORTER)
+        assert 'CARD_BREAKER_MODE: "count"' in yml
+        assert 'CARD_BREAKER_MODE="${CARD_BREAKER_MODE:-count}"' in mac
         for key in ("CARD_BREAKER_THRESHOLD", "CARD_BREAKER_PROBE_EVERY"):
             cloud = re.search(rf'{key}:\s*"(\d+)"', yml)
             local = re.search(rf'{key}="\$\{{{key}:-(\d+)\}}"', mac)

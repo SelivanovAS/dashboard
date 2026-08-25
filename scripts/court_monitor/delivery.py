@@ -820,14 +820,25 @@ def log_run_summary(
         )
     if config.METRICS["cards_blocked"]:
         opt_lines.append(
-            f"Карточек не прочитано (заглушка/блок портала): "
+            f"Ответов-карточек с заглушкой/блоком портала: "
             f"{config.METRICS['cards_blocked']}"
         )
     if config.METRICS.get("cards_breaker_skipped"):
-        opt_lines.append(
-            f"Карточек пропущено предохранителем (суд недоступен): "
-            f"{config.METRICS['cards_breaker_skipped']}"
+        _breaker_line = (
+            f"Breaker карточек: гейт сработал "
+            f"{config.METRICS['cards_breaker_skipped']} раз"
         )
+        if config.METRICS.get("cards_breaker_recovered"):
+            _breaker_line += (
+                f", дочитано после half-open "
+                f"{config.METRICS['cards_breaker_recovered']}"
+            )
+        if config.METRICS.get("cards_breaker_unrequested"):
+            _breaker_line += (
+                f", без HTTP осталось "
+                f"{config.METRICS['cards_breaker_unrequested']}"
+            )
+        opt_lines.append(_breaker_line)
     if config.METRICS["push_sent"] or config.METRICS["push_failed"]:
         opt_lines.append(
             f"Web Push: отправлено {config.METRICS['push_sent']}"

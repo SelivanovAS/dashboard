@@ -190,6 +190,54 @@ class TestMorningCumulative:
         assert ok and "за утро всего 470" in why
 
 
+class TestDailyDenominatorAndInstances:
+    TODAY = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    def test_daily_union_replaces_incomparable_attempt_denominator(self):
+        state = {
+            "sources": {"fi:a.test": _src(self.TODAY, 10)},
+            "last_run": {
+                "at": self.TODAY,
+                "cards_read": 70,
+                "cards_planned": 201,
+                "cards_read_today": 185,
+                "cards_planned_today": 548,
+            },
+        }
+        assert cloud_run_ok.cards_progress(state) == (185, 548)
+        line = cloud_run_ok.progress_line(state)
+        assert "185 из 548" in line
+        assert "70 из 201" not in line
+
+    def test_search_and_card_verdicts_are_separate_by_instance(self):
+        state = {
+            "sources": {
+                "fi:a.test": _src(self.TODAY, 10),
+                "appeal:svd.test": _src(self.TODAY, 8, fail_streak=1),
+                "appeal:ynao.test": _src(self.TODAY, 6),
+                "cassation:7kas:total": _src(self.TODAY, 12, fail_streak=1),
+                "cassation:7kas:hmao": _src(self.TODAY, 3),
+            },
+            "last_run": {
+                "at": self.TODAY,
+                "cards_read_today": 36,
+                "cards_planned_today": 323,
+                "instances": {
+                    "first_instance": {"read_today": 0, "planned_today": 287},
+                    "appeal": {"read_today": 34, "planned_today": 34},
+                    "cassation": {"read_today": 2, "planned_today": 2},
+                },
+            },
+        }
+        line = cloud_run_ok.progress_line(state)
+        assert "карточки за день: 1-я инст. 0/287" in line
+        assert "апелляция 34/34" in line
+        assert "кассация 2/2" in line
+        assert "поиск: 1-я инст. 1/1" in line
+        assert "апелляция 1/2 (ошибка 1)" in line
+        assert "кассация 0/1 (ошибка 1)" in line
+
+
 class TestDeliveredGate:
     """Гейт слота: пропуск ТОЛЬКО когда дайджест дня уже отправлен
     (delivered_at) — иначе повторный маркер-коммит разослал бы его дважды."""
@@ -895,6 +943,11 @@ class TestDeliveryIdentity:
     """
 
     ISSUE_KEY = cloud_run_ok.dt.datetime.now().strftime("%Y-%m-%dT08:25:42")
+
+    def test_issue_key_tracks_test_day_instead_of_fixed_calendar_date(self):
+        """Регрессия CI 24→25.08: фиксированная дата красила 6 тестов на
+        следующий день, хотя доставка работала штатно."""
+        assert self.ISSUE_KEY[:10] in cloud_run_ok._today_dates()
 
     @staticmethod
     def _setup_ctx(tmp_path, monkeypatch, *, issue_key=None):
