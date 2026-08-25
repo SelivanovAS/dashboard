@@ -3,10 +3,10 @@
   "run_date": "2026-08-25",
   "smart_skip": true,
   "totals": {
-    "total": 525,
+    "total": 524,
     "parsed": 0,
     "skip": 287,
-    "failed": 238,
+    "failed": 237,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -5665,9 +5665,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5719,9 +5719,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "court_breaker",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5897,24 +5897,6 @@
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-07-31"
-    },
-    {
-      "outcome": "court_breaker",
-      "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "vartovgor--hmao.sudrf.ru|2-4970/2026",
-      "number": "2-4970/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-08-14"
     },
     {
       "outcome": "skip",
@@ -9463,5 +9445,5 @@
       "last_checked_at": "2026-08-21"
     }
   ],
-  "updated_at": "2026-08-25T06:40:30"
+  "updated_at": "2026-08-25T07:20:45"
 }
