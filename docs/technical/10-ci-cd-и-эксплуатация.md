@@ -71,8 +71,11 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 > [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
 
 Цепочка: `parse_all.sh` один раз готовит маршруты обоих регионов, запускает
-Урал сразу и ХМАО через 10 минут, ждёт оба поклоновых `parse_and_push.sh`, затем
-запускает импорты поочерёдно. Каждый `parse_and_push.sh`: preflight → `run_parse.py` =
+Урал сразу и ХМАО через 10 минут, ждёт оба поклоновых `parse_and_push.sh`, после
+08:45 проходит по pending-контекстам обоих клонов в режиме `--deliver-pending`
+и затем запускает импорты поочерёдно. Этот режим не делает preflight судов и не
+запускает Python-парсер: только pull → проверка свежего pending → та же
+exact-once воронка доставки. Каждый обычный `parse_and_push.sh`: preflight → `run_parse.py` =
 `main_json` без секретов → черновой push данных → локальный
 delivery journal → `delivered_at` + отдельный marker-коммит
 `📊 Обновление данных … (Mac-парсинг)` → подтверждение marker SHA на remote)
@@ -87,7 +90,10 @@ delivery journal → `delivered_at` + отдельный marker-коммит
 Параллельная часть не делит mutable-состояние: git-индекс, данные, lock, логи,
 telemetry и delivery journal живут в каталоге своего клона. Общий только host-route,
 поэтому его меняет только родитель до старта детей. Отказ одного клона не
-отменяет второй, но итоговый exit code будет ненулевым. Быстрый откат —
+отменяет второй, но итоговый exit code будет ненулевым; sweep всё равно проверит
+оба уже накопленных контекста. Он нужен потому, что launchd пропускает без
+очереди календарный слот 08:45, если единственный `parse_all.sh` ещё работает.
+Быстрый откат —
 `CM_PARALLEL_TERRITORIES=0`; диагностический `--check` всегда последовательный.
 
 ## GitHub Actions

@@ -18,6 +18,7 @@ import json
 import os
 import plistlib
 import random
+import re
 import subprocess
 import sys
 
@@ -299,9 +300,12 @@ class TestGateWiring:
     def test_stale_lock_and_parse_snapshot_recover_before_pull(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
         lock = text.index('"$RUN_LOCK_TOOL" acquire')
-        recovery = text.index("  reconcile_parse_transaction")
-        pull = text.index("git pull --rebase")
-        assert lock < recovery < pull
+        recovery = text.index("  reconcile_parse_transaction", lock)
+        sync_call = text.index("  sync_git_and_delivery_state", recovery)
+        assert lock < recovery < sync_call
+        sync_fn = text[text.index("sync_git_and_delivery_state()"):
+                       text.index("\n}", text.index("sync_git_and_delivery_state()"))]
+        assert "git pull --rebase" in sync_fn
         assert 'trap \'release_run_lock\' EXIT' in text
 
     def test_parser_is_bracketed_by_snapshot_and_wal_ack(self):
@@ -338,7 +342,8 @@ class TestCanaryQuietRetries:
 
     def test_quiet_until_deadline_then_deliver_or_single_alert(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "DELIVERY_WINDOW_MIN=525" in text, \
+        lib = _read("ops/mac-local-run/lib_sber_net.sh")
+        assert 'CM_DELIVERY_WINDOW_MIN="${CM_DELIVERY_WINDOW_MIN:-525}"' in lib, \
             "окно доставки 08:45 пропало — дайджест уйдёт не вовремя"
         assert ".alerted-parse-" in text, "дневной дедуп алерта «утро потеряно» пропал"
         body = text[text.index("probe_failed()"):]
@@ -448,11 +453,12 @@ class TestOneDigestPerDay:
             "delivery_id в контексте ещё нет"
         )
 
-    def test_both_delivery_paths_use_one_helper(self):
+    def test_all_delivery_paths_use_one_helper(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert text.count("deliver_and_push() {") == 1
-        assert text.count('deliver_and_push "') == 2, (
-            "обычная и canary-fallback ветки должны идти через одну транзакцию"
+        assert text.count('deliver_and_push "') == 3, (
+            "обычная, canary-fallback и final-sweep ветки должны идти "
+            "через одну транзакцию"
         )
         assert text.count("--mark-delivered") == 1, (
             "кроме единого helper копий mark быть не должно"
@@ -461,6 +467,8 @@ class TestOneDigestPerDay:
         # закончить ветку, а обычный path — дойти до финального log.
         canary = text[text.index('deliver_and_push "накопленное утро'):]
         assert "exit 0" in "\n".join(canary.splitlines()[:6])
+        sweep = text[text.index('deliver_and_push "финальный sweep'):]
+        assert "exit 0" in "\n".join(sweep.splitlines()[:6])
         normal = text[text.index('deliver_and_push "обычный финиш'):]
         assert 'notify "Готово: данные обновлены' in normal
         assert 'log "Готово"' in normal and "finish_pusher" in normal
@@ -491,7 +499,7 @@ class TestOneDigestPerDay:
         block = text[text.index('RUN_WHY=$('):]
         block = block[:block.index("if git diff --cached --quiet")]
         assert '[ "$FORCE" = "1" ] && DELIVER=1' in block
-        assert "delivery_window_open && DELIVER=1" in block
+        assert "cm_delivery_window_open && DELIVER=1" in block
         assert 'RUN_OK" = "1" ] && DELIVER=1' not in block, (
             "удачная попытка до 08:45 обязана оставаться черновиком — "
             "иначе слот 06:00 отправит дайджест в 06:30"
@@ -514,6 +522,60 @@ class TestOneDigestPerDay:
         assert "дайджест отправлен с тем, что дочиталось" in text
 
 
+class TestFinalDeliverySweep:
+    """Финальный barrier закрывает гонку одного LaunchAgent с двумя клонами.
+
+    25.08.2026 Урал закончил до окна и оставил pending, ХМАО держал процесс
+    занятым после 08:45, а launchd не поставил календарный слот в очередь.
+    Родитель обязан проверить ОБА контекста после wait, не запуская суды снова.
+    """
+
+    def test_parent_sweeps_both_contexts_after_wait_and_before_imports(self):
+        driver = _read("ops/mac-local-run/parse_all.sh")
+        main = driver[driver.index('if [ "${#valid_repos[@]}"'):]
+        wait = main.index("run_parallel_parsers")
+        sweep = main.index("run_delivery_sweep", wait)
+        imports = main.index('run_imports "$@"', sweep)
+        assert wait < sweep < imports
+        fn = driver[driver.index("run_delivery_sweep()"):
+                    driver.index("\n}", driver.index("run_delivery_sweep()"))]
+        assert 'for repo in "${valid_repos[@]}"' in fn
+        assert 'run_worker "$repo" --deliver-pending' in fn
+
+    def test_sweep_mode_bypasses_court_preflight_and_parser(self):
+        worker = _read("ops/mac-local-run/parse_and_push.sh")
+        branch = worker.index('if [ "$DELIVER_PENDING_ONLY" = "1" ]; then')
+        preflight = worker.index("# ── Preflight:", branch)
+        run_parse = worker.index('run_parse.py >>"$LOG"', preflight)
+        body = worker[branch:preflight]
+        assert branch < preflight < run_parse
+        assert "cm_any_court_reachable" not in body
+        assert "run_parse.py" not in body
+        assert "--has-pending" in body
+        assert 'deliver_and_push "финальный sweep' in body
+
+    def test_sweep_reuses_exact_once_funnel_and_requires_committed_context(self):
+        worker = _read("ops/mac-local-run/parse_and_push.sh")
+        branch = worker[worker.index('if [ "$DELIVER_PENDING_ONLY" = "1" ]; then'):]
+        branch = branch[:branch.index("# ── Preflight:")]
+        assert 'git status --porcelain -- "$DELIVERY_CONTEXT_PATH"' in branch
+        assert "--mark-delivered" not in branch, \
+            "sweep создал вторую реализацию штампа мимо deliver_and_push"
+        assert "--mark-delivered" not in _read("ops/mac-local-run/parse_all.sh")
+
+    def test_sweep_never_runs_in_check_mode(self):
+        driver = _read("ops/mac-local-run/parse_all.sh")
+        fn = driver[driver.index("run_delivery_sweep()"):
+                    driver.index("\n}", driver.index("run_delivery_sweep()"))]
+        assert fn.index('[ "$CHECK_ONLY" = "1" ] && return 0') \
+            < fn.index("cm_delivery_window_open")
+
+    def test_sweep_flag_rejects_force_and_check(self):
+        worker = _read("ops/mac-local-run/parse_and_push.sh")
+        assert "--deliver-pending) DELIVER_PENDING_ONLY=1" in worker
+        assert "--deliver-pending нельзя совмещать с --check или --force" in worker
+
+
 # ── Расписания агентов (plistlib: в CI нет plutil) ───────────────────────────
 
 class TestAgentSchedules:
@@ -531,8 +593,10 @@ class TestAgentSchedules:
     def test_delivery_slot_matches_window(self):
         """Доставочный слот и окно в скрипте держать ПАРОЙ: слот раньше окна
         превратил бы дайджест в черновик и отложил его до завтра."""
-        text = _read("ops/mac-local-run/parse_and_push.sh")
-        window = int(text.split("DELIVERY_WINDOW_MIN=")[1].split()[0])
+        text = _read("ops/mac-local-run/lib_sber_net.sh")
+        match = re.search(r"CM_DELIVERY_WINDOW_MIN=.*:-([0-9]+)\}", text)
+        assert match, "общая граница окна доставки не найдена"
+        window = int(match.group(1))
         last = max(h * 60 + m for _w, h, m in _slots(PARSE_PLIST))
         assert last >= window, (
             f"последний слот {last // 60}:{last % 60:02d} раньше окна "
@@ -830,8 +894,11 @@ class TestDeliveryIdentity:
     delivered_at уже нового контекста и разрешить дубль.
     """
 
+    ISSUE_KEY = cloud_run_ok.dt.datetime.now().strftime("%Y-%m-%dT08:25:42")
+
     @staticmethod
-    def _setup_ctx(tmp_path, monkeypatch, *, issue_key="2026-08-24T08:25:42"):
+    def _setup_ctx(tmp_path, monkeypatch, *, issue_key=None):
+        issue_key = issue_key or TestDeliveryIdentity.ISSUE_KEY
         ctx = tmp_path / "ctx.json"
         ctx.write_text(json.dumps({
             "saved_at": issue_key,
@@ -847,7 +914,7 @@ class TestDeliveryIdentity:
         self, tmp_path, monkeypatch, capsys,
     ):
         ctx = self._setup_ctx(tmp_path, monkeypatch)
-        expected = "hmao:2026-08-24T08:25:42"
+        expected = f"hmao:{self.ISSUE_KEY}"
 
         assert cloud_run_ok._mark_delivered() == 0
         assert capsys.readouterr().out.strip() == expected
@@ -879,7 +946,7 @@ class TestDeliveryIdentity:
         self, tmp_path, monkeypatch, capsys,
     ):
         ctx = self._setup_ctx(tmp_path, monkeypatch)
-        expected = "hmao:2026-08-24T08:25:42"
+        expected = f"hmao:{self.ISSUE_KEY}"
         assert cloud_run_ok._mark_delivered() == 0
         capsys.readouterr()
         before = ctx.read_bytes()
@@ -910,7 +977,7 @@ class TestDeliveryIdentity:
         ctx = self._setup_ctx(tmp_path, monkeypatch)
         before = ctx.read_bytes()
         assert cloud_run_ok.main(["--delivery-id"]) == 0
-        assert capsys.readouterr().out.strip() == "hmao:2026-08-24T08:25:42"
+        assert capsys.readouterr().out.strip() == f"hmao:{self.ISSUE_KEY}"
         assert ctx.read_bytes() == before
 
     def test_same_issue_key_is_isolated_by_region(
@@ -927,15 +994,15 @@ class TestDeliveryIdentity:
             json.loads(ctx.read_text(encoding="utf-8"))
         )
 
-        assert hmao_id == "hmao:2026-08-24T08:25:42"
-        assert ural_id == "sverdlovsk_yanao:2026-08-24T08:25:42"
+        assert hmao_id == f"hmao:{self.ISSUE_KEY}"
+        assert ural_id == f"sverdlovsk_yanao:{self.ISSUE_KEY}"
         assert ural_id != hmao_id
 
     def test_cli_delivery_id_fails_without_issue_key(
         self, tmp_path, monkeypatch, capsys,
     ):
         ctx = self._setup_ctx(tmp_path, monkeypatch)
-        ctx.write_text(json.dumps({"saved_at": "2026-08-24T08:25:42"}),
+        ctx.write_text(json.dumps({"saved_at": self.ISSUE_KEY}),
                        encoding="utf-8")
         assert cloud_run_ok.main(["--delivery-id"]) == 1
         assert "issue_key" in capsys.readouterr().out
@@ -961,7 +1028,7 @@ class TestDeliveryIdentity:
         self, tmp_path, monkeypatch, capsys,
     ):
         self._setup_ctx(tmp_path, monkeypatch)
-        expected = "hmao:2026-08-24T08:25:42"
+        expected = f"hmao:{self.ISSUE_KEY}"
         assert cloud_run_ok._mark_delivered() == 0
         capsys.readouterr()
 
