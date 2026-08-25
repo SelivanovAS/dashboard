@@ -1,4 +1,4 @@
-# Пометка «лист не нужен» из админки Worker'а (карточка «Ожидание
+# Закрытие «лист не нужен» из админки Worker'а (карточка ручного закрытия:
 # исполнительных листов»: POST /admin/writ-waiver → KV import:writ:<uuid> →
 # workflow_dispatch сюда). Поток: забрать job-файл с Worker'а (Bearer
 # PUSH_SECRET, свой User-Agent — урок бана Python-urllib 13–16.07.2026) →
@@ -13,7 +13,7 @@
 # ⚠ Все inputs передаются через env, НЕ через ${{ }} в run: — имя оператора
 # произвольно, интерполяция в shell была бы инъекцией. Сами строки пачки
 # вообще не касаются shell: они едут job-файлом через KV.
-name: "🚫 Пометка «лист не нужен»"
+name: "🚫 Закрытие дела — ИЛ не нужен"
 
 on:
   workflow_dispatch:
@@ -89,7 +89,7 @@ jobs:
             exit 1
           fi
 
-      - name: Пометка «лист не нужен»
+      - name: Закрыть дела — ИЛ не нужен
         id: markwrit
         env:
           # Регион территории (Actions Variable форка; пусто у эталона = hmao).
@@ -111,7 +111,7 @@ jobs:
           fi
           N=$(jq -r '(.waived // 0) + (.updated // 0) + (.cleared // 0)' \
             "$IMPORT_SUMMARY_PATH" 2>/dev/null || echo "?")
-          git commit -m "🚫 Лист не нужен: ${N} дел (${OPERATOR:-без имени})"
+          git commit -m "🚫 Закрыто без ИЛ: ${N} дел (${OPERATOR:-без имени})"
           # Ретраи: чужой push мог проскочить между checkout и push.
           for i in 1 2 3; do
             git push && exit 0

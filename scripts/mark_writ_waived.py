@@ -21,15 +21,18 @@
      "operator": "Иванова",
      "items": [{"case_id": "2-28/2026 (2-438/2025;)",
                 "court_domain": "shuryshkarsky--ynao.sudrf.ru",
+                "court_srv_num": "1",
                 "reason": "debt_paid"}]}
 
 Пометка ложится в `first_instance.writ_waived` = {reason, at, by}. ⚠️ Именно
 отдельным ключом, а не в `writ_expected`: тот пересчитывается каждым прогоном
 (`split_bank_track`) и ручную правку затёр бы.
 
-Дело остаётся в картотеке и архивируется своим чередом (решение юриста): из
-очереди уходит, но под наблюдением остаётся — если лист всё-таки выдадут,
-прогон это увидит и снимет пометку сам.
+С 25.08.2026 пометка означает именно ЗАКРЫТИЕ: дело сразу переносится из
+`cases_bank.json` в `cases_bank_archive.json`. Ручной ввод ограничен делами
+со статусом «Решено», без ИЛ и без жалобы; ошибочно закрыть рассматриваемое
+дело нельзя. Снятие пометки возвращает дело в активные, если обычные сроки
+архивации ещё не истекли.
 
 Отказ одной строки НЕ валит пачку. Файл трека сохраняется ОДИН раз в конце и
 только при реальных изменениях. JSON-сводка — в $GITHUB_OUTPUT (ключ summary)
@@ -93,22 +96,49 @@ def _bare(num: str) -> str:
     return (num or "").split("(")[0].strip()
 
 
-def find_case(cases: list[dict], case_id: str, domain: str) -> dict | None:
-    """Запись трека по ПАРЕ (суд, номер).
+def find_case(cases: list[dict], case_id: str, domain: str,
+              srv_num: str = "") -> dict | None:
+    """Запись трека по суду, площадке и номеру.
 
-    ⚠️ Пара, а не голый номер: номера дел между судами не уникальны (51
-    совпадение на Урале, 15 в ХМАО), и пометка ушла бы чужому делу.
+    ⚠️ Не голый номер: номера между судами не уникальны. На Урале вдобавок
+    один домен может обслуживать две площадки (разные `srv_num`), поэтому
+    новая админка передаёт и площадку. Пустой srv_num оставлен для старых
+    job-файлов; если совпадений несколько, такой job безопасно отвергается.
     """
     dom = (domain or "").strip().lower()
     target = _bare(case_id)
+    srv = str(srv_num or "").strip()
+    found: list[dict] = []
     for c in cases:
         fi = c.get("first_instance") or {}
         if (fi.get("court_domain") or "").strip().lower() != dom:
             continue
+        if srv and str(fi.get("srv_num") or 1) != srv:
+            continue
         if _bare(c.get("id", "")) == target or _bare(
                 fi.get("case_number", "")) == target:
-            return c
-    return None
+            found.append(c)
+    return found[0] if len(found) == 1 else None
+
+
+def writ_archive_eligible(case: dict) -> tuple[bool, str]:
+    """Можно ли закрыть дело вручную как не требующее ИЛ.
+
+    Форма допускает любой номер активного bank-трека, поэтому авторитетный
+    гейт обязан жить здесь: UI может устареть или быть вызван напрямую.
+    """
+    fi = case.get("first_instance") or {}
+    if (fi.get("status") or "").strip() != "Решено":
+        return False, "дело ещё не решено"
+    if not lifecycle.bank_writ_expected(fi):
+        return False, "по судебному итогу исполнительный лист не ожидается"
+    if any(lifecycle.classify_writ_kind(w, fi) == "enforcement"
+           for w in fi.get("writs") or []):
+        return False, "исполнительный лист уже выдан"
+    if (fi.get("appeal_filed") or fi.get("appeal_filed_date")
+            or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
+        return False, "по делу подана жалоба"
+    return True, ""
 
 
 # Маркеры построчного отчёта — те же, что у остальных каналов ввода
@@ -196,35 +226,77 @@ def main(argv: list[str] | None = None) -> int:
     summary["items"] = len(items)
 
     data = load_bank_json(config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
-    cases = data.get("cases") or []
+    archive = load_bank_json(
+        config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH)
+    data.setdefault("track", "plaintiff_light")
+    archive.setdefault("track", "plaintiff_light")
+    cases = data.setdefault("cases", [])
+    archived_cases = archive.setdefault("cases", [])
     today = datetime.now().strftime("%Y-%m-%d")
     changed = 0
+    active_dirty = False
+    archive_dirty = False
 
     for it in items:
         case_id = str(it.get("case_id") or "").strip()
         domain = str(it.get("court_domain") or "").strip()
+        srv_num = str(it.get("court_srv_num") or it.get("srv_num") or "").strip()
         reason = str(it.get("reason") or "").strip()
         if not case_id or not domain:
             summary["refused"] += 1
             summary["lines"].append(report_line(
                 case_id, "bad_item", "не указан номер дела или суд"))
             continue
-        case = find_case(cases, case_id, domain)
+        case = find_case(cases, case_id, domain, srv_num)
+        location = "active"
+        if case is None:
+            case = find_case(archived_cases, case_id, domain, srv_num)
+            location = "archive"
         if case is None:
             summary["not_found"] += 1
             summary["lines"].append(report_line(
-                case_id, "not_found", f"нет в треке «Иски банка» ({domain})"))
+                case_id, "not_found",
+                f"нет в треке «Иски банка» ({domain}, площадка {srv_num or '?'})"))
             continue
+        if action == "set":
+            eligible, why = writ_archive_eligible(case)
+            if not eligible:
+                summary["refused"] += 1
+                summary["lines"].append(report_line(case_id, "refused", why))
+                continue
         outcome = apply_item(case, action, reason, operator, today)
         if outcome in ("waived", "updated", "cleared"):
             changed += 1
             summary[outcome] += 1
-            # У снятия причины уже нет (ключ удалён) — пишем, что случилось
-            # с делом: оператор читает отчёт как список свершившегося.
-            note = ("дело вернулось в очередь ожидания ИЛ"
-                    if outcome == "cleared"
-                    else lifecycle.writ_waive_reason_ru(
-                        case.get("first_instance") or {}))
+            if action == "set":
+                if location == "active":
+                    cases.remove(case)
+                    case["archived_at"] = today
+                    archived_cases.append(case)
+                    active_dirty = archive_dirty = True
+                    note = (lifecycle.writ_waive_reason_ru(
+                        case.get("first_instance") or {})
+                            + "; дело закрыто и перенесено в архив")
+                else:
+                    archive_dirty = True
+                    note = (lifecycle.writ_waive_reason_ru(
+                        case.get("first_instance") or {})
+                            + "; дело уже было в архиве")
+            else:
+                if location == "active":
+                    active_dirty = True
+                    note = "закрытие отменено; дело осталось в активных"
+                elif not lifecycle.is_case_archived(case):
+                    archived_cases.remove(case)
+                    case.pop("archived_at", None)
+                    case.setdefault("track", "plaintiff_light")
+                    cases.append(case)
+                    active_dirty = archive_dirty = True
+                    note = "закрытие отменено; дело возвращено в активные"
+                else:
+                    archive_dirty = True
+                    note = ("закрытие отменено; дело остаётся в архиве "
+                            "по обычным срокам")
         else:
             summary["refused"] += 1
             note = ("причина не из списка" if outcome == "bad_reason"
@@ -232,9 +304,24 @@ def main(argv: list[str] | None = None) -> int:
         summary["lines"].append(report_line(case_id, outcome, note))
 
     if changed and not args.dry_run:
-        save_bank_json(data, config.JSON_BANK_PATH,
-                       config.JSON_BANK_EVENTS_PATH)
-        log.info(f"Трек сохранён: изменено дел {changed}")
+        if active_dirty or archive_dirty:
+            data["archived_count"] = len(archived_cases)
+            active_dirty = True
+        # При закрытии сначала пишем архив, потом удаляем из активных: сбой
+        # между файлами безопаснее как временный дубль, чем как потеря дела.
+        # При отмене порядок обратный — сначала возвращаем запись в активные.
+        if action == "clear" and active_dirty:
+            save_bank_json(data, config.JSON_BANK_PATH,
+                           config.JSON_BANK_EVENTS_PATH)
+        if archive_dirty:
+            save_bank_json(archive, config.JSON_BANK_ARCHIVE_PATH,
+                           config.JSON_BANK_ARCHIVE_EVENTS_PATH)
+        if action != "clear" and active_dirty:
+            save_bank_json(data, config.JSON_BANK_PATH,
+                           config.JSON_BANK_EVENTS_PATH)
+        log.info(
+            f"Трек сохранён: изменено дел {changed}; "
+            f"активных {len(cases)}, в горячем архиве {len(archived_cases)}")
     elif changed:
         log.info(f"dry-run: изменений было бы {changed}, файл не тронут")
     else:

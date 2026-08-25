@@ -1316,7 +1316,7 @@ const WRIT_WAIVER_MAX_ITEMS = 60;
 // намеренно — first_instance целиком уезжает на ПУБЛИЧНУЮ страницу Pages.
 const WRIT_WAIVE_REASONS = new Set(["debt_paid", "not_requested", "other"]);
 
-// POST /admin/writ-waiver — пометка «исполнительный лист не нужен».
+// POST /admin/writ-waiver — ручное закрытие «исполнительный лист не нужен».
 //
 // Зачем: иск удовлетворён, решение в силе, а лист не выдают, потому что
 // ответчик погасил долг добровольно. Из карточки суда это не видно ВООБЩЕ
@@ -1357,6 +1357,7 @@ async function handleAdminWritWaiver(request, env) {
     const it = rawItems[i] || {};
     const num = String(it.case || it.case_id || "").trim();
     const dom = String(it.court_domain || "").trim().toLowerCase();
+    const srv = String(it.court_srv_num || it.srv_num || "").trim();
     const reason = String(it.reason || "").trim();
     if (!num || !ADD_CASE_NUM_RE.test(num.split("(")[0].trim())) {
       return new Response(
@@ -1370,12 +1371,18 @@ async function handleAdminWritWaiver(request, env) {
         JSON.stringify({ ok: false, error: `строка ${i + 1}: не указан суд дела` }),
         { status: 400, headers: jsonHeaders });
     }
+    if (srv && !/^\d{1,3}$/.test(srv)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `строка ${i + 1}: неверная площадка суда` }),
+        { status: 400, headers: jsonHeaders });
+    }
     if (action === "set" && !WRIT_WAIVE_REASONS.has(reason)) {
       return new Response(
         JSON.stringify({ ok: false, error: `строка ${i + 1}: причина не из списка` }),
         { status: 400, headers: jsonHeaders });
     }
-    items.push({ case_id: num, court_domain: dom, reason });
+    items.push({ case_id: num, court_domain: dom,
+                 court_srv_num: srv || "", reason });
   }
   const uuid = crypto.randomUUID();
   const jobKey = `import:writ:${uuid}`;
@@ -1383,7 +1390,7 @@ async function handleAdminWritWaiver(request, env) {
   const logKey = `import:log:${ts}|${uuid}`;
   const record = {
     uuid, kind: "writ_waiver", items_count: items.length,
-    preview: `${action === "clear" ? "снять" : "пометить"}: ${items[0].case_id}`,
+    preview: `${action === "clear" ? "отменить закрытие" : "закрыть"}: ${items[0].case_id}`,
     operator, ts, status: "dispatched", updated_at: ts,
   };
   const job = { kind: "writ_waiver", action, items, operator, ts };

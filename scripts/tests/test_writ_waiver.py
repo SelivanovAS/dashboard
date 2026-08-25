@@ -4,7 +4,7 @@
 ответчик погасил долг после решения. Из карточки суда это НЕ видно вовсе —
 проверка 16 287 событий обеих территорий дала ноль вхождений слов
 «погаш»/«добровольн»/«исполнительн»: ГАС «Правосудие» сведений об исполнении
-не публикует. Отсюда ручной канал: админка → KV → workflow → cases_bank.json.
+не публикует. Отсюда ручной канал: админка → KV → workflow → bank-архив.
 
 Запуск: python3 -m pytest scripts/tests/test_writ_waiver.py
 """
@@ -85,17 +85,11 @@ class TestPredicates:
             _fi(result="ОТКАЗАНО в удовлетворении иска")) is False
 
 
-# ── Ключевой страж решения юриста: архивацию НЕ ускоряем ─────────────────────
+# ── Ключевой страж решения юриста: ручное закрытие архивирует сразу ─────────
 
-class TestArchiveNotAccelerated:
-    """Юрист просил: помеченное дело уходит из очереди, но ОСТАЁТСЯ в
-    картотеке и архивируется своим чередом (потолок 180 дней).
-
-    Отсюда и разделение предикатов: `bank_writ_expected` (судебные причины)
-    управляет ещё и 30-дневным окном `BANK_DENIED_ARCHIVE_DAYS`, поэтому
-    пометка в него не подмешана. Подмешали бы — дело исчезло бы из картотеки
-    через месяц после мотивировки, а у 2-28/2026 этот месяц давно прошёл, и
-    дело пропало бы В ТОТ ЖЕ ПРОГОН.
+class TestManualArchive:
+    """С 25.08.2026 «ИЛ не нужен» — явное закрытие с немедленным переносом
+    в bank-архив. Жалоба важнее ручного закрытия и возвращает дело в работу.
     """
 
     @staticmethod
@@ -108,11 +102,12 @@ class TestArchiveNotAccelerated:
                 "current_stage": "first_instance", "first_instance": fi}
         return lifecycle.is_case_archived(case)
 
-    def test_waived_case_is_not_archived_early(self):
-        assert self._archived(_fi(writ_waived=_waived()), 60) is False
+    def test_waived_case_archives_immediately(self):
+        assert self._archived(_fi(writ_waived=_waived()), 1) is True
 
-    def test_waived_case_archives_by_the_usual_ceiling(self):
-        assert self._archived(_fi(writ_waived=_waived()), 260) is True
+    def test_appeal_has_priority_over_manual_archive(self):
+        assert self._archived(
+            _fi(writ_waived=_waived(), appeal_filed=True), 60) is False
 
     def test_judicial_denial_still_archives_in_month(self):
         """Регресс: отказ в иске по-прежнему уходит через 30 дней."""
@@ -236,9 +231,9 @@ class TestCourtArchivedHint:
 
 # ── Ритм опроса не меняется ──────────────────────────────────────────────────
 
-def test_rhythm_unchanged_for_waived_case():
-    """Помеченное дело продолжает читаться раз в неделю — намеренно: если
-    лист всё же выдадут, прогон это увидит и снимет пометку сам."""
+def test_legacy_active_waived_case_is_skipped_until_split_moves_it():
+    """Между ручной записью и раскладкой legacy-запись не должна дать
+    лишний HTTP; split_bank_track тут же перенесёт её в архив."""
     today = date(2026, 8, 21)
     case = _case(writ_waived=_waived(),
                  last_checked_at=today.strftime("%Y-%m-%d"))
@@ -269,6 +264,10 @@ class TestCLI:
         summary = os.path.join(tmpdir, "summary.json")
         env = dict(os.environ,
                    JSON_BANK_PATH=base, JSON_BANK_EVENTS_PATH=events,
+                   JSON_BANK_ARCHIVE_PATH=os.path.join(
+                       tmpdir, "cases_bank_archive.json"),
+                   JSON_BANK_ARCHIVE_EVENTS_PATH=os.path.join(
+                       tmpdir, "cases_bank_archive_events.json"),
                    IMPORT_SUMMARY_PATH=summary)
         env.pop("GITHUB_OUTPUT", None)
         r = subprocess.run(
@@ -283,12 +282,18 @@ class TestCLI:
             base, events = self._prepare(td)
             item = {"case_id": "2-100/2026",
                     "court_domain": "surggor--hmao.sudrf.ru",
+                    "court_srv_num": "1",
                     "reason": "debt_paid"}
             code, s = self._run({"action": "set", "operator": "Селиванов",
                                  "items": [item]}, base, events, td)
             assert code == 0 and s["waived"] == 1
             data = storage.load_bank_json(base, events)
-            fi = data["cases"][0]["first_instance"]
+            archived = storage.load_bank_json(
+                os.path.join(td, "cases_bank_archive.json"),
+                os.path.join(td, "cases_bank_archive_events.json"))
+            assert data["cases"] == []
+            assert data["archived_count"] == 1
+            fi = archived["cases"][0]["first_instance"]
             assert fi["writ_waived"]["reason"] == "debt_paid"
             assert fi["writ_waived"]["by"] == "Селиванов"
             # ⚠️ События не потеряны: split-хранение перезаписывает
@@ -297,8 +302,11 @@ class TestCLI:
             code, s = self._run({"action": "clear", "items": [item]},
                                 base, events, td)
             assert code == 0 and s["cleared"] == 1
-            assert "writ_waived" not in storage.load_bank_json(
-                base, events)["cases"][0]["first_instance"]
+            active = storage.load_bank_json(base, events)
+            assert len(active["cases"]) == 1
+            assert active["archived_count"] == 0
+            assert "writ_waived" not in active["cases"][0]["first_instance"]
+            assert active["cases"][0]["first_instance"]["events"]
 
     def test_wrong_court_is_refused(self):
         """Номера дел между судами не уникальны — пометка по паре (суд, номер)."""
@@ -320,6 +328,44 @@ class TestCLI:
                      "court_domain": "surggor--hmao.sudrf.ru",
                      "reason": "потому что"}]}, base, events, td)
             assert code == 0 and s["refused"] == 1
+
+    def test_unresolved_case_cannot_be_closed(self):
+        """Ручной номер не должен обходить содержательный гейт архивации."""
+        with tempfile.TemporaryDirectory() as td:
+            base, events = self._prepare(td, {"status": "В производстве"})
+            code, s = self._run(
+                {"action": "set", "items": [
+                    {"case_id": "2-100/2026",
+                     "court_domain": "surggor--hmao.sudrf.ru",
+                     "court_srv_num": "1",
+                     "reason": "debt_paid"}]}, base, events, td)
+            assert code == 0 and s["refused"] == 1 and s["waived"] == 0
+            assert "ещё не решено" in s["lines"][0]
+            assert len(storage.load_bank_json(base, events)["cases"]) == 1
+
+    def test_srv_num_selects_exact_court_site(self):
+        """Один домен может содержать две площадки с одинаковым номером."""
+        with tempfile.TemporaryDirectory() as td:
+            base, events = self._prepare(td)
+            data = storage.load_bank_json(base, events)
+            second = _case(srv_num=2, court="Постоянное присутствие")
+            data["cases"][0]["first_instance"]["srv_num"] = 1
+            data["cases"].append(second)
+            storage.save_bank_json(data, base, events)
+            code, s = self._run(
+                {"action": "set", "items": [
+                    {"case_id": "2-100/2026",
+                     "court_domain": "surggor--hmao.sudrf.ru",
+                     "court_srv_num": "2",
+                     "reason": "not_requested"}]}, base, events, td)
+            assert code == 0 and s["waived"] == 1
+            active = storage.load_bank_json(base, events)["cases"]
+            assert len(active) == 1
+            assert active[0]["first_instance"]["srv_num"] == 1
+            archived = storage.load_bank_json(
+                os.path.join(td, "cases_bank_archive.json"),
+                os.path.join(td, "cases_bank_archive_events.json"))["cases"]
+            assert archived[0]["first_instance"]["srv_num"] == 2
 
     def test_empty_job_exits_five(self):
         with tempfile.TemporaryDirectory() as td:
@@ -390,6 +436,8 @@ class TestWiring:
                 f"счётчик {counter} не в числовом whitelist — до оператора не доедет")
         assert 'record.kind !== "writ_waiver"' in js, (
             "пометка не должна красить светофор свежести дампов")
+        assert "court_srv_num" in js, (
+            "один домен может обслуживать несколько площадок суда")
 
     def test_worker_uses_role_gate_contract(self):
         """requireAdminRole возвращает {role} | {error: Response}, а не сам
@@ -411,11 +459,24 @@ class TestWiring:
     def test_admin_card(self):
         js = self._read("cloudflare-worker/admin_page.js")
         for marker in ('id="ww-card"', "collectWaitRow", "renderWaitCard",
+                       'id="ww-court"', 'id="ww-case"', "wwManualSend",
                        "wwSend", "/admin/writ-waiver"):
             assert marker in js, marker
         # Список строится ЧТЕНИЕМ штампа — своей копии предиката очереди нет.
         assert "writ_awaited_since" in js
         assert "classifyWritKind" not in js.split("collectWaitRow", 1)[1][:4000]
+        assert 'fetch("/admin/writ-waiver?secret="' in js
+        assert "fetch(API + \"/admin/writ-waiver" not in js, (
+            "необъявленная API роняет Safari до сетевого запроса")
+
+    def test_admin_shows_only_court_hints_not_the_long_queue(self):
+        js = self._read("cloudflare-worker/admin_page.js")
+        render = js.split("function renderWaitCard()", 1)[1].split(
+            "function renderWaivedList()", 1)[0]
+        assert "filter(function (r) { return r.archAt; })" in render
+        assert "hints.slice(0, WW_HINT_VISIBLE)" in render
+        assert "WW_LONG_WAIT_DAYS" not in js
+        assert "Показаны ждущие дольше" not in js
 
     def test_admin_summary_has_its_own_branch(self):
         """Запись kind:"writ_waiver" не должна рисоваться дамповой сводкой.
