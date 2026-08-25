@@ -1618,7 +1618,67 @@
         "announced": true
       },
       "archived_at": "2026-08-24"
+    },
+    {
+      "id": "2-4970/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "ООО Джусто густо, Шапкин Сергей Викторович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-4970/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Пименова О.В.",
+        "filing_date": "03.03.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 11:08. 31.07.2026",
+        "event_date": "28.07.2026",
+        "hearing_date": "18.06.2026",
+        "hearing_time": "10:00",
+        "link": "267304507|f02c15a7-8332-405a-89e1-4598f79d8215",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "decision_date": "18.06.2026",
+        "last_checked_at": "2026-08-14",
+        "motivirovka_emitted": true,
+        "legal_force_est": "2026-08-04",
+        "motivirovka_date": "02.07.2026",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "writs": [
+          {
+            "issue_date": "10.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4970/2026#1",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "10.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4970/2026#2",
+            "recipient": "Полюстровское отделение судебных приставов Красногвардейского района",
+            "status": "Выдан"
+          }
+        ],
+        "writ_awaited_since": "2026-08-04"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T17:11:27",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-08-25"
     }
   ],
-  "updated_at": "2026-08-24T08:25:42"
+  "updated_at": "2026-08-25T06:40:30"
 }
