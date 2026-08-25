@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "run_date": "2026-08-24",
+  "run_date": "2026-08-25",
   "smart_skip": true,
   "totals": {
     "total": 525,
     "parsed": 0,
-    "skip": 308,
-    "failed": 217,
+    "skip": 287,
+    "failed": 238,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -68,8 +68,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(4d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
+      "reason": "writ_weekly(5d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -500,8 +500,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -913,9 +913,9 @@
       "last_checked_at": "2026-08-07"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -986,8 +986,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1202,8 +1202,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "suspended_weekly(5d/7d)",
-      "reason_ru": "без движения без срока, парсим раз в 7 дн. (прошло 5)",
+      "reason": "suspended_weekly(6d/7d)",
+      "reason_ru": "без движения без срока, парсим раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1507,9 +1507,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1705,9 +1705,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1796,8 +1796,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2047,9 +2047,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2353,9 +2353,9 @@
       "last_checked_at": "2026-08-10"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2534,8 +2534,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2677,9 +2677,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2822,8 +2822,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2839,9 +2839,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2965,9 +2965,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3073,9 +3073,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3235,9 +3235,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3451,9 +3451,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3668,8 +3668,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3704,8 +3704,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3920,8 +3920,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(4d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
+      "reason": "writ_weekly(5d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4010,8 +4010,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(4d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
+      "reason": "writ_weekly(5d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4063,9 +4063,9 @@
       "last_checked_at": "2026-08-12"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4100,8 +4100,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4136,8 +4136,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4154,8 +4154,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4172,8 +4172,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4208,8 +4208,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4351,9 +4351,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4567,9 +4567,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4586,8 +4586,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4622,8 +4622,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4837,9 +4837,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4927,9 +4927,9 @@
       "last_checked_at": "2026-08-03"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5665,9 +5665,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "court_breaker",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5809,9 +5809,9 @@
       "last_checked_at": "2026-07-31"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5908,7 +5908,7 @@
       "events": [],
       "changed": false,
       "left_track": false,
-      "archived": false,
+      "archived": true,
       "key": "vartovgor--hmao.sudrf.ru|2-4970/2026",
       "number": "2-4970/2026",
       "court": "Нижневартовский городской суд",
@@ -5953,9 +5953,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6080,8 +6080,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6116,8 +6116,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6152,8 +6152,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6188,8 +6188,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6224,8 +6224,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6296,8 +6296,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6314,8 +6314,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6332,8 +6332,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6349,9 +6349,9 @@
       "last_checked_at": "2026-08-21"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6368,8 +6368,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6386,8 +6386,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6422,8 +6422,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6476,8 +6476,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6493,9 +6493,9 @@
       "last_checked_at": "2026-08-21"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6512,8 +6512,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6530,8 +6530,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6583,9 +6583,9 @@
       "last_checked_at": "2026-08-18"
     },
     {
-      "outcome": "skip",
-      "reason": "future_hearing(24.08.2026)",
-      "reason_ru": "заседание 24.08.2026 ещё впереди",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6836,8 +6836,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7628,8 +7628,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7915,9 +7915,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "court_breaker",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7970,8 +7970,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7987,9 +7987,9 @@
       "last_checked_at": "2026-08-19"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8060,8 +8060,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8150,8 +8150,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8528,8 +8528,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(5d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 5)",
+      "reason": "writ_weekly(6d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8635,9 +8635,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
+      "outcome": "court_breaker",
+      "reason": "",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8690,8 +8690,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8870,8 +8870,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8906,8 +8906,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8977,9 +8977,9 @@
       "last_checked_at": "2026-08-21"
     },
     {
-      "outcome": "court_breaker",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9031,9 +9031,9 @@
       "last_checked_at": "2026-08-17"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "court_breaker",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9428,8 +9428,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9446,8 +9446,8 @@
     },
     {
       "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
+      "reason": "writ_weekly(4d/7d)",
+      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 4)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9463,5 +9463,5 @@
       "last_checked_at": "2026-08-21"
     }
   ],
-  "updated_at": "2026-08-24T09:42:13"
+  "updated_at": "2026-08-25T06:40:30"
 }
