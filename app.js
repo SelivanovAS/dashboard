@@ -1477,6 +1477,9 @@ function uiBusyForRefresh(){
   // Шторка связывания устройств: юрист читает/вводит код — не дёргаем DOM.
   const syncSheet=document.getElementById('sync-sheet');
   if(syncSheet&&syncSheet.classList.contains('open'))return true;
+  // Анонс «Что нового» открыт — фоновая перерисовка подождёт.
+  const wnSheet=document.getElementById('whatsnew-sheet');
+  if(wnSheet&&wnSheet.classList.contains('open'))return true;
   return document.body.classList.contains('beacon-open');
 }
 
@@ -4479,6 +4482,13 @@ window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener
   // Deep-link из QR (?pair=<код>) — после loadProfileWatchlist: гард «уже
   // связано» должен видеть актуальную связку.
   try{maybeHandlePairParam();}catch(_){}
+  // «Что нового» — с задержкой, чтобы страница успела отрисоваться и анонс
+  // не спорил с экраном загрузки; при переходе по ?pair= не показываем —
+  // пользователь занят связыванием, анонс дождётся следующего открытия.
+  setTimeout(()=>{try{
+    const sync=document.getElementById('sync-sheet');
+    if(!(sync&&sync.classList.contains('open')))maybeShowWhatsNew();
+  }catch(_){}},1600);
 });
 
 /* ========== Mobile swipe-to-close drawer ========== */
@@ -5375,6 +5385,72 @@ async function startSyncScan() {
   }, 250);
 }
 window.startSyncScan = startSyncScan;
+
+// ── «Что нового» — одноразовый анонс функций ───────────────────────────────
+// Показывается ОДИН раз при первом открытии после обновления; маркер —
+// id текущего анонса в lsKey('whatsnew_seen') (следующий анонс = новый id,
+// механизм переиспользуется). Ставится при ЛЮБОМ закрытии, включая кнопки
+// действий и скрим.
+
+const WHATSNEW_KEY = lsKey('whatsnew_seen');
+const WHATSNEW_ID = 'sync-2026-08'; // бампать при следующем анонсе
+
+function maybeShowWhatsNew() {
+  try {
+    if (localStorage.getItem(WHATSNEW_KEY) === WHATSNEW_ID) return;
+  } catch (_) { return; }
+  const sheet = document.getElementById('whatsnew-sheet');
+  const scrim = document.getElementById('whatsnew-scrim');
+  if (!sheet) return;
+  sheet.classList.add('open');
+  sheet.setAttribute('aria-hidden', 'false');
+  if (scrim) scrim.classList.add('open');
+}
+
+function closeWhatsNew() {
+  try { localStorage.setItem(WHATSNEW_KEY, WHATSNEW_ID); } catch (_) {}
+  const sheet = document.getElementById('whatsnew-sheet');
+  const scrim = document.getElementById('whatsnew-scrim');
+  if (!sheet) return;
+  sheet.classList.remove('open');
+  sheet.setAttribute('aria-hidden', 'true');
+  if (scrim) scrim.classList.remove('open');
+  applyPendingDataRefresh();
+}
+window.closeWhatsNew = closeWhatsNew;
+
+// Живая демонстрация: открываем карточку первого дела и подсвечиваем плашку
+// «Проверено на сайте суда» пульсацией (класс .spotlight, снимается сам).
+function whatsNewShowFreshness() {
+  closeWhatsNew();
+  // Пример — дело, у которого дата сверки ЕСТЬ: свежезаведённое без
+  // last_checked_at показало бы «не зафиксирована» — худшая демонстрация.
+  const pool = []
+    .concat((typeof filteredCases !== 'undefined' && filteredCases.length) ? filteredCases : [])
+    .concat((typeof allCases !== 'undefined' && allCases.length) ? allCases : []);
+  const hasCheck = (x) => !!((x._fi && x._fi.last_checked_at)
+    || (x._ap && x._ap.last_checked_at) || (x._cs && x._cs.last_checked_at));
+  const c = pool.find(hasCheck) || pool[0] || null;
+  if (!c) {
+    showToast('Откройте любую карточку дела — строка «Проверено на сайте суда» в её шапке', { type: 'info' });
+    return;
+  }
+  openDrawer(c.caseNumber);
+  setTimeout(() => {
+    const el = document.querySelector('.drawer-freshness');
+    if (!el) return;
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+    el.classList.add('spotlight');
+    setTimeout(() => el.classList.remove('spotlight'), 3600);
+  }, 450);
+}
+window.whatsNewShowFreshness = whatsNewShowFreshness;
+
+function whatsNewOpenSync() {
+  closeWhatsNew();
+  openSyncSheet();
+}
+window.whatsNewOpenSync = whatsNewOpenSync;
 
 async function requestPairCode() {
   if (!PUSH_WORKER_URL) {

@@ -299,7 +299,11 @@ class TestAppJs:
         # ширину: базовый .filters-sheet прибит к низу, переопределение живёт
         # в media (min-width:769px) и ведёт появление opacity+pointer-events.
         css = _read("styles.css")
-        m = re.search(r"@media \(min-width: 769px\) \{[^@]*#sync-sheet \{([\s\S]*?)\}", css)
+        # Селектор групповой (#sync-sheet, #whatsnew-sheet — общее мини-окно).
+        m = re.search(
+            r"@media \(min-width: 769px\) \{\s*#sync-sheet,\s*#whatsnew-sheet \{([\s\S]*?)\}",
+            css,
+        )
         assert m, "Десктопное переопределение #sync-sheet не найдено."
         rules = m.group(1)
         assert "pointer-events:none" in rules

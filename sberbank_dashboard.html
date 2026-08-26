@@ -70,7 +70,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=180">
+<link rel="stylesheet" href="styles.css?v=182">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -379,6 +379,40 @@
     </div>
     <div class="sheet-body" id="sync-sheet-body"></div>
   </aside>
+
+  <!-- «Что нового» — одноразовый анонс функций при первом открытии после
+       обновления (маркер в localStorage через lsKey). На мобиле bottom-sheet,
+       на десктопе — мини-окно (то же CSS-переопределение, что у sync-sheet). -->
+  <div class="sheet-scrim" id="whatsnew-scrim" onclick="closeWhatsNew()"></div>
+  <aside class="filters-sheet" id="whatsnew-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>✨ Что нового</span>
+      <button class="sheet-close btn-x" onclick="closeWhatsNew()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="wn-block">
+        <div class="wn-date">Обновление от 26.08.2026</div>
+        <div class="wn-item">
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></div>
+          <div class="wn-item-body">
+            <div class="wn-item-title">Дата сверки с судом</div>
+            <div class="wn-item-text">В карточке дела теперь видно, когда информация в последний раз сверялась с сайтом суда.</div>
+            <button class="wn-btn" onclick="whatsNewShowFreshness()">Показать на примере</button>
+          </div>
+        </div>
+        <div class="wn-item">
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+          <div class="wn-item-body">
+            <div class="wn-item-title">Синхронизация подписок</div>
+            <div class="wn-item-text">В шапке дашборда появилась <span class="wn-nowrap">кнопка&nbsp;<span class="wn-inline-btn" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span></span> — она связывает телефон и компьютер: отслеживаемые дела (★) станут общими на всех ваших устройствах.</div>
+            <button class="wn-btn" onclick="whatsNewOpenSync()">Связать устройства</button>
+          </div>
+        </div>
+        <button class="sheet-btn-done wn-done" onclick="closeWhatsNew()">Понятно</button>
+      </div>
+    </div>
+  </aside>
 </div>
 
 <script src="region_front.js?v=3"></script>
@@ -386,6 +420,6 @@
      qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
      проекта нет. Файл не редактируется, обновление — заменой целиком. -->
 <script src="qrcode-gen.js?v=1" defer></script>
-<script src="app.js?v=180" defer></script>
+<script src="app.js?v=182" defer></script>
 </body>
 </html>

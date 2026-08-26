@@ -1524,12 +1524,39 @@ tr.detail-row { display:none; }
    (#btn-push.on — та же пара токенов). */
 #btn-sync.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
 
-/* Десктоп: «Синхронизация подписок» — не bottom-sheet во всю ширину, а
-   мини-окно по центру верхней трети. Базовые правила .filters-sheet держат
-   шторку прибитой к низу через transform:translateY(100%) — здесь transform
-   занят центрированием, поэтому появление ведут opacity+pointer-events. */
+/* ── Анонс «Что нового» (одноразовый, при первом открытии после апдейта) ── */
+.wn-block { display:flex; flex-direction:column; gap:16px; padding:16px 20px 20px; }
+.wn-date { font-size:var(--fs-xs); color:var(--fg-3); margin:-6px 0 -4px; }
+/* Мини-копия кнопки шапки прямо в тексте: пользователь видит, ЧТО искать. */
+.wn-inline-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); vertical-align:-7px; margin:0 2px; }
+.wn-inline-btn svg { width:14px; height:14px; }
+/* «кнопка + иконка» не разлучаются переносом: разрыв строки допустим вокруг
+   атомарного inline-flex даже через &nbsp; — держит только nowrap-обёртка. */
+.wn-nowrap { white-space:nowrap; }
+.wn-item { display:flex; gap:12px; align-items:flex-start; }
+.wn-item-icon { flex:0 0 36px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent); }
+.wn-item-icon svg { width:20px; height:20px; }
+.wn-item-body { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.wn-item-title { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); }
+.wn-item-text { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.wn-btn { align-self:flex-start; margin-top:2px; padding:8px 16px; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--accent); border:1px solid var(--accent); }
+.wn-btn:hover { background:var(--accent-bg-soft); }
+.wn-done { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); }
+/* Подсветка демонстрируемого элемента: три мягких пульса рамкой-акцентом. */
+.drawer-freshness.spotlight { animation:wn-spotlight 1.2s var(--ease-out) 3; }
+@keyframes wn-spotlight {
+  0%, 100% { box-shadow:0 0 0 0 transparent; }
+  40% { box-shadow:0 0 0 4px var(--accent-bg-strong), 0 0 0 6px var(--accent); }
+}
+
+/* Десктоп: «Синхронизация подписок» и «Что нового» — не bottom-sheet во всю
+   ширину, а мини-окно по центру верхней трети. Базовые правила .filters-sheet
+   держат шторку прибитой к низу через transform:translateY(100%) — здесь
+   transform занят центрированием, поэтому появление ведут
+   opacity+pointer-events. */
 @media (min-width: 769px) {
-  #sync-sheet {
+  #sync-sheet,
+  #whatsnew-sheet {
     left:50%; right:auto; bottom:auto; top:96px;
     width:440px; max-width:calc(100vw - 32px); max-height:calc(100vh - 128px);
     border-radius:var(--radius-lg);
@@ -1538,8 +1565,10 @@ tr.detail-row { display:none; }
     transition:opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
     box-shadow:0 18px 48px rgba(13, 17, 22, 0.28);
   }
-  #sync-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
-  #sync-sheet .sheet-handle { display:none; }
+  #sync-sheet.open,
+  #whatsnew-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
+  #sync-sheet .sheet-handle,
+  #whatsnew-sheet .sheet-handle { display:none; }
 }
 
 /* На телефонной ширине четыре банковских режима с числовыми бейджами не помещаются
