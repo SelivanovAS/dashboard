@@ -5991,14 +5991,21 @@ def main_json():
                 push_summary=push_summary,
                 cass_changes=cass_changes,
                 cass_discovered=cass_discovered,
+                # Банк-трек к этому моменту уже разложен из cases (фаза 7c) —
+                # без явной передачи звезда «домен|М-…» промоутнутого дела не
+                # расширялась в новый номер (инцидент 26.08.2026).
+                bank_cases=list(bank_active) + list(bank_archived_all),
             ),
         )
 
         # Канонизация watchlist'ов в KV: заменяем апел./касс./hybrid
         # звёзды на канон. FI-ID, чтобы со временем вычистить грязные
         # алиасы. Только в живом кроне, не в replay/test режимах.
+        # Банк-дела дают composite-канон: «домен|М-…» → «домен|2-…» после
+        # промоушена М→2 — KV лечится сам.
         _alias_to_canonical, _ = _build_watchlist_alias_indexes(
-            list(cases) + list(archived_cases)
+            list(cases) + list(archived_cases),
+            bank_cases=list(bank_active) + list(bank_archived_all),
         )
         canonicalize_kv_watchlists(_alias_to_canonical)
 
@@ -6317,6 +6324,30 @@ def main_replay_last(push_all: bool = False):
     log.info("Готово!")
 
 
+def _load_bank_cases_for_aliases() -> list[dict]:
+    """Банк-трек (активные + горячий архив) для alias-карт доставки.
+
+    Read-only: только чтение файлов, склейка load_bank_json нужна ради
+    first_instance.material_number/court_domain. Канон банк-дела в картах —
+    composite «домен|номер», поэтому список передаётся ОТДЕЛЬНЫМ kwarg
+    `bank_cases`, а не подмешивается в `cases` (см. _make_per_sub_callback).
+    Файлов нет (территория без трека) — пустой список, доставка как раньше.
+    """
+    out: list[dict] = []
+    for list_path, events_path in (
+        (config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH),
+        (config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH),
+    ):
+        try:
+            if os.path.exists(list_path):
+                out.extend(
+                    load_bank_json(list_path, events_path).get("cases", []) or []
+                )
+        except Exception as exc:
+            log.warning(f"Банк-трек для alias-карт не прочитан ({list_path}): {exc}")
+    return out
+
+
 def _send_replay_web_push(ctx: dict, push_all: bool = False) -> None:
     """Web push replay-контура по сохранённому контексту.
 
@@ -6345,6 +6376,10 @@ def _send_replay_web_push(ctx: dict, push_all: bool = False) -> None:
     # cases. Read-only — данные уже подмержены через act_analysis выше.
     _replay_active = load_json(config.JSON_PATH).get("cases", []) or []
     _replay_archive = load_json(config.JSON_ARCHIVE_PATH).get("cases", []) or []
+    # Банк-трек — отдельным списком (composite-канон в alias-картах): replay
+    # с 19.08 — боевой путь доставки, и без него звезда «домен|М-…»
+    # промоутнутого иска банка не матчила события (инцидент 26.08.2026).
+    _replay_bank = _load_bank_cases_for_aliases()
     send_web_push(
         title=title,
         body=body,
@@ -6352,6 +6387,7 @@ def _send_replay_web_push(ctx: dict, push_all: bool = False) -> None:
         owner_only=not push_all,
         per_subscriber=_make_per_sub_callback(
             cases=_replay_active + _replay_archive,
+            bank_cases=_replay_bank,
             fi_new_cases=ctx.get("fi_new_cases", []),
             fi_changes=ctx.get("fi_changes", []),
             changes=ctx.get("changes", []),
@@ -6537,6 +6573,8 @@ def main_push_last_digest(owner_only: bool = False):
     # Для alias-расширения watchlist'а: active + archive cases.
     _push_active = load_json(config.JSON_PATH).get("cases", []) or []
     _push_archive = load_json(config.JSON_ARCHIVE_PATH).get("cases", []) or []
+    # Банк-трек — composite-канон, см. main_replay_last (инцидент 26.08.2026).
+    _push_bank = _load_bank_cases_for_aliases()
     send_web_push(
         title=title,
         body=body,
@@ -6544,6 +6582,7 @@ def main_push_last_digest(owner_only: bool = False):
         owner_only=owner_only,
         per_subscriber=_make_per_sub_callback(
             cases=_push_active + _push_archive,
+            bank_cases=_push_bank,
             fi_new_cases=ctx.get("fi_new_cases", []),
             fi_changes=ctx.get("fi_changes", []),
             changes=ctx.get("changes", []),

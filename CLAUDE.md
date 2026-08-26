@@ -140,10 +140,10 @@
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
 | Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1370](scripts/court_monitor/digest/llm.py:1370) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
-| доставка: `send_telegram` | [scripts/court_monitor/delivery.py:646](scripts/court_monitor/delivery.py:646) |
-| PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:459](scripts/court_monitor/delivery.py:459) |
-| персонализация push: `_make_per_sub_callback` | [scripts/court_monitor/delivery.py:325](scripts/court_monitor/delivery.py:325) |
-| фильтр по watchlist: `_filter_events_by_watchlist` | [scripts/court_monitor/delivery.py:120](scripts/court_monitor/delivery.py:120) |
+| доставка: `send_telegram` | [scripts/court_monitor/delivery.py:704](scripts/court_monitor/delivery.py:704) |
+| PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:517](scripts/court_monitor/delivery.py:517) |
+| персонализация push: `_make_per_sub_callback` | [scripts/court_monitor/delivery.py:377](scripts/court_monitor/delivery.py:377) |
+| фильтр по watchlist: `_filter_events_by_watchlist` | [scripts/court_monitor/delivery.py:151](scripts/court_monitor/delivery.py:151) |
 
 ## Схема cases.json
 
@@ -1573,7 +1573,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 - **Telegram:** все workflow'и шлют в личный чат (`TELEGRAM_CHAT_ID_TEST`) по умолчанию. Чтобы продублировать в корпоративную группу — поставить галку `to_group` в UI Run workflow. Текст дайджеста в Telegram **общий**, не персонализированный.
 - **PWA push:** `update_cases.yml` (крон) шлёт всем подписчикам PWA. Тестовый workflow `test_digest.yml` шлёт push **только устройствам-владельцам** по умолчанию, чтобы не спамить коллегам прототипами. У `test_digest.yml` есть галка «push_all» — отправит на все устройства. Чтобы пометить своё устройство владельцем — открыть PWA по URL `https://selivanovas.github.io/dashboard/sberbank_dashboard.html?owner=<OWNER_SECRET>` (один раз).
-- **Персонализация push по watchlist (`_per_sub` callback):** push-payload собирается под каждого подписчика отдельно через фабрику `_make_per_sub_callback` ([scripts/court_monitor/delivery.py:325](scripts/court_monitor/delivery.py:325)). Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) — общесистемный сигнал, шлются всем; изменения и переходы стадий — только если дело в watchlist подписчика. Click_url для подписчиков с watchlist — `?digest=open&mine=1`. Используется в основном кроне (`main_json`), `--replay-last`, `--push-last-digest`.
+- **Персонализация push по watchlist (`_per_sub` callback):** push-payload собирается под каждого подписчика отдельно через фабрику `_make_per_sub_callback` ([scripts/court_monitor/delivery.py:377](scripts/court_monitor/delivery.py:377)). Новые дела (`fi_new_cases`, `appeal_new_cases_csv`) — общесистемный сигнал, шлются всем; изменения и переходы стадий — только если дело в watchlist подписчика. Click_url для подписчиков с watchlist — `?digest=open&mine=1`. Используется в основном кроне (`main_json`), `--replay-last`, `--push-last-digest`.
 
 ## Админка подписчиков
 
@@ -1720,6 +1720,47 @@ push-разрешения синка не было вовсе, ротация en
 - Стражи — [scripts/tests/test_watchlist_profiles.py](scripts/tests/test_watchlist_profiles.py)
   (34 теста: LWW-контракт, отсутствие push-гардов, ленивый jsqr, цифровой
   код, delivery-freeze, сквозная проводка).
+- **Разбор потерь звёзд 27.08.2026** (v183; повод — «пропали 2+2 подписки»,
+  оказавшиеся М-алиасами банк-дел, см. блок ниже, но заодно закрыты дыры
+  самого профильного синка): (1) успешный ответ `/profile/watchlist`
+  подтверждает только СНИМОК отправленных тоглов (`sentOps`) — звезда,
+  кликнутая пока POST летел, остаётся в буфере и допушивается следующим
+  синком (раньше безусловный сброс буфера до сравнения стирал её и локально,
+  и в KV); (2) повторный 409 больше не выбрасывает свои тоглы — dirty
+  остаётся, допушит следующий sync (немедленный повтор не планируется —
+  анти-шторм); (3) буфер тоглов персистится в `lsKey('profile_ops')` —
+  раньше dirty переживал перезагрузку, а тоглы нет, и 409-merge накатывал
+  пустой буфер; (4) `_adoptServerWatchlist` ИГНОРИРУЕТ не-массив (раньше
+  отсутствующее поле ответа обнуляло все звёзды устройства); (5) legacy
+  `POST /watchlist` при `sub.profile_id` пишет UNION, а не полное зеркало
+  одного устройства (сюда ходят клиенты без LWW: старый закэшированный
+  фронт, устройство после эвикции localStorage; цена — снятие звезды с
+  легаси-устройства до профиля не доедет); (6) канонизация KV обзавелась
+  LWW: `/subscriptions` отдаёт `wl_ts` (штамп набора), Python шлёт его в
+  `/admin/watchlist`, устаревший снимок пропускается (`skipped: "stale"`) —
+  раньше снимок, взятый ДО рассылки, затирал звёзды, поставленные во время
+  неё; имя `wl_ts` нейтральное — delivery.py о профилях не знает
+  (TestDeliveryFrozen жив); (7) тултип бейджа 🔗 в админке говорит честно
+  («правка меняет набор всех устройств»), банк-звёзды видны в модалке
+  Watchlist строками с чекбоксом.
+
+**Инцидент «пропали подписки» 26.08.2026 (М-алиасы банк-дел):** 4 звезды
+(2 ХМАО + 2 Урал) «исчезли» после промоушена М→2 их дел — звёзды трека
+хранятся composite «домен|М-…», а ДВА потребителя не знали М-алиас у
+банк-дел (фикс 11.08 дошёл только до основной картотеки): `addBankCases`
+админки не регистрировал `material_number` (звезда — «нигде не найдено»)
+и alias-карта delivery строилась вовсе без банк-дел во всех точках доставки
+(push молчал, канонизация не лечила). Теперь `_build_watchlist_alias_indexes`
+принимает `bank_cases=` с **композитным каноном** «домен|bare(id)» (в
+`alias_to_canonical` идут ТОЛЬКО composite-алиасы — bare-канон сталкивал бы
+одноимённые дела судов, а голый номер остаётся мягким фолбэком), проводка —
+`_make_per_sub_callback(bank_cases=…)` в main_json (после `split_bank_track`
+банк-дел в `cases` уже НЕТ — передавать отдельно обязательно) и
+`_load_bank_cases_for_aliases()` в replay/push-режимах; канонизация KV сама
+переписывает «домен|М-…» → «домен|2-…». Фронт был здоров (buildWatchCanonMap
+знает materialNumber). Стражи — `TestBankPromotionAliasMap`,
+`TestBankAliasWiring` (test_bank_storage_split.py),
+`test_bank_aliases_include_material_number` (test_watchlist_profiles.py).
 
 ## Соглашения
 

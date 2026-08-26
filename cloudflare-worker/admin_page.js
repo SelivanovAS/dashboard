@@ -2223,6 +2223,18 @@ async function fetchAll() {
         addAlias(casesMap, comp, payload);
         addAlias(casesMap, bare, payload);
         addAlias(casesMap, c.first_instance && c.first_instance.case_number, payload);
+        // М-предок и composite-формы номеров — зеркало addCaseAliases (фикс
+        // 11.08 дошёл только до основной ветки): промоушен М→2 переименовывает
+        // дело, а звезда трека хранится composite «домен|М-…» — без этих
+        // алиасов она показывалась «нигде не найдено» (инцидент 26.08.2026,
+        // 2+2 дела на обеих территориях).
+        const caseNum = bareCaseNumber(c.first_instance && c.first_instance.case_number);
+        const mat = bareCaseNumber(c.first_instance && c.first_instance.material_number);
+        if (mat) addAlias(casesMap, mat, payload);
+        if (dom) {
+          if (caseNum) addAlias(casesMap, dom + "|" + caseNum, payload);
+          if (mat) addAlias(casesMap, dom + "|" + mat, payload);
+        }
       }
     }).catch(function (e) { console.warn("cases_bank*.json не загружен:", e); });
   }
@@ -2424,7 +2436,7 @@ function renderCard(sub, casesMap, lastPush, pushesGeneratedAt, isOpen, openCase
     + '<summary class="sub-row">'
     +   nameHtml
     +   '<span class="badge badge-device">' + escHtml(detectDevice(sub.user_agent)) + '</span>'
-    +   (sub.profile_id ? '<span class="badge badge-profile" title="Watchlist общий — из профиля синхронизации устройств (read-only)">🔗 ' + escHtml(String(sub.profile_id).slice(0, 8)) + '</span>' : "")
+    +   (sub.profile_id ? '<span class="badge badge-profile" title="Watchlist общий — из профиля синхронизации устройств; правка отсюда меняет набор ВСЕХ связанных устройств">🔗 ' + escHtml(String(sub.profile_id).slice(0, 8)) + '</span>' : "")
     +   (sub.is_owner ? '<span class="badge badge-owner">★ owner</span>' : "")
     +   expiryBadge(sub)
     +   (orphans ? '<span class="badge badge-run" title="Номера, которых нет ни в активных делах, ни в архиве — push по ним не сработает">⚠ ' + orphans + '</span>' : "")
@@ -2529,21 +2541,25 @@ function buildWlList(query) {
       + (c.court ? ' · ' + escHtml(c.court) : '') + '</span>'
       + '</label>';
   });
-  // Архивные звёзды: дело уже в cases_archive.json, в списке активных его
-  // нет — но галку надо показать, иначе такую звезду в модалке не видно и
-  // снять её нечем (при этом в selected она не теряется и уходит при
-  // сохранении как есть).
+  // Архивные и bank-звёзды: в списке активных основной картотеки их нет —
+  // но галку надо показать, иначе такую звезду в модалке не видно и снять
+  // её нечем (при этом в selected она не теряется и уходит при сохранении
+  // как есть). Bank-дела целиком в список не льём (на Урале их сотни) —
+  // только уже выбранные звёзды.
   const archRows = [];
   wlState.selected.forEach(function (id) {
     const c = casesMapGlobal.get(bareCaseNumber(id));
-    if (!c || !c.archived) return;
+    if (!c || (!c.archived && !c.bank)) return;
     if (q && (id + " " + c.plaintiff + " " + c.defendant + " " + c.court).toLowerCase().indexOf(q) < 0) return;
     const parties = (c.plaintiff && c.defendant)
       ? c.plaintiff + " — " + c.defendant
       : (c.plaintiff || c.defendant || "");
+    const badge = c.archived
+      ? '<span class="badge badge-archive">в архиве</span>'
+      : '<span class="badge badge-profile">иски банка</span>';
     archRows.push('<label class="wl-row"><input type="checkbox" data-case-id="' + escHtml(id) + '" checked>'
       + '<span class="case-num">' + escHtml(id) + '</span>'
-      + '<span class="badge badge-archive">в архиве</span>'
+      + badge
       + '<span class="wl-parties">' + escHtml(parties)
       + (c.court ? ' · ' + escHtml(c.court) : '') + '</span>'
       + '</label>');

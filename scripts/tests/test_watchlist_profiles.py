@@ -158,6 +158,26 @@ class TestWorkerContract:
         # профиля — без сравнения N устройств давали бы N одинаковых writes.
         assert ".sort()" in body and "JSON.stringify" in body
 
+    def test_legacy_watchlist_writes_union(self):
+        """Разбор 26.08.2026: в legacy /watchlist приходят клиенты без LWW
+        (старый закэшированный фронт, устройство после эвикции localStorage) —
+        полное зеркало одного такого устройства затирало бы звёзды остальных.
+        Профиль в этой ветке пишется UNION'ом."""
+        body = _fn_src(_worker(), "handleSetWatchlist")
+        assert "unionWatchlists(profile.watchlist" in body
+
+    def test_admin_watchlist_lww_guard(self):
+        """Разбор 26.08.2026: канонизация Python шлёт снимок, взятый ДО всей
+        рассылки — без LWW-штампа он затирал звезду, поставленную юристом в
+        этом окне. /subscriptions отдаёт wl_ts, /admin/watchlist при
+        устаревшем wl_ts пропускает запись; запрос без wl_ts (модалка
+        админки) — прежнее поведение."""
+        w = _worker()
+        assert "s.wl_ts = p.updated_at" in _fn_src(w, "resolveProfilesInto")
+        body = _fn_src(w, "handleAdminWatchlist")
+        assert "r.body.wl_ts" in body
+        assert 'skipped: "stale"' in body
+
     def test_subscriptions_and_admin_data_resolve_profiles(self):
         js = _worker()
         assert "resolveProfilesInto" in _fn_src(js, "handleListSubscriptions")
@@ -373,6 +393,45 @@ console.log(JSON.stringify([
         # Юрист читает/вводит код — фоновая перерисовка не должна дёргать DOM.
         assert "sync-sheet" in _fn_src(_app_js(), "uiBusyForRefresh")
 
+    # ── Разбор 26.08.2026: потеря звёзд в профильном синке ──────────────────
+
+    def test_success_branch_keeps_inflight_ops(self):
+        """Гонка успешного ответа: тогл, сделанный пока POST летел, не должен
+        ни стираться приёмом серверного набора, ни считаться подтверждённым.
+        Прежний безусловный profileSessionOps.clear() до сравнения терял его
+        и локально, и следующим отложенным синком в KV."""
+        body = _fn_src(_app_js(), "syncWatchlistToProfile")
+        assert "const sentOps = new Map(profileSessionOps)" in body
+        assert "profileSessionOps.clear()" not in body, (
+            "Безусловный clear() в синке стирает тоглы, сделанные во время "
+            "полёта POST — подтверждать можно только отправленный снимок."
+        )
+        # Серверный набор принимается с накатом оставшихся тоглов.
+        assert "_applySessionOps(data.canonical)" in body
+
+    def test_double_409_keeps_dirty(self):
+        # Повторный конфликт: свои тоглы не выбрасываются — dirty остаётся,
+        # их допушит следующий sync. Прежний clear() оставлял фантомную
+        # звезду, которую стирала первая же чужая запись.
+        body = _fn_src(_app_js(), "syncWatchlistToProfile")
+        assert "if (profileSessionOps.size) markProfileDirty(); else clearProfileDirty();" in body
+
+    def test_adopt_ignores_non_array(self):
+        # Отсутствующее/переименованное поле ответа = раньше молчаливое
+        # обнуление всех звёзд устройства (`? arr : []`).
+        body = _fn_src(_app_js(), "_adoptServerWatchlist")
+        assert "if (!Array.isArray(arr)) return;" in body
+
+    def test_profile_ops_persisted(self):
+        """profile_dirty переживал перезагрузку, а сами тоглы — нет: 409-merge
+        после перезагрузки накатывал ПУСТОЙ буфер и глотал недопушенные
+        правки. Буфер персистится через lsKey (общий origin двух территорий)."""
+        js = _app_js()
+        assert "lsKey('profile_ops')" in js
+        assert "_loadProfileOps()" in js
+        # Сохранение зовётся из тогла и всех точек очистки буфера.
+        assert js.count("_saveProfileOps()") >= 4
+
 
 # ── Админка ─────────────────────────────────────────────────────────────────
 
@@ -398,6 +457,17 @@ class TestAdminPage:
     def test_search_matches_profile_id(self):
         assert "profile_id" in _fn_src(_admin(), "subMatches")
 
+    def test_bank_aliases_include_material_number(self):
+        """Инцидент 26.08.2026: промоушен М→2 переименовал 4 звёздных иска
+        банка, а банк-ветка алиасов (addBankCases) не знала material_number —
+        звезда «домен|М-…» показывалась «нигде не найдено». Фикс 11.08 дошёл
+        только до addCaseAliases основной картотеки; этот страж держит зеркало
+        в банк-ветке: М-предок и composite-формы обязаны регистрироваться."""
+        body = _fn_src(_admin(), "addBankCases")
+        assert "material_number" in body
+        assert 'dom + "|" + mat' in body
+        assert 'dom + "|" + caseNum' in body
+
 
 # ── Python: контракт «delivery.py не знает о профилях» ──────────────────────
 
@@ -412,6 +482,14 @@ class TestDeliveryFrozen:
         # Worker'а (/subscriptions и /admin/data отдают watchlist готовым).
         # Появление слова «profile» здесь — сигнал нарушения дизайна.
         assert "profile" not in src.lower()
+
+    def test_canonicalize_sends_lww_stamp(self):
+        # LWW-штамп набора (нейтральное имя wl_ts — контракт выше держит
+        # delivery.py в неведении о профилях): без него канонизация затирала
+        # звезду, поставленную юристом во время рассылки (разбор 26.08.2026).
+        src = _read("scripts/court_monitor/delivery.py")
+        assert 'sub.get("wl_ts")' in src
+        assert '"skipped") == "stale"' in src or "'skipped') == 'stale'" in src
 
 
 # ── Сквозная проводка ───────────────────────────────────────────────────────
