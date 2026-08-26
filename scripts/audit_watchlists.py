@@ -89,9 +89,13 @@ def build_alias_map(cases: list[dict]) -> dict[str, dict]:
             add_alias(amap, prev, payload)
         # Composite-алиас «домен|номер» — форма звёзд трека «Иски банка»
         # (и путь миграции звезды при переезде дела в основную картотеку).
+        # material_number обязателен: промоушен М→2 переименовывает дело, а
+        # звезда остаётся composite «домен|М-…» — без него аудит объявлял её
+        # truly_orphan (инцидент 26.08.2026, 2+2 «пропавшие» подписки).
         dom = (fi.get("court_domain") or "").strip()
         if dom:
-            for key in (c.get("id", ""), fi.get("case_number", "")):
+            for key in (c.get("id", ""), fi.get("case_number", ""),
+                        fi.get("material_number", "")):
                 b = bare_case_number(key)
                 if b:
                     add_alias(amap, f"{dom}|{b}", payload)
