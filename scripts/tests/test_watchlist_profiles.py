@@ -89,10 +89,11 @@ class TestWorkerContract:
         js = _worker()
         m = re.search(r'const PAIR_CODE_ALPHABET = "([^"]+)"', js)
         assert m, "PAIR_CODE_ALPHABET не найден."
-        # Код — ТОЛЬКО цифры (решение юриста 26.08.2026: цифровая клавиатура
-        # телефона), меньший алфавит компенсирует длина 8 (10^8 ≈ 26.6 бита).
+        # Код — ТОЛЬКО цифры, 6 знаков (решение юриста 26.08.2026: цифровая
+        # клавиатура, короткий ввод; компенсация малого пространства — TTL
+        # 10 мин, одноразовость и лимит Workers free).
         assert m.group(1) == "0123456789"
-        assert "const PAIR_CODE_LEN = 8" in js
+        assert "const PAIR_CODE_LEN = 6" in js
         assert "const PAIR_CODE_TTL_SEC = 600" in js
         assert "crypto.getRandomValues" in _fn_src(js, "genPairCode")
 
@@ -188,7 +189,7 @@ class TestWorkerPure:
 const seen = new Set();
 for (let i = 0; i < 200; i++) {
   const c = genPairCode();
-  if (c.length !== 8) { console.log("BAD_LEN " + c); process.exit(0); }
+  if (c.length !== 6) { console.log("BAD_LEN " + c); process.exit(0); }
   if (!/^[0-9]+$/.test(c)) { console.log("BAD_CHAR " + c); process.exit(0); }
   seen.add(c);
 }
@@ -201,9 +202,9 @@ console.log("OK " + (seen.size > 150 ? "diverse" : "suspect"));
     def test_normalize_pair_code(self):
         script = (
             _fn_src(_worker(), "normalizePairCode")
-            + "console.log(normalizePairCode(' 12-34 56 78 '));"
+            + "console.log(normalizePairCode(' 12-3 456 '));"
         )
-        assert _node(script) == "12345678"
+        assert _node(script) == "123456"
 
     def test_union_watchlists(self):
         script = (
@@ -285,6 +286,10 @@ class TestAppJs:
         ):
             assert fn in js, fn
         assert 'id="sync-code-input"' in js
+        # Маска поля: дефис вводить не нужно — нецифры вычищаются на вводе,
+        # включая вставку «123-456» из буфера (maxlength с запасом).
+        sheet = _fn_src(js, "renderSyncSheet")
+        assert "replace(/\\\\D/g" in sheet and "slice(0,6)" in sheet
         assert "confirm(" in _fn_src(js, "unlinkThisDevice"), (
             "Отвязка — разрушающее действие, обязана спрашивать."
         )
