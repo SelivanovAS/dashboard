@@ -5167,9 +5167,10 @@ function closeSyncSheet() {
 window.closeSyncSheet = closeSyncSheet;
 
 function fmtPairCode(code) {
-  // Код цифровой, 8 знаков — показываем как СМС-код: «1234-5678».
+  // Код цифровой, 6 знаков — показываем группами: «123-456». Дефис только
+  // для чтения, вводить его не нужно (поле чистит нецифры само).
   const c = String(code || '');
-  return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
+  return c.length > 3 ? c.slice(0, 3) + '-' + c.slice(3) : c;
 }
 
 function renderSyncSheet() {
@@ -5206,8 +5207,11 @@ function renderSyncSheet() {
       + '<div class="sync-divider">или</div>'
       + '<div class="sync-note">Уже есть код с первого устройства?</div>'
       + '<div class="sync-code-row">'
-      + '<input id="sync-code-input" class="sync-input" inputmode="numeric" pattern="[0-9-]*" '
-      + 'autocomplete="one-time-code" spellcheck="false" placeholder="1234-5678" maxlength="10" '
+      // Маска: только цифры, максимум 6. maxlength с запасом (8) — иначе
+      // вставка «123-456» из буфера обрезалась бы ДО очистки от дефиса.
+      + '<input id="sync-code-input" class="sync-input" inputmode="numeric" pattern="[0-9]*" '
+      + 'autocomplete="one-time-code" spellcheck="false" placeholder="123456" maxlength="8" '
+      + 'oninput="this.value=this.value.replace(/\\D/g,\'\').slice(0,6)" '
       + 'aria-label="Код связывания">'
       + '<button class="sheet-btn-done sync-btn" onclick="submitPairCode()">Связать</button>'
       + '</div>'
