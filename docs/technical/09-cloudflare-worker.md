@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:1632](../../cloudflare-worker/worker.js#L1632)):
+`scheduled(event, env)` ([worker.js:2077](../../cloudflare-worker/worker.js#L2077)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,26 +70,31 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([1675](../../cloudflare-worker/worker.js#L1675)).
+Маршрутизатор — `fetch(request, env)` ([2120](../../cloudflare-worker/worker.js#L2120)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
 
 | Маршрут | Метод | Обработчик | Авторизация | Назначение |
 |---------|-------|-----------|-------------|------------|
-| `/subscribe` | POST | `handleSubscribe` ([171](../../cloudflare-worker/worker.js#L171)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
-| `/watchlist` | POST | `handleSetWatchlist` ([239](../../cloudflare-worker/worker.js#L239)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
-| `/unsubscribe` | POST | `handleUnsubscribe` ([295](../../cloudflare-worker/worker.js#L295)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
-| `/subscriptions` | GET | `handleListSubscriptions` ([323](../../cloudflare-worker/worker.js#L323)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
-| `/mark-owner` | POST | `handleMarkOwner` ([353](../../cloudflare-worker/worker.js#L353)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/run-progress` | POST | `handleRunProgress` ([410](../../cloudflare-worker/worker.js#L410)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
-| `/admin/run-progress` | GET | `handleAdminRunProgress` ([464](../../cloudflare-worker/worker.js#L464)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
-| `/admin` | GET | `handleAdmin` ([556](../../cloudflare-worker/worker.js#L556)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
-| `/admin/data` | GET | `handleAdminData` ([516](../../cloudflare-worker/worker.js#L516)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([606](../../cloudflare-worker/worker.js#L606)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([631](../../cloudflare-worker/worker.js#L631)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([620](../../cloudflare-worker/worker.js#L620)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([719](../../cloudflare-worker/worker.js#L719)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/subscribe` | POST | `handleSubscribe` ([317](../../cloudflare-worker/worker.js#L317)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
+| `/watchlist` | POST | `handleSetWatchlist` ([394](../../cloudflare-worker/worker.js#L394)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
+| `/unsubscribe` | POST | `handleUnsubscribe` ([696](../../cloudflare-worker/worker.js#L696)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
+| `/subscriptions` | GET | `handleListSubscriptions` ([724](../../cloudflare-worker/worker.js#L724)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
+| `/mark-owner` | POST | `handleMarkOwner` ([757](../../cloudflare-worker/worker.js#L757)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
+| `/run-progress` | POST | `handleRunProgress` ([814](../../cloudflare-worker/worker.js#L814)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([868](../../cloudflare-worker/worker.js#L868)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
+| `/admin` | GET | `handleAdmin` ([984](../../cloudflare-worker/worker.js#L984)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
+| `/admin/data` | GET | `handleAdminData` ([920](../../cloudflare-worker/worker.js#L920)) | `OWNER_SECRET` | JSON-данные для админки. |
+| `/admin/label` | POST | `handleAdminLabel` ([1034](../../cloudflare-worker/worker.js#L1034)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1059](../../cloudflare-worker/worker.js#L1059)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1048](../../cloudflare-worker/worker.js#L1048)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([1164](../../cloudflare-worker/worker.js#L1164)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/profile/link-code` | POST | `handleProfileLinkCode` ([473](../../cloudflare-worker/worker.js#L473)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
+| `/profile/link` | POST | `handleProfileLink` ([537](../../cloudflare-worker/worker.js#L537)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
+| `/profile/get` | POST | `handleProfileGet` ([587](../../cloudflare-worker/worker.js#L587)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
+| `/profile/watchlist` | POST | `handleProfileSetWatchlist` ([613](../../cloudflare-worker/worker.js#L613)) | знание uuid | Запись набора с LWW: устаревший `base_ts` → 409 + серверный набор. |
+| `/profile/unlink` | POST | `handleProfileUnlink` ([660](../../cloudflare-worker/worker.js#L660)) | знание endpoint | Отвязать устройство; набор уносится в `sub.watchlist`; профиль живёт. |
 
 CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (`corsHeaders`,
 [47](../../cloudflare-worker/worker.js#L47)).
@@ -98,15 +103,27 @@ CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (
 
 Каждая запись хранит: `created_at` (один раз), `last_seen_at` (на каждом
 `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`,
-`label`, `is_owner`, `watchlist`. Канонизация watchlist использует ту же логику,
-что и бэкенд (`wnBuildAliasToCanonical`, [104](../../cloudflare-worker/worker.js#L104),
-с кэшем `getAliasMapCached`, [139](../../cloudflare-worker/worker.js#L139), читающим
+`label`, `is_owner`, `watchlist`, с 26.08.2026 — опциональный `profile_id`
+(связка с профилем синхронизации). Канонизация watchlist использует ту же логику,
+что и бэкенд (`wnBuildAliasToCanonical`, [227](../../cloudflare-worker/worker.js#L227),
+с кэшем `getAliasMapCached`, [262](../../cloudflare-worker/worker.js#L262), читающим
 `cases.json` с GitHub Pages).
+
+**Профили синхронизации (26.08.2026, пока только ХМАО):** `profile:<uuid>` =
+общий watchlist устройств юриста (`updated_at` в мс — LWW-штамп набора, ставит
+только Worker; записи БЕЗ TTL), `paircode:<8 цифр>` — одноразовый код
+связывания (TTL 600 с). Привязанным подпискам выдачи `/subscriptions` и
+`/admin/data` подставляют ПРОФИЛЬНЫЙ watchlist (`resolveProfilesInto`,
+[164](../../cloudflare-worker/worker.js#L164)) — поэтому delivery.py о
+профилях не знает вовсе; `/admin/data` отвечает `{subs, profiles}` (ключ
+`subs` — контракт `scripts/audit_watchlists.py`). Legacy `/watchlist` и
+`/admin/watchlist` при `sub.profile_id` пишут в профиль. Подробная модель —
+CLAUDE.md, раздел «Синхронизация подписок между устройствами».
 
 ## Админка подписчиков
 
 URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`.
-`handleAdmin` ([556](../../cloudflare-worker/worker.js#L556)) рендерит HTML
+`handleAdmin` ([984](../../cloudflare-worker/worker.js#L984)) рендерит HTML
 (`renderAdminHtml`, [34](../../cloudflare-worker/admin_page.js#L34)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
 устройство, флаг owner, даты создания/входа/обновления watchlist, размер и

@@ -1474,6 +1474,9 @@ function uiBusyForRefresh(){
   if(activeCaseNumber)return true;
   const sheet=document.getElementById('filters-sheet');
   if(sheet&&sheet.classList.contains('open'))return true;
+  // Шторка связывания устройств: юрист читает/вводит код — не дёргаем DOM.
+  const syncSheet=document.getElementById('sync-sheet');
+  if(syncSheet&&syncSheet.classList.contains('open'))return true;
   return document.body.classList.contains('beacon-open');
 }
 
@@ -4467,7 +4470,16 @@ function onGlobalKeydown(e){
 }
 
 /* ========== Boot ========== */
-window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();});
+window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener('keydown',onGlobalKeydown);setupDrawerSwipe();
+  // Профиль синхронизации подписок: подтянуть общий набор (fire-and-forget)
+  // и подсветить кнопку шапки. Гонка с canonicalizeWatchlistSet безопасна —
+  // принятие идемпотентно (canonCaseNumber), допуш решает LWW.
+  try{loadProfileWatchlist();}catch(_){/* профильных функций нет — легаси */}
+  try{updateSyncButton();}catch(_){}
+  // Deep-link из QR (?pair=<код>) — после loadProfileWatchlist: гард «уже
+  // связано» должен видеть актуальную связку.
+  try{maybeHandlePairParam();}catch(_){}
+});
 
 /* ========== Mobile swipe-to-close drawer ========== */
 function setupDrawerSwipe(){
@@ -4639,6 +4651,63 @@ function maybeAutoEnableMineFilter() { /* no-op */ }
 
 let watchlistSyncTimer = null;
 
+// ── Профиль синхронизации звёзд (multi-device watchlist) ───────────────────
+// Устройства одного юриста связываются коротким кодом в профиль
+// (profile:<uuid> в KV Worker'а): звёзды общие, снятие зеркалится на все
+// устройства. Связку хранит localStorage устройства — push-подписка НЕ
+// обязательна (профильный путь работает и там, где уведомления не
+// разрешены). LWW: Worker штампует updated_at (мс) на каждой принятой записи
+// набора; клиент хранит последний увиденный штамп (base_ts) и шлёт его с
+// каждой записью — устаревший даёт 409 с серверным набором, поверх которого
+// накатываются тоглы текущей сессии (profileSessionOps).
+const PROFILE_ID_KEY = lsKey('profile_id');
+const PROFILE_BASE_TS_KEY = lsKey('profile_base_ts');
+const PROFILE_DIRTY_KEY = lsKey('profile_dirty'); // '1' = есть недопушенные правки
+// Тоглы ТЕКУЩЕЙ сессии с последнего подтверждённого синка: canon → 'add'|'del'.
+// In-memory намеренно: это буфер для 409-merge, а не tombstones.
+let profileSessionOps = new Map();
+
+function getProfileId() {
+  try { return localStorage.getItem(PROFILE_ID_KEY) || ''; } catch (_) { return ''; }
+}
+function getProfileBaseTs() {
+  try { return Number(localStorage.getItem(PROFILE_BASE_TS_KEY)) || 0; } catch (_) { return 0; }
+}
+function setProfileBaseTs(ts) {
+  try { localStorage.setItem(PROFILE_BASE_TS_KEY, String(Number(ts) || 0)); } catch (_) {}
+}
+function markProfileDirty() {
+  try { localStorage.setItem(PROFILE_DIRTY_KEY, '1'); } catch (_) {}
+}
+function clearProfileDirty() {
+  try { localStorage.removeItem(PROFILE_DIRTY_KEY); } catch (_) {}
+}
+function isProfileDirty() {
+  try { return localStorage.getItem(PROFILE_DIRTY_KEY) === '1'; } catch (_) { return false; }
+}
+function setProfileLink(id, updatedAt) {
+  try {
+    localStorage.setItem(PROFILE_ID_KEY, String(id));
+    localStorage.setItem(PROFILE_BASE_TS_KEY, String(Number(updatedAt) || 0));
+    localStorage.removeItem(PROFILE_DIRTY_KEY);
+  } catch (_) {}
+  updateSyncButton();
+}
+function clearProfileLink() {
+  try {
+    localStorage.removeItem(PROFILE_ID_KEY);
+    localStorage.removeItem(PROFILE_BASE_TS_KEY);
+    localStorage.removeItem(PROFILE_DIRTY_KEY);
+  } catch (_) {}
+  profileSessionOps.clear();
+  updateSyncButton();
+}
+// Подсветка кнопки шапки: связанное устройство — как включённый колокольчик.
+function updateSyncButton() {
+  const btn = document.getElementById('btn-sync');
+  if (btn) btn.classList.toggle('on', !!getProfileId());
+}
+
 // ── Канонизация номеров дел (зеркало wnBuildAliasToCanonical в worker.js) ──
 // Watchlist хранит ТОЛЬКО канонические bare-id: bare(rawId) — ту же форму,
 // к которой Worker приводит POST /watchlist (bare от id из cases.json).
@@ -4798,9 +4867,14 @@ function toggleWatch(caseNumber, btn) {
   const canon = s.includes('|') ? (watchCanonMap.get(s) || s) : canonCaseNumber(s);
   if (watchlist.has(canon)) {
     watchlist.delete(canon);
+    profileSessionOps.set(canon, 'del');
   } else {
     watchlist.add(canon);
+    profileSessionOps.set(canon, 'add');
   }
+  // Пометка «есть недопушенные правки» — для профильного пути (409-merge и
+  // допуш после перезагрузки); без связки с профилем безвредна.
+  markProfileDirty();
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
@@ -4869,9 +4943,17 @@ function scheduleWatchlistSync() {
   watchlistSyncTimer = setTimeout(syncWatchlistToWorker, 600);
 }
 
+// Диспетчер синка: связанное устройство идёт профильным путём, остальные —
+// прежним (запись на push-подписку). Дебаунс общий (scheduleWatchlistSync).
 async function syncWatchlistToWorker() {
   watchlistSyncTimer = null;
   if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
+  const pid = getProfileId();
+  if (pid) return syncWatchlistToProfile(pid);
+  return syncWatchlistToWorkerLegacy();
+}
+
+async function syncWatchlistToWorkerLegacy() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -4910,6 +4992,494 @@ async function syncWatchlistToWorker() {
   }
 }
 
+// ── Профильный путь синка ──────────────────────────────────────────────────
+
+// Единый приём СЕРВЕРНОГО набора: канонизация, запись, перерисовки.
+// ⚠️ scheduleWatchlistSync отсюда НЕ зовётся — анти-цикл v98 («затирка
+// ответом → новый sync» крутила POST бесконечно).
+function _adoptServerWatchlist(arr) {
+  watchlist = new Set(
+    (Array.isArray(arr) ? arr : []).map(canonCaseNumber).filter(Boolean)
+  );
+  try {
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
+  } catch (_) {}
+  if (typeof applyFilters === 'function') {
+    try { applyFilters(); } catch (_) {}
+  } else if (typeof renderTable === 'function') {
+    try { renderTable(); renderMobileCards(); } catch (_) {}
+  }
+  if (typeof refreshDigestModeVisibility === 'function') {
+    try { refreshDigestModeVisibility(); } catch (_) {}
+  }
+  if (filterMineActive && typeof renderAnalytics === 'function') {
+    try { renderAnalytics(); } catch (_) {}
+  }
+}
+
+// Накат тоглов текущей сессии поверх серверного набора: закрывает 409-merge
+// и гонку «сервер ответил, пока юрист кликал звёзды».
+function _applySessionOps(serverArr) {
+  const out = new Set(
+    (Array.isArray(serverArr) ? serverArr : []).map(canonCaseNumber).filter(Boolean)
+  );
+  for (const [canon, op] of profileSessionOps) {
+    if (op === 'add') out.add(canon); else out.delete(canon);
+  }
+  return [...out];
+}
+
+// Свежее профильное состояние (из /profile/get или ответа /subscribe).
+// Сервер новее → принимаем целиком (полное зеркало, включая снятые на другом
+// устройстве звёзды), поверх — тоглы текущей сессии, если успели кликнуть.
+// Не новее, но есть недопушенные правки → допушим их.
+function applyProfileServerState(list, updatedAt) {
+  const ts = Number(updatedAt) || 0;
+  if (ts > getProfileBaseTs()) {
+    _adoptServerWatchlist(_applySessionOps(list));
+    setProfileBaseTs(ts);
+    if (profileSessionOps.size) {
+      markProfileDirty();
+      scheduleWatchlistSync();
+    } else {
+      clearProfileDirty();
+    }
+  } else if (isProfileDirty()) {
+    scheduleWatchlistSync();
+  }
+}
+
+// Запись профильного набора. ЕДИНСТВЕННЫЙ гард — PUSH_WORKER_URL: профиль не
+// зависит от push-подписки, устройство с запрещёнными уведомлениями тоже
+// синхронизируется (решение юриста; страж test_profile_sync_has_no_push_guards).
+async function syncWatchlistToProfile(profileId, isRetry) {
+  if (!PUSH_WORKER_URL) return;
+  try {
+    const r = await fetch(PUSH_WORKER_URL + '/profile/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile_id: profileId,
+        watchlist: [...watchlist],
+        base_ts: getProfileBaseTs(),
+      }),
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (r.status === 409 && data && data.error === 'conflict') {
+      // Набор менялся с другого устройства после нашего base_ts. Накатываем
+      // тоглы своей сессии поверх серверного и повторяем РОВНО один раз;
+      // повторный конфликт — принимаем сервер молча (максимум 2 POST).
+      _adoptServerWatchlist(_applySessionOps(data.canonical));
+      setProfileBaseTs(Number(data.updated_at) || 0);
+      if (!isRetry && profileSessionOps.size) {
+        return syncWatchlistToProfile(profileId, true);
+      }
+      clearProfileDirty();
+      profileSessionOps.clear();
+      return;
+    }
+    if (r.status === 404 && data && data.error === 'profile_not_found') {
+      // Профиль удалён на сервере — тихо расцепляемся (паттерн markAsOwner
+      // при 401) и уходим на легаси-путь. Голый 404 без JSON (старый Worker
+      // без /profile/*) сюда не попадает — он ниже, в ветке «молчим».
+      clearProfileLink();
+      showToast('Синхронизация подписок отключена: профиль не найден на сервере', { type: 'info' });
+      syncWatchlistToWorkerLegacy();
+      return;
+    }
+    if (!r.ok || !data || !Array.isArray(data.canonical)) return; // сеть/500 — dirty остаётся
+    setProfileBaseTs(Number(data.updated_at) || 0);
+    clearProfileDirty();
+    profileSessionOps.clear();
+    // Канонизация Worker'а могла схлопнуть алиасы — принимаем расхождение
+    // БЕЗ нового sync (дословно анти-цикл v98 из легаси-пути).
+    const local = [...watchlist].sort().join('|');
+    const server = [...data.canonical].map(canonCaseNumber).sort().join('|');
+    if (local !== server) _adoptServerWatchlist(data.canonical);
+  } catch (e) {
+    console.warn('profile watchlist sync failed:', e); // dirty остаётся — допушится
+  }
+}
+
+// Загрузка профильного набора при старте страницы (fire-and-forget).
+// Голый 404 (старый Worker без /profile/*) и сеть — молчим: устройство живёт
+// локальным набором, связка не рвётся.
+async function loadProfileWatchlist() {
+  const pid = getProfileId();
+  if (!pid || !PUSH_WORKER_URL) return;
+  try {
+    const r = await fetch(PUSH_WORKER_URL + '/profile/get', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_id: pid }),
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (r.status === 404 && data && data.error === 'profile_not_found') {
+      clearProfileLink();
+      showToast('Синхронизация подписок отключена: профиль не найден на сервере', { type: 'info' });
+      return;
+    }
+    if (!r.ok || !data) return;
+    applyProfileServerState(data.watchlist, data.updated_at);
+  } catch (_) { /* офлайн — живём локальным набором */ }
+}
+
+// ── Шторка «Синхронизация подписок» (связывание устройств) ────────────────────
+
+let _syncCodeShown = null; // код связывания, показанный в шторке этого сеанса
+
+// Endpoint push-подписки устройства, если она есть. Best-effort: без push
+// связку хранит только localStorage — Worker привяжет подписку позже, когда
+// /subscribe принесёт profile_id.
+async function currentPushEndpoint() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return '';
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return sub ? sub.endpoint : '';
+  } catch (_) { return ''; }
+}
+
+function openSyncSheet() {
+  const sheet = document.getElementById('sync-sheet');
+  const scrim = document.getElementById('sync-scrim');
+  if (!sheet) return;
+  renderSyncSheet();
+  sheet.classList.add('open');
+  sheet.setAttribute('aria-hidden', 'false');
+  if (scrim) scrim.classList.add('open');
+}
+window.openSyncSheet = openSyncSheet;
+
+function closeSyncSheet() {
+  const sheet = document.getElementById('sync-sheet');
+  const scrim = document.getElementById('sync-scrim');
+  if (!sheet) return;
+  stopSyncScan(); // камера не должна пережить закрытие окна
+  sheet.classList.remove('open');
+  sheet.setAttribute('aria-hidden', 'true');
+  if (scrim) scrim.classList.remove('open');
+  _syncCodeShown = null; // повторное открытие — свежее состояние, не старый код
+  applyPendingDataRefresh();
+}
+window.closeSyncSheet = closeSyncSheet;
+
+function fmtPairCode(code) {
+  // Код цифровой, 8 знаков — показываем как СМС-код: «1234-5678».
+  const c = String(code || '');
+  return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
+}
+
+function renderSyncSheet() {
+  const body = document.getElementById('sync-sheet-body');
+  if (!body) return;
+  stopSyncScan(); // пересборка тела убивает <video> — камера глохнет всегда
+  const pid = getProfileId();
+  let html = '';
+  if (_syncCodeShown) {
+    html = '<div class="sync-block">'
+      + '<div class="sync-note">Введите этот код на втором устройстве (кнопка '
+      + '🔗 в шапке дашборда → «Связать»). Код действует 10 минут и работает один раз.</div>'
+      + '<div class="sync-code" id="sync-code-display">' + fmtPairCode(_syncCodeShown) + '</div>'
+      + '<div class="sync-qr" id="sync-qr"></div>'
+      + '<div class="sync-note sync-qr-note">Или наведите камеру телефона на QR — '
+      + 'дашборд откроется и свяжет устройство сам.</div>'
+      + '<button class="sheet-btn-done sync-btn" onclick="closeSyncSheet()">Готово</button>'
+      + '</div>';
+  } else if (pid) {
+    html = '<div class="sync-block">'
+      + '<div class="sync-status-on">✓ Устройство связано</div>'
+      + '<div class="sync-quiet">профиль ' + pid.slice(0, 8) + '</div>'
+      + '<div class="sync-note">Подписки (сейчас: ' + watchlist.size + ') общие для всех '
+      + 'связанных устройств территории — и постановка ★, и снятие.</div>'
+      + '<button class="sheet-btn-done sync-btn" onclick="requestPairCode()">Подключить ещё устройство</button>'
+      + '<button class="sync-btn sync-btn-danger" onclick="unlinkThisDevice()">Отвязать это устройство</button>'
+      + '</div>';
+  } else {
+    html = '<div class="sync-block">'
+      + '<div class="sync-note">Подписки на дела (★) станут общими на всех связанных '
+      + 'устройствах территории. Push-подписка не обязательна.</div>'
+      + '<div class="sync-note">Это первое устройство? Получите код для второго:</div>'
+      + '<button class="sheet-btn-done sync-btn" onclick="requestPairCode()">Получить код</button>'
+      + '<div class="sync-divider">или</div>'
+      + '<div class="sync-note">Уже есть код с первого устройства?</div>'
+      + '<div class="sync-code-row">'
+      + '<input id="sync-code-input" class="sync-input" inputmode="numeric" pattern="[0-9-]*" '
+      + 'autocomplete="one-time-code" spellcheck="false" placeholder="1234-5678" maxlength="10" '
+      + 'aria-label="Код связывания">'
+      + '<button class="sheet-btn-done sync-btn" onclick="submitPairCode()">Связать</button>'
+      + '</div>'
+      + (canScanQr()
+        ? '<button class="sync-btn sync-btn-scan" onclick="startSyncScan()">📷 Сканировать QR</button>'
+        : '')
+      + '</div>';
+  }
+  body.innerHTML = html;
+  if (_syncCodeShown) renderSyncQr(_syncCodeShown);
+}
+
+// QR с deep-link'ом «?pair=<код>»: его читает СИСТЕМНАЯ камера любого
+// телефона (встроенного сканера в PWA нет намеренно — BarcodeDetector не
+// поддержан в iOS Safari, а getUserMedia+библиотека того не стоят). Генератор
+// — vendored qrcode-gen.js; если он не загрузился, блок тихо прячется,
+// текстовый код остаётся основным путём.
+function renderSyncQr(code) {
+  const el = document.getElementById('sync-qr');
+  if (!el) return;
+  if (typeof qrcode !== 'function') { el.style.display = 'none'; return; }
+  try {
+    const url = location.origin + location.pathname + '?pair=' + encodeURIComponent(code);
+    const qr = qrcode(0, 'M'); // 0 = версия по вместимости
+    qr.addData(url);
+    qr.make();
+    el.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch (e) {
+    console.warn('QR связывания не построился:', e);
+    el.style.display = 'none';
+  }
+}
+
+// Deep-link из QR: «?pair=<код>» на втором устройстве вводит код сам.
+// Параметр вычищается из URL сразу (паттерн ?owner= — history.replaceState),
+// код одноразовый и чужим глазам в адресной строке не нужен.
+async function maybeHandlePairParam() {
+  let code = '';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    code = (params.get('pair') || '').trim();
+    if (code) {
+      params.delete('pair');
+      const qs = params.toString();
+      history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+    }
+  } catch (_) {}
+  if (!code) return;
+  if (getProfileId()) {
+    showToast('Устройство уже связано — чтобы сменить профиль, сначала отвяжите его (кнопка 🔗)', { type: 'error' });
+    return;
+  }
+  openSyncSheet();
+  const inp = document.getElementById('sync-code-input');
+  if (inp) inp.value = code;
+  await submitPairCode();
+}
+
+// ── Сканер QR внутри приложения ────────────────────────────────────────────
+// Нужен ради PWA на iOS: у приложения «на Домой» хранилище ОТДЕЛЬНОЕ от
+// Safari, и deep-link из системной камеры связал бы вкладку Safari, а не
+// PWA. getUserMedia в iOS-PWA работает с 14.3; декодер — vendored jsqr.js
+// (BarcodeDetector в iOS Safari нет), грузится ЛЕНИВО по нажатию кнопки
+// (256 КБ не должны ездить каждому на старте).
+
+let _syncScanStream = null;
+let _syncScanTimer = null;
+
+function canScanQr() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+function stopSyncScan() {
+  if (_syncScanTimer) { clearInterval(_syncScanTimer); _syncScanTimer = null; }
+  if (_syncScanStream) {
+    try { _syncScanStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    _syncScanStream = null;
+  }
+}
+
+function loadJsQr() {
+  return new Promise((resolve, reject) => {
+    if (typeof jsQR === 'function') { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'jsqr.js?v=1';
+    s.onload = () => {
+      if (typeof jsQR === 'function') resolve();
+      else reject(new Error('jsQR не определился'));
+    };
+    s.onerror = () => reject(new Error('jsqr.js не загрузился'));
+    document.head.appendChild(s);
+  });
+}
+
+// Из распознанного текста достаём код: deep-link «?pair=…» или голые цифры.
+function extractPairCode(text) {
+  const s = String(text || '');
+  const m = s.match(/[?&]pair=([0-9-]+)/i);
+  if (m) return m[1].replace(/-/g, '');
+  const norm = s.replace(/[\s-]/g, '');
+  return /^\d{6,10}$/.test(norm) ? norm : null;
+}
+
+function renderSyncScanView() {
+  const body = document.getElementById('sync-sheet-body');
+  if (!body) return;
+  body.innerHTML = '<div class="sync-block">'
+    + '<div class="sync-note">Наведите камеру на QR-код на экране первого устройства.</div>'
+    + '<video id="sync-scan-video" class="sync-scan-video" muted autoplay playsinline></video>'
+    + '<button class="sync-btn sync-btn-danger" onclick="cancelSyncScan()">Отмена</button>'
+    + '</div>';
+}
+
+function cancelSyncScan() {
+  stopSyncScan();
+  renderSyncSheet();
+}
+window.cancelSyncScan = cancelSyncScan;
+
+async function startSyncScan() {
+  if (!canScanQr()) return;
+  try {
+    await loadJsQr();
+  } catch (_) {
+    showToast('Сканер недоступен: декодер не загрузился — введите код цифрами', { type: 'error' });
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (_) {
+    showToast('Камера недоступна или доступ не разрешён — введите код цифрами', { type: 'error' });
+    return;
+  }
+  _syncScanStream = stream;
+  renderSyncScanView();
+  const video = document.getElementById('sync-scan-video');
+  if (!video) { stopSyncScan(); return; }
+  video.srcObject = stream;
+  try { await video.play(); } catch (_) {}
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  _syncScanTimer = setInterval(() => {
+    if (!video.videoWidth || typeof jsQR !== 'function') return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    let found = null;
+    try {
+      ctx.drawImage(video, 0, 0);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const res = jsQR(img.data, img.width, img.height);
+      if (res && res.data) found = extractPairCode(res.data);
+    } catch (_) {}
+    if (found) {
+      stopSyncScan();
+      renderSyncSheet();
+      const inp = document.getElementById('sync-code-input');
+      if (inp) inp.value = found;
+      submitPairCode();
+    }
+  }, 250);
+}
+window.startSyncScan = startSyncScan;
+
+async function requestPairCode() {
+  if (!PUSH_WORKER_URL) {
+    showToast('Синхронизация недоступна: у территории нет Worker\'а', { type: 'error' });
+    return;
+  }
+  try {
+    const pid = getProfileId();
+    const reqBody = { watchlist: [...watchlist] };
+    if (pid) reqBody.profile_id = pid;
+    const ep = await currentPushEndpoint();
+    if (ep) reqBody.endpoint = ep;
+    const r = await fetch(PUSH_WORKER_URL + '/profile/link-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody),
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (r.status === 404 && data && data.error === 'profile_not_found') {
+      clearProfileLink();
+      showToast('Профиль не найден на сервере — связка сброшена, получите код заново', { type: 'error' });
+      renderSyncSheet();
+      return;
+    }
+    if (!r.ok || !data || !data.ok) {
+      showToast('Не удалось получить код: сервер территории недоступен или устарел', { type: 'error' });
+      return;
+    }
+    if (!pid) setProfileLink(data.profile_id, data.updated_at);
+    _syncCodeShown = data.code;
+    renderSyncSheet();
+  } catch (_) {
+    showToast('Не удалось получить код: нет сети', { type: 'error' });
+  }
+}
+window.requestPairCode = requestPairCode;
+
+async function submitPairCode() {
+  const inp = document.getElementById('sync-code-input');
+  const code = ((inp && inp.value) || '').trim();
+  if (!code) {
+    showToast('Введите код с первого устройства', { type: 'error' });
+    return;
+  }
+  if (!PUSH_WORKER_URL) return;
+  try {
+    const reqBody = { code: code, watchlist: [...watchlist] };
+    const ep = await currentPushEndpoint();
+    if (ep) reqBody.endpoint = ep;
+    const r = await fetch(PUSH_WORKER_URL + '/profile/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody),
+    });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (r.status === 404 && data
+        && (data.error === 'code_not_found' || data.error === 'profile_not_found')) {
+      showToast('Код не найден или истёк — получите новый на первом устройстве', { type: 'error' });
+      return;
+    }
+    if (!r.ok || !data || !data.ok) {
+      showToast('Не удалось связать: сервер территории недоступен или устарел', { type: 'error' });
+      return;
+    }
+    setProfileLink(data.profile_id, data.updated_at);
+    profileSessionOps.clear();
+    _adoptServerWatchlist(data.watchlist); // union наборов уже сделан сервером
+    renderSyncSheet();
+    showToast('Устройства связаны: общих дел — ' + watchlist.size, { type: 'success' });
+  } catch (_) {
+    showToast('Не удалось связать: нет сети', { type: 'error' });
+  }
+}
+window.submitPairCode = submitPairCode;
+
+async function unlinkThisDevice() {
+  if (!confirm('Отвязать это устройство от общего набора звёзд? Текущие звёзды '
+      + 'останутся на устройстве, на других устройствах ничего не изменится.')) {
+    return;
+  }
+  // Сначала снимаем привязку с push-подписки в KV (иначе следующий /subscribe
+  // вернул бы profile_id и устройство перевязалось бы само). Сбой сети —
+  // отвязку НЕ делаем: полуотвязанное состояние хуже честного отказа.
+  const ep = await currentPushEndpoint();
+  if (ep && PUSH_WORKER_URL) {
+    try {
+      const r = await fetch(PUSH_WORKER_URL + '/profile/unlink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: ep, watchlist: [...watchlist] }),
+      });
+      if (!r.ok && r.status !== 404) { // 404 — записи в KV уже нет, отвязка чисто локальная
+        showToast('Не удалось отвязать: сервер недоступен, попробуйте позже', { type: 'error' });
+        return;
+      }
+    } catch (_) {
+      showToast('Не удалось отвязать: нет сети, попробуйте позже', { type: 'error' });
+      return;
+    }
+  }
+  clearProfileLink();
+  _syncCodeShown = null; // код вёл на покинутый профиль — показывать нечего
+  renderSyncSheet();
+  showToast('Устройство отвязано — звёзды остались локальными', { type: 'info' });
+}
+window.unlinkThisDevice = unlinkThisDevice;
+
 // Двусторонний reconcile watchlist между клиентом и Worker (KV) после
 // `/subscribe`. Покрывает три сценария:
 //   1. Локальный пуст, серверный есть → берём с сервера (PWA переустановлена,
@@ -4922,6 +5492,10 @@ async function syncWatchlistToWorker() {
 //   3. Оба непустые и расходятся → не сливаем (риск воскресить только что
 //      снятые звёздочки), но если локальный — строгое надмножество, шлём.
 function reconcileWatchlistWithServer(serverList) {
+  // Устройство связано с профилем → истина живёт в профиле, а аргумент здесь
+  // — замороженный снимок sub.watchlist (мог отстать на месяцы). Профильную
+  // гидратацию делают applyProfileServerState/loadProfileWatchlist.
+  if (getProfileId()) return;
   const server = new Set(
     Array.isArray(serverList) ? serverList.filter((x) => typeof x === 'string') : []
   );
@@ -4967,6 +5541,35 @@ function reconcileWatchlistWithServer(serverList) {
 // расширениях. Внутри — тот же reconcile.
 function hydrateWatchlistFromServer(serverList) {
   reconcileWatchlistWithServer(serverList);
+}
+
+// Обработка ответа /subscribe. Связанное устройство гидратируется ПРОФИЛЬНЫМ
+// набором (profile_updated_at решает по LWW); profile_id в ответе без
+// локальной связки — самовосстановление после чистки localStorage: Worker
+// помнит привязку в записи подписки. Ответ без профиля — прежний reconcile.
+function handleSubscribeResponse(data) {
+  if (!data) return;
+  if (data.profile_id && !getProfileId()) {
+    setProfileLink(data.profile_id, 0);
+    applyProfileServerState(data.watchlist, data.profile_updated_at);
+    return;
+  }
+  if (getProfileId()) {
+    // Ответ мог прийти без профильных полей (профиль умер / старый Worker):
+    // updated_at=0 не новее base_ts, снимок sub.watchlist набор не затирает.
+    applyProfileServerState(data.watchlist, data.profile_updated_at);
+    return;
+  }
+  hydrateWatchlistFromServer(data.watchlist);
+}
+
+// Тело /subscribe: подписка + profile_id устройства (если связано) — это
+// чинит ротацию endpoint: свежая KV-запись привязывается к профилю сразу.
+function buildSubscribeBody(sub) {
+  const body = sub.toJSON();
+  const pid = getProfileId();
+  if (pid) body.profile_id = pid;
+  return JSON.stringify(body);
 }
 
 function maybeShowWatchlistHint() {
@@ -5072,11 +5675,11 @@ async function subscribeToPush(reg) {
     const r = await fetch(PUSH_WORKER_URL + '/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub.toJSON()),
+      body: buildSubscribeBody(sub),
     });
     try {
       const data = await r.json();
-      hydrateWatchlistFromServer(data && data.watchlist);
+      handleSubscribeResponse(data);
     } catch (_) {}
     console.log('Push-подписка активирована');
     // Если зашли с ?owner=<secret> и только что подписались — сразу метим владельца.
@@ -5161,10 +5764,10 @@ async function setupPushNotifications(reg) {
     fetch(PUSH_WORKER_URL + '/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(existing.toJSON()),
+      body: buildSubscribeBody(existing),
     })
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) hydrateWatchlistFromServer(data.watchlist); })
+      .then((data) => { if (data) handleSubscribeResponse(data); })
       .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
     markAsOwner(reg);

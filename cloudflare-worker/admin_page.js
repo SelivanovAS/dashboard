@@ -536,6 +536,8 @@ a { color: var(--accent); }
 :root[data-theme="dark"] .badge-owner { color:var(--accent); }
 .badge-expiry { background:var(--warning-bg); color:var(--warning-fg); }
 .badge-device { background:var(--bg-3); color:var(--fg-2); font-weight:var(--fw-medium); }
+/* Профиль синхронизации звёзд: устройства одного юриста с общим watchlist. */
+.badge-profile { background:var(--bg-3); color:var(--fg-2); font-family:var(--font-mono); }
 .badge-ok   { background:var(--success-bg); color:var(--success-fg); }
 .badge-fail { background:var(--danger-bg); color:var(--danger-fg); }
 .badge-run  { background:var(--warning-bg); color:var(--warning-fg); }
@@ -705,6 +707,11 @@ details.fold > summary:hover { color:var(--fg-1); }
    краям через ~1000px пустоты. */
 .sub-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-1);
   padding:12px 16px; max-width:1000px; }
+/* Группа устройств одного профиля синхронизации: рамка вокруг карточек. */
+.profile-group { border:1px dashed var(--border-strong); border-radius:var(--radius-lg);
+  padding:10px 12px; max-width:1024px; display:flex; flex-direction:column; gap:10px; }
+.profile-group-head { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-semibold); }
+.profile-group-orphan .profile-group-head { color:var(--fg-3); font-weight:var(--fw-medium); }
 /* Свёрнутая строка подписки. Кнопок в summary НЕТ намеренно: клик по
    вложенной кнопке переключал бы свёртку. Треугольник — тот же приём, что у
    details.fold, но своим правилом (там селектор по прямому потомку .fold). */
@@ -1469,6 +1476,10 @@ let casesMapGlobal = new Map();
 let activeCasesGlobal = [];
 let subsByEp = new Map();
 let allSubs = [];
+// Профили синхронизации звёзд (multi-device watchlist): устройства одного
+// юриста связаны общим profile_id, их watchlist живёт в profile:<uuid> KV.
+let allProfiles = [];
+let profilesById = new Map();
 let lastPushesMap = new Map();
 let lastPushesGeneratedAt = "";
 // Какие подписки юрист развернул. Живёт вне DOM: #root перерисовывается на
@@ -2107,7 +2118,12 @@ async function fetchAll() {
   ]);
   const subsRes = results[0];
   if (!subsRes.ok) throw new Error("HTTP " + subsRes.status + " /admin/data");
-  const subs = await subsRes.json();
+  const dataJson = await subsRes.json();
+  // Новый Worker отдаёт {subs, profiles} (профили синхронизации звёзд);
+  // старый (окно отката) — голый массив. Толерантность к обеим формам
+  // обязательна: страница и Worker технически деплоятся врозь.
+  const subs = Array.isArray(dataJson) ? dataJson : (dataJson.subs || []);
+  const profiles = Array.isArray(dataJson) ? [] : (dataJson.profiles || []);
   const casesMap = new Map();
   const activeCases = [];
   // Все номера дела — под один payload: канонический ID первым (он же дефолт
@@ -2234,7 +2250,7 @@ async function fetchAll() {
   } catch (e) {
     console.warn("last_digest.json не загружен:", e);
   }
-  return { subs, casesMap, activeCases, pushesMap, pushesGeneratedAt, digest };
+  return { subs, profiles, casesMap, activeCases, pushesMap, pushesGeneratedAt, digest };
 }
 
 // Разбор строки сводки дайджеста на ИМЕНОВАННЫЕ части.
@@ -2408,6 +2424,7 @@ function renderCard(sub, casesMap, lastPush, pushesGeneratedAt, isOpen, openCase
     + '<summary class="sub-row">'
     +   nameHtml
     +   '<span class="badge badge-device">' + escHtml(detectDevice(sub.user_agent)) + '</span>'
+    +   (sub.profile_id ? '<span class="badge badge-profile" title="Watchlist общий — из профиля синхронизации устройств (read-only)">🔗 ' + escHtml(String(sub.profile_id).slice(0, 8)) + '</span>' : "")
     +   (sub.is_owner ? '<span class="badge badge-owner">★ owner</span>' : "")
     +   expiryBadge(sub)
     +   (orphans ? '<span class="badge badge-run" title="Номера, которых нет ни в активных делах, ни в архиве — push по ним не сработает">⚠ ' + orphans + '</span>' : "")
@@ -2672,7 +2689,8 @@ async function handleAction(card, action, currentSub, btn) {
 // Поиск по подпискам: имя, устройство, номера дел и стороны из watchlist.
 function subMatches(sub, q) {
   if (!q) return true;
-  let hay = (sub.label || "") + " " + detectDevice(sub.user_agent) + " " + (sub.endpoint || "").slice(-32);
+  let hay = (sub.label || "") + " " + detectDevice(sub.user_agent) + " " + (sub.endpoint || "").slice(-32)
+    + " " + (sub.profile_id || "").slice(0, 8);
   for (const num of (Array.isArray(sub.watchlist) ? sub.watchlist : [])) {
     hay += " " + num;
     const c = casesMapGlobal.get(bareCaseNumber(num));
@@ -2689,12 +2707,57 @@ function renderSubsList() {
   // состояние (subsOpen) не трогаем — очистка поиска возвращает то, что
   // юрист раскрыл сам.
   const autoOpen = !!q && visible.length <= 3;
-  root.className = "subs";
-  root.innerHTML = visible.map(function (s) {
+  function cardHtml(s) {
     return renderCard(s, casesMapGlobal, lastPushesMap.get(s.endpoint), lastPushesGeneratedAt,
       autoOpen || subsOpen.has(s.endpoint), autoOpen);
-  }).join("");
-  if (!visible.length) {
+  }
+  // Группировка по профилю синхронизации: устройства одного юриста — рядом,
+  // в рамке с шапкой профиля. Порядок групп = первое вхождение подписки в
+  // отсортированном списке (owner выше — сортировка из render() наследуется).
+  const groups = new Map(); // profile_id → [подписки]
+  const singles = [];
+  for (const s of visible) {
+    if (s.profile_id) {
+      if (!groups.has(s.profile_id)) groups.set(s.profile_id, []);
+      groups.get(s.profile_id).push(s);
+    } else {
+      singles.push(s);
+    }
+  }
+  let html = "";
+  const seenProfiles = new Set();
+  for (const s of visible) {
+    if (!s.profile_id || seenProfiles.has(s.profile_id)) continue;
+    seenProfiles.add(s.profile_id);
+    const members = groups.get(s.profile_id);
+    const p = profilesById.get(s.profile_id);
+    const wlLen = p ? (p.watchlist || []).length
+      : (Array.isArray(members[0].watchlist) ? members[0].watchlist.length : 0);
+    const updated = p && p.updated_at ? relTime(new Date(p.updated_at).toISOString()) : "";
+    html += '<div class="profile-group" data-profile-id="' + escHtml(s.profile_id) + '">'
+      + '<div class="profile-group-head">🔗 Профиль ' + escHtml(String(s.profile_id).slice(0, 8))
+      + ' · ' + nPlural(members.length, "устройство", "устройства", "устройств")
+      + ' · ' + nPlural(wlLen, "дело", "дела", "дел")
+      + (updated ? ' · обновлён ' + escHtml(updated) : '')
+      + '</div>'
+      + members.map(cardHtml).join("")
+      + '</div>';
+  }
+  html += singles.map(cardHtml).join("");
+  // Профили без единой живой подписки (все устройства отвязались или их
+  // KV-записи истекли): read-only строка, видна только при пустом поиске.
+  if (!q) {
+    for (const p of allProfiles) {
+      if (seenProfiles.has(p.profile_id)) continue;
+      html += '<div class="profile-group profile-group-orphan" data-profile-id="' + escHtml(p.profile_id) + '">'
+        + '<div class="profile-group-head">🔗 Профиль ' + escHtml(String(p.profile_id).slice(0, 8))
+        + ' · без push-устройств · ' + nPlural((p.watchlist || []).length, "дело", "дела", "дел") + '</div>'
+        + '</div>';
+    }
+  }
+  root.className = "subs";
+  root.innerHTML = html;
+  if (!html) {
     root.innerHTML = '<div class="empty">' + (q ? "Ничего не найдено по запросу" : "Подписок нет.") + '</div>';
   }
   document.getElementById("subs-count").textContent =
@@ -2710,6 +2773,8 @@ async function render(force) {
     activeCasesGlobal = all.activeCases;
     lastPushesMap = all.pushesMap;
     lastPushesGeneratedAt = all.pushesGeneratedAt;
+    allProfiles = all.profiles || [];
+    profilesById = new Map(allProfiles.map((p) => [p.profile_id, p]));
     renderDigestTile(all.digest, all.pushesMap, all.pushesGeneratedAt);
     const subs = all.subs;
     const owners = subs.filter((s) => s.is_owner).length;
@@ -2725,6 +2790,7 @@ async function render(force) {
     document.getElementById("summary").innerHTML =
       "<b>" + subs.length + "</b> подписок · <b>" + owners + "</b> owner<br>"
       + totalWl + " дел в watchlist'ах"
+      + (allProfiles.length ? " · <b>" + allProfiles.length + "</b> " + plural(allProfiles.length, "профиль", "профиля", "профилей") : "")
       + (orphanWl ? " · <b>⚠ " + orphanWl + " нигде не найдено</b>" : "");
     // Тот же счётчик — в заголовке секции: сводка в шапке скрыта на мобильном
     // (.header-meta{display:none} ≤768px), и с телефона сироты не видны вовсе.

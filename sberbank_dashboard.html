@@ -70,7 +70,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=177">
+<link rel="stylesheet" href="styles.css?v=179">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -179,6 +179,9 @@
       </div>
       <div class="header-actions">
         <div class="header-meta" id="meta-info"></div>
+        <button class="theme-toggle" id="btn-sync" onclick="openSyncSheet()" aria-label="Синхронизация подписок между устройствами" title="Синхронизация подписок между устройствами">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -364,9 +367,25 @@
       <button class="sheet-btn-done" onclick="closeFiltersSheet()">Готово</button>
     </div>
   </aside>
+
+  <!-- «Синхронизация подписок» (связывание устройств в профиль):
+       на мобиле — bottom-sheet, на десктопе CSS превращает её в мини-окно -->
+  <div class="sheet-scrim" id="sync-scrim" onclick="closeSyncSheet()"></div>
+  <aside class="filters-sheet" id="sync-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Синхронизация подписок</span>
+      <button class="sheet-close btn-x" onclick="closeSyncSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body" id="sync-sheet-body"></div>
+  </aside>
 </div>
 
 <script src="region_front.js?v=3"></script>
-<script src="app.js?v=177" defer></script>
+<!-- QR-генератор для кода связывания устройств: vendored-копия
+     qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
+     проекта нет. Файл не редактируется, обновление — заменой целиком. -->
+<script src="qrcode-gen.js?v=1" defer></script>
+<script src="app.js?v=179" defer></script>
 </body>
 </html>
