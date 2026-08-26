@@ -62,6 +62,129 @@ function endpointToKey(endpoint) {
   return `sub:${parts[parts.length - 1].slice(0, 80)}`;
 }
 
+// ── Профили синхронизации звёзд (multi-device watchlist) ─────────────────────
+// Профиль = общий watchlist нескольких устройств одного юриста. Живёт в этом
+// же KV под ключом profile:<uuid>; устройство хранит profile_id в localStorage
+// (lsKey фронта) и шлёт его в /subscribe — ротация push-endpoint связку не
+// рвёт. Auth-модель — как у /watchlist: знание случайного id = доступ, поэтому
+// profile_id — bearer-секрет (только POST-body, в логах — первые 8 символов).
+// Схема profile:<uuid>: { schema_version: 1, watchlist: [...],
+//   updated_at: <мс эпохи, number — LWW-таймстамп НАБОРА, ставит только
+//   Worker при принятой записи>, created_at: ISO }.
+// ⚠️ Расширение под заметки (этап 2) — со СВОИМ notes_updated_at:
+//   updated_at принадлежит watchlist'у, а не записи целиком.
+// ⚠️ Профиль пишется БЕЗ expirationTtl: KV get TTL не продлевает, а
+//   «продление» фоновыми writes запрещено (free-tier 1000/день на аккаунт);
+//   профилей — десятки, сироты видны в админке.
+
+const KV_SUB_TTL_SEC = 60 * 24 * 3600; // TTL записей sub:* (60 дней)
+// Код — ТОЛЬКО цифры (решение юриста 26.08.2026): вводится с цифровой
+// клавиатуры телефона. Меньший алфавит компенсирует длина 8 (10^8 ≈ 26.6
+// бита): вместе с TTL 10 минут, одноразовостью и лимитом Workers free
+// (100k req/день) перебор нереален. Показ — «1234-5678».
+const PAIR_CODE_ALPHABET = "0123456789";
+const PAIR_CODE_LEN = 8;
+const PAIR_CODE_TTL_SEC = 600; // код связывания живёт 10 минут, одноразовый
+
+function profileKey(id) { return `profile:${id}`; }
+function paircodeKey(code) { return `paircode:${code}`; }
+function shortProfileId(id) { return String(id || "").slice(0, 8); }
+function looksLikeProfileId(id) {
+  return typeof id === "string" && /^[0-9a-f-]{36}$/.test(id);
+}
+// Ввод кода руками: терпим регистр, пробелы и дефис показа «ABC-234».
+function normalizePairCode(s) {
+  return String(s || "").toUpperCase().replace(/[\s-]/g, "").slice(0, 16);
+}
+function genPairCode() {
+  // rejection sampling: байты за порогом (наибольшее кратное длине алфавита,
+  // 250 для 10 цифр) отбрасываем — иначе остаток от деления даёт перекос к
+  // началу алфавита.
+  const limit = 256 - (256 % PAIR_CODE_ALPHABET.length);
+  const out = [];
+  while (out.length < PAIR_CODE_LEN) {
+    const buf = new Uint8Array(PAIR_CODE_LEN * 2);
+    crypto.getRandomValues(buf);
+    for (const b of buf) {
+      if (b < limit && out.length < PAIR_CODE_LEN) {
+        out.push(PAIR_CODE_ALPHABET[b % PAIR_CODE_ALPHABET.length]);
+      }
+    }
+  }
+  return out.join("");
+}
+// Общая санитизация клиентского массива номеров (исторические правила
+// /watchlist): только строки, длина <100, максимум 500, дедуп.
+function sanitizeWatchlistInput(arr) {
+  return Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .filter((x) => typeof x === "string" && x.length > 0 && x.length < 100)
+      .slice(0, 500)
+  ));
+}
+function unionWatchlists(a, b) {
+  return Array.from(new Set([...(a || []), ...(b || [])]));
+}
+async function getProfile(env, id) {
+  if (!looksLikeProfileId(id)) return null;
+  const raw = await env.PUSH_SUBSCRIPTIONS.get(profileKey(id));
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
+async function putProfile(env, id, profile) {
+  // ⚠️ Без expirationTtl — см. шапку блока профилей.
+  await env.PUSH_SUBSCRIPTIONS.put(profileKey(id), JSON.stringify(profile));
+}
+async function writeProfileWatchlist(env, id, profile, canonicalArr) {
+  profile.watchlist = canonicalArr;
+  profile.updated_at = Date.now();
+  await putProfile(env, id, profile);
+  return profile;
+}
+// Привязка push-подписки устройства к профилю (best-effort: у устройства без
+// push подписки нет вовсе — его связку хранит только localStorage фронта).
+async function attachSubToProfile(env, endpoint, profileId) {
+  if (!endpoint || typeof endpoint !== "string") return;
+  const key = endpointToKey(endpoint);
+  const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+  if (!existing) return;
+  try {
+    const sub = JSON.parse(existing);
+    if (sub.profile_id === profileId) return; // уже привязана — экономим write
+    sub.profile_id = profileId;
+    await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
+      expirationTtl: KV_SUB_TTL_SEC,
+    });
+  } catch (_) { /* битый JSON перезапишет следующий /subscribe */ }
+}
+// Подставляет профильный watchlist в записи подписок (выдачи /subscriptions
+// и /admin/data): Python и админка видят актуальный ОБЩИЙ набор, а delivery.py
+// о профилях не знает вовсе (0 строк правок — осознанный контракт, страж
+// TestDeliveryFrozen). Профили читаются с дедупом по id.
+async function resolveProfilesInto(env, subs) {
+  const ids = Array.from(new Set(
+    subs
+      .filter((s) => s && looksLikeProfileId(s.profile_id))
+      .map((s) => s.profile_id)
+  ));
+  const profiles = new Map();
+  if (!ids.length) return profiles;
+  await Promise.all(ids.map(async (id) => {
+    const p = await getProfile(env, id);
+    if (p) profiles.set(id, p);
+  }));
+  for (const s of subs) {
+    if (!s || !s.profile_id) continue;
+    const p = profiles.get(s.profile_id);
+    if (!p) continue; // профиль удалён — остаётся замороженный снимок sub
+    s.watchlist = Array.isArray(p.watchlist) ? p.watchlist : [];
+    if (typeof p.updated_at === "number") {
+      s.last_watchlist_update_at = new Date(p.updated_at).toISOString();
+    }
+  }
+  return profiles;
+}
+
 // ── Канонизация watchlist (Этап 4c) ──────────────────────────────────────────
 // При POST /watchlist и /admin/watchlist прогоняем входящие номера через
 // alias-карту от текущего cases.json. ★ на апел./касс./hybrid → канон. FI-ID.
@@ -168,12 +291,41 @@ function canonicalizeWatchlistArr(arr, aliasMap) {
   return out;
 }
 
+// Тело ответа /subscribe: при живой привязке к профилю гидратация идёт
+// ПРОФИЛЬНЫМ набором — снимок sub.watchlist заморожен на момент привязки и
+// мог отстать. Поле profile_id в ответе — самовосстановление связки после
+// чистки localStorage: клиент без profile_id принимает его и переустанавливает.
+// Профиль не прочитался → profile_id не отдаём (клиент не должен вставать
+// на мёртвую связку), watchlist — прежний снимок.
+async function subscribeResponseBody(env, sub) {
+  const body = {
+    ok: true,
+    watchlist: Array.isArray(sub.watchlist) ? sub.watchlist : [],
+  };
+  if (sub.profile_id) {
+    const profile = await getProfile(env, sub.profile_id);
+    if (profile) {
+      body.watchlist = Array.isArray(profile.watchlist) ? profile.watchlist : [];
+      body.profile_id = sub.profile_id;
+      body.profile_updated_at =
+        typeof profile.updated_at === "number" ? profile.updated_at : 0;
+    }
+  }
+  return body;
+}
+
 async function handleSubscribe(request, env) {
   const origin = request.headers.get("Origin") || "";
   try {
     const sub = await request.json();
     if (!sub.endpoint) {
       return new Response("Bad Request", { status: 400 });
+    }
+    // profile_id присылает новый фронт (из localStorage устройства) — это
+    // чинит ротацию endpoint: свежая KV-запись привязывается к профилю сразу.
+    // Мусорный формат снимаем ДО переноса prev-полей, чтобы сработал перенос.
+    if (sub.profile_id !== undefined && !looksLikeProfileId(sub.profile_id)) {
+      delete sub.profile_id;
     }
     const key = endpointToKey(sub.endpoint);
     // Сохраняем флаги, проставленные пользователем ранее — иначе любое
@@ -192,6 +344,12 @@ async function handleSubscribe(request, env) {
           sub.last_watchlist_update_at = prev.last_watchlist_update_at;
         }
         if (typeof prev.label === "string") sub.label = prev.label;
+        // Связка с профилем переживает /subscribe без profile_id в body:
+        // старый закэшированный фронт (?v≤177) поле не шлёт, но рвать
+        // синхронизацию устройства он не должен.
+        if (typeof prev.profile_id === "string" && !sub.profile_id) {
+          sub.profile_id = prev.profile_id;
+        }
       } catch (_) { /* игнор: невалидный JSON в KV — перезапишем */ }
     }
     // Метаданные для админки: устройство, когда создана, когда последний
@@ -202,15 +360,15 @@ async function handleSubscribe(request, env) {
     // если подписка не изменилась и last_seen_at свежее 12 часов — put
     // пропускаем. Гранулярность 12 ч безвредна: бейдж «⏳ истекает» смотрит
     // на 45 дней, KV-TTL 60 дней освежится первым же открытием после окна.
+    // Смена привязки к профилю (после переноса из prev выше неравенство
+    // возможно только при НОВОЙ/другой привязке от клиента) гейт пробивает.
     if (prev && prev.endpoint === sub.endpoint
         && JSON.stringify(prev.keys || null) === JSON.stringify(sub.keys || null)
         && prev.user_agent === sub.user_agent
+        && (prev.profile_id || null) === (sub.profile_id || null)
         && prev.last_seen_at
         && Date.now() - Date.parse(prev.last_seen_at) < 12 * 3600 * 1000) {
-      return new Response(JSON.stringify({
-        ok: true,
-        watchlist: Array.isArray(prev.watchlist) ? prev.watchlist : [],
-      }), {
+      return new Response(JSON.stringify(await subscribeResponseBody(env, prev)), {
         headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
       });
     }
@@ -218,16 +376,13 @@ async function handleSubscribe(request, env) {
     sub.last_seen_at = new Date().toISOString();
     // TTL 60 дней — браузер обновит подписку сам при следующем открытии
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
-      expirationTtl: 60 * 24 * 3600,
+      expirationTtl: KV_SUB_TTL_SEC,
     });
     console.log(`Подписка сохранена: ${key}${sub.is_owner ? " (owner)" : ""}`);
     // Возвращаем сохранённый watchlist — клиент использует его при первой
     // загрузке после переустановки PWA, чтобы восстановить локальный список
     // отслеживаемых дел без принуждения юриста кликать звёздочки заново.
-    return new Response(JSON.stringify({
-      ok: true,
-      watchlist: Array.isArray(sub.watchlist) ? sub.watchlist : [],
-    }), {
+    return new Response(JSON.stringify(await subscribeResponseBody(env, sub)), {
       headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
     });
   } catch (e) {
@@ -251,11 +406,7 @@ async function handleSetWatchlist(request, env) {
     // Чистим: только строки, обрезаем длину, дедупим. Без auth — защита
     // через привязку к существующему endpoint: чужой endpoint узнать
     // нельзя, а перезаписать запись чужого юриста — только зная его.
-    const cleaned = Array.from(new Set(
-      watchlist
-        .filter((x) => typeof x === "string" && x.length > 0 && x.length < 100)
-        .slice(0, 500)
-    ));
+    const cleaned = sanitizeWatchlistInput(watchlist);
     const key = endpointToKey(endpoint);
     const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
     if (!existing) {
@@ -273,10 +424,28 @@ async function handleSetWatchlist(request, env) {
     const aliasMap = await getAliasMapCached();
     const canonical = canonicalizeWatchlistArr(cleaned, aliasMap);
     const sub = JSON.parse(existing);
+    // Устройство привязано к профилю → правка уходит в ОБЩИЙ набор (в т.ч.
+    // со старого закэшированного фронта, не знающего о профилях). Снимок
+    // sub.watchlist не трогаем — он заморожен на момент привязки. Профиль
+    // удалён руками → старое поведение (запись в sub).
+    if (sub.profile_id) {
+      const profile = await getProfile(env, sub.profile_id);
+      if (profile) {
+        await writeProfileWatchlist(env, sub.profile_id, profile, canonical);
+        console.log(
+          `Watchlist профиля ${shortProfileId(sub.profile_id)}… обновлён ` +
+          `через /watchlist (${canonical.length} дел): ${key}`
+        );
+        return new Response(
+          JSON.stringify({ ok: true, count: canonical.length, canonical, target: "profile" }),
+          { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+        );
+      }
+    }
     sub.watchlist = canonical;
     sub.last_watchlist_update_at = new Date().toISOString();
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
-      expirationTtl: 60 * 24 * 3600,
+      expirationTtl: KV_SUB_TTL_SEC,
     });
     console.log(
       `Watchlist обновлён (${canonical.length} дел, ` +
@@ -288,6 +457,238 @@ async function handleSetWatchlist(request, env) {
     );
   } catch (e) {
     console.error("watchlist error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// ── Профили: связывание устройств и общий watchlist ──────────────────────────
+// Контракт ошибок: все ожидаемые отказы — JSON с полем error
+// (profile_not_found / code_not_found / conflict / subscription_not_found).
+// Клиент сбрасывает связку ТОЛЬКО по явному profile_not_found; голый 404
+// «Not Found» (старый Worker без этих роутов) — тихий фолбэк на легаси-путь,
+// поэтому порядок деплоя фронт/Worker некритичен.
+
+// Устройство А: «Получить код». Профиля ещё нет → он рождается из локального
+// набора этого устройства; push-подписка (если есть) привязывается сразу.
+async function handleProfileLinkCode(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    let profileId = typeof body.profile_id === "string" ? body.profile_id : "";
+    let profile = null;
+    if (profileId) {
+      if (!looksLikeProfileId(profileId)) {
+        return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
+      }
+      profile = await getProfile(env, profileId);
+      if (!profile) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "profile_not_found" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+        );
+      }
+    } else {
+      profileId = crypto.randomUUID();
+      const aliasMap = await getAliasMapCached();
+      const canonical = canonicalizeWatchlistArr(sanitizeWatchlistInput(body.watchlist), aliasMap);
+      profile = {
+        schema_version: 1,
+        watchlist: canonical,
+        updated_at: Date.now(),
+        created_at: new Date().toISOString(),
+      };
+      await putProfile(env, profileId, profile);
+      await attachSubToProfile(env, body.endpoint, profileId);
+    }
+    // Код: до 3 попыток при коллизии (31^6 ключей — почти невозможна, но
+    // упереться в чужой ЖИВОЙ код на 10 минут было бы неприятно).
+    let code = "";
+    for (let i = 0; i < 3 && !code; i++) {
+      const candidate = genPairCode();
+      if (!(await env.PUSH_SUBSCRIPTIONS.get(paircodeKey(candidate)))) {
+        code = candidate;
+      }
+    }
+    if (!code) {
+      return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+    }
+    await env.PUSH_SUBSCRIPTIONS.put(
+      paircodeKey(code),
+      JSON.stringify({ profile_id: profileId, created_at: new Date().toISOString() }),
+      { expirationTtl: PAIR_CODE_TTL_SEC }
+    );
+    console.log(`Код связывания создан для профиля ${shortProfileId(profileId)}…`);
+    return new Response(JSON.stringify({
+      ok: true,
+      profile_id: profileId,
+      code,
+      expires_in: PAIR_CODE_TTL_SEC,
+      watchlist: Array.isArray(profile.watchlist) ? profile.watchlist : [],
+      updated_at: typeof profile.updated_at === "number" ? profile.updated_at : 0,
+    }), { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+  } catch (e) {
+    console.error("profile/link-code error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Устройство Б: «Ввести код». Наборы сливаются union'ом — ПЕРВОЕ связывание
+// не должно терять ничьи звёзды; дальше работает полное зеркало (LWW).
+async function handleProfileLink(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    const code = normalizePairCode(body.code);
+    if (!code) {
+      return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
+    }
+    const rawPair = await env.PUSH_SUBSCRIPTIONS.get(paircodeKey(code));
+    if (!rawPair) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "code_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+      );
+    }
+    let profileId = "";
+    try { profileId = (JSON.parse(rawPair) || {}).profile_id || ""; } catch (_) { /* below */ }
+    const profile = await getProfile(env, profileId);
+    if (!profile) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "profile_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+      );
+    }
+    const aliasMap = await getAliasMapCached();
+    const merged = canonicalizeWatchlistArr(
+      unionWatchlists(profile.watchlist, sanitizeWatchlistInput(body.watchlist)),
+      aliasMap
+    );
+    await writeProfileWatchlist(env, profileId, profile, merged);
+    await env.PUSH_SUBSCRIPTIONS.delete(paircodeKey(code)); // одноразовость
+    await attachSubToProfile(env, body.endpoint, profileId);
+    console.log(
+      `Устройство связано с профилем ${shortProfileId(profileId)}… (${merged.length} дел)`
+    );
+    return new Response(JSON.stringify({
+      ok: true,
+      profile_id: profileId,
+      watchlist: merged,
+      updated_at: profile.updated_at,
+    }), { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+  } catch (e) {
+    console.error("profile/link error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Чтение профильного набора при загрузке страницы. POST, а не GET: profile_id
+// — bearer-секрет, в URL/логах ему не место. Канонизации на чтении нет —
+// клиент прогоняет номера через canonCaseNumber сам (как reconcile). 0 writes.
+async function handleProfileGet(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    const profile = await getProfile(env, body.profile_id);
+    if (!profile) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "profile_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+      );
+    }
+    return new Response(JSON.stringify({
+      ok: true,
+      profile_id: body.profile_id,
+      watchlist: Array.isArray(profile.watchlist) ? profile.watchlist : [],
+      updated_at: typeof profile.updated_at === "number" ? profile.updated_at : 0,
+    }), { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+  } catch (e) {
+    console.error("profile/get error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Запись профильного набора — ядро LWW. base_ts = updated_at, который клиент
+// видел последним. Устаревший base_ts → 409 с серверным набором и БЕЗ записи:
+// клиент накатывает тоглы своей сессии поверх и повторяет ровно один раз.
+async function handleProfileSetWatchlist(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    if (!Array.isArray(body.watchlist)) {
+      return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
+    }
+    const profile = await getProfile(env, body.profile_id);
+    if (!profile) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "profile_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+      );
+    }
+    const baseTs = Number(body.base_ts) || 0;
+    if (typeof profile.updated_at === "number" && baseTs < profile.updated_at) {
+      // Конфликт: набор менялся с другого устройства после base_ts клиента.
+      return new Response(JSON.stringify({
+        ok: false,
+        error: "conflict",
+        canonical: Array.isArray(profile.watchlist) ? profile.watchlist : [],
+        updated_at: profile.updated_at,
+      }), { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+    }
+    const aliasMap = await getAliasMapCached();
+    const canonical = canonicalizeWatchlistArr(sanitizeWatchlistInput(body.watchlist), aliasMap);
+    await writeProfileWatchlist(env, body.profile_id, profile, canonical);
+    console.log(
+      `Watchlist профиля ${shortProfileId(body.profile_id)}… обновлён (${canonical.length} дел)`
+    );
+    return new Response(JSON.stringify({
+      ok: true,
+      count: canonical.length,
+      canonical,
+      updated_at: profile.updated_at,
+    }), { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+  } catch (e) {
+    console.error("profile/watchlist error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Отвязать устройство: снять profile_id с его push-подписки. Профиль не
+// трогаем — он живёт для остальных устройств. Устройство «уносит» текущий
+// набор в собственную запись (замороженный снимок sub.watchlist к этому
+// моменту мог отстать на месяцы). Устройство без push этот эндпоинт не
+// зовёт — оно чистит только localStorage.
+async function handleProfileUnlink(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    const endpoint = body.endpoint;
+    if (!endpoint || typeof endpoint !== "string") {
+      return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
+    }
+    const key = endpointToKey(endpoint);
+    const existing = await env.PUSH_SUBSCRIPTIONS.get(key);
+    if (!existing) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "subscription_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+      );
+    }
+    const sub = JSON.parse(existing);
+    delete sub.profile_id;
+    if (Array.isArray(body.watchlist)) {
+      const aliasMap = await getAliasMapCached();
+      sub.watchlist = canonicalizeWatchlistArr(sanitizeWatchlistInput(body.watchlist), aliasMap);
+      sub.last_watchlist_update_at = new Date().toISOString();
+    }
+    await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
+      expirationTtl: KV_SUB_TTL_SEC,
+    });
+    console.log(`Устройство отвязано от профиля: ${key}`);
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    });
+  } catch (e) {
+    console.error("profile/unlink error:", e);
     return new Response("Error", { status: 500, headers: corsHeaders(origin) });
   }
 }
@@ -341,6 +742,9 @@ async function handleListSubscriptions(request, env) {
       if (!s) return false;
       return ownerOnly ? s.is_owner === true : true;
     });
+    // Привязанным подпискам подставляем ПРОФИЛЬНЫЙ watchlist (замороженный
+    // снимок sub.watchlist мог отстать) — delivery.py о профилях не знает.
+    await resolveProfilesInto(env, filtered);
     return new Response(JSON.stringify(filtered), {
       headers: { "Content-Type": "application/json" },
     });
@@ -383,7 +787,7 @@ async function handleMarkOwner(request, env) {
     const sub = JSON.parse(existing);
     sub.is_owner = true;
     await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(sub), {
-      expirationTtl: 60 * 24 * 3600,
+      expirationTtl: KV_SUB_TTL_SEC,
     });
     console.log(`Подписка помечена как owner: ${key}`);
     return new Response(JSON.stringify({ ok: true }), {
@@ -527,8 +931,10 @@ async function handleAdminData(request, env) {
     // Не отдаём приватные части push-подписки (auth/p256dh) — админке они
     // не нужны, а светить через GET-параметр в URL secret лишний раз
     // не стоит.
-    const safe = subs
-      .filter((s) => s)
+    const present = subs.filter((s) => s);
+    // Привязанным подпискам — профильный watchlist вместо снимка.
+    await resolveProfilesInto(env, present);
+    const safe = present
       .map((s) => ({
         endpoint: s.endpoint || "",
         is_owner: s.is_owner === true,
@@ -538,8 +944,30 @@ async function handleAdminData(request, env) {
         created_at: s.created_at || "",
         last_seen_at: s.last_seen_at || "",
         last_watchlist_update_at: s.last_watchlist_update_at || "",
+        profile_id: typeof s.profile_id === "string" ? s.profile_id : "",
       }));
-    return new Response(JSON.stringify(safe), {
+    // Реестр профилей целиком — включая сирот без единой подписки (все
+    // устройства отвязались/умерли): админке они видны read-only.
+    const profList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "profile:" });
+    const profileRows = (await Promise.all(
+      profList.keys.map(async (k) => {
+        const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
+        if (!val) return null;
+        try {
+          const p = JSON.parse(val);
+          return {
+            profile_id: k.name.slice("profile:".length),
+            watchlist: Array.isArray(p.watchlist) ? p.watchlist : [],
+            updated_at: typeof p.updated_at === "number" ? p.updated_at : 0,
+            created_at: p.created_at || "",
+          };
+        } catch (_) { return null; }
+      })
+    )).filter((p) => p);
+    // ⚠️ Ключ обёртки обязан быть именно «subs»: второй потребитель —
+    // scripts/audit_watchlists.py — понимает {subs: [...]} (и понимал
+    // прежний голый массив).
+    return new Response(JSON.stringify({ subs: safe, profiles: profileRows }), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
   } catch (e) {
@@ -609,7 +1037,7 @@ async function handleAdminLabel(request, env) {
   const label = typeof r.body.label === "string" ? r.body.label.slice(0, 60).trim() : "";
   r.sub.label = label;
   await env.PUSH_SUBSCRIPTIONS.put(r.key, JSON.stringify(r.sub), {
-    expirationTtl: 60 * 24 * 3600,
+    expirationTtl: KV_SUB_TTL_SEC,
   });
   return new Response(JSON.stringify({ ok: true, label }), {
     headers: { "Content-Type": "application/json" },
@@ -635,19 +1063,36 @@ async function handleAdminWatchlist(request, env) {
   if (!wl) {
     return new Response("Bad Request: watchlist must be array", { status: 400 });
   }
-  const cleaned = Array.from(new Set(
-    wl.filter((x) => typeof x === "string" && x.length > 0 && x.length < 100).slice(0, 500)
-  ));
+  const cleaned = sanitizeWatchlistInput(wl);
   // Канонизация — та же логика что в /watchlist (handleSetWatchlist).
   // Python (Этап 4b) сюда шлёт уже канон. версию; повторная канонизация
   // идемпотентна. Админ через UI может прислать апел./касс. номер —
   // схлопнем в канон.
   const aliasMap = await getAliasMapCached();
   const canonical = canonicalizeWatchlistArr(cleaned, aliasMap);
+  // Подписка привязана к профилю → правим ОБЩИЙ набор. skip-if-equal
+  // обязателен: canonicalize_kv_watchlists (Python) шлёт сюда по КАЖДОЙ
+  // подписке профиля — без сравнения N устройств давали бы N одинаковых
+  // writes при одном осмысленном.
+  if (r.sub.profile_id) {
+    const profile = await getProfile(env, r.sub.profile_id);
+    if (profile) {
+      const same =
+        JSON.stringify([...(profile.watchlist || [])].sort()) ===
+        JSON.stringify([...canonical].sort());
+      if (!same) {
+        await writeProfileWatchlist(env, r.sub.profile_id, profile, canonical);
+      }
+      return new Response(
+        JSON.stringify({ ok: true, count: canonical.length, canonical }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }
   r.sub.watchlist = canonical;
   r.sub.last_watchlist_update_at = new Date().toISOString();
   await env.PUSH_SUBSCRIPTIONS.put(r.key, JSON.stringify(r.sub), {
-    expirationTtl: 60 * 24 * 3600,
+    expirationTtl: KV_SUB_TTL_SEC,
   });
   return new Response(
     JSON.stringify({ ok: true, count: canonical.length, canonical }),
@@ -1700,6 +2145,27 @@ export default {
 
     if (url.pathname === "/watchlist" && request.method === "POST") {
       return handleSetWatchlist(request, env);
+    }
+
+    // Профили синхронизации звёзд (multi-device watchlist)
+    if (url.pathname === "/profile/link-code" && request.method === "POST") {
+      return handleProfileLinkCode(request, env);
+    }
+
+    if (url.pathname === "/profile/link" && request.method === "POST") {
+      return handleProfileLink(request, env);
+    }
+
+    if (url.pathname === "/profile/get" && request.method === "POST") {
+      return handleProfileGet(request, env);
+    }
+
+    if (url.pathname === "/profile/watchlist" && request.method === "POST") {
+      return handleProfileSetWatchlist(request, env);
+    }
+
+    if (url.pathname === "/profile/unlink" && request.method === "POST") {
+      return handleProfileUnlink(request, env);
     }
 
     if (url.pathname === "/admin" && request.method === "GET") {

@@ -1495,6 +1495,53 @@ tr.detail-row { display:none; }
 .sheet-btn-reset:active { transform:scale(0.97); }
 .sheet-btn-done:active { background:var(--accent-active); transform:scale(0.97); }
 
+/* ── Шторка «Синхронизация звёзд» (связывание устройств в профиль) ── */
+.sync-block { display:flex; flex-direction:column; gap:12px; padding:16px 20px 20px; }
+.sync-note { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.sync-status-on { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--accent); }
+/* Служебная строка (id профиля): мелко и приглушённо, сразу под статусом. */
+.sync-quiet { font-size:var(--fs-xs); color:var(--fg-3); font-family:var(--font-mono); margin-top:-8px; }
+/* Код крупно: юрист диктует/перепечатывает его на второе устройство. */
+.sync-code { font-family:var(--font-mono); font-size:32px; font-weight:var(--fw-bold); letter-spacing:0.12em; text-align:center; padding:14px 10px; border:1px dashed var(--border-strong); border-radius:var(--radius); background:var(--bg-2); color:var(--fg-1); user-select:all; }
+.sync-divider { display:flex; align-items:center; gap:10px; color:var(--fg-3); font-size:var(--fs-xs); }
+.sync-divider::before, .sync-divider::after { content:''; flex:1; height:1px; background:var(--divider); }
+.sync-code-row { display:flex; gap:10px; }
+.sync-input { flex:1; min-width:0; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); letter-spacing:0.08em; text-transform:uppercase; background:var(--bg-1); color:var(--fg-1); }
+.sync-input:focus { outline:none; border-color:var(--accent); }
+.sync-btn { flex:none; }
+.sync-btn-danger { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--red-500); border:1px solid var(--border); }
+.sync-btn-danger:hover { border-color:var(--red-500); }
+/* QR с deep-link'ом связывания: белая плашка обязательна и в тёмной теме —
+   сканеру нужен контраст, path в SVG чёрный. */
+.sync-qr { display:flex; justify-content:center; }
+.sync-qr svg { width:188px; height:188px; background:#fff; border-radius:var(--radius); padding:6px; box-sizing:content-box; }
+.sync-qr-note { text-align:center; }
+/* Видоискатель сканера QR (камера внутри PWA). */
+.sync-scan-video { width:100%; max-height:320px; border-radius:var(--radius); background:#000; object-fit:cover; }
+.sync-btn-scan { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
+.sync-btn-scan:hover { border-color:var(--border-strong); background:var(--bg-3); }
+/* Кнопка шапки: связанное устройство подсвечено, как включённый колокольчик
+   (#btn-push.on — та же пара токенов). */
+#btn-sync.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
+
+/* Десктоп: «Синхронизация подписок» — не bottom-sheet во всю ширину, а
+   мини-окно по центру верхней трети. Базовые правила .filters-sheet держат
+   шторку прибитой к низу через transform:translateY(100%) — здесь transform
+   занят центрированием, поэтому появление ведут opacity+pointer-events. */
+@media (min-width: 769px) {
+  #sync-sheet {
+    left:50%; right:auto; bottom:auto; top:96px;
+    width:440px; max-width:calc(100vw - 32px); max-height:calc(100vh - 128px);
+    border-radius:var(--radius-lg);
+    transform:translateX(-50%) translateY(-10px);
+    opacity:0; pointer-events:none;
+    transition:opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+    box-shadow:0 18px 48px rgba(13, 17, 22, 0.28);
+  }
+  #sync-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
+  #sync-sheet .sheet-handle { display:none; }
+}
+
 /* На телефонной ширине четыре банковских режима с числовыми бейджами не помещаются
    в одну строку без обрезания подписей. Две равные строки сохраняют крупные
    touch-target'ы и цельную форму сегментированного переключателя. */
@@ -1776,15 +1823,20 @@ tr.detail-row { display:none; }
   .mobile-cards { display:block; animation:fadeUp .6s var(--ease-out); }
   /* Mobile font size boost */
   .header-title { font-size:18px; }
-  .header-sub { font-size:var(--fs-sm); }
+  /* Подпись территории при нехватке места обрезается многоточием, а не
+     наезжает под кнопки (бренд-колонка сжимаемая: flex:1 + min-width:0). */
+  .header-sub { font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* На мобиле header сильно перегружен — прячем мета-инфо и сжимаем кнопку
      обновления до иконки (текст «Обновить» гасим font-size:0 без правки HTML). */
   .header-meta { display:none; }
   /* Theme и refresh — круглые icon-only pill'ы того же языка, что .filters-btn:
-     один тип капсулы по всему экрану (top + bottom), без чужих коробок. */
+     один тип капсулы по всему экрану (top + bottom), без чужих коробок.
+     46px вместо прежних 52: с кнопкой связывания устройств (#btn-sync,
+     26.08.2026) капсул в ряду стало четыре, и на 320px они наезжали на
+     подпись территории; 46px держит тач-таргет ≥44 и возвращает ряд в экран. */
   .app-header .theme-toggle,
   .app-header .btn-refresh {
-    width:52px; height:52px; padding:0; gap:0;
+    width:46px; height:46px; padding:0; gap:0;
     border-radius:50%;
     background:var(--pill-bg);
     border:1px solid var(--glass-border);

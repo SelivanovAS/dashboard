@@ -1645,6 +1645,78 @@ drawer/шторка фильтров/beacon (`uiBusyForRefresh`) — откла�
 - ⚠️ **Mine-версия фильтрует ГОТОВЫЙ HTML** (`filterGeneralHtmlByMine`, app.js), а не контекст: контекст читается только ради списка новых дел (`collectNewCaseNumbers`). Отсюда два инварианта, оба нарушались до 13.08.2026 (секция «🏦 ИСКИ БАНКА» показывалась целиком, мимо звёзд). **(1) Наборы эмодзи `SECTION_HEADER_RE`/`SECTION_FILTERED_RE`/`SECTION_GROUPING_RE` держать наравне с `_DIGEST_HEADER_RE`** ([postprocess.py](scripts/court_monitor/digest/postprocess.py)): незнакомый заголовок не сбрасывает состояние машины, и секция наследует режим предыдущей — так 🏦, 📑 «Касс. события» и «⚖️🔬 КАССАЦИЯ» наследовали `'new'` от «📥 Новые дела» апелляции. Альтернатива `⚖️🔬` обязана стоять ПЕРЕД одиночным `⚖` (после него идёт 🔬, а не `<b>`); 📌📊📋 — только в HEADER: футер «📌 В производстве…» обязан закрывать секцию банка, иначе выпадет как «параграф без номера». **(2) Матчинг зеркалит `_fi_change_matches`** (delivery.py): `mineRefMatches` проверяет bare-номер И composite «домен|номер», домен берётся из href той же ссылки (`caseRefsInFragment`) — звезда иска банка хранится ТОЛЬКО composite-формой, и одна починка регекспов выкинула бы все звёздные bank-дела. Тем же предикатом считается `found` в `buildMineHtml` (иначе bank-only совпадение даёт ложный фолбэк «показан общий дайджест»). Новые иски банка (`fi_bank_claim_registered`) проходят как «новые дела» без звезды — **только на дашборде**: в push они остаются по watchlist (решение юриста — на Урале авто-подхват заводит десятки исков за прогон). Счётчик заголовка пересчитывается по факту (`retitleSectionHeader`). Стражи — [scripts/tests/test_frontend_mine_digest.py](scripts/tests/test_frontend_mine_digest.py).
 - **Пилюля «★ Мои» в шапках дайджеста и «Ближайших заседаний»** (v171, решение юриста 17.08.2026): выбранный раздел был виден только по чипу вверху, а обе карточки молчали, чей это список. Общий хелпер `mineScopePillHtml` (класс `.mine-scope-pill`, значок — `scopeMineIcon()`: эмодзи и «★» в бейдж не ставить, системный цветной шрифт выпадает из палитры тёмной темы; цвет — токеном `--amber-700`, объявленным в ОБЕИХ темах). ⚠️ Шапку дайджеста рисует `renderDigestTitle` и зовётся она из ДВУХ мест — `loadLastDigest` (дата) и `setDigestView` (режим): заголовок строится при загрузке, а раздел переключается позже, и без второго вызова пилюля появлялась бы только после перезагрузки страницы. Пилюля идёт по РЕЖИМУ, а не по числу найденных дел: при пустом watchlist mine-версия честно откатывается на общий дайджест с плашкой, но раздел выбран — гейт по находкам выглядел бы поломкой (у юриста ноль звёзд). Стражи — [scripts/tests/test_frontend_mine_pills.py](scripts/tests/test_frontend_mine_pills.py).
 
+## Синхронизация подписок между устройствами (профили, 26.08.2026)
+
+> ⚠️ **Задеплоено ТОЛЬКО на ХМАО** (решение юриста 26.08.2026): merge в форк
+> Урала и `wrangler deploy` его Worker'а НЕ сделаны — на Урале звёзды живут
+> по-старому (пер-endpoint).
+
+Устройства одного юриста связываются в **профиль** `profile:<uuid>` в KV
+Worker'а — watchlist общий, снятие звезды зеркалится. До этого личность =
+endpoint push-подписки: два устройства = два независимых набора, без
+push-разрешения синка не было вовсе, ротация endpoint теряла label.
+
+- **KV**: `profile:<uuid>` = `{schema_version, watchlist, updated_at (мс,
+  LWW-штамп НАБОРА — ставит только Worker), created_at}` — **БЕЗ TTL**
+  (get TTL не продлевает, «продление» = запрещённые фоновые writes; сироты
+  видны в админке). Код связывания `paircode:<8 цифр>` (TTL 600 с,
+  одноразовый — delete при обмене; только цифры — решение юриста: цифровая
+  клавиатура; rejection sampling в `genPairCode`). У `sub:*` — опциональный
+  `profile_id`; после привязки `sub.watchlist` — замороженный снимок
+  (скрыт резолвом, перезаписывается актуальным при отвязке).
+- **Worker**: 5 публичных POST `/profile/link-code|link|get|watchlist|unlink`
+  (auth = знание случайного uuid, как /watchlist; profile_id — bearer-секрет:
+  только POST-body, в логах первые 8 симв.). LWW: устаревший `base_ts` → 409
+  `{error:"conflict", canonical, updated_at}` БЕЗ записи. Union наборов —
+  ТОЛЬКО в момент связывания (`/profile/link`), дальше полное зеркало.
+  `/subscribe` несёт profile_id из localStorage (чинит ротацию endpoint);
+  перенос `prev.profile_id` держит связку под старым фронтом; 12h-гейт
+  writes учитывает привязку; ОБЕ ветки ответа резолвят профиль
+  (`subscribeResponseBody`) — иначе гидратация отдаёт снимок. Legacy
+  `/watchlist` и `/admin/watchlist` при `sub.profile_id` пишут В ПРОФИЛЬ
+  (admin — со skip-if-equal: `canonicalize_kv_watchlists` шлёт по КАЖДОЙ
+  подписке профиля). `/subscriptions` и `/admin/data` отдают watchlist
+  РЕЗОЛВНУТЫМ (`resolveProfilesInto`) → **delivery.py о профилях не знает,
+  0 строк правок** (страж TestDeliveryFrozen: подстроки «profile» в файле
+  нет). `/admin/data` теперь `{subs, profiles}` — ключ «subs» обязателен
+  (контракт [scripts/audit_watchlists.py](scripts/audit_watchlists.py)).
+- **Фронт**: ключи `lsKey('profile_id')`/`profile_base_ts`/`profile_dirty`;
+  `syncWatchlistToWorker` — диспетчер (профиль есть → `syncWatchlistToProfile`
+  БЕЗ push-гардов — синк работает при запрещённых уведомлениях, страж
+  `test_profile_sync_has_no_push_guards`; нет → прежний
+  `syncWatchlistToWorkerLegacy`). 409 → накат тоглов сессии
+  (`profileSessionOps`, in-memory) поверх серверного набора + РОВНО один
+  повтор; приём серверного набора (`_adoptServerWatchlist`) никогда не
+  планирует новый sync (анти-цикл v98). `reconcileWatchlistWithServer` при
+  связке — ранний return (не воскрешать снимок). UI — кнопка 🔗 в шапке
+  (капсулы шапки на мобиле ужаты 52→46px: вчетвером не влезали на 320px) +
+  шторка «Синхронизация подписок»; **на ≥769px это мини-окно по центру**
+  (`@media` перебивает низовой transform `.filters-sheet`, появление ведут
+  opacity+pointer-events). Состояния: не связано (получить код / ввод /
+  скан) → код (`1234-5678` + QR) → связано (Подключить ещё / Отвязать —
+  отвязка с confirm, набор остаётся локально).
+- **QR и сканер**: QR (vendored [qrcode-gen.js](qrcode-gen.js),
+  qrcode-generator 1.4.4 MIT, в APP_SHELL SW) кодирует
+  `?pair=<код>` — читается СИСТЕМНОЙ камерой телефона, дашборд открывается
+  и связывает сам (`maybeHandlePairParam`, параметр вычищается
+  replaceState). Для **iOS-PWA** (хранилище отдельно от Safari — deep-link
+  связал бы не то) — сканер ВНУТРИ приложения: `startSyncScan` =
+  getUserMedia (`playsinline`!) + vendored [jsqr.js](jsqr.js) (jsQR 1.4.0
+  MIT, 256 КБ, **ленивая загрузка по кнопке** — статический `<script>`
+  запрещён стражем); камера глушится в `closeSyncSheet` И `renderSyncSheet`.
+- **Админка**: карточки группируются по профилю (`profile-group` в
+  `renderSubsList`), бейдж 🔗 первых 8 симв. uuid, профили-сироты «без
+  push-устройств» read-only; `fetchAll` толерантен к обеим формам ответа
+  (откат Worker'а). Кнопка «Watchlist» правит ОБЩИЙ набор профиля.
+- **KV-бюджет**: изменение звёзд = 1 write в профиль ВМЕСТО sub-записи;
+  связывание ≤6 разовых writes; периодических фоновых — 0.
+- Совместимость: старый фронт + новый Worker и новый фронт + старый Worker —
+  безопасны (голый 404 `/profile/*` → тихий легаси-путь; контракт ошибок —
+  JSON с `error`, связка сбрасывается ТОЛЬКО по явному `profile_not_found`).
+- Стражи — [scripts/tests/test_watchlist_profiles.py](scripts/tests/test_watchlist_profiles.py)
+  (34 теста: LWW-контракт, отсутствие push-гардов, ленивый jsqr, цифровой
+  код, delivery-freeze, сквозная проводка).
+
 ## Соглашения
 
 - **Язык:** весь код, переменные, комментарии, промпты — **на русском**.
