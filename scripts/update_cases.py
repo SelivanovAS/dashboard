@@ -6,7 +6,8 @@
 Запускается по расписанию через GitHub Actions:
     python scripts/update_cases.py --json          # полный прогон (крон)
     python scripts/update_cases.py --replay-last   # переиграть дайджест
-    ... (--digest-only, --push-last-digest, --backfill-appeal-anchors)
+    ... (--digest-only, --push-last-digest, --push-web-only,
+         --backfill-appeal-anchors)
 
 Весь код живёт в пакете court_monitor (scripts/court_monitor/):
 config, textutil, netutil, courts, storage, health, lifecycle, parsing/,
@@ -190,6 +191,7 @@ from court_monitor.runs import (  # noqa: F401 — ре-экспорт для с
     main, _discovered_already_resolved_old, _apel_csv_row_to_json_case,
     main_backfill_appeal_anchors, main_json, announce_imported_cases,
     main_replay_last, main_push_last_digest, main_digest_only,
+    main_push_web_only,
 )
 
 if __name__ == "__main__":
@@ -214,6 +216,16 @@ if __name__ == "__main__":
         )
         entry = main_push_last_digest
         entry_args = (owner_only,)
+    elif "--push-web-only" in sys.argv:
+        # Вторая половина replay_on_push.yml: web push по сохранённому
+        # контексту ПОСЛЕ публикации дайджеста на Pages (пуш не должен
+        # обгонять сайт). Дайджест не перегенерируется.
+        push_all = "--push-all" in sys.argv
+        mode_name = (
+            "push-web-only (push-all)" if push_all else "push-web-only"
+        )
+        entry = main_push_web_only
+        entry_args = (push_all,)
     elif "--backfill-appeal-anchors" in sys.argv:
         mode_name = "backfill-appeal-anchors"
         entry = main_backfill_appeal_anchors

@@ -95,6 +95,15 @@ jobs:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Web push из ЭТОГО шага не уходит: сначала коммит last_digest.json
+          # и публикация на Pages, потом отдельный шаг --push-web-only ниже.
+          # Иначе пуш обгоняет сайт (26.08.2026: Pages собирался ~5 минут
+          # из-за очереди из трёх пушей доставочного слота, и клик по пушу
+          # в 08:55 открывал ВЧЕРАШНИЙ дайджест до 09:00). Telegram уходит
+          # сразу — там полный текст в самом сообщении, сайт не нужен.
+          # ⚠️ Откат — удалять ПАРОЙ: эту строку И оба шага «Дождаться
+          # публикации…»/«Web push…» ниже, иначе пуш уйдёт дважды.
+          DEFER_WEB_PUSH: "1"
           # Группы фаз и аннотации WARNING/ERROR в UI Actions (ghlog.py).
           LOG_GH_ANNOTATIONS: "1"
         # --push-all: рассылка всем PWA-подписчикам (как продовый крон),
@@ -102,9 +111,15 @@ jobs:
         run: python scripts/update_cases.py --replay-last --push-all
 
       - name: Commit rendered digest
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # pushed=1 — шагу «Дождаться публикации» есть чего ждать (в т.ч.
+          # ветка «нет изменений»: сайт уже отдаёт актуальные байты, и
+          # проверка пройдёт мгновенно). Единственный pushed=0 — ниже, когда
+          # rebase не удался и наш last_digest.json на remote не попал.
+          echo "pushed=1" >> "$GITHUB_OUTPUT"
           # last_digest.json — готовый дайджест для блока «📰 Дайджест» на сайте.
           if [ -f data/last_digest.json ]; then
             git add data/last_digest.json
@@ -143,7 +158,65 @@ jobs:
           # своим пушем. При конфликте не роняем workflow — дайджест уже
           # отправлен, act_analysis догонит следующим прогоном.
           git pull --rebase origin main || {
-            echo "⚠ rebase не удался — пропускаю коммит (дайджест уже отправлен)"
+            echo "⚠ rebase не удался — пропускаю коммит (Telegram уже ушёл, push отправим без ожидания Pages)"
+            echo "pushed=0" >> "$GITHUB_OUTPUT"
             exit 0
           }
           git push
+
+      # Пуш не должен обгонять сайт. Критерий готовности — не деплой-API,
+      # а сам артефакт: сайт отдаёт байты НАШЕГО data/last_digest.json.
+      # Потолок ~7 минут (26.08.2026 очередь Pages заняла ~5:15); по
+      # истечении шлём push без подтверждения — прежнее поведение, не хуже.
+      # URL выводится из репозитория, НЕ хардкодить: workflow общий для
+      # эталона и форков территорий.
+      - name: Дождаться публикации дайджеста на Pages
+        if: steps.commit.outputs.pushed == '1'
+        env:
+          PAGES_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/last_digest.json"
+        run: |
+          WANT=$(sha256sum data/last_digest.json | cut -d' ' -f1)
+          echo "Ждём, пока ${PAGES_URL} отдаст ${WANT}"
+          for i in $(seq 1 40); do
+            GOT=$(curl -fsSL "${PAGES_URL}?pubcheck=$(date +%s)-${i}" | sha256sum | cut -d' ' -f1 || true)
+            if [ "$GOT" = "$WANT" ]; then
+              echo "Сайт отдаёт свежий дайджест (попытка ${i})"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::Pages не показал свежий дайджест за ~7 минут — шлём push без подтверждения"
+
+      - name: Web push после публикации
+        env:
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Telegram — только для crash-алерта (send_crash_alert в фасаде).
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          LOG_GH_ANNOTATIONS: "1"
+        # Дайджест не перегенерируется: режим читает тот же контекст, что и
+        # --replay-last выше, и шлёт персонализированный push (--push-all —
+        # как продовый крон).
+        run: python scripts/update_cases.py --push-web-only --push-all
+
+      # Журнал last_personal_pushes.json пишется только что отправленным
+      # пушем — то есть ПОСЛЕ основного коммита. Без этого докоммита админка
+      # подписчиков («Последний push») читала бы вчерашнюю рассылку.
+      # github-actions[bot] + paths-фильтр по last_digest_context.json —
+      # петли workflow этот пуш не создаёт.
+      - name: Commit журнала push-рассылки
+        run: |
+          [ -f data/last_personal_pushes.json ] || exit 0
+          git add data/last_personal_pushes.json
+          if git diff --cached --quiet; then
+            echo "Журнал не изменился — нечего коммитить"
+            exit 0
+          fi
+          git commit -m "📮 Журнал push-рассылки (после публикации Pages)"
+          git pull --rebase origin main || {
+            echo "⚠ rebase журнала не удался — догонит следующим прогоном"
+            exit 0
+          }
+          git push || echo "⚠ push журнала не удался — догонит следующим прогоном"
