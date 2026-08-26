@@ -82,10 +82,44 @@ def save_parse_health(state: dict) -> None:
                 pass
 
 
+def searched_ok_today(state: dict | None = None) -> set[str]:
+    """Ключи источников, чей поиск СЕГОДНЯ уже дал строки (>0).
+
+    Дочитка слотов Mac-резерва (SKIP_CHECKED_TODAY): такие поиски повторный
+    слот не запрашивает — новые дела этот суд уже отдал утренней попытке.
+    Критерий строгий, «>0 строк»: WAF-заглушка парсится как «0 строк»
+    (sber_rows=0 при живой медиане), и по одному «страница загрузилась»
+    пропуск был бы ложным — слепой поиск обязан ретраиться каждым слотом.
+    Побочка осознанная: суды с честным нулём (медиана <1) опрашиваются
+    каждый слот. Капчёвая апелляция (search_gated) пишет None и не
+    пропускается никогда — «снимут код — вернётся сам».
+    Дата — локальная, той же семантики, что дочитка карточек
+    (last_run_at пишется naive-local в этом же модуле).
+    """
+    state = state if state is not None else load_parse_health()
+    today = datetime.now().date().isoformat()
+    done: set[str] = set()
+    for key, src in ((state or {}).get("sources") or {}).items():
+        if not isinstance(src, dict):
+            continue
+        if str(src.get("last_run_at") or "")[:10] != today:
+            continue
+        if int(src.get("fail_streak") or 0) > 0:
+            continue
+        try:
+            count = int(src.get("last_count") or 0)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            done.add(str(key))
+    return done
+
+
 def update_parse_health(
     observations: dict,
     labels: dict | None = None,
     state: dict | None = None,
+    known_alive_today: int = 0,
 ) -> tuple[dict, list[str]]:
     """Обновить журнал здоровья парсеров и вернуть (state, список алертов).
 
@@ -94,6 +128,10 @@ def update_parse_health(
     labels: {ключ: человекочитаемое имя для алертов}.
     state: журнал (по умолчанию читается из config.PARSE_HEALTH_PATH; параметр —
     для тестов).
+    known_alive_today: сколько источников слот ПРОПУСТИЛ как «поиск сегодня
+    уже удался» (дочитка, searched_ok_today). При >0 глобальный алерт «все
+    источники разом по нулям» не поднимается: наблюдаемыми остались лишь
+    неудачники и честные нули, а живые суды в observations не попали.
 
     Правила алертов:
     - «стал нулём»: медиана последних успешных прогонов ≥1, а сегодня 0 —
@@ -156,7 +194,9 @@ def update_parse_health(
     # Глобальный ноль: ни один источник не дал результатов, при том что
     # раньше жизнь была (иначе первый прогон на пустой истории алертил бы).
     # Требуем ≥2 источников: для одиночного это дубль пер-судового алерта.
-    if len(observations) >= 2:
+    # Дочитка (known_alive_today>0) глушит алерт: пропущенные источники живы
+    # по определению — «всё разом мертво» при них ложь.
+    if len(observations) >= 2 and not known_alive_today:
         all_dead = all((c is None or c == 0) for c in observations.values())
         had_life = any(
             any(isinstance(x, int) and x > 0
