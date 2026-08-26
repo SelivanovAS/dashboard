@@ -4673,9 +4673,31 @@ let watchlistSyncTimer = null;
 const PROFILE_ID_KEY = lsKey('profile_id');
 const PROFILE_BASE_TS_KEY = lsKey('profile_base_ts');
 const PROFILE_DIRTY_KEY = lsKey('profile_dirty'); // '1' = есть недопушенные правки
-// Тоглы ТЕКУЩЕЙ сессии с последнего подтверждённого синка: canon → 'add'|'del'.
-// In-memory намеренно: это буфер для 409-merge, а не tombstones.
-let profileSessionOps = new Map();
+const PROFILE_OPS_KEY = lsKey('profile_ops');
+// Тоглы с последнего ПОДТВЕРЖДЁННОГО синка: canon → 'add'|'del'. Буфер для
+// 409-merge и гонки «ответ пришёл, пока юрист кликал». Персистится: dirty-флаг
+// переживал перезагрузку, а сами тоглы — нет, и 409-merge после перезагрузки
+// накатывал ПУСТОЙ буфер, молча глотая недопушенные правки (разбор 26.08.2026).
+function _loadProfileOps() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROFILE_OPS_KEY) || '[]');
+    return new Map(
+      (Array.isArray(raw) ? raw : []).filter(
+        (p) => Array.isArray(p) && p.length === 2 && (p[1] === 'add' || p[1] === 'del')
+      )
+    );
+  } catch (_) { return new Map(); }
+}
+function _saveProfileOps() {
+  try {
+    if (profileSessionOps.size) {
+      localStorage.setItem(PROFILE_OPS_KEY, JSON.stringify([...profileSessionOps]));
+    } else {
+      localStorage.removeItem(PROFILE_OPS_KEY);
+    }
+  } catch (_) {}
+}
+let profileSessionOps = _loadProfileOps();
 
 function getProfileId() {
   try { return localStorage.getItem(PROFILE_ID_KEY) || ''; } catch (_) { return ''; }
@@ -4710,6 +4732,7 @@ function clearProfileLink() {
     localStorage.removeItem(PROFILE_DIRTY_KEY);
   } catch (_) {}
   profileSessionOps.clear();
+  _saveProfileOps();
   updateSyncButton();
 }
 // Подсветка кнопки шапки: связанное устройство — как включённый колокольчик.
@@ -4882,6 +4905,7 @@ function toggleWatch(caseNumber, btn) {
     watchlist.add(canon);
     profileSessionOps.set(canon, 'add');
   }
+  _saveProfileOps();
   // Пометка «есть недопушенные правки» — для профильного пути (409-merge и
   // допуш после перезагрузки); без связки с профилем безвредна.
   markProfileDirty();
@@ -5008,9 +5032,11 @@ async function syncWatchlistToWorkerLegacy() {
 // ⚠️ scheduleWatchlistSync отсюда НЕ зовётся — анти-цикл v98 («затирка
 // ответом → новый sync» крутила POST бесконечно).
 function _adoptServerWatchlist(arr) {
-  watchlist = new Set(
-    (Array.isArray(arr) ? arr : []).map(canonCaseNumber).filter(Boolean)
-  );
+  // Не-массив (отсутствующее/переименованное поле ответа) — ИГНОРИРУЕМ, а не
+  // принимаем как пустой набор: прежний `? arr : []` при любом расхождении
+  // версий фронт/Worker молча обнулял все звёзды устройства.
+  if (!Array.isArray(arr)) return;
+  watchlist = new Set(arr.map(canonCaseNumber).filter(Boolean));
   try {
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
   } catch (_) {}
@@ -5064,6 +5090,12 @@ function applyProfileServerState(list, updatedAt) {
 // синхронизируется (решение юриста; страж test_profile_sync_has_no_push_guards).
 async function syncWatchlistToProfile(profileId, isRetry) {
   if (!PUSH_WORKER_URL) return;
+  // Снимок тоглов, вошедших в ЭТОТ POST: ответ летит сотни мс, и звезда,
+  // поставленная за это время, не должна ни потеряться при приёме серверного
+  // набора, ни посчитаться подтверждённой (разбор 26.08.2026 — прежний
+  // безусловный сброс буфера до сравнения стирал её и локально, и следующим
+  // отложенным синком в KV; страж test_success_branch_keeps_inflight_ops).
+  const sentOps = new Map(profileSessionOps);
   try {
     const r = await fetch(PUSH_WORKER_URL + '/profile/watchlist', {
       method: 'POST',
@@ -5078,15 +5110,19 @@ async function syncWatchlistToProfile(profileId, isRetry) {
     try { data = await r.json(); } catch (_) {}
     if (r.status === 409 && data && data.error === 'conflict') {
       // Набор менялся с другого устройства после нашего base_ts. Накатываем
-      // тоглы своей сессии поверх серверного и повторяем РОВНО один раз;
-      // повторный конфликт — принимаем сервер молча (максимум 2 POST).
+      // тоглы своей сессии поверх серверного и повторяем РОВНО один раз.
       _adoptServerWatchlist(_applySessionOps(data.canonical));
       setProfileBaseTs(Number(data.updated_at) || 0);
       if (!isRetry && profileSessionOps.size) {
         return syncWatchlistToProfile(profileId, true);
       }
-      clearProfileDirty();
-      profileSessionOps.clear();
+      // Повторный конфликт: сервер принят (строкой выше), но свои тоглы НЕ
+      // выбрасываем — прежний clear() оставлял их в локальном наборе
+      // «фантомом», который стирала первая же чужая запись. dirty остаётся,
+      // их допушит следующий sync (тогл юриста или загрузка страницы) —
+      // немедленный повтор не планируем, чтобы не устроить шторм при
+      // одновременных правках с двух устройств.
+      if (profileSessionOps.size) markProfileDirty(); else clearProfileDirty();
       return;
     }
     if (r.status === 404 && data && data.error === 'profile_not_found') {
@@ -5100,13 +5136,25 @@ async function syncWatchlistToProfile(profileId, isRetry) {
     }
     if (!r.ok || !data || !Array.isArray(data.canonical)) return; // сеть/500 — dirty остаётся
     setProfileBaseTs(Number(data.updated_at) || 0);
-    clearProfileDirty();
-    profileSessionOps.clear();
+    // Подтверждены только тоглы, вошедшие в отправленный набор; кликнутое
+    // во время полёта POST остаётся в буфере и уходит следующим синком.
+    for (const [canon, op] of sentOps) {
+      if (profileSessionOps.get(canon) === op) profileSessionOps.delete(canon);
+    }
+    _saveProfileOps();
+    if (profileSessionOps.size) {
+      markProfileDirty();
+      scheduleWatchlistSync(); // каждый заход съедает свой снимок — конечно
+    } else {
+      clearProfileDirty();
+    }
     // Канонизация Worker'а могла схлопнуть алиасы — принимаем расхождение
-    // БЕЗ нового sync (дословно анти-цикл v98 из легаси-пути).
+    // БЕЗ немедленного re-sync того же набора (анти-цикл v98 из легаси-пути);
+    // серверный набор берём с накатом оставшихся тоглов, не поверх них.
+    const merged = _applySessionOps(data.canonical);
     const local = [...watchlist].sort().join('|');
-    const server = [...data.canonical].map(canonCaseNumber).sort().join('|');
-    if (local !== server) _adoptServerWatchlist(data.canonical);
+    const server = [...merged].sort().join('|');
+    if (local !== server) _adoptServerWatchlist(merged);
   } catch (e) {
     console.warn('profile watchlist sync failed:', e); // dirty остаётся — допушится
   }
@@ -5518,8 +5566,12 @@ async function submitPairCode() {
       return;
     }
     setProfileLink(data.profile_id, data.updated_at);
+    // Локальный набор целиком ушёл в union телом запроса — буфер тоглов чист.
     profileSessionOps.clear();
-    _adoptServerWatchlist(data.watchlist); // union наборов уже сделан сервером
+    _saveProfileOps();
+    if (Array.isArray(data.watchlist)) {
+      _adoptServerWatchlist(data.watchlist); // union наборов уже сделан сервером
+    }
     renderSyncSheet();
     showToast('Устройства связаны: общих дел — ' + watchlist.size, { type: 'success' });
   } catch (_) {

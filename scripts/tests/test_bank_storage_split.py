@@ -323,3 +323,108 @@ class TestPushWatchlistBankMatching:
             ["surggor--hmao.sudrf.ru|2-4440/2026"], a2c, c2a)
         assert "2-4440/2026" in wl
         assert "33-100/2026" in wl
+
+
+class TestBankPromotionAliasMap:
+    """Инцидент 26.08.2026: промоушен М→2 переименовал 4 звёздных иска банка
+    (2 ХМАО + 2 Урал), а alias-карты доставки банк-дел не знали — звезда
+    «домен|М-…» переставала матчить события и не лечилась канонизацией KV.
+    Банк-дела передаются ОТДЕЛЬНЫМ kwarg bank_cases с composite-каноном."""
+
+    def _bank_case(self):
+        return {
+            "id": "2-9462/2026",
+            "track": "plaintiff_light",
+            "first_instance": {
+                "case_number": "2-9462/2026",
+                "material_number": "М-7437/2026",
+                "court_domain": "surggor--hmao.sudrf.ru",
+            },
+        }
+
+    def _maps(self):
+        return delivery._build_watchlist_alias_indexes(
+            [], bank_cases=[self._bank_case()])
+
+    def test_m_composite_star_expands_to_promoted_number(self):
+        a2c, c2a = self._maps()
+        wl = delivery._expand_watchlist_via_aliases(
+            ["surggor--hmao.sudrf.ru|М-7437/2026"], a2c, c2a)
+        assert "surggor--hmao.sudrf.ru|2-9462/2026" in wl
+        assert "2-9462/2026" in wl
+
+    def test_m_composite_star_canonicalizes_to_new_composite(self):
+        a2c, _ = self._maps()
+        canon, replaced = delivery._canonicalize_one_watchlist(
+            ["surggor--hmao.sudrf.ru|М-7437/2026"], a2c)
+        assert canon == ["surggor--hmao.sudrf.ru|2-9462/2026"]
+        assert replaced
+
+    def test_manual_bare_m_number_stays_bare(self):
+        """Голый М-номер (ручной ввод) — мягкий фолбэк матчинга; канонизация
+        НЕ переписывает его в composite (bare-алиасы банк-дел не входят в
+        alias_to_canonical — коллизия с одноимённым делом другого суда)."""
+        a2c, _ = self._maps()
+        canon, _ = delivery._canonicalize_one_watchlist(["М-7437/2026"], a2c)
+        assert canon == ["М-7437/2026"]
+
+    def test_main_case_wins_bare_alias_collision(self):
+        """Основная картотека обрабатывается первой: одноимённый bare-номер
+        остаётся за основным делом, банк-дело различает composite."""
+        main_case = {
+            "id": "2-9462/2026",
+            "first_instance": {"case_number": "2-9462/2026"},
+        }
+        a2c, _ = delivery._build_watchlist_alias_indexes(
+            [main_case], bank_cases=[self._bank_case()])
+        assert a2c.get("2-9462/2026") == "2-9462/2026"
+        assert (a2c["surggor--hmao.sudrf.ru|М-7437/2026"]
+                == "surggor--hmao.sudrf.ru|2-9462/2026")
+
+    def test_per_sub_callback_accepts_bank_cases(self):
+        """Проводка: звезда в старой М-форме получает персональный push о
+        событии по промоутнутому делу."""
+        change = {
+            "case": "2-9462/2026",
+            "track": "plaintiff_light",
+            "type": ["fi_writ_issued"],
+            "details": {"court_domain": "surggor--hmao.sudrf.ru"},
+        }
+        cb = delivery._make_per_sub_callback(
+            cases=[], bank_cases=[self._bank_case()],
+            fi_new_cases=[], fi_changes=[change],
+            changes=[], stage_transitions=[], appeal_new_cases_csv=[],
+            push_summary="сводка",
+        )
+        res = cb({"watchlist": ["surggor--hmao.sudrf.ru|М-7437/2026"]})
+        assert res is not None
+        title, _body, url = res
+        assert "твои дела" in title
+        assert "mine=1" in url
+
+
+class TestBankAliasWiring:
+    """Проводка bank_cases до всех точек доставки runs.py: main_json (push +
+    канонизация KV), общий _send_replay_web_push (replay и push-web-only) и
+    main_push_last_digest. Без передачи карта молча строится без банк-дел."""
+
+    def _runs_src(self):
+        import court_monitor.runs as runs_mod
+        with open(runs_mod.__file__, encoding="utf-8") as f:
+            return f.read()
+
+    def test_all_per_sub_callsites_pass_bank_cases(self):
+        src = self._runs_src()
+        calls = src.count("_make_per_sub_callback(")
+        # определение импортируется из delivery, тут только вызовы
+        wired = src.count("bank_cases=")
+        assert calls >= 3
+        # каждый вызов + отдельная передача в _build_watchlist_alias_indexes
+        assert wired >= calls + 1
+
+    def test_canonicalize_map_includes_bank(self):
+        src = self._runs_src()
+        idx = src.index("canonicalize_kv_watchlists(")
+        head = src[:idx]
+        build_idx = head.rindex("_build_watchlist_alias_indexes(")
+        assert "bank_cases=" in src[build_idx:idx]

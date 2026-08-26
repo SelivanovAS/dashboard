@@ -44,6 +44,7 @@ def _extract_paren_numbers(s) -> list[str]:
 
 def _build_watchlist_alias_indexes(
     cases: list[dict],
+    bank_cases: list[dict] | None = None,
 ) -> tuple[dict[str, str], dict[str, set[str]]]:
     """По списку дел строит (alias_to_canonical, canonical_to_aliases) для
     расширения watchlist при фильтрации push-событий.
@@ -59,6 +60,19 @@ def _build_watchlist_alias_indexes(
 
     Юрист звёздил `8Г-5513/2026` → bare = `8Г-5513/2026` → канон. =
     `2-3760/2025` → expanded set содержит и кассац., и FI-номер.
+
+    `bank_cases` — дела трека «Иски банка» (активные + горячий архив). Их
+    канон — COMPOSITE «домен|bare(id)»: номера не уникальны между судами, а
+    звезда трека хранится именно composite-формой. Без этих записей звезда
+    «домен|М-…» после промоушена М→2 не расширялась в новый номер — push по
+    делу молчал, а канонизация KV не могла переписать её в актуальную форму
+    (инцидент 26.08.2026, 2+2 «пропавших» подписки на обеих территориях).
+    В alias_to_canonical кладутся ТОЛЬКО composite-алиасы банк-дела: bare-канон
+    сталкивал бы одноимённые дела разных судов, а перезапись вручную введённого
+    голого номера в composite отняла бы у него роль мягкого фолбэка матчинга.
+    Bare-формы банк-дела идут в canonical_to_aliases (только расширение).
+    Основная картотека обрабатывается ПЕРВОЙ — при коллизии номера голый алиас
+    остаётся за основным делом (как в buildWatchCanonMap app.js).
     """
     alias_to_canonical: dict[str, str] = {}
     canonical_to_aliases: dict[str, set[str]] = {}
@@ -97,6 +111,23 @@ def _build_watchlist_alias_indexes(
             if a not in alias_to_canonical:
                 alias_to_canonical[a] = canonical
         canonical_to_aliases.setdefault(canonical, set()).update(aliases)
+    for c in bank_cases or []:
+        bare_id = _bare_case_number(c.get("id", ""))
+        if not bare_id:
+            continue
+        fi = c.get("first_instance") or {}
+        dom = (fi.get("court_domain") or "").strip()
+        canonical = f"{dom}|{bare_id}" if dom else bare_id
+        bares: set[str] = set()
+        for raw in (c.get("id"), fi.get("case_number"), fi.get("material_number")):
+            bare = _bare_case_number(raw)
+            if bare:
+                bares.add(bare)
+        composites = {f"{dom}|{b}" for b in bares} if dom else set()
+        for a in composites:
+            if a not in alias_to_canonical:
+                alias_to_canonical[a] = canonical
+        canonical_to_aliases.setdefault(canonical, set()).update(bares | composites)
     return alias_to_canonical, canonical_to_aliases
 
 
@@ -293,13 +324,34 @@ def canonicalize_kv_watchlists(alias_to_canonical: dict[str, str]) -> None:
             continue
 
         try:
+            payload: dict = {"endpoint": endpoint, "watchlist": canon_list}
+            # LWW-штамп набора из GET /subscriptions: между снимком и этим
+            # POST проходит вся рассылка, и звезда, поставленная юристом в
+            # этом окне, без штампа затиралась бы устаревшим снимком. Worker
+            # при wl_ts старше актуального пропускает запись — следующий
+            # крон доканонизирует по свежему набору.
+            wl_ts = sub.get("wl_ts")
+            if isinstance(wl_ts, (int, float)) and wl_ts > 0:
+                payload["wl_ts"] = wl_ts
             resp = requests.post(
                 f"{config.PUSH_WORKER_URL}/admin/watchlist",
                 params={"secret": secret},
-                json={"endpoint": endpoint, "watchlist": canon_list},
+                json=payload,
                 timeout=10,
             )
+            skipped_stale = False
             if resp.ok:
+                try:
+                    skipped_stale = (resp.json() or {}).get("skipped") == "stale"
+                except Exception:
+                    pass
+            if skipped_stale:
+                label = sub.get("label") or "?"
+                log.info(
+                    f"Канонизация ({label}): набор обновился во время "
+                    f"рассылки — пропуск, доканонизирует следующий крон"
+                )
+            elif resp.ok:
                 label = sub.get("label") or "?"
                 ep_short = endpoint[-32:]
                 log.info(
@@ -333,6 +385,7 @@ def _make_per_sub_callback(
     push_summary: str,
     cass_changes: list[dict] | None = None,
     cass_discovered: list[dict] | None = None,
+    bank_cases: list[dict] | None = None,
 ):
     """Фабрика callback'а для `send_web_push(per_subscriber=...)`.
 
@@ -341,6 +394,11 @@ def _make_per_sub_callback(
     апел., касс., hybrid-предок), а `_filter_events_by_watchlist` шлёт
     события по канон. ID. Без расширения watchlist через алиасы push'и
     не долетают по таким звёздам.
+
+    `bank_cases` — дела трека «Иски банка» (активные + горячий архив), их
+    канон в картах — composite «домен|номер». В `cases` их подмешивать НЕЛЬЗЯ:
+    общий цикл дал бы им bare-канон и столкнул с одноимёнными делами других
+    судов (см. `_build_watchlist_alias_indexes`).
 
     Логика отправки push с учётом подписки на дела:
     · watchlist пуст и событий вообще нет → None (ничего не шлём).
@@ -360,7 +418,7 @@ def _make_per_sub_callback(
     # Карты алиасов строим один раз на крон-прогон. Стоимость — ~150 записей,
     # копейки. Дальше каждая подписка дёшево расширяется через эти карты.
     alias_to_canonical, canonical_to_aliases = _build_watchlist_alias_indexes(
-        cases or []
+        cases or [], bank_cases=bank_cases or []
     )
 
     def _per_sub(sub: dict):

@@ -17,10 +17,10 @@ Actions, какие есть вспомогательные скрипты и т
 |---------|---------|-----------|
 | `--json` | `main_json` ([2338](../../scripts/court_monitor/runs.py#L2338)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([1224](../../scripts/court_monitor/runs.py#L1224)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([6560](../../scripts/court_monitor/runs.py#L6560)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([6121](../../scripts/court_monitor/runs.py#L6121)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6417](../../scripts/court_monitor/runs.py#L6417)) | Повторно разослать уже сохранённый дайджест. |
-| `--push-web-only [--push-all]` | `main_push_web_only` ([6367](../../scripts/court_monitor/runs.py#L6367)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
+| `--digest-only` | `main_digest_only` ([6599](../../scripts/court_monitor/runs.py#L6599)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([6128](../../scripts/court_monitor/runs.py#L6128)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6453](../../scripts/court_monitor/runs.py#L6453)) | Повторно разослать уже сохранённый дайджест. |
+| `--push-web-only [--push-all]` | `main_push_web_only` ([6403](../../scripts/court_monitor/runs.py#L6403)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
 | `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1419](../../scripts/court_monitor/runs.py#L1419)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
@@ -248,7 +248,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([785](../../scripts/court_monitor/delivery.py#L785)) — итоговая
+- `log_run_summary` ([843](../../scripts/court_monitor/delivery.py#L843)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, Telegram, Web Push,
   LLM-пересказы актов (вызовы/из кэша), карточки-«огрызки»; нулевые строки
   опускаются) + markdown-таблица в `$GITHUB_STEP_SUMMARY`.
@@ -276,7 +276,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   Дневное покрытие строится как union стабильных ID
   `planned_case_ids_today` / `read_case_ids_today` по 1-й инстанции,
   апелляции и кассации, поэтому планы дочиток можно сравнивать напрямую.
-- `send_crash_alert` ([918](../../scripts/court_monitor/delivery.py#L918)) — падение
+- `send_crash_alert` ([976](../../scripts/court_monitor/delivery.py#L976)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в

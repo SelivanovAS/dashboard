@@ -181,6 +181,12 @@ async function resolveProfilesInto(env, subs) {
     s.watchlist = Array.isArray(p.watchlist) ? p.watchlist : [];
     if (typeof p.updated_at === "number") {
       s.last_watchlist_update_at = new Date(p.updated_at).toISOString();
+      // LWW-штамп набора для канонизации (Python шлёт его назад как wl_ts в
+      // /admin/watchlist): между GET /subscriptions и POST проходит вся
+      // рассылка, и без штампа устаревший снимок затирал бы звезду,
+      // поставленную юристом в этом окне. Имя нейтральное — delivery.py
+      // о профилях знать не должен (страж TestDeliveryFrozen).
+      s.wl_ts = p.updated_at;
     }
   }
   return profiles;
@@ -429,16 +435,25 @@ async function handleSetWatchlist(request, env) {
     // со старого закэшированного фронта, не знающего о профилях). Снимок
     // sub.watchlist не трогаем — он заморожен на момент привязки. Профиль
     // удалён руками → старое поведение (запись в sub).
+    // ⚠️ Пишем UNION, а не замену: сюда приходят клиенты без LWW (старый
+    // закэшированный фронт ?v≤177, устройство после эвикции localStorage при
+    // живом sub.profile_id) — полное зеркало ОДНОГО такого устройства
+    // затирало бы звёзды, поставленные на других (разбор 26.08.2026).
+    // Осознанная цена: снятие звезды с легаси-устройства до профиля не
+    // доедет — снимается новым фронтом или админкой.
     if (sub.profile_id) {
       const profile = await getProfile(env, sub.profile_id);
       if (profile) {
-        await writeProfileWatchlist(env, sub.profile_id, profile, canonical);
+        const merged = canonicalizeWatchlistArr(
+          unionWatchlists(profile.watchlist, canonical), aliasMap
+        );
+        await writeProfileWatchlist(env, sub.profile_id, profile, merged);
         console.log(
-          `Watchlist профиля ${shortProfileId(sub.profile_id)}… обновлён ` +
-          `через /watchlist (${canonical.length} дел): ${key}`
+          `Watchlist профиля ${shortProfileId(sub.profile_id)}… union ` +
+          `через /watchlist (${merged.length} дел): ${key}`
         );
         return new Response(
-          JSON.stringify({ ok: true, count: canonical.length, canonical, target: "profile" }),
+          JSON.stringify({ ok: true, count: merged.length, canonical: merged, target: "profile" }),
           { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
         );
       }
@@ -1081,6 +1096,27 @@ async function handleAdminWatchlist(request, env) {
       const same =
         JSON.stringify([...(profile.watchlist || [])].sort()) ===
         JSON.stringify([...canonical].sort());
+      // LWW-гард канонизации: Python шлёт wl_ts — штамп набора из своего
+      // GET /subscriptions. Профиль успел обновиться (юрист кликал звёзды,
+      // пока шла рассылка) → снимок устарел, пропускаем без записи —
+      // следующий крон доканонизирует по свежему. Запросы БЕЗ wl_ts
+      // (человек в модалке админки) — прежнее поведение: он правит
+      // актуальный набор осознанно.
+      const bodyTs = Number(r.body.wl_ts);
+      const stale =
+        Number.isFinite(bodyTs) && bodyTs > 0 &&
+        typeof profile.updated_at === "number" &&
+        bodyTs < profile.updated_at;
+      if (stale) {
+        console.log(
+          `Watchlist профиля ${shortProfileId(r.sub.profile_id)}…: снимок ` +
+          `устарел (wl_ts ${bodyTs} < ${profile.updated_at}), запись пропущена`
+        );
+        return new Response(
+          JSON.stringify({ ok: true, skipped: "stale", count: canonical.length, canonical }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      }
       if (!same) {
         await writeProfileWatchlist(env, r.sub.profile_id, profile, canonical);
       }
