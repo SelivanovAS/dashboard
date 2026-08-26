@@ -54,7 +54,8 @@ from court_monitor.digest.core import (
 from court_monitor.digest.lint import lint_digest_html
 from court_monitor.digest.template import build_summary_line, bank_act_why_eligible
 from court_monitor.health import (
-    load_parse_health, save_parse_health, update_parse_health,
+    load_parse_health, save_parse_health, searched_ok_today,
+    update_parse_health,
 )
 from court_monitor.lifecycle import (
     advance_case_stage, is_archived, is_case_archived,
@@ -2531,6 +2532,15 @@ def main_json():
     # {ключ источника: сколько строк дал поиск; None — страница не загрузилась}.
     health_obs: dict = {}
     health_labels: dict = {}
+    # Дочитка поисков (SKIP_CHECKED_TODAY, слоты Mac-резерва): источники, чей
+    # поиск сегодня уже дал строки, повторный слот не запрашивает — см.
+    # searched_ok_today (health.py). Пропущенный источник НЕ попадает в
+    # health_obs, поэтому его last_run_at/counts/fail_streak остаются от
+    # удачного слота и дневной union cloud_run_ok не сбивается.
+    search_skip_keys: set[str] = (
+        searched_ok_today(load_parse_health())
+        if config.SKIP_CHECKED_TODAY else set()
+    )
     # Суды 1-й инст., чья страница поиска пришла как проверочный код (CAPTCHA):
     # {domain: court.name}. Отдельный 🩺-алерт в блоке 4e, чтобы код не читался
     # молча как «дел нет» (см. detect_captcha_challenge).
@@ -2572,10 +2582,20 @@ def main_json():
             "Кассация, шаг 1/2 — поиск по имени банка "
             "(первая страница выдачи 7kas)"
         )
-        polite_delay()
-        cass_search_url = CASSATION_COURT.search_url()
-        cass_search_html = fetch_page(cass_search_url, context="поиск 7kas")
-        if not cass_search_html:
+        # Дочитка поисков: выдача 7kas сегодня уже отдала строки — повторный
+        # слот её не запрашивает. Флаг гейтит и ветку отказа ниже: пропуск
+        # НЕ пишет health_obs[...] = None и не кормит предохранитель.
+        cass_search_skipped = _ck_total in search_skip_keys
+        if cass_search_skipped:
+            log.info(
+                "  7kas: поиск пропущен — удался ранее сегодня (дочитка слота)"
+            )
+            cass_search_html = ""
+        else:
+            polite_delay()
+            cass_search_url = CASSATION_COURT.search_url()
+            cass_search_html = fetch_page(cass_search_url, context="поиск 7kas")
+        if not cass_search_html and not cass_search_skipped:
             _cass_fail_kind = str(
                 config.FETCH_DIAG.get("kind") or "request_error"
             )
@@ -2808,7 +2828,7 @@ def main_json():
                 cases, cass_finds, archived_cases
             )
             cass_resurrected_count += archived_before_cass - len(archived_cases)
-        else:
+        elif not cass_search_skipped:
             log.warning("7kas: пустой ответ от поиска")
     except Exception as exc:
         # Падение парсера кассации не должно ронять весь прогон (с 08.2026
@@ -3143,6 +3163,15 @@ def main_json():
 
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
+        hk = _appeal_health_key(_ap_court)
+        # Дочитка поисков: выдача этого апел-суда сегодня уже отдала строки —
+        # повторный слот её не запрашивает (health_obs не трогаем, union цел).
+        if hk in search_skip_keys:
+            log.info(
+                f"Поиск апелляции {_ap_tag}({shorten_court_name(_ap_court.name)}): "
+                f"пропущен — удался ранее сегодня (дочитка слота)"
+            )
+            continue
         log.info(f"Загружаю страницу поиска апелляции {_ap_tag}({_ap_court.name})...")
         _ap_search_url = _ap_court.search_url()
         _ap_search_context = (
@@ -3152,7 +3181,6 @@ def main_json():
             _ap_search_url,
             context=_ap_search_context,
         )
-        hk = _appeal_health_key(_ap_court)
         health_labels[hk] = f"Апелляция ({_ap_court.name})"
         if not search_html:
             _ap_fail_kind = str(
@@ -3381,9 +3409,23 @@ def main_json():
         log.info("Иски банка: подхват в режиме DRY-RUN — карточки не качаем, "
                  "записи не создаём")
 
+    fi_search_skipped_today = 0
     for court_idx, court in enumerate(enabled_courts, 1):
         court_tag = f"[{court_idx}/{len(enabled_courts)}]"
         health_key = fi_health_key(court)
+        # Дочитка поисков: выдача суда сегодня уже отдала строки — повторный
+        # слот её не запрашивает. Гейт стоит ДО polite_delay (как пре-чеки
+        # предохранителя): пропуск не тратит ни каденс, ни HTTP. Вместе с
+        # поиском пропускаются его пассажиры этого слота (промоушен М→2 по
+        # строке, фильтр new_fi, авто-подхват 3b, канарейка предохранителя,
+        # детект капчи) — всё это уже отработало в удачном слоте.
+        if health_key in search_skip_keys:
+            fi_search_skipped_today += 1
+            log.debug(
+                f"  {court_tag} {court.name}: поиск пропущен — "
+                f"удался ранее сегодня (дочитка слота)"
+            )
+            continue
         health_labels[health_key] = court.name
         polite_delay()
         # Тайминг суда — после polite_delay, чтобы случайная задержка
@@ -3656,6 +3698,13 @@ def main_json():
                     "дело страницы — часть исков банка могла не уместиться; "
                     "добор — ручным collect_bank_claims.yml"
                 )
+
+    if fi_search_skipped_today:
+        log.info(
+            f"Поиск 1-й инст.: пропущено {fi_search_skipped_today} из "
+            f"{len(enabled_courts)} судов — поиски удались ранее сегодня "
+            f"(дочитка слота)"
+        )
 
     # Re-link дел, вернувшихся из кассации в 1-ю инст. (awaiting_relink →
     # first_instance, новый раунд). Делается ПОСЛЕ накопления fi_results_by_court
@@ -5343,8 +5392,12 @@ def main_json():
     # ронять прогон ни при каких обстоятельствах.
     log_phase(7, 9, "Здоровье парсеров")
     try:
+        # known_alive_today: при дочитке поисков наблюдаемыми остаются лишь
+        # неудачники и честные нули — без поправки алерт «ВСЕ источники разом
+        # по нулям» ложно объявил бы аварию при 18 пропущенных живых судах.
         health_state, health_alerts = update_parse_health(
-            health_obs, health_labels
+            health_obs, health_labels,
+            known_alive_today=len(search_skip_keys),
         )
         # Карточная сводка прогона — для гейта Mac-резерва (cloud_run_ok):
         # журнал по источникам видит только ПОИСКИ, и «полузрячие» прогоны
