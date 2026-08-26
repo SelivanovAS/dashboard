@@ -6299,6 +6299,43 @@ def main_replay_last(push_all: bool = False):
         log.warning(
             f"act_analysis (replay): не удалось обновить cases_bank.json: {exc}")
 
+    # Web push: под DEFER_WEB_PUSH=1 (replay_on_push.yml) он ОТКЛАДЫВАЕТСЯ —
+    # workflow сначала коммитит last_digest.json, дожидается, пока GitHub
+    # Pages реально отдаст свежий файл, и только потом шлёт пуш отдельным
+    # шагом `--push-web-only`. Иначе пуш обгоняет сайт: 26.08.2026 Pages
+    # собирался ~5 минут (очередь из трёх пушей доставочного слота), и клик
+    # по уведомлению в 08:55 открывал дашборд со ВЧЕРАШНИМ дайджестом.
+    # Telegram выше не откладывается осознанно: там полный текст дайджеста
+    # в самом сообщении, сайт ему не нужен.
+    if os.environ.get("DEFER_WEB_PUSH", "0") == "1":
+        log.info(
+            "Web push отложен (DEFER_WEB_PUSH=1): его отправит шаг "
+            "--push-web-only workflow после публикации дайджеста на Pages."
+        )
+    else:
+        _send_replay_web_push(ctx, push_all=push_all)
+    log.info("Готово!")
+
+
+def _send_replay_web_push(ctx: dict, push_all: bool = False) -> None:
+    """Web push replay-контура по сохранённому контексту.
+
+    Вынесен из main_replay_last, чтобы replay_on_push.yml мог отправить пуш
+    ОТДЕЛЬНЫМ шагом — после публикации закоммиченного last_digest.json на
+    GitHub Pages (см. комментарий у DEFER_WEB_PUSH выше). ⚠️ ctx обязан
+    прийти уже прогнанным через эхо-фильтр (_filter_ctx_fi_changes_echo) —
+    иначе push увидит события, которых нет в разосланном дайджесте.
+    """
+    saved_at = ctx.get("saved_at", "?")
+    summary = build_summary_line(
+        ctx.get("new_cases", []),
+        ctx.get("changes", []),
+        ctx.get("fi_new_cases", []),
+        ctx.get("stage_transitions", []),
+        ctx.get("fi_changes", []),
+        cass_changes=ctx.get("cass_changes", []),
+        cass_discovered=ctx.get("cass_discovered", []),
+    )
     body = summary if summary else f"Открой приложение — дайджест от {saved_at[:10]}"
     title = (
         "Мониторинг дел — тестовая рассылка"
@@ -6325,6 +6362,55 @@ def main_replay_last(push_all: bool = False):
             cass_discovered=ctx.get("cass_discovered", []),
         ),
     )
+
+
+def main_push_web_only(push_all: bool = False):
+    """Отправить ТОЛЬКО web push по сохранённому контексту (--push-web-only).
+
+    Вторая половина replay_on_push.yml: шаг --replay-last работает с
+    DEFER_WEB_PUSH=1 (Telegram уходит сразу, last_digest.json пишется на
+    диск), workflow коммитит дайджест, дожидается, пока GitHub Pages отдаст
+    свежие байты, и только потом зовёт этот режим — пуш никогда не обгоняет
+    сайт (26.08.2026: лаг ~5 минут, клик по пушу открывал вчерашний дайджест).
+
+    Дайджест НЕ перегенерируется, файлы дайджеста не трогаются; единственная
+    запись на диск — журнал last_personal_pushes.json внутри send_web_push
+    (его коммитит отдельный шаг workflow ПОСЛЕ этого режима).
+    """
+    log.info("=" * 60)
+    log.info(
+        "Режим push-web-only: web push по последнему контексту "
+        f"({'все устройства' if push_all else 'только владельцу'})"
+    )
+    log.info("=" * 60)
+
+    # validate_environment здесь не зовём: LLM и Telegram этому режиму не
+    # нужны, а PUSH_*-переменные send_web_push валидирует сам (логирует и
+    # тихо выходит, если не настроены).
+    if not os.path.exists(config.LAST_DIGEST_CONTEXT_PATH):
+        log.error(
+            f"Контекст не найден: {config.LAST_DIGEST_CONTEXT_PATH}. "
+            "Сначала выполните полный прогон или --replay-last."
+        )
+        sys.exit(2)
+
+    with open(config.LAST_DIGEST_CONTEXT_PATH, "r", encoding="utf-8") as f:
+        ctx = json.load(f)
+
+    # Эхо-фильтр — тот же, что в main_replay_last: пуш обязан видеть тот же
+    # набор событий, что и разосланный этим утром дайджест.
+    try:
+        _echo_cases = (
+            (load_json(config.JSON_PATH).get("cases") or [])
+            + (load_json(config.JSON_ARCHIVE_PATH).get("cases") or [])
+        )
+        ctx["fi_changes"] = _filter_ctx_fi_changes_echo(
+            ctx.get("fi_changes") or [], _echo_cases
+        )
+    except Exception as exc:
+        log.warning(f"push-web-only: эхо-фильтр пропущен: {exc}")
+
+    _send_replay_web_push(ctx, push_all=push_all)
     log.info("Готово!")
 
 

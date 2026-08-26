@@ -17,9 +17,10 @@ Actions, какие есть вспомогательные скрипты и т
 |---------|---------|-----------|
 | `--json` | `main_json` ([2338](../../scripts/court_monitor/runs.py#L2338)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([1224](../../scripts/court_monitor/runs.py#L1224)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([6474](../../scripts/court_monitor/runs.py#L6474)) | Только дайджест по текущим данным, без парсинга. |
+| `--digest-only` | `main_digest_only` ([6560](../../scripts/court_monitor/runs.py#L6560)) | Только дайджест по текущим данным, без парсинга. |
 | `--replay-last [--push-all]` | `main_replay_last` ([6121](../../scripts/court_monitor/runs.py#L6121)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6331](../../scripts/court_monitor/runs.py#L6331)) | Повторно разослать уже сохранённый дайджест. |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6417](../../scripts/court_monitor/runs.py#L6417)) | Повторно разослать уже сохранённый дайджест. |
+| `--push-web-only [--push-all]` | `main_push_web_only` ([6367](../../scripts/court_monitor/runs.py#L6367)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
 | `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1419](../../scripts/court_monitor/runs.py#L1419)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
@@ -115,12 +116,23 @@ telemetry и delivery journal живут в каталоге своего кло
 [Файл](../../.github/workflows/replay_on_push.yml). Триггер — `push` в `main`,
 задевший `data/last_digest_context.json` (его коммитит Mac-обёртка). Шаги:
 checkout → Python 3.12 → `python scripts/update_cases.py --replay-last
---push-all` со всеми секретами (гибридный дайджест в личный Telegram + Web
-Push всем подписчикам) → коммит `last_digest.json`, `last_personal_pushes.json`,
+--push-all` со всеми секретами и `DEFER_WEB_PUSH=1` (гибридный дайджест в
+личный Telegram; **web push здесь НЕ уходит**) → коммит `last_digest.json`,
 `cases.json` (act_analysis из replay) и `.act_summaries.json` (кэш пересказов),
-с `git pull --rebase` от гонки с Mac-пушем (`📰 Дайджест собран…`). Анти-петля:
-replay не меняет сам контекст, а пуши через `GITHUB_TOKEN` не триггерят
-workflow.
+с `git pull --rebase` от гонки с Mac-пушем (`📰 Дайджест собран…`) → **ожидание
+публикации на Pages** (до ~7 мин поллинга публичного URL, критерий — sha256
+отданных байт `data/last_digest.json` равен закоммиченным; таймаут = warning и
+отправка без подтверждения; при неудавшемся rebase шаг пропускается,
+`pushed=0`) → **web push отдельным шагом** `--push-web-only --push-all`
+(`main_push_web_only`: тот же контекст + эхо-фильтр + персонализация, дайджест
+не перегенерируется) → докоммит `last_personal_pushes.json` (журнал пишется
+отправкой, то есть после основного коммита). Порядок введён 26.08.2026:
+очередь Pages из трёх пушей доставочного слота публиковала дайджест на ~5 мин
+позже пуша, и клик по уведомлению открывал вчерашний выпуск. Откат — снимать
+`DEFER_WEB_PUSH` и оба новых шага ПАРОЙ (иначе двойной пуш); стражи —
+[`test_replay_push_after_pages.py`](../../scripts/tests/test_replay_push_after_pages.py).
+Анти-петля: replay не меняет сам контекст, а пуши через `GITHUB_TOKEN` не
+триггерят workflow.
 
 **С 03.07.2026 дайджест здесь — гибрид** (дефолт кода, флаг не выставлен):
 программный рендер `generate_template_digest` + Claude только на пересказ
