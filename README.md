@@ -246,7 +246,10 @@ GitHub Actions cron ненадёжен на бесплатных планах (�
 
 ### Админка
 
-`https://court-monitor-trigger.<аккаунт>.workers.dev/admin?secret=<OWNER_SECRET>` — открывается в браузере, в том числе с телефона. Подробно — [docs/technical/09](docs/technical/09-cloudflare-worker.md).
+`https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>` (фолбэк — прежний
+`https://court-monitor-trigger.<аккаунт>.workers.dev/admin?…`; часть операторов
+связи режет `*.workers.dev`, поэтому основной адрес — свой домен) — открывается
+в браузере, в том числе с телефона. Подробно — [docs/technical/09](docs/technical/09-cloudflare-worker.md).
 
 - **Запуск прогонов:** одна кнопка «▶ Запустить прогон» (`smart_skip=true` — ровно то, что делает ежедневный автозапуск; в нерабочий день спрашивает «прогнать всё равно?» и добавляет `ignore_calendar=true`). Полный обход без smart-skip — из GitHub Actions (Run workflow → снять галку). Рядом — мини-форма теста дайджеста с выбором LLM-провайдера.
 - **Живой лог прогона:** основной workflow гонит свой stdout через pass-through-пушер `scripts/gh_progress_pusher.py` → `POST /run-progress` → блок «Прогон (GitHub Actions)» обновляется каждые 15 с (батчи пушера уходят раз в ~60 с — экономия KV-writes free-tier). Лог свёрнут по фазам «[1/9]…[9/9]» (текущая фаза раскрыта, бейджи ⚠/✖ по WARNING/ERROR, итоговая сводка видна сразу), хранится 14 дней (текущий + предыдущий прогон) — можно смотреть и после завершения. Тот же блок показывает Mac-резерв.

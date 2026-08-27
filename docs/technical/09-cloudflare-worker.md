@@ -120,9 +120,26 @@ CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (
 `/admin/watchlist` при `sub.profile_id` пишут в профиль. Подробная модель —
 CLAUDE.md, раздел «Синхронизация подписок между устройствами».
 
+## Адреса Worker'а (custom domain, 27.08.2026)
+
+Часть операторов связи режет `*.workers.dev` по имени (SNI) — с их сетей не
+работали синк подписок, push и админка. Worker привязан к своему домену:
+`api-hmao.delosud.ru` (форк Урала — `api-ural.delosud.ru`); workers.dev-адрес
+ЖИВ и остаётся фолбэком (в wrangler.toml — явный `workers_dev = true`: при
+появлении `routes` wrangler иначе гасит его молча). Зона `delosud.ru` живёт в
+том же аккаунте Cloudflare (Free), NS у reg.ru; ⚠️ у зоны выключен ECH
+(RU DPI режет ECH-хендшейки; ручка только в API —
+`PATCH /zones/<id>/settings/ech`, `{"value":"off"}`) — не включать обратно.
+Фронт перебирает адреса сам: `workerFetch` в app.js (таймаут на адрес +
+фолбэки из `PUSH_WORKER_FALLBACKS` region_front.js), стражи —
+[scripts/tests/test_worker_fallback.py](../../scripts/tests/test_worker_fallback.py).
+CORS не менялся: `ALLOWED_ORIGIN` — это origin ФРОНТА (github.io), от адреса
+Worker'а он не зависит.
+
 ## Админка подписчиков
 
-URL: `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`.
+URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
+(фолбэк — прежний `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?…`).
 `handleAdmin` ([1000](../../cloudflare-worker/worker.js#L1000)) рендерит HTML
 (`renderAdminHtml`, [34](../../cloudflare-worker/admin_page.js#L34)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
