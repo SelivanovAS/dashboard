@@ -1501,6 +1501,7 @@ tr.detail-row { display:none; }
 .sync-status-on { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--accent); }
 /* Служебная строка (id профиля): мелко и приглушённо, сразу под статусом. */
 .sync-quiet { font-size:var(--fs-xs); color:var(--fg-3); font-family:var(--font-mono); margin-top:-8px; }
+.sync-status-pending { font-size:var(--fs-sm); color:var(--warning-fg); background:var(--warning-bg); border-radius:var(--radius); padding:8px 12px; }
 /* Код крупно: юрист диктует/перепечатывает его на второе устройство. */
 .sync-code { font-family:var(--font-mono); font-size:32px; font-weight:var(--fw-bold); letter-spacing:0.12em; text-align:center; padding:14px 10px; border:1px dashed var(--border-strong); border-radius:var(--radius); background:var(--bg-2); color:var(--fg-1); user-select:all; }
 .sync-divider { display:flex; align-items:center; gap:10px; color:var(--fg-3); font-size:var(--fs-xs); }
@@ -1523,6 +1524,11 @@ tr.detail-row { display:none; }
 /* Кнопка шапки: связанное устройство подсвечено, как включённый колокольчик
    (#btn-push.on — та же пара токенов). */
 #btn-sync.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
+/* Точка «есть неотправленные правки ★» (Worker недоступен/офлайн; ставит
+   updateSyncButton только у связанных устройств). Токен --amber-500 объявлен
+   один на обе темы — насыщенный акцент читается и на светлом, и на тёмном. */
+#btn-sync { position:relative; }
+#btn-sync.pending::after { content:''; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
 
 /* ── Анонс «Что нового» (одноразовый, при первом открытии после апдейта) ── */
 .wn-block { display:flex; flex-direction:column; gap:16px; padding:16px 20px 20px; }

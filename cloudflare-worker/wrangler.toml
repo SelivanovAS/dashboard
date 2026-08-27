@@ -2,6 +2,21 @@ name = "court-monitor-trigger"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
+# ── Адреса Worker'а (27.08.2026) ────────────────────────────────────────────
+# Часть операторов связи режет *.workers.dev по имени (SNI) — с их сетей не
+# работали синк подписок, админка и операторская. Основной адрес — свой
+# домен; workers.dev ОСТАЁТСЯ живым фолбэком (фронт перебирает адреса через
+# workerFetch, список — PUSH_WORKER_FALLBACKS в region_front.js).
+# workers_dev = true стоит ЯВНО: при появлении routes wrangler иначе гасит
+# workers.dev-адрес молча. Зона delosud.ru живёт в этом же аккаунте CF;
+# wrangler deploy сам создаёт DNS-запись и сертификат. ⚠️ У зоны выключен
+# ECH (RU DPI режет ECH-хендшейки) — не включать обратно.
+# Форк территории ставит свой поддомен: api-ural.delosud.ru.
+workers_dev = true
+routes = [
+  { pattern = "api-hmao.delosud.ru", custom_domain = true }
+]
+
 [triggers]
 # ✅ Cron ВОЗВРАЩЁН 05.07.2026. Блок судов на иностранные IP сняли (в т.ч. для
 # US-egress GitHub — проверено .github/workflows/probe_courts.yml), парсинг снова

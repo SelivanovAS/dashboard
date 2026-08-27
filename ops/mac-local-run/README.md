@@ -339,10 +339,13 @@ bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural \
 Что нужно машине: `~/.config/court-monitor/worker.<регион>` c тремя строками —
 
 ```
-url=https://court-monitor-ural.7selivanov-a.workers.dev
+url=https://api-ural.delosud.ru
 owner_secret=…
 push_secret=…
 ```
+
+(с 27.08.2026 основной адрес Worker'а — свой домен; прежний
+`https://court-monitor-ural.7selivanov-a.workers.dev` жив как фолбэк)
 
 `chmod 600`. Секреты те же, что у Worker'а территории (`OWNER_SECRET` и
 `PUSH_SECRET`); файл читается `awk`, а не `source`, — иначе `PUSH_SECRET` и
@@ -413,7 +416,7 @@ Cloudflare, и в GitHub secrets). Теперь роут стоит на общ�
 прошлые прогоны. Закрыть окно — ⌘W, на парсинг не влияет.
 
 **Из браузера/с телефона — блок «🛰 Парсинг» в админке подписчиков**
-(`https://court-monitor-trigger.7selivanov-a.workers.dev/admin?secret=<OWNER_SECRET>`).
+(`https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`).
 Обёртка запускает `progress_pusher.py`: он читает лог, фильтрует вехи
 (апелляция, каждый суд, кассация, ошибки, финал) и раз в ~5 с шлёт их на
 `POST /run-progress` Worker'а. Блок в админке автообновляется, пока прогон

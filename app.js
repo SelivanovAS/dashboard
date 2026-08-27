@@ -4613,6 +4613,71 @@ const PUSH_WORKER_URL = ('PUSH_WORKER_URL' in _RF)
   ? (_RF.PUSH_WORKER_URL || '')
   : 'https://court-monitor-trigger.7selivanov-a.workers.dev';
 
+// ── Устойчивость к блокировкам Worker'а ────────────────────────────────────
+// Некоторые операторы связи режут адреса Worker'а по имени (*.workers.dev,
+// SNI): соединение не рвётся, а ВИСНЕТ — голый fetch() ждал бы вечно.
+// Все запросы к Worker'у идут через workerFetch: таймаут на каждый адрес +
+// перебор адресов ТОГО ЖЕ Worker'а (основной из PUSH_WORKER_URL →
+// PUSH_WORKER_FALLBACKS из region_front.js). Любой HTTP-ответ (включая
+// 4xx/5xx) = адрес жив: статусы разбирают вызывающие, переключение — только
+// по сетевой ошибке/таймауту (валидный HTTPS-ответ оператор подделать не
+// может). Пустой PUSH_WORKER_URL по-прежнему значит «синк выключен» —
+// фолбэки при нём не используются.
+const WORKER_HOSTS = PUSH_WORKER_URL
+  ? [PUSH_WORKER_URL].concat(
+      (Array.isArray(_RF.PUSH_WORKER_FALLBACKS) ? _RF.PUSH_WORKER_FALLBACKS : [])
+        .filter((h) => h && h !== PUSH_WORKER_URL)
+    )
+  : [];
+let _workerHostIdx = 0;        // sticky: последний ОТВЕТИВШИЙ адрес сессии
+let _workerHostProbed = false; // какой-то адрес уже отвечал в этой сессии
+
+async function _workerFetchOne(url, init, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, Object.assign({}, init, { signal: ctrl.signal }));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function workerFetch(path, init, opts) {
+  const o = opts || {};
+  const timeoutMs = o.timeoutMs || FETCH_TIMEOUT_MS;
+  if (!WORKER_HOSTS.length) throw new Error('worker disabled'); // за гардами PUSH_WORKER_URL сюда не попасть
+  // failover:false — только текущий sticky-адрес, без перебора: для
+  // НЕидемпотентных путей связывания (см. ensureWorkerHost) повтор на второй
+  // адрес при потерянном ответе создал бы дубль (профиль-сирота в KV).
+  const hosts = o.failover === false
+    ? [WORKER_HOSTS[_workerHostIdx % WORKER_HOSTS.length]]
+    : WORKER_HOSTS.map((_, i) => WORKER_HOSTS[(_workerHostIdx + i) % WORKER_HOSTS.length]);
+  let lastErr = null;
+  for (const host of hosts) {
+    try {
+      const r = await _workerFetchOne(host + path, init, timeoutMs);
+      _workerHostIdx = WORKER_HOSTS.indexOf(host);
+      _workerHostProbed = true;
+      return r;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('worker unreachable');
+}
+
+// Одноразовый на сессию выбор живого адреса ПЕРЕД неидемпотентными путями
+// связывания: /profile/link-code без profile_id создаёт НОВЫЙ профиль на
+// каждый вызов, /profile/link сжигает код — их нельзя ретраить, поэтому
+// адрес проверяется заранее дешёвым GET / (Worker отвечает 404 — «жив»,
+// KV не трогается). Успех любого workerFetch тоже ставит probed.
+async function ensureWorkerHost() {
+  if (_workerHostProbed || WORKER_HOSTS.length < 2) return;
+  try {
+    await workerFetch('/', { method: 'GET' }, { timeoutMs: 4000 });
+  } catch (_) { /* все адреса молчат — основной POST упадёт в свой catch */ }
+}
+
 // Бейдж региона — сразу при загрузке (по REGION_FRONT/фолбэку), не дожидаясь
 // cases.json: у свежего форка данные пусты, а регион в шапке уже нужен.
 updateRegionBadge();
@@ -4710,9 +4775,11 @@ function setProfileBaseTs(ts) {
 }
 function markProfileDirty() {
   try { localStorage.setItem(PROFILE_DIRTY_KEY, '1'); } catch (_) {}
+  updateSyncButton(); // точка «есть неотправленное» на кнопке 🔗
 }
 function clearProfileDirty() {
   try { localStorage.removeItem(PROFILE_DIRTY_KEY); } catch (_) {}
+  updateSyncButton();
 }
 function isProfileDirty() {
   try { return localStorage.getItem(PROFILE_DIRTY_KEY) === '1'; } catch (_) { return false; }
@@ -4736,9 +4803,15 @@ function clearProfileLink() {
   updateSyncButton();
 }
 // Подсветка кнопки шапки: связанное устройство — как включённый колокольчик.
+// Точка .pending — есть недопушенные правки ★ (Worker недоступен/офлайн);
+// только у связанных устройств: без профиля dirty-флаг никогда не снимается
+// (легаси-путь его не чистит) и точка горела бы вечно.
 function updateSyncButton() {
   const btn = document.getElementById('btn-sync');
-  if (btn) btn.classList.toggle('on', !!getProfileId());
+  if (!btn) return;
+  const pid = !!getProfileId();
+  btn.classList.toggle('on', pid);
+  btn.classList.toggle('pending', pid && isProfileDirty());
 }
 
 // ── Канонизация номеров дел (зеркало wnBuildAliasToCanonical в worker.js) ──
@@ -4993,7 +5066,7 @@ async function syncWatchlistToWorkerLegacy() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return; // нет подписки — синхронизировать некуда
-    const r = await fetch(PUSH_WORKER_URL + '/watchlist', {
+    const r = await workerFetch('/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: sub.endpoint, watchlist: [...watchlist] }),
@@ -5097,7 +5170,7 @@ async function syncWatchlistToProfile(profileId, isRetry) {
   // отложенным синком в KV; страж test_success_branch_keeps_inflight_ops).
   const sentOps = new Map(profileSessionOps);
   try {
-    const r = await fetch(PUSH_WORKER_URL + '/profile/watchlist', {
+    const r = await workerFetch('/profile/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -5134,7 +5207,10 @@ async function syncWatchlistToProfile(profileId, isRetry) {
       syncWatchlistToWorkerLegacy();
       return;
     }
-    if (!r.ok || !data || !Array.isArray(data.canonical)) return; // сеть/500 — dirty остаётся
+    if (!r.ok || !data || !Array.isArray(data.canonical)) {
+      _notifySyncFailOnce(); // сеть/500 — dirty остаётся
+      return;
+    }
     setProfileBaseTs(Number(data.updated_at) || 0);
     // Подтверждены только тоглы, вошедшие в отправленный набор; кликнутое
     // во время полёта POST остаётся в буфере и уходит следующим синком.
@@ -5157,7 +5233,19 @@ async function syncWatchlistToProfile(profileId, isRetry) {
     if (local !== server) _adoptServerWatchlist(merged);
   } catch (e) {
     console.warn('profile watchlist sync failed:', e); // dirty остаётся — допушится
+    _notifySyncFailOnce();
   }
+}
+
+// Фоновый провал синка перестал быть немым (разбор блокировок 27.08.2026):
+// один тост на сессию, дальше о недопушенном говорят точка на 🔗 и строка в
+// шторке. Каждый провал тостить нельзя — при лежащем Worker'е их серия.
+let _syncFailToastShown = false;
+function _notifySyncFailOnce() {
+  if (_syncFailToastShown) return;
+  _syncFailToastShown = true;
+  showToast('Подписки (★) пока не отправлены: сервер недоступен. Изменения '
+    + 'сохранены на устройстве и уйдут сами при появлении связи', { type: 'info', duration: 6000 });
 }
 
 // Загрузка профильного набора при старте страницы (fire-and-forget).
@@ -5167,7 +5255,7 @@ async function loadProfileWatchlist() {
   const pid = getProfileId();
   if (!pid || !PUSH_WORKER_URL) return;
   try {
-    const r = await fetch(PUSH_WORKER_URL + '/profile/get', {
+    const r = await workerFetch('/profile/get', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile_id: pid }),
@@ -5251,6 +5339,12 @@ function renderSyncSheet() {
     html = '<div class="sync-block">'
       + '<div class="sync-status-on">✓ Устройство связано</div>'
       + '<div class="sync-quiet">профиль ' + pid.slice(0, 8) + '</div>'
+      // Недопушенные правки ★ (Worker недоступен/офлайн) — честно говорим,
+      // что звёзды пока локальные; та же причина зажигает точку на кнопке 🔗.
+      + (isProfileDirty()
+        ? '<div class="sync-status-pending">⏳ Есть неотправленные изменения ★ — '
+          + 'уйдут сами при появлении связи с сервером</div>'
+        : '')
       + '<div class="sync-note">Подписки (сейчас: ' + watchlist.size + ') общие для всех '
       + 'связанных устройств территории — и постановка ★, и снятие.</div>'
       + '<button class="sheet-btn-done sync-btn" onclick="requestPairCode()">Подключить ещё устройство</button>'
@@ -5511,11 +5605,15 @@ async function requestPairCode() {
     if (pid) reqBody.profile_id = pid;
     const ep = await currentPushEndpoint();
     if (ep) reqBody.endpoint = ep;
-    const r = await fetch(PUSH_WORKER_URL + '/profile/link-code', {
+    // failover:false: без profile_id каждый вызов создаёт НОВЫЙ профиль —
+    // повтор на второй адрес при потерянном ответе плодил бы сирот в KV.
+    // Живой адрес выбирается заранее (ensureWorkerHost).
+    await ensureWorkerHost();
+    const r = await workerFetch('/profile/link-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody),
-    });
+    }, { failover: false });
     let data = null;
     try { data = await r.json(); } catch (_) {}
     if (r.status === 404 && data && data.error === 'profile_not_found') {
@@ -5549,11 +5647,14 @@ async function submitPairCode() {
     const reqBody = { code: code, watchlist: [...watchlist] };
     const ep = await currentPushEndpoint();
     if (ep) reqBody.endpoint = ep;
-    const r = await fetch(PUSH_WORKER_URL + '/profile/link', {
+    // failover:false: код сжигается при успехе — повтор на второй адрес при
+    // потерянном ответе дал бы «code_not_found» на уже связанном профиле.
+    await ensureWorkerHost();
+    const r = await workerFetch('/profile/link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody),
-    });
+    }, { failover: false });
     let data = null;
     try { data = await r.json(); } catch (_) {}
     if (r.status === 404 && data
@@ -5591,7 +5692,7 @@ async function unlinkThisDevice() {
   const ep = await currentPushEndpoint();
   if (ep && PUSH_WORKER_URL) {
     try {
-      const r = await fetch(PUSH_WORKER_URL + '/profile/unlink', {
+      const r = await workerFetch('/profile/unlink', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: ep, watchlist: [...watchlist] }),
@@ -5752,7 +5853,7 @@ async function markAsOwner(reg) {
     return;
   }
   try {
-    const r = await fetch(PUSH_WORKER_URL + '/mark-owner', {
+    const r = await workerFetch('/mark-owner', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -5804,7 +5905,7 @@ async function subscribeToPush(reg) {
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8(VAPID_PUBLIC_KEY),
     });
-    const r = await fetch(PUSH_WORKER_URL + '/subscribe', {
+    const r = await workerFetch('/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: buildSubscribeBody(sub),
@@ -5893,7 +5994,7 @@ async function setupPushNotifications(reg) {
   // Если подписка уже есть — освежаем её на Worker (TTL мог истечь)
   const existing = await reg.pushManager.getSubscription();
   if (existing) {
-    fetch(PUSH_WORKER_URL + '/subscribe', {
+    workerFetch('/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: buildSubscribeBody(existing),
@@ -5931,8 +6032,21 @@ window.addEventListener('online',()=>{
   _dataFromCache=false;
   try{renderMeta();}catch(_){}
   if(allCases.length)loadFromSheet(resolveSheetUrl(),{quiet:true});
+  // Дорассылка недопушенных звёзд. Только профильный путь (getProfileId):
+  // без профиля dirty-флаг не снимается никогда (легаси-путь его не чистит),
+  // и каждый возврат сети давал бы холостой POST /watchlist (KV-writes).
+  if(getProfileId()&&isProfileDirty())scheduleWatchlistSync();
 });
 window.addEventListener('offline',()=>{try{renderMeta();}catch(_){}});
+// Возврат во вкладку/развёрнутое PWA: главный сценарий недоставки — «сеть
+// есть, но адрес Worker'а был недоступен» (блокировка оператора, юрист
+// перешёл на Wi-Fi) — событие online при этом НЕ стреляет. Шторма нет:
+// только при dirty, дебаунс 600 мс, успешный синк снимает флаг.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&getProfileId()&&isProfileDirty()){
+    scheduleWatchlistSync();
+  }
+});
 
 // Постоянное хранилище: ~7 МБ данных живут в Cache Storage, и best-effort
 // хранилище браузер вправе вытеснить при нехватке места. Спрашиваем ОДИН раз:
