@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-27T08:23:04",
+ "updated_at": "2026-08-27T08:51:54",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,22 +556,22 @@
   }
  },
  "last_run": {
-  "at": "2026-08-27T08:23:04",
-  "requests_ok": 44,
+  "at": "2026-08-27T08:51:54",
+  "requests_ok": 33,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 38,
-  "cards_breaker_unrequested": 38,
+  "cards_breaker_skipped": 41,
+  "cards_breaker_unrequested": 41,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 22,
-  "cards_read": 17,
-  "cards_planned": 75,
+  "cards_blocked": 27,
+  "cards_read": 2,
+  "cards_planned": 69,
   "cards_read_today": 175,
   "cards_planned_today": 215,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
-    "read": 9,
+    "read": 0,
     "planned": 67,
     "read_today": 139,
     "planned_today": 179
@@ -583,44 +583,59 @@
     "planned_today": 30
    },
    "cassation": {
-    "read": 6,
-    "planned": 6,
+    "read": 0,
+    "planned": 0,
     "read_today": 6,
     "planned_today": 6
    }
   },
   "latency": {
-   "n": 44,
+   "n": 33,
    "p50": 20.4,
-   "p90": 24.9,
-   "max": 27.1
+   "p90": 23.1,
+   "max": 25.0
   },
   "failure_latency": {
    "portal_placeholder": {
-    "n": 22,
-    "p50": 21.5,
-    "p90": 25.2,
-    "max": 27.1
+    "n": 27,
+    "p50": 20.5,
+    "p90": 24.4,
+    "max": 25.0
    }
   },
   "fail_kinds": {
-   "portal_placeholder": 22
+   "portal_placeholder": 27
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 5,
-   "open_hosts": 5,
+   "opened_hosts": 9,
+   "open_hosts": 9,
    "recovered_hosts": 0,
-   "deferred_total": 45,
-   "deferred_remaining": 45,
+   "deferred_total": 55,
+   "deferred_remaining": 55,
    "deferred_recovered": 0,
-   "probes": 4,
+   "probes": 6,
    "probe_successes": 0,
-   "probe_failures": 4,
+   "probe_failures": 6,
    "by_kind": {
-    "portal_placeholder": 9
+    "portal_placeholder": 15
    },
    "hosts": [
+    {
+     "host": "hmray--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 1,
+     "probes": 0,
+     "deferred_total": 2,
+     "deferred_remaining": 2,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 17.3
+    },
     {
      "host": "kogalym--hmao.sudrf.ru",
      "state": "open",
@@ -628,13 +643,28 @@
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
-     "skipped": 0,
+     "skipped": 1,
      "probes": 1,
-     "deferred_total": 1,
-     "deferred_remaining": 1,
+     "deferred_total": 2,
+     "deferred_remaining": 2,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 155.4
+     "next_probe_in_seconds": 179.9
+    },
+    {
+     "host": "rdj--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 0,
+     "probes": 1,
+     "deferred_total": 2,
+     "deferred_remaining": 2,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 133.6
     },
     {
      "host": "surggor--hmao.sudrf.ru",
@@ -664,7 +694,22 @@
      "deferred_remaining": 1,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 48.2
+     "next_probe_in_seconds": 110.2
+    },
+    {
+     "host": "uganskray--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 0,
+     "probes": 1,
+     "deferred_total": 2,
+     "deferred_remaining": 2,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 156.7
     },
     {
      "host": "ugorsk--hmao.sudrf.ru",
@@ -674,12 +719,27 @@
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
      "skipped": 2,
+     "probes": 0,
+     "deferred_total": 3,
+     "deferred_remaining": 3,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 64.5
+    },
+    {
+     "host": "uray--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 1,
      "probes": 1,
      "deferred_total": 3,
      "deferred_remaining": 3,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 179.9
+     "next_probe_in_seconds": 41.7
     },
     {
      "host": "vartovgor--hmao.sudrf.ru",
@@ -698,11 +758,11 @@
     }
    ]
   },
-  "courts_unavailable": 5,
-  "courts_with_unrequested": 3,
+  "courts_unavailable": 9,
+  "courts_with_unrequested": 6,
   "courts_outage": 0,
-  "cards_unreachable": 38,
-  "cards_unread_other": 20,
+  "cards_unreachable": 41,
+  "cards_unread_other": 26,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
