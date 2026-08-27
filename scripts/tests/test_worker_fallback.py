@@ -219,15 +219,12 @@ class TestAddressConfig:
             "и спасает при проблемах кастомного домена."
         )
         m = re.search(r"PUSH_WORKER_FALLBACKS:\s*\[([^\]]*)\]", rf)
-        assert "api2-" in m.group(1), (
-            "Шлюз api2-*.delosud.ru (Cloud.ru → Cloudflare) обязан быть в "
-            "фолбэках: МТС/Мегафон режут TLS к адресам Cloudflare целиком, "
-            "для их пользователей это единственный живой путь."
-        )
-        assert m.group(1).find("api2-") < m.group(1).find("workers.dev"), (
-            "Шлюз стоит ПЕРВЫМ фолбэком: у операторов с блоком Cloudflare "
-            "workers.dev мёртв так же, как основной домен — очередь из двух "
-            "таймаутов по 10 с перед живым адресом ни к чему."
+        assert "api2-" not in m.group(1), (
+            "Шлюз api2-*.delosud.ru НЕ должен быть в фолбэках (убран "
+            "27.08.2026): он на поддомене того же молодого delosud.ru — "
+            "SNI-фильтр МТС/Мегафона режет его наравне с основным адресом "
+            "(сценария «шлюз жив, основной мёртв» нет), а канал VPS→CF душит "
+            "большие POST. Во фронте от него только лишний таймаут."
         )
 
     def test_wrangler_custom_domain_and_workers_dev(self):
