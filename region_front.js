@@ -12,7 +12,14 @@ window.REGION_FRONT = {
   // недоступности основного). Пустой PUSH_WORKER_URL по-прежнему значит
   // «синк выключен» — фолбэки при нём не используются. Совпадающий с
   // основным адрес отфильтровывается сам (дедуп в app.js).
-  PUSH_WORKER_FALLBACKS: ['https://court-monitor-trigger.7selivanov-a.workers.dev'],
+  // api2-* — шлюз на Cloud.ru (nginx → Cloudflare): МТС/Мегафон режут
+  // TLS-соединения к адресам Cloudflare целиком, для них живёт только он;
+  // стоит ПЕРВЫМ фолбэком (workers.dev у таких операторов мёртв так же,
+  // как основной домен, и очередь из двух таймаутов по 10 с ни к чему).
+  PUSH_WORKER_FALLBACKS: [
+    'https://api2-hmao.delosud.ru',
+    'https://court-monitor-trigger.7selivanov-a.workers.dev',
+  ],
   VAPID_PUBLIC_KEY: 'BOQM36gf407_Ebe_r-eDOJ8pjrlhhFlNefhwzmZMRdpgj6DPogIkmcWWxzoeDSlK9fzdNanoMYBLEQfKHg9cHNU',
   // Подпись региона в шапке до загрузки данных (данные перекрывают её
   // значением name_short из блока region).

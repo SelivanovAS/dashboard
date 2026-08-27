@@ -136,6 +136,21 @@ CLAUDE.md, раздел «Синхронизация подписок между
 CORS не менялся: `ALLOWED_ORIGIN` — это origin ФРОНТА (github.io), от адреса
 Worker'а он не зависит.
 
+**Шлюз api2-\*.delosud.ru (27.08.2026).** МТС и Мегафон оказались хуже:
+режут TLS-соединения к адресам Cloudflare ЦЕЛИКОМ (http проходит, https —
+`ERR_CONNECTION_CLOSED`; и workers.dev, и кастомный домен мертвы одинаково).
+Для них поднят шлюз: VPS Cloud.ru (Free Tier, IP 195.19.66.234, Ubuntu 24.04,
+nginx + certbot) проксирует `api2-hmao.delosud.ru` → `api-hmao.delosud.ru` и
+`api2-ural.delosud.ru` → `api-ural.delosud.ru` (DNS-записи в зоне —
+`proxied:false`, серая тучка ОБЯЗАТЕЛЬНА: оранжевая вернула бы трафик на IP
+Cloudflare и убила смысл). Шлюз стоит ПЕРВЫМ фолбэком в
+`PUSH_WORKER_FALLBACKS` обеих территорий; конфиг nginx —
+`/etc/nginx/sites-available/delosud-gw` на сервере, сертификаты Let's Encrypt
+обновляет `certbot.timer`. Доступ к серверу — только по SSH-ключу
+(`~/.ssh/delosud_gw` на Mac юриста). Проверено: sudrf пускает IP Cloud.ru
+(нормальная страница поиска) — сервер годится и под будущий перенос
+парсинга/прокси для GitHub-раннеров.
+
 ## Админка подписчиков
 
 URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
