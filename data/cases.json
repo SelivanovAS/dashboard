@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-27T07:35:24",
+  "updated_at": "2026-08-27T08:23:04",
   "cases": [
     {
       "id": "М-1864/2026",
@@ -15906,7 +15906,7 @@
           }
         ],
         "link": "11987605|3d335563-2e6f-47aa-8e5d-c2c5bc8a6ebb",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": false
       }
     },
@@ -17106,7 +17106,7 @@
           }
         ],
         "link": "12183413|352dfce6-5af1-4e54-a073-aa12f6637309",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-07-07"
@@ -19141,7 +19141,7 @@
           }
         ],
         "link": "11826855|5f269b35-2a75-4ece-9769-24d381f81517",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": false
       },
       "discovered_via_cassation": false
@@ -19518,7 +19518,7 @@
           }
         ],
         "link": "11959239|a616785d-7490-49de-af48-8e083c1899a5",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": false
       }
     },
@@ -20392,7 +20392,7 @@
           }
         ],
         "link": "11906294|56b2190e-dab4-4d70-9be7-0e08a06785f1",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": false
       }
     },
@@ -21796,7 +21796,7 @@
           }
         ],
         "link": "11561528|a41b20bc-491b-431c-87e2-bc48677cb74f",
-        "last_checked_at": "2026-08-26",
+        "last_checked_at": "2026-08-27",
         "discovered_via_cassation": true
       },
       "initial_bank_role": "Третье лицо"
