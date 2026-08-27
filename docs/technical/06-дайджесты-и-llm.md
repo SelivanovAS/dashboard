@@ -204,12 +204,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 1229](../../scripts/court_monitor/digest/llm.py#L1229). При `DIGEST_POLISH=1`
+[Строка 1233](../../scripts/court_monitor/digest/llm.py#L1233). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
 `_DIGEST_POLISH_SYSTEM_PROMPT` ([1078](../../scripts/court_monitor/digest/llm.py#L1078)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([1185](../../scripts/court_monitor/digest/llm.py#L1185)): проверяется контракт
+([1189](../../scripts/court_monitor/digest/llm.py#L1189)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 

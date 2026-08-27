@@ -1659,14 +1659,22 @@ def _filter_ctx_fi_changes_echo(
     Прогоняем сохранённые fi_changes через тот же фильтр по актуальному
     состоянию дел, чтобы переигранный дайджест не тащил эхо-события.
     Дела ищем и по id, и по first_instance.case_number (у дел «с апелляции»
-    id — апел. номер), в обеих формах (_bare_case_number). Дополнительно:
+    id — апел. номер), в обеих формах (_bare_case_number). ⚠️ Номера дел НЕ
+    уникальны между судами: матч только по номеру гасил чужим делом реальные
+    события банк-трека (27.08.2026: решение 2-381/2026 Пригородного погашено
+    эхо-фильтром апелляционного 2-381/2026 Нового Уренгоя — в доставленный
+    дайджест не попало). Кандидат принимается только с совпадающим судом:
+    по court_domain, при его отсутствии (103 дела «с апелляции» на Урале без
+    fi.court_domain) — по имени суда; когда сверить нечем с обеих сторон
+    (legacy-контекст) — как раньше. Ложный НЕматч безопаснее ложного матча:
+    цена — незадавленное эхо-событие, а не потерянная новость. Дополнительно:
     стародатный фильтр (suppress_stale_fi_events — работает по датам в самом
     change, матч с делом не нужен) и дедуп записей одного FI-дела
     (dedupe_fi_changes). Change'и без оставшихся типов выбрасываются целиком.
     """
     if not fi_changes:
         return fi_changes
-    idx: dict[str, dict] = {}
+    idx: dict[str, list[dict]] = {}
     for c in cases or []:
         for key in (
             (c.get("id") or ""),
@@ -1675,15 +1683,31 @@ def _filter_ctx_fi_changes_echo(
             key = key.strip()
             if not key:
                 continue
-            idx.setdefault(key, c)
-            base = _bare_case_number(key)
-            if base:
-                idx.setdefault(base, c)
+            for k in (key, _bare_case_number(key)):
+                if not k:
+                    continue
+                bucket = idx.setdefault(k, [])
+                if not any(cand is c for cand in bucket):
+                    bucket.append(c)
+
+    def _same_court(ch: dict, c: dict) -> bool:
+        fi = c.get("first_instance") or {}
+        ch_dom = ((ch.get("details") or {}).get("court_domain") or "").strip()
+        c_dom = (fi.get("court_domain") or "").strip()
+        if ch_dom and c_dom:
+            return ch_dom == c_dom
+        ch_court = (ch.get("court") or "").strip().casefold()
+        c_court = (fi.get("court") or "").strip().casefold()
+        if ch_court and c_court:
+            return ch_court == c_court
+        return True
+
     kept: list[dict] = []
     dropped = 0
     for ch in fi_changes:
         num = (ch.get("case") or "").strip()
-        case = idx.get(num) or idx.get(_bare_case_number(num))
+        cands = idx.get(num) or idx.get(_bare_case_number(num)) or []
+        case = next((c for c in cands if _same_court(ch, c)), None)
         if case is not None:
             dropped += len(suppress_fi_echo_events(case, ch))
         # Стародатные события фильтруем и без матча с делом — даты лежат

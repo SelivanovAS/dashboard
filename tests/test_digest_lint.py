@@ -523,3 +523,61 @@ class LintBankOverdueFoldTest(unittest.TestCase):
         self.assertIn("вступили в силу", html)
         self.assertIn("ИСКИ БАНКА (9)", html)
         self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+
+class LintArchiveFinalEventTest(unittest.TestCase):
+    """Клерикальное «дело передано в архив» и линтер (Урал 27.08.2026).
+
+    Рендер гасит fi_final_event про перенос в архив (`_strip_archive_final_events`,
+    просьба юриста 07.07.2026), а линтер перебирал ВЕСЬ fi_changes — дело
+    2-311/2026 (трек банка, единственное событие дня — архивный перенос,
+    стародатный фильтр погасил fi_act_text_published) дало ложный 🩺
+    «потерян номер дела» при корректном дайджесте.
+    """
+
+    @staticmethod
+    def _archive_change(case: str = "2-311/2026") -> dict:
+        return make_fi_change(
+            ["fi_final_event"],
+            {"event": "Дело передано в архив. 16:50. 25.08.2026",
+             "last_event": "Дело передано в архив. 16:50. 25.08.2026",
+             "event_date": "25.08.2026"},
+            case=case, track="plaintiff_light",
+        )
+
+    def test_archive_only_change_not_expected(self):
+        """Единственный тип — архивный перенос: строки в HTML нет, линтер молчит."""
+        ctx = _ctx(fi_changes=[
+            self._archive_change(),
+            make_fi_change(["fi_writ_issued"], case="2-500/2026",
+                           track="plaintiff_light"),
+        ])
+        html = render(**ctx)
+        self.assertNotIn("2-311/2026", html)   # рендер гасит по замыслу
+        self.assertIn("2-500/2026", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+
+    def test_archive_with_other_type_still_expected(self):
+        """Рядом с архивным событием есть настоящее — номер обязателен."""
+        ch = self._archive_change()
+        ch["type"] = ["fi_writ_issued", "fi_final_event"]
+        ch["details"].update({"writ_number": "ФС № 123",
+                              "writ_kind": "enforcement"})
+        ctx = _ctx(fi_changes=[ch])
+        html = render(**ctx)
+        self.assertIn("2-311/2026", html)
+        self.assertEqual(uc.lint_digest_html(html, **ctx), [])
+        broken = html.replace("2-311/2026", "X-000/0000")
+        problems = uc.lint_digest_html(broken, **ctx)
+        self.assertTrue(any("2-311/2026" in p for p in problems), problems)
+
+    def test_polish_validator_mirrors_the_gate(self):
+        """Зеркало в _collect_case_numbers (валидатор полировщика)."""
+        from court_monitor.digest import llm as cm_llm
+        nums = cm_llm._collect_case_numbers(fi_changes=[
+            self._archive_change(),
+            make_fi_change(["fi_writ_issued"], case="2-500/2026",
+                           track="plaintiff_light"),
+        ])
+        self.assertNotIn("2-311/2026", nums)
+        self.assertIn("2-500/2026", nums)

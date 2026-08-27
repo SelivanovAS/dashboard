@@ -1025,6 +1025,88 @@ class TestReplayEchoFilter:
         ch = [{"case": "2-10/2026", "type": ["fi_resolved"], "details": {}}]
         assert cm_runs._filter_ctx_fi_changes_echo(ch, []) == ch
 
+    # Номера дел НЕ уникальны между судами: матч только по номеру гасил
+    # чужим делом реальные события (27.08.2026: решение банк-дела
+    # 2-381/2026 Пригородного погашено эхо-фильтром апелляционного
+    # 2-381/2026 Нового Уренгоя и не попало в доставленный дайджест).
+
+    def test_same_number_other_court_not_suppressed(self):
+        from court_monitor import runs as cm_runs
+        cases = [
+            {"id": "33-2176/2026",
+             "first_instance": {
+                 "case_number": "2-381/2026",
+                 "court": "Новоуренгойский городской суд",
+                 "court_domain": "novourengoysky--ynao.sudrf.ru"},
+             "appeal": {"case_number": "33-2176/2026"}},
+        ]
+        fi_changes = [
+            {"case": "2-381/2026", "type": ["fi_resolved"],
+             "court": "Пригородный районный суд",
+             "details": {"court_domain": "prigorodny--svd.sudrf.ru"}},
+        ]
+        kept = cm_runs._filter_ctx_fi_changes_echo(fi_changes, cases)
+        assert [ch["case"] for ch in kept] == ["2-381/2026"]
+        assert kept[0]["type"] == ["fi_resolved"]
+
+    def test_same_number_no_domain_falls_back_to_court_name(self):
+        # У 103 дел «с апелляции» fi.court_domain пуст — чужого выдаёт имя суда.
+        from court_monitor import runs as cm_runs
+        cases = [
+            {"id": "33-14523/2026",
+             "first_instance": {
+                 "case_number": "2-368/2026",
+                 "court": "Октябрьский районный суд г. Екатеринбурга"},
+             "appeal": {"case_number": "33-14523/2026"}},
+        ]
+        fi_changes = [
+            {"case": "2-368/2026", "type": ["fi_act_text_published"],
+             "court": "Качканарский городской суд",
+             "details": {"court_domain": "kachkanarsky--svd.sudrf.ru"}},
+        ]
+        kept = cm_runs._filter_ctx_fi_changes_echo(fi_changes, cases)
+        assert [ch["case"] for ch in kept] == ["2-368/2026"]
+        assert kept[0]["type"] == ["fi_act_text_published"]
+
+    def test_matching_court_still_suppressed(self):
+        # Тот же суд (домен совпал) — эхо давится, как и раньше.
+        from court_monitor import runs as cm_runs
+        cases = [
+            {"id": "33-100/2026",
+             "first_instance": {
+                 "case_number": "2-10/2026",
+                 "court_domain": "vartovgor--hmao.sudrf.ru"},
+             "appeal": {"case_number": "33-100/2026"}},
+        ]
+        fi_changes = [
+            {"case": "2-10/2026", "type": ["fi_resolved"],
+             "details": {"court_domain": "vartovgor--hmao.sudrf.ru"}},
+        ]
+        assert cm_runs._filter_ctx_fi_changes_echo(fi_changes, cases) == []
+
+    def test_right_case_chosen_among_namesakes(self):
+        # Однофамильцы по номеру: сверка выбирает дело СВОЕГО суда,
+        # даже когда чужое стоит в списке первым.
+        from court_monitor import runs as cm_runs
+        cases = [
+            {"id": "33-2176/2026",
+             "first_instance": {
+                 "case_number": "2-381/2026",
+                 "court_domain": "novourengoysky--ynao.sudrf.ru"},
+             "appeal": {"case_number": "33-2176/2026"}},
+            {"id": "33-777/2026",
+             "first_instance": {
+                 "case_number": "2-381/2026",
+                 "court_domain": "prigorodny--svd.sudrf.ru"},
+             "appeal": {"case_number": "33-777/2026"}},
+        ]
+        fi_changes = [
+            {"case": "2-381/2026", "type": ["fi_resolved"],
+             "details": {"court_domain": "prigorodny--svd.sudrf.ru"}},
+        ]
+        # Совпал второй кандидат — у него связана апелляция, эхо давится.
+        assert cm_runs._filter_ctx_fi_changes_echo(fi_changes, cases) == []
+
 
 class TestIsCaseArchived:
     def test_fi_resolved_overdue_no_appeal_is_archived(self):
