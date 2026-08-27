@@ -1156,15 +1156,19 @@ def _collect_case_numbers(
         n = (ch.get("case") or "").strip()
         if n:
             nums.add(n)
-    # Свёрнутые «заведено N новых исков банка» в HTML номеров не дают —
-    # симметрично линтеру (lint._expected_number_alternatives). Без гейта
+    # Фильтры рендера — симметрично линтеру (lint._expected_number_alternatives):
+    # change с единственным клерикальным «дело передано в архив» и свёрнутые
+    # «заведено N новых исков банка» номеров в HTML не дают. Без гейтов
     # валидатор полировщика при DIGEST_POLISH=1 отвергал бы КАЖДУЮ полировку
-    # в дни разгона территории.
-    from court_monitor.digest.template import split_bank_intake_fold
+    # в дни разгона территории или архивного переноса решённого дела.
+    from court_monitor.digest.template import (
+        _strip_archive_final_events, split_bank_intake_fold,
+    )
+    _fi_rendered = _strip_archive_final_events(list(fi_changes or []))
     _folded_ids = {id(ch) for ch in
-                   split_bank_intake_fold([ch for ch in (fi_changes or [])
+                   split_bank_intake_fold([ch for ch in _fi_rendered
                                            if ch.get("track")])[1]}
-    for ch in fi_changes or []:
+    for ch in _fi_rendered:
         if id(ch) in _folded_ids:
             continue
         n = (ch.get("case") or "").strip()

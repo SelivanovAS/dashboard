@@ -70,7 +70,7 @@
 | `RegionConfig` (регион-конфиг: суды, маркеры, public_info) | [scripts/court_monitor/regions/base.py:170](scripts/court_monitor/regions/base.py:170) |
 | `CourtConfig.search_gated` (капча: у 1-й инст. поиск ВЫКЛ; у апелляции — «код ожидаем»: поиск идёт, но капча не авария) | [scripts/court_monitor/regions/base.py:39](scripts/court_monitor/regions/base.py:39) |
 | `appeal_intake.py` (конвертеры строки выдачи апелляции: прогон + дамп) | [scripts/court_monitor/appeal_intake.py:25](scripts/court_monitor/appeal_intake.py:25) |
-| `announce_imported_appeal_cases` (дела из дампа апелляции → «Новые дела», один раз) | [scripts/court_monitor/runs.py:1894](scripts/court_monitor/runs.py:1894) |
+| `announce_imported_appeal_cases` (дела из дампа апелляции → «Новые дела», один раз) | [scripts/court_monitor/runs.py:1918](scripts/court_monitor/runs.py:1918) |
 | `courts_for_search` (суды автопоиска: enabled и не gated) | [scripts/court_monitor/courts.py:43](scripts/court_monitor/courts.py:43) |
 | `_FI_CASE_NUM_RE` (номер дела 1-й инст.; средний сегмент — постоянное присутствие: Покачи «2-2-279/2026», без него суд невидим целиком) | [scripts/court_monitor/textutil.py:43](scripts/court_monitor/textutil.py:43) |
 | `fi_health_key` (ключ журнала здоровья; `#2` у второго сервера домена — иначе Покачи затирал наблюдение районного) | [scripts/court_monitor/runs.py:120](scripts/court_monitor/runs.py:120) |
@@ -85,14 +85,14 @@
 | `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1150](scripts/court_monitor/lifecycle.py:1150) |
 | `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1177](scripts/court_monitor/lifecycle.py:1177) |
 | `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:2043](scripts/court_monitor/lifecycle.py:2043) |
-| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1922](scripts/court_monitor/runs.py:1922) |
+| `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1946](scripts/court_monitor/runs.py:1946) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
 | `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:50](scripts/court_monitor/bank_intake.py:50) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
 | `_stamp_appeal_flags` (флаги жалобы + ДВИЖЕНИЕ жалобы + апеллянт из карточки в запись) | [scripts/court_monitor/bank_intake.py:280](scripts/court_monitor/bank_intake.py:280) |
 | `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1128](scripts/court_monitor/lifecycle.py:1128) |
-| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1829](scripts/court_monitor/runs.py:1829) |
-| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:2031](scripts/court_monitor/runs.py:2031) |
+| `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1853](scripts/court_monitor/runs.py:1853) |
+| `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:2055](scripts/court_monitor/runs.py:2055) |
 | `fi_not_accepted_kind` (иск к производству не принят: возврат / отказ в принятии / передача по подсудности — каналы приёма такое дело не заводят) | [scripts/court_monitor/lifecycle.py:441](scripts/court_monitor/lifecycle.py:441) |
 | `_FI_MERGED_RX` (присоединение к делу; ТОЛЬКО поле «Результат») | [scripts/court_monitor/lifecycle.py:174](scripts/court_monitor/lifecycle.py:174) |
 | `repair_cancelled_merges` (объединение отменили → снять флаги) | [scripts/court_monitor/lifecycle.py:501](scripts/court_monitor/lifecycle.py:501) |
@@ -132,13 +132,13 @@
 | `link_cassation_cases` (link + discovery + remanded + архив + дедуп актов + бэкфилл сторон из УЧАСТНИКОВ 7kas; ⚠ признак «карточки ещё не было» для `new_cassation` — ОТСУТСТВИЕ `cassation.case_number`, а не пустота блока: `_apply_fi_cassator` кладёт туда заглушку с одним заявителем, и прежнее `if not old_cass` глушило объявление поступления в кассацию — 9 дел молча, 09–31.07.2026) | [scripts/court_monitor/linking.py:529](scripts/court_monitor/linking.py:529) |
 | `parties_from_participants` (УЧАСТНИКИ → истец/ответчик; кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий стороны пусты и касс. запись дайджеста вырождается в голый 8Г-номер) | [scripts/court_monitor/parsing/search.py:142](scripts/court_monitor/parsing/search.py:142) |
 | `update_active_cases` (обход карточек активных дел) | [scripts/court_monitor/runs.py:592](scripts/court_monitor/runs.py:592) |
-| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2339](scripts/court_monitor/runs.py:2339) |
+| `main_json` (оркестрация полного прогона) | [scripts/court_monitor/runs.py:2363](scripts/court_monitor/runs.py:2363) |
 | `GIGACHAT_SYSTEM_PROMPT` | [scripts/court_monitor/digest/llm.py:121](scripts/court_monitor/digest/llm.py:121) |
 | `def generate_digest` — диспетчер дайджеста | [scripts/court_monitor/digest/core.py:333](scripts/court_monitor/digest/core.py:333) |
 | `summarize_act_motivation` — LLM-пересказ акта | [scripts/court_monitor/digest/llm.py:947](scripts/court_monitor/digest/llm.py:947) |
-| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:1229](scripts/court_monitor/digest/llm.py:1229) |
+| `polish_digest_html` — LLM-полировщик (опц.) | [scripts/court_monitor/digest/llm.py:1233](scripts/court_monitor/digest/llm.py:1233) |
 | Пост-обработка HTML (`_ensure_*`/`_validate_*`/`_drop_*`/`_normalize_*`) | весь [scripts/court_monitor/digest/postprocess.py](scripts/court_monitor/digest/postprocess.py) |
-| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1370](scripts/court_monitor/digest/llm.py:1370) |
+| Claude model: `claude-haiku-4-5-20251001` (`_current_digest_model_name`) | [scripts/court_monitor/digest/llm.py:1374](scripts/court_monitor/digest/llm.py:1374) |
 | `def generate_template_digest` — программный рендер | [scripts/court_monitor/digest/template.py:322](scripts/court_monitor/digest/template.py:322) |
 | доставка: `send_telegram` | [scripts/court_monitor/delivery.py:704](scripts/court_monitor/delivery.py:704) |
 | PWA push: `send_web_push` | [scripts/court_monitor/delivery.py:517](scripts/court_monitor/delivery.py:517) |
