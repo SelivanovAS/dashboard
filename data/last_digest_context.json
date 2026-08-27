@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-08-27T06:35:20",
+  "saved_at": "2026-08-27T07:35:25",
   "new_cases": [],
   "changes": [
     {
@@ -1563,14 +1563,353 @@
         "overdue_days": 30,
         "legal_force_date": "28.07.2026"
       }
+    },
+    {
+      "case": "2-3391/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Гальченко Олег Анатольевич, Капутская Тамара Николаевна, Поповкин Алексей Сергеевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "257443533|c24ac756-75c1-455b-b6ca-c438013baa30",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "hearing_date": "25.09.2026",
+        "hearing_time": "12:15",
+        "hearing_type": "заседание",
+        "old_status": "",
+        "new_status": "В производстве"
+      }
+    },
+    {
+      "case": "2-5609/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Пайцева Тамара Сергеевна, Сорокин Сергей Владимирович",
+      "defendant": "Альфа Банк АО, АО ТБанк, Банк ВТБ ПАО, ООО Озон Банк, Сбербанк России ПАО",
+      "bank_role": "Ответчик",
+      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "268362317|8fd38a3f-71e9-4efe-b001-309f5fb39e95",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "hearing_date": "11.11.2026",
+        "hearing_time": "09:00",
+        "hearing_type": "предварительное заседание"
+      }
+    },
+    {
+      "case": "2-9512/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Пулотова Шахло Тоирджоновна",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "281686394|d40f39a0-95f5-40d1-9a32-d65b4d831cc6",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "hearing_date": "02.10.2026",
+        "hearing_time": "08:50",
+        "hearing_type": "подготовка дела"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-9480/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Мамедова Лала Закарийя кызы",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_final_event"
+      ],
+      "details": {
+        "link": "281658324|39a0f983-fc7e-4e92-aef0-41a4bcd1b831",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "event": "Подготовка дела (собеседование). 08:40. Зал судебного заседания 505. 26.08.2026",
+        "event_date": "25.09.2026",
+        "scheduled_hearing_date": "25.09.2026",
+        "scheduled_hearing_time": "08:40"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-9519/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Огаркова Виктория Владимировна",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "281588368|d2cb7e06-70bd-4074-9c1d-bcb39539254f",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "hearing_date": "20.10.2026",
+        "hearing_time": "14:45",
+        "hearing_type": "предварительное заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-2646/2026",
+      "court": "Нефтеюганский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Ченгаев Леонид Владимирович",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_next"
+      ],
+      "details": {
+        "link": "279270411|8466295e-9fb2-45c9-ba64-2a4878105eef",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "hearing_date": "05.09.2026",
+        "hearing_time": "08:30",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-3025/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "ЗАЛАН НИКИТА ОЛЕГОВИЧ",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_next"
+      ],
+      "details": {
+        "link": "279275252|4a8daa71-3c1a-419c-8809-fcabd64560f5",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "hearing_date": "02.09.2026",
+        "hearing_time": "11:00",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-3027/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "plaintiff": "Публичное акционерное общество «Сбербанк России» в лице филиала Уральский банк",
+      "defendant": "ЗОЛЬНИКОВ МАКСИМ МИХАЙЛОВИЧ, ООО \"ЮГРАДОРСТРОЙ\"",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_next"
+      ],
+      "details": {
+        "link": "279275713|993a78e1-2578-4743-b47e-c436b60da3eb",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "hearing_date": "02.09.2026",
+        "hearing_time": "10:20",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-2920/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Уральский Банк ПАО Сбербанк",
+      "defendant": "Хажоков Аслан Схатбиевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_returned"
+      ],
+      "details": {
+        "link": "278995206|db8038ee-d2ac-46bf-8685-e916a1018dec",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "termination_kind": "transfer",
+        "return_reason": "",
+        "event_text": "Судебное заседание. 15:00. Дело передано на рассмотрение другого суда. 13.08.2026",
+        "bank_outcome": "",
+        "termination_date": "26.08.2026"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-2-204/2026",
+      "court": "Нижневартовский районный суд (г. Покачи)",
+      "plaintiff": "Публичное акционерное общество \"Сбербанк\"",
+      "defendant": "Давлетшина Елена Юрьевна",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "277105088|6d1d318e-8009-4a64-934d-c33caca03cd8",
+        "court_domain": "vartovray--hmao.sudrf.ru",
+        "old_hearing_date": "24.08.2026",
+        "old_hearing_time": "15:30",
+        "hearing_date": "31.08.2026",
+        "hearing_time": "10:00",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "М-7680/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Уразов Сергей Юсупович, Уразова Светлана Николаевна",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "link": "281765839|84411991-a14c-454f-bd7d-886d1b122d3b",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "25.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-7679/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Джафарова Гюльджахан Ибрагим кызы, ИП ДЖафаров Орхан Аяз оглы",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "link": "281765833|f8b05533-e4d4-4af2-a40a-21e46324f12c",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "25.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-5663/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Агаджанов Бахрам Балоглан оглы",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "link": "281777661|a03fc08f-df36-4e1e-b8d7-bb67c404be1c",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "26.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-5662/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Харлов Данил Вячеславович",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "link": "281777649|62133b2b-3b0c-4b61-bb72-d1d1c8c3c23a",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "26.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-5645/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Харлов Данил Вячеславович",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "link": "281778391|48ff332e-b2c8-49b6-8319-580b066f52e5",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "26.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-420/2026",
+      "court": "Кондинский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Уральский Банк ПАО Сбербанк",
+      "defendant": "Орлов Дмитрий Николаевич",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "kondinsk--hmao.sudrf.ru",
+        "link": "281673230|2a307fcc-11af-4337-809a-f11745db574c",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "25.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "2-399/2026",
+      "court": "Кондинский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала -Югорское отделение № 5940",
+      "defendant": "Горяева Татьяна Викторовна",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "kondinsk--hmao.sudrf.ru",
+        "link": "281641755|bce2f342-f52a-48a0-aa62-51c06e4f8b69",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "24.08.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-537/2026",
+      "court": "Югорский районный суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Смолкин Павел Анатольевич",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "ugorsk--hmao.sudrf.ru",
+        "link": "281645900|31d38abf-fc47-4080-92eb-dc32717376d0",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "24.08.2026",
+        "left_track": false
+      }
     }
   ],
   "total_active_appeal": 25,
   "total_active_fi": 31,
   "total_active_cassation": 26,
-  "total_active_bank": 363,
+  "total_active_bank": 370,
   "cass_changes": [],
   "cass_discovered": [],
   "issue_key": "2026-08-27T06:35:20",
-  "updated_at": "2026-08-27T06:35:20"
+  "updated_at": "2026-08-27T07:35:25"
 }
