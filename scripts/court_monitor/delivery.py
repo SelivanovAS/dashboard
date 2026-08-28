@@ -911,6 +911,9 @@ def log_run_summary(
             f"из кэша {config.METRICS['llm_summary_cache_hits']}"
             + (f", спасено фолбэком {config.METRICS['llm_summary_fallback_saved']}"
                if config.METRICS["llm_summary_fallback_saved"] else "")
+            + (", спасено Claude "
+               f"{config.METRICS['llm_summary_provider_fallback_saved']}"
+               if config.METRICS["llm_summary_provider_fallback_saved"] else "")
             + (f", сбоев {config.METRICS['llm_summary_failed']} (откат на excerpt)"
                if config.METRICS["llm_summary_failed"] else "")
         )

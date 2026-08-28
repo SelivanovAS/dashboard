@@ -969,7 +969,9 @@ def summarize_act_motivation(
     config.OPENROUTER_SUMMARY_RETRIES попыток на основной модели с
     нарастающей паузой, затем фолбэк-модель OPENROUTER_FALLBACK_MODEL
     (openrouter/free) с config.OPENROUTER_SUMMARY_FALLBACK_RETRIES
-    попытками — и только потом None.
+    попытками, затем — при config.LLM_SUMMARY_PROVIDER_FALLBACK и живом
+    ANTHROPIC_API_KEY — одна попытка фолбэк-провайдера Claude, и только
+    потом None.
 
     Если ключа текущего провайдера нет вовсе (Mac-резерв), пересказ
     пропускается ДО вызова: `llm_summary_skipped_no_key` вместо
@@ -1041,6 +1043,32 @@ def summarize_act_motivation(
                 config.METRICS["llm_summary_fallback_saved"] += 1
                 log.info(f"Пересказ акта{who}: выручила фолбэк-модель {fallback}")
                 model_label = f"openrouter:{fallback}"
+        # Фолбэк-ПРОВАЙДЕР: бесплатный пул лёг целиком (и «модель дня», и
+        # openrouter/free исчерпали попытки) — одна попытка на боевом Claude,
+        # если его ключ есть в env (в replay/кроне прокинут всегда; на
+        # Mac-резерве ключей нет вовсе — туда не доходим, missing_llm_key_name
+        # отсёк раньше). Без этой ветки пересказ теряется НАВСЕГДА: акт
+        # объявляется один раз, и сырой отрывок замерзает в дайджесте и
+        # «AI анализе» drawer'а (инцидент 28.08.2026, Урал — оба акта
+        # выпуска). Кэш-ключ остаётся в openrouter-неймспейсе, поле model
+        # честно называет автора — тот же механизм, что у фолбэк-модели.
+        if (not summary and config.LLM_SUMMARY_PROVIDER_FALLBACK
+                and config.ANTHROPIC_API_KEY):
+            config.METRICS["llm_summary_calls"] += 1
+            claude_raw = _call_claude_simple(prompt)
+            summary = _clean_summary(claude_raw) if claude_raw else ""
+            if claude_raw:
+                # Пустой ответ Claude не затирает raw: WARNING «отбракован
+                # чисткой» ниже должен показывать голову последнего
+                # НЕПУСТОГО ответа, а не молчать «пустой ответ LLM».
+                raw = claude_raw
+            if summary:
+                config.METRICS["llm_summary_provider_fallback_saved"] += 1
+                log.info(
+                    f"Пересказ акта{who}: выручил фолбэк-провайдер claude "
+                    f"({config.CLAUDE_MODEL})"
+                )
+                model_label = f"claude:{config.CLAUDE_MODEL}"
     else:
         config.METRICS["llm_summary_calls"] += 1
         raw = _call_once()

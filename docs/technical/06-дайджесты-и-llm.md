@@ -204,12 +204,12 @@ LLM реально «думает». Алгоритм:
 
 ## Полировщик (опционально) — `polish_digest_html`
 
-[Строка 1233](../../scripts/court_monitor/digest/llm.py#L1233). При `DIGEST_POLISH=1`
+[Строка 1261](../../scripts/court_monitor/digest/llm.py#L1261). При `DIGEST_POLISH=1`
 черновой HTML отправляется в LLM с системным промптом
-`_DIGEST_POLISH_SYSTEM_PROMPT` ([1078](../../scripts/court_monitor/digest/llm.py#L1078)) для
+`_DIGEST_POLISH_SYSTEM_PROMPT` ([1106](../../scripts/court_monitor/digest/llm.py#L1106)) для
 косметики (капитализация, жирные даты, склонения, сокращение длинных категорий).
 Результат проходит `_validate_polished_html`
-([1189](../../scripts/court_monitor/digest/llm.py#L1189)): проверяется контракт
+([1217](../../scripts/court_monitor/digest/llm.py#L1217)): проверяется контракт
 `<a><b>НОМЕР</b></a>`, наличие `DASHBOARD_URL`, длина. **Если валидация не прошла
 — откат к черновику.** Принцип: полировщик не может сделать хуже.
 
@@ -278,7 +278,7 @@ LLM реально «думает». Алгоритм:
 
 Лимит Telegram — 4096 символов на сообщение; длинный дайджест автоматически
 режется на части (`split_message`, см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([666](../../scripts/court_monitor/config.py#L666)).
+Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([678](../../scripts/court_monitor/config.py#L678)).
 
 ## Разбор акта в карточке (`act_analysis`)
 
