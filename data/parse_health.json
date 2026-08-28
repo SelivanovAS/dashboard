@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-28T07:42:22",
+ "updated_at": "2026-08-28T08:12:24",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,28 +556,28 @@
   }
  },
  "last_run": {
-  "at": "2026-08-28T07:42:22",
+  "at": "2026-08-28T08:12:24",
   "requests_ok": 36,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 0,
-  "cards_read": 35,
+  "cards_blocked": 3,
+  "cards_read": 32,
   "cards_planned": 35,
   "cards_read_today": 252,
   "cards_planned_today": 252,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
-    "read": 33,
+    "read": 31,
     "planned": 33,
     "read_today": 210,
     "planned_today": 210
    },
    "appeal": {
-    "read": 2,
+    "read": 1,
     "planned": 2,
     "read_today": 35,
     "planned_today": 35
@@ -591,12 +591,21 @@
   },
   "latency": {
    "n": 36,
-   "p50": 0.5,
-   "p90": 1.1,
-   "max": 1.3
+   "p50": 0.6,
+   "p90": 3.1,
+   "max": 3.4
   },
-  "failure_latency": {},
-  "fail_kinds": {},
+  "failure_latency": {
+   "portal_placeholder": {
+    "n": 3,
+    "p50": 3.2,
+    "p90": 3.4,
+    "max": 3.4
+   }
+  },
+  "fail_kinds": {
+   "portal_placeholder": 3
+  },
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -615,7 +624,7 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 0,
+  "cards_unread_other": 3,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
