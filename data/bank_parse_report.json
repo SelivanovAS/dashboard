@@ -4,9 +4,9 @@
   "smart_skip": true,
   "totals": {
     "total": 548,
-    "parsed": 30,
+    "parsed": 26,
     "skip": 518,
-    "failed": 0,
+    "failed": 4,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -301,9 +301,9 @@
       "last_checked_at": "2026-08-28"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -319,9 +319,9 @@
       "last_checked_at": "2026-08-28"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -697,9 +697,9 @@
       "last_checked_at": "2026-08-28"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -931,9 +931,9 @@
       "last_checked_at": "2026-08-25"
     },
     {
-      "outcome": "parsed",
+      "outcome": "fetch_blocked",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9877,5 +9877,5 @@
       "last_checked_at": "2026-08-28"
     }
   ],
-  "updated_at": "2026-08-28T08:42:10"
+  "updated_at": "2026-08-28T08:58:16"
 }
