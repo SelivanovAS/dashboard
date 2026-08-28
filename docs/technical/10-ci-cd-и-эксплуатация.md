@@ -64,16 +64,27 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 наличие ключей на старте; `check_court_available` ([1227](../../scripts/court_monitor/runs.py#L1227))
 — доступность сайта суда.
 
-## Ежедневный прогон (временная схема D2, с 03.07.2026)
+## Ежедневный прогон (схема D2; с 28.08.2026 — на VPS)
 
-> ⚠️ **Временное решение.** Суды `*.sudrf.ru` дропают TLS с иностранных IP →
-> GitHub Actions больше не может их парсить; Claude, наоборот, недоступен из РФ.
-> Поэтому парсинг выполняет **Mac юриста** (LaunchAgent
-> `com.court-monitor.parse`, будни 06:00–08:30 каждые 30 минут + 08:45,
-> сеть Сбера или режим `--anywhere`), а дайджест и
-> доставку — GitHub по факту push'а. **В будущем парсинг переедет на сервер
-> (RU VPS)**, и эта секция будет переписана. Установка/логи/откат Mac-звена —
-> [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
+> 🖥 **С 28.08.2026 прогон выполняет VPS Cloud.ru** (195.19.66.234, Ubuntu
+> 24.04, egress РФ, TZ Asia/Yekaterinburg) — те же скрипты Mac-звена через
+> тонкие шимы [`ops/vps-run/`](../../ops/vps-run/README.md): systemd-таймеры
+> `court-parse.timer` (будни 06:00–08:30/30 мин + 08:45) и
+> `court-import.timer` (10:30–18:30/2 ч) зовут `parse_all.sh`/`import_all.sh`,
+> которые exec'ают боевые `ops/mac-local-run/*` с `--anywhere`. Вся цепочка
+> ниже описывает и VPS — своей логики у шимов нет. **Mac-агенты выгружены**
+> (`launchctl unload`, plist на месте) — Mac стал ручным резервом: откат =
+> `systemctl disable --now` таймеров VPS + `launchctl load` на Mac;
+> одновременно две машины работать не должны (гейт «один дайджест в день»
+> межхостовую гонку не ловит). Установка/наблюдение/откат —
+> [`ops/vps-run/README.md`](../../ops/vps-run/README.md).
+
+> ⚠️ **Предыстория.** Суды `*.sudrf.ru` дропают TLS с иностранных IP →
+> GitHub Actions больше не может их парсить; Claude, наоборот, недоступен из
+> РФ. С 19.08.2026 парсинг выполнял **Mac юриста** (LaunchAgent
+> `com.court-monitor.parse`, те же слоты, сеть Сбера или режим `--anywhere`),
+> а дайджест и доставку — GitHub по факту push'а. Установка/логи/откат
+> Mac-звена — [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
 
 Цепочка: `parse_all.sh` один раз готовит маршруты обоих регионов, запускает
 Урал сразу и ХМАО через 10 минут, ждёт оба поклоновых `parse_and_push.sh`, после
