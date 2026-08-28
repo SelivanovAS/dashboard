@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-27T08:51:54",
+ "updated_at": "2026-08-28T06:28:08",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -23,7 +23,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-27T06:35:20",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Апелляция (Суд ХМАО-Югры)"
   },
   "fi:surggor--hmao.sudrf.ru": {
@@ -31,7 +31,6 @@
     0,
     0,
     0,
-    0,
     18,
     18,
     0,
@@ -41,13 +40,14 @@
     0,
     18,
     0,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Сургутский городской суд"
   },
   "fi:surgray--hmao.sudrf.ru": {
@@ -56,7 +56,6 @@
     0,
     0,
     0,
-    0,
     19,
     0,
     0,
@@ -65,13 +64,14 @@
     0,
     19,
     0,
+    19,
     19
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Сургутский районный суд"
   },
   "fi:vartovgor--hmao.sudrf.ru": {
@@ -79,7 +79,6 @@
     0,
     0,
     0,
-    0,
     23,
     23,
     0,
@@ -89,13 +88,14 @@
     0,
     23,
     0,
+    23,
     23
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 23,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Нижневартовский городской суд"
   },
   "fi:vartovray--hmao.sudrf.ru": {
@@ -103,7 +103,6 @@
     0,
     0,
     0,
-    0,
     20,
     20,
     0,
@@ -113,13 +112,14 @@
     0,
     20,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Нижневартовский районный суд"
   },
   "fi:hmray--hmao.sudrf.ru": {
@@ -127,7 +127,6 @@
     0,
     0,
     0,
-    0,
     17,
     17,
     0,
@@ -137,13 +136,14 @@
     0,
     17,
     0,
-    17
+    17,
+    18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-08-27T07:35:24",
-   "last_count": 17,
+   "last_run_at": "2026-08-28T06:28:08",
+   "last_count": 18,
    "label": "Ханты-Мансийский районный суд"
   },
   "fi:uray--hmao.sudrf.ru": {
@@ -151,7 +151,6 @@
     0,
     0,
     0,
-    0,
     22,
     22,
     0,
@@ -161,12 +160,13 @@
     0,
     22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "last_count": 22,
    "label": "Урайский городской суд"
   },
@@ -176,7 +176,6 @@
     0,
     0,
     0,
-    0,
     14,
     0,
     0,
@@ -185,13 +184,14 @@
     0,
     14,
     0,
+    14,
     14
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 14,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Няганский городской суд"
   },
   "fi:uganskray--hmao.sudrf.ru": {
@@ -199,7 +199,6 @@
     0,
     0,
     0,
-    0,
     18,
     18,
     0,
@@ -209,13 +208,14 @@
     0,
     18,
     0,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Нефтеюганский районный суд"
   },
   "fi:kogalym--hmao.sudrf.ru": {
@@ -224,7 +224,6 @@
     0,
     0,
     0,
-    0,
     20,
     20,
     0,
@@ -233,18 +232,18 @@
     0,
     20,
     0,
-    20
+    20,
+    19
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 20,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_count": 19,
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Когалымский городской суд"
   },
   "fi:kondinsk--hmao.sudrf.ru": {
    "counts": [
-    22,
     0,
     0,
     0,
@@ -257,13 +256,14 @@
     0,
     0,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Кондинский районный суд"
   },
   "fi:langepas--hmao.sudrf.ru": {
@@ -272,7 +272,6 @@
     0,
     0,
     0,
-    0,
     24,
     24,
     0,
@@ -281,13 +280,14 @@
     0,
     0,
     0,
+    24,
     24
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 24,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Лангепасский городской суд"
   },
   "fi:megion--hmao.sudrf.ru": {
@@ -296,7 +296,6 @@
     0,
     0,
     0,
-    0,
     21,
     21,
     0,
@@ -305,13 +304,14 @@
     0,
     21,
     0,
+    21,
     21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 21,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Мегионский городской суд"
   },
   "fi:sovetsk--hmao.sudrf.ru": {
@@ -320,7 +320,6 @@
     0,
     0,
     0,
-    0,
     21,
     21,
     0,
@@ -329,13 +328,14 @@
     0,
     21,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Советский районный суд"
   },
   "fi:ugorsk--hmao.sudrf.ru": {
@@ -344,7 +344,6 @@
     0,
     0,
     0,
-    0,
     17,
     17,
     0,
@@ -353,19 +352,19 @@
     0,
     18,
     0,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Югорский районный суд"
   },
   "fi:bel--hmao.sudrf.ru": {
    "counts": [
     19,
-    19,
     0,
     0,
     0,
@@ -377,18 +376,18 @@
     0,
     18,
     0,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Белоярский городской суд"
   },
   "fi:pth--hmao.sudrf.ru": {
    "counts": [
-    22,
     0,
     0,
     0,
@@ -401,18 +400,18 @@
     0,
     22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Пыть-Яхский городской суд"
   },
   "fi:berezovo--hmao.sudrf.ru": {
    "counts": [
-    0,
     21,
     0,
     0,
@@ -425,18 +424,18 @@
     0,
     20,
     0,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Берёзовский районный суд"
   },
   "fi:rdj--hmao.sudrf.ru": {
    "counts": [
-    22,
     0,
     0,
     0,
@@ -449,18 +448,18 @@
     0,
     22,
     0,
+    22,
     22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Радужнинский городской суд"
   },
   "fi:oktb--hmao.sudrf.ru": {
    "counts": [
-    24,
     0,
     0,
     0,
@@ -473,19 +472,19 @@
     0,
     24,
     0,
+    24,
     24
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 24,
-   "last_run_at": "2026-08-27T07:35:24",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Октябрьский районный суд"
   },
   "cassation:7kas:total": {
    "counts": [
     25,
-    25,
     0,
     25,
     25,
@@ -497,18 +496,18 @@
     25,
     0,
     0,
+    25,
     25
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 25,
-   "last_run_at": "2026-08-27T08:23:04",
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    1,
     0,
     0,
     0,
@@ -521,13 +520,14 @@
     0,
     0,
     0,
-    0
+    0,
+    1
    ],
-   "zero_streak": 1,
+   "zero_streak": 0,
    "fail_streak": 0,
-   "alerted_zero": true,
-   "last_count": 0,
-   "last_run_at": "2026-08-27T08:23:04",
+   "alerted_zero": false,
+   "last_count": 1,
+   "last_run_at": "2026-08-28T06:28:08",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -535,7 +535,6 @@
     0,
     0,
     0,
-    0,
     24,
     24,
     0,
@@ -545,224 +544,158 @@
     0,
     24,
     0,
-    24
+    24,
+    0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "label": "Нижневартовский районный суд (г. Покачи)",
-   "last_count": 24,
-   "last_run_at": "2026-08-27T07:35:24"
+   "last_count": 0,
+   "last_run_at": "2026-08-28T06:28:08"
   }
  },
  "last_run": {
-  "at": "2026-08-27T08:51:54",
-  "requests_ok": 33,
+  "at": "2026-08-28T06:28:08",
+  "requests_ok": 276,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 41,
-  "cards_breaker_unrequested": 41,
-  "cards_breaker_recovered": 0,
-  "cards_blocked": 27,
-  "cards_read": 2,
-  "cards_planned": 69,
-  "cards_read_today": 175,
-  "cards_planned_today": 215,
-  "daily_attempts": 4,
+  "cards_breaker_skipped": 18,
+  "cards_breaker_unrequested": 7,
+  "cards_breaker_recovered": 10,
+  "cards_blocked": 31,
+  "cards_read": 213,
+  "cards_planned": 245,
+  "cards_read_today": 213,
+  "cards_planned_today": 245,
+  "daily_attempts": 1,
   "instances": {
    "first_instance": {
-    "read": 0,
-    "planned": 67,
-    "read_today": 139,
-    "planned_today": 179
+    "read": 179,
+    "planned": 208,
+    "read_today": 179,
+    "planned_today": 208
    },
    "appeal": {
-    "read": 2,
-    "planned": 2,
-    "read_today": 30,
+    "read": 28,
+    "planned": 30,
+    "read_today": 28,
     "planned_today": 30
    },
    "cassation": {
-    "read": 0,
-    "planned": 0,
+    "read": 6,
+    "planned": 7,
     "read_today": 6,
-    "planned_today": 6
+    "planned_today": 7
    }
   },
   "latency": {
-   "n": 33,
-   "p50": 20.4,
-   "p90": 23.1,
-   "max": 25.0
+   "n": 276,
+   "p50": 0.6,
+   "p90": 3.2,
+   "max": 5.9
   },
   "failure_latency": {
+   "outage_search": {
+    "n": 1,
+    "p50": 3.2,
+    "p90": 3.2,
+    "max": 3.2
+   },
    "portal_placeholder": {
-    "n": 27,
-    "p50": 20.5,
-    "p90": 24.4,
-    "max": 25.0
+    "n": 31,
+    "p50": 3.3,
+    "p90": 4.0,
+    "max": 5.9
    }
   },
   "fail_kinds": {
-   "portal_placeholder": 27
+   "portal_placeholder": 31,
+   "outage_search": 1
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 9,
-   "open_hosts": 9,
-   "recovered_hosts": 0,
-   "deferred_total": 55,
-   "deferred_remaining": 55,
-   "deferred_recovered": 0,
-   "probes": 6,
-   "probe_successes": 0,
-   "probe_failures": 6,
+   "opened_hosts": 4,
+   "open_hosts": 1,
+   "recovered_hosts": 3,
+   "deferred_total": 22,
+   "deferred_remaining": 12,
+   "deferred_recovered": 10,
+   "probes": 4,
+   "probe_successes": 3,
+   "probe_failures": 1,
    "by_kind": {
-    "portal_placeholder": 15
+    "outage_search": 1,
+    "portal_placeholder": 4
    },
    "hosts": [
     {
-     "host": "hmray--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 1,
-     "probes": 0,
-     "deferred_total": 2,
-     "deferred_remaining": 2,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 17.3
-    },
-    {
-     "host": "kogalym--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 1,
-     "probes": 1,
-     "deferred_total": 2,
-     "deferred_remaining": 2,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 179.9
-    },
-    {
-     "host": "rdj--hmao.sudrf.ru",
-     "state": "open",
+     "host": "berezovo--hmao.sudrf.ru",
+     "state": "closed",
      "kind": "portal_placeholder",
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
      "skipped": 0,
      "probes": 1,
-     "deferred_total": 2,
-     "deferred_remaining": 2,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 133.6
-    },
-    {
-     "host": "surggor--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 26,
-     "probes": 1,
-     "deferred_total": 28,
-     "deferred_remaining": 28,
-     "deferred_recovered": 0,
+     "deferred_total": 1,
+     "deferred_remaining": 0,
+     "deferred_recovered": 1,
      "cooldown_seconds": 180.0,
      "next_probe_in_seconds": 0.0
     },
     {
      "host": "surgray--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 0,
-     "probes": 0,
-     "deferred_total": 1,
-     "deferred_remaining": 1,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 110.2
-    },
-    {
-     "host": "uganskray--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 0,
-     "probes": 1,
-     "deferred_total": 2,
-     "deferred_remaining": 2,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 156.7
-    },
-    {
-     "host": "ugorsk--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 2,
-     "probes": 0,
-     "deferred_total": 3,
-     "deferred_remaining": 3,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 64.5
-    },
-    {
-     "host": "uray--hmao.sudrf.ru",
-     "state": "open",
+     "state": "closed",
      "kind": "portal_placeholder",
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
      "skipped": 1,
      "probes": 1,
-     "deferred_total": 3,
-     "deferred_remaining": 3,
-     "deferred_recovered": 0,
+     "deferred_total": 2,
+     "deferred_remaining": 1,
+     "deferred_recovered": 1,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 41.7
+     "next_probe_in_seconds": 0.0
     },
     {
      "host": "vartovgor--hmao.sudrf.ru",
-     "state": "open",
+     "state": "closed",
      "kind": "portal_placeholder",
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
      "skipped": 10,
      "probes": 1,
-     "deferred_total": 12,
-     "deferred_remaining": 12,
+     "deferred_total": 11,
+     "deferred_remaining": 3,
+     "deferred_recovered": 8,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 0.0
+    },
+    {
+     "host": "vartovray--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": true,
+     "skipped": 7,
+     "probes": 1,
+     "deferred_total": 8,
+     "deferred_remaining": 8,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
      "next_probe_in_seconds": 0.0
     }
    ]
   },
-  "courts_unavailable": 9,
-  "courts_with_unrequested": 6,
-  "courts_outage": 0,
-  "cards_unreachable": 41,
-  "cards_unread_other": 26,
+  "courts_unavailable": 1,
+  "courts_with_unrequested": 1,
+  "courts_outage": 1,
+  "cards_unreachable": 7,
+  "cards_unread_other": 25,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
