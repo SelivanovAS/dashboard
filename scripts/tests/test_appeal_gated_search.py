@@ -50,15 +50,118 @@ class TestRegionFlag:
                        for c in get_region("hmao").appeal_courts)
 
     def test_gated_appeal_stays_in_search_loop(self):
-        """⚠️ Гейт МЯГКИЙ: суд остаётся в обходе поиска (courts_for_search —
-        про 1-ю инстанцию и апелляции не касается). Исключи его из цикла — и
-        снятый судом код никто никогда не заметит."""
+        """⚠️ САМ ПО СЕБЕ search_gated — гейт МЯГКИЙ: суд остаётся в обходе
+        поиска (courts_for_search — про 1-ю инстанцию и апелляции не
+        касается). Жёсткий выключатель — ОТДЕЛЬНЫЙ флаг search_disabled
+        (28.08.2026); пропуск по одному лишь search_gated молча выключил бы
+        поиск и у судов, где юрист оставил мягкий режим."""
         src = _runs_src()
         loop = src.index("for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):")
-        head = src[loop:loop + 1200]
-        assert "search_gated" not in head, (
-            "поиск апелляции стал пропускаться по флагу — это уже жёсткий "
-            "гейт, и возврат к автопоиску потребует правки конфига и деплоя")
+        head = src[loop:loop + 1600]
+        assert "if _ap_court.search_gated" not in head, (
+            "поиск апелляции стал пропускаться по флагу search_gated — "
+            "мягкий режим превратился в жёсткий гейт; жёсткое выключение "
+            "живёт на отдельном search_disabled")
+
+
+class TestSearchDisabled:
+    """Жёсткий выключатель поиска апелляции (search_disabled, 28.08.2026).
+
+    Решение юриста: у Свердловского облсуда поиск не делать вовсе — мягкий
+    гейт писал None в журнал здоровья, а update_parse_health считал None
+    HTTP-фейлом и растил fail_streak («страница поиска не загружается 16
+    прогонов подряд» каждый слот). Дела заводит только дамп выдачи.
+    """
+
+    def test_flag_on_sverdlovsk_oblsud_only(self):
+        ap = get_region("sverdlovsk_yanao").appeal_courts
+        by_domain = {c.domain: c for c in ap}
+        assert by_domain["oblsud--svd.sudrf.ru"].search_disabled is True
+        # search_gated остаётся: он гейтит дослинк, дампы и семантику админки.
+        assert by_domain["oblsud--svd.sudrf.ru"].search_gated is True
+        assert by_domain["oblsud--ynao.sudrf.ru"].search_disabled is False
+
+    def test_hmao_appeal_not_disabled(self):
+        assert not any(c.search_disabled
+                       for c in get_region("hmao").appeal_courts)
+
+    def test_branch_first_no_http_no_health(self):
+        """Ветка стоит ПЕРВОЙ в цикле — до дочитки, до fetch_page и до любых
+        записей в журнал здоровья: источник исчезает из observations, и
+        детектор молчаливой поломки о нём молчит."""
+        src = _runs_src()
+        loop = src.index("for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):")
+        i_disabled = src.index("if _ap_court.search_disabled:", loop)
+        i_skip_today = src.index("if hk in search_skip_keys:", loop)
+        i_fetch = src.index("search_html = fetch_page(", loop)
+        assert i_disabled < i_skip_today < i_fetch, (
+            "ветка search_disabled обязана стоять до дочитки и до HTTP")
+        branch = src[i_disabled:i_disabled + 600]
+        branch = branch[:branch.index("continue")]
+        assert "health_obs[" not in branch and "health_labels[" not in branch, (
+            "запись в журнал здоровья у выключенного поиска = возврат "
+            "fail_streak-шума, ради которого выключатель и заводили")
+        assert "fetch_page" not in branch
+
+    def test_disabled_domain_reaches_relink_skip(self):
+        """Дослинк ходит той же поисковой формой; капча-детект, наполнявший
+        appeal_search_gated_now, у выключенного суда не выполняется — домен
+        обязан попадать в set из самой ветки search_disabled."""
+        src = _runs_src()
+        i = src.index("if _ap_court.search_disabled:")
+        branch = src[i:i + 600]
+        assert "appeal_search_gated_now.add(_ap_court.domain)" in branch, (
+            "без домена в appeal_search_gated_now relink_awaiting_appeal "
+            "начнёт жечь HTTP по капчёвой форме облсуда")
+
+    def test_public_info_exposes_flag(self):
+        info = get_region("sverdlovsk_yanao").public_info()
+        by_domain = {c["domain"]: c for c in info["appeal_courts"]}
+        assert by_domain["oblsud--svd.sudrf.ru"]["search_disabled"] is True
+        assert by_domain["oblsud--ynao.sudrf.ru"]["search_disabled"] is False
+
+
+class TestAppealCourtFallbackByFiCourt:
+    """CSV-строка апелляции без JSON-двойника и без _appeal_domain: суд
+    выбирается по суду 1-й инстанции строки, а не «первый апел-суд региона».
+
+    Инцидент 33-2042/2026 (12–28.08.2026): _appeal_domain не переживает
+    round-trip через CSV (колонки нет), и карточка ЯНАО-дела качалась со
+    Свердловского ОБЛСУДА — чужой суд отдавал постороннюю страницу на 4
+    таблицы, degraded не бампает last_checked_at, строка ретраилась каждым
+    слотом вечно.
+    """
+
+    def test_fallback_consults_fi_court(self):
+        src = _runs_src()
+        i = src.index("_ap_court = appeal_court_by_domain(_ap_domain)")
+        head = src[i - 900:i]
+        assert "match_fi_court_by_short_name" in head
+        assert "appeal_court_for_fi_domain" in head
+        assert 'case.get("Суд 1 инстанции")' in head
+
+    def test_fi_court_resolves_to_own_subject_appeal(self):
+        """Надымский (…--ynao) обязан вести в Суд ЯНАО, а не в облсуд."""
+        import importlib
+        import court_monitor.config as cm_config
+        import court_monitor.regions as cm_regions
+        import court_monitor.courts as cm_courts
+        old = os.environ.get("REGION")
+        os.environ["REGION"] = "sverdlovsk_yanao"
+        try:
+            importlib.reload(cm_config)
+            importlib.reload(cm_regions)
+            importlib.reload(cm_courts)
+            ac = cm_courts.appeal_court_for_fi_domain("nadymsky--ynao.sudrf.ru")
+            assert ac.domain == "oblsud--ynao.sudrf.ru"
+        finally:
+            if old is None:
+                os.environ.pop("REGION", None)
+            else:
+                os.environ["REGION"] = old
+            importlib.reload(cm_config)
+            importlib.reload(cm_regions)
+            importlib.reload(cm_courts)
 
 
 class TestQuietCaptchaWiring:

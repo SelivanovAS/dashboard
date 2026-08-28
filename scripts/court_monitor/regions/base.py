@@ -42,6 +42,15 @@ class CourtConfig:
     # в админке Worker'а) — оператор решает код руками, парсер дальше ведёт
     # дело по карточке. См. courts.courts_for_search().
     search_gated: bool = False
+    # Поиск по суду прогон НЕ делает вовсе (решение юриста 28.08.2026 для
+    # апелляции Свердловского облсуда): в отличие от search_gated («код
+    # ожидаем, но один запрос поиска на прогон остаётся — снимут код,
+    # вернётся сам»), это жёсткий выключатель — ни HTTP, ни записи в журнал
+    # здоровья (иначе мягкий гейт писал None, а update_parse_health считал
+    # None HTTP-фейлом и растил fail_streak: «страница поиска не загружается
+    # 16 прогонов подряд»). Карточки дел мониторятся как раньше, канал ввода
+    # новых дел — только дамп выдачи (секция «Импорт» админки).
+    search_disabled: bool = False
     srv_num: int = 1   # номер сервера (обычно 1, но бывает 2 — напр. Покачи)
     source: str = "sudrf"  # "sudrf" (скрейп) | "casebook" (API-адаптер). Дискриминатор
                            # диспетчера в runs.py; sudrf-URL-методы на не-sudrf падают (M3).
@@ -241,6 +250,7 @@ class RegionConfig:
                     "domain": c.domain,
                     "delo_id": c.delo_id,
                     "search_gated": c.search_gated,
+                    "search_disabled": c.search_disabled,
                     "srv_num": c.srv_num,
                 }
                 for c in self.appeal_courts
