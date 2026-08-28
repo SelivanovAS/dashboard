@@ -355,6 +355,17 @@ class TestRunSummaryOptionalLines:
         assert ("LLM-пересказы актов: вызовов 5, из кэша 0, "
                 "спасено фолбэком 1, сбоев 2 (откат на excerpt)") in caplog.text
 
+    def test_llm_line_provider_fallback_suffix(self, caplog):
+        # Спасение фолбэк-провайдером Claude (бесплатный пул лёг целиком,
+        # инцидент 28.08.2026) — своё слагаемое в сводке: сбоев при этом
+        # ноль, и без суффикса выручка была бы невидима.
+        cm_config.METRICS["llm_summary_calls"] = 6
+        cm_config.METRICS["llm_summary_provider_fallback_saved"] = 2
+        with caplog.at_level(logging.INFO, logger="court-monitor"):
+            cm_delivery.log_run_summary("test", {})
+        assert ("LLM-пересказы актов: вызовов 6, из кэша 0, "
+                "спасено Claude 2") in caplog.text
+
 
 # ── METRICS: инкременты LLM-пересказов ───────────────────────────────────────
 

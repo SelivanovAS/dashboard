@@ -1589,12 +1589,16 @@ def _alert_llm_summary_failures() -> None:
             return
         calls = config.METRICS.get("llm_summary_calls", 0)
         saved = config.METRICS.get("llm_summary_fallback_saved", 0)
+        saved_claude = config.METRICS.get(
+            "llm_summary_provider_fallback_saved", 0)
         line = (
             f"пересказы мотивировок: сбоев {failed} из {calls} "
             f"— в дайджест ушёл сырой текст акта"
         )
         if saved:
             line += f" (спасено фолбэком: {saved})"
+        if saved_claude:
+            line += f" (спасено Claude: {saved_claude})"
         log.warning(f"llm-summary: {line}")
         send_telegram(
             "🩺 <b>Пересказы актов</b>\n"

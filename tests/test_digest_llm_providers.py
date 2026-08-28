@@ -341,7 +341,8 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
     def setUp(self):
         super().setUp()
         for k in ("llm_summary_calls", "llm_summary_cache_hits",
-                  "llm_summary_failed", "llm_summary_fallback_saved"):
+                  "llm_summary_failed", "llm_summary_fallback_saved",
+                  "llm_summary_provider_fallback_saved"):
             cm_config.METRICS[k] = 0
         self.sleeps = []
         for p in (
@@ -350,13 +351,25 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
             patch.object(cm_config, "OPENROUTER_SUMMARY_RETRIES", 3),
             patch.object(cm_config, "OPENROUTER_SUMMARY_FALLBACK_RETRIES", 2),
             patch.object(cm_config, "OPENROUTER_SUMMARY_RETRY_DELAY", 5),
+            patch.object(cm_config, "LLM_SUMMARY_PROVIDER_FALLBACK", True),
             patch.object(cm_llm.time, "sleep", self.sleeps.append),
         ):
             p.start()
             self.addCleanup(p.stop)
 
-    def _summarize(self, fake, use_cache=False):
-        with patch.object(cm_llm, "_call_openrouter_simple", fake):
+    def _summarize(self, fake, use_cache=False, claude=None):
+        # Фолбэк-провайдер Claude патчится ВСЕГДА (база setUp даёт всем
+        # провайдерам test-key, и без патча исчерпание openrouter-попыток
+        # ушло бы настоящим HTTP в Anthropic); дефолт — «Claude тоже лёг».
+        self.claude_calls = []
+
+        def _claude_dead(prompt, **kw):
+            self.claude_calls.append(prompt)
+            return None
+
+        with patch.object(cm_llm, "_call_openrouter_simple", fake), \
+             patch.object(cm_llm, "_call_claude_simple",
+                          claude or _claude_dead):
             return cm_llm.summarize_act_motivation(
                 self.ACT, case_meta={"stage": "appeal"}, use_cache=use_cache,
             )
@@ -449,11 +462,97 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
         )
         # Паузы: 5с, 10с на основной + 5с внутри фолбэк-этапа.
         self.assertEqual(self.sleeps, [5, 10, 5])
-        self.assertEqual(cm_config.METRICS["llm_summary_calls"], 5)
+        # После обеих openrouter-моделей пробовался фолбэк-провайдер Claude
+        # (он в этом тесте тоже мёртв) — итого 5 + 1 вызовов.
+        self.assertEqual(len(self.claude_calls), 1)
+        self.assertEqual(cm_config.METRICS["llm_summary_calls"], 6)
         self.assertEqual(cm_config.METRICS["llm_summary_failed"], 1)
         self.assertEqual(cm_config.METRICS["llm_summary_fallback_saved"], 0)
+        self.assertEqual(
+            cm_config.METRICS["llm_summary_provider_fallback_saved"], 0
+        )
         self.assertTrue(
             any("отбракован чисткой" in m for m in logs.output), logs.output
+        )
+
+    def test_provider_fallback_rescues(self):
+        """Бесплатный пул лёг целиком → одна попытка Claude спасает пересказ
+        (инцидент 28.08.2026: оба акта Урала ушли сырым отрывком при живом
+        ANTHROPIC_API_KEY в env replay)."""
+        or_calls = []
+
+        def fake(prompt, *, model=None):
+            or_calls.append(model)
+            return None
+
+        claude_calls = []
+
+        def claude(prompt, **kw):
+            claude_calls.append(prompt)
+            return "Иск удовлетворён: наследники приняли наследство."
+
+        saved = {}
+        with patch.object(cm_config, "CLAUDE_MODEL", "claude-haiku-test"), \
+             patch.object(cm_llm, "_load_act_summaries", lambda: {}), \
+             patch.object(cm_llm, "_save_act_summaries", saved.update), \
+             self.assertLogs("court-monitor", level="INFO") as logs:
+            self.assertEqual(
+                self._summarize(fake, use_cache=True, claude=claude),
+                "Иск удовлетворён: наследники приняли наследство.",
+            )
+        self.assertEqual(
+            or_calls,
+            [self.PRIMARY] * 3 + [cm_config.OPENROUTER_FALLBACK_MODEL] * 2,
+        )
+        self.assertEqual(len(claude_calls), 1)
+        self.assertEqual(
+            cm_config.METRICS["llm_summary_provider_fallback_saved"], 1
+        )
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 0)
+        self.assertTrue(
+            any("выручил фолбэк-провайдер claude" in m for m in logs.output),
+            logs.output,
+        )
+        # Кэш-ключ — в openrouter-неймспейсе (следующий прогон его найдёт),
+        # поле model честно называет фактического автора.
+        key = cm_llm._act_cache_key(self.ACT.strip())
+        self.assertIn(key, saved)
+        self.assertEqual(saved[key]["model"], "claude:claude-haiku-test")
+
+    def test_provider_fallback_needs_claude_key(self):
+        """Без ANTHROPIC_API_KEY фолбэк-провайдер не зовётся — прежний отказ
+        (Mac-резерв сюда не доходит вовсе: missing_llm_key_name отсекает
+        раньше, но и с одним лишь openrouter-ключом Claude звать нечем)."""
+        def fake(prompt, *, model=None):
+            return None
+
+        with patch.object(cm_config, "ANTHROPIC_API_KEY", ""):
+            self.assertIsNone(self._summarize(fake))
+        self.assertEqual(self.claude_calls, [])
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 1)
+        self.assertEqual(
+            cm_config.METRICS["llm_summary_provider_fallback_saved"], 0
+        )
+
+    def test_provider_fallback_switch_off(self):
+        """LLM_SUMMARY_PROVIDER_FALLBACK=0 — чисто бесплатный пул, как до
+        28.08.2026."""
+        def fake(prompt, *, model=None):
+            return None
+
+        with patch.object(cm_config, "LLM_SUMMARY_PROVIDER_FALLBACK", False):
+            self.assertIsNone(self._summarize(fake))
+        self.assertEqual(self.claude_calls, [])
+        self.assertEqual(cm_config.METRICS["llm_summary_failed"], 1)
+
+    def test_provider_fallback_not_called_on_openrouter_success(self):
+        def fake(prompt, *, model=None):
+            return "Иск удовлетворён."
+
+        self.assertEqual(self._summarize(fake), "Иск удовлетворён.")
+        self.assertEqual(self.claude_calls, [])
+        self.assertEqual(
+            cm_config.METRICS["llm_summary_provider_fallback_saved"], 0
         )
 
     def test_claude_has_no_retry(self):

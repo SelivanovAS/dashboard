@@ -15,12 +15,12 @@ Actions, какие есть вспомогательные скрипты и т
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([2363](../../scripts/court_monitor/runs.py#L2363)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| `--json` | `main_json` ([2367](../../scripts/court_monitor/runs.py#L2367)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | _(без флага)_ | `main` ([1225](../../scripts/court_monitor/runs.py#L1225)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([6676](../../scripts/court_monitor/runs.py#L6676)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([6205](../../scripts/court_monitor/runs.py#L6205)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6530](../../scripts/court_monitor/runs.py#L6530)) | Повторно разослать уже сохранённый дайджест. |
-| `--push-web-only [--push-all]` | `main_push_web_only` ([6480](../../scripts/court_monitor/runs.py#L6480)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
+| `--digest-only` | `main_digest_only` ([6680](../../scripts/court_monitor/runs.py#L6680)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([6209](../../scripts/court_monitor/runs.py#L6209)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6534](../../scripts/court_monitor/runs.py#L6534)) | Повторно разослать уже сохранённый дайджест. |
+| `--push-web-only [--push-all]` | `main_push_web_only` ([6484](../../scripts/court_monitor/runs.py#L6484)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
 | `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1420](../../scripts/court_monitor/runs.py#L1420)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
@@ -276,7 +276,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   Дневное покрытие строится как union стабильных ID
   `planned_case_ids_today` / `read_case_ids_today` по 1-й инстанции,
   апелляции и кассации, поэтому планы дочиток можно сравнивать напрямую.
-- `send_crash_alert` ([976](../../scripts/court_monitor/delivery.py#L976)) — падение
+- `send_crash_alert` ([979](../../scripts/court_monitor/delivery.py#L979)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в

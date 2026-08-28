@@ -654,6 +654,18 @@ OPENROUTER_SUMMARY_RETRIES = 3           # попыток на основной 
 OPENROUTER_SUMMARY_FALLBACK_RETRIES = 2  # попыток на фолбэк-модели
 OPENROUTER_SUMMARY_RETRY_DELAY = 5       # база паузы между попытками (сек)
 
+# Фолбэк-ПРОВАЙДЕР пересказов: если бесплатный пул OpenRouter лёг целиком
+# (и «модель дня», и openrouter/free исчерпали попытки), одна попытка на
+# боевом Claude haiku — при наличии ANTHROPIC_API_KEY (в replay/кроне он
+# прокинут всегда, на Mac-резерве ключей нет и до этой ветки дело не
+# доходит). Пересказ одноразовый: акт объявляется один раз, и без фолбэка
+# сырой отрывок замерзает в дайджесте и «AI анализе» навсегда — инцидент
+# 28.08.2026 (Урал): оба акта выпуска ушли «Мотивировкой» при живом ключе
+# Claude в env. "0" — выключить (остаться чисто на бесплатном пуле).
+LLM_SUMMARY_PROVIDER_FALLBACK = os.environ.get(
+    "LLM_SUMMARY_PROVIDER_FALLBACK", "1"
+).strip() != "0"
+
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096
 # Целевой лимит длины дайджеста (передаётся в промпт). Должен быть ЗАМЕТНО
@@ -760,6 +772,7 @@ METRICS: dict[str, int] = {
     "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
     "llm_summary_failed": 0,          # пересказы актов: все попытки исчерпаны → откат на excerpt
     "llm_summary_fallback_saved": 0,  # пересказы актов: спасены фолбэк-моделью OpenRouter
+    "llm_summary_provider_fallback_saved": 0,  # пересказы актов: спасены фолбэк-провайдером Claude
     "llm_summary_skipped_no_key": 0,  # пересказы актов: не делали — у провайдера нет ключа (Mac-резерв)
     "bank_intake_candidates": 0,  # строк «банк-истец», прошедших строковые фильтры
     "bank_intake_cards": 0,       # карточек кандидатов, прочитанных подхватом
