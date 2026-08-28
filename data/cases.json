@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-28T06:28:09",
+  "updated_at": "2026-08-28T06:44:42",
   "cases": [
     {
       "id": "33-6088/2026",
@@ -11,9 +11,9 @@
       "bank_role": "Третье лицо",
       "notes": "",
       "first_instance": {
-        "case_number": "",
+        "case_number": "2-4027/2026",
         "court": "Сургутский городской суд",
-        "court_domain": "",
+        "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "",
         "filing_date": "",
         "status": "",
@@ -22,10 +22,15 @@
         "event_date": "",
         "hearing_date": "",
         "hearing_time": "",
-        "link": "",
+        "link": "263897249|21ca818c-006e-4013-bc38-29778afd076f",
         "act_published": false,
         "act_date": "",
-        "events": []
+        "events": [],
+        "judicial_uid": "86RS0004-01-2026-001732-73",
+        "appeal_appellant_checked_at": "2026-08-28",
+        "appeal_appellant": "Истец",
+        "appeal_appellant_is_bank": false,
+        "appeal_appellant_status": "Истец"
       },
       "appeal": {
         "case_number": "33-6088/2026",
@@ -43,9 +48,13 @@
         "link": "26912741|44afd3bd-fd49-4e9a-aec4-3457dc27b62f",
         "act_published": false,
         "act_date": "",
-        "appellant": "",
-        "events": []
-      }
+        "appellant": "Истец",
+        "events": [],
+        "last_checked_at": "2026-08-28",
+        "appellant_is_bank": false,
+        "appellant_status": "Истец"
+      },
+      "initial_bank_role": "Третье лицо"
     },
     {
       "id": "33-6059/2026",
@@ -90,7 +99,8 @@
         "act_date": "",
         "appellant": "",
         "events": []
-      }
+      },
+      "initial_bank_role": "Третье лицо"
     },
     {
       "id": "2-2182/2026",
@@ -111,10 +121,10 @@
         "filing_date": "24.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 18:39. 25.08.2026",
-        "event_date": "24.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 17:20. каб. №304. 27.08.2026",
+        "event_date": "29.09.2026",
+        "hearing_date": "29.09.2026",
+        "hearing_time": "17:20",
         "link": "281703271|ffc04471-99cd-477c-ae8a-61a98a61cdbd",
         "act_published": false,
         "act_date": "",
@@ -133,12 +143,35 @@
             "text": "Передача материалов судье. 18:39. 25.08.2026",
             "name": "Передача материалов судье",
             "posted_at": "25.08.2026"
+          },
+          {
+            "date": "26.08.2026",
+            "time": "16:33",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 16:33. Иск (заявление, жалоба) принят к производству. 27.08.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Иск (заявление, жалоба) принят к производству",
+            "posted_at": "27.08.2026"
+          },
+          {
+            "date": "26.08.2026",
+            "time": "16:34",
+            "text": "Вынесено определение о подготовке дела к судебному разбирательству. 16:34. 27.08.2026",
+            "name": "Вынесено определение о подготовке дела к судебному разбирательству",
+            "posted_at": "27.08.2026"
+          },
+          {
+            "date": "29.09.2026",
+            "time": "17:20",
+            "text": "Подготовка дела (собеседование). 17:20. каб. №304. 27.08.2026",
+            "name": "Подготовка дела (собеседование)",
+            "place": "каб. №304",
+            "posted_at": "27.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "judicial_uid": "86RS0005-01-2026-002973-80",
         "material_number": "М-1864/2026",
-        "accepted_pending_emit": true
+        "accepted_pending_emit": false
       },
       "appeal": null
     },
@@ -1241,7 +1274,7 @@
             "posted_at": "24.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "appellant_is_bank": true,
         "appellant_status": "Истец"
       },
@@ -1436,7 +1469,8 @@
         "act_published": false,
         "act_date": "",
         "appellant": "",
-        "events": []
+        "events": [],
+        "last_checked_at": "2026-08-28"
       },
       "initial_bank_role": "Истец",
       "import": {
@@ -1978,7 +2012,7 @@
             "posted_at": "05.08.2026"
           }
         ],
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "appellant_is_bank": false,
         "appellant_status": "Истец"
       },
@@ -14322,7 +14356,8 @@
           "model": "openrouter:google/gemma-4-26b-a4b-it:free"
         },
         "sent_to_appeal": true,
-        "sent_to_appeal_date": "18.08.2026"
+        "sent_to_appeal_date": "18.08.2026",
+        "judicial_uid": "86RS0001-01-2026-001959-36"
       },
       "appeal": {
         "case_number": "33-6096/2026",
@@ -14341,7 +14376,8 @@
         "act_published": false,
         "act_date": "",
         "appellant": "",
-        "events": []
+        "events": [],
+        "last_checked_at": "2026-08-28"
       },
       "initial_bank_role": "Ответчик"
     },
@@ -17258,7 +17294,7 @@
           }
         ],
         "link": "12183413|352dfce6-5af1-4e54-a073-aa12f6637309",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-07-07"
@@ -20857,7 +20893,7 @@
         "act_published": false,
         "act_date": "",
         "judicial_uid": "86RS0002-01-2024-007816-34",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "events": [
           {
             "date": "26.07.2024",
@@ -24458,7 +24494,8 @@
         "act_published": false,
         "act_date": "",
         "appellant": "",
-        "events": []
+        "events": [],
+        "last_checked_at": "2026-08-28"
       },
       "initial_bank_role": "Истец",
       "import": {
@@ -24492,7 +24529,7 @@
         "link": "277468216|e5d71955-ae34-4f59-b479-029db41964d9",
         "act_published": true,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-15",
         "decision_date": "29.07.2026",
         "resolved_emitted": true,

@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0004-01-2026-016791-98",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-28",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0001-01-2026-004707-37",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-28",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -145,8 +143,7 @@
         "judicial_uid": "86RS0004-01-2026-016741-54",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -260,8 +257,7 @@
         "judicial_uid": "86RS0002-01-2026-008181-38",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -770,7 +766,7 @@
         "judicial_uid": "86RS0019-01-2026-000613-16",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27"
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -808,7 +804,7 @@
         "judicial_uid": "36RS0034-03-2026-000087-09",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27"
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1103,7 +1099,7 @@
         "judicial_uid": "86RS0013-01-2026-000875-33",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27"
+        "last_checked_at": "2026-08-28"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2040,7 +2036,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "judicial_uid": "86RS0002-01-2026-007839-94"
       },
       "appeal": null,
@@ -2362,7 +2358,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "judicial_uid": "86RS0014-01-2026-000982-47"
       },
       "appeal": null,
@@ -3801,7 +3797,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "judicial_uid": "86RS0002-01-2026-007437-39"
       },
       "appeal": null,
@@ -10893,7 +10889,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "30.04.2026",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-06-02",
         "motivirovka_date": "30.04.2026",
         "legal_force_emitted": "2026-06-02",
@@ -10985,7 +10981,7 @@
         "link": "274493445|59ded058-5013-4414-ba1a-eafb5531f4b7",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-15",
         "decision_date": "12.08.2026",
         "resolved_emitted": true,
@@ -11810,7 +11806,7 @@
         "link": "276881338|d756edc8-eacc-466d-bb2a-f80e05408b06",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-29",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -13895,7 +13891,7 @@
         "link": "272996758|bceb2b7f-35bf-4779-967c-a3c227e62f32",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -16425,7 +16421,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "11.06.2026",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "motivirovka_emitted": true,
         "legal_force_est": "2026-08-18",
         "motivirovka_date": "17.07.2026",
@@ -19763,19 +19759,19 @@
         "filing_date": "05.05.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Предварительное судебное заседание. 08:35. Зал судебного заседания 402. 21.05.2026",
-        "event_date": "06.08.2026",
-        "hearing_date": "06.08.2026",
-        "hearing_time": "08:35",
+        "last_event": "Предварительное судебное заседание. 12:55. Зал судебного заседания 402. 26.08.2026",
+        "event_date": "16.09.2026",
+        "hearing_date": "16.09.2026",
+        "hearing_time": "12:55",
         "link": "270962647|cc41e0bb-c2ba-497d-b039-d1fbdd6d1078",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-26",
-        "legal_force_est": "2026-09-22",
+        "last_checked_at": "2026-08-28",
+        "legal_force_est": "2026-10-31",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0009-01-2026-000095-63",
-        "writ_awaited_since": "2026-09-22"
+        "writ_awaited_since": "2026-10-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -20048,7 +20044,7 @@
         "link": "270446895|555e4eb0-c391-4d8e-a44c-587a08921b91",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-11",
         "decision_date": "27.07.2026",
         "resolved_emitted": true,
@@ -22044,7 +22040,7 @@
         "link": "267023014|50c32b9e-0990-409d-8e90-07bb962f9702",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-01",
         "decision_date": "15.07.2026",
         "resolved_emitted": true,
@@ -23492,7 +23488,7 @@
           }
         ],
         "decision_date": "19.05.2026",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-07-03",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -23515,5 +23511,5 @@
       }
     }
   ],
-  "updated_at": "2026-08-28T06:28:09"
+  "updated_at": "2026-08-28T06:44:42"
 }
