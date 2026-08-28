@@ -1,0 +1,13 @@
+# Утренний прогон парсинга (обе территории). Ставится на VPS:
+#   cp ops/vps-run/systemd/court-parse.* /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now court-parse.timer
+[Unit]
+Description=Court Monitor: парсинг судов (слот)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=court-parse
+ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/parse_all.sh

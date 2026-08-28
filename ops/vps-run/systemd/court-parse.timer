@@ -1,0 +1,19 @@
+# Слоты — зеркало com.court-monitor.parse.plist (будни 06:00–08:30 каждые
+# 30 мин + доставочный 08:45, время местное Asia/Yekaterinburg). Слот,
+# наступивший при живом прогоне, systemd пропускает — как launchd.
+# Persistent=true — аналог «догнать проспанный слот» после ребута.
+[Unit]
+Description=Court Monitor: слоты утреннего парсинга
+
+[Timer]
+OnCalendar=Mon..Fri 06:00
+OnCalendar=Mon..Fri 06:30
+OnCalendar=Mon..Fri 07:00
+OnCalendar=Mon..Fri 07:30
+OnCalendar=Mon..Fri 08:00
+OnCalendar=Mon..Fri 08:30
+OnCalendar=Mon..Fri 08:45
+Persistent=true
+
+[Install]
+WantedBy=timers.target

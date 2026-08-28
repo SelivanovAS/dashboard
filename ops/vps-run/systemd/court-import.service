@@ -1,0 +1,11 @@
+# Дневная очередь операторских импортов (дампы + точечные пачки).
+[Unit]
+Description=Court Monitor: очередь импортов (слот)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=court-import
+ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/import_all.sh

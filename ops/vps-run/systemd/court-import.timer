@@ -1,0 +1,16 @@
+# Слоты — зеркало com.court-monitor.import.plist (будни 10:30–18:30 каждые
+# 2 часа, время местное Asia/Yekaterinburg). KV-бюджет: 5 слотов × 2
+# территории = 10 list-запросов в день (лимит free-tier 1000 — не наращивать).
+[Unit]
+Description=Court Monitor: слоты очереди импортов
+
+[Timer]
+OnCalendar=Mon..Fri 10:30
+OnCalendar=Mon..Fri 12:30
+OnCalendar=Mon..Fri 14:30
+OnCalendar=Mon..Fri 16:30
+OnCalendar=Mon..Fri 18:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target
