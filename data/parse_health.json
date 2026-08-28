@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-28T08:42:10",
+ "updated_at": "2026-08-28T08:58:16",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,22 +556,22 @@
   }
  },
  "last_run": {
-  "at": "2026-08-28T08:42:10",
+  "at": "2026-08-28T08:58:16",
   "requests_ok": 36,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 0,
-  "cards_read": 35,
+  "cards_blocked": 5,
+  "cards_read": 30,
   "cards_planned": 35,
   "cards_read_today": 252,
   "cards_planned_today": 252,
-  "daily_attempts": 6,
+  "daily_attempts": 7,
   "instances": {
    "first_instance": {
-    "read": 33,
+    "read": 28,
     "planned": 33,
     "read_today": 210,
     "planned_today": 210
@@ -591,31 +591,58 @@
   },
   "latency": {
    "n": 36,
-   "p50": 0.5,
-   "p90": 1.0,
-   "max": 1.3
+   "p50": 2.0,
+   "p90": 4.5,
+   "max": 7.7
   },
-  "failure_latency": {},
-  "fail_kinds": {},
+  "failure_latency": {
+   "portal_placeholder": {
+    "n": 5,
+    "p50": 4.4,
+    "p90": 5.5,
+    "max": 5.5
+   }
+  },
+  "fail_kinds": {
+   "portal_placeholder": 5
+  },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 0,
-   "open_hosts": 0,
+   "opened_hosts": 1,
+   "open_hosts": 1,
    "recovered_hosts": 0,
-   "deferred_total": 0,
-   "deferred_remaining": 0,
+   "deferred_total": 1,
+   "deferred_remaining": 1,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {},
-   "hosts": []
+   "by_kind": {
+    "portal_placeholder": 1
+   },
+   "hosts": [
+    {
+     "host": "hmray--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 0,
+     "probes": 0,
+     "deferred_total": 1,
+     "deferred_remaining": 1,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 147.1
+    }
+   ]
   },
-  "courts_unavailable": 0,
+  "courts_unavailable": 1,
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 0,
+  "cards_unread_other": 5,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
