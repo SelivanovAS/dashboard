@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-28T06:44:41",
+ "updated_at": "2026-08-28T07:13:11",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,93 +556,75 @@
   }
  },
  "last_run": {
-  "at": "2026-08-28T06:44:41",
-  "requests_ok": 68,
+  "at": "2026-08-28T07:13:11",
+  "requests_ok": 47,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 2,
-  "cards_breaker_unrequested": 2,
+  "cards_breaker_skipped": 0,
+  "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 9,
-  "cards_read": 54,
-  "cards_planned": 65,
-  "cards_read_today": 243,
+  "cards_blocked": 1,
+  "cards_read": 43,
+  "cards_planned": 44,
+  "cards_read_today": 252,
   "cards_planned_today": 252,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 45,
-    "planned": 55,
-    "read_today": 202,
+    "read": 40,
+    "planned": 41,
+    "read_today": 210,
     "planned_today": 210
    },
    "appeal": {
-    "read": 8,
-    "planned": 9,
-    "read_today": 34,
+    "read": 3,
+    "planned": 3,
+    "read_today": 35,
     "planned_today": 35
    },
    "cassation": {
-    "read": 1,
-    "planned": 1,
+    "read": 0,
+    "planned": 0,
     "read_today": 7,
     "planned_today": 7
    }
   },
   "latency": {
-   "n": 68,
+   "n": 47,
    "p50": 0.6,
-   "p90": 3.3,
-   "max": 4.3
+   "p90": 2.1,
+   "max": 5.7
   },
   "failure_latency": {
    "portal_placeholder": {
-    "n": 9,
-    "p50": 3.3,
-    "p90": 4.3,
-    "max": 4.3
+    "n": 1,
+    "p50": 4.7,
+    "p90": 4.7,
+    "max": 4.7
    }
   },
   "fail_kinds": {
-   "portal_placeholder": 9
+   "portal_placeholder": 1
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 1,
-   "open_hosts": 1,
+   "opened_hosts": 0,
+   "open_hosts": 0,
    "recovered_hosts": 0,
-   "deferred_total": 3,
-   "deferred_remaining": 3,
+   "deferred_total": 0,
+   "deferred_remaining": 0,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {
-    "portal_placeholder": 1
-   },
-   "hosts": [
-    {
-     "host": "vartovray--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "portal_placeholder",
-     "family": "portal_outage",
-     "reason": "вместо карточки пришла заглушка портала",
-     "preopened": false,
-     "skipped": 2,
-     "probes": 0,
-     "deferred_total": 3,
-     "deferred_remaining": 3,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 145.6
-    }
-   ]
+   "by_kind": {},
+   "hosts": []
   },
-  "courts_unavailable": 1,
-  "courts_with_unrequested": 1,
+  "courts_unavailable": 0,
+  "courts_with_unrequested": 0,
   "courts_outage": 0,
-  "cards_unreachable": 2,
-  "cards_unread_other": 9,
+  "cards_unreachable": 0,
+  "cards_unread_other": 1,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }

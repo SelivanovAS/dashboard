@@ -10225,7 +10225,7 @@
         "link": "267156331|2cefe11f-78db-4685-9603-ce29c2874437",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-09-01",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -10765,9 +10765,10 @@
         "link": "272326565|2e0e6201-b523-47f6-9af8-39f9389dea01",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-31",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-10-13",
-        "writ_awaited_since": "2026-10-13"
+        "writ_awaited_since": "2026-10-13",
+        "judicial_uid": "55RS0027-01-2025-000465-19"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -10932,7 +10933,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "29.06.2026",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-08-11",
         "motivirovka_date": "08.07.2026",
         "legal_force_emitted": "2026-08-11",
@@ -11022,7 +11023,7 @@
         "link": "274498462|dd163380-db1e-4b6e-b125-73a86ccb722b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-06-16",
         "judicial_uid": "86RS0003-01-2026-000033-82",
         "writ_awaited_since": "2026-06-16"
@@ -11062,7 +11063,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "22.06.2026",
-        "last_checked_at": "2026-08-21",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-08-07",
         "default_judgment": true,
         "motivirovka_date": "22.06.2026",
@@ -11106,7 +11107,7 @@
         "link": "274494485|b8adba22-3873-4496-9a7c-68027a279c71",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "legal_force_est": "2026-05-08",
         "judicial_uid": "86RS0003-01-2025-001623-49",
         "writ_awaited_since": "2026-05-08"
@@ -23511,5 +23512,5 @@
       }
     }
   ],
-  "updated_at": "2026-08-28T06:44:42"
+  "updated_at": "2026-08-28T07:13:11"
 }
