@@ -66,7 +66,8 @@ class TestRegionConfigDerived:
         # открыта — флаг False).
         assert info["appeal_courts"] == [
             {"name": "Суд ХМАО-Югры", "domain": "oblsud--hmao.sudrf.ru",
-             "delo_id": 5, "search_gated": False, "srv_num": 1},
+             "delo_id": 5, "search_gated": False, "search_disabled": False,
+             "srv_num": 1},
         ]
         assert info["cassation"]["domain"] == "7kas.sudrf.ru"
         assert info["cassation"]["new"] == 2800001

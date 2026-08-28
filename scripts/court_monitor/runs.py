@@ -717,11 +717,26 @@ def update_active_cases(
             continue
 
         # Суд апелляции этого дела: домен из JSON-двойника (court_domain после
-        # миграции) или из сервисного ключа CSV-строки; без обоих — первый
-        # апел-суд региона (эпоха единственной апелляции, для ХМАО байт-в-байт).
-        _ap_court = appeal_court_by_domain(
+        # миграции) или из сервисного ключа CSV-строки; без обоих — по суду
+        # 1-й инстанции строки (subject-суффикс домена, appeal_court_for_fi_domain)
+        # и только затем первый апел-суд региона (эпоха единственной апелляции,
+        # для ХМАО все ветки байт-в-байт — апел-суд один). Третий источник
+        # добавлен 28.08.2026: у CSV-строки без JSON-двойника служебный ключ
+        # _appeal_domain не переживает round-trip через CSV (колонки нет), и
+        # фолбэк «первый апел-суд» качал карточку ЯНАО-дела 33-2042/2026 со
+        # Свердловского ОБЛСУДА — чужой суд отдавал постороннюю страницу на
+        # 4 таблицы («карточка обрезана»), degraded не бампает last_checked_at,
+        # и строка ретраилась каждым слотом вечно.
+        _ap_domain = (
             (ap_dict_skip or {}).get("court_domain") or case.get("_appeal_domain")
         )
+        if not _ap_domain:
+            _fi_cfg = match_fi_court_by_short_name(
+                case.get("Суд 1 инстанции") or ""
+            )
+            if _fi_cfg is not None:
+                _ap_domain = appeal_court_for_fi_domain(_fi_cfg.domain).domain
+        _ap_court = appeal_court_by_domain(_ap_domain)
         appeal_plan.append((case, ap_dict_skip, cid, cuid, _ap_court))
 
     appeal_queue = DeferredCardQueue(appeal_plan, stage="appeal")
@@ -3192,6 +3207,19 @@ def main_json():
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
         hk = _appeal_health_key(_ap_court)
+        # Поиск выключен конфигом (Свердловский облсуд, 28.08.2026): ни HTTP,
+        # ни записи в журнал здоровья — мягкий гейт search_gated писал None,
+        # а update_parse_health считал None HTTP-фейлом и растил fail_streak
+        # («страница поиска не загружается 16 прогонов подряд» каждый слот).
+        # Домен — в appeal_search_gated_now: дослинк ходит той же поисковой
+        # формой, а капча-детект, наполнявший set раньше, теперь не выполняется.
+        if _ap_court.search_disabled:
+            appeal_search_gated_now.add(_ap_court.domain)
+            log.info(
+                f"Поиск апелляции {_ap_tag}({shorten_court_name(_ap_court.name)}): "
+                f"выключен конфигом — дела заводит дамп выдачи (секция «Импорт» админки)"
+            )
+            continue
         # Дочитка поисков: выдача этого апел-суда сегодня уже отдала строки —
         # повторный слот её не запрашивает (health_obs не трогаем, union цел).
         if hk in search_skip_keys:
