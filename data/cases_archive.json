@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-28T06:28:09",
+  "updated_at": "2026-08-28T06:44:42",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -8985,7 +8985,7 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-08-27",
+        "last_checked_at": "2026-08-28",
         "motivirovka_emitted": true,
         "judicial_uid": "86RS0002-01-2025-011911-84"
       },
