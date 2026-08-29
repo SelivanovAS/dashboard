@@ -4800,6 +4800,7 @@ function clearProfileLink() {
   } catch (_) {}
   profileSessionOps.clear();
   _saveProfileOps();
+  clearCalFeedToken(); // календарная ссылка принадлежит покинутому профилю
   updateSyncButton();
 }
 // Подсветка кнопки шапки: связанное устройство — как включённый колокольчик.
@@ -4812,6 +4813,30 @@ function updateSyncButton() {
   const pid = !!getProfileId();
   btn.classList.toggle('on', pid);
   btn.classList.toggle('pending', pid && isProfileDirty());
+}
+
+// ── Календарный фид (webcal): токен подписки «Мои заседания» ───────────────
+// Локальный ключ — только КЭШ для мгновенного рендера модалки; источник
+// истины — поле feed_token профиля в KV (выдаёт POST /profile/calendar-token,
+// повторный вызов идемпотентен и вернёт тот же токен).
+const CAL_FEED_TOKEN_KEY = lsKey('cal_feed_token');
+function getCalFeedToken() {
+  try { return localStorage.getItem(CAL_FEED_TOKEN_KEY) || ''; } catch (_) { return ''; }
+}
+function setCalFeedToken(t) {
+  try { localStorage.setItem(CAL_FEED_TOKEN_KEY, String(t)); } catch (_) {}
+}
+function clearCalFeedToken() {
+  try { localStorage.removeItem(CAL_FEED_TOKEN_KEY); } catch (_) {}
+}
+// ⚠️ Ссылка строится от ОСНОВНОГО адреса территории (PUSH_WORKER_URL), а не
+// от sticky-фолбэка workerFetch: она живёт в календаре юриста месяцами и
+// должна указывать на канонический хост, а не на запасной.
+function calFeedHttpsUrl(token) {
+  return PUSH_WORKER_URL + '/calendar/' + token + '.ics';
+}
+function calFeedWebcalUrl(token) {
+  return calFeedHttpsUrl(token).replace(/^https:/, 'webcal:');
 }
 
 // ── Канонизация номеров дел (зеркало wnBuildAliasToCanonical в worker.js) ──
@@ -5319,6 +5344,27 @@ function fmtPairCode(code) {
   return c.length > 3 ? c.slice(0, 3) + '-' + c.slice(3) : c;
 }
 
+// Блок «Календарь заседаний» внутри модалки синка: единый для связанных и
+// несвязанных устройств (подписка без профиля создаст профиль сама).
+function calFeedBlockHtml() {
+  const token = getCalFeedToken();
+  if (!token) {
+    return '<div class="sync-divider">календарь</div>'
+      + '<div class="sync-note">Заседания дел со ★ появятся в календаре телефона/Outlook '
+      + 'и будут обновляться сами (с задержкой до суток; срочные изменения — пуш и дашборд).</div>'
+      + '<button class="sheet-btn-done sync-btn" onclick="requestCalendarFeed()">📅 Подписаться на календарь заседаний</button>';
+  }
+  const webcal = calFeedWebcalUrl(token);
+  return '<div class="sync-divider">календарь</div>'
+    + '<div class="sync-note">Календарь «Мои заседания» подключается по персональной ссылке. '
+    + 'iPhone/Mac — кнопка «Открыть»; Google Календарь / Outlook — «Скопировать» и вставить '
+    + 'в «Добавить календарь по URL».</div>'
+    + '<a class="sheet-btn-done sync-btn sync-btn-link" href="' + escHtml(webcal) + '">📅 Открыть в календаре</a>'
+    + '<button class="sync-btn" onclick="copyCalFeedUrl()">⧉ Скопировать ссылку</button>'
+    + '<div class="sync-feed-url">' + escHtml(webcal) + '</div>'
+    + '<button class="sync-btn sync-btn-danger" onclick="regenerateCalFeed()">Перевыпустить ссылку</button>';
+}
+
 function renderSyncSheet() {
   const body = document.getElementById('sync-sheet-body');
   if (!body) return;
@@ -5349,6 +5395,7 @@ function renderSyncSheet() {
       + 'связанных устройств территории — и постановка ★, и снятие.</div>'
       + '<button class="sheet-btn-done sync-btn" onclick="requestPairCode()">Подключить ещё устройство</button>'
       + '<button class="sync-btn sync-btn-danger" onclick="unlinkThisDevice()">Отвязать это устройство</button>'
+      + calFeedBlockHtml()
       + '</div>';
   } else {
     html = '<div class="sync-block">'
@@ -5370,6 +5417,7 @@ function renderSyncSheet() {
       + (canScanQr()
         ? '<button class="sync-btn sync-btn-scan" onclick="startSyncScan()">📷 Сканировать QR</button>'
         : '')
+      + calFeedBlockHtml()
       + '</div>';
   }
   body.innerHTML = html;
@@ -5712,6 +5760,74 @@ async function unlinkThisDevice() {
   showToast('Устройство отвязано — звёзды остались локальными', { type: 'info' });
 }
 window.unlinkThisDevice = unlinkThisDevice;
+
+// Подписка на календарный фид: получает (или перевыпускает) персональный
+// токен. Без профиля Worker создаёт профиль из локального набора сам —
+// поэтому вызов неидемпотентен и идёт как link-code: ensureWorkerHost +
+// failover:false (повтор на второй адрес плодил бы профили-сироты в KV).
+async function requestCalendarFeed(regenerate) {
+  if (!PUSH_WORKER_URL) {
+    showToast('Календарь недоступен: у территории нет Worker\'а', { type: 'error' });
+    return;
+  }
+  try {
+    const pid = getProfileId();
+    const reqBody = { watchlist: [...watchlist] };
+    if (pid) reqBody.profile_id = pid;
+    if (regenerate) reqBody.regenerate = true;
+    const ep = await currentPushEndpoint();
+    if (ep) reqBody.endpoint = ep;
+    await ensureWorkerHost();
+    const r = await workerFetch('/profile/calendar-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody),
+    }, { failover: false });
+    let data = null;
+    try { data = await r.json(); } catch (_) {}
+    if (r.status === 404 && data && data.error === 'profile_not_found') {
+      clearProfileLink();
+      showToast('Профиль не найден на сервере — связка сброшена, подпишитесь заново', { type: 'error' });
+      renderSyncSheet();
+      return;
+    }
+    if (!r.ok || !data || !data.ok || !data.token) {
+      // Голый 404 «Not Found» — старый Worker территории без этого роута.
+      showToast('Не удалось получить ссылку: сервер территории недоступен или устарел', { type: 'error' });
+      return;
+    }
+    if (!pid) setProfileLink(data.profile_id, data.updated_at);
+    setCalFeedToken(data.token);
+    renderSyncSheet();
+    if (regenerate) showToast('Ссылка перевыпущена — старая больше не работает', { type: 'success' });
+  } catch (_) {
+    showToast('Не удалось получить ссылку: нет сети', { type: 'error' });
+  }
+}
+window.requestCalendarFeed = requestCalendarFeed;
+
+async function copyCalFeedUrl() {
+  const token = getCalFeedToken();
+  if (!token) return;
+  const url = calFeedWebcalUrl(token);
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('Ссылка скопирована — вставьте её в «Добавить календарь по URL»', { type: 'success' });
+  } catch (_) {
+    // Фолбэк без Clipboard API: юрист скопирует из видимой строки сам.
+    showToast('Скопируйте ссылку из строки под кнопкой', { type: 'info' });
+  }
+}
+window.copyCalFeedUrl = copyCalFeedUrl;
+
+async function regenerateCalFeed() {
+  if (!confirm('Перевыпустить ссылку календаря? Старая перестанет работать на всех '
+      + 'устройствах, где была добавлена, — календарь придётся подключить заново.')) {
+    return;
+  }
+  await requestCalendarFeed(true);
+}
+window.regenerateCalFeed = regenerateCalFeed;
 
 // Двусторонний reconcile watchlist между клиентом и Worker (KV) после
 // `/subscribe`. Покрывает три сценария:

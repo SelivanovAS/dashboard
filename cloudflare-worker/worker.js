@@ -261,24 +261,31 @@ function wnBuildAliasToCanonical(cases) {
   }
   return map;
 }
-// Возвращает Map<bare → canonical> от свежего cases.json через CF edge cache.
-// TTL 300s — cases.json регенерируется кроном раз в день, держать дольше
-// нет смысла, держать короче — лишние fetch'и. Если cases.json недоступен
-// (ошибка сети или 5xx), возвращает null — в этом случае канонизация
-// пропускается и в KV ложится то, что отправил клиент.
-async function getAliasMapCached() {
+// Общий загрузчик JSON-данных территории через CF edge cache. TTL 300s —
+// данные регенерируются прогоном раз в день, держать дольше нет смысла,
+// держать короче — лишние fetch'и. Ошибка сети или не-2xx → null (никаких
+// исключений наружу: каждый потребитель решает сам, чем жить без данных).
+async function fetchJsonCached(url) {
   try {
-    const r = await fetch(casesDataUrl(), {
+    const r = await fetch(url, {
       cf: { cacheTtl: 300, cacheEverything: true },
     });
     if (!r.ok) return null;
-    const j = await r.json();
-    const list = Array.isArray(j?.cases) ? j.cases : [];
-    return wnBuildAliasToCanonical(list);
+    return await r.json();
   } catch (e) {
-    console.warn("Канонизация watchlist: cases.json недоступен:", e);
+    console.warn(`Данные недоступны (${url}):`, e);
     return null;
   }
+}
+
+// Возвращает Map<bare → canonical> от свежего cases.json (fetchJsonCached).
+// Если cases.json недоступен, возвращает null — в этом случае канонизация
+// пропускается и в KV ложится то, что отправил клиент.
+async function getAliasMapCached() {
+  const j = await fetchJsonCached(casesDataUrl());
+  if (!j) return null;
+  const list = Array.isArray(j?.cases) ? j.cases : [];
+  return wnBuildAliasToCanonical(list);
 }
 // Канонизирует массив номеров через alias-карту. Дедупит, сохраняет порядок.
 // Если aliasMap = null — возвращает исходный массив без изменений.
@@ -296,6 +303,230 @@ function canonicalizeWatchlistArr(arr, aliasMap) {
     }
   }
   return out;
+}
+
+// ── Календарный фид (iCalendar/webcal) ──────────────────────────────────────
+// Персональная подписка «Мои заседания»: GET /calendar/<token>.ics отдаёт
+// заседания дел из watchlist профиля, календарь клиента (iPhone/Google/
+// Outlook) поллит ссылку сам. profile_id — bearer-секрет и в URL ему не
+// место (см. шапку блока профилей), поэтому у фида СВОЙ производный
+// read-only токен: calfeed:<uuid> → {profile_id}. Компрометация ссылки =
+// только чтение расписания; лечится перевыпуском (POST /profile/
+// calendar-token с regenerate — старый индекс удаляется).
+// KV-бюджет: выпуск токена = 2 writes однократно на юриста; поллинг фида =
+// 2 reads (индекс + профиль), lists — 0. Free-tier не задевается.
+
+function feedTokenKey(t) { return `calfeed:${t}`; }
+// Токен — тот же формат uuid, что profile_id (второй crypto.randomUUID()).
+function looksLikeFeedToken(t) {
+  return typeof t === "string" && /^[0-9a-f-]{36}$/.test(t);
+}
+// TZ территории. Обе территории (ХМАО, Урал) — Asia/Yekaterinburg (+05:00);
+// форк с другим поясом задаёт CAL_TZID в [vars] wrangler.toml (вместе с
+// CAL_TZ_OFFSET_MIN — смещением в минутах для расчёта «сегодня» региона).
+function calTzid() { return cfgVar("CAL_TZID", "Asia/Yekaterinburg"); }
+function calTzOffsetMin() { return Number(cfgVar("CAL_TZ_OFFSET_MIN", 300)); }
+function calFeedName() { return cfgVar("CAL_FEED_NAME", "Мои заседания"); }
+
+// Экранирование текстовых значений по RFC 5545: \ ; , и перевод строки.
+function icsEscape(s) {
+  return String(s || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+// Свёртка длинной строки по 75 ОКТЕТОВ (не символов!): кириллица в UTF-8 —
+// 2 байта на букву, и резать посреди code point нельзя — клиенты выбрасывают
+// битые события. Продолжение — CRLF + пробел (RFC 5545 §3.1).
+function icsFold(line) {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const out = [];
+  let cur = "";
+  let curLen = 0;
+  let limit = 75;
+  for (const ch of line) { // итерация по code point'ам, не по code unit'ам
+    const chLen = enc.encode(ch).length;
+    if (curLen + chLen > limit) {
+      out.push(cur);
+      cur = " ";
+      curLen = 1;
+      limit = 75;
+    }
+    cur += ch;
+    curLen += chLen;
+  }
+  if (cur) out.push(cur);
+  return out.join("\r\n");
+}
+// "29.08.2026" → "20260829" (формат DATE iCalendar) | null при мусоре.
+function calDateLocal(ddmmyyyy) {
+  const m = String(ddmmyyyy || "").match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  return m ? `${m[3]}${m[2]}${m[1]}` : null;
+}
+// "17:20" → "1720" | null (время в карточке бывает пустым — тогда all-day).
+function calTimeLocal(hhmm) {
+  const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})$/);
+  return m ? `${m[1].padStart(2, "0")}${m[2]}` : null;
+}
+// «Сегодня» в поясе территории, формат YYYYMMDD — граница отбора событий.
+function calTodayYmd(nowMs) {
+  const d = new Date(nowMs + calTzOffsetMin() * 60000);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+// Выбор активного блока стадии — зеркало jsonToCase фронта (app.js): кассация
+// при живом cs.case_number; апелляция в appeal/cassation_watch/cassation_
+// pending при живом ap.case_number; иначе первая инстанция.
+// → {stage, block, dateYmd, time, canon} | null (нет назначенной даты).
+function calSelectHearing(c) {
+  const fi = c.first_instance || {};
+  const ap = c.appeal || {};
+  const cs = c.cassation || {};
+  const stageRaw = c.current_stage || "appeal";
+  const isCass = stageRaw === "cassation" && !!cs.case_number;
+  const isAppeal = (stageRaw === "appeal" || stageRaw === "cassation_watch" ||
+    stageRaw === "cassation_pending") && !!ap.case_number;
+  const block = isCass ? cs : (isAppeal ? ap : fi);
+  const stage = isCass ? "cassation" : (isAppeal ? "appeal" : "first_instance");
+  const dateYmd = calDateLocal(block.hearing_date);
+  if (!dateYmd) return null; // фолбэк-выдирание даты из текста события
+  // осознанно НЕ зеркалим: там дата размещения, а не проведения.
+  return {
+    stage,
+    block,
+    dateYmd,
+    time: calTimeLocal(block.hearing_time),
+    canon: wnBareCaseNumber(c.id),
+  };
+}
+// Зал/кабинет из events[] активного блока: событие с датой заседания несёт
+// place («каб. №304», «Зал 5»). У трека банка events лениво в другом файле —
+// вернётся '' и LOCATION останется без кабинета.
+function calHearingPlace(sel) {
+  const events = Array.isArray(sel.block.events) ? sel.block.events : [];
+  const raw = String(sel.block.hearing_date || "");
+  let place = "";
+  for (const e of events) {
+    if (e && e.date === raw && e.place) place = String(e.place);
+  }
+  // Кассация 7kas пишет в place целую фразу «Рассматриваются… единолично
+  // без проведения судебного заседания» — это не кабинет, отсекаем длинное.
+  return place.length > 60 ? "" : place;
+}
+// Фильтры отбора — осознанно ПРОЩЕ фронтового classifyStatus: прошедшая
+// hearing_date сама вычищает решённые дела при следующем поллинге.
+function calCaseIncluded(sel, todayYmd) {
+  if (sel.dateYmd < todayYmd) return false; // только сегодня и будущее
+  const evLow = String(sel.block.last_event || "").toLowerCase();
+  if (evLow.includes("приостановлен")) return false; // экспертиза, розыск
+  if (/оставлен[оа]?\s+без\s+движения/.test(evLow) || evLow.includes("без движения")) {
+    return false; // «без движения до …» — не заседание
+  }
+  return true;
+}
+// Мини-порт buildCourtLink фронта (только pipe-формат "id|uuid"): ссылка на
+// карточку суда для DESCRIPTION. FI: new=0; апел.: new=5; КСОЮ: new=2800001.
+function calBuildCourtLink(sel) {
+  const b = sel.block;
+  const linkRaw = String(b.link || "");
+  if (/^https?:\/\//.test(linkRaw)) return linkRaw;
+  const pm = linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
+  if (!pm || !b.court_domain) return "";
+  const did = b.delo_id || (sel.stage === "appeal" ? 5 : 1540005);
+  const srv = b.srv_num || 1;
+  const newParam = sel.stage === "cassation" ? 2800001 : (sel.stage === "appeal" ? 5 : 0);
+  return `https://${b.court_domain}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
+}
+// UTC-штамп для DTSTAMP: локальное время территории минус смещение.
+// СТАБИЛЬНЫЙ (производный от DTSTART, не Date.now()): тело фида не должно
+// меняться от поллинга к поллингу без реальной причины.
+function calDtstampUtc(dateYmd, time) {
+  const hh = time ? time.slice(0, 2) : "00";
+  const mm = time ? time.slice(2) : "00";
+  const local = Date.UTC(
+    Number(dateYmd.slice(0, 4)), Number(dateYmd.slice(4, 6)) - 1,
+    Number(dateYmd.slice(6, 8)), Number(hh), Number(mm)
+  );
+  const d = new Date(local - calTzOffsetMin() * 60000);
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+// Одно событие VEVENT. UID = <canon>--<stage>@<host>: без даты (перенос
+// заседания ОБНОВЛЯЕТ событие, а не плодит новое), со стадией (заседания
+// первой инстанции и апелляции одного дела сосуществуют), canon стабилен
+// при переезде дела между стадиями, @host разводит территории.
+function buildVevent(sel, c, host, tzid) {
+  const b = sel.block;
+  const lines = ["BEGIN:VEVENT"];
+  const uid = `${sel.canon.replace(/\s+/g, "")}--${sel.stage}@${host}`;
+  lines.push(`UID:${icsEscape(uid)}`);
+  lines.push(`DTSTAMP:${calDtstampUtc(sel.dateYmd, sel.time)}`);
+  if (sel.time) {
+    const endH = String((Number(sel.time.slice(0, 2)) + 1) % 24).padStart(2, "0");
+    lines.push(`DTSTART;TZID=${tzid}:${sel.dateYmd}T${sel.time}00`);
+    lines.push(`DTEND;TZID=${tzid}:${sel.dateYmd}T${endH}${sel.time.slice(2)}00`);
+  } else {
+    // Время суду ещё неизвестно — событие на весь день (DTEND = след. день).
+    const d = new Date(Date.UTC(
+      Number(sel.dateYmd.slice(0, 4)), Number(sel.dateYmd.slice(4, 6)) - 1,
+      Number(sel.dateYmd.slice(6, 8)) + 1
+    ));
+    const next = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+    lines.push(`DTSTART;VALUE=DATE:${sel.dateYmd}`);
+    lines.push(`DTEND;VALUE=DATE:${next}`);
+  }
+  // Заголовок: «Заседание <номер> — <оппонент>» (оппонент банка — истец,
+  // когда банк ответчик, иначе ответчик); апел./касс. — со своим префиксом.
+  const prefix = sel.stage === "cassation" ? "Кассация" :
+    (sel.stage === "appeal" ? "Апелляция" : "Заседание");
+  const opponent = (c.bank_role === "Ответчик" ? c.plaintiff : c.defendant) || "";
+  const number = b.case_number || c.id || "";
+  lines.push(`SUMMARY:${icsEscape(`${prefix} ${number}${opponent ? " — " + opponent : ""}`)}`);
+  const place = calHearingPlace(sel);
+  const court = b.court || "";
+  if (court || place) {
+    lines.push(`LOCATION:${icsEscape(place ? `${court}, ${place}` : court)}`);
+  }
+  const descParts = [];
+  const judge = b.judge || b.judge_reporter || "";
+  if (judge) descParts.push(`Судья: ${judge}`);
+  if (c.plaintiff) descParts.push(`Истец: ${c.plaintiff}`);
+  if (c.defendant) descParts.push(`Ответчик: ${c.defendant}`);
+  if (c.category) descParts.push(`Категория: ${c.category}`);
+  const courtLink = calBuildCourtLink(sel);
+  if (courtLink) descParts.push(`Карточка суда: ${courtLink}`);
+  if (descParts.length) lines.push(`DESCRIPTION:${icsEscape(descParts.join("\n"))}`);
+  lines.push(`URL:${siteBaseUrl()}/sberbank_dashboard.html`);
+  lines.push("END:VEVENT");
+  return lines;
+}
+// Обёртка VCALENDAR. Склейка строк — строго CRLF (RFC 5545), каждая строка
+// свёрнута по 75 октетов. VTIMEZONE фиксированный +0500 без DST.
+function buildIcs(veventLines, tzid, calName) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//delosud//dashboard-calendar//RU",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${icsEscape(calName)}`,
+    `X-WR-TIMEZONE:${tzid}`,
+    "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
+    "X-PUBLISHED-TTL:PT6H",
+    "BEGIN:VTIMEZONE",
+    `TZID:${tzid}`,
+    "BEGIN:STANDARD",
+    "DTSTART:19700101T000000",
+    "TZOFFSETFROM:+0500",
+    "TZOFFSETTO:+0500",
+    "TZNAME:+05",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+    ...veventLines,
+    "END:VCALENDAR",
+  ];
+  return lines.map(icsFold).join("\r\n") + "\r\n";
 }
 
 // Тело ответа /subscribe: при живой привязке к профилю гидратация идёт
@@ -706,6 +937,146 @@ async function handleProfileUnlink(request, env) {
   } catch (e) {
     console.error("profile/unlink error:", e);
     return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Выдача/перевыпуск токена календарного фида. Auth — profile_id в body
+// (bearer, как у соседних /profile/*). Без profile_id создаёт профиль из
+// body.watchlist (зеркало ветки handleProfileLinkCode) — юристу без профиля
+// не нужен обходной путь через код связывания. Идемпотентен: повторный
+// вызов возвращает существующий токен (0 writes); regenerate:true —
+// перевыпуск (старая ссылка перестаёт работать).
+async function handleProfileCalendarToken(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  try {
+    const body = await request.json();
+    let profileId = typeof body.profile_id === "string" ? body.profile_id : "";
+    let profile = null;
+    if (profileId) {
+      if (!looksLikeProfileId(profileId)) {
+        return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
+      }
+      profile = await getProfile(env, profileId);
+      if (!profile) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "profile_not_found" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders(origin) } }
+        );
+      }
+    } else {
+      profileId = crypto.randomUUID();
+      const aliasMap = await getAliasMapCached();
+      const canonical = canonicalizeWatchlistArr(sanitizeWatchlistInput(body.watchlist), aliasMap);
+      profile = {
+        schema_version: 1,
+        watchlist: canonical,
+        updated_at: Date.now(),
+        created_at: new Date().toISOString(),
+      };
+      await putProfile(env, profileId, profile);
+      await attachSubToProfile(env, body.endpoint, profileId);
+    }
+    let token = typeof profile.feed_token === "string" ? profile.feed_token : "";
+    if (!token || body.regenerate === true) {
+      const oldToken = token;
+      token = crypto.randomUUID();
+      // ⚠️ Индекс calfeed:* — БЕЗ expirationTtl: ссылка живёт в календаре
+      // юриста месяцами, отзыв — только перевыпуском.
+      await env.PUSH_SUBSCRIPTIONS.put(
+        feedTokenKey(token),
+        JSON.stringify({ profile_id: profileId, created_at: new Date().toISOString() })
+      );
+      if (oldToken) await env.PUSH_SUBSCRIPTIONS.delete(feedTokenKey(oldToken));
+      // ⚠️ putProfile, НЕ writeProfileWatchlist: updated_at — LWW-штамп
+      // watchlist'а, токен фида его не трогает (см. шапку блока профилей).
+      profile.feed_token = token;
+      profile.feed_token_created_at = new Date().toISOString();
+      await putProfile(env, profileId, profile);
+      console.log(
+        `Токен календаря ${oldToken ? "перевыпущен" : "выдан"} для профиля ${shortProfileId(profileId)}… (${token.slice(0, 8)}…)`
+      );
+    }
+    return new Response(JSON.stringify({
+      ok: true,
+      profile_id: profileId,
+      token,
+      path: `/calendar/${token}.ics`,
+      updated_at: typeof profile.updated_at === "number" ? profile.updated_at : 0,
+    }), { headers: { "Content-Type": "application/json", ...corsHeaders(origin) } });
+  } catch (e) {
+    console.error("profile/calendar-token error:", e);
+    return new Response("Error", { status: 500, headers: corsHeaders(origin) });
+  }
+}
+
+// Сам фид: GET /calendar/<token>.ics. Зовётся календарным клиентом (без
+// Origin — CORS не нужен). 404 — отозванный/битый токен (клиент честно
+// покажет ошибку подписки после перевыпуска).
+async function handleCalendarFeed(request, env, token) {
+  try {
+    const rawIdx = await env.PUSH_SUBSCRIPTIONS.get(feedTokenKey(token));
+    if (!rawIdx) return new Response("Not Found", { status: 404 });
+    let profileId = "";
+    try { profileId = (JSON.parse(rawIdx) || {}).profile_id || ""; } catch (_) { /* ниже */ }
+    const profile = await getProfile(env, profileId);
+    // Страховка на недоудалённый старый индекс: токен обязан совпадать с
+    // актуальным в профиле.
+    if (!profile || profile.feed_token !== token) {
+      return new Response("Not Found", { status: 404 });
+    }
+    const tzid = calTzid();
+    const host = new URL(request.url).hostname;
+    const watch = Array.isArray(profile.watchlist) ? profile.watchlist : [];
+    const icsHeaders = {
+      "Content-Type": "text/calendar; charset=utf-8",
+      // private: в URL токен, shared-кэшам ответ не отдавать. 15 минут
+      // гасят и KV reads, и «взбесившийся» клиент с частым поллингом.
+      "Cache-Control": "private, max-age=900",
+      "Content-Disposition": 'inline; filename="moi-zasedaniya.ics"',
+    };
+    if (!watch.length) {
+      // Пустой watchlist → валидный ПУСТОЙ календарь (200): подписка у
+      // клиента не считается битой, звёзды появятся — появятся и события.
+      return new Response(buildIcs([], tzid, calFeedName()), { headers: icsHeaders });
+    }
+    const casesJson = await fetchJsonCached(adminPageConfig().casesUrl);
+    if (!casesJson) {
+      // Пустой календарь отдавать НЕЛЬЗЯ — клиент сотрёт события юриста.
+      // 503 + Retry-After: клиенты хранят последнюю успешную копию.
+      return new Response("Service Unavailable", {
+        status: 503,
+        headers: { "Retry-After": "3600" },
+      });
+    }
+    const watchSet = new Set(watch);
+    // Композитные каноны «домен|номер» — звёзды трека «Иски банка»: тянем
+    // второй файл только когда они есть; его отказ фид не валит.
+    let bankCases = [];
+    if (watch.some((w) => w.includes("|"))) {
+      const bankJson = await fetchJsonCached(adminPageConfig().bankUrl);
+      bankCases = Array.isArray(bankJson?.cases) ? bankJson.cases : [];
+    }
+    const todayYmd = calTodayYmd(Date.now());
+    const veventLines = [];
+    for (const c of (Array.isArray(casesJson.cases) ? casesJson.cases : [])) {
+      if (!watchSet.has(wnBareCaseNumber(c.id))) continue;
+      const sel = calSelectHearing(c);
+      if (sel && calCaseIncluded(sel, todayYmd)) {
+        veventLines.push(...buildVevent(sel, c, host, tzid));
+      }
+    }
+    for (const c of bankCases) {
+      const dom = String((c.first_instance || {}).court_domain || "").trim();
+      if (!watchSet.has(`${dom}|${wnBareCaseNumber(c.id)}`)) continue;
+      const sel = calSelectHearing(c);
+      if (sel && calCaseIncluded(sel, todayYmd)) {
+        veventLines.push(...buildVevent(sel, c, host, tzid));
+      }
+    }
+    return new Response(buildIcs(veventLines, tzid, calFeedName()), { headers: icsHeaders });
+  } catch (e) {
+    console.error("calendar feed error:", e);
+    return new Response("Error", { status: 500 });
   }
 }
 
@@ -2203,6 +2574,16 @@ export default {
 
     if (url.pathname === "/profile/unlink" && request.method === "POST") {
       return handleProfileUnlink(request, env);
+    }
+
+    // Календарный фид (webcal): выдача токена + сам .ics
+    if (url.pathname === "/profile/calendar-token" && request.method === "POST") {
+      return handleProfileCalendarToken(request, env);
+    }
+
+    const calMatch = url.pathname.match(/^\/calendar\/([0-9a-f-]{36})\.ics$/);
+    if (calMatch && request.method === "GET") {
+      return handleCalendarFeed(request, env, calMatch[1]);
     }
 
     if (url.pathname === "/admin" && request.method === "GET") {

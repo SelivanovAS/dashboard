@@ -53,6 +53,10 @@ GH_REPO = "SelivanovAS/dashboard"
 # `crons = []` сюда ставится "", иначе плитка обещает запуск, которого не будет.
 # ⏸ 19.08.2026 флип на Mac-резерв: пусто; вернуть "3:30" вместе с crons.
 CRON_UTC = ""
+# Календарный фид (webcal): опциональные переопределения для форка территории
+# с другим часовым поясом — CAL_TZID (IANA-имя), CAL_TZ_OFFSET_MIN (смещение
+# в минутах) и CAL_FEED_NAME (имя календаря). Дефолты worker.js — обе текущие
+# территории: Asia/Yekaterinburg / 300 / «Мои заседания» — здесь не задаём.
 
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS
