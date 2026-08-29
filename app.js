@@ -4849,6 +4849,15 @@ function calFeedGoogleUrl(token) {
   return 'https://calendar.google.com/calendar/render?cid='
     + encodeURIComponent(calFeedWebcalUrl(token));
 }
+// Веб-Outlook (личные аккаунты Microsoft: outlook.com / M365): открывает
+// форму «Подписаться из Интернета» с уже заполненной ссылкой и именем.
+// Корпоративный Exchange в закрытом контуре до фида не достучится — это
+// путь для личных ящиков.
+function calFeedOutlookUrl(token) {
+  return 'https://outlook.live.com/calendar/0/addfromweb?url='
+    + encodeURIComponent(calFeedWebcalUrl(token))
+    + '&name=' + encodeURIComponent('Мои заседания');
+}
 // Платформы Apple понимают webcal:— системный диалог «Подписаться на
 // календарь» (iPhone/iPad и Mac с Calendar.app). Тот же детект, что у
 // подсказки-колокольчика iOS (injectPushBell).
@@ -5378,6 +5387,7 @@ function calFeedBlockHtml() {
   if (token) {
     html += '<div class="cal-service-row">'
       + '<button class="sync-btn cal-quiet-btn" onclick="copyCalFeedUrl()">⧉ Скопировать ссылку</button>'
+      + '<button class="sync-btn cal-quiet-btn" onclick="addCalToOutlook()">Outlook</button>'
       + '<button class="sync-btn cal-quiet-btn cal-quiet-danger" onclick="regenerateCalFeed()">Перевыпустить</button>'
       + '</div>'
       + '<details class="cal-url-details"><summary>Показать ссылку (для Outlook / ручной вставки)</summary>'
@@ -5873,6 +5883,19 @@ async function copyCalFeedUrl() {
   }
 }
 window.copyCalFeedUrl = copyCalFeedUrl;
+
+// «Добавить в Outlook»: веб-Outlook с заполненной формой подписки. Тот же
+// паттерн, что subscribeCalendar: токен сам, window.open + фолбэк от
+// попап-блокера (жест «остывает» за await).
+async function addCalToOutlook() {
+  let token = getCalFeedToken();
+  if (!token) token = await requestCalendarFeed();
+  if (!token) return;
+  const url = calFeedOutlookUrl(token);
+  const w = window.open(url, '_blank');
+  if (!w) window.location.href = url;
+}
+window.addCalToOutlook = addCalToOutlook;
 
 async function regenerateCalFeed() {
   if (!confirm('Перевыпустить ссылку календаря? Старая перестанет работать на всех '

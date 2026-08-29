@@ -329,6 +329,16 @@ class TestFrontendContract:
         assert "window.open" in body and "location.href = url" in body
         assert "calendar.google.com/calendar/render?cid=" in _fn_src(js, "calFeedGoogleUrl")
 
+    def test_outlook_button(self):
+        # Веб-Outlook (личные ящики Microsoft): форма подписки с заполненной
+        # ссылкой. Тот же паттерн, что subscribeCalendar.
+        js = _app_js()
+        assert "outlook.live.com/calendar/0/addfromweb" in _fn_src(js, "calFeedOutlookUrl")
+        body = _fn_src(js, "addCalToOutlook")
+        assert "requestCalendarFeed" in body
+        assert "window.open" in body and "location.href = url" in body
+        assert "addCalToOutlook()" in _fn_src(js, "calFeedBlockHtml")
+
     def test_request_returns_token(self):
         # subscribeCalendar/copyCalFeedUrl ждут токен ВОЗВРАТОМ, не через кэш.
         body = _fn_src(_app_js(), "requestCalendarFeed")

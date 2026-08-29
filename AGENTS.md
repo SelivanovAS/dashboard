@@ -1467,8 +1467,11 @@ UID, переносы обновляют, отпавшие исчезают). К
   Apple (`calIsApplePlatform`) → `webcal:`-переход, остальные →
   `calFeedGoogleUrl` (calendar.google.com/calendar/render?cid=…,
   `window.open` + фолбэк `location.href` — попап-блокер после await);
-  сервисный ряд (копия/перевыпуск/показ ссылки в `<details>`) — только при
-  выданном токене. `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только
+  сервисный ряд (копия/Outlook/перевыпуск/показ ссылки в `<details>`) —
+  только при выданном токене; кнопка «Outlook» (`addCalToOutlook`) открывает
+  веб-Outlook личных ящиков Microsoft с заполненной формой подписки
+  (`outlook.live.com/calendar/0/addfromweb` — корпоративный Exchange в
+  закрытом контуре до фида не достучится). `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только
   кэш, источник истины — профиль; ссылка строится от **PUSH_WORKER_URL** (не
   от sticky-фолбэка — живёт в календаре месяцами); `clearProfileLink` чистит
   и токен, а `setProfileLink` сбрасывает кэш при смене profile_id (связка
