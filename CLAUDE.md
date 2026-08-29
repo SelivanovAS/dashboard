@@ -1799,6 +1799,47 @@ push-разрешения синка не было вовсе, ротация en
 `TestBankAliasWiring` (test_bank_storage_split.py),
 `test_bank_aliases_include_material_number` (test_watchlist_profiles.py).
 
+## Календарный фид «Мои заседания» (webcal, 29.08.2026)
+
+Персональная подписка календаря телефона/Outlook на заседания дел из
+watchlist: `GET /calendar/<token>.ics` на Worker'е, клиент поллит ссылку сам
+(дублей не бывает по построению — события синхронизируются по стабильным
+UID, переносы обновляют, отпавшие исчезают). Кнопки — в модалке синка 🔗
+(`calFeedBlockHtml` в app.js, обе ветки: связанное устройство и нет).
+
+- **Токен**: `profile_id` — bearer-секрет, в URL ему не место → у фида СВОЙ
+  read-only `feed_token` (второй `crypto.randomUUID()` в объекте профиля) +
+  индекс KV `calfeed:<token>` → `{profile_id}` **без TTL**. Выдача —
+  `POST /profile/calendar-token` (auth `profile_id` в body; без него создаёт
+  профиль из `body.watchlist`, зеркало link-code → фронт зовёт с
+  `ensureWorkerHost` + `failover:false`); идемпотентен, `regenerate:true` —
+  перевыпуск (старый индекс удаляется, старая ссылка умирает). ⚠️ Токен
+  пишется через `putProfile`, НЕ `writeProfileWatchlist` — `updated_at`
+  принадлежит watchlist'у (LWW).
+- **Фид** (`handleCalendarFeed`): 2 KV reads на поллинг, 0 writes/lists —
+  free-tier не задевается. Пустой watchlist → валидный ПУСТОЙ VCALENDAR
+  (200, подписка не битая); недоступный cases.json → **503 + Retry-After**
+  (пустой ответ стёр бы события у подписчика). Bank-трек тянется вторым
+  fetch'ем только при композитных канонах «домен|номер» в наборе. Заголовки:
+  `text/calendar; charset=utf-8`, `Cache-Control: private, max-age=900`.
+- **ICS**: UID = `<canon>--<stage>@<host>` (canon = bare id — стабилен при
+  переезде дела между стадиями; stage разводит FI/апелляцию/кассацию; host —
+  территории), DTSTAMP стабильный (производный от DTSTART, не `Date.now()`),
+  `DTSTART;TZID` + DTEND +1 ч (all-day без времени), LOCATION = суд +
+  `events[].place` (кабинет/зал; у bank-трека events ленивые — без кабинета),
+  DESCRIPTION с судьёй/сторонами/ссылкой на карточку суда
+  (`calBuildCourtLink` — мини-порт buildCourtLink). Отбор — упрощённое
+  зеркало фронта (`calCaseIncluded`): дата ≥ сегодня в TZ территории,
+  «приостановлено»/«без движения» — мимо. Свёртка строк по **75 октетов**
+  (`icsFold`, кириллица 2 байта — code point не режется), склейка CRLF.
+- **TZ/имя** — `CAL_TZID`/`CAL_TZ_OFFSET_MIN`/`CAL_FEED_NAME` через `cfgVar`
+  (дефолты Asia/Yekaterinburg +300/«Мои заседания» — обе территории +05:00;
+  форк с другим поясом меняет только wrangler.toml).
+- Фронт: `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только кэш,
+  источник истины — профиль; ссылка строится от **PUSH_WORKER_URL** (не от
+  sticky-фолбэка — живёт в календаре месяцами); `clearProfileLink` чистит и
+  токен. Стражи — [scripts/tests/test_calendar_feed.py](scripts/tests/test_calendar_feed.py).
+
 ## Соглашения
 
 - **Язык:** весь код, переменные, комментарии, промпты — **на русском**.
