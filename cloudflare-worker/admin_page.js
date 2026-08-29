@@ -712,6 +712,23 @@ details.fold > summary:hover { color:var(--fg-1); }
   padding:10px 12px; max-width:1024px; display:flex; flex-direction:column; gap:10px; }
 .profile-group-head { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-semibold); }
 .profile-group-orphan .profile-group-head { color:var(--fg-3); font-weight:var(--fw-medium); }
+/* Профиль без единого push-устройства — свёртка с составом набора. display:block
+   перебивает flex базового .profile-group: у <details> флексовая раскладка
+   ломает пару summary/тело. Треугольник и правила summary — как у .sub-card. */
+details.profile-group-orphan { display:block; }
+.profile-group-orphan > summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  cursor:pointer; list-style:none; user-select:none; }
+.profile-group-orphan > summary::-webkit-details-marker { display:none; }
+.profile-group-orphan > summary::before { content:''; width:0; height:0; border-left:5px solid var(--fg-4);
+  border-top:4px solid transparent; border-bottom:4px solid transparent;
+  transition:transform var(--dur-fast) var(--ease-out); flex-shrink:0; }
+.profile-group-orphan[open] > summary::before { transform:rotate(90deg); }
+.profile-group-orphan > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px;
+  border-radius:var(--radius); }
+.profile-group-orphan > summary .spacer { flex:1; }
+.profile-body { padding-top:10px; margin-top:10px; border-top:1px solid var(--divider); }
+.profile-why { color:var(--fg-3); font-size:var(--fs-xs); line-height:1.5; margin-bottom:8px; }
+.profile-guess { color:var(--fg-2); font-size:var(--fs-xs); margin-bottom:8px; }
 /* Свёрнутая строка подписки. Кнопок в summary НЕТ намеренно: клик по
    вложенной кнопке переключал бы свёртку. Треугольник — тот же приём, что у
    details.fold, но своим правилом (там селектор по прямому потомку .fold). */
@@ -1486,6 +1503,8 @@ let lastPushesGeneratedAt = "";
 // каждое нажатие в поиске и после render(true) (переименование/удаление/
 // watchlist) — иначе раскрытая карточка схлопывалась бы под руками.
 let subsOpen = new Set();
+// То же для карточек профилей без push-устройств (ключ — profile_id).
+let profilesOpen = new Set();
 
 // ── Секция «Система»: запуск прогонов GitHub Actions ─────────────────────────
 // Список последних прогонов и живой лог убраны из админки (29.07.2026,
@@ -2366,7 +2385,11 @@ function expiryBadge(sub) {
   const txt = left > 0 ? "истекает ≈ через " + left + " дн — нужен вход в PWA" : "могла истечь — нужен вход в PWA";
   return '<span class="badge badge-expiry">⏳ ' + txt + '</span>';
 }
-function caseRowHtml(num, casesMap) {
+// opts.readOnly — рендер без кнопок действий: карточка профиля-сироты живёт
+// без endpoint'а, а handleAction выходит на «if (!endpoint) return», то есть
+// крестик там был бы мёртвой кнопкой.
+function caseRowHtml(num, casesMap, opts) {
+  const readOnly = !!(opts && opts.readOnly);
   const bare = bareCaseNumber(num);
   const c = casesMap.get(bare);
   // Composite-запись трека «Иски банка» («домен|номер») показываем юристу
@@ -2379,7 +2402,7 @@ function caseRowHtml(num, casesMap) {
     // его в watchlist бессмысленно — даём убрать прямо из карточки.
     return '<div class="case-row"><span class="case-num" title="' + escHtml(num) + '">' + escHtml(shownNum) + '</span>'
       + '<span class="badge badge-run" title="Дело удалено или переименовано без алиаса — push по этому номеру никогда не сработает">нигде не найдено</span>'
-      + '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist" aria-label="Убрать номер из watchlist">' + ICON_X + '</button>'
+      + (readOnly ? '' : '<button class="btn-icon" type="button" data-action="wldel" data-wl-num="' + escHtml(num) + '" title="Убрать номер из watchlist" aria-label="Убрать номер из watchlist">' + ICON_X + '</button>')
       + '</div>';
   }
   const parties = (c.plaintiff && c.defendant)
@@ -2714,15 +2737,105 @@ function subMatches(sub, q) {
   }
   return hay.toLowerCase().indexOf(q) >= 0;
 }
+// ── Профиль без push-устройств ───────────────────────────────────────────────
+// Профиль-сирота = запись profile:<uuid>, на которую не ссылается ни одна живая
+// подписка sub:*. Так выглядят: устройство с запрещёнными уведомлениями (★
+// синхронизируются и без push), устройство, чья подписка истекла по TTL (60
+// дней), и подписка на календарный фид — она заводит профиль вовсе без push.
+// ⚠️ Устройств в профиле НЕТ: связь односторонняя (sub.profile_id → профиль),
+// ни UA, ни истории там не хранится. Поэтому владельца опознаём косвенно —
+// пересечением набора с живыми подписками и кнопкой 🔗 на самом устройстве
+// (дашборд показывает там первые 8 символов profile_id).
+function profileWlSet(p) {
+  const out = new Set();
+  const wl = Array.isArray(p.watchlist) ? p.watchlist : [];
+  for (const n of wl) out.add(bareCaseNumber(n));
+  return out;
+}
+// Поиск по профилю — зеркало subMatches: id, номера дел, стороны и суд.
+function profileMatches(p, q) {
+  if (!q) return true;
+  let hay = String(p.profile_id || "");
+  for (const num of (Array.isArray(p.watchlist) ? p.watchlist : [])) {
+    hay += " " + num;
+    const c = casesMapGlobal.get(bareCaseNumber(num));
+    if (c) hay += " " + c.plaintiff + " " + c.defendant + " " + c.court;
+  }
+  return hay.toLowerCase().indexOf(q) >= 0;
+}
+// Кто ведёт набор: подписка с наибольшим пересечением. Порог в 2 совпадения —
+// одно общее дело бывает случайным (наборы разных юристов пересекаются).
+function profileLikelyOwner(p, subs) {
+  const mine = profileWlSet(p);
+  if (mine.size < 2) return null;
+  let best = null;
+  for (const s of subs) {
+    let hits = 0;
+    for (const n of (Array.isArray(s.watchlist) ? s.watchlist : [])) {
+      if (mine.has(bareCaseNumber(n))) hits++;
+    }
+    if (hits >= 2 && (!best || hits > best.hits)) best = { sub: s, hits: hits };
+  }
+  return best;
+}
+// ⚠️ Кнопок в <summary> нет намеренно: клик по кнопке переключал бы свёртку.
+// Строки дел — readOnly: у профиля нет endpoint'а, и крестик «убрать номер»
+// был бы мёртвым (handleAction выходит на «if (!endpoint) return»).
+function orphanProfileHtml(p, isOpen) {
+  const wl = Array.isArray(p.watchlist) ? p.watchlist : [];
+  const short = escHtml(String(p.profile_id).slice(0, 8));
+  const orphans = subOrphanCount(wl, casesMapGlobal);
+  const owner = profileLikelyOwner(p, allSubs);
+  // updated_at профиля — миллисекунды эпохи (LWW-штамп набора), relTime ждёт ISO.
+  const updIso = p.updated_at ? new Date(p.updated_at).toISOString() : "";
+  const cases = wl.length
+    ? wl.map(function (num) { return caseRowHtml(num, casesMapGlobal, { readOnly: true }); }).join("")
+    : '<div class="empty">Набор пуст — профиль создан, но ★ ни разу не ставили</div>';
+  return '<details class="profile-group profile-group-orphan" data-profile-id="' + escHtml(p.profile_id) + '"' + (isOpen ? " open" : "") + '>'
+    + '<summary class="profile-group-head">'
+    +   '🔗 Профиль ' + short + ' · без push-устройств'
+    +   (p.has_feed ? '<span class="badge badge-watch" title="Профиль ведёт подписку календаря «Мои заседания» — она заводится и без push">📅 календарь</span>' : '')
+    +   (orphans ? '<span class="badge badge-run" title="Номера, которых нет ни в активных делах, ни в архиве">⚠ ' + orphans + '</span>' : '')
+    +   '<span class="spacer"></span>'
+    +   '<span class="sub-count">' + nPlural(wl.length, "дело", "дела", "дел") + '</span>'
+    + '</summary>'
+    + '<div class="profile-body">'
+    +   '<div class="sub-kv">'
+    +     '<span>Создан <b>' + escHtml(relTime(p.created_at)) + '</b></span>'
+    +     '<span>★ менялись <b>' + escHtml(relTime(updIso)) + '</b></span>'
+    +     (p.has_feed ? '<span>Календарь <b>' + escHtml(relTime(p.feed_token_created_at)) + '</b></span>' : '')
+    +   '</div>'
+    +   '<div class="profile-why">Push-устройств нет: на устройстве запрещены уведомления '
+    +     '(★ синхронизируются и без них), либо push-подписка истекла (60 дней без входа), '
+    +     'либо профиль заведён подпиской на календарь. Чьё это устройство — видно на нём '
+    +     'самом: дашборд → кнопка 🔗 → «профиль ' + short + '».</div>'
+    +   (owner
+      ? '<div class="profile-guess">Набор пересекается с подпиской «'
+        + escHtml(owner.sub.label || detectDevice(owner.sub.user_agent))
+        + '» — ' + owner.hits + ' из ' + wl.length + '</div>'
+      : '')
+    +   cases
+    + '</div>'
+    + '</details>';
+}
 function renderSubsList() {
   const root = document.getElementById("root");
   const q = document.getElementById("subs-search").value.trim().toLowerCase();
   const visible = allSubs.filter(function (s) { return subMatches(s, q); });
+  // Профиль-сирота — на который не ссылается НИ ОДНА подписка вообще (allSubs,
+  // не visible: иначе поиск, спрятавший устройства профиля, показал бы живой
+  // профиль строкой «без push-устройств»). Совпавшие с запросом считаем ДО
+  // autoOpen — они участвуют в пороге авто-раскрытия наравне с подписками.
+  const linkedProfiles = new Set();
+  for (const s of allSubs) { if (s.profile_id) linkedProfiles.add(s.profile_id); }
+  const orphanMatches = allProfiles.filter(function (p) {
+    return !linkedProfiles.has(p.profile_id) && profileMatches(p, q);
+  });
   // Найденное раскрываем сами, но только когда поиск ДЕЙСТВИТЕЛЬНО сузил
   // список: иначе буква «а» развернёт всех и вернёт простыню. Ручное
   // состояние (subsOpen) не трогаем — очистка поиска возвращает то, что
   // юрист раскрыл сам.
-  const autoOpen = !!q && visible.length <= 3;
+  const autoOpen = !!q && (visible.length + orphanMatches.length) <= 3;
   function cardHtml(s) {
     return renderCard(s, casesMapGlobal, lastPushesMap.get(s.endpoint), lastPushesGeneratedAt,
       autoOpen || subsOpen.has(s.endpoint), autoOpen);
@@ -2760,24 +2873,23 @@ function renderSubsList() {
       + '</div>';
   }
   html += singles.map(cardHtml).join("");
-  // Профили без единой живой подписки (все устройства отвязались или их
-  // KV-записи истекли): read-only строка, видна только при пустом поиске.
-  if (!q) {
-    for (const p of allProfiles) {
-      if (seenProfiles.has(p.profile_id)) continue;
-      html += '<div class="profile-group profile-group-orphan" data-profile-id="' + escHtml(p.profile_id) + '">'
-        + '<div class="profile-group-head">🔗 Профиль ' + escHtml(String(p.profile_id).slice(0, 8))
-        + ' · без push-устройств · ' + nPlural((p.watchlist || []).length, "дело", "дела", "дел") + '</div>'
-        + '</div>';
-    }
+  // Профили без единой живой подписки (устройство без push-разрешения, истёкшая
+  // подписка, подписка на календарь): read-only свёртка с составом набора.
+  // Поиск их тоже находит — по id, номерам дел и сторонам (profileMatches):
+  // иначе номер, который ведёт только такой профиль, в админке не искался.
+  for (const p of orphanMatches) {
+    html += orphanProfileHtml(p, autoOpen || profilesOpen.has(p.profile_id));
   }
   root.className = "subs";
   root.innerHTML = html;
   if (!html) {
     root.innerHTML = '<div class="empty">' + (q ? "Ничего не найдено по запросу" : "Подписок нет.") + '</div>';
   }
+  // Счётчик считает ПОДПИСКИ, а поиск показывает ещё и профили без устройств —
+  // без приписки выдача «0 из 1» при четырёх видимых карточках противоречит себе.
   document.getElementById("subs-count").textContent =
-    q ? visible.length + " из " + allSubs.length : String(allSubs.length);
+    (q ? visible.length + " из " + allSubs.length : String(allSubs.length))
+    + (q && orphanMatches.length ? " · +" + nPlural(orphanMatches.length, "профиль", "профиля", "профилей") : "");
 }
 
 async function render(force) {
@@ -2858,7 +2970,16 @@ document.getElementById("root").addEventListener("click", function (e) {
   const det = s.parentElement;
   // Фильтр обязателен: внутренние details.fold («Последний push», «Дела»)
   // иначе писали бы мусор.
-  if (!det || !det.classList.contains("sub-card")) return;
+  if (!det) return;
+  if (det.classList.contains("profile-group-orphan")) {
+    const pid = det.getAttribute("data-profile-id");
+    if (!pid) return;
+    setTimeout(function () {
+      if (det.open) profilesOpen.add(pid); else profilesOpen.delete(pid);
+    }, 0);
+    return;
+  }
+  if (!det.classList.contains("sub-card")) return;
   const ep = det.getAttribute("data-endpoint");
   if (!ep) return;
   setTimeout(function () {

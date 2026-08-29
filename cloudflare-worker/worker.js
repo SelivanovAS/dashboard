@@ -1347,6 +1347,12 @@ async function handleAdminData(request, env) {
             watchlist: Array.isArray(p.watchlist) ? p.watchlist : [],
             updated_at: typeof p.updated_at === "number" ? p.updated_at : 0,
             created_at: p.created_at || "",
+            // Признак календарной подписки: она заводит профиль БЕЗ push
+            // (handleProfileCalendarToken) — то есть объясняет «сироту без
+            // push-устройств». ⚠️ Сам feed_token НЕ отдаём: это bearer-ссылка
+            // на .ics, а /admin/data открывается в браузере.
+            has_feed: typeof p.feed_token === "string" && p.feed_token.length > 0,
+            feed_token_created_at: p.feed_token_created_at || "",
           };
         } catch (_) { return null; }
       })
