@@ -1521,9 +1521,16 @@ tr.detail-row { display:none; }
 .sync-scan-video { width:100%; max-height:320px; border-radius:var(--radius); background:#000; object-fit:cover; }
 .sync-btn-scan { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
 .sync-btn-scan:hover { border-color:var(--border-strong); background:var(--bg-3); }
-/* Календарный фид: <a>, стилизованная под кнопку модалки, и строка ссылки
-   (webcal://… длинная — переносим посимвольно, monospace, копируется целиком). */
-.sync-btn-link { display:block; text-align:center; text-decoration:none; box-sizing:border-box; }
+/* Календарный фид: главная кнопка одна (subscribeCalendar), под ней тихий
+   сервисный ряд и свёртка со ссылкой (webcal://… длинная — переносим
+   посимвольно, monospace, копируется целиком). */
+.cal-service-row { display:flex; gap:10px; justify-content:center; }
+.cal-quiet-btn { padding:7px 14px; border-radius:var(--radius-pill); font-size:var(--fs-sm); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-2); border:1px solid var(--border); }
+.cal-quiet-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.cal-quiet-danger { color:var(--red-500); }
+.cal-quiet-danger:hover { border-color:var(--red-500); }
+.cal-url-details summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; text-align:center; }
+.cal-url-details[open] summary { margin-bottom:6px; }
 .sync-feed-url { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); word-break:break-all; padding:8px 10px; border:1px dashed var(--border); border-radius:var(--radius); background:var(--bg-2); user-select:all; }
 /* Кнопка шапки: связанное устройство подсвечено, как включённый колокольчик
    (#btn-push.on — та же пара токенов). */
