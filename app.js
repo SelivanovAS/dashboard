@@ -4843,6 +4843,19 @@ function calFeedHttpsUrl(token) {
 function calFeedWebcalUrl(token) {
   return calFeedHttpsUrl(token).replace(/^https:/, 'webcal:');
 }
+// Ссылка «добавить по URL» Google Календаря: открывает его сразу с диалогом
+// «Добавить этот календарь?» — путь Android/Windows, где webcal: не подхвачен.
+function calFeedGoogleUrl(token) {
+  return 'https://calendar.google.com/calendar/render?cid='
+    + encodeURIComponent(calFeedWebcalUrl(token));
+}
+// Платформы Apple понимают webcal:— системный диалог «Подписаться на
+// календарь» (iPhone/iPad и Mac с Calendar.app). Тот же детект, что у
+// подсказки-колокольчика iOS (injectPushBell).
+function calIsApplePlatform() {
+  const ua = navigator.userAgent || '';
+  return /iPad|iPhone|iPod|Macintosh/.test(ua);
+}
 
 // ── Канонизация номеров дел (зеркало wnBuildAliasToCanonical в worker.js) ──
 // Watchlist хранит ТОЛЬКО канонические bare-id: bare(rawId) — ту же форму,
@@ -5350,24 +5363,27 @@ function fmtPairCode(code) {
 }
 
 // Блок «Календарь заседаний» внутри модалки синка: единый для связанных и
-// несвязанных устройств (подписка без профиля создаст профиль сама).
+// несвязанных устройств. ОДНА умная кнопка (subscribeCalendar): токен
+// добывается сам, календарь открывается сразу — 1 тап + системное
+// «Подписаться». Сервисный ряд (копия/перевыпуск/ссылка) — только когда
+// токен уже есть, тихо под кнопкой.
+const CAL_SUBSCRIBE_LABEL = '📅 Добавить заседания в календарь';
 function calFeedBlockHtml() {
   const token = getCalFeedToken();
-  if (!token) {
-    return '<div class="sync-divider">календарь</div>'
-      + '<div class="sync-note">Заседания дел со ★ появятся в календаре телефона/Outlook '
-      + 'и будут обновляться сами (с задержкой до суток; срочные изменения — пуш и дашборд).</div>'
-      + '<button class="sheet-btn-done sync-btn" onclick="requestCalendarFeed()">📅 Подписаться на календарь заседаний</button>';
+  let html = '<div class="sync-divider">календарь</div>'
+    + '<div class="sync-note">Заседания дел со ★ добавятся в календарь телефона и будут '
+    + 'обновляться сами (с задержкой до суток; срочные изменения — пуш и дашборд).</div>'
+    + '<button class="sheet-btn-done sync-btn" id="cal-subscribe-btn" '
+    + 'onclick="subscribeCalendar()">' + CAL_SUBSCRIBE_LABEL + '</button>';
+  if (token) {
+    html += '<div class="cal-service-row">'
+      + '<button class="sync-btn cal-quiet-btn" onclick="copyCalFeedUrl()">⧉ Скопировать ссылку</button>'
+      + '<button class="sync-btn cal-quiet-btn cal-quiet-danger" onclick="regenerateCalFeed()">Перевыпустить</button>'
+      + '</div>'
+      + '<details class="cal-url-details"><summary>Показать ссылку (для Outlook / ручной вставки)</summary>'
+      + '<div class="sync-feed-url">' + escHtml(calFeedWebcalUrl(token)) + '</div></details>';
   }
-  const webcal = calFeedWebcalUrl(token);
-  return '<div class="sync-divider">календарь</div>'
-    + '<div class="sync-note">Календарь «Мои заседания» подключается по персональной ссылке. '
-    + 'iPhone/Mac — кнопка «Открыть»; Google Календарь / Outlook — «Скопировать» и вставить '
-    + 'в «Добавить календарь по URL».</div>'
-    + '<a class="sheet-btn-done sync-btn sync-btn-link" href="' + escHtml(webcal) + '">📅 Открыть в календаре</a>'
-    + '<button class="sync-btn" onclick="copyCalFeedUrl()">⧉ Скопировать ссылку</button>'
-    + '<div class="sync-feed-url">' + escHtml(webcal) + '</div>'
-    + '<button class="sync-btn sync-btn-danger" onclick="regenerateCalFeed()">Перевыпустить ссылку</button>';
+  return html;
 }
 
 function renderSyncSheet() {
@@ -5766,14 +5782,15 @@ async function unlinkThisDevice() {
 }
 window.unlinkThisDevice = unlinkThisDevice;
 
-// Подписка на календарный фид: получает (или перевыпускает) персональный
-// токен. Без профиля Worker создаёт профиль из локального набора сам —
-// поэтому вызов неидемпотентен и идёт как link-code: ensureWorkerHost +
-// failover:false (повтор на второй адрес плодил бы профили-сироты в KV).
+// Получение (или перевыпуск) персонального токена фида. Возвращает токен
+// или '' при ошибке (тосты показывает сам). Без профиля Worker создаёт
+// профиль из локального набора — поэтому вызов неидемпотентен и идёт как
+// link-code: ensureWorkerHost + failover:false (повтор на второй адрес
+// плодил бы профили-сироты в KV).
 async function requestCalendarFeed(regenerate) {
   if (!PUSH_WORKER_URL) {
     showToast('Календарь недоступен: у территории нет Worker\'а', { type: 'error' });
-    return;
+    return '';
   }
   try {
     const pid = getProfileId();
@@ -5794,33 +5811,65 @@ async function requestCalendarFeed(regenerate) {
       clearProfileLink();
       showToast('Профиль не найден на сервере — связка сброшена, подпишитесь заново', { type: 'error' });
       renderSyncSheet();
-      return;
+      return '';
     }
     if (!r.ok || !data || !data.ok || !data.token) {
       // Голый 404 «Not Found» — старый Worker территории без этого роута.
       showToast('Не удалось получить ссылку: сервер территории недоступен или устарел', { type: 'error' });
-      return;
+      return '';
     }
     if (!pid) setProfileLink(data.profile_id, data.updated_at);
     setCalFeedToken(data.token);
     renderSyncSheet();
     if (regenerate) showToast('Ссылка перевыпущена — старая больше не работает', { type: 'success' });
+    return data.token;
   } catch (_) {
     showToast('Не удалось получить ссылку: нет сети', { type: 'error' });
+    return '';
   }
 }
 window.requestCalendarFeed = requestCalendarFeed;
 
+// Главная кнопка «в один тап»: токен добывается сам (если ещё нет), затем
+// сразу открывается календарь с готовым диалогом подписки. Apple — переход
+// на webcal: (системное «Подписаться», PWA остаётся на месте); остальные —
+// Google Календарь «добавить по URL». window.open после await может съесть
+// попап-блокер (жест уже «остыл») — тогда фолбэк location.href.
+async function subscribeCalendar() {
+  const btn = document.getElementById('cal-subscribe-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Подключаем…'; }
+  let token = getCalFeedToken();
+  if (!token) token = await requestCalendarFeed();
+  if (!token) {
+    // Тост об ошибке уже показан; вернуть кнопку (renderSyncSheet внутри
+    // requestCalendarFeed мог пересобрать модалку — ищем заново).
+    const b = document.getElementById('cal-subscribe-btn');
+    if (b) { b.disabled = false; b.textContent = CAL_SUBSCRIBE_LABEL; }
+    return;
+  }
+  if (calIsApplePlatform()) {
+    window.location.href = calFeedWebcalUrl(token);
+  } else {
+    const url = calFeedGoogleUrl(token);
+    const w = window.open(url, '_blank');
+    if (!w) window.location.href = url;
+  }
+  const b = document.getElementById('cal-subscribe-btn');
+  if (b) { b.disabled = false; b.textContent = CAL_SUBSCRIBE_LABEL; }
+}
+window.subscribeCalendar = subscribeCalendar;
+
 async function copyCalFeedUrl() {
-  const token = getCalFeedToken();
+  let token = getCalFeedToken();
+  if (!token) token = await requestCalendarFeed(); // копия тоже в один клик
   if (!token) return;
   const url = calFeedWebcalUrl(token);
   try {
     await navigator.clipboard.writeText(url);
     showToast('Ссылка скопирована — вставьте её в «Добавить календарь по URL»', { type: 'success' });
   } catch (_) {
-    // Фолбэк без Clipboard API: юрист скопирует из видимой строки сам.
-    showToast('Скопируйте ссылку из строки под кнопкой', { type: 'info' });
+    // Фолбэк без Clipboard API: юрист скопирует из строки «Показать ссылку».
+    showToast('Скопируйте ссылку из строки «Показать ссылку»', { type: 'info' });
   }
 }
 window.copyCalFeedUrl = copyCalFeedUrl;

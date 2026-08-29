@@ -313,4 +313,24 @@ class TestFrontendContract:
         body = _fn_src(js, "renderSyncSheet")
         assert body.count("calFeedBlockHtml()") >= 2, \
             "Блок календаря должен быть и у связанных, и у несвязанных устройств."
-        assert "Подписаться на календарь" in _fn_src(js, "calFeedBlockHtml")
+        assert "subscribeCalendar()" in _fn_src(js, "calFeedBlockHtml"), \
+            "Главная кнопка блока — умная subscribeCalendar (один тап)."
+
+    def test_subscribe_is_one_tap_and_platform_aware(self):
+        # «Минимум действий»: кнопка сама добывает токен и сразу открывает
+        # календарь. Apple — webcal:, остальные — Google «добавить по URL».
+        js = _app_js()
+        body = _fn_src(js, "subscribeCalendar")
+        assert "requestCalendarFeed" in body, "Токен добывается на клике сам."
+        assert "calIsApplePlatform()" in body
+        assert "calFeedWebcalUrl" in body
+        assert "calFeedGoogleUrl" in body
+        # Попап-блокер после await: window.open с фолбэком location.href.
+        assert "window.open" in body and "location.href = url" in body
+        assert "calendar.google.com/calendar/render?cid=" in _fn_src(js, "calFeedGoogleUrl")
+
+    def test_request_returns_token(self):
+        # subscribeCalendar/copyCalFeedUrl ждут токен ВОЗВРАТОМ, не через кэш.
+        body = _fn_src(_app_js(), "requestCalendarFeed")
+        assert "return data.token" in body
+        assert "return ''" in body, "Ошибочные ветки обязаны возвращать ''."

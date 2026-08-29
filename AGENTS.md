@@ -1461,12 +1461,19 @@ UID, переносы обновляют, отпавшие исчезают). К
 - **TZ/имя** — `CAL_TZID`/`CAL_TZ_OFFSET_MIN`/`CAL_FEED_NAME` через `cfgVar`
   (дефолты Asia/Yekaterinburg +300/«Мои заседания» — обе территории +05:00;
   форк с другим поясом меняет только wrangler.toml).
-- Фронт: `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только кэш,
-  источник истины — профиль; ссылка строится от **PUSH_WORKER_URL** (не от
-  sticky-фолбэка — живёт в календаре месяцами); `clearProfileLink` чистит и
-  токен, а `setProfileLink` сбрасывает кэш при смене profile_id (связка кодом
-  переводит устройство на чужой профиль — иначе модалка показывала бы рабочую
-  ссылку покинутого профиля со старым watchlist). Стражи —
+- Фронт — «один тап» (29.08.2026): в модалке 🔗 ОДНА умная кнопка
+  `subscribeCalendar` — сама добывает токен (идемпотентный
+  `/profile/calendar-token`) и сразу открывает календарь с диалогом подписки:
+  Apple (`calIsApplePlatform`) → `webcal:`-переход, остальные →
+  `calFeedGoogleUrl` (calendar.google.com/calendar/render?cid=…,
+  `window.open` + фолбэк `location.href` — попап-блокер после await);
+  сервисный ряд (копия/перевыпуск/показ ссылки в `<details>`) — только при
+  выданном токене. `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только
+  кэш, источник истины — профиль; ссылка строится от **PUSH_WORKER_URL** (не
+  от sticky-фолбэка — живёт в календаре месяцами); `clearProfileLink` чистит
+  и токен, а `setProfileLink` сбрасывает кэш при смене profile_id (связка
+  кодом переводит устройство на чужой профиль — иначе модалка показывала бы
+  рабочую ссылку покинутого профиля со старым watchlist). Стражи —
   [scripts/tests/test_calendar_feed.py](scripts/tests/test_calendar_feed.py).
 
 ## Соглашения
