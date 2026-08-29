@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:2485](../../cloudflare-worker/worker.js#L2485)):
+`scheduled(event, env)` ([worker.js:2491](../../cloudflare-worker/worker.js#L2491)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,7 +70,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2528](../../cloudflare-worker/worker.js#L2528)).
+Маршрутизатор — `fetch(request, env)` ([2534](../../cloudflare-worker/worker.js#L2534)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
@@ -84,12 +84,12 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 | `/mark-owner` | POST | `handleMarkOwner` ([1144](../../cloudflare-worker/worker.js#L1144)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
 | `/run-progress` | POST | `handleRunProgress` ([1201](../../cloudflare-worker/worker.js#L1201)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
 | `/admin/run-progress` | GET | `handleAdminRunProgress` ([1255](../../cloudflare-worker/worker.js#L1255)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
-| `/admin` | GET | `handleAdmin` ([1371](../../cloudflare-worker/worker.js#L1371)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
+| `/admin` | GET | `handleAdmin` ([1377](../../cloudflare-worker/worker.js#L1377)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
 | `/admin/data` | GET | `handleAdminData` ([1307](../../cloudflare-worker/worker.js#L1307)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([1421](../../cloudflare-worker/worker.js#L1421)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1446](../../cloudflare-worker/worker.js#L1446)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1435](../../cloudflare-worker/worker.js#L1435)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([1572](../../cloudflare-worker/worker.js#L1572)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/admin/label` | POST | `handleAdminLabel` ([1427](../../cloudflare-worker/worker.js#L1427)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1452](../../cloudflare-worker/worker.js#L1452)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1441](../../cloudflare-worker/worker.js#L1441)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([1578](../../cloudflare-worker/worker.js#L1578)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 | `/profile/link-code` | POST | `handleProfileLinkCode` ([720](../../cloudflare-worker/worker.js#L720)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
 | `/profile/link` | POST | `handleProfileLink` ([784](../../cloudflare-worker/worker.js#L784)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
 | `/profile/get` | POST | `handleProfileGet` ([834](../../cloudflare-worker/worker.js#L834)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
@@ -194,7 +194,7 @@ delosud мертвы вместе; на нормальных оператора�
 
 URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
 (фолбэк — прежний `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?…`).
-`handleAdmin` ([1371](../../cloudflare-worker/worker.js#L1371)) рендерит HTML
+`handleAdmin` ([1377](../../cloudflare-worker/worker.js#L1377)) рендерит HTML
 (`renderAdminHtml`, [34](../../cloudflare-worker/admin_page.js#L34)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
 устройство, флаг owner, даты создания/входа/обновления watchlist, размер и

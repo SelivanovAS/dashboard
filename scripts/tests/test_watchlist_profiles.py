@@ -191,6 +191,18 @@ class TestWorkerContract:
         assert "profiles: profileRows" in body
         assert "profile_id:" in body, "profile_id обязан войти в safe-проекцию."
 
+    def test_admin_data_exposes_feed_flag(self):
+        """Профиль-сирота обязан объяснять себя: подписка на календарь заводит
+        профиль БЕЗ push (handleProfileCalendarToken) — без признака «ведёт
+        календарь» такая запись в админке неотличима от мусора. ⚠️ Сам
+        feed_token наружу НЕ отдаём: это bearer-ссылка на .ics, а /admin/data
+        открывается в браузере."""
+        body = _fn_src(_worker(), "handleAdminData")
+        assert "has_feed" in body
+        assert "feed_token_created_at" in body
+        assert "feed_token: p.feed_token" not in body
+        assert "token: p.feed_token" not in body
+
     def test_error_contract_json(self):
         js = _worker()
         assert js.count('"profile_not_found"') >= 3
@@ -451,8 +463,41 @@ class TestAdminPage:
         # Вся страница — один template literal: backtick во внутреннем JS
         # обрывает его и убивает админку целиком.
         js = _admin()
-        for fn in ("renderSubsList", "renderCard", "fetchAll"):
+        for fn in ("renderSubsList", "renderCard", "fetchAll",
+                   "orphanProfileHtml", "profileMatches", "profileLikelyOwner",
+                   "caseRowHtml"):
             assert "`" not in _fn_src(js, fn), f"Backtick в {fn}."
+
+    def test_orphan_profile_lists_cases(self):
+        """Запрос юриста 29.08.2026: «вижу профиль с 12 делами — какие это
+        дела?». Набор приезжает в /admin/data с самого начала, не хватало
+        рендера: строка сироты печатала один счётчик."""
+        js = _admin()
+        body = _fn_src(js, "orphanProfileHtml")
+        assert "caseRowHtml" in body
+        assert "<details" in body
+        assert "orphanProfileHtml(" in _fn_src(js, "renderSubsList")
+
+    def test_orphan_case_rows_are_read_only(self):
+        """У профиля нет endpoint'а, и handleAction выходит на «if (!endpoint)
+        return» — крестик «убрать номер» был бы мёртвой кнопкой."""
+        js = _admin()
+        assert "readOnly" in _fn_src(js, "caseRowHtml")
+        assert "readOnly: true" in _fn_src(js, "orphanProfileHtml")
+
+    def test_orphan_summary_has_no_buttons(self):
+        """Кнопка внутри <summary> переключала бы свёртку (грабля .sub-card)."""
+        body = _fn_src(_admin(), "orphanProfileHtml")
+        head = body.split("</summary>")[0]
+        assert "<summary" in head
+        assert "<button" not in head
+
+    def test_orphan_profile_is_searchable(self):
+        """Раньше сироты скрывались при ЛЮБОМ поиске (if (!q)) — номер, который
+        ведёт только такой профиль, в админке не искался вовсе."""
+        js = _admin()
+        assert "function profileMatches" in js
+        assert "profileMatches(p, q)" in _fn_src(js, "renderSubsList")
 
     def test_search_matches_profile_id(self):
         assert "profile_id" in _fn_src(_admin(), "subMatches")
