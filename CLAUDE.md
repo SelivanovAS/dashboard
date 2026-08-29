@@ -1838,7 +1838,10 @@ UID, переносы обновляют, отпавшие исчезают). К
 - Фронт: `CAL_FEED_TOKEN_KEY` (`lsKey('cal_feed_token')`) — только кэш,
   источник истины — профиль; ссылка строится от **PUSH_WORKER_URL** (не от
   sticky-фолбэка — живёт в календаре месяцами); `clearProfileLink` чистит и
-  токен. Стражи — [scripts/tests/test_calendar_feed.py](scripts/tests/test_calendar_feed.py).
+  токен, а `setProfileLink` сбрасывает кэш при смене profile_id (связка кодом
+  переводит устройство на чужой профиль — иначе модалка показывала бы рабочую
+  ссылку покинутого профиля со старым watchlist). Стражи —
+  [scripts/tests/test_calendar_feed.py](scripts/tests/test_calendar_feed.py).
 
 ## Соглашения
 
