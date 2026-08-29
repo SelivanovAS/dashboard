@@ -4786,6 +4786,11 @@ function isProfileDirty() {
 }
 function setProfileLink(id, updatedAt) {
   try {
+    // Переезд на ДРУГОЙ профиль (связка кодом с чужим устройством): кэш
+    // календарного токена принадлежит покинутому профилю — без сброса модалка
+    // показывала бы рабочую ссылку на календарь со СТАРЫМ watchlist.
+    const prev = localStorage.getItem(PROFILE_ID_KEY) || '';
+    if (prev && prev !== String(id)) clearCalFeedToken();
     localStorage.setItem(PROFILE_ID_KEY, String(id));
     localStorage.setItem(PROFILE_BASE_TS_KEY, String(Number(updatedAt) || 0));
     localStorage.removeItem(PROFILE_DIRTY_KEY);

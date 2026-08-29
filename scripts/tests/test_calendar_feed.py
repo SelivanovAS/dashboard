@@ -295,6 +295,15 @@ class TestFrontendContract:
     def test_clear_profile_clears_feed_token(self):
         assert "clearCalFeedToken" in _fn_src(_app_js(), "clearProfileLink")
 
+    def test_profile_switch_clears_feed_token(self):
+        # Связка кодом переводит устройство на ДРУГОЙ профиль: кэш токена
+        # принадлежит покинутому — без сброса модалка показывала бы рабочую
+        # ссылку на календарь со старым watchlist.
+        body = _fn_src(_app_js(), "setProfileLink")
+        assert "clearCalFeedToken" in body
+        assert re.search(r"prev\s*&&\s*prev\s*!==", body), \
+            "Сброс — только при смене id (тот же профиль кэш не трогает)."
+
     def test_webcal_scheme(self):
         body = _fn_src(_app_js(), "calFeedWebcalUrl")
         assert "webcal:" in body
