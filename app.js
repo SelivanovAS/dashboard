@@ -4482,6 +4482,9 @@ window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener
   // Deep-link из QR (?pair=<код>) — после loadProfileWatchlist: гард «уже
   // связано» должен видеть актуальную связку.
   try{maybeHandlePairParam();}catch(_){}
+  // Счётчик посещений — фоном и последним: сервисный канал не должен
+  // задерживать первый экран.
+  try{pingVisit();}catch(_){}
   // «Что нового» — с задержкой, чтобы страница успела отрисоваться и анонс
   // не спорил с экраном загрузки; при переходе по ?pair= не показываем —
   // пользователь занят связыванием, анонс дождётся следующего открытия.
@@ -4681,6 +4684,66 @@ async function ensureWorkerHost() {
 // Бейдж региона — сразу при загрузке (по REGION_FRONT/фолбэку), не дожидаясь
 // cases.json: у свежего форка данные пусты, а регион в шапке уже нужен.
 updateRegionBadge();
+
+// ── Счётчик посещений (31.08.2026) ─────────────────────────────────────────
+// Вопрос «пользуются ли дашбордом коллеги» ответа не имел вовсе: страница
+// живёт на GitHub Pages (логов доступа GitHub не даёт), а Worker при обычном
+// визите не получал НИ ОДНОГО запроса — /subscribe летит только у уже
+// существующей push-подписки, /profile/get только при связке устройств, сами
+// данные грузятся с Pages мимо Worker'а. Пинг это чинит: один POST на визит,
+// не чаще раза в 30 минут.
+//
+// Счёт АНОНИМНЫЙ (решение юриста): vid — случайный идентификатор БРАУЗЕРА, с
+// подпиской, профилем и именем не связан, наружу из KV целиком не выходит.
+// ⚠️ Ключ ОБЯЗАН идти через lsKey: обе территории живут на одном origin
+// selivanovas.github.io, и без неймспейса одно устройство считалось бы тем же
+// самым на ХМАО и на Урале (та же грабля, из-за которой неймспейсятся звёзды).
+const VISIT_ID_KEY = lsKey('visit_id');
+const VISIT_PING_KEY = lsKey('visit_pinged_at');
+const VISIT_PING_GAP_MS = 30 * 60 * 1000;
+
+function getVisitId(){
+  try{
+    let v = localStorage.getItem(VISIT_ID_KEY);
+    if(v) return v;
+    // crypto.randomUUID нет в Safari < 15.4 — у коллег встречаются старые
+    // корпоративные телефоны, и без фолбэка они не считались бы вовсе.
+    if(crypto.randomUUID) v = crypto.randomUUID();
+    else {
+      const b = new Uint8Array(16); crypto.getRandomValues(b);
+      v = Array.from(b, x => x.toString(16).padStart(2,'0')).join('');
+    }
+    localStorage.setItem(VISIT_ID_KEY, v);
+    return v;
+  }catch(_){ return ''; } // localStorage недоступен (инкогнито) — не считаем
+}
+
+// Фоновый пинг: страницу не блокирует, ошибку глотает. Упавший счётчик не
+// должен ни ломать дашборд, ни сорить в консоль на каждой офлайн-загрузке.
+async function pingVisit(){
+  try{
+    if(!WORKER_HOSTS.length) return;   // территория без Worker'а
+    if(!navigator.onLine) return;      // офлайн-PWA: запрос заведомо мимо
+    const now = Date.now();
+    const last = Number(localStorage.getItem(VISIT_PING_KEY) || 0);
+    if(last && now - last < VISIT_PING_GAP_MS) return;
+    const v = getVisitId();
+    if(!v) return;
+    let own = 0;
+    try{ if(localStorage.getItem(OWNER_SECRET_KEY)) own = 1; }catch(_){}
+    // Штамп ставим ДО запроса: с лежащим Worker'ом иначе уходил бы пинг на
+    // каждую перезагрузку страницы.
+    localStorage.setItem(VISIT_PING_KEY, String(now));
+    // Content-Type: text/plain — CORS-safelisted, браузер не шлёт preflight
+    // OPTIONS, и визит стоит один запрос вместо двух. failover разрешён:
+    // пинг идемпотентен (в отличие от /profile/link-code, см. ensureWorkerHost).
+    await workerFetch('/visit', {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({v: v, own: own})
+    }, {timeoutMs: 4000});
+  }catch(_){ /* сервисный канал: его сбой юристу не виден и виден быть не должен */ }
+}
 
 // ── Watchlist: персональный набор отслеживаемых дел ────────────────────────
 // Хранится локально (Set в памяти + localStorage) и синхронизируется с
@@ -6239,6 +6302,12 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'&&getProfileId()&&isProfileDirty()){
     scheduleWatchlistSync();
   }
+});
+// Второй слушатель, а не ветка в первом: у них разные условия и разная цена
+// ошибки. Установленный PWA живёт открытым сутками — без пинга на возврат во
+// вкладку следующий день не засчитался бы вовсе (шторма нет: гейт 30 минут).
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){try{pingVisit();}catch(_){}}
 });
 
 // Постоянное хранилище: ~7 МБ данных живут в Cache Storage, и best-effort

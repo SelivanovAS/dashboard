@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:2491](../../cloudflare-worker/worker.js#L2491)):
+`scheduled(event, env)` ([worker.js:2674](../../cloudflare-worker/worker.js#L2674)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,36 +70,111 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2534](../../cloudflare-worker/worker.js#L2534)).
+Маршрутизатор — `fetch(request, env)` ([2717](../../cloudflare-worker/worker.js#L2717)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
 
 | Маршрут | Метод | Обработчик | Авторизация | Назначение |
 |---------|-------|-----------|-------------|------------|
-| `/subscribe` | POST | `handleSubscribe` ([555](../../cloudflare-worker/worker.js#L555)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
-| `/watchlist` | POST | `handleSetWatchlist` ([632](../../cloudflare-worker/worker.js#L632)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
-| `/unsubscribe` | POST | `handleUnsubscribe` ([1083](../../cloudflare-worker/worker.js#L1083)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
-| `/subscriptions` | GET | `handleListSubscriptions` ([1111](../../cloudflare-worker/worker.js#L1111)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
-| `/mark-owner` | POST | `handleMarkOwner` ([1144](../../cloudflare-worker/worker.js#L1144)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/run-progress` | POST | `handleRunProgress` ([1201](../../cloudflare-worker/worker.js#L1201)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
-| `/admin/run-progress` | GET | `handleAdminRunProgress` ([1255](../../cloudflare-worker/worker.js#L1255)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
-| `/admin` | GET | `handleAdmin` ([1377](../../cloudflare-worker/worker.js#L1377)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
-| `/admin/data` | GET | `handleAdminData` ([1307](../../cloudflare-worker/worker.js#L1307)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([1427](../../cloudflare-worker/worker.js#L1427)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1452](../../cloudflare-worker/worker.js#L1452)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1441](../../cloudflare-worker/worker.js#L1441)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([1578](../../cloudflare-worker/worker.js#L1578)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
-| `/profile/link-code` | POST | `handleProfileLinkCode` ([720](../../cloudflare-worker/worker.js#L720)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
-| `/profile/link` | POST | `handleProfileLink` ([784](../../cloudflare-worker/worker.js#L784)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
-| `/profile/get` | POST | `handleProfileGet` ([834](../../cloudflare-worker/worker.js#L834)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
-| `/profile/watchlist` | POST | `handleProfileSetWatchlist` ([860](../../cloudflare-worker/worker.js#L860)) | знание uuid | Запись набора с LWW: устаревший `base_ts` → 409 + серверный набор. |
-| `/profile/unlink` | POST | `handleProfileUnlink` ([907](../../cloudflare-worker/worker.js#L907)) | знание endpoint | Отвязать устройство; набор уносится в `sub.watchlist`; профиль живёт. |
+| `/subscribe` | POST | `handleSubscribe` ([654](../../cloudflare-worker/worker.js#L654)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
+| `/watchlist` | POST | `handleSetWatchlist` ([731](../../cloudflare-worker/worker.js#L731)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
+| `/unsubscribe` | POST | `handleUnsubscribe` ([1182](../../cloudflare-worker/worker.js#L1182)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
+| `/subscriptions` | GET | `handleListSubscriptions` ([1210](../../cloudflare-worker/worker.js#L1210)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
+| `/mark-owner` | POST | `handleMarkOwner` ([1243](../../cloudflare-worker/worker.js#L1243)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
+| `/run-progress` | POST | `handleRunProgress` ([1300](../../cloudflare-worker/worker.js#L1300)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([1354](../../cloudflare-worker/worker.js#L1354)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
+| `/admin` | GET | `handleAdmin` ([1476](../../cloudflare-worker/worker.js#L1476)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
+| `/admin/data` | GET | `handleAdminData` ([1406](../../cloudflare-worker/worker.js#L1406)) | `OWNER_SECRET` | JSON-данные для админки. |
+| `/admin/label` | POST | `handleAdminLabel` ([1526](../../cloudflare-worker/worker.js#L1526)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1551](../../cloudflare-worker/worker.js#L1551)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1540](../../cloudflare-worker/worker.js#L1540)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([1677](../../cloudflare-worker/worker.js#L1677)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
+| `/visit` | POST | `handleVisit` ([252](../../cloudflare-worker/worker.js#L252)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
+| `/admin/visits` | GET | `handleAdminVisits` ([2592](../../cloudflare-worker/worker.js#L2592)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
+| `/profile/link-code` | POST | `handleProfileLinkCode` ([819](../../cloudflare-worker/worker.js#L819)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
+| `/profile/link` | POST | `handleProfileLink` ([883](../../cloudflare-worker/worker.js#L883)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
+| `/profile/get` | POST | `handleProfileGet` ([933](../../cloudflare-worker/worker.js#L933)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
+| `/profile/watchlist` | POST | `handleProfileSetWatchlist` ([959](../../cloudflare-worker/worker.js#L959)) | знание uuid | Запись набора с LWW: устаревший `base_ts` → 409 + серверный набор. |
+| `/profile/unlink` | POST | `handleProfileUnlink` ([1006](../../cloudflare-worker/worker.js#L1006)) | знание endpoint | Отвязать устройство; набор уносится в `sub.watchlist`; профиль живёт. |
 | `/profile/calendar-token` | POST | `handleProfileCalendarToken` | знание uuid | Выдача/перевыпуск токена календарного фида (без uuid — создаёт профиль из набора, зеркало link-code). Идемпотентен; `regenerate:true` — перевыпуск. |
 | `/calendar/<token>.ics` | GET | `handleCalendarFeed` | знание токена | Персональный iCalendar-фид «Мои заседания» по watchlist профиля; поллится календарём клиента. |
 
 CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (`corsHeaders`,
 [47](../../cloudflare-worker/worker.js#L47)).
+
+## Счётчик посещений (31.08.2026)
+
+Отвечает на вопрос «пользуются ли дашбордом коллеги». До него следов визита не
+было нигде: дашборд — публичная страница GitHub Pages (логов доступа GitHub не
+даёт), а Worker при обычном открытии не получал ни одного запроса — `/subscribe`
+летит только у уже существующей push-подписки, `/profile/get` только при связке
+устройств, данные грузятся с Pages мимо Worker'а. Единственным следом был
+`sub.last_seen_at`: только у подписчиков, с 12-часовой гранулярностью и без
+истории.
+
+**Счёт анонимный** (решение юриста): различаются БРАУЗЕРЫ, люди не
+идентифицируются. Ни привязки к подпискам и профилям, ни имён.
+
+### Схема ключа
+
+```
+visit:d:<ГГГГ-ММ-ДД>:<vid>      значение "1"      TTL 60 дней
+metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
+```
+
+- `vid` — случайный UUID, который фронт создаёт при первом визите и хранит в
+  `lsKey('visit_id')` (`getVisitId`, [4705](../../app.js#L4705)). ⚠️ Обязательно
+  через `lsKey`: обе территории живут на одном origin `selivanovas.github.io`.
+- `os` — грубый класс устройства (`visitorDeviceClass`); **сырой `User-Agent` в
+  KV не попадает**, как и IP: `CF-Connecting-IP` и `request.cf` не читаются
+  нигде. Под корпоративным NAT банка адрес у всех общий и людей не различает.
+- `own` — заход самого владельца (в localStorage лежит `owner_secret`).
+  Единственное неанонимное поле, и оно про самого юриста: без него «3 человека
+  сегодня» может оказаться им же с трёх устройств.
+- День считается по территориальному времени (`VISIT_TZ_OFFSET_H = 5`,
+  [221](../../cloudflare-worker/worker.js#L221)), а не по UTC: заход в 02:00 по
+  местному иначе попадал бы во вчера.
+
+### Потолок записи
+
+⚠️ **Ровно одна запись KV на (устройство × день)**: перед `put` стоит `get` того
+же ключа, и повторный заход в тот же день не пишет вообще. Бюджет free-tier —
+1000 writes в день на АККАУНТ, а территорий две (инцидент 17.07.2026); прорыв
+потолка положил бы заодно `/subscribe` и журнал прогонов. При ~25 устройствах
+это ~25 writes в день на территорию.
+
+Цена решения: счётчика «сколько раз за день открыл» нет — только факт «в этот
+день заходил». Он стоил бы сотни writes ради метрики, которой не просили.
+
+Гонок нет by design: ключ принадлежит одному устройству, read-modify-write
+общего ключа не используется. Схему «общий ключ дня со списком внутри» не
+применять: KV перезаписывает значение целиком и CAS в нём нет.
+
+### Предохранители публичного роута
+
+`/visit` — единственный путь, пишущий в KV без аутентификации. Поэтому:
+
+- **выключатель** `VISITS_ENABLED` в `[vars]` `wrangler.toml`: `"0"` мгновенно
+  гасит запись, не трогая ни фронт, ни остальные роуты (применяется после
+  `wrangler deploy`);
+- **гард по `Origin`**: дашборд и Worker на разных доменах, браузер шлёт
+  заголовок всегда — легальный визит не отсекается, случайный сканер до `put` не
+  доходит. Защитой это не является (вне браузера заголовок подделывается) —
+  только фильтр шума.
+
+### Сводка для админки
+
+`GET /admin/visits` читает историю **одним `list` по префиксу и без единого
+`get`**: `metadata` приходит вместе с ключами. Пагинация по курсору обязательна
+(потолок `VISIT_LIST_PAGES_MAX`) — бескурсорный `handleAdminImportLog` копировать
+нельзя, при >1000 ключей он молча потерял бы хвост. Отдаётся только владельцу:
+lists на free-tier тоже 1000/день, а операторов на Урале около 14.
+
+Ответ: `{today, days: [{d,u,own,new}], totals: {d1,d7,d30,returning30,once30,own30,os}, devices: [{id,first,last,days,os,own}]}`.
+Наружу уходит только огрызок `vid` (6 символов).
+
+Поллинга нет: карточка грузится при открытии админки и по кнопке «Обновить».
 
 **Календарный фид (webcal, 29.08.2026):** `profile_id` в URL не светится —
 у фида производный read-only `feed_token` (поле профиля + индекс
@@ -122,8 +197,8 @@ VCALENDAR (200); недоступный cases.json → 503 + Retry-After (пус
 `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`,
 `label`, `is_owner`, `watchlist`, с 26.08.2026 — опциональный `profile_id`
 (связка с профилем синхронизации). Канонизация watchlist использует ту же логику,
-что и бэкенд (`wnBuildAliasToCanonical`, [234](../../cloudflare-worker/worker.js#L234),
-с кэшем `getAliasMapCached`, [284](../../cloudflare-worker/worker.js#L284), читающим
+что и бэкенд (`wnBuildAliasToCanonical`, [333](../../cloudflare-worker/worker.js#L333),
+с кэшем `getAliasMapCached`, [383](../../cloudflare-worker/worker.js#L383), читающим
 `cases.json` с GitHub Pages).
 
 **Профили синхронизации (26.08.2026, пока только ХМАО):** `profile:<uuid>` =
@@ -194,7 +269,7 @@ delosud мертвы вместе; на нормальных оператора�
 
 URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
 (фолбэк — прежний `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?…`).
-`handleAdmin` ([1377](../../cloudflare-worker/worker.js#L1377)) рендерит HTML
+`handleAdmin` ([1476](../../cloudflare-worker/worker.js#L1476)) рендерит HTML
 (`renderAdminHtml`, [34](../../cloudflare-worker/admin_page.js#L34)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
 устройство, флаг owner, даты создания/входа/обновления watchlist, размер и

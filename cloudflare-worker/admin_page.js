@@ -401,8 +401,12 @@ a { color: var(--accent); }
 .app-main { max-width:var(--content-max); margin:0 auto; padding:20px 20px 48px; }
 
 /* Пульт */
-.pult { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:26px; }
-.pult.has-import { grid-template-columns:repeat(5, 1fr); } /* с плиткой «Импорты» (капчёвые суды) */
+.pult { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:26px; }
+/* Числа колонок ОБЯЗАНЫ совпадать с числом плиток в разметке, иначе ряд едет
+   (страж test_admin_pult). У владельца их пять: прогон, дайджест, парсеры,
+   автозапуск, посещения; с «Импортами» (капчёвые суды) — шесть, и шесть в ряд
+   уже слишком узко, поэтому два ряда по три. */
+.pult.has-import { grid-template-columns:repeat(3, 1fr); }
 /* У оператора плиток три (дайджест и автозапуск — owner-only). Строго внутри
    min-width-медиа: специфичность html[data-role] .pult выше мобильного
    .pult, и голое правило перебило бы двухколоночный телефон. */
@@ -592,6 +596,27 @@ a { color: var(--accent); }
   min-width:22px; text-align:right; flex-shrink:0; }
 .health-note { color:var(--warning-fg); font-size:var(--fs-2xs); flex-shrink:0; }
 .health-more { color:var(--fg-3); font-size:var(--fs-xs); padding-top:8px; }
+
+/* ── Карточка «Посещения» (31.08.2026) ────────────────────────────────────
+   Строки устройств переиспользуют .health-row/.health-count — это тот же по
+   виду список, что у судов. А вот спарклайн — СВОЙ класс, и это не вкусовщина:
+   у .health-spark в мобильной выборке ниже стоит display:none, а админку юрист
+   смотрит как раз с телефона — главный график карточки там бы исчез. */
+.visits-spark { display:flex; align-items:flex-end; gap:3px; height:34px; margin:2px 0 12px; }
+/* max-width обязателен: с одним flex:1 столбик растягивался на всю карточку
+   (на десктопе — 83px в ширину), и график читался как ряд плашек. */
+.visits-spark .vb { flex:1 1 0; min-width:3px; max-width:16px; border-radius:2px;
+  background:var(--accent); opacity:0.75; }
+/* День без единого захода — не «самый низкий столбик», а отдельное состояние:
+   ровно он и есть ответ «никто не пользуется». */
+.visits-spark .vb-zero { height:2px; background:var(--fg-4); opacity:0.45; }
+.visits-sum { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 16px; padding-bottom:10px; }
+.visits-part { display:inline-flex; align-items:baseline; gap:5px; }
+.visits-num { color:var(--fg-1); font-weight:var(--fw-semibold); font-size:var(--fs-md); }
+.visits-cap { color:var(--fg-3); font-size:var(--fs-xs); }
+/* Распорка: .health-count прижимается вправо только соседством с .health-spark
+   (у того margin-left:auto), а в строке устройства спарклайна нет. */
+.visits-gap { margin-left:auto; }
 
 /* Закрытие дел, по которым ИЛ не нужен. Основной путь — ручная форма
    «суд + номер»; список ниже содержит только редкие подсказки суда, а не
@@ -826,6 +851,10 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   /* У оператора плиток три — «Импорты» оставалась бы половинной с пустотой
      справа. Это его главный показатель: растягиваем на всю ширину. */
   html[data-role="operator"] .pult.has-import #tile-import-card { grid-column:1 / -1; }
+  /* У владельца без «Импортов» плиток пять — «Посещения» остаются одни в
+     последнем ряду с зияющей половиной справа. Тот же приём, что строкой выше.
+     С «Импортами» их шесть, ряды сходятся сами — потому :not(.has-import). */
+  .pult:not(.has-import) #tile-visits-card { grid-column:1 / -1; }
   .stat-card { padding:10px 12px; }
   .stat-value { font-size:var(--fs-xl); }
   /* Подпись плитки переносим вместо обрезки: плитки идут в две колонки, и
@@ -865,6 +894,7 @@ dialog.wl::backdrop { background:rgba(13,17,22,0.45); }
   /* .system-grid тут больше не форсим в одну колонку: именно это правило
      делало страницу на 1000px ДЛИННЕЕ, чем на 1280 (сетка схлопывалась, а
      пульт оставался четырёхколоночным). auto-fit сам даёт две колонки. */
+  .pult { grid-template-columns:repeat(3, 1fr); }
   .pult.has-import { grid-template-columns:repeat(3, 1fr); }
 }
 
@@ -1107,6 +1137,14 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
       <div class="stat-value" id="tile-cron-value">…</div>
       <div class="stat-sub" id="tile-cron-sub"></div>
     </button>
+    <!-- Посещения: единственный ответ на «пользуются ли дашбордом коллеги».
+         Только владельцу — оператору посещаемость не про его работу, а лишний
+         KV-list стоит общего бюджета аккаунта. -->
+    <button class="stat-card" data-accent="gray" data-goto="#subs" id="tile-visits-card" title="Сколько разных устройств открывало дашборд" data-owner-only>
+      <div class="stat-label">Посещения</div>
+      <div class="stat-value" id="tile-visits-value">…</div>
+      <div class="stat-sub" id="tile-visits-sub"></div>
+    </button>
     <button class="stat-card" data-accent="gray" data-goto="#import" id="tile-import-card" style="display:none;">
       <div class="stat-label">Импорты</div>
       <div class="stat-value" id="tile-import-value">…</div>
@@ -1320,6 +1358,20 @@ ${IMPORT_SECTION}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input class="search-input" id="subs-search" placeholder="Имя, устройство или дело…">
       </div>
+    </div>
+    <!-- Посещения дашборда. Стоит ВНЕ #root осознанно: тот перерисовывается
+         render()'ом целиком на каждое нажатие в поиске по подписчикам, и
+         карточка внутри него стиралась бы под руками. -->
+    <div class="card" id="visits-card">
+      <div class="card-head">
+        <span class="card-title">Посещения дашборда</span>
+        <span class="spacer"></span>
+        <span id="visits-badges"></span>
+      </div>
+      <div class="visits-spark" id="visits-spark"></div>
+      <div class="visits-sum" id="visits-sum"></div>
+      <div id="visits-list" class="loading">Загрузка…</div>
+      <div class="health-more" id="visits-note"></div>
     </div>
     <div id="root" class="loading">Загрузка…</div>
   </section>
@@ -1751,6 +1803,122 @@ function healthNote(s) {
   if ((s.zero_streak || 0) > 0 && healthMedian(s.counts) >= 1) parts.push("нулей подряд: " + s.zero_streak);
   return parts.join(" · ");
 }
+// ── Карточка «Посещения» (31.08.2026) ────────────────────────────────────────
+// Единственный ответ на вопрос «пользуются ли дашбордом коллеги»: до этого
+// следов визита не было нигде — страница живёт на GitHub Pages (логов доступа
+// GitHub не даёт), а Worker при обычном открытии не получал ни одного запроса.
+// Счёт АНОНИМНЫЙ (решение юриста): различаем БРАУЗЕРЫ, имён и привязки к
+// подпискам нет — отсюда и словарь карточки «устройства», а не «человек».
+// ⚠️ Поллинга НЕТ осознанно: /admin/visits делает KV-list, а их на free-tier
+// 1000/день на аккаунт (инцидент 17.07.2026). Только загрузка и «Обновить».
+var VISITS_SPARK_DAYS = 14; // две рабочие недели — столько читается на телефоне
+var VISITS_VISIBLE = 8;     // как в «Здоровье парсеров»
+let visitsData = null;
+
+// Ряд столбиков по дням. Дни без единого захода ОБЯЗАНЫ попасть в ряд нулями:
+// «никто не пришёл» — главный сигнал карточки, а в data.days таких дней нет
+// вовсе (там только дни, когда кто-то был).
+function visitsCounts(data, n) {
+  const map = {};
+  (data.days || []).forEach(function (x) { map[x.d] = x.u; });
+  const out = [];
+  const t = Date.parse(data.today + "T00:00:00Z");
+  if (isNaN(t)) return out;
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(t - i * 86400000).toISOString().slice(0, 10);
+    out.push({ d: d, u: map[d] || 0 });
+  }
+  return out;
+}
+function visitsSpark(items) {
+  let max = 0;
+  items.forEach(function (x) { if (x.u > max) max = x.u; });
+  return items.map(function (x) {
+    if (!x.u) return '<i class="vb vb-zero" title="' + escHtml(x.d + ": никто не заходил") + '"></i>';
+    const h = Math.max(14, Math.round((x.u / max) * 100));
+    return '<i class="vb" style="height:' + h + '%" title="'
+      + escHtml(x.d + ": " + nPlural(x.u, "устройство", "устройства", "устройств")) + '"></i>';
+  }).join("");
+}
+// relTime тут не годится: у нас ДЕНЬ без времени, и «12 ч назад» про вчерашний
+// заход читалось бы как сегодняшний.
+function visitsRelDay(day) {
+  if (!visitsData) return day;
+  const a = Date.parse(visitsData.today + "T00:00:00Z");
+  const b = Date.parse(day + "T00:00:00Z");
+  if (isNaN(a) || isNaN(b)) return day;
+  const n = Math.round((a - b) / 86400000);
+  if (n <= 0) return "сегодня";
+  if (n === 1) return "вчера";
+  return n + " дн назад";
+}
+function visitsPart(n, cap) {
+  return '<span class="visits-part"><span class="visits-num">' + n + '</span>'
+    + '<span class="visits-cap">' + escHtml(cap) + '</span></span>';
+}
+function visitsRow(d) {
+  // Зелёная точка — устройство возвращалось (≥2 дня), серая — зашло однажды.
+  // Янтарь и красный тут не к месту: разовый заход — это информация, а не сбой.
+  return '<div class="health-row"><span class="dot ' + (d.days >= 2 ? "dot-green" : "dot-gray") + '"></span>'
+    + '<span class="health-name">' + escHtml(d.os + " #" + d.id + (d.own ? " · своё" : "")) + '</span>'
+    + '<span class="visits-gap"></span>'
+    + '<span class="run-meta">' + escHtml(visitsRelDay(d.last)) + '</span>'
+    + '<span class="health-count" title="дней с заходами">' + d.days + '</span>'
+    + '</div>';
+}
+function renderVisits() {
+  const listEl = document.getElementById("visits-list");
+  if (!listEl || !visitsData) return;
+  const d = visitsData, t = d.totals || {};
+  const today = (d.days || []).filter(function (x) { return x.d === d.today; })[0]
+    || { d: d.today, u: 0, own: 0, new: 0 };
+  document.getElementById("visits-spark").innerHTML = visitsSpark(visitsCounts(d, VISITS_SPARK_DAYS));
+  document.getElementById("visits-sum").innerHTML =
+    visitsPart(today.u, "сегодня") + visitsPart(t.d7 || 0, "за 7 дней")
+    + visitsPart(t.d30 || 0, "за 30 дней") + visitsPart(t.returning30 || 0, "возвращаются")
+    + visitsPart(t.once30 || 0, "зашли однажды");
+  const devs = d.devices || [];
+  if (!devs.length) {
+    listEl.className = "";
+    listEl.innerHTML = '<div class="empty">Пока ни одного захода. Счёт идёт со дня установки счётчика.</div>';
+  } else {
+    const rest = devs.slice(VISITS_VISIBLE);
+    listEl.className = "";
+    listEl.innerHTML = devs.slice(0, VISITS_VISIBLE).map(visitsRow).join("")
+      + (rest.length
+        ? '<details class="fold"><summary>Остальные ' + nPlural(rest.length, "устройство", "устройства", "устройств")
+          + '</summary><div class="fold-body">' + rest.map(visitsRow).join("") + '</div></details>'
+        : "");
+  }
+  document.getElementById("visits-badges").innerHTML =
+    '<span class="badge ' + (today.u - today.own > 0 ? "badge-ok" : "badge-run") + '">'
+    + nPlural(today.u, "устройство", "устройства", "устройств") + ' сегодня</span>';
+  // Оговорка обязана быть в самой карточке: без неё «14 за 30 дней» читается
+  // как «14 коллег», а это 14 БРАУЗЕРОВ — телефон и рабочий компьютер одного
+  // человека дают две строки, а очистка данных сайта заводит новую.
+  document.getElementById("visits-note").innerHTML = escHtml(
+    "Считаем устройства, а не людей: телефон и рабочий компьютер одного человека — две строки, "
+    + "очистка данных сайта или другой браузер заводят новое. Свои заходы (ваши устройства): "
+    + (t.own30 || 0) + ". Глубина — 60 дней, счёт с 31.08.2026.");
+  // Плитка: зелёная, если сегодня заходил кто-то кроме владельца — ровно это
+  // юрист и хочет видеть одним взглядом.
+  setTile("visits", today.u - today.own > 0 ? "green" : "gray",
+    '<span class="tile-part">' + today.u + ' <i>сегодня</i></span>',
+    "за 7 дней: " + (t.d7 || 0) + " · возвращаются " + (t.returning30 || 0));
+}
+async function loadVisits() {
+  const listEl = document.getElementById("visits-list");
+  try {
+    const r = await fetch("/admin/visits?secret=" + encodeURIComponent(SECRET));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    visitsData = await r.json();
+    renderVisits();
+  } catch (e) {
+    if (listEl) { listEl.className = ""; listEl.innerHTML = loadErrorHtml("Статистика посещений не загрузилась", "visits", e); }
+    setTile("visits", "gray", "?", "не загрузилось");
+  }
+}
+
 async function loadHealth() {
   const listEl = document.getElementById("health-list");
   try {
@@ -4955,6 +5123,9 @@ async function refreshAll(btn) {
   // территории без капчёвых судов (ХМАО) были бы платой ни за что.
   if (impCourts.length) jobs.push(loadImportLog());
   else jobs.push(loadImportCourts());
+  // Посещения — только владельцу: /admin/visits отвечает оператору 403, а
+  // каждый заход стоит KV-list из общего бюджета аккаунта.
+  if (IS_OWNER) jobs.push(loadVisits());
   // render() перерисовывает #root целиком: при открытой модалке watchlist
   // это выбило бы правки из-под рук — тогда плитку дайджеста тянем статикой.
   if (renderable) {
@@ -4991,6 +5162,7 @@ document.addEventListener("click", function (e) {
   // данных И светофор свежести, а его чинит только карта import:last:*.
   // Это редкий ручной клик, а не тик поллера — два KV-list допустимы.
   else if (k === "implog") loadImportLog();
+  else if (k === "visits") loadVisits();
 });
 
 // ⚠️ initTabs() именно здесь, а не на месте определения: onTabShown читает
@@ -5012,6 +5184,7 @@ if (IS_OWNER) {
   const llmFold = document.getElementById("llm-top-fold");
   if (llmFold) llmFold.addEventListener("toggle", function () { if (llmFold.open) loadLlmTop(); });
   render();
+  loadVisits();
 }
 // Свёрнутая/фоновая вкладка не должна поллить: гасим самоперевзводящийся
 // поллер gh-runs при уходе со вкладки, будим при возврате. Забытая открытая
