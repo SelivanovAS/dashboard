@@ -70,8 +70,7 @@
         "judicial_uid": "86RS0002-01-2026-008269-65",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-31",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -109,8 +108,7 @@
         "judicial_uid": "86RS0009-01-2026-001110-25",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-31",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -148,8 +146,7 @@
         "judicial_uid": "86RS0021-01-2026-000915-71",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-31",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -187,8 +184,7 @@
         "judicial_uid": "86RS0011-01-2026-000585-39",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-31",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -226,8 +222,7 @@
         "judicial_uid": "86RS0013-01-2026-000912-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-08-31",
-        "intake_card_parse": true
+        "last_checked_at": "2026-08-31"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23730,5 +23725,5 @@
       }
     }
   ],
-  "updated_at": "2026-08-31T06:21:47"
+  "updated_at": "2026-08-31T06:41:53"
 }
