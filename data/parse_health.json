@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-08-31T07:12:18",
+ "updated_at": "2026-08-31T07:42:01",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,7 +556,7 @@
   }
  },
  "last_run": {
-  "at": "2026-08-31T07:12:18",
+  "at": "2026-08-31T07:42:01",
   "requests_ok": 37,
   "requests_failed": 0,
   "requests_retried": 0,
@@ -568,7 +568,7 @@
   "cards_planned": 36,
   "cards_read_today": 222,
   "cards_planned_today": 222,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
     "read": 34,
