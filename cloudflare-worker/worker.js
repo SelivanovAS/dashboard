@@ -192,6 +192,105 @@ async function resolveProfilesInto(env, subs) {
   return profiles;
 }
 
+// ── Счётчик посещений дашборда (31.08.2026) ──────────────────────────────────
+// Вопрос юриста «пользуются ли инструментом коллеги» ответа не имел вовсе:
+// дашборд — публичная страница GitHub Pages (логов доступа GitHub не даёт), а
+// Worker при обычном визите не получал НИ ОДНОГО запроса (/subscribe летит
+// только у уже существующей push-подписки, /profile/get — только при связке
+// устройств, данные страница грузит с Pages мимо Worker'а). Единственным
+// следом был sub.last_seen_at — только у подписчиков, с 12-часовой
+// гранулярностью и без истории (хранит одно последнее значение).
+//
+// Счёт АНОНИМНЫЙ (решение юриста 31.08.2026): устройства различаются между
+// собой, но с подписками, профилями и именами НЕ связываются. В KV не
+// попадают ни IP (CF-Connecting-IP), ни request.cf, ни сырой User-Agent —
+// под корпоративным NAT Сбера адрес у всех общий и людей не различает, а
+// хранить адреса устройств сотрудников банка в стороннем KV — цена без выгоды.
+//
+// Схема: visit:d:<ГГГГ-ММ-ДД>:<vid> = "1", TTL 60 дней; вся статистика лежит в
+// metadata — list() отдаёт её вместе с ключами, поэтому админский эндпоинт
+// читает историю ОДНИМ list без единого get.
+//
+// ⚠️ Бюджет free-tier — 1000 KV writes в день на АККАУНТ, а территорий две
+// (инцидент 17.07.2026). Поэтому запись ровно одна на (устройство × день):
+// перед put стоит get того же ключа, и повторный заход в тот же день не пишет
+// ВООБЩЕ. Цена — счётчика «сколько раз за день открыл» нет: он стоил бы сотни
+// writes ради метрики, которой юрист не просил (спрашивал он «сколько
+// человек»). Гонок нет by design: ключ принадлежит одному устройству,
+// read-modify-write общего ключа тут не используется.
+const VISIT_TTL_SEC = 60 * 86400; // ретенция 60 дней
+// ⚠️ Секунды в сутках записаны одним числом намеренно: страж
+// test_sub_ttl_named_constant требует, чтобы разложенная на множители форма
+// встречалась в файле РОВНО один раз — у KV_SUB_TTL_SEC подписок (он ловит
+// инлайновый «магический» TTL в новых put).
+// День считаем по территориальному времени, а не по UTC: ХМАО, ЕКБ и ЯНАО —
+// все UTC+5, и заход в 02:00 по местному иначе попал бы во вчерашний день
+// (тот же приём, что у крона ниже, где сдвиг на МСК).
+const VISIT_TZ_OFFSET_H = 5;
+function visitLocalIso(ms) {
+  return new Date(ms + VISIT_TZ_OFFSET_H * 3600 * 1000).toISOString();
+}
+function visitDayKey(ms) { return visitLocalIso(ms).slice(0, 10); }
+function visitTimeHHMM(ms) { return visitLocalIso(ms).slice(11, 16); }
+function looksLikeVisitId(v) {
+  return typeof v === "string" && /^[0-9a-f-]{8,64}$/i.test(v);
+}
+// Грубый класс устройства. Намеренно КОРОЧЕ detectDevice() админки (там ещё и
+// браузер) — это не второй экземпляр тех же правил и синхронизировать их не
+// нужно: юристу важно «телефон или рабочий компьютер», а не версия Chrome.
+function visitorDeviceClass(ua) {
+  const s = String(ua || "");
+  if (/iPad/.test(s)) return "iPad";
+  if (/iPhone|iPod/.test(s)) return "iPhone";
+  if (/Android/.test(s)) return "Android";
+  if (/Macintosh/.test(s)) return "macOS";
+  if (/Windows/.test(s)) return "Windows";
+  if (/Linux/.test(s)) return "Linux";
+  return "другое";
+}
+
+async function handleVisit(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  // Пинг НИКОГДА не отвечает ошибкой: он фоновый, клиент ответ не читает, а
+  // 4xx/5xx в консоли юриста выглядели бы поломкой дашборда.
+  const ok = () => new Response(null, { status: 204, headers: corsHeaders(origin) });
+  try {
+    // text/plain — CORS-safelisted Content-Type: браузер не шлёт preflight
+    // OPTIONS, и пинг стоит один запрос вместо двух.
+    // ⚠️ Два предохранителя публичного эндпоинта. /visit — единственный путь,
+    // который пишет в KV БЕЗ аутентификации, а бюджет writes общий на аккаунт:
+    // шторм сюда положил бы заодно /subscribe и журнал прогонов.
+    // (1) Выключатель на случай, если это всё-таки случится: правится в [vars]
+    //     wrangler.toml + wrangler deploy, фронт трогать не нужно.
+    if (cfgVar("VISITS_ENABLED", "1") !== "1") return ok();
+    // (2) Гард по Origin. Дашборд и Worker на разных доменах, поэтому браузер
+    //     шлёт Origin всегда — легального визита это не отсекает, а случайный
+    //     сканер до put не доходит. Защитой это НЕ является (вне браузера
+    //     заголовок подделывается свободно) — только фильтр шума.
+    if (origin !== allowedOrigin() && origin !== "http://localhost:8081") return ok();
+    const body = JSON.parse(await request.text());
+    if (!body || !looksLikeVisitId(body.v)) return ok();
+    const now = Date.now();
+    const key = `visit:d:${visitDayKey(now)}:${body.v}`;
+    // ⚠️ Гейт бюджета: запись этого дня уже есть — выходим БЕЗ put. Читать
+    // дёшево (100k reads/день), писать дорого (1000 writes/день на аккаунт).
+    if ((await env.PUSH_SUBSCRIPTIONS.get(key)) !== null) return ok();
+    await env.PUSH_SUBSCRIPTIONS.put(key, "1", {
+      expirationTtl: VISIT_TTL_SEC,
+      metadata: {
+        t: visitTimeHHMM(now),
+        os: visitorDeviceClass(request.headers.get("User-Agent")),
+        // Единственное неанонимное поле — и оно про самого владельца: без него
+        // «3 человека сегодня» может оказаться им же с трёх устройств.
+        own: body.own === 1 ? 1 : 0,
+      },
+    });
+    return ok();
+  } catch (_) {
+    return ok();
+  }
+}
+
 // ── Канонизация watchlist (Этап 4c) ──────────────────────────────────────────
 // При POST /watchlist и /admin/watchlist прогоняем входящие номера через
 // alias-карту от текущего cases.json. ★ на апел./касс./hybrid → канон. FI-ID.
@@ -2484,6 +2583,90 @@ async function handleAdminImportLog(request, env) {
   }
 }
 
+// Статистика посещений для админки. Читает всю историю ОДНИМ list по префиксу:
+// metadata приходит вместе с ключами, поэтому get не нужен ни разу (lists-лимит
+// free-tier — 1000/день, инцидент 17.07.2026). Агрегируем здесь, а не на
+// странице: admin_page.js — один template literal, где сложный JS писать
+// неудобно и легко ошибиться (там нельзя ни backtick, ни ${).
+const VISIT_LIST_PAGES_MAX = 5; // страховка от бесконечного курсора
+async function handleAdminVisits(request, env) {
+  // Оператору не отдаём: посещаемость дашборда — не его работа, а лишний
+  // list стоит денег общего бюджета аккаунта.
+  const gate = requireAdminRole(request, env, ["owner"]);
+  if (gate.error) return gate.error;
+  try {
+    const rows = [];
+    let cursor = undefined;
+    for (let page = 0; page < VISIT_LIST_PAGES_MAX; page++) {
+      const res = await env.PUSH_SUBSCRIPTIONS.list({
+        prefix: "visit:d:", limit: 1000, cursor,
+      });
+      for (const k of res.keys) {
+        // "visit:d:<день>:<vid>" — в vid бывают дефисы, в дне их ровно два,
+        // поэтому день выкусываем жёстким шаблоном, а остаток целиком — vid.
+        const m = /^visit:d:(\d{4}-\d{2}-\d{2}):(.+)$/.exec(k.name);
+        if (!m) continue;
+        const md = k.metadata || {};
+        rows.push({ d: m[1], v: m[2], os: md.os || "другое", own: md.own === 1 });
+      }
+      if (res.list_complete) break;
+      cursor = res.cursor;
+    }
+    // Устройство → в какие дни заходило. Строки уникальны по паре (день, vid),
+    // поэтому число строк устройства = число его дней.
+    const byDevice = new Map();
+    for (const r of rows) {
+      let e = byDevice.get(r.v);
+      if (!e) { e = { days: 0, os: r.os, own: false, first: r.d, last: r.d }; byDevice.set(r.v, e); }
+      e.days++;
+      if (r.own) e.own = true;
+      if (r.d < e.first) e.first = r.d;
+      if (r.d >= e.last) { e.last = r.d; e.os = r.os; } // ОС — по свежему заходу
+    }
+    const byDay = new Map();
+    for (const r of rows) {
+      let e = byDay.get(r.d);
+      if (!e) { e = { d: r.d, u: 0, own: 0, new: 0 }; byDay.set(r.d, e); }
+      e.u++;
+      if (r.own) e.own++;
+      // «Новое» — честно «впервые за окно ретенции», истории глубже неё нет.
+      if (byDevice.get(r.v).first === r.d) e.new++;
+    }
+    const now = Date.now();
+    const today = visitDayKey(now);
+    const since = (n) => visitDayKey(now - (n - 1) * 86400 * 1000);
+    const uniq = (from) => new Set(rows.filter((r) => r.d >= from).map((r) => r.v)).size;
+    const from30 = since(30);
+    let returning30 = 0, once30 = 0, own30 = 0;
+    const os30 = {};
+    for (const [v, e] of byDevice) {
+      const daysIn30 = rows.filter((r) => r.v === v && r.d >= from30).length;
+      if (!daysIn30) continue;
+      if (daysIn30 >= 2) returning30++; else once30++;
+      if (e.own) own30++;
+      os30[e.os] = (os30[e.os] || 0) + 1;
+    }
+    const devices = Array.from(byDevice.entries()).map(([v, e]) => ({
+      // Наружу отдаём только огрызок идентификатора: полный vid из KV не
+      // выходит, а шести символов хватает, чтобы отличить строки глазами.
+      id: v.replace(/-/g, "").slice(0, 6),
+      first: e.first, last: e.last, days: e.days, os: e.os, own: e.own,
+    })).sort((a, b) => (a.last === b.last ? b.days - a.days : (a.last < b.last ? 1 : -1)));
+    return new Response(JSON.stringify({
+      today,
+      days: Array.from(byDay.values()).sort((a, b) => (a.d < b.d ? 1 : -1)),
+      totals: {
+        d1: uniq(today), d7: uniq(since(7)), d30: uniq(from30),
+        returning30, once30, own30, os: os30,
+      },
+      devices,
+    }), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+  } catch (e) {
+    console.error("admin/visits error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
 // ── Экспорт ───────────────────────────────────────────────────────────────────
 
 export default {
@@ -2539,6 +2722,13 @@ export default {
     // Preflight CORS
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    // Счётчик посещений: путь назван нейтрально (/analytics, /track, /collect,
+    // /beacon попадают в списки блокировщиков и корпоративных прокси, а
+    // операторы связи этому проекту уже резали адреса Worker'а по имени).
+    if (url.pathname === "/visit" && request.method === "POST") {
+      return handleVisit(request, env);
     }
 
     if (url.pathname === "/subscribe" && request.method === "POST") {
@@ -2653,6 +2843,10 @@ export default {
 
     if (url.pathname === "/import-result" && request.method === "POST") {
       return handleImportResult(request, env);
+    }
+
+    if (url.pathname === "/admin/visits" && request.method === "GET") {
+      return handleAdminVisits(request, env);
     }
 
     if (url.pathname === "/admin/import-log" && request.method === "GET") {
