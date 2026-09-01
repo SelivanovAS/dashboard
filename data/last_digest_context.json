@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-01T07:19:01",
+  "saved_at": "2026-09-01T08:43:25",
   "new_cases": [],
   "changes": [],
   "cases": [
@@ -2416,6 +2416,79 @@
         "filing_date": "31.08.2026",
         "left_track": false
       }
+    },
+    {
+      "case": "2-8872/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Рудаков Иван Владимирович, Рудакова Ирина Александровна",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "279566407|6aa4755d-9ba2-40f9-b7bf-c5993ffd4b31",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "old_hearing_date": "31.08.2026",
+        "old_hearing_time": "12:55",
+        "hearing_date": "23.09.2026",
+        "hearing_time": "10:40",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-4923/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Гаджиева Лейла Хандадаш кызы, ИП Меликов Аждар Гурбан оглы, Меликов Садиг Новруз оглы",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_writ_issued",
+        "fi_default_copy_returned"
+      ],
+      "details": {
+        "link": "267918766|a96adea4-601a-43d3-8c1d-572e9f2e8bdc",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "writs": [
+          {
+            "issue_date": "26.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4923/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан",
+            "kind": "enforcement"
+          },
+          {
+            "issue_date": "26.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4923/2026#2",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан",
+            "kind": "enforcement"
+          },
+          {
+            "issue_date": "26.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4923/2026#3",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан",
+            "kind": "enforcement"
+          },
+          {
+            "issue_date": "26.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-4923/2026#4",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан",
+            "kind": "enforcement"
+          }
+        ],
+        "copy_returned_date": "25.06.2026"
+      },
+      "track": "plaintiff_light"
     }
   ],
   "total_active_appeal": 30,
@@ -2425,5 +2498,5 @@
   "cass_changes": [],
   "cass_discovered": [],
   "issue_key": "2026-09-01T06:23:17",
-  "updated_at": "2026-09-01T07:19:01"
+  "updated_at": "2026-09-01T08:43:25"
 }
