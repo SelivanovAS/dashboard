@@ -5594,16 +5594,16 @@ class TestAppealActDigestDedupe:
         from court_monitor import runs as cm_runs
         card = {
             "Последнее событие": "Судебное заседание. Вынесено решение",
-            "Дата события": "01.08.2026",
+            "Дата события": _days_ago(3),
             "Статус": "Решено",
             "Время заседания": "",
             "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
             "Акт опубликован": "Да",
-            "Дата заседания": "01.08.2026",
-            "Дата публикации акта": "05.08.2026",
+            "Дата заседания": _days_ago(3),
+            "Дата публикации акта": _days_ago(1),
             "act_text": "",
             "_appellant_raw": "",
-            "_events": [{"date": "01.08.2026",
+            "_events": [{"date": _days_ago(3),
                          "text": "Судебное заседание. Вынесено решение"}],
             "_table_count": 8,
         }
@@ -5618,9 +5618,14 @@ class TestAppealActDigestDedupe:
                             lambda url, **kw: "<html>карточка</html>")
         monkeypatch.setattr(cm_runs, "parse_case_card",
                             lambda html, base: dict(card))
-        _, changes, _ = cm_runs.update_active_cases(
+        _, changes, stats = cm_runs.update_active_cases(
             [case], json_appeal_by_num={case["Номер дела"]: {
                 "case_number": case["Номер дела"], "events": []}})
+        assert stats["parsed"] == 1, (
+            "Карточка не спарсена — дело выпало из обхода (решённое дело "
+            "старше LEGACY_CSV_ARCHIVE_DAYS считается архивным). Тест "
+            "проверял бы пустоту: даты фикстуры обязаны быть относительными."
+        )
         return changes
 
     @staticmethod
@@ -5687,16 +5692,16 @@ class TestAppealActTextPersist:
         from court_monitor import runs as cm_runs
         card = {
             "Последнее событие": "Судебное заседание. Вынесено решение",
-            "Дата события": "01.08.2026",
+            "Дата события": _days_ago(3),
             "Статус": "Решено",
             "Время заседания": "",
             "Результат": "ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ",
             "Акт опубликован": "Да",
-            "Дата заседания": "01.08.2026",
-            "Дата публикации акта": "05.08.2026",
+            "Дата заседания": _days_ago(3),
+            "Дата публикации акта": _days_ago(1),
             "act_text": "",
             "_appellant_raw": "",
-            "_events": [{"date": "01.08.2026",
+            "_events": [{"date": _days_ago(3),
                          "text": "Судебное заседание. Вынесено решение"}],
             "_table_count": 8,
         }
