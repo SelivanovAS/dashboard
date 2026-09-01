@@ -110,7 +110,7 @@ from court_monitor.bank_intake import (  # noqa: E402 — правила при�
     remember_rejection, row_passes, save_intake_seen, seen_key,
 )
 from court_monitor.config import log  # noqa: E402
-from court_monitor.courts import fi_court_by_domain  # noqa: E402
+from court_monitor.courts import canon_sudrf_domain, fi_court_by_domain  # noqa: E402
 from court_monitor.lifecycle import (  # noqa: E402
     FI_NOT_ACCEPTED_RU, dedupe_orphan_by_base_number,
     discovered_already_resolved_old, fi_not_accepted_kind, is_case_archived,
@@ -207,11 +207,16 @@ _CARD_DELO_ID_RE = re.compile(
 
 
 def detect_dump_hosts(html: str) -> set[str]:
-    """Sudrf-хосты дампа: абсолютные href карточек + маркер Chrome."""
-    hosts = {h.lower() for h in _CARD_HOST_RE.findall(html)}
+    """Sudrf-хосты дампа: абсолютные href карточек + маркер Chrome.
+
+    Хосты сводятся к канону реестра (canon_sudrf_domain): с 01.09.2026 ГАС
+    «Правосудие» отдаёт выдачу на именах с точкой («artemovsky.svd…»), и без
+    канонизации легитимный дамп не сходился с реестровым «artemovsky--svd…»
+    — все три рубежа защиты блокировали импорт (инцидент 01.09.2026)."""
+    hosts = {canon_sudrf_domain(h) for h in _CARD_HOST_RE.findall(html)}
     m = _SAVED_FROM_RE.search(html)
     if m:
-        hosts.add(m.group(1).lower())
+        hosts.add(canon_sudrf_domain(m.group(1)))
     return hosts
 
 
@@ -229,7 +234,7 @@ def resolve_court(court_domain: str) -> CourtConfig | None:
     идёт тем же каналом. `court_type` найденного суда и есть переключатель
     ветки импорта.
     """
-    dom = (court_domain or "").strip().lower()
+    dom = canon_sudrf_domain(court_domain)
     region = get_region()
     for c in list(region.first_instance_courts) + list(region.appeal_courts):
         if c.domain.lower() == dom:

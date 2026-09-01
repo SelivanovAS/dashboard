@@ -129,6 +129,25 @@ CARD_URL_TPL = (
 # поэтому служит надёжным мостом для связки апелляции с кассацией на 7kas.
 JUDICIAL_UID_RE = re.compile(r"\d{2}[A-ZА-Я]{2}\d{4}-\d{2}-\d{4}-\d+-\d{2}")
 
+# С 01.09.2026 ГАС «Правосудие» отдаёт сайты судов на именах с ТОЧКОЙ
+# («artemovsky.svd.sudrf.ru»), а старую форму с «--»
+# («artemovsky--svd.sudrf.ru») 301-редиректит на новую — браузер оператора
+# оказывается на новом хосте, и все ссылки/вставки несут его. Реестры
+# регионов, cases.json и производные ключи (журнал здоровья, дедуп,
+# watchlist «домен|номер», import:last) держат СТАРУЮ форму —
+# canon_sudrf_domain сводит обе к ней перед любым сравнением/резолвом.
+# Зеркала в JS — canonSudrfHost в worker.js и admin_page.js.
+_SUDRF_DOT_HOST_RE = re.compile(r"([a-z0-9-]+)\.([a-z0-9]+)\.sudrf\.ru")
+
+
+def canon_sudrf_domain(host: str | None) -> str:
+    """Каноническая (реестровая) форма sudrf-хоста: «имя.регион.sudrf.ru» →
+    «имя--регион.sudrf.ru»; всё остальное — как есть (strip + lower)."""
+    h = (host or "").strip().lower()
+    m = _SUDRF_DOT_HOST_RE.fullmatch(h)
+    return f"{m.group(1)}--{m.group(2)}.sudrf.ru" if m else h
+
+
 def appeal_court_by_domain(domain: str | None) -> CourtConfig:
     """CourtConfig апелляции по домену из `appeal.court_domain`.
 
@@ -137,7 +156,7 @@ def appeal_court_by_domain(domain: str | None) -> CourtConfig:
     CSV-строками, у которых домена нет. У ХМАО апел-суд один — поведение
     прежнее байт-в-байт.
     """
-    d = (domain or "").strip()
+    d = canon_sudrf_domain(domain)
     if d:
         for ac in APPEAL_COURTS:
             if ac.domain == d:
@@ -152,7 +171,7 @@ _SUDRF_SUBJECT_RE = re.compile(r"--([a-z0-9]+)\.sudrf\.ru$")
 
 
 def _sudrf_subject(domain: str) -> str:
-    m = _SUDRF_SUBJECT_RE.search((domain or "").strip().lower())
+    m = _SUDRF_SUBJECT_RE.search(canon_sudrf_domain(domain))
     return m.group(1) if m else ""
 
 
@@ -228,9 +247,11 @@ def fi_court_by_domain(domain: str, srv_num: int | None = None) -> CourtConfig |
 
     srv_num=None или площадки с таким номером на домене нет → первая площадка
     домена (совместимо с прежним резолвом по голому домену). None — домена
-    нет в реестре 1-й инстанции региона вовсе.
+    нет в реестре 1-й инстанции региона вовсе. Вход канонизируется
+    (canon_sudrf_domain): ссылка из браузера с 01.09.2026 несёт форму имени
+    с точкой, а реестр — с «--».
     """
-    d = (domain or "").strip().lower()
+    d = canon_sudrf_domain(domain)
     if not d:
         return None
     first: CourtConfig | None = None

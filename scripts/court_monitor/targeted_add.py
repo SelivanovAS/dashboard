@@ -33,7 +33,11 @@ import urllib.parse
 
 from court_monitor import config
 from court_monitor.bank_intake import card_rejects, entry_is_spent, make_bank_entry
-from court_monitor.courts import courts_for_search, fi_court_by_domain
+from court_monitor.courts import (
+    canon_sudrf_domain,
+    courts_for_search,
+    fi_court_by_domain,
+)
 from court_monitor.linking import (
     _fi_name_to_domain,
     _fi_search_to_json_case,
@@ -124,8 +128,12 @@ def parse_card_link(url: str) -> dict | None:
         case_uid = ""
     srv_raw = first("srv_num")
     delo_raw = first("delo_id")
+    # Домен — в каноне реестра: с 01.09.2026 браузер юриста живёт на именах
+    # с точкой («artemovsky.svd…»), и скопированная ссылка без канонизации
+    # не сходилась бы с реестром («суд не из нашего региона»). Карточку
+    # дальше качает court.card_url() от CourtConfig — сырой хост не нужен.
     return {
-        "domain": host,
+        "domain": canon_sudrf_domain(host),
         "srv_num": int(srv_raw) if srv_raw.isdigit() else None,
         "delo_id": int(delo_raw) if delo_raw.isdigit() else None,
         "case_id": first("case_id") if first("case_id").isdigit() else "",
