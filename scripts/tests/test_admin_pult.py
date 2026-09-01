@@ -348,28 +348,17 @@ def test_gh_runs_sees_mac_run():
     assert sub and '"mac"' in sub.group(0), "подпись плитки потеряла пометку «Mac»"
 
 
-def test_run_progress_card_is_pollless():
-    """Карточка «Ход последнего прогона»: разовый GET + кнопка, БЕЗ поллинга
-    (лимиты KV бьют записи — их шлёт пушер и так; чтения редкие), retry —
-    через общий loadErrorHtml."""
+def test_run_progress_card_stays_removed():
+    """Карточка «Ход последнего прогона» удалена 01.09.2026 (решение юриста:
+    лишняя — статус даёт плитка «Последний прогон»). Канал /run-progress и
+    записи пушера в KV живы (см. worker.js), убран только UI-читатель —
+    случайный возврат мёртвой карточки или её загрузчика ловим здесь."""
     a = _admin()
-    assert "run-progress-card" in a
-    assert 'k === "runprog"' in a, "у карточки пропал «Повторить»"
-    body = re.search(r"async function loadRunProgress\(\) \{.*?\n\}", a, re.S)
-    assert body, "Не нашёл loadRunProgress."
-    assert "setTimeout" not in body.group(0), (
-        "в loadRunProgress появился таймер — карточка договорена БЕЗ поллинга"
+    assert 'id="run-progress-card"' not in a, (
+        "разметка карточки хода прогона вернулась без решения юриста"
     )
-
-
-def test_run_progress_error_run_labeled_as_failure():
-    """Прогон с финальной вехой «ERROR:» (алерт конца окна, упавший парсинг)
-    подписывается «сбой», а не «завершён»: 20.08.2026 юрист прочитал
-    «завершён» у ERROR-строки как успех."""
-    body = re.search(r"async function loadRunProgress\(\) \{.*?\n\}", _admin(), re.S)
-    assert body, "Не нашёл loadRunProgress."
-    assert '"сбой"' in body.group(0) and "ERROR:" in body.group(0), (
-        "метка «сбой» для ERROR-финала пропала из карточки хода прогона"
+    assert "async function loadRunProgress" not in a, (
+        "loadRunProgress вернулся — карточку удаляли вместе с загрузчиком"
     )
 
 
