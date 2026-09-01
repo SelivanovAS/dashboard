@@ -30,7 +30,7 @@ sys.path.insert(0, TESTS_DIR)
 import add_cases_targeted as cli  # noqa: E402
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor import targeted_add as ta  # noqa: E402
-from court_monitor.courts import fi_court_by_domain  # noqa: E402
+from court_monitor.courts import canon_sudrf_domain, fi_court_by_domain  # noqa: E402
 from court_monitor.parsing import parse_case_card  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
 from fixture_dates import recent_fi_card_html  # noqa: E402
@@ -213,6 +213,18 @@ class TestParseCardLink:
     def test_not_sudrf(self):
         assert ta.parse_card_link("https://example.com/x?case_id=1") is None
 
+    def test_dot_form_domain_canonicalized(self):
+        """С 01.09.2026 ГАС отдаёт суды на именах с точкой (старая форма с
+        «--» 301-редиректит туда), и юрист копирует из браузера ссылку уже с
+        новым хостом — домен обязан свестись к канону реестра, иначе резолв
+        отвечает «суд не из нашего региона» (инцидент 01.09.2026)."""
+        link = ta.parse_card_link(
+            "https://kamyshlovsky.svd.sudrf.ru/modules.php?name=sud_delo"
+            "&srv_num=2&name_op=case&case_id=123&case_uid=ab12-cd34"
+            "&delo_id=1540005")
+        assert link is not None
+        assert link["domain"] == "kamyshlovsky--svd.sudrf.ru"
+
 
 class TestResolveLinkTarget:
     def _link(self, domain, **kw):
@@ -280,6 +292,39 @@ class TestFiCourtByDomain:
     def test_srv_fallback_to_first(self, env):
         court = fi_court_by_domain("kamyshlovsky--svd.sudrf.ru", 9)
         assert court is not None and court.srv_num == 1
+
+    def test_dot_form_resolves(self, env):
+        """Новая форма имени ГАС (с точкой) резолвится в тот же CourtConfig."""
+        court = fi_court_by_domain("kamyshlovsky.svd.sudrf.ru", 2)
+        assert court is not None and court.srv_num == 2
+        assert court.domain == "kamyshlovsky--svd.sudrf.ru"
+
+
+class TestCanonSudrfDomain:
+    """Канонизатор новой формы имён ГАС «Правосудие» (01.09.2026)."""
+
+    def test_dot_form_converted(self):
+        assert (canon_sudrf_domain("artemovsky.svd.sudrf.ru")
+                == "artemovsky--svd.sudrf.ru")
+
+    def test_registry_form_untouched(self):
+        assert (canon_sudrf_domain("artemovsky--svd.sudrf.ru")
+                == "artemovsky--svd.sudrf.ru")
+
+    def test_three_label_hosts_untouched(self):
+        """Кассация и прочие трёхуровневые имена — не дот-форма суда."""
+        assert canon_sudrf_domain("7kas.sudrf.ru") == "7kas.sudrf.ru"
+
+    def test_strip_and_lower(self):
+        assert (canon_sudrf_domain("  Artemovsky.SVD.sudrf.ru ")
+                == "artemovsky--svd.sudrf.ru")
+
+    def test_empty_and_none(self):
+        assert canon_sudrf_domain("") == ""
+        assert canon_sudrf_domain(None) == ""
+
+    def test_non_sudrf_untouched(self):
+        assert canon_sudrf_domain("example.com") == "example.com"
 
 
 # ── Карточка: аддитивные ключи ───────────────────────────────────────────────

@@ -785,6 +785,60 @@ class TestWrongCourtGuard:
         assert isd.detect_dump_hosts(html) == {"revdinsky--svd.sudrf.ru"}
         assert isd.detect_card_delo_ids(html) == {"1540005"}
 
+    # ── Новая форма имён ГАС «Правосудие» (01.09.2026) ───────────────────────
+    # Портал переехал на хосты с точкой («artemovsky.svd.sudrf.ru»), старую
+    # форму с «--» 301-редиректит на новую — браузер оператора живёт на новом
+    # имени, и rich-paste абсолютизирует href именно им. Без канонизации все
+    # три рубежа защиты блокировали ЛЕГИТИМНЫЙ дамп («страница другого суда»,
+    # инцидент Артёмовского городского 01.09.2026).
+
+    def test_dot_form_host_accepted(self, import_env):
+        """Дамп с новых имён (с точкой) сходится с реестровым «--»-доменом."""
+        import_env["dump"].write_text(
+            _absolutize(_fixture("search_fi_all_roles.html"),
+                        "akademicheskiy.svd.sudrf.ru"),
+            encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_OK
+        assert _read_summary(import_env["gh_out"])["added"] == 2
+
+    def test_dot_form_foreign_host_still_rejected(self, import_env):
+        """Канонизация не ослабляет защиту: ЧУЖОЙ суд в новой форме имени
+        блокируется по-прежнему, в ошибке — каноническое имя реестра."""
+        import_env["dump"].write_text(
+            _absolutize(_fixture("search_fi_all_roles.html"),
+                        "alapaevsky.svd.sudrf.ru"),
+            encoding="utf-8")
+        rc = _run(import_env)
+        assert rc == isd.EXIT_WRONG_COURT
+        assert "alapaevsky--svd.sudrf.ru" in _read_summary(import_env["gh_out"])["error"]
+
+    def test_both_name_forms_are_one_host(self, import_env):
+        """Смесь двух форм имени ОДНОГО суда (страница жила до и после
+        редиректа портала) — не «ссылки нескольких судов», импорт штатный."""
+        html = (_absolutize(_fixture("search_fi_all_roles.html"),
+                            "akademicheskiy--svd.sudrf.ru")
+                + '<a href="https://akademicheskiy.svd.sudrf.ru/modules.php?'
+                  'name=sud_delo&name_op=case&case_id=9&case_uid=aaaa-9999'
+                  '&delo_id=1540005">2-9/2026</a>')
+        import_env["dump"].write_text(html, encoding="utf-8")
+        assert _run(import_env) == isd.EXIT_OK
+
+    def test_detect_dump_hosts_canonicalizes_dot_form(self):
+        """И href карточек, и маркер Chrome сводятся к канону реестра."""
+        html = ('<!-- saved from url=(0070)https://revdinsky.svd.sudrf.ru'
+                '/modules.php?name=sud_delo&name_op=r -->\n'
+                '<a href="https://revdinsky.svd.sudrf.ru/modules.php?'
+                'name=sud_delo&amp;name_op=case&amp;case_id=7'
+                '&amp;delo_id=1540005">2-7/2026</a>')
+        assert isd.detect_dump_hosts(html) == {"revdinsky--svd.sudrf.ru"}
+
+    def test_resolve_court_accepts_dot_form(self, import_env):
+        """resolve_court канонизирует вход: дот-форма домена находит суд."""
+        court = isd.resolve_court("akademicheskiy.svd.sudrf.ru")
+        assert court is not None
+        assert court.domain == "akademicheskiy--svd.sudrf.ru"
+
 
 # ── Проводка workflow (по образцу TestWiring из test_add_cases_targeted) ─────
 
@@ -808,6 +862,24 @@ def _jq_has_counter(body: str, key: str) -> bool:
 
 
 class TestWorkflowWiring:
+    def test_dot_form_canon_wired_everywhere(self):
+        """Канонизатор новой формы имён ГАС (01.09.2026) обязан стоять во ВСЕХ
+        зеркалах сверки «дамп ↔ суд» и в клиентской валидации ссылок точечного
+        добавления: рвётся любое звено НЕЗАВИСИМО — клиент блокирует отправку
+        («страница другого суда»), Worker отвечает 400, импортёр даёт
+        EXIT_WRONG_COURT, а ссылка на карточку с нового имени получает отказ
+        «суд не из нашего региона»."""
+        worker = _read_repo("cloudflare-worker/worker.js")
+        admin = _read_repo("cloudflare-worker/admin_page.js")
+        assert "function canonSudrfHost" in worker
+        assert worker.count("hosts.add(canonSudrfHost(m[1]))") == 2, \
+            "detectDumpSudrfHosts: канон нужен и href карточек, и маркеру Chrome"
+        assert "function canonSudrfHost" in admin
+        assert "h = canonSudrfHost(h);" in admin, \
+            "impDetectDomains не канонизирует хосты вставки"
+        assert "canonSudrfHost(u.hostname)" in admin, \
+            "acCheckLink сверяет сырой хост ссылки с реестром region.*"
+
     def test_import_result_checks_commit_outcome(self):
         """status:"done" в журнал импортов — только при успешном push: упавший
         шаг «Commit cases.json» (конфликт rebase после трёх ретраев) без сверки

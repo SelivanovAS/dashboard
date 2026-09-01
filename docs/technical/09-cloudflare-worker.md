@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:2674](../../cloudflare-worker/worker.js#L2674)):
+`scheduled(event, env)` ([worker.js:2685](../../cloudflare-worker/worker.js#L2685)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,7 +70,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2717](../../cloudflare-worker/worker.js#L2717)).
+Маршрутизатор — `fetch(request, env)` ([2728](../../cloudflare-worker/worker.js#L2728)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
@@ -91,7 +91,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 | `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1540](../../cloudflare-worker/worker.js#L1540)) | `OWNER_SECRET` | Принудительно удалить подписку. |
 | `/admin/test-push` | POST | `handleAdminTestPush` ([1677](../../cloudflare-worker/worker.js#L1677)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 | `/visit` | POST | `handleVisit` ([252](../../cloudflare-worker/worker.js#L252)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
-| `/admin/visits` | GET | `handleAdminVisits` ([2592](../../cloudflare-worker/worker.js#L2592)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
+| `/admin/visits` | GET | `handleAdminVisits` ([2603](../../cloudflare-worker/worker.js#L2603)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
 | `/profile/link-code` | POST | `handleProfileLinkCode` ([819](../../cloudflare-worker/worker.js#L819)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
 | `/profile/link` | POST | `handleProfileLink` ([883](../../cloudflare-worker/worker.js#L883)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
 | `/profile/get` | POST | `handleProfileGet` ([933](../../cloudflare-worker/worker.js#L933)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |

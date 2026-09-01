@@ -2003,6 +2003,17 @@ const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в 
 const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
 const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
 
+// С 01.09.2026 ГАС «Правосудие» отдаёт суды на именах с ТОЧКОЙ
+// («artemovsky.svd.sudrf.ru»), старую форму с «--» 301-редиректит туда —
+// вставка оператора несёт новый хост. Реестр, court_domain и ключи KV
+// (import:last:*) держат старую форму — сводим к ней перед сравнением
+// (зеркала: canon_sudrf_domain в courts.py, canonSudrfHost в admin_page.js).
+function canonSudrfHost(h) {
+  const s = String(h || "").trim().toLowerCase();
+  const m = /^([a-z0-9-]+)\.([a-z0-9]+)\.sudrf\.ru$/.exec(s);
+  return m ? m[1] + "--" + m[2] + ".sudrf.ru" : s;
+}
+
 // Sudrf-хосты дампа: абсолютные ссылки карточек (rich-paste абсолютизирует
 // href «https://<суд>/modules.php?…name=sud_delo…») + маркер Chrome
 // «saved from url=…» из файла «только HTML». Пустой массив = хостов в дампе
@@ -2011,9 +2022,9 @@ function detectDumpSudrfHosts(html) {
   const hosts = new Set();
   const cardRe = /https?:\/\/([a-z0-9][a-z0-9.-]*\.sudrf\.ru)\/modules\.php\?[^"'\s<>]*name=sud_delo/gi;
   let m;
-  while ((m = cardRe.exec(html)) !== null) hosts.add(m[1].toLowerCase());
+  while ((m = cardRe.exec(html)) !== null) hosts.add(canonSudrfHost(m[1]));
   m = /saved from url=\(\d+\)https?:\/\/([a-z0-9][a-z0-9.-]*\.sudrf\.ru)(?=[/\s])/i.exec(html);
-  if (m) hosts.add(m[1].toLowerCase());
+  if (m) hosts.add(canonSudrfHost(m[1]));
   return Array.from(hosts).sort();
 }
 
@@ -2028,7 +2039,7 @@ async function handleAdminImportDump(request, env) {
   } catch (_) {
     return new Response("Bad JSON", { status: 400 });
   }
-  const courtDomain = String((body && body.court_domain) || "").trim().toLowerCase();
+  const courtDomain = canonSudrfHost(String((body && body.court_domain) || ""));
   const operator = String((body && body.operator) || "").trim().slice(0, 60);
   const html = typeof (body && body.html) === "string" ? body.html : "";
   if (!/^[a-z0-9][a-z0-9.-]*\.sudrf\.ru$/.test(courtDomain)) {
@@ -2213,7 +2224,7 @@ async function handleAdminAddCase(request, env) {
       { status: 400, headers: jsonHeaders }
     );
   }
-  const courtDomain = String((body && body.court_domain) || "").trim().toLowerCase();
+  const courtDomain = canonSudrfHost(String((body && body.court_domain) || ""));
   if (courtDomain && !/^[a-z0-9][a-z0-9.-]*\.sudrf\.ru$/.test(courtDomain)) {
     return new Response(
       JSON.stringify({ ok: false, error: "court_domain не похож на домен sudrf.ru" }),

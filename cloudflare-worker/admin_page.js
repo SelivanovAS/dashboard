@@ -4143,6 +4143,16 @@ function impSetFile(f) {
   impRenderSelection(); // чип файла сразу, автоопределение догонит async
   impRunDetect();
 }
+// С 01.09.2026 ГАС «Правосудие» отдаёт суды на именах с ТОЧКОЙ
+// («artemovsky.svd.sudrf.ru»), старую форму с «--» 301-редиректит туда — и
+// rich-paste абсолютизирует href уже новым хостом. Реестр региона держит
+// старую форму — сводим хосты вставки/ссылок к ней (зеркала:
+// canon_sudrf_domain в courts.py, canonSudrfHost в worker.js).
+function canonSudrfHost(h) {
+  var s = String(h || "").trim().toLowerCase();
+  var m = /^([a-z0-9-]+)\\.([a-z0-9]+)\\.sudrf\\.ru$/.exec(s);
+  return m ? m[1] + "--" + m[2] + ".sudrf.ru" : s;
+}
 // ── Автоопределение суда по вставке/файлу ───────────────────────────────────
 // Rich-paste абсолютизирует href карточек (https://<суд>/modules.php?…
 // name=sud_delo…), файл «только HTML» из Chrome несёт маркер «saved from
@@ -4150,7 +4160,7 @@ function impSetFile(f) {
 // автоопределение молчит (серверные проверки Worker'а и импортёра — финальные).
 function impDetectDomains(html) {
   var hosts = [];
-  function add(h) { h = h.toLowerCase(); if (hosts.indexOf(h) === -1) hosts.push(h); }
+  function add(h) { h = canonSudrfHost(h); if (hosts.indexOf(h) === -1) hosts.push(h); }
   var re = /https?:\\/\\/([a-z0-9][a-z0-9.-]*\\.sudrf\\.ru)\\/modules\\.php\\?[^"'\\s<>]*name=sud_delo/gi;
   var m;
   while ((m = re.exec(html)) !== null) add(m[1]);
@@ -4476,7 +4486,9 @@ function acCheckLink(url) {
   if (s.indexOf("://") === -1) s = "https://" + s;
   var u;
   try { u = new URL(s); } catch (e) { return "не удалось разобрать ссылку"; }
-  var host = u.hostname.toLowerCase();
+  // Хост — к канону реестра: скопированная из браузера ссылка с 01.09.2026
+  // несёт форму имени с точкой, а region.* — с «--».
+  var host = canonSudrfHost(u.hostname);
   if (host.slice(-9) !== ".sudrf.ru") return "это не адрес сайта суда (sudrf.ru)";
   if (!/case_id=\\d+/.test(u.search)) {
     return "в ссылке нет case_id — откройте саму карточку дела, а не страницу поиска";
