@@ -487,12 +487,14 @@ a { color: var(--accent); }
 /* Ряды «имя слева — мета справа»: на всю ширину они разъезжаются по краям. */
 #imp-freshness .health-row, #imp-history .imp-hist-row { max-width:1000px; }
 
-/* Карточки данных. Число видимых — переменная: у оператора одна («Здоровье»),
-   у владельца одна или две («Иски банка» скрыта на 404 — на Урале bank-трека
-   нет). Фиксированные колонки при любом выборе дают дыру, поэтому auto-fit:
-   пустые треки схлопываются, две карточки занимают ширину двух, а не «двух
-   из трёх». Единственный auto-fit в проекте — оправдан именно этим. */
-.system-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+/* Карточки данных. Число видимых — переменная (часть карточек скрыта по роли
+   или по 404 данных), поэтому auto-fit: пустые треки схлопываются, две
+   карточки занимают ширину двух, а не «двух из трёх». Минимум трека 480px, а
+   не 320: на 1440 прежние 320 давали ЧЕТЫРЕ колонки по ~330px — имена судов
+   резались до 3-4 букв, а строка дела в «Парсинге исков банка» переносилась
+   на 4-5 строк (вкладка вырастала до 6 экранов). С 480 десктоп — максимум
+   две колонки ~693px, ниже ~1000px — одна. */
+.system-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(480px, 1fr));
   gap:14px; align-items:start; }
 /* min-width:0 — иначе длинное имя суда растягивает трек. max-width — потолок
    ОБЩИЙ, не операторский: одиночная карточка бывает и у владельца, а
@@ -583,7 +585,10 @@ a { color: var(--accent); }
   border-bottom:1px solid var(--divider); }
 .health-row:last-child { border-bottom:0; }
 .health-row .dot { align-self:center; width:8px; height:8px; }
-.health-name { color:var(--fg-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* flex:1 + min-width:0 — дефицит ширины режет имя многоточием, а не соседи
+   (у .health-note/.bp-meta flex-shrink:0, без этого имя суда сжималось первым). */
+.health-name { color:var(--fg-2); flex:1 1 0; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Мини-график: 10 столбиков фиксированной сетки, выравнены по низу. */
 .health-spark { margin-left:auto; flex-shrink:0; display:inline-flex; align-items:flex-end;
   gap:2px; height:14px; align-self:center; }
@@ -646,8 +651,10 @@ a { color: var(--accent); }
 .ww-actions { display:flex; align-items:center; gap:10px; padding-top:10px;
               flex-wrap:wrap; }
 .ww-manual { padding:10px 0 12px; border-bottom:1px solid var(--divider); }
-.ww-manual-grid { display:grid; grid-template-columns:minmax(190px,1.5fr)
-                  minmax(130px,.9fr) minmax(180px,1.15fr) minmax(145px,.9fr);
+/* Минимумы треков в сумме обязаны влезать во внутренние ~660px карточки
+   двухколоночной сетки (прежние 190/130/180/145 = 645px + gap вылезали). */
+.ww-manual-grid { display:grid; grid-template-columns:minmax(170px,1.5fr)
+                  minmax(120px,.9fr) minmax(160px,1.15fr) minmax(130px,.9fr);
                   gap:8px; margin-top:9px; align-items:end; }
 .ww-manual-grid label { display:flex; flex-direction:column; gap:4px;
                         min-width:0; color:var(--fg-3); font-size:var(--fs-xs); }
@@ -1174,7 +1181,7 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
           </button>
           <span class="action-flash" id="runs-flash" role="status" aria-live="polite"></span>
         </div>
-        <div class="run-launch-note">Кнопка делает ровно то же, что ежедневный автозапуск. Статусы и логи — на вкладке Actions в GitHub, плитка «Последний прогон» обновляется сама. Полный обход всех дел (без smart-skip) — там же, через Run workflow.</div>
+        <div class="run-launch-note">Как ежедневный автозапуск; логи — в Actions, полный обход (без smart-skip) — там же через Run workflow.</div>
       </div>
     <div class="system-grid">
       <div class="card">
@@ -1186,21 +1193,10 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <div id="health-list" class="loading">Загрузка…</div>
         <div class="health-more" id="health-updated"></div>
       </div>
-      <!-- Ход последнего прогона: вехи, которые пушер шлёт в KV (с Mac или из
-           облака). Вернулся 20.08.2026 при флипе на Mac-резерв: парсинг больше
-           не виден в GitHub Actions, а этот канал и так пишется каждым
-           прогоном. БЕЗ поллинга — один GET при загрузке и по кнопке: лимиты
-           Cloudflare бьют ЗАПИСИ (инцидент 17.07.2026), а не редкие чтения.
-           Скрыта, пока в KV нет ни одного прогона. -->
-      <div class="card" id="run-progress-card" style="display:none;" data-owner-only>
-        <div class="card-head">
-          <span class="card-title">Ход последнего прогона</span>
-          <span class="run-meta" id="run-progress-meta"></span>
-          <span class="spacer"></span>
-          <button class="btn-outline btn-sm" type="button" onclick="loadRunProgress()">Обновить</button>
-        </div>
-        <div id="run-progress-body" class="loading">Загрузка…</div>
-      </div>
+      <!-- Карточка «Ход последнего прогона» УДАЛЕНА 01.09.2026 (решение
+           юриста: лишняя — статус даёт плитка «Последний прогон»). Канал
+           /run-progress и записи пушера в KV живы, вернуть карточку можно из
+           git (жила здесь 20.08–01.09.2026). -->
       <!-- Не операторский трек (решение юриста 02.08.2026): data-owner-only —
            второй рубеж к тому, что loadStaticData ему файл вообще не тянет. -->
       <div class="card" id="bank-parse-card" style="display:none;" data-owner-only>
@@ -1224,7 +1220,7 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
           <span id="ww-badges"></span>
         </div>
         <div class="ww-manual">
-          <div class="imp-hint">Выберите суд и введите номер дела. После подтверждения дело исчезнет из активной картотеки и перейдёт в архив; действие можно отменить ниже.</div>
+          <div class="imp-hint" title="Выберите суд и введите номер дела. После подтверждения дело исчезнет из активной картотеки и перейдёт в архив; действие можно отменить ниже.">Дело уйдёт из активной картотеки в архив; отменить можно ниже.</div>
           <div class="ww-manual-grid">
             <label>Суд
               <select id="ww-court"><option value="">загружается…</option></select>
@@ -1648,58 +1644,8 @@ async function loadGhRuns() {
     if (hasActive && !document.hidden) ghTimer = setTimeout(loadGhRuns, 15000);
   } catch (e) { /* сеть мигнула — плитка обновится следующим заходом */ }
 }
-// ── Карточка «Ход последнего прогона» (вехи пушера из KV) ────────────────────
-// Данные пишет progress_pusher с Mac (или gh_progress_pusher из облака) — этот
-// канал живёт с 13.07.2026 и не выключался; UI-читателя вернули 20.08.2026
-// после флипа на Mac-резерв. Читаем РАЗОВО и по кнопке, без поллинга:
-// KV-лимиты бьют записи, а не редкие чтения.
-async function loadRunProgress() {
-  const card = document.getElementById("run-progress-card");
-  const body = document.getElementById("run-progress-body");
-  const meta = document.getElementById("run-progress-meta");
-  if (!card || !IS_OWNER) return;
-  try {
-    const r = await fetch("/admin/run-progress?secret=" + encodeURIComponent(SECRET));
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    // current — идущий/последний прогон, prev — предыдущий (см. worker.js).
-    const run = (d && d.current && Array.isArray(d.current.lines) && d.current.lines.length)
-      ? d.current
-      : (d && d.prev && Array.isArray(d.prev.lines) && d.prev.lines.length ? d.prev : null);
-    if (!run) { card.style.display = "none"; return; }
-    card.style.display = "";
-    const src = run.source === "github" ? "облако" : "Mac";
-    // Финальная веха «ERROR:» = прогон закончился сбоем (алерт конца окна,
-    // упавший парсинг) — подпись «завершён» читалась как успех (20.08.2026).
-    const lastLine = String((run.lines || []).slice(-1)[0] || "");
-    let state = lastLine.indexOf("ERROR:") >= 0 ? "сбой" : "завершён";
-    if (!run.done) {
-      const age = Date.now() - parseIso(run.updated_at || run.started_at || "");
-      // Пушер шлёт батчи ~раз в минуту: полчаса тишины без done — прогон
-      // оборвался (Mac уснул, скрипт убит), честнее сказать это, чем «идёт».
-      state = (isNaN(age) || age > 30 * 60000) ? "не завершился" : "идёт";
-    }
-    meta.textContent = src
-      + (run.started_at ? " · старт " + relTime(run.started_at) : "")
-      + " · " + state;
-    // ⚠️ В join обязателен ДВОЙНОЙ обратный слэш: страница — template literal,
-    // и одинарный слэш-n становится НАСТОЯЩИМ переносом строки внутри
-    // отдаваемого браузеру скрипта — разорванная строка убивает весь JS
-    // админки (инцидент 20.08.2026 «админка пустая»; страж —
-    // test_admin_page_inner_js_parses, конвенция файла — соседние join'ы).
-    const tail = (run.lines || []).slice(-12).map(function (s) {
-      return escHtml(String(s));
-    }).join("\\n");
-    body.className = "";
-    body.innerHTML = '<details class="fold"><summary>последние шаги (всего строк: '
-      + (run.lines || []).length + ')</summary>'
-      + '<div class="fold-body"><pre class="log-pre">' + tail + '</pre></div></details>';
-  } catch (e) {
-    card.style.display = "";
-    body.className = "";
-    body.innerHTML = loadErrorHtml("Ход прогона не загрузился", "runprog", e);
-  }
-}
+// Карточка «Ход последнего прогона» (loadRunProgress) удалена 01.09.2026 —
+// см. комментарий у бывшей разметки в секции #system.
 async function dispatchWorkflow(workflow, inputs, flashEl) {
   flashEl.className = "action-flash";
   flashEl.textContent = "запускаю…";
@@ -2002,16 +1948,19 @@ async function loadHealth() {
 // Пер-кейсовый итог последнего прогона по bank-треку: какие дела парсились,
 // какие пропущены и почему. Файл пишет BankParseReport (фаза 7c main_json);
 // нет файла (трек выключен / территория без bank-трека) — карточка скрыта.
-// Группы: проблемные раскрыты, рутинные свёрнуты; внутри группы рендерим
-// порциями по BP_CHUNK строк (на Урале дел будут тысячи — DOM не раздуваем).
+// Группы: ВСЕ свёрнуты по умолчанию (решение юриста 01.09.2026 — сбои sudrf
+// почти ежедневны, и раскрытые «Ошибка загрузки карточки» на 25 строк делали
+// вкладку 6-экранной; счётчики видны в summary и бейджах шапки); внутри группы
+// рендерим порциями по BP_CHUNK строк (на Урале дел тысячи — DOM не раздуваем).
 var BP_CHUNK = 30;
+var BP_COURTS_VISIBLE = 12; // потолок судов со сбоями в разрезе «По судам»
 var bpGroupsData = {};
 var BP_GROUPS = [
-  { key: "fail", title: "Ошибка загрузки карточки", dot: "dot-red", open: true },
+  { key: "fail", title: "Ошибка загрузки карточки", dot: "dot-red", open: false },
   { key: "breaker", title: "Суд снят с обхода (предохранитель)", dot: "dot-red", open: false },
-  { key: "nocard", title: "Без карточки: суд/ссылка", dot: "dot-amber", open: true },
-  { key: "queue", title: "Вне очереди 1-й инстанции", dot: "dot-gray", open: true },
-  { key: "intake", title: "Заведено авто-подхватом с выдачи", dot: "dot-green", open: true },
+  { key: "nocard", title: "Без карточки: суд/ссылка", dot: "dot-amber", open: false },
+  { key: "queue", title: "Вне очереди 1-й инстанции", dot: "dot-gray", open: false },
+  { key: "intake", title: "Заведено авто-подхватом с выдачи", dot: "dot-green", open: false },
   { key: "parsed", title: "Спарсено", dot: "dot-green", open: false },
   { key: "writ", title: "Пропуск: недельный ритм ИЛ (решённые)", dot: "dot-gray", open: false },
   { key: "hearing", title: "Пропуск: заседание в будущем", dot: "dot-gray", open: false },
@@ -2062,7 +2011,7 @@ function bpCourtsFoldHtml(rows) {
     return b.total - a.total;
   });
   var anyBad = list.some(function (c) { return c.bad > 0; });
-  var body = list.map(function (c) {
+  var rowHtml = function (c) {
     var parts = [c.total + " дел"];
     if (c.parsed) parts.push(c.parsed + " спарсено");
     if (c.skip) parts.push(c.skip + " пропуск");
@@ -2071,7 +2020,22 @@ function bpCourtsFoldHtml(rows) {
       + (c.bad ? '<span class="health-note">' + c.bad + ' без карточки/сбой</span>' : '')
       + '<span class="bp-meta">' + escHtml(parts.join(" · ")) + '</span>'
       + '</div>';
-  }).join("");
+  };
+  // Видимые строки — только суды со сбоями (потолок BP_COURTS_VISIBLE),
+  // остальные — свёрткой: тот же приём, что «Здоровье парсеров» (VISIBLE=8)
+  // и светофор импортов (FRESH_VISIBLE). Раньше при любом сбое раскрывались
+  // ВСЕ суды территории (на Урале 64 строки ≈ 2000px). Без сбоев вложенная
+  // свёртка не нужна: внешняя «По судам» закрыта, раскрыл — увидел все.
+  var nBad = list.filter(function (c) { return c.bad > 0; }).length;
+  var head = anyBad ? list.slice(0, Math.min(nBad, BP_COURTS_VISIBLE)) : list;
+  var rest = list.slice(head.length);
+  var body = head.map(rowHtml).join("");
+  if (rest.length) {
+    var restOk = rest.every(function (c) { return !c.bad; });
+    body += '<details class="fold"><summary>Остальные ' + rest.length + ' судов'
+      + (restOk ? " — все ok" : "")
+      + '</summary><div class="fold-body">' + rest.map(rowHtml).join("") + '</div></details>';
+  }
   return '<details class="fold"' + (anyBad ? " open" : "") + '>'
     + '<summary>По судам <span class="bp-group-n">(' + list.length + ')</span></summary>'
     + '<div class="fold-body">' + body + '</div></details>';
@@ -2453,18 +2417,38 @@ async function fetchAll() {
 }
 
 // Разбор строки сводки дайджеста на ИМЕНОВАННЫЕ части.
-// Боевой формат (runs.py): «🆕 Новых: 4 · 📋 Изменений: 6 · ➡️ Переходов: 2».
+// Кроновый формат (runs.py): «🆕 Новых: 4 · 📋 Изменений: 6 · ➡️ Переходов: 2».
 // Раньше плитка брала match(/\\d+/) — ПЕРВОЕ число строки — и подписывала его
 // словом «изменений»: при «Новых: 4 · Изменений: 6» юрист каждое утро читал
 // «4 изменений», то есть число новых дел под чужой подписью, а изменения не
-// показывались вовсе. Пустой массив = формат не узнан (replay пишет свой) —
-// вызывающий печатает summary как есть, он и так человекочитаемый.
+// показывались вовсе. Пустой массив = формат не узнан совсем — вызывающий
+// печатает summary текстом (клампом).
 function digestSummaryParts(summary) {
   const s = String(summary || "");
   const out = [];
   [["Новых", "новых"], ["Изменений", "изм."], ["Переходов", "перех."]].forEach(function (pair) {
     const m = s.match(new RegExp(pair[0] + ":\\\\s*(\\\\d+)"));
     if (m && Number(m[1]) > 0) out.push({ n: m[1], unit: pair[1] });
+  });
+  if (out.length) return out;
+  // Replay-формат — а это БОЕВОЙ путь с Mac/VPS-эры (дайджест дня делает
+  // replay, и summary — полная сводка выпуска на 8-9 частей через «·»):
+  // раньше он всегда падал в текстовый фолбэк, и в плитке стояла затиснутая
+  // в две строки простыня. Берём до трёх узнанных категорий в порядке строки,
+  // по одной на категорию; не узнали ни одной — прежний текстовый фолбэк.
+  const units = [[/нов/i, "нов."], [/событ/i, "соб."], [/решени|итог/i, "реш."], [/заседан/i, "зас."]];
+  const seen = {};
+  s.split("·").forEach(function (frag) {
+    if (out.length >= 3) return;
+    const m = frag.match(/(\\d+)/);
+    if (!m || !Number(m[1])) return;
+    for (let i = 0; i < units.length; i++) {
+      if (units[i][0].test(frag) && !seen[units[i][1]]) {
+        seen[units[i][1]] = true;
+        out.push({ n: m[1], unit: units[i][1] });
+        break;
+      }
+    }
   });
   return out;
 }
@@ -2475,8 +2459,11 @@ function renderDigestTile(digest, pushesMap, pushesGeneratedAt) {
     let value;
     if (digest.is_empty) value = "пусто";
     else if (parsed.length) {
+      // title у каждой части — полная сводка по ховеру, как у текстового
+      // фолбэка (обёртки-контейнера у частей нет: они сами flex-элементы).
       value = parsed.map(function (p) {
-        return '<span class="tile-part">' + escHtml(p.n) + ' <i>' + escHtml(p.unit) + '</i></span>';
+        return '<span class="tile-part" title="' + escHtml(digest.summary || "") + '">'
+          + escHtml(p.n) + ' <i>' + escHtml(p.unit) + '</i></span>';
       }).join("");
     } else {
       // Сводку не разобрали на числа — печатаем текстом, но КЛАМПОМ: replay
@@ -5116,7 +5103,7 @@ async function refreshAll(btn) {
   if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
   const wlModal = document.getElementById("wl-modal");
   const renderable = IS_OWNER && !(wlModal && wlModal.open);
-  const jobs = [loadGhRuns(), loadRunProgress()].concat(loadStaticData(!renderable));
+  const jobs = [loadGhRuns()].concat(loadStaticData(!renderable));
   // «Обновить» чинит неудачную первую загрузку списка судов (для региона
   // без капчёвых судов это лишний fetch cases.json — безвредно).
   // Журнал импортов — только там, где секция вообще есть: два KV-list на
@@ -5157,7 +5144,6 @@ document.addEventListener("click", function (e) {
   const k = b.getAttribute("data-retry");
   if (k === "health") loadHealth();
   else if (k === "bank") loadBankParse();
-  else if (k === "runprog") loadRunProgress();
   // Полный (не logonly) заход осознанно: сбой первой загрузки оставляет без
   // данных И светофор свежести, а его чинит только карта import:last:*.
   // Это редкий ручной клик, а не тик поллера — два KV-list допустимы.
@@ -5171,7 +5157,6 @@ document.addEventListener("click", function (e) {
 // первой отрисовки.
 initTabs();
 loadGhRuns();
-loadRunProgress();    // разовый GET, внутри сам выходит у оператора
 loadImportCourts();   // журнал импортов тянет он сам — только если есть gated-суды
 // Плитку дайджеста владельцу рисует render(), оператору она не нужна вовсе.
 loadStaticData(false);
