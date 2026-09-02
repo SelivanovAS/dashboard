@@ -4,9 +4,9 @@
   "smart_skip": true,
   "totals": {
     "total": 558,
-    "parsed": 27,
+    "parsed": 28,
     "skip": 530,
-    "failed": 1,
+    "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -1543,9 +1543,9 @@
       "last_checked_at": "2026-08-26"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10057,5 +10057,5 @@
       "last_checked_at": "2026-08-28"
     }
   ],
-  "updated_at": "2026-09-02T08:43:25"
+  "updated_at": "2026-09-02T08:58:04"
 }
