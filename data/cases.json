@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-02T06:26:38",
+  "updated_at": "2026-09-02T06:43:28",
   "cases": [
     {
       "id": "33-6183/2026",
@@ -13,7 +13,7 @@
       "first_instance": {
         "case_number": "2-167/2026",
         "court": "Сургутский районный суд",
-        "court_domain": "",
+        "court_domain": "surgray--hmao.sudrf.ru",
         "judge": "Бехтина Наталья Евгеньевна",
         "filing_date": "",
         "status": "",
@@ -22,10 +22,15 @@
         "event_date": "",
         "hearing_date": "",
         "hearing_time": "",
-        "link": "",
+        "link": "251791409|ff25ff69-a55f-4b30-9877-37292c9eb5db",
         "act_published": false,
         "act_date": "",
-        "events": []
+        "events": [],
+        "judicial_uid": "86RS0005-01-2024-003300-37",
+        "appeal_appellant_checked_at": "2026-09-02",
+        "appeal_appellant": "Ответчик",
+        "appeal_appellant_is_bank": false,
+        "appeal_appellant_status": "Ответчик"
       },
       "appeal": {
         "case_number": "33-6183/2026",
@@ -43,9 +48,21 @@
         "link": "26926685|1712e513-2bcd-4866-ad86-f3fa434eddc4",
         "act_published": false,
         "act_date": "",
-        "appellant": "",
-        "events": []
-      }
+        "appellant": "Ответчик",
+        "events": [
+          {
+            "date": "01.09.2026",
+            "time": "16:08",
+            "text": "Передача дела судье. 16:08. 01.09.2026",
+            "name": "Передача дела судье",
+            "posted_at": "01.09.2026"
+          }
+        ],
+        "last_checked_at": "2026-09-02",
+        "appellant_is_bank": false,
+        "appellant_status": "Ответчик"
+      },
+      "initial_bank_role": "Третье лицо"
     },
     {
       "id": "33-6088/2026",
