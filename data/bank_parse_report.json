@@ -38,7 +38,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": true,
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|М-2847/2026",
@@ -56,7 +56,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": true,
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|М-2846/2026",
@@ -10057,5 +10057,5 @@
       "last_checked_at": "2026-08-28"
     }
   ],
-  "updated_at": "2026-09-02T07:13:04"
+  "updated_at": "2026-09-02T07:43:13"
 }
