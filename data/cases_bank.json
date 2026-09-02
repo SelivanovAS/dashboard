@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0002-01-2026-008407-39",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-02",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0001-01-2026-004799-52",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-02",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -107,8 +105,7 @@
         "judicial_uid": "86RS0001-01-2026-004797-58",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-02",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -146,8 +143,7 @@
         "judicial_uid": "86RS0007-01-2026-004783-73",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-02",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -185,8 +181,7 @@
         "judicial_uid": "86RS0012-01-2026-001045-61",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-02",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -531,7 +526,7 @@
         "judicial_uid": "86RS0013-01-2026-000912-19",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-01"
+        "last_checked_at": "2026-09-02"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -4421,7 +4416,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-02",
         "judicial_uid": "86RS0002-01-2026-007437-39"
       },
       "appeal": null,
@@ -24064,5 +24059,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-02T06:26:38"
+  "updated_at": "2026-09-02T06:43:28"
 }
