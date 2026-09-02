@@ -4,9 +4,9 @@
   "smart_skip": true,
   "totals": {
     "total": 558,
-    "parsed": 27,
+    "parsed": 28,
     "skip": 530,
-    "failed": 1,
+    "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
     "intake_new": 0
@@ -38,7 +38,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": false,
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|М-2847/2026",
@@ -56,7 +56,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": false,
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|М-2846/2026",
@@ -139,9 +139,9 @@
       "last_checked_at": "2026-09-02"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10057,5 +10057,5 @@
       "last_checked_at": "2026-08-28"
     }
   ],
-  "updated_at": "2026-09-02T06:43:28"
+  "updated_at": "2026-09-02T07:13:04"
 }

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-02T06:43:28",
+ "updated_at": "2026-09-02T07:13:04",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -484,7 +484,6 @@
   },
   "cassation:7kas:total": {
    "counts": [
-    25,
     0,
     0,
     25,
@@ -496,6 +495,7 @@
     0,
     0,
     25,
+    0,
     0,
     0
    ],
@@ -503,12 +503,11 @@
    "fail_streak": 0,
    "alerted_zero": true,
    "last_count": 0,
-   "last_run_at": "2026-09-02T06:43:28",
+   "last_run_at": "2026-09-02T07:13:04",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    0,
     0,
     0,
     0,
@@ -521,13 +520,14 @@
     0,
     3,
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-02T06:43:28",
+   "last_run_at": "2026-09-02T07:13:04",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -556,29 +556,29 @@
   }
  },
  "last_run": {
-  "at": "2026-09-02T06:43:28",
-  "requests_ok": 37,
-  "requests_failed": 1,
+  "at": "2026-09-02T07:13:04",
+  "requests_ok": 35,
+  "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 9,
   "cards_breaker_unrequested": 9,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
   "cards_read": 33,
-  "cards_planned": 43,
+  "cards_planned": 42,
   "cards_read_today": 241,
   "cards_planned_today": 250,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 30,
+    "read": 31,
     "planned": 31,
     "read_today": 203,
     "planned_today": 203
    },
    "appeal": {
-    "read": 3,
-    "planned": 3,
+    "read": 2,
+    "planned": 2,
     "read_today": 38,
     "planned_today": 38
    },
@@ -590,28 +590,21 @@
    }
   },
   "latency": {
-   "n": 37,
-   "p50": 0.5,
+   "n": 35,
+   "p50": 0.4,
    "p90": 4.4,
-   "max": 5.7
+   "max": 8.2
   },
   "failure_latency": {
-   "connect_timeout": {
-    "n": 1,
-    "p50": 14.2,
-    "p90": 14.2,
-    "max": 14.2
-   },
    "outage_search": {
     "n": 1,
-    "p50": 5.1,
-    "p90": 5.1,
-    "max": 5.1
+    "p50": 8.2,
+    "p90": 8.2,
+    "max": 8.2
    }
   },
   "fail_kinds": {
-   "outage_search": 1,
-   "connect_timeout": 1
+   "outage_search": 1
   },
   "breaker": {
    "mode": "time",
@@ -641,7 +634,7 @@
      "deferred_remaining": 9,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 19.1
+     "next_probe_in_seconds": 51.8
     }
    ]
   },
@@ -649,7 +642,7 @@
   "courts_with_unrequested": 1,
   "courts_outage": 1,
   "cards_unreachable": 9,
-  "cards_unread_other": 1,
+  "cards_unread_other": 0,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
