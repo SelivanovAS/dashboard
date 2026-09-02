@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-02T07:43:12",
+ "updated_at": "2026-09-02T08:12:18",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -484,7 +484,6 @@
   },
   "cassation:7kas:total": {
    "counts": [
-    0,
     25,
     25,
     25,
@@ -494,6 +493,7 @@
     0,
     0,
     25,
+    0,
     0,
     0,
     0,
@@ -503,12 +503,11 @@
    "fail_streak": 0,
    "alerted_zero": true,
    "last_count": 0,
-   "last_run_at": "2026-09-02T07:43:12",
+   "last_run_at": "2026-09-02T08:12:18",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    0,
     0,
     1,
     3,
@@ -521,13 +520,14 @@
     0,
     0,
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-02T07:43:12",
+   "last_run_at": "2026-09-02T08:12:18",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -556,7 +556,7 @@
   }
  },
  "last_run": {
-  "at": "2026-09-02T07:43:12",
+  "at": "2026-09-02T08:12:18",
   "requests_ok": 35,
   "requests_failed": 0,
   "requests_retried": 0,
@@ -568,7 +568,7 @@
   "cards_planned": 42,
   "cards_read_today": 241,
   "cards_planned_today": 250,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
     "read": 31,
@@ -591,16 +591,16 @@
   },
   "latency": {
    "n": 35,
-   "p50": 0.7,
-   "p90": 4.4,
-   "max": 8.7
+   "p50": 0.3,
+   "p90": 3.4,
+   "max": 6.1
   },
   "failure_latency": {
    "outage_search": {
     "n": 1,
-    "p50": 1.1,
-    "p90": 1.1,
-    "max": 1.1
+    "p50": 6.1,
+    "p90": 6.1,
+    "max": 6.1
    }
   },
   "fail_kinds": {
@@ -634,7 +634,7 @@
      "deferred_remaining": 9,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 29.9
+     "next_probe_in_seconds": 60.1
     }
    ]
   },
