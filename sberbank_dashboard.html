@@ -70,7 +70,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=191">
+<link rel="stylesheet" href="styles.css?v=192">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -179,8 +179,11 @@
       </div>
       <div class="header-actions">
         <div class="header-meta" id="meta-info"></div>
-        <button class="theme-toggle" id="btn-sync" onclick="openSyncSheet()" aria-label="Синхронизация подписок между устройствами" title="Синхронизация подписок между устройствами">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <!-- ⚙ Настройки (03.09.2026): push-уведомления, синхронизация устройств
+             (прежняя кнопка 🔗), календарь заседаний, «О приложении». Точка
+             .pending — есть неотправленные правки ★ (updateSyncButton). -->
+        <button class="theme-toggle" id="btn-settings" onclick="openSettingsSheet()" aria-label="Настройки" title="Настройки">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -380,6 +383,19 @@
     <div class="sheet-body" id="sync-sheet-body"></div>
   </aside>
 
+  <!-- «Настройки» (⚙ в шапке, 03.09.2026): уведомления, синхронизация
+       устройств, календарь заседаний, о приложении. Тело рендерит
+       renderSettingsSheet (app.js); та же шторка/мини-окно, что у синка. -->
+  <div class="sheet-scrim" id="settings-scrim" onclick="closeSettingsSheet()"></div>
+  <aside class="filters-sheet" id="settings-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Настройки</span>
+      <button class="sheet-close btn-x" onclick="closeSettingsSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body" id="settings-sheet-body"></div>
+  </aside>
+
   <!-- «Что нового» — одноразовый анонс функций при первом открытии после
        обновления (маркер в localStorage через lsKey). На мобиле bottom-sheet,
        на десктопе — мини-окно (то же CSS-переопределение, что у sync-sheet). -->
@@ -392,21 +408,20 @@
     </div>
     <div class="sheet-body">
       <div class="wn-block">
-        <div class="wn-date">Обновление от 26.08.2026</div>
+        <div class="wn-date">Обновление от 03.09.2026</div>
         <div class="wn-item">
-          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></div>
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
           <div class="wn-item-body">
-            <div class="wn-item-title">Дата сверки с судом</div>
-            <div class="wn-item-text">В карточке дела теперь видно, когда информация в последний раз сверялась с сайтом суда.</div>
-            <button class="wn-btn" onclick="whatsNewShowFreshness()">Показать на примере</button>
+            <div class="wn-item-title">Настройки за шестерёнкой</div>
+            <div class="wn-item-text">В шапке появилась <span class="wn-nowrap">кнопка&nbsp;<span class="wn-inline-btn" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></span> — туда переехали уведомления, синхронизация устройств (прежняя кнопка 🔗) и календарь заседаний.</div>
+            <button class="wn-btn" onclick="whatsNewOpenSettings()">Открыть настройки</button>
           </div>
         </div>
         <div class="wn-item">
-          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
           <div class="wn-item-body">
-            <div class="wn-item-title">Синхронизация подписок</div>
-            <div class="wn-item-text">В шапке дашборда появилась <span class="wn-nowrap">кнопка&nbsp;<span class="wn-inline-btn" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span></span> — она связывает телефон и компьютер: отслеживаемые дела (★) станут общими на всех ваших устройствах.</div>
-            <button class="wn-btn" onclick="whatsNewOpenSync()">Связать устройства</button>
+            <div class="wn-item-title">Календарь на рабочем компьютере</div>
+            <div class="wn-item-text">В корпоративном OWA подписка по ссылке не работает — почтовый сервер банка не выходит в интернет. Теперь в настройках есть «Скачать файл (.ics)»: загрузите его в OWA через «Добавить календарь → Из файла». На телефоне подписка обновляется сама, как раньше.</div>
           </div>
         </div>
         <button class="sheet-btn-done wn-done" onclick="closeWhatsNew()">Понятно</button>
@@ -420,6 +435,6 @@
      qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
      проекта нет. Файл не редактируется, обновление — заменой целиком. -->
 <script src="qrcode-gen.js?v=1" defer></script>
-<script src="app.js?v=191" defer></script>
+<script src="app.js?v=192" defer></script>
 </body>
 </html>

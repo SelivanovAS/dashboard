@@ -56,6 +56,13 @@ def _app_js() -> str:
     return _read("app.js")
 
 
+def _css_rule(selector: str) -> str:
+    css = open(os.path.join(ROOT, "styles.css"), encoding="utf-8").read()
+    m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert m, f"Правило {selector} не найдено."
+    return m.group(1)
+
+
 def _fn_src(src: str, name: str) -> str:
     m = re.search(r"function\s+" + re.escape(name) + r"\s*\([\s\S]*?\n\}", src)
     assert m, f"Функция {name} не найдена."
@@ -308,13 +315,18 @@ class TestFrontendContract:
         body = _fn_src(_app_js(), "calFeedWebcalUrl")
         assert "webcal:" in body
 
-    def test_sync_sheet_has_calendar_block(self):
+    def test_settings_sheet_has_calendar_block(self):
+        # С 03.09.2026 блок календаря живёт в шторке «Настройки» (⚙), а не в
+        # шторке синка: там он был виден только в двух из трёх её состояний
+        # и делил экран с кодами-парами.
         js = _app_js()
-        body = _fn_src(js, "renderSyncSheet")
-        assert body.count("calFeedBlockHtml()") >= 2, \
-            "Блок календаря должен быть и у связанных, и у несвязанных устройств."
+        assert "calFeedBlockHtml()" in _fn_src(js, "renderSettingsSheet")
+        assert "calFeedBlockHtml()" not in _fn_src(js, "renderSyncSheet")
         assert "subscribeCalendar()" in _fn_src(js, "calFeedBlockHtml"), \
             "Главная кнопка блока — умная subscribeCalendar (один тап)."
+        # Перерисовка после выдачи/перевыпуска токена — шторки НАСТРОЕК.
+        req = _fn_src(js, "requestCalendarFeed")
+        assert "renderSettingsSheet()" in req and "renderSyncSheet()" not in req
 
     def test_subscribe_is_one_tap_and_platform_aware(self):
         # «Минимум действий»: кнопка сама добывает токен и сразу открывает
@@ -329,15 +341,31 @@ class TestFrontendContract:
         assert "window.open" in body and "location.href = url" in body
         assert "calendar.google.com/calendar/render?cid=" in _fn_src(js, "calFeedGoogleUrl")
 
-    def test_outlook_button(self):
-        # Веб-Outlook (личные ящики Microsoft): форма подписки с заполненной
-        # ссылкой. Тот же паттерн, что subscribeCalendar.
+    def test_outlook_button_stays_removed(self):
+        # Кнопка «Outlook» вела на outlook.live.com — личные ящики Microsoft.
+        # В банке рабочие станции на Linux с веб-OWA, где она не открывалась
+        # и вводила в заблуждение; удалена 03.09.2026 (решение юриста).
         js = _app_js()
-        assert "outlook.live.com/calendar/0/addfromweb" in _fn_src(js, "calFeedOutlookUrl")
-        body = _fn_src(js, "addCalToOutlook")
+        for gone in ("function calFeedOutlookUrl", "function addCalToOutlook",
+                     "https://outlook.live.com"):
+            assert gone not in js, gone
+        assert "Outlook</button>" not in _fn_src(js, "calFeedBlockHtml")
+
+    def test_download_button(self):
+        # «Скачать файл (.ics)» — путь для корпоративного OWA (импорт «Из
+        # файла»): Exchange банка в интернет не ходит, «Из Интернета» там не
+        # открывает даже публичный ICS (проверка 03.09.2026). Ссылка в
+        # https-форме (webcal: перехватил бы календарь), Worker не меняется.
+        js = _app_js()
+        body = _fn_src(js, "downloadCalFeed")
         assert "requestCalendarFeed" in body
+        assert "calFeedHttpsUrl" in body and "calFeedWebcalUrl" not in body
         assert "window.open" in body and "location.href = url" in body
-        assert "addCalToOutlook()" in _fn_src(js, "calFeedBlockHtml")
+        block = _fn_src(js, "calFeedBlockHtml")
+        assert "downloadCalFeed()" in block
+        assert "Из файла" in block and "OWA" in block, \
+            "Текст блока обязан честно называть путь для OWA."
+        assert "flex-wrap:wrap" in _css_rule(".cal-service-row")
 
     def test_request_returns_token(self):
         # subscribeCalendar/copyCalFeedUrl ждут токен ВОЗВРАТОМ, не через кэш.

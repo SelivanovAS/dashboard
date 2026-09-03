@@ -530,12 +530,6 @@ body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
 .theme-toggle:hover { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
 .theme-toggle:active { transform:scale(0.94); }
 .theme-toggle svg { width:18px; height:18px; }
-/* Колокольчик push (#btn-push): 'on' — подписка активна, 'off' — подписка
-   недоступна (iOS без установки на «Домой» / уведомления запрещены);
-   кнопка остаётся кликабельной — клик показывает toast с пояснением. */
-#btn-push.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
-#btn-push.on:hover { color:var(--sber-green-700); }
-#btn-push.off { opacity:.45; }
 .theme-toggle .icon-moon,
 .theme-toggle .icon-sun,
 .theme-toggle .icon-auto { display:none; }
@@ -1524,7 +1518,7 @@ tr.detail-row { display:none; }
 /* Календарный фид: главная кнопка одна (subscribeCalendar), под ней тихий
    сервисный ряд и свёртка со ссылкой (webcal://… длинная — переносим
    посимвольно, monospace, копируется целиком). */
-.cal-service-row { display:flex; gap:10px; justify-content:center; }
+.cal-service-row { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
 .cal-quiet-btn { padding:7px 14px; border-radius:var(--radius-pill); font-size:var(--fs-sm); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-2); border:1px solid var(--border); }
 .cal-quiet-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
 .cal-quiet-danger { color:var(--red-500); }
@@ -1532,14 +1526,18 @@ tr.detail-row { display:none; }
 .cal-url-details summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; text-align:center; }
 .cal-url-details[open] summary { margin-bottom:6px; }
 .sync-feed-url { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); word-break:break-all; padding:8px 10px; border:1px dashed var(--border); border-radius:var(--radius); background:var(--bg-2); user-select:all; }
-/* Кнопка шапки: связанное устройство подсвечено, как включённый колокольчик
-   (#btn-push.on — та же пара токенов). */
-#btn-sync.on { color:var(--sber-green-600); border-color:var(--sber-green-600); }
-/* Точка «есть неотправленные правки ★» (Worker недоступен/офлайн; ставит
-   updateSyncButton только у связанных устройств). Токен --amber-500 объявлен
-   один на обе темы — насыщенный акцент читается и на светлом, и на тёмном. */
-#btn-sync { position:relative; }
-#btn-sync.pending::after { content:''; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
+/* Шестерёнка шапки (#btn-settings, 03.09.2026 — сюда переехали 🔗 синк,
+   колокольчик push и календарь). Точка «есть неотправленные правки ★»
+   (Worker недоступен/офлайн; ставит updateSyncButton только у связанных
+   устройств). Токен --amber-500 объявлен один на обе темы — насыщенный
+   акцент читается и на светлом, и на тёмном. */
+#btn-settings { position:relative; }
+#btn-settings.pending::after { content:''; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
+/* Шторка «Настройки»: строки состояния разделов (push/синк). */
+.st-status { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); }
+.st-status.is-on { color:var(--accent); }
+.st-status.is-off { color:var(--fg-3); font-weight:var(--fw-medium); }
+.st-self-start { align-self:flex-start; }
 
 /* ── Анонс «Что нового» (одноразовый, при первом открытии после апдейта) ── */
 .wn-block { display:flex; flex-direction:column; gap:16px; padding:16px 20px 20px; }
@@ -1566,14 +1564,15 @@ tr.detail-row { display:none; }
   40% { box-shadow:0 0 0 4px var(--accent-bg-strong), 0 0 0 6px var(--accent); }
 }
 
-/* Десктоп: «Синхронизация подписок» и «Что нового» — не bottom-sheet во всю
-   ширину, а мини-окно по центру верхней трети. Базовые правила .filters-sheet
+/* Десктоп: «Синхронизация подписок», «Что нового» и «Настройки» — не
+   bottom-sheet во всю ширину, а мини-окно по центру верхней трети. Базовые правила .filters-sheet
    держат шторку прибитой к низу через transform:translateY(100%) — здесь
    transform занят центрированием, поэтому появление ведут
    opacity+pointer-events. */
 @media (min-width: 769px) {
   #sync-sheet,
-  #whatsnew-sheet {
+  #whatsnew-sheet,
+  #settings-sheet {
     left:50%; right:auto; bottom:auto; top:96px;
     width:440px; max-width:calc(100vw - 32px); max-height:calc(100vh - 128px);
     border-radius:var(--radius-lg);
@@ -1583,9 +1582,11 @@ tr.detail-row { display:none; }
     box-shadow:0 18px 48px rgba(13, 17, 22, 0.28);
   }
   #sync-sheet.open,
-  #whatsnew-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
+  #whatsnew-sheet.open,
+  #settings-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
   #sync-sheet .sheet-handle,
-  #whatsnew-sheet .sheet-handle { display:none; }
+  #whatsnew-sheet .sheet-handle,
+  #settings-sheet .sheet-handle { display:none; }
 }
 
 /* На телефонной ширине четыре банковских режима с числовыми бейджами не помещаются
@@ -1877,9 +1878,10 @@ tr.detail-row { display:none; }
   .header-meta { display:none; }
   /* Theme и refresh — круглые icon-only pill'ы того же языка, что .filters-btn:
      один тип капсулы по всему экрану (top + bottom), без чужих коробок.
-     46px вместо прежних 52: с кнопкой связывания устройств (#btn-sync,
-     26.08.2026) капсул в ряду стало четыре, и на 320px они наезжали на
-     подпись территории; 46px держит тач-таргет ≥44 и возвращает ряд в экран. */
+     46px вместо прежних 52: с кнопкой связывания устройств (26.08.2026)
+     капсул в ряду стало четыре, и на 320px они наезжали на подпись
+     территории; 46px держит тач-таргет ≥44. С 03.09.2026 капсул три
+     (⚙ настройки, тема, «Обновить») — размер оставлен. */
   .app-header .theme-toggle,
   .app-header .btn-refresh {
     width:46px; height:46px; padding:0; gap:0;
