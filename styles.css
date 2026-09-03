@@ -522,7 +522,7 @@
 /* Плавный переход при переключении темы */
 html { transition: background-color 200ms var(--ease-out); }
 body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
-.drawer, .filters-sheet, .mobile-card, .chip-btn, .badge, .btn-refresh,
+.drawer, .filters-sheet, .mobile-card, .chip-btn, .badge,
 .search-box, .filter-select, .setup-card { transition: background-color 200ms var(--ease-out), border-color 200ms var(--ease-out), color 200ms var(--ease-out); }
 
 /* Theme toggle button */
@@ -635,11 +635,6 @@ body {
                 background:var(--warning-bg); color:var(--warning-fg);
                 font-size:var(--fs-2xs); font-weight:var(--fw-semibold); }
 
-.btn-refresh { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-weight:var(--fw-semibold); font-family:var(--font-sans); cursor:pointer; transition:all 120ms var(--ease-out); }
-.btn-refresh:hover { background:var(--bg-3); border-color:var(--border-strong); }
-.btn-refresh:active { transform:scale(0.97); }
-.btn-refresh svg { width:16px; height:16px; }
-.btn-refresh.is-loading svg { animation:spin .8s linear infinite; }
 
 /* ========== Main ========== */
 .app-main { max-width:var(--content-max); margin:0 auto; padding:24px 24px 40px; }
@@ -944,6 +939,7 @@ body {
 .info-line .bridge-btn { flex:0 0 auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:6px 12px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-1); cursor:pointer; transition:all 120ms var(--ease-out); }
 .info-line .bridge-btn:hover { box-shadow:var(--shadow-1); border-color:var(--green-500); }
 @media (max-width:768px) {
+  .st-panel { padding-left:0; }
   .info-line .bridge-btn { flex-basis:100%; }
 }
 
@@ -1515,16 +1511,8 @@ tr.detail-row { display:none; }
 .sync-scan-video { width:100%; max-height:320px; border-radius:var(--radius); background:#000; object-fit:cover; }
 .sync-btn-scan { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
 .sync-btn-scan:hover { border-color:var(--border-strong); background:var(--bg-3); }
-/* Календарный фид: главная кнопка одна (subscribeCalendar), под ней тихий
-   сервисный ряд и свёртка со ссылкой (webcal://… длинная — переносим
-   посимвольно, monospace, копируется целиком). */
-.cal-service-row { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-.cal-quiet-btn { padding:7px 14px; border-radius:var(--radius-pill); font-size:var(--fs-sm); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-2); border:1px solid var(--border); }
-.cal-quiet-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
-.cal-quiet-danger { color:var(--red-500); }
-.cal-quiet-danger:hover { border-color:var(--red-500); }
-.cal-url-details summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; text-align:center; }
-.cal-url-details[open] summary { margin-bottom:6px; }
+/* Календарный фид: ссылка webcal://… длинная — переносим посимвольно,
+   monospace, копируется целиком (живёт в свёртке раздела настроек). */
 .sync-feed-url { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); word-break:break-all; padding:8px 10px; border:1px dashed var(--border); border-radius:var(--radius); background:var(--bg-2); user-select:all; }
 /* Шестерёнка шапки (#btn-settings, 03.09.2026 — сюда переехали 🔗 синк,
    колокольчик push и календарь). Точка «есть неотправленные правки ★»
@@ -1533,11 +1521,39 @@ tr.detail-row { display:none; }
    акцент читается и на светлом, и на тёмном. */
 #btn-settings { position:relative; }
 #btn-settings.pending::after { content:''; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
-/* Шторка «Настройки»: строки состояния разделов (push/синк). */
-.st-status { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); }
-.st-status.is-on { color:var(--accent); }
-.st-status.is-off { color:var(--fg-3); font-weight:var(--fw-medium); }
-.st-self-start { align-self:flex-start; }
+/* Шторка «Настройки» (03.09.2026): список строк в духе системных настроек —
+   значок · название · статус · шеврон; раскрытый раздел (.is-open) получает
+   панель с одной главной кнопкой, пояснения — в свёртке .st-fold. */
+.st-list { display:flex; flex-direction:column; width:100%; padding:2px 0 10px; }
+.st-item { border-bottom:1px solid var(--divider); }
+.st-item:last-child { border-bottom:0; }
+.st-row { display:flex; align-items:center; gap:12px; width:100%; padding:12px 2px; background:none; border:0; cursor:pointer; text-align:left; font-family:var(--font-sans); color:var(--fg-1); }
+.st-row:hover .st-row-title { color:var(--accent); }
+.st-row-icon { flex:0 0 36px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:var(--bg-2); color:var(--fg-2); }
+.st-row-icon svg { width:18px; height:18px; }
+.st-item.is-open .st-row-icon { background:var(--accent-bg-soft); color:var(--accent); }
+.st-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.st-row-title { font-size:var(--fs-md); font-weight:var(--fw-semibold); }
+.st-row-status { font-size:var(--fs-sm); color:var(--fg-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.st-row-status.is-on { color:var(--accent); }
+.st-row-status.is-warn { color:var(--warning-fg); }
+.st-row-chev { flex:0 0 auto; display:inline-flex; color:var(--fg-3); transition:transform 160ms var(--ease-out); }
+.st-row-chev svg { width:18px; height:18px; }
+.st-item.is-open .st-row-chev { transform:rotate(180deg); }
+.st-item.is-loading .st-row-icon svg { animation:spin .8s linear infinite; }
+.st-panel { display:flex; flex-direction:column; gap:10px; padding:0 2px 14px 50px; }
+.st-note { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.st-btn { align-self:flex-start; padding:9px 16px; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
+.st-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.st-btn:disabled { opacity:.6; cursor:default; }
+.st-btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.st-btn-primary:hover { background:var(--accent-active); border-color:var(--accent-active); }
+.st-btn-danger { color:var(--red-500); }
+.st-btn-danger:hover { border-color:var(--red-500); }
+.st-btn-row { display:flex; flex-wrap:wrap; gap:8px; }
+.st-fold summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; }
+.st-fold[open] summary { margin-bottom:6px; }
+.st-fold .sync-feed-url { margin-top:8px; }
 
 /* ── Анонс «Что нового» (одноразовый, при первом открытии после апдейта) ── */
 .wn-block { display:flex; flex-direction:column; gap:16px; padding:16px 20px 20px; }
@@ -1876,14 +1892,13 @@ tr.detail-row { display:none; }
   /* На мобиле header сильно перегружен — прячем мета-инфо и сжимаем кнопку
      обновления до иконки (текст «Обновить» гасим font-size:0 без правки HTML). */
   .header-meta { display:none; }
-  /* Theme и refresh — круглые icon-only pill'ы того же языка, что .filters-btn:
+  /* Капсулы шапки — круглые icon-only pill'ы того же языка, что .filters-btn:
      один тип капсулы по всему экрану (top + bottom), без чужих коробок.
      46px вместо прежних 52: с кнопкой связывания устройств (26.08.2026)
      капсул в ряду стало четыре, и на 320px они наезжали на подпись
-     территории; 46px держит тач-таргет ≥44. С 03.09.2026 капсул три
-     (⚙ настройки, тема, «Обновить») — размер оставлен. */
-  .app-header .theme-toggle,
-  .app-header .btn-refresh {
+     территории; 46px держит тач-таргет ≥44. С 03.09.2026 капсул две
+     (⚙ настройки, тема; «Обновить» ушла в настройки) — размер оставлен. */
+  .app-header .theme-toggle {
     width:46px; height:46px; padding:0; gap:0;
     border-radius:50%;
     background:var(--pill-bg);
@@ -1893,9 +1908,7 @@ tr.detail-row { display:none; }
       0 4px 12px rgba(13, 17, 22, 0.08);
     justify-content:center;
   }
-  .app-header .btn-refresh { font-size:0; }
-  .app-header .theme-toggle svg,
-  .app-header .btn-refresh svg { width:20px; height:20px; }
+  .app-header .theme-toggle svg { width:20px; height:20px; }
   .stats-mobile-summary .sms-item { font-size:var(--fs-lg); }
   .stats-mobile-summary .sms-item strong { font-size:22px; }
   /* Заголовки «Дайджест» и «Ближайшие заседания» — крупнее (решение юриста
@@ -2021,7 +2034,6 @@ tr.detail-row { display:none; }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .app-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; border-bottom:1px solid var(--border); box-shadow:none; }
     .app-header .theme-toggle,
-    .app-header .btn-refresh { background:var(--bg-1); border-color:var(--border); box-shadow:none; }
     .toolbar-row-search .search-box,
     .toolbar-row-search .filters-btn,
     .toolbar-mine-btn { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; border:1px solid var(--border-strong); }

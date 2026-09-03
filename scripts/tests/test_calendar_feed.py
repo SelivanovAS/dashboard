@@ -320,7 +320,8 @@ class TestFrontendContract:
         # шторке синка: там он был виден только в двух из трёх её состояний
         # и делил экран с кодами-парами.
         js = _app_js()
-        assert "calFeedBlockHtml()" in _fn_src(js, "renderSettingsSheet")
+        assert "calFeedBlockHtml()" in _fn_src(js, "settingsCalendarSectionHtml")
+        assert "settingsCalendarSectionHtml()" in _fn_src(js, "renderSettingsSheet")
         assert "calFeedBlockHtml()" not in _fn_src(js, "renderSyncSheet")
         assert "subscribeCalendar()" in _fn_src(js, "calFeedBlockHtml"), \
             "Главная кнопка блока — умная subscribeCalendar (один тап)."
@@ -365,7 +366,7 @@ class TestFrontendContract:
         assert "downloadCalFeed()" in block
         assert "Из файла" in block and "OWA" in block, \
             "Текст блока обязан честно называть путь для OWA."
-        assert "flex-wrap:wrap" in _css_rule(".cal-service-row")
+        assert "flex-wrap:wrap" in _css_rule(".st-btn-row")
 
     def test_request_returns_token(self):
         # subscribeCalendar/copyCalFeedUrl ждут токен ВОЗВРАТОМ, не через кэш.

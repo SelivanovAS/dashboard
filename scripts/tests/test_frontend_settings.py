@@ -7,6 +7,12 @@
 ежедневные действия — тема и «Обновить» — плюс сама шестерёнка: на 320px
 четыре капсулы наезжали на подпись территории. Форма — та же шторка, что у
 синка (bottom-sheet на телефоне, мини-окно по центру на десктопе).
+
+Вторая итерация того же дня (разбор юриста «стена текста»): список строк в
+духе системных настроек (значок · название · статус · шеврон, аккордеон с
+одной главной кнопкой, пояснения в свёртке), календарь зависит от
+устройства, «Обновить» ушла из шапки в настройки, данные перечитываются
+сами при возврате во вкладку (гейт 10 минут).
 """
 
 from __future__ import annotations
@@ -29,14 +35,15 @@ def _fn_src(src: str, name: str) -> str:
     return m.group(0)
 
 
-def test_header_has_gear_and_only_three_capsules():
+def test_header_has_gear_and_only_two_capsules():
     html = _read("sberbank_dashboard.html")
     for marker in ('id="btn-settings"', 'onclick="openSettingsSheet()"',
-                   'id="theme-toggle"', 'id="btn-refresh"'):
+                   'id="theme-toggle"'):
         assert marker in html, marker
     assert 'id="btn-sync"' not in html, "🔗 живёт за шестерёнкой."
+    assert 'id="btn-refresh"' not in html, "«Обновить» живёт в настройках (03.09.2026)."
     header = html[html.index('<header class="app-header">'):html.index("</header>")]
-    assert header.count("<button") == 3, "В шапке ровно три капсулы: ⚙, тема, «Обновить»."
+    assert header.count("<button") == 2, "В шапке ровно две капсулы: ⚙ и тема."
     # Значок — inline-SVG на currentColor, как соседи (эмодзи выпадает из палитры темы).
     gear = header[header.index('id="btn-settings"'):]
     assert "<svg" in gear[:gear.index("</button>")]
@@ -70,8 +77,66 @@ def test_sections_present():
     js = _read("app.js")
     body = _fn_src(js, "renderSettingsSheet")
     for part in ("settingsPushSectionHtml()", "settingsSyncSectionHtml()",
-                 "calFeedBlockHtml()", "settingsAboutSectionHtml()"):
+                 "settingsCalendarSectionHtml()", "settingsRefreshRowHtml()",
+                 "settingsAboutSectionHtml()"):
         assert part in body, part
+    assert "calFeedBlockHtml()" in _fn_src(js, "settingsCalendarSectionHtml")
+
+
+def test_rows_are_a_list_with_status_and_accordion():
+    # Строка = значок · название · статус · шеврон; один раскрытый раздел.
+    js = _read("app.js")
+    row = _fn_src(js, "settingsRowHtml")
+    for cls in ("st-row-icon", "st-row-title", "st-row-status", "st-row-chev", "st-panel"):
+        assert cls in row, cls
+    assert "aria-expanded" in row
+    tog = _fn_src(js, "settingsToggle")
+    assert "_settingsOpenSection" in tog and "renderSettingsSheet()" in tog
+    assert "_settingsOpenSection = null" in _fn_src(js, "closeSettingsSheet")
+    # Пояснения — в свёртке, не в панели: «стена текста» была причиной переделки.
+    for fn in ("settingsPushSectionHtml", "settingsSyncSectionHtml"):
+        assert "settingsFoldHtml(" in _fn_src(js, fn), fn
+    assert "<details" in _fn_src(js, "calFeedBlockHtml")
+    css = _read("styles.css")
+    for cls in (".st-row {", ".st-row-status.is-on", ".st-row-status.is-warn",
+                ".st-item.is-open .st-row-chev", ".st-fold summary"):
+        assert cls in css, cls
+    # Значки — SVG на currentColor; эмодзи в кнопках нет.
+    assert "ST_ICONS" in row
+    for fn in ("settingsPushSectionHtml", "settingsSyncSectionHtml", "settingsAboutSectionHtml",
+               "calFeedBlockHtml"):
+        body = _fn_src(js, fn)
+        for emoji in ("🔔", "📅", "✨", "⬇", "⧉"):
+            assert emoji not in body, f"{emoji} в {fn}: значок только SVG."
+
+
+def test_calendar_primary_depends_on_device():
+    # Телефон → «Добавить в календарь» (подписка), компьютер → «Скачать файл»
+    # (OWA умеет только импорт из файла).
+    js = _read("app.js")
+    block = _fn_src(js, "calFeedBlockHtml")
+    assert "calIsMobileDevice()" in block
+    assert block.index("mobile") < block.index("st-btn-primary")
+    assert "Из файла" in block
+
+
+def test_refresh_moved_to_settings_with_auto_refresh():
+    js = _read("app.js")
+    assert "settingsRefreshData()" in _fn_src(js, "settingsRefreshRowHtml")
+    assert "refreshData()" in _fn_src(js, "settingsRefreshData")
+    # Автообновление при возврате во вкладку: гейт 10 мин, офлайн и занятый
+    # UI — пропуск; без него PWA показывал бы утренний снимок до перезагрузки.
+    assert "const AUTO_REFRESH_MIN_MS=10*60*1000;" in js
+    i = js.index("const AUTO_REFRESH_MIN_MS")
+    tail = js[i:i + 900]
+    assert "visibilitychange" in tail and "uiBusyForRefresh()" in tail
+    assert "navigator.onLine===false" in tail
+    assert "loadFromSheet(resolveSheetUrl(),{quiet:true})" in tail
+    assert "reloadBankDataset()" in tail
+    assert "_lastDataLoadAt=Date.now()" in _fn_src(js, "loadFromSheet")
+    assert "getElementById('btn-refresh')" not in js
+    css = _read("styles.css")
+    assert ".btn-refresh" not in css, "Стили кнопки шапки удалены вместе с ней."
 
 
 def test_push_state_lives_in_settings_not_header():
@@ -114,7 +179,8 @@ def test_no_template_literals_in_settings_code():
     # Соглашение sync-кода: конкатенация строк, без backtick'ов.
     js = _read("app.js")
     for fn in ("renderSettingsSheet", "settingsPushSectionHtml", "settingsSyncSectionHtml",
-               "settingsAboutSectionHtml", "calFeedBlockHtml", "setPushUiState"):
+               "settingsAboutSectionHtml", "settingsCalendarSectionHtml", "settingsRefreshRowHtml",
+               "settingsRowHtml", "settingsFoldHtml", "calFeedBlockHtml", "setPushUiState"):
         assert "`" not in _fn_src(js, fn), f"Backtick в {fn}."
 
 
