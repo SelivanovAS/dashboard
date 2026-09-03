@@ -124,7 +124,7 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
 ```
 
 - `vid` — случайный UUID, который фронт создаёт при первом визите и хранит в
-  `lsKey('visit_id')` (`getVisitId`, [4786](../../app.js#L4786)). ⚠️ Обязательно
+  `lsKey('visit_id')` (`getVisitId`, [4796](../../app.js#L4796)). ⚠️ Обязательно
   через `lsKey`: обе территории живут на одном origin `selivanovas.github.io`.
 - `os` — грубый класс устройства (`visitorDeviceClass`); **сырой `User-Agent` в
   KV не попадает**, как и IP: `CF-Connecting-IP` и `request.cf` не читаются
