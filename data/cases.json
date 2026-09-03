@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-03T06:43:23",
+  "updated_at": "2026-09-03T07:14:04",
   "cases": [
     {
       "id": "33-6183/2026",
@@ -7417,7 +7417,7 @@
     },
     {
       "id": "33-4206/2026",
-      "current_stage": "cassation_watch",
+      "current_stage": "cassation",
       "plaintiff": "Абдулазизова Елена Азаевна",
       "defendant": "Ларин Айдар Ильдарович",
       "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
@@ -7500,7 +7500,49 @@
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5
       },
-      "initial_bank_role": "Третье лицо"
+      "initial_bank_role": "Третье лицо",
+      "cassation": {
+        "case_number": "8Г-15253/2026",
+        "cassation_number": "",
+        "court": "Седьмой кассационный суд общей юрисдикции",
+        "court_domain": "7kas.sudrf.ru",
+        "judge": "Абдрахманова Эльвира Гинитуллаевна",
+        "filing_date": "31.08.2026",
+        "fi_decision_date": "23.04.2026",
+        "act_kind": "Иные определения, вынесенные В ХОДЕ СУДЕБНОГО ПРОИЗВОДСТВА",
+        "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+        "judicial_uid": "86RS0002-01-2025-012201-87",
+        "appellant": "ПАО Сбербанк",
+        "appellant_is_bank": true,
+        "appellant_status": "ТРЕТЬЕ ЛИЦО",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "suspended_until": "",
+        "hearing_date": "20.10.2026",
+        "hearing_time": "17:00",
+        "decision_date": "",
+        "result_text": "",
+        "result_for_appeal": "",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "outcome": "",
+        "remanded_to": "",
+        "events": [
+          {
+            "name": "Единоличное рассмотрение дела судьей",
+            "date": "20.10.2026",
+            "time": "17:00",
+            "place": "Рассматриваются в суде кассационной инстанции судьей единолично без проведения судебного заседания",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "02.09.2026"
+          }
+        ],
+        "link": "13928346|9e4481ad-48b4-46a5-9a89-af2c1e793e54",
+        "last_checked_at": "2026-09-03",
+        "discovered_via_cassation": false
+      }
     },
     {
       "id": "33-4189/2026",
@@ -7981,7 +8023,7 @@
         "cassation_number": "",
         "court": "Седьмой кассационный суд общей юрисдикции",
         "court_domain": "7kas.sudrf.ru",
-        "judge": "",
+        "judge": "Федотенков Сергей Николаевич",
         "filing_date": "26.08.2026",
         "fi_decision_date": "23.04.2026",
         "act_kind": "Судебное РЕШЕНИЕ",
@@ -7990,10 +8032,10 @@
         "appellant": "Шамова А. Л.",
         "appellant_is_bank": false,
         "appellant_status": "ИСТЕЦ",
-        "review_result": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
         "suspended_until": "",
-        "hearing_date": "",
-        "hearing_time": "",
+        "hearing_date": "15.10.2026",
+        "hearing_time": "14:45",
         "decision_date": "",
         "result_text": "",
         "result_for_appeal": "",
@@ -8002,9 +8044,20 @@
         "act_text": "",
         "outcome": "",
         "remanded_to": "",
-        "events": [],
-        "link": "12432659|198a103f-ccbc-4dd7-ae02-1a43b7c8b32c",
-        "last_checked_at": "2026-09-01",
+        "events": [
+          {
+            "name": "Судебное заседание",
+            "date": "15.10.2026",
+            "time": "14:45",
+            "place": "102(П1)",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "02.09.2026"
+          }
+        ],
+        "link": "13919980|198a103f-ccbc-4dd7-ae02-1a43b7c8b32c",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-06"
@@ -12500,7 +12553,7 @@
         "appellant_is_bank": false,
         "appellant_status": "ТРЕТЬЕ ЛИЦО",
         "review_result": "",
-        "suspended_until": "",
+        "suspended_until": "02.10.2026",
         "hearing_date": "",
         "hearing_time": "",
         "decision_date": "",
@@ -12511,9 +12564,20 @@
         "act_text": "",
         "outcome": "",
         "remanded_to": "",
-        "events": [],
-        "link": "12432455|3238afb0-926e-4993-8251-8dcdff2985df",
-        "last_checked_at": "2026-09-01",
+        "events": [
+          {
+            "name": "Жалоба оставлена без движения до 02.10.2026",
+            "date": "01.09.2026",
+            "time": "",
+            "place": "",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": ""
+          }
+        ],
+        "link": "13918479|3238afb0-926e-4993-8251-8dcdff2985df",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-10"
@@ -16124,7 +16188,7 @@
           }
         ],
         "link": "11987605|3d335563-2e6f-47aa-8e5d-c2c5bc8a6ebb",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       }
     },
@@ -16636,7 +16700,7 @@
     },
     {
       "id": "33-2772/2026",
-      "current_stage": "cassation_pending",
+      "current_stage": "cassation",
       "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
       "defendant": "Леухина Анна Павловна, Тонких Евгений Тимофеевич, Тонких Надежда Григорьевна",
       "category": "Кредитный договор",
@@ -16873,9 +16937,34 @@
       },
       "initial_bank_role": "Истец",
       "cassation": {
-        "appellant": "Ответчик",
+        "case_number": "8Г-15251/2026",
+        "cassation_number": "",
+        "court": "Седьмой кассационный суд общей юрисдикции",
+        "court_domain": "7kas.sudrf.ru",
+        "judge": "",
+        "filing_date": "31.08.2026",
+        "fi_decision_date": "15.12.2025",
+        "act_kind": "Судебное РЕШЕНИЕ",
+        "category": "Споры, связанные с наследственными отношениями →Споры, связанные с наследованием имущества →об ответственности наследников по долгам наследодателя",
+        "judicial_uid": "86RS0007-01-2025-005965-03",
+        "appellant": "Тонких Н. Г., Тонких Е. Т.",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик",
+        "appellant_status": "ОТВЕТЧИК",
+        "review_result": "",
+        "suspended_until": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "decision_date": "",
+        "result_text": "",
+        "result_for_appeal": "",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "outcome": "",
+        "remanded_to": "",
+        "events": [],
+        "link": "13928327|540f2eae-efe2-4116-9842-0aee4d427527",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-26"
@@ -17290,7 +17379,7 @@
         "cassation_number": "",
         "court": "Седьмой кассационный суд общей юрисдикции",
         "court_domain": "7kas.sudrf.ru",
-        "judge": "",
+        "judge": "Загуменнова Елена Александровна",
         "filing_date": "22.07.2026",
         "fi_decision_date": "29.01.2026",
         "act_kind": "Судебное РЕШЕНИЕ",
@@ -17299,10 +17388,10 @@
         "appellant": "ООО ГК Вега-Строй",
         "appellant_is_bank": false,
         "appellant_status": "ОТВЕТЧИК",
-        "review_result": "",
-        "suspended_until": "26.08.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "suspended_until": "",
+        "hearing_date": "20.10.2026",
+        "hearing_time": "10:10",
         "decision_date": "",
         "result_text": "",
         "result_for_appeal": "",
@@ -17312,6 +17401,16 @@
         "outcome": "",
         "remanded_to": "",
         "events": [
+          {
+            "name": "Судебное заседание",
+            "date": "20.10.2026",
+            "time": "10:10",
+            "place": "102(П1)",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "02.09.2026"
+          },
           {
             "name": "Жалоба оставлена без движения до 26.08.2026",
             "date": "27.07.2026",
@@ -17324,7 +17423,7 @@
           }
         ],
         "link": "12183413|352dfce6-5af1-4e54-a073-aa12f6637309",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-07-07"
@@ -17592,8 +17691,8 @@
         "outcome": "",
         "remanded_to": "",
         "events": [],
-        "link": "12417484|971d5eaf-bbae-45b6-9fd9-21533705702e",
-        "last_checked_at": "2026-09-01",
+        "link": "13858510|971d5eaf-bbae-45b6-9fd9-21533705702e",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-18"
@@ -19125,7 +19224,7 @@
           }
         ],
         "link": "11826855|5f269b35-2a75-4ece-9769-24d381f81517",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       },
       "discovered_via_cassation": false
@@ -19502,7 +19601,7 @@
           }
         ],
         "link": "11959239|a616785d-7490-49de-af48-8e083c1899a5",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       }
     },
@@ -20376,7 +20475,7 @@
           }
         ],
         "link": "11906294|56b2190e-dab4-4d70-9be7-0e08a06785f1",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": false
       }
     },
@@ -21547,7 +21646,7 @@
           }
         ],
         "link": "11561528|a41b20bc-491b-431c-87e2-bc48677cb74f",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-09-03",
         "discovered_via_cassation": true
       },
       "initial_bank_role": "Третье лицо"
