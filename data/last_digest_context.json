@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-03T07:14:04",
+  "saved_at": "2026-09-03T08:57:59",
   "new_cases": [],
   "changes": [
     {
@@ -1667,6 +1667,25 @@
         "overdue_days": 30,
         "legal_force_date": "04.08.2026"
       }
+    },
+    {
+      "case": "2-8333/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Габидуллин Дамир Расимович",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "275894683|1dc48f8f-0101-4f82-8ae8-3157ee1bd813",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "hearing_date": "28.10.2026",
+        "hearing_time": "17:00",
+        "hearing_type": "предварительное заседание"
+      },
+      "track": "plaintiff_light"
     }
   ],
   "total_active_appeal": 29,
@@ -1815,5 +1834,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-09-03T06:27:43",
-  "updated_at": "2026-09-03T07:14:04"
+  "updated_at": "2026-09-03T08:57:59"
 }

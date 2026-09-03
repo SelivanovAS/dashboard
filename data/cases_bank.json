@@ -209,8 +209,8 @@
         "filing_date": "31.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 17:09. 31.08.2026",
-        "event_date": "31.08.2026",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 17:00. Оставление иска (заявления, жалобы) без движения. 03.09.2026",
+        "event_date": "01.09.2026",
         "hearing_date": "",
         "hearing_time": "",
         "link": "281953621|56e5a7cd-7e01-48bf-8225-bacb43c7e054",
@@ -14067,7 +14067,7 @@
       }
     },
     {
-      "id": "М-3955/2026",
+      "id": "2-8333/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк",
       "defendant": "Габидуллин Дамир Расимович",
@@ -14075,24 +14075,28 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-3955/2026",
+        "case_number": "2-8333/2026",
         "court": "Нижневартовский городской суд",
         "court_domain": "vartovgor--hmao.sudrf.ru",
         "judge": "Байдалина О.Н.",
         "filing_date": "15.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 16:30. Оставление иска (заявления, жалобы) без движения. 05.07.2026",
-        "event_date": "22.06.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Предварительное судебное заседание. 17:00. 311. 03.09.2026",
+        "event_date": "28.10.2026",
+        "hearing_date": "28.10.2026",
+        "hearing_time": "17:00",
         "link": "275894683|1dc48f8f-0101-4f82-8ae8-3157ee1bd813",
         "act_published": false,
         "act_date": "",
         "last_checked_at": "2026-09-03",
         "delo_id": 1540005,
         "srv_num": 1,
-        "judicial_uid": "86RS0002-01-2026-005744-74"
+        "judicial_uid": "86RS0002-01-2026-005744-74",
+        "material_number": "М-3955/2026",
+        "accepted_pending_emit": false,
+        "legal_force_est": "2026-12-15",
+        "writ_awaited_since": "2026-12-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23886,5 +23890,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-03T08:43:02"
+  "updated_at": "2026-09-03T08:57:59"
 }
