@@ -184,7 +184,8 @@ class TestLegalForceEst:
 
     def test_ordinary_from_act_date(self):
         """Обычное: act_date 02.02 → месяц → 02.03 (пн) → в силе 03.03."""
-        est = lifecycle.bank_legal_force_est({"act_date": "02.02.2026"})
+        est = lifecycle.bank_legal_force_est(
+            {"status": "Решено", "act_date": "02.02.2026"})
         assert est == date(2026, 3, 3)
 
     def test_ordinary_from_motivirovka_event(self):
@@ -210,10 +211,29 @@ class TestLegalForceEst:
         assert lifecycle.bank_legal_force_est(fi) == date(2026, 8, 11)
 
     def test_fallback_to_hearing_date(self):
-        """Архивные записи без decision_date: якорь — hearing_date."""
-        est = lifecycle.bank_legal_force_est({"hearing_date": "02.02.2026"})
+        """РЕШЁННЫЕ записи без decision_date (архив/легаси): якорь —
+        hearing_date, у решённого дела она держит дату решения."""
+        est = lifecycle.bank_legal_force_est(
+            {"status": "Решено", "hearing_date": "02.02.2026"})
         # 02.02 + 10 раб. дн = 16.02 → месяц → 16.03 (пн) → в силе 17.03
         assert est == date(2026, 3, 17)
+
+    def test_undecided_case_returns_none(self):
+        """Решения нет → None, даже при непустой hearing_date: у живого дела
+        это БУДУЩЕЕ заседание (последнее session-событие карточки), и прежний
+        фолбэк считал «вступление в силу» от ещё не состоявшегося заседания —
+        03.09.2026 штамп стоял у 342 из 554 активных исков банка, drawer
+        печатал «Вступило в силу … (расч.)» у дел без решения."""
+        fi = {"status": "В производстве", "hearing_date": "30.09.2026",
+              "last_event": "Подготовка дела (собеседование). 08:50. 505."}
+        assert lifecycle.bank_legal_force_est(fi) is None
+        # Пустой статус (строка выдачи без карточки) — тоже не решение.
+        assert lifecycle.bank_legal_force_est({"hearing_date": "02.02.2026"}) is None
+        # Замороженная decision_date — достаточное доказательство решения
+        # и при отстающем статусе карточки.
+        assert lifecycle.bank_legal_force_est(
+            {"status": "В производстве", "decision_date": "02.02.2026"}
+        ) == date(2026, 3, 17)
 
     def test_default_judgment_copy_served(self):
         """Заочное, копия вручена: вручение + 7 раб. дн + месяц (ст. 237).
@@ -3079,3 +3099,157 @@ class TestIntakeCheckedStampMigration:
         case = self._case()
         lifecycle.migrate_stages([case])
         assert case["first_instance"]["last_checked_at"] == "2026-08-14"
+
+
+# ── Drawer 03.09.2026: «в силе» только у решённого, «без рассмотрения» ───────
+
+class TestLegalForceOnlyWhenDecided:
+    """Разбор drawer'а юристом 03.09.2026: «Вступило в силу (расч.)» стояло у
+    342 из 554 активных исков банка «В производстве» — est считался от
+    БУДУЩЕГО заседания (hearing_date = последнее session-событие карточки,
+    суд публикует назначение заранее). Гейт живёт в bank_legal_force_est,
+    штампы split_bank_track (legal_force_est, writ_awaited_since) следуют
+    за ним."""
+
+    @staticmethod
+    def _dmy(days_from_now: int) -> str:
+        return (datetime.now() + timedelta(days=days_from_now)).strftime("%d.%m.%Y")
+
+    def test_pending_case_gets_no_stamps(self):
+        from court_monitor.runs import split_bank_track
+        live = _track_case(
+            status="В производстве", hearing_date=self._dmy(27),
+            last_event="Подготовка дела (собеседование). 08:50. Зал 505.",
+            legal_force_est="2026-11-17",  # штамп прошлых прогонов
+            writ_awaited_since="2026-11-17",
+        )
+        _, bank_active, _, _ = split_bank_track([live])
+        assert bank_active == [live]
+        fi = live["first_instance"]
+        assert "legal_force_est" not in fi
+        assert "writ_awaited_since" not in fi
+        # «Ждём лист» как факт остаётся (writ_expected не False): очередь
+        # начнётся после решения.
+        assert "writ_expected" not in fi
+
+    def test_decided_case_keeps_stamps(self):
+        from court_monitor.runs import split_bank_track
+        done = _track_case(status="Решено", hearing_date=self._dmy(-40),
+                           result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН")
+        _, bank_active, _, _ = split_bank_track([done])
+        fi = done["first_instance"]
+        assert fi["legal_force_est"]
+        assert fi["writ_awaited_since"] == fi["legal_force_est"]
+
+    def test_archive_ceiling_for_decided_survives(self):
+        """Потолок «Решено без ИЛ» по-прежнему считается от est (архивная
+        ветка стоит под status == «Решено» — гейт её не задевает)."""
+        case = _track_case(status="Решено", hearing_date=self._dmy(-400),
+                           result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН")
+        assert lifecycle.is_case_archived(case) is True
+        live = _track_case(status="В производстве", hearing_date=self._dmy(-400))
+        assert lifecycle.is_case_archived(live) is False
+
+
+class TestLeftUnconsidered:
+    """«Оставлено без рассмотрения» (ст. 222 ГПК) = листа не будет (решение
+    юриста 03.09.2026). 9 дел трека ХМАО числились «ждущими ИЛ» и получали
+    расчётное «вступило в силу»; статус карточки у них «В производстве»."""
+
+    @staticmethod
+    def _dmy(days_ago: int) -> str:
+        return (datetime.now() - timedelta(days=days_ago)).strftime("%d.%m.%Y")
+
+    RESULT = "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯ"
+
+    def test_predicate_reads_result_only(self):
+        assert lifecycle.fi_left_unconsidered({"result": self.RESULT}) is True
+        assert lifecycle.fi_left_unconsidered(
+            {"result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН"}) is False
+        # История движения не читается: определение прошлого круга после
+        # отмены по ст. 223 ч. 3 живёт в events навсегда.
+        assert lifecycle.fi_left_unconsidered({
+            "result": "",
+            "events": [{"date": "01.06.2026",
+                        "text": "Иск оставлен без рассмотрения"}],
+            "last_event": "Иск оставлен без рассмотрения",
+        }) is False
+        assert lifecycle.fi_left_unconsidered({}) is False
+
+    def test_no_writ_expected(self):
+        from court_monitor.runs import split_bank_track
+        case = _track_case(status="В производстве", hearing_date=self._dmy(20),
+                           result=self.RESULT, legal_force_est="2026-10-09")
+        fi = case["first_instance"]
+        assert lifecycle.bank_writ_expected(fi) is False
+        _, bank_active, _, _ = split_bank_track([case])
+        assert fi["writ_expected"] is False
+        assert "legal_force_est" not in fi
+
+    def test_archived_after_window_despite_live_status(self):
+        """Карточка держит «В производстве» (как у присоединения) — без
+        оговорки в архивной ветке дело застряло бы в активных навсегда."""
+        fresh = _track_case(status="В производстве", hearing_date=self._dmy(10),
+                            result=self.RESULT)
+        assert lifecycle.is_case_archived(fresh) is False
+        old = _track_case(status="В производстве", hearing_date=self._dmy(40),
+                          result=self.RESULT)
+        assert lifecycle.is_case_archived(old) is True
+        # Жалоба держит в активных при любом сроке.
+        old["first_instance"]["appeal_filed"] = True
+        assert lifecycle.is_case_archived(old) is False
+
+
+class TestDecisionDateFrozenFromEvent:
+    """Заморозка decision_date — от события «Вынесено (заочное) решение», а не
+    от дрейфующей hearing_date: при недельном ритме трека эмит бывает ПОЗЖЕ
+    назначения пост-решенческого заседания (расходы, индексация)."""
+
+    def test_backfill_prefers_decision_event(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {
+                    "status": "Решено", "hearing_date": "15.08.2026",
+                    "events": [
+                        {"date": "01.07.2026",
+                         "text": "Судебное заседание. 11:00. Вынесено решение по делу"},
+                        {"date": "15.08.2026",
+                         "text": "Судебное заседание. 10:00. Заявление о взыскании судебных расходов"},
+                    ]}}
+        lifecycle.migrate_stages([case])
+        assert case["first_instance"]["decision_date"] == "01.07.2026"
+
+    def test_backfill_falls_back_to_hearing_date(self):
+        case = {"current_stage": "first_instance",
+                "first_instance": {"status": "Решено", "hearing_date": "30.04.2026"}}
+        lifecycle.migrate_stages([case])
+        assert case["first_instance"]["decision_date"] == "30.04.2026"
+
+    def test_emit_wired_to_decision_event(self):
+        """Эмит fi_resolved (FI-цикл main_json, юнитом не достаётся) морозит
+        дату тем же источником и кладёт в details ЗАМОРОЖЕННОЕ значение."""
+        import inspect
+        from court_monitor import runs
+        src = inspect.getsource(runs)
+        assert ('fi.setdefault(\n'
+                '                    "decision_date",\n'
+                '                    lifecycle.fi_decision_date_from_events(fi.get("events") or [])\n'
+                '                    or fi.get("hearing_date", ""))') in src
+        assert 'change["details"]["decision_date"] = fi.get("decision_date", "")' in src
+        assert 'change["details"]["decision_date"] = fi.get("hearing_date", "")' not in src
+
+    def test_left_track_drops_queue_stamps(self):
+        """Дело с жалобой уезжает в основную картотеку БЕЗ штампов очереди
+        ИЛ: там их никто не пересчитывает, а решение с жалобой в силу не
+        вступило — drawer печатал «Вступило в силу (расч.)» у дела в апелляции."""
+        from court_monitor.runs import split_bank_track
+        left = _track_case(status="Решено", hearing_date="01.07.2026",
+                           decision_date="01.07.2026",
+                           result="Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+                           appeal_filed=True, appeal_filed_date="28.07.2026",
+                           legal_force_est="2026-08-18",
+                           writ_awaited_since="2026-08-18")
+        rest, bank_active, _, moved = split_bank_track([left])
+        assert rest == [left] and bank_active == [] and moved == 1
+        fi = left["first_instance"]
+        assert "legal_force_est" not in fi
+        assert "writ_awaited_since" not in fi

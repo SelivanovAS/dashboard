@@ -3231,6 +3231,58 @@ const HEARING_DATE_LABELS=['Заседание','Отложено до','Без 
 function hasHearingDate(c){
   return !!(c&&c.nextDate&&HEARING_DATE_LABELS.includes(c.nextDateLabel));
 }
+/* ── «Ключевые даты» drawer'а: дата решения и строка заседания (03.09.2026) ──
+ * Дата под строкой «Решение»/«Рассмотрено»/«Определение». Раньше drawer брал
+ * event_date — дату ПОСЛЕДНЕЙ строки движения любого рода («Дело сдано в
+ * отдел», «Изготовлено мотивированное решение», «Копия заочного
+ * возвратилась»), и у 48 из 52 решённых дел основной картотеки (120 из 188 у
+ * трека) под «Решение» стояла чужая дата, а настоящая дата решения читалась
+ * строкой выше как «Последнее заседание».
+ * fi: замороженная decision_date → hearing_date (заседание, на котором
+ * вынесено решение; у решённого дела или уже прошедшее — будущую дату сюда
+ * не пускаем) → event_date (записи без заседания вовсе — возврат на стадии
+ * принятия). ap: заседание рассмотрения — у блока апелляции decision_date
+ * нет, а event_date там «Передано в экспедицию». cs: decision_date. */
+function stageResolvedDate(stageKey,block){
+  const b=block||{};
+  if(stageKey==='cs')return parseDate(b.decision_date||'')||'';
+  if(stageKey==='ap')return parseDate(b.hearing_date||'')||parseDate(b.event_date||'')||'';
+  const dd=parseDate(b.decision_date||'');
+  if(dd)return dd;
+  const hd=parseDate(b.hearing_date||'');
+  const decided=String(b.status||'').trim().toLowerCase()==='решено';
+  if(hd&&(decided||dayDiff(hd)<=0))return hd;
+  return parseDate(b.event_date||'')||'';
+}
+// Подпись строки: кассация — всегда «Определение», апелляция — «Рассмотрено»,
+// 1-я инст. — «Решение», но процессуальные завершения (возврат, прекращение,
+// снятие, без рассмотрения, присоединение) — «Определение»: это не решение
+// по существу, а под «Решением» печаталась дата передачи по подсудности.
+const FI_RULING_RESULTS=['returned','dismissed','withdrawn','unconsidered','merged'];
+function resolvedRowLabel(stageKey,block){
+  if(stageKey==='cs')return 'Определение';
+  if(stageKey==='ap')return 'Рассмотрено';
+  return FI_RULING_RESULTS.includes(normalizeResult((block||{}).result||''))?'Определение':'Решение';
+}
+// Строка заседания. Решённое дело: заседание, на котором вынесено решение,
+// совпадает со строкой «Решение» — второй строкой его не печатаем (решение
+// юриста 03.09.2026); остаётся только заседание ПОСЛЕ решения (судебные
+// расходы, индексация) или без даты — ничего. Нерешённое с ПРОШЕДШЕЙ датой:
+// «Заседание» читалось как назначенное, а это последнее состоявшееся, и
+// нового суд не назначал (hearing_date — последнее session-событие карточки).
+function hearingRowState(o){
+  const kdNext=(o&&o.kdNext)||'',label=(o&&o.kdNextLabel)||'';
+  if(o&&o.kdResultPresent){
+    if(!kdNext||(o.resolvedDate&&kdNext===o.resolvedDate))return {show:false,label:'',note:'',prefix:''};
+    return {show:true,label:'Последнее заседание',note:'',prefix:''};
+  }
+  const d=kdNext?dayDiff(kdNext):null;
+  if(d!==null&&d<0&&HEARING_DATE_LABELS.includes(label)&&label!=='Без движения до'){
+    return {show:true,label:'Последнее заседание',note:'следующее не назначено',prefix:''};
+  }
+  const prefix=label==='Отложено до'?'отл. до ':label==='Без движения до'?'б/дв. до ':'';
+  return {show:true,label:'Заседание',note:'',prefix:prefix};
+}
 function buildHearingHtml(c,vm,opts){
   if(!hasHearingDate(c)){
     // Даты заседания нет — но у «Передано судье» / «Поступило в суд» /
@@ -3925,6 +3977,8 @@ function renderDrawer(c){
   let kdNextLabel=c.nextDateLabel;
   let kdHearingTime=c.hearingTime;
   let kdActDate=c.actDate;
+  // event_date — дата последней строки движения ЛЮБОГО рода; со 03.09.2026
+  // это лишь последний фолбэк даты решения (stageResolvedDate), не сама дата.
   let kdLastEventDate=c.lastEventDate;
   let kdResultPresent=vm.resultPresent;
   if(drawerStage==='fi'&&c._fi){
@@ -3985,28 +4039,33 @@ function renderDrawer(c){
   const plHtml=highlightSberbank(shortParty(c.plaintiff));
   const dfHtml=highlightSberbank(shortParty(c.defendant));
 
-  // Key dates — используем kd* (зависят от drawerStage)
+  // Key dates — используем kd* (зависят от drawerStage). Блок стадии для
+  // даты решения: вкладка drawer'а, а без вкладок (drawerStage=null) —
+  // блок активной стадии дела.
+  const kdStageKey=(drawerStage==='fi'||drawerStage==='ap'||drawerStage==='cs')?drawerStage:(c.stage==='appeal'?'ap':c.stage==='cassation'?'cs':'fi');
+  const kdBlock=kdStageKey==='ap'?c._ap:kdStageKey==='cs'?c._cs:c._fi;
+  const resolvedDate=kdResultPresent?(stageResolvedDate(kdStageKey,kdBlock)||kdLastEventDate||kdNext):'';
+  // Решённое без распознанного вердикта (передача по подсудности: статус
+  // «Решено», normalizeResult молчит) — заседание всё равно последнее, а не
+  // «следующее не назначено». Только на вкладке активной стадии: c.status
+  // говорит о ней.
+  const kdActiveKey=c.stage==='appeal'?'ap':c.stage==='cassation'?'cs':'fi';
+  const kdDecided=kdResultPresent||(kdStageKey===kdActiveKey&&c.status==='decided');
+  const hear=hearingRowState({kdNext:kdNext,kdNextLabel:kdNextLabel,kdResultPresent:kdDecided,resolvedDate:resolvedDate});
   const hearD=kdNext?dayDiff(kdNext):null;
   const hearCls=hearD===0||hearD===1?'kv-today':(hearD!==null&&hearD<=7&&hearD>0?'kv-soon':'');
-  const hearPrefix=kdResultPresent?'':kdNextLabel==='Отложено до'?'отл. до ':kdNextLabel==='Без движения до'?'б/дв. до ':'';
   const rel=kdNext?relativeDateText(kdNext):'';
+  // «(вчера, следующее не назначено)» / «(прошло, следующее не назначено)».
+  const hearNote=hear.note?`${rel||'прошло'}, ${hear.note}`:rel;
   const hearValue=kdNext
-    ?`${hearPrefix}${formatDate(kdNext)}${kdHearingTime?' · '+escHtml(kdHearingTime):''}${rel?` <span style="color:var(--slate-500);font-weight:500;">(${rel})</span>`:''}`
+    ?`${hear.prefix}${formatDate(kdNext)}${kdHearingTime?' · '+escHtml(kdHearingTime):''}${hearNote?` <span style="color:var(--slate-500);font-weight:500;">(${hearNote})</span>`:''}`
     :'—';
 
-  // Для решённых дел заседание уже в прошлом — подпись «Последнее заседание»
-  const hearLabel=kdResultPresent?'Последнее заседание':'Заседание';
   let keyDates=`<div class="kv-grid">`;
   if(kdReceived)keyDates+=`<div class="kv-k">Поступление</div><div class="kv-v kv-mono">${formatDate(kdReceived)}</div>`;
-  keyDates+=`<div class="kv-k">${hearLabel}</div><div class="kv-v kv-mono ${hearCls}">${hearValue}</div>`;
-  if(kdResultPresent){
-    const rd=kdLastEventDate||kdNext;
-    if(rd){
-      // На вкладке cassation решение — это «Определение», на апел. —
-      // «Рассмотрено», иначе «Решение».
-      const resolvedLabel=drawerStage==='cs'?'Определение':drawerStage==='ap'?'Рассмотрено':(c.stage==='appeal'?'Рассмотрено':'Решение');
-      keyDates+=`<div class="kv-k">${resolvedLabel}</div><div class="kv-v kv-mono">${formatDate(rd)}</div>`;
-    }
+  if(hear.show)keyDates+=`<div class="kv-k">${hear.label}</div><div class="kv-v kv-mono ${hearCls}">${hearValue}</div>`;
+  if(kdResultPresent&&resolvedDate){
+    keyDates+=`<div class="kv-k">${resolvedRowLabel(kdStageKey,kdBlock)}</div><div class="kv-v kv-mono">${formatDate(resolvedDate)}</div>`;
   }
   if(kdActDate){
     // Если для активной стадии есть LLM-разбор акта — рядом с датой
@@ -4056,9 +4115,14 @@ function renderDrawer(c){
       // Листа нет — показываем, с какого числа решение в силе и сколько дело
       // уже ждёт. Дата расчётная (по ГПК: мотивировка/вручение + месяц,
       // заочные — ст. 237/формула ВС), поэтому подписана.
+      // Второй рубеж «решение есть» (03.09.2026): первый — гейт в
+      // bank_legal_force_est, но снимок данных до ближайшего прогона ещё
+      // держит штамп у живых дел (342 из 554 на момент починки). Только
+      // трек «Иски банка»: у дела, уехавшего в основную картотеку с
+      // жалобой, штамп стар, а решение с жалобой в силу не вступило.
       const ожидание=awaitingWritDays(c);
       const сила=parseDate((c._fi&&c._fi.legal_force_est)||'');
-      if(сила){
+      if(сила&&kdResultPresent&&c._bankTrack){
         const lvl=awaitingWritLevel(ожидание);
         const помечено=writWaivedInfo(c);
         // ⚠️ Ветка пометки идёт ПЕРВОЙ: у помеченного дела awaitingWritDays

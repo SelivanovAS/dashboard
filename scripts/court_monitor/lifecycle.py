@@ -480,6 +480,25 @@ def fi_is_merged(fi: dict) -> bool:
     return bool(_FI_MERGED_RX.search((fi or {}).get("result") or ""))
 
 
+# «Оставлено без рассмотрения» (ст. 222 ГПК) — по ТЕКУЩЕМУ полю «Результат»,
+# как merged: в истории движения лежат определения прошлого круга (после
+# отмены по ст. 223 ч. 3 дело рассматривают дальше под тем же номером), и
+# скан events дал бы ложный «без рассмотрения» живому делу. Статус карточки
+# при этом суд НЕ флипает — у 9 дел трека 03.09.2026 стояло «В производстве».
+_FI_UNCONSIDERED_RX = re.compile(r"без\s+рассмотрени", re.IGNORECASE)
+
+
+def fi_left_unconsidered(fi: dict) -> bool:
+    """Иск оставлен без рассмотрения (ст. 222 ГПК) по полю «Результат».
+
+    Для трека «Иски банка» это «листа не будет» (решение юриста 03.09.2026):
+    исполнять нечего, определение отменяет тот же суд по заявлению истца
+    либо оно обжалуется частной жалобой — оба пути укладываются в
+    BANK_DENIED_ARCHIVE_DAYS.
+    """
+    return bool(_FI_UNCONSIDERED_RX.search((fi or {}).get("result") or ""))
+
+
 def merged_target_reason(fi: dict) -> str:
     """Хвост строки дайджеста с номером дела-приёмника — либо пусто.
 
@@ -1225,9 +1244,21 @@ def bank_legal_force_est(fi: dict) -> date | None:
 
     Все даты пусты → None (решения ещё нет или карточка без дат — потолок
     ожидания ИЛ считается от других якорей).
+
+    ⚠️ Решения нет (нет замороженной decision_date И статус карточки не
+    «Решено») → None ДО любого расчёта. hearing_date у ЖИВОГО дела — это
+    БУДУЩЕЕ заседание (последнее session-событие карточки, суд публикует
+    назначение заранее), и прежний фолбэк на неё считал «вступление в силу»
+    от ещё не состоявшегося заседания: 03.09.2026 такой штамп стоял у 342 из
+    554 активных исков банка ХМАО, drawer печатал «Вступило в силу … (расч.)»
+    у дел без решения. Фолбэк на hearing_date остаётся только у РЕШЁННЫХ
+    записей без decision_date (архив/легаси: там она держит дату решения).
     """
     from court_monitor.textutil import add_working_days, month_term_last_day
 
+    if (not fi.get("decision_date")
+            and (fi.get("status") or "").strip() != "Решено"):
+        return None
     # Особый порядок отмены (ст. 237-243 ГПК) останавливает счёт: пока
     # заявление на рассмотрении — срок не течёт, а после отмены решения нет
     # вовсе. Пустой результат заставляет split_bank_track снять ключ
@@ -1344,6 +1375,11 @@ def bank_writ_expected(fi: dict) -> bool:
     """
     fi = fi or {}
     if fi.get("merged") or fi_is_merged(fi):
+        return False
+    # Оставлено без рассмотрения (ст. 222 ГПК) — тоже листа не будет; поле
+    # «Результат», не история (см. fi_left_unconsidered). До 03.09.2026 такие
+    # дела числились «ждущими ИЛ» и получали расчётное «вступило в силу».
+    if fi_left_unconsidered(fi):
         return False
     result = (fi.get("result") or "")
     if classify_fi_termination(result, "", []) is not None:
@@ -1481,7 +1517,11 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
                   or parse_date(fi.get("event_date") or "")
                   or parse_date(fi.get("hearing_date") or ""))
         return bool(anchor) and (now - anchor).days > config.BANK_MERGED_ARCHIVE_DAYS
-    if status == "Решено" and not bank_writ_expected(fi):
+    # «Без рассмотрения» идёт этой же веткой при статусе «В производстве»:
+    # карточка его не флипает (как у присоединения), и без оговорки дело
+    # застряло бы в активных навсегда — общий выход `status != "Решено"` ниже.
+    if ((status == "Решено" or fi_left_unconsidered(fi))
+            and not bank_writ_expected(fi)):
         # Якорь — мотивировка: месячный срок обжалования по ст. 321 ГПК течёт
         # от неё, так что 30 дней ≈ ровно окно на жалобу банка. Резолютивка и
         # дата заседания — фолбэки для карточек, где мотивировку не публиковали.
@@ -2183,15 +2223,19 @@ def migrate_stages(cases: list[dict]) -> int:
     # update_active_cases срабатывает только на ЭМИТЕ fi_resolved, а дела,
     # импортированные уже решёнными (import_bank_registry ставит
     # resolved_emitted=True без эмита), через неё никогда не пройдут.
-    # Сегодня бэкфилл точен: hearing_date у решённых дел ещё равен настоящей
-    # дате решения (дрейфа ни в одном деле нет) — чем позже, тем хуже.
+    # Источник — событие «Вынесено (заочное) решение» из движения дела
+    # (fi_decision_date_from_events), фолбэк — hearing_date: она у решённого
+    # дела держит дату решения, но дрейфует при пост-решенческих заседаниях
+    # (расходы, индексация), и чем позже бэкфилл, тем чаще она уже чужая.
     for case in cases:
         fi = case.get("first_instance") or {}
         if fi.get("decision_date"):
             continue
         if (fi.get("status") or "").strip() in ("Решено", "Возвращено"):
-            if fi.get("hearing_date"):
-                fi["decision_date"] = fi["hearing_date"]
+            anchor = (fi_decision_date_from_events(fi.get("events") or [])
+                      or fi.get("hearing_date") or "")
+            if anchor:
+                fi["decision_date"] = anchor
     # Срок для возражений на апел. жалобу: идемпотентный штамп из движения
     # жалобы. Здесь он берётся из УЖЕ СОХРАНЁННЫХ appeal_events (свежие FI-цикл
     # вольёт позже и проштампует сам) — цель прохода анти-паводковая: сроки,

@@ -2170,7 +2170,9 @@ def split_bank_track(
         # Расчётная дата вступления в силу — только там, где ждём лист: у
         # отказного дела эмит завершения уже заморозил decision_date, и без
         # этого гарда drawer показал бы «Вступило в силу (расч.)» на деле,
-        # по которому исполнять нечего.
+        # по которому исполнять нечего. Второй гейт — «решение есть» — живёт
+        # внутри bank_legal_force_est (03.09.2026): у живого дела hearing_date
+        # = будущее заседание, и штамп стоял у 342 из 554 активных дел.
         _est = lifecycle.bank_legal_force_est(_fi) if _writ_expected else None
         if _est:
             _fi["legal_force_est"] = _est.isoformat()
@@ -2210,6 +2212,12 @@ def split_bank_track(
         if lifecycle.bank_case_left_track(c):
             c.pop("track", None)
             c["track_origin"] = "plaintiff_light"
+            # Штампы очереди ИЛ — понятия трека: в основной картотеке их
+            # никто не пересчитывает, а решение с жалобой в силу не вступило;
+            # без снятия drawer показывал бы «Вступило в силу (расч.)» у дела
+            # в апелляции (6 дел ХМАО 03.09.2026).
+            _fi.pop("legal_force_est", None)
+            _fi.pop("writ_awaited_since", None)
             moved += 1
             rest.append(c)
             continue
@@ -4892,20 +4900,27 @@ def main_json():
                 change["details"]["raw_result"] = raw_result
                 change["details"]["verdict_label"] = verdict
                 change["details"]["bank_outcome"] = bank_outcome
-                change["details"]["decision_date"] = fi.get("hearing_date", "")
+                # Дата решения замораживается В ЗАПИСИ. Источник — событие
+                # «Вынесено (заочное) решение» из движения дела, фолбэк —
+                # hearing_date: у решённого дела она держит дату решения, но
+                # перечитывается каждым прогоном (выше, безусловная запись
+                # new_hearing_date) и уедет вперёд, назначь суд заседание по
+                # судебным расходам / индексации / разъяснению; при недельном
+                # ритме трека эмит бывает ПОЗЖЕ такого назначения. От даты
+                # зависят classify_writ_kind, bank_legal_force_est и строка
+                # «Решение» drawer'а — лист на исполнение молча стал бы
+                # обеспечительным.
+                fi.setdefault(
+                    "decision_date",
+                    lifecycle.fi_decision_date_from_events(fi.get("events") or [])
+                    or fi.get("hearing_date", ""))
+                change["details"]["decision_date"] = fi.get("decision_date", "")
                 change["details"]["last_event"] = fi.get("last_event", "")
                 change["details"]["category"] = case_j.get("category", "")
                 # Заочность — в details (только при True, replay-safe):
                 # банк-секция помечает решение «🌙 заочное» (09.08.2026).
                 if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
                     change["details"]["default_judgment"] = True
-                # Дата решения замораживается В ЗАПИСИ. hearing_date у решённого
-                # дела её держит, но перечитывается каждым прогоном (выше,
-                # безусловная запись new_hearing_date) и уедет вперёд, назначь
-                # суд заседание по судебным расходам / индексации / разъяснению.
-                # От неё зависят classify_writ_kind и bank_legal_force_est —
-                # лист на исполнение молча стал бы обеспечительным.
-                fi.setdefault("decision_date", fi.get("hearing_date", ""))
                 fi["resolved_emitted"] = True
                 changed = True
 
