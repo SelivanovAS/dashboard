@@ -301,8 +301,12 @@ class TestAppJs:
 
     def test_sync_sheet_markup_and_handlers(self):
         html = _read("sberbank_dashboard.html")
-        for marker in ('id="sync-sheet"', 'id="sync-scrim"', 'id="btn-sync"'):
+        # С 03.09.2026 кнопка 🔗 из шапки переехала в шторку «Настройки» (⚙,
+        # id="btn-settings"); сама шторка синка и её id не менялись.
+        for marker in ('id="sync-sheet"', 'id="sync-scrim"', 'id="btn-settings"'):
             assert marker in html, marker
+        assert 'id="btn-sync"' not in html, "Кнопка 🔗 живёт за ⚙, не в шапке."
+        assert "settingsOpenSync()" in _fn_src(_app_js(), "settingsSyncSectionHtml")
         # Имя фичи — «Синхронизация подписок» (решение юриста 26.08.2026,
         # раннее «Синхронизация звёзд» переименовано).
         assert "Синхронизация подписок" in html
@@ -331,9 +335,10 @@ class TestAppJs:
         # ширину: базовый .filters-sheet прибит к низу, переопределение живёт
         # в media (min-width:769px) и ведёт появление opacity+pointer-events.
         css = _read("styles.css")
-        # Селектор групповой (#sync-sheet, #whatsnew-sheet — общее мини-окно).
+        # Селектор групповой (#sync-sheet, #whatsnew-sheet, #settings-sheet —
+        # общее мини-окно; настройки добавлены 03.09.2026).
         m = re.search(
-            r"@media \(min-width: 769px\) \{\s*#sync-sheet,\s*#whatsnew-sheet \{([\s\S]*?)\}",
+            r"@media \(min-width: 769px\) \{\s*#sync-sheet,\s*#whatsnew-sheet,\s*#settings-sheet \{([\s\S]*?)\}",
             css,
         )
         assert m, "Десктопное переопределение #sync-sheet не найдено."

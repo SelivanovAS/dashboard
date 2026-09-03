@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Стражи анонса «Что нового» (26.08.2026, к раскатке синка подписок).
+"""Стражи анонса «Что нового» (26.08.2026; текущий выпуск — 03.09.2026).
 
-Одноразовое окно при первом открытии после обновления: анонсирует дату
-сверки с судом (существующая плашка drawer-freshness — с живой демонстрацией
-подсветкой) и синхронизацию подписок (кнопка ведёт в sync-sheet). Маркер
-показа — id анонса в lsKey('whatsnew_seen'): следующий анонс = новый
-WHATSNEW_ID, механизм переиспользуется.
+Одноразовое окно при первом открытии после обновления. Выпуск 03.09.2026
+анонсирует шторку «Настройки» за ⚙ (туда переехали уведомления, синк 🔗 и
+календарь; кнопка ведёт в settings-sheet) и «Скачать файл (.ics)» для
+корпоративного OWA. Маркер показа — id анонса в lsKey('whatsnew_seen'):
+следующий анонс = новый WHATSNEW_ID, механизм переиспользуется; повторный
+показ — кнопка в разделе «О приложении» (showWhatsNewAgain).
 """
 
 from __future__ import annotations
@@ -32,17 +33,19 @@ def test_markup():
     html = _read("sberbank_dashboard.html")
     for marker in ('id="whatsnew-sheet"', 'id="whatsnew-scrim"', "Что нового"):
         assert marker in html, marker
-    # Обе кнопки действий ведут в демонстрации, а не просто закрывают.
-    assert "whatsNewShowFreshness()" in html
-    assert "whatsNewOpenSync()" in html
+    # Кнопка действия ведёт в шторку настроек, а не просто закрывает.
+    assert "whatsNewOpenSettings()" in html
+    for gone in ("whatsNewShowFreshness()", "whatsNewOpenSync()"):
+        assert gone not in html, f"{gone}: прошлый анонс (26.08) снят вместе с кодом."
     # Дата обновления в анонсе (решение юриста 26.08.2026).
     assert re.search(r'class="wn-date">Обновление от \d{2}\.\d{2}\.\d{4}<', html)
-    # Пункт про синк ПОКАЗЫВАЕТ кнопку шапки: мини-копия иконки в тексте,
+    # Пункт про настройки ПОКАЗЫВАЕТ кнопку шапки: мини-копия иконки в тексте,
     # чтобы пользователь знал, ЧТО искать в шапке. Слово «кнопка» и иконка
     # обёрнуты в nowrap — перенос разлучал их (разрыв строки допустим вокруг
     # атомарного inline-flex даже через &nbsp;).
     assert 'class="wn-inline-btn"' in html
     assert re.search(r'появилась <span class="wn-nowrap">кнопка&nbsp;', html)
+    assert "Из файла" in html, "Второй пункт — путь через файл для OWA."
 
 
 def test_seen_marker_via_lskey():
@@ -57,26 +60,22 @@ def test_seen_marker_via_lskey():
     assert "localStorage.setItem(WHATSNEW_KEY, WHATSNEW_ID)" in _fn_src(js, "closeWhatsNew")
 
 
-def test_demo_spotlights_existing_freshness_row():
+def test_open_settings_and_show_again():
     js = _read("app.js")
-    demo = _fn_src(js, "whatsNewShowFreshness")
-    assert "openDrawer(" in demo
-    assert "drawer-freshness" in demo, (
-        "Демонстрация подсвечивает СУЩЕСТВУЮЩУЮ плашку «Проверено на сайте "
-        "суда» (drawerFreshnessHtml), а не собственную копию."
-    )
-    assert "spotlight" in demo
-    css = _read("styles.css")
-    assert ".drawer-freshness.spotlight" in css
-    assert "wn-spotlight" in css
+    body = _fn_src(js, "whatsNewOpenSettings")
+    assert "closeWhatsNew()" in body and "openSettingsSheet()" in body
+    again = _fn_src(js, "showWhatsNewAgain")
+    assert "localStorage.removeItem(WHATSNEW_KEY)" in again
+    assert "maybeShowWhatsNew()" in again
+    assert "showWhatsNewAgain()" in _fn_src(js, "settingsAboutSectionHtml")
 
 
 def test_desktop_popup_shared_with_sync_sheet():
-    # Оба одноразовых окна используют одно десктопное переопределение —
-    # расхождение стилей двух одинаковых окон было бы молчаливым.
+    # Все три окна используют одно десктопное переопределение —
+    # расхождение стилей одинаковых окон было бы молчаливым.
     css = _read("styles.css")
-    m = re.search(r"#sync-sheet,\s*#whatsnew-sheet \{", css)
-    assert m, "Десктопное мини-окно должно быть общим для sync и whatsnew."
+    m = re.search(r"#sync-sheet,\s*#whatsnew-sheet,\s*#settings-sheet \{", css)
+    assert m, "Десктопное мини-окно должно быть общим для sync, whatsnew и settings."
 
 
 def test_whatsnew_blocks_background_refresh():
