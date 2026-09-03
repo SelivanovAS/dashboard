@@ -1424,10 +1424,18 @@ function reloadBankDataset(){
 // проходит мгновенно и без сети. Network-first в SW не годится:
 // cases.json 2 МБ, cases_bank.json 1.4 МБ — первый экран встал бы на
 // мобильной сети.
+// Проход ТИХИЙ (03.09.2026, решение юриста): тост «Данные обновлены» срабатывал
+// на каждый утренний заход (данные меняются каждые 30 мин с 06:00, а возврат во
+// вкладку сам дёргает загрузку) и двоился по файлам. Свежесть видна по штампу
+// «Данные от: …» в шапке — второго сигнала не нужно.
 const _dataUpdatedAt={};              // url файла → Date его updated_at
 let _pendingDataUrls=null;            // Set url'ов, ждущих перерисовки
 let _dataRefreshTimer=null;
-const DATA_REFRESH_DEBOUNCE_MS=400;   // пачка файлов одного прогона = 1 проход
+let _dataRefreshInFlight=null;        // promise идущего прохода (гард наложения)
+// Пачка файлов одного прогона = 1 проход. Было 400 мс: на мобильной сети
+// cases.json (2 МБ) и cases_archive/cases_bank докачиваются с разницей больше,
+// и каждый поздний файл запускал отдельный проход (03.09.2026: два тоста подряд).
+const DATA_REFRESH_DEBOUNCE_MS=1500;
 
 function parseIsoUtc(s){
   // Python на UTC-раннере пишет updated_at без «Z» (naive ISO). Без явного
@@ -1490,15 +1498,20 @@ function uiBusyForRefresh(){
 function applyPendingDataRefresh(){
   if(!_pendingDataUrls||!_pendingDataUrls.size)return;
   if(uiBusyForRefresh())return;   // не теряем: набор ждёт закрытия оверлея
+  if(_dataRefreshInFlight)return; // проход уже идёт: набор копится, хвост дочитаем после
   const kinds=_pendingDataUrls;
   _pendingDataUrls=null;
   const jobs=[];
   if(kinds.has('main'))jobs.push(loadFromSheet(resolveSheetUrl(),{quiet:true}));
   if(kinds.has('bank')){const p=reloadBankDataset();if(p)jobs.push(p);}
   if(!jobs.length)return;
-  Promise.all(jobs).then(()=>{
-    showToast('Данные обновлены — показан последний прогон',{type:'success'});
-  }).catch(e=>console.warn('Фоновое обновление данных не удалось:',e));
+  _dataRefreshInFlight=Promise.all(jobs)
+    .catch(e=>console.warn('Фоновое обновление данных не удалось:',e))
+    .then(()=>{
+      _dataRefreshInFlight=null;
+      // Файл, доехавший во время прохода, ещё не перечитан — один хвостовой проход.
+      applyPendingDataRefresh();
+    });
 }
 
 // ── Трек «Иски банка» (банк — истец): ленивый датасет ────────────────────────

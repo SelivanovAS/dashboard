@@ -10,7 +10,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v193';
+const CACHE_VERSION = 'v194';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -289,8 +289,8 @@ async function staleWhileRevalidate(request, cacheName, event) {
         // Сообщаем только о РЕАЛЬНОМ обновлении уже показанных данных:
         // первая загрузка (кэша не было) и так отдала свежее, версия без
         // ETag/Last-Modified неотличима, а при отказе записи (stored=false)
-        // в кэше остался прежний файл — перечитывать его странице незачем,
-        // вышел бы тост «Данные обновлены» поверх старых данных.
+        // в кэше остался прежний файл — перечитывать его странице незачем:
+        // это холостая перерисовка поверх тех же данных.
         if (changed && stored) await notifyDataUpdated(request.url);
       }
       return res;

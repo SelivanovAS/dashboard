@@ -69,7 +69,7 @@ def test_sw_notifies_clients_on_fresh_data():
 
 def test_sw_compares_response_version():
     """Сообщаем только о РЕАЛЬНОМ изменении: иначе каждая ревалидация дёргала
-    бы перерисовку и тост «Данные обновлены» на ровном месте."""
+    бы холостую перерисовку на ровном месте."""
     sw = _read("service-worker.js")
     tag = _fn_src(sw, "responseTag")
     assert "ETag" in tag and "Last-Modified" in tag, (
@@ -148,6 +148,33 @@ def test_background_refresh_is_quiet():
     assert "{quiet:true}" in apply_fn
     load = _fn_src(app, "loadFromSheet")
     assert "if(!(opts&&opts.quiet))showLoading();" in load
+
+
+def test_background_refresh_is_silent():
+    """Тоста «Данные обновлены» нет (03.09.2026, решение юриста): он срабатывал
+    на каждый утренний заход и двоился по файлам. Сигнал свежести один —
+    штамп «Данные от: …» в шапке."""
+    app = _read("app.js")
+    apply_fn = _fn_src(app, "applyPendingDataRefresh")
+    assert "showToast" not in apply_fn, "Тост фонового обновления вернулся."
+    # Строка тоста не должна вернуться НИ в одном вызове (комментарии не в счёт).
+    code = "\n".join(l for l in app.splitlines() if not l.lstrip().startswith("//"))
+    assert "showToast('Данные обновлены" not in code
+
+
+def test_background_refresh_passes_do_not_overlap():
+    """Три файла прогона докачиваются с разницей больше дебаунса: пока проход
+    в полёте, новые сигналы копятся, а хвост дочитывается ОДНИМ проходом после —
+    иначе два loadFromSheet бегут параллельно и дважды зовут renderAll."""
+    app = _read("app.js")
+    apply_fn = _fn_src(app, "applyPendingDataRefresh")
+    assert "if(_dataRefreshInFlight)return;" in apply_fn
+    assert "_dataRefreshInFlight=Promise.all(jobs)" in apply_fn
+    assert "_dataRefreshInFlight=null;" in apply_fn
+    # Хвостовой проход зовётся ПОСЛЕ снятия гарда — иначе он вернётся сразу.
+    assert re.search(r"_dataRefreshInFlight=null;\s*//[^\n]*\n\s*applyPendingDataRefresh\(\);", apply_fn)
+    assert re.search(r"const DATA_REFRESH_DEBOUNCE_MS=(\d+);", app)
+    assert int(re.search(r"const DATA_REFRESH_DEBOUNCE_MS=(\d+);", app).group(1)) >= 1000
 
 
 # ===== 4. Шапка показывает время прогона =====
