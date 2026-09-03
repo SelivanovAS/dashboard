@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-03T07:14:04",
+ "updated_at": "2026-09-03T07:42:50",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -556,22 +556,22 @@
   }
  },
  "last_run": {
-  "at": "2026-09-03T07:14:04",
-  "requests_ok": 44,
+  "at": "2026-09-03T07:42:50",
+  "requests_ok": 27,
   "requests_failed": 3,
   "requests_retried": 0,
-  "cards_breaker_skipped": 0,
-  "cards_breaker_unrequested": 0,
+  "cards_breaker_skipped": 4,
+  "cards_breaker_unrequested": 4,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 0,
-  "cards_read": 42,
-  "cards_planned": 45,
+  "cards_blocked": 3,
+  "cards_read": 23,
+  "cards_planned": 33,
   "cards_read_today": 244,
   "cards_planned_today": 244,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
-    "read": 28,
+    "read": 21,
     "planned": 31,
     "read_today": 196,
     "planned_today": 196
@@ -583,48 +583,73 @@
     "planned_today": 36
    },
    "cassation": {
-    "read": 12,
-    "planned": 12,
+    "read": 0,
+    "planned": 0,
     "read_today": 12,
     "planned_today": 12
    }
   },
   "latency": {
-   "n": 44,
-   "p50": 0.4,
-   "p90": 3.5,
-   "max": 5.9
+   "n": 27,
+   "p50": 0.6,
+   "p90": 5.5,
+   "max": 9.8
   },
   "failure_latency": {
    "connect_timeout": {
     "n": 3,
-    "p50": 11.1,
-    "p90": 12.2,
-    "max": 12.2
+    "p50": 10.0,
+    "p90": 10.1,
+    "max": 10.1
+   },
+   "portal_placeholder": {
+    "n": 3,
+    "p50": 0.3,
+    "p90": 1.4,
+    "max": 1.4
    }
   },
   "fail_kinds": {
-   "connect_timeout": 3
+   "connect_timeout": 3,
+   "portal_placeholder": 3
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 0,
-   "open_hosts": 0,
+   "opened_hosts": 1,
+   "open_hosts": 1,
    "recovered_hosts": 0,
-   "deferred_total": 0,
-   "deferred_remaining": 0,
+   "deferred_total": 5,
+   "deferred_remaining": 5,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {},
-   "hosts": []
+   "by_kind": {
+    "portal_placeholder": 1
+   },
+   "hosts": [
+    {
+     "host": "surggor--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 4,
+     "probes": 0,
+     "deferred_total": 5,
+     "deferred_remaining": 5,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 127.6
+    }
+   ]
   },
-  "courts_unavailable": 0,
-  "courts_with_unrequested": 0,
+  "courts_unavailable": 1,
+  "courts_with_unrequested": 1,
   "courts_outage": 0,
-  "cards_unreachable": 0,
-  "cards_unread_other": 3,
+  "cards_unreachable": 4,
+  "cards_unread_other": 6,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
