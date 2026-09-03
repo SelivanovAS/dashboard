@@ -250,3 +250,50 @@ def test_pwa_bumped():
     v = m.group(1)
     assert int(v) >= 195
     assert f"const CACHE_VERSION = 'v{v}';" in sw
+
+
+# ===== 4. Исход «передано по подсудности» =====
+
+
+@needs_node
+def test_transferred_result_recognised():
+    """До 03.09.2026 normalizeResult не знал передачу по подсудности: результат
+    читался 'pending', пилюля исхода не рисовалась, drawer терял строку
+    решения (2-716/2026 трека: статус «Решено», в строке лишь «Последнее
+    заседание»). Карточка пишет «Передано по подсудности, подведомственности»
+    (25 дел двух территорий), колонка события — «Дело передано на
+    рассмотрение другого суда»."""
+    deps = "\n".join(
+        [_const_src("RESULT_LABELS"), _const_src("FI_RESULT_LABELS"),
+         _const_src("RESULT_ICONS"), _const_src("FI_RULING_RESULTS")]
+        + [_fn_src(n) for n in ("normalizeResult", "fiProceduralEnding",
+                                "getResultFavor", "resolvedRowLabel")]
+    )
+    script = deps + """
+const out={
+  field:normalizeResult('Передано по подсудности, подведомственности'),
+  event:normalizeResult('Дело передано на рассмотрение другого суда'),
+  vedom:normalizeResult('Передано по подведомственности'),
+  labelFi:FI_RESULT_LABELS.transferred,
+  labelAp:RESULT_LABELS.transferred,
+  icon:RESULT_ICONS.transferred,
+  ruling:FI_RULING_RESULTS.includes('transferred'),
+  rowLabel:resolvedRowLabel('fi',{result:'Передано по подсудности, подведомственности'}),
+  ending:fiProceduralEnding('Судебное заседание. 11:00. Дело передано на рассмотрение другого суда'),
+  favorPl:getResultFavor({result:'transferred',resultSource:'fi',sberbankRole:'plaintiff'}),
+  favorDf:getResultFavor({result:'transferred',resultSource:'fi',sberbankRole:'defendant'}),
+  favorThird:getResultFavor({result:'transferred',resultSource:'fi',sberbankRole:'third_party',appellant:'bank'}),
+  archiveNotTransfer:normalizeResult('Дело передано в архив'),
+};
+process.stdout.write(JSON.stringify(out));"""
+    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
+    r = json.loads(out.stdout)
+    assert r["field"] == "transferred" and r["event"] == "transferred" and r["vedom"] == "transferred"
+    assert r["labelFi"] == "Передано по подсудности" and r["labelAp"] == "Передано по подсудности"
+    assert r["icon"] == "→"
+    assert r["ruling"] is True
+    assert r["rowLabel"] == "Определение", "передача — определение, не решение по существу"
+    assert r["ending"] == "передано по подсудности"
+    # Дело продолжится в другом суде — для банка исход нейтрален при любой роли.
+    assert r["favorPl"] == "neutral" and r["favorDf"] == "neutral" and r["favorThird"] == "neutral"
+    assert r["archiveNotTransfer"] == "pending", "«передано в архив» — не передача по подсудности"
