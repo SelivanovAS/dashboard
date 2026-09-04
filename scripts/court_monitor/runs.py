@@ -34,7 +34,7 @@ from court_monitor.courts import (
     FIRST_INSTANCE_COURTS,
     BASE_URL, SEARCH_URL, CARD_URL_TPL,
     appeal_court_by_domain, appeal_court_for_fi_domain, case_card_url,
-    courts_for_search, fi_card_url,
+    cassation_court_by_domain, courts_for_search, fi_card_url,
     match_fi_court_by_short_name, match_hmao_first_instance, _eyo,
 )
 from court_monitor.regions import get_region
@@ -1928,10 +1928,42 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
         if c.get("current_stage") == "appeal":
             continue
         imp = c.get("import")
+        # Дела ПРЕЗИДИУМА (дамп кассации по делам мировых судей, 04.09.2026)
+        # — свой канал announce_imported_presidium_cases: по стабу мирового
+        # судьи «Новый иск» вышел бы пустым, а кассацию дайджест печатает в
+        # «📥 Новые касс. дела».
+        if isinstance(imp, dict) and imp.get("source") == "dump_presidium":
+            continue
         if isinstance(imp, dict) and not imp.get("announced"):
             imp["announced"] = True
             to_announce.append(c)
     return to_announce
+
+
+def announce_imported_presidium_cases(cases: list[dict]) -> list[dict]:
+    """Дела президиума облсуда, заведённые дампом между прогонами, → к анонсу.
+
+    Третий капчёвый канал (04.09.2026): кассация по делам мировых судей
+    рассматривается президиумом облсуда, поиск раздела за проверочным кодом,
+    дела заводит дамп (scripts/import_search_dump.py, ветка президиума) как
+    discovery — со стадией `cassation` и стабом мирового судьи. Объявляем
+    РОВНО ОДИН РАЗ в секции «📥 Новые касс. дела» (тип discovered_in_cassation
+    рендерится по самому делу), флаг import.announced уезжает тем же save_json.
+    Дела, влившиеся импортёром в уже известное (по УИД) дело, блока import не
+    получают — объявлять нечего.
+    """
+    found: list[dict] = []
+    for c in cases:
+        if c.get("current_stage") != "cassation":
+            continue
+        imp = c.get("import")
+        if not isinstance(imp, dict) or imp.get("source") != "dump_presidium":
+            continue
+        if imp.get("announced"):
+            continue
+        imp["announced"] = True
+        found.append(c)
+    return found
 
 
 def announce_imported_appeal_cases(cases: list[dict]) -> list[dict]:
@@ -3025,7 +3057,11 @@ def main_json():
             planned_fp, _kind_fp = get_next_planned_date(cass.get("events") or [])
             if planned_fp and planned_fp >= today_for_refresh:
                 cass_refresh_force_parsed += 1
-            cass_refresh_plan.append((case, cass, link, cid, cuid))
+            # Суд карточки — по домену блока: президиум облсуда (кассация по
+            # делам мировых судей, 04.09.2026) или КСОЮ. Жёсткий
+            # CASSATION_COURT перечитывал бы дело президиума с 7kas.
+            court = cassation_court_by_domain(cass.get("court_domain"))
+            cass_refresh_plan.append((case, cass, link, cid, cuid, court))
 
         cass_refresh_queue = DeferredCardQueue(
             cass_refresh_plan, stage="cassation_refresh"
@@ -3034,17 +3070,17 @@ def main_json():
             "cassation",
             (
                 _telemetry_card_id(
-                    CASSATION_COURT.domain,
+                    court.domain,
                     cass.get("case_number") or case.get("id") or "",
                 )
-                for case, cass, _link, _cid, _cuid in cass_refresh_plan
+                for case, cass, _link, _cid, _cuid, court in cass_refresh_plan
             ),
         )
         for _work in cass_refresh_queue:
-            case, cass, link, cid, cuid = _work.value
-            if not cass_refresh_queue.allows(CASSATION_COURT.domain):
+            case, cass, link, cid, cuid, court = _work.value
+            if not cass_refresh_queue.allows(court.domain):
                 if cass_refresh_queue.defer(
-                    _work, CASSATION_COURT.domain
+                    _work, court.domain
                 ):
                     log.debug(
                         f"  7kas refresh: defer "
@@ -3053,16 +3089,16 @@ def main_json():
                 continue
             polite_delay()
             try:
-                card_url = CASSATION_COURT.card_url(cid, cuid)
+                card_url = court.card_url(cid, cuid)
                 cass_refresh_queue.mark_attempted(_work)
                 card_html = fetch_card_checked(
                     card_url, context=cass.get("case_number") or "?",
                     breaker_gate=False,
                 )
             except Exception as exc:
-                if card_breaker_open(CASSATION_COURT.domain):
+                if card_breaker_open(court.domain):
                     cass_refresh_queue.defer(
-                        _work, CASSATION_COURT.domain
+                        _work, court.domain
                     )
                 else:
                     cass_refresh_queue.finish(_work, recovered=False)
@@ -3072,16 +3108,16 @@ def main_json():
                 )
                 continue
             if not card_html:
-                if card_breaker_open(CASSATION_COURT.domain):
+                if card_breaker_open(court.domain):
                     cass_refresh_queue.defer(
-                        _work, CASSATION_COURT.domain
+                        _work, court.domain
                     )
                 log.warning(
                     f"  7kas refresh: пустой ответ для "
                     f"{cass.get('case_number') or '?'}"
                 )
                 continue
-            info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
+            info = parse_cassation_card(card_html, court.base_url)
             if not info:
                 mark_last_fetch_semantic(
                     "unparsed_card", card_url,
@@ -3109,7 +3145,7 @@ def main_json():
             telemetry.mark_case_read(
                 "cassation",
                 _telemetry_card_id(
-                    CASSATION_COURT.domain,
+                    court.domain,
                     cass.get("case_number") or case.get("id") or "",
                 ),
             )
@@ -5770,6 +5806,18 @@ def main_json():
             f"{'…' if len(apel_imported_new) > 5 else ''})"
         )
         appeal_new_cases_csv = appeal_new_cases_csv + apel_imported_new
+    # Дела ПРЕЗИДИУМА облсуда из дампа (кассация по делам мировых судей,
+    # 04.09.2026): один раз в «📥 Новые касс. дела» — тем же списком
+    # cass_discovered, что и discovery с 7kas (рендер по самому делу).
+    presidium_imported_new = announce_imported_presidium_cases(cases)
+    if presidium_imported_new:
+        log.info(
+            f"Дела президиума из дампа к анонсу в дайджесте: "
+            f"{len(presidium_imported_new)} "
+            f"({', '.join(c.get('id', '?') for c in presidium_imported_new[:5])}"
+            f"{'…' if len(presidium_imported_new) > 5 else ''})"
+        )
+        cass_discovered = list(cass_discovered) + presidium_imported_new
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию

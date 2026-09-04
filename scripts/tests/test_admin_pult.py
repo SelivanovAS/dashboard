@@ -416,7 +416,9 @@ def test_appeal_courts_pinned_first_in_dump_list():
     assert "acRegion.appeal_courts" in body, (
         "список дампов снова строится только из fi_courts — капчёвую "
         "апелляцию оператор не увидит")
-    assert "gatedAppeal.concat(gated)" in body, (
+    # С 04.09.2026 между апелляцией и судами 1-й инст. — закреплённый
+    # президиум (кассация по делам мировых судей); апелляция по-прежнему первая.
+    assert "gatedAppeal.concat(gatedPresidium).concat(gated)" in body, (
         "апелляция обязана идти ПЕРВОЙ строкой выпадающего списка")
     assert "pinned: true" in body
 

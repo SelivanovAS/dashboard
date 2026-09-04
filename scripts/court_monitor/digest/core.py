@@ -21,7 +21,7 @@ import requests
 
 from court_monitor import config
 from court_monitor.config import log
-from court_monitor.courts import CASSATION_COURT, case_card_url, fi_card_url
+from court_monitor.courts import case_card_url, cassation_card_url, fi_card_url
 from court_monitor.regions import get_region
 from court_monitor.digest import llm
 from court_monitor.digest.postprocess import (
@@ -1307,15 +1307,11 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
     # Discovery: дела, которые впервые появились в БД через 7kas (не было
     # 1-й инст./апел. в нашей истории). Идут отдельным блоком как «новые».
     if cass_discovered:
-        context_parts.append("\nНОВЫЕ ДЕЛА КАССАЦИИ (открыты через 7kas):")
+        context_parts.append("\nНОВЫЕ ДЕЛА КАССАЦИИ (открыты через КСОЮ или президиум облсуда):")
         for c in cass_discovered:
             cass = c.get("cassation") or {}
             fi = c.get("first_instance") or {}
-            url_card = ""
-            if cass.get("link"):
-                cid_, cuid_ = case_id_uid(cass["link"])
-                if cid_ and cuid_:
-                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            url_card = cassation_card_url(cass)  # президиум облсуда или КСОЮ
             # Заголовок строки = касс. внутренний номер (8Г-…/YYYY).
             # Юрист ориентируется по нему, не по номеру 1-й инст.
             line = f"- касс. № {cass.get('case_number', '')}"
@@ -1396,11 +1392,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
                 continue  # уже в блоке «НОВЫЕ ДЕЛА КАССАЦИИ» выше
             parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
             fi_p = parent.get("first_instance") or {}
-            url_card = ""
-            if d.get("link"):
-                cid_, cuid_ = case_id_uid(d["link"])
-                if cid_ and cuid_:
-                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            url_card = cassation_card_url(d)
             line = (
                 f"- 1-я инст. № {ch.get('case', '')} → касс. № "
                 f"{ch.get('cassation_internal_number', '')}"

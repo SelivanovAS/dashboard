@@ -39,6 +39,11 @@ FIRST_INSTANCE_COURTS: list[CourtConfig] = list(ACTIVE_REGION.first_instance_cou
 
 CASSATION_COURT: CourtConfig = ACTIVE_REGION.cassation_court
 
+# Президиумы областных судов — кассация по делам мировых судей (с 04.09.2026).
+# Живут карточками + дампом; поиска в прогоне по ним нет. Какой суд у блока
+# `cassation` дела — решает cassation_court_by_domain по `court_domain`.
+PRESIDIUM_COURTS: tuple[CourtConfig, ...] = ACTIVE_REGION.presidium_courts
+
 
 def courts_for_search(
     courts: list[CourtConfig] | None = None,
@@ -263,6 +268,46 @@ def fi_court_by_domain(domain: str, srv_num: int | None = None) -> CourtConfig |
         if first is None:
             first = c
     return first
+
+
+def presidium_court_by_domain(domain: str | None) -> CourtConfig | None:
+    """CourtConfig президиума АКТИВНОГО региона по домену (None — не президиум).
+
+    Перебор по get_region() НА ВЫЗОВ (config.X-инвариант: monkeypatch региона
+    в тестах должен быть виден). Домен канонизируется — на входе бывает
+    форма с точкой из браузера.
+    """
+    d = canon_sudrf_domain(domain)
+    if not d:
+        return None
+    for c in get_region().presidium_courts:
+        if c.domain.lower() == d:
+            return c
+    return None
+
+
+def cassation_court_by_domain(domain: str | None) -> CourtConfig:
+    """Суд блока `cassation` по его `court_domain`: президиум облсуда или КСОЮ.
+
+    Пустой/неизвестный домен и домен КСОЮ → CASSATION_COURT: все блоки эпохи
+    «кассация = только 7kas» несут court_domain 7kas или не несут вовсе.
+    Единая точка для фазы 4d (перечитка карточек), сборки блока в linking.py
+    и ссылок дайджеста — иначе дело президиума перечитывалось бы с 7kas и
+    «откатывалось» на него при первой же перечитке.
+    """
+    return presidium_court_by_domain(domain) or get_region().cassation_court
+
+
+def cassation_card_url(cass_or_details: dict) -> str:
+    """URL карточки кассации по блоку `cassation` дела или `details` change'а:
+    `link` ('cid|cuid') + `court_domain` → card_url суда (зеркало fi_card_url)."""
+    if not cass_or_details:
+        return ""
+    cid, cuid = case_id_uid(cass_or_details.get("link", "") or "")
+    if not (cid and cuid):
+        return ""
+    court = cassation_court_by_domain(cass_or_details.get("court_domain"))
+    return court.card_url(cid, cuid)
 
 
 def fi_card_url(fi_or_details: dict) -> str:

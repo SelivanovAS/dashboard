@@ -204,6 +204,16 @@ class RegionConfig:
     # выступающий 1-й инстанцией для отдельных категорий. Матчер возвращает
     # соответствующий CourtConfig из appeal_courts.
     appeal_long_markers: tuple[tuple[str, str], ...] = ()
+    # Президиумы областных/окружных судов — кассация по делам МИРОВЫХ судей
+    # (ГПК с 05.2026: такие жалобы ушли из КСОЮ в президиум облсуда). Домен —
+    # тот же, что у апел-суда, раздел `delo_id=2800001`, `court_type=
+    # "cassation"`. Поиск раздела за проверочным кодом → search_gated +
+    # search_disabled: новые дела заводит только дамп выдачи (админка →
+    # «Импорт», ветка президиума импортёра), карточки перечитывает фаза 4d
+    # прогона по `cassation.court_domain`. ⚠️ В appeal_courts НЕ класть:
+    # _appeal_health_key (runs.py) и appeal_court_by_domain считают
+    # апелляции по этому кортежу. cassation_court (КСОЮ) остаётся один.
+    presidium_courts: tuple[CourtConfig, ...] = ()
     # Родительный падеж имени региона для текстов («дела судов {name_gen}»);
     # пусто → используется name как есть.
     name_gen: str = ""
@@ -278,6 +288,21 @@ class RegionConfig:
                 "delo_id": self.cassation_court.delo_id,
                 "new": self.cassation_court._new_param,
             },
+            # Президиумы (кассация по делам мировых судей, с 04.09.2026):
+            # третья закреплённая строка dropdown'а дампов админки; `new` —
+            # для ссылки «Открыть поиск по суду» в раздел 2800001.
+            "presidium_courts": [
+                {
+                    "name": c.name,
+                    "domain": c.domain,
+                    "delo_id": c.delo_id,
+                    "search_gated": c.search_gated,
+                    "search_disabled": c.search_disabled,
+                    "srv_num": c.srv_num,
+                    "new": c._new_param,
+                }
+                for c in self.presidium_courts
+            ],
         }
 
     def health_cassation_keys(self) -> tuple[str, str]:

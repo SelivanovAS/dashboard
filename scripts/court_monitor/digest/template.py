@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.courts import (
-    CASSATION_COURT, case_card_url, case_link_html, fi_card_url,
+    case_card_url, case_link_html, cassation_card_url, fi_card_url,
 )
 from court_monitor.regions import get_region
 from court_monitor.digest.postprocess import _close_open_tags
@@ -3215,11 +3215,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             cass = c.get("cassation") or {}
             fi_b = c.get("first_instance") or {}
             num_cs = escape_html(cass.get("case_number", ""))
-            url = ""
-            if cass.get("link"):
-                cid_, cuid_ = case_id_uid(cass["link"])
-                if cid_ and cuid_:
-                    url = CASSATION_COURT.card_url(cid_, cuid_)
+            # Суд — по домену блока: президиум облсуда или КСОЮ.
+            url = cassation_card_url(cass)
             # Заголовок строки = касс. внутренний номер БЕЗ префикса «касс. №»
             # (избыточен: секция «Новые касс. дела» сама уже это указывает).
             link = (f'<a href="{url}"><b>{num_cs}</b></a>'
@@ -3367,11 +3364,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             num_fi = escape_html(ch.get("case", ""))
             num_cs = escape_html(ch.get("cassation_internal_number", ""))
             # URL карточки 7kas (если есть link) — для строки 1.
-            url_card = ""
-            if d.get("link"):
-                cid_, cuid_ = case_id_uid(d["link"])
-                if cid_ and cuid_:
-                    url_card = CASSATION_COURT.card_url(cid_, cuid_)
+            url_card = cassation_card_url(d)  # details несут court_domain
             # URL карточки 7kas теперь оборачивает КАССАЦИОННЫЙ номер,
             # не номер 1-й инст. Юрист просил убрать «2-XXX — касс. № 8Г-…»
             # и сразу выводить касс. номер + стороны на строке 1.

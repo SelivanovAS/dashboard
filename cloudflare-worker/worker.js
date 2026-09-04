@@ -2473,6 +2473,9 @@ async function handleImportResult(request, env) {
                      // ветка апелляции (дамп капчёвого апел-суда, 25.08.2026):
                      // дела, приклеенные к известной 1-й инстанции.
                      "linked",
+                     // ветка президиума (кассация по делам мировых судей,
+                     // 04.09.2026): дела до реформы ГПК, пропущенные без карточки.
+                     "skipped_old",
                      // счётчики точечного добавления (kind:"case").
                      // ⚠️ fetch_error — не косметика: по нему очередь резерва
                      // (ops/mac-local-run/import_queue.jq) узнаёт пачку,
@@ -2511,6 +2514,12 @@ async function handleImportResult(request, env) {
   // произвольная строка из тела запроса там не нужна.
   if (body.source === "github" || body.source === "mac") {
     record.source = body.source;
+  }
+  // Раздел, распознанный импортёром по дампу (04.09.2026): на домене облсуда
+  // живут апелляция и президиум, и подпись потерь/имени суда в админке по
+  // домену была бы ложной. Белый список значений — поле идёт в рендер.
+  if (["first_instance", "appeal", "cassation"].includes(body.section)) {
+    record.section = body.section;
   }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,
