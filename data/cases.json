@@ -24682,8 +24682,8 @@
         "name": "Суд ХМАО-Югры",
         "domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
-        "search_gated": false,
-        "search_disabled": false,
+        "search_gated": true,
+        "search_disabled": true,
         "srv_num": 1
       }
     ],
