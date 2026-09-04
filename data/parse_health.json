@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-04T07:43:51",
+ "updated_at": "2026-09-04T08:11:58",
  "sources": {
   "appeal:oblsud": {
    "counts": [
@@ -9,21 +9,21 @@
     22,
     22,
     22,
-    22,
     21,
     21,
     21,
     21,
+    0,
     0,
     0,
     0,
     0
    ],
-   "zero_streak": 4,
+   "zero_streak": 5,
    "fail_streak": 0,
    "alerted_zero": true,
    "last_count": 0,
-   "last_run_at": "2026-09-04T07:43:51",
+   "last_run_at": "2026-09-04T08:11:58",
    "label": "Апелляция (Суд ХМАО-Югры)"
   },
   "fi:surggor--hmao.sudrf.ru": {
@@ -492,8 +492,8 @@
     0,
     0,
     0,
-    0,
     25,
+    0,
     0,
     0,
     0,
@@ -503,7 +503,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-04T07:43:51",
+   "last_run_at": "2026-09-04T08:11:58",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
@@ -516,8 +516,8 @@
     0,
     0,
     0,
-    0,
     6,
+    0,
     0,
     0,
     0,
@@ -527,7 +527,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-04T07:43:51",
+   "last_run_at": "2026-09-04T08:11:58",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -556,7 +556,7 @@
   }
  },
  "last_run": {
-  "at": "2026-09-04T07:43:51",
+  "at": "2026-09-04T08:11:58",
   "requests_ok": 35,
   "requests_failed": 0,
   "requests_retried": 0,
@@ -568,7 +568,7 @@
   "cards_planned": 41,
   "cards_read_today": 263,
   "cards_planned_today": 271,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
     "read": 31,
@@ -592,15 +592,15 @@
   "latency": {
    "n": 35,
    "p50": 0.4,
-   "p90": 4.2,
-   "max": 60.1
+   "p90": 1.4,
+   "max": 5.1
   },
   "failure_latency": {
    "captcha_search": {
     "n": 1,
-    "p50": 60.1,
-    "p90": 60.1,
-    "max": 60.1
+    "p50": 0.1,
+    "p90": 0.1,
+    "max": 0.1
    },
    "outage_search": {
     "n": 1,
@@ -641,7 +641,7 @@
      "deferred_remaining": 8,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 0.0
+     "next_probe_in_seconds": 75.2
     }
    ]
   },
