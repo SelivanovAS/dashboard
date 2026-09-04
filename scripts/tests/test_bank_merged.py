@@ -261,7 +261,9 @@ def test_merged_archived_after_window():
 
 
 def test_denied_archived_from_motivation_date():
-    """Отказ в иске: 30 дней от мотивировки (≈ срок обжалования, ст. 321 ГПК).
+    """Отказ в иске: месяц от мотивировки (срок обжалования, ст. 321 ГПК)
+    + запас FI_APPEAL_GRACE_DAYS — окно ОБЩЕЕ с основной картотекой
+    (fi_appeal_window_end, 04.09.2026; прежние 30 дн шли без запаса).
 
     Раньше такое дело держал 180-дневный потолок ожидания ИЛ — в очереди
     еженедельного опроса за листом, которого не будет.
@@ -270,12 +272,12 @@ def test_denied_archived_from_motivation_date():
     свежее = {
         "status": "Решено",
         "result": DENIED_RESULT,
-        "motivirovka_date": (now - timedelta(days=29)).strftime("%d.%m.%Y"),
+        "motivirovka_date": (now - timedelta(days=35)).strftime("%d.%m.%Y"),
         "hearing_date": (now - timedelta(days=120)).strftime("%d.%m.%Y"),
     }
     старое = dict(
         свежее,
-        motivirovka_date=(now - timedelta(days=31)).strftime("%d.%m.%Y"))
+        motivirovka_date=(now - timedelta(days=31 + config.FI_APPEAL_GRACE_DAYS + 5)).strftime("%d.%m.%Y"))
     assert lifecycle._is_bank_track_archived(свежее, now) is False
     assert lifecycle._is_bank_track_archived(старое, now) is True
 
