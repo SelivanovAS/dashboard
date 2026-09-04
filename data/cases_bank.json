@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0004-01-2026-017192-59",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0004-01-2026-017107-23",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -302,8 +300,7 @@
         "judicial_uid": "86RS0004-01-2026-017010-23",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -341,8 +338,7 @@
         "judicial_uid": "86RS0005-01-2026-003125-12",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -458,8 +454,7 @@
         "judicial_uid": "86RS0007-01-2026-004869-09",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -497,8 +492,7 @@
         "judicial_uid": "86RS0007-01-2026-004866-18",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -536,8 +530,7 @@
         "judicial_uid": "86RS0017-01-2026-001437-75",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -575,8 +568,7 @@
         "judicial_uid": "86RS0017-01-2026-001432-90",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -614,8 +606,7 @@
         "judicial_uid": "86RS0012-01-2026-001067-92",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -643,19 +634,19 @@
         "filing_date": "01.09.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 16:33. 01.09.2026",
-        "event_date": "01.09.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 16:20. 113. 03.09.2026",
+        "event_date": "17.09.2026",
+        "hearing_date": "17.09.2026",
+        "hearing_time": "16:20",
         "link": "282015903|93793f25-0eb6-473c-8b4b-353cd84f16ea",
         "act_published": false,
         "act_date": "",
         "judicial_uid": "86RS0002-01-2026-008407-39",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03",
+        "last_checked_at": "2026-09-04",
         "material_number": "М-5781/2026",
-        "accepted_pending_emit": true
+        "accepted_pending_emit": false
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -852,7 +843,7 @@
         "judicial_uid": "86RS0002-01-2026-008357-92",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03"
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -1023,7 +1014,7 @@
         "judicial_uid": "86RS0002-01-2026-008269-65",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03"
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2725,7 +2716,7 @@
         "judicial_uid": "86RS0002-01-2026-007940-82",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03"
+        "last_checked_at": "2026-09-04"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2898,7 +2889,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03",
+        "last_checked_at": "2026-09-04",
         "judicial_uid": "86RS0002-01-2025-010133-83"
       },
       "appeal": null,
@@ -4391,16 +4382,16 @@
         "filing_date": "04.08.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 14:40. 304. 07.08.2026",
-        "event_date": "02.09.2026",
-        "hearing_date": "02.09.2026",
-        "hearing_time": "14:40",
+        "last_event": "Судебное заседание. 11:30. 304. 03.09.2026",
+        "event_date": "07.10.2026",
+        "hearing_date": "07.10.2026",
+        "hearing_time": "11:30",
         "link": "279840709|ca9acfb8-a1e2-4f1c-b8c5-68bb27db32c5",
         "act_published": false,
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03",
+        "last_checked_at": "2026-09-04",
         "material_number": "М-5175/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0002-01-2026-007529-54",
@@ -4963,7 +4954,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-03",
+        "last_checked_at": "2026-09-04",
         "judicial_uid": "86RS0002-01-2026-007437-39"
       },
       "appeal": null,
@@ -23446,5 +23437,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-04T06:25:17"
+  "updated_at": "2026-09-04T06:42:27"
 }

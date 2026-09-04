@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-04T06:25:17",
+  "saved_at": "2026-09-04T06:42:27",
   "new_cases": [],
   "changes": [
     {
@@ -2383,6 +2383,44 @@
         "court_domain": "vartovgor--hmao.sudrf.ru",
         "legal_force_date": "04.09.2026"
       }
+    },
+    {
+      "case": "2-8384/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Болат Серкан Альбертович",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "282015903|93793f25-0eb6-473c-8b4b-353cd84f16ea",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "hearing_date": "17.09.2026",
+        "hearing_time": "16:20",
+        "hearing_type": "подготовка дела"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-7830/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Кравец Бэлла Валерьевна, ООО \"ЭКСПРЕСС МЕБЕЛЬ\"",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "279840709|ca9acfb8-a1e2-4f1c-b8c5-68bb27db32c5",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "hearing_date": "07.10.2026",
+        "hearing_time": "11:30",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
     }
   ],
   "total_active_appeal": 29,
@@ -2392,5 +2430,5 @@
   "cass_changes": [],
   "cass_discovered": [],
   "issue_key": "2026-09-04T06:25:17",
-  "updated_at": "2026-09-04T06:25:17"
+  "updated_at": "2026-09-04T06:42:27"
 }
