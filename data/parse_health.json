@@ -1,10 +1,9 @@
 {
  "version": 1,
- "updated_at": "2026-09-04T06:42:27",
+ "updated_at": "2026-09-04T07:12:05",
  "sources": {
   "appeal:oblsud": {
    "counts": [
-    22,
     22,
     22,
     22,
@@ -17,13 +16,14 @@
     21,
     21,
     0,
+    0,
     0
    ],
-   "zero_streak": 2,
+   "zero_streak": 3,
    "fail_streak": 0,
    "alerted_zero": true,
    "last_count": 0,
-   "last_run_at": "2026-09-04T06:42:27",
+   "last_run_at": "2026-09-04T07:12:05",
    "label": "Апелляция (Суд ХМАО-Югры)"
   },
   "fi:surggor--hmao.sudrf.ru": {
@@ -484,7 +484,6 @@
   },
   "cassation:7kas:total": {
    "counts": [
-    0,
     25,
     0,
     0,
@@ -496,6 +495,7 @@
     0,
     0,
     25,
+    0,
     0,
     0
    ],
@@ -503,12 +503,11 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-04T06:42:27",
+   "last_run_at": "2026-09-04T07:12:05",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    0,
     3,
     0,
     0,
@@ -521,13 +520,14 @@
     0,
     6,
     0,
+    0,
     0
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 0,
-   "last_run_at": "2026-09-04T06:42:27",
+   "last_run_at": "2026-09-04T07:12:05",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -556,23 +556,23 @@
   }
  },
  "last_run": {
-  "at": "2026-09-04T06:42:27",
-  "requests_ok": 42,
+  "at": "2026-09-04T07:12:05",
+  "requests_ok": 35,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 8,
   "cards_breaker_unrequested": 8,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 40,
-  "cards_planned": 48,
+  "cards_read": 33,
+  "cards_planned": 41,
   "cards_read_today": 263,
   "cards_planned_today": 271,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 38,
-    "planned": 38,
+    "read": 31,
+    "planned": 31,
     "read_today": 232,
     "planned_today": 232
    },
@@ -590,23 +590,23 @@
    }
   },
   "latency": {
-   "n": 42,
+   "n": 35,
    "p50": 0.4,
-   "p90": 1.0,
-   "max": 7.6
+   "p90": 1.4,
+   "max": 5.3
   },
   "failure_latency": {
    "captcha_search": {
     "n": 1,
-    "p50": 0.1,
-    "p90": 0.1,
-    "max": 0.1
+    "p50": 0.3,
+    "p90": 0.3,
+    "max": 0.3
    },
    "outage_search": {
     "n": 1,
-    "p50": 5.1,
-    "p90": 5.1,
-    "max": 5.1
+    "p50": 5.2,
+    "p90": 5.2,
+    "max": 5.2
    }
   },
   "fail_kinds": {
@@ -641,7 +641,7 @@
      "deferred_remaining": 8,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 50.7
+     "next_probe_in_seconds": 74.1
     }
    ]
   },
