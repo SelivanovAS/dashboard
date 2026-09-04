@@ -34,6 +34,11 @@ remote, поэтому потерянный ответ `git push` не прев�
   cloud_run_ok.py --unmark-delivered --delivery-id ID
                                  снять delivered_at только у
                                  указанного выпуска (пуш не удался)
+  cloud_run_ok.py --health-alerts напечатать по строке 🩺-алерты детектора
+                                 здоровья парсеров СЕГОДНЯШНЕГО прогона
+                                 (last_run.alerts) — тело ретрансляции в
+                                 Telegram из parse_and_push.sh: Python на
+                                 Mac/VPS без токена, send_telegram молчит
 
 ДАННЫЕ. Журнал здоровья data/parse_health.json: `sources` — поиски (источник
 «зрячий сегодня» = last_run_at за сегодня И last_count > 0 И fail_streak == 0;
@@ -375,6 +380,23 @@ def unavailability_tail(state: dict) -> str:
     return tail
 
 
+def health_alert_lines(state: dict) -> list[str]:
+    """Строки 🩺-алерта последнего прогона (last_run.alerts), только сегодняшнего.
+
+    Журнал персистится и коммитится каждым слотом, поэтому слот, упавший до
+    блока 4e (или нерабочий день без прогона), отдал бы вчерашние строки
+    повторно — дата обязательна. Дедуп повторов в пределах дня — на стороне
+    parse_and_push.sh (файл health_alerts_sent.<дата>).
+    """
+    lr = (state or {}).get("last_run") or {}
+    if str(lr.get("at") or "")[:10] not in _today_dates():
+        return []
+    alerts = lr.get("alerts")
+    if not isinstance(alerts, list):
+        return []
+    return [str(a).strip() for a in alerts if str(a).strip()]
+
+
 def run_complete_today(state: dict) -> tuple[bool, str]:
     """Удачна ли сегодняшняя попытка: поиски зрячие И карточки ≥ порога.
 
@@ -579,6 +601,11 @@ def main(argv: list[str]) -> int:
     if "--has-pending" in argv:
         return 0 if context_pending(_context()) else 1
     state = _health_state()
+    if "--health-alerts" in argv:
+        lines = health_alert_lines(state)
+        if lines:
+            print("\n".join(lines))
+        return 0
     if "--run-complete" in argv:
         ok, why = run_complete_today(state)
         print(f"{_region_name()}: {why}")

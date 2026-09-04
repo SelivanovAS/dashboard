@@ -208,9 +208,12 @@ cm_territories() {
 # уведомление на экране видно только если юрист за машиной — прогон идёт в
 # 08:00. Секреты вне репозитория: файл <conf>/telegram с двумя строками
 # token=… и chat_id=… Нет файла — молча, как раньше.
-# $1 — каталог конфигов, $2 — префикс («Mac-парсинг (клон)»), $3 — текст.
+# $1 — каталог конфигов, $2 — префикс («Mac-парсинг (клон)»), $3 — текст,
+# $4 — значок (по умолчанию 🚨; существующие вызовы байт-в-байт). 🩺 —
+# ретрансляция алертов здоровья парсеров из parse_and_push.sh. Текст может быть
+# многострочным: --data-urlencode кодирует переводы строк, parse_mode не задан.
 cm_alert_telegram() {
-  local f="$1/telegram" prefix="$2" text="$3" token chat
+  local f="$1/telegram" prefix="$2" text="$3" icon="${4:-🚨}" token chat
   [ -f "$f" ] || return 0
   token=$(awk -F= '/^token=/{print $2}' "$f" | tr -d '[:space:]')
   chat=$(awk -F= '/^chat_id=/{print $2}' "$f" | tr -d '[:space:]')
@@ -218,7 +221,7 @@ cm_alert_telegram() {
   curl -sS -m 20 -o /dev/null \
     "https://api.telegram.org/bot$token/sendMessage" \
     --data-urlencode "chat_id=$chat" \
-    --data-urlencode "text=🚨 $prefix: $text" >/dev/null 2>&1 || true
+    --data-urlencode "text=$icon $prefix: $text" >/dev/null 2>&1 || true
 }
 
 # ── Регион клона и переменные территории ─────────────────────────────────────

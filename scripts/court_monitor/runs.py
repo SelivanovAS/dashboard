@@ -2592,10 +2592,13 @@ def main_json():
         searched_ok_today(load_parse_health())
         if config.SKIP_CHECKED_TODAY else set()
     )
-    # Суды 1-й инст., чья страница поиска пришла как проверочный код (CAPTCHA):
-    # {domain: court.name}. Отдельный 🩺-алерт в блоке 4e, чтобы код не читался
-    # молча как «дел нет» (см. detect_captcha_challenge).
-    fi_challenge: dict = {}
+    # Источники (все три инстанции), чья страница поиска пришла проверочным
+    # кодом (CAPTCHA): {ключ журнала здоровья: домен}. Питает капча-состояние
+    # update_parse_health (блок 4e): 🔐-алерт с рецептом при первом
+    # обнаружении, напоминание раз в день, ✅ при снятии — чтобы код не читался
+    # молча как «дел нет» (см. detect_captcha_challenge). Помеченные
+    # search_gated апелляции сюда НЕ попадают — код там ожидаем.
+    health_captcha: dict = {}
 
     # ═══ Порядок инстанций (решение юриста 12.08.2026): кассация →
     # апелляция → 1-я инстанция. Важные инстанции парсятся первыми — при
@@ -2667,9 +2670,10 @@ def main_json():
                 and detect_captcha_challenge(cass_search_html)
             )
             if cass_search_captcha:
-                fi_challenge[CASSATION_COURT.domain] = (
-                    f"Кассация ({CASSATION_COURT.name})"
-                )
+                # total и matched считаются с ОДНОЙ страницы — штампуем оба,
+                # текст алерта детектор даёт один раз на домен.
+                health_captcha[_ck_total] = CASSATION_COURT.domain
+                health_captcha[_ck_matched] = CASSATION_COURT.domain
             # Канарейка предохранителя: выдача 7kas пришла заглушкой →
             # карточки кассации не запрашиваем (пре-открытие).
             cass_search_outage = (
@@ -3283,7 +3287,7 @@ def main_json():
                 )
             else:
                 # Новый суд под кодом — это авария: пусть кричит.
-                fi_challenge[_ap_court.domain] = f"Апелляция ({_ap_court.name})"
+                health_captcha[hk] = _ap_court.domain
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности →
         # карточки апел-суда не запрашиваем (пре-открытие до первой траты).
         _ap_search_outage = (
@@ -3539,7 +3543,7 @@ def main_json():
             page_empty and detect_captcha_challenge(search_html)
         )
         if _fi_search_captcha:
-            fi_challenge[court.domain] = court.name
+            health_captcha[health_key] = court.domain
         # Канарейка предохранителя: поиск пришёл заглушкой недоступности
         # (аутейдж портала) → карточки этого суда не запрашиваем — фаза
         # поиска идёт раньше FI-цикла, пре-открытие не тратит ни карточки.
@@ -5469,6 +5473,7 @@ def main_json():
         health_state, health_alerts = update_parse_health(
             health_obs, health_labels,
             known_alive_today=len(search_skip_keys),
+            captcha=health_captcha,
         )
         # Карточная сводка прогона — для гейта Mac-резерва (cloud_run_ok):
         # журнал по источникам видит только ПОИСКИ, и «полузрячие» прогоны
@@ -5545,6 +5550,18 @@ def main_json():
         }
         health_state["last_run"] = {
             "at": datetime.now().isoformat(timespec="seconds"),
+            # Строки детектора ЭТОГО прогона — для ретрансляции с VPS/Mac
+            # (parse_and_push.sh → cloud_run_ok.py --health-alerts → shell-канал
+            # Telegram): там Python работает без TELEGRAM_BOT_TOKEN (с токеном
+            # каждый слот 06:00–08:45 слал бы дайджест — digest_will_deliver),
+            # send_telegram ниже — no-op, а replay на GitHub блок 4e не
+            # выполняет — с 19.08.2026 ни одно 🩺-сообщение не доходило.
+            # ТОЛЬКО строки update_parse_health (у них свой rate-limit:
+            # нули 1/3, фейлы по 3, капча раз в день): карточные счётчики
+            # ниже меняются каждый слот и в shell-канале были бы спамом — на
+            # VPS они едут 🚨-алертом прогресса (unavailability_tail).
+            # list() — копия: ниже список дополняется.
+            "alerts": list(health_alerts),
             "requests_ok": config.METRICS.get("requests_ok", 0),
             "requests_failed": config.METRICS.get("requests_failed", 0),
             # Сколько transport-запросов получили HTTP после повтора. Это не
@@ -5629,10 +5646,6 @@ def main_json():
                 f"карточек-«огрызков» без событий за прогон: "
                 f"{config.METRICS['cards_degraded']} (компактная карточка или "
                 f"неопознанная заглушка; при массовости см. счётчик заглушек)"
-            )
-        for _dom, _name in fi_challenge.items():
-            health_alerts.append(
-                f"{_name}: требует ввод проверочного кода — проверить вручную"
             )
         if config.METRICS.get("cards_captcha", 0):
             health_alerts.append(

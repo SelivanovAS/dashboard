@@ -340,3 +340,20 @@ class TestIntraDumpDuplicate:
         nums = [(c.get("appeal") or {}).get("case_number") for c in _cases(env)]
         assert nums.count("33-2002/2026") == 1
         assert _summary(env)["already"] == 1  # второй проход — «уже в базе»
+
+
+class TestHmaoAppealDump:
+    """04.09.2026 код закрыл поиск и Суда ХМАО-Югры — тот же канал дампа.
+
+    Ветка апелляции регион-агностична: суд резолвится реестром активного
+    региона, ветку выбирает court_type. Флаги search_gated/search_disabled
+    импортёр не проверяет (дамп разрешён любому суду реестра).
+    """
+
+    def test_hmao_appeal_resolves_as_appeal(self, monkeypatch):
+        monkeypatch.setattr(cm_config, "REGION", "hmao")
+        court = isd.resolve_court("oblsud--hmao.sudrf.ru")
+        assert court is not None
+        assert court.court_type == "appeal"
+        assert court.search_gated is True
+        assert court.delo_id == 5  # раздел апелляционных гражданских дел

@@ -62,11 +62,12 @@ class TestRegionConfigDerived:
         info = get_region("hmao").public_info()
         assert info["code"] == "hmao"
         # search_gated/srv_num — с 25.08.2026: капча бывает и на апелляции,
-        # и оттуда же строится dropdown дампов админки (у ХМАО апелляция
-        # открыта — флаг False).
+        # и оттуда же строится dropdown дампов админки. С 04.09.2026 под кодом
+        # и Суд ХМАО-Югры — режим как у СВД (оба флага), суд встаёт первой
+        # закреплённой строкой секции «Импорт».
         assert info["appeal_courts"] == [
             {"name": "Суд ХМАО-Югры", "domain": "oblsud--hmao.sudrf.ru",
-             "delo_id": 5, "search_gated": False, "search_disabled": False,
+             "delo_id": 5, "search_gated": True, "search_disabled": True,
              "srv_num": 1},
         ]
         assert info["cassation"]["domain"] == "7kas.sudrf.ru"

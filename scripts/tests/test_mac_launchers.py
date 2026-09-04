@@ -1107,3 +1107,82 @@ class TestDeliveryIdentity:
         assert "не удалось сохранить штамп" in capsys.readouterr().out
         assert ctx.read_bytes() == before
         assert not list(tmp_path.glob(".ctx.json.*.tmp"))
+
+
+# ── Ретрансляция 🩺-алертов здоровья парсеров с Mac/VPS ─────────────────────
+
+class TestHealthAlertsRelay:
+    """04.09.2026: капча на Суде ХМАО семь слотов подряд, а 🩺 «Мониторинг
+    парсеров» не доходил до Telegram с флипа на Mac/VPS — Python там без
+    токена (с токеном слот слал бы дайджест), replay блок 4e не выполняет.
+    Теперь строки детектора лежат в last_run.alerts, parse_and_push.sh
+    ретранслирует их shell-каналом с дедупом по строке за день."""
+
+    @staticmethod
+    def _state(at: str, alerts=None) -> dict:
+        lr = {"at": at}
+        if alerts is not None:
+            lr["alerts"] = alerts
+        return {"sources": {}, "last_run": lr}
+
+    def test_today_lines_returned(self):
+        today = list(cloud_run_ok._today_dates())[0]
+        st = self._state(f"{today}T06:25:00", ["🔐 Суд: код", "", " x "])
+        assert cloud_run_ok.health_alert_lines(st) == ["🔐 Суд: код", "x"]
+
+    def test_stale_run_gives_nothing(self):
+        """Слот, упавший до 4e, или выходной: журнал персистится — вчерашние
+        строки пересылать нельзя."""
+        st = self._state("2000-01-01T06:25:00", ["🔐 Суд: код"])
+        assert cloud_run_ok.health_alert_lines(st) == []
+
+    def test_missing_or_malformed_alerts(self):
+        today = list(cloud_run_ok._today_dates())[0]
+        assert cloud_run_ok.health_alert_lines(self._state(f"{today}T06:25:00")) == []
+        assert cloud_run_ok.health_alert_lines(
+            self._state(f"{today}T06:25:00", "не список")) == []
+        assert cloud_run_ok.health_alert_lines({}) == []
+
+    def test_cli_mode_prints_lines(self, monkeypatch, capsys):
+        today = list(cloud_run_ok._today_dates())[0]
+        monkeypatch.setattr(
+            cloud_run_ok, "_health_state",
+            lambda: self._state(f"{today}T06:25:00", ["a", "b"]),
+        )
+        assert cloud_run_ok.main(["--health-alerts"]) == 0
+        assert capsys.readouterr().out == "a\nb\n"
+        monkeypatch.setattr(
+            cloud_run_ok, "_health_state",
+            lambda: self._state("2000-01-01T06:25:00", ["a"]),
+        )
+        assert cloud_run_ok.main(["--health-alerts"]) == 0
+        assert capsys.readouterr().out == ""
+
+    def test_parse_and_push_relays_after_parse(self):
+        src = _read("ops/mac-local-run/parse_and_push.sh")
+        i_done = src.index('log "Парсинг завершён"')
+        i_relay = src.index("relay_health_alerts || true")
+        i_commit = src.index("# ── Коммит и пуш")
+        assert i_done < i_relay < i_commit, (
+            "релей стоит сразу после парсинга и до коммита: ветки die выше "
+            "алертят своим 🚨, а после коммита слот может выйти раньше")
+        fn = src[src.index("relay_health_alerts() {"):src.index("release_run_lock()")]
+        assert "cloud_run_ok.py --health-alerts" in fn
+        assert "health_alerts_sent." in fn and "grep -Fxq --" in fn
+        assert 'CM_LOG_KEEP_DAYS' in fn  # старые файлы дедупа чистятся
+        assert '"🩺"' in src[src.index("alert_health_telegram() {"):][:300]
+
+    def test_shell_channel_icon_is_optional(self):
+        """Существующие 🚨-вызовы байт-в-байт: значок — 4-й аргумент с
+        дефолтом."""
+        lib = _read("ops/mac-local-run/lib_sber_net.sh")
+        assert 'icon="${4:-🚨}"' in lib
+        assert '"text=$icon $prefix: $text"' in lib
+        for rel in ("ops/mac-local-run/parse_and_push.sh",
+                    "ops/mac-local-run/import_dumps.sh"):
+            s = _read(rel)
+            i = s.index("alert_telegram() {")
+            assert re.search(
+                r'cm_alert_telegram "\$CONF_DIR" "[^"]*\(\$\(basename "\$REPO"\)\)" "\$1"[;\s]',
+                s[i:i + 200],
+            ), rel

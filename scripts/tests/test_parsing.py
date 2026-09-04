@@ -2353,6 +2353,116 @@ class TestUpdateParseHealth:
         )
         assert any("ВСЕ источники" in a for a in alerts)
 
+    # ── Капча на поиске (04.09.2026: Суд ХМАО, семь слотов подряд) ──
+
+    @staticmethod
+    def _today():
+        import datetime as _dt
+        return _dt.datetime.now().date().isoformat()
+
+    def test_captcha_first_detection_alerts_once_with_recipe(self):
+        state = self._warm(self._fresh())
+        state, alerts = uc.update_parse_health(
+            {"fi:x": 0}, {"fi:x": "Сургутский горсуд"}, state,
+            captcha={"fi:x": "surggor--hmao.sudrf.ru"},
+        )
+        assert len(alerts) == 1, alerts
+        a = alerts[0]
+        assert "🔐" in a and "Сургутский горсуд" in a
+        assert "проверочным кодом" in a and "surggor--hmao.sudrf.ru" in a
+        assert "search_gated" in a and "Импорт" in a
+        assert "0 результатов" not in a  # причину называет 🔐, дубля нет
+        src = state["sources"]["fi:x"]
+        assert src["captcha_since"]
+        assert src["captcha_alerted_on"] == self._today()
+        # Красная точка админки остаётся честной.
+        assert src["zero_streak"] == 1 and src["alerted_zero"] is True
+
+    def test_captcha_same_day_silent_next_day_reminds(self):
+        state = self._warm(self._fresh())
+        cap = {"fi:x": "x.sudrf.ru"}
+        state, _ = uc.update_parse_health({"fi:x": 0}, state=state, captcha=cap)
+        for _ in range(3):  # остальные слоты того же утра — тишина
+            state, alerts = uc.update_parse_health(
+                {"fi:x": 0}, state=state, captcha=cap
+            )
+            assert alerts == [], alerts
+        state["sources"]["fi:x"]["captcha_alerted_on"] = "2000-01-01"
+        state["sources"]["fi:x"]["captcha_since"] = "2026-09-04T06:25:00"
+        state, alerts = uc.update_parse_health(
+            {"fi:x": 0}, {"fi:x": "Суд"}, state, captcha=cap
+        )
+        assert len(alerts) == 1 and "всё ещё" in alerts[0], alerts
+        assert "с 04.09" in alerts[0]
+        assert state["sources"]["fi:x"]["captcha_alerted_on"] == self._today()
+
+    def test_captcha_fetch_fail_keeps_fields(self):
+        state = self._warm(self._fresh())
+        state, _ = uc.update_parse_health(
+            {"fi:x": 0}, state=state, captcha={"fi:x": "x"}
+        )
+        state, alerts = uc.update_parse_health({"fi:x": None}, state=state)
+        assert alerts == []
+        src = state["sources"]["fi:x"]
+        assert src["captcha_since"] and src["fail_streak"] == 1
+
+    def test_captcha_lifted_alerts_and_clears(self):
+        state = self._warm(self._fresh())
+        state, _ = uc.update_parse_health(
+            {"fi:x": 0}, state=state, captcha={"fi:x": "x"}
+        )
+        state, alerts = uc.update_parse_health(
+            {"fi:x": 4}, {"fi:x": "Суд"}, state
+        )
+        assert len(alerts) == 1, alerts
+        assert "✅" in alerts[0] and "код снят" in alerts[0] and "4" in alerts[0]
+        assert not any("снова отдаёт" in a for a in alerts)
+        src = state["sources"]["fi:x"]
+        assert "captcha_since" not in src and "captcha_alerted_on" not in src
+        assert src["alerted_zero"] is False and src["zero_streak"] == 0
+
+    def test_captcha_lifted_with_zero_rows_still_clears(self):
+        """Код сняли, но выдача честно пустая: штамп капчи уходит, а
+        нулевая серия продолжается по обычным правилам."""
+        state = self._warm(self._fresh())
+        state, _ = uc.update_parse_health(
+            {"fi:x": 0}, state=state, captcha={"fi:x": "x"}
+        )
+        state, alerts = uc.update_parse_health({"fi:x": 0}, state=state)
+        assert any("код снят" in a for a in alerts)
+        src = state["sources"]["fi:x"]
+        assert "captcha_since" not in src
+        assert src["zero_streak"] == 2
+
+    def test_captcha_two_keys_same_domain_one_line(self):
+        """Кассация пишет total и matched с ОДНОЙ страницы: штампуются оба
+        ключа, текст — один."""
+        state = self._fresh()
+        for _ in range(3):
+            state, _ = uc.update_parse_health(
+                {"cassation:7kas:total": 20, "cassation:7kas:hmao": 5,
+                 "fi:y": 3},
+                state=state,
+            )
+        cap = {"cassation:7kas:total": "7kas.sudrf.ru",
+               "cassation:7kas:hmao": "7kas.sudrf.ru"}
+        # fi:y жив — иначе честно сработал бы глобальный «ВСЕ источники».
+        state, alerts = uc.update_parse_health(
+            {"cassation:7kas:total": 0, "cassation:7kas:hmao": 0, "fi:y": 3},
+            state=state, captcha=cap,
+        )
+        assert len(alerts) == 1 and "🔐" in alerts[0], alerts
+        assert state["sources"]["cassation:7kas:total"]["captcha_since"]
+        assert state["sources"]["cassation:7kas:hmao"]["captcha_since"]
+
+    def test_no_captcha_arg_is_byte_compatible(self):
+        """Без captcha поля не появляются, поведение прежнее."""
+        state = self._warm(self._fresh())
+        state, alerts = uc.update_parse_health({"fi:x": 0}, state=state)
+        assert len(alerts) == 1 and "0 результатов" in alerts[0]
+        src = state["sources"]["fi:x"]
+        assert "captcha_since" not in src and "captcha_alerted_on" not in src
+
 
 # ── card_url ─────────────────────────────────────────────────────────────────
 

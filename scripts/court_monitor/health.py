@@ -115,11 +115,54 @@ def searched_ok_today(state: dict | None = None) -> set[str]:
     return done
 
 
+def _note_captcha(
+    src: dict, name: str, domain: str, now_iso: str, announced: set[str],
+) -> list[str]:
+    """Поиск источника пришёл проверочным кодом: штамп в записи + алерт.
+
+    Первое обнаружение — строка с рецептом (что править в регион-конфиге),
+    дальше ОДНО напоминание в день (решение юриста 04.09.2026: слотов за утро
+    6–7, а суд, не помеченный в конфиге, нельзя забыть). `announced` — домены,
+    чей текст уже добавлен в этом вызове: кассация пишет два ключа
+    (total/matched) с ОДНОЙ страницы, штампуем оба, говорим один раз.
+    """
+    today = now_iso[:10]
+    lines: list[str] = []
+    if not src.get("captcha_since"):
+        src["captcha_since"] = now_iso
+        src["captcha_alerted_on"] = today
+        if domain not in announced:
+            announced.add(domain)
+            lines.append(
+                f"🔐 {name}: поиск закрыт проверочным кодом ({domain}) — "
+                f"автопоиск новых дел встал, карточки читаются. Что делать: "
+                f"search_gated=True в scripts/court_monitor/regions/"
+                f"{config.REGION}.py (у апелляции ещё search_disabled=True), "
+                f"запушить; дальше дела заводит дамп выдачи — админка → «Импорт»"
+            )
+    elif str(src.get("captcha_alerted_on") or "") != today:
+        src["captcha_alerted_on"] = today
+        if domain not in announced:
+            announced.add(domain)
+            since = str(src["captcha_since"])[:10]
+            try:
+                since = datetime.fromisoformat(since).strftime("%d.%m")
+            except ValueError:
+                pass
+            lines.append(
+                f"🔐 {name}: поиск всё ещё за проверочным кодом с {since} "
+                f"({domain}) — суд не помечен в конфиге, дела заводит дамп "
+                f"выдачи (админка → «Импорт»)"
+            )
+    return lines
+
+
 def update_parse_health(
     observations: dict,
     labels: dict | None = None,
     state: dict | None = None,
     known_alive_today: int = 0,
+    captcha: dict | None = None,
 ) -> tuple[dict, list[str]]:
     """Обновить журнал здоровья парсеров и вернуть (state, список алертов).
 
@@ -132,6 +175,18 @@ def update_parse_health(
     уже удался» (дочитка, searched_ok_today). При >0 глобальный алерт «все
     источники разом по нулям» не поднимается: наблюдаемыми остались лишь
     неудачники и честные нули, а живые суды в observations не попали.
+    captcha: {ключ источника: домен} — чей поиск В ЭТОМ прогоне пришёл
+    проверочным кодом (ключ обязан быть и в observations). Помеченные
+    `search_gated` суды сюда не попадают — код там ожидаем.
+
+    Правила капчи (поля записи `captcha_since` / `captcha_alerted_on`):
+    - первое обнаружение — 🔐-алерт с рецептом; пока код держится — одно
+      напоминание в день (слотов за утро 6–7); текст «поиск вернул 0
+      результатов» для такого ключа не печатается (причину называет 🔐),
+      но zero_streak/alerted_zero ведутся — точка в админке остаётся красной;
+    - страница пришла без кода (любой int) при живом штампе — ✅ «код снят»,
+      поля снимаются, дубль «снова отдаёт результаты» глушится;
+    - None (страница не загрузилась) поля капчи не трогает.
 
     Правила алертов:
     - «стал нулём»: медиана последних успешных прогонов ≥1, а сегодня 0 —
@@ -145,10 +200,12 @@ def update_parse_health(
       (лежит sudrf целиком или глобально сменилась вёрстка).
     """
     labels = labels or {}
+    captcha = captcha or {}
     state = state if state is not None else load_parse_health()
     sources = state.setdefault("sources", {})
     alerts: list[str] = []
     now_iso = datetime.now().isoformat(timespec="seconds")
+    captcha_announced: set[str] = set()
 
     for key, count in observations.items():
         src = sources.setdefault(key, {
@@ -171,17 +228,35 @@ def update_parse_health(
                 )
             continue
         src["fail_streak"] = 0
+        captcha_now = key in captcha
+        if captcha_now:
+            alerts.extend(_note_captcha(
+                src, name, str(captcha[key]), now_iso, captcha_announced,
+            ))
+        elif src.get("captcha_since"):
+            # Страница загрузилась и кода на ней нет — снят. Снимаем штамп и
+            # alerted_zero ДО ветки count > 0: иначе рядом встал бы дубль
+            # «снова отдаёт результаты» об одном и том же событии.
+            src.pop("captcha_since", None)
+            src.pop("captcha_alerted_on", None)
+            src["alerted_zero"] = False
+            alerts.append(
+                f"✅ {name}: проверочный код снят, поиск снова работает "
+                f"(строк в выдаче: {count}) — если стоял "
+                f"search_gated/search_disabled, автопоиск можно вернуть"
+            )
         history = [c for c in src.get("counts", []) if isinstance(c, int)]
         median = statistics.median(history) if history else 0
         if count == 0 and median >= 1:
             src["zero_streak"] = int(src.get("zero_streak", 0)) + 1
             if src["zero_streak"] in (1, 3):
                 src["alerted_zero"] = True
-                alerts.append(
-                    f"{name}: поиск вернул 0 результатов, хотя обычно "
-                    f"~{int(median)} ({src['zero_streak']}-й нулевой "
-                    f"прогон подряд)"
-                )
+                if not captcha_now:
+                    alerts.append(
+                        f"{name}: поиск вернул 0 результатов, хотя обычно "
+                        f"~{int(median)} ({src['zero_streak']}-й нулевой "
+                        f"прогон подряд)"
+                    )
         elif count > 0:
             if src.get("alerted_zero"):
                 alerts.append(f"{name}: снова отдаёт результаты ({count})")
