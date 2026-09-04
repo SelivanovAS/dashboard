@@ -45,9 +45,12 @@ class TestRegionFlag:
         assert by_domain["oblsud--svd.sudrf.ru"].search_gated is True
         assert by_domain["oblsud--ynao.sudrf.ru"].search_gated is False
 
-    def test_hmao_appeal_not_gated(self):
-        assert not any(c.search_gated
-                       for c in get_region("hmao").appeal_courts)
+    def test_hmao_appeal_gated_since_0409(self):
+        """04.09.2026 код закрыл поиск и Суда ХМАО-Югры (журнал здоровья
+        appeal:oblsud 21→0 семь прогонов, fail_kinds captcha_search) — режим
+        как у СВД: дела заводит дамп выдачи через админку."""
+        by_domain = {c.domain: c for c in get_region("hmao").appeal_courts}
+        assert by_domain["oblsud--hmao.sudrf.ru"].search_gated is True
 
     def test_gated_appeal_stays_in_search_loop(self):
         """⚠️ САМ ПО СЕБЕ search_gated — гейт МЯГКИЙ: суд остаётся в обходе
@@ -81,9 +84,11 @@ class TestSearchDisabled:
         assert by_domain["oblsud--svd.sudrf.ru"].search_gated is True
         assert by_domain["oblsud--ynao.sudrf.ru"].search_disabled is False
 
-    def test_hmao_appeal_not_disabled(self):
-        assert not any(c.search_disabled
-                       for c in get_region("hmao").appeal_courts)
+    def test_hmao_appeal_disabled_since_0409(self):
+        """Решение юриста 04.09.2026: у ХМАО тоже жёсткий режим — поиска нет
+        вовсе, возврат = снять флаги + деплой."""
+        by_domain = {c.domain: c for c in get_region("hmao").appeal_courts}
+        assert by_domain["oblsud--hmao.sudrf.ru"].search_disabled is True
 
     def test_branch_first_no_http_no_health(self):
         """Ветка стоит ПЕРВОЙ в цикле — до дочитки, до fetch_page и до любых
@@ -172,13 +177,13 @@ class TestQuietCaptchaWiring:
         i = src.index("        if _ap_search_captcha:")
         block = src[i:i + 1400]
         assert "if _ap_court.search_gated:" in block
-        # Алерт (fi_challenge) обязан остаться в ветке НЕпомеченного суда.
+        # Алерт (health_captcha) обязан остаться в ветке НЕпомеченного суда.
         i_gated = block.index("if _ap_court.search_gated:")
-        i_alert = block.index("fi_challenge[_ap_court.domain]")
+        i_alert = block.index("health_captcha[hk]")
         i_else = block.index("        else:")
         assert i_gated < i_else < i_alert, (
-            "fi_challenge выехал из ветки else — 🩺-алерт «требует ввод "
-            "проверочного кода» снова уходит каждое утро")
+            "health_captcha выехал из ветки else — 🔐-алерт о проверочном "
+            "коде снова уходит по помеченному суду каждое утро")
         assert "health_obs[hk] = None" in block[:i_else], (
             "ноль в журнале здоровья = «молчаливая поломка» для детектора; "
             "у ожидаемой капчи наблюдения быть не должно вовсе")
@@ -271,3 +276,47 @@ class TestAnnounceWiring:
         i_6c = src.index("    apel_imported_new = announce_imported_appeal_cases(cases)")
         block = src[i_6c:i_6c + 900]
         assert "appeal_new_cases_csv = appeal_new_cases_csv + apel_imported_new" in block
+
+
+class TestCaptchaHealthWiring:
+    """Капча на поиске ЛЮБОГО непомеченного суда → капча-состояние журнала
+    здоровья (04.09.2026: Суд ХМАО семь слотов подряд, а старый алерт
+    «требует ввод проверочного кода» повторялся каждый прогон, не говорил, что
+    делать, и — главное — с флипа на Mac/VPS вообще не доходил до Telegram:
+    Python там без токена. Теперь строки детектора едут в last_run.alerts,
+    а parse_and_push.sh ретранслирует их shell-каналом)."""
+
+    def test_dict_declared_and_old_loop_gone(self):
+        src = _runs_src()
+        assert "health_captcha: dict = {}" in src
+        assert "fi_challenge" not in src, (
+            "старый словарь fi_challenge мёртв — его цикл в 4e заменён "
+            "капча-состоянием update_parse_health")
+        assert "требует ввод проверочного кода — проверить вручную" not in src
+
+    def test_all_three_instances_feed_the_dict(self):
+        src = _runs_src()
+        i = src.index("if cass_search_captcha:")
+        cass = src[i:i + 600]
+        assert "health_captcha[_ck_total] = CASSATION_COURT.domain" in cass
+        assert "health_captcha[_ck_matched] = CASSATION_COURT.domain" in cass, (
+            "matched считается с той же страницы — без штампа даст обычный "
+            "zero-алерт-дубль")
+        i = src.index("if _fi_search_captcha:")
+        assert "health_captcha[health_key] = court.domain" in src[i:i + 200]
+
+    def test_detector_gets_captcha_and_keeps_known_alive(self):
+        src = _runs_src()
+        i = src.index("health_state, health_alerts = update_parse_health(")
+        call = src[i:i + 300]
+        assert "known_alive_today=len(search_skip_keys)" in call
+        assert "captcha=health_captcha" in call
+
+    def test_alerts_persisted_in_last_run_before_save(self):
+        """Ретрансляция с VPS читает last_run.alerts — строки обязаны лечь в
+        журнал ДО save_parse_health, иначе cloud_run_ok видит прошлый прогон."""
+        src = _runs_src()
+        i_lr = src.index('health_state["last_run"] = {')
+        i_alerts = src.index('"alerts": list(health_alerts)')
+        i_save = src.index("save_parse_health(health_state)")
+        assert i_lr < i_alerts < i_save

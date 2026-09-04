@@ -117,6 +117,36 @@ notify() {  # $1 = текст уведомления macOS (+ Telegram, если
 alert_telegram() {  # $1 = текст (тело — cm_alert_telegram, общее с импортом)
   cm_alert_telegram "$CONF_DIR" "Mac-парсинг ($(basename "$REPO"))" "$1"
 }
+# 🩺-алерты здоровья парсеров (детектор блока 4e main_json: суд вернул 0 при
+# живой истории, HTTP-фейлы подряд, все по нулям, поиск за проверочным кодом).
+# В облаке их шлёт сам Python; здесь он работает БЕЗ TELEGRAM_BOT_TOKEN (с
+# токеном каждый слот 06:00–08:45 слал бы дайджест — digest_will_deliver), а
+# replay на GitHub блок 4e не выполняет — с 19.08 (Mac) / 28.08 (VPS) ни одно
+# 🩺-сообщение не доходило (обнаружено 04.09.2026: капча на Суде ХМАО семь
+# слотов подряд, юрист узнал из дайджеста). Строки берём из last_run.alerts
+# журнала здоровья (только сегодняшнего прогона — cloud_run_ok --health-alerts);
+# дедуп по строке за день — файл .runtime/health_alerts_sent.<дата>: журнал
+# персистится, и слот, упавший до 4e, отдал бы прежние строки повторно.
+# Карточные счётчики (не прочитано / предохранитель) сюда НЕ входят — они
+# едут 🚨-алертом прогресса ниже (unavailability_tail).
+alert_health_telegram() {  # $1 = текст (многострочный, «• »-маркеры)
+  cm_alert_telegram "$CONF_DIR" "Мониторинг парсеров ($(basename "$REPO"))" "$1" "🩺"
+}
+relay_health_alerts() {
+  local dir="$LOG_DIR/.runtime" sent line fresh="" n=0
+  sent="$dir/health_alerts_sent.$(date +%Y-%m-%d)"
+  mkdir -p "$dir"; [ -f "$sent" ] || : >"$sent"
+  find "$dir" -name 'health_alerts_sent.*' -mtime "+$CM_LOG_KEEP_DAYS" -delete 2>/dev/null || true
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    grep -Fxq -- "$line" "$sent" && continue
+    printf '%s\n' "$line" >>"$sent"
+    fresh+="${fresh:+$'\n'}• $line"; n=$((n + 1))
+  done <<<"$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --health-alerts 2>>"$LOG")"
+  [ "$n" -gt 0 ] || return 0
+  log "Здоровье парсеров: новых строк алерта — $n → Telegram"
+  alert_health_telegram "$fresh"
+}
 release_run_lock() {
   "$PYTHON" "$RUN_LOCK_TOOL" release "$LOCK" "$$" >/dev/null 2>&1 || true
 }
@@ -738,6 +768,7 @@ elif [ "$PARSE_FINISH_RC" -ne 0 ]; then
 fi
 log "Parse-txn: ${PARSE_FINISH:-завершён}"
 log "Парсинг завершён"
+relay_health_alerts || true
 
 # ── Коммит и пуш ──────────────────────────────────────────────
 # Список файлов ОДИН с облаком: ops/stage_data_files.sh спрашивает пути у
