@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-04T06:25:17",
+  "updated_at": "2026-09-04T06:42:27",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -9322,7 +9322,7 @@
             "posted_at": "10.06.2026"
           }
         ],
-        "last_checked_at": "2026-09-03",
+        "last_checked_at": "2026-09-04",
         "material_number": "М-626/2026",
         "resolved_emitted": true,
         "judicial_uid": "86RS0005-01-2026-000993-06"
