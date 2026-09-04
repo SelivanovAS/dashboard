@@ -493,8 +493,8 @@ def fi_left_unconsidered(fi: dict) -> bool:
 
     Для трека «Иски банка» это «листа не будет» (решение юриста 03.09.2026):
     исполнять нечего, определение отменяет тот же суд по заявлению истца
-    либо оно обжалуется частной жалобой — оба пути укладываются в
-    BANK_DENIED_ARCHIVE_DAYS.
+    либо оно обжалуется частной жалобой — оба пути укладываются в окно
+    fi_appeal_window_end (месяц + запас).
     """
     return bool(_FI_UNCONSIDERED_RX.search((fi or {}).get("result") or ""))
 
@@ -794,6 +794,64 @@ def fi_decision_date_from_events(events) -> str:
             found = ev["date"]
     return found
 
+
+
+def fi_motivirovka_date_from_events(events) -> str:
+    """Дата ПОСЛЕДНЕГО события «Изготовлено мотивированное решение» —
+    «ДД.ММ.ГГГГ»|"". Якорь месячного срока на апел. жалобу (ст. 321 ГПК):
+    в основной картотеке штампа `motivirovka_date` нет (его ставит только
+    `split_bank_track` треку банка), а событие в карточке есть у обеих.
+    Последнее побеждает — после отмены заочного и нового рассмотрения
+    мотивировка текущего круга позже прежней."""
+    found = ""
+    for ev in events or []:
+        text = (ev.get("text") or "").lower().replace("ё", "е")
+        if text and _MOTIVATED_DECISION_RX.search(text) and ev.get("date"):
+            found = ev["date"]
+    return found
+
+
+def fi_appeal_window_end(fi: dict) -> date | None:
+    """Последний день окна ожидания апел. жалобы по решённому делу 1-й инст.
+    (с запасом) — после него дело без жалобы уходит в архив. ОДНО правило на
+    обе картотеки (решение юриста 04.09.2026), считает по ГПК:
+
+    - мотивировка известна (событие «Изготовлено мотивированное решение» →
+      штамп `motivirovka_date` трека → `act_date` публикации текста) →
+      месяц от неё (ст. 321 + ст. 108, `month_term_last_day`)
+      + `FI_APPEAL_GRACE_DAYS`;
+    - мотивировки в карточке нет (суд не публикует событие — 18 из 24
+      архивных дел ХМАО на 04.09.2026) → резолютивка (`decision_date` →
+      `hearing_date` → `event_date`) + 10 раб. дн на изготовление (ст. 199,
+      `BANK_MOTIVATION_TERM_WORKDAYS`) + месяц + запас ≈ прежние 60 дней
+      от заседания — окно не сужается там, где суд молчит.
+
+    Ни одной даты → None (пустые данные не архивируем). Повод — 2-857/2026:
+    заседание 25.06.2026, мотивировка 10.08 (срок на жалобу до 10.09), а
+    плоские 60 дней от заседания увели дело в архив 25.08."""
+    from court_monitor.textutil import add_working_days, month_term_last_day
+
+    motiv_dt = (parse_date(fi_motivirovka_date_from_events(fi.get("events")))
+                or parse_date(fi.get("motivirovka_date") or "")
+                or parse_date(fi.get("act_date") or ""))
+    if motiv_dt:
+        motiv = motiv_dt.date()
+    else:
+        base_dt = (parse_date(fi.get("decision_date") or "")
+                   or parse_date(fi.get("hearing_date") or "")
+                   or parse_date(fi.get("event_date") or ""))
+        if not base_dt:
+            return None
+        motiv = add_working_days(base_dt.date(), config.BANK_MOTIVATION_TERM_WORKDAYS)
+    return (month_term_last_day(motiv)
+            + timedelta(days=config.FI_APPEAL_GRACE_DAYS))
+
+
+def fi_appeal_window_passed(fi: dict, now: datetime) -> bool:
+    """True, если окно ожидания апел. жалобы (fi_appeal_window_end) уже
+    закрыто на `now`. Нет ни одной даты → False."""
+    end = fi_appeal_window_end(fi)
+    return bool(end) and now.date() > end
 
 def bank_default_judgment_info(fi: dict) -> dict:
     """Признаки заочного решения и мотивировки из событий 1-й инстанции.
@@ -1481,9 +1539,11 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     - присоединено к другому делу: BANK_MERGED_ARCHIVE_DAYS (30) от даты
       определения — окно на отмену объединения (статус карточки при этом
       остаётся «В производстве», до общих веток дело бы не дошло);
-    - листа не будет (в иске отказано ИЛИ дело завершено процессуально —
-      см. bank_writ_expected): BANK_DENIED_ARCHIVE_DAYS (30) от мотивировки —
-      окно на жалобу банка (апелляционную по ст. 321 ГПК при отказе в иске,
+    - листа не будет (см. bank_writ_expected): в иске ОТКАЗАНО по существу →
+      fi_appeal_window_end — месяц от мотивировки + FI_APPEAL_GRACE_DAYS,
+      общее с основной картотекой окно на апел. жалобу банка; завершено
+      процессуально (возврат/отказ в принятии/передача/без рассмотрения) →
+      BANK_RETURNED_ARCHIVE_DAYS (30) от определения — окно на частную жалобу (апелляционную по ст. 321 ГПК при отказе в иске,
       частную по ст. 332 — на определение о возврате/отказе в принятии/
       передаче). Ветка стоит ДО поиска листов: 180-дневный потолок ожидания
       ИЛ к таким делам не применим;
@@ -1522,19 +1582,23 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
     # застряло бы в активных навсегда — общий выход `status != "Решено"` ниже.
     if ((status == "Решено" or fi_left_unconsidered(fi))
             and not bank_writ_expected(fi)):
-        # Якорь — мотивировка: месячный срок обжалования по ст. 321 ГПК течёт
-        # от неё, так что 30 дней ≈ ровно окно на жалобу банка. Резолютивка и
-        # дата заседания — фолбэки для карточек, где мотивировку не публиковали.
-        # Последний фолбэк event_date несёт процессуальные завершения со
-        # статусом «Решено» (9-125/2026: отказ в принятии, ни решения, ни
-        # заседания в карточке нет вовсе — без него дело осталось бы активным
-        # навсегда).
-        anchor = (parse_date(fi.get("act_date") or "")
-                  or parse_date(fi.get("motivirovka_date") or "")
-                  or parse_date(fi.get("decision_date") or "")
-                  or parse_date(fi.get("hearing_date") or "")
-                  or parse_date(fi.get("event_date") or ""))
-        return bool(anchor) and (now - anchor).days > config.BANK_DENIED_ARCHIVE_DAYS
+        # Процессуальное завершение (возврат, отказ в ПРИНЯТИИ, передача по
+        # подсудности, без рассмотрения) обжалуется ЧАСТНОЙ жалобой — 15 дн
+        # по ст. 332 ГПК: окно BANK_RETURNED_ARCHIVE_DAYS (30) от определения,
+        # как у статуса «Возвращено». Последний фолбэк якоря — event_date:
+        # у 9-125/2026 (отказ в принятии) ни решения, ни заседания в карточке
+        # нет вовсе — без него дело осталось бы активным навсегда.
+        if (fi_left_unconsidered(fi)
+                or classify_fi_termination(fi.get("result") or "", "", []) is not None):
+            anchor = (parse_date(fi.get("decision_date") or "")
+                      or parse_date(fi.get("hearing_date") or "")
+                      or parse_date(fi.get("event_date") or ""))
+            return bool(anchor) and (now - anchor).days > config.BANK_RETURNED_ARCHIVE_DAYS
+        # В иске ОТКАЗАНО по существу — окно на АПЕЛЛЯЦИОННУЮ жалобу банка,
+        # ОБЩЕЕ с основной картотекой (fi_appeal_window_end, 04.09.2026):
+        # месяц ст. 321 ГПК от мотивировки + запас FI_APPEAL_GRACE_DAYS;
+        # прежние 30 дней от мотивировки шли без запаса на почтовую подачу.
+        return fi_appeal_window_passed(fi, now)
     if status == "Возвращено":
         anchor = (parse_date(fi.get("event_date") or "")
                   or parse_date(fi.get("hearing_date") or ""))
@@ -2003,19 +2067,29 @@ def is_case_archived(case: dict) -> bool:
         # парсер обнаруживал апел. жалобу.
         if fi.get("appeal_filed") or fi.get("cassation_filed") or fi.get("sent_to_cassation"):
             return False
-        if fi.get("status", "").strip() not in ("Решено", "Возвращено"):
+        status = fi.get("status", "").strip()
+        if status not in ("Решено", "Возвращено"):
             return False
-        # Якорь окна — дата заседания, а если её нет, дата последнего события
-        # карточки. Запасной якорь нужен для исков, возвращённых на стадии
-        # принятия: заседания не было, а строку «Решение вопроса о принятии
-        # иска → Возвращение искового заявления» парсер намеренно не берёт за
-        # дату решения (_ACCEPTANCE_RX в cards.py — иначе у свежепринятых дел
-        # появлялась фантомная «дата заседания», кейс М-3524/2026). Без
-        # запасного якоря такое дело висело в активных вечно и опрашивалось
-        # каждый прогон — кейс 9-1012/2026, возвращён 08.06.2026, найден через
-        # 7 дней (мимо _discovered_already_resolved_old, который проставляет
-        # якорь делам старше FI_ARCHIVE_DAYS). То же правило уже действует на
-        # фронте — isArchived в app.js считает от lastEventDate.
+        if status == "Решено":
+            # Окно по ГПК (с 04.09.2026): месяц на апел. жалобу от
+            # МОТИВИРОВКИ + запас FI_APPEAL_GRACE_DAYS; без мотивировки в
+            # карточке — от резолютивки + 10 раб. дн (см. fi_appeal_window_end).
+            # Прежние плоские FI_ARCHIVE_DAYS от заседания хоронили дело
+            # раньше срока на жалобу при задержке мотивировки (2-857/2026:
+            # заседание 25.06, мотивировка 10.08, архив 25.08 при сроке 10.09).
+            # Ни одной даты → не архивируем (защита от пустых данных прежняя).
+            # Зеркало на фронте — isArchived/appealWindowEnd в app.js.
+            return fi_appeal_window_passed(fi, now)
+        # «Возвращено»: якорь окна — дата заседания, а если её нет, дата
+        # последнего события карточки. Запасной якорь нужен для исков,
+        # возвращённых на стадии принятия: заседания не было, а строку
+        # «Решение вопроса о принятии иска → Возвращение искового заявления»
+        # парсер намеренно не берёт за дату решения (_ACCEPTANCE_RX в cards.py
+        # — иначе у свежепринятых дел появлялась фантомная «дата заседания»,
+        # кейс М-3524/2026). Без запасного якоря такое дело висело в активных
+        # вечно и опрашивалось каждый прогон — кейс 9-1012/2026, возвращён
+        # 08.06.2026, найден через 7 дней (мимо _discovered_already_resolved_old,
+        # который проставляет якорь делам старше FI_ARCHIVE_DAYS).
         # Обе даты пусты → не архивируем (защита от пустых данных прежняя).
         anchor = (parse_date(fi.get("hearing_date") or "")
                   or parse_date(fi.get("event_date") or ""))

@@ -74,6 +74,50 @@ const SORT_PREF_KEY=lsKey('sber-court-sort');
 const UPCOMING_COLLAPSED_KEY=lsKey('upcoming_collapsed');
 function upcomingCollapsed(){try{return localStorage.getItem(UPCOMING_COLLAPSED_KEY)==='true';}catch(_){return false;}}
 const ARCHIVE_DAYS=60;
+// Запас ПОСЛЕ месячного срока на апел. жалобу (зеркало FI_APPEAL_GRACE_DAYS
+// в config.py — держать синхронно). Решение юриста 04.09.2026.
+const APPEAL_GRACE_DAYS=14;
+// Срок изготовления мотивировки, если суд её не публиковал: 10 РАБОЧИХ дней
+// ст. 199 ГПК ≈ 14 календарных (производственного календаря в JS нет —
+// приближение всегда в сторону «держать дольше»).
+const MOTIVATION_TERM_CAL_DAYS=14;
+const MOTIVATED_DECISION_RE=/изготовлено\s+мотивированное\s+решение/i;
+// Последний день окна ожидания апел. жалобы по РЕШЁННОМУ делу 1-й инст. —
+// зеркало fi_appeal_window_end (lifecycle.py): месяц от мотивировки (событие
+// «Изготовлено мотивированное решение» → штамп motivirovka_date трека →
+// act_date) + запас; без мотивировки — резолютивка (decision_date →
+// hearing_date → event_date) + 14 дн + месяц + запас ≈ прежние 60 дней.
+// Месяц — календарный, «то же число следующего месяца» (ст. 108 ГПК; нет
+// такого числа → последний день месяца; перенос с нерабочего дня не делаем).
+// Повод — 2-857/2026: заседание 25.06, мотивировка 10.08, срок 10.09 — а
+// плоские 60 дней от заседания прятали дело с 25.08. null — нет ни одной даты.
+function appealWindowEnd(fi){
+  if(!fi)return null;
+  // Даты — ЛОКАЛЬНАЯ полночь (new Date('YYYY-MM-DD') даёт UTC-полночь и в
+  // западных поясах сползает на день назад).
+  const local=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
+  let motiv='';
+  (fi.events||[]).forEach(ev=>{if(ev&&ev.date&&MOTIVATED_DECISION_RE.test(ev.text||''))motiv=ev.date;});
+  let d=local(parseDate(motiv||fi.motivirovka_date||fi.act_date||''));
+  if(!d){
+    d=local(parseDate(fi.decision_date||fi.hearing_date||fi.event_date||''));
+    if(!d)return null;
+    d.setDate(d.getDate()+MOTIVATION_TERM_CAL_DAYS);
+  }
+  const day=d.getDate();
+  d.setDate(1);d.setMonth(d.getMonth()+1);
+  const lastOfMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(day,lastOfMonth));
+  d.setDate(d.getDate()+APPEAL_GRACE_DAYS);
+  return d;
+}
+// Архивно ли решённое дело 1-й инст. на сегодня по окну appealWindowEnd.
+function fiAppealWindowPassed(fi){
+  const end=appealWindowEnd(fi);
+  if(!end)return false;
+  const today=new Date();today.setHours(0,0,0,0);
+  return today>end;
+}
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
 const STATUS_MAP={'в производстве':'active','решено':'decided','возвращено':'returned'};
@@ -717,7 +761,11 @@ function computeDerived(c){
   // через cs.outcome) уходит под 30-дневный легаси-фильтр и исчезает
   // с экрана раньше публикации мотивированного определения.
   const stageManaged=c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink'||fiHasFiledAppeal;
-  if((c.status==='decided'||c.status==='returned')&&!stageManaged){
+  if(c.status==='decided'&&c.stage==='first_instance'&&c._fi&&!stageManaged){
+    // Решённое дело 1-й инст.: окно на апел. жалобу по ГПК (зеркало
+    // is_case_archived → fi_appeal_window_end), а не плоские ARCHIVE_DAYS.
+    archived=fiAppealWindowPassed(c._fi);
+  }else if((c.status==='decided'||c.status==='returned')&&!stageManaged){
     const decisionDate=c.lastEventDate||c.dateReceived;
     if(decisionDate){
       const d=new Date(decisionDate);
@@ -1814,6 +1862,7 @@ function isArchived(c){
   if(c.status!=='decided'&&c.status!=='returned')return false;
   if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink')return false;
   if(c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation))return false;
+  if(c.status==='decided'&&c.stage==='first_instance'&&c._fi)return fiAppealWindowPassed(c._fi);
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
   const d=new Date(decisionDate);if(isNaN(d))return false;

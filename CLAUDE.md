@@ -84,19 +84,19 @@
 | `process_item` (пер-строчная оркестрация точечного добавления) | [scripts/court_monitor/targeted_add.py:541](scripts/court_monitor/targeted_add.py:541) |
 | `collect_existing_ids` (общий дедуп-индекс main_json/импортёра) | [scripts/court_monitor/linking.py:1340](scripts/court_monitor/linking.py:1340) |
 | `load_bank_json` / `save_bank_json` (split-хранение bank-трека: список + events) | [scripts/court_monitor/storage.py:174](scripts/court_monitor/storage.py:174) |
-| `bank_writ_expected` (ждём ли ИЛ: отказ/присоединение/без рассмотрения → нет) | [scripts/court_monitor/lifecycle.py:1349](scripts/court_monitor/lifecycle.py:1349) |
+| `bank_writ_expected` (ждём ли ИЛ: отказ/присоединение/без рассмотрения → нет) | [scripts/court_monitor/lifecycle.py:1407](scripts/court_monitor/lifecycle.py:1407) |
 | `fi_left_unconsidered` (оставлено без рассмотрения — ТОЛЬКО по полю «Результат») | [scripts/court_monitor/lifecycle.py:491](scripts/court_monitor/lifecycle.py:491) |
-| `bank_legal_force_est` (расчётное вступление в силу; None без решения) | [scripts/court_monitor/lifecycle.py:1225](scripts/court_monitor/lifecycle.py:1225) |
+| `bank_legal_force_est` (расчётное вступление в силу; None без решения) | [scripts/court_monitor/lifecycle.py:1283](scripts/court_monitor/lifecycle.py:1283) |
 | `default_cancellation_state` (особый порядок отмены заочного: подано/отменено/отказано; матч по тексту события, белый список исходов) | [scripts/court_monitor/lifecycle.py:809](scripts/court_monitor/lifecycle.py:809) |
-| `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1169](scripts/court_monitor/lifecycle.py:1169) |
-| `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1196](scripts/court_monitor/lifecycle.py:1196) |
-| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:2094](scripts/court_monitor/lifecycle.py:2094) |
+| `default_judgment_vacated` (решение отменено, а запись держит его действующим) | [scripts/court_monitor/lifecycle.py:1227](scripts/court_monitor/lifecycle.py:1227) |
+| `default_cancellation_blocks_appeal` (гейт: апел. хода ещё нет, ст. 237 ч. 2) | [scripts/court_monitor/lifecycle.py:1254](scripts/court_monitor/lifecycle.py:1254) |
+| `repair_vacated_default_judgments` (ремонт: откат решения + возврат в трек) | [scripts/court_monitor/lifecycle.py:2168](scripts/court_monitor/lifecycle.py:2168) |
 | `intake_bank_rows` (блок 3b: приём исков банка с выдачи в прогоне) | [scripts/court_monitor/runs.py:1997](scripts/court_monitor/runs.py:1997) |
 | `card_rejects` (карточные правила приёма; флаг skip_appeal — ручные каналы vs прогон) | [scripts/court_monitor/bank_intake.py:57](scripts/court_monitor/bank_intake.py:57) |
 | `row_passes` (правила приёма по строке выдачи) | [scripts/court_monitor/bank_intake.py:50](scripts/court_monitor/bank_intake.py:50) |
 | `make_bank_entry` (сборка записи трека: маркеры, ИЛ, флаги жалобы, delo_id/srv_num) | [scripts/court_monitor/bank_intake.py:193](scripts/court_monitor/bank_intake.py:193) |
 | `_stamp_appeal_flags` (флаги жалобы + ДВИЖЕНИЕ жалобы + апеллянт из карточки в запись) | [scripts/court_monitor/bank_intake.py:280](scripts/court_monitor/bank_intake.py:280) |
-| `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1147](scripts/court_monitor/lifecycle.py:1147) |
+| `appeal_objections_deadline` / `stamp_objections_deadline` (срок возражений из движения жалобы) | [scripts/court_monitor/lifecycle.py:1205](scripts/court_monitor/lifecycle.py:1205) |
 | `apply_fi_appellant` / `appellant_is_bank` (апеллянт из карточки 1-й инст.; ре-экспорт `_apply_fi_appellant`/`_appellant_is_bank` в runs.py; **именной податель — «банк» ТОЛЬКО для самого ПАО Сбербанк**: дочки (страхование/НПФ/лизинг) отсеиваются `config.name_is_real_sberbank` с 09.08.2026 — 🏦 в кассации вставал на жалобу ООО «Сбербанк страхование жизни», кейс 8Г-11469/2026; та же проверка в `_cassation_card_to_block` linking.py; сохранённые True у дочек понижает тихая миграция `reclassify_named_appellants_is_bank`) | [scripts/court_monitor/runs.py:1872](scripts/court_monitor/runs.py:1872) |
 | `bank_track_pending` (гейт раскладки 7c — по данным, не по счётчику загрузки) | [scripts/court_monitor/runs.py:2106](scripts/court_monitor/runs.py:2106) |
 | `fi_not_accepted_kind` (иск к производству не принят: возврат / отказ в принятии / передача по подсудности — каналы приёма такое дело не заводят) | [scripts/court_monitor/lifecycle.py:441](scripts/court_monitor/lifecycle.py:441) |
@@ -114,7 +114,7 @@
 | `backfill_appeal_appellants` (тихий бэкфилл апеллянта в стадии appeal: апел. карточка подателя жалобы не публикует — разовый заход в карточку 1-й инст. ТОЛЬКО за «Заявителем жалобы», без событий/дайджеста; штамп `fi.appeal_appellant_checked_at`; капчёвые суды (search_gated) без fi.link пропускаются без HTTP и кэпа — иначе на Урале они вечно съедали весь max_per_run) | [scripts/court_monitor/runs.py:316](scripts/court_monitor/runs.py:316) |
 | `reclassify_roleword_appellants` (пересчёт сохранённых слов-ролей подателя жалобы без HTTP: составные «ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» старый классификатор писал «Иное лицо»/is_bank=False — бейдж вставал на противника банка, кейс 33-5089/2026; голый «ПРЕДСТАВИТЕЛЬ» → is_bank=null, бейдж спрятан) | [scripts/court_monitor/runs.py:1603](scripts/court_monitor/runs.py:1603) |
 | `appellant_role_words` (разбор «Заявителя» жалобы на слова-роли, в т.ч. составные; None = настоящее имя) | [scripts/court_monitor/textutil.py:471](scripts/court_monitor/textutil.py:471) |
-| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:2064](scripts/court_monitor/lifecycle.py:2064) |
+| `migrate_appeal_court_fields` (бэкфилл суда в блоках appeal) | [scripts/court_monitor/lifecycle.py:2138](scripts/court_monitor/lifecycle.py:2138) |
 | `FETCH_DIAG` (класс последнего сетевого ответа: http_NNN/blocked/captcha/breaker) | [scripts/court_monitor/config.py:642](scripts/court_monitor/config.py:642) |
 | `fetch_fail_reason_ru` (причина отказа по-русски, одно место на все каналы) | [scripts/court_monitor/netutil.py:291](scripts/court_monitor/netutil.py:291) |
 | `fetch_card_checked` (карточный fetch с детектом кода) | [scripts/court_monitor/netutil.py:1000](scripts/court_monitor/netutil.py:1000) |
@@ -123,7 +123,7 @@
 | `DIGESTED_ACTS_PATH` / `CASSATION_ACTS_PATH` / `PARSE_HEALTH_PATH` | [scripts/court_monitor/config.py:174](scripts/court_monitor/config.py:174) |
 | Константы state-machine (`FI_ARCHIVE_DAYS`, `CASSATION_*`) | [scripts/court_monitor/config.py:99](scripts/court_monitor/config.py:99) |
 | `update_parse_health` — детектор молчаливой поломки парсеров | [scripts/court_monitor/health.py:160](scripts/court_monitor/health.py:160) |
-| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:2206](scripts/court_monitor/lifecycle.py:2206) |
+| `advance_case_stage` / `is_case_archived` / `migrate_stages` | [scripts/court_monitor/lifecycle.py:2280](scripts/court_monitor/lifecycle.py:2280) |
 | `reactivate_archived_first_instance` (возврат из архива) | [scripts/court_monitor/linking.py:442](scripts/court_monitor/linking.py:442) |
 | `reactivate_bank_archived` (возврат из bank-архива; гейт «уже в активных» по case_court_key + мутация архива на месте — счётчик обязан пересохранить архив, иначе клоны) | [scripts/court_monitor/linking.py:451](scripts/court_monitor/linking.py:451) |
 | `backfill_fi_links` (достройка `fi.link` у дел «с апелляции» — без неё cassation_watch слеп) | [scripts/court_monitor/linking.py:275](scripts/court_monitor/linking.py:275) |
@@ -560,7 +560,7 @@ push с Mac. Для дампа старше суток (в KV его уже не
 
 | Стадия | Что парсим | Что запускает переход |
 |---|---|---|
-| `first_instance` | карточка 1-й инст. | подана апел. жалоба → `awaiting_appeal` · 60 дней от hearing_date (пуст → от `event_date`: иски, возвращённые на стадии принятия, заседания не имеют — кейс 9-1012/2026) без жалобы → архив (с возможностью реактивации при появлении жалобы) |
+| `first_instance` | карточка 1-й инст. | подана апел. жалоба → `awaiting_appeal` · **«Решено» (с 04.09.2026):** окно на жалобу по ГПК — `fi_appeal_window_end` (lifecycle.py): мотивировка (событие «Изготовлено мотивированное решение» → штамп `motivirovka_date` трека → `act_date`) + месяц (ст. 321/108, `month_term_last_day`) + `FI_APPEAL_GRACE_DAYS`=14; без мотивировки в карточке — резолютивка (`decision_date` → `hearing_date` → `event_date`) + 10 раб. дн (ст. 199) + месяц + запас ≈ прежние 60 дн. Прежние плоские `FI_ARCHIVE_DAYS` от заседания хоронили дело раньше срока на жалобу при задержке мотивировки (2-857/2026: заседание 25.06, мотивировка 10.08 → срок 10.09, архив 25.08 — разбор юриста 04.09.2026); правило ОДНО на обе картотеки, фронт зеркалит его в `appealWindowEnd`/`fiAppealWindowPassed` (app.js, константа `APPEAL_GRACE_DAYS` — страж `test_fi_appeal_window.py`). **«Возвращено»:** прежние 60 дней от hearing_date (пуст → от `event_date`: иски, возвращённые на стадии принятия, заседания не имеют — кейс 9-1012/2026). Без жалобы → архив (с возможностью реактивации при появлении жалобы) |
 | `awaiting_appeal` | карточка 1-й инст. — ПОКА не `sent_to_appeal`; после `sent_to_appeal` — целевой дослинк `relink_awaiting_appeal` (запрос к апел-суду по номеру 1-й инст., G2_CASE__CASE_NUMBER_ISS: дела не со стр. 1 поиска по «Сбербанк» — например, заведённые импортёром после регистрации апелляции) | link_cases находит апел. карточку → `appeal` · бессрочно, не архивируется |
 | `appeal` | карточка апел. суда | опубликован акт ИЛИ 30 дней от апел. заседания без акта → `cassation_watch` · не архивируется по времени |
 | `cassation_watch` | карточка 1-й инст. (ищем касс. жалобу) — КРОМЕ дел, где банк «Третье лицо»: их не парсим, ждём дело на 7kas | касс. жалоба или направление в кассац. суд → `cassation_pending` · 120 дней от апел. заседания → архив |
@@ -726,7 +726,10 @@ test_frontend_appeal_act.py).
 
 ⚠ Фронт ([app.js:11](app.js:11)) держит свою константу `ARCHIVE_DAYS` —
 синхронизировать вручную при правке `FI_ARCHIVE_DAYS`, иначе фронт
-будет прятать дела раньше, чем парсер их архивирует.
+будет прятать дела раньше, чем парсер их архивирует. С 04.09.2026 решённые
+дела 1-й инст. фронт прячет по зеркалу `appealWindowEnd` (`APPEAL_GRACE_DAYS`
+= `FI_APPEAL_GRACE_DAYS`, страж в test_fi_appeal_window.py); `ARCHIVE_DAYS`
+остаётся у «Возвращено» и CSV-legacy.
 
 `migrate_stages()` идемпотентно подтягивает старые записи (до появления
 state-machine) под новую модель при каждом запуске.
@@ -884,7 +887,7 @@ drawer; номера не уникальны между судами — пот�
   ПРИ ЗАВЕДЕНИИ** (дата из `now_iso`, СРЕЗАННАЯ до `YYYY-MM-DD`: полный
   таймстамп `date.fromisoformat` не разбирает, и правка вышла бы холостой) —
   карточку читает сам импорт, а ветка force-parse в `should_skip_case`
-  ([lifecycle.py:3046](scripts/court_monitor/lifecycle.py:3046)) стоит ПЕРВОЙ и
+  ([lifecycle.py:3120](scripts/court_monitor/lifecycle.py:3120)) стоит ПЕРВОЙ и
   без штампа перебивает всё остальное: и будущее заседание, и оба недельных
   ритма. Разгон Урала 14.08.2026 это и вскрыл — 265 карточек трека в очереди
   при 154 делах с заседанием впереди (после правки 37, пропуски только
@@ -901,7 +904,11 @@ drawer; номера не уникальны между судами — пот�
 - **Архив** (`_is_bank_track_archived` — обычные 60 дн убивали бы ожидание
   ИЛ): ИЛ выдан +14 дн → архив (**заочное решение +90 дн**,
   `BANK_DEFAULT_WRIT_ARCHIVE_DAYS`); без ИЛ — потолок 180 дн от вступления в
-  силу; возврат/прекращено +30 дн. Признак жалобы всегда держит в активных.
+  силу; в иске отказано — окно на апел. жалобу `fi_appeal_window_end` (общее с
+  основной картотекой, с 04.09.2026); возврат/прекращено/отказ в принятии/
+  передача/без рассмотрения +30 дн (`BANK_RETURNED_ARCHIVE_DAYS`, окно на
+  ЧАСТНУЮ жалобу — 15 дн ст. 332, поэтому месяц + запас сюда не применяется).
+  Признак жалобы всегда держит в активных.
   ⚠️ Заочность в этой ветке ПЕРЕСЧИТЫВАЕТСЯ по событиям, а не читается штампом
   `fi["default_judgment"]`: у архивных записей штампа нет вовсе — именно
   поэтому три заочных дела Сургутского гор. уехали в архив по 14-дневному окну
@@ -1035,8 +1042,10 @@ drawer; номера не уникальны между судами — пот�
 - **Листа не будет** (`bank_writ_expected`, с 31.07.2026 — находки юриста в
   прогоне 30.07): такие дела ИЛ не породят, и держать их в очереди ожидания
   бессмысленно. **(1) В иске ОТКАЗАНО** — ждём только апел. жалобу банка:
-  архив через `BANK_DENIED_ARCHIVE_DAYS=30` от **мотивировки** (ветка стоит ДО
-  поиска листов, месячный срок ст. 321 ГПК течёт от неё). **(2) ЛЮБОЕ
+  архив по окну `fi_appeal_window_end`, ОБЩЕМУ с основной картотекой (с
+  04.09.2026: месяц ст. 321 ГПК от **мотивировки** + `FI_APPEAL_GRACE_DAYS`=14;
+  прежняя `BANK_DENIED_ARCHIVE_DAYS=30` шла без запаса на почтовую подачу;
+  ветка стоит ДО поиска листов). **(2) ЛЮБОЕ
   процессуальное завершение** — присоединение к другому делу (ст. 151 ГПК),
   возврат, отказ в ПРИНЯТИИ, передача по подсудности: вид решает
   `classify_fi_termination` (у merged своя ветка окна — `BANK_MERGED_ARCHIVE_DAYS=30`
@@ -1678,7 +1687,7 @@ GitHub Actions workflows запускаются из UI репозитория (
 
 Отвечает на вопрос юриста «пользуются ли инструментом коллеги». До него следов визита не было **нигде**: дашборд — публичная страница GitHub Pages (логов доступа GitHub не даёт), а Worker при обычном открытии не получал ни одного запроса (`/subscribe` летит только у уже существующей push-подписки, `/profile/get` — только при связке устройств, данные грузятся с Pages мимо Worker'а); единственным следом был `sub.last_seen_at` — только у подписчиков, с 12-часовой гранулярностью и без истории. **Счёт АНОНИМНЫЙ** (решение юриста): различаются БРАУЗЕРЫ, люди не идентифицируются — ни привязки к подпискам и профилям, ни имён.
 
-- **Пинг** — `pingVisit` ([app.js:4824](app.js:4824)), единственный запрос фронта к Worker'у на каждом визите. Тело — ровно `{v, own}`: `v` из `lsKey('visit_id')` (⚠️ **обязательно через `lsKey`** — обе территории на одном origin `selivanovas.github.io`, иначе одно устройство считалось бы тем же самым на ХМАО и на Урале), `own` — булев флаг владельца из наличия `owner_secret` (сам секрет на публичный роут не уходит). `Content-Type: text/plain` — CORS-safelisted, браузер не шлёт preflight и визит стоит один запрос вместо двух. Гейт 30 минут, штамп ставится ДО запроса (с лежащим Worker'ом иначе пинг на каждую перезагрузку). Всё в `try/catch`, ранние выходы по пустому `WORKER_HOSTS` и `!navigator.onLine`. Точек вызова ДВЕ — старт и `visibilitychange`: установленный PWA живёт открытым сутками, и без второй следующий день не засчитался бы вовсе.
+- **Пинг** — `pingVisit` ([app.js:4873](app.js:4873)), единственный запрос фронта к Worker'у на каждом визите. Тело — ровно `{v, own}`: `v` из `lsKey('visit_id')` (⚠️ **обязательно через `lsKey`** — обе территории на одном origin `selivanovas.github.io`, иначе одно устройство считалось бы тем же самым на ХМАО и на Урале), `own` — булев флаг владельца из наличия `owner_secret` (сам секрет на публичный роут не уходит). `Content-Type: text/plain` — CORS-safelisted, браузер не шлёт preflight и визит стоит один запрос вместо двух. Гейт 30 минут, штамп ставится ДО запроса (с лежащим Worker'ом иначе пинг на каждую перезагрузку). Всё в `try/catch`, ранние выходы по пустому `WORKER_HOSTS` и `!navigator.onLine`. Точек вызова ДВЕ — старт и `visibilitychange`: установленный PWA живёт открытым сутками, и без второй следующий день не засчитался бы вовсе.
 - **Хранение** — `visit:d:<ГГГГ-ММ-ДД>:<vid>` = `"1"`, TTL 60 дней, всё содержательное в `metadata` (`{t, os, own}`). ⚠️ **Ровно одна запись KV на (устройство × день)**: перед `put` стоит `get` того же ключа (`handleVisit`, [worker.js:252](cloudflare-worker/worker.js:252)) — бюджет free-tier 1000 writes в день ОБЩИЙ на аккаунт, а территорий две (инцидент 17.07.2026), и прорыв потолка положил бы заодно `/subscribe` и журнал прогонов. Цена: счётчика «сколько раз за день открыл» НЕТ, только факт «в этот день заходил». Гонок нет by design — ключ принадлежит одному устройству; схему «общий ключ дня со списком внутри» не применять (KV перезаписывает значение целиком, CAS в нём нет). День считается по территориальному времени (`VISIT_TZ_OFFSET_H = 5`), не по UTC — иначе заход в 02:00 по местному падал бы во вчера.
 - **Приватности ради** в KV не пишутся ни сырой IP (`CF-Connecting-IP`), ни `request.cf`, ни сырой `User-Agent` — только грубый класс устройства (`visitorDeviceClass`, намеренно короче `detectDevice` админки: только ОС, без браузера — это не второй экземпляр тех же правил и синхронизировать их не нужно). Под корпоративным NAT Сбера адрес у всех общий и людей всё равно не различает.
 - **Предохранители**: `/visit` — единственный путь, пишущий в KV без аутентификации, поэтому у него есть выключатель `VISITS_ENABLED` в `[vars]` `wrangler.toml` (`"0"` гасит запись, применяется после `wrangler deploy`) и гард по `Origin` (фильтр случайных сканеров, а не защита — вне браузера заголовок подделывается).
