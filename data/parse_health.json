@@ -2,30 +2,6 @@
  "version": 1,
  "updated_at": "2026-09-04T08:56:56",
  "sources": {
-  "appeal:oblsud": {
-   "counts": [
-    22,
-    22,
-    22,
-    21,
-    21,
-    21,
-    21,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ],
-   "zero_streak": 7,
-   "fail_streak": 0,
-   "alerted_zero": true,
-   "last_count": 0,
-   "last_run_at": "2026-09-04T08:56:56",
-   "label": "Апелляция (Суд ХМАО-Югры)"
-  },
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
     0,
