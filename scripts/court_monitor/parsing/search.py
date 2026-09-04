@@ -83,8 +83,27 @@ def _is_real_sberbank(name: str) -> bool:
     return "сбербанк" in cleaned
 
 
-def determine_bank_role_from_participants(participants: list[dict]) -> str:
+# Синонимы процессуальных ролей: приказное/особое/административное
+# производство подписывает стороны иначе, чем исковое. Без них у дел
+# категории «прочие» стороны оставались пустыми, и запись в дайджесте
+# схлопывалась до голого номера (инцидент 24.07.2026, 8Г-12479/2026 —
+# кассация Урала: в карточке 7kas роли были не ИСТЕЦ/ОТВЕТЧИК).
+# «АДМИНИСТРАТИВНЫЙ ИСТЕЦ/ОТВЕТЧИК» отдельно не перечисляем: подстроки
+# ИСТЕЦ/ОТВЕТЧИК ловит первый проход.
+_PLAINTIFF_ROLE_SYNONYMS = ("ЗАЯВИТЕЛЬ", "ВЗЫСКАТЕЛЬ")
+_DEFENDANT_ROLE_SYNONYMS = ("ЗАИНТЕРЕСОВАННОЕ ЛИЦО", "ДОЛЖНИК")
+
+
+def determine_bank_role_from_participants(
+    participants: list[dict], synonyms: bool = False,
+) -> str:
     """Вернуть фактическую роль ПАО Сбербанк по списку участников карточки.
+
+    synonyms=True — понимать и роли приказного производства (ВЗЫСКАТЕЛЬ →
+    Истец, ДОЛЖНИК → Ответчик): нужно кассации президиума облсуда по делам
+    мировых судей (04.09.2026, карточка 4Г-66/2026 — банк «ВЗЫСКАТЕЛЬ»
+    читался как «Третье лицо»). Карточки 1-й инстанции зовут без флага —
+    роль банка в приказных делах основной картотеки не меняется.
 
     participants: список dict с ключами 'role' (вид участника, напр. ИСТЕЦ /
     ОТВЕТЧИК / ТРЕТЬЕ ЛИЦО) и 'name' (наименование стороны).
@@ -107,6 +126,10 @@ def determine_bank_role_from_participants(participants: list[dict]) -> str:
             found_roles.add("Ответчик")
         elif "ИСТЕЦ" in role_up or "ЗАЯВИТЕЛЬ" in role_up:
             found_roles.add("Истец")
+        elif synonyms and any(s in role_up for s in _DEFENDANT_ROLE_SYNONYMS):
+            found_roles.add("Ответчик")
+        elif synonyms and any(s in role_up for s in _PLAINTIFF_ROLE_SYNONYMS):
+            found_roles.add("Истец")
         else:
             found_roles.add("Третье лицо")
     if "Ответчик" in found_roles:
@@ -116,17 +139,6 @@ def determine_bank_role_from_participants(participants: list[dict]) -> str:
     if "Третье лицо" in found_roles:
         return "Третье лицо"
     return ""
-
-
-# Синонимы процессуальных ролей: приказное/особое/административное
-# производство подписывает стороны иначе, чем исковое. Без них у дел
-# категории «прочие» стороны оставались пустыми, и запись в дайджесте
-# схлопывалась до голого номера (инцидент 24.07.2026, 8Г-12479/2026 —
-# кассация Урала: в карточке 7kas роли были не ИСТЕЦ/ОТВЕТЧИК).
-# «АДМИНИСТРАТИВНЫЙ ИСТЕЦ/ОТВЕТЧИК» отдельно не перечисляем: подстроки
-# ИСТЕЦ/ОТВЕТЧИК ловит первый проход.
-_PLAINTIFF_ROLE_SYNONYMS = ("ЗАЯВИТЕЛЬ", "ВЗЫСКАТЕЛЬ")
-_DEFENDANT_ROLE_SYNONYMS = ("ЗАИНТЕРЕСОВАННОЕ ЛИЦО", "ДОЛЖНИК")
 
 
 def parties_from_participants(participants: list[dict]) -> tuple[str, str]:

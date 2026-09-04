@@ -67,6 +67,23 @@ CASSATION_COURT = CourtConfig(
     court_type="cassation",
 )
 
+# Президиум Суда ХМАО-Югры — кассация по делам МИРОВЫХ судей (ГПК с 05.2026;
+# раздел `delo_id=2800001` на сайте окружного суда, номера «4Г-N/YYYY»).
+# Поиск раздела за проверочным кодом (проба 04.09.2026) → дела заводит дамп
+# выдачи (админка → «Импорт», третья закреплённая строка), карточки открыты
+# и перечитываются фазой 4d по `cassation.court_domain`. Автопоиска по
+# президиуму в прогоне нет по построению (фаза 4c ходит только на КСОЮ).
+PRESIDIUM_COURTS: tuple[CourtConfig, ...] = (
+    CourtConfig(
+        name="Президиум Суда ХМАО-Югры",
+        domain="oblsud--hmao.sudrf.ru",
+        delo_id=2800001,
+        court_type="cassation",
+        search_gated=True,
+        search_disabled=True,
+    ),
+)
+
 REGION = RegionConfig(
     code="hmao",
     name="ХМАО-Югра",
@@ -74,6 +91,7 @@ REGION = RegionConfig(
     appeal_courts=(APPEAL_COURT,),
     first_instance_courts=FIRST_INSTANCE_COURTS,
     cassation_court=CASSATION_COURT,
+    presidium_courts=PRESIDIUM_COURTS,
     # Длинная форма на 7kas всегда содержит явный маркер региона — guard от
     # одноимённых судов чужих регионов («Октябрьский районный суд» есть и в
     # Екатеринбурге). См. match_region_first_instance.

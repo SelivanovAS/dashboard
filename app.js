@@ -777,10 +777,13 @@ function jsonToCase(j){
   // fallback для записей до миграции); первая инстанция — на свой.
   let link='';
   if(isCass){
+    // Суд — из БЛОКА (cassation.court_domain/delo_id): с 04.09.2026 кассация
+    // бывает и в президиуме облсуда (дела мировых судей), а region.cassation —
+    // только КСОЮ; фолбэк на регион — для блоков до миграции.
     const ks=regionCassation();
-    link=ks
-      ?buildCourtLink(cs.link,ks.domain,ks.delo_id,1,ks.new)
-      :buildCourtLink(cs.link,'7kas.sudrf.ru',2800001,1,2800001);
+    const csDom=cs.court_domain||(ks&&ks.domain)||'7kas.sudrf.ru';
+    const csDid=cs.delo_id||(ks&&ks.delo_id)||2800001;
+    link=buildCourtLink(cs.link,csDom,csDid,1,cs.delo_id||(ks&&ks.new)||2800001);
   }else if(isAppeal){
     link=buildCourtLink(ap.link,ap.court_domain||'oblsud--hmao.sudrf.ru',ap.delo_id||5);
   }else{
@@ -1137,7 +1140,9 @@ function getResultFavor(c){
   if(!c.result||c.result==='pending')return 'neutral';
   // Банк — 3-е лицо: исход по существу ему безразличен, кроме случая, когда он сам апеллировал.
   if(c.sberbankRole==='third_party'){
-    if(c.appellant!=='bank')return 'neutral';
+    const tpApp=(c.resultSource==='cassation'&&c.cassAppellant)
+      ?(c.cassAppellantIsBank?'bank':'other'):c.appellant;
+    if(tpApp!=='bank')return 'neutral';
     if(c.result==='returned'||c.result==='withdrawn'||c.result==='dismissed'||c.result==='unconsidered')return 'unfavorable';
     if(c.result==='reversed'||c.result==='partial')return 'favorable';
     if(c.result==='upheld')return 'unfavorable';
@@ -1154,7 +1159,12 @@ function getResultFavor(c){
     }
     return 'neutral';
   }
-  const app=c.appellant;
+  // В кассации исход ведёт КАССАТОР: у дел, заведённых с карточки кассации
+  // (discovery 7kas, дамп президиума — 04.09.2026), блока апелляции нет и
+  // c.appellant пуст — берём кассатора из блока cassation.
+  const app=(c.resultSource==='cassation'&&c.cassAppellant)
+    ?(c.cassAppellantIsBank?'bank':'other')
+    :c.appellant;
   if(!app)return 'neutral';
   // Жалоба не достигла цели — первоначальное решение устояло.
   // Для апеллянта это плохо, для противоположной стороны — хорошо.

@@ -3268,12 +3268,14 @@ var impCourts = [];            // [{name, domain, search_gated, srv_num, delo_id
 // Домены апел-судов территории: по ним сводка результата говорит про ДЕЛА
 // АПЕЛЛЯЦИИ, а не про иски банка (счётчики у каналов общие, смысл — разный).
 var impAppealDomains = {};
+var impPresidiumByDomain = {}; // домен → запись президиума (04.09.2026)
 var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
 var acRegion = null;           // весь region-блок cases.json — точечному добавлению
 var impPollTimer = null;
 var impSelectedFile = null;    // файл на отправку (из input или drag-n-drop)
 var impSending = false;        // идёт отправка/импорт — кнопка заблокирована
-var impDetectedHosts = [];     // sudrf-хосты текущей вставки/файла (автоопределение суда)
+var impDetectedHosts = [];
+var impDetectedDeloIds = []; // разделы из href карточек вставки (04.09.2026)     // sudrf-хосты текущей вставки/файла (автоопределение суда)
 var impDetectSeq = 0;          // защита от гонки async-чтения файла
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
 var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
@@ -3288,11 +3290,15 @@ var impDetectedCaseLinks = 0;  // ссылок на карточки дел во
 // стояло с 16.07.2026. Сам ДАМП по-прежнему уходит на сервер с голым доменом:
 // фактическую площадку дела импортёр берёт из href карточек (_stamp_court_ids),
 // а хост и delo_id у площадок совпадают.
-function impCourtKey(c) { return c.domain + "|" + String(c.srv_num || 1); }
+// С 04.09.2026 на домене облсуда живут ДВА раздела — апелляция и президиум
+// (кассация по делам мировых судей): ключ президиума несёт хвост «|cassation»,
+// иначе два <option> получили бы одно значение и select не различал бы их.
+function impCourtKey(c) { return c.domain + "|" + String(c.srv_num || 1) + (c.section === "cassation" ? "|cassation" : ""); }
 // Оператор по подписи выбирает, какой раздел сайта открывать: у апелляции своя
-// картотека (delo_id=5), и «Свердловский областной суд» без пометки читался бы
-// как суд 1-й инстанции.
+// картотека (delo_id=5), у президиума — раздел кассации (2800001), и
+// «Свердловский областной суд» без пометки читался бы как суд 1-й инстанции.
 function impCourtLabel(c) {
+  if (c && c.section === "cassation") return (c.name || "") + " — президиум (кассация)";
   return (c && c.name ? c.name : "") + (c && c.pinned ? " — апелляция" : "");
 }
 function impDomainOf(key) { return String(key || "").split("|")[0]; }
@@ -3357,14 +3363,27 @@ async function loadImportCourts() {
       return { name: c.name, domain: c.domain, srv_num: c.srv_num || 1,
                delo_id: c.delo_id, search_gated: true, pinned: true };
     });
+    // Президиум облсуда (кассация по делам мировых судей, 04.09.2026) — тот
+    // же домен, что у апелляции, другой раздел (delo_id=2800001). Закреплён,
+    // как апелляция; раздел на сервере выбирает сам дамп (delo_id в ссылках
+    // карточек), оператор по-прежнему шлёт голый домен.
+    const pres = (acRegion && Array.isArray(acRegion.presidium_courts)) ? acRegion.presidium_courts : [];
+    const gatedPresidium = pres.filter(function (c) {
+      return c && c.search_gated && c.domain;
+    }).map(function (c) {
+      return { name: c.name, domain: c.domain, srv_num: c.srv_num || 1,
+               delo_id: c.delo_id, search_gated: true, pinned: true, section: "cassation" };
+    });
     impAppealDomains = {};
     ap.forEach(function (c) { if (c && c.domain) impAppealDomains[c.domain] = true; });
+    impPresidiumByDomain = {};
+    pres.forEach(function (c) { if (c && c.domain) impPresidiumByDomain[c.domain] = c; });
     fi.concat(ap).forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
     });
     acFillCourts(fi);
     acUpdateState(); // ссылки могли ждать реестра для клиентской проверки
-    if (!gated.length && !gatedAppeal.length) {
+    if (!gated.length && !gatedAppeal.length && !gatedPresidium.length) {
       // Регион без капчёвых судов (ХМАО): дамповая часть не нужна, но
       // вкладка живёт — точечное добавление и общая история работают всем.
       var form = document.querySelector("#import .imp-form");
@@ -3388,7 +3407,7 @@ async function loadImportCourts() {
     // постоянные судебные присутствия (Пышма у Камышловского, Ачит у
     // Красноуфимского) — отдельные площадки того же сайта со своей
     // картотекой, и их дела не импортировал никто. Ключ строки — «домен|srv».
-    impCourts = gatedAppeal.concat(gated);
+    impCourts = gatedAppeal.concat(gatedPresidium).concat(gated);
     const sel = document.getElementById("imp-court");
     sel.innerHTML = impCourts.map(function (c) {
       return '<option value="' + escHtml(impCourtKey(c)) + '">' + escHtml(impCourtLabel(c)) + '</option>';
@@ -3451,17 +3470,29 @@ function impSourceLabel(item) {
 // разный — «карточка не открылась» здесь значит «потеряно дело апелляции», а
 // не «иск банка». Отличаем по домену записи: реестр апел-судов территории
 // админка уже держит (impAppealDomains).
+// С 04.09.2026 раздел (section) шлёт сам импортёр: на домене облсуда живут и
+// апелляция, и президиум, и подпись по домену была бы ложной. Старые записи
+// журнала без section — по домену, как раньше.
 function impIsAppeal(item) {
+  if (item && item.section) return item.section === "appeal";
   return !!(item && item.court_domain && impAppealDomains[item.court_domain]);
+}
+function impIsPresidium(item) {
+  return !!(item && item.section === "cassation");
 }
 function impResultParts(item) {
   var parts = ["+" + (item.added || 0) + " в картотеку"];
   var problems = [];
   var skipped = [];
   var isAp = impIsAppeal(item);
+  var isPres = impIsPresidium(item);
   // Дело уехало наверх по УЖЕ известному нам делу 1-й инстанции: не новое,
   // но и не «уже в базе» — апелляция добавлена в существующую запись.
-  if (item.linked) parts.push(nPlural(item.linked,
+  // У президиума — кассация влилась в известное дело (по УИД).
+  if (item.linked) parts.push(isPres
+    ? nPlural(item.linked, "кассация связана с известным делом",
+              "кассации связаны с известными делами", "кассаций связано с известными делами")
+    : nPlural(item.linked,
     "дело связано с 1-й инстанцией", "дела связаны с 1-й инстанцией",
     "дел связано с 1-й инстанцией"));
   if (item.added_bank) parts.push("+" + item.added_bank + " в иски банка");
@@ -3493,7 +3524,7 @@ function impResultParts(item) {
   // ближайший слот — только в понедельник.
   if (item.fetch_fail) {
     problems.push("⛔ " + item.fetch_fail
-      + (isAp ? " дел апелляции не заведено " : " исков банка не заведено ")
+      + (isPres ? " дел кассации (президиум) не заведено " : isAp ? " дел апелляции не заведено " : " исков банка не заведено ")
       + "(карточка не открылась) — " + impRetryPromise(item)
       + "; если к вечеру не появятся, вставьте дамп заново");
   }
@@ -3523,6 +3554,9 @@ function impResultParts(item) {
   if (item.no_link) skipped.push(item.no_link + " без ссылки");
   if (item.subsidiary) skipped.push(nPlural(item.subsidiary,
     "дочка Сбера", "дочки Сбера", "дочек Сбера"));
+  // Президиум: выдача по «Сбербанк» тянет дела 2019 года (президиум до
+  // реформы) — отсеяны по дате поступления, карточки не читались.
+  if (item.skipped_old) skipped.push(item.skipped_old + " до реформы ГПК (05.2026)");
   return { parts: parts, problems: problems, skipped: skipped };
 }
 // Вердикт одной фразой: получилось / переделывать / пусто. Это первое (а часто
@@ -3653,7 +3687,8 @@ function renderImportHistory(items) {
       ? ("📌 точечно · " + (it.items_count || "?") + " стр.")
       : it.kind === "writ_waiver"
       ? ("🚫 лист не нужен · " + nPlural(it.items_count || 0, "дело", "дела", "дел"))
-      : (impCourtNameByDomain[it.court_domain] || it.court_domain || "?");
+      : ((impCourtNameByDomain[it.court_domain] || it.court_domain || "?")
+         + (impIsPresidium(it) ? " (президиум)" : ""));
     // Построчный отчёт импортёра ([ADDED]/[ALREADY]/[SKIPPED ROLE]/…) хранится
     // в записи журнала — показываем свёрткой, как в live-блоке после отправки.
     var linesHtml = "";
@@ -4172,6 +4207,16 @@ function impDetectDomains(html) {
 function impCourtInDropdown(domain) {
   return impCourts.some(function (c) { return c.domain === domain; });
 }
+// delo_id из href карточек (зеркало _CARD_DELO_ID_RE импортёра): на домене
+// облсуда два раздела — апелляция (5) и президиум (2800001), и хост один
+// на оба. Только ссылки с case_id — это карточки, а не меню разделов.
+function impDetectDeloIds(html) {
+  var ids = [];
+  var re = /case_id=\\d+[^"'\\s<>]*?&(?:amp;)?delo_id=(\\d+)/gi;
+  var m;
+  while ((m = re.exec(html)) !== null) { if (ids.indexOf(m[1]) === -1) ids.push(m[1]); }
+  return ids;
+}
 async function impRunDetect() {
   var seq = ++impDetectSeq;
   var html = "";
@@ -4182,6 +4227,7 @@ async function impRunDetect() {
   }
   if (seq !== impDetectSeq) return; // источник сменился, пока читали файл
   impDetectedHosts = html ? impDetectDomains(html) : [];
+  impDetectedDeloIds = html ? impDetectDeloIds(html) : [];
   // Сколько на странице ссылок именно на КАРТОЧКИ дел. Раньше индикатор
   // считал querySelectorAll("a[href]") — то есть меню, «хлебные крошки» и
   // пейджер вместе с делами, и на обычной выдаче показывал «ссылок на дела:
@@ -4193,6 +4239,19 @@ async function impRunDetect() {
   // вставил выдачу другого». Ручной выбор автоматика не перебивает.
   // Сравниваем по ДОМЕНУ: у площадок одного суда хост общий, и переключать
   // выбранное присутствие на первую площадку из-за этого нельзя.
+  // Раздел по delo_id (04.09.2026): один хост, один раздел в ссылках — берём
+  // суд домена с этим delo_id (апелляция vs президиум облсуда); хост тот же,
+  // поэтому доменная ветка ниже его не переключила бы.
+  if (impDetectedHosts.length === 1 && impDetectedDeloIds.length === 1 && !impCourtTouched) {
+    var bySection = null;
+    for (var di = 0; di < impCourts.length; di++) {
+      if (impCourts[di].domain === impDetectedHosts[0]
+          && String(impCourts[di].delo_id) === impDetectedDeloIds[0]) { bySection = impCourts[di]; break; }
+    }
+    if (bySection && document.getElementById("imp-court").value !== impCourtKey(bySection)) {
+      impPickCourt(impCourtKey(bySection));
+    }
+  }
   if (impDetectedHosts.length === 1 && impCourtInDropdown(impDetectedHosts[0])
       && !impCourtTouched
       && impDomainOf(document.getElementById("imp-court").value) !== impDetectedHosts[0]) {
@@ -4495,6 +4554,16 @@ function acCheckLink(url) {
   }
   if (!acRegion) return "";
   var i;
+  // Президиум облсуда (кассация по делам мировых судей, 04.09.2026) — тот же
+  // хост, что у апелляции; различает раздел delo_id=2800001 в ссылке.
+  var pres = acRegion.presidium_courts || [];
+  for (i = 0; i < pres.length; i++) {
+    if ((pres[i].domain || "").toLowerCase() === host
+        && /[?&]delo_id=2800001/.test(u.search)) {
+      return "это карточка президиума (кассация по делу мирового судьи) — такие дела "
+        + "заводятся дампом выдачи раздела «Кассация» в секции «Импорт»";
+    }
+  }
   var appeals = acRegion.appeal_courts || [];
   for (i = 0; i < appeals.length; i++) {
     if ((appeals[i].domain || "").toLowerCase() === host) {

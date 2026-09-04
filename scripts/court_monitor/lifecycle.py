@@ -1879,6 +1879,13 @@ def dedupe_fi_changes(fi_changes: list[dict]) -> list[dict]:
     return out
 
 
+def is_presidium_cassation(cs: dict | None) -> bool:
+    """Блок cassation принадлежит президиуму облсуда (кассация по делам
+    мировых судей, с 04.09.2026), а не КСОЮ — по `court_domain`."""
+    from court_monitor.courts import presidium_court_by_domain  # ленивый: без цикла
+    return presidium_court_by_domain((cs or {}).get("court_domain")) is not None
+
+
 def advance_case_stage(case: dict) -> str | None:
     """Выполнить возможный переход стадии для дела. Возвращает имя предыдущей
     стадии, если переход произошёл, иначе None.
@@ -1948,8 +1955,12 @@ def advance_case_stage(case: dict) -> str | None:
     if stage == "cassation":
         # Отменено и направлено на новое — переходим в awaiting_relink (ждём
         # появления новой карточки в нижестоящей инстанции). Архивации нет:
-        # это re-open того же дела на втором круге.
-        if cs.get("outcome") == "cassation_remanded":
+        # это re-open того же дела на втором круге. ⚠️ Президиум облсуда
+        # (дела мировых судей, 04.09.2026): нижестоящих инстанций мы не
+        # мониторим — awaiting_relink повис бы навечно; remanded там идёт
+        # по общим окнам архива (is_case_archived).
+        if (cs.get("outcome") == "cassation_remanded"
+                and not is_presidium_cassation(cs)):
             case["current_stage"] = "awaiting_relink"
             return "cassation"
         return None
@@ -2032,7 +2043,7 @@ def is_case_archived(case: dict) -> bool:
     if stage == "cassation":
         # Финальные исходы (не remanded) → можно архивировать.
         outcome = cs.get("outcome") or ""
-        if outcome == "cassation_remanded":
+        if outcome == "cassation_remanded" and not is_presidium_cassation(cs):
             return False  # ждём awaiting_relink, advance_case_stage переведёт.
         if outcome and outcome != "cassation_other":
             # Опубликован акт: 30 дней после act_date → архив.
@@ -2501,7 +2512,10 @@ def dedupe_cassation_by_internal_number(cases: list[dict]) -> int:
         cass = c.get("cassation") or {}
         cn = (cass.get("case_number") or "").strip()
         if cn:
-            groups.setdefault(cn, []).append(i)
+            # Ключ — ПАРА (домен суда, номер): «4Г-N/YYYY» двух президиумов
+            # Урала совпадают; пустой домен = КСОЮ (блоки до 04.09.2026).
+            dom = (cass.get("court_domain") or "7kas.sudrf.ru").strip().lower()
+            groups.setdefault(f"{dom}|{cn}", []).append(i)
 
     def _score(c: dict) -> tuple:
         cass = c.get("cassation") or {}

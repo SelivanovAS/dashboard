@@ -16,7 +16,8 @@ from court_monitor import config
 from court_monitor.config import log, cold_archive_path
 from court_monitor.courts import (
     CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
-    match_fi_court_by_short_name,
+    match_fi_court_by_short_name, cassation_court_by_domain,
+    presidium_court_by_domain, canon_sudrf_domain,
 )
 from court_monitor.regions import get_region
 from court_monitor.regions.base import _eyo
@@ -606,11 +607,24 @@ def _cassation_card_to_block(info: dict) -> dict:
                     f"не разобрал даты (suspended_until={suspended_until!r}, "
                     f"hearing_date={hd_raw!r})"
                 )
+    # Суд блока — по домену карточки: президиум облсуда (кассация по делам
+    # мировых судей, с 04.09.2026) или КСОЮ. Пустой/7kas → CASSATION_COURT —
+    # все прежние блоки байт-в-байт. Без этого дело президиума при первой
+    # же перечитке «откатилось» бы на 7kas.
+    court = cassation_court_by_domain(info.get("court_domain"))
     block = {
-        "case_number": info.get("cassation_internal_number", ""),
+        # У президиума строки выдачи при перечитке нет — номер берём с
+        # заголовка карточки («ДЕЛО № 4Г-66/2026»).
+        "case_number": (
+            info.get("cassation_internal_number")
+            or info.get("page_case_number", "")
+        ),
         "cassation_number": info.get("cassation_number", ""),
-        "court": CASSATION_COURT.name,
-        "court_domain": CASSATION_COURT.domain,
+        "court": court.name,
+        "court_domain": court.domain,
+        # delo_id раздела — фронту и Worker-календарю для ссылки на карточку
+        # (у президиума и КСОЮ он один, 2800001, но домены разные).
+        "delo_id": court.delo_id,
         "judge": info.get("judge", ""),
         "filing_date": info.get("filing_date", ""),
         "fi_decision_date": info.get("fi_decision_date", ""),
@@ -638,6 +652,24 @@ def _cassation_card_to_block(info: dict) -> dict:
         "discovered_via_cassation": False,
     }
     return block
+
+
+def _cass_key(domain: str | None, case_number: str | None) -> str:
+    """Ключ кассационного производства — ПАРА (домен суда, номер).
+
+    «4Г-N/YYYY» уникален лишь внутри одного президиума: на Урале два
+    президиума (СВД и ЯНАО) выдают одинаковые номера; голый номер сливал бы
+    чужие дела. Пустой домен → КСОЮ (все блоки до 04.09.2026)."""
+    cn = (case_number or "").strip()
+    if not cn:
+        return ""
+    dom = canon_sudrf_domain(domain) or CASSATION_COURT.domain
+    return f"{dom}|{cn}"
+
+
+def is_presidium_find(info: dict) -> bool:
+    """Находка (parse_cassation_card) — с карточки президиума облсуда."""
+    return presidium_court_by_domain(info.get("court_domain")) is not None
 
 
 def link_cassation_cases(
@@ -734,10 +766,14 @@ def link_cassation_cases(
         fi_idx: dict[str, int], cs_idx: dict[str, int], u_idx: dict[str, int],
         u_prio: dict[str, int],
     ) -> None:
-        _put_idx(fi_idx, c.get("id", ""), i)
         fi = c.get("first_instance") or {}
-        if fi.get("case_number"):
-            _put_idx(fi_idx, fi["case_number"], i)
+        # Дело мирового судьи (кассация президиума): его FI-номер
+        # «2-1543-2803/2019» в индекс НЕ кладём — мирового судью мы не
+        # мониторим, а совпадение с районным номером всегда ложное.
+        if not fi.get("magistrate"):
+            _put_idx(fi_idx, c.get("id", ""), i)
+            if fi.get("case_number"):
+                _put_idx(fi_idx, fi["case_number"], i)
         appeal = c.get("appeal") or {}
         if appeal.get("case_number"):
             # Кассация может прийти на дело, которое мы знаем только по
@@ -745,9 +781,9 @@ def link_cassation_cases(
             # индекс тоже их видит.
             _put_idx(fi_idx, appeal["case_number"], i)
         cass = c.get("cassation") or {}
-        cn = (cass.get("case_number") or "").strip()
-        if cn:
-            cs_idx.setdefault(cn, i)
+        ck = _cass_key(cass.get("court_domain"), cass.get("case_number"))
+        if ck:
+            cs_idx.setdefault(ck, i)
         for uid in (
             fi.get("judicial_uid"),
             appeal.get("judicial_uid"),
@@ -795,31 +831,37 @@ def link_cassation_cases(
             )
             continue
         cass_block = _cassation_card_to_block(info)
-        # Первичный матч — по стабильному `8Г-...`. Сначала пробуем сматчить
-        # по нему, и только если касс. карточка вообще новая (нет в БД) —
-        # идём через fi_case_number, который может «плавать».
-        cass_int_num = (info.get("cassation_internal_number") or "").strip()
-        idx = cass_index.get(cass_int_num) if cass_int_num else None
+        # Президиум облсуда: 1-я инстанция — мировой судья, которого в базе
+        # быть не может → матч по FI-номеру всегда ложный, только (домен,
+        # номер) и УИД.
+        presidium = is_presidium_find(info)
+        # Первичный матч — по стабильному `8Г-...`/`4Г-…` (пара с доменом).
+        # Сначала пробуем сматчить по нему, и только если касс. карточка
+        # вообще новая (нет в БД) — идём через fi_case_number, который может
+        # «плавать».
+        cass_int_num = (cass_block.get("case_number") or "").strip()
+        cass_key = _cass_key(cass_block.get("court_domain"), cass_int_num)
+        idx = cass_index.get(cass_key) if cass_key else None
         # УИД — надёжнее «плавающего» fi_case_number: пробуем до него.
         if idx is None:
             uid = (info.get("judicial_uid") or "").strip()
             if uid:
                 idx = uid_index.get(uid)
-        if idx is None:
+        if idx is None and not presidium:
             idx = fi_index.get(fi_num)
-        if idx is None:
+        if idx is None and not presidium:
             idx = fi_index.get(_bare_case_number(fi_num))
         # Промах по активным — пробуем горячий архив: восстановление вместо
         # discovery-дубля. Порядок ключей тот же (8Г → УИД → номер 1-й инст.).
         if idx is None and archived_cases:
-            arch_i = arch_cass_index.get(cass_int_num) if cass_int_num else None
+            arch_i = arch_cass_index.get(cass_key) if cass_key else None
             if arch_i is None:
                 uid = (info.get("judicial_uid") or "").strip()
                 if uid:
                     arch_i = arch_uid_index.get(uid)
-            if arch_i is None:
+            if arch_i is None and not presidium:
                 arch_i = arch_fi_index.get(fi_num)
-            if arch_i is None:
+            if arch_i is None and not presidium:
                 arch_i = arch_fi_index.get(_bare_case_number(fi_num))
             if arch_i is not None and arch_i not in resurrected:
                 arch_case = archived_cases[arch_i]
@@ -988,6 +1030,9 @@ def link_cassation_cases(
                     "act_kind": cass_block["act_kind"],
                     "act_published": bool(cass_block.get("act_published")),
                     "link": cass_block.get("link", ""),
+                    # Домен суда — дайджест строит ссылку карточки по нему
+                    # (президиум облсуда vs КСОЮ).
+                    "court_domain": cass_block.get("court_domain", ""),
                     # Куда возвращено при remanded (enum first_instance|appeal)
                     # — рендер «Итога» показывает «→ в суд … инстанции».
                     "remanded_to": cass_block.get("remanded_to", ""),
@@ -1081,19 +1126,28 @@ def link_cassation_cases(
             fi_court_cfg = info.get("fi_court_config")
             fi_court_short = fi_court_cfg.name if fi_court_cfg else info.get("fi_court_long", "")
             fi_court_domain = fi_court_cfg.domain if fi_court_cfg else ""
+            # Президиум: главный номер дела — номер президиума «4Г-…»
+            # (решение юриста 04.09.2026, как у дел из дампа апелляции без
+            # известной 1-й инстанции); номер мирового судьи живёт в стабе
+            # 1-й инст. с флагом magistrate — индексы дедупа его не берут.
+            magistrate = bool(presidium or info.get("fi_magistrate"))
             new_case = {
-                "id": fi_num,
+                "id": cass_int_num if presidium and cass_int_num else fi_num,
                 "current_stage": "cassation",
                 "plaintiff": "",
                 "defendant": "",
                 "category": cass_block["category"],
                 "bank_role": info.get("bank_role", ""),
-                "notes": "Найдено через парсер кассации (7kas)",
+                "notes": (
+                    f"Найдено через дамп президиума ({cass_block['court']})"
+                    if presidium else "Найдено через парсер кассации (7kas)"
+                ),
                 "discovered_via_cassation": True,
                 "first_instance": {
                     "case_number": fi_num,
                     "court": fi_court_short,
                     "court_domain": fi_court_domain,
+                    "magistrate": magistrate,
                     "judge": info.get("fi_judge", ""),
                     "filing_date": "",
                     "status": "Решено",
@@ -1121,8 +1175,12 @@ def link_cassation_cases(
             )
             cases.append(new_case)
             discovered.append(new_case)
+            # Повторная находка того же дела в ЭТОМ же вызове (дубль строки
+            # дампа) обязана сматчиться с только что заведённым.
+            _index_case(new_case, len(cases) - 1, fi_index, cass_index,
+                        uid_index, uid_prio)
             cass_changes.append({
-                "case": fi_num,
+                "case": new_case["id"],
                 "cassation_internal_number": cass_block["case_number"],
                 "type": ["discovered_in_cassation"],
                 "details": {
@@ -1142,6 +1200,7 @@ def link_cassation_cases(
                     "act_kind": cass_block["act_kind"],
                     "act_published": bool(cass_block.get("act_published")),
                     "link": cass_block.get("link", ""),
+                    "court_domain": cass_block.get("court_domain", ""),
                     "remanded_to": cass_block.get("remanded_to", ""),
                 },
             })
@@ -1297,7 +1356,10 @@ def collect_existing_ids(all_cases) -> set[str]:
             if bare and bare != cid:
                 existing_ids.add(bare)
         fi = c.get("first_instance")
-        if fi and fi.get("case_number"):
+        # Дело мирового судьи (кассация президиума): FI-номер «2-1543-2803/2019»
+        # в индекс не кладём — мирового судью не мониторим, а совпадение с
+        # номером районного суда заблокировало бы настоящее новое дело.
+        if fi and fi.get("case_number") and not fi.get("magistrate"):
             existing_ids.add(fi["case_number"].strip())
         ap = c.get("appeal")
         if ap and ap.get("case_number"):
@@ -1335,6 +1397,12 @@ def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
     name_to_domain = _fi_name_to_domain()
     for c in all_cases:
         fi = c.get("first_instance") or {}
+        # Мировой судья (кассация президиума): ни домена, ни реестрового
+        # имени — запись ушла бы в wildcard и заблокировала бы свой
+        # FI-номер во ВСЕХ судах региона. Пропускаем целиком: её id «4Г-…»
+        # с номером 1-й инстанции не пересекается.
+        if fi.get("magistrate"):
+            continue
         domain = (fi.get("court_domain") or "").strip().lower()
         if not domain:
             court_name = (fi.get("court") or "").strip().lower()

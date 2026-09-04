@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 from datetime import datetime, date
 
 from court_monitor.config import log
@@ -33,18 +34,52 @@ _CASS_CATEGORY_RE = re.compile(
     r"КАТЕГОРИЯ:\s*(.+?)(?=Жалобу\s+подал|Суд\s|Номер дела|$)", re.IGNORECASE
 )
 _CASS_CASSATOR_RE = re.compile(
-    r"Жалобу\s+подал\(а\):\s*(.+?)(?=Суд\s|Номер дела|$)", re.IGNORECASE
+    r"Жалобу\s+подал\(а\):\s*(.+?)(?=Суд\s|Судья\s*\(|Номер дела|$)", re.IGNORECASE
 )
 _CASS_FI_COURT_RE = re.compile(
     r"Суд\s*\([^)]*\)\s*первой\s+инстанции:\s*(.+?)(?=Номер дела|Категория|$)",
     re.IGNORECASE,
 )
+# Президиум облсуда (кассация по делам МИРОВЫХ судей, с 04.09.2026): вместо
+# «Суд (…) первой инстанции» выдача пишет «Судья (мировой судья) первой
+# инстанции: ФИО (Судебный уч. №3, Ханты-Мансийский р-н)» — судья + участок
+# одной ячейкой. Разводим: ФИО → fi_judge, скобки → fi_court_long
+# «Мировой судья (участок)», флаг fi_magistrate.
+_CASS_FI_MAGISTRATE_RE = re.compile(
+    r"Судья\s*\(мировой судья\)\s*первой\s+инстанции:\s*(.+?)"
+    r"(?=Номер дела|Категория|$)",
+    re.IGNORECASE,
+)
+# «ФИО (участок)» — скобки с участком/мировым судьёй; у карточки та же форма
+# в строке «Судья (мировой судья) первой инстанции».
+_MAGISTRATE_JUDGE_RE = re.compile(
+    r"^(?P<judge>.*?)\s*\((?P<court>[^)]*(?:судебн\w*\s*уч|миров)[^)]*)\)\s*$",
+    re.IGNORECASE | re.S,
+)
 _CASS_FI_CASE_NUM_RE = re.compile(
     r"Номер дела в первой инстанции:\s*([^\s<]+)", re.IGNORECASE
 )
-# Внутренний номер 7kas (8Г-XXX/YYYY) в первой ячейке. Параллельный
-# кассационный (88-XXX/YYYY) тут не всегда показан — берём из карточки.
-_CASS_INTERNAL_NUM_RE = re.compile(r"8[ГГ]-\d+/\d{4}")
+# Внутренний номер в первой ячейке: 7kas — «8Г-XXX/YYYY», президиум облсуда —
+# «4Г-XXX/YYYY» (с 04.09.2026). Параллельный кассационный номер (88-XXX/YYYY
+# у 7kas, «44Г-N/YYYY» у президиума — в квадратных скобках после внутреннего)
+# тут не всегда показан — у 7kas берём из карточки, у президиума из скобок.
+_CASS_INTERNAL_NUM_RE = re.compile(r"\d+[ГГ]-\d+/\d{4}")
+_CASS_BRACKET_NUM_RE = re.compile(r"\[[^\]]*?(\d+[ГГ]-\d+/\d{4})")
+
+
+def split_magistrate_judge(value: str) -> tuple[str, str]:
+    """«Миненко Ю.В. (Судебный уч. №3, Ханты-Мансийский р-н)» → (судья, суд).
+
+    Суд — строкой «Мировой судья (участок)»: реестра мировых судей у нас
+    нет, а фронту/дайджесту нужна человекочитаемая подпись 1-й инстанции.
+    Скобок с участком нет → ("" , "") — значит, это не мировой судья.
+    """
+    m = _MAGISTRATE_JUDGE_RE.match((value or "").strip())
+    if not m:
+        return "", ""
+    judge = m.group("judge").strip().rstrip(",")
+    court = m.group("court").strip()
+    return judge, f"Мировой судья ({court})"
 
 
 def parse_cassation_search_page(html: str) -> list[dict]:
@@ -78,6 +113,10 @@ def parse_cassation_search_page(html: str) -> list[dict]:
         if not m_internal:
             continue  # заголовок или служебная строка
         cassation_internal_number = m_internal.group(0)
+        # «4Г-17/2026 [44Г-2/2026]» — второй номер в скобках (после передачи
+        # жалобы в президиум); _bare_case_number скобки не режет.
+        m_bracket = _CASS_BRACKET_NUM_RE.search(case_text)
+        cassation_number = m_bracket.group(1) if m_bracket else ""
         href = cell_href(case_cell)
         cid, cuid = "", ""
         if href:
@@ -94,6 +133,7 @@ def parse_cassation_search_page(html: str) -> list[dict]:
 
         combined = cell_text(row[2]) if len(row) > 2 else ""
         category, cassator, fi_court_long, fi_case_number = "", "", "", ""
+        fi_judge, fi_magistrate = "", False
         m = _CASS_CATEGORY_RE.search(combined)
         if m:
             category = m.group(1).strip().rstrip("→ \xa0")
@@ -103,6 +143,16 @@ def parse_cassation_search_page(html: str) -> list[dict]:
         m = _CASS_FI_COURT_RE.search(combined)
         if m:
             fi_court_long = m.group(1).strip().rstrip(". \xa0")
+        else:
+            m = _CASS_FI_MAGISTRATE_RE.search(combined)
+            if m:
+                fi_judge, fi_court_long = split_magistrate_judge(
+                    m.group(1).strip().rstrip(". \xa0")
+                )
+                if fi_court_long:
+                    fi_magistrate = True
+                else:
+                    fi_judge = m.group(1).strip().rstrip(". \xa0")
         m = _CASS_FI_CASE_NUM_RE.search(combined)
         if m:
             fi_case_number = m.group(1).strip().rstrip(". \xa0")
@@ -129,12 +179,15 @@ def parse_cassation_search_page(html: str) -> list[dict]:
             "case_id": cid,
             "case_uid": cuid,
             "cassation_internal_number": cassation_internal_number,
+            "cassation_number": cassation_number,
             "filing_date": filing_date,
             "category": category,
             "cassator": cassator,
             "fi_court_long": fi_court_long,
             "fi_court_config": fi_court_config,
             "fi_case_number": fi_case_number,
+            "fi_judge": fi_judge,
+            "fi_magistrate": fi_magistrate,
             "result_text": result_text,
         })
 
@@ -146,8 +199,15 @@ _CASS_ACT_DIV_RE = re.compile(
     r"(?=<div[^>]*id=['\"](?:cont|next|footer|copyright)['\"]|</body>)",
     re.S | re.I,
 )
-# Заголовок «Дело №88-XXXX/YYYY» в начале текста определения.
-_CASS_ACT_DELO_NUM_RE = re.compile(r"Дело\s*№\s*(88-?\d+/\d{4})", re.IGNORECASE)
+# Заголовок «Дело №88-XXXX/YYYY» в начале текста определения (7kas); у
+# президиума облсуда — «Дело № 44Г-N/YYYY» / «4Г-N/YYYY».
+_CASS_ACT_DELO_NUM_RE = re.compile(
+    r"Дело\s*№\s*(88-?\d+/\d{4}|\d+[ГГ]-\d+/\d{4})", re.IGNORECASE
+)
+# Заголовок карточки «ДЕЛО № 4Г-66/2026» (div.casenumber) — у 7kas тот же
+# блок несёт «8Г-…». Карточка президиума приходит в прогон БЕЗ строки выдачи
+# (дамп → карточка → перечитка), поэтому номер читаем и с самой страницы.
+_CASS_PAGE_NUM_RE = re.compile(r"ДЕЛО\s*№\s*(\d+[ГГ]-\d+/\d{4})", re.IGNORECASE)
 
 
 def _extract_cassation_act_text(html: str) -> tuple[str, str]:
@@ -232,6 +292,17 @@ def classify_cassation_outcome(
             return "cassation_modified"
         # Удовлетворили, но result_for_appeal пуст — считаем отменой.
         return "cassation_reversed"
+    # 3b) Президиум облсуда пишет исход прямо в result_text без слова
+    # «удовлетворено»: «СУДЕБНЫЙ ПРИКАЗ ОТМЕНЕН», «АПЕЛЛЯЦИОННОЕ ОПРЕДЕЛЕНИЕ
+    # ОТМЕНЕНО - с направлением на новое рассмотрение» (выдача 04.09.2026).
+    if rt and ("НАПРАВЛ" in rt or "НА НОВОЕ" in rt):
+        return "cassation_remanded"
+    if rt and "ОТМЕНЕН" in rt:
+        return "cassation_reversed"
+    if rt and "ИЗМЕНЕН" in rt and "БЕЗ ИЗМЕНЕНИЯ" not in rt:
+        return "cassation_modified"
+    if rt and "БЕЗ ИЗМЕНЕНИЯ" in rt:
+        return "cassation_upheld"
     # 4) Без явного «оставлено/удовлетворено», но в rfa есть указание.
     if "НАПРАВЛ" in rfa or "НА НОВОЕ" in rfa:
         return "cassation_remanded"
@@ -258,6 +329,12 @@ def cassation_remanded_to(result_for_appeal: str, act_text: str = "") -> str:
         return "first_instance"
     if "новое рассмотрение в суд апелляционной" in blob or "в суд апелляционной" in blob:
         return "appeal"
+    # Президиум: «АПЕЛЛЯЦИОННОЕ ОПРЕДЕЛЕНИЕ ОТМЕНЕНО - с направлением на новое
+    # рассмотрение» / «СУДЕБНЫЙ ПРИКАЗ ОТМЕНЕН …» — адресат по отменённому акту.
+    if "апелляционное определение" in rfa:
+        return "appeal"
+    if "судебный приказ" in rfa or "мирово" in rfa:
+        return "first_instance"
     if "первой инстанции" in rfa:
         return "first_instance"
     if "апелляционн" in rfa:
@@ -408,7 +485,18 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         "act_text": "",
         "cassation_number": "",
         "act_published": False,
+        # Президиум облсуда (с 04.09.2026): номер с заголовка страницы,
+        # домен суда (по нему блок cassation находит СВОЙ CourtConfig при
+        # перечитке — иначе «откатился» бы на 7kas), признак мирового судьи.
+        "page_case_number": "",
+        "court_domain": "",
+        "fi_magistrate": False,
     }
+    if court_base_url:
+        info["court_domain"] = (urlparse(court_base_url).hostname or "").lower()
+    m_page = _CASS_PAGE_NUM_RE.search(html)
+    if m_page:
+        info["page_case_number"] = m_page.group(1)
 
     tables = extract_tables(html)
     # Раскладываем по семантическим заголовкам. Заголовки СЛУШАНИЯ/ЖАЛОБЫ/
@@ -500,6 +588,16 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             if not info["fi_judge"]:
                 info["fi_judge"] = val
 
+    # Карточка президиума строки «Суд первой инстанции» не несёт — только
+    # «Судья (мировой судья) первой инстанции: ФИО (участок)». Разводим ФИО и
+    # участок: суд — строкой «Мировой судья (…)», реестра участков у нас нет.
+    if not info["fi_court_long"] and info["fi_judge"]:
+        judge, court = split_magistrate_judge(info["fi_judge"])
+        if court:
+            info["fi_judge"] = judge
+            info["fi_court_long"] = court
+            info["fi_magistrate"] = True
+
     info["fi_court_config"] = match_hmao_first_instance(info["fi_court_long"])
 
     # ── Таблица СЛУШАНИЯ ─────────────────────────────────────────────────
@@ -578,7 +676,12 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
     # is_subsidiary_only_case. Если хелпер вернул "" — Сбербанка нет среди
     # участников, дело отбросим в link_cassation_cases.
     info["sber_present"] = any(_is_real_sberbank(p["name"]) for p in info["participants"])
-    info["bank_role"] = determine_bank_role_from_participants(info["participants"])
+    # synonyms=True: в кассации по приказному производству банк — ВЗЫСКАТЕЛЬ
+    # (экономически истец), должник — ответная сторона; без синонимов роль
+    # читалась бы «Третье лицо» (карточка президиума 4Г-66/2026).
+    info["bank_role"] = determine_bank_role_from_participants(
+        info["participants"], synonyms=True
+    )
 
     # ── Жалоба оставлена без движения [до DD.MM.YYYY] ────────────────────
     # Основной путь — структурный парсинг колонок 5/6 таблицы ЖАЛОБЫ выше.

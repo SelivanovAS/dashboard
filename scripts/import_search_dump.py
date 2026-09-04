@@ -117,12 +117,14 @@ from court_monitor.lifecycle import (  # noqa: E402
 )
 from court_monitor.linking import (  # noqa: E402
     _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
-    link_cases, promote_material_record,
+    link_cases, link_cassation_cases, promote_material_record,
 )
 from court_monitor.netutil import (  # noqa: E402
     fetch_card_checked, fetch_fail_reason_ru, polite_delay,
 )
-from court_monitor.parsing import parse_case_card  # noqa: E402
+from court_monitor.parsing import (  # noqa: E402
+    parse_case_card, parse_cassation_card, parse_cassation_search_page,
+)
 from court_monitor.parsing.cards import card_is_empty_shell  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
     _NO_DATA_MARK, _find_results_table, detect_captcha_challenge,
@@ -152,6 +154,12 @@ EXIT_WRONG_COURT = 5
 # дампов. Карточка ≈ 3-6 с (polite_delay + сеть); повтор импорта того же дампа
 # безопасен — уже добавленное отсеет дедуп.
 MAX_BANK_CARDS_PER_IMPORT = 100
+
+# Ветка ПРЕЗИДИУМА (кассация по делам мировых судей, с 04.09.2026): выдача
+# раздела 2800001 облсуда по «Сбербанк» тянет и дела 2019 года (президиум
+# до реформы 2019 — 22 из 25 строк первого дампа ХМАО). Строки с датой
+# поступления раньше реформы ГПК не заводим и карточку не запрашиваем.
+PRESIDIUM_DUMP_SINCE = "01.05.2026"
 
 
 def read_dump(path: str) -> str:
@@ -225,9 +233,15 @@ def detect_card_delo_ids(html: str) -> set[str]:
     return set(_CARD_DELO_ID_RE.findall(html))
 
 
-def resolve_court(court_domain: str) -> CourtConfig | None:
+def resolve_court(court_domain: str, delo_id: str | int | None = None) -> CourtConfig | None:
     """CourtConfig активного региона по домену (первый сервер при
     двухсерверном домене — фактический srv_num возьмётся из href дампа).
+
+    delo_id — раздел из ссылок карточек дампа (detect_card_delo_ids): на
+    одном домене облсуда живут АПЕЛЛЯЦИЯ (delo_id=5) и ПРЕЗИДИУМ
+    (2800001, кассация по делам мировых судей, 04.09.2026) — раздел выбирает
+    сам дамп, оператор шлёт голый домен, как раньше. Без delo_id — первый
+    суд домена (прежнее поведение).
 
     Ищем в реестре 1-й инстанции, затем среди апел-судов: с 25.08.2026
     проверочный код появился и на апелляции (Свердловский облсуд), и её дамп
@@ -236,10 +250,21 @@ def resolve_court(court_domain: str) -> CourtConfig | None:
     """
     dom = canon_sudrf_domain(court_domain)
     region = get_region()
-    for c in list(region.first_instance_courts) + list(region.appeal_courts):
-        if c.domain.lower() == dom:
-            return c
-    return None
+    candidates = [
+        c for c in (
+            list(region.first_instance_courts)
+            + list(region.appeal_courts)
+            + list(region.presidium_courts)
+        )
+        if c.domain.lower() == dom
+    ]
+    if not candidates:
+        return None
+    if delo_id is not None:
+        for c in candidates:
+            if str(c.delo_id) == str(delo_id):
+                return c
+    return candidates[0]
 
 
 def _bank_seen(bank_state: dict) -> dict:
@@ -1138,6 +1163,264 @@ def import_appeal_rows(
     return {"counters": counters, "lines": lines}
 
 
+# ═══ Ветка ПРЕЗИДИУМА облсуда — кассация по делам мировых судей (04.09.2026)
+# С мая 2026 (ГПК) кассационные жалобы на акты мировых судей рассматривают
+# президиумы областных судов, а не КСОЮ. Раздел `delo_id=2800001` живёт на
+# ДОМЕНЕ апел-суда, поиск там за проверочным кодом → новые дела заводит
+# только дамп. Раздел выбирает сам дамп (delo_id в ссылках карточек —
+# resolve_court), проводка админка → Worker → KV → import_cases.yml →
+# очередь VPS общая и работает по домену.
+#
+# Карточка ОБЯЗАТЕЛЬНА (как у апелляции): УИД, участники, статус жалобы и
+# номер мирового судьи живут только в ней; строка выдачи без карточки —
+# потеря (fetch_fail), очередь резерва переделает дамп. Дело заводит БОЕВОЙ
+# link_cassation_cases как discovery (стадия cassation, стаб мирового судьи,
+# главный номер — «4Г-…», решение юриста); известное по УИД/номеру дело —
+# merge (linked). CSV не пишется: кассации в CSV нет.
+MAX_PRESIDIUM_CARDS_PER_IMPORT = 100
+
+
+def _presidium_known_keys(*case_lists) -> set[tuple[str, str]]:
+    """Пары (домен суда, номер) кассационных производств, уже известных базе:
+    активные + архив + прошлые круги (history). Домен обязателен — «4Г-N/YYYY»
+    двух президиумов Урала совпадают."""
+    known: set[tuple[str, str]] = set()
+
+    def _add(block: dict | None) -> None:
+        cn = ((block or {}).get("case_number") or "").strip()
+        if not cn:
+            return
+        dom = canon_sudrf_domain((block or {}).get("court_domain")) or "7kas.sudrf.ru"
+        known.add((dom, cn))
+
+    for lst in case_lists:
+        for c in lst or []:
+            _add(c.get("cassation"))
+            for h in c.get("history") or []:
+                _add((h or {}).get("cassation"))
+    return known
+
+
+def _before_reform(filing_date: str) -> bool:
+    """Дата поступления жалобы раньше PRESIDIUM_DUMP_SINCE (реформа ГПК)."""
+    try:
+        d = datetime.strptime((filing_date or "").strip(), "%d.%m.%Y")
+        since = datetime.strptime(PRESIDIUM_DUMP_SINCE, "%d.%m.%Y")
+    except ValueError:
+        return False  # дата не разобралась — не отсеиваем, решит карточка
+    return d < since
+
+
+def _fetch_cassation_card(court: CourtConfig, link: str, num: str,
+                          state: dict, dry_run: bool) -> tuple[dict | None, str]:
+    """Карточка кассации президиума. Пара (info|None, причина) — как
+    _fetch_appeal_card; парсер вернул None (нет блока «РАССМОТРЕНИЕ В
+    НИЖЕСТОЯЩЕМ») — тоже отказ, с диагнозом unparsed_card."""
+    if dry_run:
+        return None, "dry_run"
+    if state["cards"] >= MAX_PRESIDIUM_CARDS_PER_IMPORT:
+        return None, "capped"
+    cid, _, cuid = (link or "").partition("|")
+    state["cards"] += 1
+    polite_delay()
+    card_html = fetch_card_checked(court.card_url(cid, cuid), context=num)
+    if not card_html:
+        return None, "failed"
+    info = parse_cassation_card(card_html, court.base_url)
+    if not info:
+        config.FETCH_DIAG["kind"] = "unparsed_card"
+        return None, "failed"
+    return info, ""
+
+
+def import_presidium_rows(
+    court: CourtConfig, rows: list[dict], operator: str, dry_run: bool,
+) -> dict:
+    """Завести дела президиума из дампа выдачи. Возвращает summary-dict.
+
+    Шаги на строку: отсев дел до реформы → дедуп по (домен, номер) →
+    карточка (единственный онлайн-шаг) → находка; после цикла — БОЕВОЙ
+    link_cassation_cases: discovery = новое дело (added, блок import для
+    разового анонса в «📥 Новые касс. дела»), merge по УИД/номеру = linked.
+    """
+    data = load_json(config.JSON_PATH)
+    cases = data.get("cases", [])
+    archive = load_json(config.JSON_ARCHIVE_PATH)
+    archive_cases = archive.get("cases", [])
+    known = _presidium_known_keys(cases, archive_cases)
+
+    lines: list[str] = []
+    counters = {
+        "added": 0, "linked": 0, "already": 0, "no_link": 0,
+        "fetch_fail": 0, "subsidiary": 0, "skipped_old": 0,
+    }
+    state = {"cards": 0, "fail_reasons": []}
+    finds: list[dict] = []
+    now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    for r in rows:
+        num = (r.get("cassation_internal_number") or "").strip()
+        if not num:
+            continue
+        if _before_reform(r.get("filing_date", "")):
+            counters["skipped_old"] += 1
+            lines.append(
+                f"[SKIPPED OLD] {num} — поступило {r.get('filing_date')}, "
+                f"до реформы ГПК ({PRESIDIUM_DUMP_SINCE}); не заводим"
+            )
+            continue
+        if (court.domain, num) in known:
+            counters["already"] += 1
+            lines.append(f"[ALREADY] {num} — уже отслеживается")
+            continue
+        cid, cuid = (r.get("case_id") or ""), (r.get("case_uid") or "")
+        if not cid or not cuid:
+            counters["no_link"] += 1
+            lines.append(
+                f"[NO LINK] {num} — в дампе нет ссылки на карточку; "
+                f"копируйте выделение страницы или файл «только HTML»"
+            )
+            continue
+        link = f"{cid}|{cuid}"
+        info, why = _fetch_cassation_card(court, link, num, state, dry_run)
+        if info is None and why == "dry_run":
+            lines.append(f"[DRY RUN] {num} — будет заведено (карточка не читалась)")
+            continue
+        if info is None:
+            counters["fetch_fail"] += 1
+            reason = (
+                "кэп карточек за импорт — повторите тот же дамп"
+                if why == "capped" else _note_card_failure(state)
+                or "карточка не открылась"
+            )
+            lines.append(f"[FETCH FAIL] {num} — {reason}; дело НЕ заведено")
+            continue
+        if not info.get("sber_present"):
+            # Как в прогоне 7kas: без ПАО Сбербанк среди УЧАСТНИКОВ (только
+            # дочка или вовсе никого) дело не наше.
+            counters["subsidiary"] += 1
+            lines.append(
+                f"[NO SBER] {num} — в участниках карточки нет ПАО Сбербанк "
+                f"(дочка или однофамилец); пропущено"
+            )
+            continue
+        # Карточка сама не отдаёт link/номер выдачи — как в прогоне 4c.
+        info["link"] = link
+        info["cassation_internal_number"] = num or info.get("page_case_number", "")
+        if not info.get("cassation_number"):
+            info["cassation_number"] = r.get("cassation_number", "")
+        info["court_domain"] = court.domain
+        # Строка выдачи дозаполняет то, чего в карточке нет.
+        for k in ("fi_case_number", "fi_court_long", "fi_judge", "cassator",
+                  "category", "filing_date", "result_text"):
+            if not info.get(k) and r.get(k):
+                info[k] = r[k]
+        if r.get("fi_magistrate") and not info.get("fi_magistrate"):
+            info["fi_magistrate"] = True
+        known.add((court.domain, num))  # дубль строки внутри одного дампа
+        finds.append(info)
+
+    if finds and not dry_run:
+        arch_before = len(archive_cases)
+        cases, _changes, discovered = link_cassation_cases(
+            cases, finds, archive_cases,
+        )
+        disc_keys = {
+            (canon_sudrf_domain((c.get("cassation") or {}).get("court_domain")),
+             ((c.get("cassation") or {}).get("case_number") or "").strip())
+            for c in discovered
+        }
+        for info in finds:
+            num = info["cassation_internal_number"]
+            fi_num = info.get("fi_case_number") or "—"
+            if (court.domain, num) in disc_keys:
+                counters["added"] += 1
+                lines.append(
+                    f"[ADDED PRESIDIUM] {num} (1 инст. {fi_num}, "
+                    f"{info.get('fi_court_long') or 'суд не указан'})"
+                )
+            else:
+                counters["linked"] += 1
+                lines.append(
+                    f"[LINKED] {num} → дело {fi_num}: кассация добавлена в "
+                    f"уже известную запись"
+                )
+        for c in discovered:
+            # Служебный блок импорта: ближайший прогон объявит дело один раз
+            # в «📥 Новые касс. дела» (announce_imported_presidium_cases).
+            c["import"] = {
+                "operator": operator, "at": now_iso, "source": "dump_presidium",
+            }
+            c["notes"] = f"Заведено дампом президиума ({court.name})"
+        data["cases"] = cases
+        save_json(data, config.JSON_PATH)
+        if len(archive_cases) != arch_before:
+            # Воскрешение из архива по УИД/номеру — архив пересохраняем.
+            archive["cases"] = archive_cases
+            save_json(archive, config.JSON_ARCHIVE_PATH)
+
+    counters["card_fail_reason"] = _top_card_fail_reason(state)
+    return {"counters": counters, "lines": lines}
+
+
+def _empty_dump_exit(html: str, summary: dict, court_label: str) -> int | None:
+    """Пустая выдача / нет таблицы — общий хвост веток апелляции и президиума.
+    None — выдача есть, продолжать."""
+    if _NO_DATA_MARK in html.lower():
+        log.info("Выдача пуста («данных по запросу не обнаружено») — добавлять нечего")
+        summary["lines"] = ["Выдача пуста — «данных по запросу не обнаружено»"]
+        write_github_output(summary)
+        return EXIT_OK
+    if _find_results_table(extract_tables(html)) is None:
+        msg = (
+            "Таблица результатов не найдена в дампе. Сохраните страницу "
+            "как «только HTML» или скопируйте выделение страницы выдачи "
+            "целиком (вставка простым текстом не годится)."
+        )
+        log.error(msg)
+        summary["error"] = msg
+        write_github_output(summary)
+        return EXIT_NO_TABLE
+    log.info("Таблица найдена, но сберовских дел %s в ней нет", court_label)
+    return None
+
+
+def _main_presidium(court: CourtConfig, html: str, operator: str,
+                    dry_run: bool, summary: dict) -> int:
+    """Хвост main() для дампа президиума облсуда (кассация по делам мировых
+    судей): разбор выдачи парсером 7kas → приём → сводка."""
+    rows = parse_cassation_search_page(html)
+    summary["rows"] = len(rows)
+    if not rows:
+        rc = _empty_dump_exit(html, summary, "президиума")
+        if rc is not None:
+            return rc
+
+    result = import_presidium_rows(court, rows, operator, dry_run)
+    summary.update(result["counters"])
+    summary["lines"] = result["lines"][:100]
+
+    log.info("=" * 60)
+    log.info(
+        "Импорт президиума (%s, оператор %s): +%d новых дел | %d связано с "
+        "известным делом | %d уже в базе | %d до реформы | %d без Сбербанка | "
+        "%d потеряно (карточка не открылась)%s",
+        court.name, operator or "—",
+        summary["added"], summary["linked"], summary["already"],
+        summary["skipped_old"], summary["subsidiary"], summary["fetch_fail"],
+        " | DRY-RUN" if dry_run else "",
+    )
+    if summary["fetch_fail"]:
+        log.warning(
+            "Президиум: %d %s не заведено — карточка не открылась (%s)",
+            summary["fetch_fail"],
+            "дело" if summary["fetch_fail"] == 1 else "дел",
+            summary["card_fail_reason"] or "причина не определена",
+        )
+    write_github_output(summary)
+    return EXIT_OK
+
+
 def write_github_output(summary: dict) -> None:
     """JSON-сводка для import_cases.yml: одной строкой в $GITHUB_OUTPUT (ключ
     summary) и файлом $IMPORT_SUMMARY_PATH. Файл — основной канал: workflow
@@ -1172,22 +1455,21 @@ def _main_appeal(court: CourtConfig, html: str, operator: str,
     summary["rows"] = len(rows)
 
     if not rows:
-        if _NO_DATA_MARK in html.lower():
-            log.info("Выдача пуста («данных по запросу не обнаружено») — добавлять нечего")
-            summary["lines"] = ["Выдача пуста — «данных по запросу не обнаружено»"]
-            write_github_output(summary)
-            return EXIT_OK
-        if _find_results_table(extract_tables(html)) is None:
+        if re.search(r"\d+[ГГ]-\d+/\d{4}", html):
+            # Номера «4Г-…» — это выдача ПРЕЗИДИУМА, но раздел не распознан:
+            # в ссылках карточек нет delo_id (вставка «как текст»).
             msg = (
-                "Таблица результатов не найдена в дампе. Сохраните страницу "
-                "как «только HTML» или скопируйте выделение страницы выдачи "
-                "целиком (вставка простым текстом не годится)."
+                "Похоже на выдачу раздела кассации (президиум, номера «4Г-…»), "
+                "но в ссылках карточек нет delo_id — сохраните страницу как "
+                "«только HTML» или скопируйте выделение страницы целиком."
             )
             log.error(msg)
             summary["error"] = msg
             write_github_output(summary)
-            return EXIT_NO_TABLE
-        log.info("Таблица найдена, но сберовских дел в ней нет")
+            return EXIT_WRONG_COURT
+        rc = _empty_dump_exit(html, summary, "апелляции")
+        if rc is not None:
+            return rc
 
     result = import_appeal_rows(court, rows, operator, dry_run)
     summary.update(result["counters"])
@@ -1245,6 +1527,10 @@ def main(argv: list[str] | None = None) -> int:
         "bank_dry_run": 0, "bank_capped": 0,
         # Ветка апелляции: сколько дел приклеилось к известной 1-й инстанции.
         "linked": 0,
+        # Ветка президиума (04.09.2026): раздел, распознанный по дампу, и
+        # дела до реформы ГПК (президиум-2019 в той же выдаче).
+        "section": "",
+        "skipped_old": 0,
         "lines": [],
     }
 
@@ -1294,16 +1580,25 @@ def main(argv: list[str] | None = None) -> int:
         write_github_output(summary)
         return EXIT_WRONG_COURT
 
+    # Раздел выбирает сам дамп: на домене облсуда живут АПЕЛЛЯЦИЯ (delo_id=5)
+    # и ПРЕЗИДИУМ (2800001, кассация по делам мировых судей) — оператор шлёт
+    # голый домен, а нужный CourtConfig даёт delo_id из ссылок карточек.
+    card_delo_ids = detect_card_delo_ids(html)
+    if len(card_delo_ids) == 1:
+        court = resolve_court(args.court_domain, delo_id=next(iter(card_delo_ids))) or court
+        summary["court"] = court.name
+    summary["section"] = court.court_type
+
     # Выдача не того раздела (например, апелляция или уголовные дела):
     # ловится по delo_id карточек даже когда href относительные и хостов нет.
-    card_delo_ids = detect_card_delo_ids(html)
+    # После резолва выше срабатывает, только если ни один суд домена такого
+    # раздела не ведёт.
     if card_delo_ids and str(court.delo_id) not in card_delo_ids:
         found = ", ".join(sorted(card_delo_ids))
-        _section_ru = (
-            "раздел апелляционных гражданских дел"
-            if court.court_type == "appeal"
-            else "раздел гражданских дел 1-й инстанции"
-        )
+        _section_ru = {
+            "appeal": "раздел апелляционных гражданских дел",
+            "cassation": "раздел кассационных гражданских дел (президиум)",
+        }.get(court.court_type, "раздел гражданских дел 1-й инстанции")
         msg = (
             f"Дамп похож на выдачу другого раздела (в ссылках карточек "
             f"delo_id={found}, у выбранного суда {court.delo_id}) — откройте "
@@ -1319,6 +1614,10 @@ def main(argv: list[str] | None = None) -> int:
     # дела с любой ролью банка, как и в боевом поиске апелляции) и свой приём.
     if court.court_type == "appeal":
         return _main_appeal(court, html, operator, args.dry_run, summary)
+    # Президиум облсуда: выдача раздела кассации (парсер 7kas), приём —
+    # боевой link_cassation_cases.
+    if court.court_type == "cassation":
+        return _main_presidium(court, html, operator, args.dry_run, summary)
 
     stats: dict = {}
     rows = parse_first_instance_search(html, court, stats=stats, keep_all_roles=True)

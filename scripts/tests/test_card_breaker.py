@@ -490,7 +490,8 @@ class TestCardBreakerWiring:
         src = self._runs_src()
         assert "if not appeal_queue.allows(_ap_court.domain):" in src
         assert "if not cass_queue.allows(CASSATION_COURT.domain):" in src
-        assert "if not cass_refresh_queue.allows(CASSATION_COURT.domain):" in src
+        # 4d с 04.09.2026 берёт суд ИЗ БЛОКА дела (президиум облсуда или КСОЮ).
+        assert "if not cass_refresh_queue.allows(court.domain):" in src
         assert "if not fi_queue.allows(court_cfg.domain):" in src
 
     def test_search_canaries_wired_for_all_sources(self):

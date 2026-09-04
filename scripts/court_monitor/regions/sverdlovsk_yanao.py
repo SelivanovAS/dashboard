@@ -167,6 +167,20 @@ CASSATION_COURT = CourtConfig(
     court_type="cassation",
 )
 
+# Президиумы облсуда и Суда ЯНАО — кассация по делам МИРОВЫХ судей (ГПК с
+# 05.2026, раздел `delo_id=2800001`, номера «4Г-N/YYYY»; см. hmao.py).
+# Дела заводит дамп выдачи (у СВД поиск за кодом с 25.08.2026, у ЯНАО раздел
+# президиума отдельно не пробовали — режим один: только дамп), карточки
+# перечитывает фаза 4d. ⚠️ Номера «4Г-N/YYYY» между двумя президиумами НЕ
+# уникальны — ключ связки и дедупа всегда пара (домен, номер).
+PRESIDIUM_COURTS: tuple[CourtConfig, ...] = (
+    CourtConfig("Президиум Свердловского областного суда", "oblsud--svd.sudrf.ru",
+                2800001, "cassation", search_gated=True, search_disabled=True),
+    CourtConfig("Президиум Суда Ямало-Ненецкого автономного округа",
+                "oblsud--ynao.sudrf.ru",
+                2800001, "cassation", search_gated=True, search_disabled=True),
+)
+
 REGION = RegionConfig(
     code="sverdlovsk_yanao",
     name="Свердловская область и ЯНАО",
@@ -174,6 +188,7 @@ REGION = RegionConfig(
     appeal_courts=APPEAL_COURTS,
     first_instance_courts=FIRST_INSTANCE_COURTS,
     cassation_court=CASSATION_COURT,
+    presidium_courts=PRESIDIUM_COURTS,
     # Длинная форма имени суда 1-й инст. на 7kas содержит явный маркер
     # субъекта («…Свердловской области» / «…Ямало-Ненецкого автономного
     # округа») — guard от одноимённых судов чужих регионов. ⚠️ Маркер

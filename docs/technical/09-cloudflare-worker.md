@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:2685](../../cloudflare-worker/worker.js#L2685)):
+`scheduled(event, env)` ([worker.js:2694](../../cloudflare-worker/worker.js#L2694)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,7 +70,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2728](../../cloudflare-worker/worker.js#L2728)).
+Маршрутизатор — `fetch(request, env)` ([2737](../../cloudflare-worker/worker.js#L2737)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
@@ -91,7 +91,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 | `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1540](../../cloudflare-worker/worker.js#L1540)) | `OWNER_SECRET` | Принудительно удалить подписку. |
 | `/admin/test-push` | POST | `handleAdminTestPush` ([1677](../../cloudflare-worker/worker.js#L1677)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 | `/visit` | POST | `handleVisit` ([252](../../cloudflare-worker/worker.js#L252)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
-| `/admin/visits` | GET | `handleAdminVisits` ([2603](../../cloudflare-worker/worker.js#L2603)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
+| `/admin/visits` | GET | `handleAdminVisits` ([2612](../../cloudflare-worker/worker.js#L2612)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
 | `/profile/link-code` | POST | `handleProfileLinkCode` ([819](../../cloudflare-worker/worker.js#L819)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
 | `/profile/link` | POST | `handleProfileLink` ([883](../../cloudflare-worker/worker.js#L883)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
 | `/profile/get` | POST | `handleProfileGet` ([933](../../cloudflare-worker/worker.js#L933)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
@@ -124,7 +124,7 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
 ```
 
 - `vid` — случайный UUID, который фронт создаёт при первом визите и хранит в
-  `lsKey('visit_id')` (`getVisitId`, [4796](../../app.js#L4796)). ⚠️ Обязательно
+  `lsKey('visit_id')` (`getVisitId`, [4806](../../app.js#L4806)). ⚠️ Обязательно
   через `lsKey`: обе территории живут на одном origin `selivanovas.github.io`.
 - `os` — грубый класс устройства (`visitorDeviceClass`); **сырой `User-Agent` в
   KV не попадает**, как и IP: `CF-Connecting-IP` и `request.cf` не читаются
@@ -190,6 +190,20 @@ VCALENDAR (200); недоступный cases.json → 503 + Retry-After (пус
 календаря — `CAL_TZID`/`CAL_TZ_OFFSET_MIN`/`CAL_FEED_NAME` в `[vars]`
 (дефолты — Asia/Yekaterinburg, «Мои заседания»). Полная модель — CLAUDE.md,
 раздел «Календарный фид»; стражи — `scripts/tests/test_calendar_feed.py`.
+
+## Импорт дампа президиума (04.09.2026)
+
+`/admin/import-dump` и KV-запись не менялись: раздел (апелляция или президиум
+на одном домене облсуда) выбирает сам импортёр по `delo_id` из ссылок
+карточек дампа. Отчёт `/import-result` несёт строку `section`
+(белый список `first_instance|appeal|cassation` — по ней админка подписывает
+потери и имя суда « (президиум)») и счётчик `skipped_old` (дела до реформы
+ГПК 05.2026, пропущенные без карточки). Свежесть `import:last:<домен>`
+общая с апелляцией того же домена. Админка: третья закреплённая строка
+« — президиум (кассация)» из `region.presidium_courts`, ключ
+`domain|srv|cassation`, автоопределение суда по `delo_id` вставки
+(`impDetectDeloIds`), `acCheckLink` отвергает ссылку президиума с подсказкой
+про дамп.
 
 ## Метаданные подписки в KV
 
