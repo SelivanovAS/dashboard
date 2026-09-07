@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-09-04T03:57:58",
+  "generated_at": "2026-09-07T03:57:27",
   "title_default": "Мониторинг дел — тестовая рассылка",
-  "body_default": "📌 1 событие в апелляции · 📅 18 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📨 2 апел. жалобы · 📨 1 касс. жалоба · 📤 1 дело — в касс. суд · 📥 2 дела принято к производству · 🏁 2 финальных события 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.)",
+  "body_default": "📥 3 новые апелляции · 📥 3 новые кассации · 📅 9 заседаний в 1-й инст. · ⚖️ 1 решение 1-й инст. · 🔄 1 смена статуса (1-я инст.) · 📥 1 касс. карточка · 🏁 1 итог кассации · 📄 1 касс. акт",
   "owner_only": false,
   "items": [
     {
@@ -13,7 +13,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📌 1 событие в апелляции · 📅 18 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📨 2 апел. жалобы · 📨 1 касс. жалоба · 📤 1 дело — в касс. суд · 📥 2 дела принято к производству · 🏁 2 финальных события 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.)",
+      "body": "📥 3 новые апелляции · 📥 3 новые кассации · 📅 9 заседаний в 1-й инст. · ⚖️ 1 решение 1-й инст. · 🔄 1 смена статуса (1-я инст.) · 📥 1 касс. карточка · 🏁 1 итог кассации · 📄 1 касс. акт",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -34,10 +34,10 @@
         "surggor--hmao.sudrf.ru|2-8537/2026",
         "33-5852/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QF7jllcfTcHkw5lVSINyxuywUWFkX7n4A2lVE7NWkMJslfu8ZoFdKSLdcF9MqxBrzqDxNm0-y7EYP-oqdgfqMfpAIs5WZDB78hZtj7lm0JlJ0RhieEwzsiyrg4waUZv2cS0IFDnrUGYbKE19Mak8qr9v1EgIpSZCr50mbIF7UJs",
@@ -65,7 +65,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 2-1000/2026, 2-6180/2026, 2-4411/2026",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -120,7 +120,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-475/2026",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
@@ -135,10 +135,10 @@
         "2-5609/2026",
         "2-713/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QKQw727tK6X6ADP94fnPJUYhbEcqHT6oL6nndKw2p7n2Y6KCMW0i_U3P4bGWTukfa265NML8VXpd8AnFKL6LUfwWcZEcTV104i8X_ZkwYlxPpggadfa60ykuvC9M1e3olLGDfxKBINx7oItkhC3D1Lsv6nFdAfwq4SVtiPue52o",
@@ -149,10 +149,10 @@
         "2-537/2026",
         "vartovgor--hmao.sudrf.ru|2-8018/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QKsOc5rG-E2X_xvE_7uP7MjAvTrzRoQE_6Q4Gs5GDVlU8QCuXbhvMMcdmP7b7sAmJx3FbK4FDT51WoxNNSSbYMJ4zwGI7yK5oI51Hy35UkSfSbs8LznHOT2HTFg_S29hpNFmfTyuwgMvascEgbgPWGSWIm5-ApjGQYeW-vrDpWI",
@@ -175,10 +175,10 @@
         "kogalym--hmao.sudrf.ru|2-815/2026",
         "langepas--hmao.sudrf.ru|2-453/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://web.push.apple.com/QLGYfW6JWyyZiKc45AIJKxN-UklPSQLdpiUgJWjSiVoc2n7SOPq-kPg8FO8A3-CWd_aCym1GThbROIYGjyZRrgV6MMBKlqcMHzaRdHqaBE-iK-vj3rfKfiU8nDnjxo4WOJz1py4OBLIWjDLHdGTr8HnVF0KhG955JORfnJDh8tY",
@@ -201,10 +201,10 @@
         "2-2216/2026",
         "2-7354/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/ca2c3vaGlpA:APA91bFuYNL0DiAunZmQktnrl1WlQ9qmNoQHXxw6zZnin49GctQVG4lvdZsfr8rbIlj3VfpZ7TGTarxX7BchReETQCcLKBYJAG9_qC6zjoHttqZK1kJlUhfbvbePCjhP7oQRFNGtn016",
@@ -214,7 +214,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📌 1 событие в апелляции · 📅 18 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📨 2 апел. жалобы · 📨 1 касс. жалоба · 📤 1 дело — в касс. суд · 📥 2 дела принято к производству · 🏁 2 финальных события 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.)",
+      "body": "📥 3 новые апелляции · 📥 3 новые кассации · 📅 9 заседаний в 1-й инст. · ⚖️ 1 решение 1-й инст. · 🔄 1 смена статуса (1-я инст.) · 📥 1 касс. карточка · 🏁 1 итог кассации · 📄 1 касс. акт",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -225,7 +225,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📌 1 событие в апелляции · 📅 18 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📨 2 апел. жалобы · 📨 1 касс. жалоба · 📤 1 дело — в касс. суд · 📥 2 дела принято к производству · 🏁 2 финальных события 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.)",
+      "body": "📥 3 новые апелляции · 📥 3 новые кассации · 📅 9 заседаний в 1-й инст. · ⚖️ 1 решение 1-й инст. · 🔄 1 смена статуса (1-я инст.) · 📥 1 касс. карточка · 🏁 1 итог кассации · 📄 1 касс. акт",
       "click_url": "/sberbank_dashboard.html?digest=open"
     },
     {
@@ -237,10 +237,10 @@
         "2-1394/2026",
         "2-2408/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/eMo8GfnIBbM:APA91bHNZ8Sc-DTjW4grEkYo1TKSBOf6HXflM4kGp20yGeemNhbUyDcvinFdwu-kSM0N3mJwKal1eUMTapYY3-WsWy6Pk58KY2Jg9Wgzmm-hoEsPIA2I9yNEPUo9Bt02zUUwgJG3aAvi",
@@ -250,10 +250,10 @@
       "watchlist": [
         "33-5179/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/egDvQO7fZPc:APA91bH6yGYtXQdjkKHFnuitsEofc8l6CrJJcXiVkL97Of2JF-xktYGJmHpXvDsGzWFlGQZe16Y_sbVK8pf85XnDBIz3J5tnvHZ9fAOXL4zlFkeTsoR7srezoNtmNZTSeSheLWVfOsWp",
@@ -270,11 +270,11 @@
         "uganskray--hmao.sudrf.ru|2-2301/2026",
         "surggor--hmao.sudrf.ru|2-8383/2026"
       ],
-      "variant": "skip",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 6 делам: 33-6217/2026, 33-6254/2026, 33-6282/2026 и ещё 3",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1"
     }
   ],
-  "updated_at": "2026-09-04T03:57:58"
+  "updated_at": "2026-09-07T03:57:27"
 }
