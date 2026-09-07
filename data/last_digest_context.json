@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-07T06:43:04",
+  "saved_at": "2026-09-07T07:12:17",
   "new_cases": [
     {
       "Номер дела": "33-6217/2026",
@@ -1822,12 +1822,66 @@
         "overdue_days": 30,
         "legal_force_date": "08.08.2026"
       }
+    },
+    {
+      "case": "М-7991/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Бузько Виктория Вячеславовна",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "link": "282213167|9a5dd58a-5dcc-4e31-a5b8-41871b1574f7",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "04.09.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-7912/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Магда Елена Владимировна",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "link": "282182688|05e2a282-5277-4022-b531-40fa20c71545",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "03.09.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-7907/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Стальский Шамиль Александрович",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "link": "282182666|4901adcc-48fc-43fe-96d9-10fb24328c7f",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "03.09.2026",
+        "left_track": false
+      }
     }
   ],
   "total_active_appeal": 33,
   "total_active_fi": 31,
   "total_active_cassation": 32,
-  "total_active_bank": 382,
+  "total_active_bank": 385,
   "cass_changes": [
     {
       "case": "2-2056/2026",
@@ -2140,5 +2194,5 @@
     }
   ],
   "issue_key": "2026-09-07T06:23:50",
-  "updated_at": "2026-09-07T06:43:04"
+  "updated_at": "2026-09-07T07:12:17"
 }

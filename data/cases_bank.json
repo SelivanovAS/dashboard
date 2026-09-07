@@ -4,6 +4,123 @@
   "archived_count": 57,
   "cases": [
     {
+      "id": "М-7991/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Бузько Виктория Вячеславовна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-7991/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Каликина Ольга Андреевна",
+        "filing_date": "04.09.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 14:51. 06.09.2026",
+        "event_date": "06.09.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "282213167|9a5dd58a-5dcc-4e31-a5b8-41871b1574f7",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2026-017328-39",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-09-07",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-09-07T07:10:37",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-7912/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Магда Елена Владимировна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-7912/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Елшин Николай Александрович",
+        "filing_date": "03.09.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 16:46. 04.09.2026",
+        "event_date": "04.09.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "282182688|05e2a282-5277-4022-b531-40fa20c71545",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2026-017246-91",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-09-07",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-09-07T07:10:37",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-7907/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Стальский Шамиль Александрович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-7907/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Ким Аркадий Анатольевич",
+        "filing_date": "03.09.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 16:46. 04.09.2026",
+        "event_date": "04.09.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "282182666|4901adcc-48fc-43fe-96d9-10fb24328c7f",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2026-017240-12",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-09-07",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-09-07T07:10:37",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
       "id": "М-2-393/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк",
@@ -67,8 +184,7 @@
         "judicial_uid": "86RS0001-01-2026-004874-21",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-07",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-07"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23468,5 +23584,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-07T06:43:03"
+  "updated_at": "2026-09-07T07:12:16"
 }

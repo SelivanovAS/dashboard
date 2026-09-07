@@ -3,13 +3,13 @@
   "run_date": "2026-09-07",
   "smart_skip": true,
   "totals": {
-    "total": 560,
-    "parsed": 13,
+    "total": 563,
+    "parsed": 16,
     "skip": 485,
-    "failed": 62,
+    "failed": 59,
     "no_card": 0,
     "not_in_queue": 0,
-    "intake_new": 0
+    "intake_new": 3
   },
   "cases": [
     {
@@ -31,9 +31,9 @@
       "last_checked_at": "2026-09-07"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -625,9 +625,9 @@
       "last_checked_at": "2026-09-04"
     },
     {
-      "outcome": "fetch_blocked",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "портал суда отдал заглушку/блокировку вместо карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -895,9 +895,9 @@
       "last_checked_at": "2026-09-02"
     },
     {
-      "outcome": "court_breaker",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "суд снят с обхода предохранителем — карточки не читаются (заглушка/код/сеть), дело перечитается следующим прогоном",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10091,7 +10091,61 @@
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
       "last_checked_at": "2026-08-25"
+    },
+    {
+      "outcome": "intake_new",
+      "reason": "",
+      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
+      "detail": "Сургутский городской суд",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surggor--hmao.sudrf.ru|М-7991/2026",
+      "number": "М-7991/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-09-07"
+    },
+    {
+      "outcome": "intake_new",
+      "reason": "",
+      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
+      "detail": "Сургутский городской суд",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surggor--hmao.sudrf.ru|М-7912/2026",
+      "number": "М-7912/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-09-07"
+    },
+    {
+      "outcome": "intake_new",
+      "reason": "",
+      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
+      "detail": "Сургутский городской суд",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surggor--hmao.sudrf.ru|М-7907/2026",
+      "number": "М-7907/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-09-07"
     }
   ],
-  "updated_at": "2026-09-07T06:43:03"
+  "updated_at": "2026-09-07T07:12:16"
 }
