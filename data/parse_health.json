@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-07T07:42:38",
+ "updated_at": "2026-09-07T08:11:48",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,24 +532,24 @@
   }
  },
  "last_run": {
-  "at": "2026-09-07T07:42:38",
+  "at": "2026-09-07T08:11:48",
   "alerts": [],
-  "requests_ok": 33,
+  "requests_ok": 24,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 67,
-  "cards_breaker_unrequested": 67,
+  "cards_breaker_skipped": 68,
+  "cards_breaker_unrequested": 68,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 2,
-  "cards_read": 31,
-  "cards_planned": 100,
+  "cards_blocked": 4,
+  "cards_read": 20,
+  "cards_planned": 92,
   "cards_read_today": 175,
   "cards_planned_today": 245,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
-    "read": 29,
-    "planned": 98,
+    "read": 18,
+    "planned": 90,
     "read_today": 127,
     "planned_today": 196
    },
@@ -567,35 +567,35 @@
    }
   },
   "latency": {
-   "n": 33,
-   "p50": 1.5,
-   "p90": 3.3,
-   "max": 3.7
+   "n": 24,
+   "p50": 1.0,
+   "p90": 1.5,
+   "max": 2.2
   },
   "failure_latency": {
    "portal_placeholder": {
-    "n": 2,
-    "p50": 2.8,
-    "p90": 3.3,
-    "max": 3.3
+    "n": 4,
+    "p50": 0.9,
+    "p90": 1.5,
+    "max": 1.5
    }
   },
   "fail_kinds": {
-   "portal_placeholder": 2
+   "portal_placeholder": 4
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 1,
-   "open_hosts": 1,
+   "opened_hosts": 2,
+   "open_hosts": 2,
    "recovered_hosts": 0,
-   "deferred_total": 68,
-   "deferred_remaining": 68,
+   "deferred_total": 70,
+   "deferred_remaining": 70,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
    "by_kind": {
-    "portal_placeholder": 1
+    "portal_placeholder": 2
    },
    "hosts": [
     {
@@ -611,15 +611,30 @@
      "deferred_remaining": 68,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 65.7
+     "next_probe_in_seconds": 111.3
+    },
+    {
+     "host": "vartovgor--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "portal_placeholder",
+     "family": "portal_outage",
+     "reason": "вместо карточки пришла заглушка портала",
+     "preopened": false,
+     "skipped": 1,
+     "probes": 0,
+     "deferred_total": 2,
+     "deferred_remaining": 2,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 180.0,
+     "next_probe_in_seconds": 172.3
     }
    ]
   },
-  "courts_unavailable": 1,
-  "courts_with_unrequested": 1,
+  "courts_unavailable": 2,
+  "courts_with_unrequested": 2,
   "courts_outage": 0,
-  "cards_unreachable": 67,
-  "cards_unread_other": 2,
+  "cards_unreachable": 68,
+  "cards_unread_other": 4,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
