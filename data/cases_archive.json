@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-07T07:12:16",
+  "updated_at": "2026-09-07T07:42:39",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -8681,7 +8681,7 @@
             "posted_at": "04.08.2026"
           }
         ],
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-09-07",
         "resolved_emitted": true,
         "decision_date": "15.06.2026",
         "motivirovka_emitted": true,
@@ -9256,7 +9256,7 @@
             "posted_at": "11.06.2026"
           }
         ],
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-09-07",
         "resolved_emitted": true,
         "judicial_uid": "86RS0002-01-2026-001148-88"
       },
@@ -9865,7 +9865,7 @@
           }
         ],
         "resolved_emitted": true,
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-09-07",
         "motivirovka_emitted": true,
         "judicial_uid": "86RS0002-01-2025-011911-84"
       },
