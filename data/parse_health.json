@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-07T08:11:48",
+ "updated_at": "2026-09-07T08:41:36",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,23 +532,23 @@
   }
  },
  "last_run": {
-  "at": "2026-09-07T08:11:48",
+  "at": "2026-09-07T08:41:36",
   "alerts": [],
-  "requests_ok": 24,
+  "requests_ok": 23,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 68,
-  "cards_breaker_unrequested": 68,
+  "cards_breaker_skipped": 69,
+  "cards_breaker_unrequested": 69,
   "cards_breaker_recovered": 0,
   "cards_blocked": 4,
-  "cards_read": 20,
+  "cards_read": 19,
   "cards_planned": 92,
   "cards_read_today": 175,
   "cards_planned_today": 245,
-  "daily_attempts": 5,
+  "daily_attempts": 6,
   "instances": {
    "first_instance": {
-    "read": 18,
+    "read": 17,
     "planned": 90,
     "read_today": 127,
     "planned_today": 196
@@ -567,17 +567,17 @@
    }
   },
   "latency": {
-   "n": 24,
-   "p50": 1.0,
-   "p90": 1.5,
-   "max": 2.2
+   "n": 23,
+   "p50": 0.7,
+   "p90": 1.2,
+   "max": 1.4
   },
   "failure_latency": {
    "portal_placeholder": {
     "n": 4,
-    "p50": 0.9,
-    "p90": 1.5,
-    "max": 1.5
+    "p50": 0.2,
+    "p90": 1.3,
+    "max": 1.3
    }
   },
   "fail_kinds": {
@@ -588,8 +588,8 @@
    "opened_hosts": 2,
    "open_hosts": 2,
    "recovered_hosts": 0,
-   "deferred_total": 70,
-   "deferred_remaining": 70,
+   "deferred_total": 71,
+   "deferred_remaining": 71,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
@@ -611,7 +611,7 @@
      "deferred_remaining": 68,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 111.3
+     "next_probe_in_seconds": 122.0
     },
     {
      "host": "vartovgor--hmao.sudrf.ru",
@@ -620,20 +620,20 @@
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
-     "skipped": 1,
+     "skipped": 2,
      "probes": 0,
-     "deferred_total": 2,
-     "deferred_remaining": 2,
+     "deferred_total": 3,
+     "deferred_remaining": 3,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 172.3
+     "next_probe_in_seconds": 153.8
     }
    ]
   },
   "courts_unavailable": 2,
   "courts_with_unrequested": 2,
   "courts_outage": 0,
-  "cards_unreachable": 68,
+  "cards_unreachable": 69,
   "cards_unread_other": 4,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
