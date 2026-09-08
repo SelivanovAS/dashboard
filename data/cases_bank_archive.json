@@ -2844,7 +2844,157 @@
         "announced": true
       },
       "archived_at": "2026-09-07"
+    },
+    {
+      "id": "2-194/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Уральский Банк ПАО Сбербанк",
+      "defendant": "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, наследственное имущество умершего заемщика Волкова Александра Петровича",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-194/2026",
+        "court": "Октябрьский районный суд",
+        "court_domain": "oktb--hmao.sudrf.ru",
+        "judge": "Наранова Т.Б.",
+        "filing_date": "18.02.2026",
+        "status": "В производстве",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Судебное заседание. 17:15. Иск (заявление, жалоба) оставлены без рассмотрения. ИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 30.06.2026",
+        "event_date": "21.07.2026",
+        "hearing_date": "21.07.2026",
+        "hearing_time": "17:15",
+        "link": "266338601|9d9ebc48-d893-440c-8819-0d749a806bc8",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-09-08",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0020-01-2026-000108-23",
+        "writ_expected": false
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-31T14:25:02",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-08"
+    },
+    {
+      "id": "2-3688/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "МТУ Росимущества в Тюменской области, Ханты-Мансийском автономном округе-Югре, Ямало-Ненецком автономном округе",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3688/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Школьников А.Е.",
+        "filing_date": "26.01.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 14:23. 21.07.2026",
+        "event_date": "20.07.2026",
+        "hearing_date": "14.07.2026",
+        "hearing_time": "09:10",
+        "link": "263357078|6114a0f3-793c-4cc3-829f-f29da10ce9ab",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "decision_date": "14.07.2026",
+        "last_checked_at": "2026-09-04",
+        "motivirovka_emitted": true,
+        "legal_force_est": "2026-08-21",
+        "motivirovka_date": "20.07.2026",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "legal_force_emitted": "2026-08-21",
+        "judicial_uid": "86RS0002-01-2026-000560-09",
+        "writ_awaited_since": "2026-08-21",
+        "writs": [
+          {
+            "issue_date": "24.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-3688/2026#1",
+            "recipient": "Районное отделение судебных приставов Калининского административного округа г. Тюмени",
+            "status": "Выдан"
+          }
+        ]
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T17:11:27",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-08"
+    },
+    {
+      "id": "2-3434/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "МТУ Росимущества в Тюменской области, Ханты-Мансийском автономном округе-Югре, Ямало-Ненецком автономном округе",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3434/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Школьников А.Е.",
+        "filing_date": "13.01.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 12:18. 20.07.2026",
+        "event_date": "20.07.2026",
+        "hearing_date": "13.07.2026",
+        "hearing_time": "14:20",
+        "link": "259584982|78e55edc-f0cd-44e1-8faa-a02fc6e8fd5a",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "decision_date": "13.07.2026",
+        "last_checked_at": "2026-09-04",
+        "motivirovka_emitted": true,
+        "legal_force_est": "2026-08-21",
+        "motivirovka_date": "20.07.2026",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "legal_force_emitted": "2026-08-21",
+        "judicial_uid": "86RS0002-01-2026-000141-05",
+        "writ_awaited_since": "2026-08-21",
+        "writs": [
+          {
+            "issue_date": "24.08.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-3434/2026#1",
+            "recipient": "Районное отделение судебных приставов Калининского административного округа г. Тюмени",
+            "status": "Выдан"
+          }
+        ]
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T17:11:27",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-08"
     }
   ],
-  "updated_at": "2026-09-07T06:23:50"
+  "updated_at": "2026-09-08T06:23:17"
 }
