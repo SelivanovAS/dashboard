@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-08T07:12:56",
+ "updated_at": "2026-09-08T07:41:42",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,22 +532,20 @@
   }
  },
  "last_run": {
-  "at": "2026-09-08T07:12:56",
-  "alerts": [
-   "Сургутский городской суд: снова отдаёт результаты (23)"
-  ],
-  "requests_ok": 40,
+  "at": "2026-09-08T07:41:42",
+  "alerts": [],
+  "requests_ok": 27,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 109,
   "cards_breaker_unrequested": 109,
   "cards_breaker_recovered": 0,
   "cards_blocked": 2,
-  "cards_read": 35,
-  "cards_planned": 147,
+  "cards_read": 24,
+  "cards_planned": 136,
   "cards_read_today": 254,
   "cards_planned_today": 364,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
     "read": 22,
@@ -562,30 +560,30 @@
     "planned_today": 36
    },
    "cassation": {
-    "read": 11,
-    "planned": 11,
+    "read": 0,
+    "planned": 0,
     "read_today": 14,
     "planned_today": 14
    }
   },
   "latency": {
-   "n": 40,
-   "p50": 0.9,
-   "p90": 1.8,
-   "max": 4.9
+   "n": 27,
+   "p50": 0.5,
+   "p90": 0.9,
+   "max": 2.0
   },
   "failure_latency": {
    "degraded_card": {
     "n": 1,
-    "p50": 0.8,
-    "p90": 0.8,
-    "max": 0.8
+    "p50": 0.9,
+    "p90": 0.9,
+    "max": 0.9
    },
    "portal_placeholder": {
     "n": 2,
-    "p50": 0.8,
-    "p90": 1.1,
-    "max": 1.1
+    "p50": 1.1,
+    "p90": 2.0,
+    "max": 2.0
    }
   },
   "fail_kinds": {
@@ -620,7 +618,7 @@
      "deferred_remaining": 110,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 106.2
+     "next_probe_in_seconds": 114.1
     }
    ]
   },
