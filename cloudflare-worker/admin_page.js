@@ -974,6 +974,8 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
   font-size:var(--fs-sm); flex-wrap:wrap; }
 .imp-hist-court { color:var(--fg-2); }
 .imp-hist-meta { color:var(--fg-3); font-size:var(--fs-xs); }
+/* «сервер не забрал»: янтарный — токен объявлен в обеих темах */
+.imp-hist-warn { color:var(--amber-700); font-weight:var(--fw-bold); }
 .imp-steps { margin:0; padding-left:20px; font-size:var(--fs-xs); color:var(--fg-3);
   display:flex; flex-direction:column; gap:3px; }
 .imp-alert { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 12px;
@@ -3295,6 +3297,12 @@ var impDetectSeq = 0;          // защита от гонки async-чтени�
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
 var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
 var impLastLogItems = [];      // кэш последних записей журнала (то же — для «моих судов»)
+// Исполнитель импортов и его слоты — из ответа /admin/import-log (Worker:
+// IMPORT_EXECUTOR / IMPORT_SLOTS_LOCAL). "vps" с 08.09.2026: запись ждёт
+// сервер в статусе "queued", страница после отправки НЕ поллит журнал
+// (каждый тик — KV list, а слот может быть через два часа) и обещает слот.
+var impExecutor = "github";
+var impLastSlots = null;       // {last_slot_at, next_slot_at} или null
 var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
 var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
 // Ключ суда в форме импорта — «домен|srv_num», а не голый домен (14.08.2026).
@@ -3450,26 +3458,65 @@ var IMP_NO_COURT_RE = /не найден в реестре/;
 function impNoCourtReason(item) {
   return IMP_NO_COURT_RE.test(String(item.card_fail_reason || ""));
 }
+// Запись ведёт сервер (VPS — основной исполнитель с 08.09.2026): отчёт
+// подписан source:"vps" либо запись заведена под IMPORT_EXECUTOR="vps" и
+// ещё никем не тронута. Старые записи (GitHub + резерв на Mac) — прежние
+// формулировки про локальную машину.
+function impIsServer(item) {
+  if (item.source === "vps") return true;
+  return !item.source && item.executor === "vps";
+}
 // Иск банка потерян целиком — вернуть строку может только повторный разбор
-// ТОГО ЖЕ дампа (он лежит в KV сутки, очередь резерва его и берёт).
+// ТОГО ЖЕ дампа (он лежит в KV трое суток, очередь исполнителя его и берёт).
 function impRetryPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
+  if (impIsServer(item)) return "повторит сервер в следующий слот";
   return "повторит локальная машина в течение дня";
 }
 // Дело заведено card-blind: его дочитает и повторный импорт, и ближайший
 // прогон — у записи нет last_checked_at, FI-цикл возьмёт её первой.
 function impRefillPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
+  if (impIsServer(item)) return "дочитает сервер в следующий слот или ближайший прогон";
   return "дочитает локальная машина или ближайший прогон";
 }
-// Кто отработал запись. Метка появляется ТОЛЬКО у резерва: облако — дефолт,
-// и подписывать каждую строку истории «сделано облаком» значило бы засорить
-// список ради нулевой новости. Метка делает проверяемым обещание сводки
-// «повторит локальная машина»: видно, бралась машина за запись или нет.
+// Кто отработал запись. Метка появляется у сервера и у резерва: облако —
+// дефолт, и подписывать каждую строку истории «сделано облаком» значило бы
+// засорить список ради нулевой новости. Метка делает проверяемым обещание
+// сводки «повторит сервер» / «повторит локальная машина»: видно, бралась
+// машина за запись или нет.
 function impSourceLabel(item) {
-  if (item.source !== "mac") return "";
+  if (item.source !== "mac" && item.source !== "vps") return "";
   var when = relTime(item.updated_at || item.ts);
-  return "🖥 повтор с локальной машины" + (when ? " · " + when : "");
+  var who = item.source === "vps" ? "🖥 обработано сервером" : "🖥 повтор с локальной машины";
+  return who + (when ? " · " + when : "");
+}
+// «сегодня в 14:00» / «завтра в 12:00» / «пн 14.09 в 12:00» — когда сервер
+// возьмёт запись (next_slot_at из ответа Worker'а; своей копии слотов у
+// страницы нет). Время — по часам зрителя: операторы сидят в поясе территории.
+function impSlotWhen(iso) {
+  var t = parseIso(iso);
+  if (isNaN(t)) return "в ближайший слот";
+  var d = new Date(t), now = new Date();
+  var hm = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  var sameDay = d.toDateString() === now.toDateString();
+  var tomorrow = new Date(now.getTime() + 86400000);
+  if (sameDay) return "сегодня в " + hm;
+  if (d.toDateString() === tomorrow.toDateString()) return "завтра в " + hm;
+  return d.toLocaleDateString("ru-RU", { weekday: "short", day: "2-digit", month: "2-digit" }) + " в " + hm;
+}
+// Запись «в очереди сервера», пережившая последний слот: сервер её не взял
+// (VPS выключен, таймер не обновлён, Worker без ключа). Без слотов пометка
+// врала бы в выходные и утром до первого слота — поэтому граница приходит
+// с сервера (last_slot_at), а не считается здесь.
+function impQueueStale(item) {
+  if (item.status !== "queued") return false;
+  if (!impLastSlots || !impLastSlots.last_slot_at) return false;
+  var born = parseIso(item.ts), slot = parseIso(impLastSlots.last_slot_at);
+  if (isNaN(born) || isNaN(slot)) return false;
+  // Запас 10 мин: слот 12:00 стартует по таймеру, очередь читает журнал не
+  // мгновенно, а запись, вставленная в 11:59, честно ждёт 14:00.
+  return born < slot - 10 * 60 * 1000;
 }
 // Сводка дампового импорта. Раньше это была одна цепочка из 17 корзин через
 // « · », где заведения, штатный отсев и провалы, требующие повтора, стояли
@@ -3531,11 +3578,12 @@ function impResultParts(item) {
   // Правила приёма в трек решаются только по карточке, поэтому без неё
   // строка выбрасывается целиком.
   // ⚠️ Что делать дальше — с 23.08.2026 говорим правду: повтор УЖЕ стоит в
-  // очереди резерва (ops/mac-local-run/import_queue.jq берёт запись по
-  // fetch_fail/card_failed, агент ходит будни 10:30–18:30). Прежнее
+  // очереди исполнителя (ops/mac-local-run/import_queue.jq берёт запись по
+  // fetch_fail/card_failed; с 08.09.2026 это VPS по слотам будни
+  // 12:00–20:00, до того — резерв на Mac 10:30–18:30). Прежнее
   // «повторите дамп, когда суд отвечает» писалось 16.08, до появления
   // очереди, и звало оператора делать работу, которая сделается сама.
-  // Ручной запасной выход оставлен: Mac бывает выключен, а в пятницу вечером
+  // Ручной запасной выход оставлен: сервер может стоять, а в пятницу вечером
   // ближайший слот — только в понедельник.
   if (item.fetch_fail) {
     problems.push("⛔ " + item.fetch_fail
@@ -3587,6 +3635,7 @@ function impVerdict(item) {
     // резерва; у дыры в реестре повтор бесполезен — там задача и правда его.
     var tail = impNoCourtReason(item)
       ? "нужен повтор дампа, но сперва проверьте реестр региона"
+      : impIsServer(item) ? "повтор подхватит сервер в следующий слот"
       : "повтор подхватит локальная машина";
     return { kind: "bad", text: added
       ? "Заведено " + nPlural(added, "дело", "дела", "дел")
@@ -3600,6 +3649,7 @@ function impStatusBadge(status) {
   if (status === "done") return '<span class="badge badge-ok">готово</span>';
   if (status === "failed") return '<span class="badge badge-fail">сбой</span>';
   if (status === "started") return '<span class="badge badge-run">выполняется</span>';
+  if (status === "queued") return '<span class="badge badge-skip">в очереди сервера</span>';
   return '<span class="badge badge-skip">отправлено</span>';
 }
 // Однострочная склейка — для компактных строк «Истории импортов». Порядок
@@ -3676,7 +3726,7 @@ function acResultText(item) {
   if (item.fetch_error) {
     parts.push("⛔ " + nPlural(item.fetch_error,
       "карточка не открылась", "карточки не открылись", "карточек не открылось")
-      + " — повторит локальная машина");
+      + (impIsServer(item) ? " — повторит сервер в следующий слот" : " — повторит локальная машина"));
   }
   if (item.already) parts.push(item.already + " уже в базе");
   if (item.not_found) parts.push(item.not_found + " не найдено");
@@ -3717,6 +3767,8 @@ function renderImportHistory(items) {
       + '<span>' + escHtml(it.operator || "без имени") + '</span>'
       + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
       + (impSourceLabel(it) ? '<span class="imp-hist-meta">' + escHtml(impSourceLabel(it)) + '</span>' : '')
+      + (impQueueStale(it) ? '<span class="imp-hist-meta imp-hist-warn">⚠ сервер не забрал в '
+          + escHtml(impSlotWhen(impLastSlots.last_slot_at)) + ' — проверьте VPS (court-import.timer)</span>' : '')
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
       + '</div>' + linesHtml + '</div>';
   }).join("");
@@ -3733,6 +3785,8 @@ async function loadImportLog(logOnly) {
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
     impLastLogItems = items;
+    if (d.executor === "vps" || d.executor === "github") impExecutor = d.executor;
+    if (d.slots && typeof d.slots === "object") impLastSlots = d.slots;
     renderImportHistory(items);
     if (!logOnly) {
       // Кэшируем карту вечных ключей import:last:*: по ней светофор можно
@@ -4380,7 +4434,23 @@ async function impSend() {
       body: JSON.stringify({ court_domain: domain, operator: name, html: html }),
     });
     const d = await r.json().catch(function () { return {}; });
-    if (r.ok && d.ok) {
+    if (r.ok && d.ok && d.executor === "vps") {
+      // Сервер-исполнитель: запись ждёт слот (до двух часов), поллить журнал
+      // каждые 30 с всё это время значило бы сотни KV-list — не ждём, а
+      // обещаем слот. Дамп в KV трое суток, повтор не нужен — форму чистим
+      // сразу, как после «готово» (оператор идёт очередью судов).
+      impStopTicker();
+      impSetStatus(impStatusBadge("queued") + " страница принята · сервер обработает "
+        + escHtml(impSlotWhen(d.next_slot_at))
+        + " — итог появится в «Истории импортов» (обновите страницу позже)");
+      try { localStorage.setItem("admin_imp_steps_seen", "1"); } catch (e) {}
+      document.getElementById("imp-paste").innerHTML = "";
+      impSetFile(null);
+      impRunDetect();
+      impSending = false;
+      impUpdateSendState();
+      loadImportLog();
+    } else if (r.ok && d.ok) {
       var startedAt = Date.now();
       impStartTicker(startedAt);
       loadImportLog();
@@ -5089,7 +5159,16 @@ async function acSend() {
       }),
     });
     var d = await r.json().catch(function () { return {}; });
-    if (r.ok && d.ok) {
+    if (r.ok && d.ok && d.executor === "vps") {
+      // См. отправку дампа: слот сервера — не поллим, обещаем время.
+      acSetStatus(impStatusBadge("queued") + " пачка принята · сервер обработает "
+        + escHtml(impSlotWhen(d.next_slot_at))
+        + " — итог появится в «Истории импортов» (обновите страницу позже)");
+      document.getElementById("ac-input").value = "";
+      acSending = false;
+      acUpdateState();
+      loadImportLog();
+    } else if (r.ok && d.ok) {
       acSetStatus(impStatusBadge("dispatched") + " пачка принята, обработка в очереди…");
       acPollResult(d.key, Date.now());
     } else {

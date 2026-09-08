@@ -38,3 +38,7 @@ fi
 
 export PATH="$VPS_HERE/shims:$PATH"
 export CM_COURT_ROUTES_READY=1
+# Маркер исполнителя очереди импортов (08.09.2026): import_dumps.sh подписывает
+# им отчёт в журнал админки, коммиты и тексты ошибок; без переменной скрипт
+# считает себя ручным резервом на Mac.
+export CM_IMPORT_SOURCE=vps

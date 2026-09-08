@@ -5,6 +5,16 @@
 обе территории зелёные, RAM ≤81 МБ из 960). Mac-звено НЕ демонтировано —
 это ручной резерв (см. «Откат» ниже).
 
+**С 08.09.2026 очередь импортов — ОСНОВНОЙ исполнитель дампов и точечных
+пачек** (решение юриста): Worker с `IMPORT_EXECUTOR = "vps"` в GitHub не
+диспатчит, записи ждут `court-import.timer` в статусе `queued` (будни
+12:00/14:00/16:00/18:00/20:00 + утренние импорты после парсинга). Слоты
+продублированы в `IMPORT_SLOTS_LOCAL` wrangler.toml — админка обещает
+оператору именно эти часы; менять только парой (страж
+`test_slots_var_mirrors_timer`). `vps_env.sh` экспортирует
+`CM_IMPORT_SOURCE=vps` — им подписаны отчёт в журнал («🖥 обработано
+сервером»), коммиты «(VPS)» и тексты ошибок.
+
 **Здесь НЕТ своей логики.** `parse_all.sh`/`import_all.sh` — тонкие шимы:
 готовят Linux-окружение (`vps_env.sh`) и exec'ают боевые
 `ops/mac-local-run/parse_all.sh` / `import_all.sh` с `--anywhere`. Вся
@@ -43,6 +53,12 @@ egress уже РФ), notify/osascript безопасен сам (`|| true`).
 6. `cp ops/vps-run/systemd/court-*.{service,timer} /etc/systemd/system/`
    → `systemctl daemon-reload` → `systemctl enable --now court-parse.timer
    court-import.timer`.
+
+**Обновление слотов** (таймер поменялся в репо): `git pull` в
+`/opt/court-monitor/dashboard` → повторить `cp` → `systemctl daemon-reload`
+→ `systemctl restart court-import.timer` (без restart таймер держит старый
+NextElapse) → `systemctl list-timers court-import.timer` показывает новый
+ближайший слот.
 
 ## Наблюдение
 

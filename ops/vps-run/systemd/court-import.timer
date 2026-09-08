@@ -1,15 +1,20 @@
-# Слоты — зеркало com.court-monitor.import.plist (будни 10:30–18:30 каждые
-# 2 часа, время местное Asia/Yekaterinburg). KV-бюджет: 5 слотов × 2
-# территории = 10 list-запросов в день (лимит free-tier 1000 — не наращивать).
+# Слоты — зеркало com.court-monitor.import.plist (будни 12:00–20:00 каждые
+# 2 часа, время местное Asia/Yekaterinburg; решение юриста 08.09.2026 — VPS
+# теперь ОСНОВНОЙ исполнитель импортов, Worker записи в GitHub не диспатчит).
+# ⚠️ Тот же список — IMPORT_SLOTS_LOCAL в cloudflare-worker/wrangler.toml
+# (админка обещает оператору слот; страж test_mac_import_dumps.py).
+# KV-бюджет: 5 слотов × 2 территории = 10 list-запросов в день (лимит
+# free-tier 1000 — не наращивать). Утренние импорты после парсинга
+# (parse_all.sh → run_imports) добирают вечерние записи.
 [Unit]
 Description=Court Monitor: слоты очереди импортов
 
 [Timer]
-OnCalendar=Mon..Fri 10:30
-OnCalendar=Mon..Fri 12:30
-OnCalendar=Mon..Fri 14:30
-OnCalendar=Mon..Fri 16:30
-OnCalendar=Mon..Fri 18:30
+OnCalendar=Mon..Fri 12:00
+OnCalendar=Mon..Fri 14:00
+OnCalendar=Mon..Fri 16:00
+OnCalendar=Mon..Fri 18:00
+OnCalendar=Mon..Fri 20:00
 Persistent=true
 
 [Install]

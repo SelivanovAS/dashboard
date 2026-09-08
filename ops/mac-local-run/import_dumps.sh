@@ -1,15 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# Court Monitor — разбор очереди ОПЕРАТОРСКИХ ИМПОРТОВ НА MAC (резерв).
+# Court Monitor — разбор очереди ОПЕРАТОРСКИХ ИМПОРТОВ (VPS — основной
+# исполнитель с 08.09.2026; Mac — ручной резерв тем же скриптом).
 #
 # ЗАЧЕМ. Оператор решает проверочный код, вставляет выдачу суда в админку →
-# Worker кладёт дамп в KV и диспатчит import_cases.yml. Пока суды режут адреса
-# облачных раннеров (16.08.2026: страница защиты ГАС с HTTP 200, 0 карточек из
-# 10), облачный импорт заводит НОЛЬ: правила приёма исков банка решаются только
-# по карточке, и строка теряется целиком. Cloudflare и его KV при этом живы —
-# они на sudrf не ходят. Значит, ту же работу может сделать этот Mac из сети
-# Сбера: тем же импортёром, по тем же эндпоинтам Worker'а, с тем же отчётом в
-# журнал админки (оператор ничего нового не делает).
+# Worker кладёт дамп в KV. До 08.09.2026 он ещё и диспатчил import_cases.yml,
+# а этот скрипт лишь дочитывал провалы: суды режут адреса облачных раннеров
+# (16.08.2026: страница защиты ГАС с HTTP 200, 0 карточек из 10), и облачный
+# импорт заводил НОЛЬ — правила приёма исков банка решаются только по
+# карточке, строка теряется целиком. С 08.09.2026 (IMPORT_EXECUTOR="vps" у
+# Worker'а) запись сразу ждёт этот скрипт в статусе "queued": та же работа,
+# тем же импортёром, по тем же эндпоинтам Worker'а, с тем же отчётом в журнал
+# админки (оператор ничего нового не делает). GitHub-путь остаётся аварийным.
+# Кто исполняет — маркер CM_IMPORT_SOURCE (vps ставит ops/vps-run/vps_env.sh;
+# без него — mac): им подписываются отчёт, коммиты и тексты ошибок.
 #
 # КАНАЛОВ ДВА (с 23.08.2026). Второй — точечные пачки «Добавить дела»: они
 # умирают от блока ровно так же, а в ССЫЛОЧНОМ режиме (единственный путь для
@@ -98,8 +102,16 @@ LOCK="$LOG_DIR/.run.lock"
 CONF_DIR="$HOME/.config/court-monitor"
 # workers.dev режет дефолтный UA некоторых клиентов (ошибка 1010 → 403 до
 # Worker'а; инцидент живого лога 13–16.07.2026) — представляемся явно.
-UA="court-monitor-import-mac/1.0"
-DUMP_TTL=86400          # столько живёт дамп/задание в KV — старше не забрать
+# Кто исполняет: "vps" (боевой, ставит vps_env.sh) или "mac" (ручной резерв).
+# Маркер едет в отчёт Worker'у (белый список там же), в user.name и сообщения
+# коммитов, в тексты ошибок — оператор видит, кто взял запись.
+SRC="${CM_IMPORT_SOURCE:-mac}"
+case "$SRC" in vps) SRC_LABEL="VPS" ;; *) SRC_LABEL="Mac" ;; esac
+UA="court-monitor-import-$SRC/1.0"
+# Столько живёт дамп/задание в KV — старше не забрать. Зеркало IMPORT_DUMP_TTL
+# в worker.js (72 ч с 08.09.2026: слоты будних дней, пятничная вставка после
+# 20:00 иначе не доживала бы до понедельника).
+DUMP_TTL=259200
 STARTED_GRACE=900       # ДАМП «идёт» моложе 15 мин — облачный джоб ещё жив
 # У ПАЧЕК грейс свой и вчетверо больше: add_cases.yml стоит на
 # timeout-minutes: 45 (до 20 номеров × все открытые суды с вежливой паузой),
@@ -341,7 +353,7 @@ fi
 # Сеть/маршруты/реальные страницы судов + окружение территории + свежий git — общий хвост
 # обоих режимов, зовётся когда работа ТОЧНО есть. $1 = "manual" (--file: юрист
 # смотрит на экран — кричим сразу) или "queued", $2 = размер очереди (агент:
-# слоты дампов идут до 18:30 и добьют сами — лог + уведомление, алерт не чаще
+# слоты дампов идут до 20:00 и добьют сами — лог + уведомление, алерт не чаще
 # раза в день, маркер .alerted-dumps-ДАТА рядом с логами).
 courts_gate() {
   local mode="$1" queued="${2:-?}" marker
@@ -410,29 +422,29 @@ post_status() {  # $1 = ключ, $2 = статус
   # DRY-RUN не трогает журнал оператора вовсе: иначе холостая проверка
   # перевела бы запись в «идёт…» и оставила её такой навсегда.
   [ -n "$WORKER_URL" ] && [ "$DRY_RUN" != "1" ] || return 0
-  # source:"mac" — чтобы застрявшее «выполняется» называло держателя записи.
-  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg st "$2" \
-     '{($kf): $k, status:$st, source:"mac"}' \
+  # source — чтобы застрявшее «выполняется» называло держателя записи.
+  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg st "$2" --arg src "$SRC" \
+     '{($kf): $k, status:$st, source:$src}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
 post_error() {  # $1 = ключ, $2 = текст
   [ -n "$WORKER_URL" ] || return 0
-  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg er "$2" \
-     '{($kf): $k, status:"failed", error:$er, source:"mac"}' \
+  jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg er "$2" --arg src "$SRC" \
+     '{($kf): $k, status:"failed", error:$er, source:$src}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
 post_summary() {  # $1 = ключ дампа, $2 = статус, $3 = summary импортёра
   [ -n "$WORKER_URL" ] || return 0
   # Пейлоад ОДИН с облаком: ops/import_result_body.jq. Своя сборка здесь
   # означала бы молча разъехавшиеся счётчики — этим проект уже болел дважды.
-  jq -c --arg dk "$1" --arg st "$2" --arg ru "" --arg src mac \
+  jq -c --arg dk "$1" --arg st "$2" --arg ru "" --arg src "$SRC" \
      -f "$REPO/ops/import_result_body.jq" "$3" > "$TMP_DIR/body.json" \
     && post_body "$TMP_DIR/body.json"
 }
 post_case_summary() {  # $1 = ключ задания, $2 = статус, $3 = summary скрипта
   [ -n "$WORKER_URL" ] || return 0
   # Свой общий файл — у канала пачек другой ключ и другие счётчики.
-  jq -c --arg jk "$1" --arg st "$2" --arg ru "" --arg src mac \
+  jq -c --arg jk "$1" --arg st "$2" --arg ru "" --arg src "$SRC" \
      -f "$REPO/ops/add_case_result_body.jq" "$3" > "$TMP_DIR/body.json" \
     && post_body "$TMP_DIR/body.json"
 }
@@ -447,7 +459,7 @@ commit_data() {  # $1 = сообщение коммита
     log "  изменений в данных нет — коммит не нужен"
     return 0
   fi
-  git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
+  git -c user.name="Court Monitor ($SRC_LABEL)" -c user.email="bot@court-monitor.local" \
       commit -m "$1" >>"$LOG" 2>&1 || return 1
   # Ретраи: облачный джоб или парсинг могли запушить между pull и push.
   local i
@@ -462,10 +474,10 @@ commit_data() {  # $1 = сообщение коммита
 commit_and_push() {  # $1 = имя суда, $2 = added, $3 = added_bank
   local suffix=""
   [ "$3" != "0" ] && suffix=" · 🏦 +$3 в трек"
-  commit_data "📥 Импорт (Mac): $1 +$2$suffix"
+  commit_data "📥 Импорт ($SRC_LABEL): $1 +$2$suffix"
 }
 commit_and_push_case() {  # $1 = сколько дел добавлено пачкой
-  commit_data "📌 Точечное добавление (Mac): +$1"
+  commit_data "📌 Точечное добавление ($SRC_LABEL): +$1"
 }
 
 # ── Один импорт: дамп-файл → cases.json → отчёт ──────────────────────────────
@@ -482,7 +494,7 @@ run_import() {  # $1 = файл дампа, $2 = домен суда, $3 = оп�
   if [ ! -s "$summary" ]; then
     log "  ERROR: импортёр упал до разбора дампа (код $rc)"
     [ -n "$key" ] && post_error "$key" \
-      "резерв на Mac: импортёр упал до разбора дампа (код $rc)"
+      "$SRC_LABEL: импортёр упал до разбора дампа (код $rc)"
     return 1
   fi
   added=$(jq -r '.added // 0' "$summary")
@@ -499,7 +511,8 @@ run_import() {  # $1 = файл дампа, $2 = домен суда, $3 = оп�
   elif ! commit_and_push "$court" "$added" "$added_bank"; then
     # Зеркало облака: «done» только когда И импорт отработал, И данные уехали.
     status=failed
-    jq '.error = "резерв на Mac: дамп обработан, но коммит не запушился — повторите импорт, уже добавленное отсеет дедуп"' \
+    jq --arg lbl "$SRC_LABEL" \
+       '.error = ($lbl + ": дамп обработан, но коммит не запушился — повторите импорт, уже добавленное отсеет дедуп")' \
       "$summary" > "$summary.tmp" && mv "$summary.tmp" "$summary"
     log "  ERROR: коммит/push не удался"
   fi
@@ -526,7 +539,7 @@ run_add_cases() {  # $1 = файл задания, $2 = ключ|""
   if [ ! -s "$summary" ]; then
     log "  ERROR: скрипт упал до разбора задания (код $rc)"
     [ -n "$key" ] && post_error "$key" \
-      "резерв на Mac: скрипт упал до разбора задания (код $rc)"
+      "$SRC_LABEL: скрипт упал до разбора задания (код $rc)"
     return 1
   fi
   added=$(jq -r '(.added_main // 0) + (.added_bank // 0) + (.reactivated // 0) + (.promoted // 0)' "$summary")
@@ -543,7 +556,8 @@ run_add_cases() {  # $1 = файл задания, $2 = ключ|""
   elif ! commit_and_push_case "$added"; then
     # Зеркало облака: «done» только когда И скрипт отработал, И данные уехали.
     status=failed
-    jq '.error = "резерв на Mac: пачка обработана, но коммит не запушился — повторите пачку, уже добавленное отсеет дедуп"' \
+    jq --arg lbl "$SRC_LABEL" \
+       '.error = ($lbl + ": пачка обработана, но коммит не запушился — повторите пачку, уже добавленное отсеет дедуп")' \
       "$summary" > "$summary.tmp" && mv "$summary.tmp" "$summary"
     log "  ERROR: коммит/push не удался"
   fi
@@ -557,7 +571,7 @@ if [ -n "$FILE_ARG" ]; then
   [ -n "$COURT_ARG" ] || die "с --file обязателен --court <домен суда>"
   courts_gate manual
   log "Локальный дамп: $FILE_ARG · суд $COURT_ARG"
-  if run_import "$FILE_ARG" "$COURT_ARG" "${USER:-оператор} (Mac)" ""; then
+  if run_import "$FILE_ARG" "$COURT_ARG" "${USER:-оператор} ($SRC_LABEL)" ""; then
     notify "Дамп импортирован ($COURT_ARG)"
     log "Готово"
     exit 0
@@ -635,14 +649,14 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
     worker_cfg "/add-case-job?key=$key"
     if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$job"; then
       log "  ERROR: задание не скачалось — истёк TTL 24 ч или сеть"
-      post_error "$key" "резерв на Mac: задание не скачалось из KV (истёк TTL 24 ч?) — отправьте пачку заново"
+      post_error "$key" "$SRC_LABEL: задание не скачалось из KV (истёк TTL 72 ч?) — отправьте пачку заново"
       rc=1
       continue
     fi
     size=$(wc -c < "$job" | tr -d ' ')
     if [ "$size" -lt 10 ]; then
       log "  ERROR: задание подозрительно мало ($size байт)"
-      post_error "$key" "резерв на Mac: задание подозрительно мало ($size байт) — отправьте пачку заново"
+      post_error "$key" "$SRC_LABEL: задание подозрительно мало ($size байт) — отправьте пачку заново"
       rc=1
       continue
     fi
@@ -662,14 +676,14 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
   worker_cfg "/import-dump?key=$key"
   if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$dump"; then
     log "  ERROR: дамп не скачался — истёк TTL 24 ч или сеть"
-    post_error "$key" "резерв на Mac: дамп не скачался из KV (истёк TTL 24 ч?) — вставьте выдачу заново"
+    post_error "$key" "$SRC_LABEL: дамп не скачался из KV (истёк TTL 72 ч?) — вставьте выдачу заново"
     rc=1
     continue
   fi
   size=$(wc -c < "$dump" | tr -d ' ')
   if [ "$size" -lt 512 ]; then
     log "  ERROR: дамп подозрительно мал ($size байт)"
-    post_error "$key" "резерв на Mac: дамп подозрительно мал ($size байт) — вставьте выдачу заново"
+    post_error "$key" "$SRC_LABEL: дамп подозрительно мал ($size байт) — вставьте выдачу заново"
     rc=1
     continue
   fi

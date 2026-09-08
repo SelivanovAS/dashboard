@@ -70,7 +70,9 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 > 24.04, egress РФ, TZ Asia/Yekaterinburg) — те же скрипты Mac-звена через
 > тонкие шимы [`ops/vps-run/`](../../ops/vps-run/README.md): systemd-таймеры
 > `court-parse.timer` (будни 06:00–08:30/30 мин + 08:45) и
-> `court-import.timer` (10:30–18:30/2 ч) зовут `parse_all.sh`/`import_all.sh`,
+> `court-import.timer` (12:00–20:00/2 ч; с 08.09.2026 — ОСНОВНОЙ исполнитель
+> операторских импортов: Worker с `IMPORT_EXECUTOR="vps"` в GitHub не
+> диспатчит, записи ждут слот в статусе `queued`) зовут `parse_all.sh`/`import_all.sh`,
 > которые exec'ают боевые `ops/mac-local-run/*` с `--anywhere`. Вся цепочка
 > ниже описывает и VPS — своей логики у шимов нет. **Mac-агенты выгружены**
 > (`launchctl unload`, plist на месте) — Mac стал ручным резервом: откат =
