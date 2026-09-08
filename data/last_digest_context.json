@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-08T06:45:45",
+  "saved_at": "2026-09-08T07:12:56",
   "new_cases": [
     {
       "Номер дела": "33-6299/2026",
@@ -2155,8 +2155,67 @@
   "total_active_fi": 31,
   "total_active_cassation": 32,
   "total_active_bank": 389,
-  "cass_changes": [],
+  "cass_changes": [
+    {
+      "case": "2-2056/2026",
+      "cassation_internal_number": "8Г-15552/2026",
+      "type": [
+        "review_result_change",
+        "cass_hearing_scheduled"
+      ],
+      "details": {
+        "stage_prev": "cassation",
+        "stage_now": "cassation",
+        "outcome": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "result_text": "",
+        "result_for_appeal": "",
+        "filing_date": "02.09.2026",
+        "decision_date": "",
+        "hearing_date": "15.10.2026",
+        "hearing_time": "11:20",
+        "appellant": "Хадыев В. М.",
+        "appellant_is_bank": false,
+        "appellant_status": "ИСТЕЦ",
+        "act_kind": "Судебное РЕШЕНИЕ",
+        "act_published": false,
+        "link": "14521465|48fc3dc3-405b-457d-9f8f-2929da1b110f",
+        "court_domain": "7kas.sudrf.ru",
+        "remanded_to": "",
+        "suspended_until": ""
+      }
+    },
+    {
+      "case": "2-4251/2025",
+      "cassation_internal_number": "8Г-15251/2026",
+      "type": [
+        "review_result_change",
+        "cass_hearing_scheduled"
+      ],
+      "details": {
+        "stage_prev": "cassation",
+        "stage_now": "cassation",
+        "outcome": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "result_text": "",
+        "result_for_appeal": "",
+        "filing_date": "31.08.2026",
+        "decision_date": "",
+        "hearing_date": "07.10.2026",
+        "hearing_time": "11:15",
+        "appellant": "Тонких Н. Г., Тонких Е. Т.",
+        "appellant_is_bank": false,
+        "appellant_status": "ОТВЕТЧИК",
+        "act_kind": "Судебное РЕШЕНИЕ",
+        "act_published": false,
+        "link": "13928327|540f2eae-efe2-4116-9842-0aee4d427527",
+        "court_domain": "7kas.sudrf.ru",
+        "remanded_to": "",
+        "suspended_until": ""
+      }
+    }
+  ],
   "cass_discovered": [],
   "issue_key": "2026-09-08T06:23:17",
-  "updated_at": "2026-09-08T06:45:45"
+  "updated_at": "2026-09-08T07:12:56"
 }

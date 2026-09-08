@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0002-01-2026-008685-78",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-08",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0002-01-2026-008667-35",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-08",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -274,7 +272,7 @@
       }
     },
     {
-      "id": "М-7907/2026",
+      "id": "2-9803/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
       "defendant": "Стальский Шамиль Александрович",
@@ -282,7 +280,7 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-7907/2026",
+        "case_number": "2-9803/2026",
         "court": "Сургутский городской суд",
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Ким Аркадий Анатольевич",
@@ -300,7 +298,9 @@
         "delo_id": 1540005,
         "srv_num": 1,
         "last_checked_at": "2026-09-07",
-        "intake_card_parse": true
+        "intake_card_parse": true,
+        "material_number": "М-7907/2026",
+        "accepted_pending_emit": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -467,7 +467,7 @@
       }
     },
     {
-      "id": "М-7866/2026",
+      "id": "2-9800/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
       "defendant": "Хасиев Хункурпаша Исирпашаевич",
@@ -475,7 +475,7 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-7866/2026",
+        "case_number": "2-9800/2026",
         "court": "Сургутский городской суд",
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Зимина Анна Юрьевна",
@@ -492,7 +492,9 @@
         "judicial_uid": "86RS0004-01-2026-017107-23",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04"
+        "last_checked_at": "2026-09-04",
+        "material_number": "М-7866/2026",
+        "accepted_pending_emit": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23707,5 +23709,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-08T06:45:45"
+  "updated_at": "2026-09-08T07:12:56"
 }
