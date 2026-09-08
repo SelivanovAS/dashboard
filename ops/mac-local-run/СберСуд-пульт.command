@@ -97,7 +97,7 @@ agent_line() {
   local p="—" i="—"
   launchctl list 2>/dev/null | grep -q com.court-monitor.parse && p="✓" || p="⚠ выключен"
   launchctl list 2>/dev/null | grep -q com.court-monitor.import && i="✓" || i="⚠ выключен"
-  echo "Автоматика: парсинг $p (будни 09:00·11:00) · дампы $i (будни 10:30–18:30, каждые 2 ч)"
+  echo "Автоматика: парсинг $p (будни 09:00·11:00) · дампы $i (будни 12:00–20:00, каждые 2 ч)"
 }
 
 build_header() {

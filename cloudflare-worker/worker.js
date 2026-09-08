@@ -1998,10 +1998,70 @@ async function handleAdminDispatch(request, env) {
 // import_search_dump.py, коммитит cases.json и постит итог POST /import-result
 // → страница поллит GET /admin/import-log и показывает оператору «+N».
 
-const IMPORT_DUMP_TTL = 24 * 3600;        // дамп нужен только ближайшему прогону
+// Тело дампа/задания живёт 72 ч (было 24; 08.09.2026): исполнитель — VPS по
+// слотам будних дней, и пятничная вставка после 20:00 иначе умирала бы до
+// понедельника. ⚠️ Зеркало — DUMP_TTL в ops/mac-local-run/import_dumps.sh:
+// очередь резерва отсекает записи старше него (страж test_mac_import_dumps).
+const IMPORT_DUMP_TTL = 72 * 3600;
 const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в админке
 const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
 const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
+
+// Кто исполняет операторские импорты (08.09.2026, решение юриста). "vps" —
+// Worker только кладёт дамп/задание в KV и заводит запись журнала со статусом
+// "queued"; забирает её VPS по слотам court-import.timer тем же
+// import_dumps.sh (ops/mac-local-run/import_queue.jq берёт "queued" сразу,
+// без грейсов — живого облачного джоба у такой записи нет). "github" — прежний
+// путь: workflow_dispatch import_cases.yml / add_cases.yml, статус
+// "dispatched"; он же фолбэк для деплоя без [vars]. Причина смены: раннер
+// GitHub — лотерея адресов (проба 16.08.2026: 10 из 10 судов режут), и
+// провалы всё равно дочитывал VPS — теперь он делает работу сразу и один.
+// Аварийный откат — IMPORT_EXECUTOR = "github" + wrangler deploy: действует
+// на НОВЫЕ записи, уже стоящие в "queued" заберёт очередь резерва (VPS/Mac).
+// ⚠️ Пометки «лист не нужен» (writ_waiver) флага не знают и всегда идут
+// через GitHub: очередь резерва их не берёт никогда — к судам они не ходят.
+function importExecutor() {
+  return cfgVar("IMPORT_EXECUTOR", "github") === "vps" ? "vps" : "github";
+}
+// Слоты исполнителя по местному времени территории — зеркало
+// ops/vps-run/systemd/court-import.timer (страж в test_mac_import_dumps.py
+// сверяет var эталона с таймером). Отсюда оператору обещается «сервер
+// обработает в ЧЧ:ММ», а истории импортов — «сервер не забрал»: без слотов
+// оба текста врали бы (выходные, утро до первого слота). Таймер ходит
+// Mon..Fri без календаря праздников — здесь так же, только сб/вс.
+const IMPORT_SLOTS_DEFAULT = "12:00,14:00,16:00,18:00,20:00";
+function importSlotsLocal() {
+  return String(cfgVar("IMPORT_SLOTS_LOCAL", IMPORT_SLOTS_DEFAULT)).split(",")
+    .map((s) => /^(\d{1,2}):(\d{2})$/.exec(s.trim()))
+    .filter(Boolean)
+    .map((m) => [Number(m[1]), Number(m[2])]);
+}
+// {last_slot_at, next_slot_at} — ISO, ближайшие слоты вокруг nowMs.
+function importSlotsAt(nowMs) {
+  const slots = importSlotsLocal();
+  if (!slots.length) return { last_slot_at: null, next_slot_at: null };
+  const offMs = calTzOffsetMin() * 60 * 1000;
+  const local = new Date(nowMs + offMs);   // местные часы в UTC-полях Date
+  let last = null, next = null;
+  for (let i = -7; i <= 7; i++) {
+    const day = new Date(Date.UTC(
+      local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + i
+    ));
+    const dow = day.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    for (const [h, m] of slots) {
+      const fire = Date.UTC(
+        day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, m
+      ) - offMs;
+      if (fire <= nowMs) { if (last === null || fire > last) last = fire; }
+      else if (next === null || fire < next) next = fire;
+    }
+  }
+  return {
+    last_slot_at: last === null ? null : new Date(last).toISOString(),
+    next_slot_at: next === null ? null : new Date(next).toISOString(),
+  };
+}
 
 // С 01.09.2026 ГАС «Правосудие» отдаёт суды на именах с ТОЧКОЙ
 // («artemovsky.svd.sudrf.ru»), старую форму с «--» 301-редиректит туда —
@@ -2077,32 +2137,41 @@ async function handleAdminImportDump(request, env) {
   const dumpKey = `import:dump:${uuid}`;
   const ts = new Date().toISOString();
   const logKey = `import:log:${ts}|${uuid}`;
+  // Исполнитель решает начальный статус: "queued" ждёт слота VPS (диспатча
+  // нет), "dispatched" — GitHub-джоб уже дёрнут (см. importExecutor).
+  const executor = importExecutor();
   const record = {
     uuid, court_domain: courtDomain, operator, ts,
-    status: "dispatched", updated_at: ts,
+    status: executor === "vps" ? "queued" : "dispatched", executor, updated_at: ts,
   };
   await env.PUSH_SUBSCRIPTIONS.put(dumpKey, html, { expirationTtl: IMPORT_DUMP_TTL });
   await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,
   });
-  const res = await dispatchWorkflowOnGitHub(env, "import_cases.yml", {
-    dump_key: dumpKey, court_domain: courtDomain, operator,
-  });
-  if (!res.ok) {
-    // Диспатч не прошёл — фиксируем в журнале, оператор увидит «failed»
-    // сразу, а не по таймауту поллинга.
-    record.status = "failed";
-    record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
-    record.updated_at = new Date().toISOString();
-    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-      expirationTtl: IMPORT_LOG_TTL,
+  if (executor !== "vps") {
+    const res = await dispatchWorkflowOnGitHub(env, "import_cases.yml", {
+      dump_key: dumpKey, court_domain: courtDomain, operator,
     });
-    return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
-      status: 502, headers: jsonHeaders,
-    });
+    if (!res.ok) {
+      // Диспатч не прошёл — фиксируем в журнале, оператор увидит «failed»
+      // сразу, а не по таймауту поллинга.
+      record.status = "failed";
+      record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
+      record.updated_at = new Date().toISOString();
+      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+        expirationTtl: IMPORT_LOG_TTL,
+      });
+      return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
+        status: 502, headers: jsonHeaders,
+      });
+    }
   }
-  console.log(`import dump принят: ${dumpKey} (${courtDomain}, ${operator || "без имени"}, ${html.length} байт)`);
-  return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
+  console.log(`import dump принят: ${dumpKey} (${courtDomain}, ${operator || "без имени"}, ${html.length} байт, ${executor})`);
+  // executor + next_slot_at — странице: в режиме vps она не поллит журнал
+  // (каждый тик — KV list), а обещает слот.
+  return new Response(JSON.stringify({
+    ok: true, key: uuid, executor, next_slot_at: importSlotsAt(Date.now()).next_slot_at,
+  }), { headers: jsonHeaders });
 }
 
 // Выдача сырого дампа GitHub Action'у (Bearer PUSH_SECRET — он уже есть в
@@ -2242,11 +2311,12 @@ async function handleAdminAddCase(request, env) {
   const jobKey = `import:case:${uuid}`;
   const ts = new Date().toISOString();
   const logKey = `import:log:${ts}|${uuid}`;
+  const executor = importExecutor();   // см. handleAdminImportDump
   const record = {
     uuid, kind: "case", items_count: items.length,
     preview: items[0].slice(0, 120),
     court_domain: courtDomain, operator, ts,
-    status: "dispatched", updated_at: ts,
+    status: executor === "vps" ? "queued" : "dispatched", executor, updated_at: ts,
   };
   const job = {
     kind: "case", items, court_domain: courtDomain,
@@ -2258,22 +2328,26 @@ async function handleAdminAddCase(request, env) {
   await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
     expirationTtl: IMPORT_LOG_TTL,
   });
-  const res = await dispatchWorkflowOnGitHub(env, "add_cases.yml", {
-    job_key: jobKey, operator,
-  });
-  if (!res.ok) {
-    record.status = "failed";
-    record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
-    record.updated_at = new Date().toISOString();
-    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-      expirationTtl: IMPORT_LOG_TTL,
+  if (executor !== "vps") {
+    const res = await dispatchWorkflowOnGitHub(env, "add_cases.yml", {
+      job_key: jobKey, operator,
     });
-    return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
-      status: 502, headers: jsonHeaders,
-    });
+    if (!res.ok) {
+      record.status = "failed";
+      record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
+      record.updated_at = new Date().toISOString();
+      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
+        expirationTtl: IMPORT_LOG_TTL,
+      });
+      return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
+        status: 502, headers: jsonHeaders,
+      });
+    }
   }
-  console.log(`add-case принят: ${jobKey} (${items.length} строк, ${operator || "без имени"})`);
-  return new Response(JSON.stringify({ ok: true, key: uuid }), { headers: jsonHeaders });
+  console.log(`add-case принят: ${jobKey} (${items.length} строк, ${operator || "без имени"}, ${executor})`);
+  return new Response(JSON.stringify({
+    ok: true, key: uuid, executor, next_slot_at: importSlotsAt(Date.now()).next_slot_at,
+  }), { headers: jsonHeaders });
 }
 
 
@@ -2507,12 +2581,13 @@ async function handleImportResult(request, env) {
   } else if (typeof body.card_fail_reason === "string") {
     delete record.card_fail_reason;
   }
-  // Кто отработал запись — облако или резерв на Mac (23.08.2026). Сводка
-  // обещает оператору «повторит локальная машина», и обещание должно быть
-  // проверяемым: без маркера видно только, что счётчики поменялись, а кем —
-  // нет. ⚠️ БЕЛЫЙ СПИСОК значений, а не slice: поле идёт в рендер админки, и
-  // произвольная строка из тела запроса там не нужна.
-  if (body.source === "github" || body.source === "mac") {
+  // Кто отработал запись — облако, VPS (основной исполнитель с 08.09.2026)
+  // или резерв на Mac (23.08.2026). Сводка обещает оператору «обработает
+  // сервер», и обещание должно быть проверяемым: без маркера видно только,
+  // что счётчики поменялись, а кем — нет. ⚠️ БЕЛЫЙ СПИСОК значений, а не
+  // slice: поле идёт в рендер админки, и произвольная строка из тела запроса
+  // там не нужна.
+  if (body.source === "github" || body.source === "mac" || body.source === "vps") {
     record.source = body.source;
   }
   // Раздел, распознанный импортёром по дампу (04.09.2026): на домене облсуда
@@ -2594,7 +2669,12 @@ async function handleAdminImportLog(request, env) {
         if (e.court_domain) last[e.court_domain] = e;
       });
     }
-    return new Response(JSON.stringify({ items, last }), {
+    // executor + слоты — истории импортов: запись «queued», пережившая
+    // последний слот, помечается «сервер не забрал» (без слотов пометка врала
+    // бы в выходные и утром до первого слота).
+    return new Response(JSON.stringify({
+      items, last, executor: importExecutor(), slots: importSlotsAt(Date.now()),
+    }), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });
   } catch (e) {

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Импорт дампов капчёвых судов с Mac (ops/mac-local-run/import_dumps.sh).
+"""Очередь операторских импортов (ops/mac-local-run/import_dumps.sh):
+VPS — основной исполнитель с 08.09.2026, Mac — ручной резерв тем же скриптом.
 
 ЗАЧЕМ КАНАЛ. Пока суды режут адреса облачных раннеров (16.08.2026: страница
 защиты ГАС с HTTP 200, 0 карточек из 10), операторский импорт в облаке заводит
 НОЛЬ: правила приёма исков банка решаются только по карточке, и строка выдачи
 теряется целиком. Cloudflare и KV живы — на sudrf они не ходят, — поэтому ту же
-работу делает Mac из сети Сбера по тем же эндпоинтам Worker'а.
+работу делает машина с российским адресом по тем же эндпоинтам Worker'а.
+С 08.09.2026 (IMPORT_EXECUTOR="vps" у Worker'а) записи в GitHub не
+диспатчатся вовсе — они ждут очередь в статусе "queued".
 
 ЧТО СТЕРЕЖЁМ. Оба вида поломки этого проекта уже случались молча:
 1. Копия вместо общего файла (списки файлов данных, домены судов, jq-пейлоад
@@ -258,17 +261,38 @@ class TestDriverWiring:
         assert 'kind="dump"; uuid="$f1"' in text, "нет отката на старый формат"
 
     def test_reports_name_the_reserve_as_the_source(self):
-        """Сводка обещает оператору «повторит локальная машина» — обещание
-        должно быть проверяемым: без маркера видно только, что счётчики
-        поменялись, а кем — нет."""
+        """Сводка обещает оператору «повторит сервер» / «повторит локальная
+        машина» — обещание должно быть проверяемым: без маркера видно только,
+        что счётчики поменялись, а кем — нет. Маркер — CM_IMPORT_SOURCE
+        (vps ставит пролог VPS, без него — mac), а не литерал."""
         text = _read_repo(IMPORTER)
-        assert 'source:"mac"' in text
-        assert "--arg src mac" in text
+        assert 'SRC="${CM_IMPORT_SOURCE:-mac}"' in text
+        assert 'source:$src' in text
+        assert '--arg src "$SRC"' in text
+        assert 'source:"mac"' not in text and "--arg src mac" not in text, (
+            "литерал mac подпишет отчёт VPS чужим именем")
         worker = _read_repo("cloudflare-worker/worker.js")
         assert 'body.source === "mac"' in worker, "Worker режет маркер"
+        assert 'body.source === "vps"' in worker, "Worker режет маркер VPS"
         assert "record.source = body.source" in worker
         admin = _read_repo("cloudflare-worker/admin_page.js")
         assert "локальной машины" in admin
+        assert "обработано сервером" in admin
+        vps_env = _read_repo("ops/vps-run/vps_env.sh")
+        assert "export CM_IMPORT_SOURCE=vps" in vps_env, (
+            "VPS без маркера подписался бы «Mac»")
+
+    def test_error_texts_name_the_executor(self):
+        """Тексты ошибок уходят в record.error и на экран оператора — «резерв
+        на Mac: …» с VPS врал бы. Внутри одинарных кавычек jq переменная шелла
+        не раскрывается — там метка едет через --arg."""
+        text = _read_repo(IMPORTER)
+        assert "резерв на Mac" not in text
+        assert '"$SRC_LABEL: ' in text
+        assert '--arg lbl "$SRC_LABEL"' in text
+        assert "'.error = \"$SRC_LABEL" not in text, (
+            "$SRC_LABEL в одинарных кавычках jq не раскроется")
+        assert 'user.name="Court Monitor ($SRC_LABEL)"' in text
 
     def test_config_is_read_without_source(self):
         """Конфиг worker.<регион> читается через cm_worker_conf (awk, а не
@@ -307,9 +331,20 @@ JOURNAL = {"items": [
     # зависший «идёт» двухчасовой давности — забираем
     _record("stuck", status="started", ts="2026-08-16T08:00:00.000Z",
             updated_at="2026-08-16T08:00:00.000Z"),
-    # старше TTL KV: дампа в хранилище уже нет
-    _record("expired", ts="2026-08-14T09:00:00.000Z",
-            updated_at="2026-08-14T09:00:00.000Z", card_failed=3),
+    # старше TTL KV (72 ч): дампа в хранилище уже нет
+    _record("expired", ts="2026-08-12T09:00:00.000Z",
+            updated_at="2026-08-12T09:00:00.000Z", card_failed=3),
+    # ── VPS — основной исполнитель (08.09.2026): Worker записи в GitHub не
+    # диспатчит, они ждут очередь в статусе "queued" — берём СРАЗУ, без
+    # грейсов: живого облачного джоба у такой записи нет.
+    _record("queued", status="queued", ts="2026-08-16T09:59:00.000Z",
+            updated_at="2026-08-16T09:59:00.000Z"),
+    _record("case-queued", kind="case", court_domain="", status="queued",
+            ts="2026-08-16T09:59:00.000Z", updated_at="2026-08-16T09:59:00.000Z"),
+    # Пометка «лист не нужен» в статусе queued (быть не должно — хендлер
+    # флага не знает; но если появится — очередь её всё равно не берёт).
+    _record("writ-queued", kind="writ_waiver", status="queued",
+            ts="2026-08-16T09:59:00.000Z"),
     # ── Второй канал: точечные пачки «Добавить дела» (kind:"case") ──────────
     # Признак потери у них свой (fetch_error), домена у записи может не быть.
     # Облако довело с потерей строки — забираем.
@@ -351,7 +386,7 @@ def selected(tmp_path_factory) -> list[str]:
     path.write_text(json.dumps(JOURNAL, ensure_ascii=False), encoding="utf-8")
     out = subprocess.run(
         ["jq", "-r", "--argjson", "now", str(NOW),
-         "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+         "--argjson", "ttl", "259200", "--argjson", "grace", "900",
          "--argjson", "cgrace", "3000",
          "-f", QUEUE_JQ, str(path)],
         cwd=REPO_DIR, capture_output=True, text=True, check=True)
@@ -361,8 +396,9 @@ def selected(tmp_path_factory) -> list[str]:
 class TestQueueSelection:
     def test_takes_only_impaired_dumps(self, selected):
         assert set(selected) == {
-            "lost", "blind", "failed", "stuck",
+            "lost", "blind", "failed", "stuck", "queued",
             "case-lost", "case-failed", "case-stuck", "case-pending",
+            "case-queued",
         }
 
     def test_clean_import_is_not_redone(self, selected):
@@ -375,8 +411,17 @@ class TestQueueSelection:
         assert "running" not in selected
 
     def test_expired_dump_is_skipped(self, selected):
-        """Дампа старше суток в KV уже нет — брать нечего."""
+        """Дампа старше трёх суток в KV уже нет — брать нечего."""
         assert "expired" not in selected
+
+    def test_queued_records_are_taken_immediately(self, selected):
+        """Статус "queued" (Worker с IMPORT_EXECUTOR="vps"): запись ждёт ЭТУ
+        очередь с момента вставки — грейсы «облачный джоб ещё жив» к ней не
+        относятся, иначе дамп, вставленный в 11:59, ждал бы не 12:00, а 14:00.
+        Оба канала; пометка «лист не нужен» — никогда."""
+        assert "queued" in selected
+        assert "case-queued" in selected
+        assert "writ-queued" not in selected
 
     def test_targeted_batches_are_picked_up(self, selected):
         """До 23.08.2026 пачки выкидывались строкой select(kind != "case"), и
@@ -409,6 +454,7 @@ class TestQueueSelection:
         """Пультовая пометка «лист не нужен» к судам не ходит — дочитывать в
         ней нечего, а счётчики у неё свои."""
         assert "writ" not in selected
+        assert "writ-queued" not in selected
 
     def test_row_names_the_channel_first(self, selected):
         """Первое поле строки — канал: по нему скрипт выбирает и эндпоинт
@@ -428,7 +474,7 @@ class TestQueueSelection:
                                    ensure_ascii=False), encoding="utf-8")
         out = subprocess.run(
             ["jq", "-r", "--argjson", "now", str(NOW),
-             "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+             "--argjson", "ttl", "259200", "--argjson", "grace", "900",
              "--argjson", "cgrace", "3000",
              "-f", QUEUE_JQ, str(path)],
             cwd=REPO_DIR, capture_output=True, text=True, check=True)
@@ -449,7 +495,7 @@ class TestQueueSelection:
                         encoding="utf-8")
         out = subprocess.run(
             ["jq", "-r", "--argjson", "now", str(NOW),
-             "--argjson", "ttl", "86400", "--argjson", "grace", "900",
+             "--argjson", "ttl", "259200", "--argjson", "grace", "900",
              "--argjson", "cgrace", "3000",
              "-f", QUEUE_JQ, str(path)],
             cwd=REPO_DIR, capture_output=True, text=True, check=True)
@@ -460,3 +506,105 @@ class TestQueueSelection:
         text = _read_repo(IMPORTER)
         assert '[ "$domain" = "-" ] && domain=""' in text
         assert '[ "$operator" = "-" ] && operator=""' in text
+
+
+# ── VPS — основной исполнитель импортов (08.09.2026) ─────────────────────────
+# Worker с IMPORT_EXECUTOR="vps" записи в GitHub не диспатчит: дамп/пачка
+# ждут очередь в статусе "queued", страница не поллит журнал, а обещает слот.
+# Стережём сквозную проводку: флаг → оба хендлера → статус → jq → админка →
+# слоты таймера ↔ переменная Worker'а.
+
+WRANGLER = "cloudflare-worker/wrangler.toml"
+WORKER = "cloudflare-worker/worker.js"
+ADMIN = "cloudflare-worker/admin_page.js"
+TIMER = "ops/vps-run/systemd/court-import.timer"
+
+
+def _fn_src(text: str, name: str) -> str:
+    start = text.index("async function " + name + "(")
+    ends = [x for x in (text.find("\nasync function ", start + 1),
+                        text.find("\nfunction ", start + 1)) if x > 0]
+    return text[start:min(ends)] if ends else text[start:]
+
+
+class TestImportExecutorWiring:
+    def test_flag_lives_in_wrangler_vars(self):
+        toml = _read_repo(WRANGLER)
+        assert 'IMPORT_EXECUTOR = "vps"' in toml
+        assert re.search(r'^IMPORT_SLOTS_LOCAL = "', toml, re.M)
+
+    def test_worker_reads_flag_with_github_fallback(self):
+        """Деплой форка без [vars] обязан работать по-старому."""
+        assert 'cfgVar("IMPORT_EXECUTOR", "github")' in _read_repo(WORKER)
+
+    @pytest.mark.parametrize("handler", ["handleAdminImportDump", "handleAdminAddCase"])
+    def test_handlers_skip_dispatch_under_vps(self, handler):
+        src = _fn_src(_read_repo(WORKER), handler)
+        assert "const executor = importExecutor()" in src
+        assert 'executor === "vps" ? "queued" : "dispatched"' in src
+        assert 'if (executor !== "vps") {' in src, "dispatch не под флагом"
+        assert "dispatchWorkflowOnGitHub" in src, "GitHub-путь удалён, а он аварийный"
+        assert "next_slot_at: importSlotsAt(Date.now()).next_slot_at" in src
+
+    def test_writ_waiver_stays_on_github(self):
+        """Пометки «лист не нужен» очередь VPS не берёт никогда — их хендлер
+        флага знать не должен."""
+        src = _fn_src(_read_repo(WORKER), "handleAdminWritWaiver")
+        assert "importExecutor" not in src
+        assert 'status: "dispatched"' in src
+
+    def test_result_source_whitelists_vps(self):
+        assert ('body.source === "github" || body.source === "mac" || body.source === "vps"'
+                in _read_repo(WORKER))
+
+    def test_import_log_carries_executor_and_slots(self):
+        src = _fn_src(_read_repo(WORKER), "handleAdminImportLog")
+        assert "executor: importExecutor(), slots: importSlotsAt(Date.now())" in src
+
+    def test_dump_ttl_is_72h_everywhere(self):
+        """Пятничная вставка после 20:00 обязана дожить до понедельника —
+        TTL тела в KV и отсечка очереди по возрасту держатся парой."""
+        assert "const IMPORT_DUMP_TTL = 72 * 3600;" in _read_repo(WORKER)
+        assert "DUMP_TTL=259200" in _read_repo(IMPORTER)
+
+    def test_queue_takes_queued_status(self):
+        assert '($r.status == "queued")' in _read_repo(QUEUE_JQ)
+
+    def test_admin_knows_queued_status(self):
+        admin = _read_repo(ADMIN)
+        assert 'status === "queued"' in admin
+        assert "в очереди сервера" in admin
+        assert "function impIsServer(item)" in admin
+        assert "function impQueueStale(item)" in admin
+        assert "сервер не забрал" in admin
+
+    def test_admin_does_not_poll_under_vps(self):
+        """Слот бывает через два часа, а каждый тик поллинга — KV list (лимит
+        общий на аккаунт): в режиме vps страница обещает слот и отпускает
+        кнопку сразу — в ОБОИХ каналах."""
+        admin = _read_repo(ADMIN)
+        marker = 'if (r.ok && d.ok && d.executor === "vps") {'
+        assert admin.count(marker) == 2
+        dump = admin[admin.index(marker):]
+        dump = dump[:dump.index("} else if (r.ok && d.ok) {")]
+        assert "impSlotWhen(d.next_slot_at)" in dump
+        assert "impPollResult" not in dump and "impStartTicker" not in dump
+        assert "impSending = false;" in dump
+        batch = admin[admin.rindex(marker):]
+        batch = batch[:batch.index("} else if (r.ok && d.ok) {")]
+        assert "acPollResult" not in batch
+        assert "acSending = false;" in batch
+
+    def test_slots_var_mirrors_timer(self):
+        """IMPORT_SLOTS_LOCAL — второй источник правды рядом с таймером:
+        админка обещает оператору именно эти часы."""
+        m = re.search(r'^IMPORT_SLOTS_LOCAL = "([^"]+)"', _read_repo(WRANGLER), re.M)
+        assert m
+        var_slots = {tuple(int(x) for x in hm.split(":")) for hm in m.group(1).split(",")}
+        timer_slots = set()
+        for line in _read_repo(TIMER).splitlines():
+            t = re.match(r"OnCalendar=Mon\.\.Fri (\d{2}):(\d{2})$", line.strip())
+            if t:
+                timer_slots.add((int(t.group(1)), int(t.group(2))))
+        assert var_slots == timer_slots
+        assert 'IMPORT_SLOTS_DEFAULT = "12:00,14:00,16:00,18:00,20:00"' in _read_repo(WORKER)
