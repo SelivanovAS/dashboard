@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-08T06:45:45",
+  "updated_at": "2026-09-08T07:12:56",
   "cases": [
     {
       "id": "33-6299/2026",
@@ -8511,7 +8511,7 @@
           }
         ],
         "link": "13919980|198a103f-ccbc-4dd7-ae02-1a43b7c8b32c",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-06"
@@ -13072,7 +13072,7 @@
           }
         ],
         "link": "13918479|3238afb0-926e-4993-8251-8dcdff2985df",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-10"
@@ -13250,7 +13250,7 @@
         "court": "Седьмой кассационный суд общей юрисдикции",
         "court_domain": "7kas.sudrf.ru",
         "delo_id": 2800001,
-        "judge": "",
+        "judge": "Малоедова Наталия Валерьевна",
         "filing_date": "02.09.2026",
         "fi_decision_date": "26.02.2026",
         "act_kind": "Судебное РЕШЕНИЕ",
@@ -13259,10 +13259,10 @@
         "appellant": "Хадыев В. М.",
         "appellant_is_bank": false,
         "appellant_status": "ИСТЕЦ",
-        "review_result": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
         "suspended_until": "",
-        "hearing_date": "",
-        "hearing_time": "",
+        "hearing_date": "15.10.2026",
+        "hearing_time": "11:20",
         "decision_date": "",
         "result_text": "",
         "result_for_appeal": "",
@@ -13271,9 +13271,20 @@
         "act_text": "",
         "outcome": "",
         "remanded_to": "",
-        "events": [],
+        "events": [
+          {
+            "name": "Судебное заседание",
+            "date": "15.10.2026",
+            "time": "11:20",
+            "place": "108(П1)",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "07.09.2026"
+          }
+        ],
         "link": "14521465|48fc3dc3-405b-457d-9f8f-2929da1b110f",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       }
     },
@@ -16756,7 +16767,7 @@
           }
         ],
         "link": "11987605|3d335563-2e6f-47aa-8e5d-c2c5bc8a6ebb",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       }
     },
@@ -17510,7 +17521,7 @@
         "court": "Седьмой кассационный суд общей юрисдикции",
         "court_domain": "7kas.sudrf.ru",
         "delo_id": 2800001,
-        "judge": "",
+        "judge": "Гончаренко Юлия Юрьевна",
         "filing_date": "31.08.2026",
         "fi_decision_date": "15.12.2025",
         "act_kind": "Судебное РЕШЕНИЕ",
@@ -17519,10 +17530,10 @@
         "appellant": "Тонких Н. Г., Тонких Е. Т.",
         "appellant_is_bank": false,
         "appellant_status": "ОТВЕТЧИК",
-        "review_result": "",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
         "suspended_until": "",
-        "hearing_date": "",
-        "hearing_time": "",
+        "hearing_date": "07.10.2026",
+        "hearing_time": "11:15",
         "decision_date": "",
         "result_text": "",
         "result_for_appeal": "",
@@ -17531,9 +17542,20 @@
         "act_text": "",
         "outcome": "",
         "remanded_to": "",
-        "events": [],
+        "events": [
+          {
+            "name": "Судебное заседание",
+            "date": "07.10.2026",
+            "time": "11:15",
+            "place": "108(П1)",
+            "result_event": "",
+            "ground": "",
+            "note": "",
+            "posted_at": "07.09.2026"
+          }
+        ],
         "link": "13928327|540f2eae-efe2-4116-9842-0aee4d427527",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-26"
@@ -18262,7 +18284,7 @@
         "remanded_to": "",
         "events": [],
         "link": "13858510|971d5eaf-bbae-45b6-9fd9-21533705702e",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-08-18"
@@ -18556,7 +18578,7 @@
           }
         ],
         "link": "12106731|e1869c17-0174-42ca-816c-7824172e7266",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       },
       "cassation_pending_since": "2026-07-07"
@@ -20050,15 +20072,8 @@
           }
         ],
         "link": "11959239|a616785d-7490-49de-af48-8e083c1899a5",
-        "last_checked_at": "2026-09-07",
-        "discovered_via_cassation": false,
-        "act_analysis": {
-          "html": "<a href=\"https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=11959239&case_uid=a616785d-7490-49de-af48-8e083c1899a5&delo_id=2800001&new=2800001\"><b>8Г-10462/2026</b></a> — Немцов А.Д., Немцова О.Э. vs Сбербанк\nСуд 1 инст.: Нижневартовский гор. суд | категория: Иное\n<b>Итог:</b> Оставлено без изменения (жалоба истца Немцов А. Д., Немцова О. Э.)\n<b>Почему:</b> <i>Решение суда первой инстанции оставлено без изменения, поскольку условия мирового соглашения были согласованы сторонами добровольно и обязательны для исполнения; доводы истцов о понуждении к заключению соглашения и нарушении их прав документально не обоснованы. Доказательств навязывания невыгодных условий банком не представлено, а начисленные проценты до утверждения мирового соглашения соответствуют закону. Требования о пересмотре ставки, рефинансировании и отзыве исполнительных листов отклонены как не основанные на условиях соглашения.</i>",
-          "source": "digest",
-          "act_date": "11.08.2026",
-          "generated_at": "2026-09-07T03:57:01",
-          "model": "openrouter:minimax/minimax-m3:free"
-        }
+        "last_checked_at": "2026-09-08",
+        "discovered_via_cassation": false
       }
     },
     {
@@ -20932,7 +20947,7 @@
           }
         ],
         "link": "11906294|56b2190e-dab4-4d70-9be7-0e08a06785f1",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": false
       }
     },
@@ -22104,7 +22119,7 @@
           }
         ],
         "link": "11561528|a41b20bc-491b-431c-87e2-bc48677cb74f",
-        "last_checked_at": "2026-09-07",
+        "last_checked_at": "2026-09-08",
         "discovered_via_cassation": true
       },
       "initial_bank_role": "Третье лицо"
