@@ -518,6 +518,25 @@ class TestAdminPage:
         assert 'dom + "|" + mat' in body
         assert 'dom + "|" + caseNum' in body
 
+    def test_main_case_aliases_include_composite(self):
+        """Урал 08.09.2026: три иска банка Красноуфимского (2-2-115/2026,
+        2-2-118/2026, 2-2-93/2026) уехали из трека в cases.json (подана
+        апелляция), звёзды остались composite «домен|номер» — и админка
+        показала их «нигде не найдено»: addCaseAliases регистрировал только
+        bare-формы. Все прочие зеркала (app.js buildWatchCanonMap, worker.js
+        wnBuildAliasToCanonical, delivery.py, audit_watchlists.py) composite
+        основных дел знали. Держим зеркало: id, номер 1-й инст. и М-предок
+        обязаны регистрироваться и как «домен|номер»."""
+        # _fn_src режет по первому «\n}» в нулевой колонке, а addCaseAliases
+        # вложена (отступ 2) — регексп дотянулся бы до addBankCases и страж
+        # проходил бы на непочиненном коде. Режем по соседнему коду.
+        js = _admin()
+        body = js.split("function addCaseAliases(", 1)[1].split("const casesRes = results[1]", 1)[0]
+        assert "function addBankCases" not in body
+        assert "court_domain" in body
+        assert 'dom + "|" + b' in body
+        assert "material_number" in body
+
 
 # ── Python: контракт «delivery.py не знает о профилях» ──────────────────────
 

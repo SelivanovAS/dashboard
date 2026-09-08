@@ -2294,6 +2294,21 @@ async function fetchAll() {
     for (const prev of extractParenNumbers(c.id)) {
       addAlias(casesMap, prev, payload);
     }
+    // Composite «домен|номер» — форма звёзд трека «Иски банка». Дело, уехавшее
+    // из трека в основную картотеку (подана апелляция → bank_case_left_track),
+    // звезду не переносит: она остаётся composite в KV, а канонизацию в bare
+    // делает только живой облачный крон (на VPS/Mac PUSH_SECRET нет). Все
+    // остальные зеркала (app.js, worker.js, delivery.py, аудит) composite
+    // основных дел знали — админка одна показывала такие звёзды «нигде не
+    // найдено» (Урал 08.09.2026: 2-2-115/2026, 2-2-118/2026, 2-2-93/2026
+    // Красноуфимского). material_number — по той же причине, что в addBankCases.
+    const dom = String(c.first_instance?.court_domain || "").trim();
+    if (dom) {
+      for (const key of [c.id, c.first_instance?.case_number, c.first_instance?.material_number]) {
+        const b = bareCaseNumber(key);
+        if (b) addAlias(casesMap, dom + "|" + b, payload);
+      }
+    }
   }
   try {
     const casesRes = results[1];
