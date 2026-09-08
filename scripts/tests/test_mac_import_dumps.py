@@ -341,6 +341,14 @@ JOURNAL = {"items": [
             updated_at="2026-08-16T09:59:00.000Z"),
     _record("case-queued", kind="case", court_domain="", status="queued",
             ts="2026-08-16T09:59:00.000Z", updated_at="2026-08-16T09:59:00.000Z"),
+    # Вердикт о самом дампе/задании (таблицы нет, чужой суд, задание
+    # нечитаемо): исполнитель пометил ошибку «повтор не поможет» — очередь
+    # такую failed-запись больше не крутит (08.09.2026: три текстовых дампа
+    # Урала перечитывались каждым слотом до TTL).
+    _record("hopeless", status="failed", source="vps",
+            error="Таблица результатов не найдена в дампе. · повтор не поможет — вставьте выдачу заново"),
+    _record("case-hopeless", kind="case", court_domain="", status="failed",
+            source="vps", error="задание нечитаемо · повтор не поможет — вставьте выдачу заново"),
     # Пометка «лист не нужен» в статусе queued (быть не должно — хендлер
     # флага не знает; но если появится — очередь её всё равно не берёт).
     _record("writ-queued", kind="writ_waiver", status="queued",
@@ -422,6 +430,25 @@ class TestQueueSelection:
         assert "queued" in selected
         assert "case-queued" in selected
         assert "writ-queued" not in selected
+
+    def test_hopeless_failures_are_not_retried(self, selected):
+        """failed с пометкой «повтор не поможет» (вердикт о самом теле:
+        таблицы нет, чужой суд, задание нечитаемо) не берётся — иначе запись
+        крутится каждым слотом до TTL, а сервис каждый слот «failed»."""
+        assert "hopeless" not in selected
+        assert "case-hopeless" not in selected
+        assert "failed" in selected, "обычный failed (без пометки) ретраится по-прежнему"
+
+    def test_no_retry_mark_is_shared_by_script_and_queue(self):
+        """Текст пометки — контракт скрипта и jq: разъедется молча."""
+        text = _read_repo(IMPORTER)
+        m = re.search(r'NO_RETRY_MARK="([^"]+)"', text)
+        assert m
+        assert m.group(1) in _read_repo(QUEUE_JQ)
+        assert "mark_no_retry \"$summary\"" in text
+        assert text.count("mark_no_retry") >= 3, "оба канала обязаны ставить пометку"
+        assert '[ "$rc" -eq 5 ] && mark_no_retry' in text, (
+            "у пачек пометка только на нечитаемом задании (5); сеть (4) ретраится")
 
     def test_targeted_batches_are_picked_up(self, selected):
         """До 23.08.2026 пачки выкидывались строкой select(kind != "case"), и
