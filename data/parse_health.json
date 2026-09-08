@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-08T07:41:42",
+ "updated_at": "2026-09-08T08:12:28",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,25 +532,25 @@
   }
  },
  "last_run": {
-  "at": "2026-09-08T07:41:42",
+  "at": "2026-09-08T08:12:28",
   "alerts": [],
-  "requests_ok": 27,
+  "requests_ok": 39,
   "requests_failed": 0,
   "requests_retried": 0,
-  "cards_breaker_skipped": 109,
-  "cards_breaker_unrequested": 109,
+  "cards_breaker_skipped": 97,
+  "cards_breaker_unrequested": 97,
   "cards_breaker_recovered": 0,
-  "cards_blocked": 2,
-  "cards_read": 24,
+  "cards_blocked": 3,
+  "cards_read": 35,
   "cards_planned": 136,
-  "cards_read_today": 254,
+  "cards_read_today": 265,
   "cards_planned_today": 364,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
-    "read": 22,
+    "read": 33,
     "planned": 134,
-    "read_today": 204,
+    "read_today": 215,
     "planned_today": 314
    },
    "appeal": {
@@ -567,27 +567,27 @@
    }
   },
   "latency": {
-   "n": 27,
+   "n": 39,
    "p50": 0.5,
    "p90": 0.9,
-   "max": 2.0
+   "max": 1.3
   },
   "failure_latency": {
    "degraded_card": {
     "n": 1,
-    "p50": 0.9,
-    "p90": 0.9,
-    "max": 0.9
+    "p50": 0.7,
+    "p90": 0.7,
+    "max": 0.7
    },
    "portal_placeholder": {
-    "n": 2,
-    "p50": 1.1,
-    "p90": 2.0,
-    "max": 2.0
+    "n": 3,
+    "p50": 0.3,
+    "p90": 0.5,
+    "max": 0.5
    }
   },
   "fail_kinds": {
-   "portal_placeholder": 2,
+   "portal_placeholder": 3,
    "degraded_card": 1
   },
   "breaker": {
@@ -595,8 +595,8 @@
    "opened_hosts": 1,
    "open_hosts": 1,
    "recovered_hosts": 0,
-   "deferred_total": 110,
-   "deferred_remaining": 110,
+   "deferred_total": 98,
+   "deferred_remaining": 98,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
@@ -612,21 +612,21 @@
      "family": "portal_outage",
      "reason": "вместо карточки пришла заглушка портала",
      "preopened": false,
-     "skipped": 109,
+     "skipped": 97,
      "probes": 0,
-     "deferred_total": 110,
-     "deferred_remaining": 110,
+     "deferred_total": 98,
+     "deferred_remaining": 98,
      "deferred_recovered": 0,
      "cooldown_seconds": 180.0,
-     "next_probe_in_seconds": 114.1
+     "next_probe_in_seconds": 130.1
     }
    ]
   },
   "courts_unavailable": 1,
   "courts_with_unrequested": 1,
   "courts_outage": 0,
-  "cards_unreachable": 109,
-  "cards_unread_other": 3,
+  "cards_unreachable": 97,
+  "cards_unread_other": 4,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }

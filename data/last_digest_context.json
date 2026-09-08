@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-08T07:12:56",
+  "saved_at": "2026-09-08T08:12:28",
   "new_cases": [
     {
       "Номер дела": "33-6299/2026",
@@ -2149,6 +2149,26 @@
         "filing_date": "07.09.2026",
         "left_track": false
       }
+    },
+    {
+      "case": "2-7354/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Кобрин Игорь Шамилевич",
+      "defendant": "Сбербанк России ПАО",
+      "bank_role": "Ответчик",
+      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "275872351|36f28817-2bbf-4b35-b313-bb5efa2b9f47",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "old_hearing_date": "04.09.2026",
+        "old_hearing_time": "10:40",
+        "hearing_date": "06.10.2026",
+        "hearing_time": "15:10",
+        "hearing_type": "заседание"
+      }
     }
   ],
   "total_active_appeal": 35,
@@ -2217,5 +2237,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-09-08T06:23:17",
-  "updated_at": "2026-09-08T07:12:56"
+  "updated_at": "2026-09-08T08:12:28"
 }
