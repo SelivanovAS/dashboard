@@ -1912,6 +1912,19 @@ push-разрешения синка не было вовсе, ротация en
 знает materialNumber). Стражи — `TestBankPromotionAliasMap`,
 `TestBankAliasWiring` (test_bank_storage_split.py),
 `test_bank_aliases_include_material_number` (test_watchlist_profiles.py).
+**Второй заход 08.09.2026 (Урал, 2-2-115/2026, 2-2-118/2026, 2-2-93/2026
+Красноуфимского):** дело УЕХАЛО из трека в cases.json (`bank_case_left_track`,
+подана апелляция), звезда в KV осталась composite «домен|номер» — а
+`addCaseAliases` админки (ветка ОСНОВНОЙ картотеки) composite-форм не
+регистрировал вовсе, только bare: карточка подписчика писала «нигде не
+найдено» при целых звёздах (аудит — 0 сирот, push утром прошёл). Все прочие
+зеркала (app.js, worker.js, delivery.py, аудит) composite основных дел знали.
+Канонизация KV в bare тут не спасает: она живёт только в облачном `main_json`
+с `PUSH_SECRET`, а на VPS/Mac его нет — composite-звезда переехавшего дела
+остаётся в KV навсегда, и КАЖДЫЙ потребитель обязан резолвить её сам.
+Страж — `test_main_case_aliases_include_composite` (режет тело функции по
+соседнему коду: `_fn_src` дотягивается до `addBankCases`, и страж на
+непочиненном коде проходил бы).
 
 ## Календарный фид «Мои заседания» (webcal, 29.08.2026)
 
