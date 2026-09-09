@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0002-01-2026-008731-37",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-09",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0013-01-2026-000952-93",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-09",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23717,5 +23715,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-09T06:27:04"
+  "updated_at": "2026-09-09T06:43:03"
 }
