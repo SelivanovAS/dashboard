@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-09T07:42:03",
+ "updated_at": "2026-09-09T08:12:23",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,7 +532,7 @@
   }
  },
  "last_run": {
-  "at": "2026-09-09T07:42:03",
+  "at": "2026-09-09T08:12:23",
   "alerts": [],
   "requests_ok": 37,
   "requests_failed": 0,
@@ -545,7 +545,7 @@
   "cards_planned": 37,
   "cards_read_today": 301,
   "cards_planned_today": 302,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
     "read": 34,
@@ -575,9 +575,9 @@
   "failure_latency": {
    "degraded_card": {
     "n": 1,
-    "p50": 0.6,
-    "p90": 0.6,
-    "max": 0.6
+    "p50": 0.7,
+    "p90": 0.7,
+    "max": 0.7
    }
   },
   "fail_kinds": {
