@@ -134,6 +134,17 @@ class TestVpsTimers(unittest.TestCase):
         self.assertIn('. "$HERE/vps_env.sh"', text)
         self.assertNotIn("import-log", text, "поллер обязан обходиться одним get, без list")
 
+    def test_poller_falls_back_to_owner_secret(self):
+        """push-секрет в конфиге бывает чужим (Урал, 09.09.2026 — 401):
+        поллер обязан снимать код функции ЯВНО и переходить на владельческий
+        секрет; `[ $? -eq 1 ]` после `if !` видит результат отрицания, и первая
+        версия молча пропускала все тики."""
+        text = _read(VPS / "import_poll.sh")
+        self.assertIn('pending_get "$url" "$push" "$body"; auth_rc=$?', text)
+        self.assertIn('[ "$auth_rc" -eq 1 ]', text)
+        self.assertIn('pending_get "$url" "$owner" "$body"', text)
+        self.assertNotIn("if ! pending_get", text)
+
     def test_services_point_at_existing_shims(self):
         for service, shim in (("court-parse.service", "parse_all.sh"),
                               ("court-import.service", "import_all.sh"),
