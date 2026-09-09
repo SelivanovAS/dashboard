@@ -530,6 +530,25 @@ class TestWiring:
         assert "data-owner-only" not in head, (
             "карточка должна быть доступна обеим ролям")
 
+    def test_operator_sees_writ_card_on_import_tab(self):
+        """09.09.2026: «Система» у оператора скрыта (data-owner-only), а
+        карточка ИЛ переехала к нему третьей на «Импорт» — свёрткой, чтобы
+        не растить единственную вкладку. Тело ОДНО (WW_BODY): id полей
+        общие, JS карточки о раскладке не знает. У владельца — прежнее место
+        в сетке «Системы»."""
+        js = self._read("cloudflare-worker/admin_page.js")
+        assert "const WW_BODY = `" in js and "const WW_CARD = isOperator" in js
+        assert js.count("${WW_BODY}") == 2, "тело карточки должно быть одно на обе раскладки"
+        assert "${isOperator ? DUMP_CARD + AC_CARD + WW_CARD : AC_CARD + DUMP_CARD}" in js, (
+            "у оператора карточка ИЛ не на «Импорте»")
+        system = js.split('id="system"', 1)[1].split("${IMPORT_SECTION}", 1)[0]
+        assert '${isOperator ? "" : WW_CARD}' in system, (
+            "у владельца карточка ИЛ пропала из «Системы» — либо она снова "
+            "дублируется оператору (два id=\"ww-card\": JS заполнял скрытую копию)")
+        op = js.split("const WW_CARD = isOperator", 1)[1].split(" : `", 1)[0]
+        assert '<details class="fold ww-fold">' in op and "<button" not in op.split("${WW_BODY}")[0], (
+            "у оператора карточка — свёртка, и в <summary> нет кнопок")
+
     def test_admin_helpers_share_one_scope(self):
         """Функции карточки и обработчики кликов обязаны жить в ОДНОЙ области.
 

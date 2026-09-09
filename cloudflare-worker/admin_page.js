@@ -161,6 +161,67 @@ export function renderAdminHtml(secret, role, cfg) {
       </div>
       </div>
     </div>`;
+  // ── Карточка «Закрыть дело — ИЛ не нужен» ─────────────────────────────────
+  // Ручное закрытие дел, по которым ИЛ не нужен. Доступно обеим ролям: о
+  // добровольном погашении долга узнаёт тот, кто ведёт дело. Вся очередь не
+  // выводится — остаются только подсказки суда. Владельцу карточка стоит в
+  // сетке «Системы»; оператору (09.09.2026) — третьей на «Импорте», свёрткой:
+  // «Система» ему больше не показывается, а раскрытая форма растила бы его
+  // единственную вкладку. Тело ОДНО — id (ww-court, ww-case, ww-name, ww-list,
+  // ww-send…) общие, JS карточки о раскладке не знает. ⚠ Кнопок в <summary>
+  // нет: клик по ним переключал бы свёртку (та же грабля, что у .sub-card).
+  const WW_BODY = `        <div class="ww-manual">
+          <div class="imp-hint" title="Выберите суд и введите номер дела. После подтверждения дело исчезнет из активной картотеки и перейдёт в архив; действие можно отменить ниже.">Дело уйдёт из активной картотеки в архив; отменить можно ниже.</div>
+          <div class="ww-manual-grid">
+            <label>Суд
+              <select id="ww-court"><option value="">загружается…</option></select>
+            </label>
+            <label>Номер дела
+              <input type="text" id="ww-case" spellcheck="false" placeholder="2-1234/2026">
+            </label>
+            <label>Почему ИЛ не нужен
+              <select id="ww-reason">
+                <option value="debt_paid">долг погашен после решения</option>
+                <option value="not_requested">лист решили не запрашивать</option>
+                <option value="other">иное</option>
+              </select>
+            </label>
+            <label>Кто закрывает
+              <input type="text" id="ww-name" maxlength="60" placeholder="ваше имя">
+            </label>
+          </div>
+          <div class="ww-actions">
+            <button class="btn btn-primary" id="ww-manual-send" disabled>Закрыть и отправить в архив</button>
+            <span class="run-meta" id="ww-manual-status" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="ww-hints-title" id="ww-hints-title">Подсказки суда</div>
+        <div id="ww-list" class="loading">Загрузка…</div>
+        <div id="ww-waived-wrap"></div>
+        <div class="ww-actions" id="ww-actions" style="display:none;">
+          <button class="btn btn-primary" id="ww-send" disabled>Закрыть выбранные</button>
+          <button class="btn" id="ww-reset">Очистить</button>
+          <span class="run-meta" id="ww-status"></span>
+        </div>
+      `;
+  const WW_CARD = isOperator
+    ? `<div class="card" id="ww-card" style="display:none;">
+      <details class="fold ww-fold">
+        <summary><b>Закрыть дело — ИЛ не нужен</b> <span class="run-meta" id="ww-meta"></span> <span id="ww-badges"></span></summary>
+        <div class="fold-body">
+${WW_BODY}
+        </div>
+      </details>
+    </div>`
+    : `<div class="card" id="ww-card" style="display:none;">
+        <div class="card-head">
+          <span class="card-title">Закрыть дело — ИЛ не нужен</span>
+          <span class="run-meta" id="ww-meta"></span>
+          <span class="spacer"></span>
+          <span id="ww-badges"></span>
+        </div>
+${WW_BODY}
+      </div>`;
   const IMPORT_SECTION = `<section class="section${isOperator ? " is-tab-active" : ""}" id="import" role="tabpanel" aria-labelledby="nav-import">
     <div class="section-head">
       <span class="section-icon">
@@ -173,7 +234,7 @@ export function renderAdminHtml(secret, role, cfg) {
         <input type="text" id="imp-name" maxlength="60" placeholder="как вас записать в журнале">
       </label>
     </div>
-    ${isOperator ? DUMP_CARD + AC_CARD : AC_CARD + DUMP_CARD}
+    ${isOperator ? DUMP_CARD + AC_CARD + WW_CARD : AC_CARD + DUMP_CARD}
   </section>`;
   return `<!doctype html><html lang="ru" data-role="${role}"><head>
 <meta charset="utf-8">
@@ -407,7 +468,8 @@ a { color: var(--accent); }
    автозапуск, посещения; с «Импортами» (капчёвые суды) — шесть, и шесть в ряд
    уже слишком узко, поэтому два ряда по три. */
 .pult.has-import { grid-template-columns:repeat(3, 1fr); }
-/* У оператора плиток три (дайджест и автозапуск — owner-only). Строго внутри
+/* У оператора плиток три: обход карточек, очередь, импорты (прогон, дайджест,
+   парсеры, автозапуск, посещения — owner-only). Строго внутри
    min-width-медиа: специфичность html[data-role] .pult выше мобильного
    .pult, и голое правило перебило бы двухколоночный телефон. */
 @media (min-width: 769px) {
@@ -1088,7 +1150,10 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
     </div>
     <nav class="header-nav" id="nav" role="tablist" aria-label="Разделы админки">
       ${isOperator ? IMPORT_CHIP : ""}
-      <a class="chip-btn${isOperator ? "" : " active"}" href="#system" id="nav-system" role="tab" aria-controls="system" aria-selected="${isOperator ? "false" : "true"}" tabindex="${isOperator ? "-1" : "0"}">Система</a>
+      <!-- «Система» — только владельцу (09.09.2026): у оператора там жило
+           «Здоровье парсеров», которое на Урале не знает ни одного его суда,
+           и карточка «ИЛ не нужен» — та переехала к нему на «Импорт». -->
+      <a class="chip-btn${isOperator ? "" : " active"}" href="#system" id="nav-system" role="tab" aria-controls="system" aria-selected="${isOperator ? "false" : "true"}" tabindex="${isOperator ? "-1" : "0"}" data-owner-only>Система</a>
       ${isOperator ? "" : IMPORT_CHIP}
       <a class="chip-btn" href="#llm" id="nav-llm" role="tab" aria-controls="llm" aria-selected="false" tabindex="-1" data-owner-only>LLM</a>
       <a class="chip-btn" href="#subs" id="nav-subs" role="tab" aria-controls="subs" aria-selected="false" tabindex="-1" data-owner-only>Подписчики <span class="chip-count" id="nav-subs-count">…</span></a>
@@ -1110,10 +1175,11 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 
 <main class="app-main">
   <div class="pult">
-    <!-- У оператора плитка НЕ ведёт на GitHub (доступа туда у него нет): без
-         data-href она выпадает из делегирования кликов, disabled убирает её из
-         фокуса, а ghRunSub не рисует стрелку ↗. -->
-    <button class="stat-card" data-accent="gray"${isOperator ? " disabled" : ' data-href="run" title="Открыть лог прогона в GitHub Actions"'}>
+    <!-- Только владельцу (09.09.2026): плитка показывает ран replay_on_push
+         (сборка дайджеста после пуша VPS) — длительность рендера и номер
+         GitHub-рана, куда оператора не пустят. Его вопрос «прочитались ли
+         сегодня карточки моих судов» отвечает плитка «Обход карточек» ниже. -->
+    <button class="stat-card" data-accent="gray" data-href="run" title="Открыть лог прогона в GitHub Actions" data-owner-only>
       <div class="stat-label">Последний прогон</div>
       <div class="stat-value" id="tile-run-value">…</div>
       <div class="stat-sub" id="tile-run-sub"></div>
@@ -1127,15 +1193,25 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
       <div class="stat-sub" id="tile-digest-sub"></div>
     </button>
     <!-- Владельцу — здоровье автопоиска; оператору оно не про его работу:
-         parse_health наполняется только по courts_for_search, а тот исключает
-         search_gated, то есть ровно суды оператора (на Урале 56 из 69). Он
-         читал «все N ok» как «мои суды в порядке». На их месте — состояние
-         ЕГО канала: открываются ли карточки, считается по журналу импортов
-         без единого лишнего запроса. -->
-    ${isOperator ? `<button class="stat-card" data-accent="gray" data-goto="#import" title="Открывались ли карточки судов в последних импортах">
-      <div class="stat-label">Карточки судов</div>
-      <div class="stat-value" id="tile-cards-value">…</div>
-      <div class="stat-sub" id="tile-cards-sub"></div>
+         parse_health.sources наполняется только по courts_for_search, а тот
+         исключает search_gated, то есть ровно суды оператора (на Урале 54 из
+         66). Он читал «все N ok» как «мои суды в порядке». На их месте ДВЕ
+         плитки (09.09.2026): «Обход карточек» — сколько карточек прочитал
+         сегодняшний прогон (last_run того же журнала; капчёвые суды входят —
+         их карточки открыты, закрыт только поиск), и «В очереди» — его
+         дампы, ждущие сервера. Прежняя «Карточки судов» считалась по
+         последним 50 записям журнала импортов: провал недельной давности
+         выпадал из окна (плитка зеленела сама), а пятничный дамп без
+         карточек держал красный, хотя ежедневный обход давно читал суд. -->
+    ${isOperator ? `<button class="stat-card" data-accent="gray" data-goto="#import" title="Сколько карточек дел прочитал сегодняшний обход; карточки капчёвых судов открыты и входят сюда">
+      <div class="stat-label">Обход карточек</div>
+      <div class="stat-value" id="tile-scan-value">…</div>
+      <div class="stat-sub" id="tile-scan-sub"></div>
+    </button>
+    <button class="stat-card" data-accent="gray" data-goto="#import" title="Дампы и пачки, которые сервер ещё не обработал">
+      <div class="stat-label">В очереди</div>
+      <div class="stat-value" id="tile-queue-value">…</div>
+      <div class="stat-sub" id="tile-queue-sub"></div>
     </button>` : `<button class="stat-card" data-accent="gray" data-goto="#system">
       <div class="stat-label">Парсеры</div>
       <div class="stat-value" id="tile-health-value">…</div>
@@ -1161,7 +1237,7 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
     </button>
   </div>
 
-  <section class="section${isOperator ? "" : " is-tab-active"}" id="system" role="tabpanel" aria-labelledby="nav-system">
+  <section class="section${isOperator ? "" : " is-tab-active"}" id="system" role="tabpanel" aria-labelledby="nav-system" data-owner-only>
     <div class="section-head">
       <span class="section-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -1211,50 +1287,10 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
         <div id="bank-parse-list" class="loading">Загрузка…</div>
         <div class="health-more" id="bank-parse-note"></div>
       </div>
-      <!-- Ручное закрытие дел, по которым ИЛ не нужен. Доступно обеим ролям:
-           о добровольном погашении долга узнаёт тот, кто ведёт дело. Вся
-           очередь больше не выводится: остаются только подсказки суда. -->
-      <div class="card" id="ww-card" style="display:none;">
-        <div class="card-head">
-          <span class="card-title">Закрыть дело — ИЛ не нужен</span>
-          <span class="run-meta" id="ww-meta"></span>
-          <span class="spacer"></span>
-          <span id="ww-badges"></span>
-        </div>
-        <div class="ww-manual">
-          <div class="imp-hint" title="Выберите суд и введите номер дела. После подтверждения дело исчезнет из активной картотеки и перейдёт в архив; действие можно отменить ниже.">Дело уйдёт из активной картотеки в архив; отменить можно ниже.</div>
-          <div class="ww-manual-grid">
-            <label>Суд
-              <select id="ww-court"><option value="">загружается…</option></select>
-            </label>
-            <label>Номер дела
-              <input type="text" id="ww-case" spellcheck="false" placeholder="2-1234/2026">
-            </label>
-            <label>Почему ИЛ не нужен
-              <select id="ww-reason">
-                <option value="debt_paid">долг погашен после решения</option>
-                <option value="not_requested">лист решили не запрашивать</option>
-                <option value="other">иное</option>
-              </select>
-            </label>
-            <label>Кто закрывает
-              <input type="text" id="ww-name" maxlength="60" placeholder="ваше имя">
-            </label>
-          </div>
-          <div class="ww-actions">
-            <button class="btn btn-primary" id="ww-manual-send" disabled>Закрыть и отправить в архив</button>
-            <span class="run-meta" id="ww-manual-status" role="status" aria-live="polite"></span>
-          </div>
-        </div>
-        <div class="ww-hints-title" id="ww-hints-title">Подсказки суда</div>
-        <div id="ww-list" class="loading">Загрузка…</div>
-        <div id="ww-waived-wrap"></div>
-        <div class="ww-actions" id="ww-actions" style="display:none;">
-          <button class="btn btn-primary" id="ww-send" disabled>Закрыть выбранные</button>
-          <button class="btn" id="ww-reset">Очистить</button>
-          <span class="run-meta" id="ww-status"></span>
-        </div>
-      </div>
+      <!-- У оператора карточка живёт на «Импорте» — сюда её НЕ дублировать:
+           второй id="ww-card" перехватил бы getElementById, и JS заполнял бы
+           скрытую копию (проверено 09.09.2026). -->
+      ${isOperator ? "" : WW_CARD}
     </div>
   </section>
 
@@ -1582,9 +1618,10 @@ function ghRunHref() {
 }
 function ghRunSub(run) {
   const num = String(run.run_number || "");
-  // Mac-прогон (replay после пуша «(Mac-парсинг)») помечаем источником: после
-  // флипа 19.08.2026 это боевой путь, и без пометки плитка читалась как облако.
-  const src = run.source === "mac" ? "Mac · " : "";
+  // Прогон сервера (replay после пуша «(Mac-парсинг)» — маркер коммита общий
+  // для Mac-резерва и VPS, парсит с 28.08.2026 VPS) помечаем источником: без
+  // пометки плитка читалась как облако.
+  const src = run.source === "mac" ? "сервер · " : "";
   // Стрелка ↗ — только владельцу: у оператора плитка не кликается (см. пульт).
   return src + escHtml(relTime(run.run_started_at))
     + (num ? " · #" + escHtml(num) + (IS_OWNER ? " ↗" : "") : "");
@@ -1611,7 +1648,7 @@ async function loadGhRuns() {
       // Крон выключен (флип на Mac-резерв): плитка обязана это СКАЗАТЬ, а не
       // оставлять прежнее время — иначе она обещает запуск, которого не будет.
       document.getElementById("runs-next").textContent = "автозапуск выключен";
-      setTile("cron", "gray", "выключен", "прогон делает Mac (резерв)");
+      setTile("cron", "gray", "выключен", "прогон делает сервер (VPS)");
     }
     if (!r.ok) {
       setTile("run", "gray", "—", "GitHub недоступен");
@@ -1873,6 +1910,9 @@ async function loadHealth() {
     const r = await fetch(HEALTH_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
+    // Оператору — плитка «Обход карточек» из блока last_run того же файла
+    // (у владельца узла нет, setTile молча пропустит).
+    renderScanTile(d.last_run || null);
     const sources = d.sources || {};
     const items = Object.keys(sources).map(function (k) {
       const s = sources[k] || {};
@@ -1938,6 +1978,7 @@ async function loadHealth() {
         "обновлено " + escHtml(relTime(d.updated_at)));
     }
   } catch (e) {
+    setTile("scan", "gray", "?", "не загрузилось · повторить");
     listEl.className = "";
     listEl.innerHTML = loadErrorHtml("Данные о здоровье парсеров не загрузились", "health", e);
     // Не «—/нет данных» и не янтарный: серый «?» отличает СБОЙ ЗАГРУЗКИ от
@@ -3470,6 +3511,29 @@ function impNoCourtReason(item) {
 // подписан source:"vps" либо запись заведена под IMPORT_EXECUTOR="vps" и
 // ещё никем не тронута. Старые записи (GitHub + резерв на Mac) — прежние
 // формулировки про локальную машину.
+// Тексты, где владелец и оператор читают разное (09.09.2026). Владельцу —
+// правда об инфраструктуре (локальная машина, VPS, GitHub): ему это чинить.
+// Оператору слова «локальная машина»/«VPS»/«GitHub» не говорят ничего, а
+// единственное его действие в любом сбое — сообщить владельцу. Владельческие
+// строки держат стражи test_import_search_dump / test_mac_import_dumps /
+// test_add_cases_targeted — менять их только парой с тестами.
+var IMP_T = IS_OWNER ? {
+  retry: "повторит локальная машина в течение дня",
+  refill: "дочитает локальная машина или ближайший прогон",
+  verdictTail: "повтор подхватит локальная машина",
+  acRetry: " — повторит локальная машина",
+  sourceMac: "🖥 повтор с локальной машины",
+  queueStale: "проверьте VPS (court-import.timer)",
+  giveup: "Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.",
+} : {
+  retry: "повтор пройдёт автоматически в течение дня",
+  refill: "дочитает автоматический повтор или ближайший прогон",
+  verdictTail: "повтор пройдёт автоматически",
+  acRetry: " — повтор пройдёт автоматически",
+  sourceMac: "🖥 повтор выполнен автоматически",
+  queueStale: "сообщите владельцу",
+  giveup: "Обработка задерживается — повторите отправку позже или сообщите владельцу.",
+};
 function impIsServer(item) {
   if (item.source === "vps") return true;
   return !item.source && item.executor === "vps";
@@ -3479,14 +3543,14 @@ function impIsServer(item) {
 function impRetryPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
   if (impIsServer(item)) return "повторит сервер в следующий слот";
-  return "повторит локальная машина в течение дня";
+  return IMP_T.retry;
 }
 // Дело заведено card-blind: его дочитает и повторный импорт, и ближайший
 // прогон — у записи нет last_checked_at, FI-цикл возьмёт её первой.
 function impRefillPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
   if (impIsServer(item)) return "дочитает сервер в следующий слот или ближайший прогон";
-  return "дочитает локальная машина или ближайший прогон";
+  return IMP_T.refill;
 }
 // Кто отработал запись. Метка появляется у сервера и у резерва: облако —
 // дефолт, и подписывать каждую строку истории «сделано облаком» значило бы
@@ -3496,7 +3560,7 @@ function impRefillPromise(item) {
 function impSourceLabel(item) {
   if (item.source !== "mac" && item.source !== "vps") return "";
   var when = relTime(item.updated_at || item.ts);
-  var who = item.source === "vps" ? "🖥 обработано сервером" : "🖥 повтор с локальной машины";
+  var who = item.source === "vps" ? "🖥 обработано сервером" : IMP_T.sourceMac;
   return who + (when ? " · " + when : "");
 }
 // «сегодня в 14:00» / «завтра в 12:00» / «пн 14.09 в 12:00» — когда сервер
@@ -3612,22 +3676,38 @@ function impResultParts(item) {
       + " — " + impRetryPromise(item));
   }
   if (item.already) skipped.push(item.already + " уже в базе");
-  if (item.excluded_result) skipped.push(item.excluded_result + " отсеяно по итогу");
-  if (item.excluded_writ) skipped.push(item.excluded_writ + " ИЛ уже выдан");
+  // Ярлыки — словами оператора, а не именами фильтров (09.09.2026: прежние
+  // «отработавших (иски банка)», «из кэша отказов», «не влезло в потолок»
+  // объясняли корзину только тому, кто писал импортёр).
+  if (item.excluded_result) skipped.push(nPlural(item.excluded_result,
+    "иск банка завершён", "иска банка завершены", "исков банка завершены")
+    + " без решения (возврат / прекращение / без рассмотрения)");
+  if (item.excluded_writ) skipped.push(nPlural(item.excluded_writ,
+    "иск банка", "иска банка", "исков банка") + " с уже выданным листом");
   // Две корзины, а не сумма «уже в треке»: seen_cached с 18.08.2026 общий
   // для обеих веток (карточные отказы ответчик-ветки тоже кэшируются), и
   // подпись «в треке» врала бы про дела против банка.
-  if (item.already_spent) skipped.push(item.already_spent + " отработавших (иски банка)");
-  if (item.seen_cached) skipped.push(item.seen_cached + " из кэша отказов");
-  if (item.bank_capped) skipped.push(item.bank_capped + " не влезло в потолок");
-  if (item.skipped_role) skipped.push(item.skipped_role + " не наша роль (банк не ответчик)");
-  if (item.not_accepted) skipped.push(item.not_accepted + " к производству не принято");
-  if (item.no_link) skipped.push(item.no_link + " без ссылки");
+  if (item.already_spent) skipped.push(nPlural(item.already_spent,
+    "иск банка уже отработал", "иска банка уже отработали", "исков банка уже отработали")
+    + " (срок архива вышел)");
+  if (item.seen_cached) skipped.push(nPlural(item.seen_cached,
+    "отсеян ранее", "отсеяны ранее", "отсеяны ранее") + " (повторная строка)");
+  if (item.bank_capped) skipped.push(item.bank_capped
+    + " сверх лимита карточек за импорт — вставьте дамп ещё раз");
+  if (item.skipped_role) skipped.push(item.skipped_role + " где банк — третье лицо (не отслеживаем)");
+  if (item.not_accepted) skipped.push(nPlural(item.not_accepted,
+    "иск не принят", "иска не приняты", "исков не приняты")
+    + " к производству (возврат / отказ / подсудность)");
+  if (item.no_link) skipped.push(nPlural(item.no_link,
+    "строка без ссылки", "строки без ссылки", "строк без ссылки")
+    + " на дело (вставлен простой текст?)");
   if (item.subsidiary) skipped.push(nPlural(item.subsidiary,
-    "дочка Сбера", "дочки Сбера", "дочек Сбера"));
+    "дело дочерней компании", "дела дочерних компаний", "дел дочерних компаний")
+    + " Сбера (не отслеживаем)");
   // Президиум: выдача по «Сбербанк» тянет дела 2019 года (президиум до
   // реформы) — отсеяны по дате поступления, карточки не читались.
-  if (item.skipped_old) skipped.push(item.skipped_old + " до реформы ГПК (05.2026)");
+  if (item.skipped_old) skipped.push(nPlural(item.skipped_old,
+    "дело президиума", "дела президиума", "дел президиума") + " до 05.2026 (старый порядок)");
   return { parts: parts, problems: problems, skipped: skipped };
 }
 // Вердикт одной фразой: получилось / переделывать / пусто. Это первое (а часто
@@ -3644,7 +3724,7 @@ function impVerdict(item) {
     var tail = impNoCourtReason(item)
       ? "нужен повтор дампа, но сперва проверьте реестр региона"
       : impIsServer(item) ? "повтор подхватит сервер в следующий слот"
-      : "повтор подхватит локальная машина";
+      : IMP_T.verdictTail;
     return { kind: "bad", text: added
       ? "Заведено " + nPlural(added, "дело", "дела", "дел")
         + ", но карточки открылись не все — " + tail
@@ -3734,7 +3814,7 @@ function acResultText(item) {
   if (item.fetch_error) {
     parts.push("⛔ " + nPlural(item.fetch_error,
       "карточка не открылась", "карточки не открылись", "карточек не открылось")
-      + (impIsServer(item) ? " — повторит сервер в следующий слот" : " — повторит локальная машина"));
+      + (impIsServer(item) ? " — повторит сервер в следующий слот" : IMP_T.acRetry));
   }
   if (item.already) parts.push(item.already + " уже в базе");
   if (item.not_found) parts.push(item.not_found + " не найдено");
@@ -3743,6 +3823,7 @@ function acResultText(item) {
 }
 function renderImportHistory(items) {
   const el = document.getElementById("imp-history");
+  renderQueueTile(items);
   document.getElementById("imp-hist-count").textContent = items.length ? "(" + items.length + ")" : "";
   if (!items.length) {
     el.className = "empty";
@@ -3776,7 +3857,7 @@ function renderImportHistory(items) {
       + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
       + (impSourceLabel(it) ? '<span class="imp-hist-meta">' + escHtml(impSourceLabel(it)) + '</span>' : '')
       + (impQueueStale(it) ? '<span class="imp-hist-meta imp-hist-warn">⚠ сервер не забрал в '
-          + escHtml(impSlotWhen(impLastSlots.last_slot_at)) + ' — проверьте VPS (court-import.timer)</span>' : '')
+          + escHtml(impSlotWhen(impLastSlots.last_slot_at)) + ' — ' + escHtml(IMP_T.queueStale) + '</span>' : '')
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
       + '</div>' + linesHtml + '</div>';
   }).join("");
@@ -3874,32 +3955,94 @@ function collectCardTrouble(items) {
     if (byDom[d].unread > 0) impCardTrouble[d] = byDom[d];
   });
 }
-// Плитка пульта «Карточки судов» — только у оператора (у владельца на её месте
-// «Парсеры»: у него открытый поиск и есть доступ к логам прогонов).
-function renderCardsTile(domains) {
-  if (!document.getElementById("tile-cards-value")) return;
-  // Домены — из той же подсети, по которой считают бейджи и плитка «Импорты»:
-  // чужой лежащий суд не моя забота (с пустым набором «моих» это все суды).
-  var bad = Object.keys(impCardTrouble).filter(function (d) {
-    return !domains || domains[d];
-  });
-  if (!bad.length) {
-    setTile("cards", "green", '<span class="dot dot-green"></span>читаются',
-      "по последним импортам журнала");
+// ── Плитки пульта оператора (09.09.2026) ─────────────────────────────────────
+// «Обход карточек» — сколько карточек дел прочитал сегодняшний прогон. Источник
+// — parse_health.json → last_run (cards_read_today/planned_today пишет блок 4e
+// main_json с 25.08.2026; instances — разбивка по инстанциям). Капчёвые суды
+// СЮДА ВХОДЯТ: у них закрыт только поиск, карточки открыты и читаются каждым
+// обходом — это и есть канал мониторинга оператора. Прежняя «Карточки судов»
+// судила по журналу импортов (последние 50 записей) и протухала в обе стороны.
+// ⚠ «Сегодня» — по строке даты, НЕ через parseIso: штамп last_run.at naive в
+// поясе территории, а parseIso читает naive как UTC (сдвиг +5 ч), и утренний
+// обход до 05:00 UTC считался бы вчерашним.
+var SCAN_OK_SHARE = 0.85; // порог «неполной попытки» — как у cloud_run_ok --run-complete
+function localDateStr(d) {
+  var x = d || new Date();
+  return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0")
+    + "-" + String(x.getDate()).padStart(2, "0");
+}
+function renderScanTile(lastRun) {
+  if (!document.getElementById("tile-scan-value")) return;
+  if (!lastRun || !lastRun.at) {
+    setTile("scan", "gray", "—", "прогонов ещё не было");
     return;
   }
-  var latest = bad[0];
-  bad.forEach(function (d) {
-    if (impCardTrouble[d].ts > impCardTrouble[latest].ts) latest = d;
-  });
-  var reason = impCardTrouble[latest].reason || "карточки не открылись";
-  setTile("cards", "red",
-    nPlural(bad.length, "суд не отдал", "суда не отдали", "судов не отдали"),
-    escHtml(reason));
-  // Причина в подписи обрезается тремя строками — полную оставляем в
-  // подсказке: по ней отличают «нас блокируют» от «портал лёг».
-  var card = document.getElementById("tile-cards-value").closest(".stat-card");
-  if (card) card.title = "Последний отказ: " + reason;
+  var at = String(lastRun.at);
+  var day = at.slice(0, 10), hm = at.slice(11, 16);
+  var read = Number(lastRun.cards_read_today != null ? lastRun.cards_read_today : lastRun.cards_read) || 0;
+  var planned = Number(lastRun.cards_planned_today != null ? lastRun.cards_planned_today : lastRun.cards_planned) || 0;
+  if (day !== localDateStr()) {
+    var dd = day.slice(8, 10) + "." + day.slice(5, 7);
+    setTile("scan", "gray", "обхода ещё не было", "последний — " + escHtml(dd) + " " + escHtml(hm)
+      + " · " + read + " из " + planned);
+    return;
+  }
+  var inst = lastRun.instances || {};
+  function part(name, key) {
+    var i = inst[key];
+    if (!i) return "";
+    var r = i.read_today != null ? i.read_today : i.read;
+    var pl = i.planned_today != null ? i.planned_today : i.planned;
+    if (r == null || pl == null) return "";
+    return name + " " + r + "/" + pl;
+  }
+  var parts = [part("1-я инст.", "first_instance"), part("апелляция", "appeal"), part("кассация", "cassation")]
+    .filter(Boolean);
+  parts.push(hm);
+  var share = planned ? read / planned : 1;
+  var unavailable = Number(lastRun.courts_unavailable) || 0;
+  var bad = unavailable > 0 || share < SCAN_OK_SHARE;
+  var value = (bad ? '<span class="dot dot-red"></span>' : '<span class="dot dot-green"></span>')
+    + read + " из " + planned;
+  var sub = escHtml(parts.join(" · "));
+  if (unavailable) sub = nPlural(unavailable, "суд не отдал карточки", "суда не отдали карточки", "судов не отдали карточки") + " · " + sub;
+  setTile("scan", bad ? "red" : "green", value, sub);
+}
+// «В очереди» — записи журнала, которые сервер ещё не обработал (дампы,
+// пачки, пометки). Считается в renderImportHistory: тот зовётся и на горячем
+// поллинге после отправки (logonly), значит плитка живая без «Обновить».
+// Очередь общая на территорию и короткая — по «моим судам» не режем.
+var IMP_PENDING_STATUSES = { queued: true, started: true, dispatched: true };
+function renderQueueTile(items) {
+  if (!document.getElementById("tile-queue-value")) return;
+  var pending = (items || []).filter(function (it) { return IMP_PENDING_STATUSES[it.status]; });
+  var today = localDateStr();
+  var failedToday = (items || []).filter(function (it) {
+    if (it.status !== "failed") return false;
+    var t = parseIso(it.updated_at || it.ts);
+    return !isNaN(t) && localDateStr(new Date(t)) === today;
+  }).length;
+  var tail = failedToday ? " · " + nPlural(failedToday, "сбой", "сбоя", "сбоев") + " сегодня" : "";
+  if (!pending.length) {
+    setTile("queue", failedToday ? "amber" : "green",
+      '<span class="dot ' + (failedToday ? "dot-amber" : "dot-green") + '"></span>пусто',
+      "все импорты обработаны" + tail);
+    return;
+  }
+  var stale = pending.some(impQueueStale);
+  var sub;
+  if (stale) {
+    sub = "⚠ сервер не забрал — сообщите владельцу";
+  } else if (impExecutor === "vps") {
+    sub = "сервер берёт в течение 5 мин; повтор провалов — "
+      + impSlotWhen(impLastSlots && impLastSlots.next_slot_at);
+  } else {
+    sub = "обработка в облаке";
+  }
+  setTile("queue", stale ? "red" : "amber",
+    '<span class="dot ' + (stale ? "dot-red" : "dot-amber dot-pulse") + '"></span>'
+    + nPlural(pending.length, "ждёт", "ждут", "ждут"),
+    escHtml(sub + tail));
 }
 function renderImportFreshness(items, lastMap) {
   var el = document.getElementById("imp-freshness");
@@ -3973,9 +4116,6 @@ function renderImportFreshness(items, lastMap) {
     + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")
     + '<span class="badge badge-ok">' + (counted.length - nRed - nYellow) + ' ok</span>';
   // Плитка «Импорты» в пульте — из тех же подсчётов, без лишних запросов.
-  var countedDomains = {};
-  counted.forEach(function (x) { countedDomains[x.court.domain] = true; });
-  renderCardsTile(countedDomains);
   var scope = hasMine ? "моих судов" : "судов";
   if (nRed) {
     // Подписи короткие: плитка узкая (пульт из 5 колонок), и на десктопе
@@ -4232,7 +4372,7 @@ function impPollResult(key, startedAt, opts) {
     if (Date.now() - startedAt > giveup) {
       impStopTicker();
       impSetStatus(opts.giveupHtml || ('<span class="badge badge-fail">нет ответа ~5 мин</span> '
-        + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.'));
+        + escHtml(IMP_T.giveup)));
       if (opts.clearForm) {
         document.getElementById("imp-paste").innerHTML = "";
         impSetFile(null);
@@ -5306,7 +5446,7 @@ async function refreshAll(btn) {
   if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
   const wlModal = document.getElementById("wl-modal");
   const renderable = IS_OWNER && !(wlModal && wlModal.open);
-  const jobs = [loadGhRuns()].concat(loadStaticData(!renderable));
+  const jobs = (IS_OWNER ? [loadGhRuns()] : []).concat(loadStaticData(!renderable));
   // «Обновить» чинит неудачную первую загрузку списка судов (для региона
   // без капчёвых судов это лишний fetch cases.json — безвредно).
   // Журнал импортов — только там, где секция вообще есть: два KV-list на
@@ -5359,7 +5499,9 @@ document.addEventListener("click", function (e) {
 // Скрипт синхронный и стоит в конце body, коррекция по hash успевает до
 // первой отрисовки.
 initTabs();
-loadGhRuns();
+// Плитка «Последний прогон» — только владельцу (09.09.2026): оператору
+// GitHub API не дёргаем вовсе.
+if (IS_OWNER) loadGhRuns();
 loadImportCourts();   // журнал импортов тянет он сам — только если есть gated-суды
 // Плитку дайджеста владельцу рисует render(), оператору она не нужна вовсе.
 loadStaticData(false);
@@ -5383,7 +5525,7 @@ document.addEventListener("visibilitychange", function () {
     clearTimeout(ghTimer);
     return;
   }
-  loadGhRuns();
+  if (IS_OWNER) loadGhRuns();
   // Вкладку часто оставляют открытой на ночь: раньше возврат обновлял ТОЛЬКО
   // плитку прогона, а здоровье парсеров, дайджест и отчёт по искам банка
   // оставались вчерашними — вместе с метками «5 ч назад», посчитанными в
