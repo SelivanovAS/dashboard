@@ -3303,6 +3303,14 @@ var impLastLogItems = [];      // кэш последних записей жу�
 // (каждый тик — KV list, а слот может быть через два часа) и обещает слот.
 var impExecutor = "github";
 var impLastSlots = null;       // {last_slot_at, next_slot_at} или null
+// Режим vps (с 09.09.2026 — немедленная попытка): VPS опрашивает флаг «есть
+// новое» каждые 5 минут и берёт запись сразу, поэтому итог обычно приходит
+// через 5–10 минут — ждём его, но поллим РЕЖЕ GitHub-пути (каждый тик —
+// KV list, лимит общий на аккаунт): 60 с, потолок 12 мин ≈ 12 list'ов на
+// отправку против 10 у GitHub-пути. Не дождались — итог появится в истории,
+// повтор при провале сделает слот.
+var IMP_VPS_POLL_TICK_MS = 60 * 1000;
+var IMP_VPS_POLL_GIVEUP_MS = 12 * 60 * 1000;
 var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
 var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
 // Ключ суда в форме импорта — «домен|srv_num», а не голый домен (14.08.2026).
@@ -4157,15 +4165,20 @@ function impElapsedText(startedAt) {
 // нельзя — каждый тик стоит KV-операций, лимит lists общий на аккаунт).
 var impWaitState = { st: "dispatched", startedAt: 0 };
 var impWaitTimer = null;
+function impWaitingWord(st) {
+  if (st === "started") return "выполняется";
+  if (st === "queued") return "ждём сервер (обычно до 5 мин)";
+  return "в очереди";
+}
 function impRenderWaiting() {
   var st = impWaitState.st;
   impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
-    + (st === "started" ? "выполняется" : "в очереди") + " · "
+    + impWaitingWord(st) + " · "
     + impElapsedText(impWaitState.startedAt));
 }
-function impStartTicker(startedAt) {
+function impStartTicker(startedAt, st) {
   impStopTicker();
-  impWaitState = { st: "dispatched", startedAt: startedAt };
+  impWaitState = { st: st || "dispatched", startedAt: startedAt };
   impRenderWaiting();
   impWaitTimer = setInterval(function () {
     if (!impSending) { impStopTicker(); return; }
@@ -4175,7 +4188,13 @@ function impStartTicker(startedAt) {
 function impStopTicker() {
   if (impWaitTimer) { clearInterval(impWaitTimer); impWaitTimer = null; }
 }
-function impPollResult(key, startedAt) {
+// opts (режим vps): tick — период опроса, giveup — потолок ожидания,
+// giveupHtml — текст потолка, clearForm — очистить форму на потолке (дамп в
+// KV, сервер возьмёт его сам — повторная вставка не нужна).
+function impPollResult(key, startedAt, opts) {
+  opts = opts || {};
+  var tick = opts.tick || 30000;
+  var giveup = opts.giveup || 5 * 60 * 1000;
   clearTimeout(impPollTimer);
   impPollTimer = setTimeout(async function () {
     const items = await loadImportLog(true);
@@ -4210,19 +4229,25 @@ function impPollResult(key, startedAt) {
       impUpdateSendState();
       return;
     }
-    if (Date.now() - startedAt > 5 * 60 * 1000) {
+    if (Date.now() - startedAt > giveup) {
       impStopTicker();
-      impSetStatus('<span class="badge badge-fail">нет ответа ~5 мин</span> '
-        + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.');
+      impSetStatus(opts.giveupHtml || ('<span class="badge badge-fail">нет ответа ~5 мин</span> '
+        + 'Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.'));
+      if (opts.clearForm) {
+        document.getElementById("imp-paste").innerHTML = "";
+        impSetFile(null);
+        impRunDetect();
+      }
       impSending = false;
       impUpdateSendState();
       return;
     }
-    // Ожидание до 5 минут: живой статус с прошедшим временем.
-    impWaitState.st = (mine && mine.status === "started") ? "started" : "dispatched";
+    // Ожидание до потолка: живой статус с прошедшим временем.
+    impWaitState.st = (mine && (mine.status === "started" || mine.status === "queued"))
+      ? mine.status : "dispatched";
     impRenderWaiting();
-    impPollResult(key, startedAt);
-  }, 30000);
+    impPollResult(key, startedAt, opts);
+  }, tick);
 }
 async function impReadFile(file) {
   // Файл «только HTML» с sudrf — win-1251; вставки/другие файлы — utf-8.
@@ -4435,21 +4460,19 @@ async function impSend() {
     });
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok && d.executor === "vps") {
-      // Сервер-исполнитель: запись ждёт слот (до двух часов), поллить журнал
-      // каждые 30 с всё это время значило бы сотни KV-list — не ждём, а
-      // обещаем слот. Дамп в KV трое суток, повтор не нужен — форму чистим
-      // сразу, как после «готово» (оператор идёт очередью судов).
-      impStopTicker();
-      impSetStatus(impStatusBadge("queued") + " страница принята · сервер обработает "
-        + escHtml(impSlotWhen(d.next_slot_at))
-        + " — итог появится в «Истории импортов» (обновите страницу позже)");
-      try { localStorage.setItem("admin_imp_steps_seen", "1"); } catch (e) {}
-      document.getElementById("imp-paste").innerHTML = "";
-      impSetFile(null);
-      impRunDetect();
-      impSending = false;
-      impUpdateSendState();
+      // Сервер-исполнитель: VPS опрашивает флаг «есть новое» каждые 5 минут и
+      // берёт запись сразу (09.09.2026) — ждём итог, но поллим реже
+      // GitHub-пути (60 с, потолок 12 мин: каждый тик — KV list). Не
+      // дождались — дамп в KV трое суток, сервер возьмёт его сам, а провал
+      // повторит слот; форму на потолке чистим (повторная вставка не нужна).
+      var startedAtVps = Date.now();
+      impStartTicker(startedAtVps, "queued");
       loadImportLog();
+      impPollResult(d.key, startedAtVps, {
+        tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true,
+        giveupHtml: impStatusBadge("queued") + " сервер пока не взял страницу — итог появится в «Истории импортов»; "
+          + "если карточки не откроются, повтор " + escHtml(impSlotWhen(d.next_slot_at)),
+      });
     } else if (r.ok && d.ok) {
       var startedAt = Date.now();
       impStartTicker(startedAt);
@@ -5160,14 +5183,15 @@ async function acSend() {
     });
     var d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok && d.executor === "vps") {
-      // См. отправку дампа: слот сервера — не поллим, обещаем время.
-      acSetStatus(impStatusBadge("queued") + " пачка принята · сервер обработает "
-        + escHtml(impSlotWhen(d.next_slot_at))
-        + " — итог появится в «Истории импортов» (обновите страницу позже)");
-      document.getElementById("ac-input").value = "";
-      acSending = false;
-      acUpdateState();
-      loadImportLog();
+      // См. отправку дампа: сервер берёт пачку в ближайшие минуты — ждём
+      // итог редким поллингом, на потолке чистим ввод (задание в KV).
+      acSetStatus(impStatusBadge("queued") + ' <span class="dot dot-amber dot-pulse"></span> '
+        + "пачка принята · ждём сервер (обычно до 5 мин)");
+      acPollResult(d.key, Date.now(), {
+        tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true,
+        giveupHtml: impStatusBadge("queued") + " сервер пока не взял пачку — итог появится в «Истории импортов»; "
+          + "если карточки не откроются, повтор " + escHtml(impSlotWhen(d.next_slot_at)),
+      });
     } else if (r.ok && d.ok) {
       acSetStatus(impStatusBadge("dispatched") + " пачка принята, обработка в очереди…");
       acPollResult(d.key, Date.now());
@@ -5184,7 +5208,10 @@ async function acSend() {
   }
 }
 
-function acPollResult(key, startedAt) {
+function acPollResult(key, startedAt, opts) {  // opts — как у impPollResult
+  opts = opts || {};
+  var tick = opts.tick || AC_POLL_TICK_MS;
+  var giveup = opts.giveup || AC_POLL_GIVEUP_MS;
   clearTimeout(acPollTimer);
   acPollTimer = setTimeout(async function () {
     var items = await loadImportLog(true);
@@ -5206,19 +5233,20 @@ function acPollResult(key, startedAt) {
       acUpdateState();
       return;
     }
-    if (Date.now() - startedAt > AC_POLL_GIVEUP_MS) {
-      acSetStatus('<span class="badge badge-fail">нет ответа ~40 мин</span> '
+    if (Date.now() - startedAt > giveup) {
+      acSetStatus(opts.giveupHtml || ('<span class="badge badge-fail">нет ответа ~40 мин</span> '
         + 'Итог появится в «Истории импортов» — обновите страницу позже. '
-        + 'Если его там нет, отправьте пачку заново: уже добавленные дела система отсеет сама.');
+        + 'Если его там нет, отправьте пачку заново: уже добавленные дела система отсеет сама.'));
+      if (opts.clearForm) document.getElementById("ac-input").value = "";
       acSending = false;
       acUpdateState();
       return;
     }
-    var st = (mine && mine.status === "started") ? "started" : "dispatched";
+    var st = (mine && (mine.status === "started" || mine.status === "queued")) ? mine.status : "dispatched";
     acSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
-      + (st === "started" ? "выполняется" : "в очереди") + " · " + impElapsedText(startedAt));
-    acPollResult(key, startedAt);
-  }, AC_POLL_TICK_MS);
+      + impWaitingWord(st) + " · " + impElapsedText(startedAt));
+    acPollResult(key, startedAt, opts);
+  }, tick);
 }
 
 // Инициализация блока точечного добавления.

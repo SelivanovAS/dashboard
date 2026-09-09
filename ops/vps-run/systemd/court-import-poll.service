@@ -1,0 +1,12 @@
+# Немедленная попытка операторского импорта: опрос флага «есть новое»
+# (09.09.2026). Слоты — court-import.service, это только быстрый старт.
+[Unit]
+Description=Court Monitor: опрос флага «есть новое» (немедленный импорт)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=court-import-poll
+ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/import_poll.sh

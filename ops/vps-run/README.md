@@ -8,7 +8,13 @@
 **С 08.09.2026 очередь импортов — ОСНОВНОЙ исполнитель дампов и точечных
 пачек** (решение юриста): Worker с `IMPORT_EXECUTOR = "vps"` в GitHub не
 диспатчит, записи ждут `court-import.timer` в статусе `queued` (будни
-12:00/14:00/16:00/18:00/20:00 + утренние импорты после парсинга). Слоты
+12:00/14:00/16:00/18:00/20:00 + утренние импорты после парсинга).
+**С 09.09.2026 — немедленная попытка**: третий таймер
+`court-import-poll.timer` (будни 08:00–20:55 каждые 5 мин) гоняет
+`import_poll.sh` — один GET `/import-pending` на территорию (KV get, не list),
+при новой отметке сразу `import_dumps.sh <клон> --anywhere`; занятый
+`.run.lock` (утренний парсинг/слот) = пропуск тика без отметки. Слоты 12–20 —
+страховка для провалов. Слоты
 продублированы в `IMPORT_SLOTS_LOCAL` wrangler.toml — админка обещает
 оператору именно эти часы; менять только парой (страж
 `test_slots_var_mirrors_timer`). `vps_env.sh` экспортирует
@@ -52,7 +58,7 @@ egress уже РФ), notify/osascript безопасен сам (`|| true`).
    включит вторую доставку push (worker.* читается awk'ом, не source).
 6. `cp ops/vps-run/systemd/court-*.{service,timer} /etc/systemd/system/`
    → `systemctl daemon-reload` → `systemctl enable --now court-parse.timer
-   court-import.timer`.
+   court-import.timer court-import-poll.timer`.
 
 **Обновление слотов** (таймер поменялся в репо): `git pull` в
 `/opt/court-monitor/dashboard` → повторить `cp` → `systemctl daemon-reload`
@@ -62,7 +68,8 @@ NextElapse) → `systemctl list-timers court-import.timer` показывает 
 
 ## Наблюдение
 
-- `journalctl -u court-parse -u court-import --since today`
+- `journalctl -u court-parse -u court-import -u court-import-poll --since today`
+  (поллер при пустом флаге молчит — 156 тиков в день без единой строки)
 - логи прогона: `<клон>/ops/mac-local-run/parse_and_push*.log`,
   `import_dumps*.log` (ротация по дням, как на Mac)
 - вехи в админке (блок «🛰 Парсинг») — через progress_token
@@ -71,7 +78,8 @@ NextElapse) → `systemctl list-timers court-import.timer` показывает 
 
 ## Откат на Mac (если VPS лёг)
 
-1. VPS: `systemctl disable --now court-parse.timer court-import.timer`
+1. VPS: `systemctl disable --now court-parse.timer court-import.timer
+   court-import-poll.timer`
    (или просто выключить сервер).
 2. Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`
    и `... com.court-monitor.import.plist` (plist на месте, агенты были

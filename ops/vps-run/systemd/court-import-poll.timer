@@ -1,0 +1,17 @@
+# Опрос флага «есть новое» каждые 5 минут, будни 08:00–20:55 (местное время
+# Asia/Yekaterinburg; решение юриста 09.09.2026). Цена тика — один KV get на
+# территорию (лимит 100 000/день), к судам поллер ходит только при новой
+# отметке. Persistent=false осознанно: проспанный тик догонять незачем —
+# следующий через 5 минут, а провалы и так страхуют слоты court-import.timer.
+# ⚠️ Слоты 12–20 живут в court-import.timer (страж test_slots_var_mirrors_timer
+# читает только его) — сюда их не переносить.
+[Unit]
+Description=Court Monitor: опрос флага «есть новое» (немедленный импорт)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08..20:00/5
+RandomizedDelaySec=20
+Persistent=false
+
+[Install]
+WantedBy=timers.target
