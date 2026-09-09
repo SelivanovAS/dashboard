@@ -383,9 +383,9 @@ class TestАдминка:
         src = _admin()
         pult = _pult()
         ids = re.findall(r'id="tile-(\w+)-value"', pult)
-        # cards — операторская ветка тернарника, import скрыта до появления
-        # капчёвых судов (тогда включается .pult.has-import).
-        owner_tiles = [i for i in ids if i not in ("cards", "import")]
+        # scan/queue — операторская ветка тернарника (09.09.2026), import
+        # скрыта до появления капчёвых судов (тогда включается .pult.has-import).
+        owner_tiles = [i for i in ids if i not in ("scan", "queue", "import")]
         m = re.search(r"^\.pult \{[^}]*repeat\((\d+), 1fr\)", src, re.M)
         assert m, "Не нашёл число колонок .pult."
         assert int(m.group(1)) == len(owner_tiles), (

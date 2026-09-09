@@ -113,16 +113,21 @@ def test_pointer_only_on_clickable_tiles():
 
 
 def test_run_tile_href_gated_by_role():
+    """С 09.09.2026 плитка «Последний прогон» — только владельцу: она
+    показывает ран replay_on_push (сборка дайджеста) с номером GitHub-рана,
+    а оператору нужен ответ «прочитались ли сегодня карточки» — его даёт
+    плитка «Обход карточек». GitHub API оператору не дёргаем вовсе."""
     src = _admin()
-    m = re.search(r'<button class="stat-card" data-accent="gray"\$\{isOperator[^\n]*', src)
-    assert m, (
-        "Плитка «Последний прогон» потеряла гейт по роли: у оператора снова "
-        "появится data-href на лог GitHub Actions."
-    )
+    m = re.search(r'<button class="stat-card" data-accent="gray" data-href="run"[^\n]*', src)
+    assert m, "Плитка «Последний прогон» потеряла data-href на лог GitHub Actions."
     line = m.group(0)
-    assert "disabled" in line and 'data-href="run"' in line, (
-        "Ожидаю ветку: оператору — disabled, владельцу — data-href=\"run\"."
+    assert "data-owner-only" in line, (
+        "Плитка «Последний прогон» снова видна оператору: у него нет доступа "
+        "в GitHub, а её содержимое (Mac/#ран) ему ничего не говорит."
     )
+    assert "${isOperator" not in line, "ветка disabled по роли больше не нужна — плитка owner-only"
+    for call in ("if (IS_OWNER) loadGhRuns();", "(IS_OWNER ? [loadGhRuns()] : [])"):
+        assert call in src, f"loadGhRuns без гейта IS_OWNER: оператор дёргает GitHub API — {call}"
 
 
 def test_run_sub_arrow_gated_by_owner():
@@ -141,17 +146,75 @@ def test_run_sub_arrow_gated_by_owner():
 # суды в порядке». У оператора на её месте — состояние ЕГО канала: открываются
 # ли карточки (считается по журналу импортов, без единого лишнего запроса).
 
-def test_operator_gets_cards_tile_instead_of_parsers():
+def test_operator_gets_scan_and_queue_tiles():
+    """09.09.2026: вместо «Карточки судов» (журнал импортов, последние 50
+    записей — протухал в обе стороны) у оператора «Обход карточек» из
+    last_run журнала здоровья и «В очереди» из журнала импортов."""
     src = _admin()
     pult = src.split('<div class="pult">', 1)[1].split("</main>", 1)[0]
     assert "${isOperator ?" in pult, "Плитка потеряла ветку по роли."
     block = pult.split("${isOperator ?", 1)[1].split("<button class=\"stat-card\" data-accent=\"gray\" data-href=\"cron\"", 1)[0]
-    assert 'id="tile-cards-value"' in block, "у оператора пропала плитка «Карточки судов»"
-    assert 'id="tile-health-value"' in block, "у владельца пропала плитка «Парсеры»"
+    op, owner = block.split(" : ", 1)
+    assert 'id="tile-scan-value"' in op, "у оператора пропала плитка «Обход карточек»"
+    assert 'id="tile-queue-value"' in op, "у оператора пропала плитка «В очереди»"
+    assert 'id="tile-health-value"' in owner, "у владельца пропала плитка «Парсеры»"
     # Кликабельность — только через data-goto/data-href (см. тест выше).
-    assert 'data-goto="#import"' in block, (
-        "плитка оператора должна вести на его вкладку, иначе она мертва")
-    assert "function renderCardsTile" in src
+    assert op.count('data-goto="#import"') == 2, (
+        "обе плитки оператора должны вести на его вкладку, иначе они мертвы")
+    assert "function renderScanTile" in src and "function renderQueueTile" in src
+    assert "renderCardsTile" not in src and "tile-cards-value" not in src, (
+        "плитка «Карточки судов» удалена 09.09.2026 — сигнал протухал в обе стороны")
+    # Плитка обхода питается last_run того же файла, что «Здоровье парсеров».
+    health = src.split("async function loadHealth()", 1)[1][:800]
+    assert "renderScanTile(d.last_run" in health
+    # Очередь считается там, куда приходит и горячий поллинг после отправки.
+    hist = src.split("function renderImportHistory(items)", 1)[1][:300]
+    assert "renderQueueTile(items)" in hist, (
+        "плитка «В очереди» обновляется только по «Обновить» — вызов обязан "
+        "стоять в renderImportHistory, его зовёт и поллинг logonly")
+
+
+def test_scan_tile_checks_today_by_date_string():
+    """Штамп last_run.at — naive в поясе территории, а parseIso читает naive
+    как UTC (+5 ч): через него утренний обход до 05:00 UTC считался бы
+    вчерашним. «Сегодня» — сравнением строки даты."""
+    src = _admin()
+    body = src.split("function renderScanTile(lastRun)", 1)[1].split("function renderQueueTile", 1)[0]
+    assert "parseIso(" not in body, "renderScanTile снова гонит last_run.at через parseIso"
+    assert "slice(0, 10)" in body and "localDateStr()" in body
+    assert "cards_read_today" in body and "cards_planned_today" in body
+    assert "courts_unavailable" in body, "плитка не краснеет по судам с открытым предохранителем"
+
+
+def test_system_tab_is_owner_only():
+    """09.09.2026: «Система» у оператора не показывается — «Здоровье
+    парсеров» на Урале не знает ни одного его суда (parse_health.sources
+    ведётся по courts_for_search, тот исключает search_gated), а карточка
+    «ИЛ не нужен» переехала на «Импорт»."""
+    src = _admin()
+    chip = re.search(r'<a class="chip-btn[^>]*id="nav-system"[^>]*>', src)
+    assert chip and "data-owner-only" in chip.group(0), "чип «Система» виден оператору"
+    sec = re.search(r'<section class="section[^>]*id="system"[^>]*>', src)
+    assert sec and "data-owner-only" in sec.group(0), "секция «Система» не гейтится ролью"
+
+
+def test_operator_texts_have_no_infra_words():
+    """Оператору слова «локальная машина»/«VPS»/«GitHub» не говорят ничего:
+    его единственное действие в любом сбое — сообщить владельцу. Владельческие
+    строки IMP_T остаются (их держат стражи импортёра и резерва)."""
+    src = _admin()
+    m = re.search(r"var IMP_T = IS_OWNER \? \{(.*?)\} : \{(.*?)\};", src, re.S)
+    assert m, "нет карты IMP_T (владелец / оператор)"
+    owner, operator = m.group(1), m.group(2)
+    assert "локальная машина" in owner and "VPS" in owner and "GitHub" in owner
+    # Проверяем ЗНАЧЕНИЯ, не ключи: имя поля sourceMac само содержит «Mac».
+    values = re.findall(r'"([^"]*)"', operator)
+    for word in ("локальн", "Mac", "VPS", "GitHub", "timer"):
+        for v in values:
+            assert word not in v, f"оператору снова показывают «{word}»: {v}"
+    assert "сообщите владельцу" in operator
+    for key in ("retry", "refill", "verdictTail", "acRetry", "sourceMac", "queueStale", "giveup"):
+        assert f"IMP_T.{key}" in src, f"IMP_T.{key} не используется — ветка осталась с литералом"
 
 
 def test_parser_health_names_its_scope():
