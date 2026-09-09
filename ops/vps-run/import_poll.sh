@@ -68,10 +68,13 @@ while IFS= read -r clone; do
   [ -n "$url" ] && [ -n "$push" ] || continue
 
   body="$TMP/pending.$region.json"
-  # Как resolve_worker_auth в очереди: push-секрет в файле бывает чужим —
-  # на 401 молча переходим на владельческий.
-  if ! pending_get "$url" "$push" "$body"; then
-    if [ $? -eq 1 ] && [ -n "$owner" ] && [ "$push" != "$owner" ]; then
+  # Как resolve_worker_auth в очереди: push-секрет в файле бывает чужим
+  # (у Урала так и есть, 09.09.2026) — на 401 переходим на владельческий.
+  # ⚠️ Код функции снимаем ЯВНО: после `if !` в $? лежит результат отрицания,
+  # и первая версия поллера молча пропускала все тики.
+  pending_get "$url" "$push" "$body"; auth_rc=$?
+  if [ "$auth_rc" -ne 0 ]; then
+    if [ "$auth_rc" -eq 1 ] && [ -n "$owner" ] && [ "$push" != "$owner" ]; then
       pending_get "$url" "$owner" "$body" || continue
     else
       continue
