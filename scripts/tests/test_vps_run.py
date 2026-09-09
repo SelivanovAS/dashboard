@@ -36,8 +36,8 @@ def _timer_slots(name: str) -> set[tuple[int, int]]:
 
 class TestVpsShims(unittest.TestCase):
     def test_bash_syntax(self):
-        for script in ("parse_all.sh", "import_all.sh", "vps_env.sh",
-                       "shims/netstat"):
+        for script in ("parse_all.sh", "import_all.sh", "import_poll.sh",
+                       "vps_env.sh", "shims/netstat"):
             rc = subprocess.run(
                 ["bash", "-n", str(VPS / script)], capture_output=True
             )
@@ -56,7 +56,8 @@ class TestVpsShims(unittest.TestCase):
             self.assertIn('. "$HERE/vps_env.sh"', text, shim)
 
     def test_scripts_are_executable(self):
-        for script in ("parse_all.sh", "import_all.sh", "shims/netstat"):
+        for script in ("parse_all.sh", "import_all.sh", "import_poll.sh",
+                       "shims/netstat"):
             self.assertTrue((VPS / script).stat().st_mode & 0o111, script)
 
 
@@ -76,7 +77,8 @@ class TestVpsEnv(unittest.TestCase):
     def test_no_push_secret_and_no_worker_source(self):
         # PUSH_SECRET в окружении прогона включил бы вторую доставку push —
         # worker.<регион> читается только awk'ом внутри боевых скриптов.
-        for script in ("vps_env.sh", "parse_all.sh", "import_all.sh"):
+        for script in ("vps_env.sh", "parse_all.sh", "import_all.sh",
+                       "import_poll.sh"):
             text = _read(VPS / script)
             self.assertNotIn("PUSH_SECRET", text, script)
             self.assertNotIn("worker.", text, script)
@@ -106,9 +108,36 @@ class TestVpsTimers(unittest.TestCase):
         for name in ("court-parse.timer", "court-import.timer"):
             self.assertIn("Persistent=true", _read(VPS / "systemd" / name))
 
+    def test_poll_timer_is_frequent_and_not_persistent(self):
+        """Немедленная попытка (09.09.2026): опрос флага каждые 5 минут в
+        рабочие часы будней; Persistent=false осознанно — проспанный тик
+        догонять незачем, провалы страхуют слоты. Слоты живут ТОЛЬКО в
+        court-import.timer (страж test_slots_var_mirrors_timer)."""
+        text = _read(VPS / "systemd" / "court-import-poll.timer")
+        self.assertIn("OnCalendar=Mon..Fri *-*-* 08..20:00/5", text)
+        self.assertIn("Persistent=false", text)
+        self.assertNotRegex(text, r"OnCalendar=Mon\.\.Fri \d{2}:\d{2}$")
+
+    def test_poller_checks_lock_before_run_and_marks_after(self):
+        """Утренний парсинг и слот делят с очередью лок .run.lock: занятый
+        лок = пропуск тика БЕЗ отметки (import_dumps.sh выходит кодом 0 и на
+        «занято», и на «очередь пуста» — различить нельзя); отметка пишется
+        после запуска при любом коде — повтор провалов делают слоты."""
+        text = _read(VPS / "import_poll.sh")
+        lock = text.index('.run.lock')
+        run = text.index('bash "$IMPORTER" "$clone" --anywhere')
+        seen = text.index('printf \'%s\\n\' "$at" > "$seen_file"')
+        self.assertLess(lock, run)
+        self.assertLess(run, seen)
+        self.assertIn("--compressed", text)
+        self.assertIn('-K "$cfg"', text)
+        self.assertIn('. "$HERE/vps_env.sh"', text)
+        self.assertNotIn("import-log", text, "поллер обязан обходиться одним get, без list")
+
     def test_services_point_at_existing_shims(self):
         for service, shim in (("court-parse.service", "parse_all.sh"),
-                              ("court-import.service", "import_all.sh")):
+                              ("court-import.service", "import_all.sh"),
+                              ("court-import-poll.service", "import_poll.sh")):
             text = _read(VPS / "systemd" / service)
             m = re.search(r"ExecStart=/bin/bash (\S+)", text)
             self.assertIsNotNone(m, service)

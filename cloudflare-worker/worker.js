@@ -2007,6 +2007,22 @@ const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в 
 const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
 const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
 
+// Флаг «есть новое» для НЕМЕДЛЕННОЙ попытки исполнителя (09.09.2026, решение
+// юриста «пробовать сразу, провалы — в окно»): один KV-ключ с отметкой
+// последней отправки. VPS каждые 5 минут (будни 08:00–20:00) делает
+// GET /import-pending — ОДИН KV get (лимит 100 000/день), а не list — и при
+// новой отметке сразу гонит очередь import_dumps.sh; слоты court-import.timer
+// 12–20 и утренние импорты после парсинга остаются страховкой для провалов
+// (fetch_fail/card_failed, сервер не взял). Пишется только в ветке vps —
+// один write на отправку, как и запись журнала. TTL — как у тела дампа.
+const IMPORT_PENDING_KEY = "import:pending";
+const IMPORT_PENDING_TTL = IMPORT_DUMP_TTL;
+async function markImportPending(env, kind, uuid, ts) {
+  await env.PUSH_SUBSCRIPTIONS.put(IMPORT_PENDING_KEY, JSON.stringify({ at: ts, kind, uuid }), {
+    expirationTtl: IMPORT_PENDING_TTL,
+  });
+}
+
 // Кто исполняет операторские импорты (08.09.2026, решение юриста). "vps" —
 // Worker только кладёт дамп/задание в KV и заводит запись журнала со статусом
 // "queued"; забирает её VPS по слотам court-import.timer тем же
@@ -2165,12 +2181,16 @@ async function handleAdminImportDump(request, env) {
         status: 502, headers: jsonHeaders,
       });
     }
+  } else {
+    await markImportPending(env, "dump", uuid, ts);
   }
   console.log(`import dump принят: ${dumpKey} (${courtDomain}, ${operator || "без имени"}, ${html.length} байт, ${executor})`);
-  // executor + next_slot_at — странице: в режиме vps она не поллит журнал
-  // (каждый тик — KV list), а обещает слот.
+  // executor + immediate + next_slot_at — странице: в режиме vps она поллит
+  // журнал редко (60 с) и ждёт немедленную попытку сервера, а слот обещает
+  // как повтор при провале.
   return new Response(JSON.stringify({
-    ok: true, key: uuid, executor, next_slot_at: importSlotsAt(Date.now()).next_slot_at,
+    ok: true, key: uuid, executor, immediate: executor === "vps",
+    next_slot_at: importSlotsAt(Date.now()).next_slot_at,
   }), { headers: jsonHeaders });
 }
 
@@ -2203,6 +2223,23 @@ async function handleImportDumpGet(request, env) {
   }
   return new Response(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+// Флаг «есть новое» для поллера VPS (ops/vps-run/import_poll.sh): один
+// KV get, тот же канал авторизации, что у выдачи дампа. Никакого list —
+// весь смысл эндпоинта в цене одного get 156 раз в день на территорию.
+async function handleImportPendingGet(request, env) {
+  if (!importChannelAuthOk(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  let pending = null;
+  try { pending = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(IMPORT_PENDING_KEY)); } catch (_) {}
+  const body = pending && pending.at
+    ? { at: pending.at, kind: pending.kind || null, uuid: pending.uuid || null }
+    : { at: null };
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
   });
 }
 
@@ -2343,10 +2380,13 @@ async function handleAdminAddCase(request, env) {
         status: 502, headers: jsonHeaders,
       });
     }
+  } else {
+    await markImportPending(env, "case", uuid, ts);
   }
   console.log(`add-case принят: ${jobKey} (${items.length} строк, ${operator || "без имени"}, ${executor})`);
   return new Response(JSON.stringify({
-    ok: true, key: uuid, executor, next_slot_at: importSlotsAt(Date.now()).next_slot_at,
+    ok: true, key: uuid, executor, immediate: executor === "vps",
+    next_slot_at: importSlotsAt(Date.now()).next_slot_at,
   }), { headers: jsonHeaders });
 }
 
@@ -2939,6 +2979,9 @@ export default {
 
     if (url.pathname === "/import-dump" && request.method === "GET") {
       return handleImportDumpGet(request, env);
+    }
+    if (url.pathname === "/import-pending" && request.method === "GET") {
+      return handleImportPendingGet(request, env);
     }
 
     if (url.pathname === "/import-result" && request.method === "POST") {

@@ -605,22 +605,49 @@ class TestImportExecutorWiring:
         assert "function impQueueStale(item)" in admin
         assert "сервер не забрал" in admin
 
-    def test_admin_does_not_poll_under_vps(self):
-        """Слот бывает через два часа, а каждый тик поллинга — KV list (лимит
-        общий на аккаунт): в режиме vps страница обещает слот и отпускает
-        кнопку сразу — в ОБОИХ каналах."""
+    def test_admin_polls_slowly_under_vps(self):
+        """С 09.09.2026 сервер берёт запись в ближайшие минуты (поллер VPS
+        каждые 5 мин), и страница ждёт итог — но реже GitHub-пути: каждый
+        тик — KV list (лимит общий на аккаунт), 60 с при потолке 12 мин.
+        На потолке обещается слот-повтор, форма чистится (тело в KV)."""
         admin = _read_repo(ADMIN)
+        assert "var IMP_VPS_POLL_TICK_MS = 60 * 1000;" in admin
+        m = re.search(r"var IMP_VPS_POLL_GIVEUP_MS = (\d+) \* 60 \* 1000;", admin)
+        assert m and int(m.group(1)) >= 10
         marker = 'if (r.ok && d.ok && d.executor === "vps") {'
         assert admin.count(marker) == 2
         dump = admin[admin.index(marker):]
         dump = dump[:dump.index("} else if (r.ok && d.ok) {")]
+        assert "impPollResult(d.key, startedAtVps, {" in dump
+        assert "tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true" in dump
         assert "impSlotWhen(d.next_slot_at)" in dump
-        assert "impPollResult" not in dump and "impStartTicker" not in dump
-        assert "impSending = false;" in dump
+        assert 'impStartTicker(startedAtVps, "queued")' in dump
         batch = admin[admin.rindex(marker):]
         batch = batch[:batch.index("} else if (r.ok && d.ok) {")]
-        assert "acPollResult" not in batch
-        assert "acSending = false;" in batch
+        assert "acPollResult(d.key, Date.now(), {" in batch
+        assert "tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true" in batch
+        # GitHub-путь — прежние 30 с / 5 мин по умолчанию.
+        assert "var tick = opts.tick || 30000;" in admin
+        assert "var giveup = opts.giveup || 5 * 60 * 1000;" in admin
+
+    def test_pending_flag_is_set_only_under_vps(self):
+        """Флаг «есть новое» — по одному write в ветке vps ОБОИХ хендлеров;
+        writ_waiver его не ставит (очередь пометки не берёт)."""
+        worker = _read_repo(WORKER)
+        assert 'const IMPORT_PENDING_KEY = "import:pending";' in worker
+        for handler, kind in (("handleAdminImportDump", "dump"), ("handleAdminAddCase", "case")):
+            src = _fn_src(worker, handler)
+            assert "} else {\n    await markImportPending(env, \"%s\", uuid, ts);\n  }" % kind in src, handler
+            assert "immediate: executor === \"vps\"" in src, handler
+        assert "markImportPending" not in _fn_src(worker, "handleAdminWritWaiver")
+
+    def test_pending_endpoint_is_one_get_behind_channel_auth(self):
+        worker = _read_repo(WORKER)
+        src = _fn_src(worker, "handleImportPendingGet")
+        assert "importChannelAuthOk(request, env)" in src
+        assert "PUSH_SUBSCRIPTIONS.get(IMPORT_PENDING_KEY)" in src
+        assert ".list(" not in src, "весь смысл эндпоинта — цена одного get"
+        assert 'url.pathname === "/import-pending" && request.method === "GET"' in worker
 
     def test_slots_var_mirrors_timer(self):
         """IMPORT_SLOTS_LOCAL — второй источник правды рядом с таймером:
