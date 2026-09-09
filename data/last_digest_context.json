@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-09T06:27:04",
+  "saved_at": "2026-09-09T07:12:59",
   "new_cases": [],
   "changes": [
     {
@@ -2124,10 +2124,39 @@
   ],
   "total_active_appeal": 35,
   "total_active_fi": 33,
-  "total_active_cassation": 32,
+  "total_active_cassation": 31,
   "total_active_bank": 386,
-  "cass_changes": [],
+  "cass_changes": [
+    {
+      "case": "2-716/2025",
+      "cassation_internal_number": "8Г-12188/2026",
+      "type": [
+        "outcome_change"
+      ],
+      "details": {
+        "stage_prev": "cassation",
+        "stage_now": "cassation",
+        "outcome": "cassation_remanded",
+        "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "result_text": "РЕШЕНИЕ суда 1-й инстанции ОТМЕНЕНО с направлением на новое рассмотрение",
+        "result_for_appeal": "Отменен",
+        "filing_date": "14.07.2026",
+        "decision_date": "08.09.2026",
+        "hearing_date": "08.09.2026",
+        "hearing_time": "14:25",
+        "appellant": "Прокуратура Х.",
+        "appellant_is_bank": false,
+        "appellant_status": "ПРОКУРОР",
+        "act_kind": "Судебное РЕШЕНИЕ",
+        "act_published": false,
+        "link": "12120551|228a9fc7-0e96-4596-9ae4-99bc86b65684",
+        "court_domain": "7kas.sudrf.ru",
+        "remanded_to": "",
+        "suspended_until": ""
+      }
+    }
+  ],
   "cass_discovered": [],
   "issue_key": "2026-09-09T06:27:04",
-  "updated_at": "2026-09-09T06:27:04"
+  "updated_at": "2026-09-09T07:12:59"
 }
