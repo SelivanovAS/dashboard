@@ -1,7 +1,57 @@
 {
   "version": 1,
-  "updated_at": "2026-09-10T03:57:40",
+  "updated_at": "2026-09-10T17:15:38",
   "cases": [
+    {
+      "id": "33-6434/2026",
+      "current_stage": "appeal",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, Янбеков Азат Маратович, Янбеков Марат Самигуллович наследственное имущество",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-2605/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "",
+        "judge": "Пименова Оксана Васильевна",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "events": []
+      },
+      "appeal": {
+        "case_number": "33-6434/2026",
+        "court": "Суд ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 5,
+        "judge_reporter": "",
+        "filing_date": "11.09.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "26973032|e2abc2d5-e953-48be-8f88-848e91018edc",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": []
+      },
+      "import": {
+        "operator": "Селиванов А.С.",
+        "at": "2026-09-10T17:15:35",
+        "source": "dump_appeal"
+      }
+    },
     {
       "id": "М-6014/2026",
       "current_stage": "first_instance",
