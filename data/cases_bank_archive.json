@@ -3111,7 +3111,52 @@
         "announced": true
       },
       "archived_at": "2026-09-09"
+    },
+    {
+      "id": "9-168/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Эргашев Артур Хуршедович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "9-168/2026",
+        "court": "Лангепасский городской суд",
+        "court_domain": "langepas--hmao.sudrf.ru",
+        "judge": "Кучинский К.А.",
+        "filing_date": "03.08.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюИсковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 08:48. Возвращение иска (заявления, жалобы) заявления. Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ. 14.08.2026",
+        "event_date": "10.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "279737418|8e8152ac-2965-48b9-b7d5-c7df2d73cc81",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-09-04",
+        "material_number": "М-560/2026",
+        "accepted_pending_emit": false,
+        "judicial_uid": "86RS0009-01-2026-001003-55",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "writ_expected": false
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-08-04T03:32:27",
+        "source": "auto_search",
+        "announced": true
+      },
+      "archived_at": "2026-09-10"
     }
   ],
-  "updated_at": "2026-09-09T06:27:04"
+  "updated_at": "2026-09-10T06:24:58"
 }
