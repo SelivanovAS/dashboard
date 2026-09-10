@@ -107,8 +107,7 @@
         "judicial_uid": "86RS0007-01-2026-005013-62",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-10",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-10"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23825,5 +23824,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-10T06:24:58"
+  "updated_at": "2026-09-10T06:41:59"
 }
