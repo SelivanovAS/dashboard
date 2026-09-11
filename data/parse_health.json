@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-11T06:27:48",
+ "updated_at": "2026-09-11T06:45:16",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,52 +532,52 @@
   }
  },
  "last_run": {
-  "at": "2026-09-11T06:27:48",
+  "at": "2026-09-11T06:45:16",
   "alerts": [],
-  "requests_ok": 300,
+  "requests_ok": 36,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 270,
-  "cards_planned": 271,
-  "cards_read_today": 269,
-  "cards_planned_today": 270,
-  "daily_attempts": 1,
+  "cards_read": 35,
+  "cards_planned": 36,
+  "cards_read_today": 275,
+  "cards_planned_today": 276,
+  "daily_attempts": 2,
   "instances": {
    "first_instance": {
-    "read": 219,
-    "planned": 220,
-    "read_today": 218,
-    "planned_today": 219
+    "read": 33,
+    "planned": 34,
+    "read_today": 224,
+    "planned_today": 225
    },
    "appeal": {
-    "read": 35,
-    "planned": 35,
+    "read": 2,
+    "planned": 2,
     "read_today": 35,
     "planned_today": 35
    },
    "cassation": {
-    "read": 16,
-    "planned": 16,
+    "read": 0,
+    "planned": 0,
     "read_today": 16,
     "planned_today": 16
    }
   },
   "latency": {
-   "n": 300,
-   "p50": 0.7,
-   "p90": 1.4,
-   "max": 8.0
+   "n": 36,
+   "p50": 1.0,
+   "p90": 2.2,
+   "max": 4.1
   },
   "failure_latency": {
    "degraded_card": {
     "n": 1,
-    "p50": 0.5,
-    "p90": 0.5,
-    "max": 0.5
+    "p50": 4.1,
+    "p90": 4.1,
+    "max": 4.1
    }
   },
   "fail_kinds": {
