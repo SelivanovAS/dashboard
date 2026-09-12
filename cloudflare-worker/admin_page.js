@@ -146,6 +146,15 @@ export function renderAdminHtml(secret, role, cfg) {
         <div class="imp-report" id="imp-report"></div>
       </div>
       <div class="imp-side">
+      <details class="fold" id="imp-queue-fold" open>
+        <summary>Очередь импортов <span class="run-meta" id="imp-queue-count"></span></summary>
+        <div class="fold-body">
+          <div class="imp-hint">После приёма можно отправлять следующий суд или закрыть страницу. Обработка продолжится на сервере.</div>
+          <div class="imp-queue-toolbar"><span class="run-meta" id="imp-queue-note" role="status" aria-live="polite">Загрузка очереди…</span>
+            <button class="btn-refresh" type="button" id="imp-queue-refresh">Обновить</button></div>
+          <div id="imp-queue-list" class="empty">Загрузка…</div>
+        </div>
+      </details>
       <details class="fold" id="imp-fresh-fold" open>
         <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
         <div class="fold-body">
@@ -1029,6 +1038,18 @@ html[data-role="operator"] [data-owner-only] { display:none !important; }
 .imp-sum-bad b { color:var(--danger-fg); }
 .imp-sum-dim { color:var(--fg-4); }
 .imp-report { margin-top:6px; }
+.imp-queue-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0; }
+.imp-queue-toolbar .btn-refresh { flex-shrink:0; }
+.imp-queue-job { border-bottom:1px solid var(--divider); padding:7px 0; }
+.imp-queue-job:last-child { border-bottom:0; }
+.imp-queue-job > summary { display:flex; flex-wrap:wrap; gap:5px 8px; align-items:baseline; cursor:pointer; }
+.imp-queue-job > summary::before { content:"▸"; color:var(--fg-3); }
+.imp-queue-job[open] > summary::before { content:"▾"; }
+.imp-queue-name { flex:1 1 180px; min-width:0; overflow-wrap:anywhere; color:var(--fg-2); font-size:var(--fs-sm); }
+.imp-queue-detail { padding:8px 0 2px 17px; font-size:var(--fs-xs); overflow-wrap:anywhere; }
+.imp-queue-detail .log-pre { max-height:220px; overflow:auto; }
+.imp-queue-more { margin-top:8px; }
+
 .imp-hist-item { border-bottom:1px solid var(--divider); }
 .imp-hist-item:last-child { border-bottom:0; }
 .imp-hist-item > details.fold { margin:0 0 6px; }
@@ -3329,29 +3350,29 @@ var impAppealDomains = {};
 var impPresidiumByDomain = {}; // домен → запись президиума (04.09.2026)
 var impCourtNameByDomain = {}; // домен → короткое имя (для журнала)
 var acRegion = null;           // весь region-блок cases.json — точечному добавлению
-var impPollTimer = null;
 var impSelectedFile = null;    // файл на отправку (из input или drag-n-drop)
-var impSending = false;        // идёт отправка/импорт — кнопка заблокирована
+var impSending = false;        // только чтение файла и HTTP-приём, без ожидания импорта
 var impDetectedHosts = [];
 var impDetectedDeloIds = []; // разделы из href карточек вставки (04.09.2026)     // sudrf-хосты текущей вставки/файла (автоопределение суда)
 var impDetectSeq = 0;          // защита от гонки async-чтения файла
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
 var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
 var impLastLogItems = [];      // кэш последних записей журнала (то же — для «моих судов»)
-// Исполнитель импортов и его слоты — из ответа /admin/import-log (Worker:
-// IMPORT_EXECUTOR / IMPORT_SLOTS_LOCAL). "vps" с 08.09.2026: запись ждёт
-// сервер в статусе "queued", страница после отправки НЕ поллит журнал
-// (каждый тик — KV list, а слот может быть через два часа) и обещает слот.
+// Исполнитель и слоты приходят из журнала. Отправка и обработка независимы:
+// одна цепочка обновляет очередь дампов и точечных пачек для обеих ролей.
 var impExecutor = "github";
-var impLastSlots = null;       // {last_slot_at, next_slot_at} или null
-// Режим vps (с 09.09.2026 — немедленная попытка): VPS опрашивает флаг «есть
-// новое» каждые 5 минут и берёт запись сразу, поэтому итог обычно приходит
-// через 5–10 минут — ждём его, но поллим РЕЖЕ GitHub-пути (каждый тик —
-// KV list, лимит общий на аккаунт): 60 с, потолок 12 мин ≈ 12 list'ов на
-// отправку против 10 у GitHub-пути. Не дождались — итог появится в истории,
-// повтор при провале сделает слот.
-var IMP_VPS_POLL_TICK_MS = 60 * 1000;
-var IMP_VPS_POLL_GIVEUP_MS = 12 * 60 * 1000;
+var impLastSlots = null;
+var IMP_QUEUE_POLL_MS = 60 * 1000;
+var IMP_QUEUE_WATCH_MS = 20 * 60 * 1000;
+var IMP_QUEUE_TTL_MS = 72 * 3600 * 1000;
+var IMP_QUEUE_STORAGE_KEY = "admin_import_jobs_v1";
+var impQueueTimer = null;
+var impQueueWatchUntil = Date.now() + IMP_QUEUE_WATCH_MS;
+var impQueueJobs = {};
+var impServerQueue = [];
+var impLogRequest = null;
+var impQueueLoaded = false;
+var impQueueError = false;
 var impFreshAutoPicked = false; // светофор уже подставил самый просроченный суд
 var impDetectedCaseLinks = 0;  // ссылок на карточки дел во вставке/файле
 // Ключ суда в форме импорта — «домен|srv_num», а не голый домен (14.08.2026).
@@ -3497,6 +3518,9 @@ async function loadImportCourts() {
     // режиме честно говорим обеим ролям.
     impShowAlert('Не удалось загрузить список судов (cases.json). '
       + '<button class="btn-refresh" type="button" id="imp-retry">Повторить</button>');
+    // Квитанции уже приняты сервером: недоступный реестр судов не должен
+    // останавливать получение их результатов из независимого канала.
+    loadImportLog(true);
   }
 }
 // Дыра в реестре региона («суд ДОМЕН не найден в реестре») повтором НЕ
@@ -3524,7 +3548,7 @@ var IMP_T = IS_OWNER ? {
   acRetry: " — повторит локальная машина",
   sourceMac: "🖥 повтор с локальной машины",
   queueStale: "проверьте VPS (court-import.timer)",
-  giveup: "Прогон мог быть вытеснен очередью GitHub — повторите отправку или сообщите владельцу.",
+  giveup: "Если результата нет, отправьте задание заново и проверьте VPS / GitHub по выбранному исполнителю.",
 } : {
   retry: "повтор пройдёт автоматически в течение дня",
   refill: "дочитает автоматический повтор или ближайший прогон",
@@ -3532,7 +3556,7 @@ var IMP_T = IS_OWNER ? {
   acRetry: " — повтор пройдёт автоматически",
   sourceMac: "🖥 повтор выполнен автоматически",
   queueStale: "сообщите владельцу",
-  giveup: "Обработка задерживается — повторите отправку позже или сообщите владельцу.",
+  giveup: "Если результата нет, отправьте задание заново или сообщите владельцу.",
 };
 function impIsServer(item) {
   if (item.source === "vps") return true;
@@ -3862,33 +3886,37 @@ function renderImportHistory(items) {
       + '</div>' + linesHtml + '</div>';
   }).join("");
 }
-async function loadImportLog(logOnly) {
+function loadImportLog(logOnly) {
+  if (impLogRequest) return impLogRequest;
+  impLogRequest = impFetchImportLog(logOnly).finally(function () {
+    impLogRequest = null;
+    impScheduleQueuePoll();
+  });
+  return impLogRequest;
+}
+async function impFetchImportLog(logOnly) {
   try {
-    // logOnly (горячий поллинг ожидания импорта): просим только журнал —
-    // Worker пропускает второй KV-list по import:last:*. Светофор свежести
-    // при этом НЕ перерисовываем (d.last пуст), он остаётся с прошлого
-    // полного обновления — экономим KV lists+reads на каждом тике.
+    var tracked = Object.keys(impQueueJobs).filter(function (key) { return impQueuePending(impQueueJobs[key]); });
     const r = await fetch("/admin/import-log?secret=" + encodeURIComponent(SECRET)
-      + (logOnly ? "&logonly=1" : ""));
+      + "&include_queue=1" + (logOnly ? "&logonly=1" : "")
+      + (tracked.length ? "&tracked=" + encodeURIComponent(tracked.join(",")) : ""));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     const items = Array.isArray(d.items) ? d.items : [];
     impLastLogItems = items;
     if (d.executor === "vps" || d.executor === "github") impExecutor = d.executor;
     if (d.slots && typeof d.slots === "object") impLastSlots = d.slots;
+    impQueueLoaded = true;
+    impQueueError = false;
     renderImportHistory(items);
-    if (!logOnly) {
-      // Кэшируем карту вечных ключей import:last:*: по ней светофор можно
-      // перерисовать после успешного импорта, не тратя второй KV-list.
-      impLastFreshMap = d.last || {};
-      renderImportFreshness(items, impLastFreshMap);
-    }
+    impMergeQueue(items, d.queue, d.tracked);
+    if (!logOnly) impLastFreshMap = d.last || {};
+    // Уже полученные результаты обновляют светофор без второго KV-list.
+    renderImportFreshness(items.concat(d.tracked || []), impLastFreshMap);
     return items;
   } catch (e) {
-    // Раньше сбой молча возвращал null, и светофор с историей навсегда
-    // оставались с разметочным «Загрузка…» — оператор не мог отличить
-    // «данные едут» от «журнал не пришёл». На горячем поллинге (logOnly)
-    // молчим по-прежнему: там свой индикатор ожидания и свои ретраи.
+    impQueueError = true;
+    impRenderQueueNote();
     if (!logOnly) {
       const fresh = document.getElementById("imp-freshness");
       const hist = document.getElementById("imp-history");
@@ -4015,9 +4043,11 @@ function renderScanTile(lastRun) {
 var IMP_PENDING_STATUSES = { queued: true, started: true, dispatched: true };
 function renderQueueTile(items) {
   if (!document.getElementById("tile-queue-value")) return;
-  var pending = (items || []).filter(function (it) { return IMP_PENDING_STATUSES[it.status]; });
+  var pending = (items || []).filter(impQueuePending);
   var today = localDateStr();
-  var failedToday = (items || []).filter(function (it) {
+  var historyById = {};
+  impLastLogItems.concat(items || []).forEach(function (it) { historyById[it.uuid] = it; });
+  var failedToday = Object.keys(historyById).map(function (key) { return historyById[key]; }).filter(function (it) {
     if (it.status !== "failed") return false;
     var t = parseIso(it.updated_at || it.ts);
     return !isNaN(t) && localDateStr(new Date(t)) === today;
@@ -4034,7 +4064,7 @@ function renderQueueTile(items) {
   if (stale) {
     sub = "⚠ сервер не забрал — сообщите владельцу";
   } else if (impExecutor === "vps") {
-    sub = "сервер берёт в течение 5 мин; повтор провалов — "
+    sub = "обработка по очереди; повтор провалов — "
       + impSlotWhen(impLastSlots && impLastSlots.next_slot_at);
   } else {
     sub = "обработка в облаке";
@@ -4287,107 +4317,140 @@ function impPickCourt(key) {
 function impSetStatus(html) {
   document.getElementById("imp-status").innerHTML = html;
 }
-// Поллинг журнала по key дампа: «отправлено → выполняется → +N добавлено».
-// Таймаут ~5 мин: очередь GitHub держит 1 running + 1 pending — третий запуск
-// вытесняет ожидающий, дамп при этом живёт в KV 24 ч (можно повторить).
-// Интервал 30 с + ?logonly=1 (только журнал, 1 KV-list вместо 2): каждый тик
-// стоит KV-операций, а лимит lists free-tier — 1000/день на аккаунт
-// (инцидент 17.07.2026: отладка импорта сожгла 50% дневного лимита).
-function impElapsedText(startedAt) {
-  var s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
-  var m = Math.floor(s / 60);
-  return m ? m + " мин " + (s % 60) + " с" : s + " с";
+// В localStorage остаются только квитанции приёма и короткие результаты.
+// Сырые дампы, файлы и построчные отчёты хранятся на сервере.
+function impQueuePending(item) {
+  if (!item || item.status === "expired") return false;
+  return !!item.queue_pending || !!IMP_PENDING_STATUSES[item.status];
 }
-// Ожидание импорта — секундный тикер поверх 30-секундного поллинга. Тикер
-// НЕ ходит в сеть: он перерисовывает только строку прошедшего времени. Без
-// него после «страница принята» статус стоял немым ровно 30 секунд до первого
-// тика поллинга, и оператор не понимал, ушло ли вообще (реже 30 с опрашивать
-// нельзя — каждый тик стоит KV-операций, лимит lists общий на аккаунт).
-var impWaitState = { st: "dispatched", startedAt: 0 };
-var impWaitTimer = null;
-function impWaitingWord(st) {
-  if (st === "started") return "выполняется";
-  if (st === "queued") return "ждём сервер (обычно до 5 мин)";
-  return "в очереди";
+function impSaveQueue() {
+  var rows = Object.keys(impQueueJobs).map(function (key) {
+    var item = impQueueJobs[key], row = {};
+    // Сохраняем все скалярные поля результата: иначе после перезагрузки
+    // теряются предупреждения, раздел суда и причина недоступности карточек.
+    Object.keys(item).forEach(function (field) {
+      if (["string", "number", "boolean"].indexOf(typeof item[field]) !== -1) row[field] = item[field];
+    });
+    return row;
+  });
+  try { localStorage.setItem(IMP_QUEUE_STORAGE_KEY, JSON.stringify(rows)); } catch (e) {}
 }
-function impRenderWaiting() {
-  var st = impWaitState.st;
-  impSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
-    + impWaitingWord(st) + " · "
-    + impElapsedText(impWaitState.startedAt));
+function impRestoreQueue() {
+  try {
+    var rows = JSON.parse(localStorage.getItem(IMP_QUEUE_STORAGE_KEY) || "[]");
+    (Array.isArray(rows) ? rows : []).forEach(function (item) {
+      if (item && /^[0-9a-f-]{36}$/i.test(item.uuid || "")
+          && Date.parse(item.ts) > Date.now() - 7 * 86400000) impQueueJobs[item.uuid] = item;
+    });
+  } catch (e) {}
 }
-function impStartTicker(startedAt, st) {
-  impStopTicker();
-  impWaitState = { st: st || "dispatched", startedAt: startedAt };
-  impRenderWaiting();
-  impWaitTimer = setInterval(function () {
-    if (!impSending) { impStopTicker(); return; }
-    impRenderWaiting();
-  }, 1000);
+function impRememberAccepted(response, info) {
+  var now = new Date().toISOString();
+  var item = Object.assign({}, info, { uuid: response.key, ts: now, updated_at: now,
+    executor: response.executor, status: response.executor === "vps" ? "queued" : "dispatched",
+    queue_pending: true });
+  impQueueJobs[item.uuid] = item;
+  impQueueWatchUntil = Date.now() + IMP_QUEUE_WATCH_MS;
+  impSaveQueue();
+  renderImportQueue();
+  impScheduleQueuePoll();
 }
-function impStopTicker() {
-  if (impWaitTimer) { clearInterval(impWaitTimer); impWaitTimer = null; }
-}
-// opts (режим vps): tick — период опроса, giveup — потолок ожидания,
-// giveupHtml — текст потолка, clearForm — очистить форму на потолке (дамп в
-// KV, сервер возьмёт его сам — повторная вставка не нужна).
-function impPollResult(key, startedAt, opts) {
-  opts = opts || {};
-  var tick = opts.tick || 30000;
-  var giveup = opts.giveup || 5 * 60 * 1000;
-  clearTimeout(impPollTimer);
-  impPollTimer = setTimeout(async function () {
-    const items = await loadImportLog(true);
-    const mine = (items || []).find(function (it) { return it.uuid === key; });
-    if (mine && (mine.status === "done" || mine.status === "failed")) {
-      impStopTicker();
-      impSetStatus(impStatusBadge(mine.status) + " " + impResultHtml(mine));
-      const rep = document.getElementById("imp-report");
-      if (Array.isArray(mine.lines) && mine.lines.length) {
-        rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
-          + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
-          + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
-      }
-      // Успех — очищаем поле вставки и файл. Оператор идёт очередью судов, а
-      // форма оставалась заполненной прошлым дампом: следующий Ctrl+V клеился
-      // в конец предыдущего, автоопределение видело «ссылки нескольких судов»
-      // и блокировало отправку, а кнопки «очистить» на странице нет.
-      // При failed вставку НЕ трогаем — дамп нужен для повторной попытки.
-      if (mine.status === "done") {
-        // Импорт доведён до конца — инструкция больше не разворачивается сама.
-        try { localStorage.setItem("admin_imp_steps_seen", "1"); } catch (e) {}
-        document.getElementById("imp-paste").innerHTML = "";
-        impSetFile(null);          // внутри — impRenderSelection()
-        impRunDetect();            // сбросить impDetectedHosts и заметку суда
-        // Светофор свежести перерисовываем из УЖЕ полученного журнала поверх
-        // КЭША карты import:last:* — только что импортированный суд иначе
-        // висел бы красным до «Обновить». Полного захода в /admin/import-log
-        // не делаем: это лишний KV-list, а свежая запись и так в journal'е.
-        renderImportFreshness(items, impLastFreshMap);
-      }
-      impSending = false;
-      impUpdateSendState();
-      return;
+function impMergeQueue(items, queue, tracked) {
+  // Отсутствие в снимке KV не означает завершение: новая запись может стать
+  // видна чуть позже. Финал принимаем только из записи с тем же UUID.
+  impServerQueue = Array.isArray(queue) ? queue : (items || []).filter(impQueuePending);
+  var pending = {};
+  impServerQueue.forEach(function (item) { pending[item.uuid] = true; });
+  (items || []).concat(queue || [], tracked || []).forEach(function (item) {
+    var previous = impQueueJobs[item.uuid];
+    if (!previous) return;
+    if (Date.parse(item.updated_at || item.ts) < Date.parse(previous.updated_at || previous.ts)
+        && previous.status !== "queued" && previous.status !== "dispatched") return;
+    impQueueJobs[item.uuid] = Object.assign({}, previous, item, { queue_pending: !!pending[item.uuid] });
+  });
+  Object.keys(impQueueJobs).forEach(function (key) {
+    var item = impQueueJobs[key];
+    if (impQueuePending(item) && Date.parse(item.ts) < Date.now() - IMP_QUEUE_TTL_MS) {
+      item.status = "expired";
+      item.queue_pending = false;
     }
-    if (Date.now() - startedAt > giveup) {
-      impStopTicker();
-      impSetStatus(opts.giveupHtml || ('<span class="badge badge-fail">нет ответа ~5 мин</span> '
-        + escHtml(IMP_T.giveup)));
-      if (opts.clearForm) {
-        document.getElementById("imp-paste").innerHTML = "";
-        impSetFile(null);
-        impRunDetect();
-      }
-      impSending = false;
-      impUpdateSendState();
-      return;
+    if (Date.parse(item.ts) < Date.now() - 7 * 86400000) delete impQueueJobs[key];
+  });
+  impSaveQueue();
+  renderImportQueue();
+}
+function impQueueItems() {
+  var byId = {};
+  impServerQueue.forEach(function (item) { byId[item.uuid] = item; });
+  Object.keys(impQueueJobs).forEach(function (key) {
+    byId[key] = Object.assign({}, byId[key] || {}, impQueueJobs[key]);
+  });
+  return Object.keys(byId).map(function (key) { return byId[key]; });
+}
+function impQueueName(item) {
+  if (item.court_label) return item.court_label;
+  if (item.kind === "case") return "Пачка дел · " + (item.items_count || "?") + " стр.";
+  return (impCourtNameByDomain[item.court_domain] || item.court_domain || "Импорт суда")
+    + (impIsPresidium(item) ? " (президиум)" : "");
+}
+function renderImportQueue() {
+  var el = document.getElementById("imp-queue-list");
+  if (!el) return;
+  var all = impQueueItems();
+  var pending = all.filter(impQueuePending).sort(function (a, b) { return String(a.ts).localeCompare(String(b.ts)); });
+  var finished = all.filter(function (item) { return !impQueuePending(item); })
+    .sort(function (a, b) { return String(b.updated_at || b.ts).localeCompare(String(a.updated_at || a.ts)); }).slice(0, 5);
+  document.getElementById("imp-queue-count").textContent = pending.length ? "(" + pending.length + " в работе)" : "";
+  var opened = {};
+  el.querySelectorAll("details[open][data-job-key]").forEach(function (node) { opened[node.getAttribute("data-job-key")] = true; });
+  var more = el.querySelector(".imp-queue-more");
+  function row(item) {
+    var label = item.status === "expired" ? '<span class="badge badge-fail">нужна проверка</span>'
+      : impQueuePending(item) && (item.status === "done" || item.status === "failed")
+      ? '<span class="badge badge-run">ожидает повтора</span>' : impStatusBadge(item.status);
+    var detail = item.status === "expired"
+      ? "Срок хранения задания истёк. Проверьте историю импортов. " + escHtml(IMP_T.giveup)
+      : impResultHtml(item);
+    if (Array.isArray(item.lines) && item.lines.length) {
+      detail += '<pre class="log-pre">' + item.lines.map(escHtml).join("\\n") + '</pre>';
     }
-    // Ожидание до потолка: живой статус с прошедшим временем.
-    impWaitState.st = (mine && (mine.status === "started" || mine.status === "queued"))
-      ? mine.status : "dispatched";
-    impRenderWaiting();
-    impPollResult(key, startedAt, opts);
-  }, tick);
+    return '<details class="imp-queue-job" data-job-key="' + escHtml(item.uuid) + '"' + (opened[item.uuid] ? " open" : "") + '><summary>'
+      + label + '<b class="imp-queue-name">' + escHtml(impQueueName(item)) + '</b>'
+      + '<span class="run-meta">' + escHtml(relTime(item.ts)) + '</span></summary>'
+      + '<div class="imp-queue-detail"><div class="run-meta">' + escHtml(item.operator || "без имени")
+      + " · " + escHtml(fullDate(item.ts)) + '</div>' + (detail || "Задание принято. Результат появится здесь после обработки.") + '</div></details>';
+  }
+  el.className = pending.length || finished.length ? "" : "empty";
+  var html = pending.slice(0, 8).map(row).join("");
+  if (pending.length > 8) html += '<details class="fold imp-queue-more"' + (more && more.open ? " open" : "")
+    + '><summary>Ещё в очереди: ' + (pending.length - 8) + '</summary>' + pending.slice(8).map(row).join("") + '</details>';
+  if (finished.length) html += '<div class="run-meta" style="margin-top:10px;">Последние результаты ваших отправок</div>' + finished.map(row).join("");
+  el.innerHTML = html || (impQueueLoaded ? "Ожидающих импортов нет" : "Загрузка очереди…");
+  renderQueueTile(all);
+  impRenderQueueNote();
+}
+function impRenderQueueNote() {
+  var el = document.getElementById("imp-queue-note");
+  if (!el) return;
+  el.textContent = impQueueError ? "Не удалось обновить статусы. Принятые задания остаются на сервере."
+    : !impQueueLoaded ? "Загрузка очереди…"
+    : !impQueueItems().some(impQueuePending) ? "Очередь обновлена"
+    : Date.now() >= impQueueWatchUntil ? "Автообновление приостановлено — нажмите «Обновить»"
+    : "Статусы обновляются раз в минуту";
+}
+function impScheduleQueuePoll() {
+  clearTimeout(impQueueTimer);
+  impQueueTimer = null;
+  // Одна цепочка на все отправки; скрытая или забытая вкладка не расходует KV.
+  if (document.hidden || Date.now() >= impQueueWatchUntil
+      || (!impQueueError && !impQueueItems().some(impQueuePending))) {
+    impRenderQueueNote();
+    return;
+  }
+  impQueueTimer = setTimeout(function () {
+    impQueueTimer = null;
+    loadImportLog(true);
+  }, IMP_QUEUE_POLL_MS);
 }
 async function impReadFile(file) {
   // Файл «только HTML» с sudrf — win-1251; вставки/другие файлы — utf-8.
@@ -4546,87 +4609,78 @@ function impUpdateSendState() {
   if (hint) hint.style.display = (!has && !impSending) ? "" : "none";
 }
 async function impSend() {
-  // На сервер уходит голый ДОМЕН: площадку дела импортёр берёт из href
-  // карточек дампа (_stamp_court_ids), а Worker и его белый список судов
-  // работают по домену. Ключ селекта — «домен|srv» (см. impCourtKey).
-  const domain = impDomainOf(document.getElementById("imp-court").value);
-  const name = document.getElementById("imp-name").value.trim();
-  try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
-  let html = "";
-  if (impSelectedFile) {
-    // Файл (input или drag-n-drop) побеждает вставку — об этом честно
-    // говорит индикатор impRenderSelection под полем.
-    html = await impReadFile(impSelectedFile);
-  } else {
-    html = document.getElementById("imp-paste").innerHTML || "";
-  }
-  if (!domain) { impSetStatus('<span class="badge badge-fail">выберите суд</span>'); return; }
-  if (!name) { impSetStatus('<span class="badge badge-fail">укажите ваше имя</span>'); return; }
-  if (html.length < 1024) {
-    impSetStatus('<span class="badge badge-fail">страница не вставлена или слишком короткая</span> '
-      + 'Скопируйте страницу результатов целиком или приложите файл «только HTML».');
-    return;
-  }
-  // Главная ошибка операторов — вставка простым текстом: ссылки на карточки
-  // дел теряются, импортёру нечего забирать. Ловим до отправки. Проверяем
-  // именно ссылки на КАРТОЧКИ (name_op=case), а не любой <a>: страница суда
-  // полна навигации, и голый тест на <a> пропускал вставку без единого дела.
-  if (!/name_op=case/i.test(html)) {
-    impSetStatus('<span class="badge badge-fail">нет ссылок на дела</span> '
-      + 'Похоже, вставился простой текст или не та страница. Скопируйте страницу результатов заново (выделением) или приложите файл «только HTML».');
-    return;
-  }
-  // Дамп чужого суда: хост в абсолютных ссылках карточек обязан совпадать с
-  // выбранным судом (Worker и импортёр перепроверяют то же серверно; при
-  // относительных ссылках хостов нет — проверка молчит).
-  const dumpHosts = impDetectDomains(html);
-  if (dumpHosts.length && (dumpHosts.length > 1 || dumpHosts[0] !== domain)) {
-    const foundNames = dumpHosts.map(function (h) { return impCourtNameByDomain[h] || h; }).join(", ");
-    impSetStatus('<span class="badge badge-fail">страница другого суда</span> '
-      + "Ссылки ведут в «" + escHtml(foundNames) + "», а выбран «"
-      + escHtml(impCourtNameByDomain[domain] || domain)
-      + "». Выберите суд по ссылкам или вставьте выдачу выбранного суда.");
-    return;
-  }
+  if (impSending) return;
   impSending = true;
   impUpdateSendState();
-  document.getElementById("imp-report").innerHTML = "";
-  impSetStatus("отправляю страницу…");
+  const submittedFile = impSelectedFile;
+  const submittedPaste = document.getElementById("imp-paste").innerHTML;
+  const courtKey = document.getElementById("imp-court").value;
+  const court = impCourts.find(function (c) { return impCourtKey(c) === courtKey; });
   try {
+    // На сервер уходит голый ДОМЕН: площадку дела импортёр берёт из href
+    // карточек дампа (_stamp_court_ids), а Worker и его белый список судов
+    // работают по домену. Ключ селекта — «домен|srv» (см. impCourtKey).
+    const domain = impDomainOf(document.getElementById("imp-court").value);
+    const name = document.getElementById("imp-name").value.trim();
+    try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
+    let html = "";
+    if (submittedFile) {
+      // Файл (input или drag-n-drop) побеждает вставку — об этом честно
+      // говорит индикатор impRenderSelection под полем.
+      html = await impReadFile(submittedFile);
+    } else {
+      html = document.getElementById("imp-paste").innerHTML || "";
+    }
+    if (!domain) { impSetStatus('<span class="badge badge-fail">выберите суд</span>'); return; }
+    if (!name) { impSetStatus('<span class="badge badge-fail">укажите ваше имя</span>'); return; }
+    if (html.length < 1024) {
+      impSetStatus('<span class="badge badge-fail">страница не вставлена или слишком короткая</span> '
+        + 'Скопируйте страницу результатов целиком или приложите файл «только HTML».');
+      return;
+    }
+    // Главная ошибка операторов — вставка простым текстом: ссылки на карточки
+    // дел теряются, импортёру нечего забирать. Ловим до отправки. Проверяем
+    // именно ссылки на КАРТОЧКИ (name_op=case), а не любой <a>: страница суда
+    // полна навигации, и голый тест на <a> пропускал вставку без единого дела.
+    if (!/name_op=case/i.test(html)) {
+      impSetStatus('<span class="badge badge-fail">нет ссылок на дела</span> '
+        + 'Похоже, вставился простой текст или не та страница. Скопируйте страницу результатов заново (выделением) или приложите файл «только HTML».');
+      return;
+    }
+    // Дамп чужого суда: хост в абсолютных ссылках карточек обязан совпадать с
+    // выбранным судом (Worker и импортёр перепроверяют то же серверно; при
+    // относительных ссылках хостов нет — проверка молчит).
+    const dumpHosts = impDetectDomains(html);
+    if (dumpHosts.length && (dumpHosts.length > 1 || dumpHosts[0] !== domain)) {
+      const foundNames = dumpHosts.map(function (h) { return impCourtNameByDomain[h] || h; }).join(", ");
+      impSetStatus('<span class="badge badge-fail">страница другого суда</span> '
+        + "Ссылки ведут в «" + escHtml(foundNames) + "», а выбран «"
+        + escHtml(impCourtNameByDomain[domain] || domain)
+        + "». Выберите суд по ссылкам или вставьте выдачу выбранного суда.");
+      return;
+    }
+    document.getElementById("imp-report").innerHTML = "";
+    impSetStatus("отправляю страницу…");
     const r = await fetch("/admin/import-dump?secret=" + encodeURIComponent(SECRET), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ court_domain: domain, operator: name, html: html }),
     });
     const d = await r.json().catch(function () { return {}; });
-    if (r.ok && d.ok && d.executor === "vps") {
-      // Сервер-исполнитель: VPS опрашивает флаг «есть новое» каждые 5 минут и
-      // берёт запись сразу (09.09.2026) — ждём итог, но поллим реже
-      // GitHub-пути (60 с, потолок 12 мин: каждый тик — KV list). Не
-      // дождались — дамп в KV трое суток, сервер возьмёт его сам, а провал
-      // повторит слот; форму на потолке чистим (повторная вставка не нужна).
-      var startedAtVps = Date.now();
-      impStartTicker(startedAtVps, "queued");
-      loadImportLog();
-      impPollResult(d.key, startedAtVps, {
-        tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true,
-        giveupHtml: impStatusBadge("queued") + " сервер пока не взял страницу — итог появится в «Истории импортов»; "
-          + "если карточки не откроются, повтор " + escHtml(impSlotWhen(d.next_slot_at)),
-      });
-    } else if (r.ok && d.ok) {
-      var startedAt = Date.now();
-      impStartTicker(startedAt);
-      loadImportLog();
-      impPollResult(d.key, startedAt);
+    if (r.ok && d.ok && d.key) {
+      impRememberAccepted(d, { court_domain: domain, court_label: court ? impCourtLabel(court) : domain,
+        operator: name, kind: "dump" });
+      if (document.getElementById("imp-paste").innerHTML === submittedPaste) document.getElementById("imp-paste").innerHTML = "";
+      if (impSelectedFile === submittedFile) impSetFile(null);
+      impRunDetect();
+      try { localStorage.setItem("admin_imp_steps_seen", "1"); } catch (e) {}
+      impSetStatus('<span class="badge badge-ok">принято в очередь</span> Можно отправить следующий суд.');
     } else {
-      impStopTicker();
       impSetStatus('<span class="badge badge-fail">✕</span> ' + escHtml(d.error || ("HTTP " + r.status)));
-      impSending = false;
-      impUpdateSendState();
     }
   } catch (e) {
-    impStopTicker();
-    impSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
+    impSetStatus('<span class="badge badge-fail">✕ сеть или чтение файла</span> ' + escHtml(String(e)));
+  } finally {
     impSending = false;
     impUpdateSendState();
   }
@@ -4753,14 +4807,6 @@ var AC_MAX_ITEMS = 20;
 // средний сегмент постоянного присутствия (Покачи «2-2-279/2026»).
 var AC_NUM_RE = /^(?:[А-ЯA-Z]+|\\d+)-(?:\\d+-)?\\d+\\/\\d{4}$/;
 var acSending = false;
-var acPollTimer = null;
-// Пачка может честно идти дольше дампового импорта: до 20 номеров × все
-// открытые суды региона + очередь cases-data-write за ночным прогоном.
-// Тик 60 с (не 30, как у дампов): каждый тик — KV-list, а лимит list'ов
-// free-tier общий на аккаунт (инцидент 17.07.2026); 40 мин × 60 с ≤ 40 шт.
-var AC_POLL_TICK_MS = 60 * 1000;
-var AC_POLL_GIVEUP_MS = 40 * 60 * 1000;
-
 function acFillCourts(fi) {
   var sel = document.getElementById("ac-court");
   if (!sel) return;
@@ -5308,6 +5354,7 @@ async function acSend() {
     courtDomain = p[0];
     courtSrv = p[1] || "";
   }
+  var submittedInput = document.getElementById("ac-input").value;
   acSending = true;
   acUpdateState();
   document.getElementById("ac-report").innerHTML = "";
@@ -5322,71 +5369,19 @@ async function acSend() {
       }),
     });
     var d = await r.json().catch(function () { return {}; });
-    if (r.ok && d.ok && d.executor === "vps") {
-      // См. отправку дампа: сервер берёт пачку в ближайшие минуты — ждём
-      // итог редким поллингом, на потолке чистим ввод (задание в KV).
-      acSetStatus(impStatusBadge("queued") + ' <span class="dot dot-amber dot-pulse"></span> '
-        + "пачка принята · ждём сервер (обычно до 5 мин)");
-      acPollResult(d.key, Date.now(), {
-        tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true,
-        giveupHtml: impStatusBadge("queued") + " сервер пока не взял пачку — итог появится в «Истории импортов»; "
-          + "если карточки не откроются, повтор " + escHtml(impSlotWhen(d.next_slot_at)),
-      });
-    } else if (r.ok && d.ok) {
-      acSetStatus(impStatusBadge("dispatched") + " пачка принята, обработка в очереди…");
-      acPollResult(d.key, Date.now());
+    if (r.ok && d.ok && d.key) {
+      impRememberAccepted(d, { court_domain: courtDomain, kind: "case", items_count: st.items.length, operator: name });
+      if (document.getElementById("ac-input").value === submittedInput) document.getElementById("ac-input").value = "";
+      acSetStatus('<span class="badge badge-ok">принято в очередь</span> Можно отправить следующую пачку.');
     } else {
-      acSetStatus('<span class="badge badge-fail">✕</span> '
-        + escHtml((d && d.error) || ("HTTP " + r.status)));
-      acSending = false;
-      acUpdateState();
+      acSetStatus('<span class="badge badge-fail">✕</span> ' + escHtml((d && d.error) || ("HTTP " + r.status)));
     }
   } catch (e) {
     acSetStatus('<span class="badge badge-fail">✕ сеть</span> ' + escHtml(String(e)));
+  } finally {
     acSending = false;
     acUpdateState();
   }
-}
-
-function acPollResult(key, startedAt, opts) {  // opts — как у impPollResult
-  opts = opts || {};
-  var tick = opts.tick || AC_POLL_TICK_MS;
-  var giveup = opts.giveup || AC_POLL_GIVEUP_MS;
-  clearTimeout(acPollTimer);
-  acPollTimer = setTimeout(async function () {
-    var items = await loadImportLog(true);
-    var mine = (items || []).find(function (it) { return it.uuid === key; });
-    if (mine && (mine.status === "done" || mine.status === "failed")) {
-      acSetStatus(impStatusBadge(mine.status) + " " + escHtml(acResultText(mine)));
-      var rep = document.getElementById("ac-report");
-      if (rep && Array.isArray(mine.lines) && mine.lines.length) {
-        rep.innerHTML = '<details class="fold" open><summary>Отчёт построчно ('
-          + mine.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
-          + mine.lines.map(escHtml).join("\\n") + '</pre></div></details>';
-      }
-      // Успех — чистим поле (следующая пачка не должна клеиться к прошлой);
-      // при failed ввод сохраняем для повтора.
-      if (mine.status === "done") {
-        document.getElementById("ac-input").value = "";
-      }
-      acSending = false;
-      acUpdateState();
-      return;
-    }
-    if (Date.now() - startedAt > giveup) {
-      acSetStatus(opts.giveupHtml || ('<span class="badge badge-fail">нет ответа ~40 мин</span> '
-        + 'Итог появится в «Истории импортов» — обновите страницу позже. '
-        + 'Если его там нет, отправьте пачку заново: уже добавленные дела система отсеет сама.'));
-      if (opts.clearForm) document.getElementById("ac-input").value = "";
-      acSending = false;
-      acUpdateState();
-      return;
-    }
-    var st = (mine && (mine.status === "started" || mine.status === "queued")) ? mine.status : "dispatched";
-    acSetStatus(impStatusBadge(st) + ' <span class="dot dot-amber dot-pulse"></span> '
-      + impWaitingWord(st) + " · " + impElapsedText(startedAt));
-    acPollResult(key, startedAt, opts);
-  }, tick);
 }
 
 // Инициализация блока точечного добавления.
@@ -5498,6 +5493,12 @@ document.addEventListener("click", function (e) {
 // lastStaticLoadAt (let ниже по файлу) — вызов раньше объявления упал бы в TDZ.
 // Скрипт синхронный и стоит в конце body, коррекция по hash успевает до
 // первой отрисовки.
+impRestoreQueue();
+renderImportQueue();
+document.getElementById("imp-queue-refresh").addEventListener("click", function () {
+  impQueueWatchUntil = Date.now() + IMP_QUEUE_WATCH_MS;
+  loadImportLog(true);
+});
 initTabs();
 // Плитка «Последний прогон» — только владельцу (09.09.2026): оператору
 // GitHub API не дёргаем вовсе.
@@ -5523,9 +5524,15 @@ if (IS_OWNER) {
 document.addEventListener("visibilitychange", function () {
   if (document.hidden) {
     clearTimeout(ghTimer);
+    clearTimeout(impQueueTimer);
+    impQueueTimer = null;
     return;
   }
   if (IS_OWNER) loadGhRuns();
+  if (impQueueItems().some(impQueuePending)) {
+    impQueueWatchUntil = Date.now() + IMP_QUEUE_WATCH_MS;
+    loadImportLog(true);
+  }
   // Вкладку часто оставляют открытой на ночь: раньше возврат обновлял ТОЛЬКО
   // плитку прогона, а здоровье парсеров, дайджест и отчёт по искам банка
   // оставались вчерашними — вместе с метками «5 ч назад», посчитанными в

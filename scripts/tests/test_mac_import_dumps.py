@@ -605,30 +605,15 @@ class TestImportExecutorWiring:
         assert "function impQueueStale(item)" in admin
         assert "сервер не забрал" in admin
 
-    def test_admin_polls_slowly_under_vps(self):
-        """С 09.09.2026 сервер берёт запись в ближайшие минуты (поллер VPS
-        каждые 5 мин), и страница ждёт итог — но реже GitHub-пути: каждый
-        тик — KV list (лимит общий на аккаунт), 60 с при потолке 12 мин.
-        На потолке обещается слот-повтор, форма чистится (тело в KV)."""
+    def test_admin_has_one_shared_queue_poll(self):
+        """Все отправки отслеживаются одним запросом раз в минуту;
+        завершение старого задания не управляет новой формой."""
         admin = _read_repo(ADMIN)
-        assert "var IMP_VPS_POLL_TICK_MS = 60 * 1000;" in admin
-        m = re.search(r"var IMP_VPS_POLL_GIVEUP_MS = (\d+) \* 60 \* 1000;", admin)
-        assert m and int(m.group(1)) >= 10
-        marker = 'if (r.ok && d.ok && d.executor === "vps") {'
-        assert admin.count(marker) == 2
-        dump = admin[admin.index(marker):]
-        dump = dump[:dump.index("} else if (r.ok && d.ok) {")]
-        assert "impPollResult(d.key, startedAtVps, {" in dump
-        assert "tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true" in dump
-        assert "impSlotWhen(d.next_slot_at)" in dump
-        assert 'impStartTicker(startedAtVps, "queued")' in dump
-        batch = admin[admin.rindex(marker):]
-        batch = batch[:batch.index("} else if (r.ok && d.ok) {")]
-        assert "acPollResult(d.key, Date.now(), {" in batch
-        assert "tick: IMP_VPS_POLL_TICK_MS, giveup: IMP_VPS_POLL_GIVEUP_MS, clearForm: true" in batch
-        # GitHub-путь — прежние 30 с / 5 мин по умолчанию.
-        assert "var tick = opts.tick || 30000;" in admin
-        assert "var giveup = opts.giveup || 5 * 60 * 1000;" in admin
+        assert "var IMP_QUEUE_POLL_MS = 60 * 1000;" in admin
+        assert "var impQueueTimer" in admin
+        assert "function impRememberAccepted" in admin
+        assert "function impPollResult" not in admin
+        assert "function acPollResult" not in admin
 
     def test_pending_flag_is_set_only_under_vps(self):
         """Флаг «есть новое» — по одному write в ветке vps ОБОИХ хендлеров;

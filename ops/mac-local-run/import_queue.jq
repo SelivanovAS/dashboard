@@ -11,7 +11,8 @@
 # GitHub-путь, он остался аварийным (флаг у Worker'а) и по-прежнему теряет
 # дела там, где суд не отдал карточку.
 #
-# Вход  — ответ GET /admin/import-log (объект с .items[]).
+# Вход  — GET /admin/import-log?include_queue=1: полная .queue[].
+# .items — совместимость на время обновления Worker старой версии.
 # Выход — TSV «kind, uuid, домен, оператор, прежний статус», по строке на запись.
 # Аргументы: --argjson now <epoch> --argjson ttl <сек>
 #            --argjson grace <сек: живой облачный ДАМП>
@@ -64,7 +65,8 @@ def epoch: try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) catch 0;
 # оказывался статус. Пишем прочерк, шелл возвращает его в пустоту.
 def dash: if ((. // "") | tostring) == "" then "-" else . end;
 
-.items[]
+(.queue // .items // [])
+| sort_by([(.ts // ""), (.uuid // "")])[]
 | . as $r
 | (($r.kind // "dump")) as $kind
 | select($kind == "dump" or $kind == "case")
