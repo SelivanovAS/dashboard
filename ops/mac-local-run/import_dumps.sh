@@ -214,7 +214,7 @@ worker_cfg() {  # $1 = путь+query — пишет конфиг curl (адре
 # Журнал импортов: секрет в query — как у самой админки, поэтому URL уходит
 # через конфиг curl, а не argv.
 journal_cfg() {
-  printf 'url = "%s/admin/import-log?secret=%s&logonly=1"\n' \
+  printf 'url = "%s/admin/import-log?secret=%s&logonly=1&include_queue=1"\n' \
     "$WORKER_URL" "$OWNER_SECRET" > "$CURL_CFG"
 }
 

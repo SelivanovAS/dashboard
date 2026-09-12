@@ -2007,6 +2007,42 @@ const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в 
 const IMPORT_HTML_MIN = 1024;             // меньше — заведомо не страница выдачи
 const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдачи sudrf ≤ ~300 КБ
 
+// Предварительный отбор живой очереди. Точные грейсы и условия повторов
+// остаются в import_queue.jq; started тоже показываем в очереди оператора.
+// Маленькая metadata позволяет list пропускать завершённые задания без get
+// каждого отчёта. Старые записи без metadata читаются обычным способом.
+function importQueuePending(record) {
+  const kind = record.kind || "dump";
+  if (kind !== "dump" && kind !== "case") return false;
+  if (record.status === "failed"
+      && String(record.error || "").includes("повтор не поможет — вставьте выдачу заново")) return false;
+  if (record.status !== "done") return true;
+  return kind === "case" ? (record.fetch_error || 0) > 0
+    : (record.fetch_fail || 0) > 0 || (record.card_failed || 0) > 0;
+}
+
+function importLogWriteOptions(record) {
+  return {
+    expirationTtl: IMPORT_LOG_TTL,
+    metadata: { queue_pending: importQueuePending(record) },
+  };
+}
+
+// KV list возвращает страницы: история за 90 дней легко превышает 1000
+// ключей. Пустая страница тоже может иметь продолжение.
+async function listImportLogKeys(env) {
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:", limit: 1000, cursor });
+    keys.push(...page.keys);
+    if (page.list_complete !== false) break;
+    if (!page.cursor || page.cursor === cursor) throw new Error("import log pagination stalled");
+    cursor = page.cursor;
+  } while (cursor);
+  return keys;
+}
+
 // Флаг «есть новое» для НЕМЕДЛЕННОЙ попытки исполнителя (09.09.2026, решение
 // юриста «пробовать сразу, провалы — в окно»): один KV-ключ с отметкой
 // последней отправки. VPS каждые 5 минут (будни 08:00–20:00) делает
@@ -2161,9 +2197,7 @@ async function handleAdminImportDump(request, env) {
     status: executor === "vps" ? "queued" : "dispatched", executor, updated_at: ts,
   };
   await env.PUSH_SUBSCRIPTIONS.put(dumpKey, html, { expirationTtl: IMPORT_DUMP_TTL });
-  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-    expirationTtl: IMPORT_LOG_TTL,
-  });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
   if (executor !== "vps") {
     const res = await dispatchWorkflowOnGitHub(env, "import_cases.yml", {
       dump_key: dumpKey, court_domain: courtDomain, operator,
@@ -2174,9 +2208,7 @@ async function handleAdminImportDump(request, env) {
       record.status = "failed";
       record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
       record.updated_at = new Date().toISOString();
-      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-        expirationTtl: IMPORT_LOG_TTL,
-      });
+      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
       return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
         status: 502, headers: jsonHeaders,
       });
@@ -2362,9 +2394,7 @@ async function handleAdminAddCase(request, env) {
   await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {
     expirationTtl: IMPORT_DUMP_TTL,
   });
-  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-    expirationTtl: IMPORT_LOG_TTL,
-  });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
   if (executor !== "vps") {
     const res = await dispatchWorkflowOnGitHub(env, "add_cases.yml", {
       job_key: jobKey, operator,
@@ -2373,9 +2403,7 @@ async function handleAdminAddCase(request, env) {
       record.status = "failed";
       record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
       record.updated_at = new Date().toISOString();
-      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-        expirationTtl: IMPORT_LOG_TTL,
-      });
+      await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
       return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
         status: 502, headers: jsonHeaders,
       });
@@ -2480,9 +2508,7 @@ async function handleAdminWritWaiver(request, env) {
   await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {
     expirationTtl: IMPORT_DUMP_TTL,
   });
-  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-    expirationTtl: IMPORT_LOG_TTL,
-  });
+  await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
   const res = await dispatchWorkflowOnGitHub(env, "mark_writ.yml", {
     job_key: jobKey, operator,
   });
@@ -2490,9 +2516,7 @@ async function handleAdminWritWaiver(request, env) {
     record.status = "failed";
     record.error = `${res.error || "dispatch failed"}${res.detail ? ": " + res.detail : ""}`;
     record.updated_at = new Date().toISOString();
-    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), {
-      expirationTtl: IMPORT_LOG_TTL,
-    });
+    await env.PUSH_SUBSCRIPTIONS.put(logKey, JSON.stringify(record), importLogWriteOptions(record));
     return new Response(JSON.stringify({ ok: false, key: uuid, error: record.error }), {
       status: 502, headers: jsonHeaders,
     });
@@ -2550,10 +2574,9 @@ async function handleImportResult(request, env) {
     return new Response("Bad Request", { status: 400 });
   }
   const uuid = m[1];
-  // Пер-ключевой журнал: ищем запись по суффиксу |uuid. Записей ≤ сотни
-  // (TTL 90 дн), list по префиксу дешёвый.
-  const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:" });
-  const entry = list.keys.find((k) => k.name.endsWith(`|${uuid}`));
+  // Отчёт старого задания тоже должен находиться за первой страницей KV.
+  const logKeys = await listImportLogKeys(env);
+  const entry = logKeys.find((k) => k.name.endsWith(`|${uuid}`));
   if (!entry) {
     return new Response(JSON.stringify({ ok: false, error: "запись журнала не найдена" }), {
       status: 404, headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -2636,9 +2659,7 @@ async function handleImportResult(request, env) {
   if (["first_instance", "appeal", "cassation"].includes(body.section)) {
     record.section = body.section;
   }
-  await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), {
-    expirationTtl: IMPORT_LOG_TTL,
-  });
+  await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), importLogWriteOptions(record));
   // Свежесть по суду (светофор в админке): последний УСПЕШНЫЙ импорт домена.
   // Отдельный вечный ключ (без TTL): журнал живёт 90 дней и отдаётся
   // последними 50 записями — при ~52 судах с еженедельным регламентом
@@ -2681,8 +2702,9 @@ async function handleImportResult(request, env) {
   });
 }
 
-// Журнал импортов для админки (обе роли): последние 50, свежие первыми,
-// + карта «последний успешный импорт по домену» (светофор свежести).
+// История остаётся компактной, а include_queue=1 добавляет полную живую
+// очередь за TTL, по порядку поступления. tracked=uuid,... возвращает итог
+// своих отправок даже после их выхода из последних 50 записей истории.
 async function handleAdminImportLog(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
   if (gate.error) return gate.error;
@@ -2691,14 +2713,32 @@ async function handleAdminImportLog(request, env) {
     // журнал (найти свою запись по uuid). Пропускаем блок import:last:* —
     // это второй KV-list + get по всем доменам, а lists-лимит free-tier
     // всего 1000/день (инцидент 17.07.2026: отладка импорта сожгла 50%).
-    const logOnly = new URL(request.url).searchParams.get("logonly") === "1";
-    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:" });
-    // Ключ начинается с ISO-времени → лексикографический порядок = хронология.
-    const keys = list.keys.map((k) => k.name).sort().reverse().slice(0, 50);
-    const items = (await Promise.all(keys.map(async (name) => {
-      try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(name)); }
-      catch (_) { return null; }
-    }))).filter(Boolean);
+    const params = new URL(request.url).searchParams;
+    const logOnly = params.get("logonly") === "1";
+    const includeQueue = params.get("include_queue") === "1";
+    const trackedIds = new Set(String(params.get("tracked") || "").split(",")
+      .filter((id) => /^[0-9a-f-]{36}$/.test(id)));
+    const keys = (await listImportLogKeys(env)).sort((a, b) => a.name.localeCompare(b.name));
+    const historyKeys = keys.slice(-50).reverse();
+    const cutoff = Date.now() - IMPORT_DUMP_TTL * 1000;
+    const queueKeys = includeQueue ? keys.filter((k) => {
+      const born = Date.parse(k.name.slice("import:log:".length).split("|")[0]);
+      return born > cutoff && (!k.metadata || k.metadata.queue_pending !== false);
+    }) : [];
+    const trackedKeys = keys.filter((k) => trackedIds.has(k.name.split("|").pop()));
+    const wanted = new Set([...historyKeys, ...queueKeys, ...trackedKeys].map((k) => k.name));
+    const records = new Map();
+    await Promise.all([...wanted].map(async (name) => {
+      const raw = await env.PUSH_SUBSCRIPTIONS.get(name);
+      if (raw === null) return;
+      const record = JSON.parse(raw);
+      if (record && typeof record === "object") records.set(name, record);
+    }));
+    const items = historyKeys.map((k) => records.get(k.name)).filter(Boolean);
+    const queue = queueKeys.map((k) => records.get(k.name)).filter((record) =>
+      record && Date.parse(record.ts) > cutoff && importQueuePending(record)
+    ).map((record) => ({ ...record, queue_pending: true }));
+    const tracked = trackedKeys.map((k) => records.get(k.name)).filter(Boolean);
     const last = {};
     if (!logOnly) {
       const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
@@ -2714,6 +2754,8 @@ async function handleAdminImportLog(request, env) {
     // бы в выходные и утром до первого слота).
     return new Response(JSON.stringify({
       items, last, executor: importExecutor(), slots: importSlotsAt(Date.now()),
+      ...(includeQueue ? { queue } : {}),
+      ...(trackedIds.size ? { tracked } : {}),
     }), {
       headers: { "Content-Type": "application/json; charset=utf-8" },
     });

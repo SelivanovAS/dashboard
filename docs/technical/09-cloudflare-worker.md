@@ -30,7 +30,7 @@ Cloudflare Worker — это маленький серверный скрипт,
 
 ## Автозапуск (cron)
 
-`scheduled(event, env)` ([worker.js:2814](../../cloudflare-worker/worker.js#L2814)):
+`scheduled(event, env)` ([worker.js:2856](../../cloudflare-worker/worker.js#L2856)):
 
 1. Вычисляет текущую дату по МСК (UTC+3).
 2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
@@ -70,7 +70,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2857](../../cloudflare-worker/worker.js#L2857)).
+Маршрутизатор — `fetch(request, env)` ([2899](../../cloudflare-worker/worker.js#L2899)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
 [60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
@@ -91,7 +91,7 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 | `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1540](../../cloudflare-worker/worker.js#L1540)) | `OWNER_SECRET` | Принудительно удалить подписку. |
 | `/admin/test-push` | POST | `handleAdminTestPush` ([1677](../../cloudflare-worker/worker.js#L1677)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
 | `/visit` | POST | `handleVisit` ([252](../../cloudflare-worker/worker.js#L252)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
-| `/admin/visits` | GET | `handleAdminVisits` ([2732](../../cloudflare-worker/worker.js#L2732)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
+| `/admin/visits` | GET | `handleAdminVisits` ([2774](../../cloudflare-worker/worker.js#L2774)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
 | `/profile/link-code` | POST | `handleProfileLinkCode` ([819](../../cloudflare-worker/worker.js#L819)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
 | `/profile/link` | POST | `handleProfileLink` ([883](../../cloudflare-worker/worker.js#L883)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
 | `/profile/get` | POST | `handleProfileGet` ([933](../../cloudflare-worker/worker.js#L933)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
@@ -334,6 +334,35 @@ URL — `bankParseUrl` из `adminPageConfig()`). Группы по исхода
 (`BP_CHUNK`, кнопка «Показать ещё») — на Урале дел будут тысячи. Русские
 причины приходят готовыми из Python (`skip_reason_ru`, `_OUTCOME_RU`).
 Файла нет (404, трек выключен) → карточка скрыта.
+
+### Очередь импортов (12.09.2026)
+
+При подтверждённом приёме дампа или пачки дел форма сразу освобождается.
+Список «Очередь импортов» отдельно показывает обработку, автоматические повторы
+и последние результаты отправок из этого браузера. Завершение старого задания
+не меняет текущий ввод. В localStorage сохраняются квитанции и скалярные поля
+результата, без дампов и построчных отчётов.
+
+`GET /admin/import-log?include_queue=1` сохраняет компактную историю `items`
+(последние 50), добавляет полную `queue` за срок хранения дампов (72 часа),
+по порядку поступления. `tracked=uuid,...` возвращает результаты указанных
+отправок за пределами истории. `logonly=1` исключает карту свежести судов.
+Права прежние: владелец и оператор. Полная пагинация KV применяется также
+при поиске записи для приёма отчёта. Метаданные `queue_pending` позволяют
+пропускать завершённые записи без чтения их тела; записи прежних версий
+без метаданных поддержаны. Точные условия повторов и пропусков остаются
+в `ops/mac-local-run/import_queue.jq`.
+
+Один общий опрос раз в минуту обслуживает дампы и пачки. Скрытая вкладка
+приостанавливает опрос; после 20 минут без нового приёма или ручного обновления
+автообновление останавливается с подсказкой «Обновить». Это ограничение
+только страницы: сервер продолжает обработку. После возврата на вкладку
+с ожидающими квитанциями обновление возобновляется.
+
+При выпуске сначала обновляются Workers территорий, затем скрипт исполнителя
+с `include_queue=1`. Старый Worker совместим с новым jq через `items`,
+но устранение ограничения 50 записей действует только после обновления Worker.
+Сериализация записи через `.run.lock` и расписания не меняются.
 
 ## Секреты Worker'а
 

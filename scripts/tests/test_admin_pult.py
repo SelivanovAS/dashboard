@@ -326,7 +326,7 @@ def test_dump_post_sends_bare_domain():
     """На сервер уходит домен: Worker и его белый список судов — по домену,
     а фактическую площадку дела импортёр берёт из href карточек дампа."""
     src = _admin()
-    m = re.search(r"async function impSend\(\)[\s\S]{0,400}", src)
+    m = re.search(r"async function impSend\(\)[\s\S]*?\n\}", src)
     assert m and 'impDomainOf(document.getElementById("imp-court").value)' in m.group(0), (
         "impSend отправляет значение селекта как есть — на сервер уедет "
         "«домен|srv», которого нет в белом списке Worker'а."
