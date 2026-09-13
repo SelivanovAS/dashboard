@@ -38,6 +38,7 @@ UA="court-monitor-import-${CM_IMPORT_SOURCE:-vps}/1.0"
 TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 rc=0
+ran_import=0
 
 # GET /import-pending с данным секретом → печатает тело, код возврата = HTTP
 # 401 (1) / прочее (0). Секрет уходит через -K, не через argv.
@@ -93,9 +94,17 @@ while IFS= read -r clone; do
     continue
   fi
   echo "$(date '+%Y-%m-%d %H:%M:%S') $clone: новая отметка $at (была: ${seen:-нет}) — запускаю очередь"
+  ran_import=1
   bash "$IMPORTER" "$clone" --anywhere || rc=1
   mkdir -p "$(dirname "$seen_file")"
   printf '%s\n' "$at" > "$seen_file"
 done < <(cm_territories)
+
+# Даже если длинный импорт закончился после последнего утреннего тика,
+# готовый выпуск получит новую попытку. Не ждём доставку внутри поллера;
+# пустой тик остаётся тихим и не делает лишних Git-запросов.
+if [ "$ran_import" = "1" ]; then
+  systemctl --no-block start court-delivery.service || rc=1
+fi
 
 exit "$rc"

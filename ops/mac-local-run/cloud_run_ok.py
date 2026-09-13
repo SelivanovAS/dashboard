@@ -27,6 +27,9 @@ remote, поэтому потерянный ответ `git push` не прев�
   cloud_run_ok.py --progress     печатает строку-прогресс «прочитано X из Y
                                  карточек (Z%), поиски …» — тело алерта
   cloud_run_ok.py --has-pending  0 = в накоплении есть неотправленные новости
+  cloud_run_ok.py --can-deliver  0 = свежий выпуск завершённого прогона готов
+                                 к доставке, включая день без новых событий
+  cloud_run_ok.py --is-working-day 0 = сегодня рабочий день РФ по местной дате
   cloud_run_ok.py --delivery-id напечатать ID текущего выпуска, не меняя
                                  контекст (для journal до mark)
   cloud_run_ok.py --mark-delivered  проставить delivered_at и напечатать
@@ -170,6 +173,29 @@ def context_pending(ctx: dict) -> bool:
     if str(ctx.get("saved_at") or "")[:10] not in _today_dates():
         return False
     return any(ctx.get(k) for k in CTX_DELTA_KEYS)
+
+
+def can_deliver_today(state: dict, ctx: dict) -> bool:
+    """Готов ли сегодняшний выпуск к отдельной доставке без нового парсинга.
+
+    Пустой выпуск тоже закрывает день, если утренний прогон состоялся.
+    Свежий last_run отличает его от одного лишь сохранённого контекста;
+    процент прочитанных карточек и доступность поисков доставку не запрещают.
+    Окно времени, календарь автозапуска, lock и завершение публикации данных
+    проверяет вызывающая shell-обёртка, а не этот read-only критерий.
+    """
+    if not ctx or delivered_today(ctx):
+        return False
+    delivery_id = _context_delivery_id(ctx)
+    if not delivery_id:
+        return False
+    stored_id = str(ctx.get("delivery_id") or "")
+    if stored_id and stored_id != delivery_id:
+        return False
+    last_run = (state or {}).get("last_run")
+    if not isinstance(last_run, dict):
+        return False
+    return str(last_run.get("at") or "")[:10] in _today_dates()
 
 
 def cards_progress(state: dict) -> tuple[int, int] | None:
@@ -579,6 +605,9 @@ def _region_name() -> str:
 
 
 def main(argv: list[str]) -> int:
+    if "--is-working-day" in argv:
+        from court_monitor.textutil import is_russian_working_day
+        return 0 if is_russian_working_day(dt.datetime.now().date()) else 1
     if "--mark-delivered" in argv:
         return _mark_delivered()
     if "--unmark-delivered" in argv:
@@ -601,6 +630,8 @@ def main(argv: list[str]) -> int:
     if "--has-pending" in argv:
         return 0 if context_pending(_context()) else 1
     state = _health_state()
+    if "--can-deliver" in argv:
+        return 0 if can_deliver_today(state, _context()) else 1
     if "--health-alerts" in argv:
         lines = health_alert_lines(state)
         if lines:

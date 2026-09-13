@@ -599,7 +599,7 @@ class TestFinalDeliverySweep:
         assert branch < preflight < run_parse
         assert "cm_any_court_reachable" not in body
         assert "run_parse.py" not in body
-        assert "--has-pending" in body
+        assert "--can-deliver" in body
         assert 'deliver_and_push "финальный sweep' in body
 
     def test_sweep_reuses_exact_once_funnel_and_requires_committed_context(self):

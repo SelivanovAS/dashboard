@@ -497,13 +497,12 @@ if [ "$CHECK_ONLY" != "1" ]; then
   reconcile_parse_transaction
 fi
 
-# ── Финальная доставка родителя: БЕЗ судов и БЕЗ повторного парсинга ──────────
-# parse_all.sh зовёт этот режим только после wait обеих территорий. Сегодняшний
-# инцидент: Урал закончил до 08:45 и оставил черновик, ХМАО держал единственный
-# LaunchAgent занятым после 08:45, поэтому отдельный календарный слот не встал в
-# очередь. Здесь мы подтягиваем remote, проверяем свежий pending-контекст и
-# пропускаем его через СУЩЕСТВУЮЩИЙ deliver_and_push. Вторая реализация
-# delivered_at/marker/push запрещена.
+# ── Отдельная доставка: БЕЗ судов и БЕЗ повторного парсинга ──────────────────
+# Режим используется финальным sweep родителя и отдельным таймером доставки.
+# Общий lock клона уже захвачен: живой парсер или импорт не пересекаются с
+# отправкой. Подтягиваем remote, проверяем свежий выпуск завершённого прогона
+# (включая день без новых событий) и используем СУЩЕСТВУЮЩИЙ deliver_and_push.
+# Вторая реализация delivered_at/marker/push запрещена.
 if [ "$DELIVER_PENDING_ONLY" = "1" ]; then
   if ! cm_delivery_window_open; then
     log "Delivery-sweep: окно 08:45 ещё не открыто — без действий"
@@ -515,8 +514,8 @@ if [ "$DELIVER_PENDING_ONLY" = "1" ]; then
     log "Delivery-sweep: дайджест уже отправлен ($CLOUD_STATUS) — без действий"
     exit 0
   fi
-  if ! "$PYTHON" ops/mac-local-run/cloud_run_ok.py --has-pending >/dev/null 2>&1; then
-    log "Delivery-sweep: свежего pending-контекста нет (${CLOUD_STATUS:-статус не прочитался})"
+  if ! "$PYTHON" ops/mac-local-run/cloud_run_ok.py --can-deliver >/dev/null 2>&1; then
+    log "Delivery-sweep: готового свежего выпуска нет (${CLOUD_STATUS:-статус не прочитался})"
     exit 0
   fi
 
@@ -529,8 +528,8 @@ if [ "$DELIVER_PENDING_ONLY" = "1" ]; then
   [ -z "$CONTEXT_STATE" ] \
     || die "delivery-sweep отказался от локально незафиксированного контекста"
 
-  log "Delivery-sweep: найден свежий pending-контекст — отправляем без парсинга"
-  deliver_and_push "финальный sweep после завершения территорий"
+  log "Delivery-sweep: найден готовый свежий выпуск — отправляем без парсинга"
+  deliver_and_push "финальный sweep готового выпуска"
   notify "Дайджест отправляется ($(basename "$REPO"))"
   log "Готово"
   exit 0

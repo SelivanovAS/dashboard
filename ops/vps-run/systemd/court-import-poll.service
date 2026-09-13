@@ -4,6 +4,9 @@
 Description=Court Monitor: опрос флага «есть новое» (немедленный импорт)
 After=network-online.target
 Wants=network-online.target
+# После обычного импорта поллер сам запросит доставку. Этот путь страхует
+# аварийное завершение: пустые успешные тики доставку не запускают.
+OnFailure=court-delivery.service
 
 [Service]
 Type=oneshot

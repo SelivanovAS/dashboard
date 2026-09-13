@@ -5,6 +5,10 @@
 Description=Court Monitor: парсинг судов (слот)
 After=network-online.target
 Wants=network-online.target
+# Запуск очереди после окончания, без ожидания в утреннем сервисе.
+# Ошибка одного парсера не отменяет обработку импортов других территорий.
+OnSuccess=court-import.service
+OnFailure=court-import.service
 
 [Service]
 Type=oneshot

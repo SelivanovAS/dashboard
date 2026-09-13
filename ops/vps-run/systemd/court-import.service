@@ -3,6 +3,9 @@
 Description=Court Monitor: очередь импортов (слот)
 After=network-online.target
 Wants=network-online.target
+# Длинная очередь могла держать lock до конца утреннего окна доставки.
+OnSuccess=court-delivery.service
+OnFailure=court-delivery.service
 
 [Service]
 Type=oneshot

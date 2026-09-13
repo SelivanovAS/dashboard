@@ -224,6 +224,13 @@ run_parallel_parsers() {
 
 run_imports() {
   local repo
+  # На VPS очередь запускает отдельная systemd-служба после завершения
+  # этого драйвера. Долгий импорт не удерживает общий утренний сервис.
+  # Mac-резерв сохраняет прежний последовательный обход после парсеров.
+  if [ "${CM_IMPORTS_AFTER_PARSE:-1}" = "0" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: импорты обслуживает отдельная служба"
+    return 0
+  fi
   for repo in "${valid_repos[@]}"; do
     echo "  → $repo (дампы, после всех парсеров)"
     run_importer "$repo" "$@" \

@@ -28,9 +28,33 @@
 территории, затем скрипты исполнителя — иначе старая выдача ещё ограничена 50
 записями. Блокировка `.run.lock`, условия повторов и расписания сохранены.
 
-**Здесь НЕТ своей логики.** `parse_all.sh`/`import_all.sh` — тонкие шимы:
+**С 13.09.2026 утренний обход, импорт и доставка работают отдельно.**
+`court-parse.service` больше не ждёт очередь импортов: после завершения
+(включая ошибку парсера) systemd запускает `court-import.service` через
+`OnSuccess` / `OnFailure`. На VPS `CM_IMPORTS_AFTER_PARSE=0`; Mac-резерв
+сохраняет импорт внутри общего драйвера. Слоты парсинга, порядок территорий
+и интервал между их стартами не меняются. Занятый импортом клон пропустит
+свою попытку парсинга, но общий утренний сервис не ждёт окончания импортов.
+
+`court-delivery.timer` отдельно проверяет готовые выпуски по будням каждые
+5 минут с 08:45 до 10:00, затем каждые 15 минут до конца дня — только для
+оставшихся незакрытых выпусков. Закрытый день без незавершённых транзакций
+отсекается локально, без Git-запросов. Поздние тики также страхуют совпавшие
+запросы запуска уже активной службы доставки. Общий календарь РФ отсекает нерабочие дни.
+`delivery_all.sh` вызывает существующий `parse_and_push.sh --deliver-pending`
+по всем клонам без интервала старта. Общий `.run.lock`, восстановление
+транзакций, публикация данных и дневной гейт сохраняются. Сегодняшний
+завершённый прогон без новых событий тоже готов к доставке; процент чтения
+не ограничивает отправку накопленного. Занятый клон ждёт следующего тика.
+Git, зависший более 4 минут, прерывается службой; следующий тик использует
+штатное восстановление транзакции. После долгого импорта отдельная доставка
+запрашивается снова, в том числе после 10:00: у слотов — зависимости службы,
+у поллера — неблокирующий запрос только после фактического запуска очереди.
+Пустой успешный тик поллера дополнительную доставку не запускает.
+
+**Шимы используют общую реализацию.** `parse_all.sh`/`import_all.sh`/`delivery_all.sh`:
 готовят Linux-окружение (`vps_env.sh`) и exec'ают боевые
-`ops/mac-local-run/parse_all.sh` / `import_all.sh` с `--anywhere`. Вся
+`ops/mac-local-run/parse_all.sh` / `import_all.sh` / `delivery_all.sh` с `--anywhere`. Вся
 механика (слоты, транзакции доставки, гейт «один дайджест в день», окно
 08:45, sweep, очередь импортов) — одна с Mac-резервом, дрейфа нет по
 построению. macOS-специфика закрыта снаружи: заглушка `shims/netstat`
@@ -65,7 +89,16 @@ egress уже РФ), notify/osascript безопасен сам (`|| true`).
    включит вторую доставку push (worker.* читается awk'ом, не source).
 6. `cp ops/vps-run/systemd/court-*.{service,timer} /etc/systemd/system/`
    → `systemctl daemon-reload` → `systemctl enable --now court-parse.timer
-   court-import.timer court-import-poll.timer`.
+   court-import.timer court-import-poll.timer court-delivery.timer`.
+
+При обновлении этой схемы нужны новые общие helpers во всех клонах:
+`cloud_run_ok.py` и `parse_and_push.sh` читаются из собственного клона
+региона. После обновления кода скопировать изменённые service/timer,
+выполнить `systemctl daemon-reload`, затем `systemctl enable --now
+court-delivery.timer`. Проверить `systemctl cat court-parse.service
+court-import.service court-import-poll.service court-delivery.service` и
+`systemctl list-timers court-delivery.timer`. Саму службу доставки вручную
+для проверки не запускать: она действительно публикует выпуск.
 
 **Обновление слотов** (таймер поменялся в репо): `git pull` в
 `/opt/court-monitor/dashboard` → повторить `cp` → `systemctl daemon-reload`
@@ -75,7 +108,7 @@ NextElapse) → `systemctl list-timers court-import.timer` показывает 
 
 ## Наблюдение
 
-- `journalctl -u court-parse -u court-import -u court-import-poll --since today`
+- `journalctl -u court-parse -u court-import -u court-import-poll -u court-delivery --since today`
   (поллер при пустом флаге молчит — 156 тиков в день без единой строки)
 - логи прогона: `<клон>/ops/mac-local-run/parse_and_push*.log`,
   `import_dumps*.log` (ротация по дням, как на Mac)
@@ -86,7 +119,7 @@ NextElapse) → `systemctl list-timers court-import.timer` показывает 
 ## Откат на Mac (если VPS лёг)
 
 1. VPS: `systemctl disable --now court-parse.timer court-import.timer
-   court-import-poll.timer`
+   court-import-poll.timer court-delivery.timer`
    (или просто выключить сервер).
 2. Mac: `launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist`
    и `... com.court-monitor.import.plist` (plist на месте, агенты были

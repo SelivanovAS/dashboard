@@ -10,4 +10,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/vps_env.sh"
+# court-parse.service запускает court-import.service отдельно при любом
+# исходе парсинга. Сам утренний сервис ждать очередь импортов не должен.
+export CM_IMPORTS_AFTER_PARSE=0
 exec bash "$HERE/../mac-local-run/parse_all.sh" --anywhere "$@"

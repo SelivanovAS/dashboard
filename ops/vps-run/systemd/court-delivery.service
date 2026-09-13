@@ -1,0 +1,14 @@
+[Unit]
+Description=Court Monitor: доставка готовых утренних дайджестов
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=court-delivery
+# Зависший Git одного клона не должен удерживать все последующие тики.
+# Незавершённые транзакции восстанавливает штатный delivery journal.
+TimeoutStartSec=4min
+TimeoutStopSec=30s
+ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/delivery_all.sh
