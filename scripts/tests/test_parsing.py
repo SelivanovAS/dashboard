@@ -1417,7 +1417,7 @@ class TestLinkCassationCases:
         cases = [{
             "id": "2-100/2025",
             "current_stage": "cassation_pending",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "cassation": None,
         }]
         out, changes, discovered = uc.link_cassation_cases(
@@ -1440,7 +1440,7 @@ class TestLinkCassationCases:
         cases = [{
             "id": "2-100/2025",
             "current_stage": "cassation_pending",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             # ровно то, что кладёт _apply_fi_cassator (runs.py)
             "cassation": {
                 "appellant": "Истец",
@@ -1466,7 +1466,7 @@ class TestLinkCassationCases:
         cases = [{
             "id": "2-100/2025",
             "current_stage": "cassation",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "cassation": {"case_number": "8Г-111/2026", "act_published": False},
         }]
         out, changes, discovered = uc.link_cassation_cases(
@@ -1658,7 +1658,7 @@ class TestLinkCassationCases:
             "archived_at": "2026-05-01",
             "plaintiff": "ПАО Сбербанк",
             "defendant": "Кузнецов Константин Константинович",
-            "first_instance": {"case_number": "2-400/2025"},
+            "first_instance": {"case_number": "2-400/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "appeal": {"case_number": "33-800/2025",
                        "hearing_date": "01.01.2026"},
             "cassation": None,
@@ -5878,7 +5878,7 @@ class TestCassationTerminalBackfill:
         return {
             "id": "2-100/2025",
             "current_stage": "cassation",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "cassation": {
                 "case_number": "8Г-111/2026",
                 "outcome": "cassation_upheld",
@@ -5953,7 +5953,7 @@ class TestCassationCalendarEvents:
         return {
             "id": "2-100/2025",
             "current_stage": "cassation",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "cassation": cass,
         }
 
@@ -5997,7 +5997,7 @@ class TestCassationCalendarEvents:
         case = {
             "id": "2-100/2025",
             "current_stage": "cassation_pending",
-            "first_instance": {"case_number": "2-100/2025"},
+            "first_instance": {"case_number": "2-100/2025", "court_domain": "surggor--hmao.sudrf.ru"},
             "cassation": None,
         }
         out, changes, _ = uc.link_cassation_cases(

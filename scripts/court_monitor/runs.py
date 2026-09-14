@@ -2912,7 +2912,7 @@ def main_json():
             # восстанавливает запись с историей, а не плодит discovery-дубль.
             archived_before_cass = len(archived_cases)
             cases, cass_changes, cass_discovered = link_cassation_cases(
-                cases, cass_finds, archived_cases
+                cases, cass_finds, archived_cases, snapshot_discovered=True,
             )
             cass_resurrected_count += archived_before_cass - len(archived_cases)
         elif not cass_search_skipped:

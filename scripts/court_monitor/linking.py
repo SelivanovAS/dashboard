@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+from copy import deepcopy
 from datetime import datetime, timedelta, date
 
 from court_monitor import config
@@ -676,6 +677,8 @@ def link_cassation_cases(
     cases: list[dict],
     cass_finds: list[dict],
     archived_cases: list[dict] | None = None,
+    *,
+    snapshot_discovered: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
     создать новые (discovery), если 1-инст. номера нет в БД.
@@ -692,6 +695,9 @@ def link_cassation_cases(
                     восстанавливается в активные со всей историей вместо
                     создания discovery-дубля без сторон. Список мутируется
                     (восстановленные дела удаляются).
+        snapshot_discovered: сохранить анонсы на момент обнаружения для
+                    дайджеста. По умолчанию возвращаются сами записи:
+                    импорт дописывает в них служебные отметки.
 
     Возвращает (обновлённый список cases, список изменений для дайджеста,
     список новых дел discovered).
@@ -718,15 +724,72 @@ def link_cassation_cases(
     # Дуальная индексация: помимо сырого ключа кладём базовую форму
     # `_bare_case_number(...)`. Иначе пара «у нас id с хвостом
     # `(2-1148/2025;)`, а 7kas прислал короткий» (или наоборот) не сматчится.
-    def _put_idx(idx_map: dict[str, int], key: str, i: int) -> None:
+    def _put_idx(idx_map: dict[str, set[int]], key: str, i: int) -> None:
         if not key:
             return
-        idx_map.setdefault(key, i)
+        idx_map.setdefault(key, set()).add(i)
         base = _bare_case_number(key)
         if base and base != key:
-            idx_map.setdefault(base, i)
+            idx_map.setdefault(base, set()).add(i)
 
-    fi_index: dict[str, int] = {}
+    fi_index: dict[str, set[int]] = {}
+
+    def _fi_domain(block: dict) -> str:
+        domain = canon_sudrf_domain(block.get("court_domain"))
+        if domain:
+            return domain
+        court = match_fi_court_by_short_name(block.get("court", ""))
+        return court.domain if court else ""
+
+    def _find_fi_court(info: dict):
+        return (info.get("fi_court_config")
+                or match_hmao_first_instance(info.get("fi_court_long", ""))
+                or match_fi_court_by_short_name(info.get("fi_court_long", "")))
+
+    def _case_uids(case: dict, blocks=("first_instance", "appeal", "cassation")) -> set[str]:
+        return {((case.get(block) or {}).get("judicial_uid") or "").strip()
+                for block in blocks} - {""}
+
+    def _identity_conflicts(case: dict, info: dict) -> bool:
+        """Сохранённый 8Г-номер тоже мог попасть в чужое дело раньше.
+
+        Проверяем УИД всех текущих инстанций. Переход между судами допустим
+        при подтверждающем УИД нижестоящей инстанции, а не только кассации:
+        именно кассационный блок был чужим в инциденте 14.09.2026.
+        """
+        uid = (info.get("judicial_uid") or "").strip()
+        if uid and _case_uids(case) - {uid}:
+            return True
+        court = _find_fi_court(info)
+        fi = case.get("first_instance") or {}
+        domain = _fi_domain(fi)
+        if court and domain and court.domain != domain:
+            return not (uid and uid in _case_uids(case, ("first_instance", "appeal")))
+        srv = info.get("fi_srv_num") or (court.srv_num if court else None)
+        return bool(srv and fi.get("srv_num") and str(srv) != str(fi["srv_num"]))
+
+    def _number_match(index, records, info, number):
+        """Номер — лишь кандидаты. Связка требует суд; неполные/неоднозначные
+        кандидаты оставляем на проверку вместо первого совпавшего дела."""
+        candidates = set(index.get(number, ())) | set(index.get(_bare_case_number(number), ()))
+        court = _find_fi_court(info)
+        domain = court.domain if court else ""
+        exact, unknown = [], []
+        for i in candidates:
+            fi = records[i].get("first_instance") or {}
+            candidate_domain = _fi_domain(fi)
+            if not domain or not candidate_domain:
+                unknown.append(i)
+            elif domain == candidate_domain:
+                # УИД, если он есть у обеих сторон, не должен противоречить
+                # запасному матчу по суду и номеру.
+                if _identity_conflicts(records[i], info):
+                    unknown.append(i)
+                    continue
+                exact.append(i)
+        if len(exact) == 1 and not unknown:
+            return exact[0], False
+        return None, bool(exact or unknown)
     # Параллельный индекс по `cassation.case_number` (`8Г-XXXX/YYYY`).
     # Это стабильный идентификатор касс. жалобы — в отличие от fi_case_number,
     # который 7kas может вернуть с разным значением в разные периоды (после
@@ -763,7 +826,7 @@ def link_cassation_cases(
 
     def _index_case(
         c: dict, i: int,
-        fi_idx: dict[str, int], cs_idx: dict[str, int], u_idx: dict[str, int],
+        fi_idx: dict[str, set[int]], cs_idx: dict[str, int], u_idx: dict[str, int],
         u_prio: dict[str, int],
     ) -> None:
         fi = c.get("first_instance") or {}
@@ -797,13 +860,20 @@ def link_cassation_cases(
                 u_idx[uid] = i
                 u_prio[uid] = p
 
-    for i, c in enumerate(cases):
-        _index_case(c, i, fi_index, cass_index, uid_index, uid_prio)
+    def _rebuild_active_indexes() -> None:
+        # При замене производства старый 8Г-номер больше не указывает на
+        # эту запись. Пересчёт также обновляет приоритеты УИД после связки.
+        for index in (fi_index, cass_index, uid_index, uid_prio):
+            index.clear()
+        for i, c in enumerate(cases):
+            _index_case(c, i, fi_index, cass_index, uid_index, uid_prio)
+
+    _rebuild_active_indexes()
 
     # Параллельные индексы горячего архива (если передан): касс. жалоба на
     # дело, уже ушедшее в архив (например, из cassation_watch по 120-дневному
     # окну), должна восстановить его, а не плодить discovery-дубль.
-    arch_fi_index: dict[str, int] = {}
+    arch_fi_index: dict[str, set[int]] = {}
     arch_cass_index: dict[str, int] = {}
     arch_uid_index: dict[str, int] = {}
     arch_uid_prio: dict[str, int] = {}
@@ -847,24 +917,33 @@ def link_cassation_cases(
             uid = (info.get("judicial_uid") or "").strip()
             if uid:
                 idx = uid_index.get(uid)
-        if idx is None and not presidium:
-            idx = fi_index.get(fi_num)
-        if idx is None and not presidium:
-            idx = fi_index.get(_bare_case_number(fi_num))
-        # Промах по активным — пробуем горячий архив: восстановление вместо
-        # discovery-дубля. Порядок ключей тот же (8Г → УИД → номер 1-й инст.).
+        # Стабильный кассационный ключ/УИД архива надёжнее совпадения номера
+        # активного дела. Номер проверяем сразу в обоих наборах: один и тот
+        # же суд/номер в активных и архиве тоже требует ручной проверки.
+        arch_i = None
         if idx is None and archived_cases:
             arch_i = arch_cass_index.get(cass_key) if cass_key else None
             if arch_i is None:
                 uid = (info.get("judicial_uid") or "").strip()
                 if uid:
                     arch_i = arch_uid_index.get(uid)
-            if arch_i is None and not presidium:
-                arch_i = arch_fi_index.get(fi_num)
-            if arch_i is None and not presidium:
-                arch_i = arch_fi_index.get(_bare_case_number(fi_num))
+        ambiguous = False
+        if idx is None and arch_i is None and not presidium:
+            idx, ambiguous = _number_match(fi_index, cases, info, fi_num)
+            arch_i, arch_ambiguous = _number_match(
+                arch_fi_index, archived_cases or [], info, fi_num,
+            )
+            if ambiguous or arch_ambiguous or (idx is not None and arch_i is not None):
+                idx = arch_i = None
+                ambiguous = True
+        if idx is None and archived_cases:
             if arch_i is not None and arch_i not in resurrected:
                 arch_case = archived_cases[arch_i]
+                if _identity_conflicts(arch_case, info):
+                    info["_link_status"] = "needs_review"
+                    log.warning("Кассация %s: суд/УИД противоречат архивной записи %s; нужна проверка связки",
+                                cass_int_num, arch_case.get("id"))
+                    continue
                 arch_past = {
                     ((h.get("cassation") or {}).get("case_number") or "").strip()
                     for h in (arch_case.get("history") or [])
@@ -890,8 +969,20 @@ def link_cassation_cases(
                     f"  7kas: {fi_num} восстановлено из архива "
                     f"(стадия была {arch_case.get('current_stage') or '—'})"
                 )
+        if idx is None and ambiguous:
+            info["_link_status"] = "needs_review"
+            log.warning(
+                "Кассация %s: суд/номер %s неоднозначны или суд не указан; "
+                "нужна проверка связки", cass_int_num, fi_num,
+            )
+            continue
         if idx is not None:
             case = cases[idx]
+            if _identity_conflicts(case, info):
+                info["_link_status"] = "needs_review"
+                log.warning("Кассация %s: суд/УИД противоречат записи %s; нужна проверка связки",
+                            cass_int_num, case.get("id"))
+                continue
             old_cass = case.get("cassation") or {}
             # ── Защита от «воскрешения» прошлого круга ──
             # После cassation_remanded → re-link (снимок блоков в history,
@@ -1005,6 +1096,7 @@ def link_cassation_cases(
                 "appeal", "cassation_watch", "", None,
             ):
                 case["current_stage"] = "cassation"
+            _rebuild_active_indexes()
             # Зафиксируем изменения для дайджеста.
             change = {
                 "case": fi_num,
@@ -1123,7 +1215,7 @@ def link_cassation_cases(
             # Discovery: дела в cases.json нет. Создаём со стадией cassation
             # и стабом 1-й инст. (только то, что видит 7kas).
             cass_block["discovered_via_cassation"] = True
-            fi_court_cfg = info.get("fi_court_config")
+            fi_court_cfg = _find_fi_court(info)
             fi_court_short = fi_court_cfg.name if fi_court_cfg else info.get("fi_court_long", "")
             fi_court_domain = fi_court_cfg.domain if fi_court_cfg else ""
             # Президиум: главный номер дела — номер президиума «4Г-…»
@@ -1140,13 +1232,15 @@ def link_cassation_cases(
                 "bank_role": info.get("bank_role", ""),
                 "notes": (
                     f"Найдено через дамп президиума ({cass_block['court']})"
-                    if presidium else "Найдено через парсер кассации (7kas)"
+                    if presidium else f"Найдено через парсер кассации ({cass_block['court']})"
                 ),
                 "discovered_via_cassation": True,
                 "first_instance": {
                     "case_number": fi_num,
                     "court": fi_court_short,
                     "court_domain": fi_court_domain,
+                    "srv_num": info.get("fi_srv_num") or (fi_court_cfg.srv_num if fi_court_cfg else 1),
+                    "judicial_uid": info.get("judicial_uid") or "",
                     "magistrate": magistrate,
                     "judge": info.get("fi_judge", ""),
                     "filing_date": "",
@@ -1174,7 +1268,9 @@ def link_cassation_cases(
                 parties_from_participants(info.get("participants"))
             )
             cases.append(new_case)
-            discovered.append(new_case)
+            # Анонс относится к найденному производству. Последующее
+            # обновление cases в том же прогоне не должно подменить его.
+            discovered.append(deepcopy(new_case) if snapshot_discovered else new_case)
             # Повторная находка того же дела в ЭТОМ же вызове (дубль строки
             # дампа) обязана сматчиться с только что заведённым.
             _index_case(new_case, len(cases) - 1, fi_index, cass_index,

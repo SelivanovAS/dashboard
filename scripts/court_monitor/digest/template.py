@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.courts import (
-    case_card_url, case_link_html, cassation_card_url, fi_card_url,
+    case_card_url, case_link_html, cassation_card_url, fi_card_url, canon_sudrf_domain,
 )
 from court_monitor.regions import get_region
 from court_monitor.digest.postprocess import _close_open_tags
@@ -3185,15 +3185,41 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     # круга) — переданный `cases` может быть в legacy CSV-формате и содержать
     # только апел. дела (33-XXXX), что для касс. событий с FI-ключами
     # не подходит.
-    cases_by_id_for_cass: dict[str, dict] = {}
+    def _cass_digest_key(domain, number):
+        return (canon_sudrf_domain(domain) or get_region().cassation_court.domain,
+                (number or "").strip())
+
+    cases_by_id_for_cass: dict[str, list[dict]] = {}
+    cases_by_cass_key: dict[tuple[str, str], list[dict]] = {}
     for c_idx in (full_cases_for_cass or cases or []):
-        for k_idx in (
+        for k_idx in {
             c_idx.get("id") or "",
             (c_idx.get("first_instance") or {}).get("case_number") or "",
             c_idx.get("Номер дела") or "",
-        ):
+        }:
             if k_idx:
-                cases_by_id_for_cass.setdefault(k_idx, c_idx)
+                cases_by_id_for_cass.setdefault(k_idx, []).append(c_idx)
+        cass_idx = c_idx.get("cassation") or {}
+        if cass_idx.get("case_number"):
+            key = _cass_digest_key(cass_idx.get("court_domain"), cass_idx["case_number"])
+            cases_by_cass_key.setdefault(key, []).append(c_idx)
+
+    def _cass_parent(change: dict) -> dict:
+        details = change.get("details") or {}
+        number = change.get("cassation_internal_number") or ""
+        exact = cases_by_cass_key.get(_cass_digest_key(details.get("court_domain"), number), [])
+        if exact:
+            return exact[0] if len(exact) == 1 else {}
+        # Legacy без кассационного блока: допустим единственный родитель.
+        # Несколько одинаковых FI-номеров не дают права взять первый суд.
+        candidates = cases_by_id_for_cass.get(change.get("case", ""), [])
+        if len(candidates) != 1:
+            return {}
+        candidate = candidates[0]
+        cass = candidate.get("cassation") or {}
+        if number and cass.get("case_number"):
+            return {}  # другое производство: его стороны переносить нельзя
+        return candidate
 
     def _g_cass(parent: dict, eng: str, ru: str) -> str:
         return (parent.get(eng) or parent.get(ru) or "").strip() if parent else ""
@@ -3203,13 +3229,13 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         # linking.py — правильный источник текста для пересказа. Прямое чтение
         # case["cassation"]["act_text"] ниже — только фолбэк для legacy-replay
         # (полный акт до ~10 КБ уходил в LLM целиком и мимо дедупа).
-        disc_ch_by_key: dict[str, dict] = {}
+        disc_ch_by_key: dict[tuple[str, str], dict] = {}
         for _dch in cass_changes:
             if "discovered_in_cassation" in (_dch.get("type") or []):
-                for _k in (_dch.get("cassation_internal_number"),
-                           _dch.get("case")):
-                    if _k:
-                        disc_ch_by_key.setdefault(_k, _dch)
+                number = _dch.get("cassation_internal_number")
+                key = number or ("fi:" + (_dch.get("case") or ""))
+                domain = (_dch.get("details") or {}).get("court_domain")
+                disc_ch_by_key.setdefault(_cass_digest_key(domain, key), _dch)
         cass_block.append(f"📥 <b>Новые касс. дела ({len(cass_discovered)}):</b>")
         for c in cass_discovered:
             cass = c.get("cassation") or {}
@@ -3323,8 +3349,10 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             # объявлялся (.cassation_acts) или не опубликован: молчим и
             # summarizer не зовём. Change не найден — legacy-контекст replay,
             # фолбэк на прямое чтение с той же обрезкой 1800.
-            _disc_ch = (disc_ch_by_key.get(cass.get("case_number") or "")
-                        or disc_ch_by_key.get(c.get("id") or ""))
+            _disc_ch = (disc_ch_by_key.get(_cass_digest_key(
+                cass.get("court_domain"), cass.get("case_number")))
+                or disc_ch_by_key.get(_cass_digest_key(
+                    cass.get("court_domain"), "fi:" + (c.get("id") or ""))))
             if _disc_ch is not None:
                 disc_act = ((_disc_ch.get("details") or {})
                             .get("act_text") or "")
@@ -3375,7 +3403,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             sber_flag = "🏦 " if d.get("appellant_is_bank") else ""
             # Подтягиваем стороны / категорию / роль / суд 1 инст. из
             # родительского case (в cass_changes.details этих полей нет).
-            parent = cases_by_id_for_cass.get(ch.get("case", "")) or {}
+            parent = _cass_parent(ch)
             fi_p = parent.get("first_instance") or {}
             pl_raw = _g_cass(parent, "plaintiff", "Истец")
             df_raw = _g_cass(parent, "defendant", "Ответчик")
