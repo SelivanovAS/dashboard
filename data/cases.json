@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-14T08:42:35",
+  "updated_at": "2026-09-14T03:45:42",
   "cases": [
     {
       "id": "33-6434/2026",
@@ -13129,7 +13129,14 @@
         "decision_date": "28.07.2026",
         "resolved_emitted": true,
         "judicial_uid": "86RS0001-01-2026-002339-60",
-        "motivirovka_emitted": true
+        "motivirovka_emitted": true,
+        "act_analysis": {
+          "html": "<a href=\"https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=270723072&case_uid=0bb64c79-61d2-4d5d-8d0d-371883531d6b&delo_id=1540005&new=0\"><b>2-2216/2026</b></a> — Ташкин А.О. vs Сбербанк, Чигринский Андрей ИГоревич\n<b>Итог:</b> отказано (решение от 28.07.2026)\n<b>Почему:</b> <i>Истец не доказал, что приобрёл гараж до наложения ареста. Договор купли-продажи датирован позже возбуждения исполнительного производства, фактическое владение не подтверждено. Оснований для освобождения имущества от ареста нет.</i>",
+          "source": "digest",
+          "act_date": "",
+          "generated_at": "2026-09-14T03:45:42",
+          "model": "openrouter:dots-studio/dots-3-note-preview:free"
+        }
       },
       "appeal": null,
       "initial_bank_role": "Ответчик"

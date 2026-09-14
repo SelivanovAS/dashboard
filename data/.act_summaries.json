@@ -490,5 +490,11 @@
     "model": "openrouter:nex-agi/nex-n2.5-mini:free",
     "stage": "first_instance",
     "generated_at": "2026-09-11T03:58:08"
+  },
+  "ffd47c612293bbc2": {
+    "summary": "Истец не доказал, что приобрёл гараж до наложения ареста. Договор купли-продажи датирован позже возбуждения исполнительного производства, фактическое владение не подтверждено. Оснований для освобождения имущества от ареста нет.",
+    "model": "openrouter:dots-studio/dots-3-note-preview:free",
+    "stage": "first_instance",
+    "generated_at": "2026-09-14T03:45:40"
   }
 }
