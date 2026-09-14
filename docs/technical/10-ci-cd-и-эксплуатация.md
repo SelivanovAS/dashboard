@@ -7,21 +7,25 @@
 Actions, какие есть вспомогательные скрипты и тесты, и что делать, когда
 что-то сломалось (рантбук).
 
+Схема сверена с рабочим деревом 13.09.2026. Это проверка кода и конфигураций
+репозитория; состояние установленных systemd-служб, LaunchAgents, Secrets,
+Actions Variables и опубликованных Workers проверяется отдельно.
+
 ## Режимы запуска (CLI)
 
 `update_cases.py` выбирает режим по флагу в `sys.argv`
-([__main__, 13611](../../scripts/update_cases.py#L177)). Любое необработанное
+([блок `__main__` в update_cases.py](../../scripts/update_cases.py)). Любое необработанное
 исключение оборачивается в `send_crash_alert` → уходит в Telegram.
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([2422](../../scripts/court_monitor/runs.py#L2422)) | **Основной прогон**: парсинг + JSON + дайджест + рассылка + коммит. Запускается кроном. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([1240](../../scripts/court_monitor/runs.py#L1240)) | Legacy CSV-прогон (апелляция). |
-| `--digest-only` | `main_digest_only` ([6784](../../scripts/court_monitor/runs.py#L6784)) | Только дайджест по текущим данным, без парсинга. |
-| `--replay-last [--push-all]` | `main_replay_last` ([6313](../../scripts/court_monitor/runs.py#L6313)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
-| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([6638](../../scripts/court_monitor/runs.py#L6638)) | Повторно разослать уже сохранённый дайджест. |
-| `--push-web-only [--push-all]` | `main_push_web_only` ([6588](../../scripts/court_monitor/runs.py#L6588)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
-| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([1435](../../scripts/court_monitor/runs.py#L1435)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
+| `--json` | `main_json` ([runs.py](../../scripts/court_monitor/runs.py)) | **Полный прогон**: парсинг + JSON + дайджест + рассылка при настроенном транспорте. Публикацию Git выполняет launcher/workflow. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
+| _(без флага)_ | `main` ([runs.py](../../scripts/court_monitor/runs.py)) | Legacy CSV-прогон (апелляция). |
+| `--digest-only` | `main_digest_only` ([runs.py](../../scripts/court_monitor/runs.py)) | Только дайджест по текущим данным, без парсинга. |
+| `--replay-last [--push-all]` | `main_replay_last` ([runs.py](../../scripts/court_monitor/runs.py)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
+| `--push-last-digest [--owner-only]` | `main_push_last_digest` ([runs.py](../../scripts/court_monitor/runs.py)) | Повторно разослать уже сохранённый дайджест. |
+| `--push-web-only [--push-all]` | `main_push_web_only` ([runs.py](../../scripts/court_monitor/runs.py)) | Только web push по сохранённому контексту, без перегенерации дайджеста и Telegram. Вторая половина `replay_on_push.yml` — после публикации на Pages. |
+| `--backfill-appeal-anchors` | `main_backfill_appeal_anchors` ([runs.py](../../scripts/court_monitor/runs.py)) | Разовый бэкфилл якорей УИД/номеров из апел. карточек. |
 
 ```bash
 # Полный боевой прогон локально
@@ -48,10 +52,10 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` | Web Push для PWA. |
 | `OWNER_SECRET` | Секрет Worker'а для `/mark-owner` и админки. |
 | `GITHUB_PAT` | В secrets Worker'а — для `workflow_dispatch`. |
-| `LLM_PROVIDER` | `claude` (по умолч.) / `gigachat`. |
+| `LLM_PROVIDER` | `claude` / `gigachat` / `openrouter`. Python по умолчанию использует `claude`; `update_cases.yml` и `replay_on_push.yml` — Actions Variable либо `openrouter`. |
 | `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
-| `SKIP_NON_WORKING_DAYS` | `1` → smart-skip (передаёт крон). |
-| `FETCH_MAX_RETRIES` | Потолок попыток одного логического запроса. Дефолт 1; Mac ставит 3, но повтор разрешает только точная fast-policy (`connection_reset`/ошибка ответа/5xx до 5 с). |
+| `SKIP_NON_WORKING_DAYS` | `1` → smart-skip; утренний launcher задаёт его явно, ручной workflow — по входу `smart_skip`. |
+| `FETCH_MAX_RETRIES` | Потолок попыток одного логического запроса. Дефолт 1; launcher VPS/Mac ставит 3, но повтор разрешает только точная fast-policy (`connection_reset`/ошибка ответа/5xx до 5 с). |
 | `FETCH_TIMEOUT_CONNECT`, `FETCH_TIMEOUT_READ` | Таймаут соединения/чтения, дефолты 10/65 с. |
 | `CARD_BREAKER_MODE` | `time` для полного утреннего прогона; `count` для коротких batch-импортов. Не меняет `FETCH_MAX_RETRIES`. |
 | `CARD_BREAKER_*_THRESHOLD`, `CARD_BREAKER_*_COOLDOWN_SECONDS` | Порог и cooldown по семантической семье: fast 3/60 с, outage 2/180 с, slow 2/300 с, block 2/600 с. Подробно — [04](04-сбор-данных-и-парсеры.md). |
@@ -60,79 +64,74 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
-`validate_environment` ([1199](../../scripts/court_monitor/runs.py#L1199)) проверяет
-наличие ключей на старте; `check_court_available` ([1227](../../scripts/court_monitor/runs.py#L1227))
+`validate_environment` ([runs.py](../../scripts/court_monitor/runs.py)) проверяет
+наличие ключей на старте; `check_court_available` ([runs.py](../../scripts/court_monitor/runs.py))
 — доступность сайта суда.
 
-## Ежедневный прогон (схема D2; с 28.08.2026 — на VPS)
+## Ежедневный прогон: VPS и Mac-резерв
 
-> 🖥 **С 28.08.2026 прогон выполняет VPS Cloud.ru** (195.19.66.234, Ubuntu
-> 24.04, egress РФ, TZ Asia/Yekaterinburg) — те же скрипты Mac-звена через
-> тонкие шимы [`ops/vps-run/`](../../ops/vps-run/README.md): systemd-таймеры
-> `court-parse.timer` (будни 06:00–08:30/30 мин + 08:45) и
-> `court-import.timer` (12:00–20:00/2 ч; с 08.09.2026 — ОСНОВНОЙ исполнитель
-> операторских импортов: Worker с `IMPORT_EXECUTOR="vps"` в GitHub не
-> диспатчит, записи ждут слот в статусе `queued`) зовут `parse_all.sh`/`import_all.sh`,
-> которые exec'ают боевые `ops/mac-local-run/*` с `--anywhere`. Вся цепочка
-> ниже описывает и VPS — своей логики у шимов нет. **Mac-агенты выгружены**
-> (`launchctl unload`, plist на месте) — Mac стал ручным резервом: откат =
-> `systemctl disable --now` таймеров VPS + `launchctl load` на Mac;
-> одновременно две машины работать не должны (гейт «один дайджест в день»
-> межхостовую гонку не ловит). Установка/наблюдение/откат —
-> [`ops/vps-run/README.md`](../../ops/vps-run/README.md).
+Основной исполнитель — VPS; Mac использует общие скрипты как резерв. Клоны
+выбираются из `~/.config/court-monitor/territories` (либо `CM_TERRITORIES_FILE`).
+Код поддерживает ХМАО, Урал и Башкортостан. Подключение третьего VPS-клона и
+ограничения Mac-резерва зафиксированы в [отчёте внедрения Башкортостана](../regions/Башкортостан_внедрение_2026-09-11.md);
+это датированный результат, а не проверка текущей доступности судов или таймеров.
 
-> ⚠️ **Предыстория.** Суды `*.sudrf.ru` дропают TLS с иностранных IP →
-> GitHub Actions больше не может их парсить; Claude, наоборот, недоступен из
-> РФ. С 19.08.2026 парсинг выполнял **Mac юриста** (LaunchAgent
-> `com.court-monitor.parse`, те же слоты, сеть Сбера или режим `--anywhere`),
-> а дайджест и доставку — GitHub по факту push'а. Установка/логи/откат
-> Mac-звена — [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md).
+`parse_all.sh` готовит общие маршруты на Mac и запускает отдельный
+`parse_and_push.sh` для каждого клона. Урал идёт первым, остальные — в порядке
+списка территорий с интервалом 600 секунд. При списке Урал → ХМАО → Башкортостан
+старты разнесены на 0/10/20 минут. Каждый клон имеет свои Git, данные, журнал
+и `.run.lock`; ошибка соседней территории не отменяет остальные попытки.
 
-Цепочка: `parse_all.sh` один раз готовит маршруты обоих регионов, запускает
-Урал сразу и ХМАО через 10 минут, ждёт оба поклоновых `parse_and_push.sh`, после
-08:45 проходит по pending-контекстам обоих клонов в режиме `--deliver-pending`
-и затем запускает импорты поочерёдно. Этот режим не делает preflight судов и не
-запускает Python-парсер: только pull → проверка свежего pending → та же
-exact-once воронка доставки. Каждый обычный `parse_and_push.sh`: preflight → `run_parse.py` =
-`main_json` без секретов → черновой push данных → локальный
-delivery journal → `delivered_at` + отдельный marker-коммит
-`📊 Обновление данных … (Mac-парсинг)` → подтверждение marker SHA на remote)
-→ `replay_on_push.yml` (GitHub: LLM-дайджест + Telegram + Web Push). При
-потерянном ответе `git push` journal проверяет, является ли marker SHA предком
-актуального `main`: принятый marker не повторяется, отсутствующий получает
-условный rollback, недоступный remote оставляет транзакцию закрытой до
-следующего старта. Ход парсинга виден в ярлыке «Парсинг судов.command» на Mac
-и в блоке «🛰 Парсинг» админки Worker; посмертный сетевой снимок — локально в
-`ops/mac-local-run/.runtime/parse_telemetry.json`. Перед Python-прогоном
-`network_fingerprint.py` параллельно проверяет реальные страницы `sud_delo`
-(поиски трёх инстанций + известная карточка), а не быстрый корень сайта, и
-пишет `network_fingerprint.json`: активные VPN-интерфейсы, тип маршрута до
-sudrf, ID выхода и исходы проб. Отпечаток вкладывается в попытку telemetry.
-Парсер ограничен общим monotonic-бюджетом 3300 с: после 55 минут новые HTTP
-не начинаются, а уже прочитанные данные доходят до сохранения и попытка
-закрывается статусом `deadline_reached`.
+С 13.09.2026 VPS разделяет три операции. `court-parse.timer` запускает парсинг
+по будням с 06:00 до 08:30 каждые полчаса и в 08:45. После завершения службы,
+в том числе с ошибкой, systemd отдельно запускает `court-import.service`:
+`CM_IMPORTS_AFTER_PARSE=0` исключает ожидание импортов внутри `parse_all.sh`.
+Очередь также обслуживают двухчасовые слоты и пятиминутный поллер новых отметок.
+`court-delivery.timer` независимо проверяет готовые выпуски с 08:45 до конца
+дня. Точное расписание, связи служб, установка и восстановление — в
+[VPS README](../../ops/vps-run/README.md).
 
-Параллельная часть не делит mutable-состояние: git-индекс, данные, lock, логи,
-telemetry и delivery journal живут в каталоге своего клона. Общий только host-route,
-поэтому его меняет только родитель до старта детей. Отказ одного клона не
-отменяет второй, но итоговый exit code будет ненулевым; sweep всё равно проверит
-оба уже накопленных контекста. Он нужен потому, что launchd пропускает без
-очереди календарный слот 08:45, если единственный `parse_all.sh` ещё работает.
-Быстрый откат —
-`CM_PARALLEL_TERRITORIES=0`; диагностический `--check` всегда последовательный.
+На Mac отдельный таймер доставки не устанавливается имеющимися LaunchAgents.
+Драйвер ждёт все парсеры, выполняет финальную доставку, затем последовательно
+обрабатывает импорты. Если первая проверка окна была раньше 08:45, после
+импортов он проверяет время ещё раз. Оба исполнителя используют
+`parse_and_push.sh --deliver-pending`: без запросов к судам и повторного парсинга,
+с восстановлением транзакций, pull и проверкой `cloud_run_ok.py --can-deliver`.
+Готов сегодняшний ещё не закрытый выпуск завершённого прогона, в том числе
+без новых событий. Процент прочитанных карточек влияет на отчёт, но не
+запрещает доставку. Занятый `.run.lock` сериализует парсинг, импорт и доставку
+внутри клона; два хоста с копиями одного региона этот lock не синхронизирует.
+
+Публикация состоит из двух транзакций: сначала данные и контекст, затем
+`delivered_at` и отдельный marker-коммит с `(Mac-парсинг)` — также на VPS.
+Журнал доставки сверяет marker SHA с remote: подтверждённый коммит не
+повторяется, отсутствующий допускает условный rollback, неопределённый исход
+сохраняется для восстановления. Принятый Git-коммит запускает GitHub replay;
+сам по себе он не доказывает успешную рассылку или обновление Pages.
+
+Preflight и `network_fingerprint.py` проверяют реальные страницы поиска и
+карточки. HTTP 200 с защитой или заглушкой не считается чтением дела.
+Территориальный парсер имеет бюджет 3300 секунд: после его истечения новые
+HTTP-запросы не начинаются, прочитанные данные сохраняются, попытка завершается
+как `deadline_reached`. Логи, telemetry, переключатели параллельного режима и
+диагностические команды — в [README общих скриптов / Mac](../../ops/mac-local-run/README.md).
 
 ## GitHub Actions
 
-Пять workflow в [`.github/workflows/`](../../.github/workflows).
+Ниже — основные workflow из [`.github/workflows/`](../../.github/workflows).
+Запуск парсинга, replay и `test_digest.yml` имеет внешние последствия;
+`test_digest.yml` отправляет Telegram даже при `commit_results=false`.
 
-### `replay_on_push.yml` — дайджест по факту Mac-парсинга (прод)
+### `replay_on_push.yml` — дайджест по факту публикации VPS/Mac
 [Файл](../../.github/workflows/replay_on_push.yml). Триггер — `push` в `main`,
-задевший `data/last_digest_context.json` (его коммитит Mac-обёртка). Шаги:
+задевший `data/last_digest_context.json`, с маркером `Mac-парсинг` в сообщении
+последнего коммита и автором не `github-actions[bot]`. Шаги:
 checkout → Python 3.12 → `python scripts/update_cases.py --replay-last
 --push-all` со всеми секретами и `DEFER_WEB_PUSH=1` (гибридный дайджест в
 личный Telegram; **web push здесь НЕ уходит**) → коммит `last_digest.json`,
-`cases.json` (act_analysis из replay) и `.act_summaries.json` (кэш пересказов),
-с `git pull --rebase` от гонки с Mac-пушем (`📰 Дайджест собран…`) → **ожидание
+`cases.json`, `cases_bank.json` и `cases_bank_events.json` при наличии
+(анализ актов обоих треков), `.act_summaries.json` (кэш пересказов),
+с `git pull --rebase` от гонки с публикацией исполнителя (`📰 Дайджест собран…`) → **ожидание
 публикации на Pages** (до ~7 мин поллинга публичного URL, критерий — sha256
 отданных байт `data/last_digest.json` равен закоммиченным; таймаут = warning и
 отправка без подтверждения; при неудавшемся rebase шаг пропускается,
@@ -147,47 +146,43 @@ checkout → Python 3.12 → `python scripts/update_cases.py --replay-last
 Анти-петля: replay не меняет сам контекст, а пуши через `GITHUB_TOKEN` не
 триггерят workflow.
 
-**С 03.07.2026 дайджест здесь — гибрид** (дефолт кода, флаг не выставлен):
-программный рендер `generate_template_digest` + Claude только на пересказ
-мотивировок актов; после отправки — программный линтер с 🩺-алертом. Откат
-на старый полный LLM-дайджест — вернуть `DIGEST_FULL_LLM: "1"` в env шага.
+**По умолчанию дайджест гибридный:** программный рендер
+`generate_template_digest` + LLM-пересказ мотивировок актов, с программным
+линтером и алертами. Провайдер в workflow — `vars.LLM_PROVIDER` либо
+`openrouter`; фактические Variables территории проверяются отдельно. Полный
+LLM-дайджест включается через `DIGEST_FULL_LLM=1`; подробности — в [06](06-дайджесты-и-llm.md).
 
-### `update_cases.yml` — основной (cron Worker'а, с 05.07.2026 снова в облаке)
-[Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`:
-его дёргает cron Cloudflare Worker'а (пн-пт 06:30 МСК, `smart_skip=true`),
-вручную — GitHub UI или админка (кнопки «Полный прогон» / «Стандартный
-прогон»). Шаги: checkout → Python 3.12 → установка зависимостей →
-`python scripts/update_cases.py --json 2>&1 | python -u
-scripts/gh_progress_pusher.py` (pass-through-пушер лога в KV Worker'а —
-блок живого лога из админки удалён 29.07.2026, канал остался без
-UI-читателя: батчи раз в ~60 с на `POST /run-progress` — каждый POST = 1 KV-write,
-free-tier 1000/день на аккаунт; `set -o pipefail`, чтобы падение
-парсера не маскировалось пайпом; env `PROGRESS_URL` =
-`secrets.PUSH_WORKER_URL + "/run-progress"`, `PROGRESS_TOKEN` =
-`secrets.PUSH_SECRET || secrets.PROGRESS_SECRET` — без секретов пушер
-работает как cat, но с 16.07.2026 объявляет об этом одной строкой в логе
-рана; первый сбой POST тоже печатает одну ⚠️-строку с HTTP-кодом. Пушер шлёт
-собственный `User-Agent` — дефолтный `Python-urllib/…` Cloudflare банит на
-workers.dev (ошибка 1010 → 403 до Worker'а), из-за чего канал молчал
-13–16.07.2026) → коммит данных → (при падении любого шага) 🚨-алерт в
-личный Telegram.
+### `update_cases.yml` — ручной и аварийный полный прогон
+[Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
+из GitHub UI либо Worker. В эталонном `wrangler.toml` сейчас `crons = []` и
+`CRON_UTC = ""`: регулярный путь задают VPS-таймеры. Наличие кода cron-handler
+не означает включённый cron; опубликованную конфигурацию проверяют отдельно.
+
+Шаги: checkout → Python 3.12 → зависимости →
+`python scripts/update_cases.py --json 2>&1 | python -u scripts/gh_progress_pusher.py`
+→ публикация данных → при падении 🚨-алерт в Telegram. `set -o pipefail`
+сохраняет ошибку парсера. Пушер передаёт вехи на `POST /run-progress` примерно
+раз в 60 секунд; адрес берётся из `secrets.PUSH_WORKER_URL`, токен —
+`secrets.PUSH_SECRET || secrets.PROGRESS_SECRET`. Без настроек он работает
+как pass-through и сообщает о выключенном канале в логе; первый сбой POST
+также выводится в лог. Канал хранится в KV; карточка «Ход последнего
+прогона» удалена из админки 01.09.2026, вехи доступны через
+`GET /admin/run-progress` с авторизацией владельца или оператора.
 
 Входы: `to_group` (слать в корпоративную группу; иначе личный чат через
-`TELEGRAM_CHAT_ID_TEST`), `smart_skip` (cron передаёт `true`: пропуск
+`TELEGRAM_CHAT_ID_TEST`), `smart_skip` (`true`: пропуск
 нерабочих дней и дел с известной будущей датой; `false` = полный прогон),
 `ignore_calendar` (прогнать в выходной/праздник, сохранив пер-кейсовый
-smart-skip → env `IGNORE_NON_WORKING_DAY`; cron его не передаёт).
+smart-skip → env `IGNORE_NON_WORKING_DAY`).
 
 С 03.07.2026 дайджест и здесь гибридный (флаг `DIGEST_FULL_LLM` снят, дефолт
 кода); откат — вернуть `DIGEST_FULL_LLM: "1"` в env шага.
 
-Коммит-шаг добавляет: `cases.json`, `cases_archive.json`, `cases_archive_*.json`
-(холодные), `last_digest_context.json`, `last_digest.json`,
-`last_personal_pushes.json`, legacy CSV, `.digested_acts`, `.cassation_acts`,
-`parse_health.json`, `.act_summaries.json` (кэш пересказов),
-`.bank_intake_seen.json` (негативный кэш авто-подхвата исков банка — без
-коммита карточки отказников качались бы каждым прогоном заново).
-Сообщение коммита — `📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
+Коммит-шаг использует общий [`ops/stage_data_files.sh`](../../ops/stage_data_files.sh):
+он получает пути из регионального `config`, включая данные, архивы и события
+обоих треков, контекст и дайджест, историю push, кэши и журнал здоровья.
+Не заменять его отдельным неполным списком файлов. Сообщение коммита —
+`📊 Обновление данных ДД.ММ.ГГГГ ЧЧ:ММ`.
 
 Алерт о падении сделан через `curl` (не Python) — сработает, даже если упала
 установка зависимостей; текст содержит ссылку на лог упавшего run'а.
@@ -236,7 +231,7 @@ GigaChat-2 / GigaChat-2-Max), `openrouter_model` (место в рейтинге
 
 ## Тесты
 
-`pytest`, 228 тестов (июль 2026). Оба каталога собираются одним прогоном —
+Оба каталога pytest собираются одним прогоном —
 конфиг [`pytest.ini`](../../pytest.ini) (для этого у `scripts/` есть
 `__init__.py`: пакеты `scripts.tests` и `tests` не конфликтуют именами).
 
@@ -257,11 +252,14 @@ GigaChat-2 / GigaChat-2-Max), `openrouter_model` (место в рейтинге
 python3 -m pytest
 ```
 
-CI (`tests.yml`) гоняет тот же набор на каждый push.
+CI (`tests.yml`) гоняет тот же набор на push, кроме изменений только Markdown/`docs/**`,
+и по ручному запуску. Число тестов и пропусков фиксируют по результату конкретной
+проверки; `skipped` не подтверждает поведение. Для правки только документации
+достаточно сверки фактов, ссылок и `git diff --check`.
 
 ## Наблюдаемость
 
-- `log_run_summary` ([843](../../scripts/court_monitor/delivery.py#L843)) — итоговая
+- `log_run_summary` ([delivery.py](../../scripts/court_monitor/delivery.py)) — итоговая
   сводка прогона (тайминги, счётчики `METRICS`: запросы, Telegram, Web Push,
   LLM-пересказы актов (вызовы/из кэша), карточки-«огрызки»; нулевые строки
   опускаются) + markdown-таблица в `$GITHUB_STEP_SUMMARY`.
@@ -278,7 +276,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   инст. (5/9) пишет время каждого суда в пер-судовую строку, фаза карточек
   1-й инст. (6/9) — строку «1 инст: медленные суды — …»
   (топ-3 по времени обхода карточек, включая ретраи).
-- **Атомарный checkpoint сети и breaker:** Mac пишет
+- **Атомарный checkpoint сети и breaker:** launcher VPS/Mac пишет
   `ops/mac-local-run/.runtime/parse_telemetry.json` на старте/фазах/HTTP-
   попытках и переходах breaker. В `current.breaker` видны точные классы,
   cooldown, half-open пробы, сколько отложено/дочитано/осталось; завершённый
@@ -289,7 +287,7 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   Дневное покрытие строится как union стабильных ID
   `planned_case_ids_today` / `read_case_ids_today` по 1-й инстанции,
   апелляции и кассации, поэтому планы дочиток можно сравнивать напрямую.
-- `send_crash_alert` ([979](../../scripts/court_monitor/delivery.py#L979)) — падение
+- `send_crash_alert` ([delivery.py](../../scripts/court_monitor/delivery.py)) — падение
   прогона уходит в Telegram, чтобы не потеряться в логах Actions. Дублируется
   шагом `if: failure()` в самом workflow (ловит и падения до старта Python).
 - **Детектор молчаливой поломки парсеров** (шаг 4e `main_json`, история в
@@ -300,22 +298,23 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
   кодом (🔐 с рецептом, напоминание раз в день, ✅ при снятии — 04.09.2026).
   На VPS/Mac Python без токена — строки детектора едут через
   `last_run.alerts` и shell-канал `parse_and_push.sh`. См. [05](05-конвейер-обновления.md).
-- Логи прогона — во вкладке Actions соответствующего workflow. Пушер
-  `scripts/gh_progress_pusher.py` → `POST /run-progress` по-прежнему кладёт
-  лог основного прогона в KV Worker'а (14 дней, текущий + предыдущий), но
-  **блок живого лога из админки удалён 29.07.2026** — читателя у канала нет,
-  оставлен на случай возврата (данные — `GET /admin/run-progress` руками).
-- **Mac-парсинг (спящий резерв):** лог `ops/mac-local-run/parse_and_push.log`
-  (ротация автоматическая) — живой просмотр двойным кликом по ярлыку
-  «Парсинг судов.command» (рабочий стол юриста); вехи Mac-пушера тоже уходят
-  в KV `/run-progress` (в админке больше не видны). Уведомления macOS:
-  старт/готово/ошибка/пропуск.
+- Логи VPS — `journalctl` служб и `ops/mac-local-run/parse_and_push.log`
+  каждого клона; логи GitHub — во вкладке Actions соответствующего workflow.
+  `scripts/gh_progress_pusher.py` и `ops/mac-local-run/progress_pusher.py`
+  передают вехи в KV своего Worker. В текущей админке карточки живого лога
+  нет; статус даёт плитка «Последний прогон», а вехи доступны через
+  `GET /admin/run-progress`.
+- На Mac лог открывается через пульт «СберСуд-пульт.command» или совместимый
+  ярлык «Парсинг судов.command». Пушер использует `worker.<регион>` и
+  `progress_token.<регион>`; общий `progress_token` поддержан только для
+  ХМАО/Урала. Новая территория без своего адреса и токена не отправляет вехи
+  в ХМАО. Подробности — в [настройках Mac/VPS](../../ops/mac-local-run/README.md#настройки-машины-вне-репозитория).
 
 ## Рантбук (типичные инциденты)
 
 | Симптом | Вероятная причина и что делать |
 |---------|-------------------------------|
-| **Дайджест не пришёл в Telegram** | Проверить `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`/`*_CHAT_ID` в secrets; смотреть лог Actions и crash-alert. |
+| **Дайджест не пришёл в Telegram** | Проверить завершение доставки VPS, наличие marker-коммита и результат `replay_on_push.yml`, затем `TELEGRAM_BOT_TOKEN`/`*_CHAT_ID` и ошибки транспорта в логе. Для отказа анализа актов отдельно проверить выбранного LLM-провайдера и его ключ. |
 | **7kas: «Данных по запросу не обнаружено»** | Изменились параметры запроса. Проверить вручную на 7kas; не менять `delo_id=2800001`/`delo_table=g33_case`/`new=2800001` без проверки (см. [04](04-сбор-данных-и-парсеры.md)). |
 | **Парсер суда вернул мало/0 дел** | Суд сменил вёрстку или временно недоступен. С июля 2026 об этом сам сообщит 🩺-алерт детектора (история в `parse_health.json`). Сравнить карточку на сайте с ожиданиями парсера; обновить фикстуру и тест. |
 | **Push не приходят** | На локали push выключен (нет `VAPID_PRIVATE_KEY`). В проде: проверить secrets Worker'а, что устройство в подписках (`/subscriptions`), watchlist. |
@@ -323,11 +322,11 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 | **Появились дубли дел** | Сработает один из `dedupe_*` щитов на следующем прогоне (см. [05](05-конвейер-обновления.md)); если нет — `find_cassation_orphans.py` + ручной мердж. |
 | **Дело пропало из дашборда** | Ушло в архив по тайм-ауту (см. [03](03-жизненный-цикл-дела.md)). При поздней жалобе реактивируется автоматически (≤180 дн); старше года — вернуть через `add_cases_manually.py`. |
 | **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
-| **Утром нет дайджеста (нет и 🚨)** | Проверить, был ли run `update_cases.yml` в Actions (и в плитке «Последний прогон» админки). Не было — смотреть cron Worker'а (`wrangler.toml`, логи Worker'а, `isHoliday`); был, но упал до алерта — лог run'а. Если активен Mac-резерв: Mac спал/не в сети Сбера — LaunchAgent догонит при входе, либо `launchctl start com.court-monitor.parse`. |
+| **Утром нет дайджеста (нет и 🚨)** | На VPS проверить `court-parse.timer`, `court-delivery.timer`, журналы служб и `.run.lock` нужного клона; готовность выпуска и незавершённые транзакции — по [VPS README](../../ops/vps-run/README.md). Затем проверить marker-коммит и replay в Actions. При работе резерва проверить LaunchAgent, сон и сеть Mac. |
 | **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |
 | **Параллельный Mac-слот ведёт себя неожиданно** | Смотреть `launchd.out.log` драйвера и `ops/mac-local-run/parse_and_push.log` в **каждом** клоне. Импорты не начнутся, пока жив хоть один парсер. Для быстрого отката следующих слотов: `launchctl setenv CM_PARALLEL_TERRITORIES 0`; вернуть штатно — `launchctl unsetenv CM_PARALLEL_TERRITORIES`. |
-| **Канал `/run-progress` молчит** (блока в админке больше нет — проверяется `GET /admin/run-progress` руками) | Первым делом — лог рана в Actions: с 16.07.2026 пушер сам печатает одну строку `⚠️ Живой лог админки: POST … (HTTP код)` при первом сбое или `🛰 …выключен` при пустых секретах. 403 = Cloudflare-бан User-Agent (ошибка 1010, лечится `USER_AGENT` пушера — так канал молчал 13–16.07.2026), 401 = секреты (в GitHub нет ни `PUSH_SECRET`, ни `PROGRESS_SECRET`, или не совпадают с Worker'ом), 404 = кривой `PUSH_WORKER_URL`. Для Mac-резерва: нет/пуст токен `~/.config/court-monitor/progress_token`, либо `PROGRESS_SECRET` Worker'а не совпадает. Некритично: прогон работает и без лога. |
-| **Прогон был, а дайджест не пришёл** | Смотреть Actions → «💤 Резерв D2: дайджест на push» (`replay_on_push.yml`; стартует только если push задел `last_digest_context.json`). Дальше — как в первой строке таблицы. |
+| **Канал `/run-progress` молчит** | Проверить в логе включение пушера и Worker своей территории. VPS/Mac: `worker.<регион>` и `progress_token.<регион>`; GitHub: `PUSH_WORKER_URL` и `PUSH_SECRET`/`PROGRESS_SECRET`. HTTP 401 — авторизация, 403 может быть защитой до Worker, 404 — адрес. Парсинг не зависит от успешной передачи вех. |
+| **Прогон был, а дайджест не пришёл** | Проверить, был ли доставочный marker `(Mac-парсинг)` после 08:45: черновой push данных его не содержит. Если marker принят, смотреть `replay_on_push.yml`, его условия запуска, шаги Telegram и Web Push. `delivered_at` сам по себе не доказывает доставку адресату. |
 | **Автозапуск через Worker (если вернули cron)** | Проверить Cloudflare Worker (cron, `GITHUB_PAT`), `isHoliday`, логи Worker'а. Расписание — `wrangler.toml` + `wrangler deploy`. |
 
 ## Чего НЕ делать
@@ -336,6 +335,8 @@ CI (`tests.yml`) гоняет тот же набор на каждый push.
 - Не амендить опубликованные коммиты — создавать новые.
 - Не переименовывать поля `cases.json` без миграции (завязан фронт и архив).
 - Не добавлять сторонние планировщики (cron-job.org и т.п.). Расписание —
-  cron Cloudflare Worker'а; спящий резерв — LaunchAgent на Mac.
+  systemd на VPS; резерв — LaunchAgent на Mac. Worker-cron включается только
+  при согласованной смене исполнителя вместе с `CRON_UTC` и проверкой deploy.
 - Не редактировать `data/last_digest_context.json` руками в `main` — push,
-  задевший этот файл, запускает боевую рассылку (`replay_on_push.yml`).
+  задевший этот файл с доставочным маркером, запускает боевую рассылку
+  (`replay_on_push.yml`).
