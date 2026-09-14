@@ -1,48 +1,60 @@
 # 09. Cloudflare Worker
 
+> **Состав публикации документации.** Шлюз импортов, время конкретного суда в календаре и расширенный ручной импорт КСОЮ ниже описывают подготовленную локальную реализацию. Полная очередь импортов уже есть в исходном коде выпуска. Эти изменения кода не входят
+> в исходный коммит эталона `1a943a7f` и этим выпуском документации не публикуются.
+> [Границы снимка и выпуска](../Сверка_документации_2026-09-13.md).
+
 ## Что это и зачем
 
-Cloudflare Worker — это маленький серверный скрипт, который:
+Cloudflare Worker обслуживает серверные функции дашборда:
 
 1. **Хранит push-подписки и watchlist** пользователей PWA и отдаёт **админку**
    подписчиков — потому что у дашборда (статика на GitHub Pages) нет своего
    бэкенда, а где-то хранить подписки нужно.
-2. **Принимает лог прогона** (`POST /run-progress`): облачный прогон
+2. **Принимает дампы и пачки дел** в очередь своей территории. При
+   `IMPORT_EXECUTOR="vps"` сохраняет задание в KV и отметку `import:pending`;
+   исполнитель VPS забирает очередь. Режим `github` отправляет новые задания
+   в workflows `import_cases.yml` / `add_cases.yml`.
+3. **Принимает лог прогона** (`POST /run-progress`): облачный прогон
    GitHub Actions шлёт весь свой stdout через
    [`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py)
-   (`source:"github"` + ссылка на run), Mac-резерв — вехи через
+   (`source:"github"` + ссылка на run), VPS и Mac — вехи через
    `ops/mac-local-run/progress_pusher.py` (без `source`); оба — батчами,
-   лог хранится в KV 14 дней (текущий + предыдущий прогон). ⚠️ Блок живого
-   лога из админки удалён 29.07.2026 (см. раздел «Админка» ниже) — канал
-   пишется без UI-читателя, логи смотрятся на вкладке Actions GitHub.
-3. **Запускает обновление по расписанию** — cron возвращён в облако
-   **05.07.2026** (суды снова пускают иностранные IP; история раскола D2 — в
-   [01. Обзор](01-обзор-и-архитектура.md)). LaunchAgent на Mac усыплён и
-   оставлен спящим резервом (см.
-   [`ops/mac-local-run/README.md`](../../ops/mac-local-run/README.md)).
+   лог хранится в KV 14 дней (текущий + предыдущий прогон). Админка не
+   показывает живой лог. Логи GitHub смотрятся в Actions, а VPS/Mac —
+   в журнале службы или локальных файлах; API прогресса сохранён для отладки.
+4. **Поддерживает календарный фид и профили** для синхронизации устройств,
+   считает посещения. Сохраняет ручной запуск GitHub Actions и обработчик
+   облачного cron как резервные возможности.
 
 Код — [`cloudflare-worker/worker.js`](../../cloudflare-worker/worker.js),
 конфигурация — [`cloudflare-worker/wrangler.toml`](../../cloudflare-worker/wrangler.toml).
-Деплой: `cd cloudflare-worker && wrangler deploy`.
+Деплой: `cd cloudflare-worker && wrangler deploy` в checkout нужной территории.
 
-> ⚠️ cron-job.org и аналоги не добавлять по-прежнему. Расписание — только
-> Worker-cron (`crons` в `wrangler.toml` + деплой).
+Описание сверено с текущим кодом 13.09.2026. В эталонном конфиге
+`crons = []`, `CRON_UTC = ""`, `IMPORT_EXECUTOR = "vps"`: основное расписание
+задаёт systemd VPS, Mac оставлен резервом. Это состояние репозитория;
+живые таймеры, конфиги других территорий и выложенные Workers проверяются
+отдельно. Схема запуска — в [`ops/vps-run/README.md`](../../ops/vps-run/README.md).
 
-## Автозапуск (cron)
+## Резервный облачный cron и ручной запуск
 
-`scheduled(event, env)` ([worker.js:2856](../../cloudflare-worker/worker.js#L2856)):
+Обработчик `scheduled(event, env)`
+([worker.js](../../cloudflare-worker/worker.js)) остаётся в коде,
+но при пустом `crons` расписание Worker его не вызывает:
 
 1. Вычисляет текущую дату по МСК (UTC+3).
-2. `isHoliday(now)` ([32](../../cloudflare-worker/worker.js#L32)) — **второй щит**:
+2. `isHoliday(now)` ([worker.js](../../cloudflare-worker/worker.js)) — **второй щит**:
    режет субботу/воскресенье (`getDay()`) и праздники РФ (`HOLIDAYS_2026`). Если
    праздник — прогон пропускается.
 3. Иначе — `POST` на GitHub API
    `…/actions/workflows/update_cases.yml/dispatches` с `ref: "main"` и входом
    `inputs: { smart_skip: "true" }`. Авторизация — `Bearer ${env.GITHUB_PAT}`.
 
-Расписание в `wrangler.toml`: `crons = ["30 3 * * mon-fri"]` = **06:30 МСК,
-08:30 ХМАО, пн-пт** (применяется только после `wrangler deploy`). Отключить (флип на
-Mac-резерв) — вернуть `crons = []` и задеплоить.
+Исторический резервный слот `30 3 * * mon-fri` соответствует 06:30 МСК /
+08:30 Екатеринбург. Возврат к нему меняет исполнителя: одновременно нужны
+согласованное расписание VPS/Mac, `[triggers].crons`, `CRON_UTC` для UI и
+выкладка Worker. Нельзя включать второй полный прогон с параллельной записью данных.
 
 > ⚠️ Cloudflare Cron Triggers нумерует дни недели **1=Sun..7=Sat** (не как POSIX).
 > Цифровое `1-5` эмпирически срабатывало в т.ч. в воскресенье, поэтому
@@ -70,38 +82,44 @@ Cron всегда передаёт `smart_skip=true` (парсер пропус�
 
 ## HTTP API (управление подписками)
 
-Маршрутизатор — `fetch(request, env)` ([2899](../../cloudflare-worker/worker.js#L2899)).
+Маршрутизатор — `fetch(request, env)` ([worker.js](../../cloudflare-worker/worker.js)).
 Хранилище — KV-namespace `PUSH_SUBSCRIPTIONS` (биндинг в `wrangler.toml`).
 Ключ записи — хвост endpoint браузерного push-сервиса (`endpointToKey`,
-[60](../../cloudflare-worker/worker.js#L60)), префикс `sub:`.
+[worker.js](../../cloudflare-worker/worker.js)), префикс `sub:`.
 
 | Маршрут | Метод | Обработчик | Авторизация | Назначение |
 |---------|-------|-----------|-------------|------------|
-| `/subscribe` | POST | `handleSubscribe` ([654](../../cloudflare-worker/worker.js#L654)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
-| `/watchlist` | POST | `handleSetWatchlist` ([731](../../cloudflare-worker/worker.js#L731)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
-| `/unsubscribe` | POST | `handleUnsubscribe` ([1182](../../cloudflare-worker/worker.js#L1182)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
-| `/subscriptions` | GET | `handleListSubscriptions` ([1210](../../cloudflare-worker/worker.js#L1210)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
-| `/mark-owner` | POST | `handleMarkOwner` ([1243](../../cloudflare-worker/worker.js#L1243)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
-| `/run-progress` | POST | `handleRunProgress` ([1300](../../cloudflare-worker/worker.js#L1300)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
-| `/admin/run-progress` | GET | `handleAdminRunProgress` ([1354](../../cloudflare-worker/worker.js#L1354)) | `OWNER_SECRET` | JSON текущего и предыдущего прогона. С 29.07.2026 админка его не зовёт (блок живого лога удалён) — эндпоинт оставлен для ручной отладки. |
-| `/admin` | GET | `handleAdmin` ([1476](../../cloudflare-worker/worker.js#L1476)) | `OWNER_SECRET` (в URL) | HTML-админка подписчиков. |
-| `/admin/data` | GET | `handleAdminData` ([1406](../../cloudflare-worker/worker.js#L1406)) | `OWNER_SECRET` | JSON-данные для админки. |
-| `/admin/label` | POST | `handleAdminLabel` ([1526](../../cloudflare-worker/worker.js#L1526)) | `OWNER_SECRET` | Задать имя подписке. |
-| `/admin/watchlist` | POST | `handleAdminWatchlist` ([1551](../../cloudflare-worker/worker.js#L1551)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
-| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([1540](../../cloudflare-worker/worker.js#L1540)) | `OWNER_SECRET` | Принудительно удалить подписку. |
-| `/admin/test-push` | POST | `handleAdminTestPush` ([1677](../../cloudflare-worker/worker.js#L1677)) | `OWNER_SECRET` | Тестовый push (**отложено** — нужен `VAPID_PRIVATE_KEY` в secret). |
-| `/visit` | POST | `handleVisit` ([252](../../cloudflare-worker/worker.js#L252)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
-| `/admin/visits` | GET | `handleAdminVisits` ([2774](../../cloudflare-worker/worker.js#L2774)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
-| `/profile/link-code` | POST | `handleProfileLinkCode` ([819](../../cloudflare-worker/worker.js#L819)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
-| `/profile/link` | POST | `handleProfileLink` ([883](../../cloudflare-worker/worker.js#L883)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
-| `/profile/get` | POST | `handleProfileGet` ([933](../../cloudflare-worker/worker.js#L933)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
-| `/profile/watchlist` | POST | `handleProfileSetWatchlist` ([959](../../cloudflare-worker/worker.js#L959)) | знание uuid | Запись набора с LWW: устаревший `base_ts` → 409 + серверный набор. |
-| `/profile/unlink` | POST | `handleProfileUnlink` ([1006](../../cloudflare-worker/worker.js#L1006)) | знание endpoint | Отвязать устройство; набор уносится в `sub.watchlist`; профиль живёт. |
+| `/subscribe` | POST | `handleSubscribe` ([worker.js](../../cloudflare-worker/worker.js)) | — | Создать/обновить подписку. Пишет `created_at`, `last_seen_at`, `user_agent`. |
+| `/watchlist` | POST | `handleSetWatchlist` ([worker.js](../../cloudflare-worker/worker.js)) | — | Обновить watchlist подписки. Канонизирует алиасы → FI-ID, возвращает `canonical`. |
+| `/unsubscribe` | POST | `handleUnsubscribe` ([worker.js](../../cloudflare-worker/worker.js)) | `PUSH_SECRET` | Удалить подписку (вызывается автоочисткой из Python). |
+| `/subscriptions` | GET | `handleListSubscriptions` ([worker.js](../../cloudflare-worker/worker.js)) | `PUSH_SECRET` | Список подписок для рассылки (`?role=owner` — только владельцы). |
+| `/mark-owner` | POST | `handleMarkOwner` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Пометить устройство владельческим (для owner-only push). |
+| `/run-progress` | POST | `handleRunProgress` ([worker.js](../../cloudflare-worker/worker.js)) | `PROGRESS_SECRET` или `PUSH_SECRET` (Bearer) | Принять батч строк лога прогона: GitHub Actions (`scripts/gh_progress_pusher.py`, поля `source:"github"` + `link` на run) или VPS/Mac (`progress_pusher.py`, без `source`). KV `progress:current`/`progress:prev`, cap 1000 строк, TTL 14 дн. |
+| `/admin/run-progress` | GET | `handleAdminRunProgress` ([worker.js](../../cloudflare-worker/worker.js)) | владелец или оператор | JSON текущего и предыдущего прогона. Админка его не запрашивает; эндпоинт оставлен для отладки. |
+| `/admin` | GET | `handleAdmin` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` или `OPERATOR_SECRET` (в URL) | HTML-админка с интерфейсом по роли. |
+| `/admin/data` | GET | `handleAdminData` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | JSON-данные для админки. |
+| `/admin/label` | POST | `handleAdminLabel` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Задать имя подписке. |
+| `/admin/watchlist` | POST | `handleAdminWatchlist` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Перезаписать чужой watchlist. |
+| `/admin/unsubscribe` | POST | `handleAdminUnsubscribe` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Принудительно удалить подписку. |
+| `/admin/test-push` | POST | `handleAdminTestPush` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Тестовый push; требует `VAPID_PRIVATE_KEY` в secrets Worker. Наличие секрета проверяется отдельно. |
+| `/visit` | POST | `handleVisit` ([worker.js](../../cloudflare-worker/worker.js)) | — (гард по `Origin`) | Счётчик посещений: одна запись на (устройство × день). См. раздел ниже. |
+| `/admin/visits` | GET | `handleAdminVisits` ([worker.js](../../cloudflare-worker/worker.js)) | `OWNER_SECRET` | Сводка посещений одним KV-list: дни, итоги, список устройств. |
+| `/profile/link-code` | POST | `handleProfileLinkCode` ([worker.js](../../cloudflare-worker/worker.js)) | знание uuid | Код связывания устройств (профиля нет → создаёт из набора устройства). |
+| `/profile/link` | POST | `handleProfileLink` ([worker.js](../../cloudflare-worker/worker.js)) | код | Обмен кода на profile_id; union наборов; код сжигается. |
+| `/profile/get` | POST | `handleProfileGet` ([worker.js](../../cloudflare-worker/worker.js)) | знание uuid | Чтение профильного watchlist (старт страницы). POST — uuid не светится в URL. |
+| `/profile/watchlist` | POST | `handleProfileSetWatchlist` ([worker.js](../../cloudflare-worker/worker.js)) | знание uuid | Запись набора с LWW: устаревший `base_ts` → 409 + серверный набор. |
+| `/profile/unlink` | POST | `handleProfileUnlink` ([worker.js](../../cloudflare-worker/worker.js)) | знание endpoint | Отвязать устройство; набор уносится в `sub.watchlist`; профиль живёт. |
 | `/profile/calendar-token` | POST | `handleProfileCalendarToken` | знание uuid | Выдача/перевыпуск токена календарного фида (без uuid — создаёт профиль из набора, зеркало link-code). Идемпотентен; `regenerate:true` — перевыпуск. |
 | `/calendar/<token>.ics` | GET | `handleCalendarFeed` | знание токена | Персональный iCalendar-фид «Мои заседания» по watchlist профиля; поллится календарём клиента. |
+| `/admin/import-dump` | POST | `handleAdminImportDump` | владелец или оператор | Приём HTML-дампа напрямую или через настроенный шлюз. |
+| `/admin/add-case` | POST | `handleAdminAddCase` | владелец или оператор | Приём пачки номеров/ссылок для точечного добавления. |
+| `/admin/import-log` | GET | `handleAdminImportLog` | владелец или оператор | Последние 50 результатов; `include_queue=1` добавляет полную очередь, `tracked` — итоги по UUID. |
+| `/import-dump`, `/add-case-job` | GET | `handleImportDumpGet`, `handleAddCaseJobGet` | `PUSH_SECRET` или `OWNER_SECRET` (Bearer) | Получение тела задания исполнителем. |
+| `/import-pending` | GET | `handleImportPendingGet` | `PUSH_SECRET` или `OWNER_SECRET` (Bearer) | Последняя отметка приёма задания для поллера VPS. |
+| `/import-result` | POST | `handleImportResult` | `PUSH_SECRET` или `OWNER_SECRET` (Bearer) | Статус, счётчики и построчный отчёт в общий журнал импортов. |
 
 CORS разрешён только для `ALLOWED_ORIGIN` и `localhost:8081` (`corsHeaders`,
-[47](../../cloudflare-worker/worker.js#L47)).
+[worker.js](../../cloudflare-worker/worker.js)).
 
 ## Счётчик посещений (31.08.2026)
 
@@ -124,7 +142,7 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
 ```
 
 - `vid` — случайный UUID, который фронт создаёт при первом визите и хранит в
-  `lsKey('visit_id')` (`getVisitId`, [4855](../../app.js#L4855)). ⚠️ Обязательно
+  `lsKey('visit_id')` (`getVisitId`, [app.js](../../app.js)). ⚠️ Обязательно
   через `lsKey`: обе территории живут на одном origin `selivanovas.github.io`.
 - `os` — грубый класс устройства (`visitorDeviceClass`); **сырой `User-Agent` в
   KV не попадает**, как и IP: `CF-Connecting-IP` и `request.cf` не читаются
@@ -133,7 +151,7 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
   Единственное неанонимное поле, и оно про самого юриста: без него «3 человека
   сегодня» может оказаться им же с трёх устройств.
 - День считается по территориальному времени (`VISIT_TZ_OFFSET_H = 5`,
-  [221](../../cloudflare-worker/worker.js#L221)), а не по UTC: заход в 02:00 по
+  [`VISIT_TZ_OFFSET_H`, worker.js](../../cloudflare-worker/worker.js)), а не по UTC: заход в 02:00 по
   местному иначе попадал бы во вчера.
 
 ### Потолок записи
@@ -153,7 +171,7 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
 
 ### Предохранители публичного роута
 
-`/visit` — единственный путь, пишущий в KV без аутентификации. Поэтому:
+`/visit` пишет в KV без секрета пользователя. Для него предусмотрены:
 
 - **выключатель** `VISITS_ENABLED` в `[vars]` `wrangler.toml`: `"0"` мгновенно
   гасит запись, не трогая ни фронт, ни остальные роуты (применяется после
@@ -167,8 +185,8 @@ metadata: { t: "HH:MM", os: "iPhone", own: 0|1 }
 
 `GET /admin/visits` читает историю **одним `list` по префиксу и без единого
 `get`**: `metadata` приходит вместе с ключами. Пагинация по курсору обязательна
-(потолок `VISIT_LIST_PAGES_MAX`) — бескурсорный `handleAdminImportLog` копировать
-нельзя, при >1000 ключей он молча потерял бы хвост. Отдаётся только владельцу:
+(потолок `VISIT_LIST_PAGES_MAX`). Журнал импортов теперь также обходит страницы
+KV через `listImportLogKeys`. Сводка посещений отдаётся только владельцу:
 lists на free-tier тоже 1000/день, а операторов на Урале около 14.
 
 Ответ: `{today, days: [{d,u,own,new}], totals: {d1,d7,d30,returning30,once30,own30,os}, devices: [{id,first,last,days,os,own}]}`.
@@ -176,7 +194,26 @@ lists на free-tier тоже 1000/день, а операторов на Ура
 
 Поллинга нет: карточка грузится при открытии админки и по кнопке «Обновить».
 
-**Календарный фид (webcal, 29.08.2026):** `profile_id` в URL не светится —
+## Профили и синхронизация устройств
+
+KV `profile:<uuid>` хранит `schema_version`, `watchlist`, `updated_at` и
+`created_at` без TTL. `profile_id` даёт доступ к профилю, передаётся в теле
+POST; при перевыпуске push-endpoint связка сохраняется через `/subscribe`.
+Шестизначный одноразовый код `paircode:<code>` живёт 10 минут. `/profile/link`
+объединяет наборы устройств и удаляет код. При отвязке копия набора остаётся
+в подписке устройства, сам профиль сохраняется.
+
+`updated_at` профиля — серверный числовой штамп watchlist в миллисекундах.
+`/profile/watchlist` сравнивает с ним `base_ts`; устаревший клиент получает
+409 и текущий набор без перезаписи. Фронт накладывает переключения звёзд
+текущей сессии на этот набор и повторяет запись один раз. Поля профиля,
+не меняющие watchlist (например, токен календаря), сохраняются через
+`putProfile` без изменения этого штампа. Подробнее о клиентском состоянии —
+[08. Фронтенд](08-фронтенд.md#синхронизация-подписок-между-устройствами-профили-26082026).
+
+## Календарный фид
+
+`profile_id` в URL не светится —
 у фида производный read-only `feed_token` (поле профиля + индекс
 `calfeed:<token>` → `{profile_id}`, оба без TTL; отзыв = перевыпуск, токен
 пишется через `putProfile` и НЕ трогает LWW-штамп `updated_at`). Фид: 2 KV
@@ -186,24 +223,85 @@ VCALENDAR (200); недоступный cases.json → 503 + Retry-After (пус
 `Cache-Control: private, max-age=900`. UID событий =
 `<canon>--<stage>@<host>` — стабилен при переносах заседаний (событие
 обновляется, а не дублируется). ICS-строки свёрнуты по 75 октетов
-(`icsFold`, кириллица не режется посреди code point), склейка CRLF. TZ и имя
-календаря — `CAL_TZID`/`CAL_TZ_OFFSET_MIN`/`CAL_FEED_NAME` в `[vars]`
-(дефолты — Asia/Yekaterinburg, «Мои заседания»). Полная модель — CLAUDE.md,
-раздел «Календарный фид»; стражи — `scripts/tests/test_calendar_feed.py`.
+(`icsFold`, кириллица не режется посреди code point), склейка CRLF.
 
-## Импорт дампа президиума (04.09.2026)
+В локальной реализации, сверенной 13.09.2026, время берётся в поясе конкретного суда: блок инстанции → запись
+суда в `region` → пояс территории → `CAL_TZID`. `calSelectHearing` выбирает
+активную инстанцию, а граница «сегодня» считается в её поясе. События с часами
+пишутся в UTC (`DTSTART`/`DTEND` с `Z`), длительность — один час, в том числе
+при переходе через полночь. В описании сохраняются исходные часы и пояс суда.
+Пустое, некорректное время и заглушка `00:00` дают событие на весь день.
+Фиксированный блок `VTIMEZONE +0500` удалён: Самара (Шестой КСОЮ, UTC+4) и
+суды Башкортостана (UTC+5) не должны попадать в один искусственный пояс.
 
-`/admin/import-dump` и KV-запись не менялись: раздел (апелляция или президиум
-на одном домене облсуда) выбирает сам импортёр по `delo_id` из ссылок
-карточек дампа. Отчёт `/import-result` несёт строку `section`
-(белый список `first_instance|appeal|cassation` — по ней админка подписывает
-потери и имя суда « (президиум)») и счётчик `skipped_old` (дела до реформы
-ГПК 05.2026, пропущенные без карточки). Свежесть `import:last:<домен>`
-общая с апелляцией того же домена. Админка: третья закреплённая строка
-« — президиум (кассация)» из `region.presidium_courts`, ключ
-`domain|srv|cassation`, автоопределение суда по `delo_id` вставки
-(`impDetectDeloIds`), `acCheckLink` отвергает ссылку президиума с подсказкой
-про дамп.
+`CAL_TZID` и `CAL_FEED_NAME` задают резервный пояс/метаданные и имя календаря
+(дефолты `Asia/Yekaterinburg`, «Мои заседания»). `CAL_TZ_OFFSET_MIN` остаётся
+для расчёта слотов импорта территории, а не часов заседаний. Ссылка на суд
+учитывает `court_domain`, `delo_id`, `srv_num`, `new` выбранной инстанции и
+реестра; апелляция и президиум на одном домене сохраняют свои разделы.
+
+Проверки: [`test_calendar_feed.py`](../../scripts/tests/test_calendar_feed.py) и
+`scripts/tests/test_territory_timezones.py` (локальная разработка, файл не включён в этот выпуск).
+
+## Дампы апелляции, КСОЮ и президиума
+
+Добавление КСОЮ в ручной импорт и связанные счётчики ниже относятся к
+подготовленной локальной версии. Ручной импорт апелляции и президиума уже
+поддержан исходным кодом этого выпуска.
+
+Раздел на одном домене апелляции/президиума выбирает импортёр по `delo_id`
+из ссылок карточек дампа. Админка различает обычную кассацию КСОЮ и президиум:
+`section="cassation"` дополняется `cassation_kind="court"|"presidium"`.
+Для старого отчёта без этого поля используется домен кассационного суда
+территории. `/import-result` сохраняет также:
+
+- `linked` — кассации, связанные с известными делами;
+- `skipped_old` — старые дела президиума, пропущенные по правилам импортёра;
+- `skipped_region` — дела другой территории;
+- `needs_review` — неоднозначная связь с первой инстанцией: интерфейс направляет
+  к построчному отчёту и не сообщает, что всё уже в базе.
+
+Суд с закрытым поиском включается в импорт из `region.cassation`, а президиумы
+— из `region.presidium_courts`. Подписи разные: «— кассация» и «— президиум
+(кассация)». Ключ селектора учитывает домен, площадку и раздел; ссылка поиска
+сохраняет `srv_num`, `delo_id`, `new`. Точечная ссылка на КСОЮ с закрытым поиском
+отклоняется с подсказкой загрузить выдачу.
+
+При `region.manual_import_all_courts=true` можно вручную добрать историю любого
+суда территории. Список доступных судов включает и открытый поиск, но светофор
+свежести и плитка «Импорты» считают только `search_gated`: доступность ручного
+добора не означает обязанность еженедельно присылать дамп каждого суда. В
+Башкортостане КСОЮ закреплён первым. `import:last:<домен>` остаётся общей
+свежестью для разделов одного домена, включая апелляцию и президиум.
+
+Обе роли проверяются в
+`scripts/tests/test_territory_timezones.py` (локальная разработка, файл не включён в этот выпуск);
+правила самого импортёра — в [главе парсеров](04-сбор-данных-и-парсеры.md).
+
+## Загрузка дампа через шлюз территории
+
+Подготовленная локальная версия общего Worker поддерживает обратную загрузку
+для `POST /admin/import-dump`:
+шлюз передаёт `__gateway_upload` с `id`, отдельным `token`, `sha256` и
+числом `bytes`, а Worker получает исходный JSON через
+`cloudflare-worker/import_gateway.js` (локальная разработка, файл не включён в этот выпуск).
+Проверка роли владельца или оператора выполняется до скачивания. Затем
+применяются обычные проверки домена суда, содержимого и размера HTML,
+запись в собственный KV и постановка в очередь импорта.
+
+Механизм включается только переменной `IMPORT_GATEWAY_ORIGIN` в конфигурации
+Worker конкретной территории. Без неё обратная загрузка отклоняется, а обычный
+JSON-импорт продолжает работать. Адрес должен быть HTTPS-origin без пути и
+учётных данных; URL из входного JSON не используется, перенаправления запрещены.
+Проверяются размер и SHA-256 скачанного тела; после подтверждения целостности
+ответ содержит `X-Import-Gateway-SHA256`, в том числе при ошибке JSON или
+последующей валидации дампа. Лимит транспортного JSON — 10 МиБ, предел HTML
+остаётся прежним. Настройки адреса и инфраструктура шлюза остаются у территории;
+перенос общего кода сам по себе их не включает.
+
+Проверки с подменёнными сетью и KV:
+`scripts/tests/test_import_gateway.py` (локальная разработка, файл не включён в этот выпуск) и
+[`test_import_queue_api.py`](../../scripts/tests/test_import_queue_api.py).
 
 ## Метаданные подписки в KV
 
@@ -211,20 +309,18 @@ VCALENDAR (200); недоступный cases.json → 503 + Retry-After (пус
 `/subscribe`), `last_watchlist_update_at` (на `/watchlist`), `user_agent`,
 `label`, `is_owner`, `watchlist`, с 26.08.2026 — опциональный `profile_id`
 (связка с профилем синхронизации). Канонизация watchlist использует ту же логику,
-что и бэкенд (`wnBuildAliasToCanonical`, [333](../../cloudflare-worker/worker.js#L333),
-с кэшем `getAliasMapCached`, [383](../../cloudflare-worker/worker.js#L383), читающим
+что и бэкенд (`wnBuildAliasToCanonical`, [worker.js](../../cloudflare-worker/worker.js),
+с кэшем `getAliasMapCached`, [worker.js](../../cloudflare-worker/worker.js), читающим
 `cases.json` с GitHub Pages).
 
-**Профили синхронизации (26.08.2026, пока только ХМАО):** `profile:<uuid>` =
-общий watchlist устройств юриста (`updated_at` в мс — LWW-штамп набора, ставит
-только Worker; записи БЕЗ TTL), `paircode:<6 цифр>` — одноразовый код
-связывания (TTL 600 с). Привязанным подпискам выдачи `/subscriptions` и
+**Связанные подписки:** выдачи `/subscriptions` и
 `/admin/data` подставляют ПРОФИЛЬНЫЙ watchlist (`resolveProfilesInto`,
-[165](../../cloudflare-worker/worker.js#L165)) — поэтому delivery.py о
+[worker.js](../../cloudflare-worker/worker.js)) — поэтому delivery.py о
 профилях не знает вовсе; `/admin/data` отвечает `{subs, profiles}` (ключ
 `subs` — контракт `scripts/audit_watchlists.py`). Legacy `/watchlist` и
-`/admin/watchlist` при `sub.profile_id` пишут в профиль. Подробная модель —
-CLAUDE.md, раздел «Синхронизация подписок между устройствами».
+`/admin/watchlist` при `sub.profile_id` пишут в профиль. Модель описана в
+[разделе профилей](#профили-и-синхронизация-устройств); проверки —
+[`test_watchlist_profiles.py`](../../scripts/tests/test_watchlist_profiles.py).
 
 ## Адреса Worker'а (custom domain, 27.08.2026)
 
@@ -271,7 +367,7 @@ Cloud.ru (Free Tier до ~27.11.2026, дальше ~513 ₽/мес — реши�
 блока адресов Cloudflare по IP — тогда шлюз перевесить на ПОСТОРОННЕЕ зрелое
 имя (не delosud); (2) проверенная площадка под перенос парсинга — sudrf
 пускает IP Cloud.ru (нормальная страница поиска). Шлюз пока ПЕРВЫЙ фолбэк
-`PUSH_WORKER_FALLBACKS` обеих территорий (пользы для МТС нет — оба адреса
+`PUSH_WORKER_FALLBACKS` ХМАО и Урала в том снимке (пользы для МТС нет — оба адреса
 delosud мертвы вместе; на нормальных операторах основной адрес и так
 открывается — кандидат на откат до созревания). Конфиг nginx —
 `/etc/nginx/sites-available/delosud-gw` (`resolver ... ipv6=off` —
@@ -283,8 +379,8 @@ delosud мертвы вместе; на нормальных оператора�
 
 URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
 (фолбэк — прежний `https://court-monitor-trigger.7selivanov-a.workers.dev/admin?…`).
-`handleAdmin` ([1476](../../cloudflare-worker/worker.js#L1476)) рендерит HTML
-(`renderAdminHtml`, [34](../../cloudflare-worker/admin_page.js#L34)), внутри JS
+`handleAdmin` ([worker.js](../../cloudflare-worker/worker.js)) рендерит HTML
+(`renderAdminHtml`, [admin_page.js](../../cloudflare-worker/admin_page.js)), внутри JS
 тянет `/admin/data` и `cases.json`. По каждой подписке показывает: имя,
 устройство, флаг owner, даты создания/входа/обновления watchlist, размер и
 раскрываемый список дел со сторонами, а также **журнал последнего push** (из
@@ -297,8 +393,7 @@ URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
 отложенный «прыжок к фрагменту» после `replaceState`), `history.replaceState`.
 Оператор открывается на вкладке «Импорт» и больше не видит ни карточку
 «Парсинг исков банка», ни плитки «Дайджест»/«Автозапуск» — `loadStaticData`
-ему эти файлы вообще не запрашивает. **С 23.08.2026 операторская доведена
-разбором** (см. «Админка подписчиков» в [CLAUDE.md](../../CLAUDE.md)): порядок
+ему эти файлы вообще не запрашивает. Порядок
 карточек вкладки «Импорт» задаёт роль (оператору дампы первыми, точечное
 добавление — свёрткой ниже), имя оператора — одно поле в шапке секции (вне
 `.imp-form`, иначе на территории без капчёвых судов оно пряталось бы вместе с
@@ -307,17 +402,17 @@ URL: `https://api-hmao.delosud.ru/admin?secret=<OWNER_SECRET>`
 светофор свежести умеет набор «мои суды» (localStorage `admin_my_courts`,
 пустой = все). Карточки подписчиков свёрнуты по
 умолчанию (`<details>`), состояние раскрытия пишется по клику на строку, а не
-по событию `toggle`. Подробности и ловушки — в разделе «Админка подписчиков»
-[CLAUDE.md](../../CLAUDE.md).
+по событию `toggle`. Ограничения роли применяются также на сервере через
+`requireAdminRole`: чужой секрет даёт 401, недоступная роли операция — 403.
 
-⚠️ **С 29.07.2026 карточка «Прогоны GitHub Actions» урезана до «Запуск
-прогона»** (решение юриста): список последних 8 runs и блок живого лога из
-админки удалены — статусы и логи смотрятся на вкладке Actions GitHub.
+Карточка **«Запуск прогона»** не содержит список последних runs или живой лог.
+Статусы и логи облачных прогонов доступны во вкладке Actions GitHub;
+для VPS/Mac используются журнал службы и локальные файлы исполнителя.
 Остались кнопки запуска, метка следующего крона и плитки пульта «Последний
 прогон»/«Автозапуск» (их питает прежний `GET /admin/gh-runs`). Канал лога
 при этом жив целиком: `POST /run-progress` (заливает облачный workflow —
 [`scripts/gh_progress_pusher.py`](../../scripts/gh_progress_pusher.py), весь
-stdout — или Mac-резерв
+stdout — или VPS/Mac через
 [`ops/mac-local-run/progress_pusher.py`](../../ops/mac-local-run/progress_pusher.py),
 только вехи) и `GET /admin/run-progress` работают, лог лежит в KV 14 дней —
 UI-читателя у него просто нет.
@@ -353,6 +448,11 @@ URL — `bankParseUrl` из `adminPageConfig()`). Группы по исхода
 без метаданных поддержаны. Точные условия повторов и пропусков остаются
 в `ops/mac-local-run/import_queue.jq`.
 
+Клиентские проверки этого поведения —
+[`test_admin_import_queue.py`](../../scripts/tests/test_admin_import_queue.py),
+контракт API и обход KV —
+[`test_import_queue_api.py`](../../scripts/tests/test_import_queue_api.py).
+
 Один общий опрос раз в минуту обслуживает дампы и пачки. Скрытая вкладка
 приостанавливает опрос; после 20 минут без нового приёма или ручного обновления
 автообновление останавливается с подсказкой «Обновить». Это ограничение
@@ -362,7 +462,9 @@ URL — `bankParseUrl` из `adminPageConfig()`). Группы по исхода
 При выпуске сначала обновляются Workers территорий, затем скрипт исполнителя
 с `include_queue=1`. Старый Worker совместим с новым jq через `items`,
 но устранение ограничения 50 записей действует только после обновления Worker.
-Сериализация записи через `.run.lock` и расписания не меняются.
+Общая `.run.lock` сохраняет последовательную запись парсинга и импортов;
+пятиминутный поллер и резервные слоты описаны в
+[`ops/vps-run/README.md`](../../ops/vps-run/README.md).
 
 ## Секреты Worker'а
 
@@ -375,12 +477,17 @@ URL — `bankParseUrl` из `adminPageConfig()`). Группы по исхода
   (им пушит лог облачный workflow, пока в GitHub secrets нет отдельного
   `PROGRESS_SECRET`).
 - `OWNER_SECRET` — авторизация `/mark-owner` и админки.
+- `OPERATOR_SECRET` — доступ к операторской админке и импортам; без него роль
+  неактивна. Имя в форме — подпись отчёта, оно не заменяет проверку роли.
 - `PROGRESS_SECRET` — авторизация `POST /run-progress` (живой лог прогона).
   Низкопривилегированный: умеет только дописывать строки прогресса. То же
-  значение лежит на Mac в `~/.config/court-monitor/progress_token` (chmod 600,
-  вне публичного репозитория).
-- `VAPID_PRIVATE_KEY` — нужен только для test-push из админки (сейчас не
-  положен, фича отложена).
+  значение задаётся на исполнителе вне репозитория в
+  `~/.config/court-monitor/progress_token.<регион>`. Старый общий
+  `progress_token` допустим как резерв только для ХМАО и Урала. Адрес прогресса
+  берётся из `worker.<регион>`; новый регион без своего адреса и токена ничего
+  не отправляет в чужой Worker.
+- `VAPID_PRIVATE_KEY` — нужен для test-push из админки. Его наличие в
+  действующем Worker этот документ не подтверждает.
 
 Как Worker встроен в общий поток (Mac-парсинг → push → replay на GitHub) — см.
 [01. Обзор](01-обзор-и-архитектура.md) и [10. CI/CD и эксплуатация](10-ci-cd-и-эксплуатация.md).
