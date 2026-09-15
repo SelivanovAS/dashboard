@@ -3022,12 +3022,14 @@ function orphanProfileHtml(p, isOpen) {
   const owner = profileLikelyOwner(p, allSubs);
   // updated_at профиля — миллисекунды эпохи (LWW-штамп набора), relTime ждёт ISO.
   const updIso = p.updated_at ? new Date(p.updated_at).toISOString() : "";
+  const recoverable = p.lifecycle_status === "recoverable";
   const cases = wl.length
     ? wl.map(function (num) { return caseRowHtml(num, casesMapGlobal, { readOnly: true }); }).join("")
     : '<div class="empty">Набор пуст — профиль создан, но ★ ни разу не ставили</div>';
   return '<details class="profile-group profile-group-orphan" data-profile-id="' + escHtml(p.profile_id) + '"' + (isOpen ? " open" : "") + '>'
     + '<summary class="profile-group-head">'
     +   '🔗 Профиль ' + short + ' · без push-устройств'
+    +   (recoverable ? '<span class="badge badge-expiry">Удалён · можно восстановить</span>' : '')
     +   (p.has_feed ? '<span class="badge badge-watch" title="Профиль ведёт подписку календаря «Мои заседания» — она заводится и без push">📅 календарь</span>' : '')
     +   (orphans ? '<span class="badge badge-run" title="Номера, которых нет ни в активных делах, ни в архиве">⚠ ' + orphans + '</span>' : '')
     +   '<span class="spacer"></span>'
@@ -3037,8 +3039,15 @@ function orphanProfileHtml(p, isOpen) {
     +   '<div class="sub-kv">'
     +     '<span>Создан <b>' + escHtml(relTime(p.created_at)) + '</b></span>'
     +     '<span>★ менялись <b>' + escHtml(relTime(updIso)) + '</b></span>'
+    +     '<span title="Активность устройства или календаря; отметка обновляется не чаще раза в сутки">Использование <b>' + (p.last_used_at ? escHtml(relTime(p.last_used_at)) : 'пока не зафиксировано') + '</b></span>'
     +     (p.has_feed ? '<span>Календарь <b>' + escHtml(relTime(p.feed_token_created_at)) + '</b></span>' : '')
     +   '</div>'
+    +   (recoverable
+      ? '<div class="profile-why">Восстановление доступно до ' + escHtml(fullDate(p.restore_until))
+        + '. Обращение устройства или календаря в этот срок тоже восстановит профиль.</div>'
+        + '<button class="btn" data-action="restore-profile">Восстановить профиль</button><div class="profile-restore-result" role="status"></div>'
+      : '<div class="profile-why">Очистка после 7 дней без использования для пустого профиля без календаря; для остальных — после 30 дней. '
+        + (p.activity_started_at ? 'Учёт начат ' + escHtml(fullDate(p.activity_started_at)) + '.' : 'Учёт активности ещё не начат.') + '</div>')
     +   '<div class="profile-why">Push-устройств нет: на устройстве запрещены уведомления '
     +     '(★ синхронизируются и без них), либо push-подписка истекла (60 дней без входа), '
     +     'либо профиль заведён подпиской на календарь. Чьё это устройство — видно на нём '
@@ -3181,6 +3190,22 @@ async function render(force) {
 document.getElementById("root").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
+  if (btn.getAttribute("data-action") === "restore-profile") {
+    const profileCard = btn.closest("[data-profile-id]");
+    if (!profileCard) return;
+    btn.disabled = true;
+    const result = profileCard.querySelector(".profile-restore-result");
+    postAdmin("/admin/profile/restore", { profile_id: profileCard.getAttribute("data-profile-id") })
+      .then(function (res) {
+        if (res.ok) return render(true);
+        result.textContent = res.status === 404 ? "Срок восстановления истёк. Обновите список." : "Не удалось восстановить профиль. Повторите попытку.";
+        btn.disabled = false;
+      }).catch(function () {
+        result.textContent = "Нет связи с сервером. Повторите попытку.";
+        btn.disabled = false;
+      });
+    return;
+  }
   const card = btn.closest(".sub-card");
   if (!card) return;
   const sub = subsByEp.get(card.getAttribute("data-endpoint"));

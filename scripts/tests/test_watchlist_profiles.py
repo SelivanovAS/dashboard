@@ -11,8 +11,9 @@
 2. LWW по таймстампу набора: updated_at ставит только Worker; устаревший
    base_ts клиента → 409 с серверным набором БЕЗ записи, клиент накатывает
    тоглы текущей сессии и повторяет РОВНО один раз.
-3. Профиль пишется без expirationTtl (KV get TTL не продлевает, «продление»
-   фоновыми writes запрещено free-tier'ом).
+3. Профиль пишется без expirationTtl. С 15.09.2026 отдельная активность
+   и очистка 7/30 дней проверяются в test_profile_lifecycle.py; фоновый
+   учёт не переписывает watchlist и его LWW-штамп.
 4. delivery.py не знает о профилях ВООБЩЕ: Worker резолвит профильный
    watchlist в выдачах /subscriptions и /admin/data (TestDeliveryFrozen).
 5. /admin/data отдаёт обёртку {subs, profiles} — ключ «subs» обязан
@@ -98,9 +99,9 @@ class TestWorkerContract:
         assert "crypto.getRandomValues" in _fn_src(js, "genPairCode")
 
     def test_profile_put_has_no_ttl(self):
-        # Профиль бессрочный: KV get TTL не продлевает, а «продление» фоновыми
-        # writes запрещено (free-tier 1000/день). Протухший профиль снёс бы
-        # звёзды всех устройств юриста, вернувшегося из отпуска.
+        # Жизненный цикл ведёт отдельный модуль. TTL самой записи нельзя
+        # привязывать к редким изменениям звёзд: чтение тоже является
+        # использованием, а его отметка не должна переписывать watchlist.
         body = _fn_src(_worker(), "putProfile")
         code_only = re.sub(r"//[^\n]*", "", body)  # слово живёт в комментарии
         assert "expirationTtl" not in code_only

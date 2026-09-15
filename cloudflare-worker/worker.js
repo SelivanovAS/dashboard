@@ -1,4 +1,5 @@
 import { renderAdminHtml } from "./admin_page.js";
+import { readProfile, recordProfileUse, profileLifecycleFields, cleanupProfiles, PROFILE_CLEANUP_CRON } from "./profile_lifecycle.js";
 
 // Нерабочие праздничные дни РФ на 2026 год (производственный календарь).
 // Постановление Правительства РФ от 24.09.2025 N 1466.
@@ -73,9 +74,10 @@ function endpointToKey(endpoint) {
 //   Worker при принятой записи>, created_at: ISO }.
 // ⚠️ Расширение под заметки (этап 2) — со СВОИМ notes_updated_at:
 //   updated_at принадлежит watchlist'у, а не записи целиком.
-// ⚠️ Профиль пишется БЕЗ expirationTtl: KV get TTL не продлевает, а
-//   «продление» фоновыми writes запрещено (free-tier 1000/день на аккаунт);
-//   профилей — десятки, сироты видны в админке.
+// Профиль пишется БЕЗ expirationTtl. С 15.09.2026 отдельный модуль
+// profile_lifecycle.js учитывает использование (не чаще раза в сутки),
+// удаляет неактивные профили через 7/30 дней и даёт 7 дней восстановления.
+// Активность не переписывает watchlist; административное чтение её не продлевает.
 
 const KV_SUB_TTL_SEC = 60 * 24 * 3600; // TTL записей sub:* (60 дней)
 // Код — ТОЛЬКО цифры, 6 знаков (решение юриста 26.08.2026): вводится с
@@ -126,11 +128,8 @@ function sanitizeWatchlistInput(arr) {
 function unionWatchlists(a, b) {
   return Array.from(new Set([...(a || []), ...(b || [])]));
 }
-async function getProfile(env, id) {
-  if (!looksLikeProfileId(id)) return null;
-  const raw = await env.PUSH_SUBSCRIPTIONS.get(profileKey(id));
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch (_) { return null; }
+async function getProfile(env, id, options = {}) {
+  return readProfile(env, id, options);
 }
 async function putProfile(env, id, profile) {
   // ⚠️ Без expirationTtl — см. шапку блока профилей.
@@ -640,7 +639,7 @@ async function subscribeResponseBody(env, sub) {
     watchlist: Array.isArray(sub.watchlist) ? sub.watchlist : [],
   };
   if (sub.profile_id) {
-    const profile = await getProfile(env, sub.profile_id);
+    const profile = await getProfile(env, sub.profile_id, { use: true });
     if (profile) {
       body.watchlist = Array.isArray(profile.watchlist) ? profile.watchlist : [];
       body.profile_id = sub.profile_id;
@@ -772,7 +771,7 @@ async function handleSetWatchlist(request, env) {
     // Осознанная цена: снятие звезды с легаси-устройства до профиля не
     // доедет — снимается новым фронтом или админкой.
     if (sub.profile_id) {
-      const profile = await getProfile(env, sub.profile_id);
+      const profile = await getProfile(env, sub.profile_id, { use: true });
       if (profile) {
         const merged = canonicalizeWatchlistArr(
           unionWatchlists(profile.watchlist, canonical), aliasMap
@@ -826,7 +825,7 @@ async function handleProfileLinkCode(request, env) {
       if (!looksLikeProfileId(profileId)) {
         return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
       }
-      profile = await getProfile(env, profileId);
+      profile = await getProfile(env, profileId, { use: true });
       if (!profile) {
         return new Response(
           JSON.stringify({ ok: false, error: "profile_not_found" }),
@@ -844,6 +843,7 @@ async function handleProfileLinkCode(request, env) {
         created_at: new Date().toISOString(),
       };
       await putProfile(env, profileId, profile);
+      await recordProfileUse(env, profileId);
       await attachSubToProfile(env, body.endpoint, profileId);
     }
     // Код: до 3 попыток при коллизии (31^6 ключей — почти невозможна, но
@@ -897,7 +897,7 @@ async function handleProfileLink(request, env) {
     }
     let profileId = "";
     try { profileId = (JSON.parse(rawPair) || {}).profile_id || ""; } catch (_) { /* below */ }
-    const profile = await getProfile(env, profileId);
+    const profile = await getProfile(env, profileId, { use: true });
     if (!profile) {
       return new Response(
         JSON.stringify({ ok: false, error: "profile_not_found" }),
@@ -929,12 +929,13 @@ async function handleProfileLink(request, env) {
 
 // Чтение профильного набора при загрузке страницы. POST, а не GET: profile_id
 // — bearer-секрет, в URL/логах ему не место. Канонизации на чтении нет —
-// клиент прогоняет номера через canonCaseNumber сам (как reconcile). 0 writes.
+// клиент прогоняет номера через canonCaseNumber сам (как reconcile).
+// Отдельная отметка активности — не чаще раза за сутки, без изменения набора.
 async function handleProfileGet(request, env) {
   const origin = request.headers.get("Origin") || "";
   try {
     const body = await request.json();
-    const profile = await getProfile(env, body.profile_id);
+    const profile = await getProfile(env, body.profile_id, { use: true });
     if (!profile) {
       return new Response(
         JSON.stringify({ ok: false, error: "profile_not_found" }),
@@ -963,7 +964,7 @@ async function handleProfileSetWatchlist(request, env) {
     if (!Array.isArray(body.watchlist)) {
       return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
     }
-    const profile = await getProfile(env, body.profile_id);
+    const profile = await getProfile(env, body.profile_id, { use: true });
     if (!profile) {
       return new Response(
         JSON.stringify({ ok: false, error: "profile_not_found" }),
@@ -1020,6 +1021,7 @@ async function handleProfileUnlink(request, env) {
       );
     }
     const sub = JSON.parse(existing);
+    if (sub.profile_id) await getProfile(env, sub.profile_id, { use: true });
     delete sub.profile_id;
     if (Array.isArray(body.watchlist)) {
       const aliasMap = await getAliasMapCached();
@@ -1043,7 +1045,8 @@ async function handleProfileUnlink(request, env) {
 // (bearer, как у соседних /profile/*). Без profile_id создаёт профиль из
 // body.watchlist (зеркало ветки handleProfileLinkCode) — юристу без профиля
 // не нужен обходной путь через код связывания. Идемпотентен: повторный
-// вызов возвращает существующий токен (0 writes); regenerate:true —
+// вызов возвращает существующий токен; активность отмечается отдельно раз
+// в сутки. regenerate:true —
 // перевыпуск (старая ссылка перестаёт работать).
 async function handleProfileCalendarToken(request, env) {
   const origin = request.headers.get("Origin") || "";
@@ -1055,7 +1058,7 @@ async function handleProfileCalendarToken(request, env) {
       if (!looksLikeProfileId(profileId)) {
         return new Response("Bad Request", { status: 400, headers: corsHeaders(origin) });
       }
-      profile = await getProfile(env, profileId);
+      profile = await getProfile(env, profileId, { use: true });
       if (!profile) {
         return new Response(
           JSON.stringify({ ok: false, error: "profile_not_found" }),
@@ -1073,14 +1076,15 @@ async function handleProfileCalendarToken(request, env) {
         created_at: new Date().toISOString(),
       };
       await putProfile(env, profileId, profile);
+      await recordProfileUse(env, profileId);
       await attachSubToProfile(env, body.endpoint, profileId);
     }
     let token = typeof profile.feed_token === "string" ? profile.feed_token : "";
     if (!token || body.regenerate === true) {
       const oldToken = token;
       token = crypto.randomUUID();
-      // ⚠️ Индекс calfeed:* — БЕЗ expirationTtl: ссылка живёт в календаре
-      // юриста месяцами, отзыв — только перевыпуском.
+      // Индекс без TTL: чтение календарём поддерживает профиль. Индекс
+      // удаляется при перевыпуске или окончательной очистке профиля.
       await env.PUSH_SUBSCRIPTIONS.put(
         feedTokenKey(token),
         JSON.stringify({ profile_id: profileId, created_at: new Date().toISOString() })
@@ -1117,7 +1121,7 @@ async function handleCalendarFeed(request, env, token) {
     if (!rawIdx) return new Response("Not Found", { status: 404 });
     let profileId = "";
     try { profileId = (JSON.parse(rawIdx) || {}).profile_id || ""; } catch (_) { /* ниже */ }
-    const profile = await getProfile(env, profileId);
+    const profile = await getProfile(env, profileId, { use: true, calendarToken: token });
     // Страховка на недоудалённый старый индекс: токен обязан совпадать с
     // актуальным в профиле.
     if (!profile || profile.feed_token !== token) {
@@ -1441,6 +1445,8 @@ async function handleAdminData(request, env) {
         if (!val) return null;
         try {
           const p = JSON.parse(val);
+          const lifecycle = await profileLifecycleFields(env, k.name.slice("profile:".length));
+          if (lifecycle.lifecycle_status === "expired") return null;
           return {
             profile_id: k.name.slice("profile:".length),
             watchlist: Array.isArray(p.watchlist) ? p.watchlist : [],
@@ -1452,6 +1458,7 @@ async function handleAdminData(request, env) {
             // на .ics, а /admin/data открывается в браузере.
             has_feed: typeof p.feed_token === "string" && p.feed_token.length > 0,
             feed_token_created_at: p.feed_token_created_at || "",
+            ...lifecycle,
           };
         } catch (_) { return null; }
       })
@@ -1464,6 +1471,24 @@ async function handleAdminData(request, env) {
     });
   } catch (e) {
     console.error("admin/data error:", e);
+    return new Response("Error", { status: 500 });
+  }
+}
+
+// Явное восстановление владельцем считается использованием; простое
+// открытие /admin/data никогда не оживляет удалённые профили.
+async function handleAdminRestoreProfile(request, env) {
+  const gate = requireAdminRole(request, env, ["owner"]);
+  if (gate.error) return gate.error;
+  try {
+    const body = await request.json();
+    if (!looksLikeProfileId(body.profile_id)) return new Response("Bad Request", { status: 400 });
+    const profile = await getProfile(env, body.profile_id, { use: true });
+    return new Response(JSON.stringify({ ok: !!profile }), {
+      status: profile ? 200 : 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (_) {
     return new Response("Error", { status: 500 });
   }
 }
@@ -2855,6 +2880,13 @@ export default {
   // ── Cron-триггер: запуск GitHub Actions ─────────────────────────────────
   async scheduled(event, env) {
     RUNTIME_ENV = env; // [vars] wrangler.toml → cfgVar()
+    // Это обслуживание KV, а не запуск парсера/рассылки. Работает и в
+    // выходные; ранний return не даёт запустить второй полный прогон.
+    if (event.cron === PROFILE_CLEANUP_CRON) {
+      await cleanupProfiles(env);
+      return;
+    }
+    if (env.CRON_UTC === "") return; // облачный парсер выключен
     // Текущая дата по МСК (UTC+3)
     const now = new Date(Date.now() + 3 * 3600 * 1000);
 
@@ -2970,6 +3002,10 @@ export default {
 
     if (url.pathname === "/admin/data" && request.method === "GET") {
       return handleAdminData(request, env);
+    }
+
+    if (url.pathname === "/admin/profile/restore" && request.method === "POST") {
+      return handleAdminRestoreProfile(request, env);
     }
 
     if (url.pathname === "/run-progress" && request.method === "POST") {
