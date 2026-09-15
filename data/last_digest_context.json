@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-09-15T06:23:03",
+  "saved_at": "2026-09-15T06:37:13",
   "new_cases": [],
   "changes": [
     {
@@ -2443,6 +2443,24 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "legal_force_date": "15.09.2026"
       }
+    },
+    {
+      "case": "2-2906/2026",
+      "court": "Нефтеюганский районный суд",
+      "plaintiff": "Родыгина Валентина Ивановна",
+      "defendant": "ПАО Сбербанк, Родыгин Павел Васильевич",
+      "bank_role": "Ответчик",
+      "category": "Споры, связанные с исполнительным производством → Споры, возникающие в ходе исполнительного производства → об освобождении имущества от ареста",
+      "type": [
+        "fi_hearing_new"
+      ],
+      "details": {
+        "link": "281349083|9f41cad4-36d0-43d7-b847-b6452e3cac4b",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "hearing_date": "28.09.2026",
+        "hearing_time": "12:00",
+        "hearing_type": "подготовка дела"
+      }
     }
   ],
   "total_active_appeal": 30,
@@ -2481,5 +2499,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-09-15T06:23:03",
-  "updated_at": "2026-09-15T06:23:03"
+  "updated_at": "2026-09-15T06:37:13"
 }
