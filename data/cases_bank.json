@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0004-01-2026-017959-86",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0004-01-2026-017958-89",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -107,8 +105,7 @@
         "judicial_uid": "86RS0003-02-2026-000486-31",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -146,8 +143,7 @@
         "judicial_uid": "86RS0001-01-2026-005053-66",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -185,8 +181,7 @@
         "judicial_uid": "86RS0007-01-2026-005141-66",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -224,8 +219,7 @@
         "judicial_uid": "86RS0008-01-2026-001892-60",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -263,8 +257,7 @@
         "judicial_uid": "86RS0021-01-2026-000972-94",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-15",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -24280,5 +24273,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-15T06:23:03"
+  "updated_at": "2026-09-15T06:37:13"
 }
