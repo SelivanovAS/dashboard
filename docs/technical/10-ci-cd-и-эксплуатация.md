@@ -154,9 +154,14 @@ LLM-дайджест включается через `DIGEST_FULL_LLM=1`; под
 
 ### `update_cases.yml` — ручной и аварийный полный прогон
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
-из GitHub UI либо Worker. В эталонном `wrangler.toml` сейчас `crons = []` и
-`CRON_UTC = ""`: регулярный путь задают VPS-таймеры. Наличие кода cron-handler
-не означает включённый cron; опубликованную конфигурацию проверяют отдельно.
+из GitHub UI либо Worker. В эталонном `wrangler.toml` сейчас `CRON_UTC = ""`:
+регулярный парсинг задают VPS-таймеры. Выпуск Worker 15.09.2026 содержит
+единственный служебный cron `17 21 * * *` для очистки профилей; его ветка
+завершается до GitHub dispatch, а `PROFILE_CLEANUP_ENABLED` включает только
+обслуживание профилей. Код и настройки трёх Workers проверены после
+[выкладки 15.09.2026](../Выпуск_очистки_профилей_2026-09-15.md). Первый плановый
+проход ещё не выполнялся на момент проверки. Правила и восстановление — в
+[главе Worker](09-cloudflare-worker.md#очистка-неактивных-профилей-15092026).
 
 Шаги: checkout → Python 3.12 → зависимости →
 `python scripts/update_cases.py --json 2>&1 | python -u scripts/gh_progress_pusher.py`

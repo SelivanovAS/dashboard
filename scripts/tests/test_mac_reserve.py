@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -596,10 +597,18 @@ class TestFlipReadiness:
         yml = _read(".github/workflows/replay_on_push.yml")
         assert "усыплён" not in yml.splitlines()[0]
 
-    def test_cloud_cron_untouched(self):
-        """Само переключение — решение юриста, а не побочный эффект правки."""
-        toml = _read("cloudflare-worker/wrangler.toml")
-        assert "crons" in toml and "[]" not in toml.split("crons")[1][:40]
+    def test_cloud_parser_cron_disabled(self):
+        """При согласованном VPS-режиме Cloudflare не запускает второго писателя.
+
+        Проверяем значения TOML: комментарий о прежнем cron не доказывает
+        текущую настройку. Единственный cron — обслуживание профилей,
+        его отделение от dispatch проверяется настоящим Worker в Node.
+        """
+        settings = tomllib.loads(_read("cloudflare-worker/wrangler.toml"))
+        assert settings["vars"]["IMPORT_EXECUTOR"] == "vps"
+        assert settings["triggers"]["crons"] == ["17 21 * * *"]
+        assert settings["vars"]["PROFILE_CLEANUP_ENABLED"] == "1"
+        assert settings["vars"]["CRON_UTC"] == ""
 
 
 class TestHonestCourtProbe:

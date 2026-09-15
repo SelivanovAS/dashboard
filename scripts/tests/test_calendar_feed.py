@@ -12,8 +12,9 @@ GET /calendar/<token>.ics сам, события синхронизируютс�
    Компрометация ссылки = только чтение расписания, лечится перевыпуском.
 2. feed_token НЕ трогает profile.updated_at (LWW-штамп watchlist'а):
    запись строго через putProfile, не writeProfileWatchlist.
-3. Индекс calfeed:* — без expirationTtl: ссылка живёт в календаре месяцами,
-   отзыв — только перевыпуском.
+3. Индекс calfeed:* — без expirationTtl: календарные обращения продлевают
+   использование профиля. Отзыв — перевыпуск или окончательная очистка;
+   сроки и восстановление проверяются в test_profile_lifecycle.py.
 4. Пустой watchlist → валидный ПУСТОЙ календарь (200), не 404: подписка у
    клиента не должна считаться битой.
 5. Недоступный cases.json → 503 + Retry-After, НЕ пустой календарь: пустой
@@ -116,7 +117,7 @@ class TestWorkerContract:
         assert "putProfile" in body
 
     def test_calfeed_index_without_ttl(self):
-        # Решение 3: индекс вечный, отзыв — только перевыпуском.
+        # Решение 3: срок контролирует жизненный цикл профиля, не TTL индекса.
         body = _fn_src(_worker(), "handleProfileCalendarToken")
         m = re.search(r"put\(\s*\n?\s*feedTokenKey\(token\)[\s\S]*?\)", body)
         assert m, "Запись calfeed:<token> не найдена."
