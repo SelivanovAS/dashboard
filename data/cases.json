@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-17T03:45:23",
+  "updated_at": "2026-09-17T17:40:28",
   "cases": [
     {
       "id": "М-8357/2026",
@@ -24248,7 +24248,7 @@
     },
     {
       "id": "2-2898/2026 (2-10220/2025;)",
-      "current_stage": "awaiting_appeal",
+      "current_stage": "appeal",
       "plaintiff": "ПАО Сбербанк",
       "defendant": "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, Стрелков Владимир Сергеевич наследственноеимущество",
       "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
@@ -24408,7 +24408,25 @@
           }
         ]
       },
-      "appeal": null,
+      "appeal": {
+        "case_number": "33-6567/2026",
+        "court": "Суд ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 5,
+        "judge_reporter": "",
+        "filing_date": "18.09.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "27008387|76361fdd-9fe8-4ab4-aa04-c33800c06d31",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": []
+      },
       "initial_bank_role": "Истец",
       "import": {
         "operator": "manual",
