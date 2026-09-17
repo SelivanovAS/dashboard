@@ -428,7 +428,7 @@
       }
     },
     {
-      "id": "М-2991/2026",
+      "id": "2-3513/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала - Уральский Банк ПАО Сбербанк",
       "defendant": "Норов Шермахмад Боймахмадович",
@@ -436,24 +436,26 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-2991/2026",
+        "case_number": "2-3513/2026",
         "court": "Ханты-Мансийский районный суд",
         "court_domain": "hmray--hmao.sudrf.ru",
         "judge": "",
         "filing_date": "15.09.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 18:30. 16.09.2026",
-        "event_date": "15.09.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Подготовка дела (собеседование). 11:00. 17.09.2026",
+        "event_date": "05.10.2026",
+        "hearing_date": "05.10.2026",
+        "hearing_time": "11:00",
         "link": "282838245|7e835eb8-6cb9-4cf8-893d-de9726e0f625",
         "act_published": false,
         "act_date": "",
         "judicial_uid": "86RS0001-01-2026-005056-57",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-17"
+        "last_checked_at": "2026-09-17",
+        "material_number": "М-2991/2026",
+        "accepted_pending_emit": false
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -24907,5 +24909,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-17T07:07:59"
+  "updated_at": "2026-09-17T07:37:58"
 }
