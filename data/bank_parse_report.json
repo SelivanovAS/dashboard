@@ -217,12 +217,14 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_hearing_new"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
-      "key": "hmray--hmao.sudrf.ru|М-2991/2026",
-      "number": "М-2991/2026",
+      "key": "hmray--hmao.sudrf.ru|2-3513/2026",
+      "number": "2-3513/2026",
       "court": "Ханты-Мансийский районный суд",
       "court_domain": "hmray--hmao.sudrf.ru",
       "case_status": "В производстве",
@@ -10579,5 +10581,5 @@
       "last_checked_at": "2026-09-11"
     }
   ],
-  "updated_at": "2026-09-17T07:07:59"
+  "updated_at": "2026-09-17T07:37:59"
 }
