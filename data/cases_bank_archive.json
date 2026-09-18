@@ -3490,7 +3490,90 @@
         "announced": true
       },
       "archived_at": "2026-09-17"
+    },
+    {
+      "id": "2-6316/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Миралиев Закир Райзудинович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-6316/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Безносов А.В.",
+        "filing_date": "28.05.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 14:49. 03.09.2026",
+        "event_date": "24.08.2026",
+        "hearing_date": "18.08.2026",
+        "hearing_time": "16:30",
+        "link": "272273143|9adf5c41-1b3f-457e-bf5a-a8a3dbc61f44",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-09-15",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0002-01-2026-005302-42",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "18.08.2026",
+        "writ_expected": false
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T17:11:27",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-18"
+    },
+    {
+      "id": "2-4429/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
+      "defendant": "Ляхов Дмитрий Анатольевич, Межрегиональное территориальное управление Федерального агентства по управлению государственным имуществом в Тюменской области, ХМАО-Югре, ЯНАО, наследственное имущество Ляхова Людмила Викторовна",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-4429/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Смирнова Юлия Николаевна",
+        "filing_date": "03.03.2026",
+        "status": "В производстве",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯСТОРОНЫ (не просившие о разбирательстве в их отсутствие) НЕ ЯВИЛИСЬ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Судебное заседание. 12:00. Зал судебного заседания 407. Иск (заявление, жалоба) оставлены без рассмотрения. СТОРОНЫ (не просившие о разбирательстве в их отсутствие) НЕ ЯВИЛИСЬ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 21.07.2026",
+        "event_date": "18.08.2026",
+        "hearing_date": "18.08.2026",
+        "hearing_time": "12:00",
+        "link": "267373863|3686ebe2-e110-4e37-8492-531b31748e3c",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-09-18",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-003877-40",
+        "writ_expected": false
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-18"
     }
   ],
-  "updated_at": "2026-09-17T06:27:54"
+  "updated_at": "2026-09-18T06:22:42"
 }
