@@ -2,8 +2,8 @@
 """Ветка ПРЕЗИДИУМА импортёра дампов (scripts/import_search_dump.py, 04.09.2026).
 
 Кассация по делам мировых судей — президиум облсуда; раздел `delo_id=2800001`
-на домене апел-суда, поиск за проверочным кодом. Раздел выбирает САМ ДАМП
-(delo_id в ссылках карточек), оператор шлёт голый домен. Карточка обязательна
+на домене апел-суда, поиск за проверочным кодом. Новое задание сохраняет
+выбранную инстанцию; старое определяется по delo_id карточек. Карточка обязательна
 (УИД, участники, статус жалобы — только в ней); дело заводит боевой
 link_cassation_cases как discovery.
 
@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -122,11 +124,13 @@ class TestResolveCourt:
 
 
 class TestPresidiumDumpImport:
-    def test_end_to_end(self, env):
+    @pytest.mark.parametrize("selection", [[], ["--delo-id", "2800001", "--section", "cassation"]])
+    def test_end_to_end(self, env, selection):
         _seed(env, [])
-        assert _run(env) == isd.EXIT_OK
+        assert _run(env, *selection) == isd.EXIT_OK
         s = _summary(env)
         assert s["section"] == "cassation"
+        assert s["delo_id"] == "2800001"
         assert s["court"] == "Президиум Суда ХМАО-Югры"
         assert s["rows"] == 4
         # 4Г-2072/2019 — до реформы: без карточки; 4Г-16 — карточка не открылась.
@@ -231,6 +235,84 @@ class TestPresidiumDumpImport:
         _seed(env, [])
         assert _run(env) == isd.EXIT_WRONG_COURT
         assert "президиум" in _summary(env)["error"]
+
+    @pytest.mark.parametrize("selected_id,selected_section,fixture", [
+        ("5", "appeal", "search_presidium_dump_hmao.html"),
+        ("2800001", "cassation", "search_appeal_dump_svd.html"),
+    ])
+    def test_selected_instance_rejects_other_section_before_fetch(
+            self, env, selected_id, selected_section, fixture):
+        env["dump"].write_text(_fixture(fixture).replace("oblsud--svd.sudrf.ru", DOMAIN),
+                               encoding="utf-8")
+        _seed(env, [])
+        assert _run(env, "--delo-id", selected_id, "--section", selected_section) == isd.EXIT_WRONG_COURT
+        assert env["calls"] == []
+        assert _cases(env) == []
+        assert not env["csv"].exists()
+        assert _summary(env)["section"] == selected_section
+        assert _summary(env)["delo_id"] == selected_id
+
+    @pytest.mark.parametrize("selection", [[], ["--section", "appeal"], ["--section", "cassation"]])
+    def test_mixed_sections_rejected_before_any_data_change(self, env, selection):
+        html = (_fixture("search_presidium_dump_hmao.html")
+                + _fixture("search_appeal_dump_svd.html").replace("oblsud--svd.sudrf.ru", DOMAIN))
+        env["dump"].write_text(html, encoding="utf-8")
+        _seed(env, [])
+        assert _run(env, *selection) == isd.EXIT_WRONG_COURT
+        assert env["calls"] == [] and _cases(env) == []
+        assert not env["csv"].exists()
+
+    def test_empty_selected_presidium_stays_presidium(self, env):
+        env["dump"].write_text("<html>Данных по запросу не обнаружено</html>", encoding="utf-8")
+        _seed(env, [])
+        assert _run(env, "--section", "cassation") == isd.EXIT_OK
+        assert _summary(env)["section"] == "cassation"
+        assert _summary(env)["delo_id"] == "2800001"
+        assert env["calls"] == [] and _cases(env) == []
+
+    @pytest.mark.parametrize("selection", [
+        ["--delo-id", "5", "--section", "cassation"],
+        ["--delo-id", "999"], ["--section", "unknown"],
+    ])
+    def test_invalid_selected_section_does_not_auto_switch(self, env, selection):
+        _seed(env, [])
+        assert _run(env, *selection) == isd.EXIT_WRONG_COURT
+        assert env["calls"] == [] and _cases(env) == []
+
+
+@pytest.mark.parametrize("quote", ['"', "'", ""])
+@pytest.mark.parametrize("href", [
+    "modules.php?delo_id=2800001&case_id=12&name=sud_delo",
+    "modules.php?case_id=12&amp;delo_id=2800001",
+    "modules.php?delo_id=2800001&#38;case_id=12",
+])
+def test_card_section_detection_ignores_parameter_order_and_navigation(href, quote):
+    html = f'<a href="modules.php?delo_id=5">Апелляция</a><a href={quote}{href}{quote}>4Г-1/2026</a>'
+    assert isd.detect_card_delo_ids(html) == {"2800001"}
+
+
+def test_duplicate_delo_query_parameters_cannot_hide_a_mixed_section(env):
+    html = _fixture("search_presidium_dump_hmao.html").replace(
+        "delo_id=2800001", "delo_id=2800001&delo_id=5")
+    env["dump"].write_text(html, encoding="utf-8")
+    _seed(env, [])
+    assert _run(env, "--delo-id", "2800001") == isd.EXIT_WRONG_COURT
+    assert env["calls"] == [] and _cases(env) == []
+
+
+def test_selected_section_reaches_actual_result_payload(env):
+    if not shutil.which("jq"):
+        pytest.skip("jq не установлен")
+    _seed(env, [])
+    assert _run(env, "--delo-id", "2800001", "--section", "cassation") == isd.EXIT_OK
+    result = subprocess.run(
+        ["jq", "--arg", "dk", "import:dump:test", "--arg", "st", "done",
+         "--arg", "ru", "", "--arg", "src", "vps", "-f",
+         os.path.join(REPO_ROOT, "ops", "import_result_body.jq")],
+        input=json.dumps(_summary(env)), text=True, capture_output=True, check=True)
+    payload = json.loads(result.stdout)
+    assert payload["section"] == "cassation" and payload["delo_id"] == "2800001"
+    assert payload["added"] == 2 and payload["fetch_fail"] == 1
 
 
 class TestAnnounce:

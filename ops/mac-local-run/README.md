@@ -228,6 +228,13 @@ GitHub-dispatch. Основной обработчик — VPS: поллер н�
 | Дампы (`import:dump:`) | `GET /import-dump?key=` | `scripts/import_search_dump.py` |
 | Точечные пачки (`import:case:`) | `GET /add-case-job?key=` | `scripts/add_cases_targeted.py` |
 
+Дамп сохраняет выбранную инстанцию: `delo_id` (`5` — апелляция,
+`2800001` — президиум) и `section` проходят из журнала через очередь,
+CLI импортёра и итоговый отчёт. Это разные источники даже при одном домене.
+Ссылки карточек должны относиться только к выбранному разделу: другой или
+смешанный раздел отклоняется до чтения карточек и изменения картотеки.
+У старых заданий без этих полей раздел определяется по самому дампу.
+
 TTL обоих тел — 72 часа (`DUMP_TTL=259200`, соответствует `IMPORT_DUMP_TTL`
 Worker). `queued` берётся сразу, без грейса. Повторы сетевых отказов и
 частичного результата выбирает `import_queue.jq`; терминальная ошибка
@@ -249,6 +256,11 @@ bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural --dry-run --anywhere
 # Настоящий импорт локального дампа (например, после истечения TTL в KV).
 bash ops/mac-local-run/import_dumps.sh ~/dashboard-ural \
   --file ~/Downloads/выдача.html --court leninskiy--svd.sudrf.ru
+
+# Для президиума можно явно закрепить инстанцию, как в задании из админки.
+bash ops/mac-local-run/import_dumps.sh ~/dashboard \
+  --file ~/Downloads/президиум.html --court oblsud--hmao.sudrf.ru \
+  --delo-id 2800001 --section cassation
 ```
 
 Пример `worker.sverdlovsk_yanao` (значения секретов вне Git):
