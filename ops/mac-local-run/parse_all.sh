@@ -17,6 +17,9 @@
 # Настройки:
 #   CM_PARALLEL_STAGGER_SECONDS=600
 #   CM_PARALLEL_FIRST_REGION=sverdlovsk_yanao
+#   CM_PARALLEL_START_DELAYS="sverdlovsk_yanao=0 hmao=300 bashkortostan=600 tyumen=600"
+# Именные задержки — секунды от начала общего слота; остальные регионы
+# сохраняют i * CM_PARALLEL_STAGGER_SECONDS. Одинаковые значения объединяют старт.
 #
 # Список клонов: ~/.config/court-monitor/territories, по пути на строку.
 # --check намеренно последовательный и без десятиминутной задержки.
@@ -41,6 +44,28 @@ PYTHON="${CM_PYTHON:-/usr/bin/python3}"
 PARALLEL="${CM_PARALLEL_TERRITORIES:-1}"
 STAGGER_SECONDS="${CM_PARALLEL_STAGGER_SECONDS:-600}"
 FIRST_REGION="${CM_PARALLEL_FIRST_REGION:-sverdlovsk_yanao}"
+START_DELAYS="${CM_PARALLEL_START_DELAYS:-}"
+regional_delays=()
+# Не исполняем содержимое настройки; каждое значение — только имя и число.
+if [[ "$START_DELAYS" == *$'\n'* ]]; then
+  echo "parse_all: CM_PARALLEL_START_DELAYS должен быть одной строкой" >&2
+  exit 2
+fi
+read -r -a regional_delays <<< "$START_DELAYS"
+seen_delay_regions=" "
+for entry in "${regional_delays[@]:-}"; do
+  [ -n "$entry" ] || continue  # Bash 3.2: пустой массив при set -u.
+  if [[ ! "$entry" =~ ^[a-z][a-z0-9_]*=[0-9]+$ ]]; then
+    echo "parse_all: некорректная именная задержка '$entry'" >&2
+    exit 2
+  fi
+  delay_region="${entry%%=*}"
+  if [[ "$seen_delay_regions" == *" $delay_region "* ]]; then
+    echo "parse_all: повторная задержка региона '$delay_region'" >&2
+    exit 2
+  fi
+  seen_delay_regions+="$delay_region "
+done
 CHECK_ONLY=0
 ANYWHERE=0
 for arg in "$@"; do
@@ -177,7 +202,7 @@ stop_parallel_children() {
 }
 
 run_parallel_parsers() {
-  local i=0 repo region delay status order=""
+  local i=0 repo region delay entry status order=""
   parser_pids=()
   parser_pid_repos=()
   for repo in "${parser_repos[@]}"; do
@@ -192,6 +217,13 @@ run_parallel_parsers() {
   for repo in "${parser_repos[@]}"; do
     region=$(region_for_repo "$repo")
     delay=$((i * STAGGER_SECONDS))
+    for entry in "${regional_delays[@]:-}"; do
+      [ -n "$entry" ] || continue
+      if [ "${entry%%=*}" = "$region" ]; then
+        delay="${entry#*=}"
+        break
+      fi
+    done
     echo "  → $repo (парсер ${region:-?}, старт через ${delay}с)"
     (
       [ "$delay" -eq 0 ] || sleep "$delay"
