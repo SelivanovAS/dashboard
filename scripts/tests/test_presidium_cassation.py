@@ -385,7 +385,7 @@ class TestPresidiumWiring:
         assert re.search(r"\bsection\s*:\s*\(\s*\.section\s*//\s*\"\"\s*\)", jq)
         assert re.search(r"\bskipped_old\s*:\s*\(\s*\.skipped_old\s*//\s*0\s*\)", jq)
         i = worker.index("async function handleImportResult")
-        w = worker[i:i + 6000]
+        w = worker[i:worker.index("async function handleAdminImportLog", i)]
         assert '"skipped_old"' in w
         assert 'record.section = body.section' in w
         assert "item.skipped_old" in admin and "item.section" in admin

@@ -3381,7 +3381,8 @@ var impDetectedHosts = [];
 var impDetectedDeloIds = []; // разделы из href карточек вставки (04.09.2026)     // sudrf-хосты текущей вставки/файла (автоопределение суда)
 var impDetectSeq = 0;          // защита от гонки async-чтения файла
 var impCourtTouched = false;   // оператор выбирал суд сам (select/светофор) — не переключать молча
-var impLastFreshMap = {};      // кэш карты import:last:* (перерисовка светофора без KV)
+var impLastFreshMap = {};      // прежние отметки по домену: только однозначные разделы
+var impLastSectionFreshMap = {}; // отметки domain:delo_id, отдельно для каждой инстанции
 var impLastLogItems = [];      // кэш последних записей журнала (то же — для «моих судов»)
 // Исполнитель и слоты приходят из журнала. Отправка и обработка независимы:
 // одна цепочка обновляет очередь дампов и точечных пачек для обеих ролей.
@@ -3412,6 +3413,40 @@ var impDetectedCaseLinks = 0;  // ссылок на карточки дел во
 // (кассация по делам мировых судей): ключ президиума несёт хвост «|cassation»,
 // иначе два <option> получили бы одно значение и select не различал бы их.
 function impCourtKey(c) { return c.domain + "|" + String(c.srv_num || 1) + (c.section === "cassation" ? "|cassation" : ""); }
+
+// Свежесть относится к разделу сайта, а не ко всему домену. Старую отметку
+// без раздела можно использовать только у суда с единственной инстанцией.
+function impRecordDeloId(item) {
+  if (!item) return "";
+  var explicit = String(item.delo_id || "");
+  if (/^[0-9]+$/.test(explicit)) return explicit;
+  if (item.section === "appeal") return "5";
+  if (item.section === "cassation") return "2800001";
+  var domain = canonSudrfHost(item.court_domain || item.domain || "");
+  var region = acRegion || {};
+  var sources = (region.fi_courts || []).concat(region.appeal_courts || [])
+    .concat(region.presidium_courts || []).concat(region.cassation ? [region.cassation] : [])
+    .concat(impCourts);
+  var ids = {};
+  sources.forEach(function (c) {
+    if (canonSudrfHost(c.domain) !== domain) return;
+    if (item.section === "first_instance" && (String(c.delo_id) === "5" || String(c.delo_id) === "2800001")) return;
+    if (c.delo_id) ids[String(c.delo_id)] = true;
+  });
+  var keys = Object.keys(ids);
+  return keys.length === 1 ? keys[0] : "";
+}
+function impSectionKey(item) {
+  var domain = canonSudrfHost(item && (item.court_domain || item.domain) || "");
+  var deloId = impRecordDeloId(item);
+  return domain && deloId ? domain + ":" + deloId : "";
+}
+function impCourtSection(court) {
+  if (!court) return "";
+  return court.section || (String(court.delo_id) === "5" ? "appeal"
+    : String(court.delo_id) === "2800001" ? "cassation" : "first_instance");
+}
+
 // Оператор по подписи выбирает, какой раздел сайта открывать: у апелляции своя
 // картотека (delo_id=5), у президиума — раздел кассации (2800001), и
 // «Свердловский областной суд» без пометки читался бы как суд 1-й инстанции.
@@ -3484,7 +3519,7 @@ async function loadImportCourts() {
     // Президиум облсуда (кассация по делам мировых судей, 04.09.2026) — тот
     // же домен, что у апелляции, другой раздел (delo_id=2800001). Закреплён,
     // как апелляция; раздел на сервере выбирает сам дамп (delo_id в ссылках
-    // карточек), оператор по-прежнему шлёт голый домен.
+    // карточек), выбранный раздел также передаётся серверу для сверки.
     const pres = (acRegion && Array.isArray(acRegion.presidium_courts)) ? acRegion.presidium_courts : [];
     const gatedPresidium = pres.filter(function (c) {
       return c && c.search_gated && c.domain;
@@ -3657,8 +3692,7 @@ function impQueueStale(item) {
 // апелляция, и президиум, и подпись по домену была бы ложной. Старые записи
 // журнала без section — по домену, как раньше.
 function impIsAppeal(item) {
-  if (item && item.section) return item.section === "appeal";
-  return !!(item && item.court_domain && impAppealDomains[item.court_domain]);
+  return !!(item && impRecordDeloId(item) === "5" && impAppealDomains[item.court_domain]);
 }
 function impIsPresidium(item) {
   return !!(item && item.section === "cassation");
@@ -3891,7 +3925,7 @@ function renderImportHistory(items) {
       : it.kind === "writ_waiver"
       ? ("🚫 лист не нужен · " + nPlural(it.items_count || 0, "дело", "дела", "дел"))
       : ((impCourtNameByDomain[it.court_domain] || it.court_domain || "?")
-         + (impIsPresidium(it) ? " (президиум)" : ""));
+         + (impIsPresidium(it) ? " (президиум)" : impIsAppeal(it) ? " (апелляция)" : ""));
     // Построчный отчёт импортёра ([ADDED]/[ALREADY]/[SKIPPED ROLE]/…) хранится
     // в записи журнала — показываем свёрткой, как в live-блоке после отправки.
     var linesHtml = "";
@@ -3910,6 +3944,18 @@ function renderImportHistory(items) {
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
       + '</div>' + linesHtml + '</div>';
   }).join("");
+}
+function impCacheFreshRecords(items) {
+  (items || []).forEach(function (record) {
+    if (record.status !== "done" || record.kind === "case" || record.kind === "writ_waiver") return;
+    if ((record.fetch_fail || 0) + (record.card_failed || 0) > 0) return;
+    var key = impSectionKey(record), ts = record.updated_at || record.ts;
+    if (!key || isNaN(parseIso(ts))) return;
+    var previous = impLastSectionFreshMap[key];
+    if (!previous || parseIso(previous.updated_at || previous.ts) < parseIso(ts)) {
+      impLastSectionFreshMap[key] = Object.assign({}, record, { ts: ts });
+    }
+  });
 }
 function loadImportLog(logOnly) {
   if (impLogRequest) return impLogRequest;
@@ -3935,9 +3981,13 @@ async function impFetchImportLog(logOnly) {
     impQueueError = false;
     renderImportHistory(items);
     impMergeQueue(items, d.queue, d.tracked);
-    if (!logOnly) impLastFreshMap = d.last || {};
+    if (!logOnly) {
+      impLastFreshMap = d.last || {};
+      impLastSectionFreshMap = d.last_sections || {};
+    }
+    impCacheFreshRecords(items.concat(d.tracked || []));
     // Уже полученные результаты обновляют светофор без второго KV-list.
-    renderImportFreshness(items.concat(d.tracked || []), impLastFreshMap);
+    renderImportFreshness(items.concat(d.tracked || []), impLastFreshMap, impLastSectionFreshMap);
     return items;
   } catch (e) {
     impQueueError = true;
@@ -3952,9 +4002,9 @@ async function impFetchImportLog(logOnly) {
   }
 }
 // Светофор свежести: когда каждый капчёвый суд импортировался в последний
-// раз. Основной источник — карта last (вечные ключи import:last:<домен> на
-// Worker'е); журнал (последние 50) подмешивается как фолбэк для импортов,
-// прошедших до появления карты. Регламент — раз в неделю.
+// раз. Основной источник — last_sections (домен + раздел); журнал и прежняя
+// карта last дополняют её, только если раздел можно определить однозначно.
+// Апелляция и президиум не подтверждают свежесть друг друга. Регламент — раз в неделю.
 var IMP_FRESH_WARN_DAYS = 7;
 var IMP_FRESH_STALE_DAYS = 14;
 // ── «Мои суды» ───────────────────────────────────────────────────────────────
@@ -3990,22 +4040,23 @@ function saveMyCourts() {
 // внутри отчёта одного импорта.
 var impCardTrouble = {};
 function collectCardTrouble(items) {
-  var byDom = {};
+  var bySection = {};
   (items || []).forEach(function (it) {
     if (it.status !== "done" || !it.court_domain) return;
     if (it.kind === "case" || it.kind === "writ_waiver") return;
+    var key = impSectionKey(it);
     var t = parseIso(it.updated_at || it.ts);
-    if (isNaN(t)) return;
-    if (byDom[it.court_domain] && byDom[it.court_domain].ts >= t) return;
-    byDom[it.court_domain] = {
+    if (!key || isNaN(t)) return;
+    if (bySection[key] && bySection[key].ts >= t) return;
+    bySection[key] = {
       ts: t,
       unread: (it.fetch_fail || 0) + (it.card_failed || 0),
       reason: it.card_fail_reason || "",
     };
   });
   impCardTrouble = {};
-  Object.keys(byDom).forEach(function (d) {
-    if (byDom[d].unread > 0) impCardTrouble[d] = byDom[d];
+  Object.keys(bySection).forEach(function (key) {
+    if (bySection[key].unread > 0) impCardTrouble[key] = bySection[key];
   });
 }
 // ── Плитки пульта оператора (09.09.2026) ─────────────────────────────────────
@@ -4099,58 +4150,44 @@ function renderQueueTile(items) {
     + nPlural(pending.length, "ждёт", "ждут", "ждут"),
     escHtml(sub + tail));
 }
-function renderImportFreshness(items, lastMap) {
+function renderImportFreshness(items, lastMap, lastSections) {
   var el = document.getElementById("imp-freshness");
   if (!el || !impCourts.length) return;
   collectCardTrouble(items);
-  var byDomain = {};
-  Object.keys(lastMap || {}).forEach(function (d) {
-    var e = lastMap[d];
-    var t = parseIso(e && e.ts);
-    // added — оба трека: страница, с которой ушли только истцовые дела,
-    // показывала «+0 из 24» и читалась как неудачный импорт. added_bank
-    // появился в вечном ключе 14.08.2026, у прежних записей его нет.
-    if (!isNaN(t)) byDomain[d] = {
+  var bySection = {}, unknownSections = {};
+  function remember(e, domain, fromLog) {
+    if (!e) return;
+    if (fromLog && e.status !== "done") return;
+    if (e.kind === "case" || e.kind === "writ_waiver") return;
+    if ((e.fetch_fail || 0) + (e.card_failed || 0) > 0) return;
+    var record = Object.assign({ court_domain: domain }, e);
+    var key = impSectionKey(record);
+    var t = parseIso(e.updated_at || e.ts);
+    if (!key && !isNaN(t)) unknownSections[record.court_domain] = true;
+    if (!key || isNaN(t) || (bySection[key] && bySection[key].ts >= t)) return;
+    bySection[key] = {
       ts: t, operator: e.operator || "",
       added: (e.added || 0) + (e.added_bank || 0), rows: e.rows || 0,
     };
-  });
-  (items || []).forEach(function (it) {
-    // kind:"case"/"writ_waiver" — пультовые операции: свежесть ДАМПОВОГО
-    // регламента они не подтверждают (зеркало серверного гейта import:last
-    // в worker.js).
-    if (it.status !== "done" || !it.court_domain) return;
-    if (it.kind === "case" || it.kind === "writ_waiver") return;
-    // ⚠️ Второе условие серверного гейта — карточки. Без него защита,
-    // написанная после инцидента 16.08.2026 (дамп Верх-Исетского завёл НОЛЬ:
-    // 12 исков банка отвалились по блок-странице ГАС), обходилась прямо
-    // здесь: import:last Worker такому импорту не пишет, зато запись журнала
-    // со status:"done" — новее, перекрывала карту, и суд красился зелёным
-    // «импортирован сегодня». Работа сделана, только когда карточки читались.
-    if ((it.fetch_fail || 0) + (it.card_failed || 0) > 0) return;
-    var t = parseIso(it.updated_at || it.ts);
-    if (isNaN(t)) return;
-    if (!byDomain[it.court_domain] || byDomain[it.court_domain].ts < t) {
-      byDomain[it.court_domain] = { ts: t, operator: it.operator || "", added: it.added || 0, rows: it.rows || 0 };
-    }
-  });
-  // Свежесть — по ДОМЕНУ: вечный ключ import:last:* серверный и площадок не
-  // различает, поэтому у суда и его присутствия дата общая. Для регламента
-  // это честно (оператор берёт обе выдачи за один заход на сайт суда), а
-  // строки в списке всё равно свои — иначе присутствие невидимо.
+  }
+  Object.keys(lastMap || {}).forEach(function (domain) { remember(lastMap[domain], domain, false); });
+  Object.keys(lastSections || {}).forEach(function (key) { remember(lastSections[key], "", false); });
+  (items || []).forEach(function (it) { remember(it, it.court_domain, true); });
+  // Площадки одного раздела сохраняют общий регламент; разные инстанции
+  // на одном сайте всегда имеют отдельные даты и ошибки чтения карточек.
   var mine = myCourts();
   var hasMine = myCourtsCount() > 0;
   var rows = impCourts.map(function (c) {
-    var e = byDomain[c.domain];
+    var e = bySection[impSectionKey(c)];
     var days = e ? (Date.now() - e.ts) / 86400000 : Infinity;
     var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
     var key = impCourtKey(c);
-    return { court: c, key: key, e: e, days: days, level: level,
+    return { court: c, key: key, e: e, days: days, level: level, uncertain: !!unknownSections[c.domain],
              // Закреплённый суд (апелляция) считается «моим» у КАЖДОГО
              // оператора: он один на территорию, и в чужой подсети остался бы
              // без дампа вовсе.
              mine: !!c.pinned || !hasMine || !!mine[key],
-             trouble: impCardTrouble[c.domain] || null };
+             trouble: impCardTrouble[impSectionKey(c)] || null };
   });
   // Просроченные и «ни разу» сверху, внутри уровня — самые давние первыми.
   function byQueue(a, b) {
@@ -4248,7 +4285,7 @@ function freshRow(x) {
     : "";
   var note = x.e
     ? relTime(new Date(x.e.ts).toISOString()) + (x.e.operator ? " · " + escHtml(x.e.operator) : "") + added
-    : "ни разу не импортировался";
+    : x.uncertain ? "старый импорт — раздел не указан" : "ни разу не импортировался";
   // Почему суд красный, хотя импорт был: карточки не открылись, и регламент
   // такой импорт не засчитывает (гейт cardsUnread). Без пометки красный цвет
   // читался как ошибка светофора.
@@ -4416,7 +4453,7 @@ function impQueueName(item) {
   if (item.court_label) return item.court_label;
   if (item.kind === "case") return "Пачка дел · " + (item.items_count || "?") + " стр.";
   return (impCourtNameByDomain[item.court_domain] || item.court_domain || "Импорт суда")
-    + (impIsPresidium(item) ? " (президиум)" : "");
+    + (impIsPresidium(item) ? " (президиум)" : impIsAppeal(item) ? " (апелляция)" : "");
 }
 function renderImportQueue() {
   var el = document.getElementById("imp-queue-list");
@@ -4533,11 +4570,18 @@ function impCourtInDropdown(domain) {
 // облсуда два раздела — апелляция (5) и президиум (2800001), и хост один
 // на оба. Только ссылки с case_id — это карточки, а не меню разделов.
 function impDetectDeloIds(html) {
-  var ids = [];
-  var re = /case_id=\\d+[^"'\\s<>]*?&(?:amp;)?delo_id=(\\d+)/gi;
-  var m;
-  while ((m = re.exec(html)) !== null) { if (ids.indexOf(m[1]) === -1) ids.push(m[1]); }
-  return ids;
+  const ids = new Set();
+  const hrefRe = /\\bhref\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/gi;
+  let match;
+  while ((match = hrefRe.exec(html)) !== null) {
+    const href = (match[1] || match[2] || match[3] || "").replace(/&amp;|&#0*38;|&#x0*26;/gi, "&");
+    try {
+      const params = new URL(href, "https://dump.invalid/").searchParams;
+      if (!/^\\d+$/.test(params.get("case_id") || "")) continue;
+      for (const id of params.getAll("delo_id")) if (/^\\d+$/.test(id)) ids.add(id);
+    } catch (_) {}
+  }
+  return Array.from(ids).sort();
 }
 async function impRunDetect() {
   var seq = ++impDetectSeq;
@@ -4642,9 +4686,8 @@ async function impSend() {
   const courtKey = document.getElementById("imp-court").value;
   const court = impCourts.find(function (c) { return impCourtKey(c) === courtKey; });
   try {
-    // На сервер уходит голый ДОМЕН: площадку дела импортёр берёт из href
-    // карточек дампа (_stamp_court_ids), а Worker и его белый список судов
-    // работают по домену. Ключ селекта — «домен|srv» (см. impCourtKey).
+    // Отправляем домен и выбранный раздел; сервер сверяет их со ссылками
+    // дампа. Площадку конкретного дела импортёр берёт из href карточки.
     const domain = impDomainOf(document.getElementById("imp-court").value);
     const name = document.getElementById("imp-name").value.trim();
     try { localStorage.setItem("admin_operator_name", name); } catch (e) {}
@@ -4684,17 +4727,25 @@ async function impSend() {
         + "». Выберите суд по ссылкам или вставьте выдачу выбранного суда.");
       return;
     }
+    const dumpDeloIds = impDetectDeloIds(html);
+    if (!court || (dumpDeloIds.length && (dumpDeloIds.length !== 1
+        || dumpDeloIds[0] !== String(court.delo_id)))) {
+      impSetStatus('<span class="badge badge-fail">страница другого раздела</span> '
+        + "Выбран «" + escHtml(court ? impCourtLabel(court) : domain)
+        + "». Выберите раздел, которому соответствует дамп. Апелляция и президиум загружаются отдельно.");
+      return;
+    }
     document.getElementById("imp-report").innerHTML = "";
     impSetStatus("отправляю страницу…");
     const r = await fetch("/admin/import-dump?secret=" + encodeURIComponent(SECRET), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ court_domain: domain, operator: name, html: html }),
+      body: JSON.stringify({ court_domain: domain, delo_id: court.delo_id, section: impCourtSection(court), operator: name, html: html }),
     });
     const d = await r.json().catch(function () { return {}; });
     if (r.ok && d.ok && d.key) {
       impRememberAccepted(d, { court_domain: domain, court_label: court ? impCourtLabel(court) : domain,
-        operator: name, kind: "dump" });
+        delo_id: court.delo_id, section: impCourtSection(court), operator: name, kind: "dump" });
       if (document.getElementById("imp-paste").innerHTML === submittedPaste) document.getElementById("imp-paste").innerHTML = "";
       if (impSelectedFile === submittedFile) impSetFile(null);
       impRunDetect();
@@ -4760,7 +4811,7 @@ document.getElementById("imp-court").addEventListener("change", function () {
     if (!impMyEdit) impFreshAutoPicked = false;
     // Перерисовываем из кэша журнала: свежих данных правка набора не требует,
     // а лишний /admin/import-log — это KV-list (лимит общий на аккаунт).
-    renderImportFreshness(impLastLogItems, impLastFreshMap);
+    renderImportFreshness(impLastLogItems, impLastFreshMap, impLastSectionFreshMap);
   });
   var paste = document.getElementById("imp-paste");
   paste.addEventListener("input", impRunDetect);

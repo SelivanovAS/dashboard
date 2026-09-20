@@ -39,6 +39,7 @@
 #   bash ops/mac-local-run/import_dumps.sh [клон] --dry-run   # ничего не пишем
 #   bash ops/mac-local-run/import_dumps.sh [клон] --check     # только диагностика
 #   bash ops/mac-local-run/import_dumps.sh [клон] --file дамп.html --court домен
+#        [--delo-id 2800001 --section cassation]
 #
 # Последняя форма — для дампа, которого в KV уже нет (TTL 24 ч) или который
 # прислали файлом: Worker не участвует вовсе.
@@ -58,6 +59,8 @@ DRY_RUN=0
 ANYWHERE=0
 FILE_ARG=""
 COURT_ARG=""
+DELO_ID_ARG=""
+SECTION_ARG=""
 REPO_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -70,6 +73,8 @@ while [ $# -gt 0 ]; do
     --anywhere) ANYWHERE=1 ;;
     --file)    shift; FILE_ARG="${1:-}" ;;
     --court)   shift; COURT_ARG="${1:-}" ;;
+    --delo-id) shift; DELO_ID_ARG="${1:-}" ;;
+    --section) shift; SECTION_ARG="${1:-}" ;;
     -*)        echo "неизвестный ключ: $1" >&2; exit 2 ;;
     # ПЕРВЫЙ позиционный побеждает: parse_all.sh передаёт путь клона первым
     # аргументом и добавляет свои «$@» следом (см. тот же приём в
@@ -176,7 +181,7 @@ REGION_CODE=$(cm_region_code "$PYTHON")
 GATED=$("$PYTHON" -c 'import sys; sys.path.insert(0, "scripts");
 from court_monitor.regions import get_region
 r = get_region()
-print(sum(1 for c in list(r.first_instance_courts) + list(r.appeal_courts)
+print(sum(1 for c in list(r.first_instance_courts) + list(r.appeal_courts) + list(r.presidium_courts)
          if c.search_gated))' 2>/dev/null)
 if [ "${GATED:-0}" = "0" ]; then
   log "Территория $REGION_CODE: капчёвых судов нет — дампов не ждём, только пачки"
@@ -493,16 +498,19 @@ mark_no_retry() {  # $1 = summary.json
 }
 
 # ── Один импорт: дамп-файл → cases.json → отчёт ──────────────────────────────
-run_import() {  # $1 = файл дампа, $2 = домен суда, $3 = оператор, $4 = ключ|""
+run_import() {  # $1 = файл, $2 = домен, $3 = оператор, $4 = ключ, $5/$6 = раздел
   local dump="$1" domain="$2" operator="$3" key="$4"
+  local delo_id="${5:-}" section="${6:-}"
   local summary="$TMP_DIR/summary.json" rc=0 added added_bank court status
-  local dry=""
   rm -f "$summary"
-  # Флаг строкой, а не массивом: /bin/bash на macOS — 3.2, и раскрытие пустого
-  # массива "${a[@]}" под `set -u` там падает «unbound variable».
-  [ "$DRY_RUN" = "1" ] && dry="--dry-run"
-  IMPORT_SUMMARY_PATH="$summary" "$PYTHON" scripts/import_search_dump.py "$dump" \
-    --court-domain "$domain" --operator "$operator" $dry >>"$LOG" 2>&1 || rc=$?
+  # Позиционные аргументы совместимы с bash 3.2 и сохраняют кавычки; старые
+  # задания не передают новые флаги, раздел для них распознаётся из дампа.
+  set -- "$dump" --court-domain "$domain" --operator "$operator"
+  [ -z "$delo_id" ] || set -- "$@" --delo-id "$delo_id"
+  [ -z "$section" ] || set -- "$@" --section "$section"
+  [ "$DRY_RUN" != "1" ] || set -- "$@" --dry-run
+  IMPORT_SUMMARY_PATH="$summary" "$PYTHON" scripts/import_search_dump.py "$@" \
+    >>"$LOG" 2>&1 || rc=$?
   if [ ! -s "$summary" ]; then
     log "  ERROR: импортёр упал до разбора дампа (код $rc)"
     [ -n "$key" ] && post_error "$key" \
@@ -593,7 +601,7 @@ if [ -n "$FILE_ARG" ]; then
   [ -n "$COURT_ARG" ] || die "с --file обязателен --court <домен суда>"
   courts_gate manual
   log "Локальный дамп: $FILE_ARG · суд $COURT_ARG"
-  if run_import "$FILE_ARG" "$COURT_ARG" "${USER:-оператор} ($SRC_LABEL)" ""; then
+  if run_import "$FILE_ARG" "$COURT_ARG" "${USER:-оператор} ($SRC_LABEL)" "" "$DELO_ID_ARG" "$SECTION_ARG"; then
     notify "Дамп импортирован ($COURT_ARG)"
     log "Готово"
     exit 0
@@ -639,7 +647,7 @@ rc=0
 done_n=0
 # Читаем очередь с ОТДЕЛЬНОГО дескриптора: git/ssh внутри цикла иначе могли бы
 # съесть остаток файла со stdin, и часть дампов молча не обработалась бы.
-while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
+while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6 f7 <&3; do
   # ⚠️ Разбор ТЕРПИМ к старому формату очереди намеренно. LaunchAgent гоняет
   # ЭТОТ скрипт (из клона-эталона) по ВСЕМ территориям, а import_queue.jq
   # берётся из клона территории — между деплоем эталона и merge в форк они
@@ -648,14 +656,18 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
   # канал дампов территории сломался бы молча на весь период раскатки.
   if [ "$f1" = "dump" ] || [ "$f1" = "case" ]; then
     kind="$f1"; uuid="$f2"; domain="$f3"; operator="$f4"; prev="$f5"
+    delo_id="$f6"; section="$f7"
   else
     kind="dump"; uuid="$f1"; domain="$f2"; operator="$f3"; prev="$f4"
+    delo_id=""; section=""
   fi
   # Прочерк — способ передать пустое значение через TSV (см. dash в
   # import_queue.jq): без него пустой домен пачки или оператор без имени
   # схлопнули бы табы и сдвинули оставшиеся поля.
   [ "$domain" = "-" ] && domain=""
   [ "$operator" = "-" ] && operator=""
+  [ "$delo_id" = "-" ] && delo_id=""
+  [ "$section" = "-" ] && section=""
   [ -n "$uuid" ] || continue
   # ⚠️ Фигурные скобки обязательны: `«$prev»` bash 3.2 в локали Терминала
   # разбирает как имя «prev»» (первый байт ёлочки — 0xC2 — приклеивается к
@@ -710,7 +722,7 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 <&3; do
     continue
   fi
   log "  дамп: $size байт"
-  if run_import "$dump" "$domain" "$operator" "$key"; then
+  if run_import "$dump" "$domain" "$operator" "$key" "$delo_id" "$section"; then
     done_n=$((done_n + 1))
   else
     rc=1

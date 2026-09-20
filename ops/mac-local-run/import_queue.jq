@@ -13,7 +13,8 @@
 #
 # Вход  — GET /admin/import-log?include_queue=1: полная .queue[].
 # .items — совместимость на время обновления Worker старой версии.
-# Выход — TSV «kind, uuid, домен, оператор, прежний статус», по строке на запись.
+# Выход — TSV «kind, uuid, домен, оператор, прежний статус, delo_id, section».
+# Последние два поля отсутствуют у прежних заданий: импортёр определит их по HTML.
 # Аргументы: --argjson now <epoch> --argjson ttl <сек>
 #            --argjson grace <сек: живой облачный ДАМП>
 #            --argjson cgrace <сек: живая облачная ПАЧКА>
@@ -95,5 +96,6 @@ def dash: if ((. // "") | tostring) == "" then "-" else . end;
       and (($r.status != "started") or ($seen < ($now - $grace)))
     end
   )
-| [$kind, $r.uuid, ($r.court_domain | dash), ($r.operator | dash), ($r.status // "?")]
+| [$kind, $r.uuid, ($r.court_domain | dash), ($r.operator | dash), ($r.status // "?"),
+   ($r.delo_id | dash), ($r.section | dash)]
 | @tsv

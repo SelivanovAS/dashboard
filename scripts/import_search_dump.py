@@ -96,6 +96,8 @@ import re
 import sys
 from collections import Counter
 from datetime import date, datetime
+from html import unescape
+from urllib.parse import parse_qs, urlsplit
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -203,13 +205,13 @@ _SAVED_FROM_RE = re.compile(
     r"saved from url=\(\d+\)https?://([a-z0-9][a-z0-9.\-]*\.sudrf\.ru)(?=[/\s])",
     re.IGNORECASE,
 )
-# delo_id из href КАРТОЧЕК (после case_id): вкладки разделов «Судебного
+# delo_id из href КАРТОЧЕК: вкладки разделов «Судебного
 # делопроизводства» ссылок с case_id не имеют и в проверку не попадают —
 # иначе их delo_id всех разделов глушили бы сверку. У судов 1-й инст. региона
 # delo_id общий (1540005), суды он не различает, зато ловит вставку выдачи
 # другого раздела (апелляция=5, кассация=2800001) даже при относительных href.
-_CARD_DELO_ID_RE = re.compile(
-    r"case_id=\d+[^\"'\s<>]*?&(?:amp;)?delo_id=(\d+)",
+_HREF_RE = re.compile(
+    r'''\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))''',
     re.IGNORECASE,
 )
 
@@ -229,18 +231,26 @@ def detect_dump_hosts(html: str) -> set[str]:
 
 
 def detect_card_delo_ids(html: str) -> set[str]:
-    """delo_id из href карточек дампа (только ссылки с case_id)."""
-    return set(_CARD_DELO_ID_RE.findall(html))
+    """Разделы карточек, независимо от порядка параметров и HTML entities."""
+    ids = set()
+    for double, single, unquoted in _HREF_RE.findall(html):
+        href = double or single or unquoted
+        try:
+            params = parse_qs(urlsplit(unescape(href)).query)
+        except ValueError:
+            continue
+        if any(value.isdigit() for value in params.get("case_id", [])):
+            ids.update(value for value in params.get("delo_id", []) if value.isdigit())
+    return ids
 
 
 def resolve_court(court_domain: str, delo_id: str | int | None = None) -> CourtConfig | None:
     """CourtConfig активного региона по домену (первый сервер при
     двухсерверном домене — фактический srv_num возьмётся из href дампа).
 
-    delo_id — раздел из ссылок карточек дампа (detect_card_delo_ids): на
+    delo_id — выбранный раздел или раздел из ссылок карточек старого дампа:
     одном домене облсуда живут АПЕЛЛЯЦИЯ (delo_id=5) и ПРЕЗИДИУМ
-    (2800001, кассация по делам мировых судей, 04.09.2026) — раздел выбирает
-    сам дамп, оператор шлёт голый домен, как раньше. Без delo_id — первый
+    (2800001, кассация по делам мировых судей, 04.09.2026). Без delo_id — первый
     суд домена (прежнее поведение).
 
     Ищем в реестре 1-й инстанции, затем среди апел-судов: с 25.08.2026
@@ -1167,9 +1177,9 @@ def import_appeal_rows(
 # С мая 2026 (ГПК) кассационные жалобы на акты мировых судей рассматривают
 # президиумы областных судов, а не КСОЮ. Раздел `delo_id=2800001` живёт на
 # ДОМЕНЕ апел-суда, поиск там за проверочным кодом → новые дела заводит
-# только дамп. Раздел выбирает сам дамп (delo_id в ссылках карточек —
-# resolve_court), проводка админка → Worker → KV → import_cases.yml →
-# очередь VPS общая и работает по домену.
+# только дамп. Выбранный раздел сохраняется вместе с доменом по всему пути
+# админка → Worker → KV → workflow/очередь VPS → импортёр. Для старых заданий
+# без раздела сохраняется выбор по delo_id карточек (resolve_court).
 #
 # Карточка ОБЯЗАТЕЛЬНА (как у апелляции): УИД, участники, статус жалобы и
 # номер мирового судьи живут только в ней; строка выдачи без карточки —
@@ -1505,6 +1515,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("dump", help="HTML-дамп страницы результатов поиска")
     ap.add_argument("--court-domain", required=True,
                     help="домен суда, напр. akademicheskiy--svd.sudrf.ru")
+    ap.add_argument("--delo-id", default="",
+                    help="выбранный раздел судопроизводства; пусто у старых заданий")
+    ap.add_argument("--section", default="",
+                    help="выбранная инстанция: first_instance, appeal или cassation")
     ap.add_argument("--operator", default="",
                     help="имя оператора (для служебного блока import)")
     ap.add_argument("--dry-run", action="store_true",
@@ -1529,7 +1543,8 @@ def main(argv: list[str] | None = None) -> int:
         "linked": 0,
         # Ветка президиума (04.09.2026): раздел, распознанный по дампу, и
         # дела до реформы ГПК (президиум-2019 в той же выдаче).
-        "section": "",
+        "section": args.section.strip(),
+        "delo_id": args.delo_id.strip(),
         "skipped_old": 0,
         "lines": [],
     }
@@ -1549,6 +1564,21 @@ def main(argv: list[str] | None = None) -> int:
         write_github_output(summary)
         return EXIT_UNKNOWN_COURT
     summary["court"] = court.name
+    selected_id = args.delo_id.strip()
+    selected_section = args.section.strip()
+    if selected_section and not selected_id:
+        selected_id = {"first_instance": "1540005", "appeal": "5",
+                       "cassation": "2800001"}.get(selected_section, "")
+    if selected_id or selected_section:
+        selected_court = resolve_court(args.court_domain, delo_id=selected_id)
+        if (not selected_id or str(selected_court.delo_id) != selected_id
+                or (selected_section and selected_court.court_type != selected_section)):
+            summary["error"] = "Выбранный раздел суда не найден в реестре — проверьте суд и инстанцию."
+            log.error(summary["error"])
+            write_github_output(summary)
+            return EXIT_WRONG_COURT
+        court = selected_court
+        summary.update(court=court.name, section=court.court_type, delo_id=str(court.delo_id))
 
     html = normalize_dump(read_dump(args.dump))
 
@@ -1580,20 +1610,19 @@ def main(argv: list[str] | None = None) -> int:
         write_github_output(summary)
         return EXIT_WRONG_COURT
 
-    # Раздел выбирает сам дамп: на домене облсуда живут АПЕЛЛЯЦИЯ (delo_id=5)
-    # и ПРЕЗИДИУМ (2800001, кассация по делам мировых судей) — оператор шлёт
-    # голый домен, а нужный CourtConfig даёт delo_id из ссылок карточек.
+    # Новые задания сохраняют выбранный раздел. Только старые задания без
+    # метаданных выбирают его по ссылкам карточек (обратная совместимость).
     card_delo_ids = detect_card_delo_ids(html)
-    if len(card_delo_ids) == 1:
+    if not selected_id and len(card_delo_ids) == 1:
         court = resolve_court(args.court_domain, delo_id=next(iter(card_delo_ids))) or court
         summary["court"] = court.name
     summary["section"] = court.court_type
+    summary["delo_id"] = str(court.delo_id)
 
     # Выдача не того раздела (например, апелляция или уголовные дела):
     # ловится по delo_id карточек даже когда href относительные и хостов нет.
-    # После резолва выше срабатывает, только если ни один суд домена такого
-    # раздела не ведёт.
-    if card_delo_ids and str(court.delo_id) not in card_delo_ids:
+    # Смешивать разделы в одном дампе нельзя, даже когда оба есть в реестре.
+    if card_delo_ids and card_delo_ids != {str(court.delo_id)}:
         found = ", ".join(sorted(card_delo_ids))
         _section_ru = {
             "appeal": "раздел апелляционных гражданских дел",

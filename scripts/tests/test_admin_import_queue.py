@@ -149,8 +149,8 @@ function makePage(role, storage = new Map()) {
   el("imp-name").value = "Оператор";
   el("imp-court").value = "first--test.sudrf.ru|1";
   ctx.impCourts = [
-    { domain: "first--test.sudrf.ru", name: "Первый районный суд", srv_num: 1, search_gated: true },
-    { domain: "second--test.sudrf.ru", name: "Второй районный суд", srv_num: 2, search_gated: true },
+    { domain: "first--test.sudrf.ru", name: "Первый районный суд", srv_num: 1, delo_id: 1540005, search_gated: true },
+    { domain: "second--test.sudrf.ru", name: "Второй районный суд", srv_num: 2, delo_id: 1540005, search_gated: true },
   ];
   ctx.impCourtNameByDomain = Object.fromEntries(ctx.impCourts.map(c => [c.domain, c.name]));
   ctx.impCourtTouched = true;

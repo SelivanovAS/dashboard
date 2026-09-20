@@ -317,7 +317,8 @@ class TestCountersReachOperator:
                   encoding="utf-8") as f:
             text = f.read()
         start = text.index("function handleImportResult")
-        assert '"linked"' in text[start:start + 4000]
+        end = text.index("async function handleAdminImportLog", start)
+        assert '"linked"' in text[start:end]
 
     def test_linked_rendered_in_admin_summary(self):
         with open(os.path.join(REPO_ROOT, "cloudflare-worker", "admin_page.js"),

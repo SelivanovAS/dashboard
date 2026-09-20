@@ -506,7 +506,7 @@ class TestQueueSelection:
              "-f", QUEUE_JQ, str(path)],
             cwd=REPO_DIR, capture_output=True, text=True, check=True)
         assert out.stdout.strip().split("\t") == [
-            "dump", "lost", "lost.sudrf.ru", "Оператор", "done"]
+            "dump", "lost", "lost.sudrf.ru", "Оператор", "done", "-", "-"]
 
     def test_empty_fields_travel_as_a_dash(self, tmp_path):
         """⚠️ Пустое поле в TSV читать нечем: `IFS=$'\t' read` схлопывает подряд
@@ -527,12 +527,64 @@ class TestQueueSelection:
              "-f", QUEUE_JQ, str(path)],
             cwd=REPO_DIR, capture_output=True, text=True, check=True)
         fields = out.stdout.strip().split("\t")
-        assert fields == ["case", "case-x", "-", "-", "done"], (
+        assert fields == ["case", "case-x", "-", "-", "done", "-", "-"], (
             "пустые поля обязаны ехать прочерком, иначе шелл сдвинет колонки")
         # Обратное преобразование обязано быть в скрипте.
         text = _read_repo(IMPORTER)
         assert '[ "$domain" = "-" ] && domain=""' in text
         assert '[ "$operator" = "-" ] && operator=""' in text
+
+    @pytest.mark.parametrize("legacy", [None, 5, 4])
+    def test_section_reaches_cli_and_legacy_rows_stay_readable(self, tmp_path, legacy):
+        """Настоящие jq, TSV-reader и run_import передают раздел в CLI.
+
+        Вместо Python импортёра — перехват argv: ни суды, ни картотеки не трогаем.
+        Старые строки без метаданных сохраняют прежний авто-выбор из HTML.
+        """
+        if not shutil.which("jq"):
+            pytest.skip("jq не установлен")
+        rec = _record("section-x", status="queued", court_domain="oblsud--hmao.sudrf.ru",
+                      operator="Оператор", delo_id="2800001", section="cassation")
+        out = subprocess.run(
+            ["jq", "-r", "--argjson", "now", str(NOW),
+             "--argjson", "ttl", "259200", "--argjson", "grace", "900",
+             "--argjson", "cgrace", "3000", "-f", QUEUE_JQ],
+            input=json.dumps({"queue": [rec]}), cwd=REPO_DIR,
+            capture_output=True, text=True, check=True)
+        fields = out.stdout.strip().split("\t")
+        assert fields[-2:] == ["2800001", "cassation"]
+        if legacy == 5:
+            fields = fields[:5]
+        elif legacy == 4:
+            fields = fields[1:5]
+        (tmp_path / "queue.tsv").write_text("\t".join(fields) + "\n", encoding="utf-8")
+
+        source = _read_repo(IMPORTER)
+        run_function = "run_import()" + source.split("run_import()", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        reader = source[source.index("while IFS=$'\\t' read -r"):]
+        reader = reader.split("  # ⚠️ Фигурные скобки", 1)[0]
+        shell = '''set -u
+TMP_DIR="$1"; LOG="$1/log"; DRY_RUN=1; PYTHON=capture_python
+SRC_LABEL=Test
+log() { :; }
+capture_python() {
+  printf '%s\\n' "$@" > "$TMP_DIR/args"
+  printf '{"added":0}' > "$IMPORT_SUMMARY_PATH"
+}
+''' + run_function + reader + '''
+  run_import dump.html "$domain" "$operator" "import:dump:$uuid" "$delo_id" "$section"
+done 3< "$TMP_DIR/queue.tsv"
+'''
+        subprocess.run(["/bin/bash", "-c", shell, "section-test", str(tmp_path)],
+                       capture_output=True, text=True, check=True)
+        argv = (tmp_path / "args").read_text(encoding="utf-8").splitlines()
+        assert argv[:6] == ["scripts/import_search_dump.py", "dump.html", "--court-domain",
+                            rec["court_domain"], "--operator", "Оператор"]
+        assert "--dry-run" in argv
+        if legacy is None:
+            assert argv[6:10] == ["--delo-id", "2800001", "--section", "cassation"]
+        else:
+            assert "--delo-id" not in argv and "--section" not in argv
 
 
 # ── VPS — основной исполнитель импортов (08.09.2026) ─────────────────────────

@@ -61,6 +61,21 @@ async function getLog(env, query = '', secret = 'owner') {
   return workerExport.fetch(new Request('https://worker.invalid/admin/import-log?secret=' + secret
     + '&logonly=1' + query), env);
 }
+async function postDump(env, body) {
+  return workerExport.fetch(new Request('https://worker.invalid/admin/import-dump?secret=operator', {
+    method: 'POST', body: JSON.stringify(body),
+  }), env);
+}
+async function postResult(env, job, extra = {}) {
+  return workerExport.fetch(new Request('https://worker.invalid/import-result', {
+    method: 'POST', headers: {Authorization: 'Bearer push'},
+    body: JSON.stringify({dump_key: 'import:dump:' + job.uuid, status: 'done', ...extra}),
+  }), env);
+}
+function dumpHtml(deloId, extra = '') {
+  return '<html><a href="/modules.php?name=sud_delo&amp;delo_id=' + deloId
+    + '&amp;case_id=123&amp;srv_num=1">дело</a>' + extra + 'x'.repeat(1100) + '</html>';
+}
 function output(value) { process.stdout.write(JSON.stringify(value)); }
 """
 
@@ -221,6 +236,170 @@ assert.equal(kv.lists.length, 2);
 assert.equal(JSON.parse(kv.data.get(key)).added, 4);
 assert.equal(kv.metadata.get(key).queue_pending, false);
 assert.equal(JSON.parse(kv.data.get('import:last:' + job.court_domain)).added, 4);
+output({ok: true});
+""")
+
+
+@pytest.mark.parametrize("section,delo_id", [
+    ("first_instance", "1540005"), ("appeal", "5"), ("cassation", "2800001"),
+])
+def test_dump_acceptance_records_selected_instance_and_normalizes_alias(section, delo_id):
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv);
+const section = SECTION, deloId = DELO_ID;
+// Меню другого раздела не является выдачей. Раздел стоит ПЕРЕД case_id.
+const response = await postDump(env, {court_domain: 'oblsud.hmao.sudrf.ru', section,
+  delo_id: Number(deloId), html: dumpHtml(deloId, '<a href="?delo_id=777">раздел</a>')});
+assert.equal(response.status, 200);
+const body = await response.json();
+const job = JSON.parse([...kv.data.entries()].find(([k]) => k.endsWith('|' + body.key))[1]);
+assert.equal(job.court_domain, 'oblsud--hmao.sudrf.ru');
+assert.equal(job.section, section); assert.equal(job.delo_id, deloId);
+assert.equal(job.section_key, 'oblsud--hmao.sudrf.ru:' + deloId);
+output({ok: true});
+""".replace("SECTION", json.dumps(section)).replace("DELO_ID", json.dumps(delo_id)))
+
+
+@pytest.mark.parametrize("body_fields,card_id,extra", [
+    ({"section": "appeal", "delo_id": "5"}, "2800001", ""),
+    ({"section": "cassation", "delo_id": "2800001"}, "5", ""),
+    ({"section": "appeal", "delo_id": "2800001"}, "2800001", ""),
+    ({"section": "unknown"}, "5", ""),
+    ({"delo_id": "777"}, "777", ""),
+    ({}, "5", '<a href="?case_id=456&delo_id=2800001">другая инстанция</a>'),
+    ({}, "5", '<a href="?case_id=456&delo_id=5&delo_id=2800001">смешанная ссылка</a>'),
+])
+def test_wrong_or_mixed_instance_is_rejected_before_writing_queue(body_fields, card_id, extra):
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv);
+const response = await postDump(env, {court_domain: 'oblsud--hmao.sudrf.ru',
+  ...FIELDS, html: dumpHtml(CARD_ID, EXTRA)});
+assert.equal(response.status, 400); assert.equal(kv.puts.length, 0);
+assert.equal((await response.json()).ok, false);
+output({ok: true});
+""".replace("FIELDS", json.dumps(body_fields)).replace("CARD_ID", json.dumps(card_id))
+       .replace("EXTRA", json.dumps(extra)))
+
+
+def test_legacy_form_infers_only_the_card_instance_and_empty_dump_keeps_explicit_selection():
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv), domain = 'oblsud--hmao.sudrf.ru';
+const inferred = await postDump(env, {court_domain: domain, html: dumpHtml('2800001')});
+assert.equal(inferred.status, 200);
+const inferredId = (await inferred.json()).key;
+const empty = await postDump(env, {court_domain: domain, delo_id: '5', section: 'appeal',
+  html: '<html>' + 'ничего не найдено '.repeat(100) + '</html>'});
+assert.equal(empty.status, 200);
+const jobs = [...kv.data.entries()].filter(([k]) => k.startsWith('import:log:')).map(([,v]) => JSON.parse(v));
+assert.equal(jobs.find(r => r.uuid === inferredId).section, 'cassation');
+assert.equal(jobs.find(r => r.uuid !== inferredId).section_key, domain + ':5');
+output({ok: true});
+""")
+
+
+def test_github_fallback_preserves_the_selected_instance_in_workflow_inputs():
+    run_worker(r"""
+const kv = kvStore(), env = {...environment(kv), IMPORT_EXECUTOR: 'github', GITHUB_PAT: 'test-only'};
+const sent = [];
+globalThis.fetch = async (url, opts) => { sent.push(JSON.parse(opts.body)); return new Response(null, {status: 204}); };
+const response = await postDump(env, {court_domain: 'oblsud--hmao.sudrf.ru',
+  section: 'cassation', delo_id: '2800001', html: dumpHtml('2800001')});
+assert.equal(response.status, 200); assert.equal(sent.length, 1);
+assert.equal(sent[0].inputs.section, 'cassation');
+assert.equal(sent[0].inputs.delo_id, '2800001');
+assert.equal(kv.data.has('import:pending'), false);
+output({ok: true});
+""")
+
+
+def test_results_keep_appeal_and_presidium_freshness_separate_for_same_domain():
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv), domain = 'oblsud--hmao.sudrf.ru';
+for (const [i, section, deloId] of [[1, 'appeal', '5'], [2, 'cassation', '2800001']]) {
+  const job = record(i, 600, {court_domain: domain, section, delo_id: deloId}); kv.add(job);
+  assert.equal((await postResult(env, job, {section, delo_id: deloId, added: i})).status, 200);
+  assert.equal(JSON.parse(kv.data.get('import:last:' + domain + ':' + deloId)).added, i);
+}
+assert.equal(kv.data.has('import:last:' + domain), false);
+const response = await workerExport.fetch(new Request('https://worker.invalid/admin/import-log?secret=owner'), env);
+const body = await response.json();
+assert.equal(body.last_sections[domain + ':5'].added, 1);
+assert.equal(body.last_sections[domain + ':2800001'].added, 2);
+assert.deepEqual(body.last, {});
+output({ok: true});
+""")
+
+
+@pytest.mark.parametrize("extra", [
+    {"fetch_fail": 1}, {"card_failed": 1}, {"status": "failed"},
+])
+def test_incomplete_dump_never_refreshes_either_instance(extra):
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv), domain = 'oblsud--hmao.sudrf.ru';
+const job = record(1, 600, {court_domain: domain, section: 'appeal', delo_id: '5'}); kv.add(job);
+assert.equal((await postResult(env, job, EXTRA)).status, 200);
+assert.equal([...kv.data.keys()].some(k => k.startsWith('import:last:')), false);
+const body = await (await workerExport.fetch(new Request('https://worker.invalid/admin/import-log?secret=owner'), env)).json();
+assert.deepEqual(body.last_sections, {});
+output({ok: true});
+""".replace("EXTRA", json.dumps(extra)))
+
+
+@pytest.mark.parametrize("kind,key_prefix", [("case", "case"), ("writ_waiver", "writ")])
+def test_non_dump_results_never_refresh_freshness_even_with_court_and_section(kind, key_prefix):
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv), domain = 'oblsud--hmao.sudrf.ru';
+const job = record(1, 600, {court_domain: domain, kind: KIND, section: 'appeal', delo_id: '5'});
+const logKey = kv.add(job);
+const response = await postResult(env, job, {dump_key: null,
+  job_key: 'import:' + PREFIX + ':' + job.uuid, status: 'done', section: 'appeal',
+  delo_id: '5', waived: 1, added: 1});
+assert.equal(response.status, 200);
+assert.equal(JSON.parse(kv.data.get(logKey)).status, 'done');
+assert.equal([...kv.data.keys()].some(k => k.startsWith('import:last:')), false);
+const body = await (await workerExport.fetch(new Request('https://worker.invalid/admin/import-log?secret=owner'), env)).json();
+assert.deepEqual(body.last_sections, {}); assert.deepEqual(body.last, {});
+output({ok: true});
+""".replace("KIND", json.dumps(kind)).replace("PREFIX", json.dumps(key_prefix)))
+
+
+def test_result_cannot_change_selected_instance_but_failed_report_remains_visible():
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv);
+const job = record(1, 600, {court_domain: 'oblsud--hmao.sudrf.ru', section: 'appeal', delo_id: '5'});
+const key = kv.add(job), before = kv.data.get(key);
+assert.equal((await postResult(env, job, {section: 'cassation', delo_id: '2800001'})).status, 409);
+assert.equal(kv.data.get(key), before); assert.equal(kv.puts.length, 0);
+assert.equal((await postResult(env, job, {status: 'failed', section: 'cassation', error: 'Неверный раздел'})).status, 200);
+const failed = JSON.parse(kv.data.get(key));
+assert.equal(failed.section, 'appeal'); assert.equal(failed.delo_id, '5');
+assert.equal(failed.status, 'failed');
+assert.equal([...kv.data.keys()].some(k => k.startsWith('import:last:')), false);
+output({ok: true});
+""")
+
+
+def test_legacy_results_and_history_recover_only_proven_instance():
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv), domain = 'oblsud--hmao.sudrf.ru';
+const legacy = record(1, 600, {court_domain: domain}); kv.add(legacy);
+assert.equal((await postResult(env, legacy, {section: 'cassation', added: 4})).status, 200);
+assert.equal(JSON.parse(kv.data.get('import:last:' + domain + ':2800001')).section, 'cassation');
+const htmlLegacy = record(2, 500, {court_domain: domain}); kv.add(htmlLegacy);
+kv.data.set('import:dump:' + htmlLegacy.uuid, dumpHtml('5'));
+assert.equal((await postResult(env, htmlLegacy, {added: 2})).status, 200);
+assert.equal(JSON.parse(kv.data.get('import:last:' + domain + ':5')).added, 2);
+// Старый domain-only светофор не доказывает какую-либо инстанцию.
+const other = 'oblsud--tumen.sudrf.ru';
+kv.data.set('import:last:' + other, JSON.stringify({court_domain: other, ts: new Date(now).toISOString(), added: 99}));
+// Но старый журнал с section позволяет восстановить именно апелляцию.
+kv.add(record(3, 400, {court_domain: other, status: 'done', section: 'appeal', added: 3}));
+kv.add(record(4, 300, {court_domain: other, status: 'done', section: 'cassation', fetch_fail: 1}));
+kv.add(record(5, 200, {court_domain: other, status: 'done', kind: 'case', section: 'cassation', added: 8}));
+const body = await (await workerExport.fetch(new Request('https://worker.invalid/admin/import-log?secret=owner'), env)).json();
+assert.equal(body.last[other].added, 99);
+assert.equal(body.last_sections[other + ':5'].added, 3);
+assert.equal(body.last_sections[other + ':2800001'], undefined);
 output({ok: true});
 """)
 

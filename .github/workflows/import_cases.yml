@@ -29,6 +29,16 @@ on:
         required: false
         type: string
         default: ''
+      delo_id:
+        description: 'Раздел выбранного суда: 1540005, 5 или 2800001 (пусто у старых заданий)'
+        required: false
+        type: string
+        default: ''
+      section:
+        description: 'Инстанция: first_instance, appeal или cassation'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -51,6 +61,8 @@ jobs:
       # Inputs — только через env (см. предупреждение в шапке).
       DUMP_KEY: ${{ inputs.dump_key }}
       COURT_DOMAIN: ${{ inputs.court_domain }}
+      DELO_ID: ${{ inputs.delo_id }}
+      SECTION: ${{ inputs.section }}
       OPERATOR: ${{ inputs.operator }}
       # Трек «Иски банка»: при BANK_TRACK=0 истцовые строки дампа идут прежним
       # [SKIPPED ROLE] (зеркало add_cases.yml).
@@ -120,6 +132,7 @@ jobs:
         run: |
           python3 scripts/import_search_dump.py /tmp/dump.html \
             --court-domain "$COURT_DOMAIN" \
+            --delo-id "$DELO_ID" --section "$SECTION" \
             --operator "$OPERATOR"
 
       - name: Commit cases.json

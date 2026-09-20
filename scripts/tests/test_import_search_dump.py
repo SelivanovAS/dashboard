@@ -1016,11 +1016,11 @@ class TestWorkflowWiring:
         Верх-Исетского (+0 дел, 12 исков потеряно) всё равно красил суд зелёным
         «импортирован сегодня»: серверная защита обходилась в браузере."""
         admin = _read_repo("cloudflare-worker/admin_page.js")
-        body = admin.split("function renderImportFreshness", 1)[1][:3000]
-        assert "it.fetch_fail" in body and "it.card_failed" in body, (
+        body = admin.split("function renderImportFreshness", 1)[1].split("\n}\n", 1)[0]
+        assert "e.fetch_fail" in body and "e.card_failed" in body, (
             "светофор засчитывает импорт, у которого карточки не читались")
         # Пультовые операции светофор тоже не бумпают (зеркало whitelist'а).
-        assert 'it.kind === "case"' in body and 'it.kind === "writ_waiver"' in body
+        assert 'e.kind === "case"' in body and 'e.kind === "writ_waiver"' in body
 
     def test_breaker_tuned_for_dump_size(self):
         """Дефолты предохранителя считаны на боевой обход сотен карточек:

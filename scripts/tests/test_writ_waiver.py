@@ -434,8 +434,10 @@ class TestWiring:
         for counter in ('"waived"', '"cleared"'):
             assert counter in js, (
                 f"счётчик {counter} не в числовом whitelist — до оператора не доедет")
-        assert 'record.kind !== "writ_waiver"' in js, (
-            "пометка не должна красить светофор свежести дампов")
+        assert 'const isDump = (record.kind || "dump") === "dump";' in js, (
+            "свежесть должна разрешаться только полным дампам, включая legacy без kind")
+        assert 'record.court_domain && isDump && cardsUnread === 0' in js, (
+            "пометка не должна красить светофор свежести дампов; поведение проверяет test_import_queue_api")
         assert "court_srv_num" in js, (
             "один домен может обслуживать несколько площадок суда")
 

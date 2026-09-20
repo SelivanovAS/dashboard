@@ -1916,7 +1916,7 @@ const DISPATCH_WORKFLOWS = {
     roles: ["owner"],
   },
   "import_cases.yml": {
-    inputs: new Set(["dump_key", "court_domain", "operator"]),
+    inputs: new Set(["dump_key", "court_domain", "operator", "delo_id", "section"]),
     roles: ["owner", "operator"],
   },
   "add_cases.yml": {
@@ -2167,6 +2167,38 @@ function detectDumpSudrfHosts(html) {
   return Array.from(hosts).sort();
 }
 
+// На одном домене облсуда живут разные инстанции. Площадка srv_num может
+// различаться внутри одного раздела, поэтому ключ свежести — domain:delo_id.
+const IMPORT_SECTION_DELO_IDS = {
+  first_instance: "1540005", appeal: "5", cassation: "2800001",
+};
+function importSectionIdentity(record) {
+  const domain = canonSudrfHost(record && record.court_domain);
+  const section = String((record && record.section) || "");
+  const deloId = String((record && record.delo_id) || IMPORT_SECTION_DELO_IDS[section] || "");
+  const inferred = Object.keys(IMPORT_SECTION_DELO_IDS)
+    .find((key) => IMPORT_SECTION_DELO_IDS[key] === deloId);
+  if (!domain || !inferred || (section && section !== inferred)) return null;
+  return { section: inferred, delo_id: deloId, section_key: `${domain}:${deloId}` };
+}
+
+// Только ссылки КАРТОЧЕК: меню страницы содержит ссылки всех разделов.
+// Порядок параметров несущественен; rich-paste сериализует & как &amp;.
+function detectDumpCardDeloIds(html) {
+  const ids = new Set();
+  const hrefRe = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  let match;
+  while ((match = hrefRe.exec(html)) !== null) {
+    const href = (match[1] || match[2] || match[3] || "").replace(/&amp;|&#0*38;|&#x0*26;/gi, "&");
+    try {
+      const params = new URL(href, "https://dump.invalid/").searchParams;
+      if (!/^\d+$/.test(params.get("case_id") || "")) continue;
+      for (const id of params.getAll("delo_id")) if (/^\d+$/.test(id)) ids.add(id);
+    } catch (_) {}
+  }
+  return Array.from(ids).sort();
+}
+
 // Приём дампа от оператора/владельца: валидация → KV → журнал → dispatch.
 async function handleAdminImportDump(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
@@ -2212,6 +2244,32 @@ async function handleAdminImportDump(request, env) {
       { status: 400, headers: jsonHeaders }
     );
   }
+  const requestedSection = String((body && body.section) || "");
+  const requestedDeloId = String((body && body.delo_id) || "");
+  const selected = importSectionIdentity({
+    court_domain: courtDomain, section: requestedSection, delo_id: requestedDeloId,
+  });
+  const cardDeloIds = detectDumpCardDeloIds(html);
+  const detected = cardDeloIds.length === 1
+    ? importSectionIdentity({ court_domain: courtDomain, delo_id: cardDeloIds[0] }) : null;
+  let sectionError = "";
+  if ((requestedSection || requestedDeloId) && !selected) {
+    sectionError = "неверный раздел суда — обновите страницу и выберите инстанцию заново";
+  } else if (cardDeloIds.length > 1) {
+    sectionError = "в дампе смешаны ссылки разных инстанций — загрузите выдачу одного раздела";
+  } else if (cardDeloIds.length && !detected) {
+    sectionError = "раздел дампа не поддерживается — выберите гражданские дела нужной инстанции";
+  } else if (selected && detected && selected.delo_id !== detected.delo_id) {
+    sectionError = "дамп относится к другой инстанции — проверьте выбранный раздел суда";
+  }
+  if (sectionError) {
+    return new Response(JSON.stringify({ ok: false, error: sectionError }), {
+      status: 400, headers: jsonHeaders,
+    });
+  }
+  // Старые формы присылают только домен: раздел можно доказать самим дампом.
+  // Без ссылок не угадываем апелляцию: исполнитель уточнит раздел в отчёте.
+  const identity = selected || detected;
   const uuid = crypto.randomUUID();
   const dumpKey = `import:dump:${uuid}`;
   const ts = new Date().toISOString();
@@ -2221,6 +2279,7 @@ async function handleAdminImportDump(request, env) {
   const executor = importExecutor();
   const record = {
     uuid, court_domain: courtDomain, operator, ts,
+    ...(identity || {}),
     status: executor === "vps" ? "queued" : "dispatched", executor, updated_at: ts,
   };
   await env.PUSH_SUBSCRIPTIONS.put(dumpKey, html, { expirationTtl: IMPORT_DUMP_TTL });
@@ -2228,6 +2287,7 @@ async function handleAdminImportDump(request, env) {
   if (executor !== "vps") {
     const res = await dispatchWorkflowOnGitHub(env, "import_cases.yml", {
       dump_key: dumpKey, court_domain: courtDomain, operator,
+      ...(identity ? { delo_id: identity.delo_id, section: identity.section } : {}),
     });
     if (!res.ok) {
       // Диспатч не прошёл — фиксируем в журнале, оператор увидит «failed»
@@ -2611,6 +2671,32 @@ async function handleImportResult(request, env) {
   }
   let record = {};
   try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
+  const isDump = (record.kind || "dump") === "dump";
+  if (isDump) {
+    const selected = importSectionIdentity(record);
+    const reported = importSectionIdentity({
+      court_domain: record.court_domain, section: body.section, delo_id: body.delo_id,
+    });
+    // Исполнитель не должен незаметно переименовать выбранную инстанцию.
+    // Ошибочный отчёт оставляет журнал и свежесть нетронутыми. У failed
+    // сохраняем выбор: диагностический отчёт мог появиться до разбора HTML.
+    if (status === "done" && ((body.section || body.delo_id) && !reported
+        || selected && reported && selected.section_key !== reported.section_key)) {
+      return new Response(JSON.stringify({ ok: false, error: "раздел отчёта не совпадает с заданием" }), {
+        status: 409, headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    let identity = selected || reported;
+    if (!identity && status === "done" && body.dump_key) {
+      // Старые задания/исполнители могут не передать section. Пока тело
+      // живо, восстанавливаем раздел по карточкам, не по одному домену.
+      const ids = detectDumpCardDeloIds(await env.PUSH_SUBSCRIPTIONS.get(body.dump_key) || "");
+      if (ids.length === 1) identity = importSectionIdentity({
+        court_domain: record.court_domain, delo_id: ids[0],
+      });
+    }
+    if (identity) Object.assign(record, identity);
+  }
   record.status = status;
   record.updated_at = new Date().toISOString();
   for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
@@ -2683,11 +2769,13 @@ async function handleImportResult(request, env) {
   // Раздел, распознанный импортёром по дампу (04.09.2026): на домене облсуда
   // живут апелляция и президиум, и подпись потерь/имени суда в админке по
   // домену была бы ложной. Белый список значений — поле идёт в рендер.
-  if (["first_instance", "appeal", "cassation"].includes(body.section)) {
+  if (!isDump && ["first_instance", "appeal", "cassation"].includes(body.section)) {
     record.section = body.section;
   }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), importLogWriteOptions(record));
-  // Свежесть по суду (светофор в админке): последний УСПЕШНЫЙ импорт домена.
+  // Свежесть по инстанции: последний УСПЕШНЫЙ импорт domain:delo_id.
+  // Старый доменный ключ без доказанного раздела сохраняется только как
+  // legacy; интерфейс не относит его к обеим инстанциям областного суда.
   // Отдельный вечный ключ (без TTL): журнал живёт 90 дней и отдаётся
   // последними 50 записями — при ~52 судах с еженедельным регламентом
   // окна журнала на «когда суд импортировался в последний раз» не хватает.
@@ -2702,13 +2790,13 @@ async function handleImportResult(request, env) {
   // ⚠️ Свежесть подтверждают только ДАМПЫ. Пультовые операции (точечное
   // добавление, пометка «лист не нужен») идут по своим делам и суд целиком не
   // обходят — список явный, чтобы следующий kind не бумпнул светофор молча.
-  if (status === "done" && record.court_domain
-      && record.kind !== "case" && record.kind !== "writ_waiver"
-      && cardsUnread === 0) {
+  if (status === "done" && record.court_domain && isDump && cardsUnread === 0) {
+    const identity = importSectionIdentity(record);
     await env.PUSH_SUBSCRIPTIONS.put(
-      `import:last:${record.court_domain}`,
+      `import:last:${identity ? identity.section_key : record.court_domain}`,
       JSON.stringify({
         court_domain: record.court_domain,
+        ...(identity || {}),
         ts: record.updated_at,
         operator: record.operator || "",
         added: record.added || 0,
@@ -2766,21 +2854,39 @@ async function handleAdminImportLog(request, env) {
       record && Date.parse(record.ts) > cutoff && importQueuePending(record)
     ).map((record) => ({ ...record, queue_pending: true }));
     const tracked = trackedKeys.map((k) => records.get(k.name)).filter(Boolean);
-    const last = {};
+    const last = {}, lastSections = {};
+    function rememberSection(e) {
+      const identity = importSectionIdentity(e);
+      if (!identity || !Number.isFinite(Date.parse(e.ts))) return;
+      const previous = lastSections[identity.section_key];
+      if (!previous || Date.parse(e.ts) > Date.parse(previous.ts)) {
+        lastSections[identity.section_key] = { ...e, ...identity };
+      }
+    }
     if (!logOnly) {
       const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
       (await Promise.all(lastList.keys.map(async (k) => {
-        try { return JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)); }
+        try { return { key: k.name, entry: JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)) }; }
         catch (_) { return null; }
-      }))).filter(Boolean).forEach((e) => {
-        if (e.court_domain) last[e.court_domain] = e;
+      }))).filter((e) => e && e.entry).forEach(({ key, entry: e }) => {
+        if (e.court_domain && key === `import:last:${e.court_domain}`) last[e.court_domain] = e;
+        rememberSection(e);
       });
+      // У прежних last:<domain> раздел не сохранялся, а в журнале он есть.
+      // Восстанавливаем доказанную свежесть из уже прочитанных записей без
+      // дополнительных KV-чтений; неизвестную инстанцию не угадываем.
+      for (const record of records.values()) {
+        if ((record.kind || "dump") !== "dump" || record.status !== "done"
+            || (record.fetch_fail || 0) + (record.card_failed || 0) !== 0) continue;
+        rememberSection({ ...record, ts: record.updated_at || record.ts });
+      }
     }
     // executor + слоты — истории импортов: запись «queued», пережившая
     // последний слот, помечается «сервер не забрал» (без слотов пометка врала
     // бы в выходные и утром до первого слота).
     return new Response(JSON.stringify({
-      items, last, executor: importExecutor(), slots: importSlotsAt(Date.now()),
+      items, last, last_sections: lastSections,
+      executor: importExecutor(), slots: importSlotsAt(Date.now()),
       ...(includeQueue ? { queue } : {}),
       ...(trackedIds.size ? { tracked } : {}),
     }), {
