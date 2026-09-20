@@ -642,7 +642,7 @@ class TestImportExecutorWiring:
         var_slots = {tuple(int(x) for x in hm.split(":")) for hm in m.group(1).split(",")}
         timer_slots = set()
         for line in _read_repo(TIMER).splitlines():
-            t = re.match(r"OnCalendar=Mon\.\.Fri (\d{2}):(\d{2})$", line.strip())
+            t = re.match(r"OnCalendar=\*-\*-\* (\d{2}):(\d{2})$", line.strip())
             if t:
                 timer_slots.add((int(t.group(1)), int(t.group(2))))
         assert var_slots == timer_slots

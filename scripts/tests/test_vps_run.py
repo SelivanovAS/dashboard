@@ -28,7 +28,7 @@ def _plist_slots(name: str) -> set[tuple[int, int]]:
 def _timer_slots(name: str) -> set[tuple[int, int]]:
     slots = set()
     for line in _read(VPS / "systemd" / name).splitlines():
-        m = re.match(r"OnCalendar=Mon\.\.Fri (\d{2}):(\d{2})$", line.strip())
+        m = re.match(r"OnCalendar=(?:Mon\.\.Fri|\*-\*-\*) (\d{2}):(\d{2})$", line.strip())
         if m:
             slots.add((int(m.group(1)), int(m.group(2))))
     return slots
@@ -102,6 +102,10 @@ class TestVpsTimers(unittest.TestCase):
     def test_import_slots_mirror_plist(self):
         self.assertEqual(_timer_slots("court-import.timer"),
                          _plist_slots("com.court-monitor.import.plist"))
+        slots = [line for line in _read(VPS / "systemd" / "court-import.timer").splitlines()
+                 if line.startswith("OnCalendar=")]
+        self.assertEqual(slots, [f"OnCalendar=*-*-* {hour}:00"
+                                 for hour in (12, 14, 16, 18, 20)])
 
     def test_timers_are_persistent(self):
         # Аналог «догнать проспанный слот» launchd после ребута сервера.
@@ -109,12 +113,13 @@ class TestVpsTimers(unittest.TestCase):
             self.assertIn("Persistent=true", _read(VPS / "systemd" / name))
 
     def test_poll_timer_is_frequent_and_not_persistent(self):
-        """Немедленная попытка (09.09.2026): опрос флага каждые 5 минут в
-        рабочие часы будней; Persistent=false осознанно — проспанный тик
+        """Немедленная попытка (20.09.2026): опрос каждые 5 минут круглосуточно
+        во все дни; Persistent=false осознанно — проспанный тик
         догонять незачем, провалы страхуют слоты. Слоты живут ТОЛЬКО в
         court-import.timer (страж test_slots_var_mirrors_timer)."""
         text = _read(VPS / "systemd" / "court-import-poll.timer")
-        self.assertIn("OnCalendar=Mon..Fri *-*-* 08..20:00/5", text)
+        self.assertEqual([line for line in text.splitlines() if line.startswith("OnCalendar=")],
+                         ["OnCalendar=*-*-* *:00/5"])
         self.assertIn("Persistent=false", text)
         self.assertNotRegex(text, r"OnCalendar=Mon\.\.Fri \d{2}:\d{2}$")
 

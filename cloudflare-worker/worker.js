@@ -2016,16 +2016,16 @@ async function handleAdminDispatch(request, env) {
 
 // ── Импорт дел капчёвых судов ────────────────────────────────────────────────
 // Поток: оператор решает код на сайте суда → вставляет дамп выдачи в админку →
-// POST /admin/import-dump кладёт дамп в KV (import:dump:<uuid>, TTL 24 ч),
+// POST /admin/import-dump кладёт дамп в KV (import:dump:<uuid>, TTL 72 ч),
 // заводит запись журнала (import:log:<ts>|<uuid>, TTL 90 дн — пер-ключевой
 // журнал, без гонок read-modify-write) и диспатчит import_cases.yml →
 // Action забирает дамп GET /import-dump (Bearer PUSH_SECRET), гонит
 // import_search_dump.py, коммитит cases.json и постит итог POST /import-result
 // → страница поллит GET /admin/import-log и показывает оператору «+N».
 
-// Тело дампа/задания живёт 72 ч (было 24; 08.09.2026): исполнитель — VPS по
-// слотам будних дней, и пятничная вставка после 20:00 иначе умирала бы до
-// понедельника. ⚠️ Зеркало — DUMP_TTL в ops/mac-local-run/import_dumps.sh:
+// Тело дампа/задания живёт 72 ч: запас для повторов при недоступности
+// суда или исполнителя, независимо от ежедневного расписания VPS.
+// ⚠️ Зеркало — DUMP_TTL в ops/mac-local-run/import_dumps.sh:
 // очередь резерва отсекает записи старше него (страж test_mac_import_dumps).
 const IMPORT_DUMP_TTL = 72 * 3600;
 const IMPORT_LOG_TTL = 90 * 24 * 3600;    // история импортов в админке
@@ -2070,10 +2070,10 @@ async function listImportLogKeys(env) {
 
 // Флаг «есть новое» для НЕМЕДЛЕННОЙ попытки исполнителя (09.09.2026, решение
 // юриста «пробовать сразу, провалы — в окно»): один KV-ключ с отметкой
-// последней отправки. VPS каждые 5 минут (будни 08:00–20:00) делает
+// последней отправки. VPS каждые 5 минут круглосуточно, ежедневно делает
 // GET /import-pending — ОДИН KV get (лимит 100 000/день), а не list — и при
 // новой отметке сразу гонит очередь import_dumps.sh; слоты court-import.timer
-// 12–20 и утренние импорты после парсинга остаются страховкой для провалов
+// 12–20 ежедневно и импорты после парсинга остаются страховкой для провалов
 // (fetch_fail/card_failed, сервер не взял). Пишется только в ветке vps —
 // один write на отправку, как и запись журнала. TTL — как у тела дампа.
 const IMPORT_PENDING_KEY = "import:pending";
@@ -2104,8 +2104,9 @@ function importExecutor() {
 // ops/vps-run/systemd/court-import.timer (страж в test_mac_import_dumps.py
 // сверяет var эталона с таймером). Отсюда оператору обещается «сервер
 // обработает в ЧЧ:ММ», а истории импортов — «сервер не забрал»: без слотов
-// оба текста врали бы (выходные, утро до первого слота). Таймер ходит
-// Mon..Fri без календаря праздников — здесь так же, только сб/вс.
+// оба текста врали бы о ближайшем повторе. VPS повторяет ежедневно,
+// включая выходные и праздники. Для github/Mac-резерва сохраняем будни.
+// Это слоты повторов; новые задания VPS проверяет отдельно каждые 5 минут.
 const IMPORT_SLOTS_DEFAULT = "12:00,14:00,16:00,18:00,20:00";
 function importSlotsLocal() {
   return String(cfgVar("IMPORT_SLOTS_LOCAL", IMPORT_SLOTS_DEFAULT)).split(",")
@@ -2117,6 +2118,7 @@ function importSlotsLocal() {
 function importSlotsAt(nowMs) {
   const slots = importSlotsLocal();
   if (!slots.length) return { last_slot_at: null, next_slot_at: null };
+  const everyDay = importExecutor() === "vps";
   const offMs = calTzOffsetMin() * 60 * 1000;
   const local = new Date(nowMs + offMs);   // местные часы в UTC-полях Date
   let last = null, next = null;
@@ -2125,7 +2127,7 @@ function importSlotsAt(nowMs) {
       local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + i
     ));
     const dow = day.getUTCDay();
-    if (dow === 0 || dow === 6) continue;
+    if (!everyDay && (dow === 0 || dow === 6)) continue;
     for (const [h, m] of slots) {
       const fire = Date.UTC(
         day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, m
