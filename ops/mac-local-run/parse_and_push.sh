@@ -160,12 +160,12 @@ die() {  # $1 = текст → в лог, уведомление, Telegram, вы
 PUSHER_PID=""
 start_pusher() {
   # Токен вне репо (репо публичный). Нет токена — прогресс просто выключен.
-  if [ -f "$HOME/.config/court-monitor/progress_token" ]; then
+  if "$PYTHON" "$REPO/ops/mac-local-run/progress_pusher.py" --check; then
     "$PYTHON" "$REPO/ops/mac-local-run/progress_pusher.py" "run-$(date '+%Y%m%d-%H%M%S')" &
     PUSHER_PID=$!
     log "progress: онлайн-вехи включены (pid $PUSHER_PID)"
   else
-    log "progress: токена нет (~/.config/court-monitor/progress_token) — пропуск"
+    log "progress: нет токена или адреса Worker своей территории — пропуск"
   fi
 }
 finish_pusher() {

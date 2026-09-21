@@ -118,7 +118,7 @@ def load_json(path: str) -> dict:
 def save_json(data: dict, path: str):
     """Сохранить JSON-базу дел атомарно (temp + os.replace)."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    data["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
     # Публичный блок региона — только в основной cases.json (фронт строит из
     # него подписи судов и ссылки; архивы фронт грузит без этого блока).
     if path == config.JSON_PATH:

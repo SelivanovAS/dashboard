@@ -80,6 +80,7 @@ def _node(script: str) -> str:
 _ICS_FNS = [
     "icsEscape", "icsFold", "calDateLocal", "calTimeLocal", "calTodayYmd",
     "calSelectHearing", "calHearingPlace", "calCaseIncluded",
+    "calCourtMeta", "calHearingTimezone", "calLocalUtcMs",
     "calBuildCourtLink", "calDtstampUtc", "buildVevent", "buildIcs",
     "wnBareCaseNumber",
 ]
@@ -204,7 +205,7 @@ const ics = buildIcs(buildVevent(sel, c, "h.example", "Asia/Yekaterinburg"),
 console.log(JSON.stringify({
   crlf: ics.includes("\\r\\n") && !/[^\\r]\\n/.test(ics),
   ver: ics.includes("VERSION:2.0"),
-  tz: ics.includes("TZOFFSETTO:+0500"),
+  tz: !ics.includes("BEGIN:VTIMEZONE"),
   name: ics.includes("X-WR-CALNAME:Мои заседания"),
   refresh: ics.includes("REFRESH-INTERVAL;VALUE=DURATION:PT6H"),
 }));""")
@@ -252,8 +253,8 @@ console.log(JSON.stringify(ev.filter((l) => l.startsWith("DTSTART") || l.startsW
         out = self._run("""
 const ev = buildVevent(calSelectHearing(c), c, "h", "Asia/Yekaterinburg");
 console.log(JSON.stringify(ev.filter((l) => l.startsWith("DTSTART") || l.startsWith("DTEND"))));""")
-        assert out == ('["DTSTART;TZID=Asia/Yekaterinburg:20260929T172000",'
-                       '"DTEND;TZID=Asia/Yekaterinburg:20260929T182000"]')
+        assert out == ('["DTSTART:20260929T122000Z",'
+                       '"DTEND:20260929T132000Z"]')
 
     def test_case_filters(self):
         out = self._run("""

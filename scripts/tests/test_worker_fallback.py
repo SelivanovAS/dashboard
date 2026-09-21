@@ -27,10 +27,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import subprocess
+from urllib.parse import urlparse
 
 import pytest
 
@@ -213,15 +215,29 @@ class TestPendingIndication:
 # ── Конфигурация адресов (region_front.js + wrangler.toml) ──────────────────
 
 class TestAddressConfig:
+    @pytest.mark.skipif(not NODE, reason="Node.js нужен для чтения реального REGION_FRONT")
     def test_region_front_has_fallbacks(self):
-        rf = _read("region_front.js")
-        assert "PUSH_WORKER_FALLBACKS" in rf
-        assert re.search(r"PUSH_WORKER_FALLBACKS:\s*\[[^\]]*workers\.dev", rf), (
+        # Конфиг может использовать JSON-ключи в кавычках или JS-ключи без
+        # кавычек. Исполняем его в отдельном VM без браузера и сети.
+        script = """
+const vm = require('vm');
+const fs = require('fs');
+const ctx = { window: {} };
+vm.runInNewContext(fs.readFileSync(0, 'utf8'), ctx, { timeout: 1000 });
+process.stdout.write(JSON.stringify(ctx.window.REGION_FRONT));
+"""
+        result = subprocess.run([NODE, "-e", script], input=_read("region_front.js"),
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        fallbacks = json.loads(result.stdout).get("PUSH_WORKER_FALLBACKS")
+        assert isinstance(fallbacks, list) and fallbacks, "Нет резервных адресов Worker"
+        urls = [urlparse(url) for url in fallbacks]
+        assert all(url.scheme == "https" and url.hostname for url in urls)
+        assert any(url.hostname.endswith(".workers.dev") for url in urls), (
             "workers.dev-адрес обязан остаться в фолбэках: он живёт без зоны "
             "и спасает при проблемах кастомного домена."
         )
-        m = re.search(r"PUSH_WORKER_FALLBACKS:\s*\[([^\]]*)\]", rf)
-        assert "api2-" not in m.group(1), (
+        assert not any(url.hostname.startswith("api2-") for url in urls), (
             "Шлюз api2-*.delosud.ru НЕ должен быть в фолбэках (убран "
             "27.08.2026): он на поддомене того же молодого delosud.ru — "
             "SNI-фильтр МТС/Мегафона режет его наравне с основным адресом "

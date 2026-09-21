@@ -475,13 +475,13 @@ def test_admin_page_inner_js_parses():
 
 def test_appeal_courts_pinned_first_in_dump_list():
     src = _admin()
-    body = src.split("async function loadImportCourts", 1)[1][:4500]
+    body = src.split("async function loadImportCourts", 1)[1].split("function impNoCourtReason", 1)[0]
     assert "acRegion.appeal_courts" in body, (
         "список дампов снова строится только из fi_courts — капчёвую "
         "апелляцию оператор не увидит")
     # С 04.09.2026 между апелляцией и судами 1-й инст. — закреплённый
     # президиум (кассация по делам мировых судей); апелляция по-прежнему первая.
-    assert "gatedAppeal.concat(gatedPresidium).concat(gated)" in body, (
+    assert "gatedAppeal.concat(gatedCassation).concat(gatedPresidium).concat(gated)" in body, (
         "апелляция обязана идти ПЕРВОЙ строкой выпадающего списка")
     assert "pinned: true" in body
 

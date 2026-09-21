@@ -68,7 +68,8 @@ def link_cases(
 
     Логика:
     - Для каждого апелляционного дела с известным номером 1 инстанции:
-      1. Если дело 1 инстанции уже есть в cases → мержим appeal данные в него
+      1. Если дело того же суда 1 инстанции уже есть в cases → мержим appeal
+         данные в него; неоднозначные совпадения оставляем отдельно
       2. Если нет → обновляем id на номер 1 инстанции (для будущей привязки)
     - Возвращает обновлённый список cases (дедуплицированный).
     """
@@ -80,33 +81,62 @@ def link_cases(
     # «гибридные» номера 1-й инст. вида `2-208/2026 (2-1148/2025;)` ловились
     # парсером апелляции, который из карточки достаёт короткую форму
     # `2-208/2026`. Иначе матч не сработает и появится «сирота».
-    def _put_idx(idx_map: dict[str, int], key: str, i: int) -> None:
+    def _put_idx(idx_map: dict[str, set[int]], key: str, i: int) -> None:
         if not key:
             return
-        idx_map.setdefault(key, i)
+        idx_map.setdefault(key, set()).add(i)
         base = _bare_case_number(key)
         if base and base != key:
-            idx_map.setdefault(base, i)
+            idx_map.setdefault(base, set()).add(i)
 
     def _put_idx_ap(idx_map: dict, dom: str, num: str, i: int) -> None:
         """Апел-индекс: ключ (домен, номер) + (домен, bare-номер)."""
         if not num:
             return
-        idx_map.setdefault((dom, num), i)
+        idx_map.setdefault((dom, num), set()).add(i)
         base = _bare_case_number(num)
         if base and base != num:
-            idx_map.setdefault((dom, base), i)
+            idx_map.setdefault((dom, base), set()).add(i)
 
-    fi_index: dict[str, int] = {}   # номер_1_инст → индекс в cases
+    # Короткие названия и прежние названия судов в апелляционной выдаче
+    # разрешаем только точным совпадением по реестру активной территории.
+    # Несколько площадок с одинаковым именем не дают права выбрать первую.
+    court_names: dict[str, set[tuple[str, int]]] = {}
+    for court in get_region().first_instance_courts:
+        for name in (court.name, *court.name_aliases):
+            court_names.setdefault(_eyo(name.strip().lower()), set()).add(
+                (canon_sudrf_domain(court.domain), court.srv_num))
+
+    def _fi_identity(case: dict) -> tuple[str, str, str]:
+        fi = case.get("first_instance") or {}
+        domain = canon_sudrf_domain(fi.get("court_domain"))
+        name = _eyo((fi.get("court") or "").strip().lower())
+        matches = court_names.get(name, set())
+        srv = str(fi.get("srv_num") or "")
+        if len(matches) == 1:
+            named_domain, named_srv = next(iter(matches))
+            if not domain:
+                domain = named_domain
+            if domain == named_domain and not srv:
+                srv = str(named_srv)
+        return domain, srv, name
+
+    def _same_fi_court(source: dict, target: dict) -> bool:
+        src_domain, src_srv, src_name = _fi_identity(source)
+        dst_domain, dst_srv, dst_name = _fi_identity(target)
+        if src_domain or dst_domain:
+            if not src_domain or src_domain != dst_domain:
+                return False
+            return not (src_srv and dst_srv and src_srv != dst_srv)
+        # Legacy без суда допустим лишь при единственном кандидате ниже.
+        # Неизвестные, но РАЗНЫЕ названия суда не становятся wildcard.
+        return not (src_name or dst_name) or bool(src_name and src_name == dst_name)
+
+    fi_index: dict[str, set[int]] = {}   # номер_1_инст → кандидаты в cases
     appeal_index: dict = {}  # (домен_апел_суда, номер_апелляции) → индекс в cases
-    # fi_index строим в два прохода: сначала записи с реальными FI-данными,
-    # потом stub-записи. Без приоритета сирота-апелляция со stub-FI и коротким
-    # id `2-208/2026`, оказавшаяся в `cases` раньше хозяина с гибридным id
-    # `2-208/2026 (2-1148/2025;)` (новые апел. дела препендятся в начало
-    # списка), занимает bare-ключ `2-208/2026` через `setdefault`, и матчер
-    # ниже принимает её саму за свою же 1-ю инст. (fi_idx == appeal_idx).
-    fi_order = sorted(range(len(cases)), key=lambda i: not _has_real_fi(cases[i]))
-    for i in fi_order:
+    # Храним всех кандидатов. Приоритет реальных FI-данных применяется ПОСЛЕ
+    # проверки суда: первый в списке одноимённый номер мог быть чужим делом.
+    for i in range(len(cases)):
         c = cases[i]
         cid = c.get("id", "")
         fi = c.get("first_instance")
@@ -130,23 +160,38 @@ def link_cases(
         if not fi_num:
             continue
 
-        appeal_idx = appeal_index.get((ap_domain, appeal_num))
-        if appeal_idx is None:
-            appeal_idx = appeal_index.get((ap_domain, _bare_case_number(appeal_num)))
-        if appeal_idx is None:
+        appeal_candidates = appeal_index.get((ap_domain, appeal_num), set())
+        if not appeal_candidates:
+            appeal_candidates = appeal_index.get((ap_domain, _bare_case_number(appeal_num)), set())
+        if not appeal_candidates:
             # Совместимость: блок appeal ещё без court_domain (данные до
             # миграции) — пробуем пустой домен.
-            appeal_idx = appeal_index.get(("", appeal_num))
-        if appeal_idx is None:
-            appeal_idx = appeal_index.get(("", _bare_case_number(appeal_num)))
-        fi_idx = fi_index.get(fi_num)
-        if fi_idx is None:
-            fi_idx = fi_index.get(_bare_case_number(fi_num))
-
-        if appeal_idx is None:
+            appeal_candidates = appeal_index.get(("", appeal_num), set())
+        if not appeal_candidates:
+            appeal_candidates = appeal_index.get(("", _bare_case_number(appeal_num)), set())
+        appeal_candidates = appeal_candidates - to_remove
+        if not appeal_candidates:
             continue  # апелляционное дело не в нашей базе — пропускаем
+        if len(appeal_candidates) != 1:
+            log.warning("Связка: %s (%s) — несколько апелляционных записей, оставлены отдельно",
+                        appeal_num, ap_domain)
+            continue
+        appeal_idx = next(iter(appeal_candidates))
 
         appeal_case = cases[appeal_idx]
+        fi_candidates = (fi_index.get(fi_num, set())
+                         | fi_index.get(_bare_case_number(fi_num), set())) - to_remove
+        same_court = {i for i in fi_candidates if i != appeal_idx
+                      and _same_fi_court(appeal_case, cases[i])}
+        real = {i for i in same_court if _has_real_fi(cases[i])}
+        eligible = real or same_court
+        if len(eligible) > 1:
+            log.warning("Связка: %s → %s — несколько дел того же суда, оставлены отдельно",
+                        appeal_num, fi_num)
+            continue
+        fi_idx = next(iter(eligible)) if eligible else (
+            appeal_idx if appeal_idx in fi_candidates else None
+        )
 
         if fi_idx is not None and fi_idx != appeal_idx:
             # Есть оба дела — мержим апелляцию в карточку 1 инстанции
@@ -626,6 +671,9 @@ def _cassation_card_to_block(info: dict) -> dict:
         # delo_id раздела — фронту и Worker-календарю для ссылки на карточку
         # (у президиума и КСОЮ он один, 2800001, но домены разные).
         "delo_id": court.delo_id,
+        "srv_num": court.srv_num,
+        "new": court._new_param,
+        "timezone": court.timezone or get_region().timezone,
         "judge": info.get("judge", ""),
         "filing_date": info.get("filing_date", ""),
         "fi_decision_date": info.get("fi_decision_date", ""),
@@ -1116,6 +1164,9 @@ def link_cassation_cases(
                     "decision_date": cass_block["decision_date"],
                     "hearing_date": cass_block["hearing_date"],
                     "hearing_time": cass_block.get("hearing_time", ""),
+                    "timezone": cass_block["timezone"],
+                    "srv_num": cass_block["srv_num"],
+                    "new": cass_block["new"],
                     "appellant": cass_block["appellant"],
                     "appellant_is_bank": cass_block["appellant_is_bank"],
                     "appellant_status": cass_block.get("appellant_status", ""),
@@ -1288,6 +1339,9 @@ def link_cassation_cases(
                     "decision_date": cass_block["decision_date"],
                     "hearing_date": cass_block["hearing_date"],
                     "hearing_time": cass_block.get("hearing_time", ""),
+                    "timezone": cass_block["timezone"],
+                    "srv_num": cass_block["srv_num"],
+                    "new": cass_block["new"],
                     "appellant": cass_block["appellant"],
                     "appellant_is_bank": cass_block["appellant_is_bank"],
                     "appellant_status": cass_block.get("appellant_status", ""),

@@ -796,16 +796,17 @@ class TestProbeSample:
             for seed in range(300):
                 random.seed(seed)
                 targets = probe_sample.build_targets()
-                assert len(targets) == 13, \
-                    f"seed={seed}: целей {len(targets)}, а не 13"
+                assert len(targets) == 18, \
+                    f"seed={seed}: целей {len(targets)}, а не 18"
                 labels = [l for l, _ in targets]
                 domains = [d for _, d in targets]
-                assert len(set(domains)) == 13, f"seed={seed}: домен задвоился"
+                assert len(set(domains)) == 18, f"seed={seed}: домен задвоился"
                 assert "7kas.sudrf.ru" in domains, "кассация выпала из пробы"
+                assert "6kas.sudrf.ru" in domains, "кассация Башкортостана выпала из пробы"
                 for ap in ("oblsud--hmao.sudrf.ru", "oblsud--svd.sudrf.ru",
-                           "oblsud--ynao.sudrf.ru"):
+                           "oblsud--ynao.sudrf.ru", "vs--bkr.sudrf.ru"):
                     assert ap in domains, f"апелляция {ap} выпала из пробы"
-                for zone in ("Свердловская обл. ·", "ЯНАО ·", "ХМАО ·"):
+                for zone in ("Свердловская обл. ·", "ЯНАО ·", "ХМАО ·", "Башкортостан ·"):
                     assert sum(1 for l in labels if l.startswith(zone)) == 3, \
                         f"seed={seed}: в зоне «{zone}» не три суда"
         finally:

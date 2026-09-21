@@ -10,7 +10,7 @@
 // общий: тема — предпочтение человека, не территории.
 const STORAGE_NS=(((typeof window!=='undefined'&&window.REGION_FRONT)||{}).STORAGE_NS)||'';
 function lsKey(name){return STORAGE_NS?STORAGE_NS+':'+name:name;}
-// Одноразовая миграция территории с непустым NS: значения исторических
+// Одноразовая миграция старого Урала: значения исторических
 // bare-ключей копируются в неймспейс (bare-ключи не удаляем — на общем
 // домене это данные ХМАО). Маркер обязателен: пер-ключевая проверка «нет
 // ns-ключа → копируй» реанимировала бы осознанно удалённые ключи
@@ -18,7 +18,7 @@ function lsKey(name){return STORAGE_NS?STORAGE_NS+':'+name:name;}
 // копируем — секрет территориален, у соседней территории он всё равно
 // получил бы 401 и сбросился.
 (function(){
-  if(!STORAGE_NS)return;
+  if(STORAGE_NS!=='ural')return;
   const MARKER=lsKey('ls_migrated_v1');
   try{
     if(localStorage.getItem(MARKER))return;
@@ -238,6 +238,42 @@ function isCassationStage(c){
 function regionCassation(){
   return (window.REGION_INFO&&window.REGION_INFO.cassation)||null;
 }
+// Исходные часы не переводим: у заседания пояс суда, у расписания обхода — территории.
+function hearingTimezone(c,stageKey){
+  const r=(typeof window!=='undefined'&&window.REGION_INFO)||{};
+  const stage=stageKey||(c&&c.stage==='cassation'?'cs':c&&c.stage==='appeal'?'ap':'fi');
+  const b=(c&&(stage==='cs'?c._cs:stage==='ap'?c._ap:c._fi))||{};
+  const courts=stage==='cs'?[...(r.presidium_courts||[]),...(r.cassation?[r.cassation]:[])]:stage==='ap'?(r.appeal_courts||[]):(r.fi_courts||[]);
+  const court=courts.find(x=>x.domain===b.court_domain)||(stage==='cs'&&!b.court_domain?r.cassation:null)||{};
+  for(const timezone of [b.timezone,court.timezone,r.timezone,'Asia/Yekaterinburg']){
+    if(!timezone)continue;
+    const valid=hearingTimezone._valid||(hearingTimezone._valid=new Set());
+    if(valid.has(timezone))return timezone;
+    try{new Intl.DateTimeFormat('en',{timeZone:timezone});valid.add(timezone);return timezone;}catch(_){}
+  }
+  return 'Asia/Yekaterinburg';
+}
+function hearingZoneLabel(c,stageKey){
+  const timezone=hearingTimezone(c,stageKey);
+  const r=(typeof window!=='undefined'&&window.REGION_INFO)||{};
+  if(timezone===(r.timezone||'Asia/Yekaterinburg'))return '';
+  if(timezone==='Europe/Samara')return 'Самара, UTC+4';
+  return 'время суда: '+timezone;
+}
+function hearingUtcMs(dateIso,time,timezone){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateIso||'');
+  if(!m)return NaN;
+  const hm=/^(\d{1,2}):(\d{2})$/.exec(time||'');
+  const local=Date.UTC(+m[1],+m[2]-1,+m[3],hm?+hm[1]:0,hm?+hm[2]:0);
+  const fmt=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+  let utc=local;
+  for(let i=0;i<3;i++){
+    const ps=fmt.formatToParts(utc),p=n=>+ps.find(x=>x.type===n).value;
+    const delta=local-Date.UTC(p('year'),p('month')-1,p('day'),p('hour'),p('minute'),p('second'));
+    utc+=delta;if(!delta)break;
+  }
+  return utc;
+}
 // Бейдж региона в шапке: чей это дашборд («ХМАО-Югра», «ЕКБ + ЯНАО»).
 // Приоритет: блок region из cases.json → REGION_FRONT.REGION_LABEL (файл
 // территории — данные свежего форка ещё пусты) → ХМАО (легаси-данные).
@@ -449,8 +485,7 @@ function computeDetailedStatus(c){
   if(c.status==='decided')return 'decided';
   if(c.status==='returned')return 'returned';
   const evLow=(c.lastEvent||'').toLowerCase();
-  const today=new Date();today.setHours(0,0,0,0);
-  const isFuture=c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today;
+  const isFuture=c.nextDate&&dayDiff(c.nextDate,hearingTimezone(c))>=0;
   // "Приостановлено"
   if(evLow.includes('приостановлен'))return 'paused';
   // "Без движения" / "Оставлено без движения"
@@ -607,12 +642,20 @@ try{
 }catch(e){}
 
 /* ===== Relative dates & accent helpers ===== */
-function dayDiff(dateStr){
+function dayDiff(dateStr,timezone){
   if(!dateStr)return null;
-  const d=new Date(dateStr+'T00:00:00');
-  if(isNaN(d))return null;
-  const today=new Date();today.setHours(0,0,0,0);
-  return Math.round((d-today)/(1000*60*60*24));
+  const d=Date.parse(dateStr+'T00:00:00Z');
+  if(!Number.isFinite(d))return null;
+  const r=(typeof window!=='undefined'&&window.REGION_INFO)||{};
+  const zone=timezone||r.timezone||'Asia/Yekaterinburg',minute=Math.floor(Date.now()/60000);
+  const cache=dayDiff._today||(dayDiff._today=new Map());
+  let today=cache.get(zone);
+  if(!today||today.minute!==minute){
+    const ps=new Intl.DateTimeFormat('en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(Date.now());
+    const p=n=>+ps.find(x=>x.type===n).value;
+    today={minute,utc:Date.UTC(p('year'),p('month')-1,p('day'))};cache.set(zone,today);
+  }
+  return Math.round((d-today.utc)/86400000);
 }
 /* Чистая часть relativeDateText: текст из числа дней, без Date и локали.
  * Ветка «день недели» (7–14 дней) остаётся в relativeDateText — ей нужен
@@ -626,8 +669,8 @@ function relTextFromDays(d){
   if(d<-1&&d>=-6)return d*-1+(d*-1<5?' дня':' дней')+' назад';
   return '';
 }
-function relativeDateText(dateStr){
-  const d=dayDiff(dateStr);
+function relativeDateText(dateStr,timezone){
+  const d=dayDiff(dateStr,timezone);
   const t=relTextFromDays(d);
   if(t)return t;
   if(d!==null&&d>=7&&d<=14){const days=['вс','пн','вт','ср','чт','пт','сб'];const dd=new Date(dateStr+'T00:00:00');return days[dd.getDay()];}
@@ -638,7 +681,7 @@ function rowAccent(c){
   if(isNewCase(c)&&!readCases.has(c.caseNumber))return 'accent-new';
   // scheduled и отложено до/без движения: следим за ближайшей датой
   if(c.status==='active'&&c.nextDate){
-    const d=dayDiff(c.nextDate);
+    const d=dayDiff(c.nextDate,hearingTimezone(c));
     if(d!==null&&d>=0&&d<=1)return 'accent-today';
     if(d!==null&&d>1&&d<=7)return 'accent-soon';
   }
@@ -782,7 +825,7 @@ function computeDerived(c){
   };
 }
 function parseDate(s){if(!s)return '';const m=s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);return s;}
-function formatDate(d){if(!d)return'—';try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
+function formatDate(d){if(!d)return'—';const iso=/^(\d{4})-(\d{2})-(\d{2})$/.exec(d);if(iso)return iso[3]+'.'+iso[2]+'.'+iso[1];try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('ru-RU');}catch{return d;}}
 function escHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ========== JSON Case Conversion ========== */
@@ -1974,21 +2017,17 @@ function renderAnalytics(){
 
   // Upcoming hearings — group by date (Сегодня/Завтра/На неделе/Позже),
   // balance first-instance and appellate cases so neither gets drowned.
-  const today=new Date();today.setHours(0,0,0,0);
-  const tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
-  const weekEnd=new Date(today);weekEnd.setDate(today.getDate()+7);
 
   // Источник — активный датасет: основная картотека / иски банка / «★ Мои»
   // (объединённый: заседания по звёздам обеих картотек).
   let allUpcoming=scopedDataset()
     .filter(c=>c.status==='active'&&c.nextDate&&(c.nextDateLabel==='Заседание'||c.nextDateLabel==='Отложено до'||c.nextDateLabel==='Рассмотрение'))
     .map(c=>{
-      const t=c.hearingTime||'';
-      const hm=t.match(/^(\d{1,2}):(\d{2})$/);
-      const hearingDate=hm?new Date(c.nextDate+'T'+hm[1].padStart(2,'0')+':'+hm[2]+':00'):new Date(c.nextDate+'T00:00:00');
-      return{...c,hearingDate};
+      const timezone=hearingTimezone(c);
+      const hearingDate=new Date(hearingUtcMs(c.nextDate,c.hearingTime,timezone));
+      return{...c,hearingDate,hearingDays:dayDiff(c.nextDate,timezone)};
     })
-    .filter(c=>!isNaN(c.hearingDate)&&c.hearingDate>=today)
+    .filter(c=>!isNaN(c.hearingDate)&&c.hearingDays>=0)
     .sort((a,b)=>a.hearingDate-b.hearingDate);
 
   // В «Моих» scopedDataset уже оставил только watchlist обеих картотек.
@@ -2004,10 +2043,9 @@ function renderAnalytics(){
 
   const groups={today:[],tomorrow:[],week:[],later:[]};
   shownCases.forEach(c=>{
-    const d=new Date(c.hearingDate);d.setHours(0,0,0,0);
-    if(d.getTime()===today.getTime())groups.today.push(c);
-    else if(d.getTime()===tomorrow.getTime())groups.tomorrow.push(c);
-    else if(d<weekEnd)groups.week.push(c);
+    if(c.hearingDays===0)groups.today.push(c);
+    else if(c.hearingDays===1)groups.tomorrow.push(c);
+    else if(c.hearingDays<7)groups.week.push(c);
     else groups.later.push(c);
   });
   const groupMeta=[
@@ -2051,8 +2089,9 @@ function renderAnalytics(){
         const df=shortName(shortParty(c.defendant));
         const rc=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
         const timeTxt=c.hearingTime||'—';
+        const zone=hearingZoneLabel(c);
         const showDate=(g.key==='week'||g.key==='later');
-        const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'}))}</span>`:'';
+        const datePrefix=showDate?`<span class="up-date">${escHtml(c.hearingDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short',timeZone:hearingTimezone(c)}))}</span>`:'';
         const stageBadge=c.stage==='cassation'
           ?'<span class="badge badge-cassation badge-compact">Кассация</span>'
           :c.stage==='appeal'
@@ -2085,7 +2124,7 @@ function renderAnalytics(){
         // Ссылка на карточку суда живёт в drawer — в списке «Ближайших»
         // иконку не дублируем, клик по элементу открывает drawer целиком.
         upHtml+=`<div class="upcoming-item" data-case="${drawerIdEsc}" role="button" tabindex="0" ${KBD_ACT} onclick="openDrawer('${drawerIdEsc}')">`+
-          `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span></div>`+
+          `<div class="up-time">${datePrefix}<span class="up-time-value">${escHtml(timeTxt)}</span>${zone?`<small class="hearing-zone">${escHtml(zone)}</small>`:""}</div>`+
           `<div class="up-body"><div class="up-head"><span class="upcoming-case">${escHtml(caseShort)}</span>${stageBadge}<span class="badge badge-${rc} badge-compact">${ROLE_LABELS[c.sberbankRole]||''}</span>${upChips}</div>${courtHtml}<div class="upcoming-parties">${highlightSberbank(pl)} vs ${highlightSberbank(df)}</div></div>`+
           `</div>`;
       });
@@ -2403,8 +2442,8 @@ function applyFilters(){
     if(mineSource==='bank'&&!c._bankTrack)return false;
     if(st==='archived'){if(!archived)return false;}
     else if(st==='new'){if(!isNewCase(c))return false;}
-    else if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;if(archived||c.status!=='active'||d===null||d<0||d>1)return false;}
-    else if(st==='week'){const d=c.nextDate?dayDiff(c.nextDate):null;if(archived||c.status!=='active'||d===null||d<0||d>7)return false;}
+    else if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate,hearingTimezone(c)):null;if(archived||c.status!=='active'||d===null||d<0||d>1)return false;}
+    else if(st==='week'){const d=c.nextDate?dayDiff(c.nextDate,hearingTimezone(c)):null;if(archived||c.status!=='active'||d===null||d<0||d>7)return false;}
     else if(st==='all'){if(archived)return false;}
     else if(st==='active'){if(c.status!=='active'||archived)return false;}
     else if(st==='scheduled'||st==='postponed'||st==='suspended'||st==='paused'||st==='awaiting'){if(c.detailedStatus!==st||archived)return false;}
@@ -2736,8 +2775,8 @@ function countCasesByStatus(st){
     const archived=caseArchived(c);
     if(st==='all')return !archived;
     if(st==='new')return isNewCase(c);
-    if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=1;}
-    if(st==='week'){const d=c.nextDate?dayDiff(c.nextDate):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=7;}
+    if(st==='today'){const d=c.nextDate?dayDiff(c.nextDate,hearingTimezone(c)):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=1;}
+    if(st==='week'){const d=c.nextDate?dayDiff(c.nextDate,hearingTimezone(c)):null;return !archived&&c.status==='active'&&d!==null&&d>=0&&d<=7;}
     if(st==='active')return c.status==='active'&&!archived;
     if(st==='decided')return (c.status==='decided'||c.status==='returned')&&!archived;
     if(st==='archived')return archived;
@@ -3115,8 +3154,7 @@ function statusIcon(ds){return STATUS_ICONS[ds]||STATUS_ICONS.awaiting;}
 function prepareCaseViewModel(c){
   const roleClass=c.sberbankRole==='plaintiff'?'plaintiff':c.sberbankRole==='defendant'?'defendant':'third';
   const ds=c.detailedStatus||'awaiting';
-  const today=new Date();today.setHours(0,0,0,0);
-  const isFutureHearing=!!(c.nextDate&&new Date(c.nextDate+'T00:00:00')>=today);
+  const isFutureHearing=!!(c.nextDate&&dayDiff(c.nextDate,hearingTimezone(c))>=0);
   const resultPresent=!!(c.result&&c.result!=='pending');
   const resultIcon=RESULT_ICONS[c.result]||'';
   // Для результата 1-й инстанции (resultSource='fi': сама 1-я инст.,
@@ -3345,7 +3383,7 @@ function hearingRowState(o){
     if(!kdNext||(o.resolvedDate&&kdNext===o.resolvedDate))return {show:false,label:'',note:'',prefix:''};
     return {show:true,label:'Последнее заседание',note:'',prefix:''};
   }
-  const d=kdNext?dayDiff(kdNext):null;
+  const d=kdNext?dayDiff(kdNext,o&&o.timezone):null;
   if(d!==null&&d<0&&HEARING_DATE_LABELS.includes(label)&&label!=='Без движения до'){
     return {show:true,label:'Последнее заседание',note:'следующее не назначено',prefix:''};
   }
@@ -3364,7 +3402,8 @@ function buildHearingHtml(c,vm,opts){
     // мобильной карточке он выглядел потерянным минусом справа от статуса.
     return (opts&&opts.compact)?'':'<span class="cell-empty">—</span>';
   }
-  const d=dayDiff(c.nextDate);
+  const timezone=hearingTimezone(c);
+  const d=dayDiff(c.nextDate,timezone);
   let pCls='';
   if(d===0||d===1)pCls='hearing-today';
   else if(d!==null&&d>1&&d<=7)pCls='hearing-soon';
@@ -3374,8 +3413,10 @@ function buildHearingHtml(c,vm,opts){
   // включая Отложено и Без движения: бейдж сообщает статус, а юристу
   // важно увидеть конкретный час следующего заседания.
   const timeAllowed=['scheduled','prep','prelim','main','postponed','suspended'].includes(vm.ds);
+  const zone=hearingZoneLabel(c);
   const timeStr=(timeAllowed&&c.hearingTime)?escHtml(c.hearingTime):'';
-  const rel=relativeDateText(c.nextDate);
+  const zoneHtml=timeStr&&zone?`<small class="hearing-zone">${escHtml(zone)}</small>`:'';
+  const rel=relativeDateText(c.nextDate,timezone);
   let rCls='';
   if(d===0)rCls='today';
   else if(d!==null&&d>0&&d<=7)rCls='soon';
@@ -3389,12 +3430,12 @@ function buildHearingHtml(c,vm,opts){
     // метки («ср», «завтра», «через 2 дня») — решение юриста 28.07.2026:
     // срочность и так видна цветом даты (hearing-today/soon).
     const dateLine=timeStr?`${dateStr} в ${timeStr}`:dateStr;
-    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateLine}</span></div>`;
+    return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateLine}</span>${zoneHtml}</div>`;
   }
   // Десктоп-таблица: три строки — дата, время, относительная метка справа.
   const relRow=rel?`<span class="hearing-relative ${rCls}">${rel}</span>`:'';
   const timeRow=timeStr?`<span class="hearing-time ${pCls}">${timeStr}</span>`:'';
-  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateStr}</span>${timeRow}${relRow}</div>`;
+  return `<div class="cell-hearing"><span class="hearing-primary ${pCls}">${prefix}${dateStr}</span>${timeRow}${zoneHtml}${relRow}</div>`;
 }
 
 function renderTable(){
@@ -4120,14 +4161,15 @@ function renderDrawer(c){
   // говорит о ней.
   const kdActiveKey=c.stage==='appeal'?'ap':c.stage==='cassation'?'cs':'fi';
   const kdDecided=kdResultPresent||(kdStageKey===kdActiveKey&&c.status==='decided');
-  const hear=hearingRowState({kdNext:kdNext,kdNextLabel:kdNextLabel,kdResultPresent:kdDecided,resolvedDate:resolvedDate});
-  const hearD=kdNext?dayDiff(kdNext):null;
+  const hear=hearingRowState({kdNext:kdNext,kdNextLabel:kdNextLabel,kdResultPresent:kdDecided,resolvedDate:resolvedDate,timezone:hearingTimezone(c,kdStageKey)});
+  const hearD=kdNext?dayDiff(kdNext,hearingTimezone(c,kdStageKey)):null;
   const hearCls=hearD===0||hearD===1?'kv-today':(hearD!==null&&hearD<=7&&hearD>0?'kv-soon':'');
-  const rel=kdNext?relativeDateText(kdNext):'';
+  const rel=kdNext?relativeDateText(kdNext,hearingTimezone(c,kdStageKey)):'';
+  const kdZone=hearingZoneLabel(c,kdStageKey);
   // «(вчера, следующее не назначено)» / «(прошло, следующее не назначено)».
   const hearNote=hear.note?`${rel||'прошло'}, ${hear.note}`:rel;
   const hearValue=kdNext
-    ?`${hear.prefix}${formatDate(kdNext)}${kdHearingTime?' · '+escHtml(kdHearingTime):''}${hearNote?` <span style="color:var(--slate-500);font-weight:500;">(${hearNote})</span>`:''}`
+    ?`${hear.prefix}${formatDate(kdNext)}${kdHearingTime?' · '+escHtml(kdHearingTime)+(kdZone?' · '+escHtml(kdZone):''):''}${hearNote?` <span style="color:var(--slate-500);font-weight:500;">(${hearNote})</span>`:''}`
     :'—';
 
   let keyDates=`<div class="kv-grid">`;

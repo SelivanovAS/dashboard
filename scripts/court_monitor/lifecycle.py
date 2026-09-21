@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config
 from court_monitor.config import log
+from court_monitor.regions import get_region
 from court_monitor.textutil import (
     parse_date, _bare_case_number,
     classify_appellant_role, appellant_role_words, _norm_party_tokens,
@@ -2588,7 +2589,7 @@ def dedupe_cassation_by_internal_number(cases: list[dict]) -> int:
         if cn:
             # Ключ — ПАРА (домен суда, номер): «4Г-N/YYYY» двух президиумов
             # Урала совпадают; пустой домен = КСОЮ (блоки до 04.09.2026).
-            dom = (cass.get("court_domain") or "7kas.sudrf.ru").strip().lower()
+            dom = (cass.get("court_domain") or get_region().cassation_court.domain).strip().lower()
             groups.setdefault(f"{dom}|{cn}", []).append(i)
 
     def _score(c: dict) -> tuple:

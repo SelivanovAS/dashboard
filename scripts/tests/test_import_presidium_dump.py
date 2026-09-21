@@ -316,6 +316,33 @@ def test_selected_section_reaches_actual_result_payload(env):
 
 
 class TestAnnounce:
+    def test_linked_presidium_import_keeps_events_for_one_context(self, env, monkeypatch):
+        from court_monitor import runs
+        monkeypatch.setattr(cm_config, 'LAST_DIGEST_CONTEXT_PATH', str(env['json'].with_name('context.json')))
+        monkeypatch.setattr(cm_config, 'PARSE_TXN_ID', '')
+        monkeypatch.setattr(cm_config, 'PARSE_TXN_ACK_FILE', '')
+        _seed(env, [{
+            'id': '2-1543-2803/2019', 'current_stage': 'first_instance',
+            'first_instance': {'case_number': '2-1543-2803/2019', 'magistrate': True,
+                               'judicial_uid': '86MS0072-01-2019-003202-72'},
+        }])
+        assert _run(env) == isd.EXIT_OK
+        assert _summary(env)['linked'] == 1
+        data = json.loads(env['json'].read_text())
+        pending = data['pending_cassation_changes']
+        assert len(pending) == 1 and 'new_cassation' in pending[0]['type']
+        assert pending[0]['details']['court_domain'] == DOMAIN
+        # Discovery соседнего дела сохраняет собственный канал анонса.
+        discovered = runs.announce_imported_presidium_cases(data['cases'])
+        assert [c['id'] for c in discovered] == ['4Г-17/2026']
+        changes = runs.merge_imported_cassation_changes(data, [])
+        issue_key = runs.save_digest_context([], [], cass_changes=changes, cass_discovered=discovered)
+        runs.acknowledge_imported_cassation_changes(data, changes, issue_key)
+        assert _run(env) == isd.EXIT_OK
+        data = json.loads(env['json'].read_text())
+        assert not runs.merge_imported_cassation_changes(data, [])
+        assert not runs.announce_imported_presidium_cases(data['cases'])
+
     def test_presidium_import_announced_once(self, env):
         from court_monitor import runs as cm_runs
         _seed(env, [])

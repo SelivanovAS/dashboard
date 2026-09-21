@@ -1,3 +1,4 @@
+import { readGatewayImportBody } from "./import_gateway.js";
 import { renderAdminHtml } from "./admin_page.js";
 import { readProfile, recordProfileUse, profileLifecycleFields, cleanupProfiles, PROFILE_CLEANUP_CRON } from "./profile_lifecycle.js";
 
@@ -466,19 +467,58 @@ function calDateLocal(ddmmyyyy) {
 // "17:20" → "1720" | null (время в карточке бывает пустым — тогда all-day).
 function calTimeLocal(hhmm) {
   const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})$/);
-  return m ? `${m[1].padStart(2, "0")}${m[2]}` : null;
+  // 00:00 — заглушка ГАС «время не указано», как в шаблоне дайджеста.
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59 || Number(m[1]) + Number(m[2]) === 0) return null;
+  return `${m[1].padStart(2, "0")}${m[2]}`;
 }
-// «Сегодня» в поясе территории, формат YYYYMMDD — граница отбора событий.
-function calTodayYmd(nowMs) {
-  const d = new Date(nowMs + calTzOffsetMin() * 60000);
-  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+// «Сегодня» в выбранном поясе суда, формат YYYYMMDD — граница отбора событий.
+function calTodayYmd(nowMs, timezone = calTzid()) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone,
+    year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(nowMs);
+  const part = (name) => parts.find((p) => p.type === name).value;
+  return part("year") + part("month") + part("day");
+}
+// Время карточки — местные часы СУДА. КСОЮ может находиться в другом поясе.
+function calCourtMeta(block, region, stage) {
+  const r = region || {};
+  // Апелляция и старый президиум делят домен, но читают разные разделы.
+  const courts = stage === "cassation"
+    ? [...(r.presidium_courts || []), ...(r.cassation ? [r.cassation] : [])]
+    : stage === "appeal" ? (r.appeal_courts || []) : (r.fi_courts || []);
+  const domain = String(block.court_domain || "").toLowerCase();
+  return courts.find((c) => c.domain === domain) ||
+    (stage === "cassation" && !domain ? r.cassation : null) || {};
+}
+function calHearingTimezone(block, region, stage) {
+  const meta = calCourtMeta(block, region, stage);
+  for (const timezone of [block.timezone, meta.timezone, region && region.timezone, calTzid()]) {
+    if (!timezone) continue;
+    try { new Intl.DateTimeFormat("en", { timeZone: timezone }); return timezone; } catch (_) {}
+  }
+  return "Asia/Yekaterinburg";
+}
+function calLocalUtcMs(dateYmd, time, timezone) {
+  const local = Date.UTC(Number(dateYmd.slice(0, 4)), Number(dateYmd.slice(4, 6)) - 1,
+    Number(dateYmd.slice(6, 8)), Number((time || "0000").slice(0, 2)), Number((time || "0000").slice(2)));
+  const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: timezone,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  let utc = local;
+  for (let i = 0; i < 3; i++) {
+    const parts = formatter.formatToParts(utc);
+    const part = (name) => Number(parts.find((p) => p.type === name).value);
+    const shown = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+    const delta = local - shown;
+    utc += delta;
+    if (!delta) break;
+  }
+  return utc;
 }
 
 // Выбор активного блока стадии — зеркало jsonToCase фронта (app.js): кассация
 // при живом cs.case_number; апелляция в appeal/cassation_watch/cassation_
 // pending при живом ap.case_number; иначе первая инстанция.
 // → {stage, block, dateYmd, time, canon} | null (нет назначенной даты).
-function calSelectHearing(c) {
+function calSelectHearing(c, region) {
   const fi = c.first_instance || {};
   const ap = c.appeal || {};
   const cs = c.cassation || {};
@@ -497,6 +537,8 @@ function calSelectHearing(c) {
     dateYmd,
     time: calTimeLocal(block.hearing_time),
     canon: wnBareCaseNumber(c.id),
+    timezone: calHearingTimezone(block, region, stage),
+    courtMeta: calCourtMeta(block, region, stage),
   };
 }
 // Зал/кабинет из events[] активного блока: событие с датой заседания несёт
@@ -532,22 +574,17 @@ function calBuildCourtLink(sel) {
   if (/^https?:\/\//.test(linkRaw)) return linkRaw;
   const pm = linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
   if (!pm || !b.court_domain) return "";
-  const did = b.delo_id || (sel.stage === "appeal" ? 5 : 1540005);
-  const srv = b.srv_num || 1;
-  const newParam = sel.stage === "cassation" ? 2800001 : (sel.stage === "appeal" ? 5 : 0);
+  const meta = sel.courtMeta || {};
+  const did = b.delo_id || meta.delo_id || (sel.stage === "cassation" ? 2800001 : sel.stage === "appeal" ? 5 : 1540005);
+  const srv = b.srv_num || meta.srv_num || 1;
+  const newParam = b.new != null ? b.new : meta.new != null ? meta.new : sel.stage === "cassation" ? 2800001 : (sel.stage === "appeal" ? 5 : 0);
   return `https://${b.court_domain}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
 }
-// UTC-штамп для DTSTAMP: локальное время территории минус смещение.
+// UTC-штамп для DTSTAMP: исходное локальное время суда в его часовом поясе.
 // СТАБИЛЬНЫЙ (производный от DTSTART, не Date.now()): тело фида не должно
 // меняться от поллинга к поллингу без реальной причины.
-function calDtstampUtc(dateYmd, time) {
-  const hh = time ? time.slice(0, 2) : "00";
-  const mm = time ? time.slice(2) : "00";
-  const local = Date.UTC(
-    Number(dateYmd.slice(0, 4)), Number(dateYmd.slice(4, 6)) - 1,
-    Number(dateYmd.slice(6, 8)), Number(hh), Number(mm)
-  );
-  const d = new Date(local - calTzOffsetMin() * 60000);
+function calDtstampUtc(dateYmd, time, timezone = calTzid()) {
+  const d = new Date(calLocalUtcMs(dateYmd, time, timezone));
   return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 // Одно событие VEVENT. UID = <canon>--<stage>@<host>: без даты (перенос
@@ -556,14 +593,15 @@ function calDtstampUtc(dateYmd, time) {
 // при переезде дела между стадиями, @host разводит территории.
 function buildVevent(sel, c, host, tzid) {
   const b = sel.block;
+  const timezone = sel.timezone || tzid || calTzid();
   const lines = ["BEGIN:VEVENT"];
   const uid = `${sel.canon.replace(/\s+/g, "")}--${sel.stage}@${host}`;
   lines.push(`UID:${icsEscape(uid)}`);
-  lines.push(`DTSTAMP:${calDtstampUtc(sel.dateYmd, sel.time)}`);
+  lines.push(`DTSTAMP:${calDtstampUtc(sel.dateYmd, sel.time, timezone)}`);
   if (sel.time) {
-    const endH = String((Number(sel.time.slice(0, 2)) + 1) % 24).padStart(2, "0");
-    lines.push(`DTSTART;TZID=${tzid}:${sel.dateYmd}T${sel.time}00`);
-    lines.push(`DTEND;TZID=${tzid}:${sel.dateYmd}T${endH}${sel.time.slice(2)}00`);
+    const end = new Date(calLocalUtcMs(sel.dateYmd, sel.time, timezone) + 3600000);
+    lines.push(`DTSTART:${calDtstampUtc(sel.dateYmd, sel.time, timezone)}`);
+    lines.push(`DTEND:${end.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}`);
   } else {
     // Время суду ещё неизвестно — событие на весь день (DTEND = след. день).
     const d = new Date(Date.UTC(
@@ -587,6 +625,8 @@ function buildVevent(sel, c, host, tzid) {
     lines.push(`LOCATION:${icsEscape(place ? `${court}, ${place}` : court)}`);
   }
   const descParts = [];
+  const zoneLabel = timezone === "Europe/Samara" ? "Самара, UTC+4" : timezone === "Asia/Yekaterinburg" ? "UTC+5" : timezone;
+  if (sel.time) descParts.push(`Время суда: ${sel.time.slice(0, 2)}:${sel.time.slice(2)} (${zoneLabel})`);
   const judge = b.judge || b.judge_reporter || "";
   if (judge) descParts.push(`Судья: ${judge}`);
   if (c.plaintiff) descParts.push(`Истец: ${c.plaintiff}`);
@@ -600,7 +640,7 @@ function buildVevent(sel, c, host, tzid) {
   return lines;
 }
 // Обёртка VCALENDAR. Склейка строк — строго CRLF (RFC 5545), каждая строка
-// свёрнута по 75 октетов. VTIMEZONE фиксированный +0500 без DST.
+// свёрнута по 75 октетов. События в UTC: фиксированный VTIMEZONE не нужен.
 function buildIcs(veventLines, tzid, calName) {
   const lines = [
     "BEGIN:VCALENDAR",
@@ -612,15 +652,6 @@ function buildIcs(veventLines, tzid, calName) {
     `X-WR-TIMEZONE:${tzid}`,
     "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
     "X-PUBLISHED-TTL:PT6H",
-    "BEGIN:VTIMEZONE",
-    `TZID:${tzid}`,
-    "BEGIN:STANDARD",
-    "DTSTART:19700101T000000",
-    "TZOFFSETFROM:+0500",
-    "TZOFFSETTO:+0500",
-    "TZNAME:+05",
-    "END:STANDARD",
-    "END:VTIMEZONE",
     ...veventLines,
     "END:VCALENDAR",
   ];
@@ -1159,20 +1190,19 @@ async function handleCalendarFeed(request, env, token) {
       const bankJson = await fetchJsonCached(adminPageConfig().bankUrl);
       bankCases = Array.isArray(bankJson?.cases) ? bankJson.cases : [];
     }
-    const todayYmd = calTodayYmd(Date.now());
     const veventLines = [];
     for (const c of (Array.isArray(casesJson.cases) ? casesJson.cases : [])) {
       if (!watchSet.has(wnBareCaseNumber(c.id))) continue;
-      const sel = calSelectHearing(c);
-      if (sel && calCaseIncluded(sel, todayYmd)) {
+      const sel = calSelectHearing(c, casesJson.region);
+      if (sel && calCaseIncluded(sel, calTodayYmd(Date.now(), sel.timezone))) {
         veventLines.push(...buildVevent(sel, c, host, tzid));
       }
     }
     for (const c of bankCases) {
       const dom = String((c.first_instance || {}).court_domain || "").trim();
       if (!watchSet.has(`${dom}|${wnBareCaseNumber(c.id)}`)) continue;
-      const sel = calSelectHearing(c);
-      if (sel && calCaseIncluded(sel, todayYmd)) {
+      const sel = calSelectHearing(c, casesJson.region);
+      if (sel && calCaseIncluded(sel, calTodayYmd(Date.now(), sel.timezone))) {
         veventLines.push(...buildVevent(sel, c, host, tzid));
       }
     }
@@ -2210,6 +2240,18 @@ async function handleAdminImportDump(request, env) {
   } catch (_) {
     return new Response("Bad JSON", { status: 400 });
   }
+  if (body && Object.prototype.hasOwnProperty.call(body, "__gateway_upload")) {
+    try {
+      const loaded = await readGatewayImportBody(body, env);
+      body = loaded.body;
+      jsonHeaders["X-Import-Gateway-SHA256"] = loaded.sha256;
+    } catch (error) {
+      if (error.sha256) jsonHeaders["X-Import-Gateway-SHA256"] = error.sha256;
+      return new Response(JSON.stringify({ ok: false, error: error.message }), {
+        status: error.status || 502, headers: jsonHeaders,
+      });
+    }
+  }
   const courtDomain = canonSudrfHost(String((body && body.court_domain) || ""));
   const operator = String((body && body.operator) || "").trim().slice(0, 60);
   const html = typeof (body && body.html) === "string" ? body.html : "";
@@ -2725,7 +2767,7 @@ async function handleImportResult(request, env) {
                      "linked",
                      // ветка президиума (кассация по делам мировых судей,
                      // 04.09.2026): дела до реформы ГПК, пропущенные без карточки.
-                     "skipped_old",
+                     "skipped_old", "skipped_region", "needs_review",
                      // счётчики точечного добавления (kind:"case").
                      // ⚠️ fetch_error — не косметика: по нему очередь резерва
                      // (ops/mac-local-run/import_queue.jq) узнаёт пачку,
@@ -2771,6 +2813,9 @@ async function handleImportResult(request, env) {
   // домену была бы ложной. Белый список значений — поле идёт в рендер.
   if (!isDump && ["first_instance", "appeal", "cassation"].includes(body.section)) {
     record.section = body.section;
+  }
+  if (["court", "presidium"].includes(body.cassation_kind)) {
+    record.cassation_kind = body.cassation_kind;
   }
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), importLogWriteOptions(record));
   // Свежесть по инстанции: последний УСПЕШНЫЙ импорт domain:delo_id.

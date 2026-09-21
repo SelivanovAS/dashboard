@@ -58,7 +58,8 @@ def _orphan_appeal(ap_num: str, court: CourtConfig) -> dict:
         "current_stage": "appeal",
         "plaintiff": "",
         "defendant": "",
-        "first_instance": None,
+        "first_instance": {"court": "Сургутский городской суд",
+                           "court_domain": "surggor--hmao.sudrf.ru"},
         "appeal": {
             "case_number": ap_num,
             "court": court.name,

@@ -68,7 +68,7 @@ class TestRegionConfigDerived:
         assert info["appeal_courts"] == [
             {"name": "Суд ХМАО-Югры", "domain": "oblsud--hmao.sudrf.ru",
              "delo_id": 5, "search_gated": True, "search_disabled": True,
-             "srv_num": 1},
+             "srv_num": 1, "timezone": "Asia/Yekaterinburg", "new": 5},
         ]
         assert info["cassation"]["domain"] == "7kas.sudrf.ru"
         assert info["cassation"]["new"] == 2800001
@@ -210,8 +210,10 @@ class TestSverdlovskYanaoRegion:
             "name": "Академический районный суд г. Екатеринбурга",
             "domain": "akademicheskiy--svd.sudrf.ru",
             "search_gated": True,
+            "search_disabled": False,
             "srv_num": 1,
             "delo_id": 1540005,
+            "timezone": "Asia/Yekaterinburg",
         }
         assert any(not c["search_gated"] for c in fi)  # ЯНАО ищется
         hmao_fi = get_region("hmao").public_info()["fi_courts"]
@@ -355,3 +357,121 @@ class TestDigestHeaderFromRegion:
     def test_hmao_header_unchanged(self):
         html = self._render()
         assert "📊 <b>Мониторинг дел Сбербанка ХМАО-Югра — " in html
+
+
+class TestBashkortostanRegion:
+    """Новый реестр: исходные строки не теряются, СП не становятся выдуманными базами."""
+
+    @staticmethod
+    def _registry():
+        import json
+        from pathlib import Path
+        return json.loads(
+            (Path(__file__).resolve().parents[2] / "docs/regions/bashkortostan_courts.json")
+            .read_text(encoding="utf-8")
+        )
+
+    def test_source_rows_and_runtime_courts_agree(self):
+        r = get_region("bashkortostan")
+        registry = self._registry()
+        source = [row for row in registry["records"] if row["source_row"] is not None]
+        assert sorted(row["source_row"] for row in source) == list(range(5, 74))
+        assert len({row["source_bpm_id"] for row in source}) == 69
+        assert len(r.first_instance_courts) == 45
+        expected = {
+            (row["runtime_name"], row["runtime_domain"])
+            for row in source if row["record_type"] == "first_instance"
+        }
+        assert {(c.name, c.domain) for c in r.first_instance_courts} == expected
+        assert [c.domain for c in r.appeal_courts] == ["vs--bkr.sudrf.ru"]
+        assert [c.domain for c in r.presidium_courts] == ["vs--bkr.sudrf.ru"]
+        assert not r.presidium_courts[0].search_gated
+        assert not r.presidium_courts[0].search_disabled
+        assert r.manual_import_all_courts
+        assert r.public_info()["manual_import_all_courts"] is True
+
+    def test_presences_share_verified_base_without_duplicate_runtime_courts(self):
+        r = get_region("bashkortostan")
+        presences = [
+            row for row in self._registry()["records"]
+            if row["record_type"] == "judicial_presence"
+        ]
+        assert len(presences) == 23
+        assert all(row["configured_srv_num"] is None for row in presences)
+        assert all(not row["runtime_entry"] for row in presences)
+        assert len({c.domain for c in r.first_instance_courts}) == 45
+        assert r.extra["presence_server_mapping_complete"]
+        assert all(row["mapped_srv_num"] == 1 for row in presences)
+        assert all(row["building_id"] for row in presences)
+        mezhgorye = next(row for row in presences if row["source_row"] == 12)
+        assert mezhgorye["confirmed_srv_nums"] == [1]
+        assert "completeness_unverified" in mezhgorye["mapping_status"]
+        assert mezhgorye["building_id"] == "913410001"
+        fedorovka = next(row for row in presences if row["source_row"] == 69)
+        assert fedorovka["building_id"] == "913410001"
+        assert "МС" not in fedorovka["building_name"]
+
+    def test_original_conflicting_akyar_id_not_silently_rewritten(self):
+        by_row = {row["source_row"]: row for row in self._registry()["records"]}
+        assert by_row[8]["source_gas_id"] == "03RS0040_Akiar"
+        assert by_row[8]["source_id_conflict"]
+        assert by_row[8]["runtime_domain"] == "zilairsky--bkr.sudrf.ru"
+        assert by_row[8]["parent_source_row"] == 48
+        assert by_row[45]["source_gas_id"] == "03RS0040"
+        assert by_row[48]["source_gas_id"] == "03RS0043"
+
+    def test_sixth_cassation_search_gated_but_cards_enabled(self):
+        from urllib.parse import parse_qs, urlsplit
+        c = get_region("bashkortostan").cassation_court
+        assert c.enabled and c.search_gated and c.search_disabled
+        assert uc.courts_for_search([c]) == []
+        search = urlsplit(c.search_url())
+        params = parse_qs(search.query)
+        assert search.netloc == "6kas.sudrf.ru"
+        assert params["delo_id"] == params["new"] == ["2800001"]
+        assert params["delo_table"] == ["g33_case"]
+        assert "G33_PARTS__NAMESS" in params
+        card = urlsplit(c.card_url("24413318", "268d4cf1-f089-48be-b3c8-44b86ad5d164"))
+        assert card.netloc == "6kas.sudrf.ru"
+        assert parse_qs(card.query)["name_op"] == ["case"]
+
+    def test_local_schedule_and_samara_hearings_have_distinct_zones(self):
+        r = get_region("bashkortostan")
+        assert r.timezone == "Asia/Yekaterinburg"
+        assert r.tz_offset_hours == 5
+        assert r.cassation_court.timezone == "Europe/Samara"
+        assert r.health_cassation_keys() == (
+            "cassation:6kas:total", "cassation:6kas:bashkortostan",
+        )
+
+    def test_network_uncertainty_does_not_disable_first_instance_search(self):
+        r = get_region("bashkortostan")
+        assert all(c.enabled and not c.search_gated and not c.search_disabled
+                   for c in (*r.first_instance_courts, *r.appeal_courts))
+        assert not r.extra["registry_live_verification_complete"]
+
+    def test_canonical_first_instance_names_match_only_own_region(self):
+        r = get_region("bashkortostan")
+        for c in r.first_instance_courts:
+            assert uc.match_region_first_instance(
+                f"{c.name} Республики Башкортостан", r,
+            ) is c
+        assert uc.match_region_first_instance(
+            "Кировский районный суд г. Казани Республики Татарстан", r,
+        ) is None
+        assert uc.match_region_first_instance("Верховный суд Республики Башкортостан", r) is None
+
+    @pytest.mark.parametrize("name,domain", [
+        ("Бижбулякский районный суд", "bizhbuliaksky--bkr.sudrf.ru"),
+        ("Зилаирский районный суд", "zilairsky--bkr.sudrf.ru"),
+        ("Кумертауский городской суд", "kumertauskiy--bkr.sudrf.ru"),
+        ("Белорецкий городской суд", "belorecky--bkr.sudrf.ru"),
+        ("Октябрьский районный суд г.Уфы", "oktiabrsky--bkr.sudrf.ru"),
+        ("Октябрьский городской суд", "oktabrsky--bkr.sudrf.ru"),
+        ("Салаватский городской суд", "salavatsky--bkr.sudrf.ru"),
+        ("Салаватский межрайонный суд", "salavatskiy--bkr.sudrf.ru"),
+    ])
+    def test_verified_name_variants_and_similar_courts_stay_distinct(self, name, domain):
+        r = get_region("bashkortostan")
+        got = uc.match_region_first_instance(f"{name} Республики Башкортостан", r)
+        assert got is not None and got.domain == domain
