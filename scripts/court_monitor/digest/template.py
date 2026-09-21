@@ -13,6 +13,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from court_monitor import config
 from court_monitor.config import log
@@ -664,6 +665,28 @@ def _fmt_hearing_dt(date: str, time: str) -> str:
     if not date:
         return ""
     return f"{date} в {time}" if time else date
+
+
+def _court_time_note(details: dict, block: dict, hearing_date: str) -> str:
+    """Подпись отличающегося пояса суда; исходные часы не пересчитываем."""
+    region = get_region()
+    domain = details.get("court_domain") or block.get("court_domain") or region.cassation_court.domain
+    courts = (region.cassation_court, *region.presidium_courts,
+              *region.appeal_courts, *region.first_instance_courts)
+    court = next((c for c in courts if c.domain == domain), None)
+    regional_zone = getattr(region, "timezone", "Asia/Yekaterinburg")
+    zone = details.get("timezone") or block.get("timezone") or getattr(court, "timezone", "") or regional_zone
+    if zone == regional_zone:
+        return ""
+    try:
+        dt = datetime.strptime(hearing_date, "%d.%m.%Y").replace(tzinfo=ZoneInfo(zone))
+        minutes = int(dt.utcoffset().total_seconds() // 60)
+    except (ValueError, ZoneInfoNotFoundError):
+        return ""
+    hours, minute = divmod(abs(minutes), 60)
+    offset = f"UTC{'+' if minutes >= 0 else '-'}{hours}" + (f":{minute:02}" if minute else "")
+    name = "Самара" if zone == "Europe/Samara" else "время суда"
+    return f" ({name}, {offset})"
 
 
 def _hearing_type_paren(d: dict) -> str:
@@ -3506,6 +3529,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 hearing_str = f"<b>{escape_html(_fmt_hearing_dt(hd, ht))}</b>"
                 cass_block.append(
                     f"📅 Назначено судебное заседание на {hearing_str}"
+                    + (escape_html(_court_time_note(d, parent.get("cassation") or {}, hd))
+                       if ht and ht not in ("00:00", "0:00") else "")
                 )
             # «Без движения» (13.08.2026): срок устранения недостатков —
             # строка только при типе cass_suspended (сам suspended_until в

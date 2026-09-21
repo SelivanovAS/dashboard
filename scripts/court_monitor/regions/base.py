@@ -61,6 +61,11 @@ class CourtConfig:
     delo_table: str | None = None
     name_field: str | None = None
     new_param: int | None = None
+    # IANA-пояс именно суда; пусто — наследовать часовой пояс территории.
+    # КСОЮ может находиться в другом поясе (6kas — Самара, Башкортостан — Уфа).
+    timezone: str = ""
+    # Подтверждённые старые/вариантные названия после объединения судов.
+    name_aliases: tuple[str, ...] = ()
 
     @property
     def base_url(self) -> str:
@@ -207,9 +212,9 @@ class RegionConfig:
     # Президиумы областных/окружных судов — кассация по делам МИРОВЫХ судей
     # (ГПК с 05.2026: такие жалобы ушли из КСОЮ в президиум облсуда). Домен —
     # тот же, что у апел-суда, раздел `delo_id=2800001`, `court_type=
-    # "cassation"`. Поиск раздела за проверочным кодом → search_gated +
-    # search_disabled: новые дела заводит только дамп выдачи (админка →
-    # «Импорт», ветка президиума импортёра), карточки перечитывает фаза 4d
+    # "cassation"`. Если поиск за кодом → search_gated + search_disabled,
+    # новые дела заводит дамп. Открытые президиумы собирает presidium_search
+    # в кассационной фазе; дампы доступны для добора. Карточки перечитывает фаза 4d
     # прогона по `cassation.court_domain`. ⚠️ В appeal_courts НЕ класть:
     # _appeal_health_key (runs.py) и appeal_court_by_domain считают
     # апелляции по этому кортежу. cassation_court (КСОЮ) остаётся один.
@@ -228,6 +233,10 @@ class RegionConfig:
     tz_offset_hours: int = 5                    # локальное время территории (админка)
     pwa_name: str = ""                          # имя PWA (manifest форка)
     extra: dict = field(default_factory=dict)   # запас на будущее без миграций
+    timezone: str = "Asia/Yekaterinburg"        # IANA-пояс местных судов и территории
+    # Первичное наполнение может ограничиваться первой страницей автопоиска;
+    # тогда операторы добирают историю дампами любых судов территории.
+    manual_import_all_courts: bool = False
 
     @property
     def fi_default_delo_id(self) -> int:
@@ -246,6 +255,8 @@ class RegionConfig:
             "name": self.name,
             "name_short": self.name_short or self.name,
             "digest_title": self.digest_title,
+            "timezone": self.timezone,
+            "manual_import_all_courts": self.manual_import_all_courts,
             # Апел-суды: кроме подписи и ссылок фронта отсюда же строится
             # dropdown дампов в админке — у апелляции тоже бывает проверочный
             # код (Свердловский облсуд, 25.08.2026). srv_num — для ссылки
@@ -262,6 +273,8 @@ class RegionConfig:
                     "search_gated": c.search_gated,
                     "search_disabled": c.search_disabled,
                     "srv_num": c.srv_num,
+                    "timezone": c.timezone or self.timezone,
+                    "new": c._new_param,
                 }
                 for c in self.appeal_courts
             ],
@@ -279,6 +292,8 @@ class RegionConfig:
                     "search_gated": c.search_gated,
                     "srv_num": c.srv_num,
                     "delo_id": c.delo_id,
+                    "timezone": c.timezone or self.timezone,
+                    "search_disabled": c.search_disabled,
                 }
                 for c in self.first_instance_courts
             ],
@@ -287,6 +302,11 @@ class RegionConfig:
                 "domain": self.cassation_court.domain,
                 "delo_id": self.cassation_court.delo_id,
                 "new": self.cassation_court._new_param,
+                "srv_num": self.cassation_court.srv_num,
+                "search_gated": self.cassation_court.search_gated,
+                "search_disabled": self.cassation_court.search_disabled,
+                "timezone": self.cassation_court.timezone or self.timezone,
+                "cassation_kind": "court",
             },
             # Президиумы (кассация по делам мировых судей, с 04.09.2026):
             # третья закреплённая строка dropdown'а дампов админки; `new` —
@@ -300,6 +320,8 @@ class RegionConfig:
                     "search_disabled": c.search_disabled,
                     "srv_num": c.srv_num,
                     "new": c._new_param,
+                    "timezone": c.timezone or self.timezone,
+                    "cassation_kind": "presidium",
                 }
                 for c in self.presidium_courts
             ],

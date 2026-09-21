@@ -38,6 +38,7 @@ from court_monitor.courts import (
     match_fi_court_by_short_name, match_hmao_first_instance, _eyo,
 )
 from court_monitor.regions import get_region
+from court_monitor.presidium_search import collect_presidium_finds
 from court_monitor.delivery import (
     _build_watchlist_alias_indexes, _filter_events_by_watchlist,
     _make_per_sub_callback,
@@ -1902,6 +1903,20 @@ def reclassify_named_appellants_is_bank(cases: list[dict]) -> int:
     return fixed_cases
 
 
+def fetch_cassation_search(court, health_key: str, successful_today: set[str]):
+    """Закрытый поиск не мешает отдельной фазе перечитки известных карточек.
+    Пропуск не становится HTTP-ошибкой/нулевой выдачей в журнале здоровья."""
+    if not court.enabled or court.search_disabled or court.search_gated:
+        log.info("Кассация %s: автопоиск выключен; новые дела — через дамп выдачи", court.domain)
+        return "", "", True
+    if health_key in successful_today:
+        log.info("Кассация %s: поиск уже удался сегодня", court.domain)
+        return "", "", True
+    polite_delay()
+    url = court.search_url()
+    return fetch_page(url, context=f"поиск {court.domain}"), url, False
+
+
 def announce_imported_cases(cases: list[dict]) -> list[dict]:
     """Импортированные дела, ещё не объявленные в дайджесте, → к анонсу.
 
@@ -1932,7 +1947,7 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
         # — свой канал announce_imported_presidium_cases: по стабу мирового
         # судьи «Новый иск» вышел бы пустым, а кассацию дайджест печатает в
         # «📥 Новые касс. дела».
-        if isinstance(imp, dict) and imp.get("source") == "dump_presidium":
+        if isinstance(imp, dict) and imp.get("source") in {"dump_presidium", "dump_cassation"}:
             continue
         if isinstance(imp, dict) and not imp.get("announced"):
             imp["announced"] = True
@@ -1949,21 +1964,67 @@ def announce_imported_presidium_cases(cases: list[dict]) -> list[dict]:
     discovery — со стадией `cassation` и стабом мирового судьи. Объявляем
     РОВНО ОДИН РАЗ в секции «📥 Новые касс. дела» (тип discovered_in_cassation
     рендерится по самому делу), флаг import.announced уезжает тем же save_json.
-    Дела, влившиеся импортёром в уже известное (по УИД) дело, блока import не
-    получают — объявлять нечего.
+    Дела, влившиеся импортёром в уже известное дело, передают изменения
+    отдельно через pending_cassation_changes — они не являются новыми делами.
     """
     found: list[dict] = []
     for c in cases:
         if c.get("current_stage") != "cassation":
             continue
         imp = c.get("import")
-        if not isinstance(imp, dict) or imp.get("source") != "dump_presidium":
+        if not isinstance(imp, dict) or imp.get("source") not in {"dump_presidium", "dump_cassation"}:
             continue
         if imp.get("announced"):
             continue
         imp["announced"] = True
         found.append(c)
     return found
+
+
+def merge_imported_cassation_changes(data: dict, changes: list[dict]) -> list[dict]:
+    """Дельта дампа + дочитка карточки: одна строка по суду и номеру.
+
+    Новое состояние дочитки заменяет дату/исход из дампа, сохраняя сам факт
+    поступления жалобы. Очередь пока остаётся на диске: её подтвердит только
+    успешно записанный контекст дайджеста.
+    """
+    pending = data.get("pending_cassation_changes") or []
+    if not pending:
+        return changes
+    merged: dict[tuple[str, str], dict] = {}
+    for change in list(pending) + list(changes):
+        details = change.get("details") or {}
+        key = (details.get("court_domain") or get_region().cassation_court.domain,
+               change.get("cassation_internal_number") or change.get("case", ""))
+        if key not in merged:
+            merged[key] = {**change, "type": list(change.get("type") or []),
+                           "details": dict(details)}
+        else:
+            previous = merged[key]
+            previous.update({k: v for k, v in change.items() if k not in {"type", "details"}})
+            previous["type"] = list(dict.fromkeys(previous["type"] + list(change.get("type") or [])))
+            previous["details"].update(details)
+    return list(merged.values())
+
+
+def acknowledge_imported_cassation_changes(data: dict, changes: list[dict], issue_key: str) -> None:
+    """Удалить очередь только после её записи в контекст для replay/доставки."""
+    pending = data.get("pending_cassation_changes")
+    if not pending:
+        return
+    context = load_json(config.LAST_DIGEST_CONTEXT_PATH)
+    signatures = {json.dumps(ch, sort_keys=True, ensure_ascii=False)
+                  for ch in context.get("cass_changes", [])}
+    if (context.get("issue_key") != issue_key or not all(
+            json.dumps(ch, sort_keys=True, ensure_ascii=False) in signatures
+            for ch in changes)):
+        raise RuntimeError("изменения кассационного импорта не сохранены в контексте дайджеста")
+    data.pop("pending_cassation_changes")
+    try:
+        save_json(data, config.JSON_PATH)
+    except Exception:
+        data["pending_cassation_changes"] = pending
+        raise
 
 
 def announce_imported_appeal_cases(cases: list[dict]) -> list[dict]:
@@ -2643,7 +2704,7 @@ def main_json():
     # внутри parse_cassation_search_page по match_hmao_first_instance.
     # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
     # поиск иногда матчит по случайному совпадению в тексте.
-    log_phase(2, 9, "Кассация 7kas: поиск и карточки")
+    log_phase(2, 9, f"Кассация {CASSATION_COURT.domain}: поиск и карточки")
     t0 = time.perf_counter()
     cass_changes: list[dict] = []
     cass_discovered: list[dict] = []
@@ -2671,16 +2732,9 @@ def main_json():
         # Дочитка поисков: выдача 7kas сегодня уже отдала строки — повторный
         # слот её не запрашивает. Флаг гейтит и ветку отказа ниже: пропуск
         # НЕ пишет health_obs[...] = None и не кормит предохранитель.
-        cass_search_skipped = _ck_total in search_skip_keys
-        if cass_search_skipped:
-            log.info(
-                "  7kas: поиск пропущен — удался ранее сегодня (дочитка слота)"
-            )
-            cass_search_html = ""
-        else:
-            polite_delay()
-            cass_search_url = CASSATION_COURT.search_url()
-            cass_search_html = fetch_page(cass_search_url, context="поиск 7kas")
+        cass_search_html, cass_search_url, cass_search_skipped = fetch_cassation_search(
+            CASSATION_COURT, _ck_total, search_skip_keys,
+        )
         if not cass_search_html and not cass_search_skipped:
             _cass_fail_kind = str(
                 config.FETCH_DIAG.get("kind") or "request_error"
@@ -2956,6 +3010,34 @@ def main_json():
         breaker_skipped=cass_skipped_breaker,
     )
     timings["cassation"] = time.perf_counter() - t0
+
+    # Открытые президиумы ищутся отдельно от КСОЮ: судебные участки не
+    # входят в FI-реестр районных судов. Находки проходят общую связку.
+    for presidium in _region.presidium_courts:
+        pres_stats = {}
+        pres_t0 = time.perf_counter()
+        try:
+            pres_finds = collect_presidium_finds(
+                presidium, cases,
+                archived_cases + cold_archived_cases + bank_archived_cases,
+                search_skip_keys, health_obs, health_labels, health_captcha, pres_stats,
+            )
+            if pres_finds:
+                archived_before_pres = len(archived_cases)
+                cases, pres_changes, pres_discovered = link_cassation_cases(
+                    cases, pres_finds, archived_cases,
+                )
+                cass_resurrected_count += archived_before_pres - len(archived_cases)
+                cass_changes.extend(pres_changes)
+                for found in pres_discovered:
+                    found["notes"] = f"Найдено автопоиском президиума ({presidium.name})"
+                cass_discovered.extend(pres_discovered)
+        except Exception:
+            log.warning("%s: ошибка поиска президиума", presidium.name, exc_info=True)
+        finally:
+            cass_planned += pres_stats.get("planned", 0)
+            cass_parsed += pres_stats.get("parsed", 0)
+            timings["cassation"] += time.perf_counter() - pres_t0
 
     # ── 4d. Refresh кассации по cassation.link ──
     # Раздел 4c берёт только первую страницу выдачи 7kas — старые касс. дела
@@ -5818,6 +5900,7 @@ def main_json():
             f"{'…' if len(presidium_imported_new) > 5 else ''})"
         )
         cass_discovered = list(cass_discovered) + presidium_imported_new
+    cass_changes = merge_imported_cassation_changes(data, cass_changes)
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
@@ -6104,6 +6187,7 @@ def main_json():
         cass_discovered=cass_discovered,
         will_deliver=digest_will_deliver,
     )
+    acknowledge_imported_cassation_changes(data, cass_changes, digest_issue_key)
     digest = generate_digest(
         appeal_new_cases_csv, changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,

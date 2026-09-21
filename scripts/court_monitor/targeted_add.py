@@ -159,6 +159,12 @@ def resolve_link_target(link: dict) -> tuple[CourtConfig | None, str]:
                 "автоматически"
             )
     if region.cassation_court.domain.lower() == domain:
+        if region.cassation_court.search_gated or region.cassation_court.search_disabled:
+            return None, (
+                f"это карточка кассации ({region.cassation_court.name}). "
+                "Поиск закрыт: загрузите выдачу этого суда через раздел «Импорт»; "
+                "после добавления карточка будет проверяться автоматически"
+            )
         return None, (
             f"это карточка кассации ({region.cassation_court.name}) — "
             "кассация отслеживается автоматически по делу 1-й инстанции"

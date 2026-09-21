@@ -95,17 +95,19 @@ def match_region_first_instance(
     # есть в десятках регионов: Октябрьский, Советский, Центральный и т.п.).
     if not any(_eyo(kw) in name_norm for kw in region.fi_region_markers):
         return None
-    # Перебираем суды 1-й инст. региона — ищем короткое имя подстрокой.
-    # Дедуп по domain: Покачи дублирует Нижневартовский районный (один domain).
+    # Подтверждённые прежние названия нужны после объединения районных судов.
+    # Неоднозначность не разрешаем порядком реестра: чужая кассация опаснее
+    # незаполненной связки, которую оператор может уточнить.
+    matches: dict[str, CourtConfig] = {}
     for cfg in region.first_instance_courts:
-        short = _eyo(cfg.name.lower())
-        # Вторые площадки: name содержит круглые скобки («… (г. Покачи)») —
-        # внутри длинной формы такой суд отдельно не пишется, пропускаем.
-        if "(" in short:
-            continue
-        if short in name_norm:
-            return cfg
-    return None
+        for variant in (cfg.name, *cfg.name_aliases):
+            short = _eyo(variant.strip().lower())
+            # Вторые площадки без явного названия в карточке не угадываем.
+            if not short or "(" in short:
+                continue
+            if short in name_norm:
+                matches.setdefault(cfg.domain, cfg)
+    return next(iter(matches.values())) if len(matches) == 1 else None
 
 
 def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
@@ -225,7 +227,8 @@ for _c in FIRST_INSTANCE_COURTS:
 # бэкфилла ссылок на карточку 1-й инст. по имени суда из cases.json.
 _FI_COURTS_BY_NAME: dict[str, CourtConfig] = {}
 for _c in FIRST_INSTANCE_COURTS:
-    _FI_COURTS_BY_NAME.setdefault(_eyo(_c.name.lower()), _c)
+    for _name in (_c.name, *_c.name_aliases):
+        _FI_COURTS_BY_NAME.setdefault(_eyo(_name.lower()), _c)
 
 
 def match_fi_court_by_short_name(short_name: str) -> CourtConfig | None:

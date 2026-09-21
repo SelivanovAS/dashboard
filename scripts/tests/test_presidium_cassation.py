@@ -341,7 +341,7 @@ class TestPresidiumWiring:
         assert "def announce_imported_presidium_cases(" in src
         i = src.index("def announce_imported_cases(")
         body = src[i:src.index("def announce_imported_presidium_cases(")]
-        assert 'imp.get("source") == "dump_presidium"' in body, (
+        assert 'imp.get("source") in {"dump_presidium", "dump_cassation"}' in body, (
             "стаб мирового судьи уехал бы в «📥 Новые иски»")
         i_call = src.index("presidium_imported_new = announce_imported_presidium_cases(cases)")
         assert "cass_discovered = list(cass_discovered) + presidium_imported_new" in src[i_call:i_call + 800]
@@ -364,7 +364,7 @@ class TestPresidiumWiring:
         body = src.split("async function loadImportCourts", 1)[1][:5000]
         assert "acRegion.presidium_courts" in body
         assert 'section: "cassation"' in body and "pinned: true" in body
-        assert "gatedAppeal.concat(gatedPresidium).concat(gated)" in body
+        assert "gatedAppeal.concat(gatedCassation).concat(gatedPresidium).concat(gated)" in body
         m = re.search(r"function impCourtKey\(c\)[^\n]*", src)
         assert m and 'domain + "|"' in m.group(0) and '"|cassation"' in m.group(0)
         assert "function impDetectDeloIds(html)" in src

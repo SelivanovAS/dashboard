@@ -112,11 +112,22 @@ class TestRunsWiring:
 
     def test_all_three_phases_consult_the_gate(self):
         runs = self._runs()
-        assert "_ck_total in search_skip_keys" in runs, "фаза кассации без гейта"
+        assert re.search(r"fetch_cassation_search\(\s*CASSATION_COURT, _ck_total, search_skip_keys", runs), \
+            "фаза кассации не передаёт дневной гейт в общий поиск"
         assert "if hk in search_skip_keys:" in runs, "фаза апелляции без гейта"
         assert "if health_key in search_skip_keys:" in runs, (
             "фаза 1-й инстанции без гейта"
         )
+
+    def test_cassation_daily_gate_skips_http_and_delay(self, monkeypatch):
+        from court_monitor import runs
+        from court_monitor.regions.base import CourtConfig
+        court = CourtConfig("Кассация", "7kas.sudrf.ru", 2800001, "cassation")
+        def unexpected(*args, **kwargs):
+            raise AssertionError("уже успешный поиск не должен делать HTTP или ждать")
+        monkeypatch.setattr(runs, "fetch_page", unexpected)
+        monkeypatch.setattr(runs, "polite_delay", unexpected)
+        assert runs.fetch_cassation_search(court, "cass:ok", {"cass:ok"}) == ("", "", True)
 
     def test_fi_gate_precedes_polite_delay(self):
         # Пропуск не тратит каденс: гейт стоит ДО polite_delay, как пре-чеки

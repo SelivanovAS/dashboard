@@ -4,7 +4,7 @@
 
 Состав выборки — решение юриста 18.08.2026: кассация + ВСЕ апелляции обеих
 территорий + случайные 3 суда Свердловской области (обязательно с одним судом
-Екатеринбурга) + 3 ЯНАО + 3 ХМАО. Итого 13 адресов; тройки новые на каждый
+Екатеринбурга) + 3 ЯНАО + 3 ХМАО + 3 Башкортостана. Итого 18 адресов; тройки новые на каждый
 запуск — за неделю проверок покрывается заметная часть реестра.
 
 Зачем случайность: блок бывает «мигающим» и пер-судовым, одна апелляция на
@@ -34,11 +34,12 @@ TIMEOUT = 20
 
 
 def build_targets() -> list[tuple[str, str]]:
-    """[(подпись, домен)] — кассация, все апелляции, случайные 3+3+3."""
+    """[(подпись, домен)] — все кассации и апелляции, по три суда каждой зоны."""
     from court_monitor.regions import get_region
 
     hmao = get_region("hmao")
     ural = get_region("sverdlovsk_yanao")
+    bashkortostan = get_region("bashkortostan")
 
     targets: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -48,8 +49,8 @@ def build_targets() -> list[tuple[str, str]]:
             seen.add(domain)
             targets.append((label, domain))
 
-    add("Кассация (7-й КСОЮ)", hmao.cassation_court.domain)
-    for region in (hmao, ural):
+    for region in (hmao, ural, bashkortostan):
+        add(f"Кассация · {region.cassation_court.name}", region.cassation_court.domain)
         for c in region.appeal_courts:
             add(f"Апелляция · {c.name}", c.domain)
 
@@ -82,6 +83,9 @@ def build_targets() -> list[tuple[str, str]]:
         add(f"ЯНАО · {c.name}", c.domain)
     for c in random.sample(hmao_fi, 3):
         add(f"ХМАО · {c.name}", c.domain)
+    bash_fi = uniq_by_domain(c for c in bashkortostan.first_instance_courts if c.enabled)
+    for c in random.sample(bash_fi, min(3, len(bash_fi))):
+        add(f"Башкортостан · {c.name}", c.domain)
     return targets
 
 
@@ -113,7 +117,7 @@ def main() -> int:
         print(f"  {mark} {label:<44} {note}")
     print(f"Итог: отвечают {ok} из {len(targets)}")
     if ok == len(targets):
-        print("Все суды пускают эту машину — парсинг и дампы пройдут.")
+        print("Главные страницы отвечают. Доступ к поиску и карточкам проверяется отдельно.")
     elif ok == 0:
         print("Не пускает никто: с этой сети работать нельзя (корпоративный VPN?).")
     else:

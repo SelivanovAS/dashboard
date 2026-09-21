@@ -4,7 +4,7 @@
 Запускается обёрткой parse_and_push.sh в фоне. Читает parse_and_push.log
 с текущего конца, фильтрует строки-вехи и раз в ~5 секунд шлёт батч на
 POST /run-progress Worker'а (Bearer-токен из ~/.config/court-monitor/
-progress_token — файл ВНЕ репозитория, репо публичный).
+progress_token.<регион> — файл ВНЕ репозитория, репо публичный).
 
 Некритичная функция: нет токена/сети — молча выходим, парсинг не страдает.
 Завершается сам, увидев финальную строку прогона («Готово», «ERROR:»,
@@ -21,16 +21,19 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 LOG = os.path.join(HERE, "parse_and_push.log")
-TOKEN_FILE = os.path.expanduser("~/.config/court-monitor/progress_token")
+CONFIG_DIR = os.path.expanduser("~/.config/court-monitor")
 
 
 def _region() -> str:
     # Регион клона — файл REGION в корне форка (эталон ХМАО живёт без него).
     # Тот же принцип, что config._region_from_file(), но без импорта пакета:
     # пушер обязан оставаться некритичной мелочью без зависимостей.
+    configured = os.environ.get("REGION", "").strip().lower()
+    if configured:
+        return configured
     try:
         with open(os.path.join(REPO, "REGION"), encoding="utf-8") as f:
-            return f.read().strip() or "hmao"
+            return f.read().strip().lower() or "hmao"
     except OSError:
         return "hmao"
 
@@ -41,7 +44,8 @@ def _worker_url() -> str:
     # прогон как свой, а админка Урала жила вчерашним. url= берём из
     # ~/.config/court-monitor/worker.<регион> (тот же файл, что у
     # import_dumps.sh); файла нет (эталон ХМАО) — прежний адрес.
-    conf = os.path.expanduser("~/.config/court-monitor/worker." + _region())
+    region = _region()
+    conf = os.path.join(CONFIG_DIR, "worker." + region)
     try:
         with open(conf, encoding="utf-8") as f:
             for line in f:
@@ -51,16 +55,33 @@ def _worker_url() -> str:
                         return u + "/run-progress"
     except OSError:
         pass
-    return "https://court-monitor-trigger.7selivanov-a.workers.dev/run-progress"
+    # Legacy-адрес допустим только для эталона. Новый регион без конфига
+    # не должен отправлять свой прогресс в ХМАО даже с совпавшим токеном.
+    if region == "hmao":
+        return "https://court-monitor-trigger.7selivanov-a.workers.dev/run-progress"
+    return ""
+
+
+def _token_file() -> str:
+    region = _region()
+    scoped = os.path.join(CONFIG_DIR, "progress_token." + region)
+    if os.path.isfile(scoped):
+        return scoped
+    # Совместимость с двумя ранее установленными территориями. Новые
+    # получают собственный токен, общий файл машины им не наследуется.
+    if region in ("hmao", "sverdlovsk_yanao"):
+        return os.path.join(CONFIG_DIR, "progress_token")
+    return scoped
 
 
 URL = _worker_url()
+TOKEN_FILE = _token_file()
 
 # Вехи, которые интересно видеть в админке (не весь сырой лог).
 # «— \[» — фазовые заголовки log_phase («— [3/9] …»), «1 инст:» — строки
 # прогресса/агрегатов цикла 1-й инстанции (см. runs.py).
 KEY_RE = re.compile(
-    r"Старт|Апелляция:|суд: |Итого|Кассац|7kas|Обновляю|Карточка"
+    r"Старт|Апелляция:|суд: |Итого|Кассац|\d+kas|Обновляю|Карточка"
     r"|WARNING|ERROR|Запушено|Изменений нет|Готово|Пропуск"
     r"|— \[|1 инст:"
 )
@@ -94,7 +115,10 @@ def send(token: str, run_id: str, lines: list, done: bool) -> None:
 
 
 def main() -> None:
-    if not os.path.exists(TOKEN_FILE):
+    ready = bool(URL and os.path.isfile(TOKEN_FILE))
+    if "--check" in sys.argv:
+        raise SystemExit(0 if ready else 1)
+    if not ready:
         return
     token = open(TOKEN_FILE).read().strip()
     if not token or not os.path.exists(LOG):

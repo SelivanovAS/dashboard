@@ -2420,3 +2420,8 @@ body.beacon-open { overflow: hidden; }
   .drawer, .drawer-scrim, .filters-sheet, .sheet-scrim, .digest-scrim,
   .card-chevron-btn, .upcoming-list, .upcoming-empty, .toast { transition:none; }
 }
+
+/* Часы суда сохраняются и явно подписаны при другом поясе. */
+.hearing-zone{display:block;font-family:var(--font-sans);font-size:10px;line-height:1.35;font-weight:500;white-space:normal;color:var(--slate-500);margin-top:3px;}
+
+.up-time .hearing-zone{max-width:76px;align-self:center;}

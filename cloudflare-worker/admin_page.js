@@ -101,7 +101,7 @@ export function renderAdminHtml(secret, role, cfg) {
            пора» не виден одновременно с формой. ≤1024 — обратно в одну. -->
       <div class="imp-grid">
       <div class="imp-form">
-        <div class="imp-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную — выдачу копирует человек.</div>
+        <div class="imp-hint" id="imp-mode-hint">Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную — выдачу копирует человек.</div>
         <!-- Шесть шагов нужны на первом импорте и мешают на двадцатом:
              открыты, пока оператор ни разу не довёл импорт до «готово». -->
         <details class="fold" id="imp-steps-fold">
@@ -110,7 +110,7 @@ export function renderAdminHtml(secret, role, cfg) {
         <ol class="imp-steps">
           <li>выберите суд из списка;</li>
           <li>нажмите «Открыть поиск по суду»;</li>
-          <li>на сайте решите проверочный код и найдите дела по слову «Сбербанк»;</li>
+          <li id="imp-search-step">на сайте решите проверочный код и найдите дела по слову «Сбербанк»;</li>
           <li>выделите страницу результатов и скопируйте её;</li>
           <li>вставьте скопированное в поле ниже (Ctrl+V / ⌘V) — простой текст не годится, теряются
             ссылки на дела; вместо вставки можно приложить файл «только HTML»;</li>
@@ -158,7 +158,7 @@ export function renderAdminHtml(secret, role, cfg) {
       <details class="fold" id="imp-fresh-fold" open>
         <summary>Свежесть по судам <span id="imp-fresh-badges"></span></summary>
         <div class="fold-body">
-          <div class="imp-hint" style="margin-bottom:6px;">Регламент — импорт каждого суда раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху; клик по суду выбирает его в форме.</div>
+          <div class="imp-hint" style="margin-bottom:6px;">В этом списке только суды с закрытым поиском. Регламент — импорт раз в неделю: зелёный ≤ 7 дней, жёлтый 8–14, красный дольше или ни разу. Просроченные — сверху; клик по суду выбирает его в форме.</div>
           <div class="imp-my-bar" id="imp-my-bar"></div>
           <div id="imp-freshness" class="empty">Загрузка…</div>
         </div>
@@ -3451,8 +3451,8 @@ function impCourtSection(court) {
 // картотека (delo_id=5), у президиума — раздел кассации (2800001), и
 // «Свердловский областной суд» без пометки читался бы как суд 1-й инстанции.
 function impCourtLabel(c) {
-  if (c && c.section === "cassation") return (c.name || "") + " — президиум (кассация)";
-  return (c && c.name ? c.name : "") + (c && c.pinned ? " — апелляция" : "");
+  if (c && c.section === "cassation") return (c.name || "") + (c.cassation_kind === "court" ? " — кассация" : " — президиум (кассация)");
+  return (c && c.name ? c.name : "") + (c && (c.section === "appeal" || c.pinned) ? " — апелляция" : "");
 }
 function impDomainOf(key) { return String(key || "").split("|")[0]; }
 // Ссылка «Открыть поиск по суду». srv_num обязателен: голая ссылка уводила
@@ -3473,7 +3473,7 @@ function impCourtLink(key) {
   return "https://" + dom + "/modules.php?name=sud_delo&srv_num="
     + encodeURIComponent(String((c && c.srv_num) || 1))
     + "&delo_id=" + encodeURIComponent(String((c && c.delo_id) || 1540005))
-    + "&name_op=sf";
+    + "&name_op=sf" + (c && c.new != null ? "&new=" + encodeURIComponent(String(c.new)) : "");
 }
 // Синхронизация ссылки «Открыть сайт суда» с выбранным судом. На верхнем
 // уровне, а не внутри loadImportCourts: её зовут change селекта, клик по
@@ -3482,6 +3482,11 @@ function impCourtLink(key) {
 function syncImportCourtLink() {
   var sel = document.getElementById("imp-court");
   if (sel.value) document.getElementById("imp-court-link").href = impCourtLink(sel.value);
+  var court = impCourts.find(function (c) { return impCourtKey(c) === sel.value; });
+  var step = document.getElementById("imp-search-step");
+  if (step) step.textContent = court && court.search_gated
+    ? "на сайте решите проверочный код и найдите дела по слову «Сбербанк»;"
+    : "на сайте найдите дела по слову «Сбербанк» и откройте нужную страницу результатов;";
 }
 function impShowAlert(html) {
   var el = document.getElementById("imp-alert");
@@ -3500,6 +3505,7 @@ async function loadImportCourts() {
     // Весь блок региона — точечному добавлению: проверка ссылок против
     // реестра (апелляция/кассация/чужой регион) и селект судов для номеров.
     acRegion = (j && j.region) || null;
+    const manualAll = !!(acRegion && acRegion.manual_import_all_courts);
     const fi = (acRegion && Array.isArray(acRegion.fi_courts)) ? acRegion.fi_courts : [];
     wwSetRegionCourts(fi);
     const gated = fi.filter(function (c) { return c && c.search_gated && c.domain; });
@@ -3514,7 +3520,7 @@ async function loadImportCourts() {
       return c && c.search_gated && c.domain;
     }).map(function (c) {
       return { name: c.name, domain: c.domain, srv_num: c.srv_num || 1,
-               delo_id: c.delo_id, search_gated: true, pinned: true };
+               delo_id: c.delo_id, new: c.new, search_gated: true, pinned: true, section: "appeal" };
     });
     // Президиум облсуда (кассация по делам мировых судей, 04.09.2026) — тот
     // же домен, что у апелляции, другой раздел (delo_id=2800001). Закреплён,
@@ -3525,18 +3531,23 @@ async function loadImportCourts() {
       return c && c.search_gated && c.domain;
     }).map(function (c) {
       return { name: c.name, domain: c.domain, srv_num: c.srv_num || 1,
-               delo_id: c.delo_id, search_gated: true, pinned: true, section: "cassation" };
+               delo_id: c.delo_id, new: c.new, search_gated: true, pinned: true,
+               section: "cassation", cassation_kind: "presidium" };
     });
+    const kas = acRegion && acRegion.cassation;
+    const gatedCassation = kas && kas.domain && kas.search_gated ? [Object.assign({}, kas, {
+      pinned: true, section: "cassation", cassation_kind: "court"
+    })] : [];
     impAppealDomains = {};
     ap.forEach(function (c) { if (c && c.domain) impAppealDomains[c.domain] = true; });
     impPresidiumByDomain = {};
     pres.forEach(function (c) { if (c && c.domain) impPresidiumByDomain[c.domain] = c; });
-    fi.concat(ap).forEach(function (c) {
+    fi.concat(ap).concat(pres).concat(kas ? [kas] : []).forEach(function (c) {
       if (c && c.domain && !impCourtNameByDomain[c.domain]) impCourtNameByDomain[c.domain] = c.name || c.domain;
     });
     acFillCourts(fi);
     acUpdateState(); // ссылки могли ждать реестра для клиентской проверки
-    if (!gated.length && !gatedAppeal.length && !gatedPresidium.length) {
+    if (!manualAll && !gated.length && !gatedAppeal.length && !gatedPresidium.length && !gatedCassation.length) {
       // Регион без капчёвых судов (ХМАО): дамповая часть не нужна, но
       // вкладка живёт — точечное добавление и общая история работают всем.
       var form = document.querySelector("#import .imp-form");
@@ -3560,17 +3571,36 @@ async function loadImportCourts() {
     // постоянные судебные присутствия (Пышма у Камышловского, Ачит у
     // Красноуфимского) — отдельные площадки того же сайта со своей
     // картотекой, и их дела не импортировал никто. Ключ строки — «домен|srv».
-    impCourts = gatedAppeal.concat(gatedPresidium).concat(gated);
+    impCourts = gatedAppeal.concat(gatedCassation).concat(gatedPresidium).concat(gated);
+    if (manualAll) {
+      // Ручной добор истории доступен всем судам; регулярные дампы нужны
+      // только закрытому поиску. КСОЮ остаётся первым в списке территории.
+      impCourts = gatedCassation.concat(gatedAppeal).concat(gatedPresidium).concat(gated)
+        .concat(ap.filter(function (c) { return c && c.domain && !c.search_gated; })
+          .map(function (c) { return Object.assign({}, c, { section: "appeal" }); }))
+        .concat(pres.filter(function (c) { return c && c.domain && !c.search_gated; })
+          .map(function (c) { return Object.assign({}, c, { section: "cassation", cassation_kind: "presidium" }); }))
+        .concat(kas && kas.domain && !kas.search_gated
+          ? [Object.assign({}, kas, { section: "cassation", cassation_kind: "court" })] : [])
+        .concat(fi.filter(function (c) { return c && c.domain && !c.search_gated; }));
+    }
+    var modeHint = document.getElementById("imp-mode-hint");
+    if (modeHint) modeHint.textContent = manualAll
+      ? "Историю любого суда можно добрать вручную: выберите суд и загрузите нужные страницы выдачи. Еженедельный импорт нужен только судам с закрытым поиском — они в списке свежести."
+      : "Поиск этих судов закрыт проверочным кодом, поэтому дела заводятся вручную — выдачу копирует человек.";
     const sel = document.getElementById("imp-court");
     sel.innerHTML = impCourts.map(function (c) {
       return '<option value="' + escHtml(impCourtKey(c)) + '">' + escHtml(impCourtLabel(c)) + '</option>';
     }).join("");
+    var regularCount = impCourts.filter(function (c) { return c.search_gated; }).length;
     document.getElementById("imp-court-count").textContent = String(impCourts.length);
     syncImportCourtLink();
     // Плитка «Импорты» и светофор — только про регламент дампов капчёвых
     // судов; сама вкладка видна всем и без них.
-    document.getElementById("tile-import-card").style.display = "";
-    document.querySelector(".pult").classList.add("has-import");
+    document.getElementById("tile-import-card").style.display = regularCount ? "" : "none";
+    var freshFold = document.getElementById("imp-fresh-fold");
+    if (freshFold) freshFold.style.display = regularCount ? "" : "none";
+    if (regularCount) document.querySelector(".pult").classList.add("has-import");
     loadImportLog();
   } catch (e) {
     // cases.json недоступен: точечное добавление продолжает работать (без
@@ -3695,7 +3725,12 @@ function impIsAppeal(item) {
   return !!(item && impRecordDeloId(item) === "5" && impAppealDomains[item.court_domain]);
 }
 function impIsPresidium(item) {
-  return !!(item && item.section === "cassation");
+  if (!item || item.section !== "cassation") return false;
+  if (item.cassation_kind) return item.cassation_kind === "presidium";
+  return !(acRegion && acRegion.cassation && acRegion.cassation.domain === item.court_domain);
+}
+function impIsCassation(item) {
+  return !!(item && (item.section === "cassation" || (acRegion && acRegion.cassation && acRegion.cassation.domain === item.court_domain)));
 }
 function impResultParts(item) {
   var parts = ["+" + (item.added || 0) + " в картотеку"];
@@ -3703,10 +3738,13 @@ function impResultParts(item) {
   var skipped = [];
   var isAp = impIsAppeal(item);
   var isPres = impIsPresidium(item);
+  var isCass = impIsCassation(item);
+  if (item.needs_review) problems.push(item.needs_review + " дел требуют проверки связи с 1-й инстанцией — см. построчный отчёт");
+  if (item.skipped_region) skipped.push(item.skipped_region + " дел другого региона пропущено");
   // Дело уехало наверх по УЖЕ известному нам делу 1-й инстанции: не новое,
   // но и не «уже в базе» — апелляция добавлена в существующую запись.
   // У президиума — кассация влилась в известное дело (по УИД).
-  if (item.linked) parts.push(isPres
+  if (item.linked) parts.push(isCass
     ? nPlural(item.linked, "кассация связана с известным делом",
               "кассации связаны с известными делами", "кассаций связано с известными делами")
     : nPlural(item.linked,
@@ -3742,7 +3780,7 @@ function impResultParts(item) {
   // недоступны и в следующий ежедневный слот.
   if (item.fetch_fail) {
     problems.push("⛔ " + item.fetch_fail
-      + (isPres ? " дел кассации (президиум) не заведено " : isAp ? " дел апелляции не заведено " : " исков банка не заведено ")
+      + (isCass ? (isPres ? " дел кассации (президиум) не заведено " : " дел кассации не заведено ") : isAp ? " дел апелляции не заведено " : " исков банка не заведено ")
       + "(карточка не открылась) — " + impRetryPromise(item)
       + "; если к вечеру не появятся, вставьте дамп заново");
   }
@@ -3800,6 +3838,7 @@ function impVerdict(item) {
   var lost = item.fetch_fail || 0;
   var unread = item.card_failed || 0;
   var got = "заведено " + nPlural(added, "дело", "дела", "дел");
+  if (item.needs_review) return { kind: "bad", text: "Требуется проверка: " + item.needs_review + " дел не удалось однозначно связать с 1-й инстанцией — см. построчный отчёт" };
   if (lost || unread) {
     // Вердикт называет ИСХОД и того, кто доделает. Прежний «нужен повтор
     // дампа» ставил задачу оператору, хотя запись уже стоит в очереди
@@ -3814,6 +3853,7 @@ function impVerdict(item) {
       : "Ничего не заведено — карточки не открылись; " + tail };
   }
   if (added) return { kind: "ok", text: "Готово: " + got };
+  if (item.skipped_region) return { kind: "none", text: "Готово: новых дел нет; дела другого региона пропущены" };
   return { kind: "none", text: "Готово: новых дел нет — всё уже в базе" };
 }
 function impStatusBadge(status) {
@@ -4177,7 +4217,7 @@ function renderImportFreshness(items, lastMap, lastSections) {
   // на одном сайте всегда имеют отдельные даты и ошибки чтения карточек.
   var mine = myCourts();
   var hasMine = myCourtsCount() > 0;
-  var rows = impCourts.map(function (c) {
+  var rows = impCourts.filter(function (c) { return c.search_gated; }).map(function (c) {
     var e = bySection[impSectionKey(c)];
     var days = e ? (Date.now() - e.ts) / 86400000 : Infinity;
     var level = days <= IMP_FRESH_WARN_DAYS ? 0 : days <= IMP_FRESH_STALE_DAYS ? 1 : 2;
@@ -4217,7 +4257,7 @@ function renderImportFreshness(items, lastMap, lastSections) {
     setTile("import", "amber", nYellow + " скоро срок", "из " + counted.length + " " + scope + " · 8–14 дней");
   } else {
     setTile("import", "green", '<span class="dot dot-green"></span>всё свежо',
-      "все " + counted.length + " " + scope + " моложе 7 дней");
+      "свежая выдача: " + counted.length + " " + plural(counted.length, "суд", "суда", "судов") + " · до 7 дней");
   }
   renderMyBar(rows);
   el.className = "";
@@ -4943,6 +4983,7 @@ function acCheckLink(url) {
   }
   var cass = acRegion.cassation || {};
   if ((cass.domain || "").toLowerCase() === host) {
+    if (cass.search_gated || cass.search_disabled) return "это карточка кассации — поиск суда закрыт; загрузите выдачу этого суда в секции «Импорт»";
     return "это карточка кассации — она отслеживается автоматически по делу 1-й инстанции";
   }
   var fi = acRegion.fi_courts || [];

@@ -204,7 +204,7 @@ def update_parse_health(
     state = state if state is not None else load_parse_health()
     sources = state.setdefault("sources", {})
     alerts: list[str] = []
-    now_iso = datetime.now().isoformat(timespec="seconds")
+    now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
     captcha_announced: set[str] = set()
 
     for key, count in observations.items():

@@ -12,6 +12,7 @@ sud_delo и сверяет с конфигом региона. Сеть в те�
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -299,8 +300,22 @@ class TestProbeWorkflowWiring:
         """Путь самого workflow не в push.paths: иначе merge правки в форк —
         это push, и проба запускается на территории без спроса, перезаписывая
         её отчёт (класс инцидента 26.07.2026 со сборщиком исков банка).
-        Триггер по courts_probe.csv остаётся — он и нужен."""
+        Допустим ручной запуск без push; если push включён, он ограничен
+        изменением реестра судов, а не самого workflow."""
         yml = _read_repo(".github/workflows/probe_region_registry.yml")
-        push_block = yml.split("permissions:")[0].split("push:")[1]
-        assert "courts_probe.csv" in push_block
-        assert "probe_region_registry.yml" not in push_block
+        code = "\n".join(line for line in yml.splitlines()
+                         if not line.lstrip().startswith("#"))
+        trigger = re.search(r"(?ms)^on:\s*\n(.*?)(?=^\S|\Z)", code)
+        assert trigger, "Не найдена секция триггеров workflow"
+        events = set(re.findall(r"^  ([a-z_]+):", trigger.group(1), re.M))
+        assert "workflow_dispatch" in events, "Ручной запуск должен оставаться доступным"
+        assert events <= {"workflow_dispatch", "push"}, "Добавлен иной автоматический запуск пробы"
+        if "push" not in events:
+            return
+        push = re.search(r"(?ms)^  push:\s*\n(.*?)(?=^  \S|\Z)", trigger.group(1))
+        assert push, "Push-триггер обязан иметь явный фильтр путей"
+        push_block = push.group(1)
+        assert re.search(r"^    paths:\s*$", push_block, re.M)
+        paths = re.findall(r"^      -\s*['\"]?([^'\"\s]+)['\"]?\s*$", push_block, re.M)
+        assert paths == ["ops/region_probe/courts_probe.csv"], \
+            "Push пробы разрешён только для реестра, не workflow или широкого шаблона"

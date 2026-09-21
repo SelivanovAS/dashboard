@@ -112,7 +112,10 @@ from court_monitor.bank_intake import (  # noqa: E402 — правила при�
     remember_rejection, row_passes, save_intake_seen, seen_key,
 )
 from court_monitor.config import log  # noqa: E402
-from court_monitor.courts import canon_sudrf_domain, fi_court_by_domain  # noqa: E402
+from court_monitor.courts import (  # noqa: E402
+    canon_sudrf_domain, fi_court_by_domain, match_region_first_instance,
+    presidium_court_by_domain,
+)
 from court_monitor.lifecycle import (  # noqa: E402
     FI_NOT_ACCEPTED_RU, dedupe_orphan_by_base_number,
     discovered_already_resolved_old, fi_not_accepted_kind, is_case_archived,
@@ -134,10 +137,14 @@ from court_monitor.parsing.search import (  # noqa: E402
 )
 from court_monitor.parsing.tables import extract_tables  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
+from court_monitor.presidium_search import (  # noqa: E402
+    PRESIDIUM_SINCE as PRESIDIUM_DUMP_SINCE,
+    before_presidium_since as _before_reform,
+)
 from court_monitor.regions.base import CourtConfig  # noqa: E402
 from court_monitor.target_search import build_json_entry  # noqa: E402
 from court_monitor.storage import (  # noqa: E402
-    load_csv, load_json, save_bank_json, save_csv, save_json,
+    load_csv, load_json, load_bank_json, save_bank_json, save_csv, save_json,
 )
 from court_monitor.textutil import _bare_case_number  # noqa: E402
 # Прецедент импорта scripts→scripts — collect_bank_claims.py: зависимости
@@ -161,7 +168,6 @@ MAX_BANK_CARDS_PER_IMPORT = 100
 # раздела 2800001 облсуда по «Сбербанк» тянет и дела 2019 года (президиум
 # до реформы 2019 — 22 из 25 строк первого дампа ХМАО). Строки с датой
 # поступления раньше реформы ГПК не заводим и карточку не запрашиваем.
-PRESIDIUM_DUMP_SINCE = "01.05.2026"
 
 
 def read_dump(path: str) -> str:
@@ -265,6 +271,7 @@ def resolve_court(court_domain: str, delo_id: str | int | None = None) -> CourtC
             list(region.first_instance_courts)
             + list(region.appeal_courts)
             + list(region.presidium_courts)
+            + [region.cassation_court]
         )
         if c.domain.lower() == dom
     ]
@@ -1200,7 +1207,8 @@ def _presidium_known_keys(*case_lists) -> set[tuple[str, str]]:
         cn = ((block or {}).get("case_number") or "").strip()
         if not cn:
             return
-        dom = canon_sudrf_domain((block or {}).get("court_domain")) or "7kas.sudrf.ru"
+        dom = (canon_sudrf_domain((block or {}).get("court_domain"))
+               or get_region().cassation_court.domain)
         known.add((dom, cn))
 
     for lst in case_lists:
@@ -1209,16 +1217,6 @@ def _presidium_known_keys(*case_lists) -> set[tuple[str, str]]:
             for h in c.get("history") or []:
                 _add((h or {}).get("cassation"))
     return known
-
-
-def _before_reform(filing_date: str) -> bool:
-    """Дата поступления жалобы раньше PRESIDIUM_DUMP_SINCE (реформа ГПК)."""
-    try:
-        d = datetime.strptime((filing_date or "").strip(), "%d.%m.%Y")
-        since = datetime.strptime(PRESIDIUM_DUMP_SINCE, "%d.%m.%Y")
-    except ValueError:
-        return False  # дата не разобралась — не отсеиваем, решит карточка
-    return d < since
 
 
 def _fetch_cassation_card(court: CourtConfig, link: str, num: str,
@@ -1243,12 +1241,12 @@ def _fetch_cassation_card(court: CourtConfig, link: str, num: str,
     return info, ""
 
 
-def import_presidium_rows(
+def import_cassation_rows(
     court: CourtConfig, rows: list[dict], operator: str, dry_run: bool,
 ) -> dict:
-    """Завести дела президиума из дампа выдачи. Возвращает summary-dict.
+    """Импорт КСОЮ или президиума: карточка, регион, связка, безопасный повтор.
 
-    Шаги на строку: отсев дел до реформы → дедуп по (домен, номер) →
+    Шаги на строку: отсев старых дел президиума/чужих регионов КСОЮ → дедуп →
     карточка (единственный онлайн-шаг) → находка; после цикла — БОЕВОЙ
     link_cassation_cases: discovery = новое дело (added, блок import для
     разового анонса в «📥 Новые касс. дела»), merge по УИД/номеру = linked.
@@ -1257,12 +1255,34 @@ def import_presidium_rows(
     cases = data.get("cases", [])
     archive = load_json(config.JSON_ARCHIVE_PATH)
     archive_cases = archive.get("cases", [])
+    main_archive_count = len(archive_cases)
+    is_presidium = presidium_court_by_domain(court.domain) is not None
+    region = get_region()
+    # Кассация истцового дела переводит его из лёгкого трека в основной.
+    # Загружаем полные документы вместе с events и сохраняем нетронутые
+    # записи/метаданные. Президиум сохраняет прежний отдельный маршрут.
+    bank_documents = []
+    if not is_presidium and config.BANK_TRACK:
+        for list_path, events_path, target in (
+            (config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH, cases),
+            (config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH,
+             archive_cases),
+        ):
+            if os.path.exists(list_path):
+                doc = load_bank_json(list_path, events_path)
+                original = doc.get("cases", [])
+                identities = {id(c) for c in original}
+                for c in original:
+                    c.setdefault("track", "plaintiff_light")
+                target.extend(original)
+                bank_documents.append((doc, list_path, events_path, identities))
     known = _presidium_known_keys(cases, archive_cases)
 
     lines: list[str] = []
     counters = {
         "added": 0, "linked": 0, "already": 0, "no_link": 0,
         "fetch_fail": 0, "subsidiary": 0, "skipped_old": 0,
+        "skipped_region": 0, "needs_review": 0,
     }
     state = {"cards": 0, "fail_reasons": []}
     finds: list[dict] = []
@@ -1272,12 +1292,20 @@ def import_presidium_rows(
         num = (r.get("cassation_internal_number") or "").strip()
         if not num:
             continue
-        if _before_reform(r.get("filing_date", "")):
+        if is_presidium and _before_reform(r.get("filing_date", "")):
             counters["skipped_old"] += 1
             lines.append(
                 f"[SKIPPED OLD] {num} — поступило {r.get('filing_date')}, "
                 f"до реформы ГПК ({PRESIDIUM_DUMP_SINCE}); не заводим"
             )
+            continue
+        # КСОЮ обслуживает несколько субъектов. Явно чужое имя отсекаем
+        # до HTTP; отсутствие имени проверяем по карточке, не теряя дело.
+        row_court = (r.get("fi_court_long") or "").strip()
+        if (not is_presidium and row_court
+                and not match_region_first_instance(row_court, region)):
+            counters["skipped_region"] += 1
+            lines.append(f"[OTHER REGION] {num} — {row_court}; вне реестра {region.name}")
             continue
         if (court.domain, num) in known:
             counters["already"] += 1
@@ -1327,12 +1355,21 @@ def import_presidium_rows(
                 info[k] = r[k]
         if r.get("fi_magistrate") and not info.get("fi_magistrate"):
             info["fi_magistrate"] = True
+        if not is_presidium:
+            # Доверяем суду карточки, а не только строке дампа. Иначе
+            # подменённый href мог бы связать дело другой территории.
+            info["fi_court_config"] = match_region_first_instance(
+                info.get("fi_court_long", ""), region,
+            )
+            if not info["fi_court_config"]:
+                counters["skipped_region"] += 1
+                lines.append(f"[OTHER REGION] {num} — суд карточки вне реестра {region.name}")
+                continue
         known.add((court.domain, num))  # дубль строки внутри одного дампа
         finds.append(info)
 
     if finds and not dry_run:
-        arch_before = len(archive_cases)
-        cases, _changes, discovered = link_cassation_cases(
+        cases, import_changes, discovered = link_cassation_cases(
             cases, finds, archive_cases,
         )
         disc_keys = {
@@ -1340,37 +1377,90 @@ def import_presidium_rows(
              ((c.get("cassation") or {}).get("case_number") or "").strip())
             for c in discovered
         }
+        linked_keys = _presidium_known_keys(cases)
         for info in finds:
             num = info["cassation_internal_number"]
             fi_num = info.get("fi_case_number") or "—"
             if (court.domain, num) in disc_keys:
                 counters["added"] += 1
                 lines.append(
-                    f"[ADDED PRESIDIUM] {num} (1 инст. {fi_num}, "
+                    f"[ADDED {'PRESIDIUM' if is_presidium else 'CASSATION'}] {num} (1 инст. {fi_num}, "
                     f"{info.get('fi_court_long') or 'суд не указан'})"
                 )
-            else:
+            elif (court.domain, num) in linked_keys:
                 counters["linked"] += 1
                 lines.append(
                     f"[LINKED] {num} → дело {fi_num}: кассация добавлена в "
                     f"уже известную запись"
                 )
+            else:
+                counters["needs_review"] += 1
+                lines.append(f"[NEEDS REVIEW] {num} — не удалось однозначно связать дело; проверьте суд, номер и УИД")
+        if not (counters["added"] or counters["linked"]):
+            counters["card_fail_reason"] = _top_card_fail_reason(state)
+            return {"counters": counters, "lines": lines}
         for c in discovered:
             # Служебный блок импорта: ближайший прогон объявит дело один раз
             # в «📥 Новые касс. дела» (announce_imported_presidium_cases).
             c["import"] = {
-                "operator": operator, "at": now_iso, "source": "dump_presidium",
+                "operator": operator, "at": now_iso,
+                "source": "dump_presidium" if is_presidium else "dump_cassation",
             }
-            c["notes"] = f"Заведено дампом президиума ({court.name})"
+            c["notes"] = f"Заведено дампом {'президиума' if is_presidium else 'кассации'} ({court.name})"
+        # Импорт уже обновил карточку: следующий парс не восстановит дельту
+        # по сравнению со старым состоянием. Сохраняем её до включения в
+        # контекст дайджеста. Discovery объявляется своим import.announced.
+        pending = data.setdefault("pending_cassation_changes", [])
+        for change in import_changes:
+            if ("discovered_in_cassation" not in change.get("type", [])
+                    and change not in pending):
+                pending.append(change)
+        if not pending:
+            data.pop("pending_cassation_changes", None)
+        # Только успешно связанные bank-дела переезжают. Остальные остаются
+        # в своих файлах; save_bank_json получает весь исходный документ.
+        bank_updates = []
+        active_ids = {id(c) for c in cases}
+        imported_keys = {(court.domain, info["cassation_internal_number"]) for info in finds}
+        for doc, list_path, events_path, identities in bank_documents:
+            remaining = []
+            for c in cases + archive_cases:
+                if id(c) not in identities:
+                    continue
+                block = c.get("cassation") or {}
+                key = (block.get("court_domain"), block.get("case_number"))
+                if id(c) in active_ids and key in imported_keys:
+                    c.pop("track", None)
+                    c["track_origin"] = "plaintiff_light"
+                    fi = c.get("first_instance") or {}
+                    fi.pop("legal_force_est", None)
+                    fi.pop("writ_awaited_since", None)
+                else:
+                    remaining.append(c)
+            remaining_ids = {id(c) for c in remaining}
+            cases[:] = [c for c in cases if id(c) not in remaining_ids]
+            archive_cases[:] = [c for c in archive_cases if id(c) not in remaining_ids]
+            if len(remaining) != len(identities):
+                doc["cases"] = remaining
+                bank_updates.append((doc, list_path, events_path))
         data["cases"] = cases
         save_json(data, config.JSON_PATH)
-        if len(archive_cases) != arch_before:
+        if len(archive_cases) != main_archive_count:
             # Воскрешение из архива по УИД/номеру — архив пересохраняем.
             archive["cases"] = archive_cases
             save_json(archive, config.JSON_ARCHIVE_PATH)
+        # Сначала новая полная запись в основной базе, затем удаление
+        # прежней копии из bank. Ошибка записи не должна потерять дело.
+        for doc, list_path, events_path in bank_updates:
+            save_bank_json(doc, list_path, events_path)
 
     counters["card_fail_reason"] = _top_card_fail_reason(state)
     return {"counters": counters, "lines": lines}
+
+
+def import_presidium_rows(court, rows, operator, dry_run):
+    """Совместимый вход старого импортёра президиумов."""
+    return import_cassation_rows(court, rows, operator, dry_run)
 
 
 def _empty_dump_exit(html: str, summary: dict, court_label: str) -> int | None:
@@ -1397,32 +1487,41 @@ def _empty_dump_exit(html: str, summary: dict, court_label: str) -> int | None:
 
 def _main_presidium(court: CourtConfig, html: str, operator: str,
                     dry_run: bool, summary: dict) -> int:
-    """Хвост main() для дампа президиума облсуда (кассация по делам мировых
-    судей): разбор выдачи парсером 7kas → приём → сводка."""
+    """Хвост main() для кассационного дампа КСОЮ или президиума."""
     rows = parse_cassation_search_page(html)
+    is_presidium = presidium_court_by_domain(court.domain) is not None
+    label = "президиума" if is_presidium else "кассации"
+    summary["cassation_kind"] = "presidium" if is_presidium else "court"
     summary["rows"] = len(rows)
     if not rows:
-        rc = _empty_dump_exit(html, summary, "президиума")
+        rc = _empty_dump_exit(html, summary, label)
         if rc is not None:
             return rc
+        if re.search(r"\d+Г-\d+/\d{4}", html, re.I):
+            summary["error"] = (
+                "В кассационной таблице есть номера, но не распознаны ссылки "
+                "карточек. Сохраните выдачу как «только HTML» целиком."
+            )
+            write_github_output(summary)
+            return EXIT_NO_TABLE
 
-    result = import_presidium_rows(court, rows, operator, dry_run)
+    result = import_cassation_rows(court, rows, operator, dry_run)
     summary.update(result["counters"])
     summary["lines"] = result["lines"][:100]
 
     log.info("=" * 60)
     log.info(
-        "Импорт президиума (%s, оператор %s): +%d новых дел | %d связано с "
+        "Импорт %s (%s, оператор %s): +%d новых дел | %d связано с "
         "известным делом | %d уже в базе | %d до реформы | %d без Сбербанка | "
         "%d потеряно (карточка не открылась)%s",
-        court.name, operator or "—",
+        label, court.name, operator or "—",
         summary["added"], summary["linked"], summary["already"],
         summary["skipped_old"], summary["subsidiary"], summary["fetch_fail"],
         " | DRY-RUN" if dry_run else "",
     )
     if summary["fetch_fail"]:
         log.warning(
-            "Президиум: %d %s не заведено — карточка не открылась (%s)",
+            "Кассация: %d %s не заведено — карточка не открылась (%s)",
             summary["fetch_fail"],
             "дело" if summary["fetch_fail"] == 1 else "дел",
             summary["card_fail_reason"] or "причина не определена",
@@ -1626,7 +1725,7 @@ def main(argv: list[str] | None = None) -> int:
         found = ", ".join(sorted(card_delo_ids))
         _section_ru = {
             "appeal": "раздел апелляционных гражданских дел",
-            "cassation": "раздел кассационных гражданских дел (президиум)",
+            "cassation": "раздел кассационных гражданских дел",
         }.get(court.court_type, "раздел гражданских дел 1-й инстанции")
         msg = (
             f"Дамп похож на выдачу другого раздела (в ссылках карточек "
