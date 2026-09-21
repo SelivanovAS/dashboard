@@ -86,8 +86,13 @@ from court_monitor.lifecycle import (
     _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
     _TERMINAL_FI_EVENT_RX, _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
 )
+from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
+from court_monitor.identity_review import (
+    REVIEW_REASON, add_row_to_index, remember_identity_review,
+    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+)
 from court_monitor.linking import (
-    collect_existing_ids, collect_fi_dedup_index, is_fi_number_tracked,
+    collect_existing_ids, collect_fi_dedup_index,
     fi_case_by_court_number,
     dedupe_new_archive_entries, find_new_cases, link_cases, link_cassation_cases,
     reactivate_archived_first_instance, reactivate_bank_archived,
@@ -2055,6 +2060,19 @@ def announce_imported_appeal_cases(cases: list[dict]) -> list[dict]:
     return rows
 
 
+def filter_new_fi_rows(court, rows: list[dict], exact: set, wildcard: set) -> list[dict]:
+    """Новые строки поиска; сомнительные совпадения сохраняются для разбора."""
+    result = []
+    for row in rows:
+        status = row_tracking_status(row, exact, wildcard, source="auto_search", court=court)
+        if status == "free":
+            result.append(row)
+        elif status == "needs_review":
+            log.warning("[NEEDS REVIEW] %s · %s — %s",
+                        row.get("case_number"), court.name, REVIEW_REASON)
+    return result
+
+
 def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
                      dedup_wildcard: set, seen: dict, budget: int,
                      operator: str = "auto") -> tuple[list[dict], dict]:
@@ -2071,7 +2089,7 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
     пачка нечитаемых карточек
     открыла бы пер-судовый предохранитель, сняв суд с обхода на весь прогон.
     """
-    counters = {"candidates": 0, "cards": 0, "added": 0, "already": 0,
+    counters = {"candidates": 0, "cards": 0, "added": 0, "already": 0, "needs_review": 0,
                 "seen_cached": 0, "role": 0, "excluded_result": 0,
                 "excluded_writ": 0, "already_spent": 0, "no_link": 0,
                 "fetch_fail": 0, "breaker": 0, "capped": 0}
@@ -2090,7 +2108,14 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
             continue
         counters["candidates"] += 1
         config.METRICS["bank_intake_candidates"] += 1
-        if is_fi_number_tracked(num, court.domain, dedup_exact, dedup_wildcard):
+        tracking = row_tracking_status(r, dedup_exact, dedup_wildcard,
+                                       source="auto_bank_search", court=court,
+                                       dry_run=config.BANK_INTAKE_DRY_RUN)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("[NEEDS REVIEW] %s · %s — %s", num, court.name, REVIEW_REASON)
+            continue
+        if tracking == "tracked":
             counters["already"] += 1
             continue
         if seen_key(court.domain, num) in seen:
@@ -2122,6 +2147,12 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
             counters["fetch_fail"] += 1
             continue
         card_info = parse_case_card(card_html, court.base_url)
+        tracking = row_tracking_status(r, dedup_exact, dedup_wildcard,
+                                       source="auto_bank_search", court=court, card_info=card_info)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("[NEEDS REVIEW] %s — %s", num, REVIEW_REASON)
+            continue
         why_card = card_rejects(card_info, skip_appeal=False)
         if why_card:
             counters[why_card] += 1
@@ -2139,7 +2170,8 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
             log.debug(f"  Иски банка: {num} — не берём (already_spent)")
             continue
         entries.append(entry)
-        dedup_exact.add((court.domain, num))
+        add_row_to_index(dedup_exact, entry["first_instance"])
+        resolve_identity_review(row_identity(r, court), outcome="added")
         counters["added"] += 1
         config.METRICS["bank_intake_added"] += 1
     return entries, counters
@@ -3298,17 +3330,9 @@ def main_json():
         if not _dc_id:
             continue
         existing_ids.add(_dc_id)
-        _dc_fi = _dc.get("first_instance") or {}
-        _dc_dom = (_dc_fi.get("court_domain") or "").strip().lower()
-        _dc_bare = _bare_case_number(_dc_id)
-        if _dc_dom:
-            fi_dedup_exact.add((_dc_dom, _dc_id))
-            if _dc_bare and _dc_bare != _dc_id:
-                fi_dedup_exact.add((_dc_dom, _dc_bare))
-        else:
-            fi_dedup_wildcard.add(_dc_id)
-            if _dc_bare and _dc_bare != _dc_id:
-                fi_dedup_wildcard.add(_dc_bare)
+    if cass_discovered:
+        fi_dedup_exact, fi_dedup_wildcard = collect_fi_dedup_index(
+            cases + archived_cases + cold_archived_cases + bank_archived_cases)
 
     # ── 2. Парсинг апелляции: новые дела ──
     log_phase(3, 9, "Поиск апелляции: новые дела")
@@ -3708,15 +3732,18 @@ def main_json():
             mat = (r.get("material_number") or "").strip()
             if not mat or mat == r["case_number"]:
                 continue
-            old = case_by_id.get(mat)
-            if old is None:
+            material_candidates = [c for c in cases
+                if (c.get("id") or "").strip() == mat and compare_fi_identity(
+                    case_identity_fi(c), row_identity(r, court)) == "same"]
+            if len(material_candidates) > 1:
+                r["_promotion_needs_review"] = True
+                remember_identity_review(row_identity(r, court), source="auto_promotion")
+                log.warning("[NEEDS REVIEW] %s — несколько материалов %s; %s",
+                            r["case_number"], mat, REVIEW_REASON)
                 continue
-            # М-номера тоже не уникальны между судами: чужому суду запись
-            # не переименовываем (см. collect_fi_dedup_index).
-            old_dom = ((old.get("first_instance") or {})
-                       .get("court_domain") or "").strip().lower()
-            if old_dom != court.domain:
+            if not material_candidates:
                 continue
+            old = material_candidates[0]
             new_id = r["case_number"]
             # Занятость нового номера — ПАРОЙ «суд + номер», зеркало импортёра
             # (import_search_dump: `not is_fi_number_tracked(num, domain, …)`) и
@@ -3731,9 +3758,12 @@ def main_json():
                 ((old.get("first_instance") or {}).get("case_number") or "").strip(),
                 ((old.get("first_instance") or {}).get("material_number") or "").strip(),
             }
-            if new_id not in _own_nums and is_fi_number_tracked(
-                new_id, court.domain, fi_dedup_exact, fi_dedup_wildcard
-            ):
+            _promotion_status = ("free" if new_id in _own_nums else row_tracking_status(
+                r, fi_dedup_exact, fi_dedup_wildcard, source="auto_promotion", court=court))
+            if _promotion_status == "needs_review":
+                log.warning("[NEEDS REVIEW] %s → %s — %s", mat, new_id, REVIEW_REASON)
+                continue
+            if _promotion_status == "tracked":
                 _occ = fi_case_by_court_number(
                     cases, court.domain, new_id, exclude=old
                 )
@@ -3779,20 +3809,12 @@ def main_json():
             # Прежний discard делал индекс дырявее, чем он будет через минуту:
             # строка выдачи с голым М-номером выглядела неотслеживаемой и могла
             # завести дубль-материал.
-            fi_dedup_exact.add((court.domain, new_id))
-            _bare_new = new_id.split("(")[0].strip()
-            if _bare_new != new_id:
-                fi_dedup_exact.add((court.domain, _bare_new))
+            add_row_to_index(fi_dedup_exact, fi)
+            resolve_identity_review(row_identity(r, court), outcome="promoted")
 
         # Фильтр: только новые дела (первая страница поиска). Дедуп — с
         # учётом суда: одинаковые номера в разных судах — разные дела.
-        new_fi = [
-            r for r in fi_results
-            if not is_fi_number_tracked(
-                r["case_number"], court.domain,
-                fi_dedup_exact, fi_dedup_wildcard,
-            )
-        ]
+        new_fi = filter_new_fi_rows(court, fi_results, fi_dedup_exact, fi_dedup_wildcard)
         # Иск к производству не принят (возврат / отказ в принятии / передача по
         # подсудности) — в мониторинг не заводим вовсе: тяжбы не было, а дело
         # 60 дней занимало бы активную картотеку, каждый прогон качая карточку,
@@ -3828,7 +3850,8 @@ def main_json():
                 json_case = _fi_search_to_json_case(fi)
                 fi_new_cases.append(json_case)
                 existing_ids.add(fi["case_number"])
-                fi_dedup_exact.add((court.domain, fi["case_number"]))
+                add_row_to_index(fi_dedup_exact, json_case["first_instance"])
+                resolve_identity_review(row_identity(fi, court), outcome="added")
             for fi in stale:
                 json_case = _fi_search_to_json_case(fi)
                 # Якорь архивации: дата решения (= hearing_date в схеме).
@@ -3838,7 +3861,8 @@ def main_json():
                 )
                 fi_discovered_resolved.append(json_case)
                 existing_ids.add(fi["case_number"])
-                fi_dedup_exact.add((court.domain, fi["case_number"]))
+                add_row_to_index(fi_dedup_exact, json_case["first_instance"])
+                resolve_identity_review(row_identity(fi, court), outcome="added")
         else:
             log.info(
                 f"  {court_tag} {court.name}: {len(fi_results)} "
@@ -4334,9 +4358,13 @@ def main_json():
                 (fi.get("case_number") or "").strip(),
                 (fi.get("material_number") or "").strip(),
             }
-            if card_fi_num not in _own_nums and is_fi_number_tracked(
-                card_fi_num, cur_dom, fi_dedup_exact, fi_dedup_wildcard
-            ):
+            _promotion_row = dict(fi, case_number=card_fi_num)
+            _promotion_status = ("free" if card_fi_num in _own_nums else row_tracking_status(
+                _promotion_row, fi_dedup_exact, fi_dedup_wildcard,
+                source="auto_card_promotion", court=court_cfg, card_info=card_info))
+            if _promotion_status == "needs_review":
+                log.warning("[NEEDS REVIEW] %s → %s — %s", cur_id, card_fi_num, REVIEW_REASON)
+            elif _promotion_status == "tracked":
                 # Занявшего ищем только ради текста: гард стоит на множестве пар,
                 # имён оно не хранит. Не нашёлся среди активных — номер держит
                 # архив или находка этого же прогона.
@@ -4388,7 +4416,8 @@ def main_json():
                 # алиасом material_number, а его collect_fi_dedup_index
                 # индексирует наравне с номером дела — при пересборке он
                 # вернётся, и заведение дубля по нему обязано блокироваться.
-                fi_dedup_exact.add((cur_dom, card_fi_num))
+                add_row_to_index(fi_dedup_exact, fi)
+                resolve_identity_review(_promotion_row, outcome="promoted")
                 # Метка для события «принято к производству, заседание не
                 # назначено» (см. search-time промоушен выше).
                 if not fi.get("accepted_emitted"):
@@ -6131,6 +6160,7 @@ def main_json():
 
     data["cases"] = cases
     save_json(data, config.JSON_PATH)
+    flush_identity_reviews()
     timings["save"] = time.perf_counter() - t0
 
     # ── 9. Дайджест и Telegram ──

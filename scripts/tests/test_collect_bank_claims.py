@@ -121,6 +121,7 @@ class TestRowPasses:
 def env(tmp_path, monkeypatch):
     """tmp-хранилище + сеть: стр.1 → p1, page=2 → p2, page=3 → снова p2
     (проверка стоп-защиты «страница повторилась»), карточки — фикстура."""
+    monkeypatch.setattr(cm_config, "FI_IDENTITY_REVIEW_PATH", str(tmp_path / "fi_identity_review.json"))
     monkeypatch.setattr(cm_config, "JSON_PATH", str(tmp_path / "cases.json"))
     monkeypatch.setattr(cm_config, "JSON_ARCHIVE_PATH", str(tmp_path / "arch.json"))
     monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(tmp_path / "cases_bank.json"))

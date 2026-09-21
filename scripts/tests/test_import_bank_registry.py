@@ -40,6 +40,7 @@ def _domain(idx: int = 0) -> str:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """tmp-хранилище + регион Свердловск/ЯНАО + замоканная сеть."""
+    monkeypatch.setattr(cm_config, "FI_IDENTITY_REVIEW_PATH", str(tmp_path / "fi_identity_review.json"))
     monkeypatch.setattr(cm_config, "JSON_PATH", str(tmp_path / "cases.json"))
     monkeypatch.setattr(cm_config, "JSON_ARCHIVE_PATH", str(tmp_path / "cases_archive.json"))
     monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(tmp_path / "cases_bank.json"))

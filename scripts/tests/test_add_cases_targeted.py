@@ -94,6 +94,7 @@ def _card_html(*, title="ДЕЛО № 2-9001/2026", participants=(),
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """tmp-хранилище + регион Свердловск/ЯНАО + отключённый polite_delay."""
+    monkeypatch.setattr(cm_config, "FI_IDENTITY_REVIEW_PATH", str(tmp_path / "fi_identity_review.json"))
     monkeypatch.setattr(cm_config, "JSON_PATH", str(tmp_path / "cases.json"))
     monkeypatch.setattr(cm_config, "JSON_ARCHIVE_PATH",
                         str(tmp_path / "cases_archive.json"))
@@ -737,7 +738,7 @@ class TestDedupReactivation:
         cases, _ = _bank_pair(env)
         assert cases[0]["id"] == "2-1001/2026"
 
-    def test_domainless_archive_match_refused(self, env, monkeypatch):
+    def test_domainless_archive_match_needs_review(self, env, monkeypatch):
         """Архивная запись БЕЗ определённого суда (дело «с апелляции») матчится
         по номеру с любым судом — реактивировать её нельзя: номера не уникальны
         между судами, изъялась бы чужая запись. Отказ, архив не тронут."""
@@ -748,8 +749,10 @@ class TestDedupReactivation:
             {"version": 1, "cases": [rec]},
             ensure_ascii=False), encoding="utf-8")
         res, _, saved = _run_item(env, monkeypatch, "2-1001/2026")
-        assert res["status"] == ta.ST_REFUSED, res["line"]
-        assert "неоднозначно" in res["line"]
+        assert res["status"] == ta.ST_NEEDS_REVIEW, res["line"]
+        assert "требуется проверка" in res["line"]
+        review = json.loads((env / "fi_identity_review.json").read_text())
+        assert len(review["items"]) == 1
         assert saved == []
         archived = json.loads(
             (env / "cases_archive.json").read_text(encoding="utf-8"))

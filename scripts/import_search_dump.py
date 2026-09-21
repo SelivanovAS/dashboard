@@ -120,8 +120,13 @@ from court_monitor.lifecycle import (  # noqa: E402
     FI_NOT_ACCEPTED_RU, dedupe_orphan_by_base_number,
     discovered_already_resolved_old, fi_not_accepted_kind, is_case_archived,
 )
+from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
+from court_monitor.identity_review import (
+    REVIEW_REASON, add_row_to_index, remember_identity_review,
+    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+)
 from court_monitor.linking import (  # noqa: E402
-    _fi_search_to_json_case, collect_fi_dedup_index, is_fi_number_tracked,
+    _fi_search_to_json_case, collect_fi_dedup_index,
     link_cases, link_cassation_cases, promote_material_record,
 )
 from court_monitor.netutil import (  # noqa: E402
@@ -642,7 +647,7 @@ def import_rows(
 
     lines: list[str] = []
     counters = {
-        "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
+        "added": 0, "promoted": 0, "already": 0, "needs_review": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0,
         # Карточка дела основной картотеки (с 16.08.2026): сколько записей
         # осталось без неё и сколько дочитано повторным дампом.
@@ -672,6 +677,18 @@ def import_rows(
     refilled_bank_any = False
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+    def active_match(number: str, row: dict):
+        candidate = row_identity(row)
+        matches = []
+        for owner, records in (("main", cases), ("bank", bank_cases)):
+            for case in records:
+                fi = case.get("first_instance") or {}
+                if number not in {case.get("id"), fi.get("case_number")}:
+                    continue
+                if compare_fi_identity(case_identity_fi(case), candidate) == "same":
+                    matches.append((case, owner))
+        return matches[0] if len(matches) == 1 else (None, "needs_review" if matches else "main")
+
     for r in rows:
         num = r["case_number"]
         bare = num.split("(")[0].strip()
@@ -681,12 +698,23 @@ def import_rows(
         # комбо-номером «2-X ~ М-Y» при уже отслеживаемой М-записи ЭТОГО ЖЕ
         # суда означает «наш материал возбуждён в дело» — запись
         # переименовывается, а не дублируется. Роль записи не трогаем.
+        tracking = row_tracking_status(r, dedup_exact, dedup_wildcard,
+                                       source="dump", dry_run=dry_run)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            lines.append(f"[NEEDS REVIEW] {num} · {r.get('court') or domain} — {REVIEW_REASON}")
+            continue
         mat = (r.get("material_number") or "").strip()
         if (mat and mat != num
-                and not is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard)):
-            old = case_by_id.get((domain, mat))
-            if old is not None:
-                owner = case_owner.get((domain, mat), "main")
+                and tracking == "free"):
+            old, owner = active_match(mat, r)
+            if owner == "needs_review":
+                remember_identity_review(row_identity(r), source="dump", dry_run=dry_run)
+                counters["needs_review"] += 1
+                lines.append(f"[NEEDS REVIEW] {num} — найдено несколько материалов {mat}; {REVIEW_REASON}")
+                continue
+            if old is not None and compare_fi_identity(
+                    case_identity_fi(old), row_identity(r)) == "same":
                 counters["promoted"] += 1
                 # Счётчик ОБЩИЙ на обе картотеки (решение юриста): его проводка
                 # до оператора уже полная, а новый ключ пришлось бы вести через
@@ -708,12 +736,10 @@ def import_rows(
                 case_by_id[(domain, num)] = old
                 case_owner.pop((domain, mat), None)
                 case_owner[(domain, num)] = owner
-                dedup_exact.discard((domain, mat))
-                dedup_exact.add((domain, num))
-                if bare != num:
-                    dedup_exact.add((domain, bare))
+                add_row_to_index(dedup_exact, old["first_instance"])
+                resolve_identity_review(row_identity(r), outcome="promoted", dry_run=dry_run)
                 continue
-        if is_fi_number_tracked(num, domain, dedup_exact, dedup_wildcard):
+        if tracking == "tracked":
             # Дозаполнение card-blind записи (с 16.08.2026): дело уже заведено,
             # но карточку не читал никто — повторная вставка того же дампа её
             # дочитывает. Без этой ветки починить импорт, у которого суд не
@@ -728,16 +754,25 @@ def import_rows(
             # ТРЕКА без флага refilled_bank_any молча терялась (сохранялся
             # cases.json, а правка жила в объекте cases_bank.json).
             key = (domain, num) if (domain, num) in case_by_id else (domain, bare)
-            target = case_by_id.get(key)
-            owner = case_owner.get(key, "main")
+            target, owner = active_match(num, r)
+            if target is None and bare != num:
+                target, owner = active_match(bare, r)
+            if target is not None and compare_fi_identity(
+                    case_identity_fi(target), row_identity(r)) != "same":
+                target = None
             fi_blind = (_card_blind_case(target, r)
                         if r.get("bank_role") == "Ответчик" else None)
             if fi_blind is None:
                 counters["already"] += 1
-                lines.append(f"[ALREADY] {num} — уже отслеживается в этом суде")
+                lines.append(f"[ALREADY] {num} — уже отслеживается: {r.get('court') or domain}")
                 continue
             card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
             if card_info:
+                if row_tracking_status(r, dedup_exact, dedup_wildcard, source="dump",
+                                       card_info=card_info, dry_run=dry_run) == "needs_review":
+                    counters["needs_review"] += 1
+                    lines.append(f"[NEEDS REVIEW] {num} — {REVIEW_REASON}")
+                    continue
                 _apply_main_card(fi_blind, r, card_info, now_iso)
                 if owner == "bank":
                     refilled_bank_any = True
@@ -769,7 +804,7 @@ def import_rows(
                     note = ("; " + (reason or "карточка не открылась")
                             + ", дозаполнит прогон")
                 lines.append(
-                    f"[ALREADY] {num} — уже отслеживается в этом суде{note}")
+                    f"[ALREADY] {num} — уже отслеживается: {r.get('court') or domain}{note}")
             continue
         # Истцовые строки → трек «Иски банка» (с 13.08.2026, разгон Урала).
         # При выключенном треке проваливаются в прежний [SKIPPED ROLE] —
@@ -781,9 +816,16 @@ def import_rows(
             lines.append(line)
             if bank_entry is not None:
                 bank_entries.append(bank_entry)
-                dedup_exact.add((domain, num))
-                if bare != num:
-                    dedup_exact.add((domain, bare))
+                check = row_tracking_status(bank_entry["first_instance"], dedup_exact,
+                                            dedup_wildcard, source="dump", dry_run=dry_run)
+                if check == "needs_review":
+                    bank_entries.pop()
+                    counters[outcome] -= 1
+                    counters["needs_review"] += 1
+                    lines[-1] = f"[NEEDS REVIEW] {num} — {REVIEW_REASON}"
+                else:
+                    add_row_to_index(dedup_exact, bank_entry["first_instance"])
+                    resolve_identity_review(row_identity(r), outcome="added_bank", dry_run=dry_run)
             continue
         # «Банк-ответчик» — в основную картотеку, зеркало фильтра боевого
         # автопоиска (parse_first_instance_search без keep_all_roles).
@@ -846,9 +888,8 @@ def import_rows(
             entry["import"] = {"operator": operator, "at": now_iso,
                                "source": "dump", "announced": True}
             new_entries.append(entry)
-            dedup_exact.add((domain, num))
-            if bare != num:
-                dedup_exact.add((domain, bare))
+            add_row_to_index(dedup_exact, entry["first_instance"])
+            resolve_identity_review(row_identity(r), outcome="resolved_old", dry_run=dry_run)
             counters["resolved_old"] += 1
             lines.append(
                 f"[ADDED OLD] {num} — дело давно решено "
@@ -890,6 +931,12 @@ def import_rows(
         card_info, why = _fetch_main_card(r, domain, bank_state, dry_run)
         note = ""
         if card_info:
+            check = row_tracking_status(r, dedup_exact, dedup_wildcard, source="dump",
+                                        card_info=card_info, dry_run=dry_run)
+            if check == "needs_review":
+                counters["needs_review"] += 1
+                lines.append(f"[NEEDS REVIEW] {num} — {REVIEW_REASON}")
+                continue
             # Второй рубеж not_accepted — по карточке (с 18.08.2026, зеркало
             # второго рубежа card_rejects истцовой ветки): выдача отстаёт от
             # карточки, и возврат/отказ в принятии бывает виден только в ней.
@@ -928,9 +975,8 @@ def import_rows(
         if old_by_card:
             entry["import"]["announced"] = True
         new_entries.append(entry)
-        dedup_exact.add((domain, num))
-        if bare != num:
-            dedup_exact.add((domain, bare))
+        add_row_to_index(dedup_exact, row_identity(entry["first_instance"], card_info=card_info))
+        resolve_identity_review(row_identity(r), outcome="added", dry_run=dry_run)
         if old_by_card:
             counters["resolved_old"] += 1
             lines.append(
@@ -972,6 +1018,8 @@ def import_rows(
     if bank_state["seen_dirty"] and not dry_run:
         save_intake_seen(bank_state["seen"])
 
+    if not dry_run:
+        flush_identity_reviews()
     counters["card_fail_reason"] = _top_card_fail_reason(bank_state)
     return {"counters": counters, "lines": lines, "added_entries": new_entries,
             "added_bank_entries": bank_entries}
@@ -1631,7 +1679,7 @@ def main(argv: list[str] | None = None) -> int:
         "operator": operator,
         "dry_run": bool(args.dry_run),
         "region": region.code,
-        "added": 0, "promoted": 0, "already": 0, "skipped_role": 0,
+        "added": 0, "promoted": 0, "already": 0, "needs_review": 0, "skipped_role": 0,
         "not_accepted": 0, "no_link": 0, "subsidiary": 0, "rows": 0,
         "card_failed": 0, "refilled": 0, "resolved_old": 0,
         "card_fail_reason": "",
@@ -1785,6 +1833,9 @@ def main(argv: list[str] | None = None) -> int:
         summary["no_link"], summary["seen_cached"], summary["subsidiary"],
         " | DRY-RUN" if args.dry_run else "",
     )
+    if summary["needs_review"]:
+        log.warning("%d строк требуют проверки суда, площадки или УИД; кандидаты сохранены%s",
+                    summary["needs_review"], " только в отчёте (dry-run)" if args.dry_run else "")
     if summary["card_failed"] or summary["refilled"]:
         # Отдельной строкой, а не хвостом сводки выше: провал чтения карточек —
         # повод повторить импорт, и он не должен теряться среди корзин отсева.

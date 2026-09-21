@@ -2835,7 +2835,8 @@ async function handleImportResult(request, env) {
   // ⚠️ Свежесть подтверждают только ДАМПЫ. Пультовые операции (точечное
   // добавление, пометка «лист не нужен») идут по своим делам и суд целиком не
   // обходят — список явный, чтобы следующий kind не бумпнул светофор молча.
-  if (status === "done" && record.court_domain && isDump && cardsUnread === 0) {
+  if (status === "done" && record.court_domain && isDump && cardsUnread === 0
+      && !(record.needs_review || 0)) {
     const identity = importSectionIdentity(record);
     await env.PUSH_SUBSCRIPTIONS.put(
       `import:last:${identity ? identity.section_key : record.court_domain}`,
@@ -2922,7 +2923,7 @@ async function handleAdminImportLog(request, env) {
       // дополнительных KV-чтений; неизвестную инстанцию не угадываем.
       for (const record of records.values()) {
         if ((record.kind || "dump") !== "dump" || record.status !== "done"
-            || (record.fetch_fail || 0) + (record.card_failed || 0) !== 0) continue;
+            || (record.fetch_fail || 0) + (record.card_failed || 0) + (record.needs_review || 0) !== 0) continue;
         rememberSection({ ...record, ts: record.updated_at || record.ts });
       }
     }

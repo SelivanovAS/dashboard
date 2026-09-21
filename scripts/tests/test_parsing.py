@@ -1745,6 +1745,7 @@ def _fi_case_for_link(cid: str = "2-100/2025", stage: str = "awaiting_appeal",
         "defendant": "Смирнов Сергей Сергеевич",
         "first_instance": {
             "case_number": cid,
+            "court_domain": "surggor--hmao.sudrf.ru",
             "status": "Решено",
             "events": [{"date": "01.03.2026", "text": "Решение вынесено"}],
             "appeal_filed_date": "10.03.2026",
@@ -1762,7 +1763,7 @@ def _orphan_appeal_case(ap_num: str = "33-999/2026", **ap_over) -> dict:
         "current_stage": "appeal",
         "plaintiff": "",
         "defendant": "",
-        "first_instance": None,
+        "first_instance": {"court_domain": "surggor--hmao.sudrf.ru"},
         "appeal": ap,
     }
 
@@ -1907,6 +1908,7 @@ class TestReactivateArchivedFirstInstance:
             "id": cid,
             "current_stage": "first_instance",
             "first_instance": {"case_number": cid, "status": "Решено",
+                               "court_domain": "surggor--hmao.sudrf.ru",
                                "hearing_date": _days_ago(hearing_days_ago)},
         }
 
@@ -1984,12 +1986,11 @@ class TestArchiveDedup:
                  self._case("9-44/2026", "novouralsky--svd.sudrf.ru")]
         assert len(uc.dedupe_new_archive_entries([], newly)) == 2
 
-    def test_empty_domain_falls_back_to_number_match(self):
-        """Домен неизвестен и по имени суда не резолвится — ведём себя
-        консервативно, как раньше: считаем записи одним делом."""
+    def test_unknown_court_does_not_discard_another_record(self):
+        """Неизвестные суды двух записей не доказывают, что это одно дело."""
         archived = [{"id": "2-5/2026", "first_instance": {}}]
         newly = [{"id": "2-5/2026", "first_instance": {}}]
-        assert uc.dedupe_new_archive_entries(archived, newly) == []
+        assert uc.dedupe_new_archive_entries(archived, newly) == newly
 
     def test_domain_resolved_from_court_name(self):
         """У дел «с апелляции» court_domain пуст — домен резолвится по
@@ -2087,7 +2088,7 @@ class TestCardPromotionGuardWiring:
         """Голый case_by_id больше не решает занятость — только пара."""
         block = self._block()
         assert "case_by_id.get(card_fi_num)" not in block
-        assert "is_fi_number_tracked(" in block
+        assert "row_tracking_status(" in block
         assert "fi_dedup_exact, fi_dedup_wildcard" in block
 
     def test_guard_uses_current_court_domain(self):
@@ -2101,7 +2102,7 @@ class TestCardPromotionGuardWiring:
 
     def test_promotion_feeds_dedup_index(self):
         """Иначе два материала одного суда за прогон дадут дубль."""
-        assert "fi_dedup_exact.add((cur_dom, card_fi_num))" in self._block()
+        assert "add_row_to_index(fi_dedup_exact, fi)" in self._block()
 
     def test_warning_names_the_occupier(self):
         """Разбор не должен требовать раскопок в JSON: суд обязан быть в тексте."""
@@ -2211,13 +2212,14 @@ class TestSearchPromotionGuardWiring:
     def test_occupancy_checked_before_rename(self):
         """Проверка обязана стоять ДО переименования, иначе она бесполезна."""
         block = self._block()
-        assert "is_fi_number_tracked(" in block
-        i_guard = block.index("is_fi_number_tracked(")
+        assert "row_tracking_status(" in block
+        i_guard = block.index("row_tracking_status(")
         i_rename = block.index('old["id"] = new_id')
         assert i_guard < i_rename
 
     def test_guard_is_court_aware(self):
-        assert "court.domain, fi_dedup_exact, fi_dedup_wildcard" in self._block()
+        assert "fi_dedup_exact, fi_dedup_wildcard" in self._block()
+        assert "court=court" in self._block()
 
     def test_own_numbers_excluded(self):
         """Полупромоутнутая запись не должна блокировать сама себя."""
@@ -2229,7 +2231,7 @@ class TestSearchPromotionGuardWiring:
         ведут индекс одинаково)."""
         block = self._block()
         assert "fi_dedup_exact.discard(" not in block
-        assert "fi_dedup_exact.add((court.domain, new_id))" in block
+        assert "add_row_to_index(fi_dedup_exact, fi)" in block
 
     def test_warning_names_the_occupier(self):
         block = self._block()
@@ -6099,7 +6101,7 @@ class TestNotAcceptedIntakeWiring:
 
     def test_gate_runs_before_fresh_stale_split(self):
         src = self._runs_src()
-        i_new = src.index("        new_fi = [\n")
+        i_new = src.index("        new_fi = filter_new_fi_rows(")
         i_gate = src.index("fi_not_accepted_kind(r.get(\"result\") or \"\")")
         i_split = src.index("fresh = [r for r in new_fi "
                             "if not _discovered_already_resolved_old(r)]")

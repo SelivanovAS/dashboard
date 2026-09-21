@@ -22,6 +22,10 @@ from court_monitor.courts import (
 )
 from court_monitor.regions import get_region
 from court_monitor.regions.base import _eyo
+from court_monitor.fi_identity import (
+    FiDedupIndex, FiUncertainIndex, resolve_fi_identity, compare_fi_identity,
+    fi_number_tracking_status, case_identity_fi as _case_identity_fi,
+)
 from court_monitor.lifecycle import (
     _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
     _infer_archived_at, _parse_iso_date, should_parse_fi_card,
@@ -49,6 +53,21 @@ def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict
         if num and num not in existing_numbers:
             new.append(c)
     return new
+
+
+def _same_case_record(left: dict, right: dict) -> bool:
+    if left is right:
+        return True
+    return bool(left.get("id") and left.get("id") == right.get("id")
+                and compare_fi_identity(_case_identity_fi(left),
+                                        _case_identity_fi(right)) == "same")
+
+
+def _may_duplicate_record(left: dict, right: dict) -> bool:
+    """Не добавлять архивного двойника, пока суд одноимённой записи неизвестен."""
+    return bool(left.get("id") and left.get("id") == right.get("id")
+                and compare_fi_identity(_case_identity_fi(left),
+                                        _case_identity_fi(right)) != "different")
 
 
 # ── Связка дел первой инстанции ↔ апелляция ────────────────────────────────
@@ -98,39 +117,9 @@ def link_cases(
         if base and base != num:
             idx_map.setdefault((dom, base), set()).add(i)
 
-    # Короткие названия и прежние названия судов в апелляционной выдаче
-    # разрешаем только точным совпадением по реестру активной территории.
-    # Несколько площадок с одинаковым именем не дают права выбрать первую.
-    court_names: dict[str, set[tuple[str, int]]] = {}
-    for court in get_region().first_instance_courts:
-        for name in (court.name, *court.name_aliases):
-            court_names.setdefault(_eyo(name.strip().lower()), set()).add(
-                (canon_sudrf_domain(court.domain), court.srv_num))
-
-    def _fi_identity(case: dict) -> tuple[str, str, str]:
-        fi = case.get("first_instance") or {}
-        domain = canon_sudrf_domain(fi.get("court_domain"))
-        name = _eyo((fi.get("court") or "").strip().lower())
-        matches = court_names.get(name, set())
-        srv = str(fi.get("srv_num") or "")
-        if len(matches) == 1:
-            named_domain, named_srv = next(iter(matches))
-            if not domain:
-                domain = named_domain
-            if domain == named_domain and not srv:
-                srv = str(named_srv)
-        return domain, srv, name
-
     def _same_fi_court(source: dict, target: dict) -> bool:
-        src_domain, src_srv, src_name = _fi_identity(source)
-        dst_domain, dst_srv, dst_name = _fi_identity(target)
-        if src_domain or dst_domain:
-            if not src_domain or src_domain != dst_domain:
-                return False
-            return not (src_srv and dst_srv and src_srv != dst_srv)
-        # Legacy без суда допустим лишь при единственном кандидате ниже.
-        # Неизвестные, но РАЗНЫЕ названия суда не становятся wildcard.
-        return not (src_name or dst_name) or bool(src_name and src_name == dst_name)
+        return compare_fi_identity(_case_identity_fi(source),
+                                   _case_identity_fi(target)) == "same"
 
     fi_index: dict[str, set[int]] = {}   # номер_1_инст → кандидаты в cases
     appeal_index: dict = {}  # (домен_апел_суда, номер_апелляции) → индекс в cases
@@ -418,8 +407,9 @@ def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
                 (today - checked.date()).days < config.LINK_BACKFILL_RETRY_DAYS
             ):
                 continue
-        court = match_fi_court_by_short_name(fi.get("court") or "")
-        if court is None:
+        identity = resolve_fi_identity(fi)
+        court = identity.court if identity.status == "resolved" else None
+        if court is None or court.court_type != "first_instance":
             log.debug(
                 f"  backfill_fi_links: {num} — суд «{fi.get('court', '')}» "
                 f"не из реестра 1-й инст., пропуск"
@@ -521,8 +511,7 @@ def reactivate_archived_first_instance(
     now = datetime.now()
     # Ключ — (домен суда, id), а не голый номер: одноимённое дело ДРУГОГО суда
     # среди активных не должно блокировать реактивацию (см. case_court_key).
-    ntd = _fi_name_to_domain()
-    active_keys = {case_court_key(c, ntd) for c in cases if c.get("id")}
+    active = list(cases)
     moved: list[dict] = []
     keep: list[dict] = []
     for c in archived_cases:
@@ -534,8 +523,8 @@ def reactivate_archived_first_instance(
             keep.append(c)
             continue
         cid = (c.get("id") or "").strip()
-        key = case_court_key(c, ntd)
-        if not cid or key in active_keys:
+        if (not cid or resolve_fi_identity(_case_identity_fi(c)).status != "resolved"
+                or any(_may_duplicate_record(c, existing) for existing in active)):
             keep.append(c)
             continue
         hearing = parse_date(fi.get("hearing_date") or "")
@@ -547,7 +536,7 @@ def reactivate_archived_first_instance(
             keep.append(c)
             continue
         moved.append(c)
-        active_keys.add(key)
+        active.append(c)
     if not moved:
         return 0
     cases.extend(moved)
@@ -582,18 +571,19 @@ def reactivate_bank_archived(
     """
     if not bank_archived_cases:
         return 0
-    ntd = _fi_name_to_domain()
-    active_keys = {case_court_key(c, ntd) for c in cases if c.get("id")}
+    active = list(cases)
     moved: list[dict] = []
     keep: list[dict] = []
     for bc in bank_archived_cases:
-        if is_case_archived(bc) or case_court_key(bc, ntd) in active_keys:
+        if (is_case_archived(bc)
+                or resolve_fi_identity(_case_identity_fi(bc)).status != "resolved"
+                or any(_may_duplicate_record(bc, existing) for existing in active)):
             keep.append(bc)
             continue
         bc.pop("archived_at", None)
         bc.setdefault("track", "plaintiff_light")
         moved.append(bc)
-        active_keys.add(case_court_key(bc, ntd))
+        active.append(bc)
     if not moved:
         return 0
     cases.extend(moved)
@@ -783,16 +773,20 @@ def link_cassation_cases(
     fi_index: dict[str, set[int]] = {}
 
     def _fi_domain(block: dict) -> str:
-        domain = canon_sudrf_domain(block.get("court_domain"))
-        if domain:
-            return domain
-        court = match_fi_court_by_short_name(block.get("court", ""))
-        return court.domain if court else ""
+        identity = resolve_fi_identity(block)
+        return identity.domain if identity.status == "resolved" else ""
 
     def _find_fi_court(info: dict):
         return (info.get("fi_court_config")
                 or match_hmao_first_instance(info.get("fi_court_long", ""))
                 or match_fi_court_by_short_name(info.get("fi_court_long", "")))
+
+    def _incoming_fi(info: dict) -> dict:
+        court = _find_fi_court(info)
+        return {"court_domain": court.domain if court else "",
+                "court": info.get("fi_court_long") or (court.name if court else ""),
+                "srv_num": info.get("fi_srv_num"),
+                "judicial_uid": info.get("judicial_uid") or ""}
 
     def _case_uids(case: dict, blocks=("first_instance", "appeal", "cassation")) -> set[str]:
         return {((case.get(block) or {}).get("judicial_uid") or "").strip()
@@ -810,25 +804,33 @@ def link_cassation_cases(
             return True
         court = _find_fi_court(info)
         fi = case.get("first_instance") or {}
+        identity = resolve_fi_identity(_case_identity_fi(case))
+        if (identity.status == "needs_review" and
+                (identity.domain or "противореч" in identity.reason)):
+            return True
         domain = _fi_domain(fi)
         if court and domain and court.domain != domain:
             return not (uid and uid in _case_uids(case, ("first_instance", "appeal")))
-        srv = info.get("fi_srv_num") or (court.srv_num if court else None)
-        return bool(srv and fi.get("srv_num") and str(srv) != str(fi["srv_num"]))
+        incoming = resolve_fi_identity(_incoming_fi(info))
+        if incoming.status == "needs_review" and incoming.domain:
+            return True
+        srv = incoming.srv_num
+        sites = {c.srv_num for c in get_region().first_instance_courts
+                 if canon_sudrf_domain(c.domain) == domain}
+        return bool(len(sites) > 1 and srv and fi.get("srv_num")
+                    and str(srv) != str(fi["srv_num"]))
 
     def _number_match(index, records, info, number):
         """Номер — лишь кандидаты. Связка требует суд; неполные/неоднозначные
         кандидаты оставляем на проверку вместо первого совпавшего дела."""
         candidates = set(index.get(number, ())) | set(index.get(_bare_case_number(number), ()))
-        court = _find_fi_court(info)
-        domain = court.domain if court else ""
+        incoming = _incoming_fi(info)
         exact, unknown = [], []
         for i in candidates:
-            fi = records[i].get("first_instance") or {}
-            candidate_domain = _fi_domain(fi)
-            if not domain or not candidate_domain:
+            verdict = compare_fi_identity(incoming, _case_identity_fi(records[i]))
+            if verdict == "needs_review":
                 unknown.append(i)
-            elif domain == candidate_domain:
+            elif verdict == "same":
                 # УИД, если он есть у обеих сторон, не должен противоречить
                 # запасному матчу по суду и номеру.
                 if _identity_conflicts(records[i], info):
@@ -1518,97 +1520,50 @@ def collect_existing_ids(all_cases) -> set[str]:
 
 
 def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
-    """Судо-зависимый индекс дедупа новых дел 1-й инстанции.
+    """Индекс суда/номера с площадкой и УИД; неизвестные требуют проверки.
 
-    Номера дел НЕ уникальны между судами: «2-500/2026» есть в десятках судов
-    региона. Глобальный индекс по номеру (collect_existing_ids) на фильтре
-    новых FI-дел давал бы ложное «уже отслеживается» и терял новое дело суда Б
-    при совпадении номера с делом суда А (вопрос юриста 16.07.2026).
-
-    Возвращает (exact, wildcard):
-      exact    — {(домен суда 1-й инст., номер)}: полный id, его «голая»
-                 часть до скобки, fi.case_number и М-алиас записей с
-                 известным first_instance.court_domain. Пустой домен при
-                 непустом fi.court резолвится по короткому имени
-                 (match_fi_court_by_short_name): у дел «с апелляции» домен
-                 не заполнен, но суд известен — иначе их номера блокировали
-                 бы одноимённые дела во всех судах региона (11 ложных
-                 [ALREADY] на импортах 16.07.2026, инцидент 2-114/2026
-                 Ивдельский/Пуровский);
-      wildcard — номера записей, у которых нет ни домена, ни распознаваемого
-                 имени суда — консервативно блокируют номер во ВСЕХ судах
-                 (лучше ложный пропуск, чем дубль).
-    Проверка — is_fi_number_tracked().
+    Формат пары множеств сохранён для читателей. Метаданные нужны, чтобы
+    совпадение номера не означало совпадение суда или площадки.
     """
-    exact: set[tuple[str, str]] = set()
-    wildcard: set[str] = set()
-    # Карта «короткое имя → домен» активного региона (setdefault — как в
-    # courts.py: вторые площадки делят домен, первый суд имени побеждает).
-    name_to_domain = _fi_name_to_domain()
-    for c in all_cases:
-        fi = c.get("first_instance") or {}
-        # Мировой судья (кассация президиума): ни домена, ни реестрового
-        # имени — запись ушла бы в wildcard и заблокировала бы свой
-        # FI-номер во ВСЕХ судах региона. Пропускаем целиком: её id «4Г-…»
-        # с номером 1-й инстанции не пересекается.
-        if fi.get("magistrate"):
+    exact, wildcard = FiDedupIndex(), FiUncertainIndex()
+    for case in all_cases:
+        fi = _case_identity_fi(case)
+        identity = resolve_fi_identity(fi)
+        if identity.status == "magistrate":
             continue
-        domain = (fi.get("court_domain") or "").strip().lower()
-        if not domain:
-            court_name = (fi.get("court") or "").strip().lower()
-            domain = name_to_domain.get(_eyo(court_name), "")
-        nums: set[str] = set()
-        cid = (c.get("id") or "").strip()
-        if cid:
-            nums.add(cid)
-            nums.add(cid.split("(")[0].strip())
-        num = (fi.get("case_number") or "").strip()
-        if num:
-            nums.add(num)
-            nums.add(num.split("(")[0].strip())
-        mat = (fi.get("material_number") or "").strip()
-        if mat:
-            nums.add(mat)
-        nums.discard("")
-        if domain:
-            for n in nums:
-                exact.add((domain, n))
-        else:
-            wildcard |= nums
+        nums = set()
+        for value in (case.get("id"), fi.get("case_number"), fi.get("material_number")):
+            num = (value or "").strip()
+            if num:
+                nums.update((num, num.split("(")[0].strip()))
+        for num in nums:
+            if identity.status == "resolved":
+                exact.add_identity(identity.domain, num, fi)
+            else:
+                wildcard.add_identity(num, fi)
     return exact, wildcard
 
 
 def _fi_name_to_domain() -> dict[str, str]:
-    """Карта «короткое имя суда 1-й инст. → домен» активного региона.
-    Строится НА ВЫЗОВ (config.X-инвариант): статический реестр courts.py снят
-    при импорте модуля и не видит monkeypatch региона в тестах."""
-    name_to_domain: dict[str, str] = {}
+    """Совместимая карта уникальных коротких имён и подтверждённых aliases."""
+    candidates: dict[str, set[str]] = {}
     for cfg in get_region().first_instance_courts:
-        name_to_domain.setdefault(_eyo(cfg.name.lower()), cfg.domain.lower())
-    return name_to_domain
+        for name in (cfg.name, *getattr(cfg, "name_aliases", ())):
+            candidates.setdefault(_eyo(name.strip().lower()), set()).add(
+                canon_sudrf_domain(cfg.domain))
+    return {name: next(iter(domains)) for name, domains in candidates.items()
+            if len(domains) == 1}
 
 
 def case_court_key(case: dict, name_to_domain: dict[str, str] | None = None) -> tuple[str, str]:
-    """Судо-зависимый ключ дела: (домен суда 1-й инст., id).
+    """Совместимый ключ; пустой домен НЕ является доказательством совпадения.
 
-    Номера дел НЕ уникальны между судами — «9-44/2026» есть и в Невьянском, и
-    в Новоуральском городских судах (Урал, 21.07.2026). Везде, где записи
-    сопоставляются между активными и архивом, ключом должен быть этот кортеж,
-    а не голый id (тот же принцип, что в collect_fi_dedup_index для новых дел).
-
-    Домен берём из `first_instance.court_domain`, а если он пуст (дела «с
-    апелляции» заводятся без домена) — резолвим по короткому имени суда.
-    Не резолвился — домен пустой: такая запись сопоставляется только с
-    другими бездоменными, консервативно.
+    Для слияния, реактивации и проверки площадки использовать
+    compare_fi_identity. name_to_domain сохранён в сигнатуре для читателей.
     """
-    fi = case.get("first_instance") or {}
-    domain = (fi.get("court_domain") or "").strip().lower()
-    if not domain:
-        court_name = (fi.get("court") or "").strip().lower()
-        if court_name:
-            ntd = _fi_name_to_domain() if name_to_domain is None else name_to_domain
-            domain = ntd.get(_eyo(court_name), "")
-    return (domain, (case.get("id") or "").strip())
+    identity = resolve_fi_identity(_case_identity_fi(case))
+    domain = identity.domain if identity.status == "resolved" else ""
+    return domain, (case.get("id") or "").strip()
 
 
 def fi_case_by_court_number(
@@ -1666,9 +1621,8 @@ def dedupe_new_archive_entries(
     """
     if not newly_archived:
         return []
-    ntd = _fi_name_to_domain()
-    existing = {case_court_key(c, ntd) for c in archived_cases}
-    return [c for c in newly_archived if case_court_key(c, ntd) not in existing]
+    return [case for case in newly_archived
+            if not any(_same_case_record(case, archived) for archived in archived_cases)]
 
 
 # ── Присоединение дел (ст. 151 ГПК): подбор дела-приёмника ─────────────────
@@ -1837,14 +1791,12 @@ def _ddmmyyyy_in_future(raw: str) -> bool:
 def is_fi_number_tracked(
     number: str, court_domain: str, exact: set, wildcard: set
 ) -> bool:
-    """Отслеживается ли номер дела в ЭТОМ суде (индекс collect_fi_dedup_index)."""
-    number = (number or "").strip()
-    bare = number.split("(")[0].strip()
-    d = (court_domain or "").strip().lower()
-    return (
-        (d, number) in exact or (d, bare) in exact
-        or number in wildcard or bare in wildcard
-    )
+    """Совместимая обёртка: True только для подтверждённого совпадения.
+
+    Приём дел использует fi_number_tracking_status, чтобы отдельно обработать
+    needs_review и не принять неизвестность за свободный номер.
+    """
+    return fi_number_tracking_status(number, court_domain, exact, wildcard) == "tracked"
 
 
 def promote_material_record(old: dict, row: dict) -> None:

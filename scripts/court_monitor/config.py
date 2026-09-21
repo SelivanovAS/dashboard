@@ -43,6 +43,10 @@ CSV_ARCHIVE_PATH = os.environ.get(
     os.path.join(os.path.dirname(CSV_PATH) or "data", "sberbank_cases_archive.csv")
 )
 JSON_PATH = os.environ.get("JSON_PATH", "data/cases.json")
+FI_IDENTITY_REVIEW_PATH = os.environ.get(
+    "FI_IDENTITY_REVIEW_PATH",
+    os.path.join(os.path.dirname(JSON_PATH) or "data", "fi_identity_review.json"),
+)
 JSON_ARCHIVE_PATH = os.environ.get(
     "JSON_ARCHIVE_PATH",
     os.path.join(os.path.dirname(JSON_PATH) or "data", "cases_archive.json")

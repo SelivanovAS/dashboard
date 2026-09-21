@@ -24,6 +24,20 @@ from court_monitor import config as cm_config  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _isolate_fi_identity_review(tmp_path, monkeypatch, request):
+    from court_monitor.identity_review import _pending_resolutions
+    _pending_resolutions.clear()
+    # Этот модуль только читает реальные пути config и сравнивает их с
+    # отдельным процессом stage_data_files.sh --list. Подмена пути здесь
+    # исказила бы проверку включения нового файла в публикацию.
+    if request.node.path.name != "test_data_files_staged.py":
+        monkeypatch.setattr(cm_config, "FI_IDENTITY_REVIEW_PATH",
+                            str(tmp_path / "fi_identity_review.json"))
+    yield
+    _pending_resolutions.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_card_breaker():
     cm_config.CARD_BREAKER.clear()
     yield
