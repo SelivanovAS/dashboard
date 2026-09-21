@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import unittest
+from copy import deepcopy
 from contextlib import contextmanager
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -60,7 +61,7 @@ def _orphan(num="2-208/2026", court="Сургутский городской с�
 
 
 def _owner(num="2-208/2026", court="Сургутский городской суд",
-           domain="surgut--hmao.sudrf.ru", stage="first_instance"):
+           domain="surggor--hmao.sudrf.ru", stage="first_instance"):
     """Запись 1-й инст. с реальными данными карточки (хозяин)."""
     return {
         "id": num,
@@ -76,8 +77,8 @@ def _owner(num="2-208/2026", court="Сургутский городской су
 class TestDedupeOrphanCourtAware(unittest.TestCase):
     def test_same_court_pair_merged(self):
         cases = [
-            _owner(domain="surgut--hmao.sudrf.ru"),
-            _orphan(domain="surgut--hmao.sudrf.ru"),
+            _owner(domain="surggor--hmao.sudrf.ru"),
+            _orphan(domain="surggor--hmao.sudrf.ru"),
         ]
         merged = dedupe_orphan_by_base_number(cases)
         self.assertEqual(merged, 1)
@@ -90,7 +91,7 @@ class TestDedupeOrphanCourtAware(unittest.TestCase):
         # это склейка двух РАЗНЫХ дел с совпадающим номером.
         cases = [
             _owner(court="Сургутский городской суд",
-                   domain="surgut--hmao.sudrf.ru"),
+                   domain="surggor--hmao.sudrf.ru"),
             _orphan(court="Когалымский городской суд",
                     domain="kogalym--hmao.sudrf.ru"),
         ]
@@ -120,13 +121,77 @@ class TestDedupeOrphanCourtAware(unittest.TestCase):
         self.assertEqual(len(cases), 3)
         self.assertFalse(_warnings_of(records), _warnings_of(records))
 
-    def test_orphan_without_court_still_merges(self):
-        # Легаси-стаб без суда: пустой ключ матчит любой — прежнее
-        # лечение сохраняется.
+    def test_orphan_without_court_is_preserved_for_review(self):
+        # Один хозяин с таким номером тоже не доказывает суд сироты.
         cases = [_owner(), _orphan(court="", domain="")]
+        before = deepcopy(cases)
         merged = dedupe_orphan_by_base_number(cases)
-        self.assertEqual(merged, 1)
-        self.assertEqual(len(cases), 1)
+        self.assertEqual(merged, 0)
+        self.assertEqual(cases, before)
+
+    def test_owner_without_court_is_preserved_for_review(self):
+        cases = [_owner(court="", domain=""), _orphan()]
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
+
+    def test_same_court_conflicting_uids_do_not_merge(self):
+        cases = [_owner(), _orphan()]
+        cases[0]["first_instance"]["judicial_uid"] = "86RS0011-01-2026-000111-11"
+        cases[1]["first_instance"]["judicial_uid"] = "86RS0011-01-2026-000222-22"
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
+
+    def test_same_court_same_uid_merges_without_losing_history(self):
+        cases = [_owner(), _orphan()]
+        for case in cases:
+            case["first_instance"]["judicial_uid"] = "86RS0011-01-2026-000111-11"
+        cases[0]["history"] = [{"round": 1, "notes": "Первое рассмотрение"}]
+        before_fi = deepcopy(cases[0]["first_instance"])
+        before_history = deepcopy(cases[0]["history"])
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 1)
+        self.assertEqual(cases[0]["first_instance"], before_fi)
+        self.assertEqual(cases[0]["history"], before_history)
+
+    def test_conflicting_uid_from_appeal_prevents_orphan_merge(self):
+        cases = [_owner(), _orphan()]
+        cases[0]["first_instance"]["judicial_uid"] = "86RS0011-01-2026-000111-11"
+        cases[1]["appeal"]["judicial_uid"] = "86RS0011-01-2026-000222-22"
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
+
+    def test_internal_uid_conflict_preserves_both_records(self):
+        cases = [_owner(), _orphan()]
+        for case in cases:
+            case["first_instance"]["judicial_uid"] = "86RS0011-01-2026-000111-11"
+        cases[1]["appeal"]["judicial_uid"] = "86RS0011-01-2026-000222-22"
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
+
+    def test_common_site_different_sites_do_not_merge(self):
+        cases = [
+            _owner(court="Нижневартовский районный суд", domain="vartovray--hmao.sudrf.ru"),
+            _orphan(court="Нижневартовский районный суд (г. Покачи)",
+                    domain="vartovray--hmao.sudrf.ru"),
+        ]
+        cases[0]["first_instance"]["srv_num"] = 1
+        cases[1]["first_instance"]["srv_num"] = 2
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
+
+    def test_common_site_without_confirmed_site_does_not_merge(self):
+        cases = [
+            _owner(court="Нижневартовский районный суд", domain="vartovray--hmao.sudrf.ru"),
+            _orphan(court="", domain="vartovray--hmao.sudrf.ru"),
+        ]
+        cases[0]["first_instance"]["srv_num"] = 1
+        before = deepcopy(cases)
+        self.assertEqual(dedupe_orphan_by_base_number(cases), 0)
+        self.assertEqual(cases, before)
 
     def test_two_owners_different_courts_merges_into_matching(self):
         # Раньше «1 сирота + 2 хозяина» блокировались целиком; с учётом
@@ -135,8 +200,8 @@ class TestDedupeOrphanCourtAware(unittest.TestCase):
                           domain="kogalym--hmao.sudrf.ru")
         cases = [
             stranger,
-            _owner(domain="surgut--hmao.sudrf.ru"),
-            _orphan(domain="surgut--hmao.sudrf.ru"),
+            _owner(domain="surggor--hmao.sudrf.ru"),
+            _orphan(domain="surggor--hmao.sudrf.ru"),
         ]
         merged = dedupe_orphan_by_base_number(cases)
         self.assertEqual(merged, 1)

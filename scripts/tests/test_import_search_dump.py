@@ -122,6 +122,7 @@ def import_env(tmp_path, monkeypatch):
     bank_events_path = tmp_path / "cases_bank_events.json"
     seen_path = tmp_path / ".bank_intake_seen.json"
     gh_out = tmp_path / "gh_output.txt"
+    monkeypatch.setattr(cm_config, "FI_IDENTITY_REVIEW_PATH", str(tmp_path / "fi_identity_review.json"))
     monkeypatch.setattr(cm_config, "JSON_PATH", str(json_path))
     monkeypatch.setattr(cm_config, "JSON_ARCHIVE_PATH", str(archive_path))
     monkeypatch.setattr(cm_config, "JSON_BANK_PATH", str(bank_path))
@@ -229,7 +230,8 @@ class TestImporterE2E:
     def test_dedup_against_archive(self, import_env):
         """Дело из горячего архива не всплывает как новое."""
         import_env["archive"].write_text(json.dumps({
-            "version": 1, "cases": [{"id": "2-1001/2026"}],
+            "version": 1, "cases": [{"id": "2-1001/2026", "first_instance": {
+                "court_domain": _svd_court().domain, "srv_num": 1}}],
         }, ensure_ascii=False), encoding="utf-8")
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
@@ -318,17 +320,19 @@ class TestImporterE2E:
         s = _read_summary(import_env["gh_out"])
         assert s["added"] == 1 and s["already"] == 1
 
-    def test_record_without_court_blocks_everywhere(self, import_env):
-        """Запись без домена И без имени суда — wildcard: консервативно
-        блокирует номер во всех судах (лучше пропуск, чем дубль).
-        Так же работает архивный дедуп (архив в test_dedup_against_archive)."""
+    def test_record_without_court_is_quarantined(self, import_env):
+        """Неизвестный суд не подтверждает дубль; кандидат остаётся для разбора."""
         import_env["json"].write_text(json.dumps({
             "version": 1,
             "cases": [{"id": "2-1001/2026", "current_stage": "appeal"}],
         }, ensure_ascii=False), encoding="utf-8")
         _run(import_env)
         s = _read_summary(import_env["gh_out"])
-        assert s["added"] == 1 and s["already"] == 1
+        assert s["added"] == 1 and s["already"] == 0
+        assert s["needs_review"] == 1
+        review = json.loads((import_env["json"].parent / "fi_identity_review.json").read_text())
+        assert review["items"][0]["status"] == "needs_review"
+        assert review["items"][0]["candidate"]["case_number"] == "2-1001/2026"
 
     def test_appeal_record_other_court_by_name_not_blocking(self, import_env):
         """Сценарий Ивделя (16.07.2026): дело «с апелляции» без court_domain,

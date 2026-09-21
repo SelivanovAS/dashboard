@@ -61,7 +61,7 @@ EXIT_BAD_JOB = 5
 # ЦЕЛИКОМ: роль банка решается по карточке, card-blind записи там не выходит.
 _COUNTER_STATUSES = (
     ta.ST_ADDED_MAIN, ta.ST_ADDED_BANK, ta.ST_REACTIVATED,
-    ta.ST_PROMOTED, ta.ST_ALREADY, ta.ST_NOT_FOUND, ta.ST_FETCH_ERROR,
+    ta.ST_PROMOTED, ta.ST_ALREADY, ta.ST_NOT_FOUND, ta.ST_FETCH_ERROR, ta.ST_NEEDS_REVIEW,
 )
 
 
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         "dry_run": bool(args.dry_run),
         "items": 0, "added_main": 0, "added_bank": 0, "reactivated": 0,
         "promoted": 0, "already": 0, "refused": 0, "not_found": 0,
-        "fetch_error": 0,
+        "fetch_error": 0, "needs_review": 0,
         "lines": [],
     }
 
@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_BAD_JOB
 
     state = ta.load_tracked_state()
+    state["dry_run"] = bool(args.dry_run)
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     results: list[dict] = []
     for i, raw in enumerate(items, 1):
@@ -181,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
         summary["fetch_error"],
         " | DRY-RUN" if args.dry_run else "",
     )
+    if summary["needs_review"]:
+        log.warning("%d строк требуют проверки суда, площадки или УИД; кандидаты сохранены%s",
+                    summary["needs_review"], " только в отчёте (dry-run)" if args.dry_run else "")
     if summary["fetch_error"]:
         # Отдельной строкой WARNING — зеркало дампового импортёра: провал
         # чтения карточек не должен быть виден только в общей сводке.

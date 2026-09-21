@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from court_monitor.courts import appeal_court_by_domain
+from court_monitor.fi_identity import resolve_fi_identity
 from court_monitor.parsing.cards import _warn_if_card_degraded
 
 
@@ -39,6 +40,8 @@ def enrich_appeal_row_from_card(nc: dict, card_info: dict) -> str:
         nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
     if card_info.get("Судья-докладчик"):
         nc["Судья-докладчик"] = card_info["Судья-докладчик"]
+    if card_info.get("УИД"):
+        nc["УИД"] = card_info["УИД"]
     # Номер 1-й инст. — и В СТРОКУ (13.08.2026): секция «Новые дела»
     # дайджеста печатает его в шапке дела, юрист сразу видит, какое дело
     # поехало наверх. В CSV колонка не уедет (CSV_COLUMNS фиксирован,
@@ -78,6 +81,35 @@ def appeal_row_to_json_case(
         fi_case_number = (
             fi_number_lookup.get((ap_court.domain, case_num)) or ""
         ).strip()
+    first_instance = {
+        "case_number": fi_case_number,
+        "court": row.get("Суд 1 инстанции", ""),
+        "court_domain": "",
+        "judge": row.get("Судья 1 инстанции", ""),
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": False,
+        "act_date": "",
+        "events": [],
+    }
+    if row.get("УИД"):
+        first_instance["judicial_uid"] = row["УИД"]
+    identity = resolve_fi_identity(first_instance)
+    if identity.status == "resolved":
+        first_instance["court_domain"] = identity.domain
+        if identity.srv_num is not None:
+            first_instance["srv_num"] = identity.srv_num
+    # Сохраняем название из карточки. Если оно не определяет суд/площадку
+    # однозначно, оставляем якорь без домена: дальнейшая связка потребует
+    # уточнения, а не примет однономерное дело другого суда за этот якорь.
+    # Раздел районного суда (delo_id=1540005) здесь не задаём: источником
+    # первой инстанции иногда служит сам областной/окружной суд.
     return {
         "id": case_num,
         "current_stage": "appeal",
@@ -86,23 +118,7 @@ def appeal_row_to_json_case(
         "category": row.get("Категория", ""),
         "bank_role": row.get("Роль банка", ""),
         "notes": row.get("Заметки", ""),
-        "first_instance": {
-            "case_number": fi_case_number,
-            "court": row.get("Суд 1 инстанции", ""),
-            "court_domain": "",
-            "judge": row.get("Судья 1 инстанции", ""),
-            "filing_date": "",
-            "status": "",
-            "result": "",
-            "last_event": "",
-            "event_date": "",
-            "hearing_date": "",
-            "hearing_time": "",
-            "link": "",
-            "act_published": False,
-            "act_date": "",
-            "events": [],
-        },
+        "first_instance": first_instance,
         "appeal": {
             "case_number": case_num,
             "court": ap_court.name,

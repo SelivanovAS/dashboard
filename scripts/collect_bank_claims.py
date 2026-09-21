@@ -67,9 +67,12 @@ from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспор
     row_passes,
 )
 from court_monitor.config import log  # noqa: E402
+from court_monitor.identity_review import (
+    REVIEW_REASON, add_row_to_index, remember_identity_review,
+    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+)
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
-    is_fi_number_tracked,
 )
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay  # noqa: E402
 from court_monitor.parsing import parse_case_card  # noqa: E402
@@ -192,7 +195,7 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
     """Обойти выдачу, отфильтровать и завести истцовые дела. Счётчики — в return."""
     rows, pages_done = fetch_search_rows(court, pages_limit)
     counters = {
-        "pages": pages_done, "rows": len(rows), "added": 0, "already": 0,
+        "pages": pages_done, "rows": len(rows), "added": 0, "already": 0, "needs_review": 0,
         "role": 0, "excluded_result": 0, "excluded_appeal": 0,
         "excluded_writ": 0, "already_spent": 0, "no_link": 0, "fetch_fail": 0,
     }
@@ -218,9 +221,15 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             }[why]
             log.info(f"[{i}/{len(rows)}] {num} — {label}")
             continue
-        if is_fi_number_tracked(num, court.domain, dedup_exact, dedup_wildcard):
+        tracking = row_tracking_status(r, dedup_exact, dedup_wildcard, source="search_sweep",
+                                       court=court, dry_run=dry_run)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("[NEEDS REVIEW] %s · %s — %s", num, court.name, REVIEW_REASON)
+            continue
+        if tracking == "tracked":
             counters["already"] += 1
-            log.info(f"[{i}/{len(rows)}] {num} — [ALREADY] уже отслеживается")
+            log.info(f"[{i}/{len(rows)}] {num} — [ALREADY] уже отслеживается: {court.name}")
             continue
 
         cid, _, cuid = r["link"].partition("|")
@@ -231,6 +240,12 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             log.warning(f"[{i}/{len(rows)}] {num} — [FETCH FAIL] карточка")
             continue
         card_info = parse_case_card(card_html, court.base_url)
+        tracking = row_tracking_status(r, dedup_exact, dedup_wildcard, source="search_sweep",
+                                       court=court, card_info=card_info, dry_run=dry_run)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("[NEEDS REVIEW] %s — %s", num, REVIEW_REASON)
+            continue
         # Карточные фильтры — общие правила приёма (court_monitor/bank_intake.py):
         # исключаемый итог из карточки, признак апелляции/кассации (исторический
         # сбор такие дела не берёт — в треке они побыли бы мусорным транзитом,
@@ -264,7 +279,8 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
             )
             continue
         new_entries.append(entry)
-        dedup_exact.add((court.domain, num))
+        add_row_to_index(dedup_exact, row_identity(entry["first_instance"], card_info=card_info))
+        resolve_identity_review(row_identity(r, court), outcome="added", dry_run=dry_run)
         counters["added"] += 1
         fi = entry["first_instance"]
         log.info(
@@ -276,6 +292,7 @@ def collect(court, pages_limit: int, limit: int, dry_run: bool, operator: str) -
         bank = load_bank_file()
         bank["cases"] = new_entries + bank.get("cases", [])
         save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
+        flush_identity_reviews()
     elif new_entries:
         log.info(f"DRY-RUN: {len(new_entries)} дел НЕ записаны (снимите --dry-run)")
 

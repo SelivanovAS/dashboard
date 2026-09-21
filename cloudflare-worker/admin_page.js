@@ -3739,7 +3739,7 @@ function impResultParts(item) {
   var isAp = impIsAppeal(item);
   var isPres = impIsPresidium(item);
   var isCass = impIsCassation(item);
-  if (item.needs_review) problems.push(item.needs_review + " дел требуют проверки связи с 1-й инстанцией — см. построчный отчёт");
+  if (item.needs_review) problems.push("требуют уточнения суда или связи: " + item.needs_review + " — см. построчный отчёт");
   if (item.skipped_region) skipped.push(item.skipped_region + " дел другого региона пропущено");
   // Дело уехало наверх по УЖЕ известному нам делу 1-й инстанции: не новое,
   // но и не «уже в базе» — апелляция добавлена в существующую запись.
@@ -3838,7 +3838,7 @@ function impVerdict(item) {
   var lost = item.fetch_fail || 0;
   var unread = item.card_failed || 0;
   var got = "заведено " + nPlural(added, "дело", "дела", "дел");
-  if (item.needs_review) return { kind: "bad", text: "Требуется проверка: " + item.needs_review + " дел не удалось однозначно связать с 1-й инстанцией — см. построчный отчёт" };
+  if (item.needs_review) return { kind: "bad", text: "Требуется проверка суда или связи: " + item.needs_review + " — см. построчный отчёт" };
   if (lost || unread) {
     // Вердикт называет ИСХОД и того, кто доделает. Прежний «нужен повтор
     // дампа» ставил задачу оператору, хотя запись уже стоит в очереди
@@ -3854,7 +3854,7 @@ function impVerdict(item) {
   }
   if (added) return { kind: "ok", text: "Готово: " + got };
   if (item.skipped_region) return { kind: "none", text: "Готово: новых дел нет; дела другого региона пропущены" };
-  return { kind: "none", text: "Готово: новых дел нет — всё уже в базе" };
+  return { kind: "none", text: "Готово: новых дел нет — причины указаны в отчёте" };
 }
 function impStatusBadge(status) {
   if (status === "done") return '<span class="badge badge-ok">готово</span>';
@@ -3929,6 +3929,7 @@ function acResultText(item) {
   if (added) parts.push("+" + added + " добавлено");
   if (item.reactivated) parts.push(item.reactivated + " возвращено из архива");
   if (item.promoted) parts.push(item.promoted + " материалов стали делами");
+  if (item.needs_review) parts.push("⚠ " + item.needs_review + " требуют уточнения суда или связи — см. построчный отчёт");
   // ПОТЕРЯ — перед штатным отсевом: это единственная корзина, ради которой
   // оператор возвращается к делу. В ссылочном режиме (капчёвые суды)
   // непрочитанная карточка убивает строку целиком — роль банка решается
@@ -3988,7 +3989,7 @@ function renderImportHistory(items) {
 function impCacheFreshRecords(items) {
   (items || []).forEach(function (record) {
     if (record.status !== "done" || record.kind === "case" || record.kind === "writ_waiver") return;
-    if ((record.fetch_fail || 0) + (record.card_failed || 0) > 0) return;
+    if ((record.fetch_fail || 0) + (record.card_failed || 0) + (record.needs_review || 0) > 0) return;
     var key = impSectionKey(record), ts = record.updated_at || record.ts;
     if (!key || isNaN(parseIso(ts))) return;
     var previous = impLastSectionFreshMap[key];
@@ -4199,7 +4200,7 @@ function renderImportFreshness(items, lastMap, lastSections) {
     if (!e) return;
     if (fromLog && e.status !== "done") return;
     if (e.kind === "case" || e.kind === "writ_waiver") return;
-    if ((e.fetch_fail || 0) + (e.card_failed || 0) > 0) return;
+    if ((e.fetch_fail || 0) + (e.card_failed || 0) + (e.needs_review || 0) > 0) return;
     var record = Object.assign({ court_domain: domain }, e);
     var key = impSectionKey(record);
     var t = parseIso(e.updated_at || e.ts);

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config
 from court_monitor.config import log
+from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
 from court_monitor.regions import get_region
 from court_monitor.textutil import (
     parse_date, _bare_case_number,
@@ -2405,20 +2406,6 @@ def migrate_stages(cases: list[dict]) -> int:
     return migrated
 
 
-def _fi_court_key(c: dict) -> str:
-    """Ключ суда 1-й инст. записи для дедупа: домен, фолбэк — резолв
-    короткого имени через реестр региона. Пустая строка = суд неизвестен
-    (легаси-стаб) — такой ключ матчит любой."""
-    from court_monitor.courts import match_fi_court_by_short_name
-
-    fi = c.get("first_instance") or {}
-    dom = (fi.get("court_domain") or "").strip().lower()
-    if dom:
-        return dom
-    cfg = match_fi_court_by_short_name(fi.get("court") or "")
-    return cfg.domain if cfg else ""
-
-
 def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
     """Идемпотентный дедуп «сирот» по базовому номеру 1-й инст.
 
@@ -2432,10 +2419,10 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
     Хозяин — запись с тем же `_bare_case_number(id)`, у которой есть реальные
     данные карточки 1-й инст. (`events` или `act_text`), и стадия
     `first_instance`/`awaiting_appeal`. Хозяин подбирается С УЧЁТОМ СУДА
-    (`_fi_court_key`): номера дел не уникальны между судами — 2-813/2026
+    (`compare_fi_identity`): номера дел не уникальны между судами — 2-813/2026
     12.08.2026 жил сразу в трёх судах bank-трека, и слияние поперёк судов
-    склеило бы чужие дела. Пустой ключ суда (легаси-стаб) матчит любой —
-    прежнее лечение стабов без суда сохраняется.
+    склеило бы чужие дела. Неизвестный суд, неоднозначная площадка общего
+    сайта и противоречие УИД запрещают слияние: сирота остаётся для разбора.
 
     Сливаем сироту в хозяина: дозаполняем `appeal` хозяина, не перезаписывая
     уже заполненные поля. Стадию хозяина переводим в `appeal`. Сироту
@@ -2487,15 +2474,15 @@ def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
             # Голая коллизия номеров между судами — сливать нечего.
             continue
 
-        # Хозяина подбираем с учётом суда (см. докстроку): при одном сироте
-        # отбрасываем хозяев заведомо чужих судов.
+        # Только подтверждённое совпадение. Отсутствие суда у одной из
+        # записей не превращает одинаковый номер в доказательство дубля.
         if len(orphans) == 1:
-            orph_key = _fi_court_key(cases[orphans[0]])
+            orphan_fi = case_identity_fi(cases[orphans[0]])
             eligible = [
                 i for i in owners
-                if not orph_key
-                or not _fi_court_key(cases[i])
-                or _fi_court_key(cases[i]) == orph_key
+                if compare_fi_identity(
+                    orphan_fi, case_identity_fi(cases[i]),
+                ) == "same"
             ]
         else:
             eligible = owners

@@ -58,9 +58,12 @@ from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспор
     make_bank_entry,
 )
 from court_monitor.config import log  # noqa: E402
+from court_monitor.identity_review import (
+    REVIEW_REASON, add_row_to_index, remember_identity_review,
+    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+)
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,
-    is_fi_number_tracked,
 )
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay  # noqa: E402
 from court_monitor.parsing import is_subsidiary_only_case, parse_case_card  # noqa: E402
@@ -137,7 +140,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
     dedup_exact, dedup_wildcard = collect_fi_dedup_index(load_all_tracked())
 
     counters = {
-        "added": 0, "already": 0, "not_plaintiff": 0, "subsidiary": 0,
+        "added": 0, "already": 0, "needs_review": 0, "not_plaintiff": 0, "subsidiary": 0,
         "no_link": 0, "not_found": 0, "fetch_fail": 0, "unknown_court": 0,
         "already_spent": 0,
     }
@@ -157,8 +160,16 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
             counters["unknown_court"] += 1
             continue
 
-        if is_fi_number_tracked(case_num, domain, dedup_exact, dedup_wildcard):
-            log.info("  [ALREADY] уже отслеживается")
+        candidate = {"case_number": case_num, "court_domain": domain}
+        # Реестр не содержит площадку; общий домен нельзя выбрать произвольно.
+        tracking = row_tracking_status(candidate, dedup_exact, dedup_wildcard,
+                                       source="bank_registry")
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("  [NEEDS REVIEW] %s · %s — %s", case_num, domain, REVIEW_REASON)
+            continue
+        if tracking == "tracked":
+            log.info("  [ALREADY] уже отслеживается: %s", court.name)
             counters["already"] += 1
             continue
 
@@ -207,6 +218,12 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
             continue
         card_info = parse_case_card(card_html, court.base_url)
 
+        tracking = row_tracking_status(fi_row, dedup_exact, dedup_wildcard,
+                                       source="bank_registry", court=court, card_info=card_info)
+        if tracking == "needs_review":
+            counters["needs_review"] += 1
+            log.warning("  [NEEDS REVIEW] %s — %s", case_num, REVIEW_REASON)
+            continue
         entry = make_bank_entry(fi_row, card_info, operator, now_iso, court=court)
         fi = entry["first_instance"]
         # Дело из реестра, уже подпадающее под архивное окно трека: первый же
@@ -221,7 +238,8 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
             counters["already_spent"] += 1
             continue
         new_entries.append(entry)
-        dedup_exact.add((domain, case_num))
+        add_row_to_index(dedup_exact, row_identity(fi, card_info=card_info))
+        resolve_identity_review(candidate, outcome="added")
         counters["added"] += 1
         log.info(
             f"  [ADDED] статус={fi.get('status', '?')} "
@@ -233,6 +251,7 @@ def import_registry(pairs: list[tuple[str, str]], limit: int, operator: str) -> 
         bank = load_bank_file()
         bank["cases"] = new_entries + bank.get("cases", [])
         save_bank_json(bank, config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH)
+        flush_identity_reviews()
     else:
         log.info("Нечего добавлять — cases_bank.json не изменён")
 

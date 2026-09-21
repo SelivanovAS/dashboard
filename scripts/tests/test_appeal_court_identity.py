@@ -89,10 +89,13 @@ def test_registered_alias_links_without_domain():
     assert linking.link_cases([ap, fi], {(AP_DOMAIN, '33-10/2026'): number}) == [fi]
 
 
-def test_same_domain_server_collision_requires_matching_site():
+def test_same_domain_server_collision_requires_matching_site(monkeypatch):
+    monkeypatch.setattr(config, 'REGION', 'hmao')
     number = '2-739/2026'
-    ap = appeal('33-18171/2026', number, court_domain=OWN, srv_num=2)
-    a, b = first_instance(number), first_instance(number)
+    shared = 'vartovray--hmao.sudrf.ru'
+    ap = appeal('33-18171/2026', number, court_domain=shared, srv_num=2,
+                court='Нижневартовский районный суд (г. Покачи)')
+    a, b = first_instance(number, shared), first_instance(number, shared)
     a['first_instance']['srv_num'] = 1
     b['first_instance']['srv_num'] = 2
     out = linking.link_cases([ap, a, b], {(AP_DOMAIN, '33-18171/2026'): number})

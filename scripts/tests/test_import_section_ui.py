@@ -24,7 +24,8 @@ for (const role of ["owner", "operator"]) {
   const source = scripts.join("\n");
   const names = ["impRecordDeloId", "impSectionKey", "impCourtSection", "impCourtKey",
     "impCourtLabel", "impDomainOf", "canonSudrfHost", "collectCardTrouble",
-    "renderImportFreshness", "impCacheFreshRecords", "impDetectDeloIds", "impDetectDomains", "impSend"];
+    "renderImportFreshness", "impCacheFreshRecords", "impDetectDeloIds", "impDetectDomains", "impSend",
+    "impVerdict", "acResultText"];
   const functions = names.map(name => {
     const found = new RegExp("(?:async )?function " + name + "\\([^]*?\\n\\}").exec(source);
     assert.ok(found, name);
@@ -59,6 +60,9 @@ for (const role of ["owner", "operator"]) {
   const record=(section,extra={})=>({court_domain:domain,section,status:"done",ts:now,added:1,...extra});
   const render=(items=[],last={},sections={})=>context.renderImportFreshness(items,last,sections);
   const row=delo=>rows.find(r=>String(r.court.delo_id)===String(delo));
+  assert.equal(context.impVerdict({needs_review:1}).kind,"bad");
+  assert.match(context.acResultText({status:"done",needs_review:1}),/уточнения суда/);
+  assert.doesNotMatch(context.impVerdict({skipped_role:1}).text,/всё уже в базе/);
 
   for (const [section,id,other] of [["appeal",5,2800001],["cassation",2800001,5]]) {
     render([record(section)]);
@@ -74,6 +78,10 @@ for (const role of ["owner", "operator"]) {
     assert.equal(row(id).level,2,"непрочитанные карточки не подтверждают свежесть");
     assert.equal(row(id).trouble.unread,1,"ошибка своего раздела");
     assert.equal(row(other).trouble,null,"ошибка не затрагивает соседний раздел");
+    render([record(section,{needs_review:1})]);
+    assert.equal(row(id).level,2,"неопределённая связь не подтверждает полный импорт");
+    context.impCacheFreshRecords([record(section,{needs_review:1})]);
+    assert.equal(Object.keys(context.impLastSectionFreshMap).length,0,"незавершённая проверка не попадает в кэш свежести");
   }
   render([],{[domain]:{court_domain:domain,ts:now,added:5}});
   assert.equal(row(5).level,2,"неоднозначная старая отметка не означает апелляцию");

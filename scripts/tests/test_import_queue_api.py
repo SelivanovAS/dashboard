@@ -337,7 +337,7 @@ output({ok: true});
 
 
 @pytest.mark.parametrize("extra", [
-    {"fetch_fail": 1}, {"card_failed": 1}, {"status": "failed"},
+    {"fetch_fail": 1}, {"card_failed": 1}, {"needs_review": 1}, {"status": "failed"},
 ])
 def test_incomplete_dump_never_refreshes_either_instance(extra):
     run_worker(r"""

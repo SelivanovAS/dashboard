@@ -38,10 +38,13 @@ from court_monitor.courts import (
     courts_for_search,
     fi_court_by_domain,
 )
+from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
+from court_monitor.identity_review import (
+    REVIEW_REASON, add_row_to_index, remember_identity_review,
+    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+)
 from court_monitor.linking import (
-    _fi_name_to_domain,
     _fi_search_to_json_case,
-    case_court_key,
     promote_material_record,
 )
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay
@@ -67,6 +70,7 @@ ST_ADDED_BANK = "added_bank"
 ST_REACTIVATED = "reactivated"
 ST_PROMOTED = "promoted"
 ST_ALREADY = "already"
+ST_NEEDS_REVIEW = "needs_review"
 ST_NOT_FOUND = "not_found"
 ST_REFUSED = "refused"
 ST_FETCH_ERROR = "fetch_error"
@@ -324,45 +328,50 @@ def _case_numbers(case: dict) -> set[str]:
 
 
 def _case_matches(case: dict, domain: str, number: str, ntd: dict) -> bool:
-    """Семантика is_fi_number_tracked: совпадение номера + либо тот же суд,
-    либо запись бездоменная (wildcard — консервативно блокирует все суды)."""
-    bare = _bare(number)
-    nums = _case_numbers(case)
-    if number not in nums and bare not in nums:
+    """Подтверждённое совпадение номера и суда; неизвестный суд не wildcard."""
+    if not {number, _bare(number)} & _case_numbers(case):
         return False
-    case_dom = case_court_key(case, ntd)[0]
-    return (not case_dom) or case_dom == domain
+    return compare_fi_identity(case_identity_fi(case),
+                               {"court_domain": domain}) == "same"
 
 
 def dedup_verdict(
-    state: dict, domain: str, number: str,
+    state: dict, domain: str, number: str, *, srv_num=None, judicial_uid: str = "",
 ) -> tuple[str, dict | None, list[dict] | None]:
-    """Где уже живёт (домен, номер): ('free', None, None) — нигде; иначе
-    (имя источника, запись, список-источник) первого совпадения."""
-    domain = (domain or "").strip().lower()
-    ntd = _fi_name_to_domain()
+    """Источник подтверждённого дела либо free/needs_review без мутаций."""
+    candidate = {"court_domain": domain, "srv_num": srv_num,
+                 "judicial_uid": judicial_uid}
+    found = None
+    review = None
     for source, lst in _sources(state):
         for case in lst:
-            if _case_matches(case, domain, number, ntd):
-                return source, case, lst
-    return "free", None, None
+            if not {number, _bare(number)} & _case_numbers(case):
+                continue
+            comparison = compare_fi_identity(case_identity_fi(case), candidate)
+            if comparison == "needs_review":
+                review = ("needs_review", case, lst)
+            elif comparison == "same" and found is None:
+                found = (source, case, lst)
+    return review or found or ("free", None, None)
 
 
 def find_material_record(
-    state: dict, domain: str, material_number: str,
+    state: dict, domain: str, material_number: str, *, srv_num=None, judicial_uid="",
 ) -> tuple[str, dict | None]:
     """АКТИВНАЯ запись материала (id == М-номер) этого же суда — кандидат на
     промоушен М→2. Архивные М-записи не промоутим (как и остальные каналы)."""
     domain = (domain or "").strip().lower()
-    ntd = _fi_name_to_domain()
+    matches = []
     for source in ("active_main", "active_bank"):
         lst = (state["main"] if source == "active_main"
                else state["bank"]).get("cases", [])
         for case in lst:
             if ((case.get("id") or "").strip() == material_number
-                    and case_court_key(case, ntd)[0] == domain):
-                return source, case
-    return "", None
+                    and compare_fi_identity(case_identity_fi(case), {
+                        "court_domain": domain, "srv_num": srv_num,
+                        "judicial_uid": judicial_uid}) == "same"):
+                matches.append((source, case))
+    return matches[0] if len(matches) == 1 else ("needs_review" if matches else "", None)
 
 
 def reactivate_from_archive(
@@ -435,6 +444,7 @@ def save_state(state: dict) -> list[str]:
         if f"bank_cold:{path}" in dirty:
             save_json(data, path)
             saved.append(path)
+    flush_identity_reviews()
     return saved
 
 
@@ -550,6 +560,7 @@ def process_item(
 ) -> dict:
     """Обработать одну строку пачки. Мутирует state (записи и dirty-метки),
     сохранение файлов — у вызывающего, ОДИН раз на пачку (save_state)."""
+    dry_run = bool(state.get("dry_run"))
     kind, value = classify_input(raw)
     if not kind:
         return _item(ST_REFUSED, (
@@ -646,18 +657,30 @@ def process_item(
     parties = " — ".join(
         x for x in (row.get("plaintiff"), row.get("defendant")) if x)
 
+    identity = row_identity(row, court, card_info)
+    srv_num = identity.get("srv_num")
+    judicial_uid = identity.get("judicial_uid", "")
+
     # Промоушен М→2: добавляемый гражданский номер при живой М-записи того же
     # суда переименовывает её, а не плодит дубль (зеркало импортёра дампов;
     # как и там — ДО фильтра ролей, роль записи промоушен не трогает).
     mat = (row.get("material_number") or "").strip()
     if mat and mat != num:
-        verdict_num, _, _ = dedup_verdict(state, domain, num)
+        verdict_num, _, _ = dedup_verdict(state, domain, num, srv_num=srv_num, judicial_uid=judicial_uid)
         if verdict_num == "free":
-            source, old = find_material_record(state, domain, mat)
+            material_verdict, _, _ = dedup_verdict(
+                state, domain, mat, srv_num=srv_num, judicial_uid=judicial_uid)
+            source, old = find_material_record(state, domain, mat, srv_num=srv_num, judicial_uid=judicial_uid)
+            if material_verdict == "needs_review" or source == "needs_review":
+                remember_identity_review(identity, source="targeted", dry_run=dry_run)
+                return _item(ST_NEEDS_REVIEW, (
+                    f"[NEEDS REVIEW] {num} · материал {mat} — {REVIEW_REASON}"
+                ), case_number=num, court=court.name, court_domain=domain)
             if old is not None:
                 promote_material_record(old, row)
                 state["dirty"].add(
                     "main" if source == "active_main" else "bank")
+                resolve_identity_review(identity, outcome="promoted", dry_run=dry_run)
                 return _item(ST_PROMOTED, (
                     f"[PROMOTED] {mat} → {num} — материал возбуждён в дело, "
                     "запись переименована"
@@ -666,8 +689,14 @@ def process_item(
     # Дедуп по всем картотекам; архивная находка → реактивация. Роль здесь
     # ещё не проверялась — и не нужна: уже отслеживаемое/архивное дело было
     # принято по действовавшим правилам, его роль решена при заведении.
-    verdict, record, source_list = dedup_verdict(state, domain, num)
+    verdict, record, source_list = dedup_verdict(state, domain, num, srv_num=srv_num, judicial_uid=judicial_uid)
+    if verdict == "needs_review":
+        remember_identity_review(identity, source="targeted", dry_run=dry_run)
+        return _item(ST_NEEDS_REVIEW, (
+            f"[NEEDS REVIEW] {num} · {court.name} — {REVIEW_REASON}"
+        ), case_number=num, court=court.name, court_domain=domain)
     if verdict in ("active_main", "active_bank"):
+        resolve_identity_review(identity, outcome="tracked", dry_run=dry_run)
         track_name = ("иски банка" if verdict == "active_bank"
                       else "основная")
         return _item(ST_ALREADY, (
@@ -675,21 +704,9 @@ def process_item(
             f"картотека «{track_name}»"
         ), case_number=num, court=court.name, court_domain=domain)
     if verdict != "free":
-        # Гард неоднозначности: бездоменная запись (дело «с апелляции», чей
-        # суд не отрезолвился) матчится по НОМЕРУ с любым судом — для отказа
-        # «уже отслеживается» это безопасный консерватизм (как wildcard в
-        # is_fi_number_tracked), но РЕАКТИВАЦИЯ — мутация, и возвращать из
-        # архива дело, которое лишь возможно то самое, нельзя: номера не
-        # уникальны между судами, изъялась бы чужая запись.
-        if not case_court_key(record, _fi_name_to_domain())[0]:
-            return _item(ST_REFUSED, (
-                f"[REFUSED] {num} — в архиве есть запись с этим номером, но "
-                "без определённого суда (заведена «с апелляции») — совпадение "
-                "неоднозначно, вернуть её из архива может только владелец "
-                "вручную"
-            ), case_number=num, court=court.name, court_domain=domain)
         dest = reactivate_from_archive(
             state, verdict, record, source_list, operator, now_iso)
+        resolve_identity_review(identity, outcome="reactivated", dry_run=dry_run)
         return _item(ST_REACTIVATED, (
             f"[REACTIVATED] {num} · {court.name} — найдено в архиве, "
             f"возвращено на мониторинг со всей историей (картотека «{dest}»)"
@@ -713,6 +730,17 @@ def process_item(
         # Карточка не открылась — для «банк-ответчик» ниже падаем на данные
         # строки выдачи (как офлайн-импортёр дампов, он карточек не видит
         # вовсе); для иска банка вернём fetch_error.
+
+    if card_info:
+        identity = row_identity(row, court, card_info)
+        checked, _, _ = dedup_verdict(
+            state, domain, num, srv_num=identity.get("srv_num"),
+            judicial_uid=identity.get("judicial_uid", ""))
+        if checked == "needs_review":
+            remember_identity_review(identity, source="targeted", dry_run=dry_run)
+            return _item(ST_NEEDS_REVIEW, (
+                f"[NEEDS REVIEW] {num} · {court.name} — {REVIEW_REASON}"
+            ), case_number=num, court=court.name, court_domain=domain)
 
     # Роль банка. Пустая роль при только-дочке — свой текст отказа.
     role = resolve_bank_role(row, card_info)
@@ -769,6 +797,7 @@ def process_item(
             ), case_number=num, court=court.name, court_domain=domain)
         state["bank"].setdefault("cases", []).insert(0, entry)
         state["dirty"].add("bank")
+        resolve_identity_review(identity, outcome="added_bank", dry_run=dry_run)
         return _item(ST_ADDED_BANK, (
             f"[ADDED] {num} · Истец · {parties} · {court.name} → иски банка"
         ), case_number=num, court=court.name, court_domain=domain)
@@ -777,6 +806,7 @@ def process_item(
     state["main"].setdefault("cases", []).insert(0, entry)
     state["dirty"].add("main")
     note = "" if card_info else " (карточка недоступна — дозаполнит прогон)"
+    resolve_identity_review(identity, outcome="added_main", dry_run=dry_run)
     return _item(ST_ADDED_MAIN, (
         f"[ADDED] {num} · {role} · {parties} · {court.name} → основная "
         f"картотека{note}"
