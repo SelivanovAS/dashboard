@@ -29,8 +29,7 @@
         "judicial_uid": "86RS0004-01-2026-018384-72",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-21",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-21"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -68,8 +67,7 @@
         "judicial_uid": "86RS0004-01-2026-018331-37",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-21",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-21"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -107,8 +105,7 @@
         "judicial_uid": "86RS0001-01-2026-005172-97",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-21",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-21"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -146,8 +143,7 @@
         "judicial_uid": "86RS0010-01-2026-001608-30",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-21",
-        "intake_card_parse": true
+        "last_checked_at": "2026-09-21"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -25071,5 +25067,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-21T06:24:16"
+  "updated_at": "2026-09-21T06:37:59"
 }
