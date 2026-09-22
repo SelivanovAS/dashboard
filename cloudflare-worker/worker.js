@@ -2776,6 +2776,57 @@ function importAttemptApply(previous, current, body, now) {
   return current;
 }
 
+// Восстановление старого отчёта по проверенным журналам исполнителя.
+// Условие версии исключает перезапись попытки, завершившейся после сверки.
+async function restoreImportAttemptHistory(env, key, record, body) {
+  const attempts = body.restore_attempts;
+  if (record.updated_at !== body.expected_updated_at || record.attempts?.length
+      || record.status !== "done" || !["dump", "case"].includes(record.kind || "dump")) return new Response("Report changed", {status:409});
+  if (!Array.isArray(attempts) || !attempts.length || attempts.length > 100) {
+    return new Response("Bad history", {status:400});
+  }
+  const ids = new Set();
+  let lastTime = -Infinity;
+  for (const a of attempts) {
+    const start = Date.parse(a.started_at), end = Date.parse(a.finished_at);
+    if (!/^recovered-[a-zA-Z0-9-]{1,100}$/.test(a.id || "") || ids.has(a.id)
+        || !Number.isFinite(start) || !Number.isFinite(end) || start < lastTime || end < start
+        || end > Date.parse(record.updated_at)
+        || a.status !== "done" || !a.counts || typeof a.counts !== "object"
+        || !Array.isArray(a.lines) || a.lines.length > 100
+        || a.lines.some(line => typeof line !== "string" || line.length > 10000)
+        || Object.entries(a.counts).some(([k,v]) => !IMPORT_RESULT_COUNTERS.includes(k)
+          || !Number.isSafeInteger(v) || v < 0)) return new Response("Bad history", {status:400});
+    ids.add(a.id); lastTime = start;
+  }
+  const latest = attempts[attempts.length - 1];
+  if (latest.finished_at !== record.updated_at
+      || IMPORT_RESULT_COUNTERS.some(k => (latest.counts[k] || 0) !== (record[k] || 0))) {
+    return new Response("Latest result differs", {status:409});
+  }
+  record.attempts = attempts.map(a => importAttemptSnapshot({...a.counts, ...a,
+    updated_at:a.finished_at, source:"vps"}, a.id, new Date(a.started_at).toISOString()));
+  record.attempt_id = latest.id;
+  record.attempt_count = attempts.length;
+  record.totals = Object.fromEntries(IMPORT_TOTAL_COUNTERS.map(k => [k,
+    attempts.reduce((sum,a) => sum + (a.counts[k] || 0), 0)]));
+  record.attempt_history_recovered = new Date().toISOString();
+  delete record.attempt_history_incomplete;
+  await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(record), importLogWriteOptions(record));
+  // Свежесть чужой, более новой загрузки того же суда не переписываем.
+  const identity = importSectionIdentity(record);
+  for (const freshKey of new Set(["import:last:" + record.court_domain,
+      ...(identity ? ["import:last:" + identity.section_key] : [])])) {
+    const raw = await env.PUSH_SUBSCRIPTIONS.get(freshKey);
+    if (!raw) continue;
+    const fresh = JSON.parse(raw);
+    if (fresh.ts !== record.updated_at) continue;
+    for (const k of ["added", "added_bank", "promoted"]) fresh[k] = record.totals[k];
+    await env.PUSH_SUBSCRIPTIONS.put(freshKey, JSON.stringify(fresh));
+  }
+  return Response.json({ok:true, restored:attempts.length, totals:record.totals});
+}
+
 // Итог импорта от Action'а: started/done/failed + числа + строки отчёта.
 // Обновляет запись журнала по uuid из dump_key (импорт дампов) либо job_key
 // (точечное добавление, kind:"case") — журнал у обоих каналов общий.
@@ -2809,6 +2860,9 @@ async function handleImportResult(request, env) {
   }
   let record = {};
   try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
+  if (body.restore_attempts !== undefined) {
+    return restoreImportAttemptHistory(env, entry.name, record, body);
+  }
   const previous = JSON.parse(JSON.stringify(record));
   const existingAttempt = (record.attempts || []).find(a => a.id === body.attempt_id);
   // Повтор HTTP-отчёта и запоздалый started не меняют счётчики/свежесть.

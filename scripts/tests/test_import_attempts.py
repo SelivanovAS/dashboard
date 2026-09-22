@@ -85,3 +85,28 @@ assert.equal(r.totals.added_main,3); assert.equal(r.fetch_error,0);
 assert.equal(kv.metadata.get(key).queue_pending,false);
 output({ok:true});
 ''')
+
+
+def test_restore_verified_history_keeps_current_queue_and_rejects_changed_report():
+    run_worker(r"""
+const kv=kvStore(),env=environment(kv),job=record(1,1000,{status:'done',added_bank:7,fetch_fail:0}),key=kv.add(job);
+kv.data.set('import:last:'+job.court_domain,JSON.stringify({ts:job.updated_at,added_bank:7}));
+const earlier=new Date(Date.parse(job.updated_at)-20000).toISOString();
+const attempt=(id,time,counts)=>({id,started_at:time,finished_at:time,status:'done',counts,lines:['verified log']});
+const body={expected_updated_at:job.updated_at,restore_attempts:[attempt('recovered-one',earlier,{added_bank:5,fetch_fail:7}),attempt('recovered-two',job.updated_at,{added_bank:7})]};
+let res=await postResult(env,job,{...body,restore_attempts:[{...body.restore_attempts[0],counts:{added_bank:-5}},body.restore_attempts[1]]});
+assert.equal(res.status,400);assert.equal(kv.puts.length,0);
+res=await postResult(env,job,{...body,expected_updated_at:'wrong'});
+assert.equal(res.status,409);assert.equal(kv.puts.length,0);
+res=await postResult(env,job,{...body,restore_attempts:[body.restore_attempts[0]]});
+assert.equal(res.status,409);assert.equal(kv.puts.length,0);
+res=await postResult(env,job,body);assert.equal(res.status,200);
+const r=JSON.parse(kv.data.get(key));
+assert.equal(r.totals.added_bank,12);assert.equal(r.added_bank,7);assert.equal(r.fetch_fail,0);
+assert.equal(r.updated_at,job.updated_at);assert.equal(r.attempts.length,2);
+assert.equal(r.attempts[0].counts.fetch_fail,7);assert.ok(r.attempt_history_recovered);
+assert.equal(kv.metadata.get(key).queue_pending,false);
+assert.equal(JSON.parse(kv.data.get('import:last:'+job.court_domain)).added_bank,12);
+res=await postResult(env,job,body);assert.equal(res.status,409);
+output({ok:true});
+""")
