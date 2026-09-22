@@ -287,6 +287,14 @@ def _find_results_table(tables: list) -> list | None:
         header_text = " ".join(cell_text(c) for c in tbl[0]).lower()
         if "дела" in header_text and ("дата" in header_text or "поступлен" in header_text):
             return tbl
+        # При rich-paste выделение может начинаться со второго заголовка.
+        # Данные не сдвигаем: принимаем только узнаваемую выдачу, где первая
+        # ячейка строки всё ещё содержит номер и ссылку карточки суда.
+        if ("поступления" in header_text and "категория" in header_text
+                and "стороны" in header_text and "судья" in header_text
+                and any(len(row) >= 5 and _FI_CASE_NUM_RE.match(cell_text(row[0]))
+                        and _CASE_ID_RE.search(cell_href(row[0])) for row in tbl[1:])):
+            return tbl
     return None
 
 
