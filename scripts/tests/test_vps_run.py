@@ -92,20 +92,19 @@ class TestVpsEnv(unittest.TestCase):
 
 
 class TestVpsTimers(unittest.TestCase):
-    # Слоты systemd-таймеров — зеркало launchd-plist'ов Mac: обе платформы
-    # обязаны жить в одном расписании (окно 08:45 считает parse_and_push.sh,
-    # и его последний слот должен совпадать на Mac и VPS).
+    # Утренний парсинг совпадает с резервом Mac. Повторы импорта на основном
+    # VPS с 22.09.2026 ежечасные; неактивный Mac-резерв сохраняет старые слоты.
     def test_parse_slots_mirror_plist(self):
         self.assertEqual(_timer_slots("court-parse.timer"),
                          _plist_slots("com.court-monitor.parse.plist"))
 
-    def test_import_slots_mirror_plist(self):
-        self.assertEqual(_timer_slots("court-import.timer"),
-                         _plist_slots("com.court-monitor.import.plist"))
+    def test_import_slots_hourly_and_include_reserve_slots(self):
+        self.assertEqual(_timer_slots("court-import.timer"), {(h, 0) for h in range(12, 21)})
+        self.assertTrue(_plist_slots("com.court-monitor.import.plist") <= _timer_slots("court-import.timer"))
         slots = [line for line in _read(VPS / "systemd" / "court-import.timer").splitlines()
                  if line.startswith("OnCalendar=")]
         self.assertEqual(slots, [f"OnCalendar=*-*-* {hour}:00"
-                                 for hour in (12, 14, 16, 18, 20)])
+                                 for hour in range(12, 21)])
 
     def test_timers_are_persistent(self):
         # Аналог «догнать проспанный слот» launchd после ребута сервера.

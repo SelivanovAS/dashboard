@@ -141,7 +141,7 @@ def test_rendered_admin_lists_ksou_separately_from_presidium(tmp_path, role):
     html = json.loads(result.stdout)
     script = next(s for s in re.findall(r'<script>([\s\S]*?)</script>', html) if 'function loadImportCourts' in s)
     names = ['loadImportCourts','impCourtKey','impCourtLabel','impDomainOf','impCourtLink',
-             'canonSudrfHost','acCheckLink','impIsPresidium','impIsCassation','impIsAppeal','impResultParts','impVerdict']
+             'canonSudrfHost','acCheckLink','impIsPresidium','impIsCassation','impIsAppeal','impDisplayResult','impUnread','impResultParts','impVerdict']
     bundle = '\n'.join(fn(script, n) for n in names)
     result = node('''
 const elements = new Map();
@@ -231,9 +231,11 @@ def test_worker_preserves_cassation_review_counters_and_kind():
     src = (ROOT / 'cloudflare-worker/worker.js').read_text()
     section_ids = re.search(r'const IMPORT_SECTION_DELO_IDS\s*=\s*\{[^}]+\};', src)
     assert section_ids, 'Не найдены идентификаторы разделов настоящего Worker'
-    result = node(section_ids.group(0) + '\n' + '\n'.join(fn(src, name) for name in (
+    counters = re.search(r'const IMPORT_RESULT_COUNTERS\s*=\s*\[[\s\S]*?\];', src)
+    assert counters
+    result = node(section_ids.group(0) + '\n' + counters.group(0) + '\n' + '\n'.join(fn(src, name) for name in (
         'importQueuePending', 'importLogWriteOptions', 'listImportLogKeys', 'handleImportResult',
-        'importSectionIdentity', 'detectDumpCardDeloIds', 'canonSudrfHost'
+        'importSectionIdentity', 'detectDumpCardDeloIds', 'canonSudrfHost', 'importAttemptApply'
     )) + '''
 const IMPORT_LOG_TTL=100;
 const importChannelAuthOk=()=>true;

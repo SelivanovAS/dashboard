@@ -559,3 +559,29 @@ def test_polling_pauses_when_hidden_or_idle_and_keeps_tracking_on_errors(tmp_pat
   assert.equal(p.timers.size, 1, "Ручное обновление продлевает окно опроса");
   assert.equal(p.ctx.impQueuePending(p.ctx.impQueueJobs[id]), true);
 """)
+
+
+def test_attempt_totals_partial_status_and_history_are_consistent(tmp_path):
+    run_scenario(tmp_path, r'''
+const page = makePage(role), c = page.ctx;
+c.impLastSlots = {next_slot_at:'2026-09-22T11:00:00Z'};
+const job = {uuid:'abc',court_domain:'first--test.sudrf.ru',status:'done',source:'vps',
+ ts:'2026-09-22T05:14:00Z',added_bank:7,already:5,fetch_fail:2,
+ totals:{added:0,added_bank:12}, attempts:[
+ {id:'a',started_at:'2026-09-22T05:15:00Z',finished_at:'2026-09-22T05:16:00Z',status:'done',counts:{added_bank:5,fetch_fail:7},lines:['<опасная строка>']},
+ {id:'b',started_at:'2026-09-22T05:20:00Z',finished_at:'2026-09-22T05:21:00Z',status:'done',counts:{added_bank:7,fetch_fail:2},lines:['дочитано']}
+ ]};
+const html = c.impResultHtml(job);
+assert.ok(html.includes('+12 в иски банка'));
+assert.ok(html.includes('Последняя попытка: +7'));
+assert.ok(html.includes('История попыток (2)'));
+assert.ok(html.includes('&lt;опасная строка&gt;'));
+assert.ok(!html.includes('<опасная строка>'));
+assert.ok(c.impRecordBadge(job).includes('частично · ожидает повтора'));
+c.renderImportHistory([job]);
+assert.ok(page.el('imp-history').innerHTML.includes('частично · ожидает повтора'));
+c.impServerQueue=[job]; c.renderImportQueue();
+assert.ok(page.el('imp-queue-list').innerHTML.includes('частично · ожидает повтора'));
+job.fetch_fail=0;
+assert.ok(c.impRecordBadge(job).includes('>готово<'));
+''')

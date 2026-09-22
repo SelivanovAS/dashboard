@@ -384,7 +384,7 @@ class TestPresidiumWiring:
         admin = _read("cloudflare-worker/admin_page.js")
         assert re.search(r"\bsection\s*:\s*\(\s*\.section\s*//\s*\"\"\s*\)", jq)
         assert re.search(r"\bskipped_old\s*:\s*\(\s*\.skipped_old\s*//\s*0\s*\)", jq)
-        i = worker.index("async function handleImportResult")
+        i = worker.index("const IMPORT_RESULT_COUNTERS")
         w = worker[i:worker.index("async function handleAdminImportLog", i)]
         assert '"skipped_old"' in w
         assert 'record.section = body.section' in w

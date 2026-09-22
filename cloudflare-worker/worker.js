@@ -2137,7 +2137,7 @@ function importExecutor() {
 // оба текста врали бы о ближайшем повторе. VPS повторяет ежедневно,
 // включая выходные и праздники. Для github/Mac-резерва сохраняем будни.
 // Это слоты повторов; новые задания VPS проверяет отдельно каждые 5 минут.
-const IMPORT_SLOTS_DEFAULT = "12:00,14:00,16:00,18:00,20:00";
+const IMPORT_SLOTS_DEFAULT = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00";
 function importSlotsLocal() {
   return String(cfgVar("IMPORT_SLOTS_LOCAL", IMPORT_SLOTS_DEFAULT)).split(",")
     .map((s) => /^(\d{1,2}):(\d{2})$/.exec(s.trim()))
@@ -2683,65 +2683,9 @@ async function handleAddCaseJobGet(request, env) {
   });
 }
 
-// Итог импорта от Action'а: started/done/failed + числа + строки отчёта.
-// Обновляет запись журнала по uuid из dump_key (импорт дампов) либо job_key
-// (точечное добавление, kind:"case") — журнал у обоих каналов общий.
-async function handleImportResult(request, env) {
-  if (!importChannelAuthOk(request, env)) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  let body;
-  try {
-    body = await request.json();
-  } catch (_) {
-    return new Response("Bad JSON", { status: 400 });
-  }
-  const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""))
-    || /^import:(?:case|writ):([0-9a-f-]{36})$/.exec(String(body.job_key || ""));
-  const status = String(body.status || "");
-  if (!m || !["started", "done", "failed"].includes(status)) {
-    return new Response("Bad Request", { status: 400 });
-  }
-  const uuid = m[1];
-  // Отчёт старого задания тоже должен находиться за первой страницей KV.
-  const logKeys = await listImportLogKeys(env);
-  const entry = logKeys.find((k) => k.name.endsWith(`|${uuid}`));
-  if (!entry) {
-    return new Response(JSON.stringify({ ok: false, error: "запись журнала не найдена" }), {
-      status: 404, headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
-  }
-  let record = {};
-  try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
-  const isDump = (record.kind || "dump") === "dump";
-  if (isDump) {
-    const selected = importSectionIdentity(record);
-    const reported = importSectionIdentity({
-      court_domain: record.court_domain, section: body.section, delo_id: body.delo_id,
-    });
-    // Исполнитель не должен незаметно переименовать выбранную инстанцию.
-    // Ошибочный отчёт оставляет журнал и свежесть нетронутыми. У failed
-    // сохраняем выбор: диагностический отчёт мог появиться до разбора HTML.
-    if (status === "done" && ((body.section || body.delo_id) && !reported
-        || selected && reported && selected.section_key !== reported.section_key)) {
-      return new Response(JSON.stringify({ ok: false, error: "раздел отчёта не совпадает с заданием" }), {
-        status: 409, headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-    let identity = selected || reported;
-    if (!identity && status === "done" && body.dump_key) {
-      // Старые задания/исполнители могут не передать section. Пока тело
-      // живо, восстанавливаем раздел по карточкам, не по одному домену.
-      const ids = detectDumpCardDeloIds(await env.PUSH_SUBSCRIPTIONS.get(body.dump_key) || "");
-      if (ids.length === 1) identity = importSectionIdentity({
-        court_domain: record.court_domain, delo_id: ids[0],
-      });
-    }
-    if (identity) Object.assign(record, identity);
-  }
-  record.status = status;
-  record.updated_at = new Date().toISOString();
-  for (const num of ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
+// Счётчики последней попытки остаются на верхнем уровне: их читает очередь.
+// Накопительные действия храним отдельно от остатка ошибок и повторного отсева.
+const IMPORT_RESULT_COUNTERS = ["added", "promoted", "already", "skipped_role", "no_link", "subsidiary", "rows",
                      // Иск к производству не принят (возврат / отказ в принятии /
                      // передача по подсудности) — в картотеку не заводим с
                      // 14.08.2026; без ключа корзина молча пропала бы из сводки.
@@ -2776,8 +2720,142 @@ async function handleImportResult(request, env) {
                      "items", "added_main", "added_bank", "reactivated", "refused", "not_found",
                      "fetch_error",
                      // счётчики пометки «лист не нужен» (kind:"writ_waiver")
-                     "waived", "updated", "cleared"]) {
-    if (typeof body[num] === "number") record[num] = body[num];
+                     "waived", "updated", "cleared"];
+const IMPORT_TOTAL_COUNTERS = ["added", "added_bank", "added_main", "resolved_old",
+  "linked", "promoted", "reactivated", "refilled"];
+function importAttemptSnapshot(record, id, startedAt) {
+  const counts = {};
+  for (const key of IMPORT_RESULT_COUNTERS) counts[key] = record[key] || 0;
+  return { id, started_at: startedAt, finished_at: record.updated_at,
+    status: record.status, source: record.source || "", counts,
+    lines: (record.lines || []).slice(0, 100), error: record.error || "",
+    card_fail_reason: record.card_fail_reason || "", run_url: record.run_url || "" };
+}
+function importAttemptApply(previous, current, body, now) {
+  const id = String(body.attempt_id || "");
+  if (!id || (previous.kind && previous.kind !== "case" && previous.kind !== "dump")) return current;
+  const attempts = (previous.attempts || []).map(a => ({...a}));
+  // Старый отчёт — известный минимум, а не выдуманная история всех повторов.
+  if (!attempts.length && ["done", "failed"].includes(previous.status)) {
+    attempts.push(importAttemptSnapshot(previous, "legacy:" + previous.updated_at,
+      previous.updated_at || previous.ts));
+    current.attempt_history_incomplete = true;
+  }
+  const index = attempts.findIndex(a => a.id === id);
+  const old = index >= 0 ? attempts[index] : null;
+  let startedAt = old ? old.started_at : body.attempt_started_at;
+  if (!Number.isFinite(Date.parse(startedAt))) startedAt = now;
+  startedAt = new Date(startedAt).toISOString();
+  const attempt = importAttemptSnapshot(current, id, startedAt);
+  if (body.status === "started") {
+    attempt.counts = {}; attempt.lines = []; attempt.error = "";
+    attempt.card_fail_reason = ""; delete attempt.finished_at;
+  }
+  if (index >= 0) attempts[index] = attempt; else attempts.push(attempt);
+  attempts.sort((a, b) => String(a.started_at).localeCompare(String(b.started_at))
+    || a.id.localeCompare(b.id));
+  current.attempts = attempts;
+  current.attempt_count = attempts.length;
+  current.totals = Object.fromEntries(IMPORT_TOTAL_COUNTERS.map(k => [k, 0]));
+  for (const a of attempts) {
+    if (a.status !== "done") continue; // неопубликованный результат не выдаём за приём
+    for (const key of IMPORT_TOTAL_COUNTERS) current.totals[key] += a.counts[key] || 0;
+  }
+  const latest = attempts[attempts.length - 1];
+  current.attempt_id = latest.id;
+  current.status = latest.status;
+  current.updated_at = latest.finished_at || latest.started_at;
+  // Запоздалый отчёт старой попытки дополняет историю, но не возвращает сбой
+  // и не стирает остаток недочитанного у более поздней попытки.
+  if (latest.id !== id) {
+    for (const key of IMPORT_RESULT_COUNTERS) current[key] = previous[key] || 0;
+    for (const key of ["lines", "error", "card_fail_reason", "source", "run_url"]) {
+      if (previous[key] !== undefined) current[key] = previous[key]; else delete current[key];
+    }
+  }
+  return current;
+}
+
+// Итог импорта от Action'а: started/done/failed + числа + строки отчёта.
+// Обновляет запись журнала по uuid из dump_key (импорт дампов) либо job_key
+// (точечное добавление, kind:"case") — журнал у обоих каналов общий.
+async function handleImportResult(request, env) {
+  if (!importChannelAuthOk(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return new Response("Bad JSON", { status: 400 });
+  }
+  const m = /^import:dump:([0-9a-f-]{36})$/.exec(String(body.dump_key || ""))
+    || /^import:(?:case|writ):([0-9a-f-]{36})$/.exec(String(body.job_key || ""));
+  const status = String(body.status || "");
+  if (!m || !["started", "done", "failed"].includes(status)) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  if (body.attempt_id && !/^[a-zA-Z0-9:._-]{1,120}$/.test(String(body.attempt_id))) {
+    return new Response("Bad attempt id", { status: 400 });
+  }
+  const uuid = m[1];
+  // Отчёт старого задания тоже должен находиться за первой страницей KV.
+  const logKeys = await listImportLogKeys(env);
+  const entry = logKeys.find((k) => k.name.endsWith(`|${uuid}`));
+  if (!entry) {
+    return new Response(JSON.stringify({ ok: false, error: "запись журнала не найдена" }), {
+      status: 404, headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+  let record = {};
+  try { record = JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(entry.name)) || {}; } catch (_) {}
+  const previous = JSON.parse(JSON.stringify(record));
+  const existingAttempt = (record.attempts || []).find(a => a.id === body.attempt_id);
+  // Повтор HTTP-отчёта и запоздалый started не меняют счётчики/свежесть.
+  if (existingAttempt && (existingAttempt.status === "done"
+      || existingAttempt.status === "failed" && status === "started")) {
+    return Response.json({ok: true, duplicate: true});
+  }
+  const isDump = (record.kind || "dump") === "dump";
+  if (isDump) {
+    const selected = importSectionIdentity(record);
+    const reported = importSectionIdentity({
+      court_domain: record.court_domain, section: body.section, delo_id: body.delo_id,
+    });
+    // Исполнитель не должен незаметно переименовать выбранную инстанцию.
+    // Ошибочный отчёт оставляет журнал и свежесть нетронутыми. У failed
+    // сохраняем выбор: диагностический отчёт мог появиться до разбора HTML.
+    if (status === "done" && ((body.section || body.delo_id) && !reported
+        || selected && reported && selected.section_key !== reported.section_key)) {
+      return new Response(JSON.stringify({ ok: false, error: "раздел отчёта не совпадает с заданием" }), {
+        status: 409, headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    let identity = selected || reported;
+    if (!identity && status === "done" && body.dump_key) {
+      // Старые задания/исполнители могут не передать section. Пока тело
+      // живо, восстанавливаем раздел по карточкам, не по одному домену.
+      const ids = detectDumpCardDeloIds(await env.PUSH_SUBSCRIPTIONS.get(body.dump_key) || "");
+      if (ids.length === 1) identity = importSectionIdentity({
+        court_domain: record.court_domain, delo_id: ids[0],
+      });
+    }
+    if (identity) Object.assign(record, identity);
+  }
+  if (body.attempt_id) {
+    delete record.error;
+    if (status !== "started") {
+      delete record.lines;
+      delete record.card_fail_reason;
+      delete record.run_url;
+    }
+  }
+  record.status = status;
+  record.updated_at = new Date().toISOString();
+  for (const num of IMPORT_RESULT_COUNTERS) {
+    if (typeof body[num] === "number" && Number.isFinite(body[num]) && body[num] >= 0) {
+      record[num] = Math.trunc(body[num]);
+    } else if (body.attempt_id && status !== "started") record[num] = 0;
   }
   if (Array.isArray(body.lines)) {
     record.lines = body.lines.map(String).slice(0, 100);
@@ -2817,6 +2895,7 @@ async function handleImportResult(request, env) {
   if (["court", "presidium"].includes(body.cassation_kind)) {
     record.cassation_kind = body.cassation_kind;
   }
+  record = importAttemptApply(previous, record, body, record.updated_at);
   await env.PUSH_SUBSCRIPTIONS.put(entry.name, JSON.stringify(record), importLogWriteOptions(record));
   // Свежесть по инстанции: последний УСПЕШНЫЙ импорт domain:delo_id.
   // Старый доменный ключ без доказанного раздела сохраняется только как
@@ -2835,7 +2914,8 @@ async function handleImportResult(request, env) {
   // ⚠️ Свежесть подтверждают только ДАМПЫ. Пультовые операции (точечное
   // добавление, пометка «лист не нужен») идут по своим делам и суд целиком не
   // обходят — список явный, чтобы следующий kind не бумпнул светофор молча.
-  if (status === "done" && record.court_domain && isDump && cardsUnread === 0
+  if (record.status === "done" && (!body.attempt_id || record.attempt_id === body.attempt_id)
+      && record.court_domain && isDump && cardsUnread === 0
       && !(record.needs_review || 0)) {
     const identity = importSectionIdentity(record);
     await env.PUSH_SUBSCRIPTIONS.put(
@@ -2845,11 +2925,11 @@ async function handleImportResult(request, env) {
         ...(identity || {}),
         ts: record.updated_at,
         operator: record.operator || "",
-        added: record.added || 0,
+        added: (record.totals || record).added || 0,
         // Заведения в трек «Иски банка» — тоже результат импорта: без них
         // светофор писал «+0 из 24» на странице, с которой ушло четыре иска.
-        added_bank: record.added_bank || 0,
-        promoted: record.promoted || 0,
+        added_bank: (record.totals || record).added_bank || 0,
+        promoted: (record.totals || record).promoted || 0,
         // Сколько сберовских строк было на импортированной странице: светофор
         // показывает «+7 из 24», и оператору видно, полный ли вышел импорт
         // (мало добавили из многих — норма, дела уже в базе; мало из малого —

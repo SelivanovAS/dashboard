@@ -316,7 +316,7 @@ class TestCountersReachOperator:
         with open(os.path.join(REPO_ROOT, "cloudflare-worker", "worker.js"),
                   encoding="utf-8") as f:
             text = f.read()
-        start = text.index("function handleImportResult")
+        start = text.index("const IMPORT_RESULT_COUNTERS")
         end = text.index("async function handleAdminImportLog", start)
         assert '"linked"' in text[start:end]
 

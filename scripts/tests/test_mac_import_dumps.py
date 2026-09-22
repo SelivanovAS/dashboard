@@ -698,4 +698,4 @@ class TestImportExecutorWiring:
             if t:
                 timer_slots.add((int(t.group(1)), int(t.group(2))))
         assert var_slots == timer_slots
-        assert 'IMPORT_SLOTS_DEFAULT = "12:00,14:00,16:00,18:00,20:00"' in _read_repo(WORKER)
+        assert 'IMPORT_SLOTS_DEFAULT = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00"' in _read_repo(WORKER)

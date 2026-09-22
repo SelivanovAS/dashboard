@@ -58,6 +58,7 @@ jobs:
     # MAX_BANK_CARDS_PER_IMPORT=100 по ~3-6 с) — прежних 15 мин впритык.
     timeout-minutes: 45
     env:
+      IMPORT_ATTEMPT_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
       # Inputs — только через env (см. предупреждение в шапке).
       DUMP_KEY: ${{ inputs.dump_key }}
       COURT_DOMAIN: ${{ inputs.court_domain }}
@@ -105,7 +106,7 @@ jobs:
       - name: POST started (журнал импортов в админке)
         run: |
           jq -n --arg dk "$DUMP_KEY" --arg ru "$RUN_URL" \
-            '{dump_key:$dk, status:"started", run_url:$ru, source:"github"}' \
+            '{dump_key:$dk, status:"started", run_url:$ru, source:"github", attempt_id:env.IMPORT_ATTEMPT_ID}' \
           | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
               -H "Authorization: Bearer $PUSH_SECRET" \
               -H "Content-Type: application/json" \
@@ -188,10 +189,10 @@ jobs:
               --arg src github -f ops/import_result_body.jq "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg dk "$DUMP_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{dump_key:$dk, status:$st, run_url:$ru, source:"github",
+              '{dump_key:$dk, status:$st, run_url:$ru, source:"github", attempt_id:env.IMPORT_ATTEMPT_ID,
                 error:"прогон упал до разбора дампа (скачивание/зависимости) — детали в run_url"}')
           fi
-          printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \
+          printf '%s' "$BODY" | curl -f -s -m 20 --retry 2 --retry-delay 1 -A "$UA" \
             -X POST "$PUSH_WORKER_URL/import-result" \
             -H "Authorization: Bearer $PUSH_SECRET" \
             -H "Content-Type: application/json" \

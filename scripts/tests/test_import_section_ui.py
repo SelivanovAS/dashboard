@@ -25,7 +25,7 @@ for (const role of ["owner", "operator"]) {
   const names = ["impRecordDeloId", "impSectionKey", "impCourtSection", "impCourtKey",
     "impCourtLabel", "impDomainOf", "canonSudrfHost", "collectCardTrouble",
     "renderImportFreshness", "impCacheFreshRecords", "impDetectDeloIds", "impDetectDomains", "impSend",
-    "impVerdict", "acResultText"];
+    "impDisplayResult", "impUnread", "impVerdict", "acResultText"];
   const functions = names.map(name => {
     const found = new RegExp("(?:async )?function " + name + "\\([^]*?\\n\\}").exec(source);
     assert.ok(found, name);
