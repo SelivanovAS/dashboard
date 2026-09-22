@@ -4,8 +4,8 @@
   "smart_skip": true,
   "totals": {
     "total": 590,
-    "parsed": 32,
-    "skip": 558,
+    "parsed": 31,
+    "skip": 559,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -20,7 +20,7 @@
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": false,
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|М-3083/2026",
@@ -2317,9 +2317,9 @@
       "last_checked_at": "2026-09-22"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10633,5 +10633,5 @@
       "last_checked_at": "2026-09-18"
     }
   ],
-  "updated_at": "2026-09-22T06:49:12+05:00"
+  "updated_at": "2026-09-22T07:09:26+05:00"
 }
