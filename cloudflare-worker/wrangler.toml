@@ -66,7 +66,7 @@ IMPORT_EXECUTOR = "vps"
 # ops/vps-run/systemd/court-import.timer (страж test_mac_import_dumps.py):
 # из них админка обещает оператору «сервер обработает в ЧЧ:ММ» и помечает
 # запись, которую сервер не забрал. При executor=vps слоты ежедневные, включая праздники.
-IMPORT_SLOTS_LOCAL = "12:00,14:00,16:00,18:00,20:00"
+IMPORT_SLOTS_LOCAL = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00"
 
 # KV-хранилище push-подписок PWA.
 # Создать namespace: wrangler kv namespace create PUSH_SUBSCRIPTIONS

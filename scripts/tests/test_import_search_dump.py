@@ -944,7 +944,7 @@ class TestWorkflowWiring:
             "суммарная корзина «уже в треке» не должна вернуться"
         # Светофор свежести «+N из M» — тоже по обоим трекам.
         assert "(e.added || 0) + (e.added_bank || 0)" in admin
-        assert "added_bank: record.added_bank || 0" in worker
+        assert "added_bank: (record.totals || record).added_bank || 0" in worker
 
     def test_card_counters_reach_operator(self):
         """Те же три звена для карточек основной картотеки (16.08.2026): суд

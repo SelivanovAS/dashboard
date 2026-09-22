@@ -28,6 +28,9 @@
 {
   dump_key: $dk,
   status: $st,
+  publication_pending: (.publication_pending // false),
+  attempt_id: (env.IMPORT_ATTEMPT_ID // ""),
+  attempt_started_at: (env.IMPORT_ATTEMPT_STARTED_AT // ""),
   run_url: $ru,
   # Кто отработал запись. Сводка админки обещает оператору «повторит локальная
   # машина» — маркер делает обещание проверяемым. Worker принимает только два

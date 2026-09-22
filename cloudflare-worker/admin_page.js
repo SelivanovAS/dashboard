@@ -3656,14 +3656,14 @@ function impIsServer(item) {
 // ТОГО ЖЕ дампа (он лежит в KV трое суток, очередь исполнителя его и берёт).
 function impRetryPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
-  if (impIsServer(item)) return "повторит сервер в следующий слот";
+  if (impIsServer(item)) return "повторит сервер в следующий слот" + (impLastSlots && impLastSlots.next_slot_at ? " — " + impSlotWhen(impLastSlots.next_slot_at) : "");
   return IMP_T.retry;
 }
 // Дело заведено card-blind: его дочитает и повторный импорт, и ближайший
 // прогон — у записи нет last_checked_at, FI-цикл возьмёт её первой.
 function impRefillPromise(item) {
   if (impNoCourtReason(item)) return "проверьте реестр региона (повтор не поможет)";
-  if (impIsServer(item)) return "дочитает сервер в следующий слот или ближайший прогон";
+  if (impIsServer(item)) return "дочитает сервер в следующий слот или ближайший прогон" + (impLastSlots && impLastSlots.next_slot_at ? " — " + impSlotWhen(impLastSlots.next_slot_at) : "");
   return IMP_T.refill;
 }
 // Кто отработал запись. Метка появляется у сервера и у резерва: облако —
@@ -3732,7 +3732,53 @@ function impIsPresidium(item) {
 function impIsCassation(item) {
   return !!(item && (item.section === "cassation" || (acRegion && acRegion.cassation && acRegion.cassation.domain === item.court_domain)));
 }
+// Накопительные действия и остаток последней попытки — разные величины.
+function impDisplayResult(item) {
+  return item && item.totals ? Object.assign({}, item, item.totals) : item;
+}
+function impUnread(item) {
+  return item.kind === "case" ? (item.fetch_error || 0)
+    : (item.fetch_fail || 0) + (item.card_failed || 0);
+}
+function impRecordBadge(item) {
+  if (item.status === "done" && impUnread(item)) {
+    return '<span class="badge badge-run">частично · ожидает повтора</span>';
+  }
+  if (item.status === "done" && item.needs_review) {
+    return '<span class="badge badge-fail">нужна проверка</span>';
+  }
+  return impStatusBadge(item.status);
+}
+function impAttemptHistoryHtml(item) {
+  if (!Array.isArray(item.attempts) || !item.attempts.length) return "";
+  var rows = item.attempts.map(function (a, i) {
+    var c = a.counts || {};
+    var added = (c.added || 0) + (c.added_main || 0) + (c.added_bank || 0);
+    var unread = (c.fetch_fail || 0) + (c.card_failed || 0) + (c.fetch_error || 0);
+    var text = "Попытка " + (i + 1) + " · " + new Date(a.finished_at || a.started_at).toLocaleString("ru-RU")
+      + (a.status === "started" ? " · выполняется" : a.status === "failed" ? " · сбой" : "")
+      + " · добавлено " + added + " · дочитано " + (c.refilled || 0)
+      + " · не прочитано " + unread;
+    if (c.resolved_old) text += " · в архив " + c.resolved_old;
+    if (c.linked) text += " · связано " + c.linked;
+    if (a.error) text += " · " + a.error;
+    return '<div class="imp-sum-line">' + escHtml(text) + "</div>"
+      + (a.lines && a.lines.length ? '<details class="fold"><summary>Построчный отчёт попытки</summary><pre class="log-pre">'
+        + a.lines.map(escHtml).join("\\n") + "</pre></details>" : "");
+  }).join("");
+  var note = item.attempt_history_incomplete
+    ? '<div class="imp-sum-line imp-sum-dim">Старые попытки сохранены не полностью; итог до включения истории может быть неполным.</div>' : "";
+  if (item.attempt_history_recovered) note = '<div class="imp-sum-line imp-sum-dim">Предыдущие попытки восстановлены по журналу сервера.</div>';
+  return '<details class="fold"><summary>История попыток (' + item.attempts.length + ")</summary>" + note + rows + "</details>";
+}
+function impLastAttemptText(item) {
+  if (!item.totals) return "";
+  var added = (item.added || 0) + (item.added_main || 0) + (item.added_bank || 0);
+  return "Последняя попытка: +" + added + " · дочитано " + (item.refilled || 0)
+    + " · не прочитано " + impUnread(item);
+}
 function impResultParts(item) {
+  item = impDisplayResult(item);
   var parts = ["+" + (item.added || 0) + " в картотеку"];
   var problems = [];
   var skipped = [];
@@ -3834,6 +3880,7 @@ function impResultParts(item) {
 // Вердикт одной фразой: получилось / переделывать / пусто. Это первое (а часто
 // и единственное), что оператор читает после отправки.
 function impVerdict(item) {
+  item = impDisplayResult(item);
   var added = (item.added || 0) + (item.added_bank || 0);
   var lost = item.fetch_fail || 0;
   var unread = item.card_failed || 0;
@@ -3848,11 +3895,12 @@ function impVerdict(item) {
       : impIsServer(item) ? "повтор подхватит сервер в следующий слот"
       : IMP_T.verdictTail;
     return { kind: "bad", text: added
-      ? "Заведено " + nPlural(added, "дело", "дела", "дел")
+      ? "Частично обработано: заведено " + nPlural(added, "дело", "дела", "дел")
         + ", но карточки открылись не все — " + tail
-      : "Ничего не заведено — карточки не открылись; " + tail };
+      : "Частично обработано: остались непрочитанные карточки; " + tail };
   }
   if (added) return { kind: "ok", text: "Готово: " + got };
+  if (item.resolved_old || item.linked || item.refilled || item.promoted) return { kind: "ok", text: "Готово: результат обработки указан ниже" };
   if (item.skipped_region) return { kind: "none", text: "Готово: новых дел нет; дела другого региона пропущены" };
   return { kind: "none", text: "Готово: новых дел нет — причины указаны в отчёте" };
 }
@@ -3871,7 +3919,10 @@ function impResultText(item) {
   if (item.kind === "writ_waiver") return wwResultText(item);
   if (item.status === "done") {
     var g = impResultParts(item);
-    return g.parts.concat(g.problems, g.skipped).join(" · ");
+    var text = g.parts.concat(g.problems).join(" · ");
+    if (item.totals) text = "Всего по дампу: " + text + " · " + impLastAttemptText(item);
+    if (g.skipped.length) text += " · Пропущено в последней попытке: " + g.skipped.join(" · ");
+    return text;
   }
   if (item.status === "failed") return item.error || "ошибка — детали в журнале";
   return "";
@@ -3885,7 +3936,7 @@ function impResultHtml(item) {
     ? '<div class="imp-sum-line imp-sum-dim">' + escHtml(impSourceLabel(item)) + "</div>"
     : "";
   if (item.kind === "case" || item.kind === "writ_waiver" || item.status !== "done") {
-    return escHtml(impResultText(item)) + src;
+    return escHtml(impResultText(item)) + src + impAttemptHistoryHtml(item);
   }
   var g = impResultParts(item);
   var v = impVerdict(item);
@@ -3898,10 +3949,11 @@ function impResultHtml(item) {
   html += line("imp-sum-bad", "Проблемы:", g.problems);
   // Единственная корзина «+0 в картотеку» — не новость: вердикт уже сказал,
   // что заводить было нечего, и строка под ним читалась как противоречие.
-  var nothing = g.parts.length === 1 && !(item.added || 0);
-  html += nothing ? "" : line("", "Заведено:", g.parts);
-  html += line("imp-sum-dim", "Пропущено:", g.skipped);
-  return html;
+  var nothing = g.parts.length === 1 && !(impDisplayResult(item).added || 0);
+  html += nothing ? "" : line("", item.totals ? "Всего по дампу:" : "Результат:", g.parts);
+  if (item.totals) html += '<div class="imp-sum-line imp-sum-dim">' + escHtml(impLastAttemptText(item)) + "</div>";
+  html += line("imp-sum-dim", "Пропущено в последней попытке:", g.skipped);
+  return html + impAttemptHistoryHtml(item);
 }
 // Сводка закрытий «лист не нужен» (kind:"writ_waiver") — общий журнал с
 // дампами. До 23.08.2026 своей ветки не было вовсе: запись уходила в дамповую
@@ -3922,6 +3974,7 @@ function wwResultText(item) {
 }
 // Сводка записи точечного добавления (kind:"case") — общий журнал с дампами.
 function acResultText(item) {
+  item = impDisplayResult(item);
   if (item.status === "failed") return item.error || "ошибка — детали в журнале";
   if (item.status !== "done") return "";
   var parts = [];
@@ -3975,7 +4028,7 @@ function renderImportHistory(items) {
         + it.lines.length + ')</summary><div class="fold-body"><pre class="log-pre">'
         + it.lines.map(escHtml).join("\\n") + '</pre></div></details>';
     }
-    return '<div class="imp-hist-item"><div class="imp-hist-row">' + impStatusBadge(it.status)
+    return '<div class="imp-hist-item"><div class="imp-hist-row">' + impRecordBadge(it)
       + '<span class="imp-hist-court"><b>' + escHtml(court) + '</b></span>'
       + '<span>' + escHtml(it.operator || "без имени") + '</span>'
       + '<span class="imp-hist-meta">' + escHtml(relTime(it.ts)) + '</span>'
@@ -3983,11 +4036,12 @@ function renderImportHistory(items) {
       + (impQueueStale(it) ? '<span class="imp-hist-meta imp-hist-warn">⚠ сервер не забрал в '
           + escHtml(impSlotWhen(impLastSlots.last_slot_at)) + ' — ' + escHtml(IMP_T.queueStale) + '</span>' : '')
       + (impResultText(it) ? '<span class="imp-hist-meta">' + escHtml(impResultText(it)) + '</span>' : '')
-      + '</div>' + linesHtml + '</div>';
+      + '</div>' + impAttemptHistoryHtml(it) + linesHtml + '</div>';
   }).join("");
 }
 function impCacheFreshRecords(items) {
   (items || []).forEach(function (record) {
+    record = impDisplayResult(record);
     if (record.status !== "done" || record.kind === "case" || record.kind === "writ_waiver") return;
     if ((record.fetch_fail || 0) + (record.card_failed || 0) + (record.needs_review || 0) > 0) return;
     var key = impSectionKey(record), ts = record.updated_at || record.ts;
@@ -4198,6 +4252,7 @@ function renderImportFreshness(items, lastMap, lastSections) {
   var bySection = {}, unknownSections = {};
   function remember(e, domain, fromLog) {
     if (!e) return;
+    e = impDisplayResult(e);
     if (fromLog && e.status !== "done") return;
     if (e.kind === "case" || e.kind === "writ_waiver") return;
     if ((e.fetch_fail || 0) + (e.card_failed || 0) + (e.needs_review || 0) > 0) return;
@@ -4509,8 +4564,8 @@ function renderImportQueue() {
   var more = el.querySelector(".imp-queue-more");
   function row(item) {
     var label = item.status === "expired" ? '<span class="badge badge-fail">нужна проверка</span>'
-      : impQueuePending(item) && (item.status === "done" || item.status === "failed")
-      ? '<span class="badge badge-run">ожидает повтора</span>' : impStatusBadge(item.status);
+      : item.status === "failed" && impQueuePending(item)
+      ? '<span class="badge badge-run">ожидает повтора</span>' : impRecordBadge(item);
     var detail = item.status === "expired"
       ? "Срок хранения задания истёк. Проверьте историю импортов. " + escHtml(IMP_T.giveup)
       : impResultHtml(item);

@@ -29,6 +29,9 @@
 {
   job_key: $jk,
   status: $st,
+  publication_pending: (.publication_pending // false),
+  attempt_id: (env.IMPORT_ATTEMPT_ID // ""),
+  attempt_started_at: (env.IMPORT_ATTEMPT_STARTED_AT // ""),
   run_url: $ru,
   source: $src,
 

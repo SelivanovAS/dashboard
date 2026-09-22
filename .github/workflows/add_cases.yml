@@ -44,6 +44,7 @@ jobs:
     # ВСЮ пачку (save_state и POST итога не выполняются).
     timeout-minutes: 45
     env:
+      IMPORT_ATTEMPT_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
       # Inputs — только через env (см. предупреждение в шапке).
       JOB_KEY: ${{ inputs.job_key }}
       OPERATOR: ${{ inputs.operator }}
@@ -75,7 +76,7 @@ jobs:
       - name: POST started (журнал импортов в админке)
         run: |
           jq -n --arg jk "$JOB_KEY" --arg ru "$RUN_URL" \
-            '{job_key:$jk, status:"started", run_url:$ru, source:"github"}' \
+            '{job_key:$jk, status:"started", run_url:$ru, source:"github", attempt_id:env.IMPORT_ATTEMPT_ID}' \
           | curl -s -m 20 -A "$UA" -X POST "$PUSH_WORKER_URL/import-result" \
               -H "Authorization: Bearer $PUSH_SECRET" \
               -H "Content-Type: application/json" \
@@ -152,10 +153,10 @@ jobs:
               "$IMPORT_SUMMARY_PATH")
           else
             BODY=$(jq -n -c --arg jk "$JOB_KEY" --arg st "$STATUS" --arg ru "$RUN_URL" \
-              '{job_key:$jk, status:$st, run_url:$ru, source:"github",
+              '{job_key:$jk, status:$st, run_url:$ru, source:"github", attempt_id:env.IMPORT_ATTEMPT_ID,
                 error:"прогон упал до разбора задания (скачивание/зависимости) — детали в run_url"}')
           fi
-          printf '%s' "$BODY" | curl -s -m 20 -A "$UA" \
+          printf '%s' "$BODY" | curl -f -s -m 20 --retry 2 --retry-delay 1 -A "$UA" \
             -X POST "$PUSH_WORKER_URL/import-result" \
             -H "Authorization: Bearer $PUSH_SECRET" \
             -H "Content-Type: application/json" \

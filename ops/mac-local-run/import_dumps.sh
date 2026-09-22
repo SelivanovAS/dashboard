@@ -410,10 +410,44 @@ courts_gate() {
   fi
 }
 
-post_body() {  # $1 = файл с JSON-телом (само тело не секрет — идёт аргументом)
+# Финальные отчёты переживают обрыв HTTP и следующий запуск очереди.
+# Сводка после неудачного push подтверждается только после публикации данных.
+RESULT_OUTBOX="$LOG_DIR/.runtime/import_results"
+post_result_file() {
   worker_cfg "/import-result"
-  curl -s --compressed -m 20 -A "$UA" -X POST -K "$CURL_CFG" \
-    -H "Content-Type: application/json" --data @"$1" -o /dev/null || true
+  curl -f -s --compressed -m 20 --retry 2 --retry-delay 1 -A "$UA" -X POST -K "$CURL_CFG" \
+    -H "Content-Type: application/json" --data @"$1" -o /dev/null
+}
+post_body() {
+  local receipt="" attempt_id status pending
+  attempt_id=$(jq -r '.attempt_id // empty' "$1")
+  status=$(jq -r '.status // empty' "$1")
+  pending=$(jq -r '.publication_pending // false' "$1")
+  if [ -n "$attempt_id" ] && [ "$status" != "started" ]; then
+    mkdir -p "$RESULT_OUTBOX" && chmod 700 "$RESULT_OUTBOX" || return 1
+    receipt="$RESULT_OUTBOX/$attempt_id.json"
+    cp "$1" "$receipt.tmp" && mv "$receipt.tmp" "$receipt" || return 1
+  fi
+  if post_result_file "$1"; then
+    [ -z "$receipt" ] || [ "$pending" = "true" ] || rm -f "$receipt"
+  else
+    log "  отчёт не подтверждён сервером — сохранён для повторной отправки"
+    return 1
+  fi
+}
+flush_result_outbox() {
+  local receipt pending
+  [ "$DRY_RUN" != "1" ] && [ -d "$RESULT_OUTBOX" ] || return 0
+  for receipt in "$RESULT_OUTBOX"/*.json; do
+    [ -f "$receipt" ] || continue
+    pending=$(jq -r '.publication_pending // false' "$receipt")
+    if [ "$pending" = "true" ]; then
+      [ "${1:-}" = "published" ] || continue
+      jq '.status="done" | .publication_pending=false | del(.error)' "$receipt" > "$receipt.tmp" \
+        && mv "$receipt.tmp" "$receipt" || continue
+    fi
+    if post_result_file "$receipt"; then rm -f "$receipt"; fi
+  done
 }
 # Имя ключа в теле отчёта решает КАНАЛ: у дампов dump_key, у точечных пачек
 # job_key. Worker принимает оба и по нему же различает канал
@@ -425,19 +459,24 @@ key_field() {  # $1 = ключ (import:dump:… | import:case:…)
     *)             echo "dump_key" ;;
   esac
 }
+new_attempt() {
+  IMPORT_ATTEMPT_ID=$("$PYTHON" -c 'import uuid; print(uuid.uuid4())') || return 1
+  IMPORT_ATTEMPT_STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  export IMPORT_ATTEMPT_ID IMPORT_ATTEMPT_STARTED_AT
+}
 post_status() {  # $1 = ключ, $2 = статус
   # DRY-RUN не трогает журнал оператора вовсе: иначе холостая проверка
   # перевела бы запись в «идёт…» и оставила её такой навсегда.
   [ -n "$WORKER_URL" ] && [ "$DRY_RUN" != "1" ] || return 0
   # source — чтобы застрявшее «выполняется» называло держателя записи.
   jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg st "$2" --arg src "$SRC" \
-     '{($kf): $k, status:$st, source:$src}' \
+     '{($kf): $k, status:$st, source:$src, attempt_id:env.IMPORT_ATTEMPT_ID, attempt_started_at:env.IMPORT_ATTEMPT_STARTED_AT}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
 post_error() {  # $1 = ключ, $2 = текст
   [ -n "$WORKER_URL" ] || return 0
   jq -n --arg kf "$(key_field "$1")" --arg k "$1" --arg er "$2" --arg src "$SRC" \
-     '{($kf): $k, status:"failed", error:$er, source:$src}' \
+     '{($kf): $k, status:"failed", error:$er, source:$src, attempt_id:env.IMPORT_ATTEMPT_ID, attempt_started_at:env.IMPORT_ATTEMPT_STARTED_AT}' \
     > "$TMP_DIR/body.json" && post_body "$TMP_DIR/body.json"
 }
 post_summary() {  # $1 = ключ дампа, $2 = статус, $3 = summary импортёра
@@ -463,20 +502,24 @@ commit_data() {  # $1 = сообщение коммита
   # Список файлов ОДИН с облаком: пути спрашиваются у court_monitor.config.
   bash ops/stage_data_files.sh >>"$LOG" 2>&1 || return 1
   if git diff --cached --quiet; then
-    log "  изменений в данных нет — коммит не нужен"
-    return 0
-  fi
+    log "  изменений в данных нет — проверяю публикацию накопленных коммитов"
+  else
   git -c user.name="Court Monitor ($SRC_LABEL)" -c user.email="bot@court-monitor.local" \
       commit -m "$1" >>"$LOG" 2>&1 || return 1
+  fi
   # Ретраи: облачный джоб или парсинг могли запушить между pull и push.
   local i
   for i in 1 2 3; do
-    git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 && return 0
+    if git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1; then
+      flush_result_outbox published
+      return 0
+    fi
     log "  push отклонён — подтягиваю чужие коммиты и повторяю ($i/3)"
     git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1
     sleep 3
   done
-  git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1
+  git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 || return 1
+  flush_result_outbox published
 }
 commit_and_push() {  # $1 = имя суда, $2 = added, $3 = added_bank
   local suffix=""
@@ -539,7 +582,7 @@ run_import() {  # $1 = файл, $2 = домен, $3 = оператор, $4 = к
     # Зеркало облака: «done» только когда И импорт отработал, И данные уехали.
     status=failed
     jq --arg lbl "$SRC_LABEL" \
-       '.error = ($lbl + ": дамп обработан, но коммит не запушился — повторите импорт, уже добавленное отсеет дедуп")' \
+       '.publication_pending = true | .error = ($lbl + ": дамп обработан, но коммит не запушился — повторите импорт, уже добавленное отсеет дедуп")' \
       "$summary" > "$summary.tmp" && mv "$summary.tmp" "$summary"
     log "  ERROR: коммит/push не удался"
   fi
@@ -587,7 +630,7 @@ run_add_cases() {  # $1 = файл задания, $2 = ключ|""
     # Зеркало облака: «done» только когда И скрипт отработал, И данные уехали.
     status=failed
     jq --arg lbl "$SRC_LABEL" \
-       '.error = ($lbl + ": пачка обработана, но коммит не запушился — повторите пачку, уже добавленное отсеет дедуп")' \
+       '.publication_pending = true | .error = ($lbl + ": пачка обработана, но коммит не запушился — повторите пачку, уже добавленное отсеет дедуп")' \
       "$summary" > "$summary.tmp" && mv "$summary.tmp" "$summary"
     log "  ERROR: коммит/push не удался"
   fi
@@ -620,6 +663,7 @@ resolve_worker_auth \
   || die "Worker не принял ни один секрет (401) — проверьте owner_secret в $WORKER_CONF"
 log "Канал импорта: авторизуемся ключом $AUTH_KIND"
 
+flush_result_outbox
 journal_cfg
 if ! curl -f -s --compressed -m 30 -A "$UA" -K "$CURL_CFG" -o "$TMP_DIR/log.json"; then
   die "журнал импортов не читается ($WORKER_URL/admin/import-log)"
@@ -679,6 +723,7 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6 f7 <&3; do
     key="import:case:$uuid"
     log "→ точечная пачка · оператор ${operator:-—} · в журнале «${prev:-?}» · $uuid"
     job="$TMP_DIR/case_job.json"
+    new_attempt || die "не удалось создать идентификатор попытки"
     post_status "$key" started
     worker_cfg "/add-case-job?key=$key"
     if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$job"; then
@@ -706,6 +751,7 @@ while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6 f7 <&3; do
   key="import:dump:$uuid"
   log "→ $domain · оператор ${operator:-—} · в журнале «${prev:-?}» · $uuid"
   dump="$TMP_DIR/dump.html"
+  new_attempt || die "не удалось создать идентификатор попытки"
   post_status "$key" started
   worker_cfg "/import-dump?key=$key"
   if ! curl -f -s --compressed -m 60 -A "$UA" -K "$CURL_CFG" -o "$dump"; then
