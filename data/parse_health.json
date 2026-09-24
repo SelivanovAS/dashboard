@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-09-24T06:38:37+05:00",
+ "updated_at": "2026-09-24T07:05:02+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,63 +532,56 @@
   }
  },
  "last_run": {
-  "at": "2026-09-24T06:38:37",
+  "at": "2026-09-24T07:05:02",
   "alerts": [],
-  "requests_ok": 283,
-  "requests_failed": 1,
+  "requests_ok": 38,
+  "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 260,
-  "cards_planned": 262,
-  "cards_read_today": 259,
-  "cards_planned_today": 261,
-  "daily_attempts": 1,
+  "cards_read": 37,
+  "cards_planned": 38,
+  "cards_read_today": 262,
+  "cards_planned_today": 263,
+  "daily_attempts": 2,
   "instances": {
    "first_instance": {
-    "read": 214,
-    "planned": 216,
-    "read_today": 213,
-    "planned_today": 215
+    "read": 36,
+    "planned": 37,
+    "read_today": 216,
+    "planned_today": 217
    },
    "appeal": {
-    "read": 31,
-    "planned": 31,
+    "read": 1,
+    "planned": 1,
     "read_today": 31,
     "planned_today": 31
    },
    "cassation": {
-    "read": 15,
-    "planned": 15,
+    "read": 0,
+    "planned": 0,
     "read_today": 15,
     "planned_today": 15
    }
   },
   "latency": {
-   "n": 283,
-   "p50": 4.0,
-   "p90": 8.2,
-   "max": 22.3
+   "n": 38,
+   "p50": 2.3,
+   "p90": 8.6,
+   "max": 10.7
   },
   "failure_latency": {
    "degraded_card": {
     "n": 1,
-    "p50": 0.8,
-    "p90": 0.8,
-    "max": 0.8
-   },
-   "http_504": {
-    "n": 1,
-    "p50": 30.0,
-    "p90": 30.0,
-    "max": 30.0
+    "p50": 7.5,
+    "p90": 7.5,
+    "max": 7.5
    }
   },
   "fail_kinds": {
-   "degraded_card": 1,
-   "http_504": 1
+   "degraded_card": 1
   },
   "breaker": {
    "mode": "time",
@@ -608,7 +601,7 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 2,
+  "cards_unread_other": 1,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
