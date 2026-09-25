@@ -23,10 +23,13 @@ from __future__ import annotations
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.lifecycle import is_bank_plaintiff_track
+from court_monitor.netutil import fetch_fail_reason_ru
 from court_monitor.storage import bank_events_key, save_json
 
 # Исходы «пошли парсить, но неудачно» (без бумпа last_checked_at).
-FETCH_FAIL_OUTCOMES = ("fetch_captcha", "fetch_blocked", "fetch_http", "fetch_empty")
+FETCH_FAIL_OUTCOMES = (
+    "fetch_captcha", "fetch_blocked", "fetch_http", "fetch_empty", "fetch_invalid",
+)
 # Исходы «карточку не запрашивали — не по чему» (реестр/ссылка).
 NO_CARD_OUTCOMES = ("court_disabled", "no_link", "bad_link")
 
@@ -36,6 +39,7 @@ _OUTCOME_RU = {
     "fetch_blocked": "портал суда отдал заглушку/блокировку вместо карточки",
     "fetch_http": "HTTP-ошибка при загрузке карточки",
     "fetch_empty": "пустой ответ сервера суда",
+    "fetch_invalid": fetch_fail_reason_ru({"kind": "invalid_card_request"}),
     "court_breaker": "суд снят с обхода предохранителем — карточки не читаются "
                      "(заглушка/код/сеть), дело перечитается следующим прогоном",
     "empty_shell": "карточка пришла без таблиц («пустая шелуха») — проверка не засчитана",
@@ -51,7 +55,7 @@ _OUTCOME_RU = {
 # classify_fetch_failure).
 _FETCH_METRIC_KEYS = (
     "cards_captcha", "cards_blocked", "requests_failed",
-    "cards_breaker_skipped",
+    "cards_breaker_skipped", "cards_invalid_request",
 )
 
 
@@ -74,6 +78,9 @@ def classify_fetch_failure(before: dict) -> str:
         return "fetch_captcha"
     if config.METRICS.get("cards_blocked", 0) > before.get("cards_blocked", 0):
         return "fetch_blocked"
+    if (config.METRICS.get("cards_invalid_request", 0)
+            > before.get("cards_invalid_request", 0)):
+        return "fetch_invalid"
     if config.METRICS.get("requests_failed", 0) > before.get("requests_failed", 0):
         return "fetch_http"
     # Предохранитель открылся между пре-чеком FI-цикла и самим fetch'ем

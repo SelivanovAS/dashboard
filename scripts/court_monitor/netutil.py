@@ -262,6 +262,7 @@ _FAIL_REASON_RU = {
     "waf_search": "поиск суда заблокирован защитой ГАС",
     "portal_placeholder": "вместо карточки пришла заглушка портала",
     "non_card_page": "вместо карточки пришла неопознанная служебная страница",
+    "invalid_card_request": "суд отклонил ссылку на карточку: «Неверный формат запроса»",
     "breaker": "суд снят с обхода после нескольких неудач подряд",
     "empty": "суд вернул пустой ответ",
     "empty_shell": "вместо карточки пришла страница без данных",
@@ -518,7 +519,7 @@ _BREAKER_BLOCK_KINDS = frozenset({
 })
 _BREAKER_PARSER_KINDS = frozenset({
     "empty_shell", "empty_search", "unparsed_card", "degraded_card",
-    "captcha_search",
+    "captcha_search", "invalid_card_request",
 })
 
 
@@ -749,6 +750,10 @@ def card_breaker_allows(host: str, *, allow_half_open: bool = True) -> bool:
 def _card_breaker_fail(host: str, kind: str, *, reason: str = "") -> None:
     """Учесть один финальный logical failure карточки по точному классу."""
     if not config.CARD_BREAKER_THRESHOLD or not host:
+        return
+    # Ошибка конкретной ссылки не говорит о доступности других карточек.
+    # В count-профиле общий порог иначе перекрыл бы нулевой порог policy.
+    if kind == "invalid_card_request":
         return
     policy = card_breaker_policy(kind)
     threshold = (
@@ -1065,13 +1070,15 @@ def fetch_card_checked(url: str, *, context: str | None = None,
         return ""
     non_card_kind = classify_non_card_page(html, url)
     if non_card_kind:
-        config.METRICS["cards_blocked"] += 1
+        metric = ("cards_invalid_request" if non_card_kind == "invalid_card_request"
+                  else "cards_blocked")
+        config.METRICS[metric] += 1
         # Страница защиты ГАС приходит с HTTP 200 — по коду её не отличить от
         # успеха, диагноз ставится по телу. Наш адрес из него забираем: он и
         # объясняет, почему тот же URL с другой машины открывается.
         marks = block_page_marks(html)
         log.warning(
-            f"Карточка не получена — портал недоступен/заглушка{ctx}: {url}"
+            f"Карточка не получена — {fetch_fail_reason_ru({'kind': non_card_kind})}{ctx}: {url}"
             + (f" (наш адрес {marks['ip']})" if marks.get("ip") else "")
         )
         _set_diag(

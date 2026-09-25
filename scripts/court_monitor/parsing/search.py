@@ -500,6 +500,11 @@ def classify_non_card_page(html: str, url: str = "") -> str:
         return ""
     if _CARD_UID_ANCHOR in low:
         return ""
+    # Мегион, 2-957/2025: HTTP 200 и три таблицы оформления, но вместо
+    # карточки — явный отказ ссылки. Это не огрызок и не отказ всего суда.
+    # URL карточки и отсутствие УИД защищают от цитаты этой фразы в акте.
+    if "неверный формат запроса" in low:
+        return "invalid_card_request"
     if any(m in low for m in _OUTAGE_MARKERS):
         return "portal_placeholder"
     if (any(m in low for m in _ANTIBOT_TEXT_MARKERS)

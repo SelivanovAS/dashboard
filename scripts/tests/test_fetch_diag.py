@@ -34,7 +34,8 @@ from court_monitor.parsing import (  # noqa: E402
 )
 from fixture_dates import recent_fi_card_html  # noqa: E402
 from probe_court_access import (  # noqa: E402
-    BLOCKED, CAPTCHA, EMPTY, FAIL, OK, OUTAGE, classify_response,
+    BLOCKED, CAPTCHA, EMPTY, FAIL, INVALID, OK, OUTAGE, classify_response,
+    overall_verdict,
 )
 
 CARD_URL = ("https://leninskyeka--svd.sudrf.ru/modules.php?name=sud_delo"
@@ -51,6 +52,12 @@ BLOCK_PAGE = (
 OUTAGE_PAGE = ("<html><body>Информация временно недоступна. "
                "Приносим свои извинения.</body></html>")
 CAPTCHA_PAGE = "<html><body>Введите проверочный код с картинки</body></html>"
+INVALID_REQUEST_PAGE = (
+    "<html><body><table><tr><td>График работы</td></tr></table>"
+    "<table><tr><td>Поиск информации по делам</td></tr></table>"
+    "<div align='center' id=error>НЕВЕРНЫЙ ФОРМАТ ЗАПРОСА!</div>"
+    "<table><tr><td>График работы</td></tr></table></body></html>"
+)
 
 
 class _Resp:
@@ -124,6 +131,23 @@ class TestFetchPageDiag:
 
 
 class TestFetchCardCheckedDiag:
+    @pytest.mark.parametrize("mode", ["count", "time"])
+    def test_invalid_link_does_not_disable_court(self, monkeypatch, mode):
+        """Мегион: ошибка одной ссылки не блокирует остальные дела суда."""
+        monkeypatch.setattr(config, "CARD_BREAKER_MODE", mode)
+        monkeypatch.setattr(config, "CARD_BREAKER_THRESHOLD", 2)
+        _serve(monkeypatch, 200, INVALID_REQUEST_PAGE)
+        for _ in range(3):
+            assert fetch_card_checked(CARD_URL) == ""
+            assert config.FETCH_DIAG["kind"] == "invalid_card_request"
+            assert not netutil.card_breaker_open("leninskyeka--svd.sudrf.ru")
+        assert config.FETCH_FAIL_KINDS == {"invalid_card_request": 3}
+        assert config.METRICS["cards_invalid_request"] == 3
+        assert config.METRICS["requests_ok"] == 3
+        assert config.METRICS["requests_failed"] == 0
+        assert config.METRICS["cards_blocked"] == 0
+        assert config.METRICS["cards_degraded"] == 0
+
     def test_block_page_with_http_200(self, monkeypatch):
         """Внешне успех: код 200, отличает только тело."""
         _serve(monkeypatch, 200, BLOCK_PAGE)
@@ -158,6 +182,8 @@ class TestReasonRu:
          "суд заблокировал запрос (страница защиты ГАС)"),
         ({"kind": "portal_placeholder"},
          "вместо карточки пришла заглушка портала"),
+        ({"kind": "invalid_card_request"},
+         "суд отклонил ссылку на карточку: «Неверный формат запроса»"),
         ({"kind": "empty_search"},
          "поиск суда вернул страницу без распознанных дел"),
         ({"kind": "unparsed_card"},
@@ -192,6 +218,7 @@ class TestProbeClassification:
         (200, BLOCK_PAGE, BLOCKED),
         (200, OUTAGE_PAGE, OUTAGE),
         (200, CAPTCHA_PAGE, CAPTCHA),
+        (200, INVALID_REQUEST_PAGE, INVALID),
         (None, "", FAIL),
         (500, "", FAIL),
     ])
@@ -212,6 +239,24 @@ class TestProbeClassification:
     def test_unknown_service_page_is_not_misnamed_as_portal_outage(self):
         page = "<html><body>Служебная страница</body></html>"
         assert classify_non_card_page(page, CARD_URL) == "non_card_page"
+
+    def test_invalid_request_is_a_link_failure(self):
+        assert classify_non_card_page(INVALID_REQUEST_PAGE, CARD_URL) == (
+            "invalid_card_request"
+        )
+        assert classify_outage_page(INVALID_REQUEST_PAGE) == ""
+        assert overall_verdict([{"verdict": INVALID}]) == (
+            "INVALID — суд отверг ссылку на карточку"
+        )
+
+    def test_invalid_request_quote_in_card_or_act_is_not_a_failure(self):
+        card = recent_fi_card_html().replace(
+            "</body>", "<p>Сообщение системы: неверный формат запроса.</p></body>"
+        )
+        assert "неверный формат запроса" in card
+        assert classify_non_card_page(card, CARD_URL) == ""
+        act_url = CARD_URL.replace("name_op=case", "name_op=doc")
+        assert classify_non_card_page(INVALID_REQUEST_PAGE, act_url) == ""
 
     def test_page_without_tables_is_empty_shell(self):
         """Ни маркеров блока, ни капчи, ни таблиц — отдельный класс: так

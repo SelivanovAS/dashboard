@@ -780,6 +780,7 @@ METRICS: dict[str, int] = {
     "cards_degraded": 0,     # карточек-«огрызков» без событий за прогон
     "cards_captcha": 0,      # карточек, закрытых проверочным кодом (fetch_card_checked)
     "cards_blocked": 0,      # карточек-заглушек: портал недоступен/антибот-блок (looks_like_non_card_page)
+    "cards_invalid_request": 0,  # суд отверг конкретную ссылку на карточку
     "cards_breaker_skipped": 0,  # срабатываний гейта без HTTP (включая позже дочитанные)
     "cards_breaker_unrequested": 0,  # карточек осталось без HTTP к финалу основных планов
     "cards_breaker_recovered": 0,  # отложенных карточек дочитано после half-open

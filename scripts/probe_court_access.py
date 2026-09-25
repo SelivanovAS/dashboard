@@ -26,7 +26,7 @@ HTTP 200, проверочный код и заглушка давали оди�
 - запрос — напрямую через netutil.session, НЕ через fetch_page: нужен
   HTTP-код, а raise_for_status отдаёт наружу только исключение;
 - классификация — теми же функциями, что и боевой код
-  (detect_captcha_challenge_card / looks_like_non_card_page /
+  (detect_captcha_challenge_card / classify_non_card_page /
   card_is_empty_shell): второй копии правил не заводим;
 - со страницы защиты снимается наш адрес и буква правила — ровно тот факт,
   ради которого пробу и делали.
@@ -56,7 +56,7 @@ from court_monitor.courts import (  # noqa: E402
 from court_monitor.netutil import block_page_marks, polite_delay, session  # noqa: E402
 from court_monitor.parsing.cards import card_is_empty_shell  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
-    detect_captcha_challenge_card, looks_like_non_card_page,
+    classify_non_card_page, detect_captcha_challenge_card,
 )
 from court_monitor.parsing import parse_case_card  # noqa: E402
 from court_monitor.regions import get_region  # noqa: E402
@@ -69,6 +69,7 @@ BLOCKED = "БЛОК"             # страница защиты / 403 — на�
 CAPTCHA = "КОД"              # проверочный код на карточке
 OUTAGE = "ЗАГЛУШКА"          # портал недоступен
 EMPTY = "ОГРЫЗОК"            # карточка без данных (0 таблиц у парсера)
+INVALID = "ССЫЛКА"           # суд отверг запрос конкретной карточки
 FAIL = "СЕТЬ"                # соединение не состоялось
 
 
@@ -163,7 +164,10 @@ def classify_response(status: int | None, html: str, url: str) -> tuple[str, dic
         return BLOCKED if status in (401, 403, 429) else FAIL, marks
     if detect_captcha_challenge_card(html):
         return CAPTCHA, marks
-    if looks_like_non_card_page(html, url):
+    non_card_kind = classify_non_card_page(html, url)
+    if non_card_kind == "invalid_card_request":
+        return INVALID, marks
+    if non_card_kind:
         # Страница защиты и штатная заглушка sudrf идут одним детектором —
         # различает их только текст: у защиты в теле есть НАШ АДРЕС. Именно
         # ip, а не любой mark: _BLOCK_RULE_RE матчит первую латинскую букву в
@@ -204,6 +208,8 @@ def overall_verdict(results: list[dict]) -> str:
             return "CAPTCHA — карточки закрыты проверочным кодом"
         if OUTAGE in verdicts:
             return "OUTAGE — портал недоступен (заглушка)"
+        if INVALID in verdicts:
+            return "INVALID — суд отверг ссылку на карточку"
         return "FAIL — соединение не состоялось"
     return "MIXED — часть судов отвечает, часть нет (смотреть построчно)"
 
