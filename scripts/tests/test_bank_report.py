@@ -159,6 +159,20 @@ class TestClassifyFetchFailure:
         before = self._snapshot_and_bump(monkeypatch, "cards_blocked")
         assert classify_fetch_failure(before) == "fetch_blocked"
 
+    def test_invalid_link_is_reported_without_refreshing_case(self, monkeypatch):
+        before = self._snapshot_and_bump(monkeypatch, "cards_invalid_request")
+        outcome = classify_fetch_failure(before)
+        assert outcome == "fetch_invalid"
+        rep = BankParseReport()
+        case = _bank_case()
+        rep.record(case, outcome)
+        (row,) = rep.rows()
+        assert row["reason_ru"] == (
+            "суд отклонил ссылку на карточку: «Неверный формат запроса»"
+        )
+        assert row["last_checked_at"] == "2026-07-27"
+        assert rep.totals()["failed"] == 1
+
     def test_http(self, monkeypatch):
         before = self._snapshot_and_bump(monkeypatch, "requests_failed")
         assert classify_fetch_failure(before) == "fetch_http"

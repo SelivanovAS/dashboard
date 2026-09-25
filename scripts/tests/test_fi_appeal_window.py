@@ -153,24 +153,23 @@ class TestMainCatalogArchive:
         case["first_instance"]["event_date"] = _dmy(config.FI_ARCHIVE_DAYS - 5)
         assert lifecycle.is_case_archived(case) is False
 
-    def test_real_archive_returns_only_volodin(self):
-        """На снимке данных 04.09.2026 новое правило возвращает из архива
-        ровно одно решённое дело — 2-857/2026 (проверка на живом файле, если
-        он есть; дата зафиксирована, чтобы страж не протух)."""
-        path = os.path.join(ROOT, "data", "cases_archive.json")
-        if not os.path.exists(path):
-            pytest.skip("нет data/cases_archive.json")
-        with open(path, encoding="utf-8") as f:
-            cases = json.load(f)["cases"]
-        now = datetime(2026, 9, 4)
-        back = [c["id"] for c in cases
-                if c.get("current_stage") == "first_instance"
-                and (c.get("first_instance") or {}).get("status") == "Решено"
-                and not (c["first_instance"].get("appeal_filed")
-                         or c["first_instance"].get("appeal_filed_date"))
-                and not lifecycle.fi_appeal_window_passed(c["first_instance"], now)]
-        if any(i.startswith("2-857/2026") for i in [c["id"] for c in cases]):
-            assert back == ["2-857/2026 (2-7073/2025;)"]
+    @pytest.mark.parametrize("day,archived", [(4, False), (24, False), (25, True)])
+    def test_volodin_archive_boundary_on_fixed_snapshot(self, monkeypatch, day, archived):
+        """Проверяем правило архива на фиксированном деле и фиксированной дате.
+
+        Живой cases_archive.json пополняется: возвращение Володина в архив
+        25.09 включало старое условное сравнение всего файла со снимком 04.09.
+        Фикстура не зависит от состава архива и не пропускает проверку, пока
+        дело находится в активной картотеке.
+        """
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 9, day, tzinfo=tz)
+
+        monkeypatch.setattr(lifecycle, "datetime", FrozenDatetime)
+        monkeypatch.setattr(config, "FI_APPEAL_GRACE_DAYS", 14)
+        assert lifecycle.is_case_archived(_volodin()) is archived
 
 
 # ── Трек «Иски банка»: единое окно для отказа, 30 дн для завершений ──────────
