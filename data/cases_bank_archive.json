@@ -3999,7 +3999,94 @@
         "announced": true
       },
       "archived_at": "2026-09-24"
+    },
+    {
+      "id": "2-2645/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Низамеев Рустэм Зиннурович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-2645/2026",
+        "court": "Нефтеюганский районный суд",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "judge": "Ефремова Ирина Борисовна",
+        "filing_date": "27.07.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 17:06. 03.09.2026",
+        "event_date": "03.09.2026",
+        "hearing_date": "25.08.2026",
+        "hearing_time": "11:00",
+        "link": "279295456|4d2ee6a7-b62a-491b-8865-b5c660d7d6e5",
+        "act_published": true,
+        "act_date": "",
+        "last_checked_at": "2026-09-23",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0007-01-2026-004031-98",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "25.08.2026",
+        "writ_expected": false,
+        "act_text": "Дело №2-2645/2026 УИД 86RS0007-01-2026-004031-98 О П Р Е Д Е Л Е Н И Е 25 августа 2026 года г. Нефтеюганск Нефтеюганский районный суд Ханты-Мансийского автономного округа – Югры в составе: председательствующего судьи Ефремовой И.Б. при секретаре Шабалиной В.А. рассмотрев в открытом судебном заседании материалы гражданского дела по исковому заявлению публичного акционерного общества «Сбербанк России» в лице Югорского отделения №5940 к Низамееву Рустэму Зиннуровичу о взыскании задолженности по кредитному договору, возмещении понесенных судебных расходов У С Т А Н О В И Л: Публичное акционерное общество «Сбербанк России» в лице Югорского отделения №5940 обратилось с исковыми требованиями к Низамееву Р.З. о взыскании задолженности по кредитному договору № от 06 марта 2024 года за период с 29 декабря 2025 года по 15 июня 2026 года (включительно) в размере 541 552 рубля 09 копеек, возмещении понесенных судебных расходов по оплате государственной пошлины в сумме 15 831 рубль 04 копейки, процентов в размере 27,90% годовых, начисляемых на остаток задолженности по кредиту в размере 541 552 рубля 09 копеек, начиная с 16 июня 2026 года по день фактического возврата кредита. В судебное заседание представитель истца не явился, извещен надлежащим образом, просил рассмотреть дело в его отсутствие (л.д. 6, 39). В судебное заседание ответчик не явился, извещен надлежащим образом, в судебное заседание не явился, так как проживает за пределами Ханты-Мансийского автономного округа – Югры (л.д. 41). Из сведений МВД России от 25 августа 2026 года следует, что ответчик Низамеев Рустэм Зиннурович с 09 декабря 2025 года по настоящее время зарегистрирован по месту жительства по адресу: (адрес) (л.д. 42). В соответствии со ст. 28 Гражданского процессуального кодекса Российской Федерации иск предъявляется в суд по месту жительства ответчика. Согласно ст. 33 Гражданского процессуального кодекса Российской Федерации суд передает дело на рассмотрение другого суда, если выявилось, что оно было принято к производству с нарушением правил подсудности. Принимая во внимание, что ответчик Низамеев Р.З. зарегистрирован и проживает по адресу: (адрес) , суд приходит к выводу, что данное гражданское дело подсудно Пестречинскому районному суду Республики Татарстан. Руководствуясь ст. ст. 33, 224 Гражданского процессуального кодекса Российской Федерации, суд О П Р Е Д Е Л И Л: Гражданское дело по исковому заявлению публичного акционерного общества «Сбербанк России» в лице Югорского отделения №5940 к Низамееву Рустэму Зиннуровичу о взыскании задолженности по кредитному договору, возмещении понесенных судебных расходов передать для рассмотрения по существу в Пестречинский районный суд Республики Татарстан. Определение может быть обжаловано в суд Ханты-Мансийского автономного округа-Югры с подачей частной жалобы через Нефтеюганский районный суд в течение пятнадцати дней со дня его вынесения. Судья Нефтеюганского районного суда опубликовано 27.07.2026 20:16, изменено 07.09.2026 17:05 function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = masking.maskedLetter.indexOf(placeholder[i]) >= 0; if ((matchesNumber && isInt) || (isCharsetPresent && matchesLetter && isLetter)) { newValue += strippedValue[j++]; } else if ((!isCharsetPresent && !isInt && matchesNumber) || (isCharsetPresent && ((matchesLetter && !isLetter) || (matchesNumber && !isInt)))) { //masking.errorOnKeyEntry(e); // write your own error handling function return newValue; } else { newValue += placeholder[i]; } // break if no characters left and the pattern is non-special character if (strippedValue[j] == undefined) { break; } } if (e.target.getAttribute('data-valid-example')) { return masking.validateProgress(e, newValue); } return newValue; }, validateProgress : function (e, value) { var validExample = e.target.getAttribute('data-valid-example'), pattern = new RegExp(e."
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-31T14:04:07",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-25"
+    },
+    {
+      "id": "2-334/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "публичное акционерное общество Сбербанк в лице Уральский Банк ПАО Сбербанк",
+      "defendant": "Капитан-Солтанова Фаузия Фархутдиновна, Капитан Екатерина Викторовна",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-334/2026",
+        "court": "Радужнинский городской суд",
+        "court_domain": "rdj--hmao.sudrf.ru",
+        "judge": "Гаитова Гульжихан Курбангалеевна",
+        "filing_date": "02.04.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Дело передано в архив. 16:59. 08.09.2026",
+        "event_date": "08.09.2026",
+        "hearing_date": "25.08.2026",
+        "hearing_time": "14:30",
+        "link": "269130271|273cd6f0-b609-42da-a31f-0ab8b2103d0a",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-09-23",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0002-01-2025-010862-30",
+        "writ_expected": false,
+        "decision_date": "25.08.2026",
+        "resolved_emitted": true,
+        "court_archived_at": "08.09.2026"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T23:35:08",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-25"
     }
   ],
-  "updated_at": "2026-09-24T06:38:37+05:00"
+  "updated_at": "2026-09-25T06:26:59+05:00"
 }
