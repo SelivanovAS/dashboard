@@ -67,6 +67,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(cm_config, "CSV_PATH", str(paths["csv"]))
     monkeypatch.setattr(cm_config, "CSV_ARCHIVE_PATH", str(paths["csv_archive"]))
     monkeypatch.setattr(cm_config, "CASSATION_ACTS_PATH", str(paths["acts"]))
+    monkeypatch.setattr(cm_config, "BANK_TRACK", False)
     monkeypatch.setattr(cm_config, "REGION", "hmao")
     monkeypatch.setenv("GITHUB_OUTPUT", str(paths["gh_out"]))
     monkeypatch.setattr(isd, "polite_delay", lambda: None)
@@ -124,6 +125,25 @@ class TestResolveCourt:
 
 
 class TestPresidiumDumpImport:
+    def test_early_card_without_uid_or_fi_number_and_reimport(self, env, monkeypatch):
+        _seed(env, [])
+        env['dump'].write_text('''<table id="tablcont"><tr><th>№ дела</th>
+          <th>Дата поступления</th><th>Категория / Заявитель / Суд первой инстанции</th>
+          <th>Судья</th><th>Дата решения</th><th>Решение</th>
+          <th>Дата вступления в законную силу</th><th>Судебные акты</th></tr>
+          <tr><td><a href="/modules.php?name=sud_delo&amp;name_op=case&amp;srv_num=1&amp;case_id=27000814&amp;case_uid=10f9d0d7-5e3f-4271-98c4-1b5457bbf00c&amp;delo_id=2800001">4Г-80/2026</a></td>
+          <td>15.09.2026</td><td>Жалобу подал(а): ПАО Сбербанк<br>
+          Суд (судебный участок) первой инстанции: Сургутский городской суд</td>
+          <td></td><td></td><td></td><td></td><td></td></tr></table>''', encoding='utf-8')
+        monkeypatch.setattr(isd, 'fetch_card_checked', lambda *a, **kw: _fixture('case_card_presidium_early.html'))
+        assert _run(env, '--delo-id', '2800001', '--section', 'cassation') == isd.EXIT_OK
+        assert _summary(env)['added']==1
+        c=_cases(env)[0]
+        assert c['id']=='4Г-80/2026' and not c['first_instance']['magistrate']
+        assert not c['first_instance']['case_number'] and not c['cassation']['judicial_uid']
+        assert _run(env, '--delo-id', '2800001', '--section', 'cassation') == isd.EXIT_OK
+        assert _summary(env)['already']==1 and len(_cases(env))==1
+
     @pytest.mark.parametrize("selection", [[], ["--delo-id", "2800001", "--section", "cassation"]])
     def test_end_to_end(self, env, selection):
         _seed(env, [])

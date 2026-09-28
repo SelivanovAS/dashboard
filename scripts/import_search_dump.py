@@ -1303,14 +1303,14 @@ def import_cassation_rows(
     cases = data.get("cases", [])
     archive = load_json(config.JSON_ARCHIVE_PATH)
     archive_cases = archive.get("cases", [])
-    main_archive_count = len(archive_cases)
+    main_archive_snapshot = json.dumps(archive_cases, ensure_ascii=False, sort_keys=True)
     is_presidium = presidium_court_by_domain(court.domain) is not None
     region = get_region()
     # Кассация истцового дела переводит его из лёгкого трека в основной.
     # Загружаем полные документы вместе с events и сохраняем нетронутые
     # записи/метаданные. Президиум сохраняет прежний отдельный маршрут.
     bank_documents = []
-    if not is_presidium and config.BANK_TRACK:
+    if config.BANK_TRACK:
         for list_path, events_path, target in (
             (config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH, cases),
             (config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH,
@@ -1493,7 +1493,7 @@ def import_cassation_rows(
                 bank_updates.append((doc, list_path, events_path))
         data["cases"] = cases
         save_json(data, config.JSON_PATH)
-        if len(archive_cases) != main_archive_count:
+        if json.dumps(archive_cases, ensure_ascii=False, sort_keys=True) != main_archive_snapshot:
             # Воскрешение из архива по УИД/номеру — архив пересохраняем.
             archive["cases"] = archive_cases
             save_json(archive, config.JSON_ARCHIVE_PATH)

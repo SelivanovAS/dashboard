@@ -638,21 +638,21 @@ class TestShouldParseFiCard:
         assert uc.should_parse_fi_card(_c_role("first_instance", "Третье лицо"))
         assert uc.should_parse_fi_card(_c_role("cassation_pending", "Третье лицо"))
 
-    def test_awaiting_appeal_parsed_until_sent(self):
+    def test_awaiting_appeal_parsed_after_sent(self):
         assert uc.should_parse_fi_card(self._c("awaiting_appeal", {"case_number": "2-1/2025"}))
-        assert not uc.should_parse_fi_card(
+        assert uc.should_parse_fi_card(
             self._c("awaiting_appeal", {"case_number": "2-1/2025", "sent_to_appeal": True})
         )
-        assert not uc.should_parse_fi_card(
+        assert uc.should_parse_fi_card(
             self._c("awaiting_appeal", {"case_number": "2-1/2025", "sent_to_appeal_date": "01.05.2026"})
         )
 
-    def test_cassation_pending_parsed_until_sent(self):
+    def test_cassation_pending_parsed_after_sent(self):
         assert uc.should_parse_fi_card(self._c("cassation_pending", {"case_number": "2-1/2025"}))
-        assert not uc.should_parse_fi_card(
+        assert uc.should_parse_fi_card(
             self._c("cassation_pending", {"case_number": "2-1/2025", "sent_to_cassation": True})
         )
-        assert not uc.should_parse_fi_card(
+        assert uc.should_parse_fi_card(
             self._c("cassation_pending", {"case_number": "2-1/2025", "sent_to_cassation_date": "01.07.2026"})
         )
 
@@ -1255,7 +1255,7 @@ class TestMigrateStages:
     def test_cassation_watch_with_cass_filed_migrates_to_pending(self):
         cases = [{
             "current_stage": "cassation_watch",
-            "first_instance": {"cassation_filed_date": "01.05.2026"},
+            "first_instance": {"cassation_filed_date": _days_ago(20)},
             "appeal": {"hearing_date": _days_ago(45)},
         }]
         migrated = uc.migrate_stages(cases)
@@ -4230,32 +4230,16 @@ class TestBackfillFiLinks:
         assert cm_linking.backfill_fi_links(cases) == 1
         assert cases[0]["first_instance"]["link"] == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
 
-    def test_cassation_pending_sent_skipped_no_fetch(self, monkeypatch):
-        """После «направлено в кассацию» карточку 1-й инст. больше не парсим —
-        и ссылку не достраиваем."""
-        def boom(url, **kw):
-            raise AssertionError("fetch_page не должен вызываться")
-
-        monkeypatch.setattr(cm_linking, "fetch_page", boom)
-        cases = [self._case(stage="cassation_pending")]
-        cases[0]["first_instance"]["sent_to_cassation"] = True
-        assert cm_linking.backfill_fi_links(cases) == 0
-
-    def test_awaiting_appeal_backfilled_until_sent(self, monkeypatch):
-        monkeypatch.setattr(
-            cm_linking, "fetch_page",
-            lambda url, **kw: _fi_number_search_html("2-716/2025"),
-        )
-        cases = [self._case(stage="awaiting_appeal")]
-        assert cm_linking.backfill_fi_links(cases) == 1
-        cases2 = [self._case(stage="awaiting_appeal")]
-        cases2[0]["first_instance"]["sent_to_appeal_date"] = "01.05.2026"
-        # После направления в апелляцию — fetch не нужен (гейт закрыт).
-        monkeypatch.setattr(
-            cm_linking, "fetch_page",
-            lambda url, **kw: (_ for _ in ()).throw(AssertionError("не должен вызываться")),
-        )
-        assert cm_linking.backfill_fi_links(cases2) == 0
+    def test_sent_complaints_backfill_link_for_weekly_refresh(self, monkeypatch):
+        """Отправленные жалобы требуют дальнейшей недельной дочитки FI."""
+        monkeypatch.setattr(cm_linking, "fetch_page",
+                            lambda url, **kw: _fi_number_search_html("2-716/2025"))
+        for stage, sent in (("cassation_pending", "sent_to_cassation"),
+                            ("awaiting_appeal", "sent_to_appeal")):
+            cases = [self._case(stage=stage)]
+            cases[0]["first_instance"][sent] = True
+            assert cm_linking.backfill_fi_links(cases) == 1
+            assert cases[0]["first_instance"]["link"] == f"{_BF_CASE_ID}|{_BF_CASE_UID}"
 
     def test_not_found_in_results_leaves_empty(self, monkeypatch, caplog):
         monkeypatch.setattr(

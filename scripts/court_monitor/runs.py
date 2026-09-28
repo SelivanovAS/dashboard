@@ -319,14 +319,19 @@ def relink_awaiting_appeal(
 
     Возвращает число дослинкованных дел.
     """
+    from court_monitor.complaints import complaint_state, verification_due, record_verification
     candidates = []
     for c in cases:
-        if c.get("current_stage") != "awaiting_appeal":
+        stage = c.get("current_stage")
+        if stage != "awaiting_appeal" and not (
+                stage == "first_instance" and complaint_state(c, "appeal")["state"] == "resolving"):
             continue
         fi = c.get("first_instance") or {}
-        if not fi.get("sent_to_appeal"):
+        if not (fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date")):
             continue
         if ((c.get("appeal") or {}).get("case_number") or "").strip():
+            continue
+        if not verification_due(c, "appeal", date.today()):
             continue
         candidates.append(c)
     if not candidates:
@@ -347,7 +352,7 @@ def relink_awaiting_appeal(
     gated_skipped = 0
     for c in candidates:
         fi = c.get("first_instance") or {}
-        fi_num = _bare_case_number(c.get("id") or "")
+        fi_num = _bare_case_number(fi.get("case_number") or c.get("id") or "")
         if not fi_num:
             continue
         ap_court = appeal_court_for_fi_domain(fi.get("court_domain") or "")
@@ -355,19 +360,27 @@ def relink_awaiting_appeal(
             gated_skipped += 1
             continue
         polite_delay()
+        search_url = ap_court.search_by_fi_number_url(fi_num)
+        links = [search_url]
         html = fetch_page(
-            ap_court.search_by_fi_number_url(fi_num),
+            search_url,
             context=f"дослинк апелляции {fi_num}",
         )
         if not html:
+            record_verification(c, "appeal", date.today(), success=False, links=links,
+                                error="Поиск суда недоступен")
             continue
         if is_no_data_page(html):
             log.info(
                 f"  {fi_num}: апелляция в {shorten_court_name(ap_court.name)} "
                 f"ещё не зарегистрирована"
             )
+            record_verification(c, "appeal", date.today(), success=False, links=links)
             continue
-        for nc in parse_search_page(html):
+        rows = parse_search_page(html)
+        error = "" if rows else "Ответ поиска не распознан или требует проверочный код"
+        matched = False
+        for nc in rows:
             ap_num = nc.get("Номер дела", "")
             if not ap_num or ap_num in csv_existing:
                 continue  # уже отслеживается — свяжет обычный link_cases
@@ -379,10 +392,12 @@ def relink_awaiting_appeal(
             if not (cid and cuid):
                 continue
             polite_delay()
+            links.append(ap_court.card_url(cid, cuid))
             card_html = fetch_card_checked(
                 ap_court.card_url(cid, cuid), context=ap_num
             )
             if not card_html:
+                error = "Карточка найденной апелляции не прочитана"
                 continue
             card_info = parse_case_card(card_html, ap_court.base_url)
             card_fi = _enrich_appeal_row_from_card(nc, card_info)
@@ -395,11 +410,14 @@ def relink_awaiting_appeal(
             appeal_new_cases_csv.append(nc)
             csv_existing.add(ap_num)
             found += 1
+            matched = True
             log.info(
                 f"  {fi_num} → {ap_num} "
                 f"({shorten_court_name(ap_court.name)}): дослинковано"
             )
             break
+        record_verification(c, "appeal", date.today(), success=matched,
+                            links=links, error=error if not matched else "")
     if gated_skipped:
         log.info(
             f"Дослинк апелляции: {gated_skipped} "
@@ -1977,7 +1995,7 @@ def announce_imported_presidium_cases(cases: list[dict]) -> list[dict]:
         if c.get("current_stage") != "cassation":
             continue
         imp = c.get("import")
-        if not isinstance(imp, dict) or imp.get("source") not in {"dump_presidium", "dump_cassation"}:
+        if not isinstance(imp, dict) or imp.get("source") not in {"dump_presidium", "dump_cassation", "targeted_presidium"}:
             continue
         if imp.get("announced"):
             continue
@@ -3071,6 +3089,14 @@ def main_json():
             cass_parsed += pres_stats.get("parsed", 0)
             timings["cassation"] += time.perf_counter() - pres_t0
 
+    # Точный поиск пропущенной карточки: УИД → номер 1-й инстанции + суд.
+    # Состояние и недельные интервалы лежат в самих делах обоих треков.
+    from court_monitor.cassation_lookup import lookup_missing_cassations
+    exact_changes, exact_stats = lookup_missing_cassations(cases, today)
+    cass_changes.extend(exact_changes)
+    cass_planned += exact_stats["planned"]
+    cass_parsed += exact_stats["parsed"]
+
     # ── 4d. Refresh кассации по cassation.link ──
     # Раздел 4c берёт только первую страницу выдачи 7kas — старые касс. дела
     # вытесняются и перестают обновляться. Этот раздел добивает «хвост»:
@@ -3953,8 +3979,8 @@ def main_json():
     # 4b. Первая инстанция: обновляем карточки 1-й инст. только для стадий,
     # где она активна — first_instance (стандартный мониторинг) и
     # cassation_watch (ищем касс. жалобу после апел. определения).
-    # awaiting_appeal / appeal / cassation_pending — парсинг 1-й инст.
-    # не нужен (см. advance_case_stage).
+    # awaiting_appeal / cassation_pending дочитываются до нахождения
+    # вышестоящей карточки, после отправки жалобы — раз в неделю.
     log_phase(6, 9, "Обновление карточек 1-й инстанции")
     t0 = time.perf_counter()
     # Бэкфилл ссылок на карточку 1-й инст. для дел, пришедших «сверху» (через
@@ -4038,6 +4064,7 @@ def main_json():
     fi_plan_skip = 0
     fi_plan_no_card = 0
     fi_plan_writ_weekly = 0
+    fi_plan_complaint_weekly = 0
     fi_plan_checked_today = 0
     for _c in fi_active:
         _fi_b = _c.get("first_instance", {})
@@ -4055,6 +4082,8 @@ def main_json():
             if _plan_reason.startswith(
                     ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 fi_plan_writ_weekly += 1
+            elif _plan_reason == "complaint_weekly":
+                fi_plan_complaint_weekly += 1
             elif _plan_reason == "checked_today":
                 # Дочитка слотов: прочитанное сегодня — не «заседание в
                 # будущем», а уже сделанная работа утра.
@@ -4062,13 +4091,15 @@ def main_json():
             else:
                 fi_plan_skip += 1
     fi_plan_parse = (len(fi_active) - fi_plan_skip - fi_plan_writ_weekly
-                     - fi_plan_checked_today - fi_plan_no_card)
+                     - fi_plan_complaint_weekly - fi_plan_checked_today - fi_plan_no_card)
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
     # «Всего» включает и дела «третье лицо» в cassation_watch — предикат
     # should_parse_fi_card их не пускает в очередь, но юристу они видны
     # как часть общей арифметики, а не отдельной строкой.
     fi_plan_total = len(fi_active) + len(fi_third_party_watch)
     _plan_notes = []
+    if fi_plan_complaint_weekly:
+        _plan_notes.append(f"{fi_plan_complaint_weekly} направленные жалобы — недельный ритм")
     if fi_plan_skip:
         _plan_notes.append(f"{fi_plan_skip} отложено — заседание в будущем")
     if fi_plan_writ_weekly:
@@ -4098,6 +4129,7 @@ def main_json():
     fi_skipped_future = 0
     fi_skipped_suspended = 0
     fi_skipped_writ_weekly = 0
+    fi_skipped_complaint_weekly = 0
     fi_skipped_checked_today = 0
     fi_skipped_breaker = 0
     fi_breaker_hosts: set[str] = set()
@@ -4182,6 +4214,8 @@ def main_json():
                 # Недельный ритм исков банка — не «без движения»
                 # (см. одноимённое слагаемое в плане очереди выше).
                 fi_skipped_writ_weekly += 1
+            elif reason == "complaint_weekly":
+                fi_skipped_complaint_weekly += 1
             elif reason == "checked_today":
                 # Дочитка слотов — прочитанное утром не «без движения».
                 fi_skipped_checked_today += 1
@@ -5446,6 +5480,15 @@ def main_json():
             change["details"]["sent_to_cassation_date"] = sent_date
             changed = True
 
+        from court_monitor.lifecycle import fi_termination_date
+        from court_monitor.complaints import stamp_complaint_tracking
+        terminated_at = fi_termination_date(fi, card_info.get("Дата рассмотрения (карточка)", ""))
+        if terminated_at and fi.get("termination_date") != terminated_at:
+            fi["termination_date"] = terminated_at
+            changed = True
+        if stamp_complaint_tracking(case_j):
+            changed = True
+
         # Эхо-фильтр дайджеста: если вышестоящая карточка уже связана,
         # «догоняющие» события 1-й инст. (жалобы, решение, акты, статусы)
         # юристу не шлём — он всё это знает из апел./касс. карточки. Флаги
@@ -5496,12 +5539,35 @@ def main_json():
     fi_queue.checkpoint()
 
     timings["fi_update"] = time.perf_counter() - t0
+    # Новые сведения о завершении жалобы обнаружены при чтении FI ниже
+    # обычного поиска инстанций. Уточняем в этом же прогоне; сохранённый
+    # next_attempt_at исключает повтор без новых судебных сведений.
+    late_changes, late_stats = lookup_missing_cassations(cases, today)
+    cass_changes.extend(late_changes)
+    cass_planned += late_stats["planned"]
+    cass_parsed += late_stats["parsed"]
+    telemetry.set_coverage(
+        "cassation_search", cass_parsed, cass_planned,
+        processed=cass_eligible + exact_stats["planned"] + late_stats["planned"],
+        breaker_skipped=cass_skipped_breaker,
+    )
+    # Аналогично для завершённой апелляционной жалобы: новые сведения FI
+    # уточняются сразу. Эти строки ещё успеют пройти обычные CSV/JSON и
+    # link_cases ниже; ранние результаты поиска в CSV повторно не добавляем.
+    late_appeal_start = len(appeal_new_cases_csv)
+    relink_awaiting_appeal(
+        cases, csv_existing, appeal_new_cases_csv, appeal_fi_numbers,
+        skip_domains=appeal_search_gated_now,
+    )
+    csv_cases = appeal_new_cases_csv[late_appeal_start:] + csv_cases
     # Знаменатель итога — план (fi_plan_parse), в тех же единицах, что
     # строки «парсим Y» и «проверено X из Y»; скипы — пояснением в скобках.
     fi_total = fi_plan_parse
     fi_skip_total = (fi_skipped_future + fi_skipped_suspended
-                     + fi_skipped_writ_weekly + fi_skipped_checked_today)
+                     + fi_skipped_writ_weekly + fi_skipped_complaint_weekly + fi_skipped_checked_today)
     _fi_sum_parts = []
+    if fi_skipped_complaint_weekly:
+        _fi_sum_parts.append(f"{fi_skipped_complaint_weekly} направленных жалоб — недельный ритм")
     if fi_skipped_future:
         _fi_sum_parts.append(f"{fi_skipped_future} отложено — заседание в будущем")
     if fi_skipped_writ_weekly:

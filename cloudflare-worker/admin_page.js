@@ -72,6 +72,7 @@ export function renderAdminHtml(secret, role, cfg) {
         <div class="fold-body">
       <div class="imp-hint" style="margin-bottom:8px;">По одному делу в строке, до 20 за раз:
         номер дела («2-1234/2026») или ссылка на карточку дела с сайта суда.
+        Поступившие дела президиума также можно добавить по ссылке на карточку.
         Для судов с проверочным кодом работает только ссылка: откройте дело в
         браузере (код решается один раз) и скопируйте адрес карточки.</div>
       <textarea id="ac-input" rows="4" spellcheck="false"
@@ -5025,9 +5026,9 @@ function acCheckLink(url) {
   var pres = acRegion.presidium_courts || [];
   for (i = 0; i < pres.length; i++) {
     if ((pres[i].domain || "").toLowerCase() === host
-        && /[?&]delo_id=2800001/.test(u.search)) {
-      return "это карточка президиума (кассация по делу мирового судьи) — такие дела "
-        + "заводятся дампом выдачи раздела «Кассация» в секции «Импорт»";
+        && u.searchParams.get("delo_id") === String(pres[i].delo_id || 2800001)) {
+      if (!u.searchParams.get("case_uid")) return "в ссылке нет case_uid — скопируйте полный адрес карточки";
+      return "";
     }
   }
   var appeals = acRegion.appeal_courts || [];
