@@ -1631,7 +1631,7 @@ def _alert_llm_summary_failures() -> None:
         saved_claude = config.METRICS.get(
             "llm_summary_provider_fallback_saved", 0)
         line = (
-            f"пересказы мотивировок: сбоев {failed} из {calls} "
+            f"неудачных пересказов: {failed}; вызовов моделей: {calls} "
             f"— в дайджест ушёл сырой текст акта"
         )
         if saved:

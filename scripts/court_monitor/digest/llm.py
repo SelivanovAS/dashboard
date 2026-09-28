@@ -479,15 +479,40 @@ def _call_openrouter_chat(
         )
         r.raise_for_status()
         data = r.json()
+        if not isinstance(data, dict):
+            raise ValueError("некорректный формат ответа: ожидался JSON-объект")
         choices = data.get("choices") or []
         if not choices:
             # Молчать нельзя: без лога такой сбой в прогоне неотличим от
             # «модель ответила пусто» уровнем выше.
             log.warning(f"OpenRouter API ({model_id}): пустой список choices в ответе")
             return None
-        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
+        if not isinstance(choices, list) or not isinstance(choices[0], dict):
+            raise ValueError("некорректный формат choices в ответе")
+        choice = choices[0]
+        message = choice.get("message")
+        if message is None:
+            message = {}
+        if not isinstance(message, dict):
+            raise ValueError("некорректный формат message в ответе")
+        content = message.get("content")
+        if content is not None and not isinstance(content, str):
+            raise ValueError("некорректный тип content в ответе")
+        # content=null допустим в API. Это неудачная попытка, после которой
+        # нужны обычные повторы/резерв, а не AttributeError мимо всей цепочки.
+        text = (content or "").strip()
         if not text:
-            log.warning(f"OpenRouter API ({model_id}): пустой content в ответе модели")
+            usage = data.get("usage")
+            usage = usage if isinstance(usage, dict) else {}
+            details = usage.get("completion_tokens_details")
+            details = details if isinstance(details, dict) else {}
+            # Только служебные поля: текста акта/рассуждений в логе нет.
+            log.warning(
+                f"OpenRouter API ({model_id}): пустой content в ответе модели; "
+                f"id={data.get('id')!r}, finish_reason={choice.get('finish_reason')!r}, "
+                f"completion_tokens={usage.get('completion_tokens')}, "
+                f"reasoning_tokens={details.get('reasoning_tokens')}"
+            )
             return None
         return text
     except requests.HTTPError as e:
@@ -497,7 +522,7 @@ def _call_openrouter_chat(
         return None
     except (requests.RequestException, KeyError, ValueError,
             json.JSONDecodeError) as e:
-        log.warning(f"OpenRouter API: {e}")
+        log.warning(f"OpenRouter API ({model_id}): {e}")
         return None
 
 

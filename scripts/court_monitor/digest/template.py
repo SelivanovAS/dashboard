@@ -727,7 +727,10 @@ def _act_summary_or_excerpt_with_kind(
         try:
             summary = summarizer(text, case_meta=case_meta)
         except Exception as e:
-            log.warning(f"act_summarizer упал: {e}")
+            # Неожиданное исключение тоже означает потерянный пересказ:
+            # сторож качества должен его увидеть, хотя рендер продолжится.
+            config.METRICS["llm_summary_failed"] += 1
+            log.warning(f"act_summarizer упал: {e}", exc_info=True)
             summary = None
         if summary:
             return escape_html(summary), "summary"
