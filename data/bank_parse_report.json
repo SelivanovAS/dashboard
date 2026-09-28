@@ -901,12 +901,14 @@
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_hearing_new"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
-      "key": "kogalym--hmao.sudrf.ru|М-930/2026",
-      "number": "М-930/2026",
+      "key": "kogalym--hmao.sudrf.ru|2-1392/2026",
+      "number": "2-1392/2026",
       "court": "Когалымский городской суд",
       "court_domain": "kogalym--hmao.sudrf.ru",
       "case_status": "В производстве",
@@ -10723,5 +10725,5 @@
       "last_checked_at": "2026-09-25"
     }
   ],
-  "updated_at": "2026-09-28T07:39:33+05:00"
+  "updated_at": "2026-09-28T08:08:17+05:00"
 }

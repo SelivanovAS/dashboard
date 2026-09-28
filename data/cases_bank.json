@@ -1936,7 +1936,7 @@
       }
     },
     {
-      "id": "М-930/2026",
+      "id": "2-1392/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО \"Сбербанк\"",
       "defendant": "Токарь Елена Андреевна",
@@ -1944,24 +1944,26 @@
       "bank_role": "Истец",
       "notes": "",
       "first_instance": {
-        "case_number": "М-930/2026",
+        "case_number": "2-1392/2026",
         "court": "Когалымский городской суд",
         "court_domain": "kogalym--hmao.sudrf.ru",
         "judge": "Руденко Яна Александровна",
         "filing_date": "14.09.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Передача материалов судье. 15:08. 14.09.2026",
-        "event_date": "14.09.2026",
-        "hearing_date": "",
-        "hearing_time": "",
+        "last_event": "Предварительное судебное заседание. 11:00. 204. 28.09.2026",
+        "event_date": "19.01.2027",
+        "hearing_date": "19.01.2027",
+        "hearing_time": "11:00",
         "link": "282759663|6cfdb8a9-273a-4a5a-a3b9-c6926920d391",
         "act_published": false,
         "act_date": "",
         "judicial_uid": "86RS0008-01-2026-001892-60",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-28"
+        "last_checked_at": "2026-09-28",
+        "material_number": "М-930/2026",
+        "accepted_pending_emit": false
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -25575,5 +25577,5 @@
       }
     }
   ],
-  "updated_at": "2026-09-28T07:39:33+05:00"
+  "updated_at": "2026-09-28T08:08:17+05:00"
 }
