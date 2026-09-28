@@ -166,6 +166,17 @@ ROW = ("33-9001/2026", "777888", "aaaa1111-bbbb-cccc-dddd-eeee22223333",
 
 
 class TestRelinkAwaitingAppeal:
+    def test_new_completion_is_searched_before_stage_transition(self, net):
+        n = net(NO_DATA_HTML)
+        c = _awaiting_case('2-500/2026', current_stage='first_instance')
+        c['first_instance']['appeal_events'] = [
+            {'date':'01.07.2026','text':'Дата рассмотрения жалобы'}]
+        assert cm_runs.relink_awaiting_appeal([c], set(), [], {}) == 0
+        assert c['complaint_tracking']['appeal']['verification']['attempts'] == 1
+        before = len(n.search_urls)
+        cm_runs.relink_awaiting_appeal([c], set(), [], {})
+        assert len(n.search_urls) == before
+
     def test_happy_path_links_via_standard_route(self, net):
         n = net(_search_html([ROW]), card_fi="2-500/2026")
         cases = [_awaiting_case("2-500/2026")]
@@ -223,6 +234,7 @@ class TestRelinkAwaitingAppeal:
         n = net(_search_html([ROW]), card_fi="2-500/2026")
         not_sent = _awaiting_case("2-1/2026")
         not_sent["first_instance"]["sent_to_appeal"] = False
+        not_sent["first_instance"]["sent_to_appeal_date"] = ""
         wrong_stage = _awaiting_case("2-2/2026", current_stage="first_instance")
         has_appeal = _awaiting_case("2-3/2026")
         has_appeal["appeal"] = {"case_number": "33-1/2026", "events": []}

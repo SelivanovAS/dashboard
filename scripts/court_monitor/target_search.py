@@ -137,4 +137,6 @@ def build_json_entry(fi_row: dict, card_info: dict) -> dict:
     uid_card = (card_info.get("УИД") or "").strip()
     if uid_card:
         entry["first_instance"]["judicial_uid"] = uid_card
+    if card_info.get("_fi_termination_date"):
+        entry["first_instance"]["termination_date"] = card_info["_fi_termination_date"]
     return entry

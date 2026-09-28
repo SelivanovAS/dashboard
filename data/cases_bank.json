@@ -2,6 +2,7 @@
   "version": 1,
   "track": "plaintiff_light",
   "archived_count": 90,
+  "updated_at": "2026-09-28T10:27:00+05:00",
   "cases": [
     {
       "id": "М-8733/2026",
@@ -7519,7 +7520,8 @@
             "date": "23.07.2026",
             "text": "Регистрация жалобы (представления) в суде",
             "name": "Регистрация жалобы (представления) в суде",
-            "posted_at": "27.07.2026"
+            "posted_at": "27.07.2026",
+            "complaint_id": "1*"
           }
         ],
         "default_cancellation": {
@@ -7541,7 +7543,29 @@
         "source": "auto_search",
         "announced": true
       },
-      "track": "plaintiff_light"
+      "track": "plaintiff_light",
+      "complaint_tracking": {
+        "appeal": {
+          "state": "historical",
+          "episodes": [
+            {
+              "id": "1*",
+              "filed_date": "23.07.2026",
+              "sent_date": "",
+              "completed_date": "",
+              "completion_source": "decision",
+              "withdrawn": false,
+              "state": "historical"
+            }
+          ],
+          "evidence_key": "89cd04b3392d1919d0a2"
+        },
+        "cassation": {
+          "state": "none",
+          "episodes": [],
+          "evidence_key": "159c690b158020cef445"
+        }
+      }
     },
     {
       "id": "2-8869/2026",
@@ -25576,6 +25600,5 @@
         "announced": true
       }
     }
-  ],
-  "updated_at": "2026-09-28T08:38:30+05:00"
+  ]
 }

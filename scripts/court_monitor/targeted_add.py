@@ -30,6 +30,7 @@ import glob
 import os
 import re
 import urllib.parse
+from copy import deepcopy
 
 from court_monitor import config
 from court_monitor.bank_intake import card_rejects, entry_is_spent, make_bank_entry
@@ -155,6 +156,13 @@ def resolve_link_target(link: dict) -> tuple[CourtConfig | None, str]:
     """
     region = get_region()
     domain = (link.get("domain") or "").lower()
+    for pres in region.presidium_courts:
+        if canon_sudrf_domain(pres.domain) == canon_sudrf_domain(domain) and link.get("delo_id") == pres.delo_id:
+            if not (link.get("case_id") and link.get("case_uid")) or link.get("name_op") != "case":
+                return None, "откройте саму карточку президиума и скопируйте полный адрес (case_id/case_uid)"
+            if link.get("srv_num") not in (None, pres.srv_num):
+                return None, "площадка суда в ссылке не совпадает с реестром региона"
+            return pres, ""
     for ac in region.appeal_courts:
         if ac.domain.lower() == domain:
             return None, (
@@ -468,6 +476,8 @@ def build_main_entry(
     uid_card = ((card_info or {}).get("УИД") or "").strip()
     if uid_card:
         entry["first_instance"]["judicial_uid"] = uid_card
+    if (card_info or {}).get("_fi_termination_date"):
+        entry["first_instance"]["termination_date"] = card_info["_fi_termination_date"]
     entry["import"] = {"operator": operator, "at": now_iso, "source": "targeted"}
     return entry
 
@@ -554,6 +564,64 @@ def _item(status: str, line: str, *, case_number: str = "",
             "court": court, "court_domain": court_domain}
 
 
+def _process_presidium(state, html, link, court, operator, now_iso):
+    from court_monitor.parsing.cassation import parse_cassation_card
+    from court_monitor.linking import link_cassation_cases, _cass_key
+    from court_monitor.complaints import stamp_complaint_tracking
+
+    info = parse_cassation_card(html, court.base_url)
+    if not info or not re.fullmatch(r"4[Гг]-\d+/\d{4}", info.get("page_case_number", "")):
+        return _item(ST_REFUSED, "[REFUSED] не подтверждён номер гражданского производства президиума")
+    if not info.get("sber_present"):
+        return _item(ST_REFUSED, "[REFUSED] в участниках карточки нет ПАО Сбербанк")
+    num = info["page_case_number"]
+    info.update(court_domain=court.domain, cassation_internal_number=num,
+                link=f"{link['case_id']}|{link['case_uid']}")
+    key = _cass_key(court.domain, num)
+    for source, cases in _sources(state):
+        for case in cases:
+            blocks = [case.get("cassation") or {}] + [h.get("cassation") or {} for h in case.get("history") or []]
+            if any(_cass_key(b.get("court_domain"), b.get("case_number")) == key for b in blocks):
+                return _item(ST_ALREADY, f"[ALREADY] {num} — уже есть в картотеке", case_number=num)
+    # Все треки участвуют в дедупе и связке; объекты остаются в своих
+    # документах. Новые производства президиума идут в основной каталог.
+    sources = _sources(state)
+    snapshots = {source: deepcopy(cases) for source, cases in sources}
+    all_cases = [c for source, cases in sources if source.startswith("active_") for c in cases]
+    archive = [c for source, cases in sources if not source.startswith("active_") for c in cases]
+    before = {id(c) for c in all_cases}
+    _, changes, discovered = link_cassation_cases(all_cases, [info], archive, record_delivery=False)
+    if info.get("_link_status") == "needs_review":
+        return _item(ST_NEEDS_REVIEW, f"[NEEDS REVIEW] {num} — нужна проверка суда и связки")
+    active_ids = {id(c) for c in all_cases}
+    for source, cases in sources:
+        for c in list(cases):
+            if source == "active_main" or id(c) not in active_ids:
+                continue
+            block = c.get("cassation") or {}
+            if _cass_key(block.get("court_domain"), block.get("case_number")) == key:
+                cases.remove(c)
+                if c.pop("track", None) == "plaintiff_light":
+                    c["track_origin"] = "plaintiff_light"
+                    fi = c.get("first_instance") or {}
+                    fi.pop("legal_force_est", None)
+                    fi.pop("writ_awaited_since", None)
+                state["main"].setdefault("cases", []).append(c)
+        if cases != snapshots[source]:
+            state["dirty"].add({"active_main": "main", "active_bank": "bank"}.get(source, source))
+    for case in discovered:
+        if id(case) not in before:
+            case["import"] = {"source": "targeted_presidium", "operator": operator,
+                              "imported_at": now_iso, "announced": False}
+            stamp_complaint_tracking(case)
+            state["main"].setdefault("cases", []).append(case)
+    state["dirty"].add("main")
+    if not discovered and changes:
+        state["main"].setdefault("pending_cassation_changes", []).extend(changes)
+    return _item(ST_ADDED_MAIN, f"[ADDED PRESIDIUM] {num} — принято, карточка будет проверяться автоматически",
+                 case_number=num, court=court.name, court_domain=court.domain)
+
+
 def process_item(
     state: dict, raw: str, operator: str, now_iso: str,
     court_override: CourtConfig | None = None,
@@ -589,6 +657,8 @@ def process_item(
                 f"[FETCH FAIL] {value[:80]} — карточка дела не открылась "
                 "(проверочный код или суд недоступен) — повторите позже"
             ), court=court.name, court_domain=court.domain)
+        if court in get_region().presidium_courts:
+            return _process_presidium(state, card_html, link, court, operator, now_iso)
         card_info = parse_case_card(card_html, court.base_url)
         row, reason = link_row_from_card(card_info, link, court)
         if row is None:

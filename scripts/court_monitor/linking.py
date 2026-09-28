@@ -595,6 +595,35 @@ def reactivate_bank_archived(
     return len(moved)
 
 
+def retain_historical_cassation(case: dict, block: dict) -> bool:
+    """Дочитанная кассация прежнего рассмотрения не заменяет новую апелляцию.
+
+    Вызывается после проверки суда и идентичности. История пополняется без
+    событий доставки и без сброса текущих блоков/номера раунда.
+    """
+    ap = case.get("appeal") or {}
+    anchor = parse_date(ap.get("filing_date") or ap.get("hearing_date") or "")
+    ended = parse_date(block.get("decision_date") or "")
+    received = parse_date(block.get("filing_date") or "")
+    # Даже без результата карточка, поступившая до нового апелляционного
+    # производства, относится к прежнему акту. Её дочитка не откатывает
+    # текущую апелляцию; незавершённая жалоба остаётся на проверке.
+    if not (anchor and ((received and received < anchor)
+                        or (ended and ended < anchor))):
+        return False
+    key = _cass_key(block.get("court_domain"), block.get("case_number"))
+    history = case.setdefault("history", [])
+    for record in history:
+        prior = record.get("cassation") or {}
+        if _cass_key(prior.get("court_domain"), prior.get("case_number")) == key:
+            # Дочитка может принести акт; пустые поля не стирают известные.
+            prior.update({k: v for k, v in block.items() if v not in (None, "", [], False)})
+            return True
+    history.append({"reason": "historical_cassation_recovered",
+                    "cassation": deepcopy(block)})
+    return True
+
+
 def _cassation_card_to_block(info: dict) -> dict:
     """Сконвертировать результат parse_cassation_card в JSON-блок cassation
     (схема описана в плане; см. case["cassation"]). Включает производный
@@ -674,6 +703,7 @@ def _cassation_card_to_block(info: dict) -> dict:
         "appellant_is_bank": appellant_is_bank,
         "appellant_status": cassator_status,
         "review_result": info.get("review_result", ""),
+        "review_date": info.get("review_date", ""),
         "suspended_until": suspended_until,
         "hearing_date": info.get("hearing_date", ""),
         "hearing_time": info.get("hearing_time", ""),
@@ -717,6 +747,7 @@ def link_cassation_cases(
     archived_cases: list[dict] | None = None,
     *,
     snapshot_discovered: bool = False,
+    record_delivery: bool = True,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
     создать новые (discovery), если 1-инст. номера нет в БД.
@@ -944,16 +975,18 @@ def link_cassation_cases(
 
     for info in cass_finds:
         fi_num = (info.get("fi_case_number") or "").strip()
-        if not fi_num:
+        presidium = is_presidium_find(info)
+        if not fi_num and not (presidium and info.get("sber_present")
+                and info.get("link") and (info.get("cassation_internal_number")
+                                         or info.get("page_case_number"))):
             log.warning(
                 f"7kas: пропуск без fi_case_number — "
                 f"{info.get('cassation_internal_number') or '?'}"
             )
             continue
         cass_block = _cassation_card_to_block(info)
-        # Президиум облсуда: 1-я инстанция — мировой судья, которого в базе
-        # быть не может → матч по FI-номеру всегда ложный, только (домен,
-        # номер) и УИД.
+        # Раздел президиума не определяет вид нижестоящего суда: мировой
+        # подтверждается самой карточкой. Для него номер без суда не якорь.
         presidium = is_presidium_find(info)
         # Первичный матч — по стабильному `8Г-...`/`4Г-…` (пара с доменом).
         # Сначала пробуем сматчить по нему, и только если касс. карточка
@@ -978,7 +1011,7 @@ def link_cassation_cases(
                 if uid:
                     arch_i = arch_uid_index.get(uid)
         ambiguous = False
-        if idx is None and arch_i is None and not presidium:
+        if idx is None and arch_i is None and not info.get("fi_magistrate"):
             idx, ambiguous = _number_match(fi_index, cases, info, fi_num)
             arch_i, arch_ambiguous = _number_match(
                 arch_fi_index, archived_cases or [], info, fi_num,
@@ -994,11 +1027,15 @@ def link_cassation_cases(
                     log.warning("Кассация %s: суд/УИД противоречат архивной записи %s; нужна проверка связки",
                                 cass_int_num, arch_case.get("id"))
                     continue
+                if retain_historical_cassation(arch_case, cass_block):
+                    info["_link_status"] = "historical"
+                    continue
                 arch_past = {
-                    ((h.get("cassation") or {}).get("case_number") or "").strip()
+                    _cass_key((h.get("cassation") or {}).get("court_domain"),
+                              (h.get("cassation") or {}).get("case_number"))
                     for h in (arch_case.get("history") or [])
                 } - {""}
-                if cass_int_num and cass_int_num in arch_past:
+                if cass_key and cass_key in arch_past:
                     # Карточка прошлого круга архивного дела — не трогаем.
                     log.debug(
                         f"  7kas: {cass_int_num} — прошлый круг архивного "
@@ -1034,6 +1071,9 @@ def link_cassation_cases(
                             cass_int_num, case.get("id"))
                 continue
             old_cass = case.get("cassation") or {}
+            if retain_historical_cassation(case, cass_block):
+                info["_link_status"] = "historical"
+                continue
             # ── Защита от «воскрешения» прошлого круга ──
             # После cassation_remanded → re-link (снимок блоков в history,
             # round+1) старая карточка 7kas ещё месяцами висит в выдаче
@@ -1043,11 +1083,12 @@ def link_cassation_cases(
             # awaiting_relink → повторный snapshot (round растёт на каждом
             # прогоне). Карточки, чей 8Г-номер уже лежит в history, — прошлый
             # круг: пропускаем.
-            past_cass_nums = {
-                ((h.get("cassation") or {}).get("case_number") or "").strip()
+            past_cass_keys = {
+                _cass_key((h.get("cassation") or {}).get("court_domain"),
+                          (h.get("cassation") or {}).get("case_number"))
                 for h in (case.get("history") or [])
             } - {""}
-            if cass_int_num and cass_int_num in past_cass_nums:
+            if cass_key and cass_key in past_cass_keys:
                 log.debug(
                     f"  7kas: {cass_int_num} — карточка прошлого круга дела "
                     f"{fi_num} (round={case.get('round', 1)}), пропуск"
@@ -1087,7 +1128,7 @@ def link_cassation_cases(
             # advance_case_stage.
             if (old_cass.get("case_number") or "").strip() in ("", cass_int_num):
                 _restored: list[str] = []
-                for _k in ("outcome", "remanded_to", "review_result",
+                for _k in ("outcome", "remanded_to", "review_result", "review_date",
                            "result_text", "result_for_appeal", "decision_date"):
                     if (not (cass_block.get(_k) or "").strip()
                             and (old_cass.get(_k) or "").strip()):
@@ -1105,6 +1146,12 @@ def link_cassation_cases(
                         f"  7kas: {fi_num} — терминальные поля восстановлены "
                         f"после деградировавшего парса: {', '.join(_restored)}"
                     )
+            if (old_cass.get("case_number") and old_outcome
+                    and _cass_key(old_cass.get("court_domain"), old_cass["case_number"]) != cass_key):
+                # Результат отдельной предыдущей жалобы нужен для вычисления
+                # её состояния и после поступления следующего производства.
+                from court_monitor.complaints import remember_cassation_resolution
+                remember_cassation_resolution(case, old_cass, case.get("id", ""))
             case["cassation"] = cass_block
             # ── Бэкфилл сторон из УЧАСТНИКОВ карточки 7kas ──
             # Дела, заведённые discovery'ем до расширения разбора ролей (или с
@@ -1275,7 +1322,7 @@ def link_cassation_cases(
             # (решение юриста 04.09.2026, как у дел из дампа апелляции без
             # известной 1-й инстанции); номер мирового судьи живёт в стабе
             # 1-й инст. с флагом magistrate — индексы дедупа его не берут.
-            magistrate = bool(presidium or info.get("fi_magistrate"))
+            magistrate = bool(info.get("fi_magistrate"))
             new_case = {
                 "id": cass_int_num if presidium and cass_int_num else fi_num,
                 "current_stage": "cassation",
@@ -1284,7 +1331,7 @@ def link_cassation_cases(
                 "category": cass_block["category"],
                 "bank_role": info.get("bank_role", ""),
                 "notes": (
-                    f"Найдено через дамп президиума ({cass_block['court']})"
+                    f"Добавлено по карточке президиума ({cass_block['court']})"
                     if presidium else f"Найдено через парсер кассации ({cass_block['court']})"
                 ),
                 "discovered_via_cassation": True,
@@ -1377,7 +1424,7 @@ def link_cassation_cases(
                 f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"
             )
 
-    if cass_acts_dirty:
+    if cass_acts_dirty and record_delivery:
         try:
             save_cassation_acts(digested_cass_acts)
         except OSError as e:

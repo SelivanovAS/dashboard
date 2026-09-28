@@ -557,6 +557,21 @@ def repair_cancelled_merges(cases: list[dict]) -> int:
     return n
 
 
+def fi_termination_date(fi: dict, card_date: str = "") -> str:
+    """Дата действующего процессуального завершения, не отправки/публикации."""
+    if (fi.get("status") or "") not in ("Решено", "Возвращено"):
+        return ""
+    found = classify_fi_termination(
+        fi.get("result", ""), fi.get("last_event", ""), fi.get("events") or [],
+    )
+    if not found:
+        return ""
+    for ev in reversed(fi.get("events") or []):
+        if ev.get("text") == found[2] and parse_date(ev.get("date") or ""):
+            return ev["date"]
+    return card_date if parse_date(card_date) else fi.get("termination_date", "")
+
+
 def fi_termination_details(fi: dict, bank_role: str) -> dict | None:
     """`details` события `fi_returned` для дайджеста — либо None.
 
@@ -1529,7 +1544,7 @@ def bank_writ_awaited(fi: dict) -> bool:
     return bank_writ_expected(fi) and not bank_writ_waived(fi)
 
 
-def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
+def _is_bank_track_archived(fi: dict, now: datetime, complaint_pending=None) -> bool:
     """Архивные окна лёгкого трека исков банка (ветка is_case_archived).
 
     Обычное FI_ARCHIVE_DAYS=60 от резолютивки здесь не годится: исполнительный
@@ -1558,8 +1573,11 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
       вступления в силу (фолбэк — hearing_date/event_date), иначе пул
       опрашивался бы вечно.
     """
-    if (fi.get("appeal_filed") or fi.get("appeal_filed_date")
-            or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
+    if complaint_pending is None:
+        from court_monitor.complaints import has_unresolved_complaint
+        complaint_pending = any(has_unresolved_complaint({"first_instance": fi}, k)
+                                for k in ("appeal", "cassation"))
+    if complaint_pending:
         return False
     # Заявление об отмене заочного решения на рассмотрении — держим дело в
     # активных до определения суда (решение юриста 03.08.2026): исход может
@@ -1592,7 +1610,8 @@ def _is_bank_track_archived(fi: dict, now: datetime) -> bool:
         # нет вовсе — без него дело осталось бы активным навсегда.
         if (fi_left_unconsidered(fi)
                 or classify_fi_termination(fi.get("result") or "", "", []) is not None):
-            anchor = (parse_date(fi.get("decision_date") or "")
+            anchor = (parse_date(fi_termination_date(fi))
+                      or parse_date(fi.get("decision_date") or "")
                       or parse_date(fi.get("hearing_date") or "")
                       or parse_date(fi.get("event_date") or ""))
             return bool(anchor) and (now - anchor).days > config.BANK_RETURNED_ARCHIVE_DAYS
@@ -1682,15 +1701,9 @@ def should_parse_fi_card(case: dict) -> bool:
       «догоняем» из cassation_watch либо воскрешение из архива). Решение
       юриста 13.07.2026: раннее предупреждение fi_cassation_filed для третьих
       лиц не стоит ежедневного парсинга 120-дневного окна.
-    - `awaiting_appeal`  — да, ПОКА дело не направлено в апелляцию: продолжаем
-      следить за карточкой 1-й инст. (промежуточные события, «направлено в
-      вышестоящую инстанцию»). После `sent_to_appeal` — ждём только появления
-      апел. карточки (её найдёт `link_cases`).
-    - `cassation_pending`— да, ПОКА дело не направлено в кассацию: следим за
-      карточкой 1-й инст. до «направлено в кассационный суд». После
-      `sent_to_cassation` — ждём только появления карточки на 7kas
-      (её найдёт `link_cassation_cases`). Роль банка здесь не проверяем:
-      жалоба уже подана, парсить осталось недолго.
+    - `awaiting_appeal` / `cassation_pending` — да до появления карточки
+      вышестоящего суда. После отправки жалобы — недельный интервал в
+      should_skip_case. Роль банка здесь не ограничивает проверку.
     - прочие стадии (`appeal`/`cassation`/`awaiting_relink`) — нет: там либо
       парсим карточку вышестоящего суда, либо ждём появления дела по номеру.
 
@@ -1707,10 +1720,10 @@ def should_parse_fi_card(case: dict) -> bool:
         return not bank_is_third_party(case)
     if stage == "first_instance":
         return True
-    if stage == "awaiting_appeal":
-        return not (fi.get("sent_to_appeal") or fi.get("sent_to_appeal_date"))
-    if stage == "cassation_pending":
-        return not (fi.get("sent_to_cassation") or fi.get("sent_to_cassation_date"))
+    if stage in ("awaiting_appeal", "cassation_pending"):
+        # Отправка не завершает мониторинг. Пока нет вышестоящей карточки,
+        # первую инстанцию дочитываем раз в неделю (should_skip_case).
+        return True
     return False
 
 
@@ -1973,9 +1986,11 @@ def advance_case_stage(case: dict) -> str | None:
     ap = case.get("appeal") or {}
     cs = case.get("cassation") or {}
     now = datetime.now()
+    from court_monitor.complaints import has_current_complaint, stamp_complaint_tracking
+    stamp_complaint_tracking(case)
 
     if stage == "first_instance":
-        if fi.get("appeal_filed_date"):
+        if has_current_complaint(case, "appeal"):
             # Иск банка в особом порядке отмены заочного решения стадию не
             # меняет: апелляционного хода у ответчика ещё нет (ст. 237 ч. 2).
             # ⚠️ Сужение до трека обязательно — код общий: банк-ОТВЕТЧИК с
@@ -1990,6 +2005,9 @@ def advance_case_stage(case: dict) -> str | None:
         return None
 
     if stage == "awaiting_appeal":
+        if not has_current_complaint(case, "appeal") and not ap.get("case_number"):
+            case["current_stage"] = "first_instance"
+            return "awaiting_appeal"
         return None  # переход в appeal — задача link_cases
 
     if stage == "appeal":
@@ -2008,25 +2026,25 @@ def advance_case_stage(case: dict) -> str | None:
         # поступления» — см. parse_case_card. Без этого дело зависает в
         # cassation_watch и через 120 дней уходит в архив с фактически
         # поданной жалобой (зеркало кейса 2-208/2026 по 1-й инст.).
-        if (fi.get("cassation_filed_date") or fi.get("sent_to_cassation_date")
-                or fi.get("cassation_filed") or fi.get("sent_to_cassation")):
+        if has_current_complaint(case, "cassation"):
             case["current_stage"] = "cassation_pending"
             case["cassation_pending_since"] = now.date().isoformat()
             return "cassation_watch"
         return None
 
     if stage == "cassation_pending":
+        if not has_current_complaint(case, "cassation") and not cs.get("case_number"):
+            case["current_stage"] = "cassation_watch"
+            return "cassation_pending"
         return None  # переход в cassation — задача link_cassation_cases
 
     if stage == "cassation":
         # Отменено и направлено на новое — переходим в awaiting_relink (ждём
         # появления новой карточки в нижестоящей инстанции). Архивации нет:
-        # это re-open того же дела на втором круге. ⚠️ Президиум облсуда
-        # (дела мировых судей, 04.09.2026): нижестоящих инстанций мы не
-        # мониторим — awaiting_relink повис бы навечно; remanded там идёт
-        # по общим окнам архива (is_case_archived).
+        # это re-open того же дела на втором круге. Исключение — явно
+        # подтверждённый мировой судья, которого система не мониторит.
         if (cs.get("outcome") == "cassation_remanded"
-                and not is_presidium_cassation(cs)):
+                and not (fi.get("magistrate") and is_presidium_cassation(cs))):
             case["current_stage"] = "awaiting_relink"
             return "cassation"
         return None
@@ -2054,24 +2072,30 @@ def is_case_archived(case: dict) -> bool:
     fi = case.get("first_instance") or {}
     ap = case.get("appeal") or {}
     cs = case.get("cassation") or {}
+    from court_monitor.complaints import complaint_state, has_current_complaint, has_unresolved_complaint
+    if any(complaint_state(case, k)["state"] == "resolving"
+           for k in ("appeal", "cassation")):
+        return False
 
     if stage == "first_instance":
         # Лёгкий трек исков банка — свои окна (ожидание исполнительного листа
         # дольше обычного 60-дневного окна, см. _is_bank_track_archived).
         if is_bank_plaintiff_track(case):
-            return _is_bank_track_archived(fi, now)
-        if fi.get("appeal_filed_date"):
-            return False
+            return _is_bank_track_archived(fi, now, any(
+                has_unresolved_complaint(case, k) for k in ("appeal", "cassation")))
         # Защита от потери даты: если флаг жалобы/кассации стоит, но дата
         # не извлечена (короткая вкладка, расхождение шаблонов sudrf) —
         # держим в активных, парсер next-cron вытащит дату из «ДВИЖЕНИЕ
         # ЖАЛОБЫ». См. кейс 2-208/2026: дело уходило в архив раньше, чем
         # парсер обнаруживал апел. жалобу.
-        if fi.get("appeal_filed") or fi.get("cassation_filed") or fi.get("sent_to_cassation"):
+        if any(has_unresolved_complaint(case, k) for k in ("appeal", "cassation")):
             return False
         status = fi.get("status", "").strip()
         if status not in ("Решено", "Возвращено"):
             return False
+        termination = parse_date(fi_termination_date(fi))
+        if termination:
+            return (now - termination).days > config.FI_ARCHIVE_DAYS
         if status == "Решено":
             # Окно по ГПК (с 04.09.2026): месяц на апел. жалобу от
             # МОТИВИРОВКИ + запас FI_APPEAL_GRACE_DAYS; без мотивировки в
@@ -2107,9 +2131,7 @@ def is_case_archived(case: dict) -> bool:
         # cassation_pending): при любом признаке касс. жалобы — даже флаге
         # без даты — из архива исключаем. Аналогична защите first_instance
         # от «флага без даты» выше.
-        if (fi.get("cassation_filed") or fi.get("sent_to_cassation")
-                or fi.get("cassation_filed_date")
-                or fi.get("sent_to_cassation_date")):
+        if has_unresolved_complaint(case, "cassation"):
             return False
         ap_hearing = parse_date(ap.get("hearing_date") or "")
         if ap_hearing and (now - ap_hearing).days > config.CASSATION_WATCH_DAYS:
@@ -2119,7 +2141,7 @@ def is_case_archived(case: dict) -> bool:
     if stage == "cassation":
         # Финальные исходы (не remanded) → можно архивировать.
         outcome = cs.get("outcome") or ""
-        if outcome == "cassation_remanded" and not is_presidium_cassation(cs):
+        if outcome == "cassation_remanded" and not (fi.get("magistrate") and is_presidium_cassation(cs)):
             return False  # ждём awaiting_relink, advance_case_stage переведёт.
         if outcome and outcome != "cassation_other":
             # Опубликован акт: 30 дней после act_date → архив.
@@ -2291,6 +2313,15 @@ def migrate_stages(cases: list[dict]) -> int:
     # advance_case_stage — стадию awaiting_appeal. Правила, а не список
     # номеров: миграция идемпотентна и отработает на территории Урала.
     repair_vacated_default_judgments(cases)
+    from court_monitor.complaints import stamp_complaint_tracking
+    for case in cases:
+        fi = case.get("first_instance") or {}
+        termination_date = fi_termination_date(fi)
+        if termination_date:
+            fi["termination_date"] = termination_date
+        elif fi.get("termination_date"):
+            fi.pop("termination_date", None)
+        stamp_complaint_tracking(case)
     # Дата проверки делам трека, заведённым до 14.08.2026 (карточку читал
     # импорт, а штампа не ставил) — иначе force-parse перебивает у них
     # smart-skip целиком. Идемпотентно: второй прогон уже не находит записей.
@@ -3130,16 +3161,22 @@ def should_skip_case(
     elif stage == "cassation":
         block = case_dict.get("cassation") or {}
     elif stage in ("awaiting_appeal", "cassation_pending"):
-        # Смарт-скипа у этих стадий нет ПО ПОСТРОЕНИЮ (карточку 1-й инст.
-        # читаем каждый прогон, ловим «направлено выше») — ветку ниже им
-        # давать нельзя: они начали бы скипаться по будущим датам. Но дочитку
-        # слотов (SKIP_CHECKED_TODAY) они уважать обязаны, иначе повторный
-        # слот перечитывает их первыми; штамп чтения живёт в блоке 1-й инст.
+        # До отправки читаем каждый прогон, после — раз в неделю. Будущие
+        # заседания FI ритм не меняют. Штамп чтения остаётся в блоке FI.
         if config.SKIP_CHECKED_TODAY:
             _fi_checked = str((case_dict.get("first_instance") or {})
                               .get("last_checked_at") or "")[:10]
             if _fi_checked == today.isoformat():
                 return True, "checked_today"
+        fi = case_dict.get("first_instance") or {}
+        kind = "appeal" if stage == "awaiting_appeal" else "cassation"
+        if fi.get("sent_to_" + kind) or fi.get("sent_to_" + kind + "_date"):
+            try:
+                checked = date.fromisoformat(str(fi.get("last_checked_at") or "")[:10])
+            except ValueError:
+                checked = None
+            if checked and (today - checked).days < 7:
+                return True, "complaint_weekly"
         return False, ""
     else:
         return False, ""
@@ -3277,6 +3314,8 @@ def skip_reason_ru(reason: str) -> str:
     как были — на них завязана логика подсчёта; переводим только при печати.
     Неизвестный код возвращается как есть.
     """
+    if reason == "complaint_weekly":
+        return "жалоба направлена, ждём вышестоящую карточку — опрос раз в 7 дней"
     m = re.match(r"future_hearing\((.+)\)$", reason)
     if m:
         return f"заседание {m.group(1)} ещё впереди"

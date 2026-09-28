@@ -295,6 +295,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         # добавлению по ссылке (targeted_add) — оно собирает запись из одной
         # карточки, без строки поисковой выдачи.
         "Дата поступления (карточка)": "",
+        "Дата рассмотрения (карточка)": "",
         "Категория (карточка)": "",
         "УИД": "",  # Уникальный идентификатор дела (86RS...) — сквозной мост 1-я инст. ↔ апел. ↔ касс.
         "act_text": "",  # Текст акта (для дайджеста, не сохраняется в CSV)
@@ -396,6 +397,9 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             label = cell_text(row[0]).strip()
             value = cell_text(row[-1]).strip()
             label_l = label.lower()
+            if label_l == "дата рассмотрения" and not info["Дата рассмотрения (карточка)"]:
+                if parse_date(value):
+                    info["Дата рассмотрения (карточка)"] = value
             # Матчим строго по лейблу первой ячейки: «Результат рассмотрения».
             # Ранее было `"результат" in row_text` — цеплялось за дисклеймер
             # sudrf («…набор значений полей «Результат рассмотрения»…»), который
@@ -715,6 +719,7 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
         if has_appeal_tab_marker:
             break
     current_kind: str | None = None  # "appeal" | "cassation"
+    complaint_id = ""
     for tbl in tables:
         # Карта колонок таблицы «ДВИЖЕНИЕ ЖАЛОБЫ» (Событие | Дата | Результат |
         # Основание | Примечание | Дата размещения). Нужна, чтобы разложить
@@ -733,8 +738,10 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             value = cell_text(row[-1]).strip() if len(row) >= 2 else ""
 
             # Новый блок «ЖАЛОБА № N» сбрасывает контекст вида.
-            if re.search(r'жалоба\s*№', row_lc):
+            complaint_heading = re.search(r'жалоба\s*№\s*([^\s<]+)', row_lc)
+            if complaint_heading:
                 current_kind = None
+                complaint_id = complaint_heading.group(1)
                 continue
             # Вид жалобы (представления) — определяет апелляцию vs кассацию.
             if "вид жалобы" in label or "вид жалобы" in row_lc[:40]:
@@ -759,29 +766,28 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             # Привязываем к маркеру вкладки и к contextual current_kind: для
             # касс. блока пишем в _fi_cassator_raw + _fi_cassation_filed.
             if has_appeal_tab_marker:
+                if label == "дата поступления жалобы":
+                    if value and parse_date(value):
+                        kind = current_kind or "appeal"
+                        info[f"_fi_{kind}_filed"] = True
+                        if not info[f"_fi_{kind}_filed_date"]:
+                            info[f"_fi_{kind}_filed_date"] = value
+                        event = {"date": value, "text": "Дата поступления жалобы",
+                                 **({"complaint_id": complaint_id} if complaint_id else {})}
+                        if event not in info[f"_fi_{kind}_events"]:
+                            info[f"_fi_{kind}_events"].append(event)
+                    continue
                 if current_kind == "cassation":
                     if label == "заявитель жалобы":
                         info["_fi_cassation_filed"] = True
                         if value and value.lower() != label and not info["_fi_cassator_raw"]:
                             info["_fi_cassator_raw"] = value
                         continue
-                    if label == "дата поступления жалобы":
-                        if value and parse_date(value):
-                            info["_fi_cassation_filed"] = True
-                            if not info["_fi_cassation_filed_date"]:
-                                info["_fi_cassation_filed_date"] = value
-                        continue
                 else:
                     if label == "заявитель жалобы":
                         info["_fi_appeal_filed"] = True
                         if value and value.lower() != label and not info["_fi_appellant_raw"]:
                             info["_fi_appellant_raw"] = value
-                        continue
-                    if label == "дата поступления жалобы":
-                        if value and parse_date(value):
-                            info["_fi_appeal_filed"] = True
-                            if not info["_fi_appeal_filed_date"]:
-                                info["_fi_appeal_filed_date"] = value
                         continue
 
             # События движения жалобы — нужна реальная дата (или дата
@@ -826,13 +832,15 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
             # Дедуп по (date, label) — заголовки таблиц / повторные строки.
             if not any(
                 e.get("date") == effective_date and e.get("text", "").startswith(event_label)
+                and e.get("complaint_id", "") == complaint_id
                 for e in events_list
             ):
                 # Колонки — рядом с прежним text (он не меняется: по нему
                 # дедуплицирует условие выше и _events_newly_match).
                 колонки_ж = _колонки_строки(row, карта_ж, ширина_ж)
                 events_list.append(
-                    {"date": effective_date, "text": event_text, **колонки_ж}
+                    {"date": effective_date, "text": event_text, **колонки_ж,
+                     **({"complaint_id": complaint_id} if complaint_id else {})}
                 )
 
             # Регистрация жалобы → дата подачи апел. или касс. жалобы.
@@ -1004,6 +1012,11 @@ def parse_case_card(html: str, court_base_url: str = "") -> dict:
     # update_active_cases) и `_appellant_fmt` в дайджесте. Апеллянт имеет
     # приоритет — кассатор берётся только когда апеллянта нет.
     info["_appellant_raw"] = info["_fi_appellant_raw"] or info["_fi_cassator_raw"]
+    from court_monitor.lifecycle import fi_termination_date
+    info["_fi_termination_date"] = fi_termination_date({
+        "status": info.get("Статус", ""), "result": info.get("Результат", ""),
+        "last_event": info.get("Последнее событие", ""), "events": info.get("_events") or [],
+    }, info.get("Дата рассмотрения (карточка)", ""))
 
     return info
 

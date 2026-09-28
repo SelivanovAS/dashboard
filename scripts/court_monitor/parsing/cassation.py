@@ -265,7 +265,7 @@ def classify_cassation_outcome(
     rev = (review_result or "").upper()
 
     # 1) Отказ в передаче — определяется по ЖАЛОБЫ.review_result.
-    if rev and "ОТКАЗАНО" in rev and "ПЕРЕДАЧ" in rev:
+    if rev and re.search(r"\bОТКАЗ(?:АНО)?\b", rev) and "ПЕРЕДАЧ" in rev:
         return "cassation_dismissed_no_transfer"
     # 2) Возврат / прекращение / отзыв.
     for kw in ("ВОЗВРАЩЕН", "ПРЕКРАЩЕН", "ОТОЗВАН"):
@@ -426,7 +426,7 @@ def cassation_review_label(review_result: str, outcome: str = "") -> str:
     rev = (review_result or "").upper()
     if not rev:
         return ""
-    if "ОТКАЗАНО" in rev and "ПЕРЕДАЧ" in rev:
+    if re.search(r"\bОТКАЗ(?:АНО)?\b", rev) and "ПЕРЕДАЧ" in rev:
         return "🚫 Отказ в передаче"
     if "ВОЗВРАЩЕН" in rev:
         return "🛑 Возвращено"
@@ -477,6 +477,7 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         "cassator": "",
         "cassator_status": "",
         "review_result": "",
+        "review_date": "",
         "suspended_until": "",
         "suspended_event_date": "",
         "participants": [],
@@ -510,7 +511,8 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             continue
         first_row_text = " ".join(cell_text(c) for c in tbl[0]).strip().upper()
         # ДЕЛО — детект по «УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР»
-        if "УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР" in first_row_text and "ДЕЛО" not in sections:
+        if ("УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР" in first_row_text
+                or first_row_text.startswith("ДАТА ПОСТУПЛЕНИЯ")) and "ДЕЛО" not in sections:
             sections["ДЕЛО"] = tbl
             continue
         for tag in (
@@ -632,12 +634,17 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         if len(data_row) >= 3:
             info["cassator_status"] = data_row[1]  # ИСТЕЦ/ОТВЕТЧИК
             info["cassator"] = data_row[2]
+        headers = [re.sub(r"\s+", " ", cell_text(c)).strip().lower()
+                   for c in zh_tbl[1]]
+        named = dict(zip(headers, data_row))
+        info["review_result"] = named.get("результат изучения жалобы", "")
+        info["review_date"] = named.get("дата вынесения определения по итогам изучения", "")
         # «Результат изучения» — последняя ячейка с непустым значением,
         # содержащим ключевые слова «возбуждено» / «отказано».
-        for c in reversed(data_row):
+        for c in ([] if info["review_result"] else reversed(data_row)):
             if c and any(
                 kw in c.upper()
-                for kw in ("ВОЗБУЖДЕНО", "ОТКАЗАНО", "ПЕРЕДАНО", "ВОЗВРАЩЕНО")
+                for kw in ("ВОЗБУЖДЕНО", "ОТКАЗ", "ПЕРЕДАНО", "ВОЗВРАЩЕНО")
             ):
                 info["review_result"] = c
                 break
@@ -646,18 +653,27 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
         #   data_row[6] = «Срок для устранения недостатков»
         # Слова «без движения» сидят в ЗАГОЛОВКЕ колонки, в данных — только
         # даты, поэтому regex-поиск по тексту не работает; читаем по индексу.
-        if len(data_row) > 5 and data_row[5]:
-            m_ev = _DATE_DDMMYYYY_RX.match(data_row[5])
+        suspended_date = named.get("дата опр. об оставл. жалобы без движения / напр. уведомления", "")
+        suspended_limit = named.get("срок для устранения недостатков", "")
+        if suspended_date:
+            m_ev = _DATE_DDMMYYYY_RX.match(suspended_date)
             if m_ev:
-                info["suspended_event_date"] = data_row[5]
-                if len(data_row) > 6 and data_row[6]:
-                    m_su = _DATE_DDMMYYYY_RX.match(data_row[6])
+                info["suspended_event_date"] = suspended_date
+                if suspended_limit:
+                    m_su = _DATE_DDMMYYYY_RX.match(suspended_limit)
                     if m_su:
-                        info["suspended_until"] = data_row[6]
+                        info["suspended_until"] = suspended_limit
                 # Если суда столбца «Срок для устранения недостатков» нет
                 # или он пуст — оставляем suspended_until="", а событие
                 # «Жалоба оставлена без движения» добавляется ниже только
                 # при наличии конкретного срока (см. блок hearings.append).
+
+    # Определение по изучению жалобы — самостоятельная дата. Дата передачи
+    # на изучение не завершает дело; отказ/возврат завершают без заседания.
+    if (not info["decision_date"] and parse_date(info["review_date"])
+            and classify_cassation_outcome("", "", info["review_result"])
+            in ("cassation_dismissed_no_transfer", "cassation_terminated")):
+        info["decision_date"] = info["review_date"]
 
     # ── Таблица УЧАСТНИКИ ────────────────────────────────────────────────
     uch_tbl = sections.get("УЧАСТНИКИ") or []

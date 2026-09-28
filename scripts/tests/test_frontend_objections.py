@@ -251,7 +251,7 @@ def test_fi_has_filed_appeal_counts_sent_to_appeal():
     src = _strip_comments(_app_js())
     m = re.search(r"const fiHasFiledAppeal=[^;]+;", src)
     assert m, "fiHasFiledAppeal в app.js не найдена."
-    assert "fiSentToAppeal" in m.group(0), (
+    assert "currentComplaintBlocksArchive(c)" in m.group(0) and "fiSentToAppeal" in _fn_src("currentComplaintBlocksArchive"), (
         "В fiHasFiledAppeal не учтён fiSentToAppeal — дело first_instance, "
         "физически ушедшее в облсуд, фронт заархивирует раньше времени."
     )

@@ -405,6 +405,7 @@ function hasHeldPriorMainHearing(events,newHearingIso){
 function normalizeResult(raw){
   if(!raw)return 'pending';
   const s=raw.toLowerCase().trim();
+  if(/отказ(?:ано)?\s+в\s+передаче/i.test(s))return 'no_transfer';
   if(s==='ожидается'||s==='')return 'pending';
   if(/оставлен\S?\s+без\s+изменен/i.test(s))return 'upheld';
   if(/отменен\S?\s+полностью|отменен\S?\s+с\s/i.test(s))return 'reversed';
@@ -505,7 +506,7 @@ function computeDetailedStatus(c){
   // Активное дело без будущей даты
   return 'awaiting';
 }
-const RESULT_LABELS={upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',transferred:'Передано по подсудности',pending:'Ожидается'};
+const RESULT_LABELS={no_transfer:'Отказ в передаче',upheld:'Оставлено без изменения',reversed:'Отменено',partial:'Изменено частично',returned:'Возвращено',dismissed:'Прекращено',withdrawn:'Снято с рассмотрения',unconsidered:'Оставлено без рассмотрения',transferred:'Передано по подсудности',pending:'Ожидается'};
 // Лейблы для 1-й инстанции: коды result (upheld/reversed/partial/...) переиспользуем,
 // чтобы getResultFavor работал без правок, но текст бейджа — из «языка карточки суда».
 // upheld в 1-й инст. = «отказано в иске», reversed = «иск удовлетворён».
@@ -524,7 +525,7 @@ const FI_RESULT_LABELS_SHORT={partial:'Удовл-но частично'};
 // рассмотрено / изъято / влилось / закрыто / наполовину»; правки 13.08.2026:
 // «—» у Прекращено смысла не нёс и выглядел дефисом перед словом, «⇥»
 // у Присоединено читался табуляцией, а «⊘» стоял сразу у двух исходов.
-const RESULT_ICONS={upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'⊠',withdrawn:'⊖',unconsidered:'⊘',merged:'⊕',transferred:'→',pending:'…'};
+const RESULT_ICONS={no_transfer:'⊘',upheld:'✓',reversed:'✕',partial:'◐',returned:'↩',dismissed:'⊠',withdrawn:'⊖',unconsidered:'⊘',merged:'⊕',transferred:'→',pending:'…'};
 const APPELLANT_MAP={'банк':'bank','сбербанк':'bank','пао сбербанк':'bank','иное лицо':'other','другая сторона':'other','ответчик':'other','истец':'other'};
 // Сторона по процессуальному статусу подателя жалобы: ИСТЕЦ→plaintiff
 // (соистец тоже), ОТВЕТЧИК→defendant; прокурор/заявитель/третье лицо
@@ -539,7 +540,7 @@ function appellantSideFromStatus(st){
 // в scripts/update_cases.py) → читаемые формулировки. Пустая строка =
 // карточка ещё в производстве (исход не вынесен).
 const CASS_RESULT_LABELS={
-  cassation_dismissed_no_transfer:'Отказ в передаче в коллегию',
+  cassation_dismissed_no_transfer:'Отказ в передаче',
   cassation_upheld:'Оставлено без изменения',
   cassation_modified:'Изменено',
   cassation_reversed:'Отменено',
@@ -583,6 +584,14 @@ function stageBadgeHtml(c){
 function pendingAppealBadge(c){
   if(!c)return '';
   const s=c.stage;
+  if(c.complaintTracking){
+    if(s==='cassation'||s==='awaiting_relink')return '';
+    const kinds=['first_instance','awaiting_appeal'].includes(s)?['appeal','cassation']:['cassation'];
+    const states=kinds.map(k=>(c.complaintTracking[k]||{}).state);
+    const label=states.includes('active')?'Обжалуется':states.includes('needs_review')?'Нужна проверка':states.includes('resolving')?'Результат уточняется':'';
+    return label?`<span class="badge badge-pending-appeal">${label}</span>`:'';
+  }
+  if(c._fi&&c._fi.default_cancellation&&c._fi.default_cancellation.outcome==='cancelled')return '';
   if(s==='first_instance'&&(c.fiAppealFiled||c.fiSentToAppeal||c.fiCassationFiled||c.fiSentToCassation))
     return '<span class="badge badge-pending-appeal">Обжалуется</span>';
   if(s==='awaiting_appeal')
@@ -592,6 +601,21 @@ function pendingAppealBadge(c){
   if(s==='cassation_pending')
     return '<span class="badge badge-pending-appeal">Обжалуется</span>';
   return '';
+}
+function currentComplaintBlocksArchive(c){
+  if(c.complaintTracking)return Object.entries(c.complaintTracking).some(([kind,x])=>
+    ['active','resolving','needs_review'].includes(x.state)||(kind==='cassation'&&
+    (x.episodes||[]).some(e=>e.state==='historical'&&!e.outcome&&!e.withdrawn)));
+  return !!(c.fiAppealFiled||c.fiSentToAppeal||c.fiCassationFiled||c.fiSentToCassation);
+}
+function complaintVerificationHtml(c){
+  if(!c.complaintTracking)return '';
+  return Object.entries(c.complaintTracking).filter(([,x])=>['resolving','needs_review'].includes(x.state)||(x.episodes||[]).some(e=>e.state==='resolving')||(x.resolved_cases||[]).length).map(([kind,x])=>{
+    const v=x.verification||{};
+    if(!['resolving','needs_review'].includes(x.state)&&!(x.episodes||[]).some(e=>e.state==='resolving'))return (x.resolved_cases||[]).map(r=>`<div class="drawer-freshness">Жалоба рассмотрена: ${escHtml(r.case_number)} · ${escHtml(CASS_RESULT_LABELS[r.outcome]||'')} · ${escHtml(r.decision_date)}${/^https:\/\/[^/]+\.sudrf\.ru\//i.test(r.url||'')?` · <a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer">Карточка суда</a>`:''}</div>`).join('');
+    const links=(v.links||[]).filter(u=>/^https:\/\/[^/]+\.sudrf\.ru\//i.test(u));
+    return `<div class="drawer-freshness"><b>${x.state==='needs_review'||v.attempts>=3?'Нужна проверка':'Результат уточняется'} · ${kind==='appeal'?'апелляция':'кассация'}</b><div>${escHtml(v.reason||'Жалоба рассмотрена, итог пока не подтверждён.')}</div>${v.last_attempt_at?`<div>Последняя попытка: ${formatDate(v.last_attempt_at)}</div>`:''}${v.last_error?`<div>${escHtml(v.last_error)}</div>`:''}${links.map((u,i)=>`<a href="${escHtml(u)}" target="_blank" rel="noopener noreferrer">Источник ${i+1}</a>`).join(' · ')}</div>`;
+  }).join('');
 }
 const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
@@ -797,7 +821,7 @@ function computeDerived(c){
   // first_instance + поданная жалоба — фактически «awaiting_appeal» (парсер
   // ещё не подтянул дату из вкладки «Обжалование решений»). Архивировать
   // нельзя — иначе дело пропадёт с экрана раньше, чем переедет в апел. суд.
-  const fiHasFiledAppeal=c.stage==='first_instance'&&(c.fiAppealFiled||c.fiSentToAppeal||c.fiCassationFiled||c.fiSentToCassation);
+  const fiHasFiledAppeal=currentComplaintBlocksArchive(c);
   // cassation / awaiting_relink — также архивирует state-machine на бэке
   // (CASSATION_ACT_ARCHIVE_DAYS=30, CASSATION_NO_ACT_PUBLISH_DAYS=45).
   // Без этого исключения кассац. дело со status=decided (см. фикс ниже
@@ -1156,6 +1180,7 @@ function jsonToCase(j){
     // fi*Date-поля никто не читал.
     // JSON-specific: full stage data for detail view
     _fi:fi,
+    complaintTracking:j.complaint_tracking||null,
     _ap:ap.case_number?ap:null,
     _cs:cs.case_number?cs:null,
   };
@@ -1904,7 +1929,7 @@ function isArchived(c){
   if(c.computed)return c.computed.archived;
   if(c.status!=='decided'&&c.status!=='returned')return false;
   if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink')return false;
-  if(c.stage==='first_instance'&&(c.fiAppealFiled||c.fiCassationFiled||c.fiSentToCassation))return false;
+  if(currentComplaintBlocksArchive(c))return false;
   if(c.status==='decided'&&c.stage==='first_instance'&&c._fi)return fiAppealWindowPassed(c._fi);
   const decisionDate=c.lastEventDate||c.dateReceived;
   if(!decisionDate)return false;
@@ -3186,7 +3211,7 @@ function prepareCaseViewModel(c){
   // прошедшая дата — «Поступило в суд» рядом с ней читалось бы как дата
   // поступления (кейсы 33-5546/2026, 8Г-10733/2026).
   const arrivedInCourt=ds==='awaiting'&&!transferToJudge&&!!c.dateReceived
-    &&!hasHearingDate(c)&&stageGroup(c)==='first_instance';
+    &&!hasHearingDate(c)&&(stageGroup(c)==='first_instance'||(stageGroup(c)==='cassation'&&c._cs&&/^4Г-/i.test(c._cs.case_number||'')));
   const statusLabel=transferToJudge?'Передано судье'
     :arrivedInCourt?'Поступило в суд'
     :(STATUS_LABELS[ds]||ds);
@@ -3200,6 +3225,11 @@ function prepareCaseViewModel(c){
   if(transferToJudge&&!hasHearingDate(c)&&c.lastEventDate)statusDate=formatDate(c.lastEventDate);
   else if(arrivedInCourt)statusDate=formatDate(c.dateReceived);
   else if((ds==='paused'||ds==='suspended')&&!hasHearingDate(c)&&c.lastEventDate)statusDate=formatDate(c.lastEventDate);
+  else if(resultPresent&&!hasHearingDate(c)){
+    const key=c._cs&&stageGroup(c)==='cassation'?'cs':c._ap&&c.stage!=='awaiting_appeal'?'ap':'fi';
+    const resolved=stageResolvedDate(key,key==='cs'?c._cs:key==='ap'?c._ap:c._fi);
+    if(resolved)statusDate=formatDate(resolved);
+  }
   // Публикация акта: показываем только для решённых дел.
   let actLabel='',actNegative=false;
   if(resultPresent){
@@ -3211,7 +3241,10 @@ function prepareCaseViewModel(c){
   // отдельный "Кассатор" из cs.appellant_*. Сюда входят cassation_watch и
   // cassation_pending (где карточки 7kas ещё нет, но в 1-й инст. карточке
   // парсер мог уже найти кассатора и положить в cs.appellant_* предв.).
-  const isCassStage=['cassation','cassation_watch','cassation_pending','awaiting_relink'].includes(c.stage);
+  const cassState=c.complaintTracking&&c.complaintTracking.cassation;
+  const isCassStage=['cassation','awaiting_relink'].includes(c.stage)||
+    (['cassation_watch','cassation_pending'].includes(c.stage)&&
+     (!cassState||['active','resolving','needs_review'].includes(cassState.state)));
   // Для дел «Сбер — 3-е лицо» обе главные стороны не-банк — сторону подателя
   // жалобы определяем по процессуальному статусу (c.appellantSide/csSide),
   // а не по схеме «не-Сбер сторона».
@@ -3354,6 +3387,7 @@ function stageResolvedDate(stageKey,block){
   const b=block||{};
   if(stageKey==='cs')return parseDate(b.decision_date||'')||'';
   if(stageKey==='ap')return parseDate(b.hearing_date||'')||parseDate(b.event_date||'')||'';
+  if(FI_RULING_RESULTS.includes(normalizeResult(b.result||'')))return parseDate(b.termination_date||'')||'';
   const dd=parseDate(b.decision_date||'');
   if(dd)return dd;
   const hd=parseDate(b.hearing_date||'');
@@ -4449,6 +4483,7 @@ function renderDrawer(c){
       ${tabsHtml}
 
       ${drawerFreshnessHtml(stageData)}
+      ${complaintVerificationHtml(c)}
 
       <div class="drawer-section">
         <div class="drawer-section-title">Ключевые даты</div>
