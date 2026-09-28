@@ -64,6 +64,7 @@ const RENDER_CHUNK=120;
 const LEGACY_URL_PATTERNS=[/^https?:\/\/raw\.githubusercontent\.com\/SelivanovAS\/dashboard\//i];
 const LAST_VISIT_KEY=lsKey('sber-court-last-visit');
 const KNOWN_CASES_KEY=lsKey('sber-court-known-cases');
+const KNOWN_BANK_CASES_KEY=lsKey('sber-court-known-bank-cases');
 const READ_CASES_KEY=lsKey('sber-court-read-cases');
 const NOTES_KEY=lsKey('sber-court-notes');
 const SORT_PREF_KEY=lsKey('sber-court-sort');
@@ -647,9 +648,14 @@ let searchGroups=[];
 // Пагинация рендера (сбрасывается в applyFilters).
 let renderLimit=RENDER_CHUNK;
 let newCaseNumbers=new Set();
+let newBankCaseKeys=new Set();
+// Снимок предыдущего визита фиксируем отдельно для каждого трека. Фоновая
+// догрузка и повторный рендер не должны снимать отметки текущего визита.
+const knownCaseBaselines=new Map();
+const dismissedNewBanners=new Set();
 let archivedCount=0;
 let expandedRows=new Set();
-let readCases=new Set();           // номера дел, которые пользователь уже открывал (persistent)
+let readCases=new Set();           // основные: номер; банк: bank:домен|номер (persistent)
 let activeCaseNumber=null;         // номер дела, открытого в drawer
 let drawerStage=null;              // 'fi' | 'ap' — активная вкладка в drawer при двух стадиях
 let focusedRowIdx=-1;              // индекс строки под фокусом для keyboard-навигации
@@ -702,7 +708,7 @@ function relativeDateText(dateStr,timezone){
 }
 /* Возвращает accent-класс строки. Приоритет: new > today > soon > win > loss > archive */
 function rowAccent(c){
-  if(isNewCase(c)&&!readCases.has(c.caseNumber))return 'accent-new';
+  if(isNewCase(c)&&!isCaseRead(c))return 'accent-new';
   // scheduled и отложено до/без движения: следим за ближайшей датой
   if(c.status==='active'&&c.nextDate){
     const d=dayDiff(c.nextDate,hearingTimezone(c));
@@ -720,9 +726,16 @@ function rowAccent(c){
 function saveReadCases(){
   try{localStorage.setItem(READ_CASES_KEY,JSON.stringify([...readCases]));}catch(e){}
 }
-function markCaseRead(n){
-  if(readCases.has(n))return;
-  readCases.add(n);saveReadCases();
+function caseReadKey(c){
+  return c._bankTrack?'bank:'+bankCaseKey(c):c.caseNumber;
+}
+function isCaseRead(c){
+  return readCases.has(caseReadKey(c));
+}
+function markCaseRead(c){
+  const key=caseReadKey(c);
+  if(readCases.has(key))return;
+  readCases.add(key);saveReadCases();
 }
 
 /* ========== CSV Parsing ========== */
@@ -1691,6 +1704,7 @@ async function loadBankDataset(){
     try{
       bankCases=await fetchJsonCases(bankJsonUrl(),FETCH_TIMEOUT_HEAVY_MS);
       bankCases.forEach(c=>{c._bankTrack=true;});
+      updateNewCases(bankCases,true);
       bankLoaded=true;
       bankFileExists=true;
       try{localStorage.setItem(BANK_EXISTS_KEY,'1');}catch(_){}
@@ -1896,23 +1910,8 @@ function renderAll(){
   // номера дела (переход стадии, скобка-двойник, промоушен М→2).
   // Идемпотентно: повторный вызов ничего не делает.
   try{buildWatchCanonMap();canonicalizeWatchlistSet();}catch(_){}
-  const knownRaw=localStorage.getItem(KNOWN_CASES_KEY);
-  const knownSet=knownRaw?new Set(JSON.parse(knownRaw)):new Set();
-  const currentNumbers=allCases.map(c=>c.caseNumber);
-  if(knownSet.size>0){newCaseNumbers=new Set(currentNumbers.filter(n=>!knownSet.has(n)));}
-  else{newCaseNumbers=new Set();}
-  localStorage.setItem(KNOWN_CASES_KEY,JSON.stringify(currentNumbers));
+  updateNewCases(allCases);
   archivedCount=allCases.filter(c=>isArchived(c)).length;
-
-  if(newCaseNumbers.size>0){
-    const banner=document.getElementById('new-cases-banner');
-    banner.style.display='';
-    const n=newCaseNumbers.size;
-    const word=n===1?'новое дело':n<5?'новых дела':'новых дел';
-    document.getElementById('new-cases-text').innerHTML=`<strong>${n} ${word}</strong> с последнего визита`;
-  }else{
-    document.getElementById('new-cases-banner').style.display='none';
-  }
 
   populateFilterOptions();
   // renderStats/renderAnalytics вызываются внутри applyFilters (они зависят
@@ -1936,7 +1935,36 @@ function isArchived(c){
   const d=new Date(decisionDate);if(isNaN(d))return false;
   return(Date.now()-d.getTime())/(1000*60*60*24)>ARCHIVE_DAYS;
 }
-function isNewCase(c){return newCaseNumbers.has(c.caseNumber);}
+function updateNewCases(cases,bank=false){
+  const storageKey=bank?KNOWN_BANK_CASES_KEY:KNOWN_CASES_KEY;
+  // Ленивый архив банка не является поступлением новых исков.
+  const currentKeys=cases.filter(c=>!bank||!c._bankArchived)
+    .map(c=>bank?bankCaseKey(c):c.caseNumber);
+  if(!knownCaseBaselines.has(storageKey)){
+    let saved=null;
+    try{saved=JSON.parse(localStorage.getItem(storageKey));}catch(_){}
+    // Первый вход задаёт исходный список, не объявляя всю картотеку новой.
+    // Сохранённый пустой список — уже известный снимок, а не первый вход.
+    knownCaseBaselines.set(storageKey,new Set(Array.isArray(saved)?saved:currentKeys));
+  }
+  const baseline=knownCaseBaselines.get(storageKey);
+  const fresh=new Set(currentKeys.filter(key=>!baseline.has(key)));
+  if(bank)newBankCaseKeys=fresh;
+  else newCaseNumbers=fresh;
+  try{localStorage.setItem(storageKey,JSON.stringify(currentKeys));}catch(_){}
+}
+function isNewCase(c){
+  return c._bankTrack?!c._bankArchived&&newBankCaseKeys.has(bankCaseKey(c))
+    :newCaseNumbers.has(c.caseNumber);
+}
+function renderNewCasesBanner(){
+  const banner=document.getElementById('new-cases-banner');
+  const n=countCasesByStatus('new');
+  banner.style.display=n&&!dismissedNewBanners.has(activeScope())?'':'none';
+  const word=n%10===1&&n%100!==11?'новое дело'
+    :n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'новых дела':'новых дел';
+  document.getElementById('new-cases-text').innerHTML=`<strong>${n} ${word}</strong> с последнего визита`;
+}
 
 /* ========== Populate dynamic filter options ========== */
 function populateFilterOptions(){
@@ -2230,11 +2258,13 @@ function clearSearch(){
 function filterNewCases(e){
   if(e.target.closest('.dismiss'))return;
   document.getElementById('filter-status').value='new';
-  // Баннер относится к новым делам основной картотеки. Из «Моих» и трека
-  // банка ведём в правильный раздел, иначе общий статус дал бы пустой экран.
-  setDatasetView('main');
+  applyFilters();
 }
-function dismissNewBanner(e){e.stopPropagation();document.getElementById('new-cases-banner').style.display='none';}
+function dismissNewBanner(e){
+  e.stopPropagation();
+  dismissedNewBanners.add(activeScope());
+  document.getElementById('new-cases-banner').style.display='none';
+}
 
 // Архивность дела с учётом трека: у bank-дел решает ТОЛЬКО файл-источник
 // (_bankArchived — свои окна ожидания ИЛ), у основных — предвычисленный флаг.
@@ -2502,7 +2532,7 @@ function applyFilters(){
     // Relevance sort: новые → с назначенной датой (ближайшая впереди) → поступили без даты → рассмотренные → архив
     if(sortField==='relevance'){
       const rankOf=x=>{
-        if(isNewCase(x)&&!readCases.has(x.caseNumber))return 0;
+        if(isNewCase(x)&&!isCaseRead(x))return 0;
         if(caseArchived(x))return 4;
         if(x.status==='active'&&x.nextDate)return 1;
         if(x.status==='active')return 2;
@@ -2566,7 +2596,7 @@ function applyFilters(){
   renderLimit=RENDER_CHUNK;
   // KPI и «Ближайшие заседания» зависят от активного датасета и mine-режима —
   // перерисовываем вместе с таблицей (дёшево: O(n) по датасету).
-  renderDatasetSwitch();renderChipBar();renderStats();renderAnalytics();renderTable();renderMobileCards();renderCounter();renderSearchCrossHint();
+  renderDatasetSwitch();renderNewCasesBanner();renderChipBar();renderStats();renderAnalytics();renderTable();renderMobileCards();renderCounter();renderSearchCrossHint();
 }
 
 function toggleSort(f){
@@ -3024,6 +3054,8 @@ function crossCounterHtml(){
 // уносила бы и разделитель, и счётчик читался как «1166».
 const tcOf='<span class="tc-of"> из </span><span class="tc-slash"> / </span>';
 function renderCounter(){
+  const nNew=countCasesByStatus('new');
+  const newText=nNew>0?tcTail(` · ${nNew} новых`):'';
   // «Мои» — объединённый watchlist двух картотек. Знаменатель не включает
   // новые дела без звезды и меняется на размер архива при выборе «Архив».
   if(mineModeOn()){
@@ -3034,7 +3066,7 @@ function renderCounter(){
     const total=archiveSelected?nArch:nActive;
     const archText=nArch>0&&!archiveSelected?tcTail(` · ${nArch} в архиве`):'';
     const свои=crossStartIdx();
-    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${total}</strong>${tcWordy(' моих дел')}${archText}${crossCounterHtml()}`;
+    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${total}</strong>${tcWordy(' моих дел')}${newText}${archText}${crossCounterHtml()}`;
     fitCounter();
     return;
   }
@@ -3050,7 +3082,7 @@ function renderCounter(){
     const nArch=bankArchiveLoaded?bankCases.filter(c=>c._bankArchived).length:bankArchivedMeta;
     const nActive=bankArchiveLoaded?bankCases.length-nArch:bankCases.length;
     const archText=bankArchiveLoading?tcTail(' · загрузка архива…'):(nArch>0?tcTail(` · ${nArch} в архиве`):'');
-    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${nActive}</strong>${tcWordy(' исков банка')}${archText}${crossText}`;
+    document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${nActive}</strong>${tcWordy(' исков банка')}${newText}${archText}${crossText}`;
     fitCounter();
     return;
   }
@@ -3058,7 +3090,6 @@ function renderCounter(){
   // хвостом «· N в архиве», а не прячется внутри «из N». Инвариант обеих
   // картотек с v132, тот же в renderDatasetSwitch.
   const archText=archivedCount>0?tcTail(` · ${archivedCount} в архиве`):'';
-  const newText=newCaseNumbers.size>0?tcTail(` · ${newCaseNumbers.size} новых`):'';
   document.getElementById('table-counter').innerHTML=`${tcLead('Показано ')}<strong>${свои}</strong>${tcOf}<strong>${allCases.length-archivedCount}</strong>${tcWordy(' дел')}${newText}${archText}${crossText}`;
   fitCounter();
 }
@@ -3492,7 +3523,7 @@ function renderTable(){
   filteredCases.slice(0,renderLimit).forEach((c,idx)=>{
     const vm=prepareCaseViewModel(c);
     const isNew=isNewCase(c);
-    const isUnread=isNew&&!readCases.has(c.caseNumber);
+    const isUnread=isNew&&!isCaseRead(c);
     const expanded=c.caseNumber===activeCaseNumber;
     const focused=idx===focusedRowIdx;
     const accent=rowAccent(c);
@@ -3509,7 +3540,7 @@ function renderTable(){
       const archived=caseArchived(c);
       const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
-        if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length})</td></tr>`;}
+        if(grp==='new'){html+=`<tr class="group-header"><td colspan="${COLS.length}"><span class="group-dot"></span>Новые дела (${filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!isCaseRead(x)).length})</td></tr>`;}
         else if(grp==='upcoming'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--info);"></span>С назначенной датой</td></tr>`;}
         else if(grp==='awaiting'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-300);"></span>Поступили, дата не назначена</td></tr>`;}
         else if(grp==='decided'&&prevGroup){html+=`<tr class="group-header"><td colspan="${COLS.length}" style="color:var(--slate-500);"><span class="group-dot" style="background:var(--slate-400);"></span>Рассмотренные</td></tr>`;}
@@ -3646,7 +3677,7 @@ function openDrawer(caseNumber){
   const c=findCaseByNumber(caseNumber);
   if(!c)return;
   activeCaseNumber=c.caseNumber;
-  markCaseRead(c.caseNumber);
+  markCaseRead(c);
   // Вкладка по умолчанию — та инстанция, где по текущей стадии идёт движение,
   // а НЕ самая старшая открытая. Раньше апелляция побеждала всегда, когда её
   // карточка есть; с пер-инстанционной хронологией это прятало бы живые
@@ -4532,7 +4563,7 @@ function renderMobileCards(){
   }
   // Те же группы что и в desktop-таблице — рендерим только при relevance-сортировке.
   let prevGroup=null;
-  const newCount=filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!readCases.has(x.caseNumber)).length;
+  const newCount=filteredCases.slice(0,crossStartIdx()).filter(x=>isNewCase(x)&&!isCaseRead(x)).length;
   document.getElementById('mobile-cards').innerHTML=filteredCases.slice(0,renderLimit).map((c,idx)=>{
     let groupHeader='';
     // Каждая область глобального поиска получает свой заголовок (зеркало
@@ -4544,7 +4575,7 @@ function renderMobileCards(){
     else if(sortField==='relevance'&&idx<crossStartIdx()){
       const archived=caseArchived(c);
       const isNew=isNewCase(c);
-      const isUnread=isNew&&!readCases.has(c.caseNumber);
+      const isUnread=isNew&&!isCaseRead(c);
       const grp=isUnread?'new':archived?'archive':(c.status==='decided'||c.status==='returned')?'decided':c.nextDate?'upcoming':'awaiting';
       if(grp!==prevGroup){
         const headers={
@@ -4564,7 +4595,7 @@ function renderMobileCards(){
     const _cardHtml=(()=>{
     const vm=prepareCaseViewModel(c);
     const isNew=isNewCase(c);
-    const isUnread=isNew&&!readCases.has(c.caseNumber);
+    const isUnread=isNew&&!isCaseRead(c);
     const rc=vm.roleClass;
     const accent=rowAccent(c);
 
