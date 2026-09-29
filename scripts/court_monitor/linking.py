@@ -1348,7 +1348,9 @@ def link_cassation_cases(
                     "result": "",
                     "last_event": "",
                     "event_date": "",
-                    "hearing_date": info.get("fi_decision_date", ""),
+                    # Дата обжалуемого решения не означает назначение заседания.
+                    "decision_date": info.get("fi_decision_date", ""),
+                    "hearing_date": "",
                     "hearing_time": "",
                     "link": "",
                     "act_published": False,

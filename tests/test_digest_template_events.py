@@ -1528,7 +1528,9 @@ class ActAnalysisContractTest(unittest.TestCase):
     def test_cassation_act_analysis_via_cass_number(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        cass_ch = make_cass_change(["outcome_change", "new_act"])
+        cass_ch = make_cass_change(["outcome_change", "new_act"],
+                                   {"outcome": "cassation_upheld",
+                                    "decision_date": "26.05.2026"})
         with patch.object(cm_config, "JSON_PATH",
                           os.path.join(tmp.name, "нет.json")):
             html = render(
@@ -1574,6 +1576,51 @@ class CassationMatrixTest(unittest.TestCase):
             "📅 Назначено судебное заседание на <b>20.08.2026 в 14:00</b>", html
         )
         self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
+
+    def test_final_act_dates_in_new_cases_and_events(self):
+        # Даты из инцидента Тюмени: старый акт должен отличаться от
+        # сегодняшнего обновления данных и от даты поступления жалобы.
+        examples = [
+            ("4Г-23/2026", "oblsud--tum.sudrf.ru", "25.06.2026", "22.07.2026",
+             "cassation_dismissed_no_transfer", "🚫 Отказ в передаче"),
+            ("8Г-9823/2025", "7kas.sudrf.ru", "25.06.2025", "12.08.2025",
+             "cassation_upheld", "Оставлено без изменения"),
+            ("8Г-16107/2025", "7kas.sudrf.ru", "21.10.2025", "26.11.2025",
+             "cassation_upheld", "Оставлено без изменения"),
+            ("8Г-4554/2026", "7kas.sudrf.ru", "23.03.2026", "26.05.2026",
+             "cassation_upheld", "Оставлено без изменения"),
+        ]
+        for number, domain, filing, decision, outcome, label in examples:
+            for channel in ("discovery", "event"):
+                with self.subTest(number=number, channel=channel):
+                    details = {"court_domain": domain, "filing_date": filing,
+                               "decision_date": decision, "outcome": outcome}
+                    if channel == "discovery":
+                        case = make_cass_discovered(cass_num=number)
+                        case["cassation"].update(details)
+                        html = render(cass_discovered=[case])
+                    else:
+                        html = render(cass_changes=[make_cass_change(
+                            ["new_cassation", "outcome_change"], details,
+                            cass_num=number)])
+                    self.assertIn(f"<b>{decision}</b> — <b>Итог:</b> {label}", html)
+                    self.assertIn(f"<b>{filing}</b> — 📥 поступила касс. жалоба", html)
+                    self.assertNotIn("Назначено судебное заседание", html)
+                    self.assertEqual(anchors(html).count(number), 1)
+
+    def test_missing_final_act_date_does_not_use_other_dates(self):
+        for missing_date in (None, "", "  "):
+            details = {"outcome": "cassation_upheld", "decision_date": missing_date,
+                       "filing_date": "01.06.2026", "hearing_date": "02.06.2026",
+                       "act_date": "03.06.2026", "fi_decision_date": "04.06.2026"}
+            case = make_cass_discovered()
+            case["cassation"].update(details)
+            outputs = [render(cass_discovered=[case]),
+                       render(cass_changes=[make_cass_change(["outcome_change"], details)])]
+            for html in outputs:
+                with self.subTest(date=missing_date, html=html):
+                    self.assertIn("\n<b>Итог:</b> Оставлено без изменения", html)
+                    self.assertNotIn("— <b>Итог:</b>", html)
 
     def test_new_cassation_arrival_line(self):
         """Дело доехало до КСОЮ и получило 8Г-номер — главная новость записи.

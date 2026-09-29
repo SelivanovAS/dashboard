@@ -2046,7 +2046,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
       апеллянта не выводим (юрист не просил);
     - `hearing_long_ago`, `act_verdict_raw`, `last_event`, `act_excerpt`
       (при живом act_text) — вспомогательный контекст для LLM-путей;
-    - `stage_prev`/`stage_now`, `act_kind`, `decision_date`,
+    - `stage_prev`/`stage_now`, `act_kind`,
       `result_for_appeal` у кассации — служебные поля линковки;
     - stage_transitions — намеренно не секция дайджеста (см. ниже).
     """
@@ -3366,7 +3366,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 # Дублирует строку «📥 поступила касс. жалоба» выше.
                 label_d = ""
             if label_d:
-                itog_line = f"<b>Итог:</b> {escape_html(label_d)}"
+                # Дата именно кассационного акта, а не поступления жалобы,
+                # заседания или публикации текста. Без неё оставляем итог без даты.
+                decision_date_d = escape_html((cass.get("decision_date") or "").strip())
+                date_prefix_d = f"<b>{decision_date_d}</b> — " if decision_date_d else ""
+                itog_line = f"{date_prefix_d}<b>Итог:</b> {escape_html(label_d)}"
                 if reason_d:
                     itog_line += f"; {escape_html(reason_d)}"
                 cass_block.append(itog_line)
@@ -3607,8 +3611,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     f"; {escape_html(outcome_reason_ru)}"
                     if outcome_reason_ru else ""
                 )
+                # Берём дату из снимка события: актуальная карточка родителя
+                # может уже относиться к другому кассационному производству.
+                decision_date_cs = escape_html((d.get("decision_date") or "").strip())
+                date_prefix_cs = f"<b>{decision_date_cs}</b> — " if decision_date_cs else ""
                 cass_block.append(
-                    f"<b>Итог:</b> {escape_html(label)}{from_str}{reason_tail}"
+                    f"{date_prefix_cs}<b>Итог:</b> {escape_html(label)}{from_str}{reason_tail}"
                 )
             # Строка 5: Почему — пересказ мотивировки через act_summarizer.
             # Сокращаем имена сторон: pl_raw/df_raw — сырые поля parent case,

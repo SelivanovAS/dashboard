@@ -339,10 +339,8 @@ class TestPresidiumWiring:
     def test_announce_wiring(self):
         src = _read("scripts/court_monitor/runs.py")
         assert "def announce_imported_presidium_cases(" in src
-        i = src.index("def announce_imported_cases(")
-        body = src[i:src.index("def announce_imported_presidium_cases(")]
-        assert 'imp.get("source") in {"dump_presidium", "dump_cassation"}' in body, (
-            "стаб мирового судьи уехал бы в «📥 Новые иски»")
+        # Выбор канала и однократность анонса проверяются по поведению в
+        # test_presidium_intake_dates, включая точечный импорт президиума.
         i_call = src.index("presidium_imported_new = announce_imported_presidium_cases(cases)")
         assert "cass_discovered = list(cass_discovered) + presidium_imported_new" in src[i_call:i_call + 800]
 
