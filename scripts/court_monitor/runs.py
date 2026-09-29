@@ -1970,7 +1970,7 @@ def announce_imported_cases(cases: list[dict]) -> list[dict]:
         # — свой канал announce_imported_presidium_cases: по стабу мирового
         # судьи «Новый иск» вышел бы пустым, а кассацию дайджест печатает в
         # «📥 Новые касс. дела».
-        if isinstance(imp, dict) and imp.get("source") in {"dump_presidium", "dump_cassation"}:
+        if isinstance(imp, dict) and imp.get("source") in {"dump_presidium", "dump_cassation", "targeted_presidium"}:
             continue
         if isinstance(imp, dict) and not imp.get("announced"):
             imp["announced"] = True

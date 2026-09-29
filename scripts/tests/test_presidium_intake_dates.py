@@ -7,6 +7,8 @@ from court_monitor import config, targeted_add
 from court_monitor.lifecycle import is_case_archived, advance_case_stage
 from court_monitor.linking import _cassation_card_to_block, link_cassation_cases
 from court_monitor.parsing.cassation import parse_cassation_card
+from court_monitor.runs import announce_imported_cases, announce_imported_presidium_cases
+from court_monitor.digest.template import generate_template_digest
 
 FIX=Path(__file__).parent/'fixtures'
 BASE='https://oblsud--hmao.sudrf.ru'
@@ -38,8 +40,37 @@ def test_early_card_admitted_without_inventing_identity(monkeypatch,tmp_path):
     assert cases[0]['first_instance']['court_domain']=='surggor--hmao.sudrf.ru'
     assert not cases[0]['first_instance']['magistrate']
     assert not cases[0]['first_instance']['case_number']
+    assert cases[0]['first_instance']['decision_date']=='16.06.2026'
+    assert cases[0]['first_instance']['hearing_date']==''
     assert cases[0]['cassation']['decision_date']==''
     assert link_cassation_cases(cases,[info])[2]==[]
+
+
+@pytest.mark.parametrize('source', ['targeted_presidium', 'dump_presidium', 'dump_cassation'])
+def test_import_announced_in_cassation_after_fi_channel(source, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, 'CASSATION_ACTS_PATH', str(tmp_path/'acts'))
+    monkeypatch.setattr(config, 'JSON_PATH', str(tmp_path/'cases.json'))
+    info = card('case_card_presidium_early.html')
+    info['link'] = '27000814|10f9d0d7-5e3f-4271-98c4-1b5457bbf00c'
+    cases, _, _ = link_cassation_cases([], [info])
+    case = cases[0]
+    case['import'] = {'source': source, 'announced': False}
+    # Порядок полного прогона: сначала канал первой инстанции, затем кассации.
+    fi_new = announce_imported_cases(cases)
+    assert fi_new == []
+    assert case['import']['announced'] is False
+    cass_new = announce_imported_presidium_cases(cases)
+    assert cass_new == [case]
+    digest = generate_template_digest([], [], fi_new_cases=fi_new,
+                                      cass_discovered=cass_new)
+    assert 'КАССАЦИЯ' in digest and 'Новые касс. дела (1)' in digest
+    assert '4Г-80/2026' in digest
+    assert '15.09.2026</b> — 📥 поступила касс. жалоба' in digest
+    assert 'ПЕРВАЯ ИНСТАНЦИЯ' not in digest and 'Новые иски' not in digest
+    assert '16.06.2026' not in digest and 'заседание назначено' not in digest
+    assert case['import']['announced'] is True
+    assert announce_imported_cases(cases) == []
+    assert announce_imported_presidium_cases(cases) == []
 
 
 def test_presidium_district_remand_is_not_archived():
