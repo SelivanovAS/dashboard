@@ -4559,7 +4559,59 @@
         "announced": true
       },
       "archived_at": "2026-09-29"
+    },
+    {
+      "id": "2-310/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение №5940",
+      "defendant": "Леурдо Олег Сергеевич (наследственное имущество), МТУ Росимущество в Тюменской области, Ханты-Мансийском автономном округе - Югре, Ямало-Ненецком автономном округе",
+      "category": "Споры, связанные с наследственными отношениями → Споры, связанные с наследованием имущества → об ответственности наследников по долгам наследодателя",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-310/2026",
+        "court": "Нижневартовский районный суд",
+        "court_domain": "vartovray--hmao.sudrf.ru",
+        "judge": "Житинский А.В.",
+        "filing_date": "26.02.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
+        "last_event": "Дело оформлено. 08:39. 15.09.2026",
+        "event_date": "15.09.2026",
+        "hearing_date": "12.08.2026",
+        "hearing_time": "09:30",
+        "link": "274493445|59ded058-5013-4414-ba1a-eafb5531f4b7",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-09-25",
+        "legal_force_est": "2026-09-15",
+        "decision_date": "12.08.2026",
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0003-01-2026-000265-65",
+        "motivirovka_date": "12.08.2026",
+        "writ_awaited_since": "2026-09-15",
+        "legal_force_emitted": "2026-09-15",
+        "writs": [
+          {
+            "issue_date": "15.09.2026",
+            "blank_number": "ФС № 051998071",
+            "electronic_id": "",
+            "recipient": "Взыскатель",
+            "status": "Выдан"
+          }
+        ]
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T23:32:04",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-09-30"
     }
   ],
-  "updated_at": "2026-09-29T06:35:30+05:00"
+  "updated_at": "2026-09-30T07:00:21+05:00"
 }
