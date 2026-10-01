@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-01T07:00:21+05:00",
+ "updated_at": "2026-10-01T08:06:05+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,109 +532,109 @@
   }
  },
  "last_run": {
-  "at": "2026-10-01T07:00:21",
+  "at": "2026-10-01T08:06:05",
   "alerts": [],
-  "requests_ok": 169,
-  "requests_failed": 11,
+  "requests_ok": 139,
+  "requests_failed": 12,
   "requests_retried": 0,
-  "cards_breaker_skipped": 2,
-  "cards_breaker_unrequested": 2,
-  "cards_breaker_recovered": 0,
+  "cards_breaker_skipped": 11,
+  "cards_breaker_unrequested": 0,
+  "cards_breaker_recovered": 11,
   "cards_blocked": 0,
-  "cards_read": 143,
-  "cards_planned": 268,
-  "cards_read_today": 142,
-  "cards_planned_today": 267,
-  "daily_attempts": 1,
+  "cards_read": 137,
+  "cards_planned": 150,
+  "cards_read_today": 253,
+  "cards_planned_today": 268,
+  "daily_attempts": 2,
   "instances": {
    "first_instance": {
-    "read": 97,
-    "planned": 221,
-    "read_today": 96,
-    "planned_today": 220
+    "read": 136,
+    "planned": 148,
+    "read_today": 207,
+    "planned_today": 221
    },
    "appeal": {
-    "read": 32,
-    "planned": 32,
+    "read": 1,
+    "planned": 1,
     "read_today": 32,
     "planned_today": 32
    },
    "cassation": {
-    "read": 14,
-    "planned": 15,
+    "read": 0,
+    "planned": 1,
     "read_today": 14,
     "planned_today": 15
    }
   },
   "latency": {
-   "n": 169,
-   "p50": 15.4,
-   "p90": 23.4,
-   "max": 33.4
+   "n": 139,
+   "p50": 18.7,
+   "p90": 24.6,
+   "max": 29.7
   },
   "failure_latency": {
    "http_504": {
-    "n": 5,
-    "p50": 30.1,
-    "p90": 30.1,
-    "max": 30.1
+    "n": 10,
+    "p50": 30.0,
+    "p90": 30.0,
+    "max": 60.0
    },
    "invalid_card_request": {
     "n": 2,
-    "p50": 11.5,
-    "p90": 15.9,
-    "max": 15.9
+    "p50": 15.5,
+    "p90": 18.7,
+    "max": 18.7
    },
    "read_timeout": {
-    "n": 6,
-    "p50": 0.2,
-    "p90": 65.1,
-    "max": 65.1
+    "n": 2,
+    "p50": 4.3,
+    "p90": 65.0,
+    "max": 65.0
    }
   },
   "fail_kinds": {
    "invalid_card_request": 2,
-   "http_504": 5,
-   "read_timeout": 6
+   "http_504": 10,
+   "read_timeout": 2
   },
   "breaker": {
    "mode": "time",
    "opened_hosts": 1,
-   "open_hosts": 1,
-   "recovered_hosts": 0,
-   "deferred_total": 3,
-   "deferred_remaining": 3,
-   "deferred_recovered": 0,
-   "probes": 0,
-   "probe_successes": 0,
+   "open_hosts": 0,
+   "recovered_hosts": 1,
+   "deferred_total": 12,
+   "deferred_remaining": 1,
+   "deferred_recovered": 11,
+   "probes": 1,
+   "probe_successes": 1,
    "probe_failures": 0,
    "by_kind": {
-    "read_timeout": 1
+    "http_504": 1
    },
    "hosts": [
     {
-     "host": "vartovgor--hmao.sudrf.ru",
-     "state": "open",
+     "host": "surggor--hmao.sudrf.ru",
+     "state": "closed",
      "kind": "read_timeout",
      "family": "slow_unavailable",
      "reason": "суд не отдал данные до таймаута чтения",
      "preopened": false,
-     "skipped": 2,
-     "probes": 0,
-     "deferred_total": 3,
-     "deferred_remaining": 3,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 300.0,
-     "next_probe_in_seconds": 295.2
+     "skipped": 11,
+     "probes": 1,
+     "deferred_total": 12,
+     "deferred_remaining": 1,
+     "deferred_recovered": 11,
+     "cooldown_seconds": 60.0,
+     "next_probe_in_seconds": 0.0
     }
    ]
   },
-  "courts_unavailable": 1,
-  "courts_with_unrequested": 1,
+  "courts_unavailable": 0,
+  "courts_with_unrequested": 0,
   "courts_outage": 0,
-  "cards_unreachable": 2,
-  "cards_unread_other": 123,
+  "cards_unreachable": 0,
+  "cards_unread_other": 13,
   "run_deadline_seconds": 3300.0,
-  "run_deadline_reached": true
+  "run_deadline_reached": false
  }
 }
