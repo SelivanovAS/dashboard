@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-01T08:31:12+05:00",
+  "updated_at": "2026-10-01T03:45:23+00:00",
   "cases": [
     {
       "id": "М-707/2026",
@@ -27474,7 +27474,14 @@
             "posted_at": "28.09.2026",
             "complaint_id": "1*"
           }
-        ]
+        ],
+        "act_analysis": {
+          "html": "<a href=\"https://megion--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=268341239&case_uid=3c8584c1-fc48-4758-8785-9f63b450257f&delo_id=1540005&new=0\"><b>2-529/2026</b></a> (Мегионский гор. суд) — Ахмадов М.С.: 📄 текст решения от 17.08.2026 опубликован; 📨 апел. жалоба ответчика от 28.09.2026 — дело уходит в общий трек",
+          "source": "digest",
+          "act_date": "",
+          "generated_at": "2026-10-01T03:45:23",
+          "model": "openrouter:dots-studio/dots-3-note-preview:free"
+        }
       },
       "appeal": null,
       "initial_bank_role": "Истец",
