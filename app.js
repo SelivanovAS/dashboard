@@ -1461,12 +1461,16 @@ async function fetchJsonCases(url,timeoutMs){
     _dataFromCache=true;
     console.info('Данные из офлайн-кэша:',url,'('+e.message+')');
   }
+  // Пустой массив — нормальная новая картотека. Отсутствующее/повреждённое
+  // поле cases — ошибка документа, а не разрешение показать ноль дел.
+  if(!data||!Array.isArray(data.cases))throw new Error('Некорректный формат картотеки: ожидается массив cases');
   // Время ПРОГОНА, который произвёл файл. Единственный способ отличить
   // свежий снимок от вчерашнего: SW отдаёт data/*.json из кэша (см.
   // «Свежесть данных» ниже), а шапка до v127 писала «Обновлено: <сейчас>» —
   // то есть время рендера страницы, и вчерашние данные выглядели сегодняшними.
   const stamp=parseIsoUtc(data.updated_at);
   if(stamp)_dataUpdatedAt[url]=stamp;
+  else delete _dataUpdatedAt[url];
   // Блок region пишет бэкенд только в основной cases.json (не в архив):
   // из него строятся подписи судов, ссылки апелляции/кассации и бейдж
   // региона в шапке.
@@ -1485,8 +1489,9 @@ async function loadFromSheet(url,opts){
   if(!(opts&&opts.quiet))showLoading();
   const btn=document.getElementById('st-item-refresh');
   if(btn)btn.classList.add('is-loading');
+  const jsonMode=isJsonUrl(url);
   try{
-    if(isJsonUrl(url)){
+    if(jsonMode){
       // JSON mode: cases.json + optional archive
       const archUrl=url.replace('cases.json','cases_archive.json');
       const [mainRes,archiveRes]=await Promise.all([
@@ -1521,7 +1526,7 @@ async function loadFromSheet(url,opts){
       archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
       allCases=main.concat(archiveOnly);
     }
-    if(allCases.length===0)throw new Error('Таблица пуста');
+    if(!jsonMode&&allCases.length===0)throw new Error('Таблица пуста');
     _lastDataLoadAt=Date.now(); // якорь автообновления при возврате во вкладку
     showApp();hideError();renderAll();
   }catch(e){
@@ -2197,9 +2202,10 @@ function renderMeta(){
   // Время ПРОГОНА, а не рендера страницы. До v127 здесь стояло
   // «Обновлено: new Date()» — и вчерашний снимок из кэша SW (см. «Свежесть
   // данных») подписывался сегодняшним временем: отличить его было нечем.
-  // Штампа нет (CSV-режим, демо-данные) — прежняя подпись.
+  // До первого наполнения новой территории штампа нет; время открытия
+  // страницы нельзя выдавать за состоявшееся обновление картотеки.
   const stamp=currentDataStamp();
-  let metaHtml=stamp?'Данные от: '+fmtMeta(stamp):'Обновлено: '+fmtMeta(new Date());
+  let metaHtml=stamp?'Данные от: '+fmtMeta(stamp):'Ещё не обновлялось';
   // Снимок из офлайн-кэша подписываем явно — тем же штампом currentDataStamp,
   // второго механизма даты не заводим. navigator.onLine здесь только
   // ДОБАВЛЯЕТ метку (ложное false у него бывает, ложное true — нет... бывает
@@ -3174,6 +3180,7 @@ function emptyCasesCopy(){
     };
   }
   if(mineModeOn())return {title:'Нет моих дел, соответствующих фильтрам',detail:'Измените или сбросьте фильтры.'};
+  if(activeDataset().length===0)return {title:'Картотека пока пуста',detail:'Ожидает загрузки дел.'};
   return {title:'Нет дел, соответствующих фильтрам',detail:''};
 }
 

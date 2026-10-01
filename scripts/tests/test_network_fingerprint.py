@@ -7,6 +7,8 @@ import importlib.util
 import os
 import sys
 
+import pytest
+
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODULE_PATH = os.path.join(REPO, "ops", "mac-local-run", "network_fingerprint.py")
@@ -17,17 +19,68 @@ sys.modules[SPEC.name] = network_fingerprint
 SPEC.loader.exec_module(network_fingerprint)
 
 
-def test_targets_use_real_search_and_card_pages_not_site_root(monkeypatch):
-    monkeypatch.chdir(REPO)
+def _configure_probe_courts(monkeypatch, first_instance, appeal, cassation):
+    """Проба читает фасад региона; задаём его явно, без REGION/данных форка."""
+    from court_monitor import courts
+
+    monkeypatch.setattr(courts, "FIRST_INSTANCE_COURTS", list(first_instance))
+    monkeypatch.setattr(courts, "APPEAL_COURTS", tuple(appeal))
+    monkeypatch.setattr(courts, "CASSATION_COURT", cassation)
+    monkeypatch.setattr(courts, "_FI_COURTS_BY_DOMAIN", {
+        court.domain: court for court in first_instance
+    })
+
+
+@pytest.fixture
+def probe_registry(monkeypatch):
+    from court_monitor.regions.base import CourtConfig
+
+    fi = CourtConfig("Суд первой инстанции", "fi.test", 1540005, "first_instance")
+    appeal = CourtConfig("Апелляционный суд", "appeal.test", 5, "appeal")
+    cassation = CourtConfig("Кассационный суд", "cassation.test", 2800001, "cassation")
+    _configure_probe_courts(monkeypatch, [fi], [appeal], cassation)
+    cases = [{"first_instance": {"court_domain": fi.domain, "link": "123|known-uid"}}]
+    monkeypatch.setattr(network_fingerprint, "_load_cases", lambda: cases)
+    return fi, cases
+
+
+def test_targets_use_real_search_and_card_pages_not_site_root(probe_registry):
+    fi, _cases = probe_registry
     targets = network_fingerprint.build_targets()
-    assert any(target.page_type == "search" for target in targets)
-    assert any(target.page_type == "card" for target in targets)
+    assert [target.url for target in targets if target.page_type == "card"] == [
+        fi.card_url("123", "known-uid"),
+    ]
     assert {target.instance for target in targets if target.page_type == "search"} == {
         "first_instance", "appeal", "cassation",
     }
     for target in targets:
         assert "modules.php?name=sud_delo" in target.url
         assert target.url.rstrip("/") != f"https://{target.host}"
+
+
+def test_empty_case_registry_keeps_search_targets_without_inventing_card(probe_registry):
+    _fi, cases = probe_registry
+    cases.clear()
+    targets = network_fingerprint.build_targets()
+    assert len(targets) == 3
+    assert all(target.page_type == "search" for target in targets)
+    assert {target.instance for target in targets} == {"first_instance", "appeal", "cassation"}
+
+
+def test_empty_registry_has_no_closed_fi_search_or_fabricated_card(monkeypatch):
+    from court_monitor.regions.base import CourtConfig
+
+    fi = CourtConfig("Суд первой инстанции", "fi.test", 1540005,
+                     "first_instance", search_gated=True, search_disabled=True)
+    appeal = CourtConfig("Апелляция", "appeal.test", 5, "appeal")
+    cassation = CourtConfig("Кассация", "cassation.test", 2800001, "cassation")
+    _configure_probe_courts(monkeypatch, [fi], [appeal], cassation)
+    monkeypatch.setattr(network_fingerprint, "_load_cases", lambda: [])
+    targets = network_fingerprint.build_targets()
+    assert all(target.page_type == "search" for target in targets)
+    assert {(target.instance, target.host) for target in targets} == {
+        ("cassation", "cassation.test"), ("appeal", "appeal.test"),
+    }
 
 
 def test_route_type_distinguishes_sber_bypass_and_vpn(monkeypatch):
