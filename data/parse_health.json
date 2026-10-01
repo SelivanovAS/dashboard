@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-01T08:06:05+05:00",
+ "updated_at": "2026-10-01T08:31:11+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,25 +532,25 @@
   }
  },
  "last_run": {
-  "at": "2026-10-01T08:06:05",
+  "at": "2026-10-01T08:31:11",
   "alerts": [],
-  "requests_ok": 139,
-  "requests_failed": 12,
+  "requests_ok": 36,
+  "requests_failed": 7,
   "requests_retried": 0,
-  "cards_breaker_skipped": 11,
+  "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
-  "cards_breaker_recovered": 11,
+  "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 137,
-  "cards_planned": 150,
-  "cards_read_today": 253,
+  "cards_read": 35,
+  "cards_planned": 43,
+  "cards_read_today": 264,
   "cards_planned_today": 268,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 136,
-    "planned": 148,
-    "read_today": 207,
+    "read": 34,
+    "planned": 41,
+    "read_today": 218,
     "planned_today": 221
    },
    "appeal": {
@@ -567,73 +567,48 @@
    }
   },
   "latency": {
-   "n": 139,
-   "p50": 18.7,
-   "p90": 24.6,
-   "max": 29.7
+   "n": 36,
+   "p50": 11.9,
+   "p90": 26.2,
+   "max": 29.3
   },
   "failure_latency": {
    "http_504": {
-    "n": 10,
-    "p50": 30.0,
-    "p90": 30.0,
-    "max": 60.0
+    "n": 7,
+    "p50": 30.1,
+    "p90": 31.1,
+    "max": 31.1
    },
    "invalid_card_request": {
-    "n": 2,
-    "p50": 15.5,
-    "p90": 18.7,
-    "max": 18.7
-   },
-   "read_timeout": {
-    "n": 2,
-    "p50": 4.3,
-    "p90": 65.0,
-    "max": 65.0
+    "n": 1,
+    "p50": 20.2,
+    "p90": 20.2,
+    "max": 20.2
    }
   },
   "fail_kinds": {
-   "invalid_card_request": 2,
-   "http_504": 10,
-   "read_timeout": 2
+   "invalid_card_request": 1,
+   "http_504": 7
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 1,
+   "opened_hosts": 0,
    "open_hosts": 0,
-   "recovered_hosts": 1,
-   "deferred_total": 12,
-   "deferred_remaining": 1,
-   "deferred_recovered": 11,
-   "probes": 1,
-   "probe_successes": 1,
+   "recovered_hosts": 0,
+   "deferred_total": 0,
+   "deferred_remaining": 0,
+   "deferred_recovered": 0,
+   "probes": 0,
+   "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {
-    "http_504": 1
-   },
-   "hosts": [
-    {
-     "host": "surggor--hmao.sudrf.ru",
-     "state": "closed",
-     "kind": "read_timeout",
-     "family": "slow_unavailable",
-     "reason": "суд не отдал данные до таймаута чтения",
-     "preopened": false,
-     "skipped": 11,
-     "probes": 1,
-     "deferred_total": 12,
-     "deferred_remaining": 1,
-     "deferred_recovered": 11,
-     "cooldown_seconds": 60.0,
-     "next_probe_in_seconds": 0.0
-    }
-   ]
+   "by_kind": {},
+   "hosts": []
   },
   "courts_unavailable": 0,
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 13,
+  "cards_unread_other": 8,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  }
