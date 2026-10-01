@@ -1,12 +1,14 @@
 # Общие скрипты VPS и резервного запуска на Mac
 
 Основной исполнитель — VPS, использующий скрипты из этого каталога через
-[Linux-обёртки](../vps-run/README.md). Mac остаётся резервом. Ниже описаны
-текущие файлы репозитория, сверенные 13.09.2026; загруженность LaunchAgents,
-установленные службы VPS, секреты и доступность судов проверяются отдельно.
+[Linux-обёртки](../vps-run/README.md). С 01.10.2026 Mac оставлен ручным
+резервом: LaunchAgents парсинга и импорта отключены и выгружены. Обычное
+обновление кода не должно включать их снова. Результат проверки — в
+[аудите KV](../../docs/Аудит_KV_2026-10-01.md); фактическое состояние служб,
+секретов и доступность судов при следующем переключении проверяются заново.
 
-Список территорий задаётся на каждой машине. Код поддерживает ХМАО, Урал и
-Башкортостан. В [отчёте внедрения Башкортостана](../../docs/regions/Башкортостан_внедрение_2026-09-11.md)
+Список территорий задаётся на каждой машине. Код поддерживает ХМАО, Урал,
+Башкортостан и Тюменскую область. В [отчёте внедрения Башкортостана](../../docs/regions/Башкортостан_внедрение_2026-09-11.md)
 зафиксированы третий клон VPS и подготовленный ручной резерв Mac; Башкортостан
 тогда был исключён из автоматического списка Mac. Наличие клона само по себе
 не включает его в расписание.
@@ -128,13 +130,15 @@ sudo visudo -c
 писать данные или создавать доставочные коммиты. Процедура переключения —
 [VPS README](../vps-run/README.md#откат-на-mac-если-vps-лёг).
 
-После переключения исполнителя:
+Только после согласованного переключения исполнителя на автоматический Mac-резерв:
 
 ```bash
 cp ops/mac-local-run/com.court-monitor.parse.plist ~/Library/LaunchAgents/
 cp ops/mac-local-run/com.court-monitor.import.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.court-monitor.parse.plist
-launchctl load ~/Library/LaunchAgents/com.court-monitor.import.plist
+launchctl enable "gui/$(id -u)/com.court-monitor.parse"
+launchctl enable "gui/$(id -u)/com.court-monitor.import"
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.court-monitor.parse.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.court-monitor.import.plist
 launchctl list | rg court-monitor
 ```
 
@@ -287,8 +291,12 @@ read 65 с. Полный парсер имеет бюджет `RUN_DEADLINE_SECO
 в той же фазе. Полное описание — [сбор данных и парсеры](../../docs/technical/04-сбор-данных-и-парсеры.md).
 
 `progress_pusher.py` фильтрует вехи из лога и отправляет батчи на
-`POST /run-progress` своего Worker примерно раз в 60 секунд, а также при
-финале или заполнении батча. Карточка «Ход последнего прогона» удалена
+`POST /run-progress` своего Worker примерно раз в 300 секунд, а также сразу
+при финале или заполнении батча из 40 строк. Интервал изменён 01.10.2026
+для экономии общего бюджета KV четырёх территорий. Настройка относится
+к VPS и ручному Mac-резерву; отдельный `scripts/gh_progress_pusher.py`
+по умолчанию отправляет батчи раз в 60 секунд.
+Карточка «Ход последнего прогона» удалена
 из админки 01.09.2026; статус даёт плитка «Последний прогон». Канал в KV
 сохранён и читается через `GET /admin/run-progress` с авторизацией владельца или оператора.
 URL берётся из `worker.<регион>`; старый адрес ХМАО используется только для
@@ -322,16 +330,24 @@ telemetry при следующем старте помечается `interrupt
 
 ## Усыпить резерв или удалить Mac-автоматику
 
-Чтобы прекратить будущие Mac-слоты, выгрузить оба LaunchAgent:
+С 01.10.2026 Mac оставлен ручным резервом: оба LaunchAgent отключены
+через `disable` и выгружены. Это предотвращает их загрузку при следующем
+входе в macOS. Файлы plist и ручной пульт сохранены.
+Чтобы прекратить будущие Mac-слоты:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.court-monitor.parse.plist
-launchctl unload ~/Library/LaunchAgents/com.court-monitor.import.plist
-launchctl list | rg court-monitor
+launchctl disable "gui/$(id -u)/com.court-monitor.parse"
+launchctl disable "gui/$(id -u)/com.court-monitor.import"
+launchctl bootout "gui/$(id -u)/com.court-monitor.parse"
+launchctl bootout "gui/$(id -u)/com.court-monitor.import"
+launchctl print-disabled "gui/$(id -u)"
 ```
 
 Перед передачей работы VPS проверить отсутствие активных дочерних парсеров
 и импортов. Само наличие файлов plist на диске не означает работу агентов.
+Ручные команды пульта вызывают shell-скрипты напрямую и не требуют включения
+LaunchAgents. Запускать их можно после проверки отсутствия писателя VPS;
+нераспубликованные локальные результаты и конфликты Git сначала разобрать.
 Для полного удаления Mac-автоматики после выгрузки можно удалить оба
 установленных plist и `/etc/sudoers.d/court-monitor-route`. Это не требует
 включать Worker-cron: основной исполнитель определяется отдельно.
