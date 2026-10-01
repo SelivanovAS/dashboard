@@ -1,10 +1,9 @@
 {
  "version": 1,
- "updated_at": "2026-09-30T08:44:42+05:00",
+ "updated_at": "2026-10-01T07:00:21+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
-    20,
     20,
     19,
     22,
@@ -17,18 +16,18 @@
     20,
     20,
     21,
+    20,
     20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Сургутский городской суд"
   },
   "fi:surgray--hmao.sudrf.ru": {
    "counts": [
-    17,
     17,
     16,
     16,
@@ -41,13 +40,14 @@
     19,
     19,
     19,
-    19
+    19,
+    20
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 19,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_count": 20,
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Сургутский районный суд"
   },
   "fi:vartovgor--hmao.sudrf.ru": {
@@ -56,7 +56,6 @@
     18,
     18,
     18,
-    18,
     17,
     17,
     16,
@@ -65,13 +64,14 @@
     16,
     16,
     16,
-    16
+    16,
+    17
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 16,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_count": 17,
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Нижневартовский городской суд"
   },
   "fi:vartovray--hmao.sudrf.ru": {
@@ -85,7 +85,7 @@
     20,
     20,
     20,
-    20,
+    19,
     19,
     19,
     19,
@@ -95,14 +95,13 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Нижневартовский районный суд"
   },
   "fi:hmray--hmao.sudrf.ru": {
    "counts": [
     19,
     19,
-    19,
     18,
     18,
     18,
@@ -113,13 +112,14 @@
     19,
     19,
     19,
-    19
+    19,
+    18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
-   "last_count": 19,
+   "last_run_at": "2026-10-01T07:00:21+05:00",
+   "last_count": 18,
    "label": "Ханты-Мансийский районный суд"
   },
   "fi:uray--hmao.sudrf.ru": {
@@ -134,21 +134,20 @@
     22,
     22,
     22,
-    22,
     23,
     23,
-    23
+    23,
+    22
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
-   "last_count": 23,
+   "last_run_at": "2026-10-01T07:00:21+05:00",
+   "last_count": 22,
    "label": "Урайский городской суд"
   },
   "fi:nyagan--hmao.sudrf.ru": {
    "counts": [
-    14,
     14,
     14,
     14,
@@ -161,20 +160,20 @@
     11,
     11,
     10,
+    10,
     10
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 10,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Няганский городской суд"
   },
   "fi:uganskray--hmao.sudrf.ru": {
    "counts": [
     19,
     19,
-    19,
     18,
     18,
     18,
@@ -185,19 +184,20 @@
     19,
     19,
     19,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Нефтеюганский районный суд"
   },
   "fi:kogalym--hmao.sudrf.ru": {
    "counts": [
     19,
-    19,
+    18,
     18,
     18,
     18,
@@ -215,7 +215,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Когалымский городской суд"
   },
   "fi:kondinsk--hmao.sudrf.ru": {
@@ -239,7 +239,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Кондинский районный суд"
   },
   "fi:langepas--hmao.sudrf.ru": {
@@ -248,7 +248,7 @@
     24,
     24,
     24,
-    24,
+    23,
     23,
     23,
     23,
@@ -263,7 +263,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 23,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Лангепасский городской суд"
   },
   "fi:megion--hmao.sudrf.ru": {
@@ -277,7 +277,7 @@
     21,
     21,
     21,
-    21,
+    20,
     20,
     20,
     20,
@@ -287,7 +287,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Мегионский городской суд"
   },
   "fi:sovetsk--hmao.sudrf.ru": {
@@ -296,7 +296,7 @@
     17,
     17,
     17,
-    17,
+    16,
     16,
     16,
     16,
@@ -311,7 +311,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 16,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Советский районный суд"
   },
   "fi:ugorsk--hmao.sudrf.ru": {
@@ -335,7 +335,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Югорский районный суд"
   },
   "fi:bel--hmao.sudrf.ru": {
@@ -349,7 +349,7 @@
     18,
     18,
     18,
-    18,
+    17,
     17,
     17,
     17,
@@ -359,7 +359,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 17,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Белоярский городской суд"
   },
   "fi:pth--hmao.sudrf.ru": {
@@ -375,7 +375,7 @@
     22,
     22,
     22,
-    22,
+    23,
     23,
     23
    ],
@@ -383,7 +383,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 23,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Пыть-Яхский городской суд"
   },
   "fi:berezovo--hmao.sudrf.ru": {
@@ -399,7 +399,7 @@
     19,
     19,
     19,
-    19,
+    18,
     18,
     18
    ],
@@ -407,14 +407,14 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Берёзовский районный суд"
   },
   "fi:rdj--hmao.sudrf.ru": {
    "counts": [
     21,
     21,
-    21,
+    20,
     20,
     20,
     20,
@@ -431,7 +431,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Радужнинский городской суд"
   },
   "fi:oktb--hmao.sudrf.ru": {
@@ -455,7 +455,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 23,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Октябрьский районный суд"
   },
   "cassation:7kas:total": {
@@ -479,12 +479,11 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 25,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
    "counts": [
-    6,
     5,
     5,
     3,
@@ -497,20 +496,20 @@
     2,
     2,
     2,
+    2,
     2
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 2,
-   "last_run_at": "2026-09-30T07:00:21+05:00",
+   "last_run_at": "2026-10-01T07:00:21+05:00",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
    "counts": [
     24,
     24,
-    24,
     23,
     23,
     23,
@@ -521,6 +520,7 @@
     23,
     23,
     23,
+    22,
     22
    ],
    "zero_streak": 0,
@@ -528,81 +528,113 @@
    "alerted_zero": false,
    "label": "Нижневартовский районный суд (г. Покачи)",
    "last_count": 22,
-   "last_run_at": "2026-09-30T07:00:21+05:00"
+   "last_run_at": "2026-10-01T07:00:21+05:00"
   }
  },
  "last_run": {
-  "at": "2026-09-30T08:44:42",
+  "at": "2026-10-01T07:00:21",
   "alerts": [],
-  "requests_ok": 34,
-  "requests_failed": 0,
+  "requests_ok": 169,
+  "requests_failed": 11,
   "requests_retried": 0,
-  "cards_breaker_skipped": 0,
-  "cards_breaker_unrequested": 0,
+  "cards_breaker_skipped": 2,
+  "cards_breaker_unrequested": 2,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 32,
-  "cards_planned": 34,
-  "cards_read_today": 322,
-  "cards_planned_today": 324,
-  "daily_attempts": 5,
+  "cards_read": 143,
+  "cards_planned": 268,
+  "cards_read_today": 142,
+  "cards_planned_today": 267,
+  "daily_attempts": 1,
   "instances": {
    "first_instance": {
-    "read": 31,
-    "planned": 32,
-    "read_today": 274,
-    "planned_today": 275
+    "read": 97,
+    "planned": 221,
+    "read_today": 96,
+    "planned_today": 220
    },
    "appeal": {
-    "read": 1,
-    "planned": 1,
-    "read_today": 35,
-    "planned_today": 35
+    "read": 32,
+    "planned": 32,
+    "read_today": 32,
+    "planned_today": 32
    },
    "cassation": {
-    "read": 0,
-    "planned": 1,
-    "read_today": 13,
-    "planned_today": 14
+    "read": 14,
+    "planned": 15,
+    "read_today": 14,
+    "planned_today": 15
    }
   },
   "latency": {
-   "n": 34,
-   "p50": 5.7,
-   "p90": 8.6,
-   "max": 11.2
+   "n": 169,
+   "p50": 15.4,
+   "p90": 23.4,
+   "max": 33.4
   },
   "failure_latency": {
+   "http_504": {
+    "n": 5,
+    "p50": 30.1,
+    "p90": 30.1,
+    "max": 30.1
+   },
    "invalid_card_request": {
     "n": 2,
-    "p50": 6.0,
-    "p90": 9.2,
-    "max": 9.2
+    "p50": 11.5,
+    "p90": 15.9,
+    "max": 15.9
+   },
+   "read_timeout": {
+    "n": 6,
+    "p50": 0.2,
+    "p90": 65.1,
+    "max": 65.1
    }
   },
   "fail_kinds": {
-   "invalid_card_request": 2
+   "invalid_card_request": 2,
+   "http_504": 5,
+   "read_timeout": 6
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 0,
-   "open_hosts": 0,
+   "opened_hosts": 1,
+   "open_hosts": 1,
    "recovered_hosts": 0,
-   "deferred_total": 0,
-   "deferred_remaining": 0,
+   "deferred_total": 3,
+   "deferred_remaining": 3,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {},
-   "hosts": []
+   "by_kind": {
+    "read_timeout": 1
+   },
+   "hosts": [
+    {
+     "host": "vartovgor--hmao.sudrf.ru",
+     "state": "open",
+     "kind": "read_timeout",
+     "family": "slow_unavailable",
+     "reason": "суд не отдал данные до таймаута чтения",
+     "preopened": false,
+     "skipped": 2,
+     "probes": 0,
+     "deferred_total": 3,
+     "deferred_remaining": 3,
+     "deferred_recovered": 0,
+     "cooldown_seconds": 300.0,
+     "next_probe_in_seconds": 295.2
+    }
+   ]
   },
-  "courts_unavailable": 0,
-  "courts_with_unrequested": 0,
+  "courts_unavailable": 1,
+  "courts_with_unrequested": 1,
   "courts_outage": 0,
-  "cards_unreachable": 0,
-  "cards_unread_other": 2,
+  "cards_unreachable": 2,
+  "cards_unread_other": 123,
   "run_deadline_seconds": 3300.0,
-  "run_deadline_reached": false
+  "run_deadline_reached": true
  }
 }
