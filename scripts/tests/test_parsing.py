@@ -3678,15 +3678,25 @@ class TestCheckedTodayDochitka:
         case = self._case("2026-08-20")
         assert uc.should_skip_case(case, self.ДЕНЬ) == (False, "")
 
-    def test_material_guard_still_wins(self, monkeypatch):
-        """М-гард стоит ВЫШЕ осознанно: материалы читаются каждый прогон
-        ради промоушена М→2, их единицы."""
+    def test_material_read_today_is_skipped(self, monkeypatch):
+        """Успешно прочитанный материал не перечитывается следующим слотом."""
         from court_monitor import config
         monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
         case = self._case(self.ДЕНЬ.isoformat(), num="М-200/2026")
-        skip, reason = uc.should_skip_case(case, self.ДЕНЬ)
-        assert skip is False
-        assert reason == "material_pending_promotion"
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (True, "checked_today")
+
+    @pytest.mark.parametrize("checked", [None, "2026-08-20"])
+    def test_material_unread_today_stays_in_plan(self, monkeypatch, checked):
+        """Вчерашнее чтение и отсутствие штампа не блокируют поиск М→2."""
+        from court_monitor import config
+        monkeypatch.setattr(config, "SKIP_CHECKED_TODAY", True)
+        case = self._case(checked, num="М-200/2026")
+        case["first_instance"]["events"] = [
+            {"date": "30.08.2026", "text": "Судебное заседание. 10:00"}
+        ]
+        assert uc.should_skip_case(case, self.ДЕНЬ) == (
+            False, "material_pending_promotion"
+        )
 
     def test_smart_skip_off_bypasses_dochitka(self, monkeypatch):
         """Полный прогон без smart-skip читает всё — и прочитанное сегодня."""
