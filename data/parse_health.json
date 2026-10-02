@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-02T07:00:28+05:00",
+ "updated_at": "2026-10-02T07:15:11+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,102 +532,77 @@
   }
  },
  "last_run": {
-  "at": "2026-10-02T07:00:28",
+  "at": "2026-10-02T07:15:11",
   "alerts": [],
-  "requests_ok": 297,
-  "requests_failed": 5,
+  "requests_ok": 17,
+  "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 263,
-  "cards_planned": 279,
-  "cards_read_today": 262,
+  "cards_read": 15,
+  "cards_planned": 17,
+  "cards_read_today": 276,
   "cards_planned_today": 278,
-  "daily_attempts": 1,
+  "daily_attempts": 2,
   "instances": {
    "first_instance": {
-    "read": 210,
-    "planned": 225,
-    "read_today": 209,
+    "read": 14,
+    "planned": 15,
+    "read_today": 223,
     "planned_today": 224
    },
    "appeal": {
-    "read": 35,
-    "planned": 35,
+    "read": 1,
+    "planned": 1,
     "read_today": 35,
     "planned_today": 35
    },
    "cassation": {
-    "read": 18,
-    "planned": 19,
+    "read": 0,
+    "planned": 1,
     "read_today": 18,
     "planned_today": 19
    }
   },
   "latency": {
-   "n": 297,
-   "p50": 9.7,
-   "p90": 15.5,
-   "max": 27.0
+   "n": 17,
+   "p50": 10.5,
+   "p90": 13.1,
+   "max": 13.8
   },
   "failure_latency": {
    "invalid_card_request": {
     "n": 2,
-    "p50": 0.3,
-    "p90": 11.8,
-    "max": 11.8
-   },
-   "read_timeout": {
-    "n": 5,
-    "p50": 0.2,
-    "p90": 5.1,
-    "max": 5.1
+    "p50": 10.5,
+    "p90": 13.1,
+    "max": 13.1
    }
   },
   "fail_kinds": {
-   "invalid_card_request": 2,
-   "read_timeout": 5
+   "invalid_card_request": 2
   },
   "breaker": {
    "mode": "time",
-   "opened_hosts": 1,
-   "open_hosts": 1,
+   "opened_hosts": 0,
+   "open_hosts": 0,
    "recovered_hosts": 0,
-   "deferred_total": 1,
-   "deferred_remaining": 1,
+   "deferred_total": 0,
+   "deferred_remaining": 0,
    "deferred_recovered": 0,
    "probes": 0,
    "probe_successes": 0,
    "probe_failures": 0,
-   "by_kind": {
-    "read_timeout": 1
-   },
-   "hosts": [
-    {
-     "host": "megion--hmao.sudrf.ru",
-     "state": "open",
-     "kind": "read_timeout",
-     "family": "slow_unavailable",
-     "reason": "суд не отдал данные до таймаута чтения",
-     "preopened": false,
-     "skipped": 0,
-     "probes": 0,
-     "deferred_total": 1,
-     "deferred_remaining": 1,
-     "deferred_recovered": 0,
-     "cooldown_seconds": 300.0,
-     "next_probe_in_seconds": 299.8
-    }
-   ]
+   "by_kind": {},
+   "hosts": []
   },
-  "courts_unavailable": 1,
+  "courts_unavailable": 0,
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 16,
+  "cards_unread_other": 2,
   "run_deadline_seconds": 3300.0,
-  "run_deadline_reached": true
+  "run_deadline_reached": false
  }
 }
