@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-05T07:13:27+05:00",
+ "updated_at": "2026-10-05T08:11:02+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,30 +532,30 @@
   }
  },
  "last_run": {
-  "at": "2026-10-05T07:13:27",
+  "at": "2026-10-05T08:11:02",
   "alerts": [],
-  "requests_ok": 10,
+  "requests_ok": 3,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 7,
-  "cards_planned": 9,
+  "cards_read": 1,
+  "cards_planned": 3,
   "cards_read_today": 253,
   "cards_planned_today": 255,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 4,
-    "planned": 5,
+    "read": 0,
+    "planned": 1,
     "read_today": 202,
     "planned_today": 203
    },
    "appeal": {
-    "read": 3,
-    "planned": 3,
+    "read": 1,
+    "planned": 1,
     "read_today": 33,
     "planned_today": 33
    },
@@ -567,17 +567,17 @@
    }
   },
   "latency": {
-   "n": 10,
-   "p50": 10.9,
-   "p90": 14.4,
-   "max": 15.2
+   "n": 3,
+   "p50": 7.5,
+   "p90": 10.6,
+   "max": 10.6
   },
   "failure_latency": {
    "invalid_card_request": {
     "n": 2,
-    "p50": 6.7,
-    "p90": 9.9,
-    "max": 9.9
+    "p50": 7.2,
+    "p90": 10.6,
+    "max": 10.6
    }
   },
   "fail_kinds": {
