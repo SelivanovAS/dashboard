@@ -57,7 +57,7 @@
 | HTML выдачи, карточки, кассация | [parsing/](scripts/court_monitor/parsing/__init__.py), `scripts/court_monitor/presidium_search.py` (локальная разработка) |
 | Стадии, приём дел, связки и архивы | [lifecycle.py](scripts/court_monitor/lifecycle.py), [linking.py](scripts/court_monitor/linking.py), [bank_intake.py](scripts/court_monitor/bank_intake.py) |
 | JSON и раздельное хранение bank-events | [storage.py](scripts/court_monitor/storage.py) |
-| Ожидание поздних кассационных актов | [act_watch.py](scripts/court_monitor/act_watch.py); [контракт и состояние выпуска](docs/Ожидание_кассационных_актов.md) |
+| Ожидание поздних кассационных и апелляционных актов | [act_watch.py](scripts/court_monitor/act_watch.py), [appeal_act_watch.py](scripts/court_monitor/appeal_act_watch.py); [контракт и состояние выпуска](docs/Ожидание_кассационных_актов.md) |
 | Полный прогон, replay, анализ актов | [runs.py](scripts/court_monitor/runs.py) |
 | LLM, шаблон и проверка дайджеста | [digest/](scripts/court_monitor/digest/__init__.py), [llm.py](scripts/court_monitor/digest/llm.py), [template.py](scripts/court_monitor/digest/template.py), [lint.py](scripts/court_monitor/digest/lint.py) |
 | Telegram и персональный Web Push | [delivery.py](scripts/court_monitor/delivery.py) |
@@ -138,7 +138,8 @@
   Свежесть дампов и ошибки карточек учитывать по домену и `delo_id`; импорт
   одной инстанции не подтверждает импорт другой. Неоднозначную старую отметку
   по домену не присваивать сразу обоим разделам.
-- Ожидание кассационного текста ведёт `act_watch.py` независимо от стадии,
+- Ожидание кассационного текста ведёт `act_watch.py`, апелляционного —
+  `appeal_act_watch.py` независимо от стадии,
   нового круга и архива. Сохранять задачу и событие публикации до подтверждения
   контекста дайджеста; смена стадии не закрывает ожидание. Отсутствующая ссылка
   и несовпадение реквизитов должны быть видны в отчёте, а не считаться успехом.
