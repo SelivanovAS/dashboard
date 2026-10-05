@@ -202,7 +202,7 @@ _CASS_ACT_DIV_RE = re.compile(
 # Заголовок «Дело №88-XXXX/YYYY» в начале текста определения (7kas); у
 # президиума облсуда — «Дело № 44Г-N/YYYY» / «4Г-N/YYYY».
 _CASS_ACT_DELO_NUM_RE = re.compile(
-    r"Дело\s*№\s*(88-?\d+/\d{4}|\d+[ГГ]-\d+/\d{4})", re.IGNORECASE
+    r"(?:Дело\s*)?№\s*(88-?\d+/\d{4}|\d+[ГГ]-\d+/\d{4})", re.IGNORECASE
 )
 # Заголовок карточки «ДЕЛО № 4Г-66/2026» (div.casenumber) — у 7kas тот же
 # блок несёт «8Г-…». Карточка президиума приходит в прогон БЕЗ строки выдачи
@@ -511,7 +511,8 @@ def parse_cassation_card(html: str, court_base_url: str = "") -> dict | None:
             continue
         first_row_text = " ".join(cell_text(c) for c in tbl[0]).strip().upper()
         # ДЕЛО — детект по «УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР»
-        if ("УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР" in first_row_text
+        if (first_row_text == "ДЕЛО"
+                or "УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР" in first_row_text
                 or first_row_text.startswith("ДАТА ПОСТУПЛЕНИЯ")) and "ДЕЛО" not in sections:
             sections["ДЕЛО"] = tbl
             continue

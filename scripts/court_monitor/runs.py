@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog, lifecycle, telemetry
+from court_monitor import config, ghlog, lifecycle, telemetry, act_watch
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -2657,6 +2657,10 @@ def main_json():
     existing_ids = collect_existing_ids(
         cases + archived_cases + cold_archived_cases + bank_archived_cases
     )
+    # Обязательства по поздним актам фиксируем ДО смены стадий и HTTP.
+    act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
+    act_watch.checkpoint(data)
+
     # Судо-зависимый индекс для фильтра НОВЫХ FI-дел: номера не уникальны
     # между судами — глобальный existing_ids терял бы новое дело суда Б при
     # совпадении номера с делом суда А (общий хелпер с импортёром дампов).
@@ -3123,15 +3127,19 @@ def main_json():
         today_for_refresh = date.today()
         today_iso = today_for_refresh.isoformat()
         cass_refresh_finds: list[dict] = []
+        # После отмены продолжаем читать кассацию: текст акта может появиться
+        # позднее перехода в awaiting_relink. Стадию при дочитке не меняем.
         # План очереди до старта цикла: без HTTP, те же условия, что ниже.
         _plan_total = 0
         _plan_skip = 0
         _plan_fresh = 0
         _plan_no_link = 0
         for _c in cases:
-            if _c.get("current_stage") != "cassation":
+            if _c.get("current_stage") not in ("cassation", "awaiting_relink"):
                 continue
             _cb = _c.get("cassation") or {}
+            if act_watch.pending(_cb):
+                continue
             if _cb.get("last_checked_at") == today_iso:
                 _plan_fresh += 1
                 continue
@@ -3165,9 +3173,11 @@ def main_json():
         )
         cass_refresh_plan: list[tuple] = []
         for case in cases:
-            if case.get("current_stage") != "cassation":
+            if case.get("current_stage") not in ("cassation", "awaiting_relink"):
                 continue
             cass = case.get("cassation") or {}
+            if act_watch.pending(cass):
+                continue
             # Уже обновили в 4c → пропускаем (last_checked_at = сегодня).
             if cass.get("last_checked_at") == today_iso:
                 cass_refresh_fresh += 1
@@ -3334,6 +3344,25 @@ def main_json():
         breaker_skipped=cass_refresh_skipped_breaker,
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
+    def fetch_waiting_act(url, **kwargs):
+        polite_delay()
+        return fetch_card_checked(url, **kwargs)
+
+    act_watch_report = act_watch.refresh(
+        data, cases + archived_cases + cold_archived_cases + bank_archived_cases,
+        today, fetch_waiting_act, force=not config.SMART_SKIP_CASES,
+    )
+    act_watch.persist_archives(data, today)
+    cass_refresh_parsed += act_watch_report["read"]
+    cass_refresh_total += act_watch_report["planned"]
+    telemetry.set_coverage("cassation_refresh", cass_refresh_parsed, cass_refresh_total,
+                           processed=cass_refresh_total,
+                           breaker_skipped=cass_refresh_skipped_breaker)
+    log.info("Ожидаемые кассационные акты: %s; к проверке %s; прочитано %s/%s; "
+             "опубликовано %s; вне очереди %s", act_watch_report["waiting"],
+             act_watch_report["due"], act_watch_report["read"], act_watch_report["planned"],
+             act_watch_report["published"], act_watch_report["unplanned"])
+
 
     # Резервный щит после обоих link_cassation_cases (раздел 4c + 4d):
     # если по какой-то причине свежий прогон создал двойника (нашёлся
@@ -5761,6 +5790,7 @@ def main_json():
             }
             for name, attempt in _instance_attempt.items()
         }
+        health_state["act_publication_watch"] = act_watch_report
         health_state["last_run"] = {
             "at": datetime.now().isoformat(timespec="seconds"),
             # Строки детектора ЭТОГО прогона — для ретрансляции с VPS/Mac

@@ -48,7 +48,7 @@ console.log(JSON.stringify({source:store.get(window.REGION_FRONT.STORAGE_NS+':sb
 
 def frontend_bundle():
     src = (ROOT / 'app.js').read_text()
-    return '\n'.join(fn(src, n) for n in ('hearingTimezone', 'hearingZoneLabel', 'hearingUtcMs', 'dayDiff'))
+    return '\n'.join(fn(src, n) for n in ('stageGroup', 'isCassationStage', 'hearingTimezone', 'hearingZoneLabel', 'hearingUtcMs', 'dayDiff'))
 
 
 @pytest.mark.parametrize('browser_timezone', ['UTC', 'America/Los_Angeles', 'Asia/Tokyo'])
