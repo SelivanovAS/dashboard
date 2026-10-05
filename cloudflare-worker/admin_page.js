@@ -1943,7 +1943,7 @@ async function loadHealth() {
       // все источники обзаведутся label после пары прогонов).
       return { key: k, s: s, level: healthLevel(s), name: s.label || COURT_NAMES[k] || k };
     });
-    if (!items.length && !d.act_publication_watch) {
+    if (!items.length && !d.act_publication_watch && !d.appeal_act_publication_watch) {
       listEl.className = "";
       listEl.innerHTML = '<div class="empty">Журнал пуст</div>';
       return;
@@ -1975,12 +1975,13 @@ async function loadHealth() {
         + '</summary><div class="fold-body">' + rest.map(rowHtml).join("") + '</div></details>'
       : "";
     listEl.className = "";
-    const aw = d.act_publication_watch;
+    function renderActWatch(aw, title) {
     const awReasons = {scheduled:'по расписанию', text_not_published:'текст пока не опубликован',
       published:'акт получен', unread_card:'карточка не прочитана', fetch_error:'ошибка запроса',
       missing_card_link:'нет корректной ссылки', identity_conflict:'противоречивые реквизиты',
-      identity_mismatch:'карточка не соответствует делу'};
-    const awHtml = aw ? '<details class="fold"><summary>Ожидание кассационных актов: '
+      identity_mismatch:'карточка не соответствует делу', act_text_unread:'текст акта не загружен',
+      legacy_announcement_ambiguous:'старая отметка рассылки не содержит суд'};
+    return aw ? '<details class="fold"><summary>' + escHtml(title) + ': '
       + escHtml(String(aw.waiting || 0)) + ' · прочитано ' + escHtml(String(aw.read || 0))
       + '/' + escHtml(String(aw.planned || 0))
       + (aw.unplanned ? ' · ⚠ вне очереди: ' + escHtml(String(aw.unplanned)) : '')
@@ -1991,7 +1992,9 @@ async function loadHealth() {
         + escHtml(awReasons[x.reason] || x.reason || '')
         + (x.next_check_at ? ' · проверка: ' + escHtml(x.next_check_at) : '') + '</div>';}).join('')
       + '</div></details>' : '';
-    listEl.innerHTML = awHtml + head + restHtml;
+    }
+    listEl.innerHTML = renderActWatch(d.act_publication_watch, "Ожидание кассационных актов")
+      + renderActWatch(d.appeal_act_publication_watch, "Ожидание апелляционных актов") + head + restHtml;
     document.getElementById("health-badges").innerHTML =
       (nRed ? '<span class="badge badge-fail">' + nRed + ' сбой</span> ' : "")
       + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")

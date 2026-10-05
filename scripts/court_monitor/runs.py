@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog, lifecycle, telemetry, act_watch
+from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -2660,6 +2660,8 @@ def main_json():
     # Обязательства по поздним актам фиксируем ДО смены стадий и HTTP.
     act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
     act_watch.checkpoint(data)
+    appeal_act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
+    appeal_act_watch.checkpoint(data)
 
     # Судо-зависимый индекс для фильтра НОВЫХ FI-дел: номера не уникальны
     # между судами — глобальный existing_ids терял бы новое дело суда Б при
@@ -3571,9 +3573,8 @@ def main_json():
 
     # ── 4. Обновление существующих дел ──
     # 4a. Апелляция: обновляем карточки апел. только для стадии "appeal".
-    # После перехода в cassation_watch апел. карточка больше не
-    # парсится (см. user-decision: «30 дней после апел. заседания или
-    # публикация акта — и мы перестаём парсить сайт апел. инстанции»).
+    # После смены стадии обычный refresh прекращается. Неполученный текст
+    # определения продолжает ждать независимая appeal_act_watch.
     log_phase(4, 9, "Обновление карточек апелляции")
     t0 = time.perf_counter()
     json_appeal_by_num: dict = {}
@@ -3591,6 +3592,19 @@ def main_json():
         csv_cases, json_appeal_by_num, skip_apel_nums=skip_apel_nums,
         json_case_by_apnum=json_case_by_apnum,
     )
+
+    appeal_act_report = appeal_act_watch.refresh(
+        data, cases + archived_cases + cold_archived_cases + bank_archived_cases,
+        today, fetch_waiting_act, force=not config.SMART_SKIP_CASES,
+        fetch_text=fetch_act_text,
+    )
+    appeal_act_watch.persist_archives(data, today)
+    telemetry.set_coverage("appeal", ap_skip_stats['parsed'] + appeal_act_report['read'],
+        ap_skip_stats.get('planned', ap_skip_stats['total']) + appeal_act_report['planned'],
+        breaker_skipped=ap_skip_stats.get('skipped_breaker', 0))
+    log.info("Ожидание апелляционных актов: осталось %s; прочитано %s/%s; получено %s",
+             appeal_act_report['waiting'], appeal_act_report['read'],
+             appeal_act_report['planned'], appeal_act_report['published'])
 
     if appeal_new_cases_csv:
         csv_cases = appeal_new_cases_csv + csv_cases
@@ -5791,6 +5805,7 @@ def main_json():
             for name, attempt in _instance_attempt.items()
         }
         health_state["act_publication_watch"] = act_watch_report
+        health_state["appeal_act_publication_watch"] = appeal_act_report
         health_state["last_run"] = {
             "at": datetime.now().isoformat(timespec="seconds"),
             # Строки детектора ЭТОГО прогона — для ретрансляции с VPS/Mac
@@ -6026,6 +6041,7 @@ def main_json():
         )
         cass_discovered = list(cass_discovered) + presidium_imported_new
     cass_changes = merge_imported_cassation_changes(data, cass_changes)
+    changes = appeal_act_watch.merge_changes(data, changes)
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
@@ -6314,6 +6330,7 @@ def main_json():
         will_deliver=digest_will_deliver,
     )
     acknowledge_imported_cassation_changes(data, cass_changes, digest_issue_key)
+    appeal_act_watch.acknowledge(data, changes, digest_issue_key)
     digest = generate_digest(
         appeal_new_cases_csv, changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
