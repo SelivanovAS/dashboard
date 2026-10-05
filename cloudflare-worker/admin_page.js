@@ -1943,7 +1943,7 @@ async function loadHealth() {
       // все источники обзаведутся label после пары прогонов).
       return { key: k, s: s, level: healthLevel(s), name: s.label || COURT_NAMES[k] || k };
     });
-    if (!items.length) {
+    if (!items.length && !d.act_publication_watch) {
       listEl.className = "";
       listEl.innerHTML = '<div class="empty">Журнал пуст</div>';
       return;
@@ -1975,7 +1975,23 @@ async function loadHealth() {
         + '</summary><div class="fold-body">' + rest.map(rowHtml).join("") + '</div></details>'
       : "";
     listEl.className = "";
-    listEl.innerHTML = head + restHtml;
+    const aw = d.act_publication_watch;
+    const awReasons = {scheduled:'по расписанию', text_not_published:'текст пока не опубликован',
+      published:'акт получен', unread_card:'карточка не прочитана', fetch_error:'ошибка запроса',
+      missing_card_link:'нет корректной ссылки', identity_conflict:'противоречивые реквизиты',
+      identity_mismatch:'карточка не соответствует делу'};
+    const awHtml = aw ? '<details class="fold"><summary>Ожидание кассационных актов: '
+      + escHtml(String(aw.waiting || 0)) + ' · прочитано ' + escHtml(String(aw.read || 0))
+      + '/' + escHtml(String(aw.planned || 0))
+      + (aw.unplanned ? ' · ⚠ вне очереди: ' + escHtml(String(aw.unplanned)) : '')
+      + (aw.long_wait ? ' · более 90 дней: ' + escHtml(String(aw.long_wait)) : '')
+      + '</summary><div class="fold-body">'
+      + (aw.items || []).map(function(x){return '<div class="health-row">'
+        + escHtml(x.number || '') + ' · ' + escHtml(x.court || '') + ' · '
+        + escHtml(awReasons[x.reason] || x.reason || '')
+        + (x.next_check_at ? ' · проверка: ' + escHtml(x.next_check_at) : '') + '</div>';}).join('')
+      + '</div></details>' : '';
+    listEl.innerHTML = awHtml + head + restHtml;
     document.getElementById("health-badges").innerHTML =
       (nRed ? '<span class="badge badge-fail">' + nRed + ' сбой</span> ' : "")
       + (nYellow ? '<span class="badge badge-run">' + nYellow + ' ⚠︎</span> ' : "")

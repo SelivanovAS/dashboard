@@ -3158,7 +3158,7 @@ def should_skip_case(
         block = case_dict.get("first_instance") or {}
     elif stage == "appeal":
         block = case_dict.get("appeal") or {}
-    elif stage == "cassation":
+    elif stage in ("cassation", "awaiting_relink"):
         block = case_dict.get("cassation") or {}
     elif stage in ("awaiting_appeal", "cassation_pending"):
         # До отправки читаем каждый прогон, после — раз в неделю. Будущие

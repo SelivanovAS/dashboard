@@ -3233,6 +3233,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     def _cass_parent(change: dict) -> dict:
         details = change.get("details") or {}
         number = change.get("cassation_internal_number") or ""
+        snapshot = change.get("publication_parent") or {}
+        snapshot_cs = snapshot.get("cassation") or {}
+        if (snapshot_cs.get("case_number") and
+                _cass_digest_key(snapshot_cs.get("court_domain"), snapshot_cs["case_number"])
+                == _cass_digest_key(details.get("court_domain"), number)):
+            return snapshot
         exact = cases_by_cass_key.get(_cass_digest_key(details.get("court_domain"), number), [])
         if exact:
             return exact[0] if len(exact) == 1 else {}

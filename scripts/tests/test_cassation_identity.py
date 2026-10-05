@@ -122,3 +122,21 @@ def test_cassation_event_uses_parties_of_its_own_proceeding():
     html = render(cases, changes)
     assert "Второй истец" in html
     assert "Первый истец" not in html
+
+
+def test_late_act_after_remand_is_announced_once_without_stage_change():
+    info = find()
+    info.update(outcome='cassation_remanded', decision_date='08.09.2026',
+                result_text='Отменено с направлением на новое рассмотрение')
+    cases, _, _ = linking.link_cassation_cases([], [info])
+    cases[0]['current_stage'] = 'awaiting_relink'
+    published = dict(info, act_published=True, act_text='Мотивы кассационного определения. ' * 100)
+    cases, changes, discovered = linking.link_cassation_cases(cases, [published])
+    assert cases[0]['current_stage'] == 'awaiting_relink'
+    assert cases[0]['cassation']['act_published']
+    assert len(changes) == 1 and 'new_act' in changes[0]['type']
+    assert not discovered
+    html = render(cases, changes)
+    assert info['cassation_internal_number'] in html
+    _, repeated, _ = linking.link_cassation_cases(cases, [published])
+    assert repeated == []

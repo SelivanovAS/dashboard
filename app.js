@@ -232,7 +232,7 @@ function isAppealStage(c){
 // номер дела — 8Г-XXX, ссылка — на 7kas.sudrf.ru. На других кассац.
 // подстадиях (cassation_watch/pending) карточки на 7kas ещё нет.
 function isCassationStage(c){
-  return (c&&c.stage)==='cassation';
+  return stageGroup(c)==='cassation';
 }
 // Кассация территории — из блока region в cases.json (ХМАО-фолбэк для
 // данных без блока). У Башкирии будет 6-й КСОЮ — фронт не правится.
@@ -242,7 +242,7 @@ function regionCassation(){
 // Исходные часы не переводим: у заседания пояс суда, у расписания обхода — территории.
 function hearingTimezone(c,stageKey){
   const r=(typeof window!=='undefined'&&window.REGION_INFO)||{};
-  const stage=stageKey||(c&&c.stage==='cassation'?'cs':c&&c.stage==='appeal'?'ap':'fi');
+  const stage=stageKey||(isCassationStage(c)?'cs':c&&c.stage==='appeal'?'ap':'fi');
   const b=(c&&(stage==='cs'?c._cs:stage==='ap'?c._ap:c._fi))||{};
   const courts=stage==='cs'?[...(r.presidium_courts||[]),...(r.cassation?[r.cassation]:[])]:stage==='ap'?(r.appeal_courts||[]):(r.fi_courts||[]);
   const court=courts.find(x=>x.domain===b.court_domain)||(stage==='cs'&&!b.court_domain?r.cassation:null)||{};
@@ -891,7 +891,7 @@ function jsonToCase(j){
   // апелляция уже прошла, но ещё не начата кассация: самое актуальное событие
   // лежит в ap (результат, дата, ссылка). Без этого страница показывает
   // пустой fi и лепит «Не назначено» вместо «Рассмотрено».
-  const isCass=stage==='cassation'&&!!cs.case_number;
+  const isCass=isCassationStage({stage})&&!!cs.case_number;
   const isAppeal=(stage==='appeal'||stage==='cassation_watch'||stage==='cassation_pending')&&ap.case_number;
   const primary=isCass?cs:(isAppeal?ap:fi);
   // Для дел в кассации основной ID карточки — 8Г-XXX (cassation.case_number).
@@ -959,7 +959,7 @@ function jsonToCase(j){
   }
   // Источник результата: favor и словарь лейблов зависят от того, ЧЬЁ это
   // решение (1-я инст. / апелляция / кассация), а не от current_stage —
-  // в awaiting_appeal/awaiting_relink результат всё ещё от 1-й инстанции.
+  // в awaiting_appeal результат от 1-й инстанции, в awaiting_relink — от кассации.
   // Апелляционная карточка с «исковым» словарём («ИСК УДОВЛЕТВОРЕН…»)
   // говорит о судьбе иска, а не жалобы — читается по роли банка, как 1-я инст.
   let resultSource=isCass?'cassation':(isAppeal?'appeal':'fi');
@@ -3696,7 +3696,7 @@ function openDrawer(caseNumber){
   const hasFi=!!(c._fi&&c._fi.case_number);
   const hasAp=!!(c._ap&&c._ap.case_number);
   const hasCs=!!(c._cs&&c._cs.case_number);
-  const предпочтение=c.stage==='cassation'?['cs','ap','fi']
+  const предпочтение=isCassationStage(c)?['cs','ap','fi']
     :c.stage==='appeal'?['ap','cs','fi']
     :['fi','ap','cs'];
   const естьВкладка={fi:hasFi,ap:hasAp,cs:hasCs};
@@ -4191,7 +4191,7 @@ function renderDrawer(c){
       kdResultPresent=!!(c._ap.result);
     }
   }else if(drawerStage==='cs'&&c._cs){
-    kdReceived=parseDate(c._cs.filing_date||'')||(c.stage==='cassation'?kdReceived:'');
+    kdReceived=parseDate(c._cs.filing_date||'')||(isCassationStage(c)?kdReceived:'');
     // Приоритет: «без движения» → ближайшее заседание. Но если назначение
     // позже suspended_until — «без движения» уже отменено фактически.
     const _su=c._cs.suspended_until?parseDate(c._cs.suspended_until):'';
@@ -4224,14 +4224,14 @@ function renderDrawer(c){
   // Key dates — используем kd* (зависят от drawerStage). Блок стадии для
   // даты решения: вкладка drawer'а, а без вкладок (drawerStage=null) —
   // блок активной стадии дела.
-  const kdStageKey=(drawerStage==='fi'||drawerStage==='ap'||drawerStage==='cs')?drawerStage:(c.stage==='appeal'?'ap':c.stage==='cassation'?'cs':'fi');
+  const kdStageKey=(drawerStage==='fi'||drawerStage==='ap'||drawerStage==='cs')?drawerStage:(c.stage==='appeal'?'ap':isCassationStage(c)?'cs':'fi');
   const kdBlock=kdStageKey==='ap'?c._ap:kdStageKey==='cs'?c._cs:c._fi;
   const resolvedDate=kdResultPresent?(stageResolvedDate(kdStageKey,kdBlock)||kdLastEventDate||kdNext):'';
   // Решённое без распознанного вердикта (передача по подсудности: статус
   // «Решено», normalizeResult молчит) — заседание всё равно последнее, а не
   // «следующее не назначено». Только на вкладке активной стадии: c.status
   // говорит о ней.
-  const kdActiveKey=c.stage==='appeal'?'ap':c.stage==='cassation'?'cs':'fi';
+  const kdActiveKey=c.stage==='appeal'?'ap':isCassationStage(c)?'cs':'fi';
   const kdDecided=kdResultPresent||(kdStageKey===kdActiveKey&&c.status==='decided');
   const hear=hearingRowState({kdNext:kdNext,kdNextLabel:kdNextLabel,kdResultPresent:kdDecided,resolvedDate:resolvedDate,timezone:hearingTimezone(c,kdStageKey)});
   const hearD=kdNext?dayDiff(kdNext,hearingTimezone(c,kdStageKey)):null;
@@ -4255,7 +4255,7 @@ function renderDrawer(c){
     // показываем кликабельный чип-якорь, скроллящий к секции «AI анализ».
     const stageAnalysis=drawerStage==='fi'?(c._fi&&c._fi.act_analysis):drawerStage==='ap'?(c._ap&&c._ap.act_analysis):drawerStage==='cs'?(c._cs&&c._cs.act_analysis):null;
     const chip=stageAnalysis?` <span class="badge-ai-analysis" onclick="scrollToActAnalysis()" title="Перейти к AI-анализу акта">✨ AI-анализ</span>`:'';
-    keyDates+=`<div class="kv-k">Публикация акта</div><div class="kv-v kv-mono">${formatDate(kdActDate)}${chip}</div>`;
+    keyDates+=`<div class="kv-k">${kdStageKey==='cs'?'Дата опубликованного акта':'Публикация акта'}</div><div class="kv-v kv-mono">${formatDate(kdActDate)}${chip}</div>`;
   }
   // Ключевая дата «Жалоба предъявлена» — крайний свежий факт подачи апел.
   // или касс. жалобы (либо «Подана» без даты, если парсер ещё не подтянул
