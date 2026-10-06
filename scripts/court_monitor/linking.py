@@ -1,0 +1,1919 @@
+# -*- coding: utf-8 -*-
+"""Связывание дел между инстанциями: FI ↔ апелляция (link_cases),
+re-link после кассационного remanded, реактивация из архива,
+линковка/discovery кассации 7kas (link_cassation_cases) с дедупом
+определений через .cassation_acts, ротация горячего архива в холодные
+годовые файлы (rotate_cold_archive).
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from copy import deepcopy
+from datetime import datetime, timedelta, date
+
+from court_monitor import config
+from court_monitor.config import log, cold_archive_path
+from court_monitor.courts import (
+    CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
+    match_fi_court_by_short_name, cassation_court_by_domain,
+    presidium_court_by_domain, canon_sudrf_domain,
+)
+from court_monitor.regions import get_region
+from court_monitor.regions.base import _eyo
+from court_monitor.fi_identity import (
+    FiDedupIndex, FiUncertainIndex, resolve_fi_identity, compare_fi_identity,
+    fi_number_tracking_status, case_identity_fi as _case_identity_fi,
+)
+from court_monitor.lifecycle import (
+    _snapshot_round_to_history, _has_real_fi, _DATE_DDMMYYYY_RX,
+    _infer_archived_at, _parse_iso_date, should_parse_fi_card,
+    is_case_archived,
+)
+from court_monitor.netutil import fetch_page, polite_delay
+from court_monitor.parsing import (
+    parse_cassation_card, classify_cassation_outcome, cassation_remanded_to,
+    detect_captcha_challenge, find_fi_case_link, is_no_data_page,
+    looks_like_outage_page, parties_from_participants,
+)
+from court_monitor.storage import (
+    load_cassation_acts, save_cassation_acts, _cassation_act_key,
+    load_json, save_json,
+)
+from court_monitor.textutil import (
+    parse_date, _bare_case_number, extract_motive_part, classify_appellant_role,
+)
+
+def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict]:
+    """Найти дела из поиска, которых нет в текущей базе."""
+    new = []
+    for c in search_cases:
+        num = c.get("Номер дела", "").strip()
+        if num and num not in existing_numbers:
+            new.append(c)
+    return new
+
+
+def _same_case_record(left: dict, right: dict) -> bool:
+    if left is right:
+        return True
+    return bool(left.get("id") and left.get("id") == right.get("id")
+                and compare_fi_identity(_case_identity_fi(left),
+                                        _case_identity_fi(right)) == "same")
+
+
+def _may_duplicate_record(left: dict, right: dict) -> bool:
+    """Не добавлять архивного двойника, пока суд одноимённой записи неизвестен."""
+    return bool(left.get("id") and left.get("id") == right.get("id")
+                and compare_fi_identity(_case_identity_fi(left),
+                                        _case_identity_fi(right)) != "different")
+
+
+# ── Связка дел первой инстанции ↔ апелляция ────────────────────────────────
+
+def link_cases(
+    cases: list[dict], appeal_fi_numbers: dict[tuple[str, str], str]
+) -> list[dict]:
+    """Связать дела первой инстанции с апелляцией.
+
+    Args:
+        cases: список JSON-объектов дел (формат cases.json)
+        appeal_fi_numbers: маппинг {(домен_апел_суда, номер_апелляции):
+            номер_дела_1_инстанции}, полученный из parse_case_card →
+            info["Номер дела 1 инстанции"]. Ключ составной: в регионе может
+            быть НЕСКОЛЬКО апел-судов (Свердловский облсуд + Суд ЯНАО), а
+            номера 33-…/YYYY между ними не уникальны.
+
+    Логика:
+    - Для каждого апелляционного дела с известным номером 1 инстанции:
+      1. Если дело того же суда 1 инстанции уже есть в cases → мержим appeal
+         данные в него; неоднозначные совпадения оставляем отдельно
+      2. Если нет → обновляем id на номер 1 инстанции (для будущей привязки)
+    - Возвращает обновлённый список cases (дедуплицированный).
+    """
+    if not appeal_fi_numbers:
+        return cases
+
+    # Индексы для быстрого поиска. Ключи кладём дуально: исходный («сырой»)
+    # номер дела и его базовая форма через `_bare_case_number` — чтобы
+    # «гибридные» номера 1-й инст. вида `2-208/2026 (2-1148/2025;)` ловились
+    # парсером апелляции, который из карточки достаёт короткую форму
+    # `2-208/2026`. Иначе матч не сработает и появится «сирота».
+    def _put_idx(idx_map: dict[str, set[int]], key: str, i: int) -> None:
+        if not key:
+            return
+        idx_map.setdefault(key, set()).add(i)
+        base = _bare_case_number(key)
+        if base and base != key:
+            idx_map.setdefault(base, set()).add(i)
+
+    def _put_idx_ap(idx_map: dict, dom: str, num: str, i: int) -> None:
+        """Апел-индекс: ключ (домен, номер) + (домен, bare-номер)."""
+        if not num:
+            return
+        idx_map.setdefault((dom, num), set()).add(i)
+        base = _bare_case_number(num)
+        if base and base != num:
+            idx_map.setdefault((dom, base), set()).add(i)
+
+    def _same_fi_court(source: dict, target: dict) -> bool:
+        return compare_fi_identity(_case_identity_fi(source),
+                                   _case_identity_fi(target)) == "same"
+
+    fi_index: dict[str, set[int]] = {}   # номер_1_инст → кандидаты в cases
+    appeal_index: dict = {}  # (домен_апел_суда, номер_апелляции) → индекс в cases
+    # Храним всех кандидатов. Приоритет реальных FI-данных применяется ПОСЛЕ
+    # проверки суда: первый в списке одноимённый номер мог быть чужим делом.
+    for i in range(len(cases)):
+        c = cases[i]
+        cid = c.get("id", "")
+        fi = c.get("first_instance")
+        if fi and fi.get("case_number"):
+            _put_idx(fi_index, fi["case_number"], i)
+        # Также индексируем по id (который может быть номером 1 инст. или апелляции)
+        _put_idx(fi_index, cid, i)
+    # appeal_index — однопроходно: у апелляций нет конфликта orphan vs real.
+    # Блок без court_domain (не мигрирован) индексируется под пустым доменом —
+    # lookup ниже пробует и его.
+    for i, c in enumerate(cases):
+        appeal = c.get("appeal")
+        if appeal and appeal.get("case_number"):
+            dom = (appeal.get("court_domain") or "").strip()
+            _put_idx_ap(appeal_index, dom, appeal["case_number"], i)
+
+    linked_count = 0
+    to_remove: set[int] = set()
+
+    for (ap_domain, appeal_num), fi_num in appeal_fi_numbers.items():
+        if not fi_num:
+            continue
+
+        appeal_candidates = appeal_index.get((ap_domain, appeal_num), set())
+        if not appeal_candidates:
+            appeal_candidates = appeal_index.get((ap_domain, _bare_case_number(appeal_num)), set())
+        if not appeal_candidates:
+            # Совместимость: блок appeal ещё без court_domain (данные до
+            # миграции) — пробуем пустой домен.
+            appeal_candidates = appeal_index.get(("", appeal_num), set())
+        if not appeal_candidates:
+            appeal_candidates = appeal_index.get(("", _bare_case_number(appeal_num)), set())
+        appeal_candidates = appeal_candidates - to_remove
+        if not appeal_candidates:
+            continue  # апелляционное дело не в нашей базе — пропускаем
+        if len(appeal_candidates) != 1:
+            log.warning("Связка: %s (%s) — несколько апелляционных записей, оставлены отдельно",
+                        appeal_num, ap_domain)
+            continue
+        appeal_idx = next(iter(appeal_candidates))
+
+        appeal_case = cases[appeal_idx]
+        fi_candidates = (fi_index.get(fi_num, set())
+                         | fi_index.get(_bare_case_number(fi_num), set())) - to_remove
+        same_court = {i for i in fi_candidates if i != appeal_idx
+                      and _same_fi_court(appeal_case, cases[i])}
+        real = {i for i in same_court if _has_real_fi(cases[i])}
+        eligible = real or same_court
+        if len(eligible) > 1:
+            log.warning("Связка: %s → %s — несколько дел того же суда, оставлены отдельно",
+                        appeal_num, fi_num)
+            continue
+        fi_idx = next(iter(eligible)) if eligible else (
+            appeal_idx if appeal_idx in fi_candidates else None
+        )
+
+        if fi_idx is not None and fi_idx != appeal_idx:
+            # Есть оба дела — мержим апелляцию в карточку 1 инстанции
+            fi_case = cases[fi_idx]
+            prev_stage = fi_case.get("current_stage")
+            # Особый случай: awaiting_relink — кассация отменила и направила
+            # на новое рассмотрение, пришла новая апел. карточка. Снимок старых
+            # блоков идёт в history, открываем новый раунд апелляции.
+            if prev_stage == "awaiting_relink":
+                _snapshot_round_to_history(fi_case, "cassation_remanded_to_appeal")
+                fi_case["appeal"] = appeal_case.get("appeal")
+                fi_case["current_stage"] = "appeal"
+            else:
+                # Защита содержательной апелляции: если у дела уже есть апел.
+                # блок с данными (акт/события/результат), а пришла карточка с
+                # ДРУГИМ апел. номером — обычно это частная жалоба на
+                # определение (отдельный 33-номер по тому же номеру 1-й
+                # инст.). Не даём ей затереть апелляцию по существу: новая
+                # карточка остаётся отдельной записью (дальше link_cases её
+                # не пересвязывает — appeal_fi_numbers приходит только по
+                # новым карточкам).
+                old_ap = fi_case.get("appeal") or {}
+                new_ap = appeal_case.get("appeal") or {}
+                old_num = _bare_case_number((old_ap.get("case_number") or "").strip())
+                new_num = _bare_case_number((new_ap.get("case_number") or "").strip())
+                if (old_num and new_num and old_num != new_num
+                        and (old_ap.get("act_date") or old_ap.get("act_published")
+                             or old_ap.get("events") or old_ap.get("result"))):
+                    log.warning(
+                        f"  Связка: {fi_num} уже несёт апелляцию {old_num}; "
+                        f"вторая апел. карточка {appeal_num} (возможно, частная "
+                        f"жалоба) оставлена отдельной записью"
+                    )
+                    continue
+                fi_case["appeal"] = appeal_case.get("appeal")
+                # Обычно исходная стадия — awaiting_appeal (жалоба подана, ждём
+                # карточку) или first_instance (карточка пришла раньше жалобы —
+                # редко, но возможно). Из cassation_watch/cassation_pending
+                # обратно в appeal не переводим: эти стадии уже прошли апелляцию.
+                if prev_stage in ("first_instance", "awaiting_appeal", None, ""):
+                    fi_case["current_stage"] = "appeal"
+            # Обновляем общие поля из апелляции если пусты в 1 инст.
+            for field in ("plaintiff", "defendant", "category", "bank_role"):
+                if not fi_case.get(field) and appeal_case.get(field):
+                    fi_case[field] = appeal_case[field]
+            to_remove.add(appeal_idx)
+            linked_count += 1
+            log.info(f"  Связка: {fi_num} (1 инст.) ← {appeal_num} (апелляция)")
+        elif fi_idx == appeal_idx:
+            # 1-я инст. и апелляция — уже одна запись (например, после
+            # дедупа сирот: id хранится в длинной форме, а fi_num пришёл
+            # в короткой и нашёл ту же запись через дуальный индекс).
+            # Связка уже есть, ничего не делаем.
+            pass
+        else:
+            # Дела 1 инстанции нет в базе — обновляем id апелляционного дела
+            # на номер 1 инстанции для будущей привязки
+            if appeal_case.get("id") != fi_num:
+                appeal_case["id"] = fi_num
+                # Заполняем first_instance.case_number если пусто
+                fi = appeal_case.get("first_instance")
+                if fi and not fi.get("case_number"):
+                    fi["case_number"] = fi_num
+                elif fi is None:
+                    appeal_case["first_instance"] = {
+                        "case_number": fi_num,
+                        "court": "", "court_domain": "", "judge": "",
+                        "filing_date": "", "status": "", "result": "",
+                        "last_event": "", "event_date": "",
+                        "hearing_date": "", "hearing_time": "",
+                        "link": "", "act_published": False, "act_date": "",
+                        "events": [],
+                    }
+                linked_count += 1
+
+    # Удаляем дубликаты (апелляционные дела, которые смержены в карточку 1 инст.)
+    if to_remove:
+        cases = [c for i, c in enumerate(cases) if i not in to_remove]
+        log.info(f"  Удалено {len(to_remove)} дубликатов после связки")
+
+    if linked_count:
+        log.info(f"Связано дел: {linked_count}")
+
+    return cases
+
+
+def relink_awaiting_relink_first_instance(
+    cases: list[dict],
+    fi_results_by_court: list,
+) -> list[dict]:
+    """Найти дела со стадией `awaiting_relink`, чьи номера снова появились в
+    выдаче 1-й инстанции (касс. отменила и направила на новое рассмотрение).
+
+    Args:
+        cases: cases.json
+        fi_results_by_court: список пар (CourtConfig, list[fi_search_result]).
+            Каждый fi_search_result содержит case_number, court_*, link и т.д.
+
+    Возвращает список (case, fi_result, court) для дел, где сработал re-link
+    (для логирования / дайджеста). Сами cases мутируются на месте: history
+    наполняется, текущий round инкрементируется, current_stage становится
+    `first_instance`, first_instance блок инициализируется новой карточкой.
+    """
+    if not cases or not fi_results_by_court:
+        return []
+    # Дуальные ключи (сырой id + базовая форма): id дела после кассации может
+    # быть «гибридным» («2-208/2026 (2-1148/2025;)»), а поиск 1-й инст.
+    # возвращает короткую форму «2-208/2026». Без нормализации такое дело
+    # зависает в awaiting_relink навсегда — как «новое» его тоже не заведут
+    # (existing_ids уже содержит голую часть id).
+    awaiting: dict[str, dict] = {}
+    for c in cases:
+        if c.get("current_stage") != "awaiting_relink":
+            continue
+        cid = (c.get("id") or "").strip()
+        if not cid:
+            continue
+        awaiting.setdefault(cid, c)
+        base = _bare_case_number(cid)
+        if base and base != cid:
+            awaiting.setdefault(base, c)
+    if not awaiting:
+        return []
+    # На вход приходит либо список пар (court, results), либо (для совместимости)
+    # dict — нормализуем оба варианта в итерируемые пары.
+    if isinstance(fi_results_by_court, dict):
+        pairs = list(fi_results_by_court.items())
+    else:
+        pairs = list(fi_results_by_court)
+    relinked: list[dict] = []
+    for court, results in pairs:
+        for fi in results:
+            num = (fi.get("case_number") or "").strip()
+            if not num:
+                continue
+            case = awaiting.get(num) or awaiting.get(_bare_case_number(num))
+            if case is None:
+                continue
+            _snapshot_round_to_history(case, "cassation_remanded_to_fi")
+            case["current_stage"] = "first_instance"
+            new_fi_block = _fi_search_to_json_case(fi)["first_instance"]
+            case["first_instance"] = new_fi_block
+            relinked.append({"case": case, "fi": fi, "court": court})
+            log.info(
+                f"  Re-link (awaiting_relink → first_instance): {num} "
+                f"в {getattr(court, 'name', court)} (round={case.get('round', 1)})"
+            )
+            # Снимаем ВСЕ ключи этого дела (сырой и базовый), иначе вторая
+            # форма номера может сработать повторно и снять второй снимок.
+            for k in [k for k, v in awaiting.items() if v is case]:
+                del awaiting[k]
+    return relinked
+
+
+# Номенклатура, по которой целевой поиск гражданского раздела (g1_case,
+# delo_id 1-й инст.) в принципе может найти дело: иски «2-…» (включая
+# постоянные присутствия «2-2-…»), отказы в принятии «9-…», материалы до
+# принятия «М-…». Прочие индексы («13-…» — материалы исполнения и т.п.)
+# живут в других разделах sud_delo с другими delo_id/delo_table.
+_FI_CIVIL_NUM_RX = re.compile(r"^(?:2|9|М)-", re.IGNORECASE)
+
+
+def backfill_fi_links(cases: list[dict], max_per_run: int = 60) -> int:
+    """Достроить `first_instance.link`/`court_domain` целевым поиском по номеру.
+
+    Зачем: у дел, попавших в мониторинг «сверху» (через поиск апелляции),
+    ссылку на карточку 1-й инст. никто не проставляет — её пишет только
+    `_fi_search_to_json_case` при первичном обнаружении поиском 1-й инст.
+    Без ссылки цикл обновления карточек 1-й инст. пропускает дело до всякого
+    запроса, и стадия `cassation_watch` слепнет: подача касс. жалобы в
+    карточке не видна (инцидент 2-716/2025, «Кассационное представление»
+    от 02.07.2026). Общий свип не спасает: он качает только первую страницу
+    выдачи (сортировка по дате поступления), старые дела туда не попадают.
+
+    Механика: для дел, по которым на этом прогоне нужен парсинг карточки 1-й
+    инст. (`should_parse_fi_card`: first_instance/cassation_watch, а также
+    awaiting_appeal/cassation_pending до направления в вышестоящий суд), с
+    непустым `case_number` и пустым `link` ищем суд по короткому имени
+    (ё-нормализация) и дёргаем поиск по номеру дела
+    (`CourtConfig.search_by_number_url`). Совпавшую строку выдачи проверяет
+    `find_fi_case_link` (граница номера — от ложных подстрочных матчей).
+    Ссылка персистится в cases.json — запрос одноразовый на дело.
+
+    max_per_run — кэп запросов на прогон (защита от лавины на первом прогоне
+    с накопленным долгом ~55 дел); хвост доберётся на следующих прогонах.
+
+    Зеркало — `backfill_appeal_appellants` (runs.py, шаг 1): bare-номер,
+    пропуск капчёвых судов, is_no_data_page — правки синхронизировать.
+    Отличие: тут есть штамп повторной попытки `fi.link_backfill_checked_at`
+    (config.LINK_BACKFILL_RETRY_DAYS) — ссылка может появиться в выдаче
+    позже, но долбить суд каждый прогон нельзя (13-228/2026 жёг HTTP +
+    WARNING ежедневно).
+
+    Возвращает число дел, которым достроили ссылку.
+    """
+    filled = 0
+    attempted = 0
+    today = date.today()
+    for case in cases:
+        if not should_parse_fi_card(case):
+            continue
+        fi = case.get("first_instance")
+        if not isinstance(fi, dict):
+            continue
+        # Bare-форма обязательна: у дел «с апелляции» номер бывает гибридным
+        # «2-193/2026 (2-1133/2025;)» — поиск полной строкой не найдёт ничего.
+        num = _bare_case_number((fi.get("case_number") or "").strip())
+        if not num or (fi.get("link") or "").strip():
+            continue
+        if not _FI_CIVIL_NUM_RX.match(num):
+            # Не гражданская номенклатура 1-й инст. (например «13-…» —
+            # материалы исполнения с апел. карточки частной жалобы): раздел
+            # g1_case такого номера не содержит, поиск структурно вернёт
+            # пустоту — HTTP не тратим (13-228/2026, Урал, 12.08.2026).
+            log.debug(
+                f"  backfill_fi_links: {num} — номер вне гражданской "
+                f"номенклатуры (не 2-/9-/М-), поиск бесполезен, пропуск"
+            )
+            continue
+        checked_raw = (fi.get("link_backfill_checked_at") or "").strip()
+        if checked_raw:
+            checked = _parse_iso_date(checked_raw)
+            if checked and (
+                (today - checked.date()).days < config.LINK_BACKFILL_RETRY_DAYS
+            ):
+                continue
+        identity = resolve_fi_identity(fi)
+        court = identity.court if identity.status == "resolved" else None
+        if court is None or court.court_type != "first_instance":
+            log.debug(
+                f"  backfill_fi_links: {num} — суд «{fi.get('court', '')}» "
+                f"не из реестра 1-й инст., пропуск"
+            )
+            continue
+        if court.search_gated:
+            # Поиск капчёвого суда автоматике недоступен — HTTP не тратим и
+            # кэп не жжём (на Урале 54 таких суда; зеркало апеллянт-бэкфилла).
+            log.debug(
+                f"  backfill_fi_links: {num} — поиск {court.name} за капчей, "
+                f"пропуск"
+            )
+            continue
+        if attempted >= max_per_run:
+            log.info(
+                f"  backfill_fi_links: достигнут кэп {max_per_run} запросов, "
+                f"остальные дела — на следующем прогоне"
+            )
+            break
+        attempted += 1
+        polite_delay()
+        html = fetch_page(court.search_by_number_url(num), context=f"{num} ({court.name})")
+        if not html:
+            # Сетевой сбой: штамп не ставим, ретрай следующим прогоном.
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — поиск по номеру "
+                f"не загрузился"
+            )
+            continue
+        if looks_like_outage_page(html) or detect_captcha_challenge(html):
+            # Заглушка недоступности (HTTP 200 «Информация временно
+            # недоступна», аутейдж класса 20.07.2026) или проверочный код —
+            # сбой инфраструктуры, а не «дела нет»: штамп не ставим, как и
+            # при сетевом сбое, иначе однодневный аутейдж откладывал бы
+            # дослинк на LINK_BACKFILL_RETRY_DAYS у всей очереди.
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — поиск пришёл "
+                f"заглушкой/кодом, ретрай следующим прогоном"
+            )
+            continue
+        if is_no_data_page(html):
+            log.info(
+                f"  backfill_fi_links: {num} — в выдаче {court.name} нет "
+                f"данных, повтор через {config.LINK_BACKFILL_RETRY_DAYS} дн."
+            )
+            fi["link_backfill_checked_at"] = today.isoformat()
+            continue
+        link = find_fi_case_link(html, num)
+        if not link:
+            log.warning(
+                f"  backfill_fi_links: {num} ({court.name}) — дело не найдено "
+                f"в выдаче поиска по номеру, ссылка не достроена "
+                f"(повтор через {config.LINK_BACKFILL_RETRY_DAYS} дн.)"
+            )
+            fi["link_backfill_checked_at"] = today.isoformat()
+            continue
+        fi["link"] = link
+        fi["court_domain"] = court.domain
+        if not (fi.get("court") or "").strip():
+            fi["court"] = court.name
+        filled += 1
+        log.info(f"  backfill_fi_links: {num} → карточка {court.domain} ({link})")
+    return filled
+
+
+def reactivate_archived_first_instance(
+    cases: list[dict],
+    archived_cases: list[dict],
+    max_age_days: int = 180,
+) -> int:
+    """Подмешать недавние архивные дела 1-й инст. обратно в `cases`, чтобы
+    парсер обновил карточку и обнаружил поздно поданную апел./касс. жалобу.
+
+    Логика реактивации: дела архивируются через `FI_ARCHIVE_DAYS` после
+    резолютивки без жалобы, но запись о жалобе может появиться в карточке
+    ещё позже (задержка регистрации, почтовая подача в последний день,
+    апелляционное представление прокурора через 2-3 мес.). Эта функция
+    переносит подходящих кандидатов в `cases`; парсер 1-й инст. в `main_json`
+    их перепарсит как обычные активные дела. Если в карточке найдётся
+    `appeal_filed_date`/`cassation_filed_date`/`sent_to_cassation_date` —
+    `advance_case_stage` переведёт дело в `awaiting_appeal` (или дальше),
+    и `split_archived_json` в конце оставит его в активных. Иначе
+    `split_archived_json` сам вернёт дело в архив через `is_case_archived`.
+
+    Кандидат на реактивацию:
+      - `current_stage == "first_instance"`,
+      - `status == "Решено"`,
+      - `hearing_date` ≤ `max_age_days` (по умолчанию 180; дальше — статист.
+        нет смысла, апелляция уже невозможна без восстановления срока).
+
+    Защита от двойников: если номер дела уже есть в `cases` (например,
+    через discovery) — оставляем архивную запись в архиве.
+
+    `archived_cases` мутируется на месте (удаление перенесённых),
+    `cases` — добавление. Возвращает количество перенесённых дел.
+    """
+    if not archived_cases:
+        return 0
+    now = datetime.now()
+    # Ключ — (домен суда, id), а не голый номер: одноимённое дело ДРУГОГО суда
+    # среди активных не должно блокировать реактивацию (см. case_court_key).
+    active = list(cases)
+    moved: list[dict] = []
+    keep: list[dict] = []
+    for c in archived_cases:
+        if c.get("current_stage") != "first_instance":
+            keep.append(c)
+            continue
+        fi = c.get("first_instance") or {}
+        if fi.get("status", "").strip() != "Решено":
+            keep.append(c)
+            continue
+        cid = (c.get("id") or "").strip()
+        if (not cid or resolve_fi_identity(_case_identity_fi(c)).status != "resolved"
+                or any(_may_duplicate_record(c, existing) for existing in active)):
+            keep.append(c)
+            continue
+        hearing = parse_date(fi.get("hearing_date") or "")
+        if not hearing:
+            keep.append(c)
+            continue
+        age = (now - hearing).days
+        if age < 0 or age > max_age_days:
+            keep.append(c)
+            continue
+        moved.append(c)
+        active.append(c)
+    if not moved:
+        return 0
+    cases.extend(moved)
+    archived_cases[:] = keep
+    log.info(
+        f"Реактивация из архива: подмешано {len(moved)} дел 1-й инст. "
+        f"(возраст ≤{max_age_days} дн.) для повторного парсинга карточки. "
+        f"Без новой жалобы вернутся в архив через split_archived_json."
+    )
+    return len(moved)
+
+
+def reactivate_bank_archived(
+    cases: list[dict], bank_archived_cases: list[dict]
+) -> int:
+    """Вернуть из горячего bank-архива дела, которые по ТЕКУЩИМ окнам
+    `_is_bank_track_archived` архивными больше не считаются (пример: заочные
+    уезжали через 14 дней от выдачи ИЛ, а с 03.08.2026 им положено 90 —
+    `BANK_DEFAULT_WRIT_ARCHIVE_DAYS`; так 27.07.2026 в архив ушли три дела
+    Сургутского гор. суда). Правило общее, не список номеров, — то же вернёт
+    дела на территории Урала при синке.
+
+    Гейт «уже в активных» — по `case_court_key` (домен, id), как в
+    `reactivate_archived_first_instance`: без него возврат каждый прогон
+    клонировал заочные дела из архива в активные (инцидент 04–07.08.2026,
+    +1 копия в день — архивный файл пересохранялся только при пополнении и
+    изъятия не видел). Совпадение с активным делом оставляет запись в архиве.
+
+    `bank_archived_cases` мутируется на месте, `cases` пополняется.
+    Возвращает число перенесённых — ненулевое ОБЯЗАНО пересохранить архив
+    (условие в фазе 7c `main_json`), иначе изъятие живёт только в памяти.
+    """
+    if not bank_archived_cases:
+        return 0
+    active = list(cases)
+    moved: list[dict] = []
+    keep: list[dict] = []
+    for bc in bank_archived_cases:
+        if (is_case_archived(bc)
+                or resolve_fi_identity(_case_identity_fi(bc)).status != "resolved"
+                or any(_may_duplicate_record(bc, existing) for existing in active)):
+            keep.append(bc)
+            continue
+        bc.pop("archived_at", None)
+        bc.setdefault("track", "plaintiff_light")
+        moved.append(bc)
+        active.append(bc)
+    if not moved:
+        return 0
+    cases.extend(moved)
+    bank_archived_cases[:] = keep
+    log.info(
+        f"Возвращено из архива трека по новым окнам: {len(moved)} — "
+        + ", ".join(bc.get("id", "?") for bc in moved)
+    )
+    return len(moved)
+
+
+def retain_historical_cassation(case: dict, block: dict) -> bool:
+    """Дочитанная кассация прежнего рассмотрения не заменяет новую апелляцию.
+
+    Вызывается после проверки суда и идентичности. История пополняется без
+    событий доставки и без сброса текущих блоков/номера раунда.
+    """
+    ap = case.get("appeal") or {}
+    anchor = parse_date(ap.get("filing_date") or ap.get("hearing_date") or "")
+    ended = parse_date(block.get("decision_date") or "")
+    received = parse_date(block.get("filing_date") or "")
+    # Даже без результата карточка, поступившая до нового апелляционного
+    # производства, относится к прежнему акту. Её дочитка не откатывает
+    # текущую апелляцию; незавершённая жалоба остаётся на проверке.
+    if not (anchor and ((received and received < anchor)
+                        or (ended and ended < anchor))):
+        return False
+    key = _cass_key(block.get("court_domain"), block.get("case_number"))
+    history = case.setdefault("history", [])
+    for record in history:
+        prior = record.get("cassation") or {}
+        if _cass_key(prior.get("court_domain"), prior.get("case_number")) == key:
+            # Дочитка может принести акт; пустые поля не стирают известные.
+            prior.update({k: v for k, v in block.items() if v not in (None, "", [], False)})
+            return True
+    history.append({"reason": "historical_cassation_recovered",
+                    "cassation": deepcopy(block)})
+    return True
+
+
+def _cassation_card_to_block(info: dict) -> dict:
+    """Сконвертировать результат parse_cassation_card в JSON-блок cassation
+    (схема описана в плане; см. case["cassation"]). Включает производный
+    outcome через classify_cassation_outcome и remanded_to."""
+    outcome = classify_cassation_outcome(
+        info.get("result_text", ""),
+        info.get("result_for_appeal", ""),
+        info.get("review_result", ""),
+    )
+    remanded_to = ""
+    if outcome == "cassation_remanded":
+        remanded_to = cassation_remanded_to(
+            info.get("result_for_appeal", ""), info.get("act_text", "")
+        )
+    cassator_status = (info.get("cassator_status") or "").upper()
+    # Кассатор-«банк» — только сам ПАО Сбербанк: дочки (страхование/НПФ/
+    # лизинг) отсеиваются, иначе 🏦 в дайджесте вставал на жалобу
+    # ООО «Сбербанк страхование жизни» (кейс 8Г-11469/2026, 09.08.2026).
+    appellant_is_bank = bool(
+        info.get("cassator")
+        and config.name_is_real_sberbank(info["cassator"])
+    )
+    link = ""
+    # Карточка сама не отдаёт case_id/case_uid, поэтому link собирается выше
+    # (в main_json) при обходе результатов поиска и кладётся в info["link"].
+    if info.get("link"):
+        link = info["link"]
+    # «Без движения» отменяется фактическим назначением рассмотрения: если
+    # hearing_date позже или равно suspended_until, в блок suspended_until
+    # не пишем (иначе фронт показывает чип «б/дв.» даже когда уже назначено
+    # единоличное/коллегиальное рассмотрение, а skip-logic тормозит обновление).
+    suspended_until = info.get("suspended_until", "")
+    hd_raw = info.get("hearing_date", "")
+    if suspended_until and hd_raw:
+        m_su = _DATE_DDMMYYYY_RX.match(suspended_until)
+        m_hd = _DATE_DDMMYYYY_RX.match(hd_raw)
+        if m_su and m_hd:
+            try:
+                su = date(int(m_su.group(3)), int(m_su.group(2)), int(m_su.group(1)))
+                hd = date(int(m_hd.group(3)), int(m_hd.group(2)), int(m_hd.group(1)))
+                if hd >= su:
+                    suspended_until = ""
+            except ValueError:
+                log.debug(
+                    f"  7kas {info.get('cassation_internal_number') or '?'}: "
+                    f"не разобрал даты (suspended_until={suspended_until!r}, "
+                    f"hearing_date={hd_raw!r})"
+                )
+    # Суд блока — по домену карточки: президиум облсуда (кассация по делам
+    # мировых судей, с 04.09.2026) или КСОЮ. Пустой/7kas → CASSATION_COURT —
+    # все прежние блоки байт-в-байт. Без этого дело президиума при первой
+    # же перечитке «откатилось» бы на 7kas.
+    court = cassation_court_by_domain(info.get("court_domain"))
+    block = {
+        # У президиума строки выдачи при перечитке нет — номер берём с
+        # заголовка карточки («ДЕЛО № 4Г-66/2026»).
+        "case_number": (
+            info.get("cassation_internal_number")
+            or info.get("page_case_number", "")
+        ),
+        "cassation_number": info.get("cassation_number", ""),
+        "court": court.name,
+        "court_domain": court.domain,
+        # delo_id раздела — фронту и Worker-календарю для ссылки на карточку
+        # (у президиума и КСОЮ он один, 2800001, но домены разные).
+        "delo_id": court.delo_id,
+        "srv_num": court.srv_num,
+        "new": court._new_param,
+        "timezone": court.timezone or get_region().timezone,
+        "judge": info.get("judge", ""),
+        "filing_date": info.get("filing_date", ""),
+        "fi_decision_date": info.get("fi_decision_date", ""),
+        "act_kind": info.get("act_kind", ""),
+        "category": info.get("category", ""),
+        "judicial_uid": info.get("judicial_uid", ""),
+        "appellant": info.get("cassator", ""),
+        "appellant_is_bank": appellant_is_bank,
+        "appellant_status": cassator_status,
+        "review_result": info.get("review_result", ""),
+        "review_date": info.get("review_date", ""),
+        "suspended_until": suspended_until,
+        "hearing_date": info.get("hearing_date", ""),
+        "hearing_time": info.get("hearing_time", ""),
+        "decision_date": info.get("decision_date", ""),
+        "result_text": info.get("result_text", ""),
+        "result_for_appeal": info.get("result_for_appeal", ""),
+        "act_published": bool(info.get("act_published")),
+        "act_date": info.get("decision_date", "") if info.get("act_published") else "",
+        "act_text": info.get("act_text", ""),
+        "outcome": outcome,
+        "remanded_to": remanded_to,
+        "events": list(info.get("hearings") or []),
+        "link": link,
+        "last_checked_at": date.today().isoformat(),
+        "discovered_via_cassation": False,
+    }
+    return block
+
+
+def _cass_key(domain: str | None, case_number: str | None) -> str:
+    """Ключ кассационного производства — ПАРА (домен суда, номер).
+
+    «4Г-N/YYYY» уникален лишь внутри одного президиума: на Урале два
+    президиума (СВД и ЯНАО) выдают одинаковые номера; голый номер сливал бы
+    чужие дела. Пустой домен → КСОЮ (все блоки до 04.09.2026)."""
+    cn = (case_number or "").strip()
+    if not cn:
+        return ""
+    dom = canon_sudrf_domain(domain) or CASSATION_COURT.domain
+    return f"{dom}|{cn}"
+
+
+def is_presidium_find(info: dict) -> bool:
+    """Находка (parse_cassation_card) — с карточки президиума облсуда."""
+    return presidium_court_by_domain(info.get("court_domain")) is not None
+
+
+def link_cassation_cases(
+    cases: list[dict],
+    cass_finds: list[dict],
+    archived_cases: list[dict] | None = None,
+    *,
+    snapshot_discovered: bool = False,
+    record_delivery: bool = True,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
+    создать новые (discovery), если 1-инст. номера нет в БД.
+
+    Args:
+        cases: список JSON-объектов дел (формат cases.json).
+        cass_finds: список dict — каждый = parse_cassation_card(card_html)
+                    + дополненные поля `link` (case_id|case_uid) и
+                    `cassation_internal_number` из результатов поиска.
+        archived_cases: горячий архив (cases_archive.json), опционально.
+                    Если карточка 7kas матчится с архивным делом (например,
+                    дело ушло из cassation_watch по 120-дневному окну, а
+                    касс. жалоба зарегистрировалась ещё позже) — дело
+                    восстанавливается в активные со всей историей вместо
+                    создания discovery-дубля без сторон. Список мутируется
+                    (восстановленные дела удаляются).
+        snapshot_discovered: сохранить анонсы на момент обнаружения для
+                    дайджеста. По умолчанию возвращаются сами записи:
+                    импорт дописывает в них служебные отметки.
+
+    Возвращает (обновлённый список cases, список изменений для дайджеста,
+    список новых дел discovered).
+
+    Логика:
+    - Для каждой находки берём fi_case_number (Номер дела в первой инст.).
+    - Если case с таким id уже есть — мержим cassation блок, обновляем
+      current_stage. Перевод стадии:
+      - cassation_pending → cassation;
+      - first_instance / awaiting_appeal / appeal / cassation_watch → cassation
+        (это дело, которое мы прошляпили на промежуточных стадиях, но 7kas
+        уже его рассматривает — догоняем).
+      - awaiting_relink — если кассация во второй раз приехала по тому же
+        делу, обновляем cassation блок и оставляем стадию (либо снова в cassation).
+      - cassation — если уже была cassation, обновляем (новое заседание,
+        акт опубликован и т.п.).
+    - Если case нет — создаём новое со стадией `cassation` и стабом
+      first_instance из карточки 7kas (court + case_number + judge +
+      decision_date). discovered_via_cassation=True.
+    """
+    if not cass_finds:
+        return cases, [], []
+
+    # Дуальная индексация: помимо сырого ключа кладём базовую форму
+    # `_bare_case_number(...)`. Иначе пара «у нас id с хвостом
+    # `(2-1148/2025;)`, а 7kas прислал короткий» (или наоборот) не сматчится.
+    def _put_idx(idx_map: dict[str, set[int]], key: str, i: int) -> None:
+        if not key:
+            return
+        idx_map.setdefault(key, set()).add(i)
+        base = _bare_case_number(key)
+        if base and base != key:
+            idx_map.setdefault(base, set()).add(i)
+
+    fi_index: dict[str, set[int]] = {}
+
+    def _fi_domain(block: dict) -> str:
+        identity = resolve_fi_identity(block)
+        return identity.domain if identity.status == "resolved" else ""
+
+    def _find_fi_court(info: dict):
+        return (info.get("fi_court_config")
+                or match_hmao_first_instance(info.get("fi_court_long", ""))
+                or match_fi_court_by_short_name(info.get("fi_court_long", "")))
+
+    def _incoming_fi(info: dict) -> dict:
+        court = _find_fi_court(info)
+        return {"court_domain": court.domain if court else "",
+                "court": info.get("fi_court_long") or (court.name if court else ""),
+                "srv_num": info.get("fi_srv_num"),
+                "judicial_uid": info.get("judicial_uid") or ""}
+
+    def _case_uids(case: dict, blocks=("first_instance", "appeal", "cassation")) -> set[str]:
+        return {((case.get(block) or {}).get("judicial_uid") or "").strip()
+                for block in blocks} - {""}
+
+    def _identity_conflicts(case: dict, info: dict) -> bool:
+        """Сохранённый 8Г-номер тоже мог попасть в чужое дело раньше.
+
+        Проверяем УИД всех текущих инстанций. Переход между судами допустим
+        при подтверждающем УИД нижестоящей инстанции, а не только кассации:
+        именно кассационный блок был чужим в инциденте 14.09.2026.
+        """
+        uid = (info.get("judicial_uid") or "").strip()
+        if uid and _case_uids(case) - {uid}:
+            return True
+        court = _find_fi_court(info)
+        fi = case.get("first_instance") or {}
+        identity = resolve_fi_identity(_case_identity_fi(case))
+        if (identity.status == "needs_review" and
+                (identity.domain or "противореч" in identity.reason)):
+            return True
+        domain = _fi_domain(fi)
+        if court and domain and court.domain != domain:
+            return not (uid and uid in _case_uids(case, ("first_instance", "appeal")))
+        incoming = resolve_fi_identity(_incoming_fi(info))
+        if incoming.status == "needs_review" and incoming.domain:
+            return True
+        srv = incoming.srv_num
+        sites = {c.srv_num for c in get_region().first_instance_courts
+                 if canon_sudrf_domain(c.domain) == domain}
+        return bool(len(sites) > 1 and srv and fi.get("srv_num")
+                    and str(srv) != str(fi["srv_num"]))
+
+    def _number_match(index, records, info, number):
+        """Номер — лишь кандидаты. Связка требует суд; неполные/неоднозначные
+        кандидаты оставляем на проверку вместо первого совпавшего дела."""
+        candidates = set(index.get(number, ())) | set(index.get(_bare_case_number(number), ()))
+        incoming = _incoming_fi(info)
+        exact, unknown = [], []
+        for i in candidates:
+            verdict = compare_fi_identity(incoming, _case_identity_fi(records[i]))
+            if verdict == "needs_review":
+                unknown.append(i)
+            elif verdict == "same":
+                # УИД, если он есть у обеих сторон, не должен противоречить
+                # запасному матчу по суду и номеру.
+                if _identity_conflicts(records[i], info):
+                    unknown.append(i)
+                    continue
+                exact.append(i)
+        if len(exact) == 1 and not unknown:
+            return exact[0], False
+        return None, bool(exact or unknown)
+    # Параллельный индекс по `cassation.case_number` (`8Г-XXXX/YYYY`).
+    # Это стабильный идентификатор касс. жалобы — в отличие от fi_case_number,
+    # который 7kas может вернуть с разным значением в разные периоды (после
+    # cassation_remanded → round+1, либо просто из-за того, что в выдаче 7kas
+    # показывается то 1-инст., то апел. номер). Без этого индекса discovery
+    # создаёт второго двойника с `discovered_via_cassation=true`.
+    cass_index: dict[str, int] = {}
+    # Индекс по УИД (`86RS...`) — глобально уникальный сквозной идентификатор
+    # дела. Самый надёжный мост: апел. карточка и карточка 7kas несут один и тот
+    # же УИД, тогда как fi_case_number у апел.-записи часто пуст (sudrf не
+    # проставил «Номер дела в первой инстанции»). Закрывает класс discovery-
+    # дублей вида `2-278/2025` ↔ `33-2082/2026`.
+    uid_index: dict[str, int] = {}
+    uid_prio: dict[str, int] = {}
+
+    def _uid_priority(c: dict) -> int:
+        """Приоритет записи как якоря матча по УИД (меньше — лучше).
+
+        УИД принадлежит делу 1-й инст., а апел. производств (33-…) у него
+        может быть несколько (основная жалоба + частная) — «первая по файлу»
+        через setdefault выбирала якорь произвольно: 8Г-11947/2026 прицепился
+        к записи частной жалобы 33-4383/2026 вместо ждавшей кассацию
+        33-1458/2026 (12.08.2026). Новая касс. жалоба почти наверняка
+        относится к записи, ЖДУЩЕЙ кассацию; запись с уже заполненным
+        8Г-номером матчится первичным cass_index, и новый 8Г того же УИД —
+        про соседа. При равном приоритете побеждает первая по файлу
+        (детерминизм прежнего поведения)."""
+        if c.get("current_stage") in ("cassation_pending", "cassation_watch"):
+            return 0
+        cass = c.get("cassation") or {}
+        if not (cass.get("case_number") or "").strip():
+            return 1
+        return 2
+
+    def _index_case(
+        c: dict, i: int,
+        fi_idx: dict[str, set[int]], cs_idx: dict[str, int], u_idx: dict[str, int],
+        u_prio: dict[str, int],
+    ) -> None:
+        fi = c.get("first_instance") or {}
+        # Дело мирового судьи (кассация президиума): его FI-номер
+        # «2-1543-2803/2019» в индекс НЕ кладём — мирового судью мы не
+        # мониторим, а совпадение с районным номером всегда ложное.
+        if not fi.get("magistrate"):
+            _put_idx(fi_idx, c.get("id", ""), i)
+            if fi.get("case_number"):
+                _put_idx(fi_idx, fi["case_number"], i)
+        appeal = c.get("appeal") or {}
+        if appeal.get("case_number"):
+            # Кассация может прийти на дело, которое мы знаем только по
+            # апел. номеру (если 1-я инст. ещё не подтянулась) — пусть
+            # индекс тоже их видит.
+            _put_idx(fi_idx, appeal["case_number"], i)
+        cass = c.get("cassation") or {}
+        ck = _cass_key(cass.get("court_domain"), cass.get("case_number"))
+        if ck:
+            cs_idx.setdefault(ck, i)
+        for uid in (
+            fi.get("judicial_uid"),
+            appeal.get("judicial_uid"),
+            cass.get("judicial_uid"),
+        ):
+            uid = (uid or "").strip()
+            if not uid:
+                continue
+            p = _uid_priority(c)
+            if uid not in u_idx or p < u_prio.get(uid, 99):
+                u_idx[uid] = i
+                u_prio[uid] = p
+
+    def _rebuild_active_indexes() -> None:
+        # При замене производства старый 8Г-номер больше не указывает на
+        # эту запись. Пересчёт также обновляет приоритеты УИД после связки.
+        for index in (fi_index, cass_index, uid_index, uid_prio):
+            index.clear()
+        for i, c in enumerate(cases):
+            _index_case(c, i, fi_index, cass_index, uid_index, uid_prio)
+
+    _rebuild_active_indexes()
+
+    # Параллельные индексы горячего архива (если передан): касс. жалоба на
+    # дело, уже ушедшее в архив (например, из cassation_watch по 120-дневному
+    # окну), должна восстановить его, а не плодить discovery-дубль.
+    arch_fi_index: dict[str, set[int]] = {}
+    arch_cass_index: dict[str, int] = {}
+    arch_uid_index: dict[str, int] = {}
+    arch_uid_prio: dict[str, int] = {}
+    if archived_cases:
+        for i, c in enumerate(archived_cases):
+            _index_case(c, i, arch_fi_index, arch_cass_index,
+                        arch_uid_index, arch_uid_prio)
+    resurrected: set[int] = set()  # позиции archived_cases, изъятые в активные
+
+    # Дедуп определений (.cassation_acts): повторный new_act по тому же
+    # определению («мигание» act_published из-за сбойного парса) в дайджест
+    # не уходит. Зеркало .digested_acts для актов 1-й инст./апелляции.
+    digested_cass_acts = load_cassation_acts()
+    cass_acts_dirty = False
+
+    cass_changes: list[dict] = []
+    discovered: list[dict] = []
+
+    for info in cass_finds:
+        fi_num = (info.get("fi_case_number") or "").strip()
+        presidium = is_presidium_find(info)
+        if not fi_num and not (presidium and info.get("sber_present")
+                and info.get("link") and (info.get("cassation_internal_number")
+                                         or info.get("page_case_number"))):
+            log.warning(
+                f"7kas: пропуск без fi_case_number — "
+                f"{info.get('cassation_internal_number') or '?'}"
+            )
+            continue
+        cass_block = _cassation_card_to_block(info)
+        # Раздел президиума не определяет вид нижестоящего суда: мировой
+        # подтверждается самой карточкой. Для него номер без суда не якорь.
+        presidium = is_presidium_find(info)
+        # Первичный матч — по стабильному `8Г-...`/`4Г-…` (пара с доменом).
+        # Сначала пробуем сматчить по нему, и только если касс. карточка
+        # вообще новая (нет в БД) — идём через fi_case_number, который может
+        # «плавать».
+        cass_int_num = (cass_block.get("case_number") or "").strip()
+        cass_key = _cass_key(cass_block.get("court_domain"), cass_int_num)
+        idx = cass_index.get(cass_key) if cass_key else None
+        # УИД — надёжнее «плавающего» fi_case_number: пробуем до него.
+        if idx is None:
+            uid = (info.get("judicial_uid") or "").strip()
+            if uid:
+                idx = uid_index.get(uid)
+        # Стабильный кассационный ключ/УИД архива надёжнее совпадения номера
+        # активного дела. Номер проверяем сразу в обоих наборах: один и тот
+        # же суд/номер в активных и архиве тоже требует ручной проверки.
+        arch_i = None
+        if idx is None and archived_cases:
+            arch_i = arch_cass_index.get(cass_key) if cass_key else None
+            if arch_i is None:
+                uid = (info.get("judicial_uid") or "").strip()
+                if uid:
+                    arch_i = arch_uid_index.get(uid)
+        ambiguous = False
+        if idx is None and arch_i is None and not info.get("fi_magistrate"):
+            idx, ambiguous = _number_match(fi_index, cases, info, fi_num)
+            arch_i, arch_ambiguous = _number_match(
+                arch_fi_index, archived_cases or [], info, fi_num,
+            )
+            if ambiguous or arch_ambiguous or (idx is not None and arch_i is not None):
+                idx = arch_i = None
+                ambiguous = True
+        if idx is None and archived_cases:
+            if arch_i is not None and arch_i not in resurrected:
+                arch_case = archived_cases[arch_i]
+                if _identity_conflicts(arch_case, info):
+                    info["_link_status"] = "needs_review"
+                    log.warning("Кассация %s: суд/УИД противоречат архивной записи %s; нужна проверка связки",
+                                cass_int_num, arch_case.get("id"))
+                    continue
+                if retain_historical_cassation(arch_case, cass_block):
+                    info["_link_status"] = "historical"
+                    continue
+                arch_past = {
+                    _cass_key((h.get("cassation") or {}).get("court_domain"),
+                              (h.get("cassation") or {}).get("case_number"))
+                    for h in (arch_case.get("history") or [])
+                } - {""}
+                if cass_key and cass_key in arch_past:
+                    # Карточка прошлого круга архивного дела — не трогаем.
+                    log.debug(
+                        f"  7kas: {cass_int_num} — прошлый круг архивного "
+                        f"дела {fi_num}, пропуск"
+                    )
+                    continue
+                # Штамп архивации снимаем: дело снова живёт; при повторном
+                # уходе в архив получит свежий якорь для ротации.
+                arch_case.pop("archived_at", None)
+                resurrected.add(arch_i)
+                cases.append(arch_case)
+                idx = len(cases) - 1
+                # Регистрируем ключи в активных индексах: повторная находка
+                # по этому делу в том же прогоне сматчится уже с активным.
+                _index_case(arch_case, idx, fi_index, cass_index,
+                            uid_index, uid_prio)
+                log.info(
+                    f"  7kas: {fi_num} восстановлено из архива "
+                    f"(стадия была {arch_case.get('current_stage') or '—'})"
+                )
+        if idx is None and ambiguous:
+            info["_link_status"] = "needs_review"
+            log.warning(
+                "Кассация %s: суд/номер %s неоднозначны или суд не указан; "
+                "нужна проверка связки", cass_int_num, fi_num,
+            )
+            continue
+        if idx is not None:
+            case = cases[idx]
+            if _identity_conflicts(case, info):
+                info["_link_status"] = "needs_review"
+                log.warning("Кассация %s: суд/УИД противоречат записи %s; нужна проверка связки",
+                            cass_int_num, case.get("id"))
+                continue
+            old_cass = case.get("cassation") or {}
+            if retain_historical_cassation(case, cass_block):
+                info["_link_status"] = "historical"
+                continue
+            # ── Защита от «воскрешения» прошлого круга ──
+            # После cassation_remanded → re-link (снимок блоков в history,
+            # round+1) старая карточка 7kas ещё месяцами висит в выдаче
+            # поиска. Без guard'а она заново матчится по номеру 1-й инст.,
+            # перезаписывает пустой cassation-блок нового круга, даёт ложное
+            # new_cassation и утаскивает дело обратно в cassation →
+            # awaiting_relink → повторный snapshot (round растёт на каждом
+            # прогоне). Карточки, чей 8Г-номер уже лежит в history, — прошлый
+            # круг: пропускаем.
+            past_cass_keys = {
+                _cass_key((h.get("cassation") or {}).get("court_domain"),
+                          (h.get("cassation") or {}).get("case_number"))
+                for h in (case.get("history") or [])
+            } - {""}
+            if cass_key and cass_key in past_cass_keys:
+                log.debug(
+                    f"  7kas: {cass_int_num} — карточка прошлого круга дела "
+                    f"{fi_num} (round={case.get('round', 1)}), пропуск"
+                )
+                continue
+            old_act_published = bool(old_cass.get("act_published"))
+            old_outcome = old_cass.get("outcome", "")
+            old_review = old_cass.get("review_result", "")
+            # Сохраняем discovered_via_cassation если он был выставлен ранее.
+            cass_block["discovered_via_cassation"] = bool(
+                old_cass.get("discovered_via_cassation")
+            )
+            if (case.get("current_stage") == "awaiting_relink"
+                    and old_cass.get("case_number")
+                    and cass_int_num
+                    and old_cass["case_number"].strip() != cass_int_num):
+                # awaiting_relink с уже известной кассацией, а 7kas принёс
+                # ДРУГОЙ 8Г-номер (например, вторая жалоба до пересмотра) —
+                # обновляем блок, но оставляем след в логе: снимок текущего
+                # блока при будущем re-link уйдёт в history уже с новыми
+                # данными.
+                log.warning(
+                    f"  7kas: {fi_num} в awaiting_relink — блок кассации "
+                    f"{old_cass['case_number']} замещается {cass_int_num}"
+                )
+            # ── «Исход не отзывают»: защита от мигания парса (13.08.2026) ──
+            # Блок ниже замещается ЦЕЛИКОМ, а деградировавший парс 7kas отдаёт
+            # пустые терминальные поля — outcome затирался, и следующий удачный
+            # прогон объявлял его «новым» повторно (old_outcome=="" к тому
+            # моменту; .cassation_acts кроет только new_act). Пустое новое ←
+            # непустое старое, ТОЛЬКО для той же жалобы: в awaiting_relink с
+            # ДРУГИМ 8Г-номером старый блок принадлежит другой жалобе, её исход
+            # переносить нельзя. hearing_date/hearing_time/suspended_until/
+            # events намеренно НЕ бэкфиллятся — они легитимно исчезают
+            # (заседание прошло, «без движения» снято). Побочный плюс: у
+            # awaiting_relink-дел outcome=remanded перестаёт мигать пустым для
+            # advance_case_stage.
+            if (old_cass.get("case_number") or "").strip() in ("", cass_int_num):
+                _restored: list[str] = []
+                for _k in ("outcome", "remanded_to", "review_result", "review_date",
+                           "result_text", "result_for_appeal", "decision_date"):
+                    if (not (cass_block.get(_k) or "").strip()
+                            and (old_cass.get(_k) or "").strip()):
+                        cass_block[_k] = old_cass[_k]
+                        _restored.append(_k)
+                if not cass_block.get("act_published") and old_act_published:
+                    cass_block["act_published"] = True
+                    cass_block["act_date"] = (cass_block.get("act_date")
+                                              or old_cass.get("act_date", ""))
+                    cass_block["act_text"] = (cass_block.get("act_text")
+                                              or old_cass.get("act_text", ""))
+                    _restored.append("act_published")
+                if _restored:
+                    log.debug(
+                        f"  7kas: {fi_num} — терминальные поля восстановлены "
+                        f"после деградировавшего парса: {', '.join(_restored)}"
+                    )
+            if (old_cass.get("case_number") and old_outcome
+                    and _cass_key(old_cass.get("court_domain"), old_cass["case_number"]) != cass_key):
+                # Результат отдельной предыдущей жалобы нужен для вычисления
+                # её состояния и после поступления следующего производства.
+                from court_monitor.complaints import remember_cassation_resolution
+                remember_cassation_resolution(case, old_cass, case.get("id", ""))
+            case["cassation"] = cass_block
+            # ── Бэкфилл сторон из УЧАСТНИКОВ карточки 7kas ──
+            # Дела, заведённые discovery'ем до расширения разбора ролей (или с
+            # экзотическим составом участников), остались с пустыми
+            # plaintiff/defendant навсегда: карточку 1-й инст. на стадии
+            # cassation мы не парсим, а у капчёвых судов (search_gated) её и не
+            # найти. В дайджесте такая запись схлопывалась до голого 8Г-номера
+            # — юрист не понимал, по какому делу событие (инцидент 24.07.2026).
+            # Дозаполняем ТОЛЬКО пустые поля: карточка 1-й инстанции точнее.
+            _pl_new, _df_new = parties_from_participants(info.get("participants"))
+            _filled: list[str] = []
+            if not (case.get("plaintiff") or "").strip() and _pl_new:
+                case["plaintiff"] = _pl_new
+                _filled.append("истец")
+            if not (case.get("defendant") or "").strip() and _df_new:
+                case["defendant"] = _df_new
+                _filled.append("ответчик")
+            if not (case.get("bank_role") or "").strip() and info.get("bank_role"):
+                case["bank_role"] = info["bank_role"]
+                _filled.append("роль банка")
+            if _filled:
+                log.info(
+                    f"  7kas: {fi_num} — стороны дозаполнены из карточки "
+                    f"({', '.join(_filled)})"
+                )
+            # Обновим стадию.
+            prev_stage = case.get("current_stage", "")
+            if prev_stage == "awaiting_relink":
+                # Стадию НЕ возвращаем в cassation: дело ждёт новую карточку
+                # нижестоящей инстанции после remanded. Возврат был бы чистым
+                # шумом — advance_case_stage тут же увёл бы его обратно в
+                # awaiting_relink (outcome=remanded), а до снятия снимка ещё
+                # и породил бы ложные stage-переходы в логе. Сам блок выше
+                # обновили: поздняя публикация текста определения (new_act)
+                # по-прежнему ловится.
+                pass
+            elif prev_stage in (
+                "cassation_pending", "first_instance", "awaiting_appeal",
+                "appeal", "cassation_watch", "", None,
+            ):
+                case["current_stage"] = "cassation"
+            _rebuild_active_indexes()
+            # Зафиксируем изменения для дайджеста.
+            change = {
+                "case": fi_num,
+                "cassation_internal_number": cass_block["case_number"],
+                "type": [],
+                "details": {
+                    "stage_prev": prev_stage,
+                    "stage_now": case["current_stage"],
+                    "outcome": cass_block["outcome"],
+                    "review_result": cass_block["review_result"],
+                    "result_text": cass_block["result_text"],
+                    "result_for_appeal": cass_block["result_for_appeal"],
+                    # Дата поступления жалобы в КСОЮ — для строки «📥 поступила
+                    # касс. жалоба …» в секции «Касс. события» (её печатает
+                    # ТОЛЬКО тип new_cassation, см. template.py).
+                    "filing_date": cass_block["filing_date"],
+                    "decision_date": cass_block["decision_date"],
+                    "hearing_date": cass_block["hearing_date"],
+                    "hearing_time": cass_block.get("hearing_time", ""),
+                    "timezone": cass_block["timezone"],
+                    "srv_num": cass_block["srv_num"],
+                    "new": cass_block["new"],
+                    "appellant": cass_block["appellant"],
+                    "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "appellant_status": cass_block.get("appellant_status", ""),
+                    "act_kind": cass_block["act_kind"],
+                    "act_published": bool(cass_block.get("act_published")),
+                    "link": cass_block.get("link", ""),
+                    # Домен суда — дайджест строит ссылку карточки по нему
+                    # (президиум облсуда vs КСОЮ).
+                    "court_domain": cass_block.get("court_domain", ""),
+                    # Куда возвращено при remanded (enum first_instance|appeal)
+                    # — рендер «Итога» показывает «→ в суд … инстанции».
+                    "remanded_to": cass_block.get("remanded_to", ""),
+                    # Срок «без движения» — для события cass_suspended.
+                    "suspended_until": cass_block.get("suspended_until", ""),
+                },
+            }
+            # Критерий «карточки ещё не было» — ОТСУТСТВИЕ case_number, а не
+            # пустота всего блока: на стадиях cassation_watch/cassation_pending
+            # `_apply_fi_cassator` (runs.py) кладёт в case["cassation"] заглушку
+            # из вкладки «Заявитель жалобы» карточки 1-й инст. — только
+            # appellant_* без номера. Она truthy, и прежнее `if not old_cass`
+            # глушило объявление ровно на самом типичном пути: дело, чью касс.
+            # жалобу мы уже видели в 1-й инст., приезжало в кассацию МОЛЧА
+            # (09–31.07.2026 так пропали все 9 поступлений). Тот же критерий —
+            # у lifecycle.cassation_card_linked, которым гейтится сама заглушка.
+            if not (old_cass.get("case_number") or "").strip():
+                change["type"].append("new_cassation")
+            if cass_block["review_result"] and cass_block["review_result"] != old_review:
+                change["type"].append("review_result_change")
+            if cass_block["outcome"] and cass_block["outcome"] != old_outcome:
+                change["type"].append("outcome_change")
+            if cass_block["act_published"] and not old_act_published:
+                act_key = _cassation_act_key(cass_block)
+                if act_key and act_key in digested_cass_acts:
+                    # Определение уже уходило в дайджест — act_published
+                    # «мигнул» (сбойный парс перезаписал блок с False).
+                    # Блок обновили, событие не дублируем.
+                    log.debug(
+                        f"  7kas: {cass_block['case_number']} — определение "
+                        f"уже было в дайджесте, new_act подавлен"
+                    )
+                else:
+                    change["type"].append("new_act")
+                    # Текст определения — уже в cass_block["act_text"].
+                    # В дайджест пробрасываем мотивировочную часть.
+                    change["details"]["act_text"] = extract_motive_part(
+                        cass_block["act_text"], 1800
+                    )
+                    change["details"]["act_date"] = cass_block["act_date"]
+                    if act_key:
+                        digested_cass_acts.add(act_key)
+                        cass_acts_dirty = True
+            # ── Заседание кассации (13.08.2026) ──
+            # Раньше типа не было вовсе: дата печаталась только «прицепом» к
+            # другому событию и глушилась при известном исходе — назначение и
+            # перенос заседания 7kas (явка/ВКС) проходили молча. Гейты:
+            # только БУДУЩАЯ дата (прошлая — раскопанная история), исхода ещё
+            # нет (после исхода дата заседания — атрибут прошлого), и не при
+            # new_cassation — у поступления заседание печатает штатная строка.
+            # Идемпотентность значением: блок после мержа несёт новую дату;
+            # дела с будущим заседанием skip'аются до его дня, а перенос
+            # после прошедшей даты (old=прошлая, new=будущая) — желаемый эмит.
+            if (cass_block["hearing_date"]
+                    and cass_block["hearing_date"]
+                    != (old_cass.get("hearing_date") or "").strip()
+                    and not (cass_block["outcome"] or "").strip()
+                    and "new_cassation" not in change["type"]
+                    and _ddmmyyyy_in_future(cass_block["hearing_date"])):
+                change["type"].append("cass_hearing_scheduled")
+            # ── Касс. жалоба «без движения» (13.08.2026) ──
+            # suspended_until вычислялся всегда, но жил только в skip-логике —
+            # юрист не видел ни факта, ни срока устранения недостатков (а при
+            # жалобе банка срок — наш). Гейта new_cassation нет: у свежей
+            # карточки «без движения» — и есть новость. Продление срока (новая
+            # дата) переобъявляется — желаемо. Снятие суспенда назначенным
+            # заседанием гасит сам _cassation_card_to_block (пустое значение
+            # события не даёт).
+            if (cass_block.get("suspended_until")
+                    and cass_block["suspended_until"]
+                    != (old_cass.get("suspended_until") or "").strip()
+                    and _ddmmyyyy_in_future(cass_block["suspended_until"])):
+                change["type"].append("cass_suspended")
+            if change["type"]:
+                cass_changes.append(change)
+            stage_changed = prev_stage != case["current_stage"]
+            log_line = (
+                f"  7kas → {fi_num} ({cass_block['case_number']}): "
+                f"{prev_stage}→{case['current_stage']}, outcome={cass_block['outcome'] or '—'}"
+            )
+            if change["type"] or stage_changed:
+                if change["type"]:
+                    log_line += f" [{', '.join(change['type'])}]"
+                log.info(log_line)
+            else:
+                log.debug(log_line)
+        else:
+            # Discovery: дела в cases.json нет. Создаём со стадией cassation
+            # и стабом 1-й инст. (только то, что видит 7kas).
+            cass_block["discovered_via_cassation"] = True
+            fi_court_cfg = _find_fi_court(info)
+            fi_court_short = fi_court_cfg.name if fi_court_cfg else info.get("fi_court_long", "")
+            fi_court_domain = fi_court_cfg.domain if fi_court_cfg else ""
+            # Президиум: главный номер дела — номер президиума «4Г-…»
+            # (решение юриста 04.09.2026, как у дел из дампа апелляции без
+            # известной 1-й инстанции); номер мирового судьи живёт в стабе
+            # 1-й инст. с флагом magistrate — индексы дедупа его не берут.
+            magistrate = bool(info.get("fi_magistrate"))
+            new_case = {
+                "id": cass_int_num if presidium and cass_int_num else fi_num,
+                "current_stage": "cassation",
+                "plaintiff": "",
+                "defendant": "",
+                "category": cass_block["category"],
+                "bank_role": info.get("bank_role", ""),
+                "notes": (
+                    f"Добавлено по карточке президиума ({cass_block['court']})"
+                    if presidium else f"Найдено через парсер кассации ({cass_block['court']})"
+                ),
+                "discovered_via_cassation": True,
+                "first_instance": {
+                    "case_number": fi_num,
+                    "court": fi_court_short,
+                    "court_domain": fi_court_domain,
+                    "srv_num": info.get("fi_srv_num") or (fi_court_cfg.srv_num if fi_court_cfg else 1),
+                    "judicial_uid": info.get("judicial_uid") or "",
+                    "magistrate": magistrate,
+                    "judge": info.get("fi_judge", ""),
+                    "filing_date": "",
+                    "status": "Решено",
+                    "result": "",
+                    "last_event": "",
+                    "event_date": "",
+                    # Дата обжалуемого решения не означает назначение заседания.
+                    "decision_date": info.get("fi_decision_date", ""),
+                    "hearing_date": "",
+                    "hearing_time": "",
+                    "link": "",
+                    "act_published": False,
+                    "act_date": "",
+                    "act_text": "",
+                    "events": [],
+                },
+                "appeal": None,
+                "cassation": cass_block,
+            }
+            # Заполнить plaintiff/defendant из УЧАСТНИКОВ карточки 7kas.
+            # Разбор ролей — общий с бэкфиллом ниже (parties_from_participants:
+            # кроме ИСТЕЦ/ОТВЕТЧИК понимает ЗАЯВИТЕЛЬ/ВЗЫСКАТЕЛЬ и
+            # ЗАИНТЕРЕСОВАННОЕ ЛИЦО/ДОЛЖНИК — иначе у «прочих» категорий
+            # стороны оставались пустыми).
+            new_case["plaintiff"], new_case["defendant"] = (
+                parties_from_participants(info.get("participants"))
+            )
+            cases.append(new_case)
+            # Анонс относится к найденному производству. Последующее
+            # обновление cases в том же прогоне не должно подменить его.
+            discovered.append(deepcopy(new_case) if snapshot_discovered else new_case)
+            # Повторная находка того же дела в ЭТОМ же вызове (дубль строки
+            # дампа) обязана сматчиться с только что заведённым.
+            _index_case(new_case, len(cases) - 1, fi_index, cass_index,
+                        uid_index, uid_prio)
+            cass_changes.append({
+                "case": new_case["id"],
+                "cassation_internal_number": cass_block["case_number"],
+                "type": ["discovered_in_cassation"],
+                "details": {
+                    "stage_now": "cassation",
+                    "outcome": cass_block["outcome"],
+                    "review_result": cass_block["review_result"],
+                    "result_text": cass_block["result_text"],
+                    "result_for_appeal": cass_block["result_for_appeal"],
+                    "decision_date": cass_block["decision_date"],
+                    "hearing_date": cass_block["hearing_date"],
+                    "hearing_time": cass_block.get("hearing_time", ""),
+                    "timezone": cass_block["timezone"],
+                    "srv_num": cass_block["srv_num"],
+                    "new": cass_block["new"],
+                    "appellant": cass_block["appellant"],
+                    "appellant_is_bank": cass_block["appellant_is_bank"],
+                    "appellant_status": cass_block.get("appellant_status", ""),
+                    "fi_court": fi_court_short,
+                    "fi_case_number": fi_num,
+                    "act_kind": cass_block["act_kind"],
+                    "act_published": bool(cass_block.get("act_published")),
+                    "link": cass_block.get("link", ""),
+                    "court_domain": cass_block.get("court_domain", ""),
+                    "remanded_to": cass_block.get("remanded_to", ""),
+                },
+            })
+            if cass_block["act_published"]:
+                act_key = _cassation_act_key(cass_block)
+                if act_key and act_key in digested_cass_acts:
+                    log.debug(
+                        f"  7kas: {cass_block['case_number']} — определение "
+                        f"уже было в дайджесте, new_act подавлен (discovery)"
+                    )
+                else:
+                    cass_changes[-1]["type"].append("new_act")
+                    cass_changes[-1]["details"]["act_text"] = extract_motive_part(
+                        cass_block["act_text"], 1800
+                    )
+                    cass_changes[-1]["details"]["act_date"] = cass_block["act_date"]
+                    if act_key:
+                        digested_cass_acts.add(act_key)
+                        cass_acts_dirty = True
+            log.info(
+                f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "
+                f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"
+            )
+
+    if cass_acts_dirty and record_delivery:
+        try:
+            save_cassation_acts(digested_cass_acts)
+        except OSError as e:
+            log.warning(f"Не удалось сохранить {config.CASSATION_ACTS_PATH}: {e}")
+
+    # Изымаем восстановленные дела из архивного списка (мутируем на месте —
+    # вызывающий код пишет archived_cases обратно в cases_archive.json).
+    if archived_cases and resurrected:
+        archived_cases[:] = [
+            c for i, c in enumerate(archived_cases) if i not in resurrected
+        ]
+        log.info(f"7kas: восстановлено из архива {len(resurrected)} дел")
+
+    if cass_changes:
+        log.info(
+            f"7kas: касс. изменений {len(cass_changes)}, "
+            f"discovery новых дел {len(discovered)}"
+        )
+    return cases, cass_changes, discovered
+
+
+def rotate_cold_archive(hot_archive: list[dict], path_builder=None) -> list[dict]:
+    """Ротация архива по годам: дела старше COLD_ARCHIVE_DAYS (по `archived_at`)
+    уезжают из горячего cases_archive.json в холодные годовые файлы
+    cases_archive_YYYY.json (фронт их не грузит). Возвращает урезанный горячий
+    список (только дела свежее года), который вызывающий код записывает обратно
+    в JSON_ARCHIVE_PATH.
+
+    path_builder(year) — билдер пути холодного файла; по умолчанию
+    cold_archive_path (основной трек). Трек «Иски банка» передаёт
+    config.bank_cold_archive_path: его холодные файлы хранят полные записи
+    с inline events (вызывающий код обязан отдать сюда СКЛЕЕННЫЕ записи).
+
+    Бэкфилл: делам без `archived_at` штамп выводится из дат стадий
+    (_infer_archived_at) и записывается обратно — считается один раз.
+
+    Идемпотентно: дело дописывается в холодный файл только если его `id`/
+    `first_instance.case_number` там ещё нет.
+
+    Известное ограничение: холодные дела «заморожены» — они попадают в индекс
+    дедупликации (см. main_json), но reactivate_archived_first_instance их НЕ
+    сканирует (работает только по горячему архиву). Если дело годичной давности
+    внезапно возобновится (новая жалоба), автоматически оно не реактивируется —
+    вернуть вручную через add_cases_manually.py. Для гражданских дел такое после
+    года практически не встречается.
+    """
+    if path_builder is None:
+        path_builder = cold_archive_path
+    now = datetime.now()
+    keep_hot: list[dict] = []
+    to_cold_by_year: dict[int, list[dict]] = {}
+
+    for c in hot_archive:
+        stamp = (c.get("archived_at") or "").strip()
+        if not stamp:
+            stamp = _infer_archived_at(c)
+            c["archived_at"] = stamp  # бэкфилл — пишем обратно, считаем один раз
+        d = _parse_iso_date(stamp)
+        if d and (now - d).days > config.COLD_ARCHIVE_DAYS:
+            to_cold_by_year.setdefault(d.year, []).append(c)
+        else:
+            keep_hot.append(c)
+
+    if not to_cold_by_year:
+        return keep_hot
+
+    def _numbers(c: dict) -> list[str]:
+        nums = [(c.get("id") or "").strip(),
+                ((c.get("first_instance") or {}).get("case_number") or "").strip()]
+        return [n for n in nums if n]
+
+    def _domain(c: dict) -> str:
+        return ((c.get("first_instance") or {}).get("court_domain") or "").strip()
+
+    for year, moved in sorted(to_cold_by_year.items()):
+        path = path_builder(year)
+        cold = load_json(path)
+        cold_cases = cold.get("cases", [])
+        seen = set()          # голые номера (legacy-поведение основного трека)
+        seen_comp = set()     # «домен|номер» — номера не уникальны между судами
+        for c in cold_cases:
+            dom = _domain(c)
+            for n in _numbers(c):
+                seen.add(n)
+                if dom:
+                    seen_comp.add(f"{dom}|{n}")
+        added = 0
+        for c in moved:
+            dom = _domain(c)
+            nums = _numbers(c)
+            if dom:
+                # у записи есть домен → сверяем строго по составному ключу,
+                # иначе дело из другого суда с тем же номером «прилипло» бы
+                if any(f"{dom}|{n}" in seen_comp for n in nums):
+                    continue
+            elif any(n in seen for n in nums):
+                continue
+            cold_cases.append(c)
+            for n in nums:
+                seen.add(n)
+                if dom:
+                    seen_comp.add(f"{dom}|{n}")
+            added += 1
+        if added:
+            cold["cases"] = cold_cases
+            save_json(cold, path)
+            log.info(f"В холодный архив {os.path.basename(path)} перенесено {added} дел")
+
+    return keep_hot
+
+
+def collect_existing_ids(all_cases) -> set[str]:
+    """Индекс дедупликации по всем известным номерам дел.
+
+    Паттерн main_json (runs.py, блок 1), вынесен для переиспользования
+    импортёром дампов (scripts/import_search_dump.py). На вход — активные
+    дела + горячий архив + холодные годовые архивы одним iterable. В индекс
+    попадают: полный id, его «голая» часть до скобки (архив переномеровывает:
+    «2-122/2026 (2-535/2025;)», а поиск суда возвращает только текущий номер),
+    fi.case_number и appeal.case_number.
+    """
+    existing_ids: set[str] = set()
+    for c in all_cases:
+        cid = (c.get("id") or "").strip()
+        if cid:
+            existing_ids.add(cid)
+            bare = cid.split("(")[0].strip()
+            if bare and bare != cid:
+                existing_ids.add(bare)
+        fi = c.get("first_instance")
+        # Дело мирового судьи (кассация президиума): FI-номер «2-1543-2803/2019»
+        # в индекс не кладём — мирового судью не мониторим, а совпадение с
+        # номером районного суда заблокировало бы настоящее новое дело.
+        if fi and fi.get("case_number") and not fi.get("magistrate"):
+            existing_ids.add(fi["case_number"].strip())
+        ap = c.get("appeal")
+        if ap and ap.get("case_number"):
+            existing_ids.add(ap["case_number"].strip())
+    return existing_ids
+
+
+def collect_fi_dedup_index(all_cases) -> tuple[set, set]:
+    """Индекс суда/номера с площадкой и УИД; неизвестные требуют проверки.
+
+    Формат пары множеств сохранён для читателей. Метаданные нужны, чтобы
+    совпадение номера не означало совпадение суда или площадки.
+    """
+    exact, wildcard = FiDedupIndex(), FiUncertainIndex()
+    for case in all_cases:
+        fi = _case_identity_fi(case)
+        identity = resolve_fi_identity(fi)
+        if identity.status == "magistrate":
+            continue
+        nums = set()
+        for value in (case.get("id"), fi.get("case_number"), fi.get("material_number")):
+            num = (value or "").strip()
+            if num:
+                nums.update((num, num.split("(")[0].strip()))
+        for num in nums:
+            if identity.status == "resolved":
+                exact.add_identity(identity.domain, num, fi)
+            else:
+                wildcard.add_identity(num, fi)
+    return exact, wildcard
+
+
+def _fi_name_to_domain() -> dict[str, str]:
+    """Совместимая карта уникальных коротких имён и подтверждённых aliases."""
+    candidates: dict[str, set[str]] = {}
+    for cfg in get_region().first_instance_courts:
+        for name in (cfg.name, *getattr(cfg, "name_aliases", ())):
+            candidates.setdefault(_eyo(name.strip().lower()), set()).add(
+                canon_sudrf_domain(cfg.domain))
+    return {name: next(iter(domains)) for name, domains in candidates.items()
+            if len(domains) == 1}
+
+
+def case_court_key(case: dict, name_to_domain: dict[str, str] | None = None) -> tuple[str, str]:
+    """Совместимый ключ; пустой домен НЕ является доказательством совпадения.
+
+    Для слияния, реактивации и проверки площадки использовать
+    compare_fi_identity. name_to_domain сохранён в сигнатуре для читателей.
+    """
+    identity = resolve_fi_identity(_case_identity_fi(case))
+    domain = identity.domain if identity.status == "resolved" else ""
+    return domain, (case.get("id") or "").strip()
+
+
+def fi_case_by_court_number(
+    cases: list[dict], domain: str, number: str, exclude: dict | None = None
+) -> dict | None:
+    """Активная запись ЭТОГО суда под этим номером (id либо fi.case_number).
+
+    Нужна ТОЛЬКО чтобы назвать «занявшего» в предупреждении: сам гард стоит на
+    is_fi_number_tracked (множество пар — имён оно не хранит, зато видит архивы
+    и дела, заведённые этим же прогоном).
+
+    Ключ — пара, а не голый номер (см. case_court_key): индекс по id схлопывает
+    одноимённые записи разных судов, и «занявшим» оказывался случайный — так
+    иск Тагилстроевского суда заблокировал промоушен М-971/2026 в Асбестовском
+    (боевой прогон Урала 18.08.2026).
+
+    `exclude` — сама проверяемая запись: промоушен ищет ЧУЖОГО, иначе
+    полупромоутнутая запись (id ещё «М-», fi.case_number уже «2-») заблокирует
+    сама себя навсегда.
+    """
+    dom = (domain or "").strip().lower()
+    num = (number or "").strip()
+    if not dom or not num:
+        return None
+    ntd = _fi_name_to_domain()
+    for case in cases:
+        if exclude is not None and case is exclude:
+            continue
+        if case_court_key(case, ntd)[0] != dom:
+            continue
+        fi = case.get("first_instance") or {}
+        own = {
+            (case.get("id") or "").strip(),
+            (fi.get("case_number") or "").strip(),
+        }
+        own.discard("")
+        if num in own:
+            return case
+    return None
+
+
+def dedupe_new_archive_entries(
+    archived_cases: list[dict], newly_archived: list[dict]
+) -> list[dict]:
+    """Отобрать из `newly_archived` дела, которых ещё нет в горячем архиве.
+
+    Ключ — case_court_key, а не id: при дедупе по голому номеру дело суда Б
+    молча терялось, если одноимённое дело суда А уже лежало в архиве. Терялось
+    насовсем — split_archived_json к этому моменту уже убрал его из активных, а
+    в архив оно не попадало (инцидент не случился только потому, что оба
+    «9-44/2026» на Урале архивировались одним прогоном).
+
+    Порядок сохраняем; повторы внутри самого `newly_archived` не трогаем — их
+    там быть не может (одна запись = одно дело).
+    """
+    if not newly_archived:
+        return []
+    return [case for case in newly_archived
+            if not any(_same_case_record(case, archived) for archived in archived_cases)]
+
+
+# ── Присоединение дел (ст. 151 ГПК): подбор дела-приёмника ─────────────────
+# Суд НЕ публикует номер дела, к которому присоединил: в карточке только
+# «Дело присоединено к другому делу» и иногда основание («ИНЫЕ ПРИЧИНЫ»,
+# «Замена одного из судей»). Проверено на всех 9 присоединённых делах пилота
+# 31.07.2026 — ни в «Результате», ни в движении, ни в участниках номера нет.
+# Поэтому приёмник ищем сами по совпадению сторон, и результат ВСЕГДА помечен
+# предположением (merged_into_guess) — юрист должен видеть, что это догадка.
+_PATRONYMIC_SUFFIXES = ("вич", "вна", "ична", "кызы", "оглы")
+
+
+def _person_keys(parties: str) -> set[str]:
+    """ФИО-тройки («Фамилия Имя Отчество») из строки сторон карточки.
+
+    Ключ, а не отображаемое имя: сравниваются такие ключи между собой.
+    Юрлица сознательно НЕ попадают в набор — МТУ Росимущества стоит
+    соответчиком почти в каждом наследственном иске банка и склеил бы
+    несвязанные дела в один «приёмник». Отсюда обязательное отчество:
+    оно есть только у физлиц.
+
+    Тюркское отчество идёт двумя словами («Ариф Играр оглы»): окно ловит его
+    хвостом, и если перед окном есть ещё слово — это фамилия, добавляем её.
+    """
+    keys: set[str] = set()
+    for segment in re.split(r"[,;]", parties or ""):
+        tokens = re.findall(r"[А-ЯЁ][а-яё\-]+", segment)
+        for i in range(len(tokens) - 2):
+            window = tokens[i:i + 3]
+            if not window[2].lower().endswith(_PATRONYMIC_SUFFIXES):
+                continue
+            if window[2].lower() in ("оглы", "кызы") and i > 0:
+                window = tokens[i - 1:i + 3]
+            keys.add(" ".join(window))
+    return keys
+
+
+def _merged_event_date(fi: dict) -> str:
+    """Дата определения о присоединении — якорь 30-дневного архивного окна."""
+    from court_monitor.lifecycle import _FI_MERGED_RX
+    for ev in reversed(fi.get("events") or []):
+        if _FI_MERGED_RX.search(ev.get("text") or ""):
+            return ev.get("date") or ""
+    return fi.get("hearing_date") or fi.get("event_date") or ""
+
+
+def resolve_bank_merged_targets(
+    cases: list[dict], fi_changes: list[dict] | None = None
+) -> int:
+    """Проставить присоединённым делам трека штампы merged* и номер приёмника.
+
+    Возвращает число дел, которым номер подобран в этом прогоне.
+
+    Кандидат — дело того же суда, само не присоединённое, у которого совпадает
+    хотя бы одно ФИО ответчика. Выбираем по числу совпавших лиц, при равенстве —
+    поданное раньше (объединяют, как правило, в более раннее производство).
+    Ничья на первом месте — номер НЕ ставим: лучше пусто, чем неверный номер,
+    на который уедет звезда юриста.
+
+    Подбор идёт после FI-цикла (нужен весь список дел), а эмит завершения — в
+    нём, поэтому здесь же дописываем номер в готовое change["details"]: иначе
+    первый (и единственный, дальше termination_emitted) дайджест о присоединении
+    вышел бы без номера.
+    """
+    from court_monitor.lifecycle import (
+        is_bank_plaintiff_track, fi_is_merged, merged_target_reason,
+    )
+    merged_cases = [
+        c for c in cases
+        if is_bank_plaintiff_track(c) and fi_is_merged(c.get("first_instance") or {})
+    ]
+    if not merged_cases:
+        return 0
+
+    by_domain: dict[str, list[dict]] = {}
+    for c in cases:
+        fi = c.get("first_instance") or {}
+        if fi_is_merged(fi):
+            continue
+        dom = (fi.get("court_domain") or "").strip()
+        if dom:
+            by_domain.setdefault(dom, []).append(c)
+
+    resolved = 0
+    for case in merged_cases:
+        fi = case["first_instance"]
+        fi["merged"] = True
+        if not fi.get("merged_at"):
+            fi["merged_at"] = _merged_event_date(fi)
+        # Номер, once подобранный (или вписанный юристом), не пересматриваем.
+        if not fi.get("merged_into"):
+            keys = _person_keys(case.get("defendant") or "")
+            scored = []
+            if keys:
+                for other in by_domain.get(
+                    (fi.get("court_domain") or "").strip(), []
+                ):
+                    hits = keys & _person_keys(other.get("defendant") or "")
+                    if hits:
+                        ofi = other.get("first_instance") or {}
+                        scored.append((
+                            -len(hits),
+                            _sort_key_date(ofi.get("filing_date") or ""),
+                            other,
+                        ))
+            scored.sort(key=lambda t: (t[0], t[1]))
+            ambiguous = len(scored) > 1 and scored[0][0] == scored[1][0]
+            if scored and not ambiguous:
+                target = scored[0][2]
+                tfi = target.get("first_instance") or {}
+                fi["merged_into"] = target.get("id") or tfi.get("case_number") or ""
+                fi["merged_into_domain"] = (tfi.get("court_domain") or "").strip()
+                fi["merged_into_guess"] = True
+                resolved += 1
+                log.info(
+                    f"  {case.get('id', '?')}: присоединено — вероятный приёмник "
+                    f"{fi['merged_into']} (совпало лиц: {-scored[0][0]})"
+                )
+            elif ambiguous:
+                log.info(
+                    f"  {case.get('id', '?')}: присоединено — приёмник "
+                    f"неоднозначен ({len(scored)} кандидатов), номер не ставим"
+                )
+        # Дописать номер в уже собранное событие дайджеста этого прогона.
+        reason = merged_target_reason(fi)
+        if reason and fi_changes:
+            bare = (case.get("id") or "").strip()
+            dom = (fi.get("court_domain") or "").strip()
+            for ch in fi_changes:
+                if "fi_returned" not in (ch.get("type") or []):
+                    continue
+                d = ch.get("details") or {}
+                if d.get("termination_kind") != "merged":
+                    continue
+                if (ch.get("case") or "").strip() != bare:
+                    continue
+                if (d.get("court_domain") or "").strip() not in ("", dom):
+                    continue
+                d["return_reason"] = reason
+    return resolved
+
+
+def _sort_key_date(raw: str) -> tuple:
+    """ДД.ММ.ГГГГ → сортируемый ключ; пустая/битая дата уходит в конец."""
+    m = _DATE_DDMMYYYY_RX.match((raw or "").strip())
+    if not m:
+        return ("9999", "99", "99")
+    return (m.group(3), m.group(2), m.group(1))
+
+
+def _ddmmyyyy_in_future(raw: str) -> bool:
+    """True, если строка «ДД.ММ.ГГГГ» парсится и дата СТРОГО в будущем.
+
+    Гейт календарных событий кассации (заседание, «без движения»): прошедшая
+    дата — раскопанная история карточки, не анонс."""
+    m = _DATE_DDMMYYYY_RX.match((raw or "").strip())
+    if not m:
+        return False
+    try:
+        return date(int(m.group(3)), int(m.group(2)),
+                    int(m.group(1))) > date.today()
+    except ValueError:
+        return False
+
+
+def is_fi_number_tracked(
+    number: str, court_domain: str, exact: set, wildcard: set
+) -> bool:
+    """Совместимая обёртка: True только для подтверждённого совпадения.
+
+    Приём дел использует fi_number_tracking_status, чтобы отдельно обработать
+    needs_review и не принять неизвестность за свободный номер.
+    """
+    return fi_number_tracking_status(number, court_domain, exact, wildcard) == "tracked"
+
+
+def promote_material_record(old: dict, row: dict) -> None:
+    """Переименовать М-запись в возбуждённое гражданское дело (промоушен М→2).
+
+    `old` — существующая запись материала (id «М-…»), `row` — строка выдачи
+    (или её аналог, собранный из карточки) с комбо-номером: case_number —
+    гражданский номер, material_number — прежний М-номер. Общее тело
+    импортёра дампов (import_search_dump) и точечного добавления
+    (targeted_add); зеркало промоушена блока 3 main_json. Индексы дедупа
+    правит вызывающий — у каналов они устроены по-разному.
+    """
+    num = row["case_number"]
+    mat = (row.get("material_number") or "").strip()
+    old["id"] = num
+    fi_block = old.setdefault("first_instance", {})
+    fi_block["case_number"] = num
+    # М-номер остаётся алиасом — ★ юриста на материале не теряется.
+    if mat and not fi_block.get("material_number"):
+        fi_block["material_number"] = mat
+    if row.get("judge"):
+        fi_block["judge"] = row["judge"]
+    if row.get("link"):
+        fi_block["link"] = row["link"]
+    if row.get("href_srv_num"):
+        fi_block["srv_num"] = row["href_srv_num"]
+    if row.get("status"):
+        fi_block["status"] = row["status"]
+    # Флаг события «принято к производству, заседание не назначено» —
+    # эмитит ближайший прогон (как при промоушене автопоиска).
+    if not fi_block.get("accepted_emitted"):
+        fi_block["accepted_pending_emit"] = True
+
+
+def _fi_search_to_json_case(fi: dict) -> dict:
+    """Конвертировать результат parse_first_instance_search() в JSON-структуру дела."""
+    initial_role = fi.get("bank_role", "Ответчик")
+    return {
+        "id": fi["case_number"],
+        "current_stage": "first_instance",
+        "plaintiff": fi.get("plaintiff", ""),
+        "defendant": fi.get("defendant", ""),
+        "category": fi.get("category", ""),
+        "bank_role": initial_role,
+        # initial_bank_role фиксирует роль при создании дела и не меняется
+        # даже если bank_role позже переключится (банк исключили из ответчиков).
+        # Используется в дайджесте для показа «было: Ответчик».
+        "initial_bank_role": initial_role,
+        "notes": "",
+        "first_instance": {
+            "case_number": fi["case_number"],
+            "court": fi.get("court", ""),
+            "court_domain": fi.get("court_domain", ""),
+            "delo_id": fi.get("court_delo_id", 0),
+            "srv_num": fi.get("court_srv_num", 1),
+            "judge": fi.get("judge", ""),
+            "filing_date": fi.get("filing_date", ""),
+            "status": fi.get("status", "В производстве"),
+            "result": fi.get("result", ""),
+            "last_event": "",
+            "event_date": "",
+            "hearing_date": "",
+            "hearing_time": "",
+            "link": fi.get("link", ""),
+            "act_published": False,
+            "act_date": "",
+            "act_text": "",
+            "events": [],
+        },
+        "appeal": None,
+    }

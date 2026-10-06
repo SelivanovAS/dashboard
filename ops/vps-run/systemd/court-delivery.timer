@@ -1,0 +1,17 @@
+# Отправка готового выпуска отдельно от обхода судов и очереди импортов.
+# Занятый .run.lock клона — пропуск до следующего тика; повторную рассылку
+# отсекает существующий дневной гейт. Время VPS — Asia/Yekaterinburg.
+[Unit]
+Description=Court Monitor: утренняя доставка и повтор незакрытых выпусков
+
+[Timer]
+OnCalendar=Mon..Fri 08:45/5
+OnCalendar=Mon..Fri 09:00/5
+# Страховка долгих импортов и совпавших запросов start активной службы.
+# Закрытый день отсекается локально, без Git и повторной рассылки.
+OnCalendar=Mon..Fri 10..23:00/15
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,29 @@
+name: "Сравнение моделей пересказа — без доставки"
+on:
+  push:
+    branches: [codex/model-selection-20261006]
+    paths: [.github/workflows/model-comparison.yml]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare 20 acts on four free models
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
+        run: python model-selection/compare_models.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: court-model-comparison
+          path: ${{ runner.temp }}/court-model-results
+          retention-days: 7

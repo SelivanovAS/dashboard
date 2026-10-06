@@ -1,0 +1,251 @@
+# Имя файла (update_cases.yml) не менять: Cloudflare Worker дёргает
+# workflow_dispatch по нему (cloudflare-worker/worker.js, scheduled).
+name: "📊 Основной прогон: парсинг + дайджест"
+
+on:
+  # Автозапуск (с 05.07.2026 возвращён в облако): Cloudflare Worker по крону
+  # дёргает этот workflow через workflow_dispatch (crons в cloudflare-worker/
+  # wrangler.toml, 03:30 UTC = 08:30 ХМАО, пн-пт). Суды снова пускают US-IP
+  # GitHub (проверено probe_courts.yml), поэтому полный прогон идёт в облаке.
+  workflow_dispatch:  # Запуск через Cloudflare Worker (cron) или вручную из UI
+    inputs:
+      to_group:
+        description: 'Отправить дайджест в корпоративную группу (TELEGRAM_CHAT_ID). Снять галку — в личный чат.'
+        required: false
+        type: boolean
+        default: false
+      smart_skip:
+        description: 'Smart-skip: пропускать дела с известной будущей датой (заседание/без движения) и нерабочие дни РФ. Cron всегда true; ручной запуск — false для полного прогона.'
+        required: false
+        type: boolean
+        default: false
+      ignore_calendar:
+        description: 'Прогнать даже в выходной/праздник: режим ежедневного крона (smart-skip по делам сохраняется), но без проверки производственного календаря. Без этой галки прогон со smart_skip в нерабочий день завершается сразу.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  deployments: read   # читать статус github-pages деплоя (страховка публикации)
+
+# Сериализация записи в data/ с импортом дампов (import_cases.yml): у прогона
+# push без rebase — параллельный импорт уронил бы его non-fast-forward'ом,
+# а rebase прогона затёр бы только что импортированные дела.
+concurrency:
+  group: cases-data-write
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    # Страховка от молчаливого зависания: обычный прогон — 10-25 мин, с полным
+    # пулом исков банка — до ~1 ч; 2 часа хватает даже при массовых ретраях
+    # sudrf, а дефолтные 6 ч только оттягивали бы 🚨-алерт (шаг failure() при
+    # отсечке по таймауту не срабатывает — job отменяется, а не падает).
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run court monitor
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          # Форк задаёт REGION и DASHBOARD_URL в Settings → Variables — код
+          # общий для всех территорий.
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          # Трек «Иски банка»: BANK_TRACK=0 в Variables выключает его для
+          # территории. Фолбэк '1' = сегодняшнее поведение, поэтому у эталона
+          # и территорий без переменной ничего не меняется.
+          # ⚠ Гасит только ПРОГОН. Сегмент «🏦 Иски банка» на дашборде прячется
+          # по отсутствию data/cases_bank.json (HEAD-проба probeBankFile), про
+          # флаг фронт не знает — файл территории всё равно надо удалять.
+          # Ручные import_bank_registry/collect_bank_claims флаг тоже не
+          # спрашивают и файл создадут: это их работа, запускают их осознанно.
+          BANK_TRACK: ${{ vars.BANK_TRACK || '1' }}
+          # Авто-подхват исков банка со страницы выдачи (блок 3b фазы 3).
+          # BANK_AUTO_INTAKE=0 оставляет трек работать, но новые иски снова
+          # заводятся только вручную. BANK_INTAKE_DRY_RUN=1 — холостой прогон:
+          # кандидаты считаются и логируются, карточки не качаются, записи не
+          # создаются (для первого прогона после деплоя).
+          BANK_AUTO_INTAKE: ${{ vars.BANK_AUTO_INTAKE || '1' }}
+          BANK_INTAKE_DRY_RUN: ${{ vars.BANK_INTAKE_DRY_RUN || '0' }}
+          # Кэпы подхвата — рычаг темпа ввода территории без правки кода
+          # (разгон Урала 08.2026: юрист держит ~200 дел/день). Порог алерта
+          # поднимают вместе с кэпом, иначе штатный разгон ежедневно алертит.
+          BANK_INTAKE_MAX_PER_RUN: ${{ vars.BANK_INTAKE_MAX_PER_RUN || '30' }}
+          BANK_INTAKE_MAX_CARDS_PER_COURT: ${{ vars.BANK_INTAKE_MAX_CARDS_PER_COURT || '10' }}
+          BANK_INTAKE_ALERT_ADDED: ${{ vars.BANK_INTAKE_ALERT_ADDED || '50' }}
+          # Порог свёртки «заведено N новых исков банка» в дайджесте.
+          BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
+          # Свёртка «вступило в силу» и потолок перечня сторон (21.08.2026):
+          # replay обязан воспроизводить крон, иначе тестовый дайджест
+          # разойдётся с боевым.
+          BANK_FORCE_DIGEST_FOLD: ${{ vars.BANK_FORCE_DIGEST_FOLD || '3' }}
+          # Шаг эскалации напоминания «ИЛ не выдан» (30/60/90/120/150).
+          # Только здесь: календарный проход живёт в main_json, replay
+          # рендерит уже собранный контекст и событий не эмитит.
+          BANK_WRIT_OVERDUE_REPEAT_DAYS: ${{ vars.BANK_WRIT_OVERDUE_REPEAT_DAYS || '30' }}
+          DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
+          DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
+          # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM
+          # только на пересказ мотивировок актов. Откат на полный
+          # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # LLM боевого дайджеста: с 16.07.2026 дефолт — OpenRouter
+          # «модель дня» (бесплатный контур, решение юриста; пустая
+          # OPENROUTER_MODEL = топ-1 рейтинга shir-man на момент прогона).
+          # Вернуть Claude БЕЗ правки кода: Actions Variable
+          # LLM_PROVIDER=claude (Settings → Variables; так же может
+          # отличаться территория). ⚠ Секрет OPENROUTER_API_KEY обязателен:
+          # без него validate_environment уронит прогон на старте.
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          # По умолчанию шлём в личный чат (TELEGRAM_CHAT_ID_TEST). Cloudflare Worker
+          # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.
+          # Чтобы продублировать в корпоративную группу — поставить галку to_group в UI.
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Личный чат: по нему скрипт понимает, что дайджест идёт юристу,
+          # и добавляет сервисную приписку «какая LLM делала дайджест»
+          # (в корпоративную группу приписка не уходит).
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Web Push PWA-уведомления (опционально — если не заданы, пропускаются).
+          PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # Smart-skip: при автозапуске Worker передаёт smart_skip=true →
+          # парсер пропускает нерабочие дни и дела с известной будущей датой.
+          SKIP_NON_WORKING_DAYS: ${{ inputs.smart_skip && '1' || '' }}
+          # Календарный гейт отдельно от пер-кейсового smart-skip: галка
+          # ignore_calendar даёт «режим крона» в выходной (проверка правок,
+          # добор после простоя суда). Крон её не передаёт — плановые прогоны
+          # в праздники по-прежнему завершаются сразу.
+          IGNORE_NON_WORKING_DAY: ${{ inputs.ignore_calendar && '1' || '' }}
+          # Группы фаз (::group::) и аннотации WARNING/ERROR в UI Actions
+          # (court_monitor/ghlog.py). Явный флаг, а не GITHUB_ACTIONS:
+          # pytest-прогоны tests.yml не должны плодить аннотации.
+          LOG_GH_ANNOTATIONS: "1"
+          # Живой лог прогона в админке Worker (блок «Прогон (GitHub Actions)»):
+          # pass-through-пушер шлёт строки stdout батчами на POST /run-progress.
+          # Без секретов пушер работает как cat — прогон не страдает (но с
+          # 16.07.2026 объявляет о сбое/выключении одной строкой в логе).
+          # Токен: PUSH_SECRET первым — им же ходит пуш-доставка этого же шага,
+          # поэтому он проверяемо совпадает с Worker'ом; PROGRESS_SECRET — лишь
+          # запасной. (Причиной мёртвого канала 13–16.07.2026 были не секреты,
+          # а Cloudflare-бан UA Python-urllib — см. USER_AGENT в пушере.)
+          PROGRESS_URL: ${{ secrets.PUSH_WORKER_URL }}/run-progress
+          PROGRESS_TOKEN: ${{ secrets.PUSH_SECRET || secrets.PROGRESS_SECRET }}
+          # Логи и так флашатся построчно (StreamHandler/ghlog); это страховка
+          # для «голых» print из зависимостей под pipe-буферизацией.
+          PYTHONUNBUFFERED: "1"
+          # Полный многосудовый обход: открытый хост остывает по времени,
+          # пока очередь продолжает другие суды. FETCH_MAX_RETRIES не растёт.
+          CARD_BREAKER_MODE: "time"
+        run: |
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 GROUP CHAT: digest will go to corporate group"
+          else
+            echo "📱 PERSONAL CHAT: digest will go to personal chat"
+          fi
+          if [ "${{ inputs.smart_skip }}" = "true" ]; then
+            echo "🧠 SMART-SKIP: skip-нерабочих-дней + skip-будущих-заседаний"
+          fi
+          if [ "${{ inputs.ignore_calendar }}" = "true" ]; then
+            echo "📆 IGNORE-CALENDAR: прогон идёт и в нерабочий день (skip по делам сохранён)"
+          fi
+          # pipefail обязателен: дефолтный shell GitHub (bash -e) его НЕ
+          # включает — без него пушер маскировал бы падение парсера, и
+          # failure-алерт ниже ослеп бы.
+          set -o pipefail
+          python scripts/update_cases.py --json 2>&1 | python -u scripts/gh_progress_pusher.py
+
+      - name: Commit updated data
+        id: commit
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          # Список коммитимых файлов ОДИН на облако и Mac-резерв: хелпер
+          # спрашивает пути у court_monitor.config (там они и объявлены).
+          # Раньше список вёлся руками в двух местах и молча разъехался —
+          # Mac-путь не коммитил семь файлов трека «Иски банка», появившихся
+          # уже после того, как резерв усыпили. См. ops/stage_data_files.sh.
+          bash ops/stage_data_files.sh
+          BEFORE_SHA=$(git rev-parse HEAD)
+          git diff --cached --quiet || git commit -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M')"
+          AFTER_SHA=$(git rev-parse HEAD)
+          git push
+          # Запомним, создан ли новый коммит: по нему проверяем публикацию Pages
+          # (нет коммита → нет нового деплоя → проверять нечего).
+          if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$AFTER_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Страховка публикации сайта. GitHub Pages (Deploy from a branch → Jekyll)
+      # иногда плавающе роняет сборку: если деплой для только что запушенного
+      # коммита упал, сайт «замерзает» на прошлой версии — данные на сайте не
+      # обновляются, хотя сам прогон зелёный (инцидент 06.07.2026, см. фикс
+      # .nojekyll). Ловим упавший деплой и шлём отдельный 🚨-алерт в личный чат.
+      - name: Проверка публикации GitHub Pages
+        if: success() && steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+        run: |
+          SHA="${{ steps.commit.outputs.sha }}"
+          echo "Ждём публикацию GitHub Pages для ${SHA}…"
+          STATE=""
+          # ~4 мин с запасом: обычно деплой Pages завершается меньше чем за минуту.
+          for i in $(seq 1 24); do
+            DID=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=github-pages&sha=${SHA}&per_page=1" --jq '.[0].id // empty' 2>/dev/null || true)
+            if [ -n "$DID" ]; then
+              STATE=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${DID}/statuses?per_page=1" --jq '.[0].state // empty' 2>/dev/null || true)
+              echo "[$i] deployment ${DID} → ${STATE:-<нет статуса>}"
+              case "$STATE" in
+                success) echo "✅ Pages опубликован"; exit 0 ;;
+                failure|error) break ;;
+              esac
+            else
+              echo "[$i] github-pages деплой ещё не создан…"
+            fi
+            sleep 10
+          done
+          if [ "$STATE" = "failure" ] || [ "$STATE" = "error" ]; then
+            echo "❌ Публикация Pages упала — шлём алерт"
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              --data-urlencode text="🚨 Публикация сайта (GitHub Pages) упала — данные на сайте НЕ обновились, хотя прогон прошёл. Коммит ${SHA}. Перезапусти: Actions → workflow «pages build and deployment» → Re-run. Прогон: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}" \
+              >/dev/null || true
+          else
+            echo "⚠️ Статус Pages не подтвердился за отведённое время (${STATE:-нет данных}) — алерт не шлём, обычно достраивается."
+          fi
+          exit 0
+
+      # Падение любого шага выше — сигнал в личный Telegram (не в группу):
+      # иначе упавший ночной прогон выглядит как «сегодня нет новостей».
+      # curl вместо python — сработает, даже если упала установка зависимостей.
+      - name: Notify on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            --data-urlencode text="🚨 Ночной прогон мониторинга упал (run #${{ github.run_number }}). Логи: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null || true

@@ -1,0 +1,235 @@
+name: 🧪 Тест дайджеста (replay)
+
+# Объединённый тестовый прогон. Парсинга не делает — переигрывает
+# последний продовый дайджест из data/last_digest_context.json (гибрид:
+# программный шаблон + LLM на пересказ мотивировок; галка full_llm —
+# откат на старый полный LLM-вариант). LLM-провайдер выбирается списком
+# llm_provider (claude / gigachat / openrouter); модель — выпадающим списком
+# своего провайдера: gigachat_model (имена моделей GigaChat) или
+# openrouter_model (место в рейтинге бесплатных моделей shir-man.com —
+# конкретный id резолвится на прогоне, чтобы список не протухал).
+# Текстовое поле llm_model перебивает оба списка (произвольный id).
+# Telegram: личный по умолчанию, группа по галке.
+# Публикация результатов (last_digest.json, cases.json, кэш пересказов) —
+# только по галке commit_results: без неё тестовый дайджест НЕ попадает на
+# дашборд, и PWA push тоже не отправляется (пуш ведёт на дашборд — без
+# публикации он показал бы старый дайджест). push_all регулирует круг
+# получателей пуша при включённой публикации.
+# Имена inputs (commit_results и др.) — латиницей: GitHub не допускает
+# кириллицу в идентификаторах; русский текст — в description (его и видно
+# в форме Run workflow).
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_group:
+        description: 'Слать в корпоративную группу Telegram. Снять галку — в личный чат.'
+        required: false
+        type: boolean
+        default: false
+      push_all:
+        description: 'PWA push на ВСЕ устройства (включая коллег). Снять галку — только владельцу. Работает только вместе с галкой «опубликовать».'
+        required: false
+        type: boolean
+        default: false
+      full_llm:
+        description: 'Старый вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом вместо программного шаблона.'
+        required: false
+        type: boolean
+        default: false
+      llm_provider:
+        description: 'LLM-провайдер дайджеста.'
+        required: false
+        type: choice
+        options:
+          - claude
+          - gigachat
+          - openrouter
+        default: claude
+      claude_model:
+        description: 'Модель Claude (действует при провайдере claude). haiku — боевой эталон; sonnet/opus дороже, для сравнения.'
+        required: false
+        type: choice
+        options:
+          - haiku
+          - sonnet
+          - opus
+        default: haiku
+      claude_effort:
+        description: 'Уровень усилий Claude (только sonnet/opus — haiku не поддерживает, значение игнорируется). default = не отправлять, у API это high.'
+        required: false
+        type: choice
+        options:
+          - default
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+        default: default
+      gigachat_model:
+        description: 'Модель GigaChat (действует при провайдере gigachat).'
+        required: false
+        type: choice
+        options:
+          - GigaChat-2-Pro
+          - GigaChat-2
+          - GigaChat-2-Max
+          - GigaChat-3-Ultra
+        default: GigaChat-2-Pro
+      openrouter_model:
+        description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга, какая именно — видно в приписке «🤖 LLM» и в логе.'
+        required: false
+        type: choice
+        options:
+          - модель дня (топ-1)
+          - топ-2
+          - топ-3
+          - топ-4
+          - топ-5
+        default: модель дня (топ-1)
+      llm_model:
+        description: 'Другая модель (текстом) — перебивает все списки. Например, свежая free-модель OpenRouter, которой нет в рейтинге, GigaChat-Max или точный id Claude.'
+        required: false
+        type: string
+        default: ''
+      commit_results:
+        description: 'Опубликовать результаты: дайджест попадёт на дашборд (last_digest.json, cases.json, кэш пересказов) и уйдёт PWA push. Без галки — только Telegram.'
+        required: false
+        type: boolean
+        default: false
+
+# Коммит обновлённого last_digest.json — нужен contents: write.
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v5
+
+      - name: Установка Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Установка зависимостей
+        run: pip install -r scripts/requirements.txt
+
+      - name: Переигровка последнего дайджеста
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона = hmao).
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          # Порог свёртки «заведено N новых исков банка»: replay обязан
+          # воспроизводить крон, иначе тестовый дайджест разойдётся с боевым.
+          BANK_INTAKE_DIGEST_FOLD: ${{ vars.BANK_INTAKE_DIGEST_FOLD || '25' }}
+          # Свёртка «вступило в силу» и потолок перечня сторон (21.08.2026):
+          # replay обязан воспроизводить крон, иначе тестовый дайджест
+          # разойдётся с боевым.
+          BANK_FORCE_DIGEST_FOLD: ${{ vars.BANK_FORCE_DIGEST_FOLD || '3' }}
+          DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
+          DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
+          # Личный чат: по нему скрипт понимает, что дайджест идёт юристу,
+          # и добавляет сервисную приписку «какая LLM делала дайджест»
+          # (в корпоративную группу приписка не уходит).
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          # PWA push уходит только вместе с публикацией: без commit_results
+          # PUSH-переменные пустые, и send_web_push тихо пропускает отправку
+          # («Web Push: переменные не настроены, пропуск»).
+          PUSH_WORKER_URL: ${{ inputs.commit_results && secrets.PUSH_WORKER_URL || '' }}
+          PUSH_SECRET: ${{ inputs.commit_results && secrets.PUSH_SECRET || '' }}
+          VAPID_PRIVATE_KEY: ${{ inputs.commit_results && secrets.VAPID_PRIVATE_KEY || '' }}
+          # Управление архитектурой дайджеста для тестирования:
+          # без галки — боевой гибрид, с галкой — старый полный LLM.
+          DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
+          # Выбор LLM-провайдера и модели. Модель берётся из выпадающего
+          # списка своего провайдера; текстовое поле llm_model (если
+          # заполнено) перебивает оба списка. Читает переменную только
+          # активный провайдер. «Топ-N» в OPENROUTER_MODEL резолвится в
+          # конкретную модель на прогоне (llm._resolve_openrouter_model).
+          LLM_PROVIDER: ${{ inputs.llm_provider }}
+          # Модель Claude: короткое имя из списка (haiku/sonnet/opus) или точный
+          # id из llm_model; config.py резолвит алиасы и держит haiku дефолтом.
+          CLAUDE_MODEL: ${{ inputs.llm_model || inputs.claude_model }}
+          # Уровень усилий (output_config.effort) для sonnet/opus; «default»
+          # config.py резолвит в пусто = параметр не отправляется (API: high).
+          CLAUDE_EFFORT: ${{ inputs.claude_effort }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: GIGACHAT_API_PERS
+          GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ inputs.llm_model || inputs.openrouter_model }}
+          # Группы фаз и аннотации WARNING/ERROR в UI Actions (ghlog.py).
+          LOG_GH_ANNOTATIONS: "1"
+        run: |
+          if [ -n "${{ inputs.llm_model }}" ]; then
+            echo "🧠 Провайдер: ${{ inputs.llm_provider }}, модель (текстом): ${{ inputs.llm_model }}"
+          elif [ "${{ inputs.llm_provider }}" = "gigachat" ]; then
+            echo "🧠 Провайдер: gigachat, модель: ${{ inputs.gigachat_model }}"
+          elif [ "${{ inputs.llm_provider }}" = "openrouter" ]; then
+            echo "🧠 Провайдер: openrouter, модель: ${{ inputs.openrouter_model }} — конкретный id см. ниже в логе"
+          else
+            echo "🧠 Провайдер: claude, модель: ${{ inputs.claude_model }}, усилия: ${{ inputs.claude_effort }}"
+          fi
+          if [ "${{ inputs.to_group }}" = "true" ]; then
+            echo "📢 Дайджест уйдёт в корпоративную группу Telegram"
+          else
+            echo "📱 Дайджест уйдёт в личный чат Telegram"
+          fi
+          if [ "${{ inputs.full_llm }}" = "true" ]; then
+            echo "🤖 Полный LLM-вызов (DIGEST_FULL_LLM=1) вместо гибрида"
+          else
+            echo "🏗 Гибрид: программный шаблон + LLM-пересказы актов"
+          fi
+          if [ "${{ inputs.commit_results }}" != "true" ]; then
+            echo "🔕 Без публикации на дашборд — PWA push пропускается"
+            python scripts/update_cases.py --replay-last
+          elif [ "${{ inputs.push_all }}" = "true" ]; then
+            echo "📣 PWA push на все устройства (включая коллег)"
+            python scripts/update_cases.py --replay-last --push-all
+          else
+            echo "👤 PWA push только устройствам владельца"
+            python scripts/update_cases.py --replay-last
+          fi
+
+      - name: Публикация результатов на дашборд
+        # Без галки commit_results результаты теста живут только в логе
+        # прогона и в Telegram — сайт (GitHub Pages) не меняется.
+        if: ${{ inputs.commit_results }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f data/last_digest.json ]; then
+            git add data/last_digest.json
+          fi
+          # Журнал последней push-рассылки — читает админка подписчиков. Тестовые
+          # прогоны тоже шлют push (владельцу/всем), и этот файл должен попадать
+          # на GitHub Pages, иначе админка не покажет, что получила подписка.
+          if [ -f data/last_personal_pushes.json ]; then
+            git add data/last_personal_pushes.json
+          fi
+          # cases.json (act_analysis из replay) + кэш LLM-пересказов —
+          # та же пара, что коммитит replay_on_push.yml.
+          if [ -f data/cases.json ]; then
+            git add data/cases.json
+          fi
+          if [ -f data/.act_summaries.json ]; then
+            git add data/.act_summaries.json
+          fi
+          if git diff --cached --quiet; then
+            echo "Нет изменений — нечего коммитить"
+            exit 0
+          fi
+          git commit -m "🔁 Тест дайджеста: результаты опубликованы на дашборд"
+          git pull --rebase origin main || {
+            echo "⚠ rebase не удался — пропускаю коммит (дайджест уже отправлен)"
+            exit 0
+          }
+          git push

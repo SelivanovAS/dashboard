@@ -1,0 +1,128 @@
+name: 🔬 Проба доступа к судам с GitHub (US-egress)
+
+# Диагностический workflow (держим как постоянный чек). Проверяет, отвечают ли
+# сайты судов на американский IP раннера GitHub Actions. Нужен для сценария
+# резерва: 02.07.2026 суды начали резать иностранные IP (→ раскол D2), к
+# 05.07.2026 блок сняли и автозапуск вернули в облако. Если 🩺/🚨-алерт намекнёт,
+# что блок вернулся — запустить этот workflow и по выводу решить, не пора ли
+# будить Mac-резерв (см. CLAUDE.md, «Процедура флипа»). НИЧЕГО не парсит, не
+# коммитит, не шлёт дайджест — только curl + реальный запрос парсера и статус.
+# Запуск вручную: вкладка Actions → этот workflow → Run workflow.
+
+on:
+  workflow_dispatch:
+
+# Отчёт пробы карточек коммитится в ops/court_probe/report.txt: логи ранов
+# требуют admin-прав, и разбирать по ним провал импорта нельзя.
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Регион — на ВЕСЬ job, а не на отдельный шаг: 16.08.2026 проба на Урале
+    # честно доложила про суды ХМАО (хосты были захардкожены, а REGION никуда
+    # не передавался) — отчёт о чужой территории хуже, чем никакого.
+    env:
+      REGION: ${{ vars.REGION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Хосты своего региона (для шагов ниже)
+        id: hosts
+        run: |
+          # get_region() тянет только stdlib — можно до pip install.
+          HOSTS=$(python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          from court_monitor.regions import get_region
+          r = get_region()
+          # По одному представителю каждой инстанции: блок бьёт по адресу, а не
+          # по конкретному суду — больше хостов ничего не добавит.
+          hosts = [r.first_instance_courts[0].domain]
+          hosts += [c.domain for c in r.appeal_courts]
+          hosts.append(r.cassation_court.domain)
+          print(" ".join(dict.fromkeys(hosts)))
+          PY
+          )
+          echo "Регион ${REGION:-hmao}, хосты: $HOSTS"
+          echo "list=$HOSTS" >> "$GITHUB_OUTPUT"
+
+      - name: Сырой curl — TLS-хендшейк и HTTP-код (подпись блока)
+        run: |
+          for host in ${{ steps.hosts.outputs.list }}; do
+            echo "=== $host ==="
+            curl -sS -o /dev/null \
+              --connect-timeout 12 --max-time 25 \
+              -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -w "  code=%{http_code}  time_connect(TCP)=%{time_connect}s  time_appconnect(TLS)=%{time_appconnect}s  time_total=%{time_total}s\n" \
+              "https://$host/" || echo "  curl ВЕРНУЛ ОШИБКУ (код 000 = TLS/таймаут — вероятен блок)"
+            echo
+          done
+
+      - name: Python — реальный запрос парсера (приходят ли данные)
+        run: |
+          python3 -m pip install --quiet requests
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          from court_monitor import courts
+          from court_monitor.netutil import session
+
+          # Суды берём из АКТИВНОГО региона (env REGION), а не по именам ХМАО:
+          # на форке территории такая проба докладывала о чужих судах.
+          # Капчёвые суды в список поиска не берём — у них код закрывает поиск
+          # по проекту, «нет данных» там не новость (карточки спрашивает
+          # probe_court_access.py ниже).
+          targets = [(f"{c.name} (1-я инст.)", c)
+                     for c in courts.FIRST_INSTANCE_COURTS
+                     if c.enabled and not c.search_gated][:2]
+          targets += [(f"{c.name} (апелляция)", c) for c in courts.APPEAL_COURTS]
+          targets.append((f"{courts.CASSATION_COURT.name} (кассация)",
+                          courts.CASSATION_COURT))
+          ok = 0
+          for label, c in targets:
+              url = c.search_url()
+              try:
+                  r = session.get(url, timeout=30)
+                  body = r.content.decode("windows-1251", errors="replace")
+                  marks = []
+                  if "Данных по запросу не обнаружено" in body: marks.append("НЕТ ДАННЫХ")
+                  if "Сбербанк" in body: marks.append("данные ✓");
+                  if "sud_delo" in body: marks.append("таблица дел")
+                  if "Сбербанк" in body: ok += 1
+                  print(f"{label:20} HTTP {r.status_code}  len={len(body):>7}  {' | '.join(marks) or '—'}")
+              except Exception as e:
+                  print(f"{label:20} ОШИБКА: {type(e).__name__}: {e}")
+          print()
+          print(f"ИТОГ: с данными {ok}/{len(targets)}")
+          print(">>> Если у всех 'данные ✓' — блок для US снят, облако снова может парсить.")
+          print(">>> Если ОШИБКА/таймаут или 'НЕТ ДАННЫХ' — блок для GitHub жив, Mac-схема оправдана.")
+          PY
+
+      # Главный шаг с 16.08.2026. Шаги выше спрашивают ПОИСК, а у капчёвых
+      # судов Свердловской области он закрыт по проекту — весь канал
+      # мониторинга там карточки, и молчат именно они. Отчёт коммитится:
+      # логи ранов требуют admin-прав, и разбирать провал по ним нельзя.
+      - name: Python — проба КАРТОЧЕК своего региона (отчёт файлом)
+        env:
+          REGION: ${{ vars.REGION }}
+        run: |
+          mkdir -p ops/court_probe
+          python3 scripts/probe_court_access.py 2>&1 \
+            | tee ops/court_probe/report.txt
+
+      - name: Commit report
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add ops/court_probe/report.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "🔬 Отчёт пробы доступа к судам ($(date -u +'%d.%m.%Y %H:%M') UTC)"
+          # Ретраи на случай параллельного пуша другого workflow.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push

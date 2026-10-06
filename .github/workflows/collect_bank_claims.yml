@@ -1,0 +1,120 @@
+# Разовый сбор исков банка (банк — истец) с выдачи поиска суда.
+# Проходит первые N страниц выдачи по «Сбербанк» (пилот — Сургутский
+# городской), заводит в data/cases_bank.json только иски банка-истца;
+# исключаются итоги «без рассмотрения» / «по подсудности» / «возвращено» /
+# «прекращено» (решение юриста 26.07.2026), дела с признаком апелляции/
+# кассации в карточке и дела с уже выданным ИЛ на исполнение решения
+# (решение юриста 30.07.2026). Первый запуск — с галкой
+# dry_run: отчёт в ops/bank_registry/collect_report.txt (коммитится и в
+# dry-run), запись файла — только без галки.
+name: "🏦 Разовый сбор исков банка (выдача суда)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      court_domain:
+        # ⚠️ Без дефолта (с 13.08.2026): прежний дефолт surggor--hmao был
+        # ХМАО-шным, и запуск на территории с непроставленным полем молча
+        # собирал бы чужой суд. Фолбэк в run-шаге остаётся только для
+        # push-запусков, которые гейтом job живут лишь в эталоне.
+        description: "Домен суда 1-й инстанции (обязателен)"
+        required: true
+      srv_num:
+        description: "Номер сервера суда (Покачи на vartovray — 2)"
+        required: false
+        default: "1"
+      pages:
+        description: "Сколько страниц выдачи обойти"
+        required: false
+        default: "10"
+      limit:
+        description: "Максимум добавлений (0 — без лимита)"
+        required: false
+        default: "0"
+      dry_run:
+        description: "Только отчёт, без записи cases_bank.json"
+        type: boolean
+        required: false
+        default: false
+  # push-триггер: (1) регистрирует workflow в GitHub — dispatch-API отдаёт
+  # 404 для workflow, которых нет в дефолтной ветке и которые ни разу не
+  # срабатывали; (2) даёт свежий dry-run-отчёт после каждой правки сборщика.
+  # Запуск по push ВСЕГДА идёт в dry-run (см. шаг сбора) — боевая запись
+  # только руками через Run workflow.
+  push:
+    paths:
+      - "scripts/collect_bank_claims.py"
+      - ".github/workflows/collect_bank_claims.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    # ⚠️ Гейт территорий (инцидент 26.07.2026): push-триггер срабатывает и в
+    # форке — на самом merge синхронизации с эталоном — и сборщик уходил в
+    # суды ХМАО из репозитория территории. Push-запуски живут ТОЛЬКО в
+    # эталоне (пин по репозиторию); ручной Run workflow работает везде.
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'SelivanovAS/dashboard'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Один писатель data/* за раз — сериализация с основным прогоном
+    # и импортёрами.
+    concurrency:
+      group: cases-data-write
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Сбор выдачи (10 страниц + карточки истцовых дел)
+        env:
+          # Регион территории (Actions Variable форка; пусто у эталона =
+          # hmao). Второй корень инцидента 26.07.2026: без REGION форк
+          # резолвил суды по региону hmao.
+          REGION: ${{ vars.REGION }}
+          # Ручная операция: ретраи полезны — повтор запуска дороже
+          # (боевой дефолт FETCH_MAX_RETRIES=1).
+          FETCH_MAX_RETRIES: "3"
+        run: |
+          mkdir -p ops/bank_registry
+          # push-запуск (регистрация/проверка после правок) — всегда dry-run;
+          # боевая запись — только ручной Run workflow без галки dry_run.
+          DRY_FLAG=""
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] \
+             || [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          python3 scripts/collect_bank_claims.py \
+            --court "${{ github.event.inputs.court_domain || 'surggor--hmao.sudrf.ru' }}" \
+            --srv "${{ github.event.inputs.srv_num || '1' }}" \
+            --pages "${{ github.event.inputs.pages || '10' }}" \
+            --limit "${{ github.event.inputs.limit || '0' }}" \
+            $DRY_FLAG 2>&1 \
+            | tee ops/bank_registry/collect_report.txt
+
+      - name: Commit data + report
+        run: |
+          git config user.name "Court Monitor Bot"
+          git config user.email "bot@court-monitor.local"
+          git add ops/bank_registry/collect_report.txt
+          if [ -f data/cases_bank.json ]; then
+            git add data/cases_bank.json
+          fi
+          if [ -f data/cases_bank_events.json ]; then
+            git add data/cases_bank_events.json
+          fi
+          git diff --cached --quiet && exit 0
+          git commit -m "🏦 Сбор исков банка с выдачи ($(date -u +'%d.%m.%Y %H:%M') UTC)"
+          # Ретраи на случай параллельного пуша другого workflow.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase && sleep 3
+          done
+          git push

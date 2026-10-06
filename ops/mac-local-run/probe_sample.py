@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Выборочная проба судов для пульта: отвечают ли сайты ЭТОЙ машине.
+
+Состав выборки — решение юриста 18.08.2026: кассация + ВСЕ апелляции обеих
+территорий + случайные 3 суда Свердловской области (обязательно с одним судом
+Екатеринбурга) + 3 ЯНАО + 3 ХМАО + 3 Башкортостана. Итого 18 адресов; тройки новые на каждый
+запуск — за неделю проверок покрывается заметная часть реестра.
+
+Зачем случайность: блок бывает «мигающим» и пер-судовым, одна апелляция на
+территорию (быстрый преflight-гейт) его не увидит. Это диагностический скрипт,
+не workflow, — random здесь допустим.
+
+Ходим так же, как парсер (netutil.session с браузерным UA — служебные
+заголовки суды режут), вердикты зеркалят cm_court_reachable:
+  ✓ отвечает    — HTTP 200 и тело ≥ 4 КБ (настоящая страница суда);
+  ✗ не пускает  — HTTP 403 (нас режут по адресу);
+  ⚠ заглушка    — HTTP 200, но тело ~1 КБ (страница защиты ГАС);
+  ✗ молчит      — таймаут/сеть.
+
+Запуск из корня любого клона (оба региона доступны из каждого):
+  python3 ops/mac-local-run/probe_sample.py
+"""
+from __future__ import annotations
+
+import os
+import random
+import sys
+
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+
+MIN_BYTES = 4096       # главная суда — десятки КБ; заглушка/блок — ~1 КБ
+TIMEOUT = 20
+
+
+def build_targets() -> list[tuple[str, str]]:
+    """[(подпись, домен)] — все кассации и апелляции, по три суда каждой зоны."""
+    from court_monitor.regions import get_region
+
+    hmao = get_region("hmao")
+    ural = get_region("sverdlovsk_yanao")
+    bashkortostan = get_region("bashkortostan")
+
+    targets: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(label: str, domain: str) -> None:
+        if domain not in seen:
+            seen.add(domain)
+            targets.append((label, domain))
+
+    for region in (hmao, ural, bashkortostan):
+        add(f"Кассация · {region.cassation_court.name}", region.cassation_court.domain)
+        for c in region.appeal_courts:
+            add(f"Апелляция · {c.name}", c.domain)
+
+    def uniq_by_domain(courts) -> list:
+        # Постоянное присутствие живёт на домене родительского суда (Покачи,
+        # Пышма, Ачит), а проба ходит на главную домена — это ОДНА цель.
+        # Без дедупа ДО жребия random.sample, вытащив обоих соседей по
+        # домену, давал зоне 2 строки вместо 3 (плавающее падение
+        # test_composition ~раз в 50 запусков).
+        out, seen_domains = [], set()
+        for c in courts:
+            if c.domain not in seen_domains:
+                seen_domains.add(c.domain)
+                out.append(c)
+        return out
+
+    fi = uniq_by_domain(c for c in ural.first_instance_courts if c.enabled)
+    ekb = [c for c in fi if "Екатеринбург" in c.name]
+    ynao = [c for c in fi if c.domain.endswith("--ynao.sudrf.ru")]
+    svd = [c for c in fi
+           if not c.domain.endswith("--ynao.sudrf.ru") and c not in ekb]
+    hmao_fi = uniq_by_domain(
+        c for c in hmao.first_instance_courts if c.enabled)
+
+    # Свердловская тройка: один суд ЕКБ гарантированно + два прочих области.
+    trio = random.sample(ekb, 1) + random.sample(svd, 2)
+    for c in trio:
+        add(f"Свердловская обл. · {c.name}", c.domain)
+    for c in random.sample(ynao, 3):
+        add(f"ЯНАО · {c.name}", c.domain)
+    for c in random.sample(hmao_fi, 3):
+        add(f"ХМАО · {c.name}", c.domain)
+    bash_fi = uniq_by_domain(c for c in bashkortostan.first_instance_courts if c.enabled)
+    for c in random.sample(bash_fi, min(3, len(bash_fi))):
+        add(f"Башкортостан · {c.name}", c.domain)
+    return targets
+
+
+def probe(domain: str) -> tuple[str, str]:
+    """(значок, пояснение) для одного домена."""
+    from court_monitor.netutil import session
+    try:
+        r = session.get(f"https://{domain}/", timeout=TIMEOUT)
+    except Exception as e:  # noqa: BLE001 — сюда попадает и таймаут, и DNS
+        return "✗", f"молчит ({type(e).__name__})"
+    size = len(r.content or b"")
+    if r.status_code == 403:
+        return "✗", "не пускает (HTTP 403 — режут наш адрес)"
+    if r.status_code != 200:
+        return "✗", f"HTTP {r.status_code}"
+    if size < MIN_BYTES:
+        return "⚠", f"заглушка ({size} байт — страница защиты, не суд)"
+    return "✓", f"отвечает ({size // 1024} КБ)"
+
+
+def main() -> int:
+    targets = build_targets()
+    print(f"Проба {len(targets)} адресов — как ходит парсер, с этой машины:")
+    ok = 0
+    for label, domain in targets:
+        mark, note = probe(domain)
+        if mark == "✓":
+            ok += 1
+        print(f"  {mark} {label:<44} {note}")
+    print(f"Итог: отвечают {ok} из {len(targets)}")
+    if ok == len(targets):
+        print("Главные страницы отвечают. Доступ к поиску и карточкам проверяется отдельно.")
+    elif ok == 0:
+        print("Не пускает никто: с этой сети работать нельзя (корпоративный VPN?).")
+    else:
+        print("Пускают не все: блок мигающий — прогон возможен, но с пропусками.")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

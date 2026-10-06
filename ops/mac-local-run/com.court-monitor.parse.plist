@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent: парсинг судов на Mac по будням.
+  Ставится в ~/Library/LaunchAgents/ (см. ops/mac-local-run/README.md).
+  Зовёт parse_all.sh — он прогоняет ВСЕ территории (список клонов в
+  ~/.config/court-monitor/territories; нет файла = только ~/dashboard). С 24.08.2026
+  маршруты обоих регионов готовятся один раз, потом Урал стартует сразу,
+  ХМАО через 10 минут; после wait и 08:45 родитель доставляет pending обоих
+  контекстов без повторного парсинга, затем идут импорты. Откат без правки кода:
+  CM_PARALLEL_TERRITORIES=0 в environment launchd (см. README).
+
+  Время — ЛОКАЛЬНОЕ (этот Mac на +05). LaunchAgent досрабатывает при
+  пробуждении/входе, если в назначенный час Mac спал или ты не был
+  залогинен. Поменять время — Hour/Minute ниже. Weekday: 1=Пн … 5=Пт.
+
+  ⏸ С 19.08.2026 облачный крон ВЫКЛЮЧЕН (crons = [] в wrangler.toml обеих
+  территорий — лотерея адресов раннеров), и этот агент — ОСНОВНОЙ путь
+  парсинга. Слоты каждые 30 минут с 06:00 до 08:30 плюс ДОСТАВОЧНЫЙ 08:45
+  (решение юриста 21.08.2026: «парсинг с 06:00, дайджест не раньше 08:45»;
+  до этого было 08:00–10:00). Слоты до окна копят новости молча — данные
+  сохраняются, дайджест не уходит; отправляет первый слот, ЗАВЕРШИВШИЙСЯ
+  после 08:45 (штатно — слот 08:45), со ВСЕМ накопленным с 06:00. Лишние
+  запуски бесплатны — гейт cloud_run_ok.py выходит за секунды, когда
+  дайджест дня уже отправлен, а лок на клон не пускает второй прогон
+  параллельно первому.
+
+  ⚠️ Слоты — это ТОЧКИ, ГДЕ launchd МОЖЕТ начать, а не гарантия запуска
+  каждые 30 минут: пока агент работает, наступивший интервал пропускается
+  БЕЗ ОЧЕРЕДИ (замер 21.08.2026: старт 08:00, конец 09:02 — обе территории
+  ещё шли подряд, поэтому слоты 08:30 и 09:00 не запускались вовсе). Теперь длительность
+  ближе к max(Урал, 10 мин + ХМАО), а не к их сумме; на дочитке повторные слоты идут быстро.
+
+  ⚠️ 08:45 — ПОСЛЕДНИЙ слот дня (слот 09:00 юрист велел убрать 21.08.2026):
+  страховки после него нет, упавший доставочный слот = алерт в Telegram и
+  ручной запуск с пульта. Штатные случаи закрыты и без страховки: прогон,
+  ещё идущий в 08:45, доставляет САМ — после wait родитель проходит оба
+  pending-контекста без повторного HTTP к судам (тогда дайджест придёт позже
+  08:45, во сколько закончит);
+  проспанный слот launchd доигрывает при пробуждении — окно доставки внутри
+  скрипта отправит накопленное сразу.
+
+  Ключ «anywhere» в аргументах (19.08.2026): агент больше не требует сети
+  Сбера. В офисе поведение прежнее (преflight «в сети Сбера» проверяется
+  первым и строит маршруты судов мимо VPN), вне офиса маршруты не строятся
+  и честная проба судов решает, есть ли доступ. Без ключа агент 19.08.2026
+  пропустил оба слота («не в сети Сбера» — Mac был дома), и всё
+  запускалось руками. (В XML-комментарии нельзя писать двойной дефис —
+  потому здесь ключ назван словом, а не как в аргументах ниже.)
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.court-monitor.parse</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/parse_all.sh</string>
+        <string>--anywhere</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>45</integer></dict>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/aleksandrselivanov/dashboard/ops/mac-local-run/launchd.err.log</string>
+</dict>
+</plist>

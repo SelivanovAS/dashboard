@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="windows-1251"><title>Поиск по делам</title></head>
+<body>
+<div id="modSudDelo">
+  <form name="sf" method="get" action="modules.php?name=sud_delo&amp;name_op=r">
+    <p>Для доступа к результатам поиска введите код с картинки:</p>
+    <img id="captcha" src="/captcha.php?rand=8f3a1c" alt="Проверочный код" width="120" height="40">
+    <input type="text" name="captcha" id="captcha_input" maxlength="6" autocomplete="off">
+    <input type="submit" value="Найти">
+    <p class="hint">Защита от автоматических запросов.</p>
+  </form>
+</div>
+</body>
+</html>

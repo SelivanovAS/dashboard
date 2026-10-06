@@ -1,0 +1,2427 @@
+/* ============================================================
+   Мониторинг дел · v2 design system
+   Белый фон, сберовский зелёный — только акцент. Плотный B2B-интерфейс.
+   Шрифт: IBM Plex Sans (цифры — основным шрифтом + tabular-nums).
+   Класс-имена сохранены — app.js рендерит без правок.
+   ============================================================ */
+
+/* ---------- 0. Шрифты (свои woff2, с 15.08.2026) ----------
+   До этого IBM Plex Sans тянулся render-blocking `<link>` с Google Fonts:
+   офлайн при непрогретом кэше страница ждала сетевой таймаут ОС (defer-скрипты
+   не исполняются, пока висит стилевой лист) — главный вклад в «белый экран»
+   из жалобы юриста. Файлы вариативные (один woff2 на 400-700, проверено по
+   css2: 4 веса → 1 URL на подмножество), суммарно ~110 КБ, живут в APP_SHELL
+   service worker'а. IBM Plex Mono выброшен: единственным потребителем был
+   `.setup-body code` экрана настройки, который юрист не видит. unicode-range
+   скопированы из ответа css2 — браузер качает только нужные подмножества. */
+/* cyrillic-ext */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------- 1. Base palette ---------- */
+:root {
+  /* Высота нижней безопасной зоны iOS (home-indicator). Резолвится в px,
+     читается из JS для компенсации в visualViewport-расчётах клавиатуры. */
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
+  /* Расстояние от низа экрана до плавающих элементов (toolbar, drawer-footer):
+     12px ниже safe-area, минимум 12px (чтобы на Android/десктопе, где
+     safe-area = 0, тулбар не прижимался к самому краю). Меняй здесь —
+     обновятся оба места. */
+  --floating-bottom: max(var(--sai-bottom) - 12px, 12px);
+  /* Sber green — бренд-акцент (CTA, активные состояния, focus) */
+  --sber-green-700: #157f3a;
+  --sber-green-600: #1a9f29;
+  --sber-green-500: #21a038;
+  --sber-green-100: #e1f5e5;
+  --sber-green-50:  #f1faf3;
+  --sber-lime-500:  #c8d951;
+
+  /* Neutrals */
+  --gray-950: #0d1116;
+  --gray-900: #14181f;
+  --gray-800: #1f242c;
+  --gray-700: #2d333d;
+  --gray-600: #4a5160;
+  --gray-500: #6b7280;
+  --gray-400: #9aa0ac;
+  --gray-300: #c8ccd4;
+  --gray-200: #e4e7eb;
+  --gray-150: #eef0f3;
+  --gray-100: #f4f6f8;
+  --gray-50:  #fafbfc;
+  --white:    #ffffff;
+
+  /* Semantic raw */
+  --blue-700:  #1e4dbb;
+  --blue-600:  #2563eb;
+  --blue-500:  #3b82f6;
+  --blue-100:  #dbeafe;
+  --blue-50:   #eff6ff;
+
+  --amber-700: #92400e;
+  --amber-600: #d97706;
+  --amber-500: #f59e0b;
+  --amber-100: #fef3c7;
+  --amber-50:  #fffbeb;
+
+  --red-700:   #991b1b;
+  --red-600:   #dc2626;
+  --red-500:   #ef4444;
+  --red-100:   #fee2e2;
+
+  /* ⚠️ Пары --rose-* тут больше нет (14.08.2026): её единственным
+     потребителем был бейдж «Кассатор», а тёмного варианта у неё не
+     существовало — на тёмной теме он светился светло-розовым кирпичом.
+     Заводя новый токен, объявляй его СРАЗУ в обоих блоках темы. */
+  --violet-700: #6d28d9;
+  --violet-100: #ede9fe;
+
+  --teal-800:  #115e59;
+  --teal-700:  #0d9488;
+  --teal-100:  #ccfbf1;
+
+  --pink-700:  #9d174d;
+  --pink-100:  #fce7f3;
+
+  --indigo-700: #3730a3;
+  --indigo-100: #e0e7ff;
+
+  --green-favorable-fg: #065f46;
+  --green-favorable-bg: #d1fae5;
+
+  /* ---------- 2. Semantic ---------- */
+  --fg-1: var(--gray-900);
+  --fg-2: var(--gray-700);
+  --fg-3: var(--gray-600);   /* WCAG AA на белом ~7:1 (был gray-500 ~3.8:1) */
+  --fg-4: var(--gray-500);   /* для совсем «тихого» текста, был gray-400 */
+
+  /* Шеврон селекта «Суд» (см. .court-select): цвет зашит в data-URI, var()
+     внутри url() не работает — поэтому токен объявлен в ОБЕИХ темах.
+     Цвет = --fg-2 соответствующей темы. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232d333d' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  --bg-1: var(--white);       /* поверхности */
+  --bg-2: #eceef2;            /* фон страницы — серее, чем gray-50 */
+  --bg-3: var(--gray-100);    /* hover, чипы */
+  --bg-4: var(--gray-150);    /* активные заливки */
+
+  --border: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --divider: var(--gray-150);
+
+  --accent: var(--sber-green-500);
+  --accent-hover: var(--sber-green-600);
+  --accent-active: var(--sber-green-700);
+  --accent-bg-soft: var(--sber-green-50);
+  --accent-bg-strong: var(--sber-green-100);
+  --freshness-bg: #f4f8f5;
+  --freshness-border: #dce8df;
+  --focus-ring: 0 0 0 3px rgba(33, 160, 56, 0.30);
+
+  /* Активный сегмент (#dataset-switch, роль/инстанция, шторка фильтров).
+     Отдельные токены, а не голый --accent: в тёмной теме бренд-зелёный с
+     белым текстом оставался единственной насыщенной заливкой экрана и бил
+     по глазам среди приглушённой палитры (решение юриста 14.08.2026).
+     В светлой теме — прежние значения побайтово. */
+  --seg-active-bg:       var(--accent);
+  --seg-active-fg:       #fff;
+  --seg-active-count-bg: rgba(255, 255, 255, 0.25);
+
+  /* Верхняя навигация разделов в духе системного tab bar: общий нейтральный
+     док и отдельная приподнятая поверхность активного пункта. Эти токены не
+     переиспользуют --seg-active-*: фильтры остаются зелёными смысловыми
+     переключателями, а Основные / Иски банка / Мои читаются как навигация. */
+  --scope-nav-bg:              var(--gray-200);
+  --scope-nav-muted-fg:        var(--gray-500);
+  --scope-nav-active-bg:       var(--white);
+  --scope-nav-active-fg:       var(--gray-900);
+  --scope-nav-active-border:   rgba(13, 17, 22, 0.09);
+  --scope-nav-active-shadow:   0 2px 7px rgba(13, 17, 22, 0.10), 0 1px 2px rgba(13, 17, 22, 0.07);
+  --scope-nav-count-bg:        var(--gray-150);
+  --scope-nav-count-fg:        var(--gray-600);
+
+  /* «Без движения» — рыжая ветка тёплой оси (не путать с амбер «Отложено»).
+     Токенами, потому что цвет обязан иметь тёмный вариант: литералами он
+     светил персиковым кирпичом на тёмной теме. */
+  --state-suspended-bg:  #ffedd5;
+  --state-suspended-fg:  #c2410c;
+  --badge-to-fi-border:  #fecaca;
+
+  /* Стадии дела */
+  /* Три цветовые оси, не пересекающиеся между собой (правило 14.08.2026):
+     ХОЛОДНОЕ  — стадия дела: 1 инст. (teal) → апелляция (indigo) → кассация
+                 (violet), градация по насыщенности;
+     ТЁПЛОЕ    — состояние и срочность: заседание сегодня/скоро, «Отложено»,
+                 «Без движения», «Обжалуется»;
+     ГРАФИТ    — роль стороны в жалобе («Апеллянт»/«Кассатор») и архив.
+     До этого роль «Апеллянт» сидела на violet — том же самом, что стадия
+     «Кассация» (побайтово: #ede9fe/#6d28d9), и юрист их путал. Новую
+     сущность красить в занятую ось нельзя: сначала выбрать ось. */
+  --stage-fi-fg:        var(--teal-800);
+  --stage-fi-bg:        var(--teal-100);
+  --stage-await-fg:     var(--indigo-700);
+  --stage-await-bg:     var(--indigo-100);
+  --stage-appeal-fg:    var(--indigo-700);
+  --stage-appeal-bg:    var(--indigo-100);
+  --stage-cass-fg:      var(--violet-700);
+  --stage-cass-bg:      var(--violet-100);
+  --stage-archive-fg:   var(--gray-600);
+  --stage-archive-bg:   var(--gray-150);
+
+  /* Роли банка */
+  --role-plaintiff-fg:  var(--blue-700);
+  --role-plaintiff-bg:  var(--blue-100);
+  --role-defendant-fg:  var(--pink-700);
+  --role-defendant-bg:  var(--pink-100);
+  --role-third-fg:      var(--gray-600);
+  --role-third-bg:      var(--gray-150);
+
+  /* Роль стороны в жалобе — «Апеллянт»/«Кассатор». Графитовая ось: вместе
+     эти бейджи не встречаются (на кассац. стадиях «Апеллянт» подавлён),
+     различает их слово, а не цвет. ⚠️ Пара обязана быть объявлена в ОБЕИХ
+     темах: у прежнего rose тёмного варианта не было, и «Кассатор» светился
+     светло-розовым кирпичом на тёмном фоне. */
+  --role-badge-fg:      var(--gray-700);
+  --role-badge-bg:      var(--gray-150);
+
+  /* Срочность */
+  --urgency-today-fg:   var(--red-700);
+  --urgency-today-bg:   var(--red-100);
+  --urgency-tomorrow-fg:var(--amber-700);
+  --urgency-tomorrow-bg:var(--amber-100);
+  --urgency-week-fg:    var(--blue-700);
+  --urgency-week-bg:    var(--blue-100);
+  --urgency-far-fg:     var(--gray-600);
+  --urgency-far-bg:     var(--gray-150);
+
+  /* Семантические алиасы (legacy class compat) */
+  --success: var(--accent);
+  --success-bg: var(--green-favorable-bg);
+  --success-fg: var(--green-favorable-fg);
+  --warning: var(--amber-500);
+  --warning-bg: var(--amber-100);
+  --warning-fg: var(--amber-700);
+  --danger: var(--red-500);
+  --danger-bg: var(--red-100);
+  --danger-fg: var(--red-700);
+  --info: var(--blue-500);
+  --info-bg: var(--blue-100);
+  --info-fg: var(--blue-700);
+  --pending: var(--gray-400);
+  --pending-bg: var(--gray-100);
+  --pending-fg: var(--gray-600);
+
+  /* Legacy навигационные алиасы (некоторые места app.js / drawer завязаны на них) */
+  --navy-900: var(--gray-900);
+  --navy-800: var(--gray-800);
+  --navy-700: var(--gray-700);
+  --navy-600: var(--accent);
+  --navy-500: var(--accent);
+  --gold-500: var(--accent);
+  --gold-400: var(--accent-hover);
+  --gold-300: var(--accent-bg-strong);
+  --slate-50:  var(--gray-50);
+  --slate-100: var(--gray-100);
+  --slate-200: var(--gray-200);
+  --slate-300: var(--gray-300);
+  --slate-400: var(--gray-400);
+  --slate-500: var(--gray-500);
+  --slate-600: var(--gray-600);
+  --slate-700: var(--gray-700);
+  --slate-800: var(--gray-900);
+  --green-500: var(--accent);
+  --green-100: var(--green-favorable-bg);
+  --green-800: var(--green-favorable-fg);
+  --red-800:   var(--red-700);
+  --blue-800:  var(--blue-700);
+  --amber-50:  #fffbeb;
+  --purple-100: var(--violet-100);
+  --purple-800: var(--violet-700);
+
+  /* Типографика */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: var(--font-sans);
+  /* Цифры и номера дел рендерим основным шрифтом с tabular-nums (см. body) — --font-mono наследует sans для совместимости */
+  --font-mono: var(--font-sans);
+  /* IBM Plex Mono не грузим (см. блок шрифтов вверху) — системный mono-стек */
+  --font-code: 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-2xs: 11px;
+  --fs-xs:  12px;
+  --fs-sm:  13px;
+  --fs-md:  15px;   /* база таблицы/карточек, было 14px — комфортнее для длинного чтения */
+  --fs-lg:  16px;   /* было 15px — теперь body-плюс */
+  --fs-xl:  18px;   /* было 17px */
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold:600;
+  --fw-bold:    700;
+
+  /* Spacing & radii */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(13, 17, 22, 0.04);
+  --shadow-1:  0 1px 2px rgba(13, 17, 22, 0.04);
+  --shadow-md: 0 2px 6px rgba(13, 17, 22, 0.06), 0 1px 2px rgba(13, 17, 22, 0.04);
+  --shadow-2:  0 2px 6px rgba(13, 17, 22, 0.06), 0 1px 2px rgba(13, 17, 22, 0.04);
+  --shadow-lg: 0 8px 24px rgba(13, 17, 22, 0.08), 0 2px 6px rgba(13, 17, 22, 0.04);
+  --shadow-3:  0 8px 24px rgba(13, 17, 22, 0.08), 0 2px 6px rgba(13, 17, 22, 0.04);
+  --shadow-4:  0 20px 50px rgba(13, 17, 22, 0.14), 0 4px 10px rgba(13, 17, 22, 0.06);
+
+  --content-max: 1800px;
+  /* Высота .drawer-footer — диктуется кнопками
+     (16px padding-top + кнопка + 16px padding-bottom). */
+  --footer-h: 68px;
+
+  /* ─── Liquid Glass / Material 3 surface ─────────────────────────────────
+     Apple iOS 26 Liquid Glass: высокий blur + saturate + полупрозрачная
+     поверхность + тонкий highlight по верхней кромке. На Android (Chrome 76+)
+     работает тот же backdrop-filter — выглядит как Material 3 translucent
+     surface. Fallback на сплошной фон ниже через @supports not. */
+  --glass-bg:        rgba(236, 238, 242, 0.72);   /* совпадает с --bg-2 light */
+  --glass-border:    rgba(15, 23, 42, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-shadow:    0 -1px 14px rgba(15, 23, 42, 0.06);
+  --glass-blur:      saturate(180%) blur(24px);
+  /* Floating-pill (мобильные поиск/кнопка фильтра) — ярче и чище серого
+     glass-bg: почти-белый полупрозрачный, читается как iOS-капсула, а не
+     как «серая плашка». Dark переопределяется ниже. */
+  --pill-bg:         rgba(255, 255, 255, 0.78);
+
+  /* Тёплый off-white фон тела дайджеста — мягче чем чистый --bg-1, как
+     в Reader-режимах. Для долгого чтения LLM-текста удобнее. На dark
+     переопределяется ниже. */
+  --digest-paper:    #FAFAF7;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+
+  color-scheme: light;
+}
+
+/* ============================================================
+   Dark theme — переопределяем только семантические токены.
+   Базовая палитра не трогается; стадии/срочность/роли
+   получают тёмные фоны через soft-приглушённые оттенки.
+   ============================================================ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --fg-1: #ecedef;
+  --fg-2: #c5c8cf;
+  --fg-3: #a8aeba;   /* было #8c92a0 — поднято для AA на тёмном bg-1 */
+  --fg-4: #80868f;   /* было #6b7280 — слабый текст всё ещё читаем */
+
+  /* Шеврон селекта «Суд» — тёмный вариант (--fg-2 этой темы). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c5c8cf' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  --bg-1: #181c22;       /* поверхности (карточки, таблицы) */
+  --bg-2: #0f1217;       /* фон страницы */
+  --bg-3: #232830;       /* hover, чипы */
+  --bg-4: #2c333d;       /* активные заливки */
+
+  --border: #2a2f38;
+  --border-strong: #3a414c;
+  --divider: #232830;
+
+  /* Liquid Glass — тёмная схема: тёмная полупрозрачная поверхность,
+     приглушённый highlight, едва заметная hairline-кромка. */
+  --glass-bg:        rgba(15, 18, 23, 0.66);     /* совпадает с --bg-2 dark */
+  --glass-border:    rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --glass-shadow:    0 -1px 14px rgba(0, 0, 0, 0.32);
+  /* Floating-pill в dark — почти-чёрный полупрозрачный, контрастнее серого. */
+  --pill-bg:         rgba(20, 22, 28, 0.78);
+
+  /* Дайджест — тёплый чуть светлее --bg-1 фон, отделяет тело от карточек */
+  --digest-paper:    #1f242c;
+
+  /* Бренд-акцент чуть светлее на тёмном */
+  --accent: #2fbf4a;
+  --accent-hover: #3fd05c;
+  --accent-active: #2aa540;
+  --accent-bg-soft: rgba(47, 191, 74, 0.10);
+  --accent-bg-strong: rgba(47, 191, 74, 0.20);
+  --freshness-bg: #18251f;
+  --freshness-border: #2d4037;
+  --focus-ring: 0 0 0 3px rgba(47, 191, 74, 0.40);
+
+  /* Активный сегмент: приглушённый зелёный со светлым текстом (решение
+     юриста 14.08.2026). Бренд-зелёный с белым текстом был единственной
+     насыщенной заливкой тёмного экрана и бил по глазам. */
+  --seg-active-bg:       #1e7a34;
+  --seg-active-fg:       #eaf7ec;
+  --seg-active-count-bg: rgba(255, 255, 255, 0.18);
+
+  /* Тёмный tab bar: активная поверхность чуть светлее общего дока, тень
+     глубже, но без яркой зелёной плашки на всю ширину сегмента. */
+  --scope-nav-bg:              #171b21;
+  --scope-nav-muted-fg:        #9299a4;
+  --scope-nav-active-bg:       #2a3039;
+  --scope-nav-active-fg:       #f2f3f5;
+  --scope-nav-active-border:   rgba(255, 255, 255, 0.09);
+  --scope-nav-active-shadow:   0 3px 10px rgba(0, 0, 0, 0.42), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --scope-nav-count-bg:        rgba(255, 255, 255, 0.09);
+  --scope-nav-count-fg:        #c9cdd4;
+
+  /* «Без движения» — рыжий в тон urgency-tomorrow, приглушённой заливкой. */
+  --state-suspended-bg:  rgba(249, 115, 22, 0.18);
+  --state-suspended-fg:  #fdba74;
+  --badge-to-fi-border:  rgba(239, 68, 68, 0.35);
+
+  /* Стадии — приглушённые холодные фоны на тёмном (teal/indigo/violet) */
+  --stage-fi-fg:        #5eead4;
+  --stage-fi-bg:        rgba(20, 184, 166, 0.16);
+  --stage-await-fg:     #c7d2fe;
+  --stage-await-bg:     rgba(99, 102, 241, 0.18);
+  --stage-appeal-fg:    #c7d2fe;
+  --stage-appeal-bg:    rgba(99, 102, 241, 0.18);
+  --stage-cass-fg:      #c4b5fd;
+  --stage-cass-bg:      rgba(139, 92, 246, 0.20);
+  --stage-archive-fg:   #b0b6c0;
+  --stage-archive-bg:   rgba(154, 160, 172, 0.14);
+
+  /* Роли */
+  --role-plaintiff-fg:  #8ab4ff;
+  --role-plaintiff-bg:  rgba(59, 130, 246, 0.16);
+  --role-defendant-fg:  #f9a8d4;
+  --role-defendant-bg:  rgba(244, 114, 182, 0.16);
+  --role-third-fg:      #b0b6c0;
+  --role-third-bg:      rgba(154, 160, 172, 0.14);
+
+  /* Роль стороны в жалобе (Апеллянт/Кассатор) — графит, чуть контрастнее
+     архивного: бейдж стоит внутри строки со сторонами, а не в шапке. */
+  --role-badge-fg:      #b0b6c0;
+  --role-badge-bg:      rgba(154, 160, 172, 0.16);
+
+  /* Срочность */
+  --urgency-today-fg:   #fca5a5;
+  --urgency-today-bg:   rgba(239, 68, 68, 0.18);
+  --urgency-tomorrow-fg:#f4c97c;
+  --urgency-tomorrow-bg:rgba(245, 158, 11, 0.18);
+  --urgency-week-fg:    #8ab4ff;
+  --urgency-week-bg:    rgba(59, 130, 246, 0.18);
+  --urgency-far-fg:     #b0b6c0;
+  --urgency-far-bg:     rgba(154, 160, 172, 0.14);
+
+  /* Семантические алиасы */
+  --success: var(--accent);
+  --success-bg: rgba(47, 191, 74, 0.18);
+  --success-fg: #86efac;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.18);
+  --warning-fg: #f4c97c;
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.18);
+  --danger-fg: #fca5a5;
+  --info: #3b82f6;
+  --info-bg: rgba(59, 130, 246, 0.18);
+  --info-fg: #8ab4ff;
+  --pending: #6b7280;
+  --pending-bg: rgba(154, 160, 172, 0.14);
+  --pending-fg: #b0b6c0;
+
+  --green-favorable-fg: #86efac;
+  --green-favorable-bg: rgba(47, 191, 74, 0.18);
+
+  /* Пере-маппинг legacy-переменных под тёмную тему */
+  --navy-900: var(--fg-1);
+  --navy-800: var(--fg-1);
+  --navy-700: var(--fg-2);
+  --slate-50:  var(--bg-2);
+  --slate-100: var(--bg-3);
+  --slate-200: var(--border);
+  --slate-300: var(--border-strong);
+  --slate-400: var(--fg-4);
+  --slate-500: var(--fg-3);
+  --slate-600: var(--fg-2);
+  --slate-700: var(--fg-2);
+  --slate-800: var(--fg-1);
+  --red-100: rgba(239, 68, 68, 0.18);
+  --red-700: #fca5a5;
+  --red-800: #fca5a5;
+  --blue-100: rgba(59, 130, 246, 0.18);
+  --blue-700: #8ab4ff;
+  --blue-800: #8ab4ff;
+  --amber-50:  rgba(245, 158, 11, 0.10);
+  --amber-100: rgba(245, 158, 11, 0.18);
+  --amber-700: #f4c97c;
+  --indigo-100: rgba(99, 102, 241, 0.18);
+  --indigo-700: #c7d2fe;
+  --violet-100: rgba(139, 92, 246, 0.18);
+  --violet-700: #c4b5fd;
+  --pink-100:  rgba(244, 114, 182, 0.16);
+  --pink-700:  #f9a8d4;
+  --teal-100:  rgba(20, 184, 166, 0.16);
+  --teal-700:  #5eead4;
+
+  /* Тени — глубже и темнее */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-1:  0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-2:  0 2px 8px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-3:  0 12px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-4:  0 24px 60px rgba(0, 0, 0, 0.65), 0 6px 12px rgba(0, 0, 0, 0.40);
+}
+
+/* Авто-detect, если пользователь явно не выбирал тему */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: dark;
+  }
+}
+
+/* Плавный переход при переключении темы */
+html { transition: background-color 200ms var(--ease-out); }
+body, .app-header, .app-main, .stat-card, .table-wrap, .analytics-card,
+.drawer, .filters-sheet, .mobile-card, .chip-btn, .badge,
+.search-box, .filter-select, .setup-card { transition: background-color 200ms var(--ease-out), border-color 200ms var(--ease-out), color 200ms var(--ease-out); }
+
+/* Theme toggle button */
+.theme-toggle { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:var(--radius); cursor:pointer; transition:all 120ms var(--ease-out); }
+.theme-toggle:hover { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
+.theme-toggle:active { transform:scale(0.94); }
+.theme-toggle svg { width:18px; height:18px; }
+.theme-toggle .icon-moon,
+.theme-toggle .icon-sun,
+.theme-toggle .icon-auto { display:none; }
+:root[data-theme-pref="auto"]  .theme-toggle .icon-auto { display:inline; }
+:root[data-theme-pref="light"] .theme-toggle .icon-sun  { display:inline; }
+:root[data-theme-pref="dark"]  .theme-toggle .icon-moon { display:inline; }
+
+* { margin:0; padding:0; box-sizing:border-box; }
+/* ⚠️ overflow-x:hidden — ТОЛЬКО на html, у body его быть не должно.
+   По спецификации overflow корневого элемента распространяется на вьюпорт
+   (горизонтальный вылет всё так же обрезается), а вот body с собственным
+   overflow становится СКРОЛЛ-КОНТЕЙНЕРОМ — и position:sticky у любого
+   потомка перестаёт работать: он липнет к боксу body, который сам не
+   скроллится. Так молча не липла .app-header (её position:sticky
+   существовал, но при scrollY=896 шапка стояла на -827px, то есть просто
+   уезжала) и не заработала бы .list-bar.
+   Проверено 13.08.2026: с overflow-x только на html шапка встаёт на 0,
+   полоса — ровно под ней, scrollWidth не превышает innerWidth.
+   ⚠️ Запрет в силе и после 14.08.2026, когда шапку на телефоне сделали
+   статичной: от него по-прежнему зависит липкая полоса списка на телефоне
+   и липкая шапка на десктопе. */
+html { overflow-x:hidden; }
+html, body { max-width:100%; }
+
+/* Контракт ВСЕХ кнопок «закрыть»: содержимое — только svg, никакого
+   текстового «×». Знак умножения U+00D7 сидит на математической оси
+   шрифта, то есть всегда выше оптического центра, и flex его не спасает:
+   flex центрирует строчный бокс, а не чернила глифа. Плюс font-family у
+   <button> не наследуется (глобального `button{font:inherit}` в проекте
+   нет) — крестик рисовался системным шрифтом, и величина сдвига была
+   разной на разных ОС. Геометрия svg симметрична, шрифт в ней не
+   участвует вовсе.
+   ⚠️ display:block у svg обязателен: инлайновый svg тянет за собой
+   строчный бокс с подстрочным просветом и ломает центровку заново.
+   ⚠️ Правило стоит В НАЧАЛЕ файла намеренно: у .search-clear и
+   .digest-close свой display:none (показываются по классу), и при равной
+   специфичности выигрывает тот, кто ниже — стой .btn-x после них, обе
+   кнопки были бы всегда видимы. */
+.btn-x { display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.btn-x svg { display:block; }
+body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+
+/* ========== Loading ========== */
+.loading-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:20px; }
+.loading-spinner { width:38px; height:38px; border:3px solid var(--gray-200); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+.loading-text { font-size:var(--fs-md); color:var(--fg-3); animation:pulse 1.5s ease infinite; }
+
+/* ========== Setup ========== */
+.setup-screen { max-width:680px; margin:80px auto; padding:0 24px; animation:fadeUp .5s var(--ease-out); }
+.setup-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); overflow:hidden; border:1px solid var(--border); }
+.setup-header { background:var(--bg-1); padding:28px 32px 20px; color:var(--fg-1); border-bottom:1px solid var(--border); }
+.setup-header h1 { font-family:var(--font-display); font-size:var(--fs-2xl); font-weight:var(--fw-bold); letter-spacing:-0.02em; }
+.setup-header p { color:var(--fg-3); font-size:var(--fs-md); margin-top:6px; }
+.setup-body { padding:24px 32px; }
+.setup-body ol { list-style:none; counter-reset:steps; }
+.setup-body ol li { counter-increment:steps; padding:14px 0; border-bottom:1px solid var(--divider); font-size:var(--fs-md); line-height:1.6; display:flex; gap:14px; align-items:flex-start; }
+.setup-body ol li:last-child { border-bottom:none; }
+.setup-body ol li::before { content:counter(steps); display:flex; align-items:center; justify-content:center; min-width:26px; height:26px; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent-active); font-weight:var(--fw-bold); font-size:var(--fs-sm); flex-shrink:0; margin-top:1px; }
+.setup-body code { font-family:var(--font-code); font-size:var(--fs-xs); background:var(--bg-3); padding:2px 7px; border-radius:var(--radius-xs); color:var(--fg-1); }
+/* Причина на экране «Нет сохранённых данных» (#nodata-screen) */
+.nodata-reason { margin:0 0 12px; font-size:var(--fs-sm); color:var(--fg-3); }
+.setup-input-group { margin-top:20px; }
+.setup-input-group label { font-weight:var(--fw-semibold); font-size:var(--fs-sm); color:var(--fg-2); display:block; margin-bottom:6px; }
+.setup-input { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); transition:all 120ms var(--ease-out); background:var(--bg-1); color:var(--fg-1); }
+.setup-input:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.setup-btn { margin-top:16px; padding:11px 22px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:background 120ms var(--ease-out); }
+.setup-btn:hover { background:var(--accent-hover); }
+.setup-btn:active { background:var(--accent-active); transform:scale(0.98); }
+.setup-footer { padding:14px 32px; background:var(--bg-2); border-top:1px solid var(--border); }
+.setup-footer p { font-size:var(--fs-xs); color:var(--fg-3); line-height:1.6; }
+
+/* ========== Header ========== */
+.app-header { background:var(--bg-1); border-bottom:1px solid var(--border); padding:0 24px; position:sticky; top:0; z-index:100; }
+.header-inner { max-width:var(--content-max); margin:0 auto; display:flex; justify-content:space-between; align-items:center; padding:10px 0; gap:18px; min-height:56px; }
+.header-brand { display:flex; align-items:center; gap:12px; }
+.header-logo { width:32px; height:32px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; overflow:hidden; color:#fff; }
+.header-logo img { width:100%; height:100%; object-fit:cover; display:block; }
+.header-logo svg { width:20px; height:20px; }
+.header-title { font-family:var(--font-display); font-size:var(--fs-xl); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; line-height:1.2; }
+.header-sub { font-size:var(--fs-xs); color:var(--fg-3); margin-top:1px; font-weight:var(--fw-medium); letter-spacing:0; }
+/* Бейдж региона территории под названием («ХМАО-Югра», «ЕКБ + ЯНАО») */
+.header-region { color:var(--accent); font-weight:var(--fw-semibold); }
+.header-actions { display:flex; align-items:center; gap:12px; }
+.header-meta { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); text-align:right; }
+.header-meta b { color:var(--fg-1); font-weight:var(--fw-semibold); }
+/* Метка «данные из офлайн-кэша» — живёт внутри .header-meta перед
+   «Данные от: …», второго механизма штампа не заводим (см. renderMeta).
+   Токены warning-* объявлены в обеих темах. */
+.meta-offline { display:inline-block; padding:1px 7px; margin-right:6px; border-radius:var(--radius-pill);
+                background:var(--warning-bg); color:var(--warning-fg);
+                font-size:var(--fs-2xs); font-weight:var(--fw-semibold); }
+
+
+/* ========== Main ========== */
+.app-main { max-width:var(--content-max); margin:0 auto; padding:24px 24px 40px; }
+
+/* ========== Stats — primary KPI row ========== */
+/* ⚠️ Ряд из четырёх KPI-плиток СКРЫТ 21.08.2026 (решение юриста): он занимал
+   верх первого экрана, а работа идёт в списке ниже. Действия плиток
+   дублируются чипами полосы списка (setStatusFilter 'active'/'lost' и
+   setBankControlFilter 'writs'/'awaiting_writ' в картотеке банка), поэтому
+   вместе с рядом ничего не потеряно. Разметку и renderStats/renderBankStats
+   не трогаем — вернуть ряд = поставить display обратно на grid. На ≤768px он
+   и так гасился `display:none !important` (медиа-блок ниже), правка видна
+   только на десктопе и планшете. */
+.stats-primary { display:none; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:14px; animation:fadeUp .4s var(--ease-out); }
+.stat-card { background:var(--bg-1); border-radius:var(--radius-md); padding:14px 16px; box-shadow:var(--shadow-1); border-left:3px solid var(--border-strong); transition:box-shadow 150ms var(--ease-out); }
+.stat-card:hover { box-shadow:var(--shadow-md); }
+.stat-card.clickable { cursor:pointer; }
+.stat-card[data-accent="blue"]  { border-left-color:var(--blue-500); }
+.stat-card[data-accent="green"] { border-left-color:var(--accent); }
+.stat-card[data-accent="gold"]  { border-left-color:var(--accent); }
+.stat-card[data-accent="red"]   { border-left-color:var(--red-500); }
+.stat-card[data-accent="amber"] { border-left-color:var(--amber-500); }
+.stat-value { font-family:var(--font-display); font-size:var(--fs-3xl); font-weight:var(--fw-bold); letter-spacing:-0.02em; line-height:1; color:var(--fg-1); font-variant-numeric:tabular-nums; }
+.stat-label { font-size:var(--fs-sm); color:var(--fg-3); margin-top:6px; font-weight:var(--fw-semibold); letter-spacing:-0.005em; }
+.stat-progress { margin-top:10px; height:5px; border-radius:3px; background:var(--bg-3); overflow:hidden; }
+.stat-progress-fill { height:100%; border-radius:3px; background:var(--accent); transition:width .5s var(--ease-out); }
+
+/* ========== Stats secondary — compact row ========== */
+.stats-secondary { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px; padding:0 2px; animation:fadeUp .45s var(--ease-out); }
+.chip-group { display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding-right:16px; border-right:1px solid var(--border); }
+.chip-group:last-child { border-right:none; padding-right:0; }
+.stat-chip { display:flex; align-items:center; gap:6px; font-size:var(--fs-sm); color:var(--fg-2); }
+.stat-chip .chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.stat-chip strong { font-weight:var(--fw-bold); color:var(--fg-1); font-variant-numeric:tabular-nums; }
+
+/* ========== Analytics row (upcoming hearings + categories) ========== */
+.analytics-row { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:20px; animation:fadeUp .5s var(--ease-out); }
+.analytics-card { background:var(--bg-1); border-radius:var(--radius-md); padding:16px 20px; box-shadow:var(--shadow-1); }
+.analytics-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); letter-spacing:-0.005em; }
+/* Зазор переехал с заголовка на содержимое — иначе при свёрнутом блоке
+   («Ближайшие заседания» с кликом по chevron) внизу карточки висел
+   пустой margin-bottom 14px. Теперь у свёрнутой карточки шапка прижата
+   к низу, у раскрытой — отступ перед списком есть. */
+.analytics-title + .upcoming-list,
+.analytics-title + .upcoming-empty { margin-top:14px; }
+
+/* Categories mini-chart */
+.cat-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:var(--fs-xs); }
+.cat-bar-row:last-child { margin-bottom:0; }
+.cat-bar-label { width:180px; flex-shrink:0; color:var(--fg-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cat-bar-track { flex:1; height:6px; background:var(--bg-3); border-radius:3px; overflow:hidden; }
+.cat-bar-fill { height:100%; border-radius:3px; transition:width .5s var(--ease-out); }
+.cat-bar-count { width:28px; text-align:right; font-weight:var(--fw-semibold); color:var(--fg-2); font-family:var(--font-mono); font-size:var(--fs-2xs); }
+
+/* Upcoming hearings */
+.up-title { display:flex; align-items:center; gap:10px; }
+.up-title .card-chevron-btn { margin-left:auto; }
+.up-counter { display:inline-block; margin-left:6px; padding:2px 10px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
+.upcoming-list { display:flex; flex-direction:column; gap:14px; }
+.up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); margin-bottom:8px; letter-spacing:-0.005em; }
+.up-group-head::after { content:''; flex:1; height:1px; background:var(--divider); }
+.up-group-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; padding:0 6px; height:16px; border-radius:8px; background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-2xs); font-weight:var(--fw-bold); letter-spacing:0; order:1; }
+.up-group-today .up-group-head { color:var(--urgency-today-fg); }
+.up-group-today .up-group-count { background:var(--urgency-today-bg); color:var(--urgency-today-fg); }
+.up-group-tomorrow .up-group-head { color:var(--urgency-tomorrow-fg); }
+.up-group-tomorrow .up-group-count { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
+.up-group-week .up-group-head { color:var(--urgency-week-fg); }
+.up-group-week .up-group-count { background:var(--urgency-week-bg); color:var(--urgency-week-fg); }
+.up-group-body { display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; }
+.upcoming-item { display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; transition:background 120ms var(--ease-out); }
+.upcoming-item:hover { background:var(--bg-2); }
+.up-time { min-width:72px; flex-shrink:0; text-align:center; padding:4px 6px; background:var(--bg-2); border-radius:var(--radius-xs); font-family:var(--font-mono); line-height:1.2; display:flex; flex-direction:column; gap:2px; }
+.up-time-value { font-size:var(--fs-lg); font-weight:var(--fw-bold); color:var(--fg-1); }
+.up-date { font-size:var(--fs-xs); color:var(--fg-2); font-weight:var(--fw-bold); }
+.up-group-today .up-time-value { color:var(--urgency-today-fg); }
+.up-group-tomorrow .up-time-value { color:var(--urgency-tomorrow-fg); }
+.up-body { flex:1; min-width:0; color:var(--fg-2); line-height:1.35; }
+.up-head { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:2px; }
+.upcoming-case { font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); }
+.up-court { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.upcoming-parties { font-size:var(--fs-md); color:var(--fg-2); word-break:break-word; }
+.up-ext { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:var(--radius-sm); color:var(--fg-4); text-decoration:none; flex-shrink:0; transition:all 120ms var(--ease-out); }
+.up-ext:hover { background:var(--bg-3); color:var(--accent); }
+.up-ext svg { width:14px; height:14px; }
+.upcoming-empty { font-size:var(--fs-sm); color:var(--fg-4); text-align:center; padding:20px 0; }
+.upcoming-chevron { display:none; font-size:var(--fs-xs); color:var(--fg-4); transition:transform .2s; }
+/* Chevron-кнопка в шапке analytics-карточек — тот же визуальный паттерн,
+   что .digest-toggle. По умолчанию блок раскрыт → chevron-up (rotate 180);
+   при .upcoming-collapsed на карточке — chevron-down (rotate 0). */
+.card-chevron-btn {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--fg-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+  transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
+  transform: rotate(180deg);
+}
+.card-chevron-btn:hover { background: var(--bg-3); color: var(--fg-1); }
+.card-chevron-btn svg { width: 18px; height: 18px; }
+.upcoming-collapsed .card-chevron-btn { transform: rotate(0deg); }
+.upcoming-list.collapsed, .upcoming-empty.collapsed { max-height:0; overflow:hidden; opacity:0; margin:0; padding:0; transition:max-height .25s var(--ease-out), opacity .2s var(--ease-out); }
+.upcoming-list:not(.collapsed), .upcoming-empty:not(.collapsed) { max-height:4000px; opacity:1; transition:max-height .35s var(--ease-out), opacity .2s var(--ease-out); }
+
+/* ========== Toolbar ==========
+   Десктоп: тулбар двухрядный.
+     ряд 1 (.toolbar-row-search) — поиск + быстрые статус-чипы (chip-bar-quick).
+     ряд 2 (.toolbar-row-segments) — сегментные переключатели роль/инстанция.
+   Раньше всё лежало в одном flex-row .toolbar-left, и .seg-ctrl с width:100%
+   ломал раскладку — статус-чипы перемешивались с сегментами и наезжали на
+   thead/search. Теперь сегменты живут в собственном ряду со своей шириной. */
+.toolbar { display:flex; flex-direction:column; align-items:stretch; gap:8px; margin-bottom:10px; animation:fadeUp .5s var(--ease-out); }
+.toolbar-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.toolbar-row-search { gap:12px; }
+.toolbar-row-segments { width:100%; }
+.toolbar-hidden-selects { display:contents; }
+.toolbar-mine-btn { display:none; }
+/* Старые .toolbar-left/.toolbar-right больше не используются на десктопе,
+   но классы могут встретиться в drawer/sheet — оставляем безобидными. */
+.toolbar-left { display:flex; gap:8px; align-items:center; flex:1; flex-wrap:wrap; }
+.toolbar-right { display:flex; gap:8px; align-items:center; }
+.search-box { display:flex; align-items:center; gap:10px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-pill); padding:11px 18px; min-width:240px; flex:0 1 360px; transition:all 120ms var(--ease-out); position:relative; }
+.search-box:focus-within { border-color:var(--accent); box-shadow:var(--focus-ring); }
+.search-box svg { width:17px; height:17px; color:var(--fg-3); flex-shrink:0; }
+.search-input { border:none; outline:none; background:transparent; font-size:var(--fs-lg); color:var(--fg-1); flex:1; font-family:var(--font-sans); font-weight:var(--fw-medium); }
+.search-input::placeholder { color:var(--fg-4); }
+/* Кружок с заливкой показывает любой сдвиг крестика лучше всех — поэтому
+   здесь особенно важен svg, а не текстовый глиф (см. .btn-x). */
+.search-clear { display:none; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; border:none; background:var(--bg-4); color:var(--fg-2); cursor:pointer; padding:0; transition:background 120ms var(--ease-out); }
+.search-clear:hover { background:var(--border-strong); }
+.search-clear.visible { display:inline-flex; }
+.search-clear svg { width:11px; height:11px; }
+.filter-select { padding:7px 14px; border:1px solid var(--border); border-radius:var(--radius-pill); font-size:var(--fs-sm); background:var(--bg-1); color:var(--fg-1); cursor:pointer; font-family:var(--font-sans); font-weight:var(--fw-medium); transition:border-color 120ms var(--ease-out); }
+.filter-select:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+/* Фильтр «Суд»: нативный select в ряду сегментов. Ширину ограничиваем,
+   длинное имя браузер сам режет многоточием; полное имя — в title.
+   Нативную стрелку браузеры рисуют мимо стиля (Safari — двойная «⌃⌄» на
+   прямоугольнике с прямыми углами, Chrome — прижимает к скруглению пилюли):
+   appearance:none снимает браузерный вид, стрелку даёт фоновый SVG токеном
+   --select-chevron (объявлен в обеих темах — var() внутри url() не работает). */
+.court-select { -webkit-appearance:none; appearance:none; background-image:var(--select-chevron); background-repeat:no-repeat; background-position:right 13px center; background-size:14px 14px; padding-right:34px; }
+.chip-bar-segments .court-select { max-width:300px; text-overflow:ellipsis; }
+
+/* ========== Chip filters ========== */
+.chip-bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.chip-bar-quick { flex:1 1 auto; min-width:0; }                    /* быстрые статус-чипы заполняют остаток ряда после поиска */
+.chip-bar-segments { display:flex; gap:10px 16px; flex-wrap:wrap; align-items:flex-end; width:100%; }
+.chip-bar .chip-divider { width:1px; height:22px; background:var(--border); margin:0 4px; }
+.chip-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius-pill); background:var(--bg-1); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out); font-family:var(--font-sans); white-space:nowrap; line-height:1.3; }
+/* Hover — только устройства с курсором: на тач-экранах iOS «залипает» hover
+   после касания, и бледный фон перекрывал зелёный у .active (белый текст на
+   бледной плашке — не прочитать, скрин юриста 10.08.2026). Гард :not(.active)
+   держит активную кнопку зелёной и под мышью. */
+@media (hover:hover) {
+  .chip-btn:hover:not(.active) { border-color:var(--border-strong); background:var(--bg-3); }
+}
+.chip-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip-btn.active .chip-count { background:rgba(255,255,255,0.25); color:#fff; }
+.chip-btn.chip-new.active { background:var(--amber-500); border-color:var(--amber-500); color:#fff; }
+.chip-btn.chip-today.active { background:var(--red-500); border-color:var(--red-500); color:#fff; }
+.chip-btn.chip-week.active { background:var(--blue-500); border-color:var(--blue-500); color:#fff; }
+.chip-count { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:16px; padding:0 5px; border-radius:8px; background:var(--bg-3); color:var(--fg-3); font-size:10px; font-weight:var(--fw-bold); font-variant-numeric:tabular-nums; }
+.chip-new .chip-count { background:var(--amber-100); color:var(--amber-700); }
+.chip-today .chip-count { background:var(--red-100); color:var(--red-700); }
+.chip-week .chip-count { background:var(--blue-100); color:var(--blue-700); }
+
+/* width у .seg-ctrl задаётся контекстом:
+     - на десктопе внутри .chip-bar-segments сегмент имеет натуральную ширину
+       (flex:0 0 auto + min-width), две группы лежат рядом и красиво wrap'ятся;
+     - в мобильном bottom-sheet — растягивается на всю ширину листа (.sheet-body .seg-ctrl). */
+.seg-ctrl { display:flex; border:1px solid var(--border); border-radius:var(--radius-pill); overflow:hidden; background:var(--bg-1); }
+.chip-bar-segments .seg-ctrl { flex:0 0 auto; min-width:280px; }
+.filter-group { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.filter-group-label { padding-left:10px; color:var(--fg-4); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); letter-spacing:.04em; text-transform:uppercase; }
+/* inline-flex + gap: счётчик .chip-count не липнет к подписи («Иски банка163»). */
+.seg-btn { flex:1 1 0; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border:none; background:transparent; color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:all 120ms var(--ease-out); white-space:nowrap; text-align:center; }
+/* На активном (заливка --seg-active-bg) серый счётчик тонул — как у .chip-btn.active. */
+.seg-btn.active .chip-count { background:var(--seg-active-count-bg); color:var(--seg-active-fg); }
+.seg-btn:not(:last-child) { border-right:1px solid var(--border); }
+/* Тот же гард hover, что у .chip-btn выше: специфичность :hover:not(...) выше
+   .seg-btn.active, и залипший тач-hover красил АКТИВНЫЙ сегмент в бледный
+   --bg-3 при белом тексте («Иски банка»/«Истец» пропадали на глазах). */
+@media (hover:hover) {
+  .seg-btn:hover:not(:disabled):not(.active) { background:var(--bg-3); }
+}
+.seg-btn.active { background:var(--seg-active-bg); color:var(--seg-active-fg); }
+.seg-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+.btn-outline { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-sm); cursor:pointer; color:var(--fg-1); font-weight:var(--fw-semibold); transition:all 120ms var(--ease-out); }
+.btn-outline:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.btn-outline svg { width:14px; height:14px; }
+
+/* Table counter + верхний выбор раздела. Три области равноправны и стоят
+   перед поиском: Основные / Иски банка / Мои. */
+.list-bar { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.dataset-switch { display:flex; align-items:center; flex:0 1 520px; min-width:360px; }
+.dataset-switch[hidden] { display:none; }
+.dataset-switch .seg-ctrl { flex:1 1 auto; width:100%; }
+/* Верхний переключатель — не группа фильтров, а единая навигационная
+   платформа, как в системных tab bars: без внутренних разделителей, с
+   небольшим inset и отдельной карточкой активного раздела. */
+.scope-switch {
+  gap:3px;
+  padding:3px;
+  overflow:visible;
+  border:0;
+  border-radius:16px;
+  background:var(--scope-nav-bg);
+}
+.scope-switch .seg-btn {
+  min-width:0;
+  min-height:42px;
+  padding:8px 12px;
+  border:1px solid transparent;
+  border-radius:13px;
+  color:var(--scope-nav-muted-fg);
+  font-weight:var(--fw-medium);
+  transition:background 150ms var(--ease-out), color 150ms var(--ease-out),
+             border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out),
+             transform 120ms var(--ease-out);
+}
+.scope-switch .seg-btn:not(:last-child) { border-right-color:transparent; }
+.scope-switch .seg-btn.active {
+  background:var(--scope-nav-active-bg);
+  color:var(--scope-nav-active-fg);
+  border-color:var(--scope-nav-active-border);
+  box-shadow:var(--scope-nav-active-shadow);
+  font-weight:var(--fw-semibold);
+}
+.scope-switch .seg-btn.active .chip-count {
+  background:var(--scope-nav-count-bg);
+  color:var(--scope-nav-count-fg);
+}
+.scope-nav-icon {
+  width:16px;
+  height:16px;
+  flex:0 0 auto;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.9;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+@media (hover:hover) {
+  .scope-switch .seg-btn:hover:not(:disabled):not(.active) {
+    background:transparent;
+    color:var(--fg-2);
+  }
+}
+.scope-switch .seg-btn:active { transform:translateY(1px); }
+/* min-width:0 — иначе длинный счётчик распирает полосу и выдавливает капсулу. */
+.table-counter { flex:1 1 auto; min-width:0; text-align:right; font-size:var(--fs-sm); color:var(--fg-3); animation:fadeUp .55s var(--ease-out); }
+/* nowrap обязателен: fitCounter подбирает ступень по scrollWidth, а перенос
+   строк внутри счётчика обнулил бы этот замер. */
+.list-bar.is-sticky .table-counter { white-space:nowrap; }
+/* Не влез даже кратчайшей формой (узкие экраны вроде 320px) — прячем:
+   вторая строка удваивала бы высоту липкой полосы. Ставит fitCounter. */
+.list-bar.is-sticky .table-counter.is-squeezed { display:none; }
+/* Капсулы нет (нет cases_bank.json или режим «★ Мои») — счётчик остаётся
+   слева, как был до появления полосы, а не жмётся к правому краю пустой строки. */
+.dataset-switch[hidden] + .table-counter { text-align:left; }
+/* Счётчик в две формы: на десктопе — фраза целиком, на телефоне остаётся
+   только «N из M» (места в липкой полосе рядом с капсулой ~99px). Служебные
+   слова — .tc-wordy, хвосты про архив/новые/кросс-поиск — .tc-tail; ступени
+   отсечения ставит fitCounter (app.js) атрибутом data-fit — от «места
+   хватает на всё» до «1 / 166». Порядок ступеней: lead → nouns → tails →
+   slash, каждая включает предыдущие. */
+.tc-slash { display:none; }
+.table-counter[data-fit] .tc-lead { display:none; }
+.table-counter[data-fit="nouns"] .tc-wordy,
+.table-counter[data-fit="tails"] .tc-wordy,
+.table-counter[data-fit="slash"] .tc-wordy { display:none; }
+.table-counter[data-fit="tails"] .tc-tail,
+.table-counter[data-fit="slash"] .tc-tail { display:none; }
+/* Последняя ступень: «из» уступает косой черте (11px экономии). */
+.table-counter[data-fit="slash"] .tc-of { display:none; }
+.table-counter[data-fit="slash"] .tc-slash { display:inline; }
+.table-counter strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
+
+/* ========== Banners ========== */
+.error-banner { background:var(--red-100); border:1px solid #fecaca; border-radius:var(--radius); padding:14px 18px; margin-bottom:16px; font-size:var(--fs-sm); color:var(--red-700); }
+.new-cases-banner { background:var(--amber-50); border:1px solid var(--amber-100); border-radius:var(--radius); padding:12px 18px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:var(--fs-sm); color:var(--amber-700); animation:fadeUp .4s var(--ease-out); cursor:pointer; transition:all 120ms var(--ease-out); }
+.new-cases-banner:hover { box-shadow:var(--shadow-1); border-color:var(--amber-500); }
+.new-cases-banner svg { width:18px; height:18px; flex-shrink:0; }
+.new-cases-banner strong { font-weight:var(--fw-bold); }
+.new-cases-banner .banner-hint { font-size:var(--fs-2xs); opacity:.7; margin-left:4px; }
+.new-cases-banner .dismiss { margin-left:auto; flex-shrink:0; width:28px; height:28px; background:none; border:none; border-radius:50%; color:var(--amber-700); cursor:pointer; opacity:.6; transition:opacity 120ms var(--ease-out); }
+.new-cases-banner .dismiss svg { width:16px; height:16px; }
+.new-cases-banner .dismiss:hover { opacity:1; }
+
+/* Кросс-поиск (#search-cross-hint): «Найдено N в другой картотеке» при
+   нулевой выдаче. Нейтральная палитра — навигационная подсказка, не алерт. */
+.info-line { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:10px; display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; font-size:var(--fs-sm); color:var(--fg-3); animation:fadeUp .4s var(--ease-out); }
+.info-line[hidden] { display:none; }
+.info-line .bridge-text { flex:1 1 auto; min-width:200px; }
+.info-line strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
+.info-line .bridge-btn { flex:0 0 auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:6px 12px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-1); cursor:pointer; transition:all 120ms var(--ease-out); }
+.info-line .bridge-btn:hover { box-shadow:var(--shadow-1); border-color:var(--green-500); }
+@media (max-width:768px) {
+  .st-panel { padding-left:0; }
+  .info-line .bridge-btn { flex-basis:100%; }
+}
+
+/* ========== Table ========== */
+.table-wrap { background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); overflow:hidden; animation:fadeUp .6s var(--ease-out); }
+.table-scroll { overflow-x:auto; max-height:calc(100vh - 200px); overflow-y:auto; }
+table { width:100%; border-collapse:collapse; font-size:var(--fs-md); font-variant-numeric:tabular-nums; }
+thead th { text-align:left; padding:10px 14px; background:var(--bg-2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:var(--fs-sm); color:var(--fg-3); font-weight:var(--fw-semibold); letter-spacing:-0.005em; white-space:nowrap; user-select:none; transition:color 120ms var(--ease-out); position:sticky; top:0; z-index:10; }
+thead th.sortable { cursor:pointer; }
+thead th.sortable:hover { color:var(--fg-1); }
+thead th.sorted { color:var(--accent); }
+.sort-icon { display:inline-block; margin-left:4px; font-size:10px; }
+tbody tr { border-bottom:1px solid var(--divider); transition:background 100ms var(--ease-out); position:relative; }
+tbody tr:hover { background:var(--bg-2); }
+tbody td { padding:10px 14px; vertical-align:top; }
+tbody td:first-child { position:relative; padding-left:18px; }
+tbody tr td:first-child::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:transparent; transition:background 120ms var(--ease-out); }
+tbody tr.accent-new    td:first-child::before { background:var(--amber-500); }
+tbody tr.accent-today  td:first-child::before { background:var(--red-500); }
+tbody tr.accent-soon   td:first-child::before { background:var(--blue-500); }
+tbody tr.accent-win    td:first-child::before { background:var(--accent); }
+tbody tr.accent-loss   td:first-child::before { background:var(--pink-700); }
+tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
+
+.case-number { font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); display:flex; align-items:flex-start; gap:8px; line-height:1.25; min-width:0; }
+.case-number .case-num-stack { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
+.case-number .case-row-top { display:flex; align-items:center; gap:6px; min-width:0; flex-wrap:wrap; }
+.case-number .case-main { letter-spacing:-0.01em; white-space:nowrap; }
+.case-number .case-sub-row { display:flex; align-items:center; gap:6px; min-width:0; }
+.case-number .case-sub { font-family:var(--font-mono); font-weight:var(--fw-normal); font-size:var(--fs-sm); color:var(--fg-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+.case-number .case-sub-row .row-actions { margin-left:0; }
+.case-link { color:var(--fg-1); text-decoration:none; display:inline-flex; align-items:center; gap:4px; border-bottom:1px dashed var(--border-strong); }
+.case-link:hover { color:var(--accent); border-bottom-color:var(--accent); }
+.case-meta { display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-top:3px; }
+.court-label { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
+/* Перенос на 2 строки только по пробелам («Нижневартовский / гор. суд»).
+   Без word-break, чтобы не ломало слово посередине. Лишнее (3+) обрезается. */
+.cell-court { font-size:var(--fs-md); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.parties-col { display:flex; flex-direction:column; gap:2px; font-size:var(--fs-md); min-width:180px; line-height:1.4; }
+.parties-col > span { display:flex; align-items:baseline; gap:4px; }
+.parties-col .party-name { flex:1; min-width:0; word-break:break-word; }
+.party-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; letter-spacing:0.04em; color:var(--fg-4); flex-shrink:0; min-width:14px; }
+.party-sberbank { color:var(--accent); font-weight:var(--fw-bold); }
+
+/* Колонка «Заседание» */
+.cell-hearing { display:flex; flex-direction:column; gap:2px; line-height:1.2; }
+.hearing-primary { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; white-space:nowrap; }
+.hearing-primary.hearing-today { color:var(--urgency-today-fg); }
+.hearing-primary.hearing-soon { color:var(--urgency-week-fg); }
+.hearing-primary.hearing-past { color:var(--fg-4); }
+.hearing-time { font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--fg-2); letter-spacing:-0.01em; }
+.hearing-time.hearing-today { color:var(--urgency-today-fg); }
+.hearing-time.hearing-soon { color:var(--urgency-week-fg); }
+.hearing-time.hearing-past { color:var(--fg-4); }
+.hearing-relative { font-size:var(--fs-2xs); color:var(--fg-3); text-transform:lowercase; align-self:flex-end; }
+.hearing-relative.today { color:var(--urgency-today-fg); font-weight:var(--fw-bold); text-transform:uppercase; letter-spacing:0.04em; }
+.hearing-relative.soon { color:var(--urgency-week-fg); font-weight:var(--fw-semibold); }
+.cell-hearing .cell-empty { font-size:var(--fs-xs); color:var(--fg-4); }
+
+/* ========== Badges ========== */
+.badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:var(--radius-pill); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); white-space:nowrap; line-height:1.3; }
+.badge svg { width:12px; height:12px; flex-shrink:0; }
+
+/* status (legacy class names → новые токены) */
+.badge-active    { background:var(--amber-100); color:var(--amber-700); }
+.badge-decided   { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+/* «🧾 ИЛ» — исполнительный лист выдан (трек исков банка) */
+.badge-writ      { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+/* Drawer: секция «Исполнительные листы» — реквизиты каждого листа явно
+   (title-тултип бейджа на телефоне не работает). Герой карточки — НОМЕР
+   листа: им юрист оперирует, поэтому он крупнее всего остального, mono,
+   выделяется целиком долгим тапом и копируется кнопкой. */
+.writ-list { display:flex; flex-direction:column; gap:10px; }
+.writ-row { display:flex; flex-direction:column; gap:6px; padding:10px 12px; background:var(--bg-2); border-radius:10px; }
+.writ-row-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.writ-row-top .badge { margin-left:auto; }
+.writ-count { font-size:var(--fs-2xs); font-weight:var(--fw-semibold); color:var(--fg-4); text-transform:uppercase; letter-spacing:0.04em; }
+.writ-date { font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--fg-2); letter-spacing:-0.01em; }
+.writ-id-row { display:flex; align-items:center; gap:6px; }
+/* user-select:all — долгий тап на телефоне выделяет номер целиком, а не по
+   слову; переносится только по «#» (<wbr> ставит writNumHtml). */
+.writ-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); letter-spacing:-0.01em; line-height:1.35; user-select:all; -webkit-user-select:all; min-width:0; }
+.writ-copy { flex-shrink:0; }
+.writ-kind { font-size:var(--fs-xs); color:var(--fg-2); }
+.writ-recipient { font-size:var(--fs-sm); color:var(--fg-1); line-height:1.35; }
+.badge-writ-status.writ-issued { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+.badge-writ-status.writ-inactive { background:var(--amber-100); color:var(--amber-700); }
+/* Отозванный/возвращённый лист — история: приглушаем содержимое карточки,
+   чтобы глаз падал на действующий. Пилюля статуса из-под приглушения выведена
+   (она и есть сигнал «этот уже не работает»). */
+.writ-row.is-inactive .writ-num,
+.writ-row.is-inactive .writ-date,
+.writ-row.is-inactive .writ-kind,
+.writ-row.is-inactive .writ-recipient,
+.writ-row.is-inactive .writ-count { opacity:.6; }
+/* Уточнение в заголовке секции: «Исполнительные листы (2) · обеспечительных 2» */
+.ws-extra { font-weight:var(--fw-normal); color:var(--fg-4); }
+/* «⏳ ждёт ИЛ N дн.» — приоритет внутри очереди «Ждут ИЛ». Пороги: до 30 дн
+   норма, 30-60 присмотреться, дольше — просрочено (реальная выдача листа —
+   +40..55 дн от решения, потолок ожидания на бэкенде 180 дн). */
+/* Пометка «лист не нужен» (21.08.2026): не срочность, а закрытая позиция —
+   поэтому нейтральный графит, а не тёплая шкала ожидания. Токены объявлены в
+   обеих темах (страж test_frontend_status_badges запрещает литеральные hex). */
+.badge-writ-waived { background: var(--role-badge-bg); color: var(--role-badge-fg); border-color: var(--role-badge-br); }
+.mc-track-waived { color: var(--fg-2); font-weight: 600; }
+.kv-waived { color: var(--fg-2); font-weight: 500; }
+.badge-await-writ.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
+.badge-await-writ.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
+.badge-await-writ.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+/* «⏳ возражения до ДД.ММ» — срок на возражения по апел. жалобе (ст. 325 ГПК).
+   Шкала обратная к «ждёт ИЛ»: тают дни ДО срока — больше недели норма,
+   3-7 дней присмотреться, 2 и меньше — горит. Токены те же. */
+.badge-objections.aw-normal  { background:var(--urgency-far-bg);      color:var(--urgency-far-fg); }
+.badge-objections.aw-watch   { background:var(--urgency-tomorrow-bg); color:var(--urgency-tomorrow-fg); }
+.badge-objections.aw-overdue { background:var(--urgency-today-bg);    color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+.kv-await { font-weight:var(--fw-semibold); }
+.kv-await.aw-normal  { color:var(--urgency-far-fg); }
+.kv-await.aw-watch   { color:var(--urgency-tomorrow-fg); }
+.kv-await.aw-overdue { color:var(--urgency-today-fg); }
+/* «🛡 Обеспечение» — обеспечительный лист (арест); индиго, чтобы не путать
+   с зелёным «🧾 ИЛ» на исполнение решения */
+.badge-writ-interim { background:var(--indigo-100); color:var(--indigo-700); }
+/* «🌙 Заочное» — решение в заочном производстве (ст. 233 ГПК): свой порядок
+   вступления в силу. Приглушённый серый — информирует, не тревожит
+   (тревожная гамма занята порогами aw-*). В списках у решённого дела признак
+   печатается тихой меткой (.state-quiet), пилюля остаётся hero drawer'а и
+   делам, у которых результат снят ремонтом. */
+.badge-default-judgment { background:var(--slate-100); color:var(--slate-700); }
+/* Особый порядок отмены заочного решения (ст. 237-243 ГПК). «Отмена заочного»
+   — заявление ответчика на рассмотрении (взыскание под угрозой), «Заочное
+   отменено» — решения больше нет, дело рассматривается заново. Оба состояния
+   вытесняют нейтральный бейдж «Заочное». */
+/* ⚠️ Без литеральных фолбэков в var(): токена --amber-800 в проекте нет
+   вовсе, и в тёмной теме фолбэк #92400e ставил ТЁМНО-КОРИЧНЕВЫЙ текст на
+   тёмный фон — бейдж не читался. Фолбэк маскирует опечатку в имени токена
+   ровно там, где ошибку и не видно: в другой теме. */
+.badge-default-pending { background:var(--amber-100); color:var(--amber-700); }
+.badge-default-vacated { background:var(--red-100); color:var(--red-700); }
+/* Пагинация рендера: кнопка «Показать ещё N» под таблицей/карточками
+   (IntersectionObserver дорисовывает сам — кнопка видна на медленном скролле
+   и как фолбэк без observer'а) */
+.show-more-row td { text-align:center; padding:10px 0 14px; }
+.show-more-wrap { text-align:center; padding:10px 0 14px; }
+.show-more-btn {
+  border:1px solid var(--border-1); background:var(--bg-2); color:var(--fg-2);
+  border-radius:999px; padding:8px 18px; font:inherit; font-size:var(--fs-xs);
+  cursor:pointer;
+}
+.show-more-btn:hover { background:var(--bg-3, var(--bg-2)); color:var(--fg-1); }
+/* Хроника bank-дела грузится отдельным файлом — мягкое ожидание */
+.tl-loading { opacity:.75; font-style:italic; }
+.badge-scheduled { background:var(--blue-100); color:var(--blue-700); }
+.badge-prep      { background:var(--indigo-100); color:var(--indigo-700); }
+.badge-prelim    { background:var(--blue-100); color:var(--blue-700); }
+.badge-main      { background:var(--blue-100); color:var(--blue-700); }
+.badge-postponed { background:var(--amber-100); color:var(--amber-700); }
+.badge-to-fi     { background:var(--red-100); color:var(--red-700); border:1px solid var(--badge-to-fi-border); font-weight:var(--fw-bold); }
+/* ⚠️ Через токены, а НЕ литералами: до 14.08.2026 тут стояли #ffedd5/#c2410c
+   без тёмного варианта, и «Без движения» светилось на тёмной теме светлым
+   персиковым кирпичом (тот же дефект, что был у --rose-* «Кассатора»).
+   Любой новый цвет бейджа объявляем СРАЗУ в обоих блоках темы. */
+.badge-suspended { background:var(--state-suspended-bg); color:var(--state-suspended-fg); }
+.badge-paused    { background:var(--pink-100); color:var(--pink-700); }
+.badge-awaiting  { background:var(--blue-100); color:var(--blue-700); }
+
+/* Дата статуса в колонке дат — «Передано судье», «Поступило в суд»,
+   «Приостановлено», «Без движения» (buildHearingHtml, 14.08.2026). Кегль и
+   моношрифт как у .hearing-primary — даты обеих природ стоят одним столбцом,
+   но вес обычный и цвет приглушённый: это дата СЛУЧИВШЕГОСЯ, а не
+   назначенного заседания, и перетягивать взгляд она не должна.
+   ⚠️ Классы .status-cell/.status-date-prominent, лежавшие тут же, удалены
+   14.08.2026 — потребителей в JS у них не было ни одного. */
+.status-date { font-family:var(--font-mono); font-size:var(--fs-md); color:var(--fg-3); letter-spacing:-0.01em; white-space:nowrap; }
+
+/* Роли. В hero drawer'а с 28.07.2026 остаётся только бейдж 3-го лица (роль
+   «истец»/«ответчик» видна из подсветки ПАО Сбербанк в строках сторон), но
+   в «Ближайших заседаниях» роль печатается всем — класс собирается
+   динамически (`badge-${rc}` в renderUpcoming), grep по литералу его не видит. */
+.badge-plaintiff { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); }
+.badge-defendant { background:var(--role-defendant-bg); color:var(--role-defendant-fg); }
+.badge-third     { background:var(--role-third-bg); color:var(--role-third-fg); }
+/* Апеллянт/Кассатор — графитовая ось (см. правило трёх осей у стадий выше,
+   решение юриста 14.08.2026). Раньше «Апеллянт» был violet — тот же цвет,
+   что стадия «Кассация», а «Кассатор» rose — токен без тёмного варианта. */
+.badge-appellant { background:var(--role-badge-bg); color:var(--role-badge-fg); font-weight:var(--fw-semibold); }
+/* Кассатор — податель кассац. жалобы, показывается на стадиях cassation*/
+/* awaiting_relink ВМЕСТО Апеллянта. Источник: cs.appellant_* (карточка 7kas) */
+/* или _fi_cassator_raw (1-я инст. карточка, пока 7kas-карточки нет). */
+.badge-cassator  { background:var(--role-badge-bg); color:var(--role-badge-fg); font-weight:var(--fw-semibold); }
+
+/* Исходы */
+.badge-upheld    { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+.badge-reversed  { background:var(--red-100); color:var(--red-700); }
+.badge-partial   { background:var(--amber-100); color:var(--amber-700); }
+.badge-returned  { background:var(--slate-100); color:var(--slate-600); }
+.badge-dismissed { background:var(--gray-100); color:var(--fg-2); }
+.badge-pending   { background:var(--gray-100); color:var(--fg-2); }
+.badge-favorable { background:var(--green-favorable-bg); color:var(--green-favorable-fg); }
+.badge-unfavorable { background:var(--red-100); color:var(--red-700); }
+.badge-neutral-result { background:var(--blue-100); color:var(--blue-700); }
+
+.badge-cat { background:var(--bg-3); color:var(--fg-2); font-weight:var(--fw-medium); border-radius:var(--radius-xs); font-size:var(--fs-2xs); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; padding:2px 7px; }
+.badge-act    { display:inline-block; padding:2px 7px; border-radius:var(--radius-xs); background:var(--blue-100); color:var(--blue-700); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); }
+
+.cell-state { display:flex; flex-direction:column; gap:4px; align-items:flex-start; line-height:1.3; }
+/* Пилюля исхода/статуса не должна вылезать за свою колонку: у .badge стоит
+   nowrap, и на узкой карточке (320px — колонка ≈153px) длинный исход
+   («Удовл-но частично», «Оставлено без рассмотрения») наезжал на дату
+   заседания справа. Разрешаем перенос ТОЛЬКО прямому потомку .cell-state
+   (ряд метаданных со своими плашками не трогаем); flex-wrap обязателен —
+   у .badge display:inline-flex, одного white-space мало. Пока текст влезает
+   (375px и шире, вся десктопная таблица), правило ничего не меняет. */
+.cell-state > .badge { max-width:100%; white-space:normal; flex-wrap:wrap; text-align:left; }
+.cell-state .state-sub { font-size:var(--fs-2xs); color:var(--fg-3); }
+/* Тип решения и публикация акта — единая строка метаданных под результатом:
+   «🌙 заочное · акт не опубликован». Плашками остались только события —
+   синяя «Акт 12.08» и цветные состояния отмены заочного; факты-отсутствия
+   идут тихим текстом (.state-quiet), кегль и цвет наследуют от .state-sub.
+   Мобильное правило ниже поднимает все обычные .badge до 13px, поэтому
+   плашкам здесь явно сохраняем компактный кегль 11px. На совсем узком экране
+   перенос разрешён. */
+.cell-state .state-decision-meta { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+/* Тихий текст, открывающий ряд, сдвигаем на горизонтальный отступ пилюли
+   (.badge padding:3px 9px): иначе он начинается от края ячейки, а текст
+   исхода — на 9px правее, и строка «акт не опубликован» читается съехавшей
+   влево из-под бейджа. Плашкам сдвиг НЕ даём: они выравниваются по краю
+   пилюли, плашка с плашкой — в одну линию. */
+.cell-state .state-decision-meta > .state-quiet:first-child { margin-left:9px; }
+.cell-state .state-decision-meta .badge,
+.cell-state .state-decision-meta .badge-act { font-size:var(--fs-2xs); }
+/* Разделитель между тихими метками — псевдоэлементом, а не в разметке: так он
+   не появится ни перед первой меткой, ни рядом с плашкой. Вешаем его на
+   ПРЕДЫДУЩУЮ метку (::after), а не на следующую: при переносе ряда «·» иначе
+   встаёт в начало второй строки и читается как маркер списка. */
+.cell-state .state-decision-meta .state-quiet:has(+ .state-quiet)::after { content:' ·'; }
+
+.cat-role-cell { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
+.cat-role-cell .badge { font-size:var(--fs-2xs); padding:2px 7px; }
+
+.next-date-val { font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--fg-1); }
+.next-date-label { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:1px; }
+.next-date-warn { color:var(--amber-600); font-style:italic; font-size:var(--fs-2xs); }
+.court-cell { font-size:var(--fs-xs); color:var(--fg-2); line-height:1.35; }
+.result-cell { display:flex; flex-direction:column; gap:2px; }
+/* Значок исхода внутри пилюли («⊘», «—», «↩», «◐», «⇥»). Кегль наследуем от
+   пилюли, а не прибиваем к 11px: на карточке телефона текст 15px, и вдвое
+   меньший знак читался грязью (разбор 13.08.2026). ✓/✕ у favorable/
+   unfavorable идут инлайн-стилем мимо этого класса — они и были нормального
+   размера, отсюда и разнобой. */
+.badge-icon { font-size:inherit; line-height:1; font-weight:var(--fw-bold); }
+
+/* «NEW» / Архив / стадии в виде плотных пилюль */
+.badge-new      { background:var(--amber-500); color:#fff; font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
+.badge-archived { background:var(--stage-archive-bg); color:var(--stage-archive-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-semibold); text-transform:uppercase; }
+.badge-fi       { background:var(--stage-fi-bg); color:var(--stage-fi-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+.badge-appeal   { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+.badge-cassation{ background:var(--stage-cass-bg); color:var(--stage-cass-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* «Обжалуется» — рядом со stage-бейджем, пока карточка в следующей
+   инстанции ещё не появилась. Тёплый amber для отличия от холодных
+   тонов стадий (teal/indigo/violet). */
+.badge-pending-appeal { background:var(--amber-100); color:var(--amber-700); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* Банк-заявитель в кассации (cs.appellant_is_bank). Использует роль-цвет
+   plaintiff (синий) — Сбер выступает активной стороной. */
+.badge-bank     { background:var(--role-plaintiff-bg); color:var(--role-plaintiff-fg); font-size:var(--fs-2xs); padding:2px 7px; border-radius:var(--radius-pill); font-weight:var(--fw-bold); letter-spacing:0.02em; white-space:nowrap; }
+/* Раскрываемый блок «Текст определения (полный)» в drawer'е кассации.
+   Тексты до 30 КБ — без ограничения высоты drawer задвоит scrollbar. */
+.cass-act       { margin-top:var(--space-3); }
+.cass-act > summary { cursor:pointer; font-weight:var(--fw-semibold); color:var(--fg-2); padding:var(--space-2) 0; }
+.cass-act-pre   { margin-top:var(--space-2); padding:var(--space-3); background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-md); white-space:pre-wrap; font-family:inherit; font-size:var(--fs-xs); max-height:50vh; overflow:auto; }
+/* Текст акта 1-й инстанции — та же вёрстка, свой класс: на телефоне у него
+   снимается max-height (см. медиа-блок), у кассационного он остаётся. */
+.act-block      { margin-top:var(--space-3); }
+.act-block > summary { cursor:pointer; font-weight:var(--fw-semibold); color:var(--fg-2); padding:var(--space-2) 0; }
+.act-pre        { margin-top:var(--space-2); padding:var(--space-3); background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius-md); white-space:pre-wrap; font-family:inherit; font-size:var(--fs-xs); max-height:50vh; overflow:auto; }
+.act-note       { margin-top:var(--space-2); font-size:var(--fs-2xs); color:var(--fg-4); }
+
+/* Hover-actions */
+.row-actions { display:inline-flex; gap:4px; margin-left:auto; opacity:0; transition:opacity 120ms var(--ease-out); vertical-align:middle; }
+tbody tr:hover .row-actions, tbody tr.row-focus .row-actions { opacity:1; }
+.row-action-btn { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-1); color:var(--fg-3); cursor:pointer; transition:all 120ms var(--ease-out); }
+.row-action-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
+.row-action-btn svg { width:12px; height:12px; }
+.row-action-btn.copied { border-color:var(--accent); color:var(--accent); }
+/* Кнопка «скопировать» вне hover-контекста таблицы (drawer): видна всегда —
+   в drawer'е hover'а нет, а на телефоне его нет нигде. */
+.copy-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; padding:0; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-1); color:var(--fg-3); cursor:pointer; transition:all 120ms var(--ease-out); }
+.copy-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
+.copy-btn svg { width:13px; height:13px; }
+.copy-btn.copied { border-color:var(--accent); color:var(--accent); background:var(--accent-bg-soft); }
+
+/* Watchlist: звёздочка отслеживания дела (карточка/таблица/drawer) */
+.watch-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; padding:0; margin-left:6px;
+  position:relative; /* якорь для ::after — расширенной зоны тапа на touch */
+  border:0; background:transparent; cursor:pointer;
+  font-size:18px; line-height:1; color:var(--fg-3);
+  border-radius:var(--radius-sm);
+  transition:color 120ms var(--ease-out), background 120ms var(--ease-out), transform 120ms var(--ease-out);
+  vertical-align:middle;
+}
+.watch-btn:hover { background:var(--accent-bg-soft); color:var(--accent); }
+.watch-btn:active { transform:scale(0.92); }
+.watch-btn.on { color:var(--accent); }
+.watch-btn.on:hover { color:var(--accent-hover); }
+/* Hit-area под палец на мобиле */
+@media (max-width: 768px) {
+  .watch-btn { width:32px; height:32px; font-size:20px; }
+}
+/* В таблице звёздочка стоит ВНЕ .row-actions (которая прячется по opacity)
+   и сжимаем поля, чтобы не растягивать колонку «Дело» */
+.case-number .watch-btn { width:24px; height:24px; font-size:16px; margin-left:4px; }
+/* Расширенная зона тапа ≥44px только на touch-устройствах: псевдоэлемент
+   входит в hit-область кнопки, layout не трогает. Рост вправо ограничен
+   (-4px), чтобы не перехватывать тапы по началу номера дела рядом. */
+@media (hover:none) and (pointer:coarse) {
+  .watch-btn::after { content:''; position:absolute; inset:-10px -4px -10px -10px; }
+}
+
+/* Кнопка «Отслеживать дело» в подвале drawer.
+   Состояние on — заливка Сбер-зелёным, чтобы юрист видел подписку даже мельком */
+/* line-height:1 + меньший размер ★ — иначе кнопка выше соседней «Карточка дела»
+   (внутри btn-primary svg 13px, а тут глиф 18px растягивал высоту на 4-5px) */
+.btn-watch { line-height:1; }
+.btn-watch .btn-watch-star { font-size:14px; line-height:1; margin-right:6px; }
+/* Спецификация .btn-secondary имеет тот же вес — поэтому повышаем
+   через .btn-secondary.btn-watch.on (3 класса) */
+.btn-secondary.btn-watch.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+.btn-secondary.btn-watch.on:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+.btn-secondary.btn-watch.on .btn-watch-star { color:#fff; }
+
+/* Keyboard focus */
+tbody tr.row-focus { outline:2px solid var(--accent); outline-offset:-2px; background:var(--accent-bg-soft); }
+
+/* Row "new" подсветка */
+tbody tr.row-new { background:var(--amber-50); }
+tbody tr.row-new:hover { background:var(--amber-100); }
+tbody tr.row-new.row-expanded { background:var(--amber-100); }
+
+/* Group header — якорь при скане длинного списка. Sentence-case 13-14px,
+   воздух сверху, тонкая нижняя hairline для отделения от строк дел. */
+tr.group-header td { padding:18px 14px 8px; background:transparent; border-bottom:1px solid var(--divider); font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-2); letter-spacing:-0.005em; }
+tr.group-header td .group-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--amber-500); margin-right:8px; vertical-align:middle; }
+tr.group-header + tr td { padding-top:14px; }
+
+/* Те же group-headers для мобильной карточной раскладки. */
+.mc-group-header { padding:18px 4px 8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-2); display:flex; align-items:center; gap:8px; letter-spacing:-0.005em; }
+.mc-group-header .group-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
+.mc-group-header.gh-upcoming .group-dot { background:var(--info); }
+.mc-group-header.gh-awaiting .group-dot { background:var(--gray-400); }
+.mc-group-header.gh-decided .group-dot { background:var(--gray-500); }
+.mc-group-header.gh-archive .group-dot { background:var(--gray-300); }
+/* Группы глобального поиска из других разделов. Зелёная точка — не статус
+   дела, а граница области данных; отбивка сверху отделяет её от текущей. */
+tr.group-header.cross-group td { padding-top:20px; }
+tr.group-header.cross-group td .group-dot,
+.mc-group-header.gh-cross .group-dot { background:var(--green-500); }
+.mc-group-header.gh-cross { padding-top:16px; }
+
+/* Row click → drawer */
+tbody tr.row-clickable { cursor:pointer; }
+tbody tr.row-expanded { background:var(--accent-bg-soft); box-shadow:inset 3px 0 0 var(--accent); }
+tbody tr.row-expanded:hover { background:var(--accent-bg-strong); }
+tr.detail-row { display:none; }
+
+.empty-state { text-align:center; padding:60px 20px; color:var(--fg-4); }
+.empty-state svg { width:40px; height:40px; margin-bottom:12px; opacity:.4; }
+.empty-state p { font-size:var(--fs-md); color:var(--fg-3); }
+.empty-state span { display:block; margin-top:6px; font-size:var(--fs-sm); color:var(--fg-4); }
+
+/* ========== Drawer ========== */
+.drawer-scrim { position:fixed; inset:0; background:rgba(13, 17, 22, 0.32); opacity:0; pointer-events:none; transition:opacity 200ms var(--ease-out); z-index:200; }
+.drawer-scrim.open { opacity:1; pointer-events:auto; }
+.drawer { position:fixed; top:0; right:0; width:540px; max-width:100%; height:100vh; height:100dvh; background:var(--bg-1); box-shadow:var(--shadow-3); transform:translateX(100%); transition:transform 280ms var(--ease-out); z-index:201; display:flex; flex-direction:column; }
+.drawer.open { transform:translateX(0); }
+.drawer-header { display:flex; align-items:center; gap:10px; padding:14px 20px; border-bottom:1px solid var(--glass-border); background:var(--pill-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 -1px 0 var(--glass-highlight); color:var(--fg-1); flex-shrink:0; }
+.drawer-header .drawer-nav { display:flex; gap:4px; }
+.drawer-nav-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; transition:all 120ms var(--ease-out); padding:0; }
+.drawer-nav-btn:hover:not(:disabled) { background:var(--bg-3); border-color:var(--border-strong); color:var(--fg-1); }
+.drawer-nav-btn:disabled { opacity:.35; cursor:not-allowed; }
+.drawer-nav-btn svg { width:14px; height:14px; }
+.drawer-title { flex:1; display:flex; flex-direction:column; min-width:0; }
+.drawer-title .dt-main { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-xl); letter-spacing:-0.01em; line-height:1.2; color:var(--fg-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-title .dt-main .watch-btn { width:34px; height:34px; font-size:22px; margin-left:0; flex-shrink:0; }
+.drawer-title .dt-sub { font-size:var(--fs-2xs); color:var(--fg-3); margin-top:2px; }
+.drawer-close { width:40px; height:40px; flex-shrink:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; }
+.drawer-close svg { width:18px; height:18px; }
+.drawer-close:hover { background:var(--bg-3); color:var(--fg-1); }
+/* Padding-bottom = высота футера + safe-area, чтобы последний элемент
+   не уходил под полупрозрачное «стекло» drawer-footer. */
+.drawer-body { flex:1; overflow-y:auto; padding:18px 22px calc(96px + env(safe-area-inset-bottom, 0px)); }
+/* Liquid Glass: абсолютное позиционирование снизу drawer'а — контент
+   drawer-body виден сквозь backdrop-filter при скролле. */
+.drawer-footer { position:absolute; left:0; right:0; bottom:0; padding:16px 22px calc(16px + env(safe-area-inset-bottom, 0px)); border-top:1px solid var(--glass-border); background:var(--pill-bg); -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur); box-shadow:inset 0 1px 0 var(--glass-highlight), var(--glass-shadow); display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; box-sizing:border-box; z-index:1; }
+.drawer-footer .btn-primary { display:inline-flex; align-items:center; gap:8px; padding:12px 20px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; transition:background 120ms var(--ease-out), transform 120ms var(--ease-out); text-decoration:none; }
+.drawer-footer .btn-primary-stretch { flex:1 1 auto; justify-content:center; }
+.drawer-footer .btn-primary:hover { background:var(--accent-hover); }
+.drawer-footer .btn-primary:active { background:var(--accent-active); transform:scale(0.97); }
+.drawer-footer .btn-secondary { display:inline-flex; align-items:center; gap:8px; padding:12px 20px; background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; transition:all 120ms var(--ease-out); }
+.drawer-footer .btn-secondary:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.drawer-footer .btn-secondary:active { transform:scale(0.97); }
+.drawer-footer svg { width:20px; height:20px; }
+
+/* Drawer sections */
+.drawer-hero { margin-bottom:18px; }
+.drawer-hero .hero-meta { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.drawer-hero .hero-parties { font-size:var(--fs-lg); line-height:1.5; color:var(--fg-1); margin-bottom:12px; }
+.drawer-hero .hero-parties .party-row { display:flex; gap:8px; align-items:baseline; margin-bottom:3px; }
+/* flex-shrink:0 обязателен: явный min-width ОТМЕНЯЕТ автоминимум flex-элемента
+   (min-width:auto), поэтому тег сжимался ниже своего содержимого — «ОТВЕТ.»
+   при 22px коробки требует 39px и наезжал на имя ответчика. У такого же тега
+   в таблице (.party-tag) flex-shrink:0 стоит с самого начала.
+   min-width в em, а не в px: держит обе метки в одной колонке (значения
+   выравниваются по вертикали) и переживает смену --fs-2xs и шрифта. */
+.drawer-hero .hero-parties .party-row .p-tag { font-size:var(--fs-2xs); font-weight:var(--fw-bold); text-transform:uppercase; color:var(--fg-4); flex-shrink:0; min-width:4em; }
+.drawer-hero .hero-badges { display:flex; gap:6px; flex-wrap:wrap; }
+.drawer-hero .hero-category { font-size:var(--fs-sm); color:var(--fg-2); margin:0 0 10px; line-height:1.4; }
+.drawer-hero .hero-category .hc-label { color:var(--fg-4); font-weight:var(--fw-semibold); margin-right:4px; }
+.drawer-section { margin-bottom:18px; }
+.drawer-section-title { font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); letter-spacing:-0.005em; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+.drawer-section-title::after { content:''; flex:1; height:1px; background:var(--divider); }
+.kv-grid { display:grid; grid-template-columns:auto 1fr; gap:10px 16px; line-height:1.5; }
+.kv-grid .kv-k { color:var(--fg-3); font-size:var(--fs-xs); font-weight:var(--fw-medium); padding-top:1px; }
+.kv-grid .kv-v { color:var(--fg-1); font-size:var(--fs-md); font-weight:var(--fw-medium); }
+.kv-grid .kv-v.kv-today { color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+.kv-grid .kv-v.kv-soon { color:var(--urgency-week-fg); font-weight:var(--fw-bold); }
+.kv-grid .kv-v.kv-mono { font-family:var(--font-mono); }
+
+/* Drawer tabs */
+.drawer-tabs { display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+/* Стек: сверху pill-badge инстанции (мелкий), снизу номер дела (mono, крупнее).
+   Так инстанция читается первой как «метка», а номер — основное содержимое. */
+.drawer-tab { padding:8px 14px; border:none; background:transparent; color:var(--fg-3); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-family:var(--font-sans); transition:all 120ms var(--ease-out); display:inline-flex; flex-direction:column; align-items:flex-start; gap:6px; line-height:1.2; }
+.drawer-tab:hover { color:var(--fg-1); }
+.drawer-tab.active { color:var(--fg-1); border-bottom-color:var(--accent); }
+.drawer-tab .tab-badge { align-self:flex-start; padding:2px 8px; border-radius:var(--radius-pill); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); letter-spacing:0; }
+.drawer-tab .tab-num { font-family:var(--font-mono); font-size:var(--fs-md); font-weight:var(--fw-bold); letter-spacing:-0.01em; color:inherit; }
+.drawer-tab.tab-fi .tab-badge { background:var(--stage-fi-bg); color:var(--stage-fi-fg); }
+.drawer-tab.tab-ap .tab-badge { background:var(--stage-appeal-bg); color:var(--stage-appeal-fg); }
+.drawer-tab.tab-cs .tab-badge { background:var(--stage-cass-bg); color:var(--stage-cass-fg); }
+
+/* Последняя успешная проверка карточки выбранной инстанции. Отдельная тихая
+   поверхность не даёт служебной дате потеряться среди «Ключевых дат», но и
+   не изображает срочность: возраст проверки здесь намеренно не оценивается. */
+.drawer-freshness { min-height:38px; box-sizing:border-box; display:flex; align-items:center; gap:8px; margin-bottom:18px; padding:8px 10px; border:1px solid var(--freshness-border); border-radius:10px; background:var(--freshness-bg); }
+.drawer-freshness-icon { width:20px; height:20px; flex:0 0 20px; display:inline-flex; align-items:center; justify-content:center; color:var(--accent); }
+.drawer-freshness-icon svg { width:16px; height:16px; }
+.drawer-freshness-label { min-width:0; flex:1 1 auto; color:var(--fg-3); font-size:var(--fs-sm); font-weight:var(--fw-medium); line-height:1.35; white-space:nowrap; }
+.drawer-freshness-short { display:none; }
+.drawer-freshness-date { margin-left:auto; color:var(--fg-1); font-family:var(--font-mono); font-size:14px; font-weight:var(--fw-semibold); font-variant-numeric:tabular-nums; line-height:1.35; white-space:nowrap; }
+.drawer-freshness.is-missing { background:var(--bg-3); border-color:var(--border); }
+.drawer-freshness.is-missing .drawer-freshness-icon { color:var(--fg-4); }
+.drawer-freshness.is-missing .drawer-freshness-date { color:var(--fg-3); font-family:var(--font-sans); font-size:var(--fs-sm); font-weight:var(--fw-medium); }
+
+/* Timeline */
+.timeline { position:relative; padding-left:18px; }
+.timeline::before { content:''; position:absolute; left:5px; top:4px; bottom:4px; width:2px; background:var(--border); }
+.tl-item { position:relative; padding-bottom:12px; }
+.tl-item:last-child { padding-bottom:0; }
+.tl-item::before { content:''; position:absolute; left:-17px; top:5px; width:10px; height:10px; border-radius:50%; background:var(--gray-300); border:2px solid var(--bg-1); box-shadow:0 0 0 1px var(--border); }
+.tl-item.tl-info::before    { background:var(--blue-500); box-shadow:none; }
+.tl-item.tl-success::before { background:var(--accent); box-shadow:none; }
+.tl-item.tl-danger::before  { background:var(--red-500); box-shadow:none; }
+.tl-item.tl-warning::before { background:var(--amber-500); box-shadow:none; }
+.tl-item.tl-pause::before   { background:var(--pink-700); box-shadow:none; }
+.tl-item .tl-date { font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--fg-3); font-weight:var(--fw-semibold); }
+.tl-item .tl-text { font-size:var(--fs-sm); color:var(--fg-1); margin-top:2px; line-height:1.4; }
+.tl-item.tl-recent .tl-text { font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); }
+/* Второй и третий уровень события: основание/примечание из карточки и
+   метаданные (время · зал · дата размещения). Высоту не ограничиваем —
+   drawer должен показывать карточку суда целиком, когда сайты недоступны. */
+.tl-item .tl-detail { font-size:var(--fs-sm); color:var(--fg-2); margin-top:2px; line-height:1.4; }
+.tl-item .tl-meta { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; line-height:1.35; }
+/* Хронология: время заседания в строке даты, служебный штамп, зал, бейдж
+   срочности. Будущие заседания подсвечены теми же urgency-токенами, что
+   .kv-today/.kv-soon в «Ключевых датах» — форматы обязаны рифмоваться.
+   .tl-meta («размещено») остаётся самой тихой строкой. */
+.tl-item .tl-time { color:var(--fg-1); font-weight:var(--fw-bold); }
+.tl-item .tl-stamp { color:var(--fg-4); font-weight:var(--fw-regular); }
+.tl-item .tl-place { font-size:var(--fs-sm); color:var(--fg-2); font-weight:var(--fw-medium); margin-top:2px; line-height:1.4; }
+.tl-item .tl-rel { display:inline-block; margin-left:4px; padding:1px 7px; border-radius:var(--radius-pill); font-family:var(--font-sans); font-size:var(--fs-2xs); font-weight:var(--fw-semibold); line-height:1.3; background:var(--urgency-week-bg); color:var(--urgency-week-fg); vertical-align:1px; }
+/* Будущее заседание: строка даты-времени укрупняется — время заседания
+   должно читаться сразу (запрос юриста), 11px-мелочью ему нельзя. */
+.tl-item.tl-upcoming .tl-date,
+.tl-item.tl-upcoming-soon .tl-date,
+.tl-item.tl-upcoming-today .tl-date { font-size:var(--fs-sm); }
+.tl-item.tl-upcoming .tl-date { color:var(--fg-2); }
+.tl-item.tl-upcoming-soon .tl-date,
+.tl-item.tl-upcoming-soon .tl-time { color:var(--urgency-week-fg); }
+.tl-item.tl-upcoming-today .tl-date,
+.tl-item.tl-upcoming-today .tl-time { color:var(--urgency-today-fg); }
+.tl-item.tl-upcoming-today .tl-rel { background:var(--urgency-today-bg); color:var(--urgency-today-fg); }
+/* Водораздел будущее/прошлое: тонкая линия с тихой подписью «уже было» */
+.tl-divider { display:flex; align-items:center; gap:8px; margin:2px 0 12px; color:var(--fg-4); font-size:var(--fs-2xs); }
+.tl-divider::before,.tl-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.notes-edit { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--font-sans); font-size:var(--fs-sm); color:var(--fg-1); background:var(--bg-1); resize:vertical; min-height:70px; transition:all 120ms var(--ease-out); }
+.notes-edit:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
+.notes-hint { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
+
+/* Liquid Glass / Material 3 translucent surface — backdrop-filter работает
+   и в Safari (с -webkit-), и в Chrome/Edge (включая Android).
+   Fallback для движков без backdrop-filter (старый Android WebView, Firefox <103):
+   сплошная поверхность с edge-tint, как у Material 3 surface-container. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .drawer-footer { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; }
+  .drawer-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; border-bottom:1px solid var(--border); }
+}
+
+/* ========== Filters bottom-sheet (mobile) ========== */
+.filters-btn { display:none; align-items:center; gap:6px; padding:10px 18px; border:1px solid var(--border); border-radius:var(--radius-pill); background:var(--bg-1); color:var(--fg-1); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; box-shadow:var(--shadow-1); position:relative; }
+.filters-btn:active { background:var(--bg-3); transform:scale(0.98); }
+.filters-btn svg { width:16px; height:16px; }
+.filters-btn-count { display:none; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; border-radius:var(--radius-pill); background:var(--accent); color:#fff; font-size:var(--fs-2xs); font-weight:var(--fw-bold); }
+.sheet-scrim { position:fixed; inset:0; background:rgba(13, 17, 22, 0.32); opacity:0; pointer-events:none; transition:opacity 200ms var(--ease-out); z-index:210; }
+.sheet-scrim.open { opacity:1; pointer-events:auto; }
+.filters-sheet { position:fixed; left:0; right:0; bottom:0; background:var(--bg-1); border-radius:20px 20px 0 0; box-shadow:0 -12px 40px rgba(13, 17, 22, 0.18); transform:translateY(100%); transition:transform 280ms var(--ease-out); z-index:211; max-height:85vh; display:flex; flex-direction:column; padding-bottom:env(safe-area-inset-bottom, 0px); }
+.filters-sheet.open { transform:translateY(0); }
+.sheet-handle { align-self:center; width:40px; height:4px; background:var(--border); border-radius:var(--radius-pill); margin:6px 0 2px; }
+.sheet-header { display:flex; align-items:center; justify-content:space-between; padding:4px 20px 8px; font-size:var(--fs-xl); font-weight:var(--fw-bold); color:var(--fg-1); border-bottom:1px solid var(--border); }
+/* Фикс-бокс вместо padding'а: прежний хитбокс был ~24×28 — для пальца
+   мало, а шторка фильтров живёт только на телефоне. */
+.sheet-close { width:36px; height:36px; flex-shrink:0; background:none; border:none; border-radius:50%; color:var(--fg-4); cursor:pointer; }
+.sheet-close svg { width:20px; height:20px; }
+.sheet-body { padding:10px 20px; overflow-y:auto; flex:1; }
+.sheet-body .chip-bar,
+.sheet-body { display:flex; flex-wrap:wrap; gap:6px; }
+.sheet-body .chip-btn { font-size:var(--fs-sm); padding:5px 12px; }
+.sheet-body .chip-btn .chip-count { font-size:var(--fs-2xs); padding:1px 6px; }
+.sheet-body .filter-group { flex-basis:100%; width:100%; gap:5px; margin-top:2px; }
+.sheet-body .filter-group-label { padding-left:8px; }
+.sheet-body .seg-ctrl { width:100%; min-width:0; }
+/* Селект «Суд» в шторке — на всю ширину листа (сам .filter-group уже 100%). */
+.sheet-body .court-select { width:100%; }
+.sheet-body .seg-btn { min-width:0; font-size:var(--fs-xs); padding:5px 5px; gap:3px; }
+.sheet-body .seg-btn .chip-count { min-width:16px; padding:0 4px; }
+.sheet-body .chip-divider { flex-basis:100%; height:1px; background:var(--divider); margin:2px 0; }
+.sheet-footer { display:flex; gap:10px; padding:10px 20px; background:var(--bg-1); border-top:1px solid var(--border); }
+.sheet-btn-reset, .sheet-btn-done { flex:1; padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:transform 120ms var(--ease-out), background 120ms var(--ease-out); }
+.sheet-btn-reset { background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
+.sheet-btn-reset:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.sheet-btn-done { background:var(--accent); color:#fff; border:1px solid var(--accent); }
+.sheet-btn-reset:active { transform:scale(0.97); }
+.sheet-btn-done:active { background:var(--accent-active); transform:scale(0.97); }
+
+/* ── Шторка «Синхронизация звёзд» (связывание устройств в профиль) ── */
+.sync-block { display:flex; flex-direction:column; gap:12px; padding:16px 20px 20px; }
+.sync-note { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.sync-status-on { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--accent); }
+/* Служебная строка (id профиля): мелко и приглушённо, сразу под статусом. */
+.sync-quiet { font-size:var(--fs-xs); color:var(--fg-3); font-family:var(--font-mono); margin-top:-8px; }
+.sync-status-pending { font-size:var(--fs-sm); color:var(--warning-fg); background:var(--warning-bg); border-radius:var(--radius); padding:8px 12px; }
+/* Код крупно: юрист диктует/перепечатывает его на второе устройство. */
+.sync-code { font-family:var(--font-mono); font-size:32px; font-weight:var(--fw-bold); letter-spacing:0.12em; text-align:center; padding:14px 10px; border:1px dashed var(--border-strong); border-radius:var(--radius); background:var(--bg-2); color:var(--fg-1); user-select:all; }
+.sync-divider { display:flex; align-items:center; gap:10px; color:var(--fg-3); font-size:var(--fs-xs); }
+.sync-divider::before, .sync-divider::after { content:''; flex:1; height:1px; background:var(--divider); }
+.sync-code-row { display:flex; gap:10px; }
+.sync-input { flex:1; min-width:0; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); letter-spacing:0.08em; text-transform:uppercase; background:var(--bg-1); color:var(--fg-1); }
+.sync-input:focus { outline:none; border-color:var(--accent); }
+.sync-btn { flex:none; }
+.sync-btn-danger { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--red-500); border:1px solid var(--border); }
+.sync-btn-danger:hover { border-color:var(--red-500); }
+/* QR с deep-link'ом связывания: белая плашка обязательна и в тёмной теме —
+   сканеру нужен контраст, path в SVG чёрный. */
+.sync-qr { display:flex; justify-content:center; }
+.sync-qr svg { width:188px; height:188px; background:#fff; border-radius:var(--radius); padding:6px; box-sizing:content-box; }
+.sync-qr-note { text-align:center; }
+/* Видоискатель сканера QR (камера внутри PWA). */
+.sync-scan-video { width:100%; max-height:320px; border-radius:var(--radius); background:#000; object-fit:cover; }
+.sync-btn-scan { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
+.sync-btn-scan:hover { border-color:var(--border-strong); background:var(--bg-3); }
+/* Календарный фид: ссылка webcal://… длинная — переносим посимвольно,
+   monospace, копируется целиком (живёт в свёртке раздела настроек). */
+.sync-feed-url { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--fg-3); word-break:break-all; padding:8px 10px; border:1px dashed var(--border); border-radius:var(--radius); background:var(--bg-2); user-select:all; }
+/* Шестерёнка шапки (#btn-settings, 03.09.2026 — сюда переехали 🔗 синк,
+   колокольчик push и календарь). Точка «есть неотправленные правки ★»
+   (Worker недоступен/офлайн; ставит updateSyncButton только у связанных
+   устройств). Токен --amber-500 объявлен один на обе темы — насыщенный
+   акцент читается и на светлом, и на тёмном. */
+#btn-settings { position:relative; }
+#btn-settings.pending::after { content:''; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--amber-500); }
+/* Шторка «Настройки» (03.09.2026): список строк в духе системных настроек —
+   значок · название · статус · шеврон; раскрытый раздел (.is-open) получает
+   панель с одной главной кнопкой, пояснения — в свёртке .st-fold. */
+.st-list { display:flex; flex-direction:column; width:100%; padding:2px 0 10px; }
+.st-item { border-bottom:1px solid var(--divider); }
+.st-item:last-child { border-bottom:0; }
+.st-row { display:flex; align-items:center; gap:12px; width:100%; padding:12px 2px; background:none; border:0; cursor:pointer; text-align:left; font-family:var(--font-sans); color:var(--fg-1); }
+.st-row:hover .st-row-title { color:var(--accent); }
+.st-row-icon { flex:0 0 36px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:var(--bg-2); color:var(--fg-2); }
+.st-row-icon svg { width:18px; height:18px; }
+.st-item.is-open .st-row-icon { background:var(--accent-bg-soft); color:var(--accent); }
+.st-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.st-row-title { font-size:var(--fs-md); font-weight:var(--fw-semibold); }
+.st-row-status { font-size:var(--fs-sm); color:var(--fg-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.st-row-status.is-on { color:var(--accent); }
+.st-row-status.is-warn { color:var(--warning-fg); }
+.st-row-chev { flex:0 0 auto; display:inline-flex; color:var(--fg-3); transition:transform 160ms var(--ease-out); }
+.st-row-chev svg { width:18px; height:18px; }
+.st-item.is-open .st-row-chev { transform:rotate(180deg); }
+.st-item.is-loading .st-row-icon svg { animation:spin .8s linear infinite; }
+.st-panel { display:flex; flex-direction:column; gap:10px; padding:0 2px 14px 50px; }
+.st-note { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.st-btn { align-self:flex-start; padding:9px 16px; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--fg-1); border:1px solid var(--border); }
+.st-btn:hover { border-color:var(--border-strong); background:var(--bg-3); }
+.st-btn:disabled { opacity:.6; cursor:default; }
+.st-btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.st-btn-primary:hover { background:var(--accent-active); border-color:var(--accent-active); }
+.st-btn-danger { color:var(--red-500); }
+.st-btn-danger:hover { border-color:var(--red-500); }
+.st-btn-row { display:flex; flex-wrap:wrap; gap:8px; }
+.st-fold summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; }
+.st-fold[open] summary { margin-bottom:6px; }
+.st-fold .sync-feed-url { margin-top:8px; }
+
+/* ── Анонс «Что нового» (одноразовый, при первом открытии после апдейта) ── */
+.wn-block { display:flex; flex-direction:column; gap:16px; padding:16px 20px 20px; }
+.wn-date { font-size:var(--fs-xs); color:var(--fg-3); margin:-6px 0 -4px; }
+/* Мини-копия кнопки шапки прямо в тексте: пользователь видит, ЧТО искать. */
+.wn-inline-btn { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); vertical-align:-7px; margin:0 2px; }
+.wn-inline-btn svg { width:14px; height:14px; }
+/* «кнопка + иконка» не разлучаются переносом: разрыв строки допустим вокруг
+   атомарного inline-flex даже через &nbsp; — держит только nowrap-обёртка. */
+.wn-nowrap { white-space:nowrap; }
+.wn-item { display:flex; gap:12px; align-items:flex-start; }
+.wn-item-icon { flex:0 0 36px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent); }
+.wn-item-icon svg { width:20px; height:20px; }
+.wn-item-body { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.wn-item-title { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--fg-1); }
+.wn-item-text { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.45; }
+.wn-btn { align-self:flex-start; margin-top:2px; padding:8px 16px; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--accent); border:1px solid var(--accent); }
+.wn-btn:hover { background:var(--accent-bg-soft); }
+.wn-done { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); }
+/* Подсветка демонстрируемого элемента: три мягких пульса рамкой-акцентом. */
+.drawer-freshness.spotlight { animation:wn-spotlight 1.2s var(--ease-out) 3; }
+@keyframes wn-spotlight {
+  0%, 100% { box-shadow:0 0 0 0 transparent; }
+  40% { box-shadow:0 0 0 4px var(--accent-bg-strong), 0 0 0 6px var(--accent); }
+}
+
+/* Десктоп: «Синхронизация подписок», «Что нового» и «Настройки» — не
+   bottom-sheet во всю ширину, а мини-окно по центру верхней трети. Базовые правила .filters-sheet
+   держат шторку прибитой к низу через transform:translateY(100%) — здесь
+   transform занят центрированием, поэтому появление ведут
+   opacity+pointer-events. */
+@media (min-width: 769px) {
+  #sync-sheet,
+  #whatsnew-sheet,
+  #settings-sheet {
+    left:50%; right:auto; bottom:auto; top:96px;
+    width:440px; max-width:calc(100vw - 32px); max-height:calc(100vh - 128px);
+    border-radius:var(--radius-lg);
+    transform:translateX(-50%) translateY(-10px);
+    opacity:0; pointer-events:none;
+    transition:opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+    box-shadow:0 18px 48px rgba(13, 17, 22, 0.28);
+  }
+  #sync-sheet.open,
+  #whatsnew-sheet.open,
+  #settings-sheet.open { transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto; }
+  #sync-sheet .sheet-handle,
+  #whatsnew-sheet .sheet-handle,
+  #settings-sheet .sheet-handle { display:none; }
+}
+
+/* На телефонной ширине четыре банковских режима с числовыми бейджами не помещаются
+   в одну строку без обрезания подписей. Две равные строки сохраняют крупные
+   touch-target'ы и цельную форму сегментированного переключателя. */
+@media (max-width:480px) {
+  .sheet-body .filter-group-bank-control .seg-ctrl {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    border-radius:14px;
+  }
+  .sheet-body .filter-group-bank-control .seg-btn { border-right:0; }
+  .sheet-body .filter-group-bank-control .seg-btn:nth-child(odd) { border-right:1px solid var(--border); }
+  .sheet-body .filter-group-bank-control .seg-btn:nth-child(-n+2) { border-bottom:1px solid var(--border); }
+}
+
+/* ========== Mobile cards ========== */
+.mobile-cards { display:none; }
+.mobile-card { position:relative; background:var(--bg-1); border-radius:var(--radius-md); box-shadow:var(--shadow-1); padding:14px 14px 14px 16px; margin-bottom:10px; border-left:4px solid var(--border-strong); transition:box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out); cursor:pointer; }
+.mobile-card:active { box-shadow:var(--shadow-md); transform:scale(0.995); }
+.mobile-card.card-new { background:var(--amber-50); }
+.mobile-card.accent-new     { border-left-color:var(--amber-500); }
+.mobile-card.accent-today   { border-left-color:var(--red-500); }
+.mobile-card.accent-soon    { border-left-color:var(--blue-500); }
+.mobile-card.accent-win     { border-left-color:var(--accent); }
+.mobile-card.accent-loss    { border-left-color:var(--pink-700); }
+.mobile-card.accent-archive { border-left-color:var(--gray-300); }
+.mc-top { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+/* Сжимаем звёздочку и сдвигаем её левее (negative margin),
+   чтобы padding-area не создавала визуального «провала» слева от номера */
+.mc-top .watch-btn { flex:0 0 auto; width:24px; height:24px; font-size:18px; margin:0 0 0 -4px; }
+.mc-top .mc-case { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-top .mc-badges { flex:0 0 auto; margin-left:auto; }
+.mc-case { font-family:var(--font-mono); font-size:var(--fs-lg); font-weight:var(--fw-bold); color:var(--fg-1); letter-spacing:-0.01em; }
+.mc-badges { display:flex; gap:4px; flex-wrap:wrap; align-items:center; }
+/* 🛡-иконка обеспечительного листа — перед бейджем стадии, без слова
+   (перекомпоновка 28.07.2026): фоновый факт, текст съедал место у номера. */
+.mc-shield { font-size:15px; line-height:1; }
+/* «Обжалуется» — своим рядом под шапкой, по правому краю: точно под бейджем
+   стадии, с которым он и читается в паре («Апелляция» + «Обжалуется» = дело
+   ушло в кассацию). В одной строке с номером (как было до 14.08.2026) пара
+   бейджей отжимала номер дела в многоточие на узком экране — решение юриста.
+   ⚠️ Ряд отдельный, а НЕ перенос внутри .mc-badges: у .mc-top
+   align-items:center, и двухстрочная группа увела бы номер в вертикальный
+   центр карточки. */
+.mc-pending { display:flex; justify-content:flex-end; margin:-2px 0 6px; }
+.mc-court-label { font-size:var(--fs-xs); color:var(--fg-3); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc-third { margin-bottom:8px; }
+.mc-parties { font-size:var(--fs-md); color:var(--fg-2); margin-bottom:10px; line-height:1.4; display:flex; flex-direction:column; gap:3px; }
+.mc-party { display:flex; align-items:baseline; gap:5px; }
+.mc-party-tag { font-weight:var(--fw-bold); color:var(--fg-4); flex-shrink:0; font-size:var(--fs-2xs); text-transform:uppercase; }
+.mc-party-name { flex:1; min-width:0; word-break:break-word; }
+.mc-recent { display:flex; align-items:flex-start; gap:6px; font-size:var(--fs-sm); line-height:1.4; color:var(--fg-2); margin-bottom:10px; padding:6px 8px; background:var(--bg-2); border-radius:var(--radius-sm); }
+.mc-recent-icon { flex:0 0 auto; line-height:1.4; opacity:0.7; }
+.mc-recent-rel { flex:0 0 auto; font-weight:var(--fw-semibold); color:var(--fg-3); white-space:nowrap; }
+.mc-recent-text { flex:1 1 auto; min-width:0; color:var(--fg-1); overflow:hidden; }
+/* baseline: текст бейджа-результата и дата справа на одной линии (у бейджа
+   есть свой паддинг — flex-start спускал его текст ниже даты). */
+.mc-bottom { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding-top:8px; border-top:1px solid var(--divider); }
+.mc-state { min-width:0; flex-shrink:1; }
+.mc-hearing { text-align:right; flex-shrink:0; }
+.mc-hearing .cell-hearing { align-items:flex-end; }
+/* Строка трека ИЛ (28.07.2026): «🧾 ИЛ ДД.ММ» либо «⏳ ждёт ИЛ N дн.» тихим
+   текстом СРАЗУ ПОД ДАТОЙ — живёт внутри правой колонки .mc-hearing, а не
+   отдельным рядом карточки: отдельный ряд отбивала вниз высота левой колонки
+   (бейдж результата + «Акт опубликован»), и связь с датой терялась.
+   Без своей черты — вторая линия делала карточку полосатой. */
+.mc-track { display:flex; justify-content:flex-end; align-items:center; margin-top:3px; font-size:var(--fs-xs); }
+.mc-track-await { color:var(--fg-3); }
+.mc-track-await.aw-watch { color:var(--urgency-tomorrow-fg); font-weight:var(--fw-semibold); }
+.mc-track-await.aw-overdue { color:var(--urgency-today-fg); font-weight:var(--fw-bold); }
+.mc-track-writ { color:var(--green-favorable-fg); font-weight:var(--fw-semibold); }
+
+/* ========== Responsive ========== */
+@media (max-width: 1024px) {
+  .stats-primary { grid-template-columns:repeat(2, 1fr); }
+  .analytics-row { grid-template-columns:1fr; }
+  .up-group-body { grid-template-columns:1fr; }
+  .drawer { width:480px; }
+  /* Скрытие колонки «Суд» на том же брейкпоинте, что stats/drawer и
+     JS-проверки 1024 — раньше было 1100 и в полосе 1025–1099 раскладка
+     «расползалась» (stats уже 4-колоночные, а таблица уже без суда). */
+  table .col-court { display:none; }
+}
+.stats-mobile-summary { display:none; background:var(--bg-1); border-radius:var(--radius-md); padding:12px 16px; box-shadow:var(--shadow-1); margin-bottom:12px; cursor:pointer; user-select:none; animation:fadeUp .4s var(--ease-out); }
+.stats-mobile-summary .sms-row { display:flex; justify-content:space-between; align-items:center; }
+.stats-mobile-summary .sms-items { display:flex; gap:14px; flex-wrap:wrap; }
+.stats-mobile-summary .sms-item { font-size:var(--fs-sm); color:var(--fg-2); }
+.stats-mobile-summary .sms-item strong { color:var(--fg-1); font-size:17px; font-variant-numeric:tabular-nums; }
+.stats-mobile-summary .sms-chevron { color:var(--fg-4); font-size:18px; transition:transform 200ms var(--ease-out); }
+.stats-mobile-summary.expanded .sms-chevron { transform:rotate(180deg); }
+
+@media (max-width: 768px) {
+  /* На мобиле унифицируем высоту футеров с нижним toolbar'ом (~72px),
+     чтобы drawer-footer визуально не «нависал» больше нижней панели. */
+  :root { --footer-h: 72px; }
+  /* Header в стиле iOS Liquid Glass: full-width, прозрачный, blur. Тот же
+     оттенок --pill-bg, что и floating-капсулы снизу — единая стеклянная среда
+     сверху и снизу. Fallback ниже.
+     ⚠️ position:static — решение юриста 14.08.2026: на телефоне липкая шапка
+     занимала ~73px первого экрана навсегда, а работа идёт в списке ниже.
+     Теперь шапка уезжает вместе с контентом; на десктопе липкость сохранена
+     (базовое правило .app-header выше по файлу). Следствия: z-index:100 при
+     static не действует, и верхним липким слоем становится полоса списка
+     (.list-bar.is-sticky, z-index 90) — она же липнет к top:0, а не под
+     шапку; диапазоны drawer/шторки/маячка (150+) не затронуты. */
+  .app-header {
+    padding:0 16px;
+    position:static;
+    background:var(--pill-bg);
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border-bottom:1px solid var(--glass-border);
+    box-shadow:inset 0 -1px 0 var(--glass-highlight);
+  }
+  .app-main { padding:16px 10px; }
+  /* Однострочный header на мобиле: лого + сжатый заголовок + кнопки справа.
+     Старый column-layout оставлял пустоту между brand и actions. */
+  .header-inner { flex-direction:row; align-items:center; gap:10px; padding:10px 0; }
+  .header-inner .header-brand { flex:1 1 auto; min-width:0; transition:opacity 200ms var(--ease-out); }
+  .header-brand .header-title { font-size:var(--fs-md); line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .header-logo { width:32px; height:32px; flex-shrink:0; }
+  /* ⚠️ Здесь НЕ должно быть правил `.app-header.scrolled …`. Сжатие шапки при
+     прокрутке (padding 10→8px, заголовок в одну строку) имело смысл, пока она
+     липла: экономило высоту у постоянно видимой полосы. У статичной шапки оно
+     на scrollY≈30 укорачивает документ, и весь контент под шапкой — уже за
+     кадром — прыгает вверх на 4px. Снято 14.08.2026 вместе с липкостью; класс
+     `scrolled` больше никто не ставит (обработчик из app.js удалён). */
+  .header-actions { width:auto; justify-content:flex-end; gap:8px; flex-shrink:0; }
+  .stats-mobile-summary,
+  .stats-primary,
+  .stats-primary.mobile-visible,
+  .stats-secondary { display:none !important; }
+  .analytics-row { grid-template-columns:1fr; gap:8px; }
+  .upcoming-chevron { display:inline; }
+  .analytics-card { padding:14px; min-width:0; }
+  .up-group-body { grid-template-columns:1fr; gap:6px; }
+  .upcoming-item { padding:8px; min-width:0; }
+  .up-time { min-width:64px; flex-shrink:0; }
+  .upcoming-case { font-size:var(--fs-lg); overflow-wrap:anywhere; word-break:break-word; }
+  .upcoming-parties { overflow-wrap:anywhere; word-break:break-word; }
+  .up-court { overflow-wrap:anywhere; white-space:normal; }
+  /* ⚠️ Здесь НЕ должно быть `.app-main { overflow-x:hidden }`. Оно делало
+     .app-main скроллпортом для своих потомков, и position:sticky у .list-bar
+     на телефоне не работал вовсе. Правило дублировало `html, body
+     { overflow-x:hidden }` (в начале файла), а реальные переполнения лечат
+     overflow-wrap:anywhere у строк выше — поэтому снято 13.08.2026. */
+  /* Полоса разделов липнет к самому верху экрана: на телефоне карточки
+     скроллятся страницей, а Основные / Иски банка / Мои должны оставаться
+     одинаково доступными во всех трёх режимах.
+     ⚠️ top:0, а не под шапку: с 14.08.2026 шапка на телефоне статична
+     (position:static выше) и уезжает вместе с контентом — липнуть под неё
+     нечему. Прежний `top:var(--header-h, 73px)` открыл бы над полосой щель
+     в высоту шапки, сквозь которую видно уезжающий контент; вместе с ним
+     ушла и вся механика --header-h/syncHeaderHeight в app.js.
+     z-index 90 — выше плавающего тулбара (50), вне диапазона
+     drawer/шторки/маячка (150+). Фон обязателен: у самой полосы его нет,
+     просвечивал бы контент. */
+  .list-bar.is-sticky { position:sticky; top:0; z-index:90;
+    background:var(--bg-2); padding:8px 0; margin-bottom:2px; }
+  /* Замер на 375px: капсула 254px, полосе 355px — счётчику остаётся 89px, а
+     полная фраза занимает 500px и разваливала строку на шесть. Уплотняем
+     капсулу, а объём текста счётчика подбирает fitCounter по остатку места.
+     Что он отрезает, то не пропадает: архив виден на чипе «Архив» в шторке
+     фильтров, число кросс-совпадений — в заголовке группы над самими
+     делами. На совсем узких экранах счётчик скрывается целиком
+     (.is-squeezed), поэтому flex-wrap здесь — просто страховка. */
+  .list-bar { flex-wrap:wrap; gap:6px 10px; }
+  .dataset-switch { flex:0 1 440px; min-width:0; max-width:100%; }
+  /* Плавная шкала 320→390px: на самом узком экране подписи и числа не
+     сталкиваются, на широком телефоне кегль возвращается к комфортным 15px.
+     Сегменты при этом всегда занимают всю ширину капсулы поровну. */
+  .list-bar .seg-btn {
+    padding:6px clamp(3px, calc(7.14vw - 19.85px), 8px);
+    gap:clamp(2px, calc(2.86vw - 7.15px), 4px);
+    font-size:clamp(12px, calc(4.29vw - 1.73px), 15px);
+  }
+  .list-bar .chip-count {
+    min-width:16px;
+    height:clamp(16px, calc(2.86vw + 6.85px), 18px);
+    padding:1px clamp(2px, calc(4.29vw - 11.73px), 5px);
+    font-size:clamp(9px, calc(4.29vw - 4.73px), 12px);
+  }
+  /* Мобильное переопределение: на десктопе .up-time-value 16px, на мобиле 15 — экономит ширину карточки. */
+  .up-time-value { font-size:var(--fs-md); }
+  /* Мобильный «toolbar» — невидимый контейнер, который позиционирует floating-
+     элементы (★ + поиск + кнопка фильтра) над контентом. Стекло — на pill'ах. */
+  .toolbar {
+    position:fixed;
+    left:12px; right:12px;
+    bottom:var(--floating-bottom);
+    z-index:50;
+    margin:0;
+  }
+  /* Когда экранная клавиатура открыта — поднимаем toolbar над клавиатурой через
+     transform в setupKeyboardAwareToolbar(). Здесь только сбрасываем фон/тень
+     самого контейнера (стекло живёт на дочерних капсулах). */
+  .toolbar.kb-open {
+    flex-direction:column; align-items:stretch;
+    padding:0;
+    background:transparent;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    border:none;
+    border-radius:0;
+    box-shadow:none;
+    gap:8px;
+  }
+  /* Поиск — отдельная iOS-капсула с glass-фоном, скруглением, мягкой тенью. */
+  .toolbar-row-search .search-box {
+    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    border-radius:26px;
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+    padding:0 16px;
+    min-height:52px;
+  }
+  /* Звезда подписок и фильтры — две одинаковые круглые glass-капсулы. */
+  .toolbar-row-search .filters-btn,
+  .toolbar-mine-btn {
+    width:52px; height:52px; padding:0;
+    border-radius:50%;
+    background:var(--pill-bg, rgba(255, 255, 255, 0.78));
+    -webkit-backdrop-filter:var(--glass-blur);
+    backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+  }
+  .toolbar-row-search .filters-btn { gap:0; justify-content:center; }
+  .toolbar-row-search .filters-btn span:not(.filters-btn-count) { display:none; }
+  .toolbar-row-search .filters-btn svg { width:20px; height:20px; }
+  .toolbar-row-search .filters-btn .filters-btn-count {
+    position:absolute; top:-4px; right:-4px;
+  }
+  .toolbar-mine-btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 auto;
+    font-size:22px;
+    line-height:1;
+    color:var(--amber-500);
+    cursor:pointer;
+  }
+  .toolbar-mine-btn[hidden] { display:none; }
+  .toolbar-mine-btn.active {
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
+  .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
+  /* Мобилка: единственный видимый ряд тулбара — поиск + кнопка «Фильтры».
+     Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
+  .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
+  .toolbar-row-segments { display:none; }
+  /* Освобождаем место под плавающим тулбаром, чтобы контент не перекрывался.
+     Высота: 52 (капсула) + 16 (нижний зазор над home-indicator) + 16 (воздух
+     сверху) + env(safe-area-inset-bottom) (для iPhone home-indicator). */
+  .app-main { padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 74px); }
+  .search-box { flex:1 1 0; min-width:0; }
+  .search-box input { min-width:0; }
+  .filters-btn { flex:0 0 auto; }
+  #filter-status, #filter-role, #filter-stage, #filter-bank-control,
+  #filter-mine-source, #filter-mine-role, #filter-mine-stage,
+  #filter-category { display:none; }
+  .toolbar-right { justify-content:flex-end; }
+  .chip-bar { display:none; }
+  .filters-btn { display:inline-flex; flex-shrink:0; }
+  /* 100% вместо 100vw: на Android с классическим скроллбаром 100vw шире
+     видимой области и даёт горизонтальный сдвиг. */
+  .drawer { width:100%; }
+  .table-wrap { display:none; }
+  .mobile-cards { display:block; animation:fadeUp .6s var(--ease-out); }
+  /* Mobile font size boost */
+  .header-title { font-size:18px; }
+  /* Подпись территории при нехватке места обрезается многоточием, а не
+     наезжает под кнопки (бренд-колонка сжимаемая: flex:1 + min-width:0). */
+  .header-sub { font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* На мобиле header сильно перегружен — прячем мета-инфо и сжимаем кнопку
+     обновления до иконки (текст «Обновить» гасим font-size:0 без правки HTML). */
+  .header-meta { display:none; }
+  /* Капсулы шапки — круглые icon-only pill'ы того же языка, что .filters-btn:
+     один тип капсулы по всему экрану (top + bottom), без чужих коробок.
+     46px вместо прежних 52: с кнопкой связывания устройств (26.08.2026)
+     капсул в ряду стало четыре, и на 320px они наезжали на подпись
+     территории; 46px держит тач-таргет ≥44. С 03.09.2026 капсул две
+     (⚙ настройки, тема; «Обновить» ушла в настройки) — размер оставлен. */
+  .app-header .theme-toggle {
+    width:46px; height:46px; padding:0; gap:0;
+    border-radius:50%;
+    background:var(--pill-bg);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 4px 12px rgba(13, 17, 22, 0.08);
+    justify-content:center;
+  }
+  .app-header .theme-toggle svg { width:20px; height:20px; }
+  .stats-mobile-summary .sms-item { font-size:var(--fs-lg); }
+  .stats-mobile-summary .sms-item strong { font-size:22px; }
+  /* Заголовки «Дайджест» и «Ближайшие заседания» — крупнее (решение юриста
+     14.08.2026): на телефоне это два одинаковых по смыслу свёрнутых блока,
+     и 13px читались мелко. Кегль держать одинаковым у обоих, иначе
+     карточки разъедутся по высоте. */
+  .analytics-title { font-size:var(--fs-md); }
+  /* Свёрнутая карточка заседаний обязана совпадать по высоте с шапкой
+     дайджеста (padding у .digest-head на телефоне 10px 12px): они стоят
+     друг под другом, и разница в 8px читалась как небрежность. */
+  .analytics-card.upcoming-collapsed { padding:10px 12px; }
+  .cat-bar-row { font-size:var(--fs-md); }
+  .cat-bar-label { font-size:var(--fs-md); }
+  .cat-bar-count { font-size:var(--fs-sm); }
+  .search-input { font-size:16px; }
+  /* На мобиле крестик крупнее и с большим хитбоксом — палец не промахивается. */
+  .search-clear { width:28px; height:28px; margin-right:-4px; }
+  .search-clear svg { width:16px; height:16px; }
+  .filter-select { font-size:16px; }
+  .table-counter { font-size:var(--fs-md); }
+  .badge { font-size:var(--fs-sm); }
+  .badge-cat { font-size:var(--fs-sm); }
+  .mc-case { font-size:17px; }
+  /* Суд + судья не влезают в строку на узких экранах (на 320px обрезалось
+     20% карточек, причём резало хвост с фамилией судьи). Переносим, как
+     это уже сделано для .up-court в «Ближайших». */
+  .mc-court-label { font-size:var(--fs-sm); overflow-wrap:anywhere; white-space:normal; }
+  .mc-parties { font-size:var(--fs-lg); }
+  .mc-bottom .badge { font-size:var(--fs-md); }
+  /* Дата заседания — наравне с бейджем «Назначено» слева (fs-md, как и
+     .mc-bottom .badge); относительной метки в compact-режиме больше нет. */
+  .mc-hearing .hearing-primary { font-size:var(--fs-md); }
+  .mc-track { font-size:var(--fs-sm); }
+  .error-banner { font-size:var(--fs-lg); }
+  .new-cases-banner { font-size:var(--fs-lg); }
+  /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer.
+     52 (кнопка) + 16 (нижний зазор) + 24 (воздух над кнопкой) = 92px над safe-area. */
+  .drawer-body { padding:16px 16px calc(env(safe-area-inset-bottom, 0px) + 82px); }
+  .drawer-title .dt-sub { font-size:var(--fs-xs); }
+  .drawer-hero .hero-parties { font-size:17px; }
+  .drawer-hero .hero-category { font-size:var(--fs-md); }
+  .kv-grid { font-size:var(--fs-md); }
+  .kv-grid .kv-k { font-size:var(--fs-sm); }
+  .tl-item .tl-text { font-size:var(--fs-md); }
+  .tl-item.tl-recent .tl-text { font-size:var(--fs-lg); }
+  .tl-item .tl-date { font-size:var(--fs-xs); }
+  .tl-item .tl-detail { font-size:var(--fs-sm); }
+  .tl-item .tl-meta { font-size:var(--fs-xs); }
+  .tl-item .tl-place { font-size:var(--fs-md); }
+  .tl-item .tl-rel { font-size:var(--fs-xs); }
+  .tl-item.tl-upcoming .tl-date,
+  .tl-item.tl-upcoming-soon .tl-date,
+  .tl-item.tl-upcoming-today .tl-date { font-size:var(--fs-md); }
+  /* Исполнительные листы: секция единственная в drawer оставалась на
+     --fs-2xs (11px) и на телефоне, хотя все соседи выше подняты. Ни одна
+     строка здесь не должна остаться на 11px — тултипа на тач-экране нет,
+     это единственный канал для реквизитов. Номер — крупнее всего. */
+  .writ-row { padding:12px 14px; }
+  .writ-num { font-size:var(--fs-lg); }
+  .writ-recipient { font-size:var(--fs-lg); }
+  .writ-kind { font-size:var(--fs-sm); }
+  .writ-date { font-size:var(--fs-md); }
+  .writ-count { font-size:var(--fs-xs); }
+  /* Хитбокс под палец 44px, но без рамки и фона: коробка кнопки на 320px
+     тяжелее самого номера и спорит с ним за внимание. Обратка на нажатие
+     остаётся — `.copied` красит иконку в accent. */
+  .writ-copy { width:44px; height:44px; margin:-9px -10px -9px 0; border-color:transparent; background:transparent; }
+  .writ-copy svg { width:18px; height:18px; }
+  .writ-copy.copied { background:transparent; border-color:transparent; }
+  /* Текст решения на телефоне разворачиваем без внутреннего скролла —
+     вложенный скролл в drawer'е неудобен пальцем. */
+  .act-pre { max-height:none; }
+  .drawer-tab { font-size:var(--fs-md); }
+  /* На 375px две кнопки в одну строку: больше воздуха по вертикали для
+     удобства тапа, без переноса. */
+  /* Прозрачная подложка футера — кнопки сами становятся floating-капсулами,
+     контент drawer-body виден сквозь них (как у toolbar поверх списка). */
+  .drawer-footer {
+    flex-wrap:nowrap; gap:8px;
+    /* Тот же зазор, что у toolbar — обе плавающие плашки на одной высоте. */
+    padding:8px 12px var(--floating-bottom);
+    background:transparent;
+    -webkit-backdrop-filter:none; backdrop-filter:none;
+    border-top:none;
+    box-shadow:none;
+  }
+  .drawer-footer .btn-primary, .drawer-footer .btn-secondary {
+    font-size:var(--fs-md); padding:0 16px; min-height:52px;
+    white-space:nowrap; min-width:0; flex:1 1 0; justify-content:center;
+    border-radius:50px;
+  }
+  /* Secondary (☆ Отслеживать) — glass pill-капсула как у .filters-btn в toolbar. */
+  .drawer-footer .btn-secondary {
+    background:var(--pill-bg);
+    -webkit-backdrop-filter:var(--glass-blur); backdrop-filter:var(--glass-blur);
+    border:1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+  }
+  /* Primary остаётся accent — добавляем такую же мягкую тень для floating. */
+  .drawer-footer .btn-primary {
+    box-shadow:
+      0 12px 32px rgba(13, 17, 22, 0.16),
+      0 2px 8px rgba(13, 17, 22, 0.08);
+  }
+  .drawer-footer .btn-watch .btn-watch-star { font-size:22px; margin-right:4px; }
+}
+
+@media (max-width:350px) {
+  .drawer-freshness { gap:6px; padding-inline:8px; }
+  .drawer-freshness-long { display:none; }
+  .drawer-freshness-short { display:inline; }
+  .drawer-freshness-label { font-size:var(--fs-xs); }
+  .drawer-freshness-date { font-size:var(--fs-sm); }
+}
+
+/* Fallback для движков без backdrop-filter (старый Android WebView, Samsung
+   Internet <80, Firefox <103): сплошные поверхности вместо стекла. Floating-
+   позиция и скруглённые углы у toolbar сохраняются — теряется только blur. */
+@media (max-width: 768px) {
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .app-header { background:var(--bg-1); -webkit-backdrop-filter:none; backdrop-filter:none; border-bottom:1px solid var(--border); box-shadow:none; }
+    .app-header .theme-toggle,
+    .toolbar-row-search .search-box,
+    .toolbar-row-search .filters-btn,
+    .toolbar-mine-btn { background:var(--bg-2); -webkit-backdrop-filter:none; backdrop-filter:none; border:1px solid var(--border-strong); }
+  }
+}
+
+/* Helpers (extracted from inline styles in app.js) */
+.stat-of-total { font-size:var(--fs-md); color:var(--fg-4); font-weight:var(--fw-regular); }
+.stat-no-appeal-data { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:6px; }
+.upcoming-time { font-size:var(--fs-xs); color:var(--fg-3); }
+.upcoming-role-badge { font-size:var(--fs-sm); padding:3px 8px; }
+.meta-last-visit { font-size:var(--fs-2xs); color:var(--fg-4); }
+.badge-compact { font-size:var(--fs-2xs); vertical-align:middle; }
+.kv-v-muted { color:var(--fg-2); font-size:var(--fs-sm); }
+.tl-empty { font-size:var(--fs-xs); color:var(--fg-4); }
+.drawer-notes-orig { font-size:var(--fs-sm); color:var(--fg-2); line-height:1.5; }
+
+/* ── AI анализ опубликованного акта (drawer + чип-якорь) ─────────────── */
+.badge-ai-analysis {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:5px 11px;
+  border-radius:var(--radius-pill);
+  background:var(--accent-bg-strong);
+  color:var(--accent-active);
+  font-size:var(--fs-sm);
+  font-weight:var(--fw-semibold);
+  line-height:1.1;
+  cursor:pointer;
+  margin-left:10px;
+  vertical-align:middle;
+  transition:background 120ms var(--ease-out), color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.badge-ai-analysis:hover { background:var(--accent); color:#fff; transform:translateY(-1px); }
+.badge-ai-analysis:active { transform:translateY(0); }
+.ai-analysis-block {
+  padding:12px 14px;
+  border-radius:var(--radius);
+  background:var(--accent-bg-soft);
+  border-left:3px solid var(--accent);
+  font-size:var(--fs-sm);
+  line-height:1.5;
+  color:var(--fg-1);
+}
+.ai-analysis-block.is-raw {
+  background:var(--bg-3);
+  border-left-color:var(--fg-4);
+  color:var(--fg-2);
+}
+.ai-analysis-html { word-wrap:break-word; overflow-wrap:break-word; }
+.ai-analysis-html p { margin:0 0 8px; }
+.ai-analysis-html p:last-child { margin-bottom:0; }
+.ai-analysis-html a { color:var(--accent-active); }
+.ai-analysis-block .ai-meta {
+  font-size:var(--fs-2xs);
+  color:var(--fg-3);
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px dashed var(--divider);
+}
+
+/* ── Последний дайджест (свёртываемый блок) ─────────────────────────── */
+.digest-block {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  margin-bottom: 14px;
+  overflow: hidden;
+  animation: fadeUp .4s var(--ease-out);
+}
+.digest-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 150ms var(--ease-out);
+}
+.digest-head:hover { background: var(--bg-3); }
+/* В свёрнутом виде шапка похожа на заголовок секции «Ближайшие заседания»
+   (.analytics-title): sentence-case 13px, дата вынесена в pill. */
+.digest-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+  letter-spacing: -0.005em;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.digest-date-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(33, 168, 92, 0.14);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Признак выбранного раздела «★ Мои» в шапках дайджеста и «Ближайших
+   заседаний» (решение юриста 17.08.2026). Класс ОБЩИЙ для обеих карточек —
+   прежнее имя .digest-mine-pill врало бы про место. Цвет — токенами
+   (--amber-700 объявлен и в светлой, и в тёмной теме): литеральный фолбэк
+   var(--x,#hex) — тот самый класс дефектов, что чинили 14.08.2026, в тёмной
+   теме он молча ставит тёмно-коричневый текст на тёмный фон. */
+.mine-scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--amber-700);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Звезда внутри пилюли — тот же SVG, что в чипе раздела (scopeMineIcon),
+   но помельче: 16px рядом с 13px текстом перевешивают подпись. */
+.mine-scope-pill .scope-nav-icon { width: 13px; height: 13px; }
+.mine-digest-note {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--amber-500, #f59e0b);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.mine-digest-note-fallback {
+  border-left-color: var(--accent);
+  background: rgba(33, 168, 92, 0.08);
+}
+.digest-meta  { color: var(--fg-3); font-size: var(--fs-sm); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.digest-toggle {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--fg-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  transition: background-color 150ms var(--ease-out), transform 250ms var(--ease-out);
+}
+.digest-head .digest-toggle { margin-left: auto; }
+.digest-toggle:hover { background: var(--bg-3); color: var(--fg-1); }
+.digest-toggle svg { width: 18px; height: 18px; }
+.digest-block.expanded .digest-toggle { transform: rotate(180deg); }
+.digest-body {
+  padding: 0 16px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 300ms var(--ease-out), opacity 200ms var(--ease-out), padding 250ms var(--ease-out);
+  color: var(--fg-1);
+  font-size: 15px;        /* было 14 — крупнее на 1px для удобного чтения */
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.digest-block.expanded .digest-body {
+  /* Потолка высоты НЕТ намеренно (21.08.2026): прежний max-height:10000px при
+     неотменённом overflow:hidden базового правила молча срезал хвост дайджеста.
+     На телефоне (16px × line-height 1.6) 10000px — это ~390 визуальных строк:
+     у Урала терялось больше половины, у ХМАО — при втором выпуске дня
+     («➕ Дополнение»), и футер «📌 В производстве…» пропадал без скролла и без
+     индикатора. Тот же приём уже стоял в beacon-режиме ниже — там дайджест
+     всегда открывался целиком, поэтому дефект не замечали (beacon показывается
+     на свежий дайджест, обрезка била при ПОВТОРНОМ ручном раскрытии).
+     Цена — раскрытие больше не анимируется по высоте (max-height:0 → none не
+     интерполируется); переход остаётся на opacity/padding, как в beacon. */
+  max-height: none;
+  overflow: visible;
+  opacity: 1;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--digest-paper);
+}
+/* На широких экранах (≥1024px) ограничиваем ширину текста дайджеста, иначе
+   он растягивается на всю карточку (>1300px) — глаз теряет место в строке.
+   ~720px = ~80 русских символов в строке, оптимум для чтения. */
+@media (min-width: 1024px) {
+  .digest-block.expanded .digest-body { padding-left: max(16px, calc(50% - 360px)); padding-right: max(16px, calc(50% - 360px)); }
+}
+.digest-body b      { color: var(--fg-1); font-weight: var(--fw-semibold); }
+.digest-body i      { color: var(--fg-2); font-style: italic; }
+.digest-body a      { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent); transition: border-color 150ms var(--ease-out); }
+.digest-body a:hover { border-bottom-color: var(--accent); }
+
+/* Кликабельный номер дела внутри дайджеста — открывает drawer карточки. */
+.digest-body a.digest-case-link {
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+  border-bottom: 1px solid var(--accent);
+  cursor: pointer;
+}
+.digest-body a.digest-case-link:hover { background: rgba(33, 168, 92, 0.08); border-radius: 3px; }
+
+/* ── Beacon-режим: полноэкранный modal со scrim'ом ──────────────────── */
+/* z-index подобран так, чтобы beacon перекрывал app-header (100), мобильный
+   toolbar (50) и нижние панели, но при сворачивании уступал место drawer'у
+   карточки (201). */
+.digest-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 17, 22, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--ease-out);
+  z-index: 150;
+}
+.digest-scrim.open { opacity: 1; pointer-events: auto; }
+
+.digest-close {
+  display: none;
+  background: transparent;
+  border: 0;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--fg-3);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.digest-close:hover { background: var(--bg-3); color: var(--fg-1); }
+.digest-close svg { width: 18px; height: 18px; }
+
+.digest-block.beacon {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 720px);
+  max-height: calc(100vh - 48px);
+  margin: 0;
+  z-index: 160;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  border-left-width: 1px;
+  box-shadow: var(--shadow-4);
+  animation: beaconIn 260ms var(--ease-out);
+}
+/* Liquid Glass шапки beacon: переменные --glass-* — те же, что у .app-footer
+   и .drawer-footer (см. iOS 26 / Material 3 surface). Полупрозрачный фон +
+   blur + тонкий highlight по верхней кромке. Через шапку видно прокручи-
+   вающийся под ней контент. Fallback ниже — для браузеров без backdrop-filter. */
+.digest-block.beacon .digest-head {
+  position: sticky;
+  top: 0;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--glass-border);
+  z-index: 1;
+  cursor: default;
+}
+.digest-block.beacon .digest-head:hover { background: var(--glass-bg); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .digest-block.beacon .digest-head {
+    background: var(--bg-1);
+    box-shadow: none;
+  }
+}
+.digest-block.beacon .digest-title {
+  font-size: var(--fs-lg);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg-1);
+}
+.digest-block.beacon .digest-date-pill { font-size: var(--fs-xs); padding: 2px 10px; }
+.digest-block.beacon .digest-close { display: inline-flex; }
+.digest-block.beacon .digest-toggle { display: none; }
+.digest-block.beacon .digest-body {
+  max-height: none;
+  opacity: 1;
+  padding: 16px 20px 20px;
+  border-top: 0;
+  overflow: visible;
+  background: var(--digest-paper);
+}
+/* В beacon на широких экранах текст тоже центрируется в колонке ~720px
+   (само окно beacon шире на padding'ах, центрируем «бумагой» внутри). */
+@media (min-width: 1024px) {
+  .digest-block.beacon .digest-body { padding-left: max(20px, calc(50% - 340px)); padding-right: max(20px, calc(50% - 340px)); }
+}
+.digest-block.beacon-leaving {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.96);
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+@keyframes beaconIn {
+  from { opacity: 0; transform: translateX(-50%) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+body.beacon-open { overflow: hidden; }
+
+@media (max-width: 768px) {
+  .digest-head { padding: 10px 12px; }
+  .digest-title { font-size: var(--fs-md); }
+  .digest-meta { display: none; }
+  /* На мобиле — чуть крупнее шрифт (16px вместо 15) для удобного чтения
+     с расстояния руки, и плотнее padding по краям. */
+  .digest-body { font-size: 16px; }
+  .digest-block.expanded .digest-body { padding: 12px 12px 12px; }
+  .digest-block.beacon {
+    top: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    border-radius: var(--radius-md);
+  }
+  .digest-block.beacon .digest-head { padding: 12px 14px; }
+  .digest-block.beacon .digest-title { font-size: var(--fs-md); text-transform: none; letter-spacing: 0; color: var(--fg-1); }
+  .digest-block.beacon .digest-meta { display: block; font-size: var(--fs-xs); }
+  .digest-block.beacon .digest-body { padding: 14px; }
+}
+
+/* ========== Toast-уведомления (замена блокирующих alert) ========== */
+.toast-container {
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:24px; z-index:300; /* выше drawer (201), чтобы тост был виден всегда */
+  display:flex; flex-direction:column; gap:8px; align-items:center;
+  pointer-events:none;
+  max-width:min(480px, calc(100% - 32px));
+}
+.toast {
+  background:var(--bg-1); color:var(--fg-1);
+  border:1px solid var(--border); border-left:3px solid var(--fg-4);
+  border-radius:var(--radius-md);
+  box-shadow:var(--shadow-3); padding:12px 16px;
+  font-size:var(--fs-sm); line-height:1.45;
+  opacity:0; transform:translateY(8px);
+  transition:opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.toast.show { opacity:1; transform:translateY(0); }
+.toast-success { border-left-color:var(--accent); }
+.toast-error { border-left-color:var(--red-500); }
+@media (max-width: 768px) {
+  /* Поднимаем над плавающим тулбаром + home-indicator iPhone */
+  .toast-container { bottom:calc(env(safe-area-inset-bottom, 0px) + 84px); }
+}
+
+/* ========== Спиннер первой загрузки mine-дайджеста ========== */
+/* Виден пока тянется last_digest_context.json (на медленной сети — секунды). */
+.digest-loading { display:flex; align-items:center; gap:8px; padding:16px; color:var(--fg-3); font-size:var(--fs-sm); }
+.digest-spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0; }
+
+/* ========== Доступность: видимый фокус для клавиатурной навигации ========== */
+.case-link:focus-visible,
+.digest-body a:focus-visible,
+.watch-btn:focus-visible,
+.chip-btn:focus-visible,
+.seg-btn:focus-visible,
+.mobile-card:focus-visible,
+.stat-card.clickable:focus-visible,
+.upcoming-item:focus-visible {
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+/* ========== prefers-reduced-motion ==========
+   Гасим декоративные анимации (входные fadeUp, pulse, beacon) и transitions
+   крупных панелей. Спиннеры (spin) оставляем — они информативны. */
+@media (prefers-reduced-motion: reduce) {
+  .setup-screen, .stats-primary, .stats-secondary, .analytics-row,
+  .toolbar, .table-counter, .new-cases-banner, .table-wrap,
+  .stats-mobile-summary, .mobile-cards, .digest-block,
+  .loading-text, .digest-block.beacon { animation:none; }
+  .drawer, .drawer-scrim, .filters-sheet, .sheet-scrim, .digest-scrim,
+  .card-chevron-btn, .upcoming-list, .upcoming-empty, .toast { transition:none; }
+}
+
+/* Часы суда сохраняются и явно подписаны при другом поясе. */
+.hearing-zone{display:block;font-family:var(--font-sans);font-size:10px;line-height:1.35;font-weight:500;white-space:normal;color:var(--slate-500);margin-top:3px;}
+
+.up-time .hearing-zone{max-width:76px;align-self:center;}

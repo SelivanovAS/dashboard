@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>СберСуд</title>
+<!-- Статическое описание для поисковиков и превью ссылок в мессенджерах. -->
+<meta name="description" content="Мониторинг судебных дел Сбербанка: заседания, судебные акты, исполнительные листы и уведомления об изменениях.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="СберСуд">
+<meta property="og:title" content="СберСуд — мониторинг судебных дел">
+<meta property="og:description" content="Мониторинг судебных дел Сбербанка: заседания, судебные акты, исполнительные листы и уведомления об изменениях.">
+<!-- theme-color стоит ДО скрипта темы: applyResolved меняет его content
+     при переключении light/dark, ниже по <head> тег был бы ещё не распарсен -->
+<meta name="theme-color" content="#21a038">
+<script>
+  // Тема: 3 состояния — 'auto' | 'light' | 'dark'.
+  //   auto: следуем prefers-color-scheme и обновляемся при смене системной.
+  //   light/dark: фиксируем выбор пользователя.
+  // Применяем до парсинга стилей, чтобы избежать FOUC.
+  (function(){
+    var ROOT = document.documentElement;
+    var MQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var listener = null;
+
+    function readPref(){
+      try { return localStorage.getItem('theme') || 'auto'; } catch(e){ return 'auto'; }
+    }
+    function applyResolved(pref){
+      var resolved = (pref === 'auto') ? (MQ.matches ? 'dark' : 'light') : pref;
+      ROOT.setAttribute('data-theme', resolved);
+      ROOT.setAttribute('data-theme-pref', pref);
+      // Цвет статус-бара/title-bar в PWA под текущую тему:
+      // тёмная — фон страницы (--bg-2 dark), светлая — Сбер-зелёный.
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0f1217' : '#21a038');
+      var btn = document.getElementById('theme-toggle');
+      if (btn) {
+        var labels = { auto: 'Тема: системная', light: 'Тема: светлая', dark: 'Тема: тёмная' };
+        btn.setAttribute('aria-label', labels[pref] || labels.auto);
+        btn.setAttribute('title', labels[pref] || labels.auto);
+      }
+    }
+    function bindAuto(pref){
+      if (listener) {
+        if (MQ.removeEventListener) MQ.removeEventListener('change', listener);
+        else MQ.removeListener(listener);
+        listener = null;
+      }
+      if (pref === 'auto') {
+        listener = function(){ applyResolved('auto'); };
+        if (MQ.addEventListener) MQ.addEventListener('change', listener);
+        else MQ.addListener(listener);
+      }
+    }
+    function setTheme(pref){
+      try { localStorage.setItem('theme', pref); } catch(e){}
+      applyResolved(pref);
+      bindAuto(pref);
+    }
+    window.toggleTheme = function(){
+      var order = ['auto', 'light', 'dark'];
+      var cur = readPref();
+      var next = order[(order.indexOf(cur) + 1) % order.length];
+      setTheme(next);
+    };
+    var initial = readPref();
+    applyResolved(initial);
+    bindAuto(initial);
+  })();
+</script>
+<!-- Шрифты — свои woff2 через @font-face в styles.css (с 15.08.2026).
+     Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
+     кэше он держал белый экран до сетевого таймаута — defer-скрипты не
+     исполняются, пока висит стилевой лист. -->
+<link rel="stylesheet" href="styles.css?v=205">
+
+<!-- PWA: установка на главный экран и офлайн-режим
+     (theme-color вынесен выше, до скрипта темы) -->
+<link rel="manifest" href="manifest.json">
+<!-- iOS Safari требует отдельных apple-* мета-тегов помимо стандартного manifest -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="СберСуд">
+<link rel="apple-touch-icon" href="icon-180.png">
+</head>
+<body>
+
+<div id="setup-screen" class="setup-screen" style="display:none;">
+  <div class="setup-card">
+    <div class="setup-header">
+      <h1>Настройка дашборда</h1>
+      <p>Подключите Google-таблицу с данными дел</p>
+    </div>
+    <div class="setup-body">
+      <ol>
+        <li><div>Создайте Google-таблицу со столбцами:<br>
+          <code>Номер дела</code> <code>Дата поступления</code> <code>Истец</code> <code>Ответчик</code>
+          <code>Категория</code> <code>Суд 1 инстанции</code> <code>Роль банка</code> <code>Статус</code>
+          <code>Последнее событие</code> <code>Дата события</code> <code>Акт опубликован</code>
+          <code>Результат</code> <code>Ссылка</code> <code>Заметки</code>
+          <code>Апеллянт</code> <code>Дата публикации акта</code></div>
+        </li>
+        <li><div>Откройте <strong>Файл → Поделиться → Опубликовать в интернете</strong></div></li>
+        <li><div>Выберите нужный лист, формат <strong>CSV</strong>, нажмите «Опубликовать»</div></li>
+        <li><div>Скопируйте полученную ссылку и вставьте ниже</div></li>
+      </ol>
+      <div class="setup-input-group">
+        <label>Ссылка на опубликованную CSV-таблицу</label>
+        <input type="text" id="sheet-url-input" class="setup-input" placeholder="https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv">
+      </div>
+      <button class="setup-btn" onclick="saveSheetUrl()">Подключить таблицу</button>
+      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
+        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">загрузите демо-данные</a> чтобы посмотреть дашборд
+      </p>
+    </div>
+    <div class="setup-footer">
+      <p>Эта страница загружает данные напрямую из вашей Google-таблицы. Данные не передаются третьим лицам.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Экран «нет данных»: показывается, когда датасет не удалось взять ни из
+     сети, ни из офлайн-кэша. До 15.08.2026 на его месте молча подставлялись
+     демо-данные (DEMO_CSV): из восьми демо-дел четыре решены больше
+     ARCHIVE_DAYS назад и прятались фильтром «all» — юрист офлайн видел ровно
+     4 чужие карточки и считал, что потерял свои дела. Честный экран лучше
+     правдоподобной подделки; демо остаётся по явной ссылке. -->
+<div id="nodata-screen" class="setup-screen" style="display:none;">
+  <div class="setup-card">
+    <div class="setup-header">
+      <h1>Нет сохранённых данных</h1>
+      <p>Дела ещё не загружались на этом устройстве</p>
+    </div>
+    <div class="setup-body">
+      <p id="nodata-reason" class="nodata-reason"></p>
+      <p>Подключитесь к интернету и повторите — после первой загрузки
+         дашборд будет открываться и без сети.</p>
+      <button class="setup-btn" onclick="retryLoad()">Повторить</button>
+      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
+        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">посмотреть демо-данные</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ⚠️ Без style="display:none": экран загрузки виден С ПЕРВОГО кадра, до
+     исполнения app.js. Раньше и #loading-screen, и #app были скрыты в
+     разметке, спиннер зажигал только showLoading() из app.js — всё время до
+     этого (офлайн: сетевые таймауты SW + ожидание шрифтов) юрист смотрел
+     в буквально белый лист. -->
+<div id="loading-screen" class="loading-screen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Загрузка данных…</div>
+</div>
+<!-- Сторож загрузки: app.js мог не доехать вовсе (офлайн + пустой кэш кода,
+     оборванная сеть, синтаксическая ошибка). Без него видимый спиннер выше
+     дал бы тот же белый экран, только с вечным кружком. Скрипт инлайновый —
+     обязан жить без app.js; снимают его show*-функции (app.js). -->
+<script>
+  window.__bootWatchdog = setTimeout(function () {
+    var t = document.querySelector('#loading-screen .loading-text');
+    if (!t) return;
+    t.innerHTML = 'Приложение не отвечает — похоже, нет связи.<br><br>' +
+      '<button class="setup-btn" onclick="location.reload()">Перезагрузить</button>';
+  }, 12000);
+</script>
+
+<div id="app" style="display:none;">
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <div class="header-logo" aria-hidden="true">
+          <img src="icon-192.png" alt="" />
+        </div>
+        <div>
+          <div class="header-title">СберСуд</div>
+          <!-- Регион территории: заполняет app.js (updateRegionBadge) из блока
+               region в cases.json / REGION_FRONT.REGION_LABEL -->
+          <div class="header-sub header-region" id="header-region"></div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="header-meta" id="meta-info"></div>
+        <!-- ⚙ Настройки (03.09.2026): push-уведомления, синхронизация устройств
+             (прежняя кнопка 🔗), календарь заседаний, «Обновить данные» (прежняя
+             кнопка шапки; данные перечитываются сами при возврате во вкладку),
+             «О приложении». Точка .pending — есть неотправленные правки ★
+             (updateSyncButton). -->
+        <button class="theme-toggle" id="btn-settings" onclick="openSettingsSheet()" aria-label="Настройки" title="Настройки">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Тема">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div id="new-cases-banner" class="new-cases-banner" style="display:none;" onclick="filterNewCases(event)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span id="new-cases-text"></span>
+      <span class="banner-hint">Нажмите, чтобы отфильтровать</span>
+      <button class="dismiss btn-x" onclick="dismissNewBanner(event)" title="Скрыть" aria-label="Скрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div id="error-banner" class="error-banner" style="display:none;"></div>
+
+    <!-- Last digest (collapsible) -->
+    <div id="digest-scrim" class="digest-scrim" onclick="closeDigestBeacon()"></div>
+    <section id="digest-block" class="digest-block" hidden>
+      <header class="digest-head" role="button" tabindex="0" onclick="toggleDigest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDigest();}">
+        <span class="digest-title" id="digest-title">📰 Дайджест</span>
+        <span class="digest-meta" id="digest-meta"></span>
+        <button class="digest-close btn-x" id="digest-close" aria-label="Закрыть дайджест" type="button" onclick="event.stopPropagation();closeDigestBeacon();">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+        <button class="digest-toggle" id="digest-toggle" aria-label="Свернуть/развернуть" type="button" onclick="event.stopPropagation();toggleDigest();">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </header>
+      <div class="digest-body" id="digest-body"></div>
+    </section>
+
+    <!-- Mobile stats summary -->
+    <div class="stats-mobile-summary" id="stats-mobile-summary" onclick="toggleMobileStats()"></div>
+    <!-- Primary stats -->
+    <div class="stats-primary" id="stats-primary"></div>
+    <!-- Secondary stats -->
+    <div class="stats-secondary" id="stats-secondary"></div>
+
+    <!-- Analytics row -->
+    <div class="analytics-row" id="analytics-row"></div>
+
+    <!-- Верхний уровень навигации: три равноправных раздела. Полоса стоит
+         перед поиском и фильтрами, потому что сначала пользователь выбирает
+         область данных, а уже потом сужает её. Счётчик остаётся справа на
+         широком экране; на узком при нехватке места его скрывает fitCounter. -->
+    <div class="list-bar" id="list-bar">
+      <div class="dataset-switch" id="dataset-switch"></div>
+      <div class="table-counter" id="table-counter"></div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <!-- Ряд 1: ★ Мои (моб, только при непустых подписках) + поиск +
+           фильтры (моб) + общие статусы (десктоп). Нижняя звезда дублирует
+           верхний раздел и остаётся быстрым входом во время прокрутки. -->
+      <div class="toolbar-row toolbar-row-search">
+        <button class="toolbar-mine-btn mine-toggle-btn" id="toolbar-mine-btn" type="button"
+                hidden
+                aria-label="Мои дела"
+                aria-pressed="false"
+                title="Показать мои дела"
+                onclick="toggleMobileMine()">★</button>
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="search-input" id="search-input" placeholder="Поиск по всем делам..." aria-label="Поиск по номеру, сторонам и категории во всех разделах" oninput="onSearchInput()">
+          <button class="search-clear btn-x" id="search-clear" onclick="clearSearch()" title="Очистить" aria-label="Очистить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        </div>
+        <button class="filters-btn" id="filters-btn" onclick="openFiltersSheet()" aria-label="Фильтры">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+          <span>Фильтры</span>
+          <span class="filters-btn-count" id="filters-btn-count" style="display:none;"></span>
+        </button>
+        <!-- Быстрые статус-чипы (десктоп) — рендерятся JS -->
+        <div class="chip-bar chip-bar-quick" id="chip-bar-quick"></div>
+      </div>
+      <!-- Ряд 2: контекстные фильтры выбранного раздела — рендерятся JS -->
+      <div class="toolbar-row toolbar-row-segments">
+        <div class="chip-bar chip-bar-segments" id="chip-bar-segments"></div>
+      </div>
+      <div class="toolbar-hidden-selects">
+        <!-- Hidden selects — используются JS как source of truth -->
+        <select class="filter-select" id="filter-status" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все статусы</option>
+          <option value="new">Только новые</option>
+          <option value="today">Заседание сегодня</option>
+          <option value="week">Заседание на неделе</option>
+          <option value="active">Все в производстве</option>
+          <option value="scheduled">Назначено</option>
+          <option value="postponed">Отложено</option>
+          <option value="suspended">Без движения</option>
+          <option value="paused">Приостановлено</option>
+          <option value="awaiting">Ожидает назначения</option>
+          <option value="decided">Рассмотрено</option>
+          <option value="lost">Проиграно (отм./изм.)</option>
+          <option value="archived">Архив (60+ дней)</option>
+        </select>
+        <select class="filter-select" id="filter-role" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все роли</option>
+          <option value="plaintiff">Истец</option>
+          <option value="defendant">Ответчик</option>
+          <option value="third_party">Сбер 3-е лицо</option>
+        </select>
+        <select class="filter-select" id="filter-stage" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все инстанции</option>
+          <option value="first_instance">1 инстанция</option>
+          <option value="appeal">Апелляция</option>
+          <option value="cassation">Кассация</option>
+        </select>
+        <!-- Контекст трека «Иски банка» хранится отдельно от общего статуса:
+             скрытое значение никогда не влияет на другие разделы. -->
+        <select class="filter-select" id="filter-bank-control" style="display:none;" onchange="applyFilters()">
+          <option value="all">Любой контроль</option>
+          <option value="writs">Есть исполнительный лист</option>
+          <option value="awaiting_writ">Ждут исполнительный лист</option>
+          <option value="interim">Обеспечение</option>
+        </select>
+        <!-- У «Моих» свои источник, роль и инстанция. Они не наследуют
+             контекст основной картотеки и сохраняются при переключении. -->
+        <select class="filter-select" id="filter-mine-source" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все источники</option>
+          <option value="main">Основные</option>
+          <option value="bank">Иски банка</option>
+        </select>
+        <select class="filter-select" id="filter-mine-role" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все роли</option>
+          <option value="plaintiff">Истец</option>
+          <option value="defendant">Ответчик</option>
+          <option value="third_party">Сбер 3-е лицо</option>
+        </select>
+        <select class="filter-select" id="filter-mine-stage" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все инстанции</option>
+          <option value="first_instance">1 инстанция</option>
+          <option value="appeal">Апелляция</option>
+          <option value="cassation">Кассация</option>
+        </select>
+        <select class="filter-select" id="filter-category" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все категории</option>
+        </select>
+        <!-- Суд 1-й ИНСТАНЦИИ дела (не суд текущей стадии): коллеги думают
+             «дела моего суда» независимо от того, где дело сейчас. Опции
+             наполняет populateFilterOptions из активного датасета; видимые
+             копии (ряд сегментов + мобильная шторка) рисует renderChipBar. -->
+        <select class="filter-select" id="filter-court" style="display:none;" onchange="applyFilters()">
+          <option value="all">Все суды</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Глобальный поиск: здесь показывается только индикатор фоновой загрузки
+         bank-списка. Найденные дела подмешиваются группами — см. applyFilters. -->
+    <div class="search-cross-hint info-line" id="search-cross-hint" hidden></div>
+
+    <!-- Desktop table -->
+    <div class="table-wrap"><div class="table-scroll"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div></div>
+
+    <!-- Mobile cards -->
+    <div class="mobile-cards" id="mobile-cards"></div>
+  </main>
+
+  <!-- Drawer (боковая панель с деталями дела) -->
+  <div class="drawer-scrim" id="drawer-scrim" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-hidden="true"></aside>
+
+  <!-- Bottom-sheet «Фильтры» (мобилка) -->
+  <div class="sheet-scrim" id="filters-scrim" onclick="closeFiltersSheet()"></div>
+  <aside class="filters-sheet" id="filters-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Фильтры</span>
+      <button class="sheet-close btn-x" onclick="closeFiltersSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body" id="filters-sheet-body"></div>
+    <div class="sheet-footer">
+      <button class="sheet-btn-reset" onclick="resetFilters()">Сбросить</button>
+      <button class="sheet-btn-done" onclick="closeFiltersSheet()">Готово</button>
+    </div>
+  </aside>
+
+  <!-- «Синхронизация подписок» (связывание устройств в профиль):
+       на мобиле — bottom-sheet, на десктопе CSS превращает её в мини-окно -->
+  <div class="sheet-scrim" id="sync-scrim" onclick="closeSyncSheet()"></div>
+  <aside class="filters-sheet" id="sync-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Синхронизация подписок</span>
+      <button class="sheet-close btn-x" onclick="closeSyncSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body" id="sync-sheet-body"></div>
+  </aside>
+
+  <!-- «Настройки» (⚙ в шапке, 03.09.2026): уведомления, синхронизация
+       устройств, календарь заседаний, о приложении. Тело рендерит
+       renderSettingsSheet (app.js); та же шторка/мини-окно, что у синка. -->
+  <div class="sheet-scrim" id="settings-scrim" onclick="closeSettingsSheet()"></div>
+  <aside class="filters-sheet" id="settings-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>Настройки</span>
+      <button class="sheet-close btn-x" onclick="closeSettingsSheet()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body" id="settings-sheet-body"></div>
+  </aside>
+
+  <!-- «Что нового» — одноразовый анонс функций при первом открытии после
+       обновления (маркер в localStorage через lsKey). На мобиле bottom-sheet,
+       на десктопе — мини-окно (то же CSS-переопределение, что у sync-sheet). -->
+  <div class="sheet-scrim" id="whatsnew-scrim" onclick="closeWhatsNew()"></div>
+  <aside class="filters-sheet" id="whatsnew-sheet" role="dialog" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span>✨ Что нового</span>
+      <button class="sheet-close btn-x" onclick="closeWhatsNew()" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="wn-block">
+        <div class="wn-date">Обновление от 03.09.2026</div>
+        <div class="wn-item">
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+          <div class="wn-item-body">
+            <div class="wn-item-title">Настройки за шестерёнкой</div>
+            <div class="wn-item-text">В шапке появилась <span class="wn-nowrap">кнопка&nbsp;<span class="wn-inline-btn" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></span> — туда переехали уведомления, синхронизация устройств (прежняя кнопка 🔗), календарь заседаний и «Обновить» (данные теперь обновляются сами при возврате на страницу).</div>
+            <button class="wn-btn" onclick="whatsNewOpenSettings()">Открыть настройки</button>
+          </div>
+        </div>
+        <div class="wn-item">
+          <div class="wn-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+          <div class="wn-item-body">
+            <div class="wn-item-title">Календарь на рабочем компьютере</div>
+            <div class="wn-item-text">В корпоративном OWA подписка по ссылке не работает — почтовый сервер банка не выходит в интернет. Теперь в настройках есть «Скачать файл (.ics)»: загрузите его в OWA через «Добавить календарь → Из файла». На телефоне подписка обновляется сама, как раньше.</div>
+          </div>
+        </div>
+        <button class="sheet-btn-done wn-done" onclick="closeWhatsNew()">Понятно</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="region_front.js?v=6"></script>
+<!-- QR-генератор для кода связывания устройств: vendored-копия
+     qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
+     проекта нет. Файл не редактируется, обновление — заменой целиком. -->
+<script src="qrcode-gen.js?v=1" defer></script>
+<script src="app.js?v=205" defer></script>
+</body>
+</html>
