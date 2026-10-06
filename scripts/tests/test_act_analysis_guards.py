@@ -39,7 +39,7 @@ class TestNoKeyGate:
         """Без гарда Mac-прогон пишет в карточку сырой текст акта, и он
         остаётся там навсегда — до следующего акта по тому же делу."""
         src = _runs_src()
-        i_gate = src.index("llm_key_missing := llm.missing_llm_key_name()")
+        i_gate = src.index("if not llm.summaries_configured():")
         i_main = src.index("act_analyses_updated = attach_act_analyses(")
         i_bank = src.index("bank_analyses_updated = _attach_bank_act_analyses(")
         assert i_gate < i_main < i_bank

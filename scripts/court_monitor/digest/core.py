@@ -390,23 +390,11 @@ def attach_act_analyses(
       них тот же тип `new_act`, что и у апелляции, и стадию нужно
       назначить по источнику).
 
-    Для каждого триггера вырезает из `digest_html` относящийся к делу
-    абзац с маркером `<b>Почему:</b>` (мотивировочный разбор LLM) и
-    кладёт в `case[<stage>]["act_analysis"] = {html, source, act_date,
-    generated_at, model}`. Если разборного абзаца в дайджесте нет
-    (шаблонный fallback или нет мотивировки) — fallback на HTML-обёрнутую
-    `change["details"]["act_text"]` с пометкой `source: "raw_act"`. Если
-    и `act_text` пуст — поле просто не пишем.
-
-    Поле перезаписывается ТОЛЬКО для дел с новым событием в этом прогоне;
-    у остальных дел `act_analysis` сохраняется с прошлых прогонов и
-    переживает любое количество последующих дайджестов. Идемпотентно:
-    при повторном прогоне на тех же данных `generated_at` не обновляется.
-
-    `require_explained=True` — абзац из дайджеста берётся только с маркером
-    «Почему:», иначе сразу raw_act-фолбэк (банк-вызов в runs.py: дело там
-    печатается одной строкой с номером, и обычный фолбэк выдал бы её за
-    «AI анализ»).
+    Для каждого триггера сохраняет относящийся к делу абзац «Почему».
+    Без готового пересказа поле не пишется: сырой акт не является AI-анализом.
+    Событийный путь сохраняет прежние разборы; отложенные результаты независимо
+    дописывает summary_queue с проверкой полного источника и фактическим автором.
+    require_explained сохранён для совместимости; маркер обязателен всегда.
 
     Возвращает кол-во дел, у которых поле реально изменилось.
     """
@@ -418,7 +406,7 @@ def attach_act_analyses(
     # апелляции = апел. номер, для 1-й инст. = номер 1-й инст., для
     # кассации = обычно номер 1-й инст. (см. cass_changes append'ы) —
     # все три должны находить нужное дело.
-    by_id: dict[str, dict] = {}
+    by_id: dict[str, list[dict]] = {}
     for c in cases:
         for raw in (
             c.get("id"),
@@ -428,7 +416,9 @@ def attach_act_analyses(
         ):
             bare = _bare_case_number(raw or "")
             if bare:
-                by_id.setdefault(bare, c)
+                bucket = by_id.setdefault(bare, [])
+                if not any(item is c for item in bucket):
+                    bucket.append(c)
 
     # Собираем (stage, change) — один цикл вместо ветвлений в середине.
     # У апеллированного `new_act` и кассационного `new_act` тип совпадает,
@@ -454,7 +444,12 @@ def attach_act_analyses(
         bare = _bare_case_number(case_num)
         if not bare:
             continue
-        case = by_id.get(bare)
+        details = ch.get("details") or {}
+        candidates = by_id.get(bare, [])
+        domain = details.get('court_domain') or ch.get('court_domain')
+        if domain:
+            candidates = [c for c in candidates if (c.get(stage) or {}).get('court_domain') == domain]
+        case = candidates[0] if len(candidates) == 1 else None
         if not case:
             # DEBUG, а не INFO: штатная ситуация каждого прогона — общий
             # вызов идёт по основной картотеке, а очередь несёт и банк-дела
@@ -471,7 +466,7 @@ def attach_act_analyses(
         act_date = details.get("act_date") or ""
 
         html_fragment = _extract_case_paragraphs_from_digest(
-            digest_html, bare, require_explained=require_explained
+            digest_html, bare, require_explained=True
         )
         if not html_fragment and stage == "cassation":
             # Шаблонный рендер кассации оборачивает КАССАЦИОННЫЙ номер
@@ -479,22 +474,12 @@ def attach_act_analyses(
             alt = _bare_case_number(ch.get("cassation_internal_number") or "")
             if alt:
                 html_fragment = _extract_case_paragraphs_from_digest(
-                    digest_html, alt, require_explained=require_explained
+                    digest_html, alt, require_explained=True
                 )
-        if html_fragment:
-            source = "digest"
-        else:
-            raw_act = (details.get("act_text") or "").strip()
-            if not raw_act:
-                continue
-            # Сырая мотивировка: оборачиваем в <p>, экранируем угловые
-            # скобки, переводы строк превращаем в <br> / новые абзацы.
-            escaped = html_escape(raw_act).replace("\r\n", "\n")
-            paragraphs = [p.strip() for p in escaped.split("\n\n") if p.strip()]
-            html_fragment = "".join(
-                "<p>" + p.replace("\n", "<br>") + "</p>" for p in paragraphs
-            )
-            source = "raw_act"
+        if not html_fragment:
+            # Сбой/отказ остаётся в очереди. Исходник не является AI-анализом.
+            continue
+        source = "digest"
 
         stage_obj = case.setdefault(stage, {})
         existing = stage_obj.get("act_analysis") or {}
@@ -640,6 +625,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             + (", + полировщик HTML" if config.DIGEST_POLISH else "")
             + ")"
         )
+        from court_monitor.digest.summary_queue import summarize_tracked
         draft = generate_template_digest(
             new_cases, changes, cases=cases,
             fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
@@ -650,7 +636,7 @@ def generate_digest(new_cases: list[dict], changes: list[dict], *,
             total_active_bank=total_active_bank,
             cass_changes=cass_changes,
             cass_discovered=cass_discovered,
-            act_summarizer=llm.summarize_act_motivation,
+            act_summarizer=summarize_tracked,
         )
         if config.DIGEST_POLISH:
             expected_nums = llm._collect_case_numbers(

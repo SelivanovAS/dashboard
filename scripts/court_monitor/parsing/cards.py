@@ -63,14 +63,10 @@ def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
             return "", act_url
 
     # Способ 3: Блок <div> с текстом акта (class содержит "act")
-    act_div_match = re.search(
-        r'<div[^>]*class="[^"]*act[^"]*"[^>]*>(.*?)</div>',
-        html, re.DOTALL | re.IGNORECASE
-    )
-    if act_div_match:
-        act_text = _strip_html(act_div_match.group(1))
-        if len(act_text) > 50:
-            return act_text, ""
+    from court_monitor.parsing.act_markup import _extract
+    act_text = _extract(html, 'act')
+    if len(act_text) > 50:
+        return act_text, ""
 
     return "", ""
 
@@ -1028,10 +1024,8 @@ def fetch_act_text(act_url: str, *, context: str | None = None) -> str:
     html = fetch_card_checked(act_url, context=context)
     if not html:
         return ""
-    # Убираем script/style + теги, схлопываем пробелы
-    text = _HTML_SCRIPT_RE.sub('', html)
-    text = _HTML_STYLE_RE.sub('', text)
-    text = _strip_html(text)
+    from court_monitor.parsing.act_markup import act_page_text
+    text = act_page_text(html)
     # fetch_card_checked знает лишь, что HTTP-200 похож на
     # карточку. Здесь уточняем тот же request_id как страницу
     # акта с текстом либо пустую — без фиктивного второго HTTP.

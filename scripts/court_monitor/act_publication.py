@@ -6,15 +6,18 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 
 from court_monitor.textutil import parse_date
 
 FIELDS = ('act_absent_checked_at', 'act_detected_at', 'act_decision_date',
-          'act_notification_kind')
+          'act_notification_kind', 'act_source_url', 'act_received_at', 'act_summary_needs_source')
 _MONTHS = {name: i + 1 for i, name in enumerate((
     'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'))}
+_ENDING_RE = re.compile(r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?|'
+                        r'р\s*е\s*ш\s*и\s*л\s*[аи]?|'
+                        r'п\s*о\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?)\s*:', re.I)
 
 
 def document_date(text: str, confirmed_date: str = '') -> str:
@@ -41,7 +44,7 @@ def document_date(text: str, confirmed_date: str = '') -> str:
 
 
 def observe(block: dict, text: str, today: date, *, present: bool,
-            confirmed_date: str = '') -> bool:
+            confirmed_date: str = '', source_url: str = '') -> bool:
     """Сохранить успешное наблюдение; вернуть право объявить новый текст.
 
 present=True при ссылке/признаке документа без доступного текста: это не
@@ -57,8 +60,13 @@ present=True при ссылке/признаке документа без до
         block.setdefault('act_detected_at', today.isoformat())
         block['act_notification_kind'] = (
             'new_publication' if block.get('act_absent_checked_at') else 'backfill')
-    if first or (not summary_source(block.get('act_text') or '') and summary_source(text)):
+    if first or ((block.get('act_summary_needs_source') or not summary_source(block.get('act_text') or '')) and summary_source(text)):
         block['act_text'] = text
+        block['act_received_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+        if source_url:
+            block['act_source_url'] = source_url
+        if block.get('act_summary_needs_source') and summary_source(text):
+            block['act_summary_needs_source'] = False
     block['act_published'] = True
     decision = document_date(text, confirmed_date)
     if decision:
@@ -67,34 +75,41 @@ present=True при ссылке/признаке документа без до
 
 
 def dates(block: dict) -> dict:
-    return {k: block.get(k) or '' for k in ('act_decision_date', 'act_detected_at')}
+    return {k: block.get(k) or '' for k in ('act_decision_date', 'act_detected_at', 'act_source_url', 'act_received_at')}
 
 
 def summary_source(text: str, stage: str = '') -> str:
     """Пересказ допустим для документа с заключительной частью.
 
 Обрезанное после «установил» изложение иска не является мотивировкой.
-Для длинного документа оставляем шапку и заключительные 26 тысяч знаков.
+Объём проверяется отдельно для каждой модели; середину не удаляем.
 """
     text = (text or '').strip()
-    ending = re.search(r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л[аи]?|'
-                       r'р\s*е\s*ш\s*и\s*л[аи]?|постановил[аи]?)\s*:', text, re.I)
+    endings = list(_ENDING_RE.finditer(text))
+    ending = endings[-1] if endings else None
     if not ending or ending.start() < 100 or len(text[ending.end():].strip()) < 30:
         return ''
-    if len(text) <= 32000:
-        return text
-    return text[:5000] + '\n[Промежуточная часть документа опущена]\n' + text[-26000:]
+    return text
 
 
 def summary_agrees(summary: str, text: str, verdict: str) -> bool:
     """Отсечь явное противоречие резолюции; неоднозначность не исправлять догадкой."""
     lower = summary.lower()
-    parts = re.split(r'(?:определил[аи]?|решил[аи]?|постановил[аи]?)\s*:', text, flags=re.I)
+    parts = _ENDING_RE.split(text)
     tail = parts[-1].lower()
     denied = bool(re.search(r'в удовлетворении .{0,200}отказа(?:ть|но)', tail))
     granted = bool(re.search(r'(?:иск(?:овые требования)?|требования)[^.]{0,80}удовлетворить', tail))
     if denied and not granted and re.search(r'(?:иск|требования)[^.]{0,80}удовлетворен|договор признан недействительным', lower):
         return False
     if granted and not denied and re.search(r'в удовлетворении .{0,150}отказано', lower):
+        return False
+    # Кассация, оставившая прежний акт без изменения, не сама оставила
+    # заявление без рассмотрения. Не переносим действие нижестоящего суда.
+    if ('оставить без изменения' in tail and
+            not re.search(r'отменить|изменить|без рассмотрения', tail) and
+            re.search(r'кассационн(?:ый суд|ая инстанция|ая коллегия)\s+(?:'
+                      r'оставил[а]?\s+(?:заявлени[ея]|иск)\b[^.!?]{0,100}без рассмотрения|'
+                      r'отказал[а]? в восстановлении|отклонил[а]? требовани[ея]|'
+                      r'прекратил[а]? производство)', lower)):
         return False
     return bool(summary)

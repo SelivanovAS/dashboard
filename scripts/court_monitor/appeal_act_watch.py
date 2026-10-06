@@ -39,7 +39,7 @@ def decision_date(block):
 
 
 def has_text(block):
-    return bool((block.get('act_text') or '').strip())
+    return bool(((block.get('act_text') or '').strip() and not block.get('act_summary_needs_source')))
 
 
 def pending(block):
@@ -111,6 +111,14 @@ def sync(data, cases, today):
             continue
         if task['status'] == 'needs_review':
             continue
+        if (block.get('act_summary_needs_source') and task['status'] == 'complete'
+                and old.get('act_summary_needs_source') is False
+                and act_publication.summary_source(old.get('act_text') or '')):
+            for field in ('act_text', 'act_published', 'act_date', 'last_checked_at') + act_publication.FIELDS:
+                if field in old:
+                    block[field] = deepcopy(old[field])
+        if block.get('act_summary_needs_source'):
+            task.update(status='waiting', block=deepcopy(block), previously_announced=True)
         if has_text(block):
             newly_complete = task['status'] != 'complete'
             task['status'] = 'complete'
@@ -247,8 +255,8 @@ def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
             report['read'] += 1
             telemetry.mark_case_read('appeal', block['court_domain'] + '|' + block['case_number'])
             block['last_checked_at'] = today.isoformat()
-            notify = act_publication.observe(block, text, today, present=present, confirmed_date=confirmed_date)
-            if text:
+            notify = act_publication.observe(block, text, today, present=present, confirmed_date=confirmed_date, source_url=card_url(block))
+            if text and not block.get('act_summary_needs_source'):
                 task.update(status='complete', completed_at=today.isoformat())
                 if notify and not task.get('previously_announced'):
                     change = event(task)
@@ -261,7 +269,7 @@ def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
                     report['backfilled'] += 1
                     item['reason'] = 'backfilled'
             else:
-                item['reason'] = 'text_not_published'
+                item['reason'] = 'source_incomplete' if text else 'text_not_published'
             due = next_check(block, today)
             task['next_check_at'] = due.isoformat() if due else ''
             item['next_check_at'] = task['next_check_at']

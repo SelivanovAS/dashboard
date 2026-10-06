@@ -51,6 +51,8 @@ def transport(monkeypatch):
         "OPENROUTER_API_KEY": "test-key",
         "ANTHROPIC_API_KEY": "test-key",
         "OPENROUTER_MODEL": PRIMARY,
+        "OPENROUTER_SUMMARY_MODEL": PRIMARY,
+        "SUMMARY_CONTEXT_TOKENS": {"openrouter": 262144},
         "OPENROUTER_FALLBACK_MODEL": FALLBACK,
         "OPENROUTER_SUMMARY_RETRIES": 3,
         "OPENROUTER_SUMMARY_FALLBACK_RETRIES": 2,
@@ -99,8 +101,8 @@ def test_invalid_response_is_a_failed_attempt(transport, caplog, payload):
     assert "некорректный" in caplog.text
 
 
-@pytest.mark.parametrize("empty_attempts", [1, 3])
-def test_null_content_reaches_retry_or_model_fallback(transport, empty_attempts):
+@pytest.mark.parametrize("empty_attempts", [1, 2])
+def test_null_content_reaches_bounded_retry(transport, empty_attempts):
     transport.post.side_effect = [empty_response() for _ in range(empty_attempts)] + [
         response({"choices": [{"message": {"content": SUMMARY}}]}),
     ]
@@ -110,13 +112,13 @@ def test_null_content_reaches_retry_or_model_fallback(transport, empty_attempts)
     ) == SUMMARY
 
     models = [call.kwargs["json"]["model"] for call in transport.post.call_args_list]
-    expected = [PRIMARY] * 2 if empty_attempts == 1 else [PRIMARY] * 3 + [FALLBACK]
+    expected = [PRIMARY] * 2 if empty_attempts == 1 else [PRIMARY] * 3
     assert models == expected
     assert [call.args[0] for call in transport.sleep.call_args_list] == (
         [5] if empty_attempts == 1 else [5, 10])
     assert config.METRICS["llm_summary_calls"] == empty_attempts + 1
     assert config.METRICS["llm_summary_failed"] == 0
-    assert config.METRICS["llm_summary_fallback_saved"] == (empty_attempts == 3)
+    assert config.METRICS["llm_summary_fallback_saved"] == 0
     transport.claude.assert_not_called()
     transport.save.assert_not_called()
 
@@ -131,10 +133,10 @@ def test_null_content_reaches_claude_and_reports_final_result(transport, claude_
     )
 
     assert [call.kwargs["json"]["model"] for call in transport.post.call_args_list] == (
-        [PRIMARY] * 3 + [FALLBACK] * 2)
-    assert [call.args[0] for call in transport.sleep.call_args_list] == [5, 10, 5]
+        [PRIMARY] * 3)
+    assert [call.args[0] for call in transport.sleep.call_args_list] == [5, 10]
     transport.claude.assert_called_once()
-    assert config.METRICS["llm_summary_calls"] == 6
+    assert config.METRICS["llm_summary_calls"] == 4
     runs._alert_llm_summary_failures()
     if claude_summary:
         assert (text, kind) == (SUMMARY, "summary")
@@ -153,7 +155,7 @@ def test_null_content_reaches_claude_and_reports_final_result(transport, claude_
         transport.telegram.assert_called_once()
         alert = transport.telegram.call_args.args[0]
         assert "неудачных пересказов: 1" in alert
-        assert "вызовов моделей: 6" in alert
+        assert "вызовов моделей: 4" in alert
 
 
 def test_unexpected_summary_exception_is_counted_and_alerted(transport, caplog):

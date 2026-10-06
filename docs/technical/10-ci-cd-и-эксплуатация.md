@@ -43,8 +43,10 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | Переменная | Назначение |
 |------------|-----------|
 | `ANTHROPIC_API_KEY` | Claude (генерация/пересказ). |
-| `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | GigaChat (альтернативный LLM, `LLM_PROVIDER=gigachat`). |
-| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter (`LLM_PROVIDER=openrouter`); пустая модель = «модель дня» с shir-man.com, fallback `openrouter/free`. |
+| `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | Первый резерв пересказов, дефолт `GigaChat-3-Pro`; доступен и как основной провайдер. |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter; пустая модель = Apodex 1.1 Mini Free. Рейтинг используется только при явном выборе `топ-N` в тесте/полном LLM-режиме. |
+| `OPENROUTER_SUMMARY_MODEL` | В обычных workflows закреплена `apodex/apodex-1.1-mini:free`; случайного `openrouter/free` в цепочке пересказов нет. |
+| `CLAUDE_MODEL` / `CLAUDE_EFFORT` | Второй резерв, дефолт `claude-haiku-4-5-20251001`; Variables могут переопределить модель и effort. |
 | `TELEGRAM_BOT_TOKEN` | Токен бота. |
 | `TELEGRAM_CHAT_ID` | Корпоративная группа (только при `to_group=true`). |
 | `TELEGRAM_CHAT_ID_TEST` | Личный чат — дефолтный получатель. |
@@ -52,7 +54,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `PUSH_WORKER_URL`, `PUSH_SECRET`, `VAPID_PRIVATE_KEY` | Web Push для PWA. |
 | `OWNER_SECRET` | Секрет Worker'а для `/mark-owner` и админки. |
 | `GITHUB_PAT` | В secrets Worker'а — для `workflow_dispatch`. |
-| `LLM_PROVIDER` | `claude` / `gigachat` / `openrouter`. Python по умолчанию использует `claude`; `update_cases.yml` и `replay_on_push.yml` — Actions Variable либо `openrouter`. |
+| `LLM_PROVIDER` | `claude` / `gigachat` / `openrouter`. Python по умолчанию использует `openrouter`; `update_cases.yml` и `replay_on_push.yml` — Actions Variable либо `openrouter`. |
 | `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
 | `SKIP_NON_WORKING_DAYS` | `1` → smart-skip; утренний launcher задаёт его явно, ручной workflow — по входу `smart_skip`. |
 | `FETCH_MAX_RETRIES` | Потолок попыток одного логического запроса. Дефолт 1; launcher VPS/Mac ставит 3, но повтор разрешает только точная fast-policy (`connection_reset`/ошибка ответа/5xx до 5 с). |
@@ -218,13 +220,14 @@ smart-skip → env `IGNORE_NON_WORKING_DAY`).
 последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
 иначе только владельцу), `full_llm` (`DIGEST_FULL_LLM=1` — старый полный
 LLM-вариант вместо гибрида), `llm_provider` (выпадающий список
-claude/gigachat/openrouter), `gigachat_model` (GigaChat-2-Pro (дефолт) /
-GigaChat-2 / GigaChat-2-Max), `openrouter_model` (место в рейтинге бесплатных
+claude/gigachat/openrouter), `gigachat_model` (GigaChat-3-Pro (дефолт) /
+GigaChat-2-Pro / GigaChat-2 / GigaChat-2-Max / GigaChat-3-Ultra), `openrouter_model` (место в рейтинге бесплатных
 моделей shir-man.com: «модель дня (топ-1)» (дефолт) … «топ-5» — конкретный id
 резолвится на прогоне из свежего рейтинга, статичный список в YAML не
 протухает) и `llm_model` (произвольный id текстом — перебивает оба списка).
 Модельная переменная уходит в `GIGACHAT_MODEL`/`OPENROUTER_MODEL` — читает
-только активный провайдер. Публикация результатов (`last_digest.json`, `cases.json`, кэш
+активный провайдер; `OPENROUTER_SUMMARY_MODEL=__selected__` разрешает ручной
+выбор модели пересказа. Публикация результатов (`last_digest.json`, `cases.json`, кэш
 пересказов) и PWA push — только по галке `commit_results` (по умолчанию
 выключена: тестовый прогон не публикует ничего на дашборд и не шлёт пуш —
 пуш вёл бы на неопубликованный дайджест; остаётся только Telegram).

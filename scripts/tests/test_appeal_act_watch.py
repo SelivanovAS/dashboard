@@ -185,3 +185,17 @@ def test_legacy_announcement_with_same_number_in_two_courts_needs_review(monkeyp
     data={};r=run(monkeypatch,data,[a,b])
     assert r['unplanned']==2 and r['read']==0
     assert {x['reason'] for x in r['items']}=={'legacy_announcement_ambiguous'}
+
+
+def test_completed_watch_refetches_incomplete_source_without_announcement(monkeypatch):
+    c = case(); data = {}
+    run(monkeypatch, data, [c])
+    data['pending_appeal_act_changes'] = []
+    c['appeal']['act_summary_needs_source'] = True
+    full = TEXT + ' Определила: решение суда оставить без изменения, жалобу без удовлетворения.'
+    report = run(monkeypatch, data, [c], info(full), force=True)
+    assert report['read'] == 1 and report['published'] == 0
+    assert not c['appeal']['act_summary_needs_source']
+    assert c['appeal']['act_received_at'] and c['appeal']['act_source_url']
+    assert not data['pending_appeal_act_changes']
+    assert run(monkeypatch, data, [c], info(full), force=True)['planned'] == 0

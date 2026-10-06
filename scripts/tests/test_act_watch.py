@@ -162,3 +162,17 @@ def test_court_collision_never_overwrites_task():
     report = run(data, [a, b])
     assert report['unplanned'] == 1 and report['read'] == 0
     assert not data.get('pending_cassation_changes')
+
+
+def test_completed_watch_refetches_incomplete_source_without_announcement():
+    c = case(); data = {}
+    run(data, [c])
+    data['pending_cassation_changes'] = []
+    c['cassation']['act_summary_needs_source'] = True
+    full = html().replace('</div>', ' Определила: решение суда оставить без изменения, жалобу без удовлетворения.</div>')
+    report = run(data, [c], full, force=True)
+    assert report['read'] == 1 and report['published'] == 0
+    assert not c['cassation']['act_summary_needs_source']
+    assert c['cassation']['act_received_at'] and c['cassation']['act_source_url']
+    assert not data['pending_cassation_changes']
+    assert run(data, [c], full, force=True)['planned'] == 0
