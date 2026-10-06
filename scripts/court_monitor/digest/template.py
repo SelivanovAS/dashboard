@@ -701,6 +701,19 @@ def _hearing_type_paren(d: dict) -> str:
 
 # ── Основная логика обновления ───────────────────────────────────────────────
 
+def _act_dates_html(details):
+    """Две разные даты; неизвестное значение не заменяется датой заседания."""
+    from court_monitor.act_publication import document_date
+    decision = details.get("act_decision_date") or document_date(details.get("act_text") or "", details.get("decision_date") or "")
+    detected = str(details.get("act_detected_at") or "")[:10]
+    try:
+        detected = datetime.strptime(detected, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        detected = "не зафиксирована"
+    return ["Акт вынесен: " + escape_html(decision or "дата не установлена"),
+            "Текст обнаружен системой: " + escape_html(detected)]
+
+
 def _act_summary_or_excerpt_with_kind(
     act_text: str,
     case_meta: dict,
@@ -1977,6 +1990,8 @@ def _bank_track_block(bank_changes: list[dict], *,
         head = f"{link} ({court})" + (f" — {df}" if df else "")
         phrases = _bank_event_phrases(ch)
         block.append(f"{head}: {'; '.join(phrases)}" if phrases else head)
+        if "fi_act_text_published" in ch.get("type", []):
+            block.extend(_act_dates_html(d))
         # «Почему» при исходе против банка (bank_act_why_eligible) — строкой
         # СРАЗУ за строкой дела (без пустой строки: абзац head+Почему —
         # контракт attach_act_analyses, он же несёт разбор в drawer). Без
@@ -2683,6 +2698,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             else:
                 act_excerpt, act_kind = "", ""
             fi_block.append(f"{link} — {pl} vs {df}")
+            fi_block.extend(_act_dates_html(d))
             itog_parts: list[str] = []
             if verdict:
                 # Дата решения (13.08.2026): суд публикует тексты задним
@@ -3137,6 +3153,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
             if pl55 and df55:
                 line1_55 += f" — {pl55} vs {df55}"
             appeal_block.append(line1_55)
+            appeal_block.extend(_act_dates_html(d))
             # Итог из карточки + «в чью пользу» — симметрично 3.6 (данные
             # уже в details: act_verdict_label / bank_outcome).
             verdict55 = escape_html(
@@ -3157,7 +3174,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     f"<b>Почему:</b> <i>{summary_or_excerpt}</i>"
                 )
             elif summary_or_excerpt:
-                appeal_block.append(f"Мотивировка: {summary_or_excerpt}")
+                appeal_block.append(f"Фрагмент текста: {summary_or_excerpt}")
             # Пустая строка между делами — правило вёрстки юриста; заодно
             # attach_act_analyses режет 5.5 на абзацы по-делово, а не одним
             # куском на всю секцию.
@@ -3624,6 +3641,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 cass_block.append(
                     f"{date_prefix_cs}<b>Итог:</b> {escape_html(label)}{from_str}{reason_tail}"
                 )
+            if "new_act" in ch.get("type", []):
+                cass_block.extend(_act_dates_html(d))
             # Строка 5: Почему — пересказ мотивировки через act_summarizer.
             # Сокращаем имена сторон: pl_raw/df_raw — сырые поля parent case,
             # для LLM-пересказа они слишком длинные («МТУ Росимущества в …»).

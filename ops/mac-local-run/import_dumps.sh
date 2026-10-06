@@ -390,6 +390,7 @@ courts_gate() {
   cm_load_territory_env "$PYTHON" "$CONF_DIR" log
   # Операторский импорт: ретраи полезны — запросов мало, повтор дороже
   # (боевой дефолт FETCH_MAX_RETRIES=1). Зеркало import_cases.yml.
+  export COURT_REQUEST_COORD_DIR="${COURT_REQUEST_COORD_DIR:-/tmp/court-monitor-http-$(id -u)}"
   export FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}"
   # Предохранитель под размер ДАМПА, а не боевого прогона — те же значения, что
   # у облака (env в import_cases.yml, страж test_breaker_settings_match_cloud):

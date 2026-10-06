@@ -258,7 +258,7 @@ class FiNewCaseSyntheticTest(unittest.TestCase):
 class BuildActSummaryPromptTest(unittest.TestCase):
     def test_includes_full_metadata(self):
         prompt = uc._build_act_summary_prompt(
-            "Мотивировочная часть акта. " * 10,
+            ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения."),
             {
                 "stage": "appeal",
                 "bank_role": "Истец",
@@ -457,7 +457,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
                  patch.object(cm_llm, "_call_claude_simple", fake_claude), \
                  patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
                  patch.object(cm_config, "LLM_PROVIDER", "claude"):
-                act_text = "Мотивировочная часть акта. " * 10
+                act_text = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
                 meta = {"stage": "appeal", "bank_role": "Истец"}
                 s1 = uc.summarize_act_motivation(act_text, case_meta=meta)
                 self.assertEqual(s1, "Тестовый пересказ.")
@@ -480,7 +480,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
              patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.summarize_act_motivation(
-                "Мотивировочная часть. " * 10,
+                ("Мотивировочная часть. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения."),
                 case_meta={"stage": "appeal"},
                 use_cache=False,
             )
@@ -494,7 +494,7 @@ class SummarizeActMotivationTest(unittest.TestCase):
              patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
              patch.object(cm_config, "LLM_PROVIDER", "claude"):
             result = uc.summarize_act_motivation(
-                "Мотивировочная часть. " * 10,
+                ("Мотивировочная часть. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения."),
                 case_meta={"stage": "appeal"},
                 use_cache=False,
             )
@@ -520,7 +520,7 @@ class TemplateDigestSummarizerIntegrationTest(unittest.TestCase):
                 "raw_result": "Иск удовлетворён",
                 "decision_date": "01.05.2026",
                 "category": "Кредитный договор",
-                "act_text": "Мотивировочная часть. " * 30,
+                "act_text": ("Мотивировочная часть. " * 30 + " Определила: решение оставить без изменения, жалобу без удовлетворения."),
                 "act_date": "10.05.2026",
                 "bank_outcome": "в пользу банка",
             },
@@ -1240,7 +1240,7 @@ class SummaryLanguageGuardTest(unittest.TestCase):
                  patch.object(cm_llm, "_call_claude_simple", fake_claude), \
                  patch.object(cm_config, "ANTHROPIC_API_KEY", "fake-key"), \
                  patch.object(cm_config, "LLM_PROVIDER", "claude"):
-                act_text = "Мотивировочная часть акта. " * 10
+                act_text = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
                 meta = {"stage": "first_instance", "bank_role": "Истец"}
                 # Засеваем кэш испорченным пересказом под настоящим ключом.
                 key = cm_llm._act_cache_key(act_text)

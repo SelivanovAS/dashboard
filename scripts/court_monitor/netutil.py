@@ -19,7 +19,8 @@ from urllib.parse import urlsplit
 
 import requests
 
-from court_monitor import config, telemetry
+from court_monitor import config, telemetry, host_throttle
+from contextlib import contextmanager
 from court_monitor.config import log
 
 session = requests.Session()
@@ -55,13 +56,28 @@ def run_deadline_reached() -> bool:
     return _RUN_DEADLINE_AT > 0 and time.monotonic() >= _RUN_DEADLINE_AT
 
 
+@contextmanager
+def limit_run_deadline(seconds, max_retries=1):
+    global _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED
+    retries = config.FETCH_MAX_RETRIES
+    config.FETCH_MAX_RETRIES = max_retries
+    previous, reported = _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED
+    deadline = time.monotonic() + max(0, seconds)
+    _RUN_DEADLINE_AT = min(previous, deadline) if previous > 0 else deadline
+    try:
+        yield
+    finally:
+        _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED = previous, reported
+        config.FETCH_MAX_RETRIES = retries
+
+
 def _report_run_deadline_once() -> None:
     global _RUN_DEADLINE_REPORTED
     if _RUN_DEADLINE_REPORTED:
         return
     _RUN_DEADLINE_REPORTED = True
     log.warning(
-        f"Общий лимит прогона {config.RUN_DEADLINE_SECONDS:.0f} с исчерпан: "
+        "Бюджет текущего обхода исчерпан: "
         "новые запросы не начинаем, сохраняем уже прочитанное"
     )
 
@@ -384,13 +400,6 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
                 context=context, attempt=attempt,
             )
             return ""
-        request_id = telemetry.begin_fetch(
-            host,
-            context or "",
-            attempt=attempt,
-            max_attempts=config.FETCH_MAX_RETRIES,
-            request_id=request_id or None,
-        )
         try:
             # ⚠️ Таймаут РАЗДЕЛЬНЫЙ (connect, read) — это разные события, и
             # одна мерка на оба неверна. Соединение с судом встаёт за 0,05 с,
@@ -407,7 +416,6 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             # в такое утро крутить их правкой кода с коммитом — не вариант.
             # На здоровом дне правка невидима: таймаут — потолок, а не
             # задержка, быстрый ответ возвращается быстро.
-            _t0 = time.monotonic()
             connect_timeout = config.FETCH_TIMEOUT_CONNECT
             read_timeout = config.FETCH_TIMEOUT_READ
             if remaining is not None and remaining < connect_timeout + read_timeout:
@@ -418,7 +426,23 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
                     read_timeout,
                     max(remaining - connect_timeout, 0.1),
                 )
-            r = session.get(url, timeout=(connect_timeout, read_timeout))
+            with host_throttle.request_slot(url, run_deadline_remaining) as allowed:
+                if not allowed:
+                    _set_diag('run_deadline', url, record_failure=False, context=context)
+                    return ''
+                left = run_deadline_remaining()
+                if left is not None:
+                    connect_timeout = min(connect_timeout, max(left / 2, 0.1))
+                    read_timeout = min(read_timeout, max(left - connect_timeout, 0.1))
+                _t0 = time.monotonic()
+                request_id = telemetry.begin_fetch(
+                    host,
+                    context or "",
+                    attempt=attempt,
+                    max_attempts=config.FETCH_MAX_RETRIES,
+                    request_id=request_id or None,
+                )
+                r = session.get(url, timeout=(connect_timeout, read_timeout))
             r.raise_for_status()
             elapsed = time.monotonic() - _t0
             config.FETCH_TIMINGS.append(elapsed)

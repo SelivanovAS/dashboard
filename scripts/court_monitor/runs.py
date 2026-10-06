@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch
+from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -949,18 +949,14 @@ def update_active_cases(
 
         # Новый акт
         act_text = card_info.get("act_text", "")
-        if not act_text and card_info.get("_act_url"):
+        if not act_text and card_info.get("_act_url") and not (ap_json or {}).get("act_text"):
             act_text = fetch_act_text(
                 card_info["_act_url"], context=case["Номер дела"]
             )
-        # Персист текста апел. определения (13.08.2026): раньше текст жил один
-        # прогон (только details события) — drawer апелляции не мог показать
-        # полный текст, в отличие от 1-й инст. и кассации. Пишем один раз,
-        # независимо от гейтов дайджеста (.digested_acts): «при добытом
-        # тексте». Бэкфилл старых актов не делаем — потребовал бы перекачку.
-        if (ap_json is not None and act_text
-                and not (ap_json.get("act_text") or "").strip()):
-            ap_json["act_text"] = act_text[:8000]  # симметрия FI
+        observation = ap_json if ap_json is not None else case
+        announce_text = act_publication.observe(observation, act_text, today,
+            present=bool(act_text or card_info.get('_act_url')),
+            confirmed_date=card_info.get('Дата рассмотрения (карточка)') or '')
         # Снимок итога на момент публикации акта: результат обычно уже давно
         # стоит в карточке (акт публикуется через 14+ дней после заседания).
         # verdict_label в JSON не сохраняется — переклассифицируем из сырого
@@ -968,28 +964,11 @@ def update_active_cases(
         act_verdict_raw = new_result or old_result
         act_verdict_label = (classify_verdict(act_verdict_raw, new_event)
                              if act_verdict_raw else "")
-        if new_act == "Да" and old_act != "Да":
-            change["type"].append("new_act")
-            change["details"]["act_text"] = extract_motive_part(act_text, 1800)
-            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
-            change["details"]["act_date"] = card_info.get("Дата публикации акта", "")
+        if announce_text and case['Номер дела'] not in _digested_acts:
+            change['type'].append('new_act')
+            change['details'].update(act_text=act_text, **act_publication.dates(observation))
             if act_verdict_label:
-                change["details"]["act_verdict_label"] = act_verdict_label
-                change["details"]["act_verdict_raw"] = act_verdict_raw
-        elif (new_act == "Да" and old_act == "Да"
-              and act_text
-              and case["Номер дела"] not in _digested_acts):
-            # Акт уже был помечен ранее, но текст не извлекался.
-            # Добавляем в дайджест один раз.
-            motive = extract_motive_part(act_text, 1800)
-            if motive and len(motive) > 100:
-                change["type"].append("new_act")
-                change["details"]["act_text"] = motive
-                change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
-                change["details"]["act_date"] = card_info.get("Дата публикации акта", "")
-                if act_verdict_label:
-                    change["details"]["act_verdict_label"] = act_verdict_label
-                    change["details"]["act_verdict_raw"] = act_verdict_raw
+                change['details'].update(act_verdict_label=act_verdict_label, act_verdict_raw=act_verdict_raw)
 
         # Новый результат.
         # Гард: суд иногда заполняет поле «Результат» текстом события
@@ -1008,8 +987,9 @@ def update_active_cases(
             # (содержит причину возврата/прекращения), фрагмент мотивировки
             change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
             change["details"]["last_event"] = new_event
-            if act_text:
-                change["details"]["act_excerpt"] = extract_motive_part(act_text, 600)
+            if act_text and announce_text:
+                change["details"]["act_text"] = act_text
+                change["details"].update(act_publication.dates(observation))
             # Нормализованный ярлык — модель должна использовать его дословно,
             # а не пересказывать сырое поле «Результат» своими словами.
             change["details"]["verdict_label"] = classify_verdict(
@@ -3346,24 +3326,6 @@ def main_json():
         breaker_skipped=cass_refresh_skipped_breaker,
     )
     timings["cassation_refresh"] = time.perf_counter() - t0
-    def fetch_waiting_act(url, **kwargs):
-        polite_delay()
-        return fetch_card_checked(url, **kwargs)
-
-    act_watch_report = act_watch.refresh(
-        data, cases + archived_cases + cold_archived_cases + bank_archived_cases,
-        today, fetch_waiting_act, force=not config.SMART_SKIP_CASES,
-    )
-    act_watch.persist_archives(data, today)
-    cass_refresh_parsed += act_watch_report["read"]
-    cass_refresh_total += act_watch_report["planned"]
-    telemetry.set_coverage("cassation_refresh", cass_refresh_parsed, cass_refresh_total,
-                           processed=cass_refresh_total,
-                           breaker_skipped=cass_refresh_skipped_breaker)
-    log.info("Ожидаемые кассационные акты: %s; к проверке %s; прочитано %s/%s; "
-             "опубликовано %s; вне очереди %s", act_watch_report["waiting"],
-             act_watch_report["due"], act_watch_report["read"], act_watch_report["planned"],
-             act_watch_report["published"], act_watch_report["unplanned"])
 
 
     # Резервный щит после обоих link_cassation_cases (раздел 4c + 4d):
@@ -3593,18 +3555,6 @@ def main_json():
         json_case_by_apnum=json_case_by_apnum,
     )
 
-    appeal_act_report = appeal_act_watch.refresh(
-        data, cases + archived_cases + cold_archived_cases + bank_archived_cases,
-        today, fetch_waiting_act, force=not config.SMART_SKIP_CASES,
-        fetch_text=fetch_act_text,
-    )
-    appeal_act_watch.persist_archives(data, today)
-    telemetry.set_coverage("appeal", ap_skip_stats['parsed'] + appeal_act_report['read'],
-        ap_skip_stats.get('planned', ap_skip_stats['total']) + appeal_act_report['planned'],
-        breaker_skipped=ap_skip_stats.get('skipped_breaker', 0))
-    log.info("Ожидание апелляционных актов: осталось %s; прочитано %s/%s; получено %s",
-             appeal_act_report['waiting'], appeal_act_report['read'],
-             appeal_act_report['planned'], appeal_act_report['published'])
 
     if appeal_new_cases_csv:
         csv_cases = appeal_new_cases_csv + csv_cases
@@ -5152,10 +5102,8 @@ def main_json():
                 fi["resolved_emitted"] = True
                 changed = True
 
-        # Публикация акта — только факт (флаг + дата).
-        if new_act and not old_act:
-            change["type"].append("fi_act_published")
-            change["details"]["act_date"] = card_info.get("Дата публикации акта", "")
+        if not card_info.get('act_text') and not card_info.get('_act_url'):
+            act_publication.observe(fi, '', today, present=False)
 
         # Захват текста опубликованного решения 1-й инстанции — для 3.6.
         # Отделено от fi_act_published, т.к. текст часто приходит ПОЗЖЕ
@@ -5171,15 +5119,15 @@ def main_json():
                 )
                 act_text_fi = (fetched or "").strip()
             if act_text_fi:
-                # Обрезаем как у апелляции: 8000 символов в JSON,
-                # 1800 — мотивировочная часть в контексте для LLM.
-                fi["act_text"] = act_text_fi[:8000]
+                announce_fi_text = act_publication.observe(fi, act_text_fi, today, present=True,
+                    confirmed_date=fi.get('decision_date') or '')
                 changed = True
                 verdict = classify_verdict_fi(fi.get("result", ""))
-                change["type"].append("fi_act_text_published")
-                change["details"]["act_text"] = extract_motive_part(
-                    act_text_fi, 1800
-                )
+                if announce_fi_text:
+                    change["type"].append("fi_act_text_published")
+                if announce_fi_text:
+                    change["details"]["act_text"] = act_text_fi
+                change["details"].update(act_publication.dates(fi))
                 change["details"]["act_date"] = (
                     change["details"].get("act_date")
                     or card_info.get("Дата публикации акта", "")
@@ -5715,6 +5663,39 @@ def main_json():
                 f"Иски банка: рутина отфильтрована (BANK_DIGEST_ROUTINE=0): "
                 f"{before_bank} → {len(fi_changes)} записей fi_changes"
             )
+
+    # Независимые тексты не вытесняют основной обход инстанций.
+    def fetch_waiting_act(url, **kwargs):
+        polite_delay()
+        return fetch_card_checked(url, **kwargs)
+
+    from court_monitor.netutil import run_deadline_remaining
+    all_productions = cases + archived_cases + cold_archived_cases + bank_archived_cases
+    watch_budget = act_watch_policy.Budget(data, today,
+        allow_backfill=(fi_parsed >= fi_total and
+                        ap_skip_stats['parsed'] >= ap_skip_stats.get('planned', ap_skip_stats['total']) and
+                        cass_refresh_parsed >= cass_refresh_total and cass_parsed >= cass_planned))
+    reports = {}
+    for phase in ('waiting', 'backfill'):
+        for module in (act_watch, appeal_act_watch):
+            report = module.refresh(data, all_productions, today, fetch_waiting_act,
+                force=not config.SMART_SKIP_CASES, fetch_text=fetch_act_text,
+                budget=watch_budget, phase=phase)
+            reports[module.FIELD] = (act_watch_policy.merge_reports(reports[module.FIELD], report)
+                                    if module.FIELD in reports else report)
+    act_watch.persist_archives(data, today)
+    appeal_act_watch.persist_archives(data, today)
+    act_watch_report = reports[act_watch.FIELD]
+    appeal_act_report = reports[appeal_act_watch.FIELD]
+    cass_refresh_parsed += act_watch_report['read']
+    cass_refresh_total += act_watch_report['planned']
+    ap_skip_stats['parsed'] += appeal_act_report['read']
+    ap_skip_stats['planned'] = ap_skip_stats.get('planned', ap_skip_stats['total']) + appeal_act_report['planned']
+    telemetry.set_coverage('cassation_refresh', cass_refresh_parsed, cass_refresh_total)
+    telemetry.set_coverage('appeal', ap_skip_stats['parsed'], ap_skip_stats['planned'])
+    for label, report in (('кассационных', act_watch_report), ('апелляционных', appeal_act_report)):
+        log.info('Ожидание %s актов: осталось %s; прочитано %s/%s; новых публикаций %s; догружено %s',
+                 label, report['waiting'], report['read'], report['planned'], report['published'], report['backfilled'])
 
     # ── 4e. Здоровье парсеров: детектор молчаливой поломки ──
     # Суд, вернувший 0 при живой истории, HTTP-фейлы подряд, глобальный ноль

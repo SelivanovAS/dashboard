@@ -1546,7 +1546,7 @@ class TestLinkCassationCases:
             "first_instance": {"case_number": "2-200/2025"},
             "cassation": {"case_number": "8Г-222/2026",
                           "outcome": "cassation_remanded",
-                          "act_published": False},
+                          "act_absent_checked_at": "2026-05-01", "act_published": False},
         }]
         find = _cass_find(
             "2-200/2025", cass_num="8Г-222/2026",
@@ -1692,7 +1692,7 @@ class TestLinkCassationCases:
         case = {"id": "2-600/2025", "current_stage": "cassation",
                 "first_instance": {"case_number": "2-600/2025"},
                 "cassation": {"case_number": "8Г-888/2026",
-                              "act_published": False}}
+                              "act_absent_checked_at": "2026-05-01", "act_published": False}}
         cases = [case]
         cases, changes, _ = uc.link_cassation_cases(cases, [dict(find)])
         assert any("new_act" in ch["type"] for ch in changes)
@@ -1712,7 +1712,7 @@ class TestLinkCassationCases:
         case = {"id": "2-601/2025", "current_stage": "cassation",
                 "first_instance": {"case_number": "2-601/2025"},
                 "cassation": {"case_number": "8Г-888/2026",
-                              "act_published": False}}
+                              "act_absent_checked_at": "2026-05-01", "act_published": False}}
         _, changes, _ = uc.link_cassation_cases([case], [find])
         assert any("new_act" in ch["type"] for ch in changes)
 
@@ -5725,8 +5725,9 @@ class TestAppealActDigestDedupe:
         monkeypatch.setattr(cm_runs, "parse_case_card",
                             lambda html, base: dict(card))
         _, changes, stats = cm_runs.update_active_cases(
-            [case], json_appeal_by_num={case["Номер дела"]: {
-                "case_number": case["Номер дела"], "events": []}})
+            [case], json_appeal_by_num={case["Номер дела"]: case.setdefault("_json_ap", {
+                "case_number": case["Номер дела"], "events": [],
+                "act_absent_checked_at": "2026-10-01"})})
         assert stats["parsed"] == 1, (
             "Карточка не спарсена — дело выпало из обхода (решённое дело "
             "старше LEGACY_CSV_ARCHIVE_DAYS считается архивным). Тест "
@@ -5745,11 +5746,11 @@ class TestAppealActDigestDedupe:
             "Акт опубликован": "Нет",
         }
 
-    def test_flag_without_text_emits_but_not_deduped(self, monkeypatch):
+    def test_flag_without_text_is_silent_and_not_deduped(self, monkeypatch):
         digested: set = set()
         case = self._case()
         changes = self._run(monkeypatch, case, {"act_text": ""}, digested)
-        assert any("new_act" in ch["type"] for ch in changes)
+        assert not any("new_act" in ch["type"] for ch in changes)
         assert "33-7777/2026" not in digested, (
             "Номер попал в дедуп без текста — ветка добора B закрыта, "
             "поздний текст акта потерян навсегда (дефект Д1)."
@@ -5837,13 +5838,13 @@ class TestAppealActTextPersist:
             "Акт опубликован": "Нет",
         }
 
-    def test_act_text_persisted_trimmed(self, monkeypatch):
+    def test_initial_act_text_persisted_in_full_without_notification(self, monkeypatch):
         ap = {"case_number": "33-8888/2026", "events": []}
         changes = self._run(monkeypatch, self._case(),
                             {"act_text": self._LONG_ACT}, ap)
-        assert ap["act_text"] == self._LONG_ACT[:8000]
-        # Ветка A не задета: new_act эмитится как раньше.
-        assert any("new_act" in ch["type"] for ch in changes)
+        assert ap["act_text"] == self._LONG_ACT.strip()
+        # Историческая догрузка не объявляется новой публикацией.
+        assert not any("new_act" in ch["type"] for ch in changes)
 
     def test_existing_text_not_overwritten(self, monkeypatch):
         ap = {"case_number": "33-8888/2026", "events": [],

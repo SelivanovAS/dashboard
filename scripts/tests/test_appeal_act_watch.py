@@ -1,6 +1,6 @@
 # coding: utf-8
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 import pytest
 from court_monitor import appeal_act_watch as watch, config
@@ -8,7 +8,7 @@ from court_monitor.digest.template import generate_template_digest
 
 TODAY = date(2026, 10, 5)
 DOMAIN = 'oblsud--hmao.sudrf.ru'
-TEXT = 'Суд исследовал доказательства и оставил решение без изменения. ' * 20
+TEXT = ('Суд исследовал доказательства и оставил решение без изменения. ' * 20).strip()
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
@@ -26,7 +26,7 @@ def case():
             'first_instance':{'case_number':'2-1/2026','judicial_uid':'86RS0001-01-2026-000001-01'},
             'appeal':{'case_number':'33-10/2026 (33-9/2025;)','court_domain':DOMAIN,
                       'link':'123|card-uid','status':'Решено','hearing_date':'08.09.2026',
-                      'last_checked_at':'2026-09-09','result':'Оставлено без изменения',
+                      'act_absent_checked_at':'2026-09-09','last_checked_at':'2026-09-09','result':'Оставлено без изменения',
                       'act_published':False}}
 
 
@@ -37,6 +37,7 @@ def info(text=TEXT, **extra):
 
 def run(monkeypatch,data,cases,card=None,**kwargs):
     monkeypatch.setattr(watch,'parse_case_card',lambda *a:info() if card is None else card)
+    kwargs.setdefault('now', datetime.combine(TODAY, datetime.min.time())+timedelta(hours=6))
     return watch.refresh(data,cases,TODAY,lambda *a,**k:'html',persist=lambda d:None,**kwargs)
 
 
@@ -76,14 +77,18 @@ def test_failed_reads_are_retryable(monkeypatch,card,reason):
     c=case();data={};r=run(monkeypatch,data,[c],card)
     assert r['unread']==1 and r['items'][0]['reason']==reason
     assert next(iter(data[watch.FIELD].values()))['block']['last_checked_at']=='2026-09-09'
-    assert run(monkeypatch,data,[c])['published']==1
+    assert run(monkeypatch,data,[c])['published']==0
+    if reason == 'identity_mismatch':
+        assert next(iter(data[watch.FIELD].values()))['status']=='needs_review'
+    else:
+        assert run(monkeypatch,data,[c],now=datetime.combine(TODAY, datetime.min.time())+timedelta(hours=6,minutes=31))['published']==1
 
 
 def test_failed_act_download_does_not_mark_success(monkeypatch):
     c=case();data={}
     r=run(monkeypatch,data,[c],info('',_act_url='https://'+DOMAIN+'/act'),fetch_text=lambda *a,**k:'')
     assert r['read']==0 and r['items'][0]['reason']=='act_text_unread'
-    assert run(monkeypatch,data,[c])['published']==1
+    assert run(monkeypatch,data,[c],now=datetime.combine(TODAY, datetime.min.time())+timedelta(hours=6,minutes=31))['published']==1
 
 
 def test_same_numbers_in_different_courts_are_separate(monkeypatch):
@@ -105,7 +110,7 @@ def test_previous_announcement_is_not_repeated(monkeypatch,tmp_path):
 def test_normal_parser_publication_survives_crash(monkeypatch,tmp_path):
     c=case();data={};watch.sync(data,[c],TODAY)
     (tmp_path/'acts').write_text(c['appeal']['case_number']+'\n')
-    c['appeal'].update(act_published=True,act_text=TEXT)
+    c['appeal'].update(act_notification_kind='new_publication',act_published=True,act_text=TEXT)
     watch.sync(data,[c],TODAY);watch.checkpoint(data)
     saved=watch.load_json(config.JSON_PATH)
     assert len(saved['pending_appeal_act_changes'])==1
@@ -154,8 +159,8 @@ def test_failed_write_leaves_event_retryable(monkeypatch):
         if d.get('pending_appeal_act_changes'):raise OSError('disk full')
         saved.update(deepcopy(d))
     with pytest.raises(OSError):
-        watch.refresh(data,[c],TODAY,lambda *a,**k:'html',persist=persist)
-    assert run(monkeypatch,saved,[case()])['published']==1
+        watch.refresh(data,[c],TODAY,lambda *a,**k:'html',persist=persist,now=datetime.combine(TODAY,datetime.min.time())+timedelta(hours=6))
+    assert run(monkeypatch,saved,[case()],now=datetime.combine(TODAY,datetime.min.time())+timedelta(hours=6,minutes=31))['published']==1
 
 
 def test_other_court_act_link_is_not_fetched(monkeypatch):

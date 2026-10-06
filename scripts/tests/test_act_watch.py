@@ -1,6 +1,6 @@
 """Поздние акты: история, архив, расписание, повторы и аварийное сохранение."""
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta
 import json
 
 import pytest
@@ -26,7 +26,7 @@ def case():
             'cassation': {'case_number': '8Г-12188/2026', 'court_domain': '7kas.sudrf.ru',
                          'link': '12120551|228a9fc7-0e96-4596-9ae4-99bc86b65684',
                          'judicial_uid': '86-test', 'decision_date': '08.09.2026',
-                         'last_checked_at': '2026-09-09', 'outcome': 'cassation_remanded',
+                         'act_absent_checked_at': '2026-09-09', 'last_checked_at': '2026-09-09', 'outcome': 'cassation_remanded',
                          'act_published': False}}
 
 
@@ -40,8 +40,9 @@ def html(published=True, uid='86-test', number='8Г-12188/2026'):
             + '</body>')
 
 
-def run(data, cases, response=None, persist=lambda d: None):
-    return act_watch.refresh(data, cases, TODAY, lambda *a, **k: html() if response is None else response, persist)
+def run(data, cases, response=None, persist=lambda d: None, **kwargs):
+    kwargs.setdefault('now', datetime.combine(TODAY, datetime.min.time())+timedelta(hours=6))
+    return act_watch.refresh(data, cases, TODAY, lambda *a, **k: html() if response is None else response, persist, **kwargs)
 
 
 @pytest.mark.parametrize('location', ['active', 'history', 'detached'])
@@ -75,7 +76,11 @@ def test_failures_remain_due(response, reason):
     report = run(data, [c], response)
     assert report['unread'] == 1 and report['items'][0]['reason'] == reason
     assert c['cassation']['last_checked_at'] == '2026-09-09'
-    assert run(data, [c])['published'] == 1
+    assert run(data, [c])['published'] == 0
+    if reason == 'identity_mismatch':
+        assert next(iter(data[act_watch.FIELD].values()))['status'] == 'needs_review'
+    else:
+        assert run(data, [c], now=datetime.combine(TODAY, datetime.min.time()) + timedelta(hours=6,minutes=31))['published'] == 1
 
 
 def test_success_without_text_is_not_repeated_today():
@@ -87,8 +92,8 @@ def test_success_without_text_is_not_repeated_today():
 
 @pytest.mark.parametrize('decision,last,next_day', [
     ('08.09.2026', '2026-10-02', '2026-10-05'),
-    ('01.08.2026', '2026-10-02', '2026-10-09'),
-    ('01.06.2026', '2026-10-02', '2026-11-01'),
+    ('01.08.2026', '2026-10-02', '2026-10-05'),
+    ('01.06.2026', '2026-10-02', '2026-11-23'),
 ])
 def test_cadence(decision, last, next_day):
     block = {'decision_date': decision, 'last_checked_at': last}
@@ -122,13 +127,13 @@ def test_failed_checkpoint_does_not_consume_publication():
         saved.update(deepcopy(d))
     with pytest.raises(OSError):
         run(data, [c], persist=save)
-    assert run(saved, [case()])['published'] == 1
+    assert run(saved, [case()], now=datetime.combine(TODAY, datetime.min.time())+timedelta(hours=6,minutes=31))['published'] == 1
 
 
 def test_normal_parser_publication_is_durable_even_if_old_dedup_was_written(tmp_path):
     c = case(); data = {}
     act_watch.sync(data, [c], TODAY)
-    c['cassation'].update(act_published=True, act_text='Мотивировка. ' * 50)
+    c['cassation'].update(act_notification_kind='new_publication', act_published=True, act_text='Мотивировка. ' * 50)
     (tmp_path / 'acts').write_text('8Г-12188/2026|08.09.2026\n')
     act_watch.sync(data, [c], TODAY)
     assert len(data['pending_cassation_changes']) == 1

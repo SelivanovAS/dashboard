@@ -1980,11 +1980,18 @@ async function loadHealth() {
       published:'акт получен', unread_card:'карточка не прочитана', fetch_error:'ошибка запроса',
       missing_card_link:'нет корректной ссылки', identity_conflict:'противоречивые реквизиты',
       identity_mismatch:'карточка не соответствует делу', act_text_unread:'текст акта не загружен',
-      legacy_announcement_ambiguous:'старая отметка рассылки не содержит суд'};
+      legacy_announcement_ambiguous:'старая отметка рассылки не содержит суд',
+      backfilled:'исторический текст сохранён без рассылки', age_limit:'ожидание завершено: более 180 дней',
+      watch_budget:'перенесено: бюджет обхода исчерпан', backfill_budget:'историческая догрузка отложена',
+      retry_cooldown:'повтор не раньше чем через 30 минут', daily_retry_limit:'две попытки за сегодня использованы',
+      invalid_card_link:'некорректный адрес карточки', invalid_card_request:'суд отклонил адрес карточки',
+      missing_decision_date:'нужна проверка даты акта'};
     return aw ? '<details class="fold"><summary>' + escHtml(title) + ': '
       + escHtml(String(aw.waiting || 0)) + ' · прочитано ' + escHtml(String(aw.read || 0))
       + '/' + escHtml(String(aw.planned || 0))
       + (aw.unplanned ? ' · ⚠ вне очереди: ' + escHtml(String(aw.unplanned)) : '')
+      + (aw.backfilled ? ' · исторических текстов: ' + escHtml(String(aw.backfilled)) : '')
+      + (aw.expired ? ' · ожидание завершено: ' + escHtml(String(aw.expired)) : '')
       + (aw.long_wait ? ' · более 90 дней: ' + escHtml(String(aw.long_wait)) : '')
       + '</summary><div class="fold-body">'
       + (aw.items || []).map(function(x){return '<div class="health-row">'

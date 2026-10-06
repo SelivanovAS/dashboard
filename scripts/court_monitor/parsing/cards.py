@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+from court_monitor.parsing.act_markup import document_div_text
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.courts import JUDICIAL_UID_RE
@@ -44,15 +45,9 @@ def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
     if not court_base_url:
         court_base_url = BASE_URL
     # Способ 1: Текст акта встроен в страницу (div#cont_doc1)
-    doc_match = re.search(
-        r"""id\s*=\s*['"]?cont_doc1['"]?[^>]*>(.+?)"""
-        r"""(?=<div[^>]*id\s*=\s*['"]?cont_doc\d|<div[^>]*id\s*=\s*['"]?cont[^_]|$)""",
-        html, re.DOTALL
-    )
-    if doc_match:
-        act_text = _strip_html(doc_match.group(1))
-        if len(act_text) > 200:
-            return act_text[:8000], ""
+    act_text = document_div_text(html)
+    if len(act_text) > 200:
+        return act_text, ""
 
     # Способ 2: Ссылка на отдельную страницу с текстом акта
     html_lower = html.lower()
@@ -75,7 +70,7 @@ def _extract_act_text(html: str, court_base_url: str = "") -> tuple[str, str]:
     if act_div_match:
         act_text = _strip_html(act_div_match.group(1))
         if len(act_text) > 50:
-            return act_text[:8000], ""
+            return act_text, ""
 
     return "", ""
 
@@ -1036,7 +1031,7 @@ def fetch_act_text(act_url: str, *, context: str | None = None) -> str:
     # Убираем script/style + теги, схлопываем пробелы
     text = _HTML_SCRIPT_RE.sub('', html)
     text = _HTML_STYLE_RE.sub('', text)
-    text = _strip_html(text)[:5000]  # Сырой текст, обрезается позже
+    text = _strip_html(text)
     # fetch_card_checked знает лишь, что HTTP-200 похож на
     # карточку. Здесь уточняем тот же request_id как страницу
     # акта с текстом либо пустую — без фиктивного второго HTTP.
