@@ -9,7 +9,6 @@ from urllib.parse import urlparse
 from court_monitor import act_publication
 
 VERSION = 'full-act-v1'
-NUMBER_RE = re.compile(r'(?:дел[оа]|производство)\s*(?:№|N)?\s*([\d]+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4})', re.I)
 
 
 def normalize_text(text: str) -> str:

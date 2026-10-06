@@ -13,6 +13,7 @@ import os
 
 from court_monitor import config
 from court_monitor.act_preparation import source_hash, prepare_act
+from court_monitor.textutil import _bare_case_number
 from court_monitor.config import log
 from court_monitor.digest import llm
 
@@ -48,6 +49,14 @@ def _key(text, meta):
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
 
 
+def _ready_status(job):
+    prepared = prepare_act(job['text'], job['meta'])
+    if prepared.status != 'ready':
+        return prepared.status
+    return llm._response_status(job.get('summary'), prepared.text,
+                                job['meta'].get('verdict_label', ''))[1]
+
+
 def summarize_tracked(text, *, case_meta):
     """Write-ahead: сохраняем исходник до API и до фиксации дедупа доставки."""
     jobs = _load()
@@ -57,10 +66,14 @@ def summarize_tracked(text, *, case_meta):
         'text': text, 'meta': dict(case_meta), 'source_hash': source_hash(text),
         'created_at': now.isoformat(timespec='seconds'), 'runs': 0,
     }
+    job['meta'] = dict(case_meta)
     # Успешный результат всегда проходит актуальные проверки источника/ответа.
     if job.get('summary') and prepare_act(text, case_meta).status == 'ready':
         summary, _ = llm._response_status(job['summary'], text, case_meta.get('verdict_label', ''))
         if summary:
+            config.METRICS['llm_summary_cache_hits'] += 1
+            if job.get('model'):
+                config.SUMMARY_MODELS_USED.add(job['model'])
             return summary
     if job.get('status') in _WAIT_FOR_SOURCE or job.get('status') == 'needs_review':
         return None
@@ -116,7 +129,9 @@ def _matches(job, cases):
         if meta.get('court_domain') and block.get('court_domain') != meta['court_domain']:
             continue
         number = block.get('case_number') or (case.get('id') if stage == 'first_instance' else '')
-        if meta.get('case_number') and number != meta['case_number']:
+        if meta.get('case_number') and _bare_case_number(number or '') != _bare_case_number(meta['case_number']):
+            continue
+        if meta.get('judicial_uid') and block.get('judicial_uid') and meta['judicial_uid'] != block['judicial_uid']:
             continue
         # При отсутствии реквизитов нужен именно полный источник, не совпадение номера.
         if not (meta.get('court_domain') and meta.get('case_number')):
@@ -158,25 +173,37 @@ def retry_pending(cases):
         if count >= config.SUMMARY_RETRY_BATCH:
             break
         if job.get('status') == 'ready':
-            continue
+            status = _ready_status(job)
+            if status == 'ready':
+                continue
+            job['status'] = status
+            job.pop('summary', None)
+            current = _load()
+            current[key] = job
+            _save(current)
         matches = _matches(job, cases)
         text = job['text']
+        refreshed = False
         if len(matches) == 1 and matches[0].get('act_text'):
             candidate = matches[0]['act_text']
-            if source_hash(candidate) != job['source_hash']:
+            if (source_hash(candidate) != job['source_hash'] or
+                    (job.get('status') == 'source_incomplete' and matches[0].get('act_received_at') and
+                     matches[0]['act_received_at'] != job['meta'].get('act_received_at'))):
                 new_meta = dict(job['meta'], act_received_at=matches[0].get('act_received_at', ''),
                                 source_url=matches[0].get('act_source_url') or job['meta'].get('source_url', ''))
                 if prepare_act(candidate, new_meta).status != 'ready':
                     continue
                 text = candidate
+                refreshed = True
                 job['meta'] = new_meta
                 # Старую запись помечаем заменённой, не удаляем до сохранения новой.
                 current = _load()
                 current[key]['status'] = 'superseded'
+                current[key].pop('retry_after', None)
                 _save(current)
-        if text == job['text'] and (job.get('status') in _WAIT_FOR_SOURCE or job.get('status') in ('needs_review', 'superseded')):
+        if not refreshed and text == job['text'] and (job.get('status') in _WAIT_FOR_SOURCE or job.get('status') in ('needs_review', 'superseded')):
             continue
-        if text == job['text'] and job.get('retry_after', '') > datetime.now(timezone.utc).isoformat():
+        if not refreshed and text == job['text'] and job.get('retry_after', '') > datetime.now(timezone.utc).isoformat():
             continue
         count += 1
         summarize_tracked(text, case_meta=job['meta'])
@@ -193,10 +220,12 @@ def attach_ready(cases):
                 changed += 1
         if job.get('status') != 'ready' or not job.get('summary'):
             continue
+        if _ready_status(job) != 'ready':
+            continue
         if len(matches) != 1:
             continue
         block = matches[0]
-        if block.get('act_text') and source_hash(block['act_text']) != job['source_hash']:
+        if not block.get('act_text') or source_hash(block['act_text']) != job['source_hash']:
             continue
         desired = {
             'html': '<p><b>Почему:</b> ' + escape(job['summary']) + '</p>',

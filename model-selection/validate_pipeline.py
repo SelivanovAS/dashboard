@@ -28,7 +28,7 @@ assert model.endswith(':free') and all(float(entry['pricing'][k]) == 0 for k in 
 key = requests.get('https://openrouter.ai/api/v1/key', headers={'Authorization':'Bearer '+config.OPENROUTER_API_KEY}, timeout=20)
 key.raise_for_status()
 quota = key.json()['data'].get('free_model_daily_requests')
-assert isinstance(quota, dict) and quota.get('remaining',0) >= 100, 'Недостаточная подтверждённая бесплатная квота'
+assert isinstance(quota, dict) and quota.get('remaining',0) >= 60, 'Недостаточная подтверждённая бесплатная квота'
 
 post = requests.post
 calls = 0
@@ -38,7 +38,7 @@ def bounded_post(url, **kw):
     global calls, previous
     assert url == config.OPENROUTER_API_URL
     assert kw['json']['model'] == model and kw['json']['reasoning'] == {'enabled':False}
-    assert calls < 100
+    assert calls < 60
     time.sleep(max(0, 4-(time.monotonic()-previous)))
     previous=time.monotonic();calls+=1
     return post(url, **kw)

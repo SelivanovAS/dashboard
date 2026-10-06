@@ -57,7 +57,7 @@ present=True при ссылке/признаке документа без до
         block.setdefault('act_detected_at', today.isoformat())
         block['act_notification_kind'] = (
             'new_publication' if block.get('act_absent_checked_at') else 'backfill')
-    if first or (not summary_source(block.get('act_text') or '') and summary_source(text)):
+    if first or ((block.get('act_summary_needs_source') or not summary_source(block.get('act_text') or '')) and summary_source(text)):
         block['act_text'] = text
         block['act_received_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
         if source_url:
@@ -101,5 +101,13 @@ def summary_agrees(summary: str, text: str, verdict: str) -> bool:
     if denied and not granted and re.search(r'(?:иск|требования)[^.]{0,80}удовлетворен|договор признан недействительным', lower):
         return False
     if granted and not denied and re.search(r'в удовлетворении .{0,150}отказано', lower):
+        return False
+    # Кассация, оставившая прежний акт без изменения, не сама оставила
+    # заявление без рассмотрения. Не переносим действие нижестоящего суда.
+    if ('оставить без изменения' in tail and
+            not re.search(r'отменить|изменить|без рассмотрения', tail) and
+            re.search(r'кассационн(?:ый суд|ая инстанция|ая коллегия)\s+'
+                      r'оставил[а]?\s+(?:заявлени[ея]|иск)\b[^.!?]{0,100}'
+                      r'без рассмотрения', lower)):
         return False
     return bool(summary)

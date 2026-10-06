@@ -662,6 +662,10 @@ def _build_act_summary_prompt(act_text: str, case_meta: dict) -> str:
         "доводы сторон, решения нижестоящих судов и собственные выводы суда. Не выдавай первые "
         "три за последнее. Фразы «обратился», «просит», «считает», «в обоснование указал», "
         "«доводы жалобы» обозначают позицию стороны, пока суд явно с ней не согласился.\n"
+        "Сохранение решения в силе не означает согласия со всеми мотивами нижестоящего суда: "
+        "не переноси мотив, который текущий суд отверг или скорректировал. Отклонение довода "
+        "не означает его недоказанность: называй причину отклонения только если суд её указал. "
+        "Для каждой причины в пересказе найди прямое подтверждение в собственных выводах суда.\n"
         "Пересказывай основания, которые принял суд, вынесший данный акт. При пересмотре важны "
         "мотивы текущей инстанции, а не только история дела. Не выводи, кто выиграл, из роли "
         "банка или фразы «решение оставлено без изменения». Утверждение мирового соглашения "
@@ -1129,6 +1133,7 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
     if summary:
         outcome.update(status='ready', model=cached.get('model') or _current_digest_model_name())
         config.METRICS['llm_summary_cache_hits'] += 1
+        config.SUMMARY_MODELS_USED.add(outcome['model'])
         return summary
     if not summaries_configured():
         outcome['status'] = 'missing_keys'
@@ -1172,6 +1177,7 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
             if summary:
                 label = f'{provider}:{actual_model}'
                 outcome.update(status='ready', model=label)
+                config.SUMMARY_MODELS_USED.add(label)
                 if index:
                     config.METRICS['llm_summary_provider_fallback_saved'] += 1
                 if use_cache:

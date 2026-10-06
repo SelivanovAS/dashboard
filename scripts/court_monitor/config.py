@@ -565,10 +565,8 @@ PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
 # Приватный VAPID-ключ в PEM-формате; хранится только в GitHub Secrets.
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 
-# Переключатель провайдера LLM: "claude" (по умолчанию), "gigachat"
-# или "openrouter". Тестовый workflow (test_digest.yml) пробрасывает выбор
-# провайдера/модели из inputs; основной мониторинг (update_cases.yml)
-# остаётся на Claude и ничего не знает про этот флаг.
+# Основной провайдер — OpenRouter. Для пересказов резерв GigaChat → Claude;
+# явный выбор другого первичного провайдера сохраняется для теста/отката.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openrouter").strip().lower()
 
 # Модель Claude для дайджеста. По умолчанию — боевой эталон haiku (общий кэш
@@ -656,13 +654,9 @@ GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions
 # не принимает. Выбор URL по модели — llm._gigachat_api_url.
 GIGACHAT_V3_API_URL = "https://api.giga.chat/v1/chat/completions"
 
-# OpenRouter — третий провайдер (только тестовый контур, см. test_digest.yml).
-# OPENROUTER_MODEL: буквальный id модели ИЛИ место в рейтинге бесплатных
-# моделей («модель дня (топ-1)», «топ-3» — значения выпадающего списка
-# workflow; пусто = топ-1). Место резолвится на прогоне
-# (llm._resolve_openrouter_model) из OPENROUTER_TOP_MODELS_URL (рейтинг
-# shir-man.com/free-llm), при недоступности — OPENROUTER_FALLBACK_MODEL
-# (маршрут openrouter/free: OpenRouter сам выбирает живую бесплатную модель).
+# Пересказы закреплены за OPENROUTER_SUMMARY_MODEL. OPENROUTER_MODEL
+# сохраняет отдельный выбор полного дайджеста/полировки и ручного теста
+# (в том числе явный «топ-N» рейтинга). Пустой env даёт Apodex.
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
 OPENROUTER_SUMMARY_MODEL = os.environ.get("OPENROUTER_SUMMARY_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
@@ -791,9 +785,9 @@ METRICS: dict[str, int] = {
     "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
     "llm_summary_calls": 0,       # пересказы актов: реальные вызовы LLM
     "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
-    "llm_summary_failed": 0,          # пересказы актов: все попытки исчерпаны → откат на excerpt
+    "llm_summary_failed": 0,          # пересказы актов: технический/непригодный ответ после всех резервов
     "llm_summary_fallback_saved": 0,  # пересказы актов: спасены фолбэк-моделью OpenRouter
-    "llm_summary_provider_fallback_saved": 0,  # пересказы актов: спасены фолбэк-провайдером Claude
+    "llm_summary_provider_fallback_saved": 0,  # пересказы актов: спасены GigaChat или Claude
     "llm_summary_skipped_no_key": 0,  # пересказы актов: не делали — у провайдера нет ключа (Mac-резерв)
     "bank_intake_candidates": 0,  # строк «банк-истец», прошедших строковые фильтры
     "bank_intake_cards": 0,       # карточек кандидатов, прочитанных подхватом
@@ -839,7 +833,11 @@ FETCH_FAIL_KINDS: dict[str, int] = {}  # отказы по классам _set_d
 FETCH_FAIL_TIMINGS: dict[str, list[float]] = {}
 
 
+SUMMARY_MODELS_USED: set[str] = set()
+
+
 def _metrics_reset() -> None:
+    SUMMARY_MODELS_USED.clear()
     for k in METRICS:
         METRICS[k] = 0
     CARD_BREAKER.clear()
