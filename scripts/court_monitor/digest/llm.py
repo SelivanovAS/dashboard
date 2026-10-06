@@ -104,7 +104,11 @@ def _gigachat_access_token() -> str | None:
             verify=False,
         )
         r.raise_for_status()
-        return r.json().get("access_token")
+        data = r.json()
+        if not isinstance(data, dict) or not isinstance(data.get('access_token'), str):
+            log.warning('GigaChat OAuth: отсутствует строковый access_token')
+            return None
+        return data['access_token'] or None
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
@@ -578,13 +582,7 @@ def _call_openrouter_chat(
 
 
 def _call_openrouter_simple(prompt: str, *, model: str | None = None) -> str | None:
-    """Минимальный вызов OpenRouter для пересказа акта — без system-промпта
-    (зеркально _call_gigachat_simple). Лимит токенов сильно выше, чем у
-    Claude/GigaChat: reasoning-модели (DeepSeek R1, Nemotron и т.п.) тратят
-    бюджет на размышления в content и с маленьким лимитом обрезаются
-    посреди <think> — до финального ответа дело не доходит (наблюдалось
-    на nemotron-3-super при 1200). Модели бесплатные, удорожания нет;
-    4096 — как у полных digest/polish-вызовов OpenRouter."""
+    """Пересказ с отключёнными рассуждениями и резервом вывода 1024 токена."""
     return _call_openrouter_chat(
         [{"role": "user", "content": prompt}],
         max_tokens=1024, temperature=0.2, model=model, reasoning_disabled=True,
@@ -685,6 +683,10 @@ def _build_act_summary_prompt(act_text: str, case_meta: dict) -> str:
         + "Вид документа по инстанции: " + _ACT_KIND_BY_STAGE.get(case_meta.get('stage'), 'судебный акт') + ".\n"
         + "РЕКВИЗИТЫ КАРТОЧКИ: " + json.dumps(meta, ensure_ascii=False) + "\n"
         + "ТЕКСТ АКТА (исходные данные):\n" + act_text + "\nКОНЕЦ ТЕКСТА АКТА.\n"
+        + "Начни сразу с решающей причины. Выбери один-два подтверждённых мотива; "
+          "не перечисляй все доводы и не повторяй резолюцию, реквизиты или общие фразы "
+          "о правильности решения. Два коротких предложения, суммарно до 450 символов. "
+          "Если суд скорректировал мотив прежней инстанции, исключи этот прежний мотив.\n"
         + "Ответ (2-3 предложения):"
     )
 
@@ -789,7 +791,7 @@ def _call_claude_simple(
 def _call_gigachat_simple(prompt: str) -> str | None:
     """Минимальный вызов GigaChat для пересказа акта — без жёсткого
     GIGACHAT_SYSTEM_PROMPT (он заточен под формат дайджеста). На любой
-    ошибке — None, вызывающая сторона упадёт на сырой excerpt.
+    ошибке — None; очередь попробует следующий доступный резерв.
     """
     token = _gigachat_access_token()
     if not token:

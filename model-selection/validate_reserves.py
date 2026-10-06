@@ -39,7 +39,7 @@ def bounded_post(url, **kw):
     return r
 llm.requests.post=bounded_post
 results=[]
-for provider in ('gigachat','claude'):
+for provider in os.environ.get('BENCHMARK_PROVIDERS','gigachat,claude').split(','):
     current=provider; config.LLM_PROVIDER=provider
     folder=OUT/provider;folder.mkdir(exist_ok=True)
     config.ACT_SUMMARIES_PATH=str(folder/'cache.json')
