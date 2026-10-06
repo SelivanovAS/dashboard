@@ -134,6 +134,14 @@ ACT_SUMMARIES_PATH = os.environ.get(
     "ACT_SUMMARIES_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".act_summaries.json")
 )
+ACT_SUMMARY_PENDING_PATH = os.environ.get(
+    "ACT_SUMMARY_PENDING_PATH",
+    os.path.join(os.path.dirname(ACT_SUMMARIES_PATH) or "data", ".act_summaries.pending.json")
+)
+LLM_PROVIDER_STATE_PATH = os.environ.get(
+    "LLM_PROVIDER_STATE_PATH",
+    os.path.join(os.path.dirname(ACT_SUMMARIES_PATH) or "data", ".llm_provider_state.json")
+)
 # Снимок контекста последнего дайджеста — сохраняется перед отправкой
 # в Telegram и используется режимом --replay-last для повторной генерации
 # (например, чтобы переиграть с другой версией промпта).
@@ -408,6 +416,7 @@ BANK_INTAKE_SEEN_TTL_DAYS = 60  # сколько помним отказнико
 # 30-дневное окно от «Даты события». Будет удалена вместе с CSV-веткой.
 LEGACY_CSV_ARCHIVE_DAYS = 30
 REQUEST_DELAY = (2, 3)  # Задержка между запросами к суду (сек)
+COURT_REQUEST_COORD_DIR = os.environ.get("COURT_REQUEST_COORD_DIR", "")
 # Кол-во попыток загрузки страницы. Боевой прогон — ОДНА попытка (решение
 # юриста 26.07.2026): пропуск безопасен — карточка перечитается следующим
 # прогоном, сбой поиска пишется в журнал здоровья как HTTP-fail (алерт только
@@ -560,7 +569,7 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 # или "openrouter". Тестовый workflow (test_digest.yml) пробрасывает выбор
 # провайдера/модели из inputs; основной мониторинг (update_cases.yml)
 # остаётся на Claude и ничего не знает про этот флаг.
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openrouter").strip().lower()
 
 # Модель Claude для дайджеста. По умолчанию — боевой эталон haiku (общий кэш
 # пересказов). Тестовый workflow (test_digest.yml) может выбрать sonnet/opus
@@ -655,34 +664,27 @@ GIGACHAT_V3_API_URL = "https://api.giga.chat/v1/chat/completions"
 # shir-man.com/free-llm), при недоступности — OPENROUTER_FALLBACK_MODEL
 # (маршрут openrouter/free: OpenRouter сам выбирает живую бесплатную модель).
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip()
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
+OPENROUTER_SUMMARY_MODEL = os.environ.get("OPENROUTER_SUMMARY_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
 OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 
-# Ретраи LLM-пересказов актов через OpenRouter: перегруженный free-пул отдаёт
-# 429 мгновенно, и немедленный повтор упирается в ту же стену — между
-# попытками нужна пауза (нарастающая, attempt * DELAY: 5с, 10с — как у
-# fetch_page). Если основная модель так и не ответила — фолбэк-роутер
-# OPENROUTER_FALLBACK_MODEL (openrouter/free: OpenRouter сам подбирает живую
-# бесплатную модель), тоже с ретраем. Худший случай на безнадёжный акт:
-# 3+2 вызова и ~20 с пауз. Инцидент 17.07.2026 (Урал): два хвостовых акта
-# из шести ушли в дайджест сырой мотивировкой вместо «Почему:».
-OPENROUTER_SUMMARY_RETRIES = 3           # попыток на основной модели
-OPENROUTER_SUMMARY_FALLBACK_RETRIES = 2  # попыток на фолбэк-модели
-OPENROUTER_SUMMARY_RETRY_DELAY = 5       # база паузы между попытками (сек)
-
-# Фолбэк-ПРОВАЙДЕР пересказов: если бесплатный пул OpenRouter лёг целиком
-# (и «модель дня», и openrouter/free исчерпали попытки), одна попытка на
-# боевом Claude haiku — при наличии ANTHROPIC_API_KEY (в replay/кроне он
-# прокинут всегда, на Mac-резерве ключей нет и до этой ветки дело не
-# доходит). Пересказ одноразовый: акт объявляется один раз, и без фолбэка
-# сырой отрывок замерзает в дайджесте и «AI анализе» навсегда — инцидент
-# 28.08.2026 (Урал): оба акта выпуска ушли «Мотивировкой» при живом ключе
-# Claude в env. "0" — выключить (остаться чисто на бесплатном пуле).
+# Ограниченные повторы OpenRouter, затем GigaChat, затем Claude.
+# Никакого случайного openrouter/free в цепочке пересказов.
+OPENROUTER_SUMMARY_RETRIES = 3
+OPENROUTER_SUMMARY_FALLBACK_RETRIES = 0  # совместимость; случайный маршрут отключён
+OPENROUTER_SUMMARY_RETRY_DELAY = 5
 LLM_SUMMARY_PROVIDER_FALLBACK = os.environ.get(
     "LLM_SUMMARY_PROVIDER_FALLBACK", "1"
 ).strip() != "0"
+# Неизвестная модель требует явного подтверждённого лимита, а не обрезки.
+SUMMARY_CONTEXT_TOKENS = {
+    p: int(os.environ.get(p.upper() + "_SUMMARY_CONTEXT_TOKENS", "0"))
+    for p in ("openrouter", "gigachat", "claude")
+}
+SUMMARY_RETRY_BATCH = 10
+SUMMARY_RETRY_DAYS = 3
 
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096

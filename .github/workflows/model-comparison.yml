@@ -16,11 +16,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify refusal fix and precise court-act references
+      - name: Install isolated pipeline dependencies
+        run: pip install -r scripts/requirements.txt
+      - name: Validate implemented pipeline on 25 new acts
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
-        run: python model-selection/compare_models.py
+        run: python model-selection/validate_pipeline.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
