@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-06T07:30:12+05:00",
+ "updated_at": "2026-10-06T08:02:10+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,25 +532,25 @@
   }
  },
  "last_run": {
-  "at": "2026-10-06T07:30:12",
+  "at": "2026-10-06T08:02:10",
   "alerts": [],
-  "requests_ok": 99,
-  "requests_failed": 1,
+  "requests_ok": 4,
+  "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 95,
-  "cards_planned": 98,
-  "cards_read_today": 409,
+  "cards_read": 2,
+  "cards_planned": 4,
+  "cards_read_today": 410,
   "cards_planned_today": 412,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 94,
-    "planned": 96,
-    "read_today": 254,
+    "read": 1,
+    "planned": 2,
+    "read_today": 255,
     "planned_today": 256
    },
    "appeal": {
@@ -567,28 +567,21 @@
    }
   },
   "latency": {
-   "n": 99,
-   "p50": 8.7,
-   "p90": 15.7,
-   "max": 41.1
+   "n": 4,
+   "p50": 12.2,
+   "p90": 13.2,
+   "max": 13.2
   },
   "failure_latency": {
-   "http_504": {
-    "n": 1,
-    "p50": 30.0,
-    "p90": 30.0,
-    "max": 30.0
-   },
    "invalid_card_request": {
     "n": 2,
-    "p50": 0.4,
-    "p90": 13.1,
-    "max": 13.1
+    "p50": 13.1,
+    "p90": 13.2,
+    "max": 13.2
    }
   },
   "fail_kinds": {
-   "invalid_card_request": 2,
-   "http_504": 1
+   "invalid_card_request": 2
   },
   "breaker": {
    "mode": "time",
@@ -608,7 +601,7 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 3,
+  "cards_unread_other": 2,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false
  },
@@ -791,10 +784,10 @@
   "date": "2026-10-06",
   "region": "hmao",
   "waiting": 38,
-  "due": 2,
-  "planned": 2,
-  "read": 2,
-  "published": 2,
+  "due": 0,
+  "planned": 0,
+  "read": 0,
+  "published": 0,
   "unplanned": 0,
   "items": [
    {
@@ -1046,26 +1039,6 @@
     "next_check_at": "2026-10-13",
     "over_90_days": false,
     "reason": "scheduled"
-   },
-   {
-    "key": "oblsud--hmao.sudrf.ru|5|1|33-4233/2026",
-    "number": "33-4233/2026",
-    "court": "oblsud--hmao.sudrf.ru",
-    "status": "waiting",
-    "last_checked_at": "2026-08-26",
-    "next_check_at": "2026-10-13",
-    "over_90_days": false,
-    "reason": "published"
-   },
-   {
-    "key": "oblsud--hmao.sudrf.ru|5|1|33-4189/2026",
-    "number": "33-4189/2026",
-    "court": "oblsud--hmao.sudrf.ru",
-    "status": "waiting",
-    "last_checked_at": "2026-08-19",
-    "next_check_at": "2026-10-13",
-    "over_90_days": false,
-    "reason": "published"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-4102/2026",
