@@ -18,13 +18,14 @@ jobs:
           python-version: '3.12'
       - name: Install isolated pipeline dependencies
         run: pip install -r scripts/requirements.txt
-      - name: Validate concise Claude summaries on five full acts
+      - name: Validate Sonnet 5 on five full acts
         env:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
           GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_MODEL: claude-haiku-4-5-20251001
+          CLAUDE_MODEL: claude-sonnet-5
+          CLAUDE_EFFORT: high
           BENCHMARK_PROVIDERS: claude
           BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
         run: python model-selection/validate_reserves.py

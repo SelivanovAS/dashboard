@@ -23,9 +23,10 @@ def bounded_post(url, **kw):
         counts[current] += 1
         payload=kw['json']
         if current == 'claude':
-            assert payload['model'] == 'claude-haiku-4-5-20251001'
-            upper = len(json.dumps(payload['messages'],ensure_ascii=False).encode())/1e6 + payload['max_tokens']*5/1e6
-            assert estimates['claude'] + upper <= 1, 'Claude $1 upper budget reached'
+            assert payload['model'] in ('claude-haiku-4-5-20251001','claude-sonnet-5')
+            rate = 2 if payload['model'] == 'claude-sonnet-5' else 1
+            upper = (len(json.dumps(payload['messages'],ensure_ascii=False).encode()) + 512)/1e6*rate + payload['max_tokens']*5*rate/1e6
+            assert estimates['claude'] + upper <= 0.9, 'Claude $1 upper budget reached'
             estimates['claude'] += upper
         time.sleep(2)
     started=time.monotonic(); r=post(url, **kw)
