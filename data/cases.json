@@ -1,7 +1,59 @@
 {
   "version": 1,
-  "updated_at": "2026-10-06T04:04:35+00:00",
+  "updated_at": "2026-10-06T17:05:51+05:00",
   "cases": [
+    {
+      "id": "33-6931/2026",
+      "current_stage": "appeal",
+      "plaintiff": "Исаков Иван Васильевич, Исакова (Хаялиева) Диана Рафисовна",
+      "defendant": "ООО СЗ МЕТРИКС-ОЛЬГИНКА",
+      "category": "Споры, связанные с жилищными отношениями → Споры, возникающие в связи с участием граждан в долевом строительстве многоквартирных домов и иных объектов недвижимости",
+      "bank_role": "Третье лицо",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-6896/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Безносов Андрей Вячеславович",
+        "filing_date": "",
+        "status": "",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "events": [],
+        "judicial_uid": "86RS0002-01-2026-005900-91",
+        "srv_num": 1
+      },
+      "appeal": {
+        "case_number": "33-6931/2026",
+        "court": "Суд ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 5,
+        "judge_reporter": "Соболевская Наталья Юрьевна",
+        "filing_date": "06.10.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача дела судье. 12:51. 06.10.2026",
+        "event_date": "06.10.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "27078867|d536b7cd-054a-4631-9def-36aca218abd3",
+        "act_published": false,
+        "act_date": "",
+        "appellant": "",
+        "events": []
+      },
+      "import": {
+        "operator": "Селиванов А.С.",
+        "at": "2026-10-06T17:05:37",
+        "source": "dump_appeal"
+      }
+    },
     {
       "id": "33-6806/2026",
       "current_stage": "appeal",
