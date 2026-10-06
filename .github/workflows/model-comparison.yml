@@ -1,4 +1,4 @@
-name: "Сравнение моделей пересказа — без доставки"
+name: "Проверка GigaChat и Claude — без доставки"
 on:
   push:
     branches: [codex/model-selection-20261006]
@@ -18,11 +18,15 @@ jobs:
           python-version: '3.12'
       - name: Install isolated pipeline dependencies
         run: pip install -r scripts/requirements.txt
-      - name: Validate revised prompt and guards on 25 held-out acts
+      - name: Validate both reserves on five identical full acts
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
+          GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: claude-haiku-4-5-20251001
           BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
-        run: python model-selection/validate_pipeline.py
+        run: python model-selection/validate_reserves.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

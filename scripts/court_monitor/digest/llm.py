@@ -1073,9 +1073,12 @@ def _context_limit(provider, model):
             _context_limits.setdefault(model, 0)
         return _context_limits[model]
     if provider == 'gigachat':
-        if model in ('GigaChat-2', 'GigaChat-2-Pro', 'GigaChat-2-Max', 'GigaChat-3-Ultra'):
+        if model in ('GigaChat-2', 'GigaChat-2-Pro', 'GigaChat-2-Max', 'GigaChat-3-Ultra',
+                     'GigaChat', 'GigaChat-Pro', 'GigaChat-Max'):
+            # Текущие алиасы Lite/Pro/Max относятся к поколению 2
+            # (таблица ID в официальных тарифах от 29.09.2026).
             return 128000
-        if model in ('GigaChat', 'GigaChat-Pro', 'GigaChat-Plus', 'GigaChat-Max'):
+        if model == 'GigaChat-Plus':
             return 32768
     if provider == 'claude' and model.startswith(('claude-haiku-4-5', 'claude-sonnet-4', 'claude-opus-4', 'claude-sonnet-5')):
         # Консервативный доступный объём; без предположений о beta/тарифе 1M.
