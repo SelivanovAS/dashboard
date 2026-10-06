@@ -18,15 +18,12 @@ jobs:
           python-version: '3.12'
       - name: Install isolated pipeline dependencies
         run: pip install -r scripts/requirements.txt
-      - name: Compare GigaChat 2 Pro on five unchanged full acts
+      - name: Read available GigaChat models without generation
         env:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
-          GIGACHAT_MODEL: GigaChat-2-Pro
-          BENCHMARK_PROVIDERS: gigachat
-          BENCHMARK_SAMPLE_IDS: H02,H08,H09,H19,H24
-          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/pro
-        run: python model-selection/validate_reserves.py
+          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/catalogue
+        run: python model-selection/list_gigachat_models.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
