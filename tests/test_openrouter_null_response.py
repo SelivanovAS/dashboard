@@ -14,7 +14,7 @@ from court_monitor import config, runs
 from court_monitor.digest import llm, template
 
 
-ACT = "Мотивировочная часть судебного акта. " * 8
+ACT = ("Мотивировочная часть судебного акта. " * 8 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
 SUMMARY = "Долг подтверждён документами. Доказательств оплаты не представлено."
 PRIMARY = "test/primary:free"
 FALLBACK = "openrouter/free"

@@ -320,7 +320,7 @@ class SummarizeDispatchTest(_OpenRouterTestBase):
                               "gigachat", called["gigachat"] + 1
                           ) or "нет"):
             out = cm_llm.summarize_act_motivation(
-                "Мотивировочная часть акта. " * 10,
+                ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения."),
                 case_meta={"stage": "appeal"},
                 use_cache=False,
             )
@@ -335,7 +335,7 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
     подключается фолбэк-модель OPENROUTER_FALLBACK_MODEL. У Claude/
     GigaChat ретрая нет."""
 
-    ACT = "Мотивировочная часть акта. " * 10
+    ACT = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
     PRIMARY = "primary/model:free"
 
     def setUp(self):
@@ -572,7 +572,7 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
 
 
 class ActCacheKeyNamespaceTest(_OpenRouterTestBase):
-    ACT = "Мотивировочная часть акта. " * 10
+    ACT = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
 
     def _key(self, provider, **cfg):
         patches = [patch.object(cm_config, "LLM_PROVIDER", provider)]
@@ -744,7 +744,7 @@ class SummarizeNoKeyTest(_OpenRouterTestBase):
     дайджест-черновик уходил с сырым текстом акта.
     """
 
-    ACT = "Мотивировочная часть акта. " * 10
+    ACT = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
 
     def setUp(self):
         super().setUp()

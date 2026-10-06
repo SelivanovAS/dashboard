@@ -13,7 +13,7 @@ import re
 from copy import deepcopy
 from datetime import datetime, timedelta, date
 
-from court_monitor import config
+from court_monitor import config, act_publication
 from court_monitor.config import log, cold_archive_path
 from court_monitor.courts import (
     CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
@@ -1152,6 +1152,15 @@ def link_cassation_cases(
                 # её состояния и после поступления следующего производства.
                 from court_monitor.complaints import remember_cassation_resolution
                 remember_cassation_resolution(case, old_cass, case.get("id", ""))
+            # Наблюдение относится к конкретному производству, а не к делу вообще.
+            previous_observation = deepcopy(old_cass) if _cass_key(old_cass.get("court_domain"), old_cass.get("case_number")) == cass_key else {}
+            announce_text = act_publication.observe(previous_observation,
+                info.get("act_text") or "", date.today(),
+                present=bool(info.get("act_published")),
+                confirmed_date=info.get("decision_date") or "")
+            for field in (*act_publication.FIELDS, "act_text"):
+                if previous_observation.get(field):
+                    cass_block[field] = previous_observation[field]
             case["cassation"] = cass_block
             # ── Бэкфилл сторон из УЧАСТНИКОВ карточки 7kas ──
             # Дела, заведённые discovery'ем до расширения разбора ролей (или с
@@ -1247,7 +1256,7 @@ def link_cassation_cases(
                 change["type"].append("review_result_change")
             if cass_block["outcome"] and cass_block["outcome"] != old_outcome:
                 change["type"].append("outcome_change")
-            if cass_block["act_published"] and not old_act_published:
+            if announce_text:
                 act_key = _cassation_act_key(cass_block)
                 if act_key and act_key in digested_cass_acts:
                     # Определение уже уходило в дайджест — act_published
@@ -1261,10 +1270,8 @@ def link_cassation_cases(
                     change["type"].append("new_act")
                     # Текст определения — уже в cass_block["act_text"].
                     # В дайджест пробрасываем мотивировочную часть.
-                    change["details"]["act_text"] = extract_motive_part(
-                        cass_block["act_text"], 1800
-                    )
-                    change["details"]["act_date"] = cass_block["act_date"]
+                    change["details"]["act_text"] = cass_block["act_text"]
+                    change["details"].update(act_publication.dates(cass_block))
                     if act_key:
                         digested_cass_acts.add(act_key)
                         cass_acts_dirty = True
@@ -1405,22 +1412,12 @@ def link_cassation_cases(
                     "remanded_to": cass_block.get("remanded_to", ""),
                 },
             })
-            if cass_block["act_published"]:
-                act_key = _cassation_act_key(cass_block)
-                if act_key and act_key in digested_cass_acts:
-                    log.debug(
-                        f"  7kas: {cass_block['case_number']} — определение "
-                        f"уже было в дайджесте, new_act подавлен (discovery)"
-                    )
-                else:
-                    cass_changes[-1]["type"].append("new_act")
-                    cass_changes[-1]["details"]["act_text"] = extract_motive_part(
-                        cass_block["act_text"], 1800
-                    )
-                    cass_changes[-1]["details"]["act_date"] = cass_block["act_date"]
-                    if act_key:
-                        digested_cass_acts.add(act_key)
-                        cass_acts_dirty = True
+            # Первое обнаружение производства — историческая загрузка текста.
+            observed = {}
+            act_publication.observe(observed, cass_block.get("act_text") or "", date.today(),
+                present=bool(cass_block.get("act_published")),
+                confirmed_date=cass_block.get("decision_date") or "")
+            cass_block.update({k: observed[k] for k in act_publication.FIELDS if k in observed})
             log.info(
                 f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "
                 f"{fi_court_short}), outcome={cass_block['outcome'] or '—'}"

@@ -370,7 +370,7 @@ class TestRunSummaryOptionalLines:
 # ── METRICS: инкременты LLM-пересказов ───────────────────────────────────────
 
 class TestSummarizeMetrics:
-    ACT = "Мотивировочная часть судебного акта, достаточно длинная. " * 5
+    ACT = ("Мотивировочная часть судебного акта, достаточно длинная. " * 5 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
 
     def test_cache_hit_counted(self, monkeypatch):
         key = cm_llm._act_cache_key(self.ACT.strip())

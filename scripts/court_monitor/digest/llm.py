@@ -19,11 +19,11 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
-from court_monitor import config
+from court_monitor import config, act_publication
 from court_monitor.config import log
 from court_monitor.storage import _load_act_summaries, _save_act_summaries
 from court_monitor.textutil import _bare_case_number
@@ -446,6 +446,19 @@ def _resolve_openrouter_model() -> str:
     return _openrouter_resolved_model
 
 
+# Подтверждённая суточная квота относится ко всему бесплатному пулу ключа.
+_openrouter_daily_exhausted = set()
+
+
+def _daily_pool_key():
+    return (datetime.now(timezone.utc).date().isoformat(),
+            hashlib.sha256(config.OPENROUTER_API_KEY.encode()).hexdigest())
+
+
+def _free_pool_blocked(model):
+    return (model == "openrouter/free" or model.endswith(":free")) and _daily_pool_key() in _openrouter_daily_exhausted
+
+
 def _call_openrouter_chat(
     messages: list[dict], *, max_tokens: int, temperature: float,
     model: str | None = None,
@@ -462,6 +475,8 @@ def _call_openrouter_chat(
         log.warning("OPENROUTER_API_KEY не задан")
         return None
     model_id = model or _resolve_openrouter_model()
+    if _free_pool_blocked(model_id):
+        return None
     try:
         r = requests.post(
             config.OPENROUTER_API_URL,
@@ -518,7 +533,11 @@ def _call_openrouter_chat(
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
-        log.warning(f"OpenRouter API HTTP {status}: {body}")
+        if status == 429 and re.search(r"free[- ]models[- ]per[- ]day|daily (?:quota|limit)|per.day.*(?:quota|limit)|(?:quota|limit).*per.day", body, re.I):
+            _openrouter_daily_exhausted.add(_daily_pool_key())
+            log.warning("OpenRouter: суточная квота исчерпана; до следующего дня используем резервного провайдера")
+        else:
+            log.warning(f"OpenRouter API HTTP {status}: {body}")
         return None
     except (requests.RequestException, KeyError, ValueError,
             json.JSONDecodeError) as e:
@@ -954,11 +973,15 @@ def _openrouter_summary_attempts(
     """
     raw: str | None = None
     for attempt in range(1, max(1, attempts) + 1):
+        if _free_pool_blocked(model):
+            break
         config.METRICS["llm_summary_calls"] += 1
         raw = _call_openrouter_simple(prompt, model=model)
         summary = _clean_summary(raw) if raw else ""
         if summary:
             return summary, raw
+        if _free_pool_blocked(model):
+            break
         if attempt < attempts:
             wait = attempt * config.OPENROUTER_SUMMARY_RETRY_DELAY
             log.warning(
@@ -1002,15 +1025,16 @@ def summarize_act_motivation(
     пропускается ДО вызова: `llm_summary_skipped_no_key` вместо
     `llm_summary_failed`, одна строка в лог за процесс.
     """
-    act = (act_text or "").strip()
-    if not act or len(act) < 100:
+    act = act_publication.summary_source(act_text, case_meta.get("stage", ""))
+    if not act:
         return None
 
     key = _act_cache_key(act)
     cache = _load_act_summaries() if use_cache else {}
     if use_cache and key in cache:
         cached_summary = (cache[key] or {}).get("summary")
-        if cached_summary and not summary_language_ok(cached_summary):
+        if cached_summary and (not summary_language_ok(cached_summary)
+                or not act_publication.summary_agrees(cached_summary, act, case_meta.get("verdict_label", ""))):
             # Испорченный пересказ в кэше жил бы ВЕЧНО: кэш-хит стоит до всех
             # чисток, и гард в _clean_summary его никогда не увидит. Так
             # выпуск 21.08.2026 разослал «послужили Creditный договор»
@@ -1039,7 +1063,12 @@ def summarize_act_motivation(
         _report_llm_not_configured(missing_key)
         return None
 
-    prompt = _build_act_summary_prompt(act, case_meta)
+    prompt = _build_act_summary_prompt(act, case_meta) + (
+        "\nПроверка: пересказывай выводы именно этой инстанции. Изложение иска, "
+        "доводы жалобы и отменённое решение не являются выводами рассматривающего суда. "
+        "Сверь пересказ с заключительной резолютивной частью и указанным итогом. "
+        "Если мотивировка отсутствует или документ внутренне противоречив, верни только НЕДОСТАТОЧНО_ТЕКСТА."
+    )
 
     def _call_once() -> str | None:
         if config.LLM_PROVIDER == "gigachat":
@@ -1098,6 +1127,10 @@ def summarize_act_motivation(
         config.METRICS["llm_summary_calls"] += 1
         raw = _call_once()
         summary = _clean_summary(raw) if raw else ""
+    if summary and ("НЕДОСТАТОЧНО_ТЕКСТА" in summary or not act_publication.summary_agrees(
+            summary, act, case_meta.get("verdict_label", ""))):
+        log.warning("Пересказ отброшен: недостаточная мотивировка или противоречие резолюции")
+        summary = ""
     if not summary:
         config.METRICS["llm_summary_failed"] += 1
         if raw:

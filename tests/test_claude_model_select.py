@@ -160,7 +160,7 @@ class CurrentModelLabelTest(unittest.TestCase):
 
 
 class ActCacheKeyNamespaceTest(unittest.TestCase):
-    ACT = "Мотивировочная часть акта. " * 20  # заведомо длиннее 100 символов
+    ACT = ("Мотивировочная часть акта. " * 20 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")  # заведомо длиннее 100 символов
 
     def _key(self, model):
         with patch.object(cm_config, "LLM_PROVIDER", "claude"), patch.object(

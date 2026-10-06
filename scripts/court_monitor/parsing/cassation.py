@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from court_monitor.parsing.act_markup import document_div_text
+
 import re
 from urllib.parse import urlparse
 from datetime import datetime, date
@@ -216,13 +218,7 @@ def _extract_cassation_act_text(html: str) -> tuple[str, str]:
     Возвращает (act_text, cassation_number_88) — текст и официальный касс.
     номер 88-XXXX/YYYY (если найден в заголовке акта). Если div пуст или
     короче 200 символов — возвращает ("", "")."""
-    m = _CASS_ACT_DIV_RE.search(html)
-    if not m:
-        return "", ""
-    body = m.group(1)
-    body = _HTML_SCRIPT_RE.sub("", body)
-    body = _HTML_STYLE_RE.sub("", body)
-    text = _strip_html(body)
+    text = document_div_text(html)
     if len(text) < 200:
         return "", ""
     cass_num = ""

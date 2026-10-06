@@ -737,6 +737,7 @@ log "Парсинг судов ($REGION_CODE): run_parse.py (main_json без с
 # Полный многосудовый обход: cooldown измеряется временем, пока очередь
 # продолжает другие хосты. Batch-импорты отдельно фиксируют count (5/3).
 PARSE_TELEMETRY_FILE="$REPO/ops/mac-local-run/.runtime/parse_telemetry.json" \
+COURT_REQUEST_COORD_DIR="${COURT_REQUEST_COORD_DIR:-/tmp/court-monitor-http-$(id -u)}" \
 PARSE_NETWORK_FINGERPRINT_FILE="$NETWORK_FINGERPRINT_FILE" \
 DIGEST_CONTEXT_REQUIRED=1 \
 PARSE_TXN_ID="$PARSE_TXN_ID" \

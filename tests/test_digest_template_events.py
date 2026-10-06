@@ -1116,7 +1116,7 @@ class AppealEventMatrixTest(unittest.TestCase):
         html = render(changes=[make_appeal_change(["new_act"])])
         self.assertIn("📄 <b>Опубликованные тексты актов (1):</b>", html)
         # Без summarizer — excerpt (первые 1-2 предложения).
-        self.assertIn("Мотивировка: Судебная коллегия установила", html)
+        self.assertIn("Фрагмент текста: Судебная коллегия установила", html)
         self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_appeal_to_fi_rules(self):
@@ -2499,7 +2499,8 @@ class BankActWhyTest(unittest.TestCase):
         # «Почему» — строкой СРАЗУ за строкой дела (контракт
         # attach_act_analyses: абзац head+Почему без пустой строки).
         nxt = self._line_after_case(html)
-        self.assertEqual(nxt, "<b>Почему:</b> <i>ПЕРЕСКАЗ_БАНК</i>")
+        self.assertTrue(nxt.startswith("Акт вынесен:"))
+        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_БАНК</i>", html)
         # Без номера дела в строке пересказа — линтер считает дела по
         # строкам с номерами, второй номер удвоил бы счётчик.
         self.assertNotIn("2-100/2026", nxt)

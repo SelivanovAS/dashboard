@@ -3198,9 +3198,10 @@
             "posted_at": "07.05.2026"
           }
         ],
-        "link": "11651493|3ba9803a-077c-42fe-83dd-03d6d5be74de",
-        "last_checked_at": "2026-07-27",
-        "discovered_via_cassation": true
+        "link": "15806445|3ba9803a-077c-42fe-83dd-03d6d5be74de",
+        "last_checked_at": "2026-10-06",
+        "discovered_via_cassation": true,
+        "act_absent_checked_at": "2026-10-06"
       },
       "initial_bank_role": "Истец",
       "archived_at": "2026-07-27"
