@@ -18,23 +18,14 @@ jobs:
           python-version: '3.12'
       - name: Install isolated pipeline dependencies
         run: pip install -r scripts/requirements.txt
-      - name: Retry only three GigaChat 2 Max connection failures
+      - name: Compare GigaChat 2 Pro on five unchanged full acts
         env:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
-          GIGACHAT_MODEL: GigaChat-2-Max
+          GIGACHAT_MODEL: GigaChat-2-Pro
           BENCHMARK_PROVIDERS: gigachat
-          BENCHMARK_SAMPLE_IDS: H09,H19,H24
-          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/max
-        run: python model-selection/validate_reserves.py
-      - name: Retry only one GigaChat 3 Ultra OAuth connection failure
-        env:
-          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
-          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
-          GIGACHAT_MODEL: GigaChat-3-Ultra
-          BENCHMARK_PROVIDERS: gigachat
-          BENCHMARK_SAMPLE_IDS: H02
-          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/ultra
+          BENCHMARK_SAMPLE_IDS: H02,H08,H09,H19,H24
+          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/pro
         run: python model-selection/validate_reserves.py
       - uses: actions/upload-artifact@v4
         if: always()
