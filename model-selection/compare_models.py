@@ -11,8 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-          'cohere/north-mini-code:free']
+MODELS = ['nvidia/nemotron-3-ultra-550b-a55b:free']
+REASONING = {"enabled": True, "max_tokens": 1024}
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -63,7 +63,7 @@ def main():
     total = len(samples) * len(MODELS)
     report = {"models": MODELS, "samples": len(samples), "planned_requests": total,
               "configuration": {"max_tokens": 4096, "temperature": 0.2,
-                                "reasoning": {"enabled": False}}, "status": "preflight"}
+                                "reasoning": REASONING}, "status": "preflight"}
 
     def save():
         (OUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
@@ -113,7 +113,7 @@ def main():
             previous_start = time.monotonic()
             payload = {"model": model, "messages": [{"role": "user", "content": sample["prompt"]}],
                        "max_tokens": 4096, "temperature": 0.2,
-                       "reasoning": {"enabled": False},
+                       "reasoning": REASONING,
                        "provider": {"max_price": {"prompt": 0, "completion": 0}}}
             status, data = request("/chat/completions", payload, auth=True)
             elapsed = round(time.monotonic() - previous_start, 3)
