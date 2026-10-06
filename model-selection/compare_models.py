@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['nvidia/nemotron-3-ultra-550b-a55b:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'inclusionai/ling-3.0-flash-sante:free', 'google/gemma-4-26b-a4b-it:free', 'apodex/apodex-1.1-mini:free']
+MODELS = ['apodex/apodex-1.1-mini:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'inclusionai/ling-3.0-flash-sante:free']
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)

@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Compare short and full texts on five free models
+      - name: Compare grounded instruction on three free models
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
