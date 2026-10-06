@@ -72,11 +72,12 @@ on:
         required: false
         type: choice
         options:
+          - GigaChat-3-Pro
           - GigaChat-2-Pro
           - GigaChat-2
           - GigaChat-2-Max
           - GigaChat-3-Ultra
-        default: GigaChat-2-Pro
+        default: GigaChat-3-Pro
       openrouter_model:
         description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга, какая именно — видно в приписке «🤖 LLM» и в логе.'
         required: false
@@ -166,6 +167,7 @@ jobs:
           GIGACHAT_MODEL: ${{ inputs.llm_model || inputs.gigachat_model }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ inputs.llm_model || inputs.openrouter_model }}
+          OPENROUTER_SUMMARY_MODEL: __selected__
           # Группы фаз и аннотации WARNING/ERROR в UI Actions (ghlog.py).
           LOG_GH_ANNOTATIONS: "1"
         run: |
@@ -223,6 +225,15 @@ jobs:
           if [ -f data/.act_summaries.json ]; then
             git add data/.act_summaries.json
           fi
+          if [ -f data/.act_summaries.pending.json ]; then
+            git add data/.act_summaries.pending.json
+          fi
+          if [ -f data/.llm_provider_state.json ]; then
+            git add data/.llm_provider_state.json
+          fi
+          for archive in data/cases_bank.json data/cases_bank_events.json data/cases_archive.json data/cases_bank_archive.json data/cases_bank_archive_events.json data/cases_archive_[0-9][0-9][0-9][0-9].json data/cases_bank_archive_[0-9][0-9][0-9][0-9].json; do
+            [ ! -f "$archive" ] || git add "$archive"
+          done
           if git diff --cached --quiet; then
             echo "Нет изменений — нечего коммитить"
             exit 0

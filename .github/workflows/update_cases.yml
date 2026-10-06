@@ -103,15 +103,20 @@ jobs:
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # LLM боевого дайджеста: с 16.07.2026 дефолт — OpenRouter
-          # «модель дня» (бесплатный контур, решение юриста; пустая
-          # OPENROUTER_MODEL = топ-1 рейтинга shir-man на момент прогона).
+          # Пересказы: фиксированный Apodex → настроенный GigaChat → Claude.
           # Вернуть Claude БЕЗ правки кода: Actions Variable
           # LLM_PROVIDER=claude (Settings → Variables; так же может
-          # отличаться территория). ⚠ Секрет OPENROUTER_API_KEY обязателен:
-          # без него validate_environment уронит прогон на старте.
+          # отличаться территория). При отсутствии ключа основного
+          # провайдера используется следующий настроенный резерв.
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          OPENROUTER_SUMMARY_MODEL: apodex/apodex-1.1-mini:free
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
+          GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat-3-Pro' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-haiku-4-5-20251001' }}
+          CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # По умолчанию шлём в личный чат (TELEGRAM_CHAT_ID_TEST). Cloudflare Worker
           # дёргает workflow_dispatch без inputs → default to_group=false → личный чат.

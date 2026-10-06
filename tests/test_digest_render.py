@@ -296,7 +296,7 @@ class BuildActSummaryPromptTest(unittest.TestCase):
     def test_detailed_format_and_language(self):
         # Контракт «v3-detailed»: 2-3 предложения, лимит 450, русский язык.
         prompt = uc._build_act_summary_prompt("Текст. " * 30, {})
-        self.assertIn("2-3 предложениями", prompt)
+        self.assertIn("2-3 предложения", prompt)
         self.assertIn("450", prompt)
         self.assertIn("на русском языке", prompt)
 
@@ -408,11 +408,11 @@ class CleanSummaryTest(unittest.TestCase):
             "",
         )
 
-    def test_overlong_trimmed_at_sentence_boundary(self):
+    def test_overlong_is_rejected_without_losing_final_qualification(self):
         sent = "Довод ответчика о пропуске срока исковой давности отклонён. "
         cleaned = uc._clean_summary(sent * 20)  # ~1200 символов
         self.assertLessEqual(len(cleaned), cm_llm._SUMMARY_HARD_LIMIT)
-        self.assertTrue(cleaned.endswith("отклонён."))
+        self.assertEqual(cleaned, "")
 
     def test_overlong_without_boundary_is_garbage(self):
         self.assertEqual(uc._clean_summary("а" * 700), "")

@@ -47,7 +47,7 @@ def sync(data, cases, today):
         if not key:
             continue
         if key not in tasks:
-            if (block.get('act_text') or '').strip() or not block.get('decision_date'):
+            if ((block.get('act_text') or '').strip() and not block.get('act_summary_needs_source')) or not block.get('decision_date'):
                 continue
             tasks[key] = {
                 'status': 'waiting', 'created_at': today.isoformat(),
@@ -67,7 +67,17 @@ def sync(data, cases, today):
             continue
         if task['status'] == 'needs_review':
             continue
-        if (block.get('act_text') or '').strip():
+        if (block.get('act_summary_needs_source') and task['status'] == 'complete'
+                and old.get('act_summary_needs_source') is False
+                and act_publication.summary_source(old.get('act_text') or '')):
+            for field in ('act_text', 'act_published', 'act_date', 'cassation_number', 'last_checked_at') + act_publication.FIELDS:
+                if field in old:
+                    block[field] = deepcopy(old[field])
+        if block.get('act_summary_needs_source'):
+            # Дочитка уже известного акта, даже если прежняя задача завершена.
+            # Старый снимок задачи не должен затереть запрос полного источника.
+            task.update(status='waiting', block=deepcopy(block), previously_announced=True)
+        if ((block.get('act_text') or '').strip() and not block.get('act_summary_needs_source')):
             newly_complete = task['status'] != 'complete'
             task['status'] = 'complete'
             task['block'] = deepcopy(block)
@@ -193,8 +203,8 @@ def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
             report['read'] += 1
             telemetry.mark_case_read('cassation', block['court_domain'] + '|' + block['case_number'])
             block['last_checked_at'] = today.isoformat()
-            notify = act_publication.observe(block, text, today, present=present, confirmed_date=confirmed_date)
-            if text:
+            notify = act_publication.observe(block, text, today, present=present, confirmed_date=confirmed_date, source_url=url)
+            if text and not block.get('act_summary_needs_source'):
                 task.update(status='complete', completed_at=today.isoformat())
                 if notify and not task.get('previously_announced'):
                     change = event(task)
@@ -207,7 +217,7 @@ def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
                     report['backfilled'] += 1
                     item['reason'] = 'backfilled'
             else:
-                item['reason'] = 'text_not_published'
+                item['reason'] = 'source_incomplete' if text else 'text_not_published'
             due = next_check(block, today)
             task['next_check_at'] = due.isoformat() if due else ''
             item['next_check_at'] = task['next_check_at']
@@ -251,4 +261,4 @@ def persist_archives(data, today):
 
 def pending(block):
     """Публикацию терминального производства обслуживает отдельная очередь."""
-    return bool(block.get('decision_date') and not (block.get('act_text') or '').strip())
+    return bool(block.get('decision_date') and not ((block.get('act_text') or '').strip() and not block.get('act_summary_needs_source')))

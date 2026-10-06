@@ -82,12 +82,18 @@ jobs:
           # Провайдер пересказов — ТОТ ЖЕ, что у облачного крона (зеркало
           # update_cases.yml; решение юриста 19.08.2026 при флипе на Mac-резерв:
           # с выключенным облачным кроном replay — боевой путь дайджеста).
-          # Пустая модель = «модель дня» рейтинга shir-man, фолбэк openrouter/free.
+          # Пересказы: фиксированный Apodex → настроенный GigaChat → Claude.
           # Откат на Claude без правки кода — Actions Variable LLM_PROVIDER=claude
           # (ANTHROPIC_API_KEY ниже оставлен именно для этого).
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          OPENROUTER_SUMMARY_MODEL: apodex/apodex-1.1-mini:free
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
+          GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat-3-Pro' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-haiku-4-5-20251001' }}
+          CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           # Личный чат — как и старый крон по умолчанию (to_group=false).
@@ -149,6 +155,15 @@ jobs:
           if [ -f data/.act_summaries.json ]; then
             git add data/.act_summaries.json
           fi
+          if [ -f data/.act_summaries.pending.json ]; then
+            git add data/.act_summaries.pending.json
+          fi
+          if [ -f data/.llm_provider_state.json ]; then
+            git add data/.llm_provider_state.json
+          fi
+          for archive in data/cases_archive.json data/cases_bank_archive.json data/cases_bank_archive_events.json data/cases_archive_[0-9][0-9][0-9][0-9].json data/cases_bank_archive_[0-9][0-9][0-9][0-9].json; do
+            [ ! -f "$archive" ] || git add "$archive"
+          done
           if git diff --cached --quiet; then
             echo "Нет изменений — нечего коммитить"
             exit 0

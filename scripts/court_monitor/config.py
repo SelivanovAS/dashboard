@@ -134,6 +134,14 @@ ACT_SUMMARIES_PATH = os.environ.get(
     "ACT_SUMMARIES_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", ".act_summaries.json")
 )
+ACT_SUMMARY_PENDING_PATH = os.environ.get(
+    "ACT_SUMMARY_PENDING_PATH",
+    os.path.join(os.path.dirname(ACT_SUMMARIES_PATH) or "data", ".act_summaries.pending.json")
+)
+LLM_PROVIDER_STATE_PATH = os.environ.get(
+    "LLM_PROVIDER_STATE_PATH",
+    os.path.join(os.path.dirname(ACT_SUMMARIES_PATH) or "data", ".llm_provider_state.json")
+)
 # Снимок контекста последнего дайджеста — сохраняется перед отправкой
 # в Telegram и используется режимом --replay-last для повторной генерации
 # (например, чтобы переиграть с другой версией промпта).
@@ -557,18 +565,16 @@ PUSH_SECRET = os.environ.get("PUSH_SECRET", "")
 # Приватный VAPID-ключ в PEM-формате; хранится только в GitHub Secrets.
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 
-# Переключатель провайдера LLM: "claude" (по умолчанию), "gigachat"
-# или "openrouter". Тестовый workflow (test_digest.yml) пробрасывает выбор
-# провайдера/модели из inputs; основной мониторинг (update_cases.yml)
-# остаётся на Claude и ничего не знает про этот флаг.
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "claude").strip().lower()
+# Основной провайдер — OpenRouter. Для пересказов резерв GigaChat → Claude;
+# явный выбор другого первичного провайдера сохраняется для теста/отката.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openrouter").strip().lower()
 
 # Модель Claude для дайджеста. По умолчанию — боевой эталон haiku (общий кэш
 # пересказов). Тестовый workflow (test_digest.yml) может выбрать sonnet/opus
 # через input claude_model → env CLAUDE_MODEL; короткие имена из админки
 # резолвятся в полный id API, точный id (из «Точной модели») проходит как есть.
-# Основной мониторинг (update_cases.yml) env CLAUDE_MODEL не ставит → остаётся
-# на haiku. Код читает только config.CLAUDE_MODEL — тесты патчат его напрямую.
+# Основные workflows задают CLAUDE_MODEL из Variables с резервом на Haiku.
+# Код читает config.CLAUDE_MODEL — тесты патчат его напрямую.
 DEFAULT_CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 _CLAUDE_MODEL_ALIASES = {
     "haiku": DEFAULT_CLAUDE_MODEL,
@@ -638,52 +644,41 @@ DIGEST_LINT = (
 )
 GIGACHAT_AUTH_KEY = os.environ.get("GIGACHAT_AUTH_KEY", "")
 GIGACHAT_SCOPE = os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-# `or "GigaChat"` — workflow передаёт общий input llm_model и в GIGACHAT_MODEL,
+# `or "GigaChat-3-Pro"` — workflow передаёт общий input llm_model и в GIGACHAT_MODEL,
 # и в OPENROUTER_MODEL; пустая строка из env должна означать «дефолт модели».
-GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "").strip() or "GigaChat"
+GIGACHAT_MODEL = os.environ.get("GIGACHAT_MODEL", "").strip() or "GigaChat-3-Pro"
 GIGACHAT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
-# Модели 3-го поколения (GigaChat-3-Ultra, freemium для физлиц) живут на
+# Модели 3-го поколения (включая GigaChat-3-Pro и GigaChat-3-Ultra) живут на
 # отдельном базовом адресе — стандартный gigachat.devices.sberbank.ru их
 # не принимает. Выбор URL по модели — llm._gigachat_api_url.
 GIGACHAT_V3_API_URL = "https://api.giga.chat/v1/chat/completions"
 
-# OpenRouter — третий провайдер (только тестовый контур, см. test_digest.yml).
-# OPENROUTER_MODEL: буквальный id модели ИЛИ место в рейтинге бесплатных
-# моделей («модель дня (топ-1)», «топ-3» — значения выпадающего списка
-# workflow; пусто = топ-1). Место резолвится на прогоне
-# (llm._resolve_openrouter_model) из OPENROUTER_TOP_MODELS_URL (рейтинг
-# shir-man.com/free-llm), при недоступности — OPENROUTER_FALLBACK_MODEL
-# (маршрут openrouter/free: OpenRouter сам выбирает живую бесплатную модель).
+# Пересказы закреплены за OPENROUTER_SUMMARY_MODEL. OPENROUTER_MODEL
+# сохраняет отдельный выбор полного дайджеста/полировки и ручного теста
+# (в том числе явный «топ-N» рейтинга). Пустой env даёт Apodex.
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip()
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
+OPENROUTER_SUMMARY_MODEL = os.environ.get("OPENROUTER_SUMMARY_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
 OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 
-# Ретраи LLM-пересказов актов через OpenRouter: перегруженный free-пул отдаёт
-# 429 мгновенно, и немедленный повтор упирается в ту же стену — между
-# попытками нужна пауза (нарастающая, attempt * DELAY: 5с, 10с — как у
-# fetch_page). Если основная модель так и не ответила — фолбэк-роутер
-# OPENROUTER_FALLBACK_MODEL (openrouter/free: OpenRouter сам подбирает живую
-# бесплатную модель), тоже с ретраем. Худший случай на безнадёжный акт:
-# 3+2 вызова и ~20 с пауз. Инцидент 17.07.2026 (Урал): два хвостовых акта
-# из шести ушли в дайджест сырой мотивировкой вместо «Почему:».
-OPENROUTER_SUMMARY_RETRIES = 3           # попыток на основной модели
-OPENROUTER_SUMMARY_FALLBACK_RETRIES = 2  # попыток на фолбэк-модели
-OPENROUTER_SUMMARY_RETRY_DELAY = 5       # база паузы между попытками (сек)
-
-# Фолбэк-ПРОВАЙДЕР пересказов: если бесплатный пул OpenRouter лёг целиком
-# (и «модель дня», и openrouter/free исчерпали попытки), одна попытка на
-# боевом Claude haiku — при наличии ANTHROPIC_API_KEY (в replay/кроне он
-# прокинут всегда, на Mac-резерве ключей нет и до этой ветки дело не
-# доходит). Пересказ одноразовый: акт объявляется один раз, и без фолбэка
-# сырой отрывок замерзает в дайджесте и «AI анализе» навсегда — инцидент
-# 28.08.2026 (Урал): оба акта выпуска ушли «Мотивировкой» при живом ключе
-# Claude в env. "0" — выключить (остаться чисто на бесплатном пуле).
+# Ограниченные повторы OpenRouter, затем GigaChat, затем Claude.
+# Никакого случайного openrouter/free в цепочке пересказов.
+OPENROUTER_SUMMARY_RETRIES = 3
+OPENROUTER_SUMMARY_FALLBACK_RETRIES = 0  # совместимость; случайный маршрут отключён
+OPENROUTER_SUMMARY_RETRY_DELAY = 5
 LLM_SUMMARY_PROVIDER_FALLBACK = os.environ.get(
     "LLM_SUMMARY_PROVIDER_FALLBACK", "1"
 ).strip() != "0"
+# Неизвестная модель требует явного подтверждённого лимита, а не обрезки.
+SUMMARY_CONTEXT_TOKENS = {
+    p: int(os.environ.get(p.upper() + "_SUMMARY_CONTEXT_TOKENS", "0"))
+    for p in ("openrouter", "gigachat", "claude")
+}
+SUMMARY_RETRY_BATCH = 10
+SUMMARY_RETRY_DAYS = 3
 
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096
@@ -790,9 +785,9 @@ METRICS: dict[str, int] = {
     "push_failed": 0,        # Web Push: WebPushException (skip по watchlist — не сбой)
     "llm_summary_calls": 0,       # пересказы актов: реальные вызовы LLM
     "llm_summary_cache_hits": 0,  # пересказы актов: взяты из кэша
-    "llm_summary_failed": 0,          # пересказы актов: все попытки исчерпаны → откат на excerpt
+    "llm_summary_failed": 0,          # пересказы актов: технический/непригодный ответ после всех резервов
     "llm_summary_fallback_saved": 0,  # пересказы актов: спасены фолбэк-моделью OpenRouter
-    "llm_summary_provider_fallback_saved": 0,  # пересказы актов: спасены фолбэк-провайдером Claude
+    "llm_summary_provider_fallback_saved": 0,  # пересказы актов: спасены GigaChat или Claude
     "llm_summary_skipped_no_key": 0,  # пересказы актов: не делали — у провайдера нет ключа (Mac-резерв)
     "bank_intake_candidates": 0,  # строк «банк-истец», прошедших строковые фильтры
     "bank_intake_cards": 0,       # карточек кандидатов, прочитанных подхватом
@@ -838,7 +833,11 @@ FETCH_FAIL_KINDS: dict[str, int] = {}  # отказы по классам _set_d
 FETCH_FAIL_TIMINGS: dict[str, list[float]] = {}
 
 
+SUMMARY_MODELS_USED: set[str] = set()
+
+
 def _metrics_reset() -> None:
+    SUMMARY_MODELS_USED.clear()
     for k in METRICS:
         METRICS[k] = 0
     CARD_BREAKER.clear()

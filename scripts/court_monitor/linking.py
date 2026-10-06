@@ -18,7 +18,7 @@ from court_monitor.config import log, cold_archive_path
 from court_monitor.courts import (
     CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
     match_fi_court_by_short_name, cassation_court_by_domain,
-    presidium_court_by_domain, canon_sudrf_domain,
+    presidium_court_by_domain, canon_sudrf_domain, cassation_card_url,
 )
 from court_monitor.regions import get_region
 from court_monitor.regions.base import _eyo
@@ -1157,7 +1157,8 @@ def link_cassation_cases(
             announce_text = act_publication.observe(previous_observation,
                 info.get("act_text") or "", date.today(),
                 present=bool(info.get("act_published")),
-                confirmed_date=info.get("decision_date") or "")
+                confirmed_date=info.get("decision_date") or "",
+                source_url=cassation_card_url(cass_block))
             for field in (*act_publication.FIELDS, "act_text"):
                 if previous_observation.get(field):
                     cass_block[field] = previous_observation[field]
@@ -1234,6 +1235,8 @@ def link_cassation_cases(
                     # Домен суда — дайджест строит ссылку карточки по нему
                     # (президиум облсуда vs КСОЮ).
                     "court_domain": cass_block.get("court_domain", ""),
+                    "judicial_uid": cass_block.get("judicial_uid", ""),
+                    "cassation_number": cass_block.get("cassation_number", ""),
                     # Куда возвращено при remanded (enum first_instance|appeal)
                     # — рендер «Итога» показывает «→ в суд … инстанции».
                     "remanded_to": cass_block.get("remanded_to", ""),
@@ -1409,6 +1412,8 @@ def link_cassation_cases(
                     "act_published": bool(cass_block.get("act_published")),
                     "link": cass_block.get("link", ""),
                     "court_domain": cass_block.get("court_domain", ""),
+                    "judicial_uid": cass_block.get("judicial_uid", ""),
+                    "cassation_number": cass_block.get("cassation_number", ""),
                     "remanded_to": cass_block.get("remanded_to", ""),
                 },
             })
@@ -1416,7 +1421,8 @@ def link_cassation_cases(
             observed = {}
             act_publication.observe(observed, cass_block.get("act_text") or "", date.today(),
                 present=bool(cass_block.get("act_published")),
-                confirmed_date=cass_block.get("decision_date") or "")
+                confirmed_date=cass_block.get("decision_date") or "",
+                source_url=cassation_card_url(cass_block))
             cass_block.update({k: observed[k] for k in act_publication.FIELDS if k in observed})
             log.info(
                 f"  7kas → DISCOVERY: {fi_num} ({cass_block['case_number']}, "

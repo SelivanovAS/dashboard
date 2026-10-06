@@ -714,6 +714,18 @@ def _act_dates_html(details):
             "Текст обнаружен системой: " + escape_html(detected)]
 
 
+def _summary_identity(details, number):
+    return {
+        'case_number': details.get('case_number') or number,
+        'cassation_number': details.get('cassation_number') or '',
+        'court_domain': details.get('court_domain') or '',
+        'source_url': details.get('act_source_url') or details.get('_act_url') or '',
+        'judicial_uid': details.get('judicial_uid') or '',
+        'act_received_at': details.get('act_received_at') or '',
+        'act_date': details.get('act_decision_date') or details.get('decision_date') or '',
+    }
+
+
 def _act_summary_or_excerpt_with_kind(
     act_text: str,
     case_meta: dict,
@@ -1998,13 +2010,14 @@ def _bank_track_block(bank_changes: list[dict], *,
         # номера дела — линтер считает дела по строкам с номерами. Печатаем
         # ТОЛЬКО kind=="summary": сырой excerpt в компакт-секции не
         # показываем (Telegram-бюджет; при отказе LLM остаётся прежняя одна
-        # строка, drawer получит raw_act-фолбэк от attach_act_analyses).
+        # строка; отложенный анализ допишет очередь пересказов).
         # Пустой act_text (старые контексты replay) — прежний рендер.
         if bank_act_why_eligible(ch):
             why, why_kind = _act_summary_or_excerpt_with_kind(
                 (d.get("act_text") or "").strip(),
                 {
                     "stage": "first_instance",
+                    **_summary_identity(d, ch.get("case", "")),
                     "bank_role": ch.get("bank_role", ""),
                     "verdict_label": d.get("verdict_label", ""),
                     "plaintiff": shorten_party_name(
@@ -2682,6 +2695,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     d.get("act_text") or "",
                     {
                         "stage": "first_instance",
+                    **_summary_identity(d, ch.get("case", "")),
                         "bank_role": ch.get("bank_role", ""),
                         "verdict_label": d.get("verdict_label", ""),
                         "plaintiff": shorten_party_name(
@@ -3116,6 +3130,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                     raw_act,
                     {
                         "stage": "appeal",
+                    **_summary_identity(d, ch.get("case", "")),
                         "bank_role": d.get("role", ""),
                         "verdict_label": (
                             d.get("act_verdict_label")
@@ -3273,8 +3288,8 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
     def _g_cass(parent: dict, eng: str, ru: str) -> str:
         return (parent.get(eng) or parent.get(ru) or "").strip() if parent else ""
     if cass_discovered:
-        # Индекс discovery-change'ей (13.08.2026): их details["act_text"] уже
-        # обрезан extract_motive_part(...,1800) и загейчен .cassation_acts в
+        # Индекс discovery-change'ей (13.08.2026): их details["act_text"] содержит
+        # полный акт и загейчен .cassation_acts в
         # linking.py — правильный источник текста для пересказа. Прямое чтение
         # case["cassation"]["act_text"] ниже — только фолбэк для legacy-replay
         # (полный акт до ~10 КБ уходил в LLM целиком и мимо дедупа).
@@ -3397,11 +3412,11 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 if reason_d:
                     itog_line += f"; {escape_html(reason_d)}"
                 cass_block.append(itog_line)
-            # Текст мотивировки — из details discovery-change'а (обрезан и
+            # Полный текст — из details discovery-change'а (сохранён и
             # задедуплен linking-ом). Change найден, а текста нет — акт уже
             # объявлялся (.cassation_acts) или не опубликован: молчим и
             # summarizer не зовём. Change не найден — legacy-контекст replay,
-            # фолбэк на прямое чтение с той же обрезкой 1800.
+            # фолбэк на прямое чтение полного источника.
             _disc_ch = (disc_ch_by_key.get(_cass_digest_key(
                 cass.get("court_domain"), cass.get("case_number")))
                 or disc_ch_by_key.get(_cass_digest_key(
@@ -3410,11 +3425,12 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 disc_act = ((_disc_ch.get("details") or {})
                             .get("act_text") or "")
             else:
-                disc_act = extract_motive_part(cass.get("act_text") or "", 1800)
+                disc_act = cass.get("act_text") or ""
             disc_excerpt, disc_kind = _act_summary_or_excerpt_with_kind(
                 disc_act,
                 {
                     "stage": "cassation",
+                    **_summary_identity(cass, cass.get("case_number", "")),
                     "bank_role": role,
                     "verdict_label": label_d,
                     "plaintiff": shorten_party_name(pl_raw, keep_fio_full=True),
@@ -3650,6 +3666,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                 d.get("act_text") or "",
                 {
                     "stage": "cassation",
+                    **_summary_identity(d, ch.get("cassation_internal_number", "")),
                     "bank_role": role_raw,
                     "verdict_label": label,
                     "plaintiff": shorten_party_name(pl_raw, keep_fio_full=True),

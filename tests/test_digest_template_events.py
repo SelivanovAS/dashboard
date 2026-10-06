@@ -2637,7 +2637,7 @@ class BankActAttachContractTest(unittest.TestCase):
         self.assertIn("<b>Почему:</b>", aa["html"])
         self.assertIn("ПЕРЕСКАЗ_FIRST_INSTANCE", aa["html"])
 
-    def test_require_explained_falls_back_to_raw_act(self):
+    def test_refusal_does_not_publish_source_as_ai_analysis(self):
         # Без «Почему» в дайджесте (LLM отказал) обычный фолбэк взял бы
         # одностроковый абзац банк-секции с номером дела — require_explained
         # уводит в raw_act по details.
@@ -2647,10 +2647,8 @@ class BankActAttachContractTest(unittest.TestCase):
         updated = uc.attach_act_analyses(
             [case], html, all_changes=[ch], require_explained=True,
         )
-        self.assertEqual(updated, 1)
-        aa = case["first_instance"]["act_analysis"]
-        self.assertEqual(aa["source"], "raw_act")
-        self.assertIn("Суд установил", aa["html"])
+        self.assertEqual(updated, 0)
+        self.assertNotIn("act_analysis", case["first_instance"])
 
 
 # ── Discovery-кассация: источник текста для пересказа (13.08.2026) ──────────
@@ -2692,7 +2690,7 @@ class DiscoveryActSourceTest(unittest.TestCase):
         self.assertNotIn("ПОЛНЫЙ_ТЕКСТ_ИЗ_CASES", html)
         self.assertEqual(rec.calls, [])
 
-    def test_legacy_context_fallback_is_trimmed(self):
+    def test_legacy_context_preserves_full_source(self):
         # Change'а нет (legacy-контекст replay): фолбэк читает case, но с
         # той же обрезкой extract_motive_part(...,1800) — раньше полный акт
         # (до ~10 КБ) уходил в LLM целиком.
@@ -2703,7 +2701,7 @@ class DiscoveryActSourceTest(unittest.TestCase):
         html = render(cass_discovered=[disc], act_summarizer=rec)
         self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_DISC</i>", html)
         self.assertEqual(len(rec.calls), 1)
-        self.assertLessEqual(len(rec.calls[0][0]), 1800)
+        self.assertEqual(rec.calls[0][0], disc["cassation"]["act_text"])
 
 
 if __name__ == "__main__":

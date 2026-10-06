@@ -30,7 +30,7 @@ class TelegramLlmNoteTest(unittest.TestCase):
              patch.object(cm_config, "LLM_PROVIDER", "claude"), \
              patch.object(cm_config, "DIGEST_FULL_LLM", False):
             out = cm_runs._telegram_digest_text(DIGEST)
-        self.assertIn("🤖 LLM: claude-haiku-4-5-20251001", out)
+        self.assertIn("🤖 LLM: пересказов в этом выпуске нет", out)
         self.assertIn("гибрид", out)
         self.assertTrue(out.startswith(DIGEST))
 
@@ -64,7 +64,7 @@ class TelegramLlmNoteTest(unittest.TestCase):
              patch.object(cm_config, "OPENROUTER_MODEL", "qwen/qwen3:free"), \
              patch.object(cm_config, "DIGEST_FULL_LLM", False):
             out = cm_runs._telegram_digest_text(DIGEST)
-        self.assertIn("🤖 LLM: openrouter:qwen/qwen3:free", out)
+        self.assertIn("🤖 LLM: пересказов в этом выпуске нет", out)
 
 
 if __name__ == "__main__":

@@ -949,14 +949,15 @@ def update_active_cases(
 
         # Новый акт
         act_text = card_info.get("act_text", "")
-        if not act_text and card_info.get("_act_url") and not (ap_json or {}).get("act_text"):
+        if not act_text and card_info.get("_act_url") and ((ap_json or {}).get("act_summary_needs_source") or not act_publication.summary_source((ap_json or {}).get("act_text") or "")):
             act_text = fetch_act_text(
                 card_info["_act_url"], context=case["Номер дела"]
             )
         observation = ap_json if ap_json is not None else case
         announce_text = act_publication.observe(observation, act_text, today,
             present=bool(act_text or card_info.get('_act_url')),
-            confirmed_date=card_info.get('Дата рассмотрения (карточка)') or '')
+            confirmed_date=card_info.get('Дата рассмотрения (карточка)') or '',
+            source_url=card_info.get('_act_url') or url)
         # Снимок итога на момент публикации акта: результат обычно уже давно
         # стоит в карточке (акт публикуется через 14+ дней после заседания).
         # verdict_label в JSON не сохраняется — переклассифицируем из сырого
@@ -1211,8 +1212,9 @@ def validate_environment(require_anthropic: bool = True) -> None:
     if require_anthropic:
         # Соответствие «провайдер → его ключ» живёт одним местом в llm.py:
         # тем же предикатом гейтятся пересказы актов и запись act_analysis.
-        if llm_key := llm.missing_llm_key_name():
-            missing.append(llm_key)
+        if (config.DIGEST_FULL_LLM or not llm.summaries_configured()):
+            if llm_key := llm.missing_llm_key_name():
+                missing.append(llm_key)
     if not config.TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
     if not config.TELEGRAM_CHAT_ID:
@@ -1534,7 +1536,13 @@ def _llm_digest_note() -> str:
         "полный LLM-дайджест" if config.DIGEST_FULL_LLM
         else "гибрид, LLM только на пересказах актов"
     )
-    return f"🤖 LLM: {llm._current_digest_model_name()} ({mode})"
+    if config.DIGEST_FULL_LLM:
+        model = llm._current_digest_model_name()
+    elif config.SUMMARY_MODELS_USED:
+        model = ', '.join(sorted(config.SUMMARY_MODELS_USED))
+    else:
+        model = 'пересказов в этом выпуске нет'
+    return f"🤖 LLM: {model} ({mode})"
 
 
 def _telegram_digest_text(digest: str) -> str:
@@ -1590,12 +1598,52 @@ def _lint_digest_and_alert(digest_html: str, *,
         log.warning(f"digest-lint: ошибка линтера: {exc}", exc_info=True)
 
 
+def _process_act_summary_queue(*, retry=False):
+    """Общая обработка обеих картотек и архивов без уведомлений."""
+    from court_monitor.digest import summary_queue
+    if not os.path.exists(config.ACT_SUMMARY_PENDING_PATH) and not llm.summaries_configured():
+        return
+    try:
+        stores = []
+        paths = [
+            (config.JSON_PATH, None), (config.JSON_ARCHIVE_PATH, None),
+            (config.JSON_BANK_PATH, config.JSON_BANK_EVENTS_PATH),
+            (config.JSON_BANK_ARCHIVE_PATH, config.JSON_BANK_ARCHIVE_EVENTS_PATH),
+        ]
+        paths.extend((path, None) for path in glob.glob(cold_archive_glob())
+                     if re.fullmatch(r'cases_archive_\d{4}\.json', os.path.basename(path)))
+        # В холодном bank-архиве events хранятся внутри полного документа.
+        paths.extend((path, None) for path in glob.glob(config.bank_cold_archive_glob())
+                     if config.is_bank_cold_archive_file(path))
+        for path, events in paths:
+            if not os.path.exists(path):
+                continue
+            data = load_bank_json(path, events) if events else load_json(path)
+            stores.append((path, events, data))
+        all_cases = [c for _, _, data in stores for c in data.get('cases', [])]
+        if retry:
+            summary_queue.seed_legacy(all_cases)
+            summary_queue.retry_pending(all_cases)
+        # Общий список предотвращает привязку неоднозначного результата к
+        # одноимённым делам разных судов/архивов. Сохраняем только изменения.
+        before = [json.dumps(data, ensure_ascii=False, sort_keys=True) for _, _, data in stores]
+        summary_queue.attach_ready(all_cases)
+        for old, (path, events, data) in zip(before, stores):
+            if old != json.dumps(data, ensure_ascii=False, sort_keys=True):
+                if events:
+                    save_bank_json(data, path, events)
+                else:
+                    save_json(data, path)
+    except Exception:
+        log.exception('Очередь пересказов сохранена для следующего прогона')
+
+
 def _alert_llm_summary_failures() -> None:
     """🩺-алерт, если пересказы мотивировок сорвались.
 
     Мотивировки судебных актов пересказывает LLM; при отказе провайдера
     (17.07.2026: free-пул OpenRouter отвечал 429 на каждый запрос) в дайджест
-    вместо пересказа уходит сырой текст акта. Счётчики жили только в stdout и
+    пересказ остаётся в отдельной очереди. Счётчики раньше жили только в stdout и
     GITHUB_STEP_SUMMARY — юрист узнавал об этом, только открыв лог прогона.
 
     ⚠️ Зовётся ПОСЛЕ отправки дайджеста, рядом с линтером: блок 4e (алерты
@@ -1612,12 +1660,12 @@ def _alert_llm_summary_failures() -> None:
             "llm_summary_provider_fallback_saved", 0)
         line = (
             f"неудачных пересказов: {failed}; вызовов моделей: {calls} "
-            f"— в дайджест ушёл сырой текст акта"
+            f"— пересказы оставлены в очереди"
         )
         if saved:
             line += f" (спасено фолбэком: {saved})"
         if saved_claude:
-            line += f" (спасено Claude: {saved_claude})"
+            line += f" (спасено резервным провайдером: {saved_claude})"
         log.warning(f"llm-summary: {line}")
         send_telegram(
             "🩺 <b>Пересказы актов</b>\n"
@@ -5111,7 +5159,7 @@ def main_json():
         # через 14+ дней). Идемпотентно по fi["act_text"]: один раз поймали —
         # больше не тянем и не ретранслируем событие.
         old_act_text = (fi.get("act_text") or "").strip()
-        if new_act and not old_act_text:
+        if new_act and (fi.get("act_summary_needs_source") or not act_publication.summary_source(old_act_text)):
             act_text_fi = (card_info.get("act_text") or "").strip()
             if not act_text_fi and card_info.get("_act_url"):
                 fetched = fetch_act_text(
@@ -5120,7 +5168,8 @@ def main_json():
                 act_text_fi = (fetched or "").strip()
             if act_text_fi:
                 announce_fi_text = act_publication.observe(fi, act_text_fi, today, present=True,
-                    confirmed_date=fi.get('decision_date') or '')
+                    confirmed_date=fi.get('decision_date') or '',
+                    source_url=card_info.get('_act_url') or fi_card_url(fi))
                 changed = True
                 verdict = classify_verdict_fi(fi.get("result", ""))
                 if announce_fi_text:
@@ -6419,14 +6468,10 @@ def main_json():
     # Поле `act_analysis` обновляется только у дел с new_act (апел. или
     # касс.) / fi_act_text_published в этом прогоне; остальные не трогаем.
     #
-    # ⚠️ Пишем ТОЛЬКО когда LLM реально работала. Без ключа (Mac-резерв,
-    # боевой путь с 19.08.2026) attach откатывается на raw_act и кладёт в
-    # карточку СЫРОЙ текст мотивировки под заголовком «AI анализ» — и он
-    # остаётся там навсегда, пока по делу не выйдет новый акт. Фолбэк
-    # задумывался под редкий отказ провайдера (429), а на машине без ключей
-    # отказ постоянный. Пропуск безопасен: replay переигрывает тот же
-    # контекст на OpenRouter и пишет разбор в обе картотеки.
-    if (llm_key_missing := llm.missing_llm_key_name()):
+    # Здесь привязываются готовые абзацы событий. Отложенные пересказы
+    # независимо дописывает очередь; без ключей можно использовать её кэш.
+    if not llm.summaries_configured():
+        llm_key_missing = llm.missing_llm_key_name()
         log.info(
             f"act_analysis: LLM не настроен (нет {llm_key_missing}) — "
             f"разбор актов допишет replay"
@@ -6462,6 +6507,7 @@ def main_json():
                 config.JSON_BANK_EVENTS_PATH,
             )
 
+    _process_act_summary_queue(retry=True)
     timings["total"] = time.perf_counter() - t_total_start
 
     # Агрегат отчёта bank-трека для сводки (пер-кейсовая детализация —
@@ -6698,6 +6744,8 @@ def main_replay_last(push_all: bool = False):
     except Exception as exc:
         log.warning(
             f"act_analysis (replay): не удалось обновить cases_bank.json: {exc}")
+
+    _process_act_summary_queue(retry=True)
 
     # Web push: под DEFER_WEB_PUSH=1 (replay_on_push.yml) он ОТКЛАДЫВАЕТСЯ —
     # workflow сначала коммитит last_digest.json, дожидается, пока GitHub
