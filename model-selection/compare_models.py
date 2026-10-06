@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['apodex/apodex-1.1-mini:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'inclusionai/ling-3.0-flash-sante:free']
+MODELS = ['apodex/apodex-1.1-mini:free', 'google/gemma-4-31b-it:free']
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -100,6 +100,7 @@ def main():
     results = []
     previous_start = 0.0
     abort = False
+    gemma_unavailable = 0
     # Rotate order to reduce bias from changing provider load during the run.
     for i, sample in enumerate(samples):
         order = MODELS[i % len(MODELS):] + MODELS[:i % len(MODELS)]
@@ -148,6 +149,21 @@ def main():
                 report["status"] = "unexpected_charge"
                 abort = True
                 break
+            if model == "google/gemma-4-31b-it:free":
+                if status in (429, 503) or error.get("code") in (429, 503):
+                    gemma_unavailable += 1
+                    if gemma_unavailable >= 3:
+                        report["status"] = "gemma_temporarily_unavailable"
+                        abort = True
+                        break
+                    # Bounded cooldown for shared provider capacity, not daily quota.
+                    time.sleep(20 * gemma_unavailable)
+                elif status in (401, 403):
+                    report["status"] = "gemma_access_denied"
+                    abort = True
+                    break
+                elif text:
+                    gemma_unavailable = 0
         if abort:
             break
     if not abort:
