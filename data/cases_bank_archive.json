@@ -4988,7 +4988,63 @@
         "announced": true
       },
       "archived_at": "2026-10-05"
+    },
+    {
+      "id": "2-6924/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Насиров Эмин Синер оглы",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-6924/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Хуруджи Виктор Николаевич",
+        "filing_date": "29.05.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 13:04. 25.08.2026",
+        "event_date": "24.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "272317154|8fd90b41-4da9-4eb1-9ece-b0d90951270a",
+        "act_published": true,
+        "act_date": "",
+        "resolved_emitted": true,
+        "last_checked_at": "2026-09-30",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "motivirovka_emitted": true,
+        "legal_force_est": "2026-09-15",
+        "motivirovka_date": "12.08.2026",
+        "writ_awaited_since": "2026-09-15",
+        "judicial_uid": "86RS0004-01-2026-010389-98",
+        "decision_date": "22.07.2026",
+        "legal_force_emitted": "2026-09-15",
+        "act_text": "РЕШЕНИЕ Именем Российской Федерации 22 июля 2026 г. &lt;адрес&gt; Сургутский городской суд &lt;адрес&gt; -Югры в составе председательствующего судьи Хуруджи В.Н., рассмотрев в порядке упрощенного производства в помещении Сургутского городского суда гражданское дело № 2-6924/2026 иску ПАО Сбербанк &lt;данные изъяты&gt; ) к Насирову Э.С.о. ( &lt;данные изъяты&gt; ) о взыскании задолженности по кредитным обязательствам и судебных расходов, руководствуясь ст.ст. 88-98, 116, 194-198, пункта 3 части первой статьи 232.2, 232.4 ГПК РФ, суд решил: Исковые требования ПАО Сбербанк к Насирову Э.С.о. о взыскании задолженности по кредитным обязательствам и судебных расходов- удовлетворить частично. Взыскать с Насирова Э.С.о. в пользу ПАО Сбербанк задолженность по кредитным обязательствам в период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ в размере 24685 рублей 08 копеек –основной долг, 6863 рубля 12 копеек- проценты, 4000 рублей расходы по оплате государственной пошлины; в остальной части исковых требований отказать в связи с пропуском срока исковой давности установленной ст.ст.196, 199 ГК РФ по заявлению об этом Насирова Э.С.о. . Заявление о составлении мотивированного решения суда может быть подано сторонами в течение пяти дней со дня подписания резолютивной части решения суда по делу, рассмотренному в порядке упрощенного производства. Мотивированное решение суда изготавливается в течение пяти дней со дня поступления от лица, участвующего в деле, его представителя соответствующего заявления или со дня подачи апелляционной жалобы. Решение суда по делу, рассмотренному в порядке упрощенного производства, вступает в законную силу по истечении пятнадцати дней со дня его принятия, если не поданы апелляционные жалоба, представление. Решение по результатам рассмотрения дела в порядке упрощенного производства может быть обжаловано в суд апелляционной инстанции через Сургутский городской суд в течение пятнадцати дней со дня его принятия, а в случае составления мотивированного решения суда по заявлению лиц, участвующих в деле, их представителей - со дня принятия решения в окончательной форме. Председательствующий судья В.Н. Хуруджи Копия верна: В.Н.Хуруджи опубликовано 01.06.2026 13:17, изменено 10.09.2026 20:07 function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5'; break; case 5: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=5'; break; case 2800001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=5&new=2800001'; break; } break; case 2800001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2800001'; break; } break; case 41: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=41'; break; } break; case 42: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=42'; break; } break; case 43: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=43'; break; } break; case 1500001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1500001'; break; } break; case 1502001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1502001'; break; } break; case 1513001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1513001'; break; } break; case 2550001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2550001'; break; } break; case 1610001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610001'; break; } break; case 1610002: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1610002'; break; } break; } loadXMLDoc1(url); } else { alert(\"Не выбран вид производства\"); document.getElementById('inst1').innerHTML = 'Для поиска по решениям необходимо выбрать вид производства'; if(document.getElementById('case_type1').options[document.getElementById('case_type1').selectedIndex].value === 0) document.getElementById('inst').style.display = 'block'; else document.getElementById('inst').style.display = 'none'; document.getElementById('inst2').style.display = 'block'; document.getElementById('search_content').style.display = 'none'; } hidePopupDiv(); } } function index_docs(n, m) { for(i = 1; i = 10) { s = s * 100 + a } else { s = s * 10 + a; } // Чтобы избежать переполнения - берём остаток по модулю от частичной суммы if (s > maxS) { s = s % modulus } } var result = s % modulus; return result; } function validateJuid(juid) { const minJuidLen = 2; var code = juid.replace(/\\W/g, ''); if(code.length ' + ' ' + placeholder + ' ' + input.outerHTML + ' ';*/ text = ' ' + input.outerHTML + ' Неверный формат ввода ' + ' '; input.outerHTML = text; }, setValueOfMask : function (e) { var value = e.target.value, placeholder = e.target.getAttribute('data-placeholder'); return \" \" + value + \" \" + placeholder.substr(value.length); }, // add event listeners activateMasking : function (inputs) { var i, l; for (i = 0, l = inputs.length; i = 0; matchesLetter = masking.maskedLetter.indexOf(placeholder[i]) >= 0; if ((matchesNumber && isInt) || (isCharsetPresent && matchesLetter && isLetter)) { newValue += strippedValue[j++]; } else if ((!isCharsetPresent && !isInt && matchesNumber) || (isCharsetPresent && ((matchesLetter && !isLetter) || (matchesNumber && !isInt)))) { //masking.errorOnKeyEntry(e); // write your own error handling function return newValue; } else { newValue += placeholder[i]; } // break if no characters left and the pattern is non-special character if (strippedValue[j] == undefined) { break; } } if (e.target.getAttribute('data-valid-example')) { return masking.validateProgress(e, newValue); } return newValue; }, validateProgress : function (e, value) { var validExample = e.target.getAttribute('data-valid-example'), pattern = new RegExp(e.target.getAttribute('pattern')), placeholder = e.target.getAttribute('data-placeholder'), l = value.length, testValue = '', id = e.target.getAttribute('id'), maskErrorId = document.getElementById(id + 'MaskError'); maskErrorId.style.display = 'block'; //convert to months if (l == 1 && placeholder.toUpperCase().substr(0,2) == 'MM') { if(value > 1 && value = 0; i--) { testValue = value + validExample.substr(value.length); if(id == 'case__JUDICIAL_UIDSS' && l == 13 && placeholder.toUpperCase().substr(12,4) == 'YYYY') { if(value.substr(12,1) == 1) { testValue = value + '9' + validExample.substr(value.length + 1); } if(value.substr(12,1) == 2) { testValue = value + '0' + validExample.substr(value.length + 1); } } if (pattern.test(testValue)) { if(l == placeholder.length)",
+        "writs": [
+          {
+            "issue_date": "21.09.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-6924/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ]
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-10-06"
     }
   ],
-  "updated_at": "2026-10-05T06:58:06+05:00"
+  "updated_at": "2026-10-06T07:00:31+05:00"
 }
