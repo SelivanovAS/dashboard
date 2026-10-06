@@ -18,17 +18,23 @@ jobs:
           python-version: '3.12'
       - name: Install isolated pipeline dependencies
         run: pip install -r scripts/requirements.txt
-      - name: Retry three GigaChat transport failures with in-process OAuth cache
+      - name: Compare GigaChat 2 Max on five unchanged full acts
         env:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
-          GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat' }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_MODEL: claude-sonnet-5
-          CLAUDE_EFFORT: high
+          GIGACHAT_MODEL: GigaChat-2-Max
           BENCHMARK_PROVIDERS: gigachat
-          BENCHMARK_SAMPLE_IDS: H09,H19,H24
-          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
+          BENCHMARK_SAMPLE_IDS: H02,H08,H09,H19,H24
+          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/max
+        run: python model-selection/validate_reserves.py
+      - name: Compare GigaChat 3 Ultra on the same five full acts
+        env:
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
+          GIGACHAT_MODEL: GigaChat-3-Ultra
+          BENCHMARK_PROVIDERS: gigachat
+          BENCHMARK_SAMPLE_IDS: H02,H08,H09,H19,H24
+          BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results/ultra
         run: python model-selection/validate_reserves.py
       - uses: actions/upload-artifact@v4
         if: always()

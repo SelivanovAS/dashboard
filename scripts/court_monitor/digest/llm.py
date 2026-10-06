@@ -1207,8 +1207,12 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
                     except OSError as exc:
                         log.warning(f'Не удалось сохранить кэш пересказов: {exc}')
                 return summary
-            if status in ('source_conflict', 'provider_refusal'):
+            if status == 'source_conflict':
                 return None
+            if status == 'provider_refusal':
+                # Ограничение темы провайдером не означает нехватку исходника.
+                # Не повторяем его запрос, продолжаем согласованную цепочку.
+                break
             if status == 'refused':
                 if outcome['refusal_rechecked']:
                     return None
