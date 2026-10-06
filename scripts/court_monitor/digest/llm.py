@@ -1117,7 +1117,11 @@ def _refused(raw):
 def _response_status(raw, act, verdict):
     if not raw:
         return '', 'technical_error'
-    if re.search(r'разговоры на некоторые темы временно ограничены', raw, re.I):
+    if re.search(
+        r'разговоры на некоторые темы временно ограничены|'
+        r'ответы на вопросы,?\s+связанные с чувствительными темами,?\s+временно ограничены',
+        raw, re.I,
+    ):
         return '', 'provider_refusal'
     if _refused(raw):
         return '', 'refused'
