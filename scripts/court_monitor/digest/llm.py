@@ -835,7 +835,11 @@ def _call_gigachat_simple(prompt: str) -> str | None:
         if not isinstance(text, str):
             return None
         text = text.strip()
-        return _ModelText(text, data.get("model") or config.GIGACHAT_MODEL) if text else None
+        finish_reason = choices[0].get("finish_reason")
+        if text or finish_reason == "blacklist":
+            return _ModelText(text, data.get("model") or config.GIGACHAT_MODEL,
+                              finish_reason=finish_reason)
+        return None
     except (requests.RequestException, KeyError, ValueError, TypeError, AttributeError, IndexError,
             json.JSONDecodeError) as e:
         log.warning(f"GigaChat (summary): {e}")
@@ -1031,9 +1035,10 @@ def _openrouter_summary_attempts(
 
 class _ModelText(str):
     """Текст совместим со старым API; автор берётся из ответа поставщика."""
-    def __new__(cls, text, model):
+    def __new__(cls, text, model, *, finish_reason=None):
         obj = super().__new__(cls, text)
         obj.model = model
+        obj.finish_reason = finish_reason
         return obj
 
 
@@ -1086,6 +1091,11 @@ def _context_limit(provider, model):
             _context_limits.setdefault(model, 0)
         return _context_limits[model]
     if provider == 'gigachat':
+        if model == 'GigaChat-3-Pro':
+            # Каталог Cloud.ru указывает 262K; для прямого API используем
+            # консервативный рабочий предел 128K, с override через config.
+            # https://cloud.ru/products/evolution-ai-factory/catalog-foundation-models
+            return 128000
         if model in ('GigaChat-2', 'GigaChat-2-Pro', 'GigaChat-2-Max', 'GigaChat-3-Ultra',
                      'GigaChat', 'GigaChat-Pro', 'GigaChat-Max'):
             # Текущие алиасы Lite/Pro/Max относятся к поколению 2
@@ -1115,10 +1125,14 @@ def _refused(raw):
 
 
 def _response_status(raw, act, verdict):
+    # У GigaChat текст отказа меняется; официальный признак надёжнее формулировки.
+    if getattr(raw, 'finish_reason', None) == 'blacklist':
+        return '', 'provider_refusal'
     if not raw:
         return '', 'technical_error'
     if re.search(
         r'разговоры на некоторые темы временно ограничены|'
+        r'разговоры на чувствительные темы могут быть ограничены|'
         r'ответы на вопросы,?\s+связанные с чувствительными темами,?\s+временно ограничены',
         raw, re.I,
     ):

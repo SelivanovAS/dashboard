@@ -35,7 +35,8 @@ def bounded_post(url, **kw):
         except ValueError: data={}
         records.append({'provider':current,'id':sample_id,'http_status':r.status_code,
           'seconds':round(time.monotonic()-started,2), 'model':data.get('model'),
-          'usage':data.get('usage'), 'answer': ''.join(b.get('text','') for b in (data.get('content') or []) if isinstance(b,dict)) if current=='claude' else ((data.get('choices') or [{}])[0].get('message') or {}).get('content'),
+          'usage':data.get('usage'), 'finish_reason': (data.get('choices') or [{}])[0].get('finish_reason'),
+          'answer': ''.join(b.get('text','') for b in (data.get('content') or []) if isinstance(b,dict)) if current=='claude' else ((data.get('choices') or [{}])[0].get('message') or {}).get('content'),
           'error_type':(data.get('error') or {}).get('type') if isinstance(data.get('error'),dict) else None})
     return r
 llm.requests.post=bounded_post
