@@ -11,7 +11,10 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['apodex/apodex-1.1-mini:free', 'google/gemma-4-31b-it:free']
+MODELS = ['nvidia/nemotron-3.5-lightning:free',
+          'nvidia/nemotron-3-ultra-550b-a55b:free',
+          'dots-studio/dots-3-note-preview:free',
+          'poolside/laguna-s-2.1:free']
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -100,11 +103,14 @@ def main():
     results = []
     previous_start = 0.0
     abort = False
-    gemma_unavailable = 0
+    unavailable = {model: 0 for model in MODELS}
+    disabled = {}
     # Rotate order to reduce bias from changing provider load during the run.
     for i, sample in enumerate(samples):
         order = MODELS[i % len(MODELS):] + MODELS[:i % len(MODELS)]
         for model in order:
+            if model in disabled:
+                continue
             time.sleep(max(0, 3.3 - (time.monotonic() - previous_start)))
             previous_start = time.monotonic()
             payload = {"model": model, "messages": [{"role": "user", "content": sample["prompt"]}],
@@ -125,6 +131,7 @@ def main():
             metadata = error.get("metadata") or {}
             row = {"sample": sample["id"], "model": model,
                    "returned_model": data.get("model"), "http_status": status,
+                   "provider": data.get("provider"),
                    "seconds": elapsed, "finish_reason": choice.get("finish_reason"),
                    "completion_tokens": usage.get("completion_tokens"),
                    "reasoning_tokens": details.get("reasoning_tokens"),
@@ -149,25 +156,19 @@ def main():
                 report["status"] = "unexpected_charge"
                 abort = True
                 break
-            if model == "google/gemma-4-31b-it:free":
-                if status in (429, 503) or error.get("code") in (429, 503):
-                    gemma_unavailable += 1
-                    if gemma_unavailable >= 3:
-                        report["status"] = "gemma_temporarily_unavailable"
-                        abort = True
-                        break
-                    # Bounded cooldown for shared provider capacity, not daily quota.
-                    time.sleep(20 * gemma_unavailable)
-                elif status in (401, 403):
-                    report["status"] = "gemma_access_denied"
-                    abort = True
-                    break
-                elif text:
-                    gemma_unavailable = 0
+            if status in (401, 403) or error.get("code") in (401, 403):
+                disabled[model] = "access_denied"
+            elif not raw:
+                unavailable[model] += 1
+                if unavailable[model] >= 3:
+                    disabled[model] = "three_consecutive_empty_or_unavailable"
+            else:
+                unavailable[model] = 0
         if abort:
             break
     if not abort:
-        report["status"] = "complete"
+        report["status"] = "complete_with_disabled_models" if disabled else "complete"
+    report["disabled_models"] = disabled
     report["completed_requests"] = len(results)
     report["metrics"] = []
     for model in MODELS:
