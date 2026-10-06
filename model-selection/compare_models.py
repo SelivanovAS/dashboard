@@ -11,8 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['nvidia/nemotron-3-ultra-550b-a55b:free']
-REASONING = {"enabled": True, "max_tokens": 1024}
+MODELS = ['apodex/apodex-1.1-mini:free']
+REASONING = {"enabled": False}
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -128,6 +128,8 @@ def main():
             error = data.get("error") or {}
             metadata = error.get("metadata") or {}
             row = {"sample": sample["id"], "model": model,
+                   "base_sample": sample.get("base_sample", sample["id"]),
+                   "prompt_variant": sample.get("prompt_variant"),
                    "returned_model": data.get("model"), "http_status": status,
                    "provider": data.get("provider"),
                    "seconds": elapsed, "finish_reason": choice.get("finish_reason"),
@@ -136,7 +138,7 @@ def main():
                    "reported_cost": usage.get("cost"), "output_chars": len(text),
                    "within_450": bool(text) and len(text) <= 450,
                    "accepted_by_current_cleaner": bool(text), "summary": text,
-                   "raw_content": raw[:4000], "error_code": error.get("code"),
+                   "raw_output_chars": len(raw), "raw_content": raw[:4000], "error_code": error.get("code"),
                    "limit_source": metadata.get("limit_source"),
                    "error_message": str(error.get("message", ""))[:200]}
             results.append(row)
