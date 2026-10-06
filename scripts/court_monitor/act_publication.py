@@ -15,6 +15,9 @@ FIELDS = ('act_absent_checked_at', 'act_detected_at', 'act_decision_date',
 _MONTHS = {name: i + 1 for i, name in enumerate((
     'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'))}
+_ENDING_RE = re.compile(r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?|'
+                        r'р\s*е\s*ш\s*и\s*л\s*[аи]?|'
+                        r'п\s*о\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?)\s*:', re.I)
 
 
 def document_date(text: str, confirmed_date: str = '') -> str:
@@ -82,9 +85,7 @@ def summary_source(text: str, stage: str = '') -> str:
 Объём проверяется отдельно для каждой модели; середину не удаляем.
 """
     text = (text or '').strip()
-    endings = list(re.finditer(r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л[аи]?|'
-                       r'р\s*е\s*ш\s*и\s*л[аи]?|постановил[аи]?)\s*:', text, re.I)
-                   )
+    endings = list(_ENDING_RE.finditer(text))
     ending = endings[-1] if endings else None
     if not ending or ending.start() < 100 or len(text[ending.end():].strip()) < 30:
         return ''
@@ -94,7 +95,7 @@ def summary_source(text: str, stage: str = '') -> str:
 def summary_agrees(summary: str, text: str, verdict: str) -> bool:
     """Отсечь явное противоречие резолюции; неоднозначность не исправлять догадкой."""
     lower = summary.lower()
-    parts = re.split(r'(?:определил[аи]?|решил[аи]?|постановил[аи]?)\s*:', text, flags=re.I)
+    parts = _ENDING_RE.split(text)
     tail = parts[-1].lower()
     denied = bool(re.search(r'в удовлетворении .{0,200}отказа(?:ть|но)', tail))
     granted = bool(re.search(r'(?:иск(?:овые требования)?|требования)[^.]{0,80}удовлетворить', tail))

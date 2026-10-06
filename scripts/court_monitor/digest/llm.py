@@ -77,16 +77,24 @@ def _report_llm_not_configured(missing: str) -> None:
 
 # ── GigaChat API — альтернативный провайдер для digest_only ───────────────────
 
+_gigachat_token_cache = {}
+
+
 def _gigachat_access_token() -> str | None:
     """Получить OAuth access token GigaChat. Живёт 30 минут.
 
-    Токен не кешируем: дайджест-раны короткие и одноразовые, а держать
-    кеш между запусками workflow негде. Verify=False — на ubuntu-latest нет
+    Кэш только в памяти процесса, по ключу и scope, до expires_at минус
+    минута: очередь пересказов не требует нового OAuth для каждого акта.
+    Verify=False — на ubuntu-latest нет
     корневого сертификата Минцифры РФ, которым подписан ngw.devices.sberbank.ru.
     """
     if not config.GIGACHAT_AUTH_KEY:
         log.warning("GIGACHAT_AUTH_KEY не задан")
         return None
+    cache_key = (hashlib.sha256(config.GIGACHAT_AUTH_KEY.encode()).hexdigest(), config.GIGACHAT_SCOPE)
+    cached = _gigachat_token_cache.get(cache_key)
+    if cached and cached[1] > time.time() + 60:
+        return cached[0]
     try:
         import uuid
         import urllib3
@@ -108,6 +116,9 @@ def _gigachat_access_token() -> str | None:
         if not isinstance(data, dict) or not isinstance(data.get('access_token'), str):
             log.warning('GigaChat OAuth: отсутствует строковый access_token')
             return None
+        expires = data.get('expires_at')
+        if data['access_token'] and isinstance(expires, (int, float)) and expires / 1000 > time.time() + 60:
+            _gigachat_token_cache[cache_key] = (data['access_token'], expires / 1000)
         return data['access_token'] or None
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
@@ -1106,6 +1117,8 @@ def _refused(raw):
 def _response_status(raw, act, verdict):
     if not raw:
         return '', 'technical_error'
+    if re.search(r'разговоры на некоторые темы временно ограничены', raw, re.I):
+        return '', 'provider_refusal'
     if _refused(raw):
         return '', 'refused'
     if 'ПРОТИВОРЕЧИЕ_ИСТОЧНИКОВ' in raw:
@@ -1194,7 +1207,7 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
                     except OSError as exc:
                         log.warning(f'Не удалось сохранить кэш пересказов: {exc}')
                 return summary
-            if status == 'source_conflict':
+            if status in ('source_conflict', 'provider_refusal'):
                 return None
             if status == 'refused':
                 if outcome['refusal_rechecked']:

@@ -11,7 +11,7 @@ from court_monitor import config
 from court_monitor.digest import llm, summary_queue
 from court_monitor.act_preparation import prepare_act
 samples = [s for s in json.loads(Path('model-selection/implementation-holdout.json').read_text())['samples']
-           if s['id'] in ('H02','H08','H09','H19','H24')]
+           if s['id'] in os.environ.get('BENCHMARK_SAMPLE_IDS','H02,H08,H09,H19,H24').split(',')]
 post = requests.post
 records=[]; estimates={'claude':0.0}; counts={'gigachat':0,'claude':0}; current=''; sample_id=''
 allowed={config.GIGACHAT_OAUTH_URL,config.GIGACHAT_API_URL,config.GIGACHAT_V3_API_URL,'https://api.anthropic.com/v1/messages'}

@@ -19,7 +19,7 @@ from court_monitor.digest import llm
 
 _WAIT_FOR_SOURCE = {'source_incomplete', 'empty_source', 'text_extraction_required',
                     'case_mismatch', 'court_mismatch', 'uid_mismatch', 'stage_mismatch',
-                    'refused', 'source_conflict'}
+                    'refused', 'provider_refusal', 'source_conflict'}
 
 
 def _load():
