@@ -11,10 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ['nvidia/nemotron-3.5-lightning:free',
-          'nvidia/nemotron-3-ultra-550b-a55b:free',
-          'dots-studio/dots-3-note-preview:free',
-          'poolside/laguna-s-2.1:free']
+MODELS = ['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+          'cohere/north-mini-code:free']
 BASE = "https://openrouter.ai/api/v1"
 OUT = Path(os.environ.get("BENCHMARK_OUTPUT", "/tmp/court-model-results"))
 OUT.mkdir(parents=True, exist_ok=True)

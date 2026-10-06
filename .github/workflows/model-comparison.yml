@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Evaluate four free backup models on identical court inputs
+      - name: Evaluate Nano Omni and North Mini Code as free backup models
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           BENCHMARK_OUTPUT: ${{ runner.temp }}/court-model-results
