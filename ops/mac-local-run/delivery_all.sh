@@ -7,7 +7,6 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib_sber_net.sh"
-WORKER="${CM_WORKER:-$HERE/parse_and_push.sh}"
 PYTHON="${CM_PYTHON:-/usr/bin/python3}"
 CHECK_ONLY=0
 for arg in "$@"; do
@@ -39,7 +38,8 @@ trap 'stop_children 130' INT
 trap 'stop_children 143' TERM
 
 deliver_repo() {
-  local repo="$1" calendar_rc
+  local repo="$1" calendar_rc WORKER
+  WORKER="${CM_WORKER:-$repo/ops/mac-local-run/parse_and_push.sh}"
   cd "$repo" || return 1
   "$PYTHON" ops/mac-local-run/cloud_run_ok.py --is-working-day
   calendar_rc=$?

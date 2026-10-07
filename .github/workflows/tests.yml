@@ -26,5 +26,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt pytest
 
+      - name: Verify installed program files
+        run: |
+          if [ -f .program-release.json ]; then
+            python scripts/program_release.py verify --repo .
+          fi
+
       - name: Run pytest
         run: python -m pytest -q

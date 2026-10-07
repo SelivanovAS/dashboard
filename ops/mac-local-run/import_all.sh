@@ -22,7 +22,6 @@
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMPORTER="$HERE/import_dumps.sh"
 . "$HERE/lib_sber_net.sh"
 
 repos=()
@@ -40,6 +39,7 @@ for repo in "${repos[@]}"; do
     rc=1
     continue
   fi
+  IMPORTER="${CM_IMPORTER:-$repo/ops/mac-local-run/import_dumps.sh}"
   echo "  → $repo"
   bash "$IMPORTER" "$repo" "$@" || rc=1
 done
