@@ -826,5 +826,25 @@
     "model": "claude:claude-haiku-4-5-20251001",
     "stage": "cassation",
     "generated_at": "2026-10-06T04:04:32"
+  },
+  "1facb9c10a1b9b95": {
+    "summary": "Истец не доказал умышленное причинение ущерба ответчиком: отсутствие надлежащего учета движения топливных карт и оригиналов путевых листов не позволяет установить факт их использования ответчиком. Косвенные доказательства не свидетельствуют о виновном поведении ответчика, а уголовное дело приостановлено за не установлением лица, совершившего преступление.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "048f5560a6ccaa3884963cdeb2774e9644f002e17759adac3a17031ee827d06f",
+      "raw_chars": 39027,
+      "prepared_chars": 39027,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=244033664&case_uid=ae8923f0-b74e-46d4-bb1c-8c2bdf2392a9&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-07T01:20:23+00:00",
+      "case_number": "2-8029/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-005924-75",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-07T03:45:31+00:00"
   }
 }

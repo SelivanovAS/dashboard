@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-07T08:35:41+05:00",
+  "updated_at": "2026-10-07T03:45:31+00:00",
   "cases": [
     {
       "id": "М-9094/2026",
@@ -12619,7 +12619,8 @@
         "cassation_filed": true,
         "cassation_filed_date": "22.07.2026",
         "sent_to_cassation": true,
-        "sent_to_cassation_date": "20.08.2026"
+        "sent_to_cassation_date": "20.08.2026",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-4321/2026",
@@ -16370,7 +16371,8 @@
         "cassation_filed": true,
         "cassation_filed_date": "05.08.2026",
         "sent_to_cassation": true,
-        "sent_to_cassation_date": "20.08.2026"
+        "sent_to_cassation_date": "20.08.2026",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-4570/2026",
@@ -22083,7 +22085,8 @@
         "cassation_filed_date": "09.07.2026",
         "sent_to_cassation": true,
         "sent_to_cassation_date": "16.07.2026",
-        "decision_date": "19.01.2026"
+        "decision_date": "19.01.2026",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-2462/2026",
@@ -22940,7 +22943,8 @@
         "decision_date": "26.11.2025",
         "objections_due": "2026-01-19",
         "objections_set_at": "2025-12-22",
-        "objections_emitted": "2026-01-19"
+        "objections_emitted": "2026-01-19",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-1161/2026",
@@ -23242,7 +23246,8 @@
         "decision_date": "11.09.2025",
         "objections_due": "2025-11-25",
         "objections_set_at": "2025-11-06",
-        "objections_emitted": "2025-11-25"
+        "objections_emitted": "2025-11-25",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-321/2026 (33-7047/2025;)",
@@ -25166,7 +25171,8 @@
         "decision_date": "06.05.2026",
         "sent_to_appeal": true,
         "sent_to_appeal_date": "28.07.2026",
-        "judicial_uid": "86RS0004-01-2025-012699-39"
+        "judicial_uid": "86RS0004-01-2025-012699-39",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-5734/2026",
