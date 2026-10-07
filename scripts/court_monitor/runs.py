@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
-from court_monitor import fi_act_watch, writ_watch
+from court_monitor import fi_act_watch, writ_watch, technical_report as tech_report
 from court_monitor.netutil import card_cache_run
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
@@ -1262,6 +1262,7 @@ def main():
 
     # Таймеры этапов: ключ = название этапа, значение = секунды.
     timings: dict[str, float] = {}
+    tech_report.begin('main')
     t_total_start = time.perf_counter()
 
     # 1. Проверяем доступность суда
@@ -1387,7 +1388,7 @@ def main():
     # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
-    send_telegram(_telegram_digest_text(digest))
+    _send_digest_telegram(digest)
     # На Mac (без токена) дайджест — черновик дельты: на дашборд не пишем,
     # его выпуск сохранит replay после доставочного коммита (полный, из
     # накопленного контекста).
@@ -1399,6 +1400,12 @@ def main():
             issue_key=digest_issue_key,
         )
     timings["telegram"] = time.perf_counter() - t0
+
+    if digest_will_deliver:
+        tech_report.record_digest({'new_cases': new_cases, 'changes': changes,
+                                   'saved_at': tech_report.now(), 'issue_key': digest_issue_key})
+        tech_report.record_push({'status': 'skipped'})
+        tech_report.finish_inline()
 
     # 9. Разделяем на активные и архивные (Решено + 30+ дней)
     t0 = time.perf_counter()
@@ -1553,6 +1560,15 @@ def _llm_digest_note() -> str:
     return f"🤖 LLM: {model} ({mode})"
 
 
+def _send_digest_telegram(digest: str) -> None:
+    """В личном канале текст заменён финальным техническим отчётом."""
+    if tech_report.digest_mode() == 'technical':
+        log.info('Личный Telegram: технический отчёт после результатов публикации и push')
+        return
+    receipt = send_telegram(_telegram_digest_text(digest))
+    tech_report.update(telegram_digest=dict(receipt or {'status': 'unknown'}, target='group'))
+
+
 def _telegram_digest_text(digest: str) -> str:
     """Telegram-версия дайджеста: компактная обрезка + сервисная приписка
     о LLM-модели.
@@ -1596,6 +1612,9 @@ def _lint_digest_and_alert(digest_html: str, *,
         )
         if problems:
             log.warning("digest-lint: " + "; ".join(problems))
+            if tech_report.digest_mode() == 'technical':
+                tech_report.record_warning('Проверка дайджеста: ' + '; '.join(problems))
+                return
             send_telegram(
                 "🩺 <b>Дайджест-линтер</b>\n"
                 + "\n".join(f"• {escape_html(p)}" for p in problems)
@@ -1660,7 +1679,7 @@ def _alert_llm_summary_failures() -> None:
     """
     try:
         failed = config.METRICS.get("llm_summary_failed", 0)
-        if not failed:
+        if not failed or tech_report.digest_mode() == 'technical':
             return
         calls = config.METRICS.get("llm_summary_calls", 0)
         saved = config.METRICS.get("llm_summary_fallback_saved", 0)
@@ -2632,6 +2651,8 @@ def main_json():
     log.info("Запуск мониторинга дел Сбербанка (JSON-режим)")
     log.info("=" * 60)
 
+    tech_report.begin('main_json')
+
     # Smart-skip нерабочих дней РФ (включается при автозапуске через
     # Worker — он передаёт SKIP_NON_WORKING_DAYS=1 / --smart-skip).
     # Ручной запуск из UI работает без skip.
@@ -2652,6 +2673,8 @@ def main_json():
     if skip_non_working_day(today, smart_skip=smart_skip_mode,
                             ignore_calendar=ignore_calendar):
         log.info(f"{today.isoformat()} — нерабочий день РФ, парсинг пропущен.")
+        tech_report.update(execution={'status': 'skipped', 'reason': 'non_working_day'})
+        tech_report.finish_inline()
         return
     if ignore_calendar and not is_russian_working_day(today):
         # Без этой строки по логу не отличить «сегодня рабочий день» от
@@ -6122,10 +6145,14 @@ def main_json():
             log.warning(
                 "parse-health: " + "; ".join(health_alerts)
             )
-            send_telegram(
-                "🩺 <b>Мониторинг парсеров</b>\n"
-                + "\n".join(f"• {escape_html(a)}" for a in health_alerts)
-            )
+            if tech_report.digest_mode() == 'technical':
+                for alert in health_alerts:
+                    tech_report.record_warning(alert)
+            else:
+                send_telegram(
+                    "🩺 <b>Мониторинг парсеров</b>\n"
+                    + "\n".join(f"• {escape_html(a)}" for a in health_alerts)
+                )
     except Exception as exc:
         log.warning(f"parse-health: ошибка детектора: {exc}", exc_info=True)
 
@@ -6560,7 +6587,7 @@ def main_json():
     # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
-    send_telegram(_telegram_digest_text(digest))
+    _send_digest_telegram(digest)
     timings["telegram"] = time.perf_counter() - t0
 
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
@@ -6690,6 +6717,9 @@ def main_json():
             )
 
     _process_act_summary_queue(retry=True)
+    if digest_will_deliver:
+        tech_report.record_digest(dict(context_args, saved_at=tech_report.now(), issue_key=digest_issue_key))
+        tech_report.finish_inline()
     timings["total"] = time.perf_counter() - t_total_start
 
     # Агрегат отчёта bank-трека для сводки (пер-кейсовая детализация —
@@ -6768,6 +6798,8 @@ def main_replay_last(push_all: bool = False):
     )
     log.info("=" * 60)
 
+    tech_report.begin('main_replay_last')
+    _metrics_reset()
     validate_environment()
 
     if not os.path.exists(config.LAST_DIGEST_CONTEXT_PATH):
@@ -6844,7 +6876,7 @@ def main_replay_last(push_all: bool = False):
     # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
-    send_telegram(_telegram_digest_text(digest))
+    _send_digest_telegram(digest)
     # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
     _lint_digest_and_alert(
         digest,
@@ -6944,6 +6976,8 @@ def main_replay_last(push_all: bool = False):
         )
     else:
         _send_replay_web_push(ctx, push_all=push_all)
+    tech_report.record_digest(ctx)
+    tech_report.finish_inline()
     log.info("Готово!")
 
 
@@ -7225,6 +7259,8 @@ def main_digest_only():
     log.info("Режим digest-only: дайджест по текущим данным")
     log.info("=" * 60)
 
+    tech_report.begin('main_digest_only')
+    _metrics_reset()
     validate_environment()
 
     cases = load_csv(config.CSV_PATH)
@@ -7268,7 +7304,7 @@ def main_digest_only():
     # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
-    send_telegram(_telegram_digest_text(digest))
+    _send_digest_telegram(digest)
     send_web_push(
         title="Мониторинг дел — проверка",
         body="Дайджест по текущим данным",
@@ -7277,4 +7313,6 @@ def main_digest_only():
     # digest-only вызывается с пустыми new_cases/changes — это всегда
     # «no-changes» дайджест по текущим данным.
     save_last_digest(digest, summary="(digest-only)", is_empty=True)
+    tech_report.record_digest({'saved_at': tech_report.now()})
+    tech_report.finish_inline()
     log.info("Готово!")

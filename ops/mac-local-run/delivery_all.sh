@@ -58,6 +58,15 @@ deliver_repo() {
     fi
     return 0
   fi
+  # Независимый от запуска parse-процесса контроль: после 10:00 сообщает,
+  # если сегодня нет завершённого прогона и живого писателя в общем lock.
+  # Проверяем и закрытый день: delivered_at сам по себе не доказывает обход.
+  # Собственный lock отчёта не мешает штатной доставочной транзакции.
+  if [ -f scripts/technical_report.py ]; then
+    "$PYTHON" scripts/technical_report.py ops --event watchdog --repo "$repo" \
+      --telegram-config "$HOME/.config/court-monitor/telegram" \
+      || echo "delivery_all: $repo — технический контроль не завершён" >&2
+  fi
   # Подтверждённый закрытый день не требует Git-запросов. При любом
   # незавершённом journal этот быстрый выход запрещён: worker обязан
   # восстановить транзакцию прежде, чем доверять локальному delivered_at.

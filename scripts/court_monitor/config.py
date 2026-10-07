@@ -837,6 +837,8 @@ SUMMARY_MODELS_USED: set[str] = set()
 
 
 def _metrics_reset() -> None:
+    from court_monitor.digest import summary_audit
+    summary_audit.reset()
     SUMMARY_MODELS_USED.clear()
     for k in METRICS:
         METRICS[k] = 0

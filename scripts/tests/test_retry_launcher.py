@@ -32,6 +32,8 @@ def worker_env(tmp_path):
     helpers = repo / "ops/mac-local-run"
     helpers.mkdir(parents=True)
     (repo / "data").mkdir()
+    (repo / "scripts").mkdir()
+    (repo / "scripts/technical_report.py").write_text('# test stub intercepted by fake_python\n')
     data = repo / "data/cases.json"
     data.write_text('{"cases": [], "pending_retry_context": []}\n')
     context = repo / "data/last_digest_context.json"
@@ -71,6 +73,8 @@ if name == "progress_pusher.py":
     sys.exit(1)
 if name == "delivery_txn.py":
     sys.exit(1)
+if name == "technical_report.py":
+    sys.exit(int(os.environ.get("CM_TEST_REPORT_FAIL", "0")))
 if name == "cloud_run_ok.py":
     print("дайджест отправлен" if "--report" in sys.argv else "прочитано")
     sys.exit(0)
@@ -95,7 +99,11 @@ sys.exit("unexpected Python tool: " + name)
 import json, os, sys
 with open(os.environ["CM_TEST_TRACE"], "a") as f:
     f.write(json.dumps({"tool": "git", "args": sys.argv[1:]}) + "\n")
-sys.exit(1 if sys.argv[1:2] == ["diff"] else 0)
+if sys.argv[1:2] == ["diff"]:
+    sys.exit(int(os.environ.get("CM_TEST_DATA_DIFF", "1")))
+if sys.argv[1:2] == ["merge-base"]:
+    sys.exit(int(os.environ.get("CM_TEST_REMOTE_CONTAINS_HEAD", "0")))
+sys.exit(0)
 ''')
     env = {**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
            "CM_TEST_PYTHON": str(fake_python), "CM_COURT_ROUTES_READY": "1",
@@ -137,6 +145,11 @@ def test_retry_publishes_with_daily_skip_and_hard_budget_without_delivery(worker
     assert "Mac-парсинг" not in commits[0][commits[0].index("-m") + 1]
     assert sum(args[:1] == ["push"] for args in git_calls) == 1
     assert not (repo / "ops/mac-local-run/.runtime/parse_txn.json").exists()
+    report_calls = [call for call in calls if call['tool'] == 'technical_report.py']
+    assert len(report_calls) == 1
+    assert report_calls[0]['args'][:3] == ['ops', '--event', 'retry-result']
+    assert calls.index(report_calls[0]) > max(i for i, call in enumerate(calls)
+        if call['tool'] == 'git' and call['args'][:1] == ['push'])
 
 
 def test_retry_waits_for_delivery_recovery_without_touching_markers(worker_env):
@@ -154,7 +167,7 @@ def test_retry_waits_for_delivery_recovery_without_touching_markers(worker_env):
     assert not Path(env["CM_TEST_PARSE_ENV"]).exists()
 
 
-def test_failed_retry_rolls_back_data_without_publishing_or_notifications(worker_env):
+def test_failed_retry_rolls_back_data_without_publishing_and_reports_real_failure(worker_env):
     repo, _, env = worker_env
     data = repo / "data/cases.json"
     before = data.read_bytes()
@@ -164,6 +177,29 @@ def test_failed_retry_rolls_back_data_without_publishing_or_notifications(worker
     assert data.read_bytes() == before
     assert not Path(env["CM_TEST_ACTIONS"]).exists()
     assert not any(call["tool"] == "git" and "push" in call["args"] for call in calls)
+    reports = [call for call in calls if call['tool'] == 'technical_report.py']
+    assert len(reports) == 1
+    assert reports[0]['args'][:3] == ['ops', '--event', 'failure']
+    assert 'парсинг завершился с кодом 7' in reports[0]['args'][-1]
+
+
+def test_retry_reporting_failure_does_not_change_published_result(worker_env):
+    repo, _, env = worker_env
+    env['CM_TEST_REPORT_FAIL'] = '2'
+    result, calls = run_worker(worker_env, '--retry-only')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (repo / 'ops/mac-local-run/.runtime/parse_txn.json').exists()
+    assert any(call['tool'] == 'git' and call['args'][:1] == ['push'] for call in calls)
+
+
+@pytest.mark.parametrize('remote_rc,report_count', [('0', 1), ('1', 0)])
+def test_empty_diff_only_reports_publication_if_remote_contains_current_commit(worker_env, remote_rc, report_count):
+    _, _, env = worker_env
+    env.update(CM_TEST_DATA_DIFF='0', CM_TEST_REMOTE_CONTAINS_HEAD=remote_rc)
+    result, calls = run_worker(worker_env, '--retry-only')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not any(call['tool'] == 'git' and call['args'][:1] == ['push'] for call in calls)
+    assert len([call for call in calls if call['tool'] == 'technical_report.py']) == report_count
 
 
 def test_ordinary_slot_keeps_delivered_day_gate(worker_env):
