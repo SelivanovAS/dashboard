@@ -19,6 +19,7 @@
     ".github/workflows/test_digest.yml": "deployment/workflows/test_digest.yml",
     ".github/workflows/tests.yml": "deployment/workflows/tests.yml",
     ".github/workflows/update_cases.yml": "deployment/workflows/update_cases.yml",
+    "README.md": "deployment/regions/bashkortostan/files/README.md",
     "REGION": "deployment/regions/bashkortostan/files/REGION",
     "cloudflare-worker/wrangler.toml": "deployment/regions/bashkortostan/files/cloudflare-worker/wrangler.toml",
     "docs/regions/Башкортостан_api2.md": "deployment/regions/bashkortostan/files/docs/regions/Башкортостан_api2.md",

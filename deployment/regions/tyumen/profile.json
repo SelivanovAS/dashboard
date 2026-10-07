@@ -20,6 +20,7 @@
     ".github/workflows/tests.yml": "deployment/workflows/tests.yml",
     ".github/workflows/update_cases.yml": "deployment/workflows/update_cases.yml",
     ".github/workflows/verify_tyumen_setup.yml": "deployment/workflows/verify_tyumen_setup.yml",
+    "README.md": "deployment/regions/tyumen/files/README.md",
     "REGION": "deployment/regions/tyumen/files/REGION",
     "cloudflare-worker/wrangler.toml": "deployment/regions/tyumen/files/cloudflare-worker/wrangler.toml",
     "docs/regions/Тюмень_api2.md": "deployment/regions/tyumen/files/docs/regions/Тюмень_api2.md",

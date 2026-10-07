@@ -60,6 +60,10 @@
       "mode": "100644",
       "sha256": "78a9e948d86681589f9eb9bdf14c9dc9c526845eabea6a81049dc0cc20903984"
     },
+    "README.md": {
+      "mode": "100644",
+      "sha256": "9b6621412c247a046fc8c383c57e57d6700fcf6942435c07ac45f7f80f0e3784"
+    },
     "REGION": null,
     "app.js": {
       "mode": "100644",
