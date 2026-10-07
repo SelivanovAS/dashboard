@@ -5044,7 +5044,64 @@
         "announced": true
       },
       "archived_at": "2026-10-06"
+    },
+    {
+      "id": "2-3708/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Эргашев Жонибек Муроталиевич",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-3708/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Зимина Анна Юрьевна",
+        "filing_date": "02.02.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Копия заочного решения возвратилась невручённой. 14:48. 04.06.2026",
+        "event_date": "03.06.2026",
+        "hearing_date": "19.05.2026",
+        "hearing_time": "10:45",
+        "link": "263897224|8cdaeb9b-e676-4f10-9ef9-5ab0d972c58a",
+        "act_published": false,
+        "act_date": "",
+        "resolved_emitted": true,
+        "writs": [
+          {
+            "issue_date": "08.07.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0004#2-3708/2026#1",
+            "recipient": "Отделение судебных приставов по г. Сургуту",
+            "status": "Выдан"
+          }
+        ],
+        "decision_date": "19.05.2026",
+        "last_checked_at": "2026-10-02",
+        "legal_force_est": "2026-07-03",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "default_judgment": true,
+        "motivirovka_date": "19.05.2026",
+        "default_copy_returned": true,
+        "default_copy_returned_emitted": "03.06.2026",
+        "default_copy_returned_date": "03.06.2026",
+        "judicial_uid": "86RS0004-01-2026-001727-88",
+        "writ_awaited_since": "2026-07-03"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-10-07"
     }
   ],
-  "updated_at": "2026-10-06T07:00:31+05:00"
+  "updated_at": "2026-10-07T07:00:46+05:00"
 }
