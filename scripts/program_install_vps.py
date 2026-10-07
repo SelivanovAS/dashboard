@@ -155,8 +155,16 @@ def preflight_revision(repo, revision, document, region):
             path.write_bytes(content)
             path.chmod(0o755 if document["files"][name]["mode"] == "100755" else 0o644)
         verify_files(stage, document)
-        if not (stage / "REGION").is_file() or (stage / "REGION").read_text().strip() != region:
+        region_file = stage / "REGION"
+        if region_file.is_file():
+            if region_file.read_text().strip() != region:
+                raise InstallError("Не совпадает файл REGION выпуска")
+        elif not (document.get("kind") == "baseline" and region == "hmao"):
             raise InstallError("Не совпадает файл REGION выпуска")
+        # До первого общего выпуска ХМАО использовал штатный default hmao
+        # без файла REGION. Только такой исходный снимок допускает отсутствие
+        # файла; эффективный регион всё равно подтверждается ниже процессом
+        # без env и боевых данных. Новые program-пакеты требуют явного REGION.
         # Не задаём REGION через env: иначе неверный регион в файле маскируется.
         code = "import sys; sys.path.insert(0, 'scripts'); from court_monitor import config; print(config.REGION)"
         try:

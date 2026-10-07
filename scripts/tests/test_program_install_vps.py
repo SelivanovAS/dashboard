@@ -214,7 +214,8 @@ from pathlib import Path
 assert 'PUSH_SECRET' not in os.environ
 assert 'REGION' not in os.environ
 assert not Path('data').exists()
-REGION = (Path(__file__).resolve().parents[2] / 'REGION').read_text().strip()
+region_file = Path(__file__).resolve().parents[2] / 'REGION'
+REGION = region_file.read_text().strip() if region_file.is_file() else 'hmao'
 ''')
     (repo / 'data').mkdir()
     (repo / 'data/cases.json').write_text('private live data')
@@ -309,3 +310,47 @@ def test_failed_repair_does_not_revive_previously_unverified_checkout(monkeypatc
     assert not any(a[:2] == ['systemctl', 'start'] for a in calls)
     assert all(json.loads(path.read_text())['phase'] == 'applying'
                for path in tmp_path.glob('.program-install-*.json'))
+
+
+def preflight_repo_without_region(tmp_path, *, kind="baseline", fallback="hmao"):
+    repo, _, lock = real_preflight_repo(tmp_path)
+    subprocess.run(['git', 'rm', '--', 'REGION'], cwd=repo, check=True, capture_output=True)
+    config = repo / 'scripts/court_monitor/config.py'
+    config.write_text(config.read_text().replace("else 'hmao'", "else " + repr(fallback)))
+    for args in (('add', 'scripts/court_monitor/config.py'), ('commit', '-qm', 'original HMAO without REGION')):
+        subprocess.run(['git', *args], cwd=repo, check=True, capture_output=True)
+    lock['files'].pop('REGION')
+    lock['files']['scripts/court_monitor/config.py']['sha256'] = hashlib.sha256(config.read_bytes()).hexdigest()
+    lock['kind'] = kind
+    return repo, m.git(repo, 'rev-parse', 'HEAD'), sign(lock)
+
+
+def test_first_hmao_baseline_preflight_accepts_verified_default_without_region(monkeypatch, tmp_path):
+    repo, revision, lock = preflight_repo_without_region(tmp_path)
+    # The actual config default, never the operator's environment, decides.
+    monkeypatch.setenv('REGION', 'tyumen')
+    m.validate_document(lock)
+    m.preflight_revision(repo, revision, lock, 'hmao')
+    assert not (repo / 'REGION').exists()
+    assert (repo / 'data/cases.json').read_text() == 'private live data'
+
+
+def test_program_preflight_still_requires_explicit_region_file(tmp_path):
+    repo, revision, lock = preflight_repo_without_region(tmp_path, kind='program')
+    with pytest.raises(m.InstallError, match='файл REGION'):
+        m.preflight_revision(repo, revision, lock, 'hmao')
+
+
+def test_other_baseline_region_cannot_use_hmao_missing_file_exception(tmp_path):
+    repo, revision, lock = preflight_repo_without_region(tmp_path)
+    lock.update(region='tyumen', repository='SelivanovAS/dashboard-tyumen', source_repo='SelivanovAS/dashboard-tyumen')
+    lock = sign(lock)
+    m.validate_document(lock)
+    with pytest.raises(m.InstallError, match='файл REGION'):
+        m.preflight_revision(repo, revision, lock, 'tyumen')
+
+
+def test_hmao_baseline_missing_region_still_checks_effective_config(tmp_path):
+    repo, revision, lock = preflight_repo_without_region(tmp_path, fallback='tyumen')
+    with pytest.raises(m.InstallError, match='регион запуска'):
+        m.preflight_revision(repo, revision, lock, 'hmao')
