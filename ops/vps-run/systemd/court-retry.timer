@@ -1,0 +1,11 @@
+[Unit]
+Description=Court Monitor: дочитка по будням в 12:00 и 16:00
+
+[Timer]
+OnCalendar=Mon..Fri 12:00 Asia/Yekaterinburg
+OnCalendar=Mon..Fri 16:00 Asia/Yekaterinburg
+# Не запускаем пропущенную дневную попытку при ночной загрузке сервера.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

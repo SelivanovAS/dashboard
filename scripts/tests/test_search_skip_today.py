@@ -19,10 +19,16 @@
 Запуск: `python3 -m pytest scripts/tests/test_search_skip_today.py`.
 """
 
+import ast
+from copy import deepcopy
 import os
 import re
 import sys
 from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(0, SCRIPTS_DIR)
@@ -99,6 +105,44 @@ class TestRunsWiring:
     def _runs(self) -> str:
         return _read("scripts/court_monitor/runs.py")
 
+    def _run_search_prefix(self, phase, *, skipped=False, retry_only=False,
+                           queue_only=False):
+        """Исполнить настоящий цикл до первого HTTP, не вызывая main_json.
+
+        AST сохраняет вложенные условия и continue: перестановка гейта
+        после HTTP, потеря continue или запись в health не пройдут тест.
+        Всё после начала запроса отсечено: парсер/доставка здесь не нужны.
+        """
+        tree = ast.parse(self._runs())
+        target = "court_idx" if phase == "fi" else "_ap_i"
+        loops = [node for node in ast.walk(tree) if isinstance(node, ast.For)
+                 and target in {n.id for n in ast.walk(node.target)
+                                if isinstance(n, ast.Name)}]
+        assert len(loops) == 1, f"не найден единственный цикл {phase}"
+        loop = deepcopy(loops[0])
+        http_index = next(i for i, statement in enumerate(loop.body)
+            if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                   and n.func.id == "fetch_page" for n in ast.walk(statement)))
+        loop.body = loop.body[:http_index + 1]
+        loop.orelse = []
+        module = ast.fix_missing_locations(ast.Module(body=[loop], type_ignores=[]))
+        court = SimpleNamespace(name="Тестовый суд", domain="test.sudrf.ru",
+                                search_disabled=False, search_url=lambda: "search://test")
+        old_health = {"source:test": 7, "other": 3}
+        context = dict(
+            intake_courts=[court], enabled_courts=[] if queue_only else [court],
+            queue_only_courts=[court] if queue_only else [], APPEAL_COURTS=[court],
+            retry_only=retry_only, search_skip_keys={"source:test"} if skipped else set(),
+            fi_search_skipped_today=0, appeal_search_gated_now=set(),
+            fi_health_key=lambda c: "source:test", _appeal_health_key=lambda c: "source:test",
+            shorten_court_name=lambda name: name, log=Mock(),
+            time=SimpleNamespace(perf_counter=lambda: 0), health_obs=old_health.copy(),
+            health_labels={}, health_captcha={}, polite_delay=Mock(), fetch_page=Mock(),
+            card_breaker_note_failure=Mock(), consume_bank_candidates=Mock(),
+        )
+        exec(compile(module, "runs.py search prefix", "exec"), context)
+        return context, court, old_health
+
     def test_gate_is_behind_skip_checked_today(self):
         runs = self._runs()
         m = re.search(
@@ -111,13 +155,17 @@ class TestRunsWiring:
                    "SKIP_CHECKED_TODAY, что и дочитка карточек")
 
     def test_all_three_phases_consult_the_gate(self):
-        runs = self._runs()
-        assert re.search(r"fetch_cassation_search\(\s*CASSATION_COURT, _ck_total, search_skip_keys", runs), \
+        calls = [node for node in ast.walk(ast.parse(self._runs()))
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                 and node.func.id == "fetch_cassation_search"]
+        assert any(len(call.args) >= 3 and isinstance(call.args[2], ast.Name)
+                   and call.args[2].id == "search_skip_keys" for call in calls), \
             "фаза кассации не передаёт дневной гейт в общий поиск"
-        assert "if hk in search_skip_keys:" in runs, "фаза апелляции без гейта"
-        assert "if health_key in search_skip_keys:" in runs, (
-            "фаза 1-й инстанции без гейта"
-        )
+        for phase in ("fi", "appeal"):
+            regular, _, _ = self._run_search_prefix(phase)
+            regular["fetch_page"].assert_called_once()
+            skipped, _, _ = self._run_search_prefix(phase, skipped=True)
+            skipped["fetch_page"].assert_not_called()
 
     def test_cassation_daily_gate_skips_http_and_delay(self, monkeypatch):
         from court_monitor import runs
@@ -129,16 +177,14 @@ class TestRunsWiring:
         monkeypatch.setattr(runs, "polite_delay", unexpected)
         assert runs.fetch_cassation_search(court, "cass:ok", {"cass:ok"}) == ("", "", True)
 
-    def test_fi_gate_precedes_polite_delay(self):
-        # Пропуск не тратит каденс: гейт стоит ДО polite_delay, как пре-чеки
-        # предохранителя (см. FI-цикл).
-        runs = self._runs()
-        loop = runs.split(
-            "for court_idx, court in enumerate(enabled_courts, 1):", 1
-        )[1]
-        gate = loop.index("if health_key in search_skip_keys:")
-        delay = loop.index("polite_delay()")
-        assert gate < delay, "гейт дочитки поисков обязан стоять до polite_delay"
+    @pytest.mark.parametrize("gate", ["skipped", "retry_only", "queue_only"])
+    def test_fi_gate_precedes_polite_delay(self, gate):
+        state, court, _ = self._run_search_prefix("fi", **{gate: True})
+        state["polite_delay"].assert_not_called()
+        state["fetch_page"].assert_not_called()
+        # Поиск пропущен, но ранее обнаруженная карточка не теряется.
+        state["consume_bank_candidates"].assert_called_once_with(court, [], "[1/1]")
+        assert state["fi_search_skipped_today"] == (0 if gate == "queue_only" else 1)
 
     def test_cassation_skip_does_not_feed_failure_branch(self):
         # Пропуск ≠ отказ: ветка «поиск не загрузился» пишет health_obs=None и
@@ -150,20 +196,16 @@ class TestRunsWiring:
             "«7kas: пустой ответ от поиска» не должен печататься при дочитке"
         )
 
-    def test_skip_branches_do_not_write_health_obs(self):
-        # Инвариант телеметрии: пропущенный источник не попадает в health_obs,
-        # его last_run_at/counts остаются от удачного слота. Проверяем, что
-        # внутри веток пропуска нет записи в журнал.
-        runs = self._runs()
-        for marker in (
-            "if hk in search_skip_keys:",
-            "if health_key in search_skip_keys:",
-        ):
-            idx = runs.index(marker)
-            branch = runs[idx:idx + 600].split("continue")[0]
-            assert "health_obs[" not in branch, (
-                f"ветка пропуска у «{marker}» пишет в health_obs"
-            )
+    @pytest.mark.parametrize("phase,gate", [
+        ("fi", "skipped"), ("fi", "retry_only"), ("fi", "queue_only"),
+        ("appeal", "skipped"), ("appeal", "retry_only"),
+    ])
+    def test_skip_branches_do_not_write_health_obs(self, phase, gate):
+        state, _, old_health = self._run_search_prefix(phase, **{gate: True})
+        assert state["health_obs"] == old_health
+        assert state["health_labels"] == {}
+        assert state["health_captcha"] == {}
+        state["card_breaker_note_failure"].assert_not_called()
 
 
 class TestKnownAliveGuard:

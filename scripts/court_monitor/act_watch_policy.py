@@ -1,4 +1,4 @@
-"""Общие ограничения двух очередей: календарь, бюджет и повторы."""
+"""Общие ограничения очередей актов: календарь, бюджет и повторы."""
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +10,9 @@ from court_monitor.textutil import parse_date
 VERSION = 2
 MAX_AGE = 180
 BUDGET_SECONDS = 600
+# Резерв внутри общего RUN_DEADLINE_SECONDS, а не добавка к нему. Основной
+# обход освобождает это время для очередей; сам Budget общий для инстанций.
+RESERVED_SECONDS = 90
 BACKFILL_SECONDS = 180
 BACKFILL_CARDS = 10
 MAX_DAILY_ATTEMPTS = 2
@@ -96,10 +99,16 @@ def attempt(task, now):
 
 
 class Budget:
-    """Один бюджет на обе инстанции; лимит догрузки переживает новые слоты."""
-    def __init__(self, data, today, *, allow_backfill=True, clock=time.monotonic):
+    """Один бюджет всех инстанций; лимит догрузки переживает новые слоты.
+
+    Полнота основного обхода не является условием создания бюджета. Параметр
+    allow_backfill сохранён для явно ограниченных служебных запусков.
+    """
+    def __init__(self, data, today, *, allow_backfill=True,
+                 seconds=BUDGET_SECONDS, clock=time.monotonic):
         self.clock = clock
         self.started = clock()
+        self.seconds = min(BUDGET_SECONDS, max(0, seconds))
         self.allow_backfill = allow_backfill
         previous = data.get('act_watch_budget') or {}
         if previous.get('date') != today.isoformat():
@@ -113,12 +122,27 @@ class Budget:
         self.state = data['act_watch_budget'] = previous
 
     def remaining(self, kind):
-        remaining = BUDGET_SECONDS - (self.clock() - self.started)
+        remaining = self.seconds - (self.clock() - self.started)
         if kind == 'backfill':
             if not self.allow_backfill or self.state['backfill_count'] >= BACKFILL_CARDS:
                 return 0
             remaining = min(remaining, BACKFILL_SECONDS - self.state['backfill_seconds'])
         return max(0, remaining)
+
+    def reason(self, kind, *, run_remaining=None):
+        """Отличить перенос по лимиту от ошибки чтения карточки суда."""
+        if run_remaining is not None and run_remaining < 1:
+            return 'run_deadline'
+        if self.seconds - (self.clock() - self.started) < 1:
+            return 'watch_time_limit'
+        if kind == 'backfill':
+            if not self.allow_backfill:
+                return 'backfill_disabled'
+            if self.state['backfill_count'] >= BACKFILL_CARDS:
+                return 'backfill_daily_card_limit'
+            if BACKFILL_SECONDS - self.state['backfill_seconds'] < 1:
+                return 'backfill_daily_time_limit'
+        return ''
 
     def begin(self, kind):
         if kind == 'backfill':

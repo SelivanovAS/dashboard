@@ -68,12 +68,21 @@ for entry in "${regional_delays[@]:-}"; do
 done
 CHECK_ONLY=0
 ANYWHERE=0
+RETRY_ONLY=0
+RETRY_CONFLICT=0
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK_ONLY=1 ;;
     --anywhere) ANYWHERE=1 ;;
+    --retry-only) RETRY_ONLY=1 ;;
+    --force|--deliver-pending|--ignore-calendar) RETRY_CONFLICT=1 ;;
   esac
 done
+if [ "$RETRY_ONLY" = "1" ] \
+    && { [ "$CHECK_ONLY" = "1" ] || [ "$RETRY_CONFLICT" = "1" ]; }; then
+  echo "parse_all: --retry-only несовместим с полным прогоном, диагностикой и доставкой" >&2
+  exit 2
+fi
 case "$STAGGER_SECONDS" in
   ""|*[!0-9]*)
     echo "$(date '+%Y-%m-%d %H:%M:%S') parse_all: некорректный stagger '$STAGGER_SECONDS' — последовательный fallback"
@@ -256,6 +265,7 @@ run_parallel_parsers() {
 
 run_imports() {
   local repo
+  [ "$RETRY_ONLY" = "1" ] && return 0
   # На VPS очередь запускает отдельная systemd-служба после завершения
   # этого драйвера. Долгий импорт не удерживает общий утренний сервис.
   # Mac-резерв сохраняет прежний последовательный обход после парсеров.
@@ -280,6 +290,7 @@ run_sequential_parsers() {
 
 run_delivery_sweep() {
   local repo
+  [ "$RETRY_ONLY" = "1" ] && return 0
   [ "$CHECK_ONLY" = "1" ] && return 0
   [ "$delivery_sweep_ran" = "1" ] && return 0
   if ! cm_delivery_window_open; then

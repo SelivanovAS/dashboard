@@ -11,6 +11,10 @@ import random
 import re
 import socket
 import time
+import hashlib
+import tempfile
+from pathlib import Path
+from functools import wraps
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from http.client import RemoteDisconnected
@@ -36,14 +40,61 @@ session.headers.update({
 
 _RUN_DEADLINE_AT = 0.0
 _RUN_DEADLINE_REPORTED = False
+_RUN_DEADLINE_RESERVED_AT = 0.0
+_CARD_CACHE = None
+
+
+def enable_card_cache() -> None:
+    """Один временный дисковый кэш на прогон, без переноса успеха между днями."""
+    global _CARD_CACHE
+    if _CARD_CACHE is not None:
+        _CARD_CACHE.cleanup()
+    _CARD_CACHE = tempfile.TemporaryDirectory(prefix='court-card-cache-')
+
+
+def card_cache_run(function):
+    @wraps(function)
+    def run(*args, **kwargs):
+        global _CARD_CACHE
+        enable_card_cache()
+        try:
+            return function(*args, **kwargs)
+        finally:
+            if _CARD_CACHE is not None:
+                _CARD_CACHE.cleanup()
+                _CARD_CACHE = None
+    return run
+
+
+def _card_cache_path(url):
+    if _CARD_CACHE is None:
+        return None
+    return Path(_CARD_CACHE.name) / hashlib.sha256(url.encode()).hexdigest()
+
+
+def reserve_run_deadline(seconds: float) -> None:
+    """Убрать резерв из основного обхода, сохранив абсолютный общий предел."""
+    global _RUN_DEADLINE_AT, _RUN_DEADLINE_RESERVED_AT
+    if _RUN_DEADLINE_AT > 0 and not _RUN_DEADLINE_RESERVED_AT:
+        _RUN_DEADLINE_RESERVED_AT = _RUN_DEADLINE_AT
+        _RUN_DEADLINE_AT = max(time.monotonic(), _RUN_DEADLINE_AT - seconds)
+
+
+def release_run_deadline_reserve() -> None:
+    global _RUN_DEADLINE_AT, _RUN_DEADLINE_RESERVED_AT, _RUN_DEADLINE_REPORTED
+    if _RUN_DEADLINE_RESERVED_AT:
+        _RUN_DEADLINE_AT = _RUN_DEADLINE_RESERVED_AT
+        _RUN_DEADLINE_RESERVED_AT = 0.0
+        _RUN_DEADLINE_REPORTED = False
 
 
 def start_run_deadline(seconds: float | None = None) -> None:
     """Начать общий monotonic-бюджет; 0 выключает ограничение."""
-    global _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED
+    global _RUN_DEADLINE_AT, _RUN_DEADLINE_REPORTED, _RUN_DEADLINE_RESERVED_AT
     budget = config.RUN_DEADLINE_SECONDS if seconds is None else float(seconds)
     _RUN_DEADLINE_AT = time.monotonic() + budget if budget > 0 else 0.0
     _RUN_DEADLINE_REPORTED = False
+    _RUN_DEADLINE_RESERVED_AT = 0.0
 
 
 def run_deadline_remaining() -> float | None:
@@ -356,6 +407,9 @@ def mark_last_fetch_semantic(
     if kind not in (
         "ok", "valid", "valid_card", "valid_search", "valid_act",
     ):
+        cached = _card_cache_path(url)
+        if cached is not None:
+            cached.unlink(missing_ok=True)
         preserved = {
             key: diag[key]
             for key in ("status", "elapsed", "attempt", "request_id")
@@ -1049,6 +1103,10 @@ def fetch_card_checked(url: str, *, context: str | None = None,
     READ-ONLY: код не читаем и не решаем — только распознаём страницу
     (см. detect_captcha_challenge_card / looks_like_non_card_page).
     """
+    cached = _card_cache_path(url)
+    if cached is not None and cached.exists():
+        _set_diag('ok', url, cache_hit=True, context=context)
+        return cached.read_text(encoding='utf-8')
     host = urlsplit(url).netloc
     if breaker_gate and not card_breaker_allows(host):
         # Запроса не было вовсе — иначе оператор прочитал бы в отчёте диагноз
@@ -1122,4 +1180,6 @@ def fetch_card_checked(url: str, *, context: str | None = None,
     telemetry.classify_semantic(
         request_id or None, "valid_card", host=host, context=context or ""
     )
+    if cached is not None:
+        cached.write_text(html, encoding='utf-8')
     return html
