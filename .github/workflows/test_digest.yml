@@ -9,7 +9,7 @@ name: 🧪 Тест дайджеста (replay)
 # openrouter_model (место в рейтинге бесплатных моделей shir-man.com —
 # конкретный id резолвится на прогоне, чтобы список не протухал).
 # Текстовое поле llm_model перебивает оба списка (произвольный id).
-# Telegram: личный по умолчанию, группа по галке.
+# Telegram: личный технический отчёт всегда, дайджест в группу по галке.
 # Публикация результатов (last_digest.json, cases.json, кэш пересказов) —
 # только по галке commit_results: без неё тестовый дайджест НЕ попадает на
 # дашборд, и PWA push тоже не отправляется (пуш ведёт на дашборд — без
@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       to_group:
-        description: 'Слать в корпоративную группу Telegram. Снять галку — в личный чат.'
+        description: 'Слать дайджест в корпоративную группу Telegram. В личный чат всегда направляется технический отчёт.'
         required: false
         type: boolean
         default: false
@@ -79,7 +79,7 @@ on:
           - GigaChat-3-Ultra
         default: GigaChat-3-Pro
       openrouter_model:
-        description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга, какая именно — видно в приписке «🤖 LLM» и в логе.'
+        description: 'Модель OpenRouter (при провайдере openrouter) — место в рейтинге бесплатных моделей shir-man.com; конкретная модель подставляется на прогоне из свежего рейтинга и указывается в техническом отчёте и логе.'
         required: false
         type: choice
         options:
@@ -95,7 +95,7 @@ on:
         type: string
         default: ''
       commit_results:
-        description: 'Опубликовать результаты: дайджест попадёт на дашборд (last_digest.json, cases.json, кэш пересказов) и уйдёт PWA push. Без галки — только Telegram.'
+        description: 'Опубликовать результаты: дайджест попадёт на дашборд (last_digest.json, cases.json, кэш пересказов) и уйдёт PWA push. Без галки — личный техотчёт и дайджест в группу, если она выбрана.'
         required: false
         type: boolean
         default: false
@@ -107,10 +107,19 @@ permissions:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    env:
+      TELEGRAM_DIGEST_MODE: technical
+      DEFER_TECHNICAL_REPORT: "1"
 
     steps:
       - name: Клонирование репозитория
         uses: actions/checkout@v5
+
+      - name: Начать технический отчёт
+        run: |
+          report_path="$RUNNER_TEMP/court-technical-report.json"
+          rm -f -- "$report_path" "${report_path%.json}.html"
+          echo "TECHNICAL_REPORT_PATH=$report_path" >> "$GITHUB_ENV"
 
       - name: Установка Python
         uses: actions/setup-python@v6
@@ -121,6 +130,7 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Переигровка последнего дайджеста
+        id: digest
         env:
           # Регион территории (Actions Variable форка; пусто у эталона = hmao).
           REGION: ${{ vars.REGION }}
@@ -137,9 +147,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.to_group && secrets.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID_TEST }}
-          # Личный чат: по нему скрипт понимает, что дайджест идёт юристу,
-          # и добавляет сервисную приписку «какая LLM делала дайджест»
-          # (в корпоративную группу приписка не уходит).
+          TELEGRAM_DIGEST_MODE: ${{ inputs.to_group && 'digest' || 'technical' }}
           TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           # PWA push уходит только вместе с публикацией: без commit_results
           # PUSH-переменные пустые, и send_web_push тихо пропускает отправку
@@ -183,7 +191,7 @@ jobs:
           if [ "${{ inputs.to_group }}" = "true" ]; then
             echo "📢 Дайджест уйдёт в корпоративную группу Telegram"
           else
-            echo "📱 Дайджест уйдёт в личный чат Telegram"
+            echo "📱 В личный чат уйдёт технический отчёт после всех этапов"
           fi
           if [ "${{ inputs.full_llm }}" = "true" ]; then
             echo "🤖 Полный LLM-вызов (DIGEST_FULL_LLM=1) вместо гибрида"
@@ -202,10 +210,12 @@ jobs:
           fi
 
       - name: Публикация результатов на дашборд
+        id: commit
         # Без галки commit_results результаты теста живут только в логе
         # прогона и в Telegram — сайт (GitHub Pages) не меняется.
         if: ${{ inputs.commit_results }}
         run: |
+          echo "status=failed" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ -f data/last_digest.json ]; then
@@ -236,11 +246,99 @@ jobs:
           done
           if git diff --cached --quiet; then
             echo "Нет изменений — нечего коммитить"
+            echo "status=confirmed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "🔁 Тест дайджеста: результаты опубликованы на дашборд"
           git pull --rebase origin main || {
-            echo "⚠ rebase не удался — пропускаю коммит (дайджест уже отправлен)"
+            echo "⚠ rebase не удался — публикация не подтверждена"
+            echo "status=not_confirmed" >> "$GITHUB_OUTPUT"
             exit 0
           }
           git push
+          echo "status=confirmed" >> "$GITHUB_OUTPUT"
+
+      - name: Проверка публикации дайджеста на Pages
+        id: pages
+        if: success() && steps.commit.outputs.status == 'confirmed'
+        env:
+          PAGES_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/last_digest.json"
+        run: |
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          WANT=$(sha256sum data/last_digest.json | cut -d' ' -f1)
+          for i in $(seq 1 40); do
+            GOT=$(curl -fsSL "${PAGES_URL}?pubcheck=$(date +%s)-${i}" | sha256sum | cut -d' ' -f1 || true)
+            if [ "$GOT" = "$WANT" ]; then
+              echo "Сайт отдаёт свежий дайджест (попытка ${i})"
+              echo "status=confirmed" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::Pages не показал свежий дайджест за ~7 минут"
+          echo "status=unconfirmed" >> "$GITHUB_OUTPUT"
+
+      - name: Технический отчёт в личный Telegram
+        if: always()
+        env:
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          WORKFLOW_STATUS: ${{ job.status }}
+          DIGEST_STATUS: ${{ steps.digest.outcome || 'unknown' }}
+          PUBLICATION_STATUS: ${{ steps.commit.outputs.status || 'skipped' }}
+          PAGES_STATUS: ${{ steps.pages.outputs.status || 'skipped' }}
+          PUSH_STATUS: ${{ inputs.commit_results && 'unknown' || 'skipped' }}
+        run: |
+          report_python="$(command -v python || command -v python3)"
+          if [ -f scripts/technical_report.py ]; then
+            "$report_python" scripts/technical_report.py --send \
+            --workflow-status "$WORKFLOW_STATUS" \
+            --digest-step "$DIGEST_STATUS" \
+            --data-publication "$PUBLICATION_STATUS" \
+            --pages "$PAGES_STATUS" \
+            --push-step "$PUSH_STATUS"
+          else
+            # Checkout мог завершиться до появления CLI. Этот запасной сигнал
+            # не зависит от файлов проекта и никогда не дублирует вызов CLI.
+            "$report_python" - <<'PY_FALLBACK'
+          import json
+          import os
+          import sys
+          from urllib.request import Request, urlopen
+          token = os.environ.get('TELEGRAM_BOT_TOKEN')
+          chat = os.environ.get('TELEGRAM_CHAT_ID_PERSONAL') or os.environ.get('TELEGRAM_CHAT_ID')
+          if not token or not chat:
+              print('Аварийный технический отчёт: Telegram не настроен.')
+              sys.exit(1)
+          repository = os.environ.get('GITHUB_REPOSITORY', '')
+          run_id = os.environ.get('GITHUB_RUN_ID', '')
+          message = ('🚨 Технический отчёт не собран: после checkout недоступны файлы проекта. '
+                     'Результат парсинга и доставки не подтверждён. '
+                     f'Проверьте запуск: https://github.com/{repository}/actions/runs/{run_id}')
+          payload = json.dumps({'chat_id': chat, 'text': message, 'disable_web_page_preview': True}).encode()
+          try:
+              request = Request(f'https://api.telegram.org/bot{token}/sendMessage', data=payload,
+                                headers={'Content-Type': 'application/json'})
+              with urlopen(request, timeout=30) as response:
+                  accepted = bool(json.load(response).get('ok'))
+          except Exception:
+              accepted = False
+          print('Аварийный технический отчёт принят Telegram.' if accepted
+                else 'Telegram не подтвердил аварийный технический отчёт.')
+          sys.exit(0 if accepted else 1)
+          PY_FALLBACK
+          fi
+
+      - name: Сохранить технический отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: technical-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/court-technical-report.json
+            ${{ runner.temp }}/court-technical-report.html
+          if-no-files-found: ignore
+          retention-days: 7

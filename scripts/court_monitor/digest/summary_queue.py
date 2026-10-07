@@ -15,7 +15,7 @@ from court_monitor import config
 from court_monitor.act_preparation import source_hash, prepare_act
 from court_monitor.textutil import _bare_case_number
 from court_monitor.config import log
-from court_monitor.digest import llm
+from court_monitor.digest import llm, summary_audit
 
 _WAIT_FOR_SOURCE = {'source_incomplete', 'empty_source', 'text_extraction_required',
                     'case_mismatch', 'court_mismatch', 'uid_mismatch', 'stage_mismatch',
@@ -74,11 +74,15 @@ def summarize_tracked(text, *, case_meta):
             config.METRICS['llm_summary_cache_hits'] += 1
             if job.get('model'):
                 config.SUMMARY_MODELS_USED.add(job['model'])
+            summary_audit.record(summary_audit.identity(text, case_meta),
+                                 dict(job, status='ready'), cached=True)
             return summary
     if job.get('status') in _WAIT_FOR_SOURCE or job.get('status') == 'needs_review':
+        summary_audit.record(summary_audit.identity(text, case_meta), job)
         return None
     due = job.get('retry_after', '')
     if due and due > now.isoformat():
+        summary_audit.record(summary_audit.identity(text, case_meta), job)
         return None
     if llm.summaries_configured():
         job['runs'] += 1
@@ -98,6 +102,8 @@ def summarize_tracked(text, *, case_meta):
         summary = None
         meta['_summary_result'] = {'status': 'technical_error'}
     result = meta.get('_summary_result') or {'status': 'ready' if summary else 'technical_error'}
+    summary_audit.record(summary_audit.identity(text, case_meta), result,
+                         cached=result.get('cached', False))
     job.update(result)
     job['updated_at'] = now.isoformat(timespec='seconds')
     if summary:

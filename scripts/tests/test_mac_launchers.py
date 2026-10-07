@@ -553,21 +553,19 @@ class TestOneDigestPerDay:
             "иначе слот 06:00 отправит дайджест в 06:30"
         )
 
-    def test_incomplete_attempt_sends_progress_alert(self):
-        """Решение юриста 20.08.2026: после КАЖДОЙ неполной попытки — алерт
-        «прочитано X из Y» (--progress), без дневного дедупа. Удачная попытка
-        до окна молчит: копить больше нечего, а шесть «всё прочитано» за утро
-        — тот же спам, от которого уходили 20.08."""
+    def test_incomplete_attempt_waits_for_final_technical_report(self):
+        """Обычная неполная попытка не создаёт сообщение каждые полчаса."""
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "попытка неполная" in text and "--progress" in text
         block = text[text.index("Черновик запушен"):]
-        block = block[:block.index("\n  fi")]
-        assert '[ "$RUN_OK" != "1" ]' in block, \
-            "алерт-прогресс потерял гейт «попытка неполная»"
+        assert "alert_telegram" not in block
+        assert "дайджест отправлен с тем, что дочиталось" not in text
 
-    def test_window_delivery_names_incompleteness(self):
+    def test_marker_confirmation_does_not_claim_delivery(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "дайджест отправлен с тем, что дочиталось" in text
+        normal = text[text.index('deliver_and_push "обычный финиш'):]
+        assert 'notify "Готово: данные обновлены, дайджест собирается"' in normal
+        assert 'alert_telegram' not in normal
+        assert 'результат публикации покажет итоговый технический отчёт' in text
 
 
 class TestFinalDeliverySweep:
@@ -1160,31 +1158,25 @@ class TestHealthAlertsRelay:
         assert cloud_run_ok.main(["--health-alerts"]) == 0
         assert capsys.readouterr().out == ""
 
-    def test_parse_and_push_relays_after_parse(self):
+    def test_parse_health_is_reported_once_after_publication(self):
         src = _read("ops/mac-local-run/parse_and_push.sh")
-        i_done = src.index('log "Парсинг завершён"')
-        i_relay = src.index("relay_health_alerts || true")
-        i_commit = src.index("# ── Коммит и пуш")
-        assert i_done < i_relay < i_commit, (
-            "релей стоит сразу после парсинга и до коммита: ветки die выше "
-            "алертят своим 🚨, а после коммита слот может выйти раньше")
-        fn = src[src.index("relay_health_alerts() {"):src.index("release_run_lock()")]
-        assert "cloud_run_ok.py --health-alerts" in fn
-        assert "health_alerts_sent." in fn and "grep -Fxq --" in fn
-        assert 'CM_LOG_KEEP_DAYS' in fn  # старые файлы дедупа чистятся
-        assert '"🩺"' in src[src.index("alert_health_telegram() {"):][:300]
+        assert "relay_health_alerts" not in src
+        assert "health_alerts_sent." not in src
+        assert "alert_health_telegram" not in src
+        assert 'log "Парсинг завершён"' in src
+        assert "итоговый технический отчёт" in src
 
     def test_shell_channel_icon_is_optional(self):
-        """Существующие 🚨-вызовы байт-в-байт: значок — 4-й аргумент с
-        дефолтом."""
+        """Импорт сохраняет прежний канал; парсинг использует дедуп отчётов."""
         lib = _read("ops/mac-local-run/lib_sber_net.sh")
         assert 'icon="${4:-🚨}"' in lib
         assert '"text=$icon $prefix: $text"' in lib
-        for rel in ("ops/mac-local-run/parse_and_push.sh",
-                    "ops/mac-local-run/import_dumps.sh"):
-            s = _read(rel)
-            i = s.index("alert_telegram() {")
-            assert re.search(
-                r'cm_alert_telegram "\$CONF_DIR" "[^"]*\(\$\(basename "\$REPO"\)\)" "\$1"[;\s]',
-                s[i:i + 200],
-            ), rel
+        s = _read("ops/mac-local-run/import_dumps.sh")
+        i = s.index("alert_telegram() {")
+        assert re.search(
+            r'cm_alert_telegram "\$CONF_DIR" "[^"]*\(\$\(basename "\$REPO"\)\)" "\$1"[;\s]',
+            s[i:i + 200],
+        )
+        parser = _read("ops/mac-local-run/parse_and_push.sh")
+        alert = parser[parser.index("alert_telegram() {"):][:200]
+        assert 'technical_report failure "$1"' in alert

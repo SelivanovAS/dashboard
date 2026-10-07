@@ -26,6 +26,9 @@ concurrency:
 jobs:
   replay:
     runs-on: ubuntu-latest
+    env:
+      TELEGRAM_DIGEST_MODE: technical
+      DEFER_TECHNICAL_REPORT: "1"
     # ⏸ 05.07.2026 резерв усыпили (`if: false`), 16.08.2026 РАЗБУДИЛИ обратно:
     # проба показала 0 карточек из 21 с раннера GitHub — блок по адресу
     # вернулся, и Mac-парсинг снова на столе. Пока облачный крон жив, это
@@ -55,6 +58,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Начать технический отчёт
+        run: |
+          report_path="$RUNNER_TEMP/court-technical-report.json"
+          rm -f -- "$report_path" "${report_path%.json}.html"
+          echo "TECHNICAL_REPORT_PATH=$report_path" >> "$GITHUB_ENV"
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -64,7 +73,10 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Replay digest (гибрид) + доставка
+        id: digest
         env:
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер
           # generate_template_digest + LLM ТОЛЬКО на пересказ мотивировок
           # актов (summarize_act_motivation, кэш data/.act_summaries.json).
@@ -96,8 +108,9 @@ jobs:
           CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          # Личный чат — как и старый крон по умолчанию (to_group=false).
+          # Личный чат получает один технический отчёт после всех этапов.
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
@@ -105,8 +118,7 @@ jobs:
           # и публикация на Pages, потом отдельный шаг --push-web-only ниже.
           # Иначе пуш обгоняет сайт (26.08.2026: Pages собирался ~5 минут
           # из-за очереди из трёх пушей доставочного слота, и клик по пушу
-          # в 08:55 открывал ВЧЕРАШНИЙ дайджест до 09:00). Telegram уходит
-          # сразу — там полный текст в самом сообщении, сайт не нужен.
+          # в 08:55 открывал ВЧЕРАШНИЙ дайджест до 09:00).
           # ⚠️ Откат — удалять ПАРОЙ: эту строку И оба шага «Дождаться
           # публикации…»/«Web push…» ниже, иначе пуш уйдёт дважды.
           DEFER_WEB_PUSH: "1"
@@ -119,6 +131,7 @@ jobs:
       - name: Commit rendered digest
         id: commit
         run: |
+          echo "status=failed" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # pushed=1 — шагу «Дождаться публикации» есть чего ждать (в т.ч.
@@ -166,18 +179,21 @@ jobs:
           done
           if git diff --cached --quiet; then
             echo "Нет изменений — нечего коммитить"
+            echo "status=confirmed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "📰 Дайджест собран (replay после Mac-парсинга)"
           # Гонка с параллельным пушем Mac: подтягиваем свежий main перед
-          # своим пушем. При конфликте не роняем workflow — дайджест уже
-          # отправлен, act_analysis догонит следующим прогоном.
+          # своим пушем. При конфликте сохраняем прежнюю политику push,
+          # а отсутствие публикации явно попадёт в технический отчёт.
           git pull --rebase origin main || {
-            echo "⚠ rebase не удался — пропускаю коммит (Telegram уже ушёл, push отправим без ожидания Pages)"
+            echo "⚠ rebase не удался — пропускаю коммит; push отправим без ожидания Pages"
             echo "pushed=0" >> "$GITHUB_OUTPUT"
+            echo "status=not_confirmed" >> "$GITHUB_OUTPUT"
             exit 0
           }
           git push
+          echo "status=confirmed" >> "$GITHUB_OUTPUT"
 
       # Пуш не должен обгонять сайт. Критерий готовности — не деплой-API,
       # а сам артефакт: сайт отдаёт байты НАШЕГО data/last_digest.json.
@@ -186,23 +202,28 @@ jobs:
       # URL выводится из репозитория, НЕ хардкодить: workflow общий для
       # эталона и форков территорий.
       - name: Дождаться публикации дайджеста на Pages
+        id: pages
         if: steps.commit.outputs.pushed == '1'
         env:
           PAGES_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/last_digest.json"
         run: |
+          echo "status=failed" >> "$GITHUB_OUTPUT"
           WANT=$(sha256sum data/last_digest.json | cut -d' ' -f1)
           echo "Ждём, пока ${PAGES_URL} отдаст ${WANT}"
           for i in $(seq 1 40); do
             GOT=$(curl -fsSL "${PAGES_URL}?pubcheck=$(date +%s)-${i}" | sha256sum | cut -d' ' -f1 || true)
             if [ "$GOT" = "$WANT" ]; then
               echo "Сайт отдаёт свежий дайджест (попытка ${i})"
+              echo "status=confirmed" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 10
           done
           echo "::warning::Pages не показал свежий дайджест за ~7 минут — шлём push без подтверждения"
+          echo "status=unconfirmed" >> "$GITHUB_OUTPUT"
 
       - name: Web push после публикации
+        id: push
         env:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
@@ -222,6 +243,7 @@ jobs:
       # github-actions[bot] + paths-фильтр по last_digest_context.json —
       # петли workflow этот пуш не создаёт.
       - name: Commit журнала push-рассылки
+        id: push_journal
         run: |
           [ -f data/last_personal_pushes.json ] || exit 0
           git add data/last_personal_pushes.json
@@ -235,3 +257,68 @@ jobs:
             exit 0
           }
           git push || echo "⚠ push журнала не удался — догонит следующим прогоном"
+
+      - name: Технический отчёт в личный Telegram
+        if: always()
+        env:
+          REGION: ${{ vars.REGION }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+          WORKFLOW_STATUS: ${{ job.status }}
+          DIGEST_STATUS: ${{ steps.digest.outcome || 'unknown' }}
+          PUBLICATION_STATUS: ${{ steps.commit.outputs.status || 'skipped' }}
+          PAGES_STATUS: ${{ steps.pages.outputs.status || 'skipped' }}
+          PUSH_STATUS: ${{ steps.push.outcome || 'skipped' }}
+        run: |
+          report_python="$(command -v python || command -v python3)"
+          if [ -f scripts/technical_report.py ]; then
+            "$report_python" scripts/technical_report.py --send \
+            --workflow-status "$WORKFLOW_STATUS" \
+            --digest-step "$DIGEST_STATUS" \
+            --data-publication "$PUBLICATION_STATUS" \
+            --pages "$PAGES_STATUS" \
+            --push-step "$PUSH_STATUS"
+          else
+            # Checkout мог завершиться до появления CLI. Этот запасной сигнал
+            # не зависит от файлов проекта и никогда не дублирует вызов CLI.
+            "$report_python" - <<'PY_FALLBACK'
+          import json
+          import os
+          import sys
+          from urllib.request import Request, urlopen
+          token = os.environ.get('TELEGRAM_BOT_TOKEN')
+          chat = os.environ.get('TELEGRAM_CHAT_ID_PERSONAL') or os.environ.get('TELEGRAM_CHAT_ID')
+          if not token or not chat:
+              print('Аварийный технический отчёт: Telegram не настроен.')
+              sys.exit(1)
+          repository = os.environ.get('GITHUB_REPOSITORY', '')
+          run_id = os.environ.get('GITHUB_RUN_ID', '')
+          message = ('🚨 Технический отчёт не собран: после checkout недоступны файлы проекта. '
+                     'Результат парсинга и доставки не подтверждён. '
+                     f'Проверьте запуск: https://github.com/{repository}/actions/runs/{run_id}')
+          payload = json.dumps({'chat_id': chat, 'text': message, 'disable_web_page_preview': True}).encode()
+          try:
+              request = Request(f'https://api.telegram.org/bot{token}/sendMessage', data=payload,
+                                headers={'Content-Type': 'application/json'})
+              with urlopen(request, timeout=30) as response:
+                  accepted = bool(json.load(response).get('ok'))
+          except Exception:
+              accepted = False
+          print('Аварийный технический отчёт принят Telegram.' if accepted
+                else 'Telegram не подтвердил аварийный технический отчёт.')
+          sys.exit(0 if accepted else 1)
+          PY_FALLBACK
+          fi
+
+      - name: Сохранить технический отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: technical-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/court-technical-report.json
+            ${{ runner.temp }}/court-technical-report.html
+          if-no-files-found: ignore
+          retention-days: 7

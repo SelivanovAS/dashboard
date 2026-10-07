@@ -114,6 +114,56 @@ def test_confirmed_delivered_day_does_not_start_git_or_delivery(setup):
     assert not trace.exists()
 
 
+def install_report_stub(repo):
+    scripts = repo / "scripts"
+    scripts.mkdir(exist_ok=True)
+    (scripts / "technical_report.py").write_text(
+        "import json, os, sys\n"
+        "with open(os.environ['CM_TEST_REPORT_TRACE'], 'a') as f:\n"
+        "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+        "sys.exit(int(os.environ.get('CM_TEST_REPORT_EXIT', '0')))\n"
+    )
+
+
+def test_independent_watchdog_runs_even_when_delivery_day_is_closed(setup):
+    import json
+    tmp, repos, trace, _, env = setup
+    for repo in repos:
+        install_report_stub(repo)
+    report_trace = tmp / 'reports'
+    result = run_delivery({**env, 'CM_TEST_DELIVERED': '0',
+                           'CM_TEST_REPORT_TRACE': str(report_trace)})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not trace.exists()
+    calls = [json.loads(line) for line in report_trace.read_text().splitlines()]
+    assert {args[args.index('--repo') + 1] for args in calls} == set(map(str, repos))
+    assert all(args[:3] == ['ops', '--event', 'watchdog'] for args in calls)
+
+
+@pytest.mark.parametrize('args,overrides', [
+    (('--check',), {}), ((), {'CM_TEST_CALENDAR': '1'}),
+    ((), {'CM_DELIVERY_WINDOW_MIN': '1440'}),
+])
+def test_check_calendar_and_window_do_not_trigger_technical_messages(setup, args, overrides):
+    tmp, repos, _, _, env = setup
+    for repo in repos:
+        install_report_stub(repo)
+    report_trace = tmp / 'reports'
+    result = run_delivery({**env, **overrides, 'CM_TEST_REPORT_TRACE': str(report_trace)}, *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not report_trace.exists()
+
+
+def test_reporting_failure_does_not_suppress_delivery(setup):
+    tmp, repos, trace, _, env = setup
+    for repo in repos:
+        install_report_stub(repo)
+    result = run_delivery({**env, 'CM_TEST_REPORT_TRACE': str(tmp / 'reports'),
+                           'CM_TEST_REPORT_EXIT': '2'})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(trace.read_text().splitlines()) == 3
+
+
 @pytest.mark.parametrize("journal", ["delivery_txn.json", "parse_txn.json"])
 def test_local_stamp_never_skips_unfinished_transaction_recovery(setup, journal):
     _, repos, trace, _, env = setup

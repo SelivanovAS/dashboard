@@ -521,7 +521,7 @@ def send_web_push(
     click_url: str | None = None,
     owner_only: bool = False,
     per_subscriber=None,
-) -> None:
+) -> dict:
     """Отправить Web Push PWA-подписчикам через Cloudflare Worker + pywebpush.
 
     `click_url` — относительный или абсолютный URL, который Service Worker откроет
@@ -538,9 +538,14 @@ def send_web_push(
     событий — пропустить». Используется для персонализации основного крона
     по watchlist подписчика.
     """
+    from court_monitor import technical_report
+    result = {'status': 'running', 'subscriptions': None, 'attempted': 0,
+              'accepted': 0, 'failed': 0, 'skipped': 0, 'expired': 0}
     if not config.PUSH_WORKER_URL or not config.PUSH_SECRET or not config.VAPID_PRIVATE_KEY:
         log.info("Web Push: переменные не настроены, пропуск")
-        return
+        result['status'] = 'not_configured'
+        technical_report.record_push(result)
+        return result
     try:
         # Получаем список подписок от Worker
         list_url = f"{config.PUSH_WORKER_URL}/subscriptions"
@@ -553,12 +558,18 @@ def send_web_push(
         )
         if not r.ok:
             log.warning(f"Web Push: не удалось получить подписки: {r.status_code}")
-            return
+            result.update(status='failed', reason='subscriptions_http_' + str(r.status_code))
+            return result
         subscriptions = r.json()
+        if not isinstance(subscriptions, list) or any(not isinstance(sub, dict) for sub in subscriptions):
+            result.update(status='failed', reason='invalid_subscriptions')
+            return result
+        result['subscriptions'] = len(subscriptions)
         if not subscriptions:
             scope = "владельческих" if owner_only else ""
             log.info(f"Web Push: нет {scope}подписчиков".replace("  ", " ").strip())
-            return
+            result['status'] = 'no_subscriptions'
+            return result
         log.info(
             f"Web Push: отправляю {len(subscriptions)} "
             f"{'владельческим ' if owner_only else ''}подписчикам"
@@ -591,6 +602,7 @@ def send_web_push(
                 personalised = per_subscriber(sub)
                 if personalised is None:
                     skipped += 1
+                    result['skipped'] += 1
                     log.info(
                         f"Web Push: ⊘ skip ({'owner' if is_owner else 'user'}, "
                         f"watchlist={wl_size}) …{ep_short}"
@@ -602,6 +614,7 @@ def send_web_push(
                         "watchlist_size": wl_size,
                         "watchlist": list(wl_raw) if isinstance(wl_raw, list) else [],
                         "variant": "skip",
+                        "delivery_status": "skipped",
                         "title": None,
                         "body": None,
                         "click_url": None,
@@ -656,6 +669,8 @@ def send_web_push(
                     "body": body,
                     "click_url": default_url,
                 })
+            result['attempted'] += 1
+            dump_items[-1]['delivery_status'] = 'attempted'
             try:
                 webpush(
                     subscription_info=sub,
@@ -666,9 +681,13 @@ def send_web_push(
                                 # пока устройство не выйдет в сеть
                 )
                 ok_count += 1
+                result['accepted'] += 1
+                dump_items[-1]['delivery_status'] = 'accepted'
                 config.METRICS["push_sent"] += 1
             except WebPushException as exc:
                 config.METRICS["push_failed"] += 1
+                result['failed'] += 1
+                dump_items[-1]['delivery_status'] = 'failed'
                 ep_full = sub.get("endpoint") or ""
                 ep_short = ep_full[:60] or "?"
                 log.warning(f"Web Push: ошибка для {ep_short}: {exc}")
@@ -677,8 +696,11 @@ def send_web_push(
                 # тащить балласт каждый прогон.
                 resp = getattr(exc, "response", None)
                 status = getattr(resp, "status_code", None) if resp is not None else None
+                dump_items[-1]['http_status'] = status
                 if status in (404, 410) and ep_full:
+                    result['expired'] += 1
                     _drop_dead_subscription(ep_full)
+        result['status'] = 'partial' if result['failed'] else 'complete'
         suffix = f", пропущено по watchlist: {skipped}" if skipped else ""
         if per_subscriber is not None:
             suffix += f"; персональных: {n_personal}, общих: {n_general}"
@@ -693,23 +715,29 @@ def send_web_push(
                 "title_default": title,
                 "body_default": body,
                 "owner_only": owner_only,
+                "delivery": result,
                 "items": dump_items,
             }, config.LAST_PERSONAL_PUSHES_PATH)
         except Exception as exc:
             log.warning(f"Web Push: не удалось сохранить журнал push: {exc}")
     except Exception as exc:
+        result.update(status='failed', reason=type(exc).__name__)
         log.error(f"Web Push: исключение: {exc}")
+    finally:
+        technical_report.record_push(result)
+    return result
 
 
-def send_telegram(text: str):
+def send_telegram(text: str) -> dict:
     """Отправить сообщение в Telegram (HTML-формат)."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         log.warning("Telegram не настроен, сообщение не отправлено")
         preview = "\n".join(text.splitlines()[:3])
         log.info(f"Сообщение ({len(text)} символов), начало:\n{preview}")
         log.debug(f"Сообщение целиком:\n{text}")
-        return
+        return {'status': 'not_configured', 'accepted': 0, 'failed': 0}
 
+    accepted = failed = 0
     # Разбиваем на части если превышен лимит
     parts = split_message(text, config.TELEGRAM_MSG_LIMIT)
 
@@ -727,7 +755,8 @@ def send_telegram(text: str):
                 },
                 timeout=30,
             )
-            if r.ok:
+            if r.ok and r.json().get('ok', False):
+                accepted += 1
                 config.METRICS["telegram_sent"] += 1
                 log.info(f"Telegram: сообщение {i + 1}/{len(parts)} отправлено")
             else:
@@ -743,10 +772,12 @@ def send_telegram(text: str):
                     },
                     timeout=30,
                 )
-                if r2.ok:
+                if r2.ok and r2.json().get('ok', False):
+                    accepted += 1
                     config.METRICS["telegram_sent"] += 1
                     log.info("Telegram: отправлено без разметки")
                 else:
+                    failed += 1
                     config.METRICS["telegram_failed"] += 1
                     log.error(f"Telegram повторная ошибка: {r2.text}")
 
@@ -755,7 +786,11 @@ def send_telegram(text: str):
                 time.sleep(1)
 
         except Exception as e:
-            log.error(f"Telegram исключение: {e}")
+            failed += 1
+            config.METRICS["telegram_failed"] += 1
+            log.error(f"Telegram исключение: {type(e).__name__}")
+    return {'status': 'accepted' if not failed else 'partial' if accepted else 'failed',
+            'accepted': accepted, 'failed': failed}
 
 
 def split_message(text: str, limit: int = 4096) -> list[str]:
@@ -982,6 +1017,10 @@ def send_crash_alert(mode: str, exc: BaseException) -> None:
     Не должен сам кидать исключение, иначе перекроет исходное.
     """
     try:
+        from court_monitor import technical_report
+        if technical_report.enabled() and os.environ.get('DEFER_TECHNICAL_REPORT') == '1':
+            technical_report.record_warning(f'Сбой режима {mode}: {type(exc).__name__}')
+            return
         tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         tb_tail = tb[-1500:]  # хвост трейсбека, чтобы не упереться в лимит Telegram
         text = (

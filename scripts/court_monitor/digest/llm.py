@@ -20,6 +20,7 @@ import json
 import os
 import re
 import time
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 import requests
@@ -29,6 +30,36 @@ from court_monitor.act_preparation import prepare_act
 from court_monitor.config import log
 from court_monitor.storage import _load_act_summaries, _save_act_summaries
 from court_monitor.textutil import _bare_case_number
+from court_monitor.digest import summary_audit
+
+
+# Вызовы сохраняют прежний контракт str | None. Причина неудачи передаётся
+# отдельно, только внутри текущей попытки, без тела HTTP-ответа и секретов.
+_summary_call_failure = ContextVar('summary_call_failure', default=None)
+_DAILY_QUOTA_RE = re.compile(
+    r'free[- ]models[- ]per[- ]day|daily (?:quota|limit)|per.day.*(?:quota|limit)|(?:quota|limit).*per.day', re.I)
+
+
+def _summary_failure(reason):
+    if isinstance(reason, requests.HTTPError):
+        response = reason.response
+        status = response.status_code if response is not None else None
+        if status == 429:
+            reason = ('daily_quota' if _DAILY_QUOTA_RE.search(response.text or '')
+                      else 'rate_limit')
+        else:
+            reason = f'http_{status}' if status else 'technical_error'
+    elif isinstance(reason, requests.Timeout):
+        reason = 'timeout'
+    elif isinstance(reason, (ValueError, KeyError, TypeError, AttributeError, IndexError)):
+        # requests.JSONDecodeError одновременно ValueError и RequestException.
+        reason = 'invalid_response'
+    elif isinstance(reason, requests.RequestException):
+        reason = 'network'
+    elif isinstance(reason, Exception):
+        reason = 'invalid_response'
+    _summary_call_failure.set(reason)
+    return None
 
 
 # ── Настроен ли LLM ──────────────────────────────────────────────────────────
@@ -115,20 +146,20 @@ def _gigachat_access_token() -> str | None:
         data = r.json()
         if not isinstance(data, dict) or not isinstance(data.get('access_token'), str):
             log.warning('GigaChat OAuth: отсутствует строковый access_token')
-            return None
+            return _summary_failure('invalid_response')
         expires = data.get('expires_at')
         if data['access_token'] and isinstance(expires, (int, float)) and expires / 1000 > time.time() + 60:
             _gigachat_token_cache[cache_key] = (data['access_token'], expires / 1000)
-        return data['access_token'] or None
+        return data['access_token'] or _summary_failure('invalid_response')
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
         log.error(f"GigaChat OAuth HTTP {status}: {body}")
-        return None
+        return _summary_failure(e)
     except (requests.RequestException, KeyError, ValueError,
             json.JSONDecodeError) as e:
         log.error(f"GigaChat OAuth ошибка: {e}")
-        return None
+        return _summary_failure(e)
 
 
 # System-инструкция для GigaChat. Claude-промпт в generate_digest описывает
@@ -514,12 +545,13 @@ def _call_openrouter_chat(
     Возвращает текст ответа или None при любой ошибке — вызывающая сторона
     откатывается так же, как при ошибке Claude/GigaChat.
     """
+    _summary_call_failure.set(None)
     if not config.OPENROUTER_API_KEY:
         log.warning("OPENROUTER_API_KEY не задан")
-        return None
+        return _summary_failure('missing_key')
     model_id = model or _resolve_openrouter_model()
     if _free_pool_blocked(model_id):
-        return None
+        return _summary_failure('daily_quota')
     try:
         r = requests.post(
             config.OPENROUTER_API_URL,
@@ -545,7 +577,7 @@ def _call_openrouter_chat(
             # Молчать нельзя: без лога такой сбой в прогоне неотличим от
             # «модель ответила пусто» уровнем выше.
             log.warning(f"OpenRouter API ({model_id}): пустой список choices в ответе")
-            return None
+            return _summary_failure('invalid_response')
         if not isinstance(choices, list) or not isinstance(choices[0], dict):
             raise ValueError("некорректный формат choices в ответе")
         choice = choices[0]
@@ -572,24 +604,24 @@ def _call_openrouter_chat(
                 f"completion_tokens={usage.get('completion_tokens')}, "
                 f"reasoning_tokens={details.get('reasoning_tokens')}"
             )
-            return None
+            return _summary_failure('empty_response')
         if choice.get("finish_reason") == "length":
             log.warning("OpenRouter: ответ оборван лимитом вывода")
-            return None
+            return _summary_failure('output_limit')
         return _ModelText(text, data.get("model") or model_id)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
-        if status == 429 and re.search(r"free[- ]models[- ]per[- ]day|daily (?:quota|limit)|per.day.*(?:quota|limit)|(?:quota|limit).*per.day", body, re.I):
+        if status == 429 and _DAILY_QUOTA_RE.search(body):
             _remember_daily_quota()
             log.warning("OpenRouter: суточная квота исчерпана; до следующего дня используем резервного провайдера")
         else:
             log.warning(f"OpenRouter API HTTP {status}: {body}")
-        return None
+        return _summary_failure(e)
     except (requests.RequestException, KeyError, ValueError,
             json.JSONDecodeError) as e:
         log.warning(f"OpenRouter API ({model_id}): {e}")
-        return None
+        return _summary_failure(e)
 
 
 def _call_openrouter_simple(prompt: str, *, model: str | None = None) -> str | None:
@@ -763,8 +795,9 @@ def _call_claude_simple(
     Дублирует часть `generate_digest`, но с маленьким max_tokens и без
     post-обработки HTML — для пересказа мотивировки нужен plain text.
     """
+    _summary_call_failure.set(None)
     if not config.ANTHROPIC_API_KEY:
-        return None
+        return _summary_failure('missing_key')
     try:
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -782,21 +815,22 @@ def _call_claude_simple(
         r.raise_for_status()
         data = r.json()
         if data.get("stop_reason") == "max_tokens":
-            return None
+            return _summary_failure('output_limit')
         text = "".join(
             block["text"] for block in (data.get("content") or [])
             if isinstance(block, dict) and block.get("type") == "text"
         ).strip()
-        return _ModelText(text, data.get("model") or config.CLAUDE_MODEL) if text else None
+        return (_ModelText(text, data.get("model") or config.CLAUDE_MODEL)
+                if text else _summary_failure('empty_response'))
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "?"
         body = (e.response.text or "")[:500] if e.response is not None else ""
         log.warning(f"Claude API (summary) HTTP {status}: {body}")
-        return None
+        return _summary_failure(e)
     except (requests.RequestException, KeyError, ValueError, TypeError, AttributeError,
             json.JSONDecodeError) as e:
         log.warning(f"Claude API (summary): {e}")
-        return None
+        return _summary_failure(e)
 
 
 def _call_gigachat_simple(prompt: str) -> str | None:
@@ -804,6 +838,7 @@ def _call_gigachat_simple(prompt: str) -> str | None:
     GIGACHAT_SYSTEM_PROMPT (он заточен под формат дайджеста). На любой
     ошибке — None; очередь попробует следующий доступный резерв.
     """
+    _summary_call_failure.set(None)
     token = _gigachat_access_token()
     if not token:
         return None
@@ -829,21 +864,23 @@ def _call_gigachat_simple(prompt: str) -> str | None:
         r.raise_for_status()
         data = r.json()
         choices = data.get("choices") or []
-        if not choices or choices[0].get("finish_reason") == "length":
-            return None
+        if not choices:
+            return _summary_failure('invalid_response')
+        if choices[0].get("finish_reason") == "length":
+            return _summary_failure('output_limit')
         text = (choices[0].get("message", {}) or {}).get("content") or ""
         if not isinstance(text, str):
-            return None
+            return _summary_failure('invalid_response')
         text = text.strip()
         finish_reason = choices[0].get("finish_reason")
         if text or finish_reason == "blacklist":
             return _ModelText(text, data.get("model") or config.GIGACHAT_MODEL,
                               finish_reason=finish_reason)
-        return None
+        return _summary_failure('empty_response')
     except (requests.RequestException, KeyError, ValueError, TypeError, AttributeError, IndexError,
             json.JSONDecodeError) as e:
         log.warning(f"GigaChat (summary): {e}")
-        return None
+        return _summary_failure(e)
 
 
 _SUMMARY_PREFIX_RE = re.compile(
@@ -1150,6 +1187,21 @@ def _response_status(raw, act, verdict):
 
 
 def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool = True) -> str | None:
+    """Пересказ с аудитом фактического автора, кэша и причин резервов."""
+    case_meta.pop('_summary_result', None)
+    try:
+        return _summarize_act_motivation(act_text, case_meta=case_meta, use_cache=use_cache)
+    except Exception:
+        outcome = case_meta.setdefault('_summary_result', {})
+        outcome['status'] = 'technical_error'
+        raise
+    finally:
+        outcome = case_meta.get('_summary_result') or {'status': 'technical_error'}
+        summary_audit.record(summary_audit.identity(act_text, case_meta), outcome,
+                             cached=outcome.get('cached', False))
+
+
+def _summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool = True) -> str | None:
     """Полный акт → ограниченная цепочка провайдеров → проверенный пересказ.
 
     Диагностика возвращается в case_meta['_summary_result']; очередь сохраняет
@@ -1167,7 +1219,8 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
     cached = cache.get(key) or cache.get(_act_cache_key(act_text.strip())) or {}
     summary, status = _response_status(cached.get('summary'), act, case_meta.get('verdict_label', ''))
     if summary:
-        outcome.update(status='ready', model=cached.get('model') or _current_digest_model_name())
+        outcome.update(status='ready', model=cached.get('model') or 'unknown', cached=True,
+                       attempts=cached.get('attempts') or [], fallback=cached.get('fallback'))
         config.METRICS['llm_summary_cache_hits'] += 1
         config.SUMMARY_MODELS_USED.add(outcome['model'])
         return summary
@@ -1200,6 +1253,7 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
                 break
             called = True
             config.METRICS['llm_summary_calls'] += 1
+            _summary_call_failure.set(None)
             if provider == 'openrouter':
                 raw = _call_openrouter_simple(active_prompt, model=model)
             elif provider == 'gigachat':
@@ -1207,17 +1261,20 @@ def summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool 
             else:
                 raw = _call_claude_simple(active_prompt)
             summary, status = _response_status(raw, act, case_meta.get('verdict_label', ''))
+            if status == 'technical_error' and _summary_call_failure.get():
+                status = _summary_call_failure.get()
             actual_model = getattr(raw, 'model', model)
             outcome['attempts'].append(dict(provider=provider, model=actual_model, status=status, **budget))
             outcome['status'] = status
             if summary:
                 label = f'{provider}:{actual_model}'
-                outcome.update(status='ready', model=label)
+                outcome.update(status='ready', model=label, fallback=bool(index), cached=False)
                 config.SUMMARY_MODELS_USED.add(label)
                 if index:
                     config.METRICS['llm_summary_provider_fallback_saved'] += 1
                 if use_cache:
                     cache[key] = {'summary': summary, 'model': label,
+                        'attempts': outcome['attempts'], 'fallback': outcome['fallback'],
                         'stage': case_meta.get('stage', ''), 'preparation': prepared.audit,
                         'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds')}
                     try:
