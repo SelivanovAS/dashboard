@@ -12,7 +12,9 @@ after the context is durable.  Recovery therefore has two safe outcomes:
 
 * matching ACK: keep parser data and discard the snapshot;
 * no ACK: restore the snapshot, while retaining any atomically written digest
-  context as a write-ahead record for the next run.
+  context as a write-ahead record for the next run.  Search candidates are
+  retained separately: discovery_queue records a completed search, not a
+  committed admission or an emitted event.
 
 The manifest is published last, so a crash while preparing the snapshot can
 never make the wrapper start the parser with an incomplete recovery point.
@@ -33,6 +35,26 @@ from datetime import datetime
 
 
 VERSION = 1
+DISCOVERY_FIELD = "discovery_queue"
+DISCOVERY_RECOVERY_FIELD = "preserved_discovery_queue"
+
+
+def _region(repo: str) -> str:
+    value = os.environ.get("REGION", "")
+    if not value:
+        try:
+            with open(os.path.join(repo, "REGION"), encoding="utf-8") as f:
+                value = f.read().strip()
+        except OSError:
+            pass
+    return (value or "hmao").strip().lower()
+
+
+def _discovery_path(repo: str) -> str:
+    path = os.environ.get("JSON_PATH", "data/cases.json")
+    if os.path.isabs(path):
+        path = os.path.relpath(path, repo)
+    return _safe_rel(repo, path)[0]
 
 
 def _now() -> str:
@@ -217,6 +239,8 @@ def prepare(
             "status": "prepared",
             "txn_id": txn_id,
             "repo": repo,
+            "region": _region(repo),
+            "discovery_path": _discovery_path(repo),
             "excluded": excluded,
             "snapshot_dir": snapshot_dir,
             "patterns": normalized_patterns,
@@ -278,12 +302,103 @@ def _clear(journal: str, ack_file: str, manifest: dict) -> None:
     shutil.rmtree(snapshot_dir, ignore_errors=True)
 
 
+def _discovery_items(queue: object, region: str) -> dict:
+    """Accept only local, internally consistent version-1 queue records.
+
+    This standalone helper deliberately does not import parser configuration
+    or reinterpret admission rules.  The consumer revalidates court scope and
+    reopens accepted candidates whose cases were rolled back.
+    """
+    if (not isinstance(queue, dict) or type(queue.get("version")) is not int
+            or queue["version"] != 1 or not isinstance(queue.get("items"), dict)):
+        return {}
+    valid = {}
+    for key, task in queue["items"].items():
+        if not isinstance(key, str) or not isinstance(task, dict):
+            continue
+        try:
+            identity = json.loads(key)
+        except ValueError:
+            continue
+        if (not isinstance(identity, list) or len(identity) != 7
+                or task.get("key") != key or task.get("region") != region
+                or task.get("kind") not in ("bank", "cassation", "presidium")
+                or task.get("status") not in ("pending", "accepted", "rejected")
+                or not isinstance(task.get("row"), dict)
+                or not isinstance(task.get("court_domain"), str)
+                or not task["court_domain"]
+                or any(type(task.get(field)) is not int or task[field] <= 0
+                       for field in ("delo_id", "srv_num"))
+                or identity[:5] != [region, task["kind"], task["court_domain"],
+                                    task["delo_id"], task["srv_num"]]
+                or not all(isinstance(part, str) for part in identity[5:])
+                or not any(identity[5:])):
+            continue
+        valid[key] = task
+    return valid
+
+
+def _preserve_discovery(journal: str, manifest: dict, snapshot_dir: str):
+    repo = os.path.abspath(str(manifest["repo"]))
+    region = str(manifest.get("region") or _region(repo))
+    if region != _region(repo):
+        raise RuntimeError("регион parse snapshot не совпадает с регионом репозитория")
+    rel, target = _safe_rel(repo, str(manifest.get("discovery_path") or "data/cases.json"))
+    entries = manifest.get("entries") or {}
+    if rel not in entries and rel not in (manifest.get("absent_exact") or []):
+        return None  # never modify a file outside this transaction's snapshot
+
+    # A previous recovery may have already restored cases.json before crashing.
+    # Its durable queue is authoritative; do not overwrite it with old live data.
+    if DISCOVERY_RECOVERY_FIELD in manifest:
+        queue = manifest[DISCOVERY_RECOVERY_FIELD]
+        items = _discovery_items(queue, region)
+        if not isinstance(queue, dict) or queue != {"version": 1, "items": items}:
+            raise RuntimeError("повреждена сохранённая discovery_queue в parse snapshot")
+        return rel, queue
+
+    try:
+        live = _load_json(target)
+    except (ValueError, RuntimeError):
+        live = None  # a broken cases file must still be restorable from backup
+    items = _discovery_items((live or {}).get(DISCOVERY_FIELD), region)
+    if not items:
+        return None
+    baseline = _load_json(os.path.join(snapshot_dir, rel)) if rel in entries else None
+    merged = _discovery_items((baseline or {}).get(DISCOVERY_FIELD), region)
+    merged.update(items)
+    queue = {"version": 1, "items": merged}
+    if queue == (baseline or {}).get(DISCOVERY_FIELD):
+        return None  # the snapshot already contains every durable candidate
+    # Publish this WAL before the first deletion/copy.  Recovery is repeatable
+    # even if it is interrupted between restoring cases and reapplying the queue.
+    preserved = dict(manifest, **{DISCOVERY_RECOVERY_FIELD: queue})
+    _atomic_json(journal, preserved)
+    manifest.update(preserved)
+    return rel, queue
+
+
+def _restore_discovery(repo: str, preserved) -> None:
+    if preserved is None:
+        return
+    rel, queue = preserved
+    _, target = _safe_rel(repo, rel)
+    data = _load_json(target)
+    if data is None:
+        # Same initial document as storage.load_json; no uncommitted cases or
+        # unrelated metadata may be carried over from the failed parser run.
+        data = {"version": 1, "updated_at": "", "cases": []}
+    data[DISCOVERY_FIELD] = queue
+    _atomic_json(target, data)
+
+
 def rollback(journal: str, ack_file: str, manifest: dict) -> int:
     repo = os.path.abspath(str(manifest["repo"]))
     snapshot_dir = _validate_snapshot_dir(
         journal, str(manifest.get("snapshot_dir") or "")
     )
     changed, known = _current_matches(manifest)
+    preserved = _preserve_discovery(journal, manifest, snapshot_dir)
 
     # Remove only newly-created files matched by the manifest patterns.
     for pattern in manifest.get("patterns") or []:
@@ -313,6 +428,7 @@ def rollback(journal: str, ack_file: str, manifest: dict) -> int:
             raise RuntimeError(f"в snapshot нет файла: {rel}")
         _copy_durable(backup, target, int(meta.get("mode", 0o600)))
 
+    _restore_discovery(repo, preserved)
     _clear(journal, ack_file, manifest)
     return changed
 

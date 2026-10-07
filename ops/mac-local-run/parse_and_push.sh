@@ -24,6 +24,8 @@
 #   bash ops/mac-local-run/parse_and_push.sh --check   # только диагностика
 #   bash ops/mac-local-run/parse_and_push.sh [клон] --deliver-pending
 #       # доставить свежий pending-контекст без пробы судов и без парсинга
+#   bash ops/mac-local-run/parse_and_push.sh [клон] --retry-only
+#       # до 10 минут дочитки известных очередей, без поиска и доставки
 # =============================================================================
 
 # ── Аргументы ────────────────────────────────────────────────────────────────
@@ -32,6 +34,7 @@ FORCE=0
 ANYWHERE=0
 IGNORE_CALENDAR=0
 DELIVER_PENDING_ONLY=0
+RETRY_ONLY=0
 REPO_ARG=""
 for arg in "$@"; do
   case "$arg" in
@@ -51,6 +54,7 @@ for arg in "$@"; do
     # ни маршрутов, ни канареек, ни run_parse.py — только pending-контекст через
     # ту же exact-once доставочную транзакцию, что и обычный финиш.
     --deliver-pending) DELIVER_PENDING_ONLY=1 ;;
+    --retry-only) RETRY_ONLY=1 ;;
     -*)      echo "неизвестный ключ: $arg" >&2; exit 2 ;;
     # ПЕРВЫЙ позиционный побеждает: parse_all.sh передаёт путь клона первым
     # аргументом и добавляет свои «$@» следом — если бы побеждал последний,
@@ -59,6 +63,12 @@ for arg in "$@"; do
     *)       [ -n "$REPO_ARG" ] || REPO_ARG="$arg" ;;
   esac
 done
+if [ "$RETRY_ONLY" = "1" ] \
+  && { [ "$FORCE" = "1" ] || [ "$DELIVER_PENDING_ONLY" = "1" ] \
+       || [ "$CHECK_ONLY" = "1" ] || [ "$IGNORE_CALENDAR" = "1" ]; }; then
+  echo "--retry-only нельзя совмещать с --force, --deliver-pending, --check или --ignore-calendar" >&2
+  exit 2
+fi
 if [ "$DELIVER_PENDING_ONLY" = "1" ] \
   && { [ "$CHECK_ONLY" = "1" ] || [ "$FORCE" = "1" ]; }; then
   echo "--deliver-pending нельзя совмещать с --check или --force" >&2
@@ -115,6 +125,7 @@ notify() {  # $1 = текст уведомления macOS (+ Telegram, если
 # ~/.config/court-monitor/telegram с двумя строками token=… и chat_id=…
 # Нет файла — молча, как раньше.
 alert_telegram() {  # $1 = текст (тело — cm_alert_telegram, общее с импортом)
+  [ "$RETRY_ONLY" = "1" ] && return 0
   cm_alert_telegram "$CONF_DIR" "Mac-парсинг ($(basename "$REPO"))" "$1"
 }
 # 🩺-алерты здоровья парсеров (детектор блока 4e main_json: суд вернул 0 при
@@ -130,6 +141,7 @@ alert_telegram() {  # $1 = текст (тело — cm_alert_telegram, обще�
 # Карточные счётчики (не прочитано / предохранитель) сюда НЕ входят — они
 # едут 🚨-алертом прогресса ниже (unavailability_tail).
 alert_health_telegram() {  # $1 = текст (многострочный, «• »-маркеры)
+  [ "$RETRY_ONLY" = "1" ] && return 0
   cm_alert_telegram "$CONF_DIR" "Мониторинг парсеров ($(basename "$REPO"))" "$1" "🩺"
 }
 relay_health_alerts() {
@@ -451,7 +463,7 @@ sync_git_and_delivery_state() {
   # Незавершённую доставку доводим ДО pull и дневного гейта. Иначе локальный
   # delivered_at после SIGKILL заставил бы gate молча пропустить день, хотя
   # marker не дошёл до GitHub. --check остаётся строго read-only.
-  if [ "$CHECK_ONLY" != "1" ]; then
+  if [ "$CHECK_ONLY" != "1" ] && [ "$RETRY_ONLY" != "1" ]; then
     reconcile_delivery_transaction
   fi
 
@@ -489,6 +501,14 @@ log "=================================================================="
 log "Старт parse_and_push (pid $$)"
 
 cd "$REPO" || die "нет каталога $REPO"
+
+# Дочитка не восстанавливает и не откатывает доставку. Неясный исход старого
+# marker сначала разрешит штатная служба; до этого даже pull/data-push
+# запрещены, чтобы не опубликовать неразобранный доставочный commit.
+if [ "$RETRY_ONLY" = "1" ] && [ -e "$DELIVERY_TXN_JOURNAL" ]; then
+  log "Дочитка отложена: незавершённую доставочную транзакцию обслужит штатная служба"
+  exit 0
+fi
 
 # Обрыв прошлого Python-процесса мог оставить one-shot флаги в data
 # раньше дневного контекста. Восстанавливаем/подтверждаем снимок ДО
@@ -571,7 +591,7 @@ sync_git_and_delivery_state
 # СТОИТ ДО маршрутов и пробы судов: при отправленном дайджесте агент выходит
 # за секунды. --force (пульт, юрист у экрана) гейт пропускает; --check ниже
 # печатает статус информационно.
-if [ "$CHECK_ONLY" != "1" ] && [ "$FORCE" != "1" ]; then
+if [ "$CHECK_ONLY" != "1" ] && [ "$FORCE" != "1" ] && [ "$RETRY_ONLY" != "1" ]; then
   if CLOUD_STATUS=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --report 2>/dev/null); then
     log "Дайджест дня уже отправлен ($CLOUD_STATUS) — пропуск, Mac не нужен"
     finish_pusher
@@ -664,7 +684,9 @@ probe_failed() {  # $1 = диагностика канареек; наружу �
   finish_pusher
   exit 0
 }
-if PROBE_HOST=$(cm_any_court_reachable "$PYTHON" "$NETWORK_FINGERPRINT_FILE"); then
+if [ "$RETRY_ONLY" = "1" ]; then
+  log "Дочитка: сетевые канарейки пропущены; запросы только к запланированным карточкам"
+elif PROBE_HOST=$(cm_any_court_reachable "$PYTHON" "$NETWORK_FINGERPRINT_FILE"); then
   log "Сетевая проба пройдена: $PROBE_HOST"
 else
   probe_failed "$PROBE_HOST"
@@ -692,6 +714,11 @@ fi
 # свойство машины, а не кода. Нет файла — дефолты, как раньше.
 REGION_CODE=$(cm_region_code "$PYTHON")
 cm_load_territory_env "$PYTHON" "$CONF_DIR" log
+# Профиль задаём после env территории: дочитка не наследует --force и не
+# превращается в полный обход из-за машинных переопределений.
+if [ "$RETRY_ONLY" = "1" ]; then
+  export RUN_DEADLINE_SECONDS=600
+fi
 
 # Crash-consistency «data ↔ дневной контекст». Список тот же, что у
 # staging ниже; сам last_digest_context из snapshot исключён как WAL.
@@ -744,6 +771,7 @@ PARSE_TXN_ID="$PARSE_TXN_ID" \
 PARSE_TXN_ACK_FILE="$PARSE_TXN_ACK_FILE" \
 FETCH_MAX_RETRIES="${FETCH_MAX_RETRIES:-3}" \
 CARD_BREAKER_MODE="${CARD_BREAKER_MODE:-time}" \
+CM_RETRY_ONLY="$RETRY_ONLY" \
 SKIP_NON_WORKING_DAYS=$([ "$IGNORE_CALENDAR" = "1" ] && echo 0 || echo 1) \
 SKIP_CHECKED_TODAY=$([ "$FORCE" = "1" ] && echo 0 || echo 1) \
   "$PYTHON" ops/mac-local-run/run_parse.py >>"$LOG" 2>&1
@@ -768,7 +796,9 @@ elif [ "$PARSE_FINISH_RC" -ne 0 ]; then
 fi
 log "Parse-txn: ${PARSE_FINISH:-завершён}"
 log "Парсинг завершён"
-relay_health_alerts || true
+if [ "$RETRY_ONLY" != "1" ]; then
+  relay_health_alerts || true
+fi
 
 # ── Коммит и пуш ──────────────────────────────────────────────
 # Список файлов ОДИН с облаком: ops/stage_data_files.sh спрашивает пути у
@@ -811,6 +841,7 @@ RUN_WHY=$("$PYTHON" ops/mac-local-run/cloud_run_ok.py --run-complete 2>/dev/null
 DELIVER=0
 [ "$FORCE" = "1" ] && DELIVER=1
 cm_delivery_window_open && DELIVER=1
+[ "$RETRY_ONLY" = "1" ] && DELIVER=0
 
 # ── Фаза 1: данные ───────────────────────────────────────────────────────────
 # Сначала публикуем ДАННЫЕ и только потом, отдельным коммитом, штамп доставки.
@@ -835,6 +866,16 @@ else
 fi
 
 # ── Фаза 2: доставка ─────────────────────────────────────────────────────────
+# После дневной дочитки публикуем только данные. Контекст и события для
+# следующего выпуска сохраняет Python; этот финиш не создаёт marker-коммит,
+# не ставит delivered_at и не отправляет Telegram-отчёт о попытке.
+if [ "$RETRY_ONLY" = "1" ]; then
+  log "Дочитка завершена: данные опубликованы, события сохранены без доставки"
+  log "Готово"
+  finish_pusher
+  exit 0
+fi
+
 # ⚠️ RUN_OK (вердикт --run-complete: поиски зрячие И карточки ≥85% плана) на
 # РЕШЕНИЕ о доставке НЕ влияет — только на формулировки алертов. Решение юриста
 # 21.08.2026 «дайджест не раньше 08:45»: со слотами от 06:00 прежняя ветка

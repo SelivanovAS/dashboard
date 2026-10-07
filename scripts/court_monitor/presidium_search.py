@@ -6,7 +6,7 @@
 """
 from datetime import datetime, date
 
-from court_monitor import config, telemetry
+from court_monitor import config, telemetry, discovery_queue as dq
 from court_monitor.config import log
 from court_monitor.courts import canon_sudrf_domain
 from court_monitor.lifecycle import should_skip_case
@@ -30,22 +30,12 @@ def before_presidium_since(filing_date: str) -> bool:
         return False
 
 
-def collect_presidium_finds(court, cases, archived_cases, successful_today,
-                           health_obs, health_labels, health_captcha, stats=None):
-    """Первая страница и карточки; судебный участок не обязан быть в FI-реестре.
-
-    Очередь и её полный знаменатель фиксируются до первого запроса карточки.
-    При сбое поиска известные карточки остаются в обычной фазе refresh.
-    """
-    finds = []
-    if stats is None:
-        stats = {}
-    stats.update(planned=0, parsed=0)
+def _search_rows(court, successful_today, health_obs, health_labels, health_captcha):
     if not court.enabled or court.search_gated or court.search_disabled:
-        return finds
+        return []
     key = f"cassation:presidium:{court.domain}:total"
     if key in successful_today:
-        return finds
+        return []
     health_labels[key] = court.name
     polite_delay()
     url = court.search_url()
@@ -53,7 +43,7 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
     if not html:
         if config.FETCH_DIAG.get("kind") != "run_deadline":
             health_obs[key] = None
-        return finds
+        return []
     rows = parse_cassation_search_page(html)
     captcha = not rows and detect_captcha_challenge(html)
     outage = classify_outage_page(html) if not rows else ""
@@ -67,6 +57,35 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
         health_captcha[key] = court.domain
     if outage:
         card_breaker_preopen(court.domain, kind, reason=str(outage))
+    return rows
+
+
+def collect_presidium_finds(court, cases, archived_cases, successful_today,
+                           health_obs, health_labels, health_captcha, stats=None,
+                           *, queue_data=None, retry_only=False):
+    """Первая страница и карточки; сохранённые новые кандидаты дочитываются.
+
+    optional queue_data включает durable-очередь только в обычном прогоне;
+    импорт дампа и прежние callers этим интерфейсом не меняются.
+    """
+    finds = []
+    if stats is None:
+        stats = {}
+    stats.update(planned=0, parsed=0)
+    if not court.enabled:
+        return finds
+    rows = ([] if retry_only else _search_rows(
+        court, successful_today, health_obs, health_labels, health_captcha))
+    if queue_data is not None:
+        known = lambda row: dq.known_cassation(row, court, list(cases) + list(archived_cases))
+        dq.reconcile(queue_data, "presidium", court, known)
+        dq.enqueue(queue_data, "presidium", court,
+                   [r for r in rows if not before_presidium_since(r.get("filing_date"))],
+                   known=known)
+        merged = {dq.key("presidium", court, r): r for r in rows}
+        for row in dq.due_rows(queue_data, "presidium", court):
+            merged.setdefault(dq.key("presidium", court, row), row)
+        rows = list(merged.values())
     if not rows:
         return finds
 
@@ -88,6 +107,12 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
         if known and (known.get("current_stage") != "cassation"
                       or should_skip_case(known, date.today())[0]):
             continue
+        if queue_data is not None and known is None:
+            task_key = dq.key("presidium", court, row)
+            task = dq.tasks(queue_data).get(task_key)
+            if task and dq.retry_reason(task):
+                continue
+            row["_discovery_queue_key"] = task_key
         plan.append(row)
 
     stage = f"presidium_search:{court.domain}"
@@ -101,8 +126,13 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
     try:
         for work in queue:
             row = work.value
+            task_key = row.get("_discovery_queue_key", "")
             if not queue.allows(court.domain):
+                if queue_data is not None:
+                    dq.defer(queue_data, task_key, "court_breaker")
                 queue.defer(work, court.domain)
+                continue
+            if task_key and not dq.begin_attempt(queue_data, task_key):
                 continue
             number = row["cassation_internal_number"]
             card_url = court.card_url(row["case_id"], row["case_uid"])
@@ -110,12 +140,16 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
             queue.mark_attempted(work)
             card_html = fetch_card_checked(card_url, context=number, breaker_gate=False)
             if not card_html:
+                if queue_data is not None:
+                    dq.defer(queue_data, task_key, str(config.FETCH_DIAG.get("kind") or "fetch_failed"))
                 if card_breaker_open(court.domain) and queue.defer(work, court.domain):
                     continue
                 queue.finish(work, recovered=False)
                 continue
             info = parse_cassation_card(card_html, court.base_url)
             if not info:
+                if queue_data is not None:
+                    dq.defer(queue_data, task_key, "unparsed_card")
                 mark_last_fetch_semantic("unparsed_card", card_url, context=number)
                 queue.finish(work, recovered=False)
                 continue
@@ -124,10 +158,14 @@ def collect_presidium_finds(court, cases, archived_cases, successful_today,
             queue.finish(work, recovered=True)
             telemetry.mark_case_read("cassation", f"{court.domain}|{number}")
             if not info.get("sber_present"):
+                if queue_data is not None:
+                    dq.finish(queue_data, task_key, accepted=False, reason="not_bank")
                 log.info("%s: %s — в участниках нет ПАО Сбербанк", court.name, number)
                 continue
             info.update(link=f"{row['case_id']}|{row['case_uid']}",
                         cassation_internal_number=number, court_domain=court.domain)
+            if task_key:
+                info["_discovery_queue_key"] = task_key
             for field in ("cassation_number", "fi_case_number", "fi_court_long",
                           "fi_judge", "cassator", "category", "filing_date", "result_text"):
                 if not info.get(field) and row.get(field):

@@ -173,7 +173,7 @@ def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
         left = budget.remaining(kind)
         run_left = run_deadline_remaining()
         if reason or left < 1 or (run_left is not None and run_left < 1):
-            item['reason'] = reason or ('backfill_budget' if kind == 'backfill' else 'watch_budget')
+            item['reason'] = reason or budget.reason(kind, run_remaining=run_left)
             continue
         policy.attempt(task, now)
         started = budget.begin(kind)

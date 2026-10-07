@@ -6,6 +6,7 @@
 # импорты после парсеров) — здесь только Linux-окружение и --anywhere.
 # Запускается systemd-таймером court-parse.timer (слоты — зеркало
 # com.court-monitor.parse.plist); руками: bash ops/vps-run/parse_all.sh [--check]
+# court-retry.timer вызывает этот же шим с --retry-only: без импорта и доставки.
 # =============================================================================
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

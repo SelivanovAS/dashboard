@@ -131,6 +131,7 @@ def save_digest_context(
     cass_changes: list[dict] | None = None,
     cass_discovered: list[dict] | None = None,
     will_deliver: bool = False,
+    defer_data: dict | None = None,
 ) -> str:
     """Сохранить входные данные дайджеста в LAST_DIGEST_CONTEXT_PATH.
 
@@ -168,6 +169,17 @@ def save_digest_context(
         "cass_changes": cass_changes or [],
         "cass_discovered": cass_discovered or [],
     }
+    if defer_data is not None:
+        # Дневная дочитка не переоткрывает выпуск и не меняет delivered_at.
+        # Очередь живёт в уже публикуемом cases.json; ACK выдаём после записи.
+        pending = _merge_day_context(defer_data.get('pending_retry_context') or {}, payload)
+        pending['issue_key'] = 'retry:' + saved_at
+        disk = load_json(config.JSON_PATH)
+        disk['pending_retry_context'] = pending
+        save_json(disk, config.JSON_PATH)
+        defer_data['pending_retry_context'] = pending
+        _ack_parse_context_wal(pending['issue_key'])
+        return pending['issue_key']
     issue_key = saved_at
     today = {
         datetime.now().date().isoformat(),
@@ -210,6 +222,27 @@ def save_digest_context(
     else:
         _ack_parse_context_wal(issue_key)
     return issue_key
+
+
+def acknowledge_retry_context(data: dict, issue_key: str, expected: dict) -> None:
+    """Убрать дневную дельту лишь после доказанного включения в новый выпуск."""
+    pending = data.get('pending_retry_context')
+    if not pending:
+        return
+    confirmed = _load_prev_context() or {}
+    signature = lambda x: json.dumps(x, sort_keys=True, ensure_ascii=False)
+    if confirmed.get('issue_key') != issue_key or any(
+        not {signature(x) for x in expected.get(key, [])}.issubset(
+            {signature(x) for x in confirmed.get(key, [])})
+        for key in _CTX_DELTA_KEYS
+    ):
+        raise RuntimeError('дневная дочитка не подтверждена контекстом следующего выпуска')
+    data.pop('pending_retry_context')
+    try:
+        save_json(data, config.JSON_PATH)
+    except Exception:
+        data['pending_retry_context'] = pending
+        raise
 
 
 def _load_prev_issues() -> list[dict]:

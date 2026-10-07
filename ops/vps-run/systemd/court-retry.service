@@ -1,0 +1,15 @@
+# Подготовленный отдельный режим; установка и включение таймера — при выпуске.
+[Unit]
+Description=Court Monitor: ограниченная дочитка без поиска и доставки
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+SyslogIdentifier=court-retry
+ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/parse_all.sh --retry-only
+# Между территориями сохраняем ограничение общего исполнителя. Каждый
+# Python-парсер получает RUN_DEADLINE_SECONDS=600 после env территории.
+Environment=CM_PARALLEL_STAGGER_SECONDS=300
+Environment="CM_PARALLEL_START_DELAYS=sverdlovsk_yanao=0 hmao=300 bashkortostan=600 tyumen=600"

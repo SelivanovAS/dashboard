@@ -71,6 +71,35 @@ def test_failed_card_stays_in_denominator(env, monkeypatch):
     assert env[2][-1][0][1:] == (0, 3)
 
 
+def test_discovery_failure_retry_only_survives_without_search(env, monkeypatch, tmp_path):
+    import json
+    from datetime import datetime, timedelta
+    from court_monitor import discovery_queue as dq
+    path = tmp_path / "cases.json"
+    path.write_text('{"cases": []}')
+    monkeypatch.setattr(config, "JSON_PATH", str(path))
+    original_now = dq._now
+    clock = [datetime(2026, 10, 7, 6)]
+    monkeypatch.setattr(dq, "_now", lambda value=None: original_now(value or clock[0]))
+    original_search_parser = ps.parse_cassation_search_page
+    monkeypatch.setattr(ps, "parse_cassation_search_page", lambda html: [
+        r for r in original_search_parser(html) if not ps.before_presidium_since(r.get("filing_date"))][:1])
+    original_fetch = ps.fetch_card_checked
+    monkeypatch.setattr(ps, "fetch_card_checked", lambda *a, **kw: None)
+    data = {}
+    assert not ps.collect_presidium_finds(env[0], [], [], set(), {}, {}, {}, queue_data=data)
+    assert len(dq.tasks(json.loads(path.read_text()))) == 1
+    clock[0] += timedelta(minutes=31)
+    monkeypatch.setattr(ps, "fetch_page", lambda *a, **kw: pytest.fail("retry-only must not search"))
+    monkeypatch.setattr(ps, "fetch_card_checked", original_fetch)
+    findings = ps.collect_presidium_finds(env[0], [], [], set(), {}, {}, {},
+                                          queue_data=data, retry_only=True)
+    assert len(findings) == 1
+    cases, _, _ = linking.link_cassation_cases([], findings, [])
+    dq.finish_cassation_finds(data, "presidium", env[0], findings, cases)
+    assert {t["status"] for t in dq.tasks(data).values()} == {"accepted"}
+
+
 def test_captcha_is_not_empty_success(env, monkeypatch):
     monkeypatch.setattr(ps, 'fetch_page', lambda *a, **kw: (FIXTURES / 'search_captcha_challenge.html').read_text())
     finds, health, captcha = collect(env)

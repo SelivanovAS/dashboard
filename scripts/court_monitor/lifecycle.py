@@ -1459,7 +1459,7 @@ def bank_writ_expected(fi: dict) -> bool:
     result = (fi.get("result") or "")
     if classify_fi_termination(result, "", []) is not None:
         return False
-    if "отказано" in result.lower():
+    if "отказано" in result.lower() and not re.search(r'удовлетвор\w*\s+частич|частич\w*\s+удовлетвор', result, re.I):
         return False
     return True
 
@@ -3293,6 +3293,20 @@ def should_skip_case(
     if known:
         return known
 
+    # Фоновые проверки не замедляют свежую жалобу и не меняют правила
+    # будущих заседаний. Старый результат из истории нового круга не берём.
+    if stage == 'first_instance':
+        from court_monitor.complaints import has_unresolved_complaint
+        complaint = any(has_unresolved_complaint(case_dict, k) for k in ('appeal', 'cassation'))
+        if not complaint:
+            days_since = (today - last_checked).days
+            archived_safety = (case_dict.get('archived_at') and block.get('status') == 'Решено'
+                               and fi_appeal_window_passed(block, datetime.combine(today, datetime.min.time())))
+            completed = (fi_left_unconsidered(block) or classify_fi_termination(block.get('result') or '', '', []))
+            if days_since < 7 and (archived_safety or completed):
+                reason = 'archive_weekly' if archived_safety else 'completed_weekly'
+                return True, f'{reason}({days_since}d/7d)'
+
     # Дело «без движения» без явной будущей даты исправления — парсим раз
     # в 7 дней. Суды 1-й инст. ХМАО часто не указывают срок устранения
     # (или он уже прошёл), а ежедневный парс бесполезен: новое определение
@@ -3314,6 +3328,10 @@ def skip_reason_ru(reason: str) -> str:
     как были — на них завязана логика подсчёта; переводим только при печати.
     Неизвестный код возвращается как есть.
     """
+    if reason.startswith('archive_weekly'):
+        return 'архивная проверка поздней жалобы — раз в 7 дней'
+    if reason.startswith('completed_weekly'):
+        return 'процессуально завершено — контроль карточки раз в 7 дней'
     if reason == "complaint_weekly":
         return "жалоба направлена, ждём вышестоящую карточку — опрос раз в 7 дней"
     m = re.match(r"future_hearing\((.+)\)$", reason)

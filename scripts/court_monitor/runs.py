@@ -20,6 +20,8 @@ import time
 from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
+from court_monitor import fi_act_watch, writ_watch
+from court_monitor.netutil import card_cache_run
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
     remember_rejection, row_passes, save_intake_seen, seen_key,
@@ -513,6 +515,8 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
         if (fi.get("link") or "").strip():
             court = None  # ссылка уже есть — поиск не нужен
         else:
+            if fi.get('appeal_appellant_search_empty_at') == date.today().isoformat():
+                continue
             court = match_fi_court_by_short_name(fi.get("court") or "")
             if court is None:
                 # Не из реестра — HTTP не тратим; самоизлечится в
@@ -554,6 +558,7 @@ def backfill_appeal_appellants(cases: list[dict], max_per_run: int = 20) -> dict
                 stats["failed"] += 1
                 continue
             if is_no_data_page(html):
+                fi['appeal_appellant_search_empty_at'] = date.today().isoformat()
                 log.info(
                     f"  апеллянт-бэкфилл: {num} — в выдаче "
                     f"{shorten_court_name(court.name)} нет данных"
@@ -716,6 +721,9 @@ def update_active_cases(
         # будущую дату. Для CSV-row без JSON-родителя — фолбэк, парсим как раньше.
         num = case.get("Номер дела", "").strip()
         ap_dict_skip = (json_appeal_by_num or {}).get(num)
+        if ap_dict_skip is None and os.environ.get('CM_RETRY_ONLY') == '1':
+            log.info('Дочитка: апелляция %s без JSON-состояния — нужна сверка', num)
+            continue
         if ap_dict_skip is not None:
             shim = {"current_stage": "appeal", "appeal": ap_dict_skip}
             skip, reason = should_skip_case(shim, today)
@@ -2121,7 +2129,7 @@ def filter_new_fi_rows(court, rows: list[dict], exact: set, wildcard: set) -> li
 
 def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
                      dedup_wildcard: set, seen: dict, budget: int,
-                     operator: str = "auto") -> tuple[list[dict], dict]:
+                     operator: str = "auto", queue_data: dict | None = None) -> tuple[list[dict], dict]:
     """Завести иски банка со страницы выдачи суда (блок 3b фазы 3).
 
     Возвращает (новые записи, счётчики). Правила приёма — общие для всех
@@ -2140,17 +2148,42 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
                 "excluded_writ": 0, "already_spent": 0, "no_link": 0,
                 "fetch_fail": 0, "breaker": 0, "capped": 0}
     entries: list[dict] = []
-    if not rows or budget <= 0:
+    from court_monitor import discovery_queue as dq
+    # Только обычный автопоиск включает очередь. Импортёры и прежние
+    # вызывающие без queue_data сохраняют свой контракт приёма.
+    queued = queue_data is not None and not config.BANK_INTAKE_DRY_RUN
+    if queued:
+        def known(row):
+            return row_tracking_status(row, dedup_exact, dedup_wildcard,
+                source="auto_bank_search", court=court, dry_run=True) == "tracked"
+        dq.reconcile(queue_data, "bank", court, known)
+        candidates = [r for r in rows if row_passes(r)[0]
+                      and seen_key(court.domain, r["case_number"]) not in seen]
+        dq.enqueue(queue_data, "bank", court, candidates, known=known)
+        pending_rows = dq.due_rows(queue_data, "bank", court)
+        merged = {dq.key("bank", court, r): r for r in rows}
+        for r in pending_rows:
+            merged.setdefault(dq.key("bank", court, r), r)
+        rows = list(merged.values())
+    if not rows or (budget <= 0 and not queued):
         return entries, counters
     now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     for r in rows:
         num = r["case_number"]
+        task_key = dq.key("bank", court, r) if queued else ""
+        def queue_finish(accepted, reason):
+            if queued:
+                dq.finish(queue_data, task_key, accepted=accepted, reason=reason)
+        def queue_defer(reason):
+            if queued:
+                dq.defer(queue_data, task_key, reason)
         ok, why = row_passes(r)
         if not ok:
             counters[why] += 1
             if why in ("excluded_result", "no_link"):
                 remember_rejection(seen, court.domain, num, why)
+            queue_finish(False, why)
             continue
         counters["candidates"] += 1
         config.METRICS["bank_intake_candidates"] += 1
@@ -2160,20 +2193,29 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
         if tracking == "needs_review":
             counters["needs_review"] += 1
             log.warning("[NEEDS REVIEW] %s · %s — %s", num, court.name, REVIEW_REASON)
+            queue_finish(False, "needs_review")
             continue
         if tracking == "tracked":
             counters["already"] += 1
+            queue_finish(True, "already_tracked")
             continue
         if seen_key(court.domain, num) in seen:
             # Отказник прошлых прогонов: причина вечная, карточку не трогаем.
             counters["seen_cached"] += 1
             seen[seen_key(court.domain, num)]["last_seen"] = date.today().isoformat()
+            queue_finish(False, "cached_rejection")
             continue
+        if queued:
+            task = dq.tasks(queue_data).get(task_key)
+            if task and dq.retry_reason(task):
+                continue
         if len(entries) >= budget:
             counters["capped"] += 1
+            queue_defer("run_intake_cap")
             continue
         if counters["cards"] >= config.BANK_INTAKE_MAX_CARDS_PER_COURT:
             counters["capped"] += 1
+            queue_defer("per_court_intake_cap")
             continue
         if config.BANK_INTAKE_DRY_RUN:
             continue
@@ -2182,28 +2224,46 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
         # вызывается ровно один раз на карточку.
         if not card_breaker_allows(court.domain):
             counters["breaker"] += 1
+            queue_defer("court_breaker")
+            continue
+        from court_monitor.netutil import run_deadline_reached
+        if run_deadline_reached():
+            queue_defer("run_deadline")
+            continue
+        card_court = dq.target_court("bank", court, r) if queued else court
+        if card_court is None:
+            queue_finish(False, "unknown_court_site")
+            continue
+        if queued and not dq.begin_attempt(queue_data, task_key):
             continue
         cid, _, cuid = r["link"].partition("|")
         polite_delay()
         counters["cards"] += 1
         config.METRICS["bank_intake_cards"] += 1
-        card_html = fetch_card_checked(court.card_url(cid, cuid), context=num,
+        card_html = fetch_card_checked(card_court.card_url(cid, cuid), context=num,
                                        breaker_gate=False)
         if not card_html:
             counters["fetch_fail"] += 1
+            queue_defer(str(config.FETCH_DIAG.get("kind") or "fetch_failed"))
             continue
         card_info = parse_case_card(card_html, court.base_url)
+        if queued and card_is_empty_shell(card_info):
+            counters["fetch_fail"] += 1
+            queue_defer("empty_card")
+            continue
         tracking = row_tracking_status(r, dedup_exact, dedup_wildcard,
                                        source="auto_bank_search", court=court, card_info=card_info)
         if tracking == "needs_review":
             counters["needs_review"] += 1
             log.warning("[NEEDS REVIEW] %s — %s", num, REVIEW_REASON)
+            queue_finish(False, "needs_review")
             continue
         why_card = card_rejects(card_info, skip_appeal=False)
         if why_card:
             counters[why_card] += 1
             remember_rejection(seen, court.domain, num, why_card)
             log.debug(f"  Иски банка: {num} — не берём ({why_card})")
+            queue_finish(False, why_card)
             continue
         entry = make_bank_entry(r, card_info, operator, now_iso,
                                 source="auto_search", court=court)
@@ -2214,12 +2274,14 @@ def intake_bank_rows(court, rows: list[dict], *, dedup_exact: set,
             counters["already_spent"] += 1
             remember_rejection(seen, court.domain, num, "already_spent")
             log.debug(f"  Иски банка: {num} — не берём (already_spent)")
+            queue_finish(False, "already_spent")
             continue
         entries.append(entry)
         add_row_to_index(dedup_exact, entry["first_instance"])
         resolve_identity_review(row_identity(r, court), outcome="added")
         counters["added"] += 1
         config.METRICS["bank_intake_added"] += 1
+        queue_finish(True, "admitted")
     return entries, counters
 
 
@@ -2309,7 +2371,7 @@ def split_bank_track(
         # «ждём» и есть дефолт, лишний ключ в 345 записях ни к чему.
         _fi = c.get("first_instance") or {}
         _backfill_court_ids(_fi)
-        _writ_expected = lifecycle.bank_writ_expected(_fi)
+        _writ_expected = writ_watch.bank_claim(c) and lifecycle.bank_writ_expected(_fi)
         if _writ_expected:
             _fi.pop("writ_expected", None)
         else:
@@ -2344,7 +2406,8 @@ def split_bank_track(
         # по которому исполнять нечего. Второй гейт — «решение есть» — живёт
         # внутри bank_legal_force_est (03.09.2026): у живого дела hearing_date
         # = будущее заседание, и штамп стоял у 342 из 554 активных дел.
-        _est = lifecycle.bank_legal_force_est(_fi) if _writ_expected else None
+        _est = (lifecycle.bank_legal_force_est(_fi)
+                if _writ_expected and _fi.get('writ_watch_status') != 'needs_review' else None)
         if _est:
             _fi["legal_force_est"] = _est.isoformat()
         else:
@@ -2355,7 +2418,7 @@ def split_bank_track(
         # уже хватило, см. комментарий у awaitsWrit).
         # ⚠️ Строго ПОСЛЕ вычисления _est: выше по циклу переменной ещё нет, и
         # штамп молча взял бы дату ПРЕДЫДУЩЕГО дела.
-        if lifecycle.bank_writ_awaited(_fi) and _est:
+        if _writ_expected and lifecycle.bank_writ_awaited(_fi) and _est:
             _fi["writ_awaited_since"] = _est.isoformat()
         else:
             _fi.pop("writ_awaited_since", None)
@@ -2450,7 +2513,11 @@ def collect_bank_calendar_events(
     for c in cases:
         if not lifecycle.is_bank_plaintiff_track(c):
             continue
+        if not writ_watch.bank_claim(c):
+            continue
         fi = c.get("first_instance") or {}
+        if fi.get('writ_watch_status') == 'needs_review':
+            continue
         if (fi.get("status") or "").strip() != "Решено":
             continue
         if (lifecycle.bank_case_left_track(c)
@@ -2558,6 +2625,7 @@ def _count_cards_read_today(cases: list, today_iso: str) -> int:
     return count
 
 
+@card_cache_run
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -2567,7 +2635,8 @@ def main_json():
     # Smart-skip нерабочих дней РФ (включается при автозапуске через
     # Worker — он передаёт SKIP_NON_WORKING_DAYS=1 / --smart-skip).
     # Ручной запуск из UI работает без skip.
-    smart_skip_mode = (
+    retry_only = os.environ.get('CM_RETRY_ONLY') == '1'
+    smart_skip_mode = retry_only or (
         "--smart-skip" in sys.argv
         or os.environ.get("SKIP_NON_WORKING_DAYS") == "1"
     )
@@ -2600,6 +2669,9 @@ def main_json():
 
     _metrics_reset()
     start_run_deadline()
+    from court_monitor.netutil import reserve_run_deadline, release_run_deadline_reserve
+    if retry_only:
+        config.SKIP_CHECKED_TODAY = True
     validate_environment()
     if config.PARSE_TELEMETRY_FILE:
         _network_fingerprint = {}
@@ -2690,6 +2762,15 @@ def main_json():
     act_watch.checkpoint(data)
     appeal_act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
     appeal_act_watch.checkpoint(data)
+    all_initial = cases + archived_cases + cold_archived_cases + bank_archived_cases
+    fi_act_watch.sync(data, all_initial, today)
+    fi_act_watch.checkpoint(data)
+    writ_watch.sync(data, all_initial, today)
+    writ_watch.checkpoint(data)
+    if any(task.get('status') in ('waiting', 'monitoring')
+           for field in (act_watch.FIELD, appeal_act_watch.FIELD, fi_act_watch.FIELD, writ_watch.FIELD)
+           for task in (data.get(field) or {}).values()):
+        reserve_run_deadline(act_watch_policy.RESERVED_SECONDS)
 
     # Судо-зависимый индекс для фильтра НОВЫХ FI-дел: номера не уникальны
     # между судами — глобальный existing_ids терял бы новое дело суда Б при
@@ -2789,6 +2870,11 @@ def main_json():
     # Дополнительно проверяем sber_present в карточке (УЧАСТНИКИ), т.к.
     # поиск иногда матчит по случайному совпадению в тексте.
     log_phase(2, 9, f"Кассация {CASSATION_COURT.domain}: поиск и карточки")
+    from court_monitor import discovery_queue as dq
+    def known_cassation_candidate(row):
+        return dq.known_cassation(row, CASSATION_COURT,
+            cases + archived_cases + cold_archived_cases + bank_archived_cases)
+    dq.reconcile(data, "cassation", CASSATION_COURT, known_cassation_candidate)
     t0 = time.perf_counter()
     cass_changes: list[dict] = []
     cass_discovered: list[dict] = []
@@ -2816,9 +2902,13 @@ def main_json():
         # Дочитка поисков: выдача 7kas сегодня уже отдала строки — повторный
         # слот её не запрашивает. Флаг гейтит и ветку отказа ниже: пропуск
         # НЕ пишет health_obs[...] = None и не кормит предохранитель.
-        cass_search_html, cass_search_url, cass_search_skipped = fetch_cassation_search(
-            CASSATION_COURT, _ck_total, search_skip_keys,
-        )
+        hmao_results = []
+        if retry_only:
+            cass_search_html, cass_search_url, cass_search_skipped = "", "", True
+        else:
+            cass_search_html, cass_search_url, cass_search_skipped = fetch_cassation_search(
+                CASSATION_COURT, _ck_total, search_skip_keys,
+            )
         if not cass_search_html and not cass_search_skipped:
             _cass_fail_kind = str(
                 config.FETCH_DIAG.get("kind") or "request_error"
@@ -2931,6 +3021,17 @@ def main_json():
                     + "; ".join(dropped_courts)
                 )
 
+        # Только прошедшие прежний фильтр территории строки. Сохраняем
+        # весь новый набор до первой карточки; дневной пропуск поиска не
+        # закрывает дочитку этих кандидатов.
+        dq.enqueue(data, "cassation", CASSATION_COURT, hmao_results,
+                   known=known_cassation_candidate)
+        pending_cass_rows = dq.due_rows(data, "cassation", CASSATION_COURT)
+        merged_cass_rows = {dq.key("cassation", CASSATION_COURT, r): r for r in hmao_results}
+        for r in pending_cass_rows:
+            merged_cass_rows.setdefault(dq.key("cassation", CASSATION_COURT, r), r)
+        hmao_results = list(merged_cass_rows.values())
+        if cass_search_html or hmao_results:
             # Индекс существующих дел по номеру 1-й инст. — для smart-skip
             # (discovery-кейсы остаются вне индекса и парсятся всегда).
             cass_fi_index: dict[str, dict] = {}
@@ -2948,6 +3049,12 @@ def main_json():
             # посередине, знаменатель останется полным и 85%-вердикт не сможет
             # объявить частичный обход успешным.
             for r in hmao_results:
+                if not known_cassation_candidate(r):
+                    task_key = dq.key("cassation", CASSATION_COURT, r)
+                    task = dq.tasks(data).get(task_key)
+                    if task and dq.retry_reason(task):
+                        continue
+                    r["_discovery_queue_key"] = task_key
                 fi_num_search = (r.get("fi_case_number") or "").strip()
                 existing_case = cass_fi_index.get(fi_num_search) if fi_num_search else None
                 if existing_case and existing_case.get("current_stage") == "cassation":
@@ -2983,12 +3090,16 @@ def main_json():
             )
             for _work in cass_queue:
                 r = _work.value
+                task_key = r.get("_discovery_queue_key", "")
                 if not cass_queue.allows(CASSATION_COURT.domain):
+                    dq.defer(data, task_key, "court_breaker")
                     if cass_queue.defer(_work, CASSATION_COURT.domain):
                         log.debug(
                             f"  7kas: defer {r['cassation_internal_number']} — "
                             "суд ждёт half-open"
                         )
+                    continue
+                if task_key and not dq.begin_attempt(data, task_key):
                     continue
                 polite_delay()
                 card_url = CASSATION_COURT.card_url(r["case_id"], r["case_uid"])
@@ -2998,6 +3109,7 @@ def main_json():
                     breaker_gate=False,
                 )
                 if not card_html:
+                    dq.defer(data, task_key, str(config.FETCH_DIAG.get("kind") or "fetch_failed"))
                     if card_breaker_open(CASSATION_COURT.domain):
                         cass_queue.defer(_work, CASSATION_COURT.domain)
                     log.warning(
@@ -3007,6 +3119,7 @@ def main_json():
                     continue
                 info = parse_cassation_card(card_html, CASSATION_COURT.base_url)
                 if not info:
+                    dq.defer(data, task_key, "unparsed_card")
                     mark_last_fetch_semantic(
                         "unparsed_card", card_url,
                         context=r["cassation_internal_number"],
@@ -3030,6 +3143,7 @@ def main_json():
                 )
                 cass_queue.finish(_work, recovered=True)
                 if not info.get("sber_present"):
+                    dq.finish(data, task_key, accepted=False, reason="not_bank")
                     log.info(
                         f"  7kas: пропуск {r['cassation_internal_number']} — "
                         f"в УЧАСТНИКАХ нет ПАО Сбербанк (или только дочка)"
@@ -3040,6 +3154,8 @@ def main_json():
                 # link нет: его нужно собрать из case_id|case_uid).
                 info["link"] = f"{r['case_id']}|{r['case_uid']}"
                 info["cassation_internal_number"] = r["cassation_internal_number"]
+                if task_key:
+                    info["_discovery_queue_key"] = task_key
                 # Если в карточке fi_case_number пустой (редко) — берём из выдачи.
                 if not info.get("fi_case_number") and r.get("fi_case_number"):
                     info["fi_case_number"] = r["fi_case_number"]
@@ -3052,6 +3168,8 @@ def main_json():
             cases, cass_changes, cass_discovered = link_cassation_cases(
                 cases, cass_finds, archived_cases, snapshot_discovered=True,
             )
+            dq.finish_cassation_finds(data, "cassation", CASSATION_COURT, cass_finds,
+                cases + archived_cases + cold_archived_cases + bank_archived_cases)
             cass_resurrected_count += archived_before_cass - len(archived_cases)
         elif not cass_search_skipped:
             log.warning("7kas: пустой ответ от поиска")
@@ -3105,12 +3223,15 @@ def main_json():
                 presidium, cases,
                 archived_cases + cold_archived_cases + bank_archived_cases,
                 search_skip_keys, health_obs, health_labels, health_captcha, pres_stats,
+                queue_data=data, retry_only=retry_only,
             )
             if pres_finds:
                 archived_before_pres = len(archived_cases)
                 cases, pres_changes, pres_discovered = link_cassation_cases(
                     cases, pres_finds, archived_cases,
                 )
+                dq.finish_cassation_finds(data, "presidium", presidium, pres_finds,
+                    cases + archived_cases + cold_archived_cases + bank_archived_cases)
                 cass_resurrected_count += archived_before_pres - len(archived_cases)
                 cass_changes.extend(pres_changes)
                 for found in pres_discovered:
@@ -3126,7 +3247,8 @@ def main_json():
     # Точный поиск пропущенной карточки: УИД → номер 1-й инстанции + суд.
     # Состояние и недельные интервалы лежат в самих делах обоих треков.
     from court_monitor.cassation_lookup import lookup_missing_cassations
-    exact_changes, exact_stats = lookup_missing_cassations(cases, today)
+    exact_changes, exact_stats = (([], {"planned": 0, "parsed": 0}) if retry_only
+                                  else lookup_missing_cassations(cases, today))
     cass_changes.extend(exact_changes)
     cass_planned += exact_stats["planned"]
     cass_parsed += exact_stats["parsed"]
@@ -3426,6 +3548,9 @@ def main_json():
     appeal_search_gated_now: set[str] = set()
 
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
+        if retry_only:
+            appeal_search_gated_now.add(_ap_court.domain)
+            continue
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
         hk = _appeal_health_key(_ap_court)
         # Поиск выключен конфигом (Свердловский облсуд, 28.08.2026): ни HTTP,
@@ -3686,22 +3811,53 @@ def main_json():
         log.info("Иски банка: подхват в режиме DRY-RUN — карточки не качаем, "
                  "записи не создаём")
 
+    def consume_bank_candidates(court, rows, court_tag):
+        if not bank_intake_on:
+            return []
+        entries, bank_counters = intake_bank_rows(
+            court, rows, dedup_exact=fi_dedup_exact,
+            dedup_wildcard=fi_dedup_wildcard, seen=bank_intake_seen,
+            budget=config.BANK_INTAKE_MAX_PER_RUN - len(bank_new_cases),
+            operator=intake_operator, queue_data=data,
+        )
+        bank_new_cases.extend(entries)
+        for k, v in bank_counters.items():
+            bank_intake_totals[k] = bank_intake_totals.get(k, 0) + v
+        for entry in entries:
+            existing_ids.add(entry["id"])
+        if entries or bank_counters["candidates"]:
+            log.info(
+                f"  {court_tag} {court.name}: иски банка — "
+                f"кандидатов {bank_counters['candidates']}, "
+                f"карточек {bank_counters['cards']}, +{len(entries)} в трек"
+                + (f", известных {bank_counters['already']}" if bank_counters["already"] else "")
+                + (f", отказников из кэша {bank_counters['seen_cached']}" if bank_counters["seen_cached"] else "")
+            )
+        return entries
+
+    # Поиск мог закрыться уже ПОСЛЕ обнаружения кандидата. Такая карточка
+    # всё ещё дочитывается, но новый поиск закрытого источника не включаем.
+    queue_only_courts = [c for c in FIRST_INSTANCE_COURTS
+        if c.enabled and c not in enabled_courts and bank_intake_on
+        and dq.has_candidates(data, "bank", c)]
+    intake_courts = enabled_courts + queue_only_courts
     fi_search_skipped_today = 0
-    for court_idx, court in enumerate(enabled_courts, 1):
-        court_tag = f"[{court_idx}/{len(enabled_courts)}]"
+    for court_idx, court in enumerate(intake_courts, 1):
+        court_tag = f"[{court_idx}/{len(intake_courts)}]"
         health_key = fi_health_key(court)
         # Дочитка поисков: выдача суда сегодня уже отдала строки — повторный
         # слот её не запрашивает. Гейт стоит ДО polite_delay (как пре-чеки
         # предохранителя): пропуск не тратит ни каденс, ни HTTP. Вместе с
-        # поиском пропускаются его пассажиры этого слота (промоушен М→2 по
-        # строке, фильтр new_fi, авто-подхват 3b, канарейка предохранителя,
-        # детект капчи) — всё это уже отработало в удачном слоте.
-        if health_key in search_skip_keys:
-            fi_search_skipped_today += 1
+        # поиском пропускается discovery, но сохранённые кандидаты исков
+        # банка дочитываются независимо от сегодняшнего успеха выдачи.
+        if retry_only or court in queue_only_courts or health_key in search_skip_keys:
+            if court in enabled_courts:
+                fi_search_skipped_today += 1
             log.debug(
                 f"  {court_tag} {court.name}: поиск пропущен — "
-                f"удался ранее сегодня (дочитка слота)"
+                f"дочитка сохранённых карточек"
             )
+            consume_bank_candidates(court, [], court_tag)
             continue
         health_labels[health_key] = court.name
         polite_delay()
@@ -3728,6 +3884,7 @@ def main_json():
                 f"  {court_tag} {court.name}: не удалось загрузить поиск"
                 f" ({time.perf_counter() - _t_court:.1f}s)"
             )
+            consume_bank_candidates(court, [], court_tag)
             continue
 
         # Здоровье меряем по сберовским строкам ДО фильтра ролей: вал исков
@@ -3941,30 +4098,8 @@ def main_json():
         # Истцовые строки той же страницы — в трек «Иски банка». Раньше он
         # пополнялся только вручную, и новый иск вставал на мониторинг лишь
         # после того, как юрист вспомнит запустить сбор.
-        if bank_intake_on and bank_rows:
-            entries, bank_counters = intake_bank_rows(
-                court, bank_rows,
-                dedup_exact=fi_dedup_exact, dedup_wildcard=fi_dedup_wildcard,
-                seen=bank_intake_seen,
-                budget=config.BANK_INTAKE_MAX_PER_RUN - len(bank_new_cases),
-                operator=intake_operator,
-            )
-            bank_new_cases.extend(entries)
-            for k, v in bank_counters.items():
-                bank_intake_totals[k] = bank_intake_totals.get(k, 0) + v
-            if entries or bank_counters["candidates"]:
-                log.info(
-                    f"  {court_tag} {court.name}: иски банка — "
-                    f"кандидатов {bank_counters['candidates']}, "
-                    f"карточек {bank_counters['cards']}, "
-                    f"+{len(entries)} в трек"
-                    + (f", известных {bank_counters['already']}"
-                       if bank_counters["already"] else "")
-                    + (f", отказников из кэша {bank_counters['seen_cached']}"
-                       if bank_counters["seen_cached"] else "")
-                )
-            for e in entries:
-                existing_ids.add(e["id"])
+        if bank_intake_on:
+            entries = consume_bank_candidates(court, bank_rows, court_tag)
             # Страховка вместо пагинации (решение юриста 31.07.2026 — прогон
             # читает только страницу 1): если неизвестной оказалась и самая
             # старая строка выдачи, значит окна страницы могло не хватить.
@@ -4029,7 +4164,7 @@ def main_json():
     # пропускает дело до всякого запроса — стадия cassation_watch слепнет
     # (инцидент 2-716/2025: не увидели «Кассационное представление»).
     # Целевой поиск по номеру дела; ссылка персистится — запрос одноразовый.
-    backfilled = backfill_fi_links(cases)
+    backfilled = 0 if retry_only else backfill_fi_links(cases)
     if backfilled:
         log.info(f"Достроено ссылок на карточку 1-й инст.: {backfilled}")
     # Переклассификация сохранённых слов-ролей апеллянта/кассатора (без HTTP):
@@ -4056,7 +4191,7 @@ def main_json():
     # жалобы не публикует, а карточка 1-й инст. в appeal не парсится
     # (should_parse_fi_card) — разовый точечный заход ТОЛЬКО за полями
     # appeal_appellant*/appellant*, без событий и дайджеста (см. функцию).
-    ap_bf = backfill_appeal_appellants(cases)
+    ap_bf = {'candidates': 0} if retry_only else backfill_appeal_appellants(cases)
     if ap_bf["candidates"]:
         log.info(
             f"Апеллянт (бэкфилл): кандидатов {ap_bf['candidates']}, проверено "
@@ -4105,6 +4240,7 @@ def main_json():
     fi_plan_skip = 0
     fi_plan_no_card = 0
     fi_plan_writ_weekly = 0
+    fi_plan_background_weekly = 0
     fi_plan_complaint_weekly = 0
     fi_plan_checked_today = 0
     for _c in fi_active:
@@ -4120,7 +4256,9 @@ def main_json():
             # дату рассмотрения) — отдельное слагаемое: раньше он сливался в
             # «заседание в будущем», и юрист читал 39 отложенных
             # writ_weekly-дел как отложенные по заседаниям.
-            if _plan_reason.startswith(
+            if _plan_reason.startswith(('archive_weekly', 'completed_weekly')):
+                fi_plan_background_weekly += 1
+            elif _plan_reason.startswith(
                     ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 fi_plan_writ_weekly += 1
             elif _plan_reason == "complaint_weekly":
@@ -4131,7 +4269,7 @@ def main_json():
                 fi_plan_checked_today += 1
             else:
                 fi_plan_skip += 1
-    fi_plan_parse = (len(fi_active) - fi_plan_skip - fi_plan_writ_weekly
+    fi_plan_parse = (len(fi_active) - fi_plan_skip - fi_plan_writ_weekly - fi_plan_background_weekly
                      - fi_plan_complaint_weekly - fi_plan_checked_today - fi_plan_no_card)
     # Баланс одной строкой: «парсим» + слагаемые в скобках = «всего дел».
     # «Всего» включает и дела «третье лицо» в cassation_watch — предикат
@@ -4139,6 +4277,8 @@ def main_json():
     # как часть общей арифметики, а не отдельной строкой.
     fi_plan_total = len(fi_active) + len(fi_third_party_watch)
     _plan_notes = []
+    if fi_plan_background_weekly:
+        _plan_notes.append(f'{fi_plan_background_weekly} архивные/завершённые — недельный контроль')
     if fi_plan_complaint_weekly:
         _plan_notes.append(f"{fi_plan_complaint_weekly} направленные жалобы — недельный ритм")
     if fi_plan_skip:
@@ -4170,6 +4310,7 @@ def main_json():
     fi_skipped_future = 0
     fi_skipped_suspended = 0
     fi_skipped_writ_weekly = 0
+    fi_skipped_background_weekly = 0
     fi_skipped_complaint_weekly = 0
     fi_skipped_checked_today = 0
     fi_skipped_breaker = 0
@@ -4250,6 +4391,8 @@ def main_json():
                 # Заседание по заявлению об отмене заочного решения — такая же
                 # известная будущая активность, а не «без движения».
                 fi_skipped_future += 1
+            elif reason.startswith(('archive_weekly', 'completed_weekly')):
+                fi_skipped_background_weekly += 1
             elif reason.startswith(
                     ("writ_weekly", "merged_weekly", "default_cancel_weekly")):
                 # Недельный ритм исков банка — не «без движения»
@@ -4790,8 +4933,12 @@ def main_json():
         # лишнее поле раздувало бы cases.json. Идемпотентность — по fi["writs"]:
         # новая запись листа → fi_writ_issued, смена статуса существующей
         # («Выдан» → «Отозван»/«Возвращен») → fi_writ_status_changed.
-        if lifecycle.is_bank_plaintiff_track(case_j):
-            change["track"] = "plaintiff_light"
+        if writ_watch.bank_claim(case_j):
+            initial_writ_baseline = (not lifecycle.is_bank_plaintiff_track(case_j)
+                                     and not fi.get('writ_checked_at'))
+            if lifecycle.is_bank_plaintiff_track(case_j):
+                change["track"] = "plaintiff_light"
+            fi['writ_checked_at'] = today.isoformat()
             new_writs = card_info.get("_writs") or []
             if new_writs:
                 def _writ_key(w: dict) -> tuple:
@@ -4812,10 +4959,10 @@ def main_json():
                     and (w.get("status") or "")
                     != (old_writs[_writ_key(w)].get("status") or "")
                 ]
-                if issued:
+                if issued and not initial_writ_baseline:
                     change["type"].append("fi_writ_issued")
                     change["details"]["writs"] = issued
-                if restatused:
+                if restatused and not initial_writ_baseline:
                     change["type"].append("fi_writ_status_changed")
                     change["details"]["writ_status_changes"] = restatused
                 if fi.get("writs") != new_writs:
@@ -5151,7 +5298,7 @@ def main_json():
                 changed = True
 
         if not card_info.get('act_text') and not card_info.get('_act_url'):
-            act_publication.observe(fi, '', today, present=False)
+            fi_act_watch.observe(fi, '', today, present=False)
 
         # Захват текста опубликованного решения 1-й инстанции — для 3.6.
         # Отделено от fi_act_published, т.к. текст часто приходит ПОЗЖЕ
@@ -5167,7 +5314,7 @@ def main_json():
                 )
                 act_text_fi = (fetched or "").strip()
             if act_text_fi:
-                announce_fi_text = act_publication.observe(fi, act_text_fi, today, present=True,
+                announce_fi_text = fi_act_watch.observe(fi, act_text_fi, today, present=True,
                     confirmed_date=fi.get('decision_date') or '',
                     source_url=card_info.get('_act_url') or fi_card_url(fi))
                 changed = True
@@ -5582,7 +5729,7 @@ def main_json():
     # Новые сведения о завершении жалобы обнаружены при чтении FI ниже
     # обычного поиска инстанций. Уточняем в этом же прогоне; сохранённый
     # next_attempt_at исключает повтор без новых судебных сведений.
-    late_changes, late_stats = lookup_missing_cassations(cases, today)
+    late_changes, late_stats = ([], {'planned': 0, 'parsed': 0}) if retry_only else lookup_missing_cassations(cases, today)
     cass_changes.extend(late_changes)
     cass_planned += late_stats["planned"]
     cass_parsed += late_stats["parsed"]
@@ -5603,9 +5750,11 @@ def main_json():
     # Знаменатель итога — план (fi_plan_parse), в тех же единицах, что
     # строки «парсим Y» и «проверено X из Y»; скипы — пояснением в скобках.
     fi_total = fi_plan_parse
-    fi_skip_total = (fi_skipped_future + fi_skipped_suspended
+    fi_skip_total = (fi_skipped_future + fi_skipped_suspended + fi_skipped_background_weekly
                      + fi_skipped_writ_weekly + fi_skipped_complaint_weekly + fi_skipped_checked_today)
     _fi_sum_parts = []
+    if fi_skipped_background_weekly:
+        _fi_sum_parts.append(f'{fi_skipped_background_weekly} архивных/завершённых — недельный контроль')
     if fi_skipped_complaint_weekly:
         _fi_sum_parts.append(f"{fi_skipped_complaint_weekly} направленных жалоб — недельный ритм")
     if fi_skipped_future:
@@ -5684,35 +5833,6 @@ def main_json():
             },
         })
 
-    # Календарные события трека: «решение вступило в силу (расч.)» и «ИЛ не
-    # выдан N дн.» наступают датой, а не карточкой — решённые дела живут в
-    # недельном ритме writ_weekly и в FI-цикле change не собирают. Порядок
-    # load-bearing: ПОСЛЕ dedupe (синтетике он не нужен) и врезки новых
-    # исков (слияние строк по делу), ДО фильтра рутины и save_digest_context
-    # (replay видит события) и ДО вливания bank_new_cases в cases —
-    # свежезаведённое дело со старым решением объявит не этот проход, а
-    # эпоха/стародатный фильтр отсеют. Маркеры мутируются в тех же dict,
-    # которые сохранит save_bank_json в фазе 7c.
-    _cal_emitted = collect_bank_calendar_events(cases, fi_changes, today)
-    if _cal_emitted:
-        log.info(
-            f"Иски банка: календарных событий (сила/просрочка ИЛ) "
-            f"по {_cal_emitted} делам"
-        )
-
-    # Трек «Иски банка»: при BANK_DIGEST_ROUTINE=0 рутина track-дел
-    # (заседания, статусы, принятия) в дайджест не идёт — остаются решение,
-    # возврат, апел. жалоба и ИЛ. Фильтр стоит ДО save_digest_context, чтобы
-    # replay/push видели тот же список.
-    if not config.BANK_DIGEST_ROUTINE:
-        before_bank = len(fi_changes)
-        fi_changes = lifecycle.filter_bank_routine_events(fi_changes)
-        if len(fi_changes) != before_bank:
-            log.info(
-                f"Иски банка: рутина отфильтрована (BANK_DIGEST_ROUTINE=0): "
-                f"{before_bank} → {len(fi_changes)} записей fi_changes"
-            )
-
     # Независимые тексты не вытесняют основной обход инстанций.
     def fetch_waiting_act(url, **kwargs):
         polite_delay()
@@ -5720,13 +5840,16 @@ def main_json():
 
     from court_monitor.netutil import run_deadline_remaining
     all_productions = cases + archived_cases + cold_archived_cases + bank_archived_cases
-    watch_budget = act_watch_policy.Budget(data, today,
-        allow_backfill=(fi_parsed >= fi_total and
-                        ap_skip_stats['parsed'] >= ap_skip_stats.get('planned', ap_skip_stats['total']) and
-                        cass_refresh_parsed >= cass_refresh_total and cass_parsed >= cass_planned))
+    release_run_deadline_reserve()
+    watch_budget = act_watch_policy.Budget(data, today)
     reports = {}
+    watch_modules = (act_watch, appeal_act_watch, fi_act_watch)
+    offset = today.toordinal() % len(watch_modules)
+    watch_modules = watch_modules[offset:] + watch_modules[:offset]
     for phase in ('waiting', 'backfill'):
-        for module in (act_watch, appeal_act_watch):
+        if phase == 'backfill':
+            writ_report = writ_watch.refresh(data, all_productions, today, fetch_waiting_act, budget=watch_budget)
+        for module in watch_modules:
             report = module.refresh(data, all_productions, today, fetch_waiting_act,
                 force=not config.SMART_SKIP_CASES, fetch_text=fetch_act_text,
                 budget=watch_budget, phase=phase)
@@ -5734,8 +5857,26 @@ def main_json():
                                     if module.FIELD in reports else report)
     act_watch.persist_archives(data, today)
     appeal_act_watch.persist_archives(data, today)
+    fi_act_watch.persist_archives(data, today)
+    writ_watch.persist_archives(data, today)
+    # Календарные события — после проверки основания, но до сохранения
+    # контекста и добавления новых исков в cases. Исторический приём не
+    # объявляет старую силу; неясное основание не создаёт ложную просрочку.
+    _cal_emitted = collect_bank_calendar_events(cases, fi_changes, today)
+    if _cal_emitted:
+        log.info('Иски банка: календарных событий (сила/просрочка ИЛ) по %s делам', _cal_emitted)
+    # Рутинные события исков банка фильтруются до контекста и доставки.
+    if not config.BANK_DIGEST_ROUTINE:
+        before_bank = len(fi_changes)
+        fi_changes = lifecycle.filter_bank_routine_events(fi_changes)
+        if len(fi_changes) != before_bank:
+            log.info('Иски банка: рутина отфильтрована (BANK_DIGEST_ROUTINE=0): %s → %s записей fi_changes',
+                     before_bank, len(fi_changes))
     act_watch_report = reports[act_watch.FIELD]
     appeal_act_report = reports[appeal_act_watch.FIELD]
+    fi_act_report = reports[fi_act_watch.FIELD]
+    fi_parsed += fi_act_report['read']
+    fi_total += fi_act_report['planned']
     cass_refresh_parsed += act_watch_report['read']
     cass_refresh_total += act_watch_report['planned']
     ap_skip_stats['parsed'] += appeal_act_report['read']
@@ -5836,6 +5977,18 @@ def main_json():
         }
         health_state["act_publication_watch"] = act_watch_report
         health_state["appeal_act_publication_watch"] = appeal_act_report
+        health_state['fi_act_publication_watch'] = fi_act_report
+        health_state['writ_watch'] = writ_report
+        health_state['discovery_queue'] = dq.report(data, today)
+        health_state['parsing_backlog'] = {
+            'date': today.isoformat(), 'region': config.REGION,
+            'cards_unread': max(0, _cards_planned - _cards_read),
+            'fi_without_card': fi_no_card,
+            'candidates_pending': health_state['discovery_queue']['pending'],
+            'acts_unread': sum(r['unread'] for r in (act_watch_report, appeal_act_report, fi_act_report)),
+            'writs_unread': writ_report['unread'],
+            'writs_need_review': writ_report['needs_review'],
+        }
         health_state["last_run"] = {
             "at": datetime.now().isoformat(timespec="seconds"),
             # Строки детектора ЭТОГО прогона — для ретрансляции с VPS/Mac
@@ -5965,7 +6118,7 @@ def main_json():
                 f"банка за прогон (порог {config.BANK_INTAKE_ALERT_ADDED}) — "
                 f"проверить дедуп и выдачу судов"
             )
-        if health_alerts:
+        if health_alerts and not retry_only:
             log.warning(
                 "parse-health: " + "; ".join(health_alerts)
             )
@@ -6072,6 +6225,9 @@ def main_json():
         cass_discovered = list(cass_discovered) + presidium_imported_new
     cass_changes = merge_imported_cassation_changes(data, cass_changes)
     changes = appeal_act_watch.merge_changes(data, changes)
+    fi_changes = fi_act_watch.merge_changes(data, fi_changes)
+    from court_monitor.digest.core import _merge_day_context
+    fi_changes = _merge_day_context({'fi_changes': data.get(writ_watch.PENDING) or []}, {'fi_changes': fi_changes})['fi_changes']
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
@@ -6346,9 +6502,9 @@ def main_json():
     # дельту и закроет день, но отправит ТОЛЬКО свою дельту (рендерит из
     # памяти) — накопленное утро останется в данных дашборда, не в дайджесте.
     # Крон выключен, кейс ручной и редкий — осознанно не усложняем.
-    digest_will_deliver = bool(config.TELEGRAM_BOT_TOKEN)
-    digest_issue_key = save_digest_context(
-        appeal_new_cases_csv, changes, cases=csv_cases,
+    digest_will_deliver = bool(config.TELEGRAM_BOT_TOKEN) and not retry_only
+    context_args = dict(
+        new_cases=appeal_new_cases_csv, changes=changes, cases=csv_cases,
         fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
         fi_changes=fi_changes,
         total_active_appeal=total_active_appeal,
@@ -6357,20 +6513,46 @@ def main_json():
         total_active_bank=total_active_bank,
         cass_changes=cass_changes,
         cass_discovered=cass_discovered,
-        will_deliver=digest_will_deliver,
     )
+    if not retry_only and data.get('pending_retry_context'):
+        context_args = _merge_day_context(data['pending_retry_context'], context_args)
+        context_args['fi_changes'] = fi_act_watch.merge_changes({}, context_args['fi_changes'])
+    # Все потребители выпуска должны видеть ту же накопленную дельту:
+    # персональный push, линтер и привязка анализа к карточкам работают ниже
+    # с этими списками, а не только с аргументами рендера/контекста.
+    appeal_new_cases_csv = context_args['new_cases']
+    changes = context_args['changes']
+    fi_new_cases = context_args['fi_new_cases']
+    stage_transitions = context_args['stage_transitions']
+    fi_changes = context_args['fi_changes']
+    cass_changes = context_args['cass_changes']
+    cass_discovered = context_args['cass_discovered']
+    digest_issue_key = save_digest_context(
+        **context_args, will_deliver=digest_will_deliver,
+        defer_data=data if retry_only else None,
+    )
+    if retry_only:
+        telemetry.complete_run(status='retry_completed',
+            cards_read=fi_parsed + ap_skip_stats['parsed'] + cass_parsed + cass_refresh_parsed,
+            cards_planned=fi_total + ap_skip_stats.get('planned', ap_skip_stats['total']) + cass_planned + cass_refresh_total)
+        log.info('Дочитка завершена: события сохранены для следующего выпуска; доставка не выполнялась')
+        return
+    from court_monitor.digest.core import acknowledge_retry_context
+    acknowledge_retry_context(data, digest_issue_key, context_args)
     acknowledge_imported_cassation_changes(data, cass_changes, digest_issue_key)
     appeal_act_watch.acknowledge(data, changes, digest_issue_key)
+    fi_act_watch.acknowledge(data, context_args['fi_changes'], digest_issue_key)
+    if data.get(writ_watch.PENDING):
+        # Удаление только после подтверждённой записи того же выпуска.
+        context = load_json(config.LAST_DIGEST_CONTEXT_PATH)
+        saved = {json.dumps(ch, sort_keys=True, ensure_ascii=False) for ch in context.get('fi_changes', [])}
+        if context.get('issue_key') != digest_issue_key or not all(
+                json.dumps(ch, sort_keys=True, ensure_ascii=False) in saved for ch in data[writ_watch.PENDING]):
+            raise RuntimeError('события ИЛ не подтверждены контекстом дайджеста')
+        data.pop(writ_watch.PENDING)
+        save_json(data, config.JSON_PATH)
     digest = generate_digest(
-        appeal_new_cases_csv, changes, cases=csv_cases,
-        fi_new_cases=fi_new_cases, stage_transitions=stage_transitions,
-        fi_changes=fi_changes,
-        total_active_appeal=total_active_appeal,
-        total_active_fi=total_active_fi,
-        total_active_cassation=total_active_cassation,
-        total_active_bank=total_active_bank,
-        cass_changes=cass_changes,
-        cass_discovered=cass_discovered,
+        **context_args,
     )
     timings["digest"] = time.perf_counter() - t0
 
