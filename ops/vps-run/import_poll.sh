@@ -33,7 +33,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONF_DIR="$HOME/.config/court-monitor"
 PYTHON="/usr/bin/python3"
-IMPORTER="$HERE/../mac-local-run/import_dumps.sh"
 UA="court-monitor-import-${CM_IMPORT_SOURCE:-vps}/1.0"
 TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT
@@ -94,6 +93,12 @@ while IFS= read -r clone; do
     continue
   fi
   echo "$(date '+%Y-%m-%d %H:%M:%S') $clone: новая отметка $at (была: ${seen:-нет}) — запускаю очередь"
+  IMPORTER="${CM_IMPORTER:-$clone/ops/mac-local-run/import_dumps.sh}"
+  if [ ! -f "$IMPORTER" ]; then
+    echo "$clone: нет программы импорта $IMPORTER — отметка не обработана" >&2
+    rc=1
+    continue
+  fi
   ran_import=1
   bash "$IMPORTER" "$clone" --anywhere || rc=1
   mkdir -p "$(dirname "$seen_file")"

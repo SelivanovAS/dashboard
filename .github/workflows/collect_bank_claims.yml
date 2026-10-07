@@ -36,16 +36,7 @@ on:
         type: boolean
         required: false
         default: false
-  # push-триггер: (1) регистрирует workflow в GitHub — dispatch-API отдаёт
-  # 404 для workflow, которых нет в дефолтной ветке и которые ни разу не
-  # срабатывали; (2) даёт свежий dry-run-отчёт после каждой правки сборщика.
-  # Запуск по push ВСЕГДА идёт в dry-run (см. шаг сбора) — боевая запись
-  # только руками через Run workflow.
-  push:
-    paths:
-      - "scripts/collect_bank_claims.py"
-      - ".github/workflows/collect_bank_claims.yml"
-
+  # Общий выпуск программы не запускает сбор; только явный ручной dispatch.
 permissions:
   contents: write
 

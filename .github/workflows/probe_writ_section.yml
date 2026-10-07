@@ -16,11 +16,6 @@ on:
         description: "Сколько карточек проверить"
         required: false
         default: "8"
-  push:
-    paths:
-      - "scripts/probe_writ_sections.py"
-      - ".github/workflows/probe_writ_section.yml"
-
 permissions:
   contents: write
 
