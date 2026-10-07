@@ -51,10 +51,12 @@ VPS — основной исполнитель парсинга и операт
 и интервал между их стартами не меняются. Занятый импортом клон пропустит
 свою попытку парсинга, но общий утренний сервис не ждёт окончания импортов.
 
-**Подготовлено к выпуску 07.10.2026: дневная дочитка без доставки.**
+**Выпуск 07.10.2026: дневная дочитка без доставки.**
 Отдельные `court-retry.service` / `court-retry.timer` задают два слота по будням:
 12:00 и 16:00 `Asia/Yekaterinburg`. Они вызывают общий драйвер с
-`--retry-only`; установленное расписание этим файлом не подтверждается.
+`--retry-only`. Установка и эффективное расписание проверены 07.10.2026;
+[отчёт выпуска](../../docs/Выпуск_парсинга_2026-10-07.md) отделяет их от
+ещё не подтверждённого первого штатного прогона.
 Это начало общего слота, задержки территорий задаются самой retry-службой:
 Урал — 0, ХМАО — 5, Башкортостан и Тюмень — 10 минут.
 Каждому региону даётся бюджет Python 600 секунд. Повтор обслуживает только
@@ -155,8 +157,9 @@ Secrets `OPENROUTER_API_KEY`, `GIGACHAT_AUTH_KEY`, `ANTHROPIC_API_KEY` кажд�
 2. `apt install -y python3-requests jq`; `vps_env.sh` проверяет `requests`
    у `/usr/bin/python3`. Если выбран `CM_PYTHON`, зависимости должны быть и
    в этом интерпретаторе. `net-tools` для обхода через shim не требуется.
-3. Клоны: `/opt/court-monitor/dashboard`, `/opt/court-monitor/dashboard-ural`
-   и `/opt/court-monitor/dashboard-bashkortostan`. У каждого свои данные,
+3. Клоны: `/opt/court-monitor/dashboard`, `/opt/court-monitor/dashboard-ural`,
+   `/opt/court-monitor/dashboard-bashkortostan` и `/opt/court-monitor/dashboard-tyumen`.
+   У каждого свои данные,
    регион и remote. Для форков настроить `git config merge.ours.driver true`,
    затем проверять результат каждого merge, включая новые файлы. Одного
    merge-driver недостаточно для региональной изоляции.
@@ -179,7 +182,7 @@ Secrets `OPENROUTER_API_KEY`, `GIGACHAT_AUTH_KEY`, `ANTHROPIC_API_KEY` кажд�
 5. `~/.config/court-monitor/`: `territories` с путями участвующих клонов
    (например, Урал → ХМАО → Башкортостан), `env.<регион>`, `telegram`,
    `worker.<регион>` и `progress_token.<регион>` с правами `0600` для секретов.
-   Коды регионов: `hmao`, `sverdlovsk_yanao`, `bashkortostan`. Общий
+   Коды регионов: `hmao`, `sverdlovsk_yanao`, `bashkortostan`, `tyumen`. Общий
    `progress_token` совместим только с ХМАО/Уралом; Башкортостану нужен свой.
    Токены доставки в `env.*` не класть: Python не должен отправлять второй
    дайджест или Web Push. `worker.*` читается как данные, а не через `source`.
