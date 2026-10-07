@@ -508,3 +508,208 @@ def test_repeated_publish_after_new_data_retries_original_code_commit(world, mon
     release_diff = git(bare, 'diff-tree', '--no-commit-id', '--name-only', '-r', second['commit']).splitlines()
     assert release.LOCK in release_diff
     assert not any(name.startswith('data/') for name in release_diff)
+
+
+def mock_site_reader(world, expected, *, stale_stamp=False, wrong_asset=False):
+    def read(url):
+        path = release.urlparse(url).path
+        if path.endswith('/' + release.LOCK):
+            stamp = dict(expected)
+            if stale_stamp:
+                stamp['source_commit'] = 'f' * 40
+                stamp['release_id'] = release.release_id(stamp)
+            return release.canonical(stamp)
+        name = path.rsplit('/', 1)[-1]
+        if wrong_asset:
+            return b'old cached asset'
+        return (world['package'] / 'files' / name).read_bytes()
+    return read
+
+
+def vps_report(expected, **changes):
+    return {'verified': True, 'head': 'a' * 40, 'branch': 'main', 'region': expected['region'],
+            'effective_region': expected['region'], 'source_commit': expected['source_commit'],
+            'release_id': expected['release_id'], 'files_verified': len(expected['files']), **changes}
+
+
+def test_online_github_accepts_later_data_without_touching_local_refs(world, monkeypatch):
+    install_prepared(world)
+    bare, remote, pushes = local_remote(world, monkeypatch)
+    writer = world['tmp'] / 'online-data-writer'
+    git(world['tmp'], 'clone', str(bare), str(writer))
+    write(writer, 'data/cases.json', '{"case":"online newer"}\n')
+    data_head = commit(writer, 'normal data')
+    git(writer, 'push', 'origin', 'main')
+    refs_before = git(world['target'], 'show-ref')
+    head_before = git(world['target'], 'rev-parse', 'HEAD')
+    result = release.verify_release(world['target'], 'hmao', remote=remote)
+    assert result['requested_checks_passed'] is True
+    assert result['online_verified'] is False  # Pages/VPS were not requested.
+    assert result['boundaries']['github']['commit'] == data_head
+    assert result['boundaries']['github']['source_commit'] == world['sha']
+    assert git(world['target'], 'show-ref') == refs_before
+    assert git(world['target'], 'rev-parse', 'HEAD') == head_before
+    assert pushes == []
+    assert git(bare, 'show', 'main:data/cases.json') == '{"case":"online newer"}'
+
+
+def test_pages_checks_stamp_and_actual_browser_assets(world, monkeypatch):
+    expected = release.lock_from_package(release.load_package(world['package']))
+    reader = mock_site_reader(world, expected)
+    checked = []
+    def read(url):
+        checked.append(url)
+        return reader(url)
+    monkeypatch.setattr(release, 'read_public_bytes', read)
+    result = release.verify_site(expected, expected['site_url'])
+    assert result['verified'] is True and result['files_verified'] == ['app.js']
+    assert len(checked) == 2
+    assert any(release.LOCK in url for url in checked)
+    assert all('data/' not in url and 'cloudflare-worker' not in url for url in checked)
+
+
+@pytest.mark.parametrize('stale_stamp,wrong_asset', [(True, False), (False, True)])
+def test_pages_stale_stamp_or_asset_fails(world, monkeypatch, stale_stamp, wrong_asset):
+    expected = release.lock_from_package(release.load_package(world['package']))
+    monkeypatch.setattr(release, 'read_public_bytes', mock_site_reader(world, expected,
+                       stale_stamp=stale_stamp, wrong_asset=wrong_asset))
+    with pytest.raises(release.ReleaseError):
+        release.verify_site(expected, expected['site_url'])
+
+
+def test_site_url_normalization_and_territory_mismatch(world, monkeypatch):
+    assert release.site_base('https://site.invalid/region/sberbank_dashboard.html') == 'https://site.invalid/region/'
+    assert release.site_base('https://site.invalid/region') == 'https://site.invalid/region/'
+    expected = release.lock_from_package(release.load_package(world['package']))
+    monkeypatch.setattr(release, 'read_public_bytes', lambda _: pytest.fail('Must reject before HTTP'))
+    with pytest.raises(release.ReleaseError, match='территории'):
+        release.verify_site(expected, 'https://other.invalid/')
+    with pytest.raises(release.ReleaseError, match='HTTPS'):
+        release.site_base('http://site.invalid/')
+
+
+def test_online_reports_all_requested_boundaries_even_when_one_fails(world, monkeypatch):
+    install_prepared(world)
+    expected = release.lock_from_package(release.load_package(world['package']))
+    calls = []
+    def github(*args):
+        calls.append('github')
+        raise release.ReleaseError('GitHub version differs')
+    def site(*args):
+        calls.append('pages')
+        return {'verified': True}
+    def vps(*args):
+        calls.append('vps')
+        return vps_report(expected)
+    monkeypatch.setattr(release, 'verify_github', github)
+    monkeypatch.setattr(release, 'verify_site', site)
+    monkeypatch.setattr(release, 'verify_vps', vps)
+    result = release.verify_release(world['target'], remote='git@github.com:SelivanovAS/dashboard.git',
+                                   site_url=expected['site_url'], vps_host='host', ssh_key='identity')
+    assert calls == ['github', 'pages', 'vps']
+    assert result['status'] == 'verification_failed'
+    assert result['online_verified'] is False
+    assert result['boundaries']['local']['verified'] is True
+    assert result['boundaries']['github']['verified'] is False
+    assert result['boundaries']['pages']['verified'] is True
+    assert result['boundaries']['vps']['verified'] is True
+
+
+def test_online_flag_true_only_after_all_three_checks_and_local_pass(world, monkeypatch):
+    install_prepared(world)
+    expected = release.lock_from_package(release.load_package(world['package']))
+    monkeypatch.setattr(release, 'verify_github', lambda *a: {'verified': True})
+    monkeypatch.setattr(release, 'verify_site', lambda *a: {'verified': True})
+    monkeypatch.setattr(release, 'verify_vps', lambda *a: vps_report(expected))
+    kwargs = dict(remote='git@github.com:SelivanovAS/dashboard.git', site_url=expected['site_url'],
+                  vps_host='host', ssh_key='identity')
+    result = release.verify_release(world['target'], **kwargs)
+    assert result['status'] == 'verified_requested_boundaries' and result['online_verified'] is True
+    git(world['target'], 'update-index', '--assume-unchanged', 'app.js')
+    write(world['target'], 'app.js', 'hidden local defect\n')
+    bad = release.verify_release(world['target'], **kwargs)
+    assert bad['online_verified'] is False
+    assert bad['boundaries']['local']['verified'] is False
+    assert bad['boundaries']['vps']['verified'] is True
+
+
+def test_vps_uses_read_only_ssh_script_and_validates_reply(world, monkeypatch):
+    expected = release.lock_from_package(release.load_package(world['package']))
+    commands = []
+    def run(args, **kwargs):
+        commands.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, json.dumps(vps_report(expected)), '')
+    monkeypatch.setattr(release.subprocess, 'run', run)
+    result = release.verify_vps(expected, 'operator@server.invalid', '/private/key')
+    assert result['verified'] is True
+    args, kwargs = commands[0]
+    assert args[0] == 'ssh' and args[-1] == 'python3 -B -'
+    assert 'IdentitiesOnly=yes' in args and 'BatchMode=yes' in args
+    script = kwargs['input']
+    assert 'systemctl' not in script and "'fetch'" not in script and "'merge'" not in script
+    assert '.run.lock' not in script and 'data/cases.json' not in script
+    assert 'hashlib.sha256(path.read_bytes())' in script
+    monkeypatch.setattr(release.subprocess, 'run', lambda args, **kw: subprocess.CompletedProcess(
+        args, 0, json.dumps(vps_report(expected, source_commit='f' * 40)), ''))
+    with pytest.raises(release.ReleaseError, match='другую версию'):
+        release.verify_vps(expected, 'operator@server.invalid', '/private/key')
+
+
+def test_vps_read_only_script_checks_actual_bytes_with_hidden_index_changes(world):
+    install_prepared(world)
+    target = world['target']
+    config = 'scripts/court_monitor/config.py'
+    write(target, config, "from pathlib import Path\nREGION=Path('REGION').read_text().strip()\n")
+    expected = release.lock_from_package(release.load_package(world['package']))
+    expected['files'][config] = record((target / config).read_text())
+    expected['release_id'] = release.release_id(expected)
+    write(target, release.LOCK, release.canonical(expected))
+    commit(target, 'VPS fixture config')
+    root = world['tmp'] / 'vps-root'
+    root.mkdir()
+    vps = root / 'dashboard'
+    git(root, 'clone', str(target), str(vps))
+    code = release.VPS_VERIFY_CODE.replace("Path('/opt/court-monitor')", f'Path({str(root)!r})')
+    script = 'import json\nexpected=json.loads(' + repr(release.canonical(expected).decode()) + ')\n' + code
+    def check():
+        return subprocess.run([os.sys.executable, '-B', '-'], input=script, capture_output=True, text=True)
+    before = git(vps, 'rev-parse', 'HEAD')
+    result = check()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout)['verified'] is True
+    git(vps, 'update-index', '--assume-unchanged', 'app.js')
+    write(vps, 'app.js', 'hidden VPS modification')
+    assert git(vps, 'status', '--porcelain') == ''
+    failed = check()
+    assert failed.returncode == 1
+    assert json.loads(failed.stdout)['verified'] is False
+    assert git(vps, 'rev-parse', 'HEAD') == before
+    assert (vps / 'data/cases.json').read_text() == '{"case":"live"}\n'
+
+
+def test_verify_cli_returns_failure_for_requested_online_mismatch(world, monkeypatch, capsys):
+    install_prepared(world)
+    def fail(*args):
+        raise release.ReleaseError('Old Pages asset')
+    monkeypatch.setattr(release, 'verify_site', fail)
+    code = release.main(['verify', '--repo', str(world['target']), '--site-url', 'https://example.invalid'])
+    assert code == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output['status'] == 'verification_failed'
+    assert output['boundaries']['local']['verified'] is True
+    assert output['boundaries']['pages']['verified'] is False
+
+
+def test_pages_verifies_html_js_css_region_manifest_and_service_worker(world, monkeypatch):
+    expected = release.lock_from_package(release.load_package(world['package']))
+    assets = {name: (name + '\n').encode() for name in (
+        'sberbank_dashboard.html', 'app.js', 'styles.css', 'region_front.js', 'manifest.json', 'service-worker.js')}
+    for name, content in assets.items():
+        expected['files'][name] = {'sha256': release.digest(content), 'mode': '100644'}
+    expected['release_id'] = release.release_id(expected)
+    def read(url):
+        name = release.urlparse(url).path.rsplit('/', 1)[-1]
+        return release.canonical(expected) if name == release.LOCK else assets[name]
+    monkeypatch.setattr(release, 'read_public_bytes', read)
+    result = release.verify_site(expected, expected['site_url'])
+    assert set(result['files_verified']) == set(assets)

@@ -9,17 +9,20 @@ VPS устанавливается отдельным helper при --vps-host; 
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import shlex
 import stat
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
+from urllib.request import Request, urlopen
 
 SCHEMA = 1
 LOCK = ".program-release.json"
@@ -645,7 +648,167 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
         raise ReleaseError("Данные изменились во всех трёх попытках публикации; повторите позднее")
 
 
-def verify_release(repo, region=None, package_dir=None):
+def verify_git_snapshot(repo, commit, expected):
+    if read_installed(repo, commit, expected["region"]) != expected:
+        raise ReleaseError("Опубликована другая версия программы")
+    actual = read_git_files(repo, commit, expected["files"])
+    if {name: record_of(actual.get(name)) for name in expected["files"]} != expected["files"]:
+        raise ReleaseError("Git-файлы не соответствуют опубликованной описи")
+    return {"verified": True, "commit": commit, "source_commit": expected["source_commit"],
+            "release_id": expected["release_id"], "files_verified": len(expected["files"])}
+
+
+def verify_github(repo, expected, remote):
+    if repository_name(remote, require_ssh=True) != repository_name(expected["repository"]):
+        raise ReleaseError("SSH URL не соответствует территории выпуска")
+    # Fetch belongs to a disposable clone; caller's HEAD/index/refs stay intact.
+    with tempfile.TemporaryDirectory(prefix="court-program-verify-github-") as tmp:
+        clone = Path(tmp) / "repo"
+        git(repo, "clone", "--no-local", "--no-checkout", str(repo), str(clone))
+        git(clone, "fetch", "--no-tags", remote, "refs/heads/main")
+        head = git_text(clone, "rev-parse", "FETCH_HEAD")
+        return verify_git_snapshot(clone, head, expected)
+
+
+def site_base(url):
+    if not isinstance(url, str):
+        raise ReleaseError("Не задан адрес сайта территории")
+    parsed = urlparse(url)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+            or parsed.query or parsed.fragment or any(c.isspace() for c in url)):
+        raise ReleaseError("Нужен обычный HTTPS адрес сайта без параметров")
+    path = parsed.path
+    if path.endswith((".html", ".htm")):
+        path = path.rsplit("/", 1)[0] + "/"
+    elif not path.endswith("/"):
+        path += "/"
+    return parsed._replace(path=path).geturl()
+
+
+def read_public_bytes(url):
+    request = Request(url, headers={"User-Agent": "CourtMonitor-Release-Verify/1", "Cache-Control": "no-cache",
+                                    "Accept-Encoding": "identity"})
+    with urlopen(request, timeout=20) as response:
+        content = response.read(20 * 1024 * 1024 + 1)
+    if len(content) > 20 * 1024 * 1024:
+        raise ReleaseError("Публикуемый файл неожиданно превышает 20 МиБ")
+    return content
+
+
+def verify_site(expected, url):
+    base = site_base(url)
+    if base != site_base(expected.get("site_url")):
+        raise ReleaseError("Адрес сайта не соответствует территории выпуска")
+    suffix = "?program_release=" + expected["release_id"]
+    published = read_json(read_public_bytes(urljoin(base, LOCK) + suffix), "опись сайта")
+    validate_lock(published, expected["region"])
+    if published != expected:
+        raise ReleaseError("Сайт ещё не опубликовал выбранную версию программы")
+    # All browser code/styles at the root, not Worker server source or data.
+    assets = sorted(name for name in expected["files"] if "/" not in name and
+                    (PurePosixPath(name).suffix in {".html", ".htm", ".js", ".css", ".webmanifest"}
+                     or name == "manifest.json"))
+    if not assets:
+        raise ReleaseError("В выпуске не найдены проверяемые файлы сайта")
+    def check(name):
+        content = read_public_bytes(urljoin(base, name) + suffix)
+        if digest(content) != expected["files"][name]["sha256"]:
+            raise ReleaseError(f"Сайт отдаёт другой файл: {name}")
+        return name
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        verified = list(pool.map(check, assets))
+    return {"verified": True, "site_url": base, "source_commit": expected["source_commit"],
+            "release_id": expected["release_id"], "files_verified": verified}
+
+
+# This script reads only Git metadata, the release stamp, managed source bytes,
+# and the effective region. It never fetches, installs, locks, or runs services.
+VPS_VERIFY_CODE = r"""
+import hashlib, json, os, subprocess, sys
+from pathlib import Path
+
+def command(args, **kwargs):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=30, **kwargs)
+    if result.returncode:
+        raise RuntimeError('Не выполнена read-only проверка: ' + args[0])
+    return result.stdout.strip()
+
+def verify():
+    names = {'hmao': 'dashboard', 'sverdlovsk_yanao': 'dashboard-ural',
+             'bashkortostan': 'dashboard-bashkortostan', 'tyumen': 'dashboard-tyumen'}
+    repo = Path('/opt/court-monitor') / names[expected['region']]
+    branch = command(['git', '-C', str(repo), 'branch', '--show-current'])
+    if branch != 'main':
+        raise RuntimeError('VPS находится не в рабочей ветке main')
+    head = command(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
+    stamp = repo / '.program-release.json'
+    if stamp.is_symlink() or not stamp.is_file() or json.loads(stamp.read_text()) != expected:
+        raise RuntimeError('На VPS другая или повреждённая опись выпуска')
+    committed = json.loads(command(['git', '-C', str(repo), 'show', 'HEAD:.program-release.json']))
+    if committed != expected:
+        raise RuntimeError('В HEAD VPS другая опись выпуска')
+    for name, record in expected['files'].items():
+        path = repo
+        for part in Path(name).parts:
+            path = path / part
+            if path.is_symlink():
+                raise RuntimeError('Символическая ссылка в программе: ' + name)
+        if not path.is_file():
+            raise RuntimeError('Отсутствует файл программы: ' + name)
+        mode = '100755' if path.stat().st_mode & 0o100 else '100644'
+        if hashlib.sha256(path.read_bytes()).hexdigest() != record['sha256'] or mode != record['mode']:
+            raise RuntimeError('Файл VPS не соответствует выпуску: ' + name)
+    region_file = repo / 'REGION'
+    if region_file.is_file():
+        if region_file.read_text().strip() != expected['region']:
+            raise RuntimeError('Другой REGION на VPS')
+    elif not (expected.get('kind') == 'baseline' and expected['region'] == 'hmao'):
+        raise RuntimeError('На VPS отсутствует REGION')
+    code = "import sys;sys.path.insert(0,'scripts');from court_monitor import config;print(config.REGION)"
+    effective = command([sys.executable, '-I', '-B', '-c', code], cwd=repo,
+                        env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+    if effective != expected['region']:
+        raise RuntimeError('Не совпадает эффективный регион VPS')
+    if command(['git', '-C', str(repo), 'rev-parse', 'HEAD']) != head:
+        raise RuntimeError('HEAD VPS изменился во время проверки; повторите проверку')
+    return {'verified': True, 'head': head, 'branch': branch, 'region': expected['region'],
+            'source_commit': expected['source_commit'], 'release_id': expected['release_id'],
+            'files_verified': len(expected['files']), 'effective_region': effective}
+try:
+    print(json.dumps(verify(), ensure_ascii=False))
+except Exception as exc:
+    print(json.dumps({'verified': False, 'error': str(exc)}, ensure_ascii=False))
+    raise SystemExit(1)
+"""
+
+
+def verify_vps(expected, host, identity):
+    if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9_.@:\[\]-]+", host) or host.startswith("-"):
+        raise ReleaseError("Некорректный SSH host")
+    if not identity:
+        raise ReleaseError("Для проверки VPS нужен --ssh-key")
+    script = "import json\nexpected = json.loads(" + repr(canonical(expected).decode()) + ")\n" + VPS_VERIFY_CODE
+    args = ["ssh", "-i", str(identity), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=15", host, shlex.join(["python3", "-B", "-"])]
+    try:
+        cp = subprocess.run(args, input=script, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=60)
+    except subprocess.TimeoutExpired as exc:
+        raise ReleaseError("Время read-only проверки VPS истекло") from exc
+    report = read_json(cp.stdout, "результат проверки VPS")
+    if cp.returncode or report.get("verified") is not True:
+        raise ReleaseError("VPS: " + str(report.get("error", "проверка не подтверждена")))
+    for name in ("region", "source_commit", "release_id"):
+        if report.get(name) != expected[name]:
+            raise ReleaseError("VPS подтвердил другую версию или территорию")
+    if (report.get("branch") != "main" or report.get("effective_region") != expected["region"]
+            or report.get("files_verified") != len(expected["files"])
+            or not isinstance(report.get("head"), str) or not COMMIT.fullmatch(report["head"])):
+        raise ReleaseError("VPS вернул неполную проверку")
+    return report
+
+
+def verify_release(repo, region=None, package_dir=None, *, remote=None, site_url=None, vps_host=None, ssh_key=None):
     repo = Path(repo).resolve()
     commit = git_text(repo, "rev-parse", "HEAD")
     items = read_git_files(repo, commit, [LOCK])
@@ -653,15 +816,36 @@ def verify_release(repo, region=None, package_dir=None):
         raise ReleaseError("В checkout нет установленного выпуска")
     installed = read_json(items[LOCK]["content"], LOCK)
     validate_lock(installed, region)
-    check_worktree(repo, installed["files"])
-    actual = read_git_files(repo, commit, installed["files"])
-    if {name: record_of(actual.get(name)) for name in installed["files"]} != installed["files"]:
-        raise ReleaseError("Установленные файлы отличаются от описи выпуска")
     if package_dir is not None and lock_from_package(load_package(package_dir)) != installed:
         raise ReleaseError("Установлен другой пакет")
-    return {"status": "verified_checkout", "region": installed["region"], "commit": commit,
-            "source_commit": installed["source_commit"], "release_id": installed["release_id"],
-            "files_verified": len(installed["files"]), "online_verified": False}
+    def local():
+        check_worktree(repo, installed["files"])
+        return verify_git_snapshot(repo, commit, installed)
+    online_requested = any((remote, site_url, vps_host))
+    if not online_requested:
+        local()
+        return {"status": "verified_checkout", "region": installed["region"], "commit": commit,
+                "source_commit": installed["source_commit"], "release_id": installed["release_id"],
+                "files_verified": len(installed["files"]), "online_verified": False}
+    boundaries = {}
+    def boundary(name, check):
+        try:
+            boundaries[name] = check()
+        except (ReleaseError, OSError, ValueError) as exc:
+            boundaries[name] = {"verified": False, "error": str(exc)}
+    boundary("local", local)
+    if remote:
+        boundary("github", lambda: verify_github(repo, installed, remote))
+    if site_url:
+        boundary("pages", lambda: verify_site(installed, site_url))
+    if vps_host:
+        boundary("vps", lambda: verify_vps(installed, vps_host, ssh_key))
+    passed = all(report.get("verified") is True for report in boundaries.values())
+    return {"status": "verified_requested_boundaries" if passed else "verification_failed",
+            "region": installed["region"], "source_commit": installed["source_commit"],
+            "release_id": installed["release_id"], "requested_checks_passed": passed,
+            "online_verified": passed and all(name in boundaries for name in ("github", "pages", "vps")),
+            "boundaries": boundaries}
 
 
 def main(argv=None):
@@ -678,6 +862,11 @@ def main(argv=None):
         cmd.add_argument("--repo", required=True, type=Path)
         cmd.add_argument("--region", choices=REGIONS, required=name != "verify")
         cmd.add_argument("--package", required=name != "verify", type=Path)
+        if name == "verify":
+            cmd.add_argument("--remote", help="Read-only проверка main GitHub через SSH")
+            cmd.add_argument("--site-url", help="HTTPS адрес сайта/страницы для проверки опубликованных файлов")
+            cmd.add_argument("--vps-host", help="Read-only проверка установленной программы VPS")
+            cmd.add_argument("--ssh-key", type=Path, help="SSH identity для read-only проверки VPS")
         if name in {"promote", "rollback"}:
             cmd.add_argument("--push", action="store_true")
             cmd.add_argument("--remote", help="Явный SSH URL соответствующего репозитория")
@@ -691,12 +880,15 @@ def main(argv=None):
         elif args.command == "plan":
             result = plan_release(args.package, args.repo, args.region)
         elif args.command == "verify":
-            result = verify_release(args.repo, args.region, args.package)
+            result = verify_release(args.repo, args.region, args.package, remote=args.remote,
+                                    site_url=args.site_url, vps_host=args.vps_host, ssh_key=args.ssh_key)
         else:
             result = promote_release(args.package, args.repo, args.region, push=args.push,
                                      remote=args.remote, vps_host=args.vps_host, ssh_key=args.ssh_key,
                                      rollback=args.command == "rollback")
         print(canonical(result).decode(), end="")
+        if isinstance(result, dict) and result.get("status") == "verification_failed":
+            return 1
         return 2 if isinstance(result, dict) and result.get("install_error") else 0
     except (ReleaseError, OSError) as exc:
         print(canonical({"status": "blocked", "error": str(exc)}).decode(), end="", file=sys.stderr)

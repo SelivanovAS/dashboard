@@ -60,6 +60,10 @@
       "mode": "100644",
       "sha256": "78a9e948d86681589f9eb9bdf14c9dc9c526845eabea6a81049dc0cc20903984"
     },
+    "README.md": {
+      "mode": "100644",
+      "sha256": "fc249d4df2d00e67257cfd85d01e238b586769e38fa033015103ae1d2e07989c"
+    },
     "REGION": {
       "mode": "100644",
       "sha256": "50784bb3a5788673aa15b41f6d40f0e4dd15b131781f6905d911d585c9a5748b"
