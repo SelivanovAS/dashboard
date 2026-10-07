@@ -615,7 +615,14 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
                 install_vps(result, package, None, None)
                 return result
             if target == base:
-                result = {**plan, "commit": target, "published": True, "checkout_unchanged": True,
+                # main may already contain newer parser data after publication.
+                # Give the installer the code-only introduction commit; it will
+                # independently verify ancestry/same lock and install latest data.
+                introduced = git_text(clone, "log", "-1", "--format=%H", base, "--", LOCK)
+                if not introduced:
+                    raise ReleaseError("Не найден коммит публикации установленного выпуска")
+                result = {**plan, "commit": introduced, "remote_commit": base,
+                          "published": True, "checkout_unchanged": True,
                           "operation": "rollback" if rollback else "promote"}
                 install_vps(result, package, vps_host, ssh_key)
                 return result

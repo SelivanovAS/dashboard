@@ -482,3 +482,29 @@ def test_newly_protected_former_managed_file_is_never_deleted(world, installed):
         release.promote_release(out / "hmao", target, "hmao")
     assert git(target, "rev-parse", "HEAD") == initial_head
     assert (target / "app.js").read_bytes() == initial_contents
+
+
+def test_repeated_publish_after_new_data_retries_original_code_commit(world, monkeypatch):
+    bare, remote, pushes = local_remote(world, monkeypatch)
+    installs = []
+    def install(result, package, host, identity):
+        installs.append(result['commit'])
+        result.update(status='published_not_installed', install_pending=True)
+    monkeypatch.setattr(release, 'install_vps', install)
+    first = release.promote_release(world['package'], world['target'], 'hmao', push=True,
+                                    remote=remote, vps_host='host')
+    writer = world['tmp'] / 'normal-data-writer'
+    git(world['tmp'], 'clone', str(bare), str(writer))
+    write(writer, 'data/cases.json', '{"case":"after published release"}\n')
+    data_commit = commit(writer, 'normal data after code publish')
+    git(writer, 'push', 'origin', 'main')
+    second = release.promote_release(world['package'], world['target'], 'hmao', push=True,
+                                     remote=remote, vps_host='host')
+    assert second['unchanged'] is True and len(pushes) == 1
+    assert second['commit'] == first['commit'] != data_commit
+    assert second['remote_commit'] == data_commit
+    assert installs == [first['commit'], first['commit']]
+    assert git(bare, 'show', 'main:data/cases.json') == '{"case":"after published release"}'
+    release_diff = git(bare, 'diff-tree', '--no-commit-id', '--name-only', '-r', second['commit']).splitlines()
+    assert release.LOCK in release_diff
+    assert not any(name.startswith('data/') for name in release_diff)
