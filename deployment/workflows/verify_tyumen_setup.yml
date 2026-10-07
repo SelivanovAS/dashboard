@@ -1,0 +1,149 @@
+name: "Тюмень — проверка подключения без доставки"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REGION: tyumen
+      CONFIGURED_REGION: ${{ vars.REGION }}
+      DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+      PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
+      PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+    steps:
+      - name: "Проверить конфигурацию и доступ без отправки сообщений"
+        shell: bash
+        run: |
+          python3 -I -B - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          # No checkout, file writes, model calls, messages, or push delivery.
+          # Never print environment values, response bodies, URLs, or exceptions.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+
+          def report(name, ok, status=""):
+              print(f"{name}: {'OK' if ok else 'FAIL'}{status}", flush=True)
+              return ok
+
+          def check_get(name, url, headers=None, validate=None):
+              try:
+                  request = urllib.request.Request(
+                      url,
+                      headers={
+                          "User-Agent": "court-monitor-setup-check/1.0",
+                          "Accept": "application/json",
+                          **(headers or {}),
+                      },
+                      method="GET",
+                  )
+                  with opener.open(request, timeout=20) as response:
+                      if response.status != 200:
+                          return report(name, False, f" HTTP {response.status}")
+                      if validate is not None:
+                          body = response.read(1_048_577)
+                          if len(body) > 1_048_576:
+                              return report(name, False)
+                          if not validate(json.loads(body)):
+                              return report(name, False)
+                  return report(name, True, " HTTP 200")
+              except urllib.error.HTTPError as error:
+                  status = error.code
+                  error.close()
+                  return report(name, False, f" HTTP {status}")
+              except Exception:
+                  # HTTP exceptions can contain the Telegram token in their URL.
+                  return report(name, False)
+
+          def main():
+              required = (
+                  "OPENROUTER_API_KEY", "TELEGRAM_BOT_TOKEN",
+                  "TELEGRAM_CHAT_ID_TEST", "PUSH_WORKER_URL",
+                  "PUSH_SECRET", "VAPID_PRIVATE_KEY",
+              )
+              presence = [
+                  report(name, bool(os.environ.get(name, "").strip()))
+                  for name in required
+              ]
+              if not all(presence):
+                  return 1
+
+              worker_url = os.environ["PUSH_WORKER_URL"].rstrip("/")
+              chat_id = os.environ["TELEGRAM_CHAT_ID_TEST"]
+              bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
+              configuration = [
+                  report("REPOSITORY", os.environ.get("GITHUB_REPOSITORY") == "SelivanovAS/dashboard-tyumen"),
+                  report("REGION", os.environ.get("REGION") == os.environ.get("CONFIGURED_REGION") == "tyumen"),
+                  report("DASHBOARD_URL", os.environ.get("DASHBOARD_URL") == "https://selivanovas.github.io/dashboard-tyumen/sberbank_dashboard.html"),
+                  report("WORKER_URL", worker_url == "https://api-tyumen.delosud.ru"),
+                  report("LLM_PROVIDER", os.environ.get("LLM_PROVIDER") == "openrouter"),
+                  report("TELEGRAM_PRIVATE_ID", re.fullmatch(r"[1-9][0-9]*", chat_id) is not None),
+                  report("TELEGRAM_TOKEN_FORMAT", re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", bot_token) is not None),
+              ]
+              if not all(configuration):
+                  return 1
+
+              def bot_ok(document):
+                  result = document.get("result") if isinstance(document, dict) else None
+                  return (
+                      isinstance(result, dict) and document.get("ok") is True
+                      and result.get("is_bot") is True
+                      and result.get("id") == int(bot_token.split(":", 1)[0])
+                  )
+
+              def chat_ok(document):
+                  result = document.get("result") if isinstance(document, dict) else None
+                  return (
+                      isinstance(result, dict) and document.get("ok") is True
+                      and result.get("type") == "private"
+                      and result.get("id") == int(chat_id)
+                  )
+
+              telegram_url = "https://api.telegram.org/bot" + urllib.parse.quote(bot_token, safe=":")
+              checks = [
+                  check_get("TELEGRAM_GET_ME", telegram_url + "/getMe", validate=bot_ok),
+                  check_get(
+                      "TELEGRAM_GET_CHAT",
+                      telegram_url + "/getChat?" + urllib.parse.urlencode({"chat_id": chat_id}),
+                      validate=chat_ok,
+                  ),
+                  # Official read-only endpoint; no model or billing request:
+                  # https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key
+                  check_get(
+                      "OPENROUTER_KEY_AUTH", "https://openrouter.ai/api/v1/key",
+                      {"Authorization": "Bearer " + os.environ["OPENROUTER_API_KEY"]},
+                      lambda document: isinstance(document, dict) and isinstance(document.get("data"), dict),
+                  ),
+                  check_get(
+                      "WORKER_IMPORT_PENDING", worker_url + "/import-pending",
+                      {"Authorization": "Bearer " + os.environ["PUSH_SECRET"]},
+                  ),
+              ]
+              return 0 if report("SETUP_CHECK", all(checks)) else 1
+
+          try:
+              exit_code = main()
+          except Exception:
+              report("SETUP_CHECK", False)
+              exit_code = 1
+          raise SystemExit(exit_code)
+          PY

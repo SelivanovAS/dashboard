@@ -1,0 +1,61 @@
+{
+  "name": "СберСуд (Урал)",
+  "short_name": "СберСуд Урал",
+  "description": "Мониторинг гражданских дел Сбербанка: Свердловская область и ЯНАО",
+  "start_url": "./sberbank_dashboard.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#21a038",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": [
+    "productivity",
+    "business"
+  ],
+  "shortcuts": [
+    {
+      "name": "Новые дела",
+      "url": "./sberbank_dashboard.html?filter=new",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "★ Мои дела",
+      "url": "./sberbank_dashboard.html?mine=1",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

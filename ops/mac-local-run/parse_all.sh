@@ -36,8 +36,6 @@ if [ -x /usr/bin/caffeinate ]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKER="${CM_WORKER:-$HERE/parse_and_push.sh}"
-IMPORTER="${CM_IMPORTER:-$HERE/import_dumps.sh}"
 PYTHON="${CM_PYTHON:-/usr/bin/python3}"
 . "$HERE/lib_sber_net.sh"
 
@@ -174,8 +172,10 @@ order_parser_repos() {
 region_for_repo() { (cd "$1" && cm_region_code "$PYTHON"); }
 
 run_worker() {
-  local repo="$1"
+  local repo="$1" WORKER
   shift
+  # Версию программы выбирает целевой клон; CM_WORKER — явный override.
+  WORKER="${CM_WORKER:-$repo/ops/mac-local-run/parse_and_push.sh}"
   if [ "$routes_ready" = "1" ]; then
     CM_COURT_ROUTES_READY=1 bash "$WORKER" "$repo" "$@"
   else
@@ -184,8 +184,9 @@ run_worker() {
 }
 
 run_importer() {
-  local repo="$1"
+  local repo="$1" IMPORTER
   shift
+  IMPORTER="${CM_IMPORTER:-$repo/ops/mac-local-run/import_dumps.sh}"
   if [ "$routes_ready" = "1" ]; then
     CM_COURT_ROUTES_READY=1 bash "$IMPORTER" "$repo" "$@"
   else
@@ -211,7 +212,7 @@ stop_parallel_children() {
 }
 
 run_parallel_parsers() {
-  local i=0 repo region delay entry status order=""
+  local i=0 repo region delay entry status WORKER order=""
   parser_pids=()
   parser_pid_repos=()
   for repo in "${parser_repos[@]}"; do
@@ -233,6 +234,7 @@ run_parallel_parsers() {
         break
       fi
     done
+    WORKER="${CM_WORKER:-$repo/ops/mac-local-run/parse_and_push.sh}"
     echo "  → $repo (парсер ${region:-?}, старт через ${delay}с)"
     (
       [ "$delay" -eq 0 ] || sleep "$delay"

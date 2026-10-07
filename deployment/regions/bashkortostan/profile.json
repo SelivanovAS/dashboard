@@ -1,0 +1,38 @@
+{
+  "coverage": {
+    "appeal": true,
+    "bank_claims": true,
+    "cassation": true,
+    "first_instance": true
+  },
+  "files": {
+    ".github/workflows/add_cases.yml": "deployment/workflows/add_cases.yml",
+    ".github/workflows/collect_bank_claims.yml": "deployment/workflows/collect_bank_claims.yml",
+    ".github/workflows/import_bank_registry.yml": "deployment/workflows/import_bank_registry.yml",
+    ".github/workflows/import_cases.yml": "deployment/workflows/import_cases.yml",
+    ".github/workflows/mark_writ.yml": "deployment/workflows/mark_writ.yml",
+    ".github/workflows/probe_captcha.yml": "deployment/workflows/probe_captcha.yml",
+    ".github/workflows/probe_courts.yml": "deployment/workflows/probe_courts.yml",
+    ".github/workflows/probe_region_registry.yml": "deployment/workflows/probe_region_registry.yml",
+    ".github/workflows/probe_writ_section.yml": "deployment/workflows/probe_writ_section.yml",
+    ".github/workflows/replay_on_push.yml": "deployment/workflows/replay_on_push.yml",
+    ".github/workflows/test_digest.yml": "deployment/workflows/test_digest.yml",
+    ".github/workflows/tests.yml": "deployment/workflows/tests.yml",
+    ".github/workflows/update_cases.yml": "deployment/workflows/update_cases.yml",
+    "REGION": "deployment/regions/bashkortostan/files/REGION",
+    "cloudflare-worker/wrangler.toml": "deployment/regions/bashkortostan/files/cloudflare-worker/wrangler.toml",
+    "docs/regions/Башкортостан_api2.md": "deployment/regions/bashkortostan/files/docs/regions/Башкортостан_api2.md",
+    "manifest.json": "deployment/regions/bashkortostan/files/manifest.json",
+    "ops/vps-run/api2-bashkortostan.nginx.conf": "deployment/regions/bashkortostan/files/ops/vps-run/api2-bashkortostan.nginx.conf",
+    "region_front.js": "deployment/regions/bashkortostan/files/region_front.js"
+  },
+  "region": "bashkortostan",
+  "repository": "SelivanovAS/dashboard-bashkortostan",
+  "schema_version": 1,
+  "site_url": "https://selivanovas.github.io/dashboard-bashkortostan/sberbank_dashboard.html",
+  "vps_path": "/opt/court-monitor/dashboard-bashkortostan",
+  "workflow_policy": {
+    "delivery_unchanged": true,
+    "manual_network_probes": true
+  }
+}

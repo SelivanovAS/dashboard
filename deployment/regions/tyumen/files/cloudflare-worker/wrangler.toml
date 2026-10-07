@@ -1,0 +1,34 @@
+# Изолированные ресурсы Тюменской области.
+name = "court-monitor-tyumen"
+main = "worker.js"
+account_id = "fccd25d64fda7e1899a8ad11e5e488fd"
+compatibility_date = "2024-01-01"
+workers_dev = true
+routes = [{ pattern = "api-tyumen.delosud.ru", custom_domain = true }]
+
+[triggers]
+# Только очистка профилей: 02:17 Екатеринбург; парсер остаётся на VPS.
+# Начнёт действовать после настройки собственных ресурсов и deploy.
+crons = ["17 21 * * *"]
+
+[vars]
+ALLOWED_ORIGIN = "https://selivanovas.github.io"
+CASES_DATA_URL = "https://selivanovas.github.io/dashboard-tyumen/data/cases.json"
+GH_REPO = "SelivanovAS/dashboard-tyumen"
+CRON_UTC = ""
+# Сроки 7/30 дней без использования + 7 дней восстановления.
+PROFILE_CLEANUP_ENABLED = "1"
+IMPORT_EXECUTOR = "vps"
+# VPS принимает большой файл, Worker скачивает его по отдельному временному токену.
+IMPORT_GATEWAY_ORIGIN = "https://api2-tyumen.delosud.ru"
+# Ежедневные слоты повторов VPS; новые задания проверяются круглосуточно каждые 5 минут.
+IMPORT_SLOTS_LOCAL = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00"
+VISITS_ENABLED = "1"
+CAL_TZID = "Asia/Yekaterinburg"
+CAL_TZ_OFFSET_MIN = "300"
+CAL_FEED_NAME = "СберСуд · Тюменская область"
+VAPID_PUBLIC_KEY = "BIW5W_x8jTVGeMfNH9dfBFw73vpep6ynmBtTyoRqimBb2M0Jdcq85Y1qYi3DXzZVkEdy1zNStKLGq46CFFgPlZE"
+
+[[kv_namespaces]]
+binding = "PUSH_SUBSCRIPTIONS"
+id = "bfde7e3ca15247adbcc8d778881a8ad7"
