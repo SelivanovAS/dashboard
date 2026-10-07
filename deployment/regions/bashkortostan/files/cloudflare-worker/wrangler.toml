@@ -1,0 +1,32 @@
+# Изолированные ресурсы Республики Башкортостан.
+name = "court-monitor-bashkortostan"
+main = "worker.js"
+account_id = "fccd25d64fda7e1899a8ad11e5e488fd"
+compatibility_date = "2024-01-01"
+workers_dev = true
+routes = [{ pattern = "api-bashkortostan.delosud.ru", custom_domain = true }]
+
+[triggers]
+# Отдельная очистка профилей: ежедневно 02:17 Екатеринбург. Парсер выключен.
+crons = ["17 21 * * *"]
+
+[vars]
+ALLOWED_ORIGIN = "https://selivanovas.github.io"
+CASES_DATA_URL = "https://selivanovas.github.io/dashboard-bashkortostan/data/cases.json"
+GH_REPO = "SelivanovAS/dashboard-bashkortostan"
+CRON_UTC = ""
+# Сроки 7/30 дней без использования + 7 дней восстановления.
+PROFILE_CLEANUP_ENABLED = "1"
+IMPORT_EXECUTOR = "vps"
+# Уже действующая обратная загрузка через отдельный вход территории.
+IMPORT_GATEWAY_ORIGIN = "https://api2-bashkortostan.delosud.ru"
+IMPORT_SLOTS_LOCAL = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00"
+VISITS_ENABLED = "1"
+CAL_TZID = "Asia/Yekaterinburg"
+CAL_TZ_OFFSET_MIN = "300"
+CAL_FEED_NAME = "СберСуд · Башкортостан"
+VAPID_PUBLIC_KEY = "BE2rKPXrsvkjCHhUMifVtVL1nRJxoYZvQ1vWPHMxEwHMADBQZSYGeQqL4KwpzCt_rXKACqwYYdH-rIdrOLuGU50"
+
+[[kv_namespaces]]
+binding = "PUSH_SUBSCRIPTIONS"
+id = "e4e38c7090e9416887a1f1f4d190f2f8"

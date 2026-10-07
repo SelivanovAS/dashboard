@@ -1,0 +1,70 @@
+name = "court-monitor-ural"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# ── Адреса Worker'а (27.08.2026) ────────────────────────────────────────────
+# Часть операторов связи режет *.workers.dev по имени (SNI) — с их сетей не
+# работали синк подписок, админка и операторская. Основной адрес — свой
+# домен; workers.dev ОСТАЁТСЯ живым фолбэком (фронт перебирает адреса через
+# workerFetch, список — PUSH_WORKER_FALLBACKS в region_front.js).
+# workers_dev = true стоит ЯВНО: при появлении routes wrangler иначе гасит
+# workers.dev-адрес молча. Зона delosud.ru живёт в том же аккаунте CF
+# (общая с ХМАО: api-hmao.delosud.ru); ⚠️ у зоны выключен ECH — не включать.
+workers_dev = true
+routes = [
+  { pattern = "api-ural.delosud.ru", custom_domain = true }
+]
+
+[triggers]
+# Автозапуск Урала: 03:00 UTC = 08:00 Екатеринбург, пн-пт (решение юриста
+# 15.07.2026). ХМАО-инстанс ходит в 03:30 UTC — разнос 30 мин, чтобы не бить
+# sudrf одновременно. Буквенный `mon-fri` ОБЯЗАТЕЛЕН: Cloudflare нумерует
+# дни 1=Sun..7=Sat. Применяется только после `wrangler deploy`.
+#
+# ⏸ 19.08.2026 — флип на Mac-резерв (решение юриста): лотерея адресов
+# раннеров, парсит Mac-агент 08:00–11:00. Вернуть облако:
+# crons = ["0 3 * * mon-fri"] и CRON_UTC = "3:00" + deploy.
+# Отдельная очистка профилей: ежедневно 02:17 Екатеринбург. Парсер выключен.
+crons = ["17 21 * * *"]
+
+# ── Пер-инстансные настройки территории «Урал» ──────────────────────────────
+[vars]
+ALLOWED_ORIGIN = "https://selivanovas.github.io"
+CASES_DATA_URL = "https://selivanovas.github.io/dashboard-ural/data/cases.json"
+GH_REPO = "SelivanovAS/dashboard-ural"
+# Время крона (UTC, "Ч:ММ") — ДЕРЖАТЬ В СИНХРОНЕ с [triggers].crons выше:
+# из него админка считает плитку «Автозапуск» (worker.js cronUtcParts).
+# 3:00 UTC = 08:00 Екатеринбург.
+# ⏸ 19.08.2026 флип на Mac-резерв: пусто («крона нет»); вернуть "3:00" вместе с crons.
+CRON_UTC = ""
+# Сроки 7/30 дней без использования + 7 дней восстановления.
+PROFILE_CLEANUP_ENABLED = "1"
+
+# Счётчик посещений дашборда (31.08.2026). "0" мгновенно выключает ЗАПИСЬ
+# визитов, не трогая ни фронт, ни остальные роуты: /visit — единственный путь,
+# который пишет в KV без аутентификации, а бюджет writes общий на аккаунт
+# (1000/день на ОБЕ территории). Применяется только после `wrangler deploy`.
+# ⚠️ Из эталона этот var НЕ приезжает: cloudflare-worker/wrangler.toml стоит
+# в .gitattributes как merge=ours — заводить руками при синхронизации.
+VISITS_ENABLED = "1"
+
+# Исполнитель операторских импортов (08.09.2026, решение юриста): "vps" —
+# Worker кладёт запись в KV со статусом "queued", забирает VPS по слотам
+# court-import.timer (обе территории на одном сервере). "github" — аварийный
+# откат (прежний workflow_dispatch). Пометки «лист не нужен» всегда GitHub.
+IMPORT_EXECUTOR = "vps"
+# Слоты VPS (местное время +05) — ДЕРЖАТЬ В СИНХРОНЕ с
+# ops/vps-run/systemd/court-import.timer: из них админка обещает оператору
+# «сервер обработает в ЧЧ:ММ».
+IMPORT_SLOTS_LOCAL = "12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00"
+# VAPID-пара территории (16.07.2026): public обязан совпадать с
+# region_front.js форка; private — секрет VAPID_PRIVATE_KEY (тот же PEM,
+# что в GH-секрете форка). Нужен кнопке «Тест push» админки.
+VAPID_PUBLIC_KEY = "BHjYv0QmRYDkdwqvERpsbWi8wWkmwqMkn78Q-TN9gK7awAVjeQ7u2LebeUKFyiT_BTlJOVD3YB6E3MLUKe43d7k"
+
+# KV-хранилище push-подписок PWA территории (+ дампы и журнал импорта).
+# Namespace «URAL_PUSH_SUBSCRIPTIONS» создан 16.07.2026 (титул с префиксом:
+# голый «PUSH_SUBSCRIPTIONS» занят ХМАО-инстансом; binding при этом прежний).
+[[kv_namespaces]]
+binding = "PUSH_SUBSCRIPTIONS"
+id = "a42e1b5a8c31485e9483ab9ee80be518"

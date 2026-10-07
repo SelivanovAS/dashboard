@@ -1,0 +1,103 @@
+name: Общая программа — четыре региональные сборки
+
+# Эта ветка проверяет исходники. Боевые задания лежат в deployment/workflows.
+on:
+  push:
+    branches: [codex/program]
+  pull_request:
+    branches: [codex/program]
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Зависимости проверок
+        run: pip install -r scripts/requirements.txt pytest
+      - name: Контракт выпусков и региональных профилей
+        env:
+          PYTHONPATH: scripts
+        run: python -m pytest -q deployment/tests scripts/tests/test_program_release.py scripts/tests/test_program_install_vps.py
+
+  region:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [hmao, sverdlovsk_yanao, bashkortostan, tyumen]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Зависимости проверок
+        run: pip install -r scripts/requirements.txt pytest
+      - name: Собрать закреплённую версию для территории
+        env:
+          TARGET_REGION: ${{ matrix.region }}
+        run: |
+          python scripts/program_release.py build --source-sha "$GITHUB_SHA" --source-repo . --out "$RUNNER_TEMP/packages" --regions "$TARGET_REGION"
+      - name: Подготовить выпуск поверх текущего main территории без публикации
+        env:
+          TARGET_REGION: ${{ matrix.region }}
+        run: |
+          repository=$(python -c 'import json,os; print(json.load(open("deployment/regions/"+os.environ["TARGET_REGION"]+"/profile.json"))["repository"])')
+          assembled="$RUNNER_TEMP/assembled/$TARGET_REGION"
+          git clone --no-tags --depth 1 --branch main "https://github.com/$repository.git" "$assembled"
+          git -C "$assembled" rev-parse HEAD > "$RUNNER_TEMP/target-$TARGET_REGION.sha"
+          python scripts/program_release.py promote --repo "$assembled" --region "$TARGET_REGION" --package "$RUNNER_TEMP/packages/$TARGET_REGION" > "$RUNNER_TEMP/prepared-$TARGET_REGION.json"
+          prepared=$(python -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/prepared-"+os.environ["TARGET_REGION"]+".json"))["commit"])')
+          git -C "$assembled" checkout --detach "$prepared"
+      - name: Проверить регион вне pytest и его conftest
+        env:
+          TARGET_REGION: ${{ matrix.region }}
+        run: |
+          cd "$RUNNER_TEMP/assembled/$TARGET_REGION"
+          env -u REGION python - "$TARGET_REGION" <<'PYTHON'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'scripts')
+          from court_monitor import config
+          from court_monitor.regions import get_region
+          expected = sys.argv[1]
+          assert Path('REGION').read_text().strip() == expected
+          assert config.REGION == expected
+          assert get_region().public_info()['code'] == expected
+          print('Регион файла и runtime подтверждён:', expected)
+          PYTHON
+      - name: Полный набор на синтетических данных
+        env:
+          TARGET_REGION: ${{ matrix.region }}
+        run: |
+          python - <<'PYTHON'
+          from pathlib import Path
+          import os
+          import shutil
+          temp = Path(os.environ['RUNNER_TEMP']).resolve()
+          assembled = (temp / 'assembled' / os.environ['TARGET_REGION']).resolve()
+          assembled.relative_to(temp)
+          data = assembled / 'data'
+          shutil.rmtree(data, ignore_errors=True)
+          data.mkdir()
+          shutil.copyfile('deployment/fixtures/last_digest_context.json', data / 'last_digest_context.json')
+          (data / 'cases.json').write_text('{"version":1,"cases":[]}\n')
+          PYTHON
+          cd "$RUNNER_TEMP/assembled/$TARGET_REGION"
+          node --version
+          python -m pytest -q

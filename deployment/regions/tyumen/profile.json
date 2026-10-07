@@ -1,0 +1,42 @@
+{
+  "coverage": {
+    "appeal": true,
+    "bank_claims": true,
+    "cassation": true,
+    "first_instance": true
+  },
+  "files": {
+    ".github/workflows/add_cases.yml": "deployment/workflows/add_cases.yml",
+    ".github/workflows/collect_bank_claims.yml": "deployment/workflows/collect_bank_claims.yml",
+    ".github/workflows/import_bank_registry.yml": "deployment/workflows/import_bank_registry.yml",
+    ".github/workflows/import_cases.yml": "deployment/workflows/import_cases.yml",
+    ".github/workflows/mark_writ.yml": "deployment/workflows/mark_writ.yml",
+    ".github/workflows/probe_captcha.yml": "deployment/workflows/probe_captcha.yml",
+    ".github/workflows/probe_courts.yml": "deployment/workflows/probe_courts.yml",
+    ".github/workflows/probe_region_registry.yml": "deployment/workflows/probe_region_registry.yml",
+    ".github/workflows/probe_writ_section.yml": "deployment/workflows/probe_writ_section.yml",
+    ".github/workflows/replay_on_push.yml": "deployment/workflows/replay_on_push.yml",
+    ".github/workflows/test_digest.yml": "deployment/workflows/test_digest.yml",
+    ".github/workflows/tests.yml": "deployment/workflows/tests.yml",
+    ".github/workflows/update_cases.yml": "deployment/workflows/update_cases.yml",
+    ".github/workflows/verify_tyumen_setup.yml": "deployment/workflows/verify_tyumen_setup.yml",
+    "REGION": "deployment/regions/tyumen/files/REGION",
+    "cloudflare-worker/wrangler.toml": "deployment/regions/tyumen/files/cloudflare-worker/wrangler.toml",
+    "docs/regions/Тюмень_api2.md": "deployment/regions/tyumen/files/docs/regions/Тюмень_api2.md",
+    "docs/regions/Тюмень_оператор.md": "deployment/regions/tyumen/files/docs/regions/Тюмень_оператор.md",
+    "manifest.json": "deployment/regions/tyumen/files/manifest.json",
+    "ops/vps-run/api2-tyumen.nginx.conf": "deployment/regions/tyumen/files/ops/vps-run/api2-tyumen.nginx.conf",
+    "ops/vps-run/court-monitor-upload-tyumen.service": "deployment/regions/tyumen/files/ops/vps-run/court-monitor-upload-tyumen.service",
+    "ops/vps-run/tyumen-bootstrap.md": "deployment/regions/tyumen/files/ops/vps-run/tyumen-bootstrap.md",
+    "region_front.js": "deployment/regions/tyumen/files/region_front.js"
+  },
+  "region": "tyumen",
+  "repository": "SelivanovAS/dashboard-tyumen",
+  "schema_version": 1,
+  "site_url": "https://selivanovas.github.io/dashboard-tyumen/sberbank_dashboard.html",
+  "vps_path": "/opt/court-monitor/dashboard-tyumen",
+  "workflow_policy": {
+    "delivery_unchanged": true,
+    "manual_network_probes": true
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "new_cases": [],
+  "changes": [],
+  "cases": [],
+  "stage_transitions": [],
+  "fi_changes": [],
+  "cass_changes": [],
+  "cass_discovered": [],
+  "total_active_appeal": 0,
+  "total_active_fi": 1,
+  "total_active_cassation": 0,
+  "fi_new_cases": [
+    {
+      "id": "2-9999/2026",
+      "plaintiff": "Тестовый заявитель",
+      "defendant": "ПАО Сбербанк",
+      "category": "Тестовое требование",
+      "bank_role": "Ответчик",
+      "first_instance": {
+        "case_number": "2-9999/2026",
+        "court": "Тестовый суд",
+        "filing_date": "01.05.2026",
+        "judge": "Тестов Т.Т.",
+        "link": "12345|fixture-1234",
+        "court_domain": "court.invalid"
+      }
+    }
+  ]
+}
