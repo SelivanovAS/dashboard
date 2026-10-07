@@ -28,7 +28,7 @@ jobs:
       - name: Контракт выпусков и региональных профилей
         env:
           PYTHONPATH: scripts
-        run: python -m pytest -q deployment/tests scripts/tests/test_program_release.py scripts/tests/test_program_install_vps.py
+        run: python -m pytest -q deployment/tests scripts/tests/test_program_release.py scripts/tests/test_program_install_vps.py scripts/tests/test_regional_launcher_programs.py
 
   region:
     runs-on: ubuntu-latest
