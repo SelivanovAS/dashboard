@@ -7904,7 +7904,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-01",
+        "last_checked_at": "2026-10-08",
         "judicial_uid": "86RS0002-01-2026-007840-91",
         "material_number": "М-5390/2026",
         "accepted_pending_emit": false,
@@ -7912,7 +7912,11 @@
         "resolved_emitted": true,
         "decision_date": "22.09.2026",
         "writ_expected": false,
-        "termination_date": "22.09.2026"
+        "termination_date": "22.09.2026",
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8316,7 +8320,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-09-30",
+        "last_checked_at": "2026-10-08",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -8335,7 +8339,11 @@
             "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
             "status": "Выдан"
           }
-        ]
+        ],
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8372,14 +8380,18 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-01",
+        "last_checked_at": "2026-10-08",
         "judicial_uid": "86RS0007-01-2026-000511-85",
         "result_date": "",
         "resolved_emitted": true,
         "termination_emitted": false,
         "decision_date": "23.09.2026",
         "termination_date": "23.09.2026",
-        "writ_expected": false
+        "writ_expected": false,
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -13822,7 +13834,7 @@
         "act_published": true,
         "act_date": "",
         "resolved_emitted": false,
-        "last_checked_at": "2026-10-07",
+        "last_checked_at": "2026-10-08",
         "delo_id": 1540005,
         "srv_num": 1,
         "default_judgment": true,
@@ -13848,7 +13860,8 @@
         "act_source_url": "https://uganskray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=269068504&case_uid=481b5000-8f86-4e60-b6a5-59ef78a2f65f&delo_id=1540005&new=0",
         "act_decision_date": "20.07.2026",
         "writ_watch_status": "needs_review",
-        "writ_watch_reason": "decision_cancelled"
+        "writ_watch_reason": "decision_cancelled",
+        "writ_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -13935,7 +13948,7 @@
         "link": "279511504|4c69d4ea-0f5a-46a6-8af7-dda73930a927",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-01",
+        "last_checked_at": "2026-10-08",
         "delo_id": 1540005,
         "srv_num": 1,
         "material_number": "М-2460/2026",
@@ -13985,7 +13998,10 @@
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_observed_bank_role": "Истец",
-        "writ_checked_at": "2026-10-08"
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -22748,16 +22764,21 @@
         "filing_date": "17.06.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Предварительное судебное заседание. 12:20. Зал судебного заседания 505. 25.06.2026",
-        "event_date": "07.10.2026",
-        "hearing_date": "07.10.2026",
-        "hearing_time": "12:20",
+        "last_event": "Судебное заседание. 12:30. Зал судебного заседания 505. 07.10.2026",
+        "event_date": "27.10.2026",
+        "hearing_date": "27.10.2026",
+        "hearing_time": "12:30",
         "link": "277024726|b971c543-236d-4efb-8a9d-dacf71a6ae95",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-07-27",
+        "last_checked_at": "2026-10-08",
         "delo_id": 1540005,
-        "srv_num": 1
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-011833-34",
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -22792,10 +22813,14 @@
         "link": "277724256|5e2fba02-aa19-46ff-a4ea-c998e45ac859",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-07",
+        "last_checked_at": "2026-10-08",
         "delo_id": 1540005,
         "srv_num": 1,
-        "judicial_uid": "86RS0004-01-2026-001553-28"
+        "judicial_uid": "86RS0004-01-2026-001553-28",
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -24980,7 +25005,7 @@
         "link": "268810448|9f3a16db-9d95-4284-b140-c30d08f99931",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-01",
+        "last_checked_at": "2026-10-08",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-005592-36",
@@ -24992,7 +25017,10 @@
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_observed_bank_role": "Истец",
-        "writ_checked_at": "2026-10-08"
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -27605,5 +27633,5 @@
       }
     }
   ],
-  "updated_at": "2026-10-08T07:44:22+05:00"
+  "updated_at": "2026-10-08T08:09:09+05:00"
 }

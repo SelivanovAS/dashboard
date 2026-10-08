@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-10-08T07:44:23",
+  "saved_at": "2026-10-08T08:09:09",
   "new_cases": [],
   "changes": [
     {
@@ -2138,6 +2138,27 @@
         "scheduled_hearing_time": "09:40"
       },
       "track": "plaintiff_light"
+    },
+    {
+      "case": "2-7700/2026",
+      "court": "Сургутский городской суд",
+      "plaintiff": "Сбербанк ПАО",
+      "defendant": "Талыбова Елена Мирзагулу кызы",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "277024726|b971c543-236d-4efb-8a9d-dacf71a6ae95",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "old_hearing_date": "07.10.2026",
+        "old_hearing_time": "12:20",
+        "hearing_date": "27.10.2026",
+        "hearing_time": "12:30",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
     }
   ],
   "total_active_appeal": 23,
@@ -2507,5 +2528,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-10-08T07:01:01",
-  "updated_at": "2026-10-08T07:44:23+05:00"
+  "updated_at": "2026-10-08T08:09:09+05:00"
 }
