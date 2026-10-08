@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-08T08:09:09+05:00",
+ "updated_at": "2026-10-08T08:36:10+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,24 +532,24 @@
   }
  },
  "last_run": {
-  "at": "2026-10-08T08:09:09",
+  "at": "2026-10-08T08:36:10",
   "alerts": [],
-  "requests_ok": 10,
+  "requests_ok": 1,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 9,
-  "cards_planned": 112,
+  "cards_read": 1,
+  "cards_planned": 104,
   "cards_read_today": 259,
   "cards_planned_today": 365,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
-    "read": 8,
-    "planned": 111,
+    "read": 0,
+    "planned": 103,
     "read_today": 204,
     "planned_today": 309
    },
@@ -567,22 +567,13 @@
    }
   },
   "latency": {
-   "n": 10,
-   "p50": 9.6,
-   "p90": 11.6,
-   "max": 17.9
+   "n": 1,
+   "p50": 17.6,
+   "p90": 17.6,
+   "max": 17.6
   },
-  "failure_latency": {
-   "invalid_card_request": {
-    "n": 1,
-    "p50": 4.7,
-    "p90": 4.7,
-    "max": 4.7
-   }
-  },
-  "fail_kinds": {
-   "invalid_card_request": 1
-  },
+  "failure_latency": {},
+  "fail_kinds": {},
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -4607,7 +4598,7 @@
    },
    {
     "key": "megion--hmao.sudrf.ru|1|2-957/2025|08.12.2025",
-    "reason": "invalid_card_request",
+    "reason": "daily_retry_limit",
     "next_check_at": "2026-10-07"
    },
    {

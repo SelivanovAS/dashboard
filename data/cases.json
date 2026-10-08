@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-08T08:09:09+05:00",
+  "updated_at": "2026-10-08T08:36:10+05:00",
   "cases": [
     {
       "id": "М-9136/2026",
@@ -100411,6 +100411,7 @@
         "act_decision_date": "20.07.2026",
         "writ_watch_status": "needs_review",
         "writ_watch_reason": "decision_cancelled",
+        "writ_checked_at": "2026-10-08",
         "events": [
           {
             "date": "01.04.2026",
@@ -100537,8 +100538,7 @@
             "name": "Дело сдано в отдел судебного делопроизводства после рассмотрения ходатайства/заявления/вопроса",
             "posted_at": "22.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08"
+        ]
       },
       "status": "needs_review",
       "reason": "decision_cancelled",
@@ -100757,6 +100757,9 @@
         "writ_watch_reason": "awaiting_writ",
         "writ_observed_bank_role": "Истец",
         "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08",
         "events": [
           {
             "date": "29.07.2026",
@@ -100827,10 +100830,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "24.09.2026"
           }
-        ],
-        "act_absent_checked_at": "2026-10-08",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -115962,6 +115962,9 @@
         "writ_watch_reason": "awaiting_writ",
         "writ_observed_bank_role": "Истец",
         "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08",
         "events": [
           {
             "date": "26.03.2026",
@@ -116018,10 +116021,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "03.09.2026"
           }
-        ],
-        "act_absent_checked_at": "2026-10-08",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
