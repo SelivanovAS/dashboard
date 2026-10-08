@@ -846,5 +846,69 @@
       "status": "ready"
     },
     "generated_at": "2026-10-07T03:45:31+00:00"
+  },
+  "06fe72714611b6e6": {
+    "summary": "Суд подтвердил солидарную ответственность поручителей по кредитам на основании факта заключения договоров поручительства и просрочек заемщика. Решение изменено: госпошлина взыскана в равных долях, а не солидарно, а долг по первому кредиту уменьшен на сумму частичного погашения после подачи иска.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 121730,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "310a76c71e67e0326cb259c3603c9172236e57874a04340ef8de98b2cb2a0163",
+      "raw_chars": 64868,
+      "prepared_chars": 64868,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26943827&case_uid=49df739d-b629-4410-afc1-acbaf0e74331&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-08T01:12:19+00:00",
+      "case_number": "33-6299/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-08T03:45:29+00:00"
+  },
+  "90d88eb1b3cf3d0b": {
+    "summary": "Изъятие правомерно, поскольку соблюдена процедура принудительного изъятия для муниципальных нужд, а размер возмещения определён на основании заключения судебной оценочной экспертизы, которое ответчиком не опровергнуто. Доводы о праве на другой объект отклонены, так как он не являлся предметом иска, а право собственности на него ответчиком не подтверждено.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 43771,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "01a1912cd0b3eca24208e1ec913587fd3ffee71e83715731170a1f516d06fe9e",
+      "raw_chars": 21410,
+      "prepared_chars": 21410,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12290557&case_uid=1347a584-fe98-43fe-9a44-4360b8b172e3&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-08T02:42:04+00:00",
+      "case_number": "8Г-13815/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0007-01-2023-004885-10",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-08T03:45:30+00:00"
   }
 }

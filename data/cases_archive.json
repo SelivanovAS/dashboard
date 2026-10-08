@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-08T08:36:10+05:00",
+  "updated_at": "2026-10-08T03:45:31+00:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -2320,7 +2320,8 @@
           "act_date": "",
           "generated_at": "2026-07-07T04:32:39",
           "model": "claude-haiku-4-5-20251001"
-        }
+        },
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-2337/2026",
@@ -2488,7 +2489,8 @@
           "act_date": "",
           "generated_at": "2026-07-07T04:32:39",
           "model": "claude-haiku-4-5-20251001"
-        }
+        },
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-2029/2026",
@@ -2705,7 +2707,8 @@
           "act_date": "",
           "generated_at": "2026-07-07T04:32:39",
           "model": "claude-haiku-4-5-20251001"
-        }
+        },
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-898/2026",
@@ -3071,7 +3074,8 @@
           "generated_at": "2026-07-07T04:32:39",
           "model": "claude-haiku-4-5-20251001"
         },
-        "decision_date": "21.10.2025"
+        "decision_date": "21.10.2025",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-2475/2026",
@@ -4771,7 +4775,8 @@
             "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
             "status": "Выдан"
           }
-        ]
+        ],
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-1594/2026",
@@ -6253,7 +6258,8 @@
         "decision_date": "04.08.2025",
         "objections_due": "2026-01-23",
         "objections_set_at": "2025-12-23",
-        "objections_emitted": "2026-01-23"
+        "objections_emitted": "2026-01-23",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-1675/2026",
@@ -6488,7 +6494,8 @@
             "recipient": "Отделение судебных приставов по г. Сургуту",
             "status": "Выдан"
           }
-        ]
+        ],
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-1895/2026",
@@ -7116,7 +7123,8 @@
             "recipient": "Отделение судебных приставов по г. Нефтеюганску и Нефтеюганскому району",
             "status": "Выдан"
           }
-        ]
+        ],
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-2243/2026",
@@ -7495,7 +7503,8 @@
           "generated_at": "2026-07-07T04:32:39",
           "model": "claude-haiku-4-5-20251001"
         },
-        "decision_date": "13.03.2025"
+        "decision_date": "13.03.2025",
+        "act_summary_needs_source": true
       },
       "appeal": {
         "case_number": "33-1475/2026",
