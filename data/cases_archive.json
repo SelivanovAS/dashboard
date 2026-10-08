@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-08T07:01:01+05:00",
+  "updated_at": "2026-10-08T07:44:23+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -1714,8 +1714,19 @@
           "model": "claude-haiku-4-5-20251001"
         },
         "act_summary_needs_source": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        "writ_watch_status": "complete",
+        "writ_watch_reason": "issued_observation_finished",
+        "writ_observed_bank_role": "Истец",
+        "writ_checked_at": "2026-10-08",
+        "writs": [
+          {
+            "issue_date": "13.08.2026",
+            "blank_number": "ФС № 051985095",
+            "electronic_id": "",
+            "recipient": "Взыскатель",
+            "status": "Выдан"
+          }
+        ]
       },
       "appeal": {
         "case_number": "33-1736/2026",
