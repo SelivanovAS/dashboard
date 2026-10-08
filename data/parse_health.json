@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-08T08:36:10+05:00",
+ "updated_at": "2026-10-08T12:05:14+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -532,20 +532,20 @@
   }
  },
  "last_run": {
-  "at": "2026-10-08T08:36:10",
+  "at": "2026-10-08T12:05:14",
   "alerts": [],
-  "requests_ok": 1,
+  "requests_ok": 0,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 1,
+  "cards_read": 0,
   "cards_planned": 104,
   "cards_read_today": 259,
   "cards_planned_today": 365,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -554,7 +554,7 @@
     "planned_today": 309
    },
    "appeal": {
-    "read": 1,
+    "read": 0,
     "planned": 1,
     "read_today": 39,
     "planned_today": 39
@@ -566,12 +566,7 @@
     "planned_today": 17
    }
   },
-  "latency": {
-   "n": 1,
-   "p50": 17.6,
-   "p90": 17.6,
-   "max": 17.6
-  },
+  "latency": {},
   "failure_latency": {},
   "fail_kinds": {},
   "breaker": {
@@ -592,8 +587,8 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 103,
-  "run_deadline_seconds": 3300.0,
+  "cards_unread_other": 104,
+  "run_deadline_seconds": 600.0,
   "run_deadline_reached": false
  },
  "act_publication_watch": {
@@ -1836,12 +1831,60 @@
     "reason": "age_limit"
    },
    {
+    "key": "hmray--hmao.sudrf.ru|1540005|1|2-2837/2025|2025-08-11",
+    "number": "2-2837/2025",
+    "court": "hmray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
+    "key": "hmray--hmao.sudrf.ru|1540005|1|2-2850/2025|2025-10-24",
+    "number": "2-2850/2025",
+    "court": "hmray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
+    "key": "hmray--hmao.sudrf.ru|1540005|1|2-3554/2025|2025-10-21",
+    "number": "2-3554/2025",
+    "court": "hmray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
     "key": "hmray--hmao.sudrf.ru|1540005|1|2-3830/2025|2025-11-26",
     "number": "2-3830/2025",
     "court": "hmray--hmao.sudrf.ru",
     "status": "expired",
     "last_checked_at": "2026-07-20",
     "normal_last_checked_at": "2026-07-20",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
+    "key": "hmray--hmao.sudrf.ru|1540005|1|2-4141/2025|2025-12-17",
+    "number": "2-4141/2025",
+    "court": "hmray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-08-03",
+    "normal_last_checked_at": "2026-08-03",
     "fi_act_checked_at": "",
     "next_check_at": "",
     "over_90_days": true,
@@ -1980,6 +2023,18 @@
     "reason": "age_limit"
    },
    {
+    "key": "pth--hmao.sudrf.ru|1540005|1|2-685/2025|2025-11-24",
+    "number": "2-685/2025",
+    "court": "pth--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
     "key": "rdj--hmao.sudrf.ru|1540005|1|2-620/2025|2025-09-08",
     "number": "2-620/2025",
     "court": "rdj--hmao.sudrf.ru",
@@ -2004,6 +2059,18 @@
     "reason": "missing_decision_date"
    },
    {
+    "key": "surggor--hmao.sudrf.ru|1540005|1|2-332/2025|2025-03-13",
+    "number": "2-332/2025",
+    "court": "surggor--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-3760/2025|undated",
     "number": "2-3760/2025",
     "court": "surggor--hmao.sudrf.ru",
@@ -2014,6 +2081,18 @@
     "next_check_at": "",
     "over_90_days": false,
     "reason": "missing_decision_date"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1540005|1|2-4440/2025|2025-05-30",
+    "number": "2-4440/2025",
+    "court": "surggor--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-08-14",
+    "normal_last_checked_at": "2026-08-14",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-464/2025|2025-07-07",
@@ -2202,6 +2281,30 @@
     "status": "expired",
     "last_checked_at": "2026-07-13",
     "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
+    "key": "uganskray--hmao.sudrf.ru|1540005|1|2-2236/2025|2025-08-04",
+    "number": "2-2236/2025",
+    "court": "uganskray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-07-13",
+    "normal_last_checked_at": "2026-07-13",
+    "fi_act_checked_at": "",
+    "next_check_at": "",
+    "over_90_days": true,
+    "reason": "age_limit"
+   },
+   {
+    "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3378/2025|2025-12-24",
+    "number": "2-3378/2025",
+    "court": "uganskray--hmao.sudrf.ru",
+    "status": "expired",
+    "last_checked_at": "2026-08-20",
+    "normal_last_checked_at": "2026-08-20",
     "fi_act_checked_at": "",
     "next_check_at": "",
     "over_90_days": true,
@@ -4548,7 +4651,7 @@
     "reason": "scheduled"
    }
   ],
-  "expired": 28,
+  "expired": 37,
   "unread": 103,
   "long_wait": 51
  },
@@ -6065,7 +6168,7 @@
  "parsing_backlog": {
   "date": "2026-10-08",
   "region": "hmao",
-  "cards_unread": 103,
+  "cards_unread": 104,
   "fi_without_card": 0,
   "candidates_pending": 0,
   "acts_unread": 103,
