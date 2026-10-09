@@ -1,7 +1,6 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-08T07:44:22+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -5382,6 +5381,55 @@
         "announced": true
       },
       "archived_at": "2026-10-08"
+    },
+    {
+      "id": "2-7633/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Мышевский Михаил Сергеевич",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-7633/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Беловолова Ирина Игоревна",
+        "filing_date": "16.06.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 11:45. 14.09.2026",
+        "event_date": "14.09.2026",
+        "hearing_date": "08.09.2026",
+        "hearing_time": "15:20",
+        "link": "276960462|24e3365c-fad9-4a6a-b69d-8261840c411d",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-10-08",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0004-01-2026-011761-56",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "08.09.2026",
+        "writ_expected": false,
+        "termination_date": "08.09.2026",
+        "writ_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-08",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-08"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-07-26T08:06:54",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-10-09"
     }
-  ]
+  ],
+  "updated_at": "2026-10-09T07:00:38+05:00"
 }
