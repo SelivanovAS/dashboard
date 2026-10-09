@@ -146,6 +146,14 @@ def test_marker_disappearing_during_poll_never_reports_safe_drain(gate, monkeypa
         gate.drain(timeout=1)
 
 
+def test_systemd_255_empty_job_value_means_no_pending_job(gate):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    gate.test_properties['Job'] = ''
+    assert not gate.busy()
+    assert gate.drain(timeout=0) == {}
+
+
 def test_invalid_systemd_names_or_expanded_paths_are_rejected(tmp_path):
     for marker in ['/tmp/%N', '/tmp/foo\n[Service]', '/tmp/../etc', '/tmp/with space']:
         with pytest.raises(MaintenanceGateError):

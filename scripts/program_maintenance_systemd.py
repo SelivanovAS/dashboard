@@ -208,7 +208,9 @@ class SystemdMaintenanceGate:
             if props["ActiveState"] not in ("inactive", "failed"):
                 busy[unit] = props
                 continue
-            if not re.fullmatch(r"0(?: /)?", props["Job"]):
+            # systemctl 255 prints an empty Job value for D-Bus job ID zero.
+            # The property itself is required by properties(); missing != empty.
+            if props["Job"] not in ("", "0", "0 /"):
                 busy[unit] = props
                 continue
             if props["MainPID"] != "0" or props["ControlPID"] != "0":
