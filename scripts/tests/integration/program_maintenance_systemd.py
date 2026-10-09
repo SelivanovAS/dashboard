@@ -165,6 +165,28 @@ class Fixture:
         values = self.control("show", unit, "--no-pager").stdout
         return dict(line.split("=", 1) for line in values.splitlines() if "=" in line)
 
+    def timer_monotonic_trigger(self, unit):
+        """Read the D-Bus uint64; systemctl show formats this as a duration."""
+        assert unit in self.all_timers, "refusing foreign timer property"
+        prefix = ["busctl", "--system", "--json=short"]
+        lookup = prefix + ["call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+                           "org.freedesktop.systemd1.Manager", "GetUnit", "s", unit]
+        self.report["commands"].append({"owner": "fixture", "args": lookup, "time": time.time()})
+        result = json.loads(run(lookup).stdout)
+        assert isinstance(result, dict) and result.get("type") == "o", result
+        path = result.get("data")
+        if isinstance(path, list) and len(path) == 1:
+            path = path[0]
+        assert isinstance(path, str) and re.fullmatch(r"/org/freedesktop/systemd1/unit/[A-Za-z0-9_]+", path), result
+        query = prefix + ["get-property", "org.freedesktop.systemd1", path,
+                          "org.freedesktop.systemd1.Timer", "LastTriggerUSecMonotonic"]
+        self.report["commands"].append({"owner": "fixture", "args": query, "time": time.time()})
+        result = json.loads(run(query).stdout)
+        assert isinstance(result, dict) and result.get("type") == "t", result
+        value = result.get("data")
+        assert type(value) is int and 0 <= value <= 2**64 - 1, result
+        return value
+
     def snapshot(self, label):
         properties = ("ActiveState", "SubState", "ActiveEnterTimestampMonotonic", "InvocationID",
                       "LastTriggerUSec", "LastTriggerUSecMonotonic", "NextElapseUSecRealtime",
@@ -422,7 +444,7 @@ class Fixture:
                 self.wait(lambda: {"signal": "JobNew", "job_id": job_id} in job_signals(),
                           timeout=5, label="natural pending JobNew signal")
                 timer_triggered = self.properties(self.natural_pending_timer)
-                trigger_us = int(timer_triggered["LastTriggerUSecMonotonic"])
+                trigger_us = self.timer_monotonic_trigger(self.natural_pending_timer)
                 assert trigger_us > 0
                 observed_pending = time.monotonic()
 
@@ -450,11 +472,12 @@ class Fixture:
                 time.sleep(.5)
                 pending_after_open = self.properties(self.service("natural-pending"))
                 timer_after_open = self.properties(self.natural_pending_timer)
+                trigger_after_open_us = self.timer_monotonic_trigger(self.natural_pending_timer)
                 assert pending_after_open["Job"] == pending["Job"], "opening replaced/created pending job"
                 assert not self.events("natural-pending", phase=None), "marker removal caused a worker start"
                 assert job_signals() == before_open_signals, "marker removal changed the service job queue"
-                for field in ("ActiveEnterTimestampMonotonic", "LastTriggerUSecMonotonic"):
-                    assert timer_after_open[field] == timer_triggered[field], "opening changed timer lifecycle/trigger"
+                assert timer_after_open["ActiveEnterTimestampMonotonic"] == timer_triggered["ActiveEnterTimestampMonotonic"], "opening changed timer lifecycle"
+                assert trigger_after_open_us == trigger_us, "opening changed timer trigger"
 
                 dependency_released = time.monotonic()
                 hold.unlink()  # Release only the harmless fixture dependency.
