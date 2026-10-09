@@ -91,7 +91,14 @@ class Fixture:
         self.all_names = (*self.guarded_names, "blocker")
         self.services = tuple(self.service(name) for name in self.guarded_names)
         self.timers = tuple(self.prefix + "-" + name + ".timer" for name in self.main_names)
-        self.all_units = (*self.services, self.service("blocker"), *self.timers)
+        # Production services are retained by their active timer routes. Unused
+        # scenario services have no such references and systemd may garbage-
+        # collect them between show and GetUnit. Far-future fixture timers keep
+        # the same reference invariant without starting their scenario work.
+        self.pinning_timers = tuple(self.prefix + "-" + name + "-pin.timer"
+                                    for name in self.guarded_names if name not in self.main_names)
+        self.all_timers = (*self.timers, *self.pinning_timers)
+        self.all_units = (*self.services, self.service("blocker"), *self.all_timers)
         self.created_paths = []
         self.started = False
         self.adapter = None
@@ -223,12 +230,22 @@ class Fixture:
                 f"OnCalendar=*-*-* *:*:00,12,24,36,48 UTC\nUnit={self.service(name)}\n"
                 "AccuracySec=10ms\nRandomizedDelaySec=0\nPersistent=false\n"
                 "[Install]\nWantedBy=timers.target\n")
+        extra_names = [name for name in self.guarded_names if name not in self.main_names]
+        for name, timer in zip(extra_names, self.pinning_timers):
+            self.write_unit(timer,
+                f"[Unit]\nDescription=Disposable reference pin for {name}\n[Timer]\n"
+                f"OnCalendar=2099-01-01 00:00:00 UTC\nUnit={self.service(name)}\n"
+                "Persistent=false\n[Install]\nWantedBy=timers.target\n")
         self.control("daemon-reload")
-        self.control("enable", "--now", *self.timers)
+        self.control("enable", "--now", *self.all_timers)
         self.started = True
         self.wait(lambda: all(self.timer_count().values()), label="first natural timer tick")
         self.wait(lambda: all(self.properties(self.service(name))["ActiveState"] == "inactive"
                               for name in self.main_names), label="first services finishing")
+        assert all(self.properties(timer)["ActiveState"] == "active" for timer in self.pinning_timers)
+        assert not any(self.events(name, phase=None) for name in extra_names), "reference pins started scenario work"
+        self.checked("far-future timer references retain scenario units without work",
+                     timers=list(self.pinning_timers), on_calendar="2099-01-01 00:00:00 UTC")
         self.timer_baseline = self.snapshot("initial_tick")
         self.timer_hashes = {timer: hashlib.sha256((self.unit_directory / timer).read_bytes()).hexdigest()
                              for timer in self.timers}
@@ -371,7 +388,7 @@ class Fixture:
             for hold in (self.root / "holds").glob("*"):
                 hold.unlink()
         if self.created_paths:
-            self.control("disable", "--now", *self.timers, check=False)
+            self.control("disable", "--now", *self.all_timers, check=False)
             self.control("stop", *self.services, self.service("blocker"), check=False)
             self.control("reset-failed", *self.services, self.service("blocker"), check=False)
         for path in self.created_paths:
@@ -411,6 +428,9 @@ class Fixture:
             (self.output / "summary.json").write_text(json.dumps(self.report, ensure_ascii=False, indent=2) + "\n")
             print(json.dumps({"passed": self.report["passed"], "checks": len(self.report["checks"]),
                               "error": self.report.get("error"), "summary": str(self.output / "summary.json")}))
+            print(json.dumps({"systemd_version": self.report.get("systemd_version"),
+                              "checks": self.report["checks"], "limits": self.report["limits"]},
+                             ensure_ascii=False))
             if not self.report["passed"]:
                 # Artifact download is not always available to the observer;
                 # these contain only disposable fixture names and paths.
