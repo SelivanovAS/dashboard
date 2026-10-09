@@ -1,0 +1,51 @@
+name: Общая программа — изолированная проверка systemd 255.4
+
+# Только исходная рабочая ветка. Никаких production secrets или региональных jobs.
+on:
+  push:
+    branches: [codex/program-maintenance-lease]
+
+permissions:
+  contents: read
+
+jobs:
+  systemd-255-4:
+    if: github.ref == 'refs/heads/codex/program-maintenance-lease'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Зависимости изолированных проверок
+        run: python -m pip install pytest
+      - name: Контракты защиты и блокировок
+        env:
+          PYTHONPATH: scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q \
+            deployment/tests/test_profiles.py \
+            scripts/tests/test_program_maintenance.py \
+            scripts/tests/test_program_maintenance_systemd.py \
+            scripts/tests/test_run_lock.py scripts/tests/test_retry_launcher.py \
+            scripts/tests/test_delivery_readiness.py::test_delivery_skips_a_clone_locked_by_another_live_process
+      - name: Проверить только фиктивные службы одноразового runner
+        env:
+          FIXTURE_OUTPUT: ${{ runner.temp }}/program-maintenance-fixture
+        run: |
+          sudo env GITHUB_ACTIONS=true GITHUB_SHA="$GITHUB_SHA" \
+            ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+            python3 scripts/tests/integration/program_maintenance_systemd.py \
+            --output "$FIXTURE_OUTPUT" --ack-disposable-runner
+      - name: Сохранить версию, события и журнал фикстуры
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-maintenance-systemd-255-4-${{ github.sha }}
+          path: ${{ runner.temp }}/program-maintenance-fixture/
+          if-no-files-found: error
+          retention-days: 14
