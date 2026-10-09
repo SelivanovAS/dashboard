@@ -71,7 +71,7 @@ class SystemdMaintenanceGate:
     SERVICE_PROPERTIES = ("LoadState", "ActiveState", "SubState", "Job", "MainPID",
                           "ControlPID", "ControlGroup", "NeedDaemonReload", "DropInPaths")
     TIMER_PROPERTIES = ("LoadState", "ActiveState", "UnitFileState", "FragmentPath",
-                        "DropInPaths", "TimersCalendar", "TimersMonotonic", "Persistent",
+                        "DropInPaths", "Persistent",
                         "LastTriggerUSec", "NextElapseUSecRealtime", "NextElapseUSecMonotonic")
 
     def __init__(self, marker, services, *, timers=(),
@@ -97,7 +97,10 @@ class SystemdMaintenanceGate:
                 f"ConditionPathExists=!{self.marker}\n").encode()
 
     def properties(self, unit, names):
-        raw = self.run(["systemctl", "show", unit, "--property=" + ",".join(names)])
+        # Array timer properties are omitted when empty and printed as repeated
+        # keys when nonempty in systemd 255. Snapshot scalar lifecycle fields;
+        # the host's routing audit separately hashes the unit/drop-in contents.
+        raw = self.run(["systemctl", "show", unit, "--all", "--property=" + ",".join(names)])
         props = {}
         for line in raw.splitlines():
             key, sep, value = line.partition("=")
@@ -105,7 +108,8 @@ class SystemdMaintenanceGate:
                 raise MaintenanceGateError("Неоднозначный ответ systemd")
             props[key] = value
         if set(props) != set(names) or props.get("LoadState") != "loaded":
-            raise MaintenanceGateError("Не подтверждено загруженное состояние службы")
+            missing = ','.join(sorted(set(names) - set(props)))
+            raise MaintenanceGateError("Не подтверждено загруженное состояние службы; отсутствуют поля: " + missing)
         return props
 
     def snapshot(self):
