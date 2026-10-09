@@ -20809,7 +20809,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "08.07.2026",
-        "last_checked_at": "2026-10-02",
+        "last_checked_at": "2026-10-09",
         "legal_force_est": "2026-09-29",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -20832,7 +20832,10 @@
         "writ_watch_status": "monitoring",
         "writ_watch_reason": "issued_status_observation",
         "writ_observed_bank_role": "Истец",
-        "writ_checked_at": "2026-10-09"
+        "writ_checked_at": "2026-10-09",
+        "act_absent_checked_at": "2026-10-09",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -23564,14 +23567,14 @@
         "link": "274167190|8a7d5955-7419-4858-954d-dd9850d0d2e0",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-09",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011034-06",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-09",
+        "act_absent_checked_at": "2026-10-09",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08"
+        "fi_act_checked_at": "2026-10-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -24456,14 +24459,14 @@
         "link": "270962647|cc41e0bb-c2ba-497d-b039-d1fbdd6d1078",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-09",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0009-01-2026-000095-63",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-09",
+        "act_absent_checked_at": "2026-10-09",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08"
+        "fi_act_checked_at": "2026-10-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -25425,7 +25428,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-02",
+        "last_checked_at": "2026-10-09",
         "appeal_appellant": "ПРЕДСТАВИТЕЛЬ",
         "appeal_appellant_is_bank": null,
         "delo_id": 1540005,
@@ -25436,7 +25439,11 @@
         "legal_force_est": "2026-11-17",
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-09",
+        "act_absent_checked_at": "2026-10-09",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -26133,10 +26140,14 @@
         "link": "267868922|945b592f-ad1a-48f0-ab3f-22b78321cf9d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-17",
+        "last_checked_at": "2026-10-09",
         "delo_id": 1540005,
         "srv_num": 1,
-        "judicial_uid": "86RS0004-01-2026-004414-78"
+        "judicial_uid": "86RS0004-01-2026-004414-78",
+        "writ_checked_at": "2026-10-09",
+        "act_absent_checked_at": "2026-10-09",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-09"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -27933,5 +27944,5 @@
       }
     }
   ],
-  "updated_at": "2026-10-09T07:57:46+05:00"
+  "updated_at": "2026-10-09T08:21:40+05:00"
 }
