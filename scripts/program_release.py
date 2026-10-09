@@ -540,6 +540,42 @@ def check_remote_advance(clone, initial, remote_head, package):
         raise ReleaseError("На сервере появились изменения программы/настроек; обновите checkout")
 
 
+def preflight_vps(package, host, identity):
+    """Reject an unsafe VPS deployment before the code becomes public/pullable."""
+    if host is None:
+        return None
+    if not identity:
+        raise ReleaseError("Предварительная проверка VPS требует --ssh-key")
+    helper = Path(__file__).with_name("program_install_vps.py")
+    if not helper.is_file():
+        raise ReleaseError("Отсутствует program_install_vps.py для предварительной проверки VPS")
+    expected = lock_from_package(package)
+    with tempfile.TemporaryDirectory(prefix="court-program-vps-preflight-") as tmp:
+        manifest = Path(tmp) / LOCK
+        manifest.write_bytes(canonical(expected))
+        command = [sys.executable, str(helper), "--preflight-manifest", str(manifest),
+                   "--host", host, "--identity", str(identity)]
+        try:
+            cp = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ReleaseError("Предварительная проверка VPS не завершена; публикация остановлена") from exc
+    try:
+        report = json.loads(cp.stdout if cp.returncode == 0 else cp.stderr)
+    except ValueError:
+        report = {}
+    if cp.returncode or not isinstance(report, dict) or report.get("preflight_passed") is not True:
+        reason = report.get("error") if isinstance(report, dict) else None
+        detail = (": " + reason[:800]) if isinstance(reason, str) else ""
+        raise ReleaseError("Предварительная проверка VPS отклонена; публикация остановлена" + detail)
+    for key in ("region", "source_commit", "release_id"):
+        if report.get(key) != expected[key]:
+            raise ReleaseError("Предварительная проверка VPS вернула другой выпуск; публикация остановлена")
+    if not isinstance(report.get("head"), str) or not COMMIT.fullmatch(report["head"]):
+        raise ReleaseError("Предварительная проверка VPS не подтвердила исходный HEAD")
+    return report
+
+
 def install_vps(result, package, host, identity):
     if host is None:
         result.update(install_pending=True, status="published_not_installed" if result["published"] else "prepared")
@@ -578,6 +614,8 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
         raise ReleaseError("Установка VPS требует опубликованного коммита (--push)")
     if push and repository_name(remote, require_ssh=True) != repository_name(package["repository"]):
         raise ReleaseError("SSH URL не соответствует территории пакета")
+    if push and (not vps_host or not ssh_key):
+        raise ReleaseError("Публикация рабочей территории требует --vps-host и --ssh-key: VPS должен пройти проверку до push")
     initial = git_text(repo, "rev-parse", "HEAD")
     local_installed = read_installed(repo, initial, region)
     if rollback and local_installed is None and not push:
@@ -617,6 +655,9 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
                           "checkout_unchanged": True}
                 install_vps(result, package, None, None)
                 return result
+            # Parsers normally pull main themselves. Check VPS safety BEFORE push,
+            # and repeat after a racing data commit, not only in the installer.
+            vps_preflight = preflight_vps(package, vps_host, ssh_key)
             if target == base:
                 # main may already contain newer parser data after publication.
                 # Give the installer the code-only introduction commit; it will
@@ -626,7 +667,8 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
                     raise ReleaseError("Не найден коммит публикации установленного выпуска")
                 result = {**plan, "commit": introduced, "remote_commit": base,
                           "published": True, "checkout_unchanged": True,
-                          "operation": "rollback" if rollback else "promote"}
+                          "operation": "rollback" if rollback else "promote",
+                          "vps_preflight": vps_preflight}
                 install_vps(result, package, vps_host, ssh_key)
                 return result
             pushed = git(clone, "push", remote, target + ":refs/heads/main", check=False)
@@ -638,7 +680,8 @@ def promote_release(package_dir, repo, region, *, push=False, remote=None, branc
             if git(clone, "merge-base", "--is-ancestor", target, newest, check=False).returncode == 0:
                 _plan(package, clone, newest)
                 result = {**plan, "commit": target, "remote_commit": newest, "published": True,
-                          "checkout_unchanged": True, "operation": "rollback" if rollback else "promote"}
+                          "checkout_unchanged": True, "operation": "rollback" if rollback else "promote",
+                          "vps_preflight": vps_preflight}
                 install_vps(result, package, vps_host, ssh_key)
                 return result
             check_remote_advance(clone, base, newest, package)
