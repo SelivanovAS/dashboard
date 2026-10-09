@@ -62,6 +62,7 @@ class MaintenanceHooks(Protocol):
     def snapshot(self) -> dict: ...
     def validate_snapshot(self, snapshot: dict) -> None: ...
     def validate_target(self, journal: dict) -> None: ...
+    def apply_target(self, journal: dict) -> None: ...
     def verify_installed(self, journal: dict) -> dict: ...
     def verify_safe(self, journal: dict) -> dict: ...
 
@@ -559,6 +560,20 @@ class MaintenanceLease:
         journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["targets"][-1])
         journal["phase"] = "verified"
         return self._save(journal)
+
+    def apply(self, nonce, attempt_id):
+        """Explicit host write boundary; never infer installation from an ACK.
+
+        The host must bind its resumable Git journal to this exact target and
+        independently validate the fetched commit and preserved inventory. It
+        must not accept client commands or run a parser. Any failure leaves
+        durable `applying` and the marker; repeating uses the same transaction.
+        Verification/opening remain separate operations after this returns.
+        """
+        journal = self.begin_apply(nonce, attempt_id)
+        self.hooks.apply_target(copy.deepcopy(journal))
+        self._live(nonce)
+        return self._owned(nonce, phases=("applying",))
 
     def _resume(self, journal, *, outcome):
         nonce = journal["nonce"]

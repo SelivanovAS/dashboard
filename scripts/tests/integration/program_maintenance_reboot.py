@@ -38,6 +38,19 @@ def run(args, *, timeout=30, check=True, **kwargs):
     return subprocess.run(args, text=True, capture_output=True, timeout=timeout, check=check, **kwargs)
 
 
+def probe_guest(ssh, command):
+    """Temporary SSH loss during boot is pending; the caller owns the deadline.
+
+    Only the short probe's transport timeout/nonzero exit is retried. Unexpected
+    local execution errors propagate, as does the outer bounded wait failure.
+    """
+    try:
+        result = run([*ssh, command], timeout=6, check=False)
+    except subprocess.TimeoutExpired:
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -305,7 +318,7 @@ write_files:
             ssh = ["ssh", *options, "-p", str(port), "fixture@127.0.0.1"]
             def ready():
                 assert process.poll() is None, "QEMU exited before proof completed"
-                return run([*ssh, "test -e /var/lib/cloud/instance/boot-finished"], timeout=6, check=False).returncode == 0
+                return probe_guest(ssh, "test -e /var/lib/cloud/instance/boot-finished") is not None
             wait(ready, timeout=180, label="first guest boot")
             run([*ssh, "sudo mkdir -p /opt/court-reboot && sudo chown fixture /opt/court-reboot"])
             adapter = Path(__file__).resolve().parents[2] / "program_maintenance_systemd.py"
@@ -317,13 +330,19 @@ write_files:
             assert before["passed"]
             # Reboot the GUEST, never the runner. QEMU stays alive while a new
             # guest kernel/PID1 starts from the same durable disk.
-            reboot = run([*ssh, "sudo systemctl reboot"], timeout=10, check=False)
-            assert reboot.returncode in (0, 255), "Guest reboot request rejected"
+            try:
+                reboot = run([*ssh, "sudo systemctl reboot"], timeout=10, check=False)
+                assert reboot.returncode in (0, 255), "Guest reboot request rejected"
+                report["reboot_request_returncode"] = reboot.returncode
+            except subprocess.TimeoutExpired:
+                # Lost SSH acknowledgement does not prove success or failure.
+                # The bounded new-kernel boot_id check below decides the proof.
+                report["reboot_request_returncode"] = "timeout-unknown"
             def rebooted():
                 if not ready():
                     return False
-                value = run([*ssh, "cat /proc/sys/kernel/random/boot_id"], timeout=6, check=False)
-                return value.returncode == 0 and value.stdout.strip() != before["boot_id"]
+                value = probe_guest(ssh, "cat /proc/sys/kernel/random/boot_id")
+                return value is not None and value.strip() != before["boot_id"]
             wait(rebooted, timeout=180, label="new guest kernel boot_id")
             after = json.loads(run([*ssh, "sudo python3 /opt/court-reboot/fixture.py --guest after"], timeout=110).stdout)
             (output / "after-reboot.json").write_text(json.dumps(after, indent=2, sort_keys=True) + "\n")

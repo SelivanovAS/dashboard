@@ -379,3 +379,83 @@ def test_delayed_push_before_connection_is_rejected_after_safe_fence(repos):
     assert m.publication_fences(installed, fence, [intent(base, candidate)])["attempts"][0]["relationship"] == "diverged"
     assert git(author, "push", "origin", candidate + ":refs/heads/main", check=False).returncode != 0
     assert git(origin, "rev-parse", "main") == fence
+
+
+def test_shallow_history_cannot_falsely_fence_late_fast_forward(repos):
+    origin, author, installed, remote, _ = repos
+    git(author, "commit", "--allow-empty", "-m", "middle B")
+    base = git(author, "rev-parse", "HEAD")
+    git(author, "commit", "--allow-empty", "-m", "target T")
+    candidate = git(author, "rev-parse", "HEAD")
+    git(installed, "fetch", str(author), candidate)
+    write(installed, ".git/shallow", (base + "\n").encode())
+    # Git's truncated graph reports diverged even though true remote R precedes T.
+    assert git(installed, "merge-base", "--is-ancestor", remote, candidate, check=False).returncode == 1
+    with pytest.raises(m.MaintenanceGitError, match="shallow"):
+        m.publication_fences(installed, remote, [intent(base, candidate)])
+    git(author, "push", "origin", candidate + ":refs/heads/main")
+    assert git(origin, "rev-parse", "main") == candidate
+
+
+@pytest.mark.parametrize("history", ["shallow", "grafts", "partial-config", "promisor-config", "promisor-pack", "alternates"])
+def test_noncomplete_history_blocks_all_git_transaction_proofs(repos, tmp_path, history):
+    _, _, installed, base, _ = repos
+    sha, lock = target(repos)
+    path = journal(tmp_path)
+    m.begin_install(installed, sha, path, lock)
+    if history == "shallow": write(installed, ".git/shallow", (base + "\n").encode())
+    if history == "grafts": write(installed, ".git/info/grafts", (base + "\n").encode())
+    if history == "partial-config": git(installed, "config", "extensions.partialClone", "origin")
+    if history == "promisor-config": git(installed, "config", "remote.origin.promisor", "true")
+    if history == "promisor-pack": write(installed, ".git/objects/pack/unknown.promisor", b"")
+    if history == "alternates": write(installed, ".git/objects/info/alternates", b"/nonexistent/objectstore\n")
+    with pytest.raises(m.MaintenanceGitError): m.publication_fences(installed, sha, [intent(base, sha)])
+    with pytest.raises(m.MaintenanceGitError): m.begin_install(installed, sha, journal(tmp_path, "next"), lock)
+    with pytest.raises(m.MaintenanceGitError): m.resume_install(installed, path)
+    with pytest.raises(m.MaintenanceGitError): m.verify_install(installed, path)
+    assert (installed / "script.py").read_bytes() == b"old program\n"
+
+
+def test_public_verification_rejects_index_lock_after_head_crash(repos, tmp_path):
+    _, _, installed, _, _ = repos
+    sha, lock = target(repos)
+    path = journal(tmp_path)
+    m.begin_install(installed, sha, path, lock)
+    def crash(point, name):
+        if point == "head": raise RuntimeError("after HEAD before lock cleanup")
+    with pytest.raises(RuntimeError): m.resume_install(installed, path, checkpoint=crash)
+    assert git(installed, "rev-parse", "HEAD") == sha
+    with pytest.raises(m.MaintenanceGitError, match="index lock must be absent"):
+        m.verify_install(installed, path)
+    assert m.resume_install(installed, path)["installed_sha"] == sha
+    assert m.verify_install(installed, path)["installed_sha"] == sha
+
+
+def test_public_verification_rejects_foreign_index_lock_and_resume_keeps_it(repos, tmp_path):
+    _, _, installed, _, _ = repos
+    sha, lock = target(repos)
+    path = journal(tmp_path)
+    m.begin_install(installed, sha, path, lock)
+    m.resume_install(installed, path)
+    own_bytes = (path.parent / "index.owner").read_bytes()
+    write(installed, ".git/index.lock", own_bytes)  # Same bytes, different inode.
+    with pytest.raises(m.MaintenanceGitError): m.verify_install(installed, path)
+    with pytest.raises(m.MaintenanceGitError): m.resume_install(installed, path)
+    assert (installed / ".git/index.lock").read_bytes() == own_bytes
+
+
+def test_fencing_accepts_actual_v2_targets_and_preserves_them_in_evidence(repos):
+    _, author, installed, base, _ = repos
+    sha, lock = target(repos)
+    write(author, "data/cases.json", b"later")
+    later = commit(author, "safe next target")
+    git(author, "push", "origin", "main")
+    git(installed, "fetch", "origin", "main")
+    attempts = [dict(intent(base, sha), target_id=1), dict(intent(sha, later, 2), target_id=2)]
+    result = m.publication_fences(installed, later, attempts)
+    assert result["covered_attempt_ids"] == [1, 2]
+    assert [a["target_id"] for a in result["attempts"]] == [1, 2]
+    for invalid in [dict(attempts[0], target_id=True), dict(attempts[0], target_id=0), dict(attempts[0], target_id=2)]:
+        with pytest.raises(m.MaintenanceGitError): m.publication_fences(installed, later, [invalid])
+    with pytest.raises(m.MaintenanceGitError):
+        m.publication_fences(installed, later, [attempts[0], intent(sha, later, 2)])

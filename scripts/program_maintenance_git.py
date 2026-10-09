@@ -43,6 +43,36 @@ def _text(repo, *args):
     return _git(repo, *args).stdout.decode().strip()
 
 
+def _assert_complete_history(repo):
+    # A shallow/grafted graph can falsely report "diverged" while the actual
+    # remote still accepts a late fast-forward. Never fetch missing history as
+    # an implicit side effect of a safety proof.
+    if _text(repo, "rev-parse", "--is-shallow-repository") != "false":
+        raise MaintenanceGitError("Incomplete/shallow Git history cannot prove safety")
+    for item in ("shallow", "info/grafts"):
+        path = Path(_text(repo, "rev-parse", "--git-path", item))
+        if not path.is_absolute():
+            path = Path(repo) / path
+        if path.exists() or path.is_symlink():
+            raise MaintenanceGitError("Shallow/grafted Git history cannot prove safety")
+    config = _git(repo, "config", "--get-regexp",
+                  r"^(extensions\.partialclone|remote\..*\.promisor|remote\..*\.partialclonefilter)$", check=False)
+    if config.returncode not in (0, 1):
+        raise MaintenanceGitError("Cannot inspect partial-clone configuration")
+    if config.returncode == 0:
+        raise MaintenanceGitError("Partial/promisor clone cannot prove safety")
+    objects = Path(_text(repo, "rev-parse", "--git-path", "objects"))
+    if not objects.is_absolute():
+        objects = Path(repo) / objects
+    if any((objects / "pack").glob("*.promisor")):
+        raise MaintenanceGitError("Promisor objects cannot prove safety")
+    # External object stores could themselves hide shallow/promisor metadata.
+    # Generic release checkouts must be self-contained ordinary full clones.
+    for item in (objects / "info/alternates", objects / "info/http-alternates"):
+        if item.exists() or item.is_symlink():
+            raise MaintenanceGitError("Alternate object stores cannot prove safety")
+
+
 def _commit(repo, sha):
     if not isinstance(sha, str) or not release.COMMIT.fullmatch(sha):
         raise MaintenanceGitError("A full commit SHA is required")
@@ -65,14 +95,24 @@ def publication_fences(repo, remote_sha, attempts):
     installed program, obtains remote_sha by its own fetch, and forbids force push.
     A diverged remote is fenced, but is not thereby a safe program.
     """
+    _assert_complete_history(repo)
     _commit(repo, remote_sha)
     if not isinstance(attempts, list):
         raise MaintenanceGitError("Invalid publication intents")
     evidence = []
+    v2 = bool(attempts and isinstance(attempts[0], dict) and "target_id" in attempts[0])
+    keys = {"attempt_id", "base_sha", "target_sha"} | ({"target_id"} if v2 else set())
+    previous_target = 1
     for number, attempt in enumerate(attempts, 1):
-        if (not isinstance(attempt, dict) or set(attempt) != {"attempt_id", "base_sha", "target_sha"}
+        if (not isinstance(attempt, dict) or set(attempt) != keys
                 or type(attempt["attempt_id"]) is not int or attempt["attempt_id"] != number):
             raise MaintenanceGitError("Publication intent sequence is invalid")
+        if v2:
+            target_id = attempt["target_id"]
+            if (type(target_id) is not int or target_id < previous_target
+                    or (number == 1 and target_id != 1)):
+                raise MaintenanceGitError("Invalid v2 target sequence")
+            previous_target = target_id
         base, target = (_commit(repo, attempt[key]) for key in ("base_sha", "target_sha"))
         if base == target or not _ancestor(repo, base, target):
             raise MaintenanceGitError("Intent was not a strict fast-forward")
@@ -250,6 +290,7 @@ def begin_install(repo, target_sha, journal_path, expected_lock):
     staging can be retained for inspection and a new journal path can be used.
     """
     repo = _repo(repo)
+    _assert_complete_history(repo)
     _commit(repo, target_sha)
     old = _text(repo, "rev-parse", "HEAD")
     branch = _text(repo, "symbolic-ref", "HEAD")
@@ -330,6 +371,7 @@ def begin_install(repo, target_sha, journal_path, expected_lock):
 
 def _load(repo, journal_path):
     repo = _repo(repo)
+    _assert_complete_history(repo)
     journal_path = Path(journal_path)
     _no_symlinks(journal_path)
     if (stat.S_IMODE(journal_path.parent.stat().st_mode) != 0o700
@@ -378,6 +420,26 @@ def _validate_partial(repo, doc):
         raise MaintenanceGitError("Index changed outside installation")
 
 
+def _check_index_lock(repo, journal_path, doc, *, require_owned):
+    lock = repo / ".git/index.lock"
+    present = lock.exists() or lock.is_symlink()
+    if not require_owned:
+        if present:
+            raise MaintenanceGitError("Git index lock must be absent for public verification")
+        return
+    if not present or lock.is_symlink() or not lock.is_file():
+        raise MaintenanceGitError("Owned Git index lock is missing or invalid")
+    owner_file = journal_path.parent / "index.owner"
+    if owner_file.is_symlink() or not owner_file.is_file():
+        raise MaintenanceGitError("Index lock owner is invalid")
+    held, original = lock.stat(), owner_file.stat()
+    owner = ("program-maintenance-index/1 " + doc["transaction_id"] + "\n").encode()
+    if ((held.st_dev, held.st_ino) != (original.st_dev, original.st_ino)
+            or stat.S_IMODE(held.st_mode) != 0o600 or held.st_uid != os.geteuid()
+            or lock.read_bytes() != owner):
+        raise MaintenanceGitError("Foreign Git index lock")
+
+
 def resume_install(repo, journal_path, *, checkpoint=None):
     """Finish only the recorded transition. Fault callback is for isolated tests.
 
@@ -387,10 +449,8 @@ def resume_install(repo, journal_path, *, checkpoint=None):
     repo, journal_path, doc = _load(repo, journal_path)
     _validate_partial(repo, doc)
     lock = repo / ".git/index.lock"
-    owner = ("program-maintenance-index/1 " + doc["transaction_id"] + "\n").encode()
     if lock.exists() or lock.is_symlink():
-        if lock.is_symlink() or not lock.is_file() or lock.read_bytes() != owner:
-            raise MaintenanceGitError("Foreign Git index lock")
+        _check_index_lock(repo, journal_path, doc, require_owned=True)
     else:
         os.link(journal_path.parent / "index.owner", lock)
         _sync_dir(lock.parent)
@@ -439,17 +499,24 @@ def resume_install(repo, journal_path, *, checkpoint=None):
             _sync_dir(refpath.parent)
         if checkpoint:
             checkpoint("head", None)
-        result = verify_install(repo, journal_path)
+        _verify_install(repo, journal_path, allow_owned_index_lock=True)
+        _check_index_lock(repo, journal_path, doc, require_owned=True)
         lock.unlink()
         _sync_dir(lock.parent)
-        return result
+        return verify_install(repo, journal_path)
     except BaseException:
         # The owned index lock deliberately survives ambiguity for explicit resume.
         raise
 
 
 def verify_install(repo, journal_path):
+    """Public completion proof: no remaining Git index lock is acceptable."""
+    return _verify_install(repo, journal_path, allow_owned_index_lock=False)
+
+
+def _verify_install(repo, journal_path, *, allow_owned_index_lock):
     repo, journal_path, doc = _load(repo, journal_path)
+    _check_index_lock(repo, journal_path, doc, require_owned=allow_owned_index_lock)
     _validate_partial(repo, doc)
     actual = inventory(repo)
     for name, change in doc["writes"].items():
