@@ -21,10 +21,10 @@ import secrets
 import stat
 from typing import Protocol
 
-SCHEMA_VERSION = 1
-PROTOCOL = "court-program-maintenance/1"
+SCHEMA_VERSION = 2
+PROTOCOL = "court-program-maintenance/2"
 REGIONS = ("hmao", "sverdlovsk_yanao", "bashkortostan", "tyumen")
-PHASES = ("reserved", "ready", "publish_intent", "applying", "verified", "safe_to_resume", "complete")
+PHASES = ("reserved", "ready", "recovery_ready", "publish_intent", "applying", "verified", "safe_to_resume", "complete")
 MAX_DOCUMENT_BYTES = 1024 * 1024
 
 
@@ -38,11 +38,17 @@ class MaintenanceHooks(Protocol):
     acquire_run_locks is all-or-nothing; on failure it MUST release any partial
     acquisition itself. release_run_locks is called only after acquisition has
     returned successfully. It must prove release or raise; no blind second retry.
-    snapshot returns four region records: head, release_id, managed_sha256.
+    snapshot returns four region records: head, release_id, managed_sha256 and
+    inventory_sha256. The last digest binds a durable external inventory of
+    protected/unmanaged files; the adapter must retain it across recovery.
     validate_snapshot proves the current trees equal that snapshot (data rules
     belong to the host adapter). assert_run_locks proves live ownership.
+    validate_target proves the current target's manifest and the original
+    protected inventories, including known partial writes on recovery. It must
+    reject unknown managed/unmanaged differences before any publish permission.
     verify_installed checks hashes, modes, source, effective region and protected
-    data; returns installed_sha, release_id, evidence_sha256.
+    data; returns target_id, manifest_sha256, installed_sha, release_id,
+    evidence_sha256 for the CURRENT target, including an emergency rollback.
     verify_safe checks the entire journal, all attempted target/base pairs, remote
     ref fences, queued jobs and installed integrity; returns covered_attempt_ids
     and evidence_sha256. With no intents it proves the baseline is still safe.
@@ -55,6 +61,7 @@ class MaintenanceHooks(Protocol):
     def release_run_locks(self, nonce: str) -> None: ...
     def snapshot(self) -> dict: ...
     def validate_snapshot(self, snapshot: dict) -> None: ...
+    def validate_target(self, journal: dict) -> None: ...
     def verify_installed(self, journal: dict) -> dict: ...
     def verify_safe(self, journal: dict) -> dict: ...
 
@@ -99,17 +106,32 @@ def _snapshot(document):
     if not isinstance(document, dict) or set(document) != set(REGIONS):
         raise MaintenanceError("Нужен снимок четырёх территорий")
     for record in document.values():
-        if not isinstance(record, dict) or set(record) != {"head", "release_id", "managed_sha256"}:
+        if not isinstance(record, dict) or set(record) != {"head", "release_id", "managed_sha256", "inventory_sha256"}:
             raise MaintenanceError("Некорректный снимок территории")
         _sha(record["head"])
         if record["release_id"] is not None:
             _hex(record["release_id"], 64, "release_id")
         _hex(record["managed_sha256"], 64, "managed_sha256")
+        _hex(record["inventory_sha256"], 64, "inventory_sha256")
     return copy.deepcopy(document)
+
+
+def _target(document, index):
+    if (not isinstance(document, dict) or set(document) != {
+            "target_id", "release_id", "source_commit", "manifest_sha256", "reason"}
+            or type(document["target_id"]) is not int or document["target_id"] != index):
+        raise MaintenanceError("Нарушен порядок целей установки")
+    _hex(document["release_id"], 64, "release_id")
+    _sha(document["source_commit"])
+    _hex(document["manifest_sha256"], 64, "manifest_sha256")
+    if document["reason"] not in (("release",) if index == 1 else ("rollback", "repair")):
+        raise MaintenanceError("Неизвестное основание цели установки")
+    return document
 
 
 def _journal(document):
     required = {"schema_version", "protocol", "nonce", "region", "release_id", "source_commit",
+                "manifest_sha256", "targets", "active_target_id",
                 "phase", "revision", "owner", "snapshot", "attempts", "active_attempt_id",
                 "verification", "safe_evidence", "outcome"}
     if not isinstance(document, dict) or set(document) != required:
@@ -122,6 +144,18 @@ def _journal(document):
         raise MaintenanceError("Неизвестная территория или фаза")
     _hex(document["release_id"], 64, "release_id")
     _sha(document["source_commit"])
+    _hex(document["manifest_sha256"], 64, "manifest_sha256")
+    targets = document["targets"]
+    if not isinstance(targets, list) or not targets:
+        raise MaintenanceError("Потеряны цели установки")
+    for index, target in enumerate(targets, 1):
+        _target(target, index)
+    if (type(document["active_target_id"]) is not int
+            or document["active_target_id"] != len(targets)):
+        raise MaintenanceError("Некорректная активная цель")
+    current = targets[-1]
+    if any(document[key] != current[key] for key in ("release_id", "source_commit", "manifest_sha256")):
+        raise MaintenanceError("Активная цель не соответствует паспорту окна")
     if type(document["revision"]) is not int or document["revision"] < 1:
         raise MaintenanceError("Некорректная ревизия журнала")
     owner = document["owner"]
@@ -136,10 +170,16 @@ def _journal(document):
         _snapshot(document["snapshot"])
     if not isinstance(document["attempts"], list):
         raise MaintenanceError("Некорректные намерения публикации")
+    previous_target = 1
     for index, attempt in enumerate(document["attempts"], 1):
-        if (not isinstance(attempt, dict) or set(attempt) != {"attempt_id", "base_sha", "target_sha"}
+        if (not isinstance(attempt, dict) or set(attempt) != {"attempt_id", "target_id", "base_sha", "target_sha"}
                 or type(attempt["attempt_id"]) is not int or attempt["attempt_id"] != index):
             raise MaintenanceError("Нарушен порядок намерений публикации")
+        if (type(attempt["target_id"]) is not int
+                or not previous_target <= attempt["target_id"] <= len(targets)
+                or (index == 1 and attempt["target_id"] != 1)):
+            raise MaintenanceError("Намерение относится к неизвестной или прежней цели")
+        previous_target = attempt["target_id"]
         _sha(attempt["base_sha"])
         _sha(attempt["target_sha"])
         if len(attempt["base_sha"]) != len(attempt["target_sha"]):
@@ -147,11 +187,23 @@ def _journal(document):
         if attempt["base_sha"] == attempt["target_sha"]:
             raise MaintenanceError("Публикация не меняет коммит")
     active = document["active_attempt_id"]
-    if active is not None and (type(active) is not int or active != len(document["attempts"])):
+    if active is not None and (type(active) is not int or not document["attempts"]
+                              or active != len(document["attempts"])):
         raise MaintenanceError("Некорректное активное намерение")
+    if active is not None and document["attempts"][-1]["target_id"] != current["target_id"]:
+        raise MaintenanceError("Активное намерение относится к прежней цели")
     phase = document["phase"]
     if phase in ("reserved", "ready") and (document["attempts"] or active is not None):
         raise MaintenanceError("Намерение предшествует разрешённой фазе")
+    if phase in ("reserved", "ready") and len(targets) != 1:
+        raise MaintenanceError("Цель восстановления предшествует разрешению публикации")
+    if phase == "recovery_ready" and (len(targets) < 2 or not document["attempts"] or active is not None):
+        raise MaintenanceError("Некорректное состояние цели восстановления")
+    if (phase == "recovery_ready"
+            and document["attempts"][-1]["target_id"] >= current["target_id"]):
+        raise MaintenanceError("Восстановление содержит уже разрешённое активное намерение")
+    if len(targets) > 1 and not document["attempts"]:
+        raise MaintenanceError("Восстановление не содержит прежних намерений")
     if phase != "reserved" and document["snapshot"] is None:
         # A reservation may be cancelled before it obtains a baseline snapshot.
         if not (phase == "complete" and document["outcome"] == "cancelled"):
@@ -170,7 +222,7 @@ def _journal(document):
         raise MaintenanceError("Отмена после разрешения публикации запрещена")
     verified = phase in ("verified", "safe_to_resume") or document["outcome"] == "installed"
     if verified:
-        _verification(document["verification"], document["release_id"])
+        _verification(document["verification"], current)
     elif document["verification"] is not None:
         raise MaintenanceError("Проверка записана до установки")
     if phase == "safe_to_resume" or phase == "complete":
@@ -181,11 +233,13 @@ def _journal(document):
     return document
 
 
-def _verification(document, release_id):
-    if not isinstance(document, dict) or set(document) != {"installed_sha", "release_id", "evidence_sha256"}:
+def _verification(document, target):
+    if not isinstance(document, dict) or set(document) != {"target_id", "manifest_sha256", "installed_sha", "release_id", "evidence_sha256"}:
         raise MaintenanceError("Нет полной проверки установленного пакета")
     _sha(document["installed_sha"])
-    if document["release_id"] != release_id:
+    if (document["release_id"] != target["release_id"]
+            or type(document["target_id"]) is not int or document["target_id"] != target["target_id"]
+            or document["manifest_sha256"] != target["manifest_sha256"]):
         raise MaintenanceError("Проверен другой пакет")
     _hex(document["evidence_sha256"], 64, "evidence_sha256")
     return copy.deepcopy(document)
@@ -208,7 +262,8 @@ class MaintenanceLease:
     A dead coordinator is recovered explicitly with recover(nonce); it never
     gains an automatic right to clear an ambiguous post-intent marker.
     """
-    def __init__(self, state_dir, hooks: MaintenanceHooks, *, boot_id=None):
+    def __init__(self, state_dir, hooks: MaintenanceHooks, *, boot_id=None,
+                 allow_verified_pending_jobs=False):
         self.path = Path(state_dir)
         if not self.path.is_absolute() or ".." in self.path.parts:
             raise MaintenanceError("Нужен абсолютный путь каталога окна")
@@ -217,6 +272,11 @@ class MaintenanceLease:
         for name in MaintenanceHooks.__dict__:
             if not name.startswith("_") and not callable(getattr(hooks, name, None)):
                 raise MaintenanceError(f"Не реализована обязательная проверка {name}")
+        if type(allow_verified_pending_jobs) is not bool:
+            raise MaintenanceError("Режим проверки выхода должен быть явным bool")
+        self.allow_verified_pending_jobs = allow_verified_pending_jobs
+        if allow_verified_pending_jobs and not callable(getattr(hooks, "check_exit", None)):
+            raise MaintenanceError("Для обычных ожидающих jobs нужна проверка check_exit")
         self.owner = {"pid": os.getpid(), "session_id": secrets.token_hex(16), "boot_id": boot_id}
         self.dirfd = self.lockfd = None
         self.held_nonce = None
@@ -364,39 +424,54 @@ class MaintenanceLease:
             raise MaintenanceError(f"Операция недопустима в фазе {journal['phase']}")
         return journal
 
-    def _live(self, nonce):
+    def _check_quiescence(self, exit_journal=None):
+        if self.allow_verified_pending_jobs and exit_journal is not None:
+            # An explicit adapter proves no remaining writes/active workers and
+            # effective admission guards. Natural pending jobs may remain; this
+            # hook MUST NOT create, cancel or start any job. Only a verified
+            # target may use this finite exit contract, including crash recovery.
+            if exit_journal["phase"] not in ("verified", "safe_to_resume", "complete"):
+                raise MaintenanceError("Ослабление drain до проверки запрещено")
+            self.hooks.check_exit(copy.deepcopy(exit_journal))
+        else:
+            self.hooks.drain()
+
+    def _live(self, nonce, *, exit_journal=None):
         self._identity()
         if self.held_nonce != nonce:
             raise MaintenanceError("Четыре региональных замка не удерживаются")
         self.hooks.check_guard(self.marker)
         self.hooks.assert_run_locks(nonce)
-        self.hooks.drain()
+        self._check_quiescence(exit_journal)
         self.hooks.assert_run_locks(nonce)
 
-    def _acquire(self, nonce):
+    def _acquire(self, nonce, *, exit_journal=None):
         if self.held_nonce is not None:
             if self.held_nonce != nonce:
                 raise MaintenanceError("Объект удерживает замки другого окна")
-            self._live(nonce)
+            self._live(nonce, exit_journal=exit_journal)
             return
         self.hooks.check_guard(self.marker)
-        self.hooks.drain()
+        self._check_quiescence(exit_journal)
         self.hooks.acquire_run_locks(nonce)  # Adapter cleans its own partial failure.
         self.held_nonce = nonce
-        self._live(nonce)
+        self._live(nonce, exit_journal=exit_journal)
 
     def _release_locks(self):
         if self.held_nonce is not None:
             nonce, self.held_nonce = self.held_nonce, None
             self.hooks.release_run_locks(nonce)
 
-    def reserve(self, *, region, release_id, source_commit, nonce=None):
+    def reserve(self, *, region, release_id, source_commit, manifest_sha256, nonce=None):
         nonce = _nonce(nonce or secrets.token_hex(16))
         state = self.inspect()
         if state["blocked"] or (state["journal"] is not None and state["journal"]["phase"] != "complete"):
             raise MaintenanceError("Нужно явно восстановить прежнее окно")
         journal = _journal({"schema_version": SCHEMA_VERSION, "protocol": PROTOCOL, "nonce": nonce,
             "region": region, "release_id": release_id, "source_commit": source_commit,
+            "manifest_sha256": manifest_sha256, "active_target_id": 1,
+            "targets": [{"target_id": 1, "release_id": release_id, "source_commit": source_commit,
+                         "manifest_sha256": manifest_sha256, "reason": "release"}],
             "phase": "reserved", "revision": 1, "owner": self.owner, "snapshot": None,
             "attempts": [], "active_attempt_id": None, "verification": None,
             "safe_evidence": None, "outcome": None})
@@ -423,16 +498,46 @@ class MaintenanceLease:
         journal = self._owned(nonce, allow_unblocked=True)
         if journal["phase"] == "complete" and not self.inspect()["blocked"]:
             return journal
-        self._acquire(nonce)
+        final = journal if (journal["phase"] in ("verified", "safe_to_resume")
+                            or journal["outcome"] == "installed") else None
+        self._acquire(nonce, exit_journal=final)
         if journal["phase"] in ("reserved", "ready") and journal["snapshot"] is not None:
             self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
         return journal
 
-    def publish_intent(self, nonce, *, base_sha, target_sha):
-        journal = self._owned(nonce, phases=("ready", "publish_intent"))
+    def select_recovery_target(self, nonce, *, release_id, source_commit,
+                               manifest_sha256, reason):
+        """Retain every earlier late-push hazard inside the SAME closed lease.
+
+        Selection is not permission to publish/apply. validate_target must prove
+        the chosen manifest and original inventories before a new intent is ACKed.
+        v1 journals are rejected by inspect, never silently migrated or replaced.
+        """
+        journal = self._owned(nonce, phases=("publish_intent", "applying", "verified",
+                                            "safe_to_resume", "recovery_ready", "complete"))
+        if not journal["attempts"]:
+            raise MaintenanceError("Нет прежней публикации для восстановления")
         self._live(nonce)
-        self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
+        target = _target({"target_id": len(journal["targets"]) + 1,
+                          "release_id": release_id, "source_commit": source_commit,
+                          "manifest_sha256": manifest_sha256, "reason": reason},
+                         len(journal["targets"]) + 1)
+        journal["targets"].append(target)
+        journal["active_target_id"] = target["target_id"]
+        for key in ("release_id", "source_commit", "manifest_sha256"):
+            journal[key] = target[key]
+        journal.update(phase="recovery_ready", active_attempt_id=None,
+                       verification=None, safe_evidence=None, outcome=None)
+        return self._save(journal)
+
+    def publish_intent(self, nonce, *, base_sha, target_sha):
+        journal = self._owned(nonce, phases=("ready", "recovery_ready", "publish_intent"))
+        self._live(nonce)
+        if journal["active_target_id"] == 1:
+            self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
+        self.hooks.validate_target(copy.deepcopy(journal))
         attempt = {"attempt_id": len(journal["attempts"]) + 1,
+                   "target_id": journal["active_target_id"],
                    "base_sha": _sha(base_sha), "target_sha": _sha(target_sha)}
         journal["attempts"].append(attempt)
         journal["active_attempt_id"] = attempt["attempt_id"]
@@ -451,15 +556,15 @@ class MaintenanceLease:
     def mark_verified(self, nonce):
         journal = self._owned(nonce, phases=("applying", "verified"))
         self._live(nonce)
-        journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["release_id"])
+        journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["targets"][-1])
         journal["phase"] = "verified"
         return self._save(journal)
 
     def _resume(self, journal, *, outcome):
         nonce = journal["nonce"]
-        self._live(nonce)
+        self._live(nonce, exit_journal=journal if outcome == "installed" else None)
         if outcome == "installed":
-            journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["release_id"])
+            journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["targets"][-1])
         elif journal["snapshot"] is not None:
             self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
         journal["safe_evidence"] = _safe_evidence(self.hooks.verify_safe(copy.deepcopy(journal)), journal["attempts"])
@@ -470,7 +575,7 @@ class MaintenanceLease:
         # All run locks are released while the durable marker still excludes starts.
         self._release_locks()
         self.hooks.check_guard(self.marker)
-        self.hooks.drain()
+        self._check_quiescence(journal if outcome == "installed" else None)
         # Adapter must close queued-job races and late-push races here as well.
         journal["safe_evidence"] = _safe_evidence(self.hooks.verify_safe(copy.deepcopy(journal)), journal["attempts"])
         journal["phase"], journal["outcome"] = "complete", outcome
@@ -489,7 +594,7 @@ class MaintenanceLease:
         if journal["phase"] == "complete" and journal["outcome"] == "cancelled":
             self._acquire(nonce)
             return self._resume(journal, outcome="cancelled")
-        self._acquire(nonce)
+        self._acquire(nonce, exit_journal=journal)
         return self._resume(journal, outcome="installed")
 
     def cancel_before_publish(self, nonce):

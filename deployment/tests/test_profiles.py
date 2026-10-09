@@ -100,7 +100,7 @@ def test_region_workflow_presence_is_preserved():
 def test_source_branch_has_no_production_data_or_delivery_workflow():
     assert not (ROOT / "data").exists()
     active = list((ROOT / ".github/workflows").glob("*.yml"))
-    assert sorted(path.name for path in active) == ["program-maintenance-fixture.yml", "program-tests.yml"]
+    assert sorted(path.name for path in active) == ["program-maintenance-fixture.yml", "program-maintenance-reboot.yml", "program-tests.yml"]
     text = (ROOT / '.github/workflows/program-tests.yml').read_text()
     assert "branches: [codex/program]" in text
     assert "contents: read" in text
@@ -121,3 +121,18 @@ def test_production_ci_detects_unapproved_program_changes_before_unit_tests():
     command = "python scripts/program_release.py verify --repo ."
     assert command in text
     assert text.index(command) < text.index("python -m pytest -q")
+
+
+def test_reboot_fixture_is_isolated_and_manual_production_launch_is_impossible():
+    text = (ROOT / '.github/workflows/program-maintenance-reboot.yml').read_text()
+    assert 'branches: [codex/program-maintenance-lease]' in text
+    assert "github.ref == 'refs/heads/codex/program-maintenance-lease'" in text
+    assert 'contents: read' in text
+    assert 'secrets.' not in text
+    assert 'persist-credentials: false' in text
+    assert not re.search(r'^  (schedule|workflow_run|workflow_dispatch|pull_request):', text, re.M)
+    assert 'program_maintenance_reboot.py' in text
+    fixture = (ROOT / 'scripts/tests/integration/program_maintenance_reboot.py').read_text()
+    assert 'restrict=on,hostfwd=tcp:127.0.0.1:' in fixture
+    assert 'installer_protocol_tested": False' in fixture
+    assert 'gpgv' in fixture and 'Official image SHA256 mismatch' in fixture

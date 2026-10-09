@@ -30,6 +30,8 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q \
             deployment/tests/test_profiles.py \
             scripts/tests/test_program_maintenance.py \
+            scripts/tests/test_program_maintenance_protocol.py \
+            scripts/tests/test_program_maintenance_git.py \
             scripts/tests/test_program_maintenance_systemd.py \
             scripts/tests/test_run_lock.py scripts/tests/test_retry_launcher.py \
             scripts/tests/test_delivery_readiness.py::test_delivery_skips_a_clone_locked_by_another_live_process
