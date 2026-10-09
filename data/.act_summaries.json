@@ -910,5 +910,37 @@
       "status": "ready"
     },
     "generated_at": "2026-10-08T03:45:30+00:00"
+  },
+  "ef58dd08d3b12d6f": {
+    "summary": "Суд отказал в признании договора недействительным, поскольку истец лично прошел идентификацию, ввел коды из СМС и выразил волю на заключение сделки. Установлено, что заемщик самостоятельно снял наличные и перевел их мошенникам, поэтому ущерб причинен третьими лицами, а не банком.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 58520,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "0d0d0a61f066e7809817b30745c19d0a5ece9ad164468c67951dfcc766f942a1",
+      "raw_chars": 29399,
+      "prepared_chars": 29399,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262686215&case_uid=61637028-8b34-4d9b-87c3-bb8c17a4583f&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-07T02:14:35+00:00",
+      "case_number": "2-135/2026 (2-3719/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-005555-96",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-09T03:45:24+00:00"
   }
 }
