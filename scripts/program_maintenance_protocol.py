@@ -75,6 +75,7 @@ ACTIONS = {
     "publish_intent": ({"nonce", "base_sha", "target_sha"}, set()),
     "select_recovery_target": ({"nonce", "release_id", "source_commit", "manifest_sha256", "reason"}, set()),
     "begin_apply": ({"nonce", "attempt_id"}, set()),
+    "apply": ({"nonce", "attempt_id"}, set()),
     "mark_verified": ({"nonce"}, set()),
     "finish": ({"nonce"}, set()),
     "cancel_before_publish": ({"nonce"}, set()),

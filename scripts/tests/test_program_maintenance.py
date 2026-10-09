@@ -81,6 +81,14 @@ class Hooks:
         assert journal["phase"] in ("verified", "safe_to_resume", "complete")
         assert self.marker.exists()
 
+    def apply_target(self, journal):
+        self.call("apply_target")
+        assert self.held == journal["nonce"]
+        assert self.marker.is_file()
+        persisted = json.loads((self.marker.parent / "journal.json").read_text())
+        assert persisted["phase"] == "applying"
+        assert persisted == journal
+
     def verify_installed(self, journal):
         self.call("verify_installed")
         assert self.held == journal["nonce"]
@@ -438,6 +446,47 @@ def test_missing_verification_hook_has_no_default_approval(state_dir):
     hooks.verify_safe = None
     with pytest.raises(m.MaintenanceError, match="verify_safe"):
         m.MaintenanceLease(state_dir, hooks)
+
+
+def test_apply_records_phase_before_host_write_and_requires_separate_verification(state_dir):
+    hooks = Hooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "publish_intent")
+        applied = lease.apply(NONCE, 1)
+        assert applied["phase"] == "applying" and applied["verification"] is None
+        assert hooks.calls.count("apply_target") == 1
+        assert lease.inspect()["blocked"]
+        with pytest.raises(m.MaintenanceError):
+            lease.finish(NONCE)
+        lease.mark_verified(NONCE)
+        lease.finish(NONCE)
+
+
+@pytest.mark.parametrize("fault", ["apply_target", "assert_locks", "drain"])
+def test_apply_failure_preserves_gate_and_intent(state_dir, fault):
+    hooks = Hooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "publish_intent")
+        hooks.fail = fault
+        with pytest.raises(m.MaintenanceError):
+            lease.apply(NONCE, 1)
+        assert lease.inspect()["blocked"]
+        assert len(lease.inspect()["journal"]["attempts"]) == 1
+        if fault != "apply_target":
+            assert "apply_target" not in hooks.calls
+        hooks.fail = None
+
+
+def test_apply_cannot_write_before_intent_or_for_stale_attempt(state_dir):
+    hooks = Hooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "ready")
+        with pytest.raises(m.MaintenanceError):
+            lease.apply(NONCE, 1)
+        lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)
+        with pytest.raises(m.MaintenanceError):
+            lease.apply(NONCE, 2)
+        assert "apply_target" not in hooks.calls
 
 
 @pytest.mark.parametrize("field,value", [("nonce", "../secret"), ("region", "ural"), ("release_id", "a"), ("source_commit", "HEAD")])
