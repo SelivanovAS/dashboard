@@ -100,12 +100,20 @@ def test_region_workflow_presence_is_preserved():
 def test_source_branch_has_no_production_data_or_delivery_workflow():
     assert not (ROOT / "data").exists()
     active = list((ROOT / ".github/workflows").glob("*.yml"))
-    assert [path.name for path in active] == ["program-tests.yml"]
-    text = active[0].read_text()
+    assert sorted(path.name for path in active) == ["program-maintenance-fixture.yml", "program-tests.yml"]
+    text = (ROOT / '.github/workflows/program-tests.yml').read_text()
     assert "branches: [codex/program]" in text
     assert "contents: read" in text
     assert "secrets." not in text
     assert "workflow_dispatch" not in text
+    fixture = (ROOT / '.github/workflows/program-maintenance-fixture.yml').read_text()
+    assert 'codex/program-maintenance-lease' in fixture
+    assert 'ubuntu-24.04' in fixture
+    assert 'contents: read' in fixture
+    assert 'secrets.' not in fixture
+    assert 'workflow_dispatch' not in fixture
+    assert not re.search(r'^  (schedule|workflow_run):', fixture, re.M)
+    assert 'program_maintenance_systemd.py' in fixture
 
 
 def test_production_ci_detects_unapproved_program_changes_before_unit_tests():
