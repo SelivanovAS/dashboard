@@ -18,6 +18,7 @@ TARGET = "b" * 40
 SOURCE = "c" * 40
 RELEASE = "d" * 64
 NONCE = "e" * 32
+MANIFEST = "6" * 64
 
 
 class Hooks:
@@ -26,8 +27,10 @@ class Hooks:
         self.held = None
         self.marker = None
         self.fail = None
-        self.snapshot_value = {r: {"head": SHA, "release_id": "f" * 64, "managed_sha256": "1" * 64} for r in m.REGIONS}
+        self.snapshot_value = {r: {"head": SHA, "release_id": "f" * 64, "managed_sha256": "1" * 64,
+                                   "inventory_sha256": "7" * 64} for r in m.REGIONS}
         self.safe_journals = []
+        self.target_journals = []
 
     def call(self, name):
         self.calls.append(name)
@@ -66,10 +69,23 @@ class Hooks:
         if snapshot != self.snapshot_value:
             raise m.MaintenanceError("changed baseline")
 
+    def validate_target(self, journal):
+        self.call("validate_target")
+        self.target_journals.append(copy.deepcopy(journal))
+        for region in m.REGIONS:
+            if journal["snapshot"][region]["inventory_sha256"] != self.snapshot_value[region]["inventory_sha256"]:
+                raise m.MaintenanceError("changed inventory")
+
+    def check_exit(self, journal):
+        self.call("check_exit")
+        assert journal["phase"] in ("verified", "safe_to_resume", "complete")
+        assert self.marker.exists()
+
     def verify_installed(self, journal):
         self.call("verify_installed")
         assert self.held == journal["nonce"]
-        return {"installed_sha": journal["attempts"][-1]["target_sha"], "release_id": journal["release_id"], "evidence_sha256": "2" * 64}
+        return {"target_id": journal["active_target_id"], "manifest_sha256": journal["manifest_sha256"],
+                "installed_sha": journal["attempts"][-1]["target_sha"], "release_id": journal["release_id"], "evidence_sha256": "2" * 64}
 
     def verify_safe(self, journal):
         self.call("verify_safe")
@@ -83,7 +99,8 @@ def state_dir(tmp_path):
 
 
 def reserve(lease, nonce=NONCE):
-    return lease.reserve(region="hmao", release_id=RELEASE, source_commit=SOURCE, nonce=nonce)
+    return lease.reserve(region="hmao", release_id=RELEASE, source_commit=SOURCE,
+                         manifest_sha256=MANIFEST, nonce=nonce)
 
 
 def advance(lease, phase):
@@ -426,7 +443,8 @@ def test_missing_verification_hook_has_no_default_approval(state_dir):
 @pytest.mark.parametrize("field,value", [("nonce", "../secret"), ("region", "ural"), ("release_id", "a"), ("source_commit", "HEAD")])
 def test_invalid_reservation_never_creates_gate(state_dir, field, value):
     with m.MaintenanceLease(state_dir, Hooks()) as lease:
-        args = dict(region="hmao", release_id=RELEASE, source_commit=SOURCE, nonce=NONCE)
+        args = dict(region="hmao", release_id=RELEASE, source_commit=SOURCE,
+                    manifest_sha256=MANIFEST, nonce=NONCE)
         args[field] = value
         with pytest.raises(m.MaintenanceError): lease.reserve(**args)
     assert not (state_dir / "blocked").exists()
@@ -478,3 +496,247 @@ def test_state_permissions_changed_mid_lease_fail_closed(state_dir):
         with pytest.raises(m.MaintenanceError, match="Каталог окна"):
             lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)
     assert (state_dir / "blocked").exists()
+
+
+def recovery_target(lease, *, reason="rollback"):
+    return lease.select_recovery_target(NONCE, release_id="8" * 64,
+                                        source_commit="9" * 40,
+                                        manifest_sha256="0" * 64, reason=reason)
+
+
+def test_v2_recovery_keeps_original_intents_and_inventories_across_real_crash(state_dir):
+    # Crash after durable selection, before sending a recovery publication.
+    code = f'''import importlib.util, os
+spec = importlib.util.spec_from_file_location("fixture", {str(Path(__file__).resolve())!r})
+f = importlib.util.module_from_spec(spec); spec.loader.exec_module(f)
+with f.m.MaintenanceLease({str(state_dir)!r}, f.Hooks()) as lease:
+    f.advance(lease, "applying")
+    f.recovery_target(lease)
+    os._exit(73)
+'''
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=5)
+    assert result.returncode == 73, result.stderr
+    persisted = json.loads((state_dir / "journal.json").read_text())
+    assert persisted["phase"] == "recovery_ready"
+    assert persisted["active_attempt_id"] is None
+    assert persisted["attempts"] == [{"attempt_id": 1, "target_id": 1, "base_sha": SHA, "target_sha": TARGET}]
+    hooks = Hooks()
+    # Recovery is allowed over a partial checkout; protected inventory is still
+    # the original four-region snapshot. Equality to old HEAD is inappropriate.
+    hooks.snapshot_value["hmao"]["head"] = "4" * 40
+    with m.MaintenanceLease(state_dir, hooks, boot_id="after-reboot") as lease:
+        lease.recover(NONCE)
+        with pytest.raises(m.MaintenanceError):
+            lease.cancel_before_publish(NONCE)
+        permission = lease.publish_intent(NONCE, base_sha=TARGET, target_sha="5" * 40)
+        assert permission["attempt_id"] == permission["target_id"] == 2
+        with pytest.raises(m.MaintenanceError, match="Устаревшее"):
+            lease.begin_apply(NONCE, 1)
+        lease.begin_apply(NONCE, 2)
+        lease.mark_verified(NONCE)
+        result = lease.finish(NONCE)
+        assert not lease.inspect()["blocked"]
+    assert result["targets"][0]["release_id"] == RELEASE
+    assert result["targets"][1]["reason"] == "rollback"
+    assert result["snapshot"] == persisted["snapshot"]
+    assert result["verification"]["target_id"] == 2
+    assert result["safe_evidence"]["covered_attempt_ids"] == [1, 2]
+    assert hooks.target_journals[-1]["attempts"] == persisted["attempts"]
+    assert all(len(doc["attempts"]) == 2 for doc in hooks.safe_journals)
+
+
+@pytest.mark.parametrize("phase", ["publish_intent", "applying", "verified"])
+def test_recovery_selection_never_cancels_or_reopens_postintent_lease(state_dir, phase):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, phase)
+        before = lease.inspect()["journal"]
+        selected = recovery_target(lease, reason="repair")
+        assert selected["snapshot"] == before["snapshot"]
+        assert selected["attempts"] == before["attempts"]
+        assert selected["verification"] is selected["safe_evidence"] is None
+        assert selected["targets"][-1]["reason"] == "repair"
+        for action in (lease.cancel_before_publish, lease.finish):
+            with pytest.raises(m.MaintenanceError): action(NONCE)
+        assert lease.inspect()["blocked"]
+
+
+def test_recovery_finish_refuses_safe_evidence_covering_only_new_target(state_dir):
+    hooks = Hooks()
+    hooks.verify_safe = lambda doc: {"covered_attempt_ids": [2], "evidence_sha256": "3" * 64}
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "applying")
+        recovery_target(lease)
+        lease.publish_intent(NONCE, base_sha=TARGET, target_sha="5" * 40)
+        lease.begin_apply(NONCE, 2)
+        lease.mark_verified(NONCE)
+        with pytest.raises(m.MaintenanceError, match="все разрешённые"):
+            lease.finish(NONCE)
+    assert (state_dir / "blocked").exists()
+
+
+@pytest.mark.parametrize("field,value", [("target_id", 1), ("release_id", RELEASE), ("manifest_sha256", MANIFEST)])
+def test_recovery_verification_must_match_current_target_and_exact_manifest(state_dir, field, value):
+    hooks = Hooks()
+    original = hooks.verify_installed
+    def wrong(doc):
+        result = original(doc)
+        result[field] = value
+        return result
+    hooks.verify_installed = wrong
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "applying")
+        recovery_target(lease)
+        lease.publish_intent(NONCE, base_sha=TARGET, target_sha="5" * 40)
+        lease.begin_apply(NONCE, 2)
+        with pytest.raises(m.MaintenanceError, match="другой пакет"):
+            lease.mark_verified(NONCE)
+        assert lease.inspect()["journal"]["phase"] == "applying"
+    assert (state_dir / "blocked").exists()
+
+
+@pytest.mark.parametrize("region", m.REGIONS)
+def test_original_protected_inventory_is_bound_through_recovery_intents(state_dir, region):
+    hooks = Hooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "applying")
+        recovery_target(lease)
+        hooks.snapshot_value[region]["inventory_sha256"] = "8" * 64
+        with pytest.raises(m.MaintenanceError, match="inventory"):
+            lease.publish_intent(NONCE, base_sha=TARGET, target_sha="5" * 40)
+        assert len(lease.inspect()["journal"]["attempts"]) == 1
+    assert (state_dir / "blocked").exists()
+
+
+@pytest.mark.parametrize("bad", [None, "hash", 1])
+def test_snapshot_requires_full_inventory_digest_before_first_permission(state_dir, bad):
+    hooks = Hooks()
+    hooks.snapshot_value["tyumen"]["inventory_sha256"] = bad
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        reserve(lease)
+        with pytest.raises(m.MaintenanceError, match="inventory_sha256"):
+            lease.prepare(NONCE)
+        assert lease.inspect()["journal"]["snapshot"] is None
+    assert (state_dir / "blocked").exists()
+
+
+def test_missing_inventory_is_not_silently_filled_or_recomputed(state_dir):
+    hooks = Hooks()
+    del hooks.snapshot_value["tyumen"]["inventory_sha256"]
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        reserve(lease)
+        with pytest.raises(m.MaintenanceError, match="снимок территории"):
+            lease.prepare(NONCE)
+
+
+@pytest.mark.parametrize("phase", ["publish_intent", "complete"])
+def test_v1_journal_is_rejected_without_migration_or_marker_removal(state_dir, phase):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, phase)
+    path = state_dir / "journal.json"
+    legacy = json.loads(path.read_text())
+    legacy["schema_version"], legacy["protocol"] = 1, "court-program-maintenance/1"
+    for key in ("targets", "active_target_id", "manifest_sha256"):
+        del legacy[key]
+    for record in legacy["snapshot"].values(): del record["inventory_sha256"]
+    for attempt in legacy["attempts"]: del attempt["target_id"]
+    if legacy["verification"]:
+        del legacy["verification"]["target_id"]
+        del legacy["verification"]["manifest_sha256"]
+    path.write_text(json.dumps(legacy))
+    marker = state_dir / "blocked"
+    if phase != "complete": marker.write_text(json.dumps({"schema_version": 1, "nonce": NONCE}))
+    before = {p.name: p.read_bytes() for p in state_dir.iterdir()}
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        for action in (lease.recover, lease.finish):
+            with pytest.raises(m.MaintenanceError): action(NONCE)
+        with pytest.raises(m.MaintenanceError): reserve(lease, "4" * 32)
+    assert before == {p.name: p.read_bytes() for p in state_dir.iterdir()}
+
+
+@pytest.mark.parametrize("mutation", ["unknown_target", "old_active_target", "current_manifest", "invalid_reason", "backwards_attempt"])
+def test_inconsistent_v2_target_history_fails_closed(state_dir, mutation):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, "applying")
+        recovery_target(lease)
+        lease.publish_intent(NONCE, base_sha=TARGET, target_sha="5" * 40)
+    path = state_dir / "journal.json"
+    doc = json.loads(path.read_text())
+    if mutation == "unknown_target": doc["attempts"][-1]["target_id"] = 3
+    elif mutation == "old_active_target": doc["active_target_id"] = 1
+    elif mutation == "current_manifest": doc["manifest_sha256"] = MANIFEST
+    elif mutation == "invalid_reason": doc["targets"][-1]["reason"] = "abort"
+    else:
+        doc["attempts"][0]["target_id"] = 2
+        doc["attempts"][-1]["target_id"] = 1
+    path.write_text(json.dumps(doc))
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        with pytest.raises(m.MaintenanceError): lease.recover(NONCE)
+    assert (state_dir / "blocked").exists()
+
+
+def test_recovery_target_fsync_ack_loss_preserves_both_targets(state_dir, monkeypatch):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, "applying")
+        original = m.os.fsync
+        calls = 0
+        def fail_directory(fd):
+            nonlocal calls
+            calls += 1
+            if calls == 2: raise OSError("lost target acknowledgment")
+            return original(fd)
+        monkeypatch.setattr(m.os, "fsync", fail_directory)
+        with pytest.raises(OSError): recovery_target(lease)
+        monkeypatch.setattr(m.os, "fsync", original)
+        state = lease.inspect()
+        assert state["blocked"] and state["journal"]["phase"] == "recovery_ready"
+        assert len(state["journal"]["targets"]) == 2
+        assert len(state["journal"]["attempts"]) == 1
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        assert lease.recover(NONCE)["active_target_id"] == 2
+
+
+def test_finite_exit_requires_explicit_mode_and_mandatory_live_check(state_dir):
+    hooks = Hooks()
+    hooks.check_exit = None
+    with pytest.raises(m.MaintenanceError, match="check_exit"):
+        m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True)
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "verified")
+        hooks.fail = "drain"
+        with pytest.raises(m.MaintenanceError, match="drain"):
+            lease.finish(NONCE)
+    assert (state_dir / "blocked").exists()
+
+
+def test_explicit_verified_exit_permits_natural_pending_jobs_without_another_drain(state_dir):
+    hooks = Hooks()
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "verified")
+        hooks.calls.clear()
+        hooks.fail = "drain"  # A natural pending job persists beyond verified.
+        lease.finish(NONCE)
+        assert not lease.inspect()["blocked"]
+    assert "drain" not in hooks.calls
+    assert hooks.calls.count("check_exit") == 3  # Reassert locks, resume, after unlock.
+    assert hooks.calls.count("verify_safe") == 2
+
+
+def test_failed_final_exit_check_keeps_gate_and_recovers_without_clearing_evidence(state_dir):
+    hooks = Hooks()
+    original = hooks.check_exit
+    def check(doc):
+        original(doc)
+        if hooks.held is None: raise m.MaintenanceError("writer still active")
+    hooks.check_exit = check
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "verified")
+        with pytest.raises(m.MaintenanceError, match="writer still active"):
+            lease.finish(NONCE)
+    assert (state_dir / "blocked").exists()
+    hooks = Hooks()
+    hooks.fail = "drain"
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        recovered = lease.recover(NONCE)
+        assert recovered["phase"] == "safe_to_resume"
+        lease.finish(NONCE)
+        assert not lease.inspect()["blocked"]
