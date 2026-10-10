@@ -559,6 +559,7 @@ def test_malformed_and_unknown_jobs_do_not_block_real_retry(setup):
     base = {'text': ACT, 'meta': deepcopy(META), 'source_hash': source_hash(ACT),
             'status': 'pending', 'runs': 0}
     jobs = {'not-object': [], 'unknown': dict(base, status='new_unknown_status'),
+            'bad-status-list': dict(base, status=[]), 'bad-status-object': dict(base, status={}),
             'bad-counter': dict(base, runs='one'),
             'bad-meta': dict(base, meta=dict(META, case_number=42)),
             'bad-ready': dict(base, status='ready', summary=['invalid'])}
@@ -583,3 +584,18 @@ def test_direct_call_preserves_corrupt_saved_record_without_model(setup, corrupt
     setup.setattr(llm, 'summarize_act_motivation', lambda *a, **kw: pytest.fail('Повреждённая запись'))
     assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) is None
     assert queue._load() == {key: corrupt}
+
+
+@pytest.mark.parametrize('corrupt', [[], None])
+def test_replacement_does_not_close_source_into_corrupt_target(setup, corrupt):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    old_key, new_key = queue._key(fragment, META), queue._key(ACT, META)
+    jobs = queue._load()
+    jobs[new_key] = corrupt
+    queue._save(jobs)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('Corrupt replacement'))
+    queue.retry_pending([{'appeal': {**META, 'act_text': ACT}}])
+    after = queue._load()
+    assert after[old_key]['status'] == 'source_incomplete'
+    assert after[new_key] == corrupt
