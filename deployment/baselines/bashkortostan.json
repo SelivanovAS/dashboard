@@ -1236,6 +1236,8 @@
       "mode": "100644",
       "sha256": "f0682c438d44696daadea7a9f18271e9eba9d00fea55dc9f861d1cd7bc5addc2"
     },
+    "scripts/review_act_summaries.py": null,
+    "scripts/tests/test_summary_inventory.py": null,
     "scripts/tests/test_summary_pipeline.py": {
       "mode": "100644",
       "sha256": "8dc2c44b64906ec0a239ed0e3169949a9602a0283d96b7e5bbc260c3f578ea46"
