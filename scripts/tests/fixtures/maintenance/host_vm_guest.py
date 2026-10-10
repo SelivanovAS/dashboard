@@ -178,6 +178,9 @@ def setup(source_commit):
     atomic('/etc/systemd/system.conf.d/90-host-vm-path.conf',
            ('[Manager]\nDefaultEnvironment=PATH=' + manager_path + '\n').encode(), 0o644)
     run(['systemctl', 'daemon-reexec'])
+    # Reexec intentionally retains the running manager's environment; update
+    # that copy as well. The persisted default supplies it after cold boot.
+    run(['systemctl', 'set-environment', 'PATH=' + manager_path])
     assert 'PATH=' + manager_path in run(['systemctl', 'show-environment']).stdout.splitlines()
     run(['git', '--version'])
     ssh_transport()
