@@ -61,6 +61,7 @@ def _readable_job(job):
     """Одна повреждённая запись не должна останавливать остальные пересказы."""
     if (not isinstance(job, dict) or not isinstance(job.get('text'), str)
             or not isinstance(job.get('meta'), dict)
+            or ('status' in job and not isinstance(job['status'], str))
             or ('source_hash' in job and not isinstance(job['source_hash'], str))
             or ('runs' in job and (type(job['runs']) is not int or job['runs'] < 0))
             or (job.get('summary') is not None and not isinstance(job['summary'], str))
@@ -278,6 +279,10 @@ def retry_pending(cases):
                     job.update(meta=new_meta, status='pending')
                     job.pop('retry_after', None)
                 else:
+                    if new_key in jobs and not _readable_job(jobs[new_key]):
+                        # Нельзя закрывать исходную задачу в пользу повреждённой
+                        # записи: сохраняем обе для разбора без потери дочитки.
+                        continue
                     # Один atomic-write сохраняет замену ДО API. Нельзя сначала
                     # закрыть старую запись: между двумя записями процесс может
                     # прерваться. Уже полученный результат нового ключа сохраняем.
