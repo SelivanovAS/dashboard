@@ -324,6 +324,13 @@ write_files:
             finally:
                 report.update(rehearsal.proof)
                 rehearsal.close()
+                if not report.get('passed'):
+                    try:
+                        diagnostic = rehearsal.guest('diagnose-host', timeout=30)
+                        save(output / 'host-diagnostics.json', diagnostic)
+                        report['host_diagnostics'] = diagnostic
+                    except Exception as exc:
+                        report['diagnostic_error'] = str(exc)
                 for label, command in [('guest-unit-journal.log', "journalctl --no-pager -o short-precise -u 'court-*' -u host-vm-git-ssh"),
                         ('guest-final-status.json', GUEST + 'status')]:
                     result = vm.probe_guest(ssh, command)
