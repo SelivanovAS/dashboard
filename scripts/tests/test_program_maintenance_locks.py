@@ -1,5 +1,6 @@
 """Real Linux atomic-lock publication; no production services or admission proof."""
 import importlib.util
+import copy
 import hashlib
 import errno
 import types
@@ -87,6 +88,8 @@ def test_legacy_locale_mismatch_is_fail_closed(monkeypatch):
 def test_complete_owner_is_visible_at_atomic_publication_and_legacy_busy(tmp_path):
     events = []
     def observe(event, region):
+        if region is None:
+            return  # Separate tests exercise receipt file rename boundaries.
         receipt = json.loads((tmp_path / "state" / NONCE / "receipt.json").read_text())
         record = receipt["locks"][region]
         if event == "receipt":
@@ -362,3 +365,354 @@ def test_real_crash_at_every_lock_boundary_retains_exact_inode_receipt(tmp_path,
         assert len(found) == 1
         assert [found[0].stat().st_dev, found[0].stat().st_ino] == record["inode"]
         assert json.loads((found[0] / "owner.json").read_text()) == record["owner"]
+
+
+def test_recovery_liveness_refuses_live_and_permission_unknown(monkeypatch):
+    epoch = {"pid": 42, "process_start": "saved", "boot_id": "same"}
+    monkeypatch.setattr(locks.os, "kill", lambda *args: None)
+    monkeypatch.setattr(locks, "process_start", lambda pid: "saved")
+    with pytest.raises(locks.AtomicLockError, match="still alive"):
+        locks.AtomicRunLocks._prove_dead(epoch, "same")
+    def denied(*args):
+        raise PermissionError("cannot read process")
+    monkeypatch.setattr(locks.os, "kill", denied)
+    with pytest.raises(locks.AtomicLockError, match="liveness is unknown"):
+        locks.AtomicRunLocks._prove_dead(epoch, "same")
+
+
+def test_recovery_failed_ps_does_not_prove_death(monkeypatch):
+    epoch = {"pid": 42, "process_start": "saved", "boot_id": "same"}
+    monkeypatch.setattr(locks.os, "kill", lambda *args: None)
+    def failed(pid):
+        raise locks.AtomicLockError("ps failed")
+    monkeypatch.setattr(locks, "process_start", failed)
+    with pytest.raises(locks.AtomicLockError, match="start identity is unknown"):
+        locks.AtomicRunLocks._prove_dead(epoch, "same")
+
+
+def test_recovery_accepts_only_esrch_prior_boot_or_proven_pid_reuse(monkeypatch):
+    epoch = {"pid": 42, "process_start": "saved", "boot_id": "before"}
+    def forbidden(*args):
+        raise AssertionError("old boot cannot contain a live process")
+    monkeypatch.setattr(locks.os, "kill", forbidden)
+    locks.AtomicRunLocks._prove_dead(epoch, "after")
+    monkeypatch.setattr(locks.os, "kill", lambda *args: None)
+    monkeypatch.setattr(locks, "process_start", lambda pid: "different process")
+    locks.AtomicRunLocks._prove_dead(epoch, "before")
+    def absent(*args):
+        raise ProcessLookupError("gone")
+    monkeypatch.setattr(locks.os, "kill", absent)
+    locks.AtomicRunLocks._prove_dead(epoch, "before")
+
+
+def run_crash(root, event, region, *, recovery=False):
+    context = multiprocessing.get_context("spawn")
+    process = context.Process(target=crash_during_recovery if recovery else crash_at_checkpoint,
+                              args=(str(root), event, region))
+    process.start()
+    process.join(30)
+    if process.is_alive():
+        process.kill()
+        process.join(5)
+    assert process.exitcode == 74
+    return process.pid
+
+
+def assert_recovered(current, previous_pid, generation):
+    result = current.recover()
+    assert result["phase"] == "held" and result["generation"] == generation
+    assert result["nonce"] == NONCE and result["pid"] == os.getpid()
+    assert result["pid"] != previous_pid and len(result["history"]) == generation - 1
+    assert current.marker.exists()
+    current.assert_owned()
+    for record in result["locks"].values():
+        path = Path(record["target"])
+        assert json.loads((path / "owner.json").read_text()) == current.owner
+        assert [path.stat().st_dev, path.stat().st_ino] == record["inode"]
+    current.release()
+    assert current.marker.exists(), "Lock recovery/release must never open admission"
+    return result
+
+
+@linux
+@pytest.mark.parametrize("event", ["receipt", "published", "retired"])
+@pytest.mark.parametrize("region", locks.REGIONS)
+def test_explicit_recovery_of_each_original_crash_boundary(tmp_path, event, region):
+    fixture(tmp_path)
+    pid = run_crash(tmp_path, event, region)
+    with adapter(tmp_path) as current:
+        result = assert_recovered(current, pid, 2)
+        assert result["history"][0]["pid"] == pid
+
+
+def crash_during_recovery(root, event, region):
+    def checkpoint(actual_event, actual_region):
+        if (actual_event, actual_region) == (event, region):
+            os._exit(74)
+    current = adapter(Path(root), checkpoint=checkpoint)
+    current.recover()
+
+
+@linux
+@pytest.mark.parametrize("event,region", [("recovery_begin", None)] +
+    [(event, region) for event in ("recovery_retired", "recovery_receipt", "recovery_published") for region in locks.REGIONS])
+def test_second_crash_during_recovery_keeps_all_generations_recoverable(tmp_path, event, region):
+    fixture(tmp_path)
+    first_pid = run_crash(tmp_path, "published", "tyumen")
+    second_pid = run_crash(tmp_path, event, region, recovery=True)
+    with adapter(tmp_path) as current:
+        result = assert_recovered(current, second_pid, 3)
+        assert [epoch["pid"] for epoch in result["history"]] == [first_pid, second_pid]
+        assert len({epoch["session_id"] for epoch in [*result["history"], result]}) == 3
+
+
+@linux
+def test_recovery_refuses_an_alive_predecessor_including_same_pid(tmp_path):
+    with adapter(tmp_path) as owner:
+        owner.acquire()
+        before = owner.receipt()
+        with adapter(tmp_path) as contender:
+            with pytest.raises(locks.AtomicLockError, match="still alive"):
+                contender.recover()
+        assert owner.receipt() == before
+        owner.assert_owned()
+        owner.release()
+
+
+def acquired_then_released(root):
+    with adapter(Path(root)) as current:
+        current.acquire()
+        current.release()
+    os._exit(75)
+
+
+@linux
+def test_dead_owner_released_locks_recover_without_new_nonce(tmp_path):
+    fixture(tmp_path)
+    context = multiprocessing.get_context("spawn")
+    process = context.Process(target=acquired_then_released, args=(str(tmp_path),))
+    process.start()
+    process.join(30)
+    assert process.exitcode == 75
+    with adapter(tmp_path) as current:
+        assert_recovered(current, process.pid, 2)
+
+
+@linux
+@pytest.mark.parametrize("change", ["owner", "foreign-content", "foreign-target", "receipt-next", "guard"])
+def test_recovery_preserves_unknown_state_instead_of_reclaiming(tmp_path, change):
+    paths, state, marker = fixture(tmp_path)
+    run_crash(tmp_path, "published", "hmao")
+    path = paths["hmao"]
+    if change == "owner":
+        (path / "owner.json").write_text("unknown owner")
+    elif change == "foreign-content":
+        (path / "extra").write_text("preserve")
+    elif change == "foreign-target":
+        paths["tyumen"].mkdir()
+    elif change == "receipt-next":
+        (state / NONCE / "receipt.next").write_text("unexplained partial write")
+    else:
+        guard = Path(str(path) + ".guard")
+        guard.rename(guard.with_name("old.guard"))
+        guard.touch(mode=0o600)
+    before = (state / NONCE / "receipt.json").read_bytes()
+    current_inode = path.stat().st_ino
+    with adapter(tmp_path) as current:
+        with pytest.raises(locks.AtomicLockError):
+            current.recover()
+    assert marker.exists()
+    assert (state / NONCE / "receipt.json").read_bytes() == before
+    assert path.stat().st_ino == current_inode
+    if change == "foreign-content":
+        assert (path / "extra").read_text() == "preserve"
+
+
+def crash_receipt_write(root, boundary, number, recovery):
+    seen = 0
+    def checkpoint(event, region):
+        nonlocal seen
+        if event == boundary:
+            seen += 1
+            if seen == number:
+                os._exit(74)
+    with adapter(Path(root), checkpoint=checkpoint) as current:
+        if recovery:
+            current.recover()
+        else:
+            current.acquire()
+            current.release()
+    os._exit(93)  # Requested boundary was not reached.
+
+
+def receipt_write_crash(root, boundary, number, *, recovery=False):
+    context = multiprocessing.get_context('spawn')
+    process = context.Process(target=crash_receipt_write, args=(str(root), boundary, number, recovery))
+    process.start()
+    process.join(30)
+    if process.is_alive():
+        process.kill()
+        process.join(5)
+    assert process.exitcode == 74
+    return process.pid
+
+
+@linux
+@pytest.mark.parametrize('boundary', ['receipt_next', 'receipt_renamed'])
+@pytest.mark.parametrize('number', range(1, 16))
+def test_every_acquire_release_receipt_write_crash_is_recoverable(tmp_path, boundary, number):
+    fixture(tmp_path)
+    pid = receipt_write_crash(tmp_path, boundary, number)
+    folder = tmp_path / 'state' / NONCE
+    if boundary == 'receipt_next':
+        assert (folder / 'receipt.next').is_file()
+        if number == 1:
+            assert not (folder / 'receipt.json').exists()
+    with adapter(tmp_path) as current:
+        result = assert_recovered(current, pid, 2)
+        assert result['history'][0]['pid'] == pid
+    assert not (folder / 'receipt.next').exists()
+
+
+@linux
+@pytest.mark.parametrize('boundary', ['receipt_next', 'receipt_renamed'])
+@pytest.mark.parametrize('number', range(1, 15))
+def test_every_recovery_receipt_write_crash_keeps_old_generations(tmp_path, boundary, number):
+    fixture(tmp_path)
+    first = run_crash(tmp_path, 'published', 'tyumen')
+    second = receipt_write_crash(tmp_path, boundary, number, recovery=True)
+    with adapter(tmp_path) as current:
+        result = assert_recovered(current, second, 3)
+        assert [epoch['pid'] for epoch in result['history']] == [first, second]
+
+
+@linux
+def test_crash_after_candidate_reconciliation_still_recovers_same_nonce(tmp_path):
+    fixture(tmp_path)
+    first = receipt_write_crash(tmp_path, 'receipt_next', 4)
+    run_crash(tmp_path, 'receipt_reconciled', None, recovery=True)
+    with adapter(tmp_path) as current:
+        result = assert_recovered(current, first, 2)
+        assert result['history'][0]['pid'] == first
+
+
+def successor_fixture():
+    """Pure transition fixture; filesystem/liveness are independently checked."""
+    current = locks.AtomicRunLocks.__new__(locks.AtomicRunLocks)
+    doc = {'schema_version': 2, 'generation': 1, 'history': [], 'nonce': NONCE,
+           'strategy': 'linux-renameat2-noreplace/1', 'legacy_ps_locale': 'C-compatible',
+           'pid': 100, 'process_start': 'recorded owner', 'boot_id': 'a' * 36,
+           'session_id': 'b' * 32, 'phase': 'preparing',
+           'guard_inodes': {region: [1, number + 10] for number, region in enumerate(locks.REGIONS)},
+           'locks': {locks.REGIONS[0]: {'status': 'prepared', 'inode': [1, 100], 'owner_inode': [1, 101]}}}
+    return current, doc
+
+
+def test_complete_initial_candidate_does_not_require_existing_receipt():
+    current, doc = successor_fixture()
+    current._validate_successor(None, doc)
+    doc['phase'] = 'held'
+    with pytest.raises(locks.AtomicLockError, match='initial'):
+        current._validate_successor(None, doc)
+
+
+@pytest.mark.parametrize('change', ['nonce', 'guard', 'owner', 'session', 'generation',
+                                   'new_inode', 'skip_region', 'skip_status', 'history'])
+def test_unknown_complete_candidates_are_not_treated_as_successors(change):
+    current, previous = successor_fixture()
+    candidate = copy.deepcopy(previous)
+    candidate['locks'][locks.REGIONS[0]]['status'] = 'installed'
+    if change == 'nonce': candidate['nonce'] = 'c' * 32
+    elif change == 'guard': candidate['guard_inodes']['hmao'] = [2, 34]
+    elif change == 'owner': candidate['pid'] += 1
+    elif change == 'session': candidate['session_id'] = 'c' * 32
+    elif change == 'generation': candidate['generation'] = 3
+    elif change == 'new_inode': candidate['locks']['hmao']['inode'] = [1, 99]
+    elif change == 'skip_region': candidate['locks']['tyumen'] = {'status': 'prepared'}
+    elif change == 'skip_status': candidate['locks']['hmao']['status'] = 'retired'
+    elif change == 'history': candidate['history'] = [copy.deepcopy(previous)]
+    with pytest.raises(locks.AtomicLockError):
+        current._validate_successor(previous, candidate)
+
+
+def test_next_generation_candidate_must_retain_exact_predecessor():
+    current, previous = successor_fixture()
+    candidate = copy.deepcopy(previous)
+    candidate.update(generation=2, history=[current._epoch(previous)], phase='recovering',
+                     locks={}, pid=200, process_start='new recorded owner', session_id='c' * 32)
+    current._validate_successor(previous, candidate)
+    candidate['history'][0]['locks']['hmao']['inode'] = [1, 99]
+    with pytest.raises(locks.AtomicLockError, match='next-generation'):
+        current._validate_successor(previous, candidate)
+
+
+def test_historical_retirement_candidate_cannot_change_owner_or_inode():
+    current, first = successor_fixture()
+    previous = copy.deepcopy(first)
+    previous.update(generation=2, history=[current._epoch(first)], phase='recovering',
+                    locks={}, pid=200, process_start='new owner', session_id='c' * 32)
+    candidate = copy.deepcopy(previous)
+    candidate['history'][0]['locks']['hmao']['status'] = 'retired'
+    current._validate_successor(previous, candidate)
+    candidate['history'][0]['pid'] = 999
+    with pytest.raises(locks.AtomicLockError, match='Historical identity'):
+        current._validate_successor(previous, candidate)
+
+
+def test_exact_durable_successors_cover_acquire_release_recovery_and_compensation():
+    current, previous = successor_fixture()
+
+    def advance(candidate):
+        nonlocal previous
+        current._validate_successor(previous, candidate)
+        previous = copy.deepcopy(candidate)
+
+    for number, region in enumerate(locks.REGIONS[1:], 1):
+        candidate = copy.deepcopy(previous)
+        candidate['locks'][region] = {'status': 'prepared', 'inode': [1, 100 + 2 * number],
+                                     'owner_inode': [1, 101 + 2 * number]}
+        advance(candidate)
+    for region in locks.REGIONS:
+        candidate = copy.deepcopy(previous)
+        candidate['locks'][region]['status'] = 'installed'
+        advance(candidate)
+    advance(dict(copy.deepcopy(previous), phase='held'))
+    held = copy.deepcopy(previous)
+    advance(dict(copy.deepcopy(previous), phase='releasing'))
+    for region in reversed(locks.REGIONS):
+        candidate = copy.deepcopy(previous)
+        candidate['locks'][region]['status'] = 'retired'
+        advance(candidate)
+    advance(dict(copy.deepcopy(previous), phase='released'))
+
+    # Recovery starts with a new durable owner, retaining the complete earlier
+    # generation, before retiring any visible predecessor directory.
+    previous = held
+    candidate = dict(copy.deepcopy(previous), generation=2, history=[current._epoch(previous)],
+                     phase='recovering', locks={}, pid=200, process_start='new owner', session_id='c' * 32)
+    advance(candidate)
+    for region in reversed(locks.REGIONS):
+        candidate = copy.deepcopy(previous)
+        candidate['history'][0]['locks'][region]['status'] = 'retired'
+        advance(candidate)
+    for number, region in enumerate(locks.REGIONS):
+        candidate = copy.deepcopy(previous)
+        candidate['locks'][region] = {'status': 'prepared', 'inode': [1, 200 + 2 * number],
+                                     'owner_inode': [1, 201 + 2 * number]}
+        advance(candidate)
+    for region in locks.REGIONS:
+        candidate = copy.deepcopy(previous)
+        candidate['locks'][region]['status'] = 'installed'
+        advance(candidate)
+    advance(dict(copy.deepcopy(previous), phase='held'))
+
+    # Failed acquisition retires only the already published lock; unexposed
+    # prepared directories remain as receipt-bound evidence.
+    _, previous = successor_fixture()
+    previous['locks']['hmao']['status'] = 'installed'
+    previous['locks'][locks.REGIONS[1]] = {'status': 'prepared', 'inode': [1, 110], 'owner_inode': [1, 111]}
+    advance(dict(copy.deepcopy(previous), phase='compensating'))
+    candidate = copy.deepcopy(previous)
+    candidate['locks']['hmao']['status'] = 'retired'
+    advance(candidate)
+    advance(dict(copy.deepcopy(previous), phase='acquire_failed'))

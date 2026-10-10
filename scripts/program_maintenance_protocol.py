@@ -3,12 +3,16 @@
 
 The same framing runs over local pipes in tests and a dedicated SSH process.
 An acknowledged, durable publish intent is required before the caller's push.
+The exact candidate is registered first using one Git bundle, at most 512 KiB
+decoded. Larger bundles fail before push; this is not a chunked transfer API.
 Transport loss never invokes cancel/finish and never opens the admission gate.
 The host adapter (not this module) must validate manifests, Git and all writers.
 """
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -21,6 +25,7 @@ import time
 PROTOCOL = "court-program-maintenance/2"
 MAX_FRAME = 1024 * 1024
 MAX_BOOTSTRAP = 2 * 1024 * 1024
+MAX_TARGET_BUNDLE_BYTES = 512 * 1024
 BOOTSTRAP_LOADER = (
     "import sys; r=sys.stdin.buffer; n=int(r.readline(32)); "
     "assert 0<n<=2097152; b=r.read(n); assert len(b)==n; "
@@ -72,6 +77,7 @@ ACTIONS = {
     "reserve": ({"region", "release_id", "source_commit", "manifest_sha256"}, {"nonce"}),
     "prepare": ({"nonce"}, set()),
     "recover": ({"nonce"}, set()),
+    "register_target": ({"nonce", "base_sha", "target_sha", "bundle_sha256", "bundle_base64"}, set()),
     "publish_intent": ({"nonce", "base_sha", "target_sha"}, set()),
     "select_recovery_target": ({"nonce", "release_id", "source_commit", "manifest_sha256", "reason"}, set()),
     "begin_apply": ({"nonce", "attempt_id"}, set()),
@@ -219,6 +225,24 @@ class LeaseClient:
         except BaseException:
             self.close()
             raise
+
+    def register_target(self, *, nonce, base_sha, target_sha, bundle):
+        """Transfer one bounded bundle; registration is not permission to push."""
+        if not isinstance(bundle, bytes) or not 0 < len(bundle) <= MAX_TARGET_BUNDLE_BYTES:
+            raise MaintenanceProtocolError("Git bundle должен быть не больше 512 KiB")
+        digest = hashlib.sha256(bundle).hexdigest()
+        result = self.request("register_target", nonce=nonce, base_sha=base_sha, target_sha=target_sha,
+                              bundle_sha256=digest, bundle_base64=base64.b64encode(bundle).decode("ascii"))
+        if (not isinstance(result, dict) or set(result) != {"protocol", "nonce", "target_id", "base_sha",
+                "target_sha", "bundle_sha256", "evidence_sha256"}
+                or result["protocol"] != PROTOCOL or result["nonce"] != nonce
+                or result["base_sha"] != base_sha or result["target_sha"] != target_sha
+                or result["bundle_sha256"] != digest or type(result["target_id"]) is not int
+                or result["target_id"] <= 0 or not isinstance(result["evidence_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", result["evidence_sha256"])):
+            self.close()
+            raise MaintenanceProtocolError("Подтверждение относится к другой регистрации")
+        return result
 
     def publish(self, *, nonce, base_sha, target_sha, push):
         """The callback is unreachable before the durable exact-target permit."""

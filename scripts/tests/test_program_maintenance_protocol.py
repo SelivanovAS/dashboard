@@ -16,7 +16,7 @@ RELEASE = 'd' * 64
 MANIFEST = '6' * 64
 
 
-def bootstrap(state, *, lost_ack=False, slow=False):
+def bootstrap(state, *, lost_ack=False, slow=False, registration=False, lost_registration_ack=False):
     scripts = Path(__file__).resolve().parents[1]
     code = f'''import sys, os, time
 from pathlib import Path
@@ -24,6 +24,26 @@ sys.path.insert(0, {str(scripts)!r})
 sys.path.insert(0, {str(scripts / 'tests')!r})
 from test_program_maintenance import Hooks, m
 from program_maintenance_protocol import serve
+class RegistrationHooks(Hooks):
+    # Synthetic framing/ACK fixture. Connected tests separately import real Git.
+    def register_target(self, journal, **fields):
+        import hashlib, json
+        assert hashlib.sha256(fields['bundle_bytes']).hexdigest() == fields['bundle_sha256']
+        receipt = dict(nonce=journal['nonce'], target_id=journal['active_target_id'],
+                       base_sha=fields['base_sha'], target_sha=fields['target_sha'],
+                       bundle_sha256=fields['bundle_sha256'])
+        path = Path({str(state)!r}) / 'registration.json'
+        with path.open('w') as stream:
+            json.dump(receipt, stream); stream.flush(); os.fsync(stream.fileno())
+        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        return {{'evidence_sha256': '7' * 64}}
+    def validate_publication(self, journal, attempt):
+        import json
+        record = json.loads((Path({str(state)!r}) / 'registration.json').read_text())
+        assert record['nonce'] == journal['nonce']
+        assert all(record[key] == attempt[key] for key in ('target_id', 'base_sha', 'target_sha'))
 class Lease(m.MaintenanceLease):
     def prepare(self, nonce):
         if {slow!r}: time.sleep(1)
@@ -31,9 +51,10 @@ class Lease(m.MaintenanceLease):
 class Writer:
     def write(self, value):
         if {lost_ack!r} and b'"attempt_id"' in value: os._exit(23)
+        if {lost_registration_ack!r} and b'"bundle_sha256"' in value: os._exit(24)
         return sys.stdout.buffer.write(value)
     def flush(self): sys.stdout.buffer.flush()
-serve(Lease(Path({str(state)!r}), Hooks()), writer=Writer())
+serve(Lease(Path({str(state)!r}), RegistrationHooks() if {registration!r} else Hooks()), writer=Writer())
 '''
     return code.encode()
 
@@ -62,6 +83,67 @@ def test_real_pipe_push_callback_only_after_durable_exact_intent(tmp_path):
         finished = client.request('finish', nonce=NONCE)
         assert finished['outcome'] == 'installed'
     assert not (state / 'blocked').exists()
+
+
+def test_real_pipe_requires_registration_before_exact_publication_ack(tmp_path):
+    state = tmp_path.resolve() / 'state'
+    called = []
+    with p.LeaseClient.local(bootstrap(state, registration=True)) as client:
+        reserve(client)
+        client.request('prepare', nonce=NONCE)
+        with pytest.raises(p.MaintenanceProtocolError):
+            client.publish(nonce=NONCE, base_sha=BASE, target_sha=TARGET, push=called.append)
+    assert called == []
+    assert json.loads((state / 'journal.json').read_text())['attempts'] == []
+    with p.LeaseClient.local(bootstrap(state, registration=True)) as client:
+        client.request('recover', nonce=NONCE)
+        proof = client.register_target(nonce=NONCE, base_sha=BASE, target_sha=TARGET,
+                                       bundle=b'synthetic pipe payload')
+        assert proof['target_id'] == 1
+        assert json.loads((state / 'registration.json').read_text())['target_sha'] == TARGET
+        assert json.loads((state / 'journal.json').read_text())['attempts'] == []
+        client.publish(nonce=NONCE, base_sha=BASE, target_sha=TARGET, push=called.append)
+    assert called == [TARGET] and (state / 'blocked').exists()
+
+
+def test_lost_registration_ack_preserves_receipt_but_grants_no_push(tmp_path):
+    state = tmp_path.resolve() / 'state'
+    with p.LeaseClient.local(bootstrap(state, registration=True, lost_registration_ack=True)) as client:
+        reserve(client)
+        client.request('prepare', nonce=NONCE)
+        with pytest.raises(p.MaintenanceProtocolError):
+            client.register_target(nonce=NONCE, base_sha=BASE, target_sha=TARGET, bundle=b'payload')
+    assert (state / 'registration.json').is_file() and (state / 'blocked').is_file()
+    assert json.loads((state / 'journal.json').read_text())['attempts'] == []
+    called = []
+    with p.LeaseClient.local(bootstrap(state, registration=True)) as client:
+        client.request('recover', nonce=NONCE)
+        client.register_target(nonce=NONCE, base_sha=BASE, target_sha=TARGET, bundle=b'payload')
+        client.publish(nonce=NONCE, base_sha=BASE, target_sha=TARGET, push=called.append)
+    assert called == [TARGET]
+
+
+def test_oversized_bundle_fails_before_transport_or_publication(tmp_path):
+    state = tmp_path.resolve() / 'state'
+    with p.LeaseClient.local(bootstrap(state, registration=True)) as client:
+        reserve(client)
+        client.request('prepare', nonce=NONCE)
+        before = client.sequence
+        with pytest.raises(p.MaintenanceProtocolError, match='512 KiB'):
+            client.register_target(nonce=NONCE, base_sha=BASE, target_sha=TARGET,
+                                   bundle=b'x' * (p.MAX_TARGET_BUNDLE_BYTES + 1))
+        assert client.sequence == before and client.process is not None
+        assert json.loads((state / 'journal.json').read_text())['attempts'] == []
+
+
+def test_maximum_registration_fits_single_json_frame(tmp_path):
+    state = tmp_path.resolve() / 'state'
+    with p.LeaseClient.local(bootstrap(state, registration=True)) as client:
+        reserve(client)
+        client.request('prepare', nonce=NONCE)
+        client.register_target(nonce=NONCE, base_sha=BASE, target_sha=TARGET,
+                               bundle=b'x' * p.MAX_TARGET_BUNDLE_BYTES)
+        assert client.sequence == 3
 
 
 def test_disconnect_after_intent_never_cancels_reservation(tmp_path):

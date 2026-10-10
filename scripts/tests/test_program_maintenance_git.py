@@ -459,3 +459,17 @@ def test_fencing_accepts_actual_v2_targets_and_preserves_them_in_evidence(repos)
         with pytest.raises(m.MaintenanceGitError): m.publication_fences(installed, later, [invalid])
     with pytest.raises(m.MaintenanceGitError):
         m.publication_fences(installed, later, [attempts[0], intent(sha, later, 2)])
+
+
+def test_manifest_omission_cannot_keep_previously_managed_file(repos, tmp_path):
+    origin, author, installed, base, old_lock = repos
+    lock = stamp(author, "d" * 40, ("REGION",))
+    sha = commit(author, "malformed omission retaining old script")
+    git(author, "push", "origin", "main")
+    git(installed, "fetch", "origin", "main")
+    journal = tmp_path / "omission" / "journal.json"
+    before = m.inventory(installed)
+    with pytest.raises(m.MaintenanceGitError, match="omitted"):
+        m.begin_install(installed, sha, journal, lock)
+    assert not journal.exists() and m.inventory(installed) == before
+    assert git(installed, "rev-parse", "HEAD") == base

@@ -1,5 +1,7 @@
 """Crash and conflict proofs for the durable coordinator, without host mutations."""
 import copy
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -76,9 +78,16 @@ class Hooks:
             if journal["snapshot"][region]["inventory_sha256"] != self.snapshot_value[region]["inventory_sha256"]:
                 raise m.MaintenanceError("changed inventory")
 
+    def validate_publication(self, journal, attempt):
+        # Pure coordinator fixture only: real Git registration is covered by the
+        # connected/HostHooks suites, never inferred from this synthetic target.
+        self.call("validate_publication")
+        assert self.held == journal["nonce"]
+        assert attempt["target_id"] == journal["active_target_id"]
+
     def check_exit(self, journal):
         self.call("check_exit")
-        assert journal["phase"] in ("verified", "safe_to_resume", "complete")
+        assert journal["phase"] in ("applying", "verified", "safe_to_resume", "complete")
         assert self.marker.exists()
 
     def apply_target(self, journal):
@@ -123,6 +132,143 @@ def advance(lease, phase):
     lease.mark_verified(NONCE)
     if phase == "verified": return
     lease.finish(NONCE)
+
+
+def bundle_arguments(raw=b"synthetic coordinator payload"):
+    return {"base_sha": SHA, "target_sha": TARGET,
+            "bundle_sha256": hashlib.sha256(raw).hexdigest(),
+            "bundle_base64": base64.b64encode(raw).decode("ascii")}
+
+
+class RegistrationHooks(Hooks):
+    """Synthetic hook boundary only; actual Git import has separate tests."""
+    def __init__(self):
+        super().__init__()
+        self.registrations = []
+
+    def register_target(self, journal, **fields):
+        self.call("register_target")
+        assert self.held == journal["nonce"] and self.marker.exists()
+        assert hashlib.sha256(fields["bundle_bytes"]).hexdigest() == fields["bundle_sha256"]
+        self.registrations.append((copy.deepcopy(journal), fields))
+        return {"evidence_sha256": "4" * 64}
+
+    def validate_publication(self, journal, attempt):
+        super().validate_publication(journal, attempt)
+        if not any(record["nonce"] == journal["nonce"]
+                   and record["active_target_id"] == attempt["target_id"]
+                   and record["manifest_sha256"] == journal["manifest_sha256"]
+                   and all(fields[key] == attempt[key] for key in ("base_sha", "target_sha"))
+                   for record, fields in self.registrations):
+            raise m.MaintenanceError("exact candidate is not registered")
+
+
+def test_publication_validation_is_required_even_without_transfer_action(state_dir):
+    hooks = Hooks()
+    hooks.validate_publication = None
+    with pytest.raises(m.MaintenanceError, match="validate_publication"):
+        m.MaintenanceLease(state_dir, hooks)
+
+
+def test_registration_hook_is_required_when_action_is_called(state_dir):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, "ready")
+        with pytest.raises(m.MaintenanceError, match="register_target"):
+            lease.register_target(NONCE, **bundle_arguments())
+        assert lease.inspect()["journal"]["attempts"] == []
+
+
+def test_registration_does_not_grant_intent_and_exact_pair_is_checked(state_dir):
+    hooks = RegistrationHooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "ready")
+        before = lease.inspect()
+        with pytest.raises(m.MaintenanceError, match="not registered"):
+            lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)
+        hooks.calls.clear()
+        proof = lease.register_target(NONCE, **bundle_arguments())
+        assert proof == {"protocol": m.PROTOCOL, "nonce": NONCE, "target_id": 1,
+                         "base_sha": SHA, "target_sha": TARGET,
+                         "bundle_sha256": bundle_arguments()["bundle_sha256"], "evidence_sha256": "4" * 64}
+        assert lease.inspect() == before
+        assert hooks.calls == ["check_guard", "assert_locks", "drain", "assert_locks",
+                               "validate_snapshot", "validate_target", "register_target",
+                               "check_guard", "assert_locks", "drain", "assert_locks"]
+        with pytest.raises(m.MaintenanceError, match="not registered"):
+            lease.publish_intent(NONCE, base_sha=SHA, target_sha="4" * 40)
+        assert lease.inspect() == before
+        assert lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)["attempt_id"] == 1
+
+
+@pytest.mark.parametrize("change", ["hash", "bad-base64", "non-ascii", "empty", "large", "noncanonical", "same-commit", "sha-width"])
+def test_invalid_bundle_fails_before_host_mutation(state_dir, change):
+    fields = bundle_arguments()
+    if change == "hash": fields["bundle_sha256"] = "0" * 64
+    elif change == "bad-base64": fields["bundle_base64"] = "!?"
+    elif change == "non-ascii": fields["bundle_base64"] = "\u0430"
+    elif change == "empty": fields = bundle_arguments(b"")
+    elif change == "large": fields = bundle_arguments(b"x" * (m.MAX_TARGET_BUNDLE_BYTES + 1))
+    elif change == "noncanonical":
+        fields = bundle_arguments(b"f")
+        fields["bundle_base64"] = "Zh=="  # Decodes to f but carries nonzero pad bits.
+    elif change == "same-commit": fields["target_sha"] = SHA
+    elif change == "sha-width": fields["target_sha"] = "b" * 64
+    hooks = RegistrationHooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "ready")
+        before = lease.inspect()
+        with pytest.raises(m.MaintenanceError):
+            lease.register_target(NONCE, **fields)
+        assert not hooks.registrations and lease.inspect() == before
+
+
+def test_maximum_bundle_is_bounded_and_recovery_target_cannot_reuse_registration(state_dir):
+    hooks = RegistrationHooks()
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "ready")
+        fields = bundle_arguments(b"x" * m.MAX_TARGET_BUNDLE_BYTES)
+        lease.register_target(NONCE, **fields)
+        lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)
+        lease.select_recovery_target(NONCE, release_id="8" * 64, source_commit=SOURCE,
+                                     manifest_sha256="9" * 64, reason="repair")
+        with pytest.raises(m.MaintenanceError, match="not registered"):
+            lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)
+        proof = lease.register_target(NONCE, **fields)
+        assert proof["target_id"] == 2
+        assert lease.publish_intent(NONCE, base_sha=SHA, target_sha=TARGET)["attempt_id"] == 2
+
+
+@pytest.mark.parametrize("phase", ["reserved", "applying", "verified", "complete"])
+def test_registration_is_forbidden_outside_ready_publication_phases(state_dir, phase):
+    hooks = RegistrationHooks()
+    # Phase construction is separately tested with the explicit pure fixture.
+    hooks.validate_publication = lambda journal, attempt: None
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, phase)
+        with pytest.raises(m.MaintenanceError):
+            lease.register_target(NONCE, **bundle_arguments())
+        assert not hooks.registrations
+
+
+def test_registration_cannot_use_finite_exit_to_skip_strict_drain(state_dir):
+    hooks = RegistrationHooks()
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "ready")
+        hooks.fail = "drain"
+        with pytest.raises(m.MaintenanceError, match="drain"):
+            lease.register_target(NONCE, **bundle_arguments())
+        assert not hooks.registrations and "check_exit" not in hooks.calls
+
+
+@pytest.mark.parametrize("bad", [None, {"evidence_sha256": "bad"}, {"evidence_sha256": "4" * 64, "extra": True}])
+def test_invalid_registration_evidence_never_acknowledged(state_dir, bad):
+    hooks = RegistrationHooks()
+    hooks.register_target = lambda journal, **fields: bad
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "ready")
+        with pytest.raises(m.MaintenanceError):
+            lease.register_target(NONCE, **bundle_arguments())
+        assert lease.inspect()["journal"]["attempts"] == []
 
 
 def test_normal_flow_durable_order_and_idempotent_finish(state_dir, monkeypatch):
@@ -487,6 +633,117 @@ def test_apply_cannot_write_before_intent_or_for_stale_attempt(state_dir):
         with pytest.raises(m.MaintenanceError):
             lease.apply(NONCE, 2)
         assert "apply_target" not in hooks.calls
+
+
+def test_pending_job_after_completed_write_does_not_block_actual_verification(state_dir):
+    hooks = Hooks()
+    original_apply = hooks.apply_target
+    def write_then_pending(doc):
+        original_apply(doc)
+        hooks.fail = "drain"
+    hooks.apply_target = write_then_pending
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "publish_intent")
+        applied = lease.apply(NONCE, 1)
+        assert applied["phase"] == "applying" and applied["verification"] is None
+        hooks.calls.clear()
+        lease.mark_verified(NONCE)
+        assert hooks.calls == ["check_guard", "assert_locks", "check_exit", "assert_locks",
+                               "verify_installed", "check_guard", "assert_locks", "check_exit", "assert_locks"]
+        lease.finish(NONCE)
+        assert not lease.inspect()["blocked"]
+        assert "drain" not in hooks.calls
+
+
+def test_default_mode_still_requires_strict_postwrite_drain(state_dir):
+    hooks = Hooks()
+    def write_then_pending(doc):
+        hooks.call("apply_target")
+        hooks.fail = "drain"
+    hooks.apply_target = write_then_pending
+    with m.MaintenanceLease(state_dir, hooks) as lease:
+        advance(lease, "publish_intent")
+        with pytest.raises(m.MaintenanceError, match="drain"):
+            lease.apply(NONCE, 1)
+        assert lease.inspect()["journal"]["phase"] == "applying"
+        assert lease.inspect()["blocked"]
+
+
+def test_eof_after_write_recovers_without_waiting_for_pending_job(state_dir):
+    with m.MaintenanceLease(state_dir, Hooks(), allow_verified_pending_jobs=True) as lease:
+        advance(lease, "publish_intent")
+        lease.apply(NONCE, 1)
+    persisted = json.loads((state_dir / "journal.json").read_text())
+    assert persisted["phase"] == "applying" and persisted["verification"] is None
+    hooks = Hooks()
+    hooks.fail = "drain"
+    with m.MaintenanceLease(state_dir, hooks, boot_id="after-write-reboot",
+                            allow_verified_pending_jobs=True) as lease:
+        assert lease.recover(NONCE)["phase"] == "applying"
+        assert "apply_target" not in hooks.calls and "verify_installed" not in hooks.calls
+        assert lease.inspect()["blocked"]
+        lease.mark_verified(NONCE)
+        lease.finish(NONCE)
+        assert not lease.inspect()["blocked"]
+    assert "drain" not in hooks.calls
+
+
+def test_partial_recovery_is_read_only_and_cannot_bypass_prewrite_drain(state_dir):
+    with m.MaintenanceLease(state_dir, Hooks()) as lease:
+        advance(lease, "applying")
+    hooks = Hooks()
+    hooks.fail = "drain"
+    def incomplete(doc):
+        hooks.call("verify_installed")
+        raise m.MaintenanceError("actual tree incomplete")
+    hooks.verify_installed = incomplete
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        lease.recover(NONCE)
+        with pytest.raises(m.MaintenanceError, match="actual tree incomplete"):
+            lease.mark_verified(NONCE)
+        with pytest.raises(m.MaintenanceError, match="drain"):
+            lease.apply(NONCE, 1)
+        assert "apply_target" not in hooks.calls
+        state = lease.inspect()
+        assert state["blocked"] and state["journal"]["phase"] == "applying"
+        assert state["journal"]["verification"] is None
+
+
+def test_remaining_worker_after_write_blocks_verification_and_recovery(state_dir):
+    hooks = Hooks()
+    def write_then_active(doc):
+        hooks.call("apply_target")
+        hooks.fail = "check_exit"
+    hooks.apply_target = write_then_active
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "publish_intent")
+        with pytest.raises(m.MaintenanceError, match="check_exit"):
+            lease.apply(NONCE, 1)
+        assert "verify_installed" not in hooks.calls
+        assert lease.inspect()["blocked"]
+    hooks = Hooks()
+    hooks.fail = "check_exit"
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        with pytest.raises(m.MaintenanceError, match="check_exit"):
+            lease.recover(NONCE)
+        assert "acquire" not in hooks.calls
+
+
+def test_worker_appearing_during_actual_verification_prevents_durable_verified(state_dir):
+    hooks = Hooks()
+    original = hooks.verify_installed
+    def verified_but_active(doc):
+        result = original(doc)
+        hooks.fail = "check_exit"
+        return result
+    hooks.verify_installed = verified_but_active
+    with m.MaintenanceLease(state_dir, hooks, allow_verified_pending_jobs=True) as lease:
+        advance(lease, "applying")
+        with pytest.raises(m.MaintenanceError, match="check_exit"):
+            lease.mark_verified(NONCE)
+        state = lease.inspect()
+        assert state["blocked"] and state["journal"]["phase"] == "applying"
+        assert state["journal"]["verification"] is None
 
 
 @pytest.mark.parametrize("field,value", [("nonce", "../secret"), ("region", "ural"), ("release_id", "a"), ("source_commit", "HEAD")])

@@ -11,8 +11,11 @@ This module does not execute Git, SSH, systemd or any delivery operation.
 from __future__ import annotations
 
 import copy
+import base64
+import binascii
 import errno
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -26,6 +29,7 @@ PROTOCOL = "court-program-maintenance/2"
 REGIONS = ("hmao", "sverdlovsk_yanao", "bashkortostan", "tyumen")
 PHASES = ("reserved", "ready", "recovery_ready", "publish_intent", "applying", "verified", "safe_to_resume", "complete")
 MAX_DOCUMENT_BYTES = 1024 * 1024
+MAX_TARGET_BUNDLE_BYTES = 512 * 1024
 
 
 class MaintenanceError(RuntimeError):
@@ -46,6 +50,15 @@ class MaintenanceHooks(Protocol):
     validate_target proves the current target's manifest and the original
     protected inventories, including known partial writes on recovery. It must
     reject unknown managed/unmanaged differences before any publish permission.
+    validate_publication proves this exact base/target pair was durably registered
+    for the current target and that its Git objects remain present, including
+    unreachable objects from rejected/rebased earlier pushes. It runs before any
+    intent ACK. register_target is required when that action is called; it imports
+    a verified Git bundle and records the exact binding outside the checkout,
+    without updating refs or working files. It returns only evidence_sha256.
+    Bundles are deliberately limited to 512 KiB decoded (within a 1 MiB frame);
+    a larger release requires a separately reviewed transfer procedure BEFORE
+    push, never a bypass of registration or a relaxed frame/size limit.
     verify_installed checks hashes, modes, source, effective region and protected
     data; returns target_id, manifest_sha256, installed_sha, release_id,
     evidence_sha256 for the CURRENT target, including an emergency rollback.
@@ -53,6 +66,13 @@ class MaintenanceHooks(Protocol):
     ref fences, queued jobs and installed integrity; returns covered_attempt_ids
     and evidence_sha256. With no intents it proves the baseline is still safe.
     The digest is audit evidence, not a replacement for those live checks.
+
+    With allow_verified_pending_jobs=True, check_exit(journal) is additionally
+    required. It proves effective admission guards and absence of active workers,
+    installer children and unfinished writes while allowing ordinary queued jobs.
+    It runs only at read/verification boundaries (including applying recovery),
+    sometimes before run-lock acquisition or after release. It must never write
+    the program or create/cancel/start jobs. Every new write still requires drain.
     """
     def check_guard(self, marker: Path) -> None: ...
     def drain(self) -> None: ...
@@ -62,6 +82,9 @@ class MaintenanceHooks(Protocol):
     def snapshot(self) -> dict: ...
     def validate_snapshot(self, snapshot: dict) -> None: ...
     def validate_target(self, journal: dict) -> None: ...
+    def validate_publication(self, journal: dict, attempt: dict) -> None: ...
+    def register_target(self, journal: dict, *, base_sha: str, target_sha: str,
+                        bundle_sha256: str, bundle_bytes: bytes) -> dict: ...
     def apply_target(self, journal: dict) -> None: ...
     def verify_installed(self, journal: dict) -> dict: ...
     def verify_safe(self, journal: dict) -> dict: ...
@@ -77,6 +100,30 @@ def _sha(value):
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", value) is None:
         raise MaintenanceError("Нужен полный SHA коммита")
     return value
+
+
+def _publication_pair(base_sha, target_sha):
+    _sha(base_sha)
+    _sha(target_sha)
+    if len(base_sha) != len(target_sha) or base_sha == target_sha:
+        raise MaintenanceError("Публикация требует разных коммитов одного формата SHA")
+
+
+def _target_bundle(bundle_sha256, bundle_base64):
+    _hex(bundle_sha256, 64, "bundle_sha256")
+    if (not isinstance(bundle_base64, str) or not bundle_base64
+            or len(bundle_base64) > ((MAX_TARGET_BUNDLE_BYTES + 2) // 3) * 4):
+        raise MaintenanceError("Git bundle превышает предел 512 KiB или отсутствует")
+    try:
+        encoded = bundle_base64.encode("ascii")
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, UnicodeError, binascii.Error) as exc:
+        raise MaintenanceError("Некорректный base64 Git bundle") from exc
+    if (not raw or len(raw) > MAX_TARGET_BUNDLE_BYTES
+            or base64.b64encode(raw) != encoded
+            or hashlib.sha256(raw).hexdigest() != bundle_sha256):
+        raise MaintenanceError("Размер, канонический base64 или SHA256 Git bundle не совпадает")
+    return raw
 
 
 def _nonce(value):
@@ -271,6 +318,8 @@ class MaintenanceLease:
         self.marker = self.path / "blocked"
         self.hooks = hooks
         for name in MaintenanceHooks.__dict__:
+            if name == "register_target":
+                continue  # Required only when the bounded transfer is invoked.
             if not name.startswith("_") and not callable(getattr(hooks, name, None)):
                 raise MaintenanceError(f"Не реализована обязательная проверка {name}")
         if type(allow_verified_pending_jobs) is not bool:
@@ -429,10 +478,13 @@ class MaintenanceLease:
         if self.allow_verified_pending_jobs and exit_journal is not None:
             # An explicit adapter proves no remaining writes/active workers and
             # effective admission guards. Natural pending jobs may remain; this
-            # hook MUST NOT create, cancel or start any job. Only a verified
-            # target may use this finite exit contract, including crash recovery.
-            if exit_journal["phase"] not in ("verified", "safe_to_resume", "complete"):
-                raise MaintenanceError("Ослабление drain до проверки запрещено")
+            # hook MUST NOT create, cancel or start any job. During applying this
+            # is only a read-only recovery/post-write/verification boundary. It
+            # grants no right to write or open admission: actual installation is
+            # independently checked before durable verified. begin_apply always
+            # uses strict drain, even after a successful finite recovery check.
+            if exit_journal["phase"] not in ("applying", "verified", "safe_to_resume", "complete"):
+                raise MaintenanceError("Ослабление drain вне проверки установки запрещено")
             self.hooks.check_exit(copy.deepcopy(exit_journal))
         else:
             self.hooks.drain()
@@ -499,7 +551,7 @@ class MaintenanceLease:
         journal = self._owned(nonce, allow_unblocked=True)
         if journal["phase"] == "complete" and not self.inspect()["blocked"]:
             return journal
-        final = journal if (journal["phase"] in ("verified", "safe_to_resume")
+        final = journal if (journal["phase"] in ("applying", "verified", "safe_to_resume")
                             or journal["outcome"] == "installed") else None
         self._acquire(nonce, exit_journal=final)
         if journal["phase"] in ("reserved", "ready") and journal["snapshot"] is not None:
@@ -531,8 +583,36 @@ class MaintenanceLease:
                        verification=None, safe_evidence=None, outcome=None)
         return self._save(journal)
 
+    def register_target(self, nonce, *, base_sha, target_sha, bundle_sha256, bundle_base64):
+        """Import an exact bounded candidate before granting any push permission.
+
+        The host stores the durable receipt and retains every registered object's
+        reachability independently of the branch ref. An interrupted ACK grants
+        no permission to push; repeating registration must be host-idempotent.
+        """
+        journal = self._owned(nonce, phases=("ready", "recovery_ready", "publish_intent"))
+        _publication_pair(base_sha, target_sha)
+        raw = _target_bundle(bundle_sha256, bundle_base64)
+        hook = getattr(self.hooks, "register_target", None)
+        if not callable(hook):
+            raise MaintenanceError("Не реализована обязательная операция register_target")
+        self._live(nonce)  # Strict drain: registration writes Git objects/receipt.
+        if journal["active_target_id"] == 1:
+            self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
+        self.hooks.validate_target(copy.deepcopy(journal))
+        evidence = hook(copy.deepcopy(journal), base_sha=base_sha, target_sha=target_sha,
+                        bundle_sha256=bundle_sha256, bundle_bytes=raw)
+        if not isinstance(evidence, dict) or set(evidence) != {"evidence_sha256"}:
+            raise MaintenanceError("Некорректное подтверждение регистрации Git bundle")
+        _hex(evidence["evidence_sha256"], 64, "evidence_sha256")
+        self._live(nonce)
+        return {"protocol": PROTOCOL, "nonce": nonce, "target_id": journal["active_target_id"],
+                "base_sha": base_sha, "target_sha": target_sha,
+                "bundle_sha256": bundle_sha256, **evidence}
+
     def publish_intent(self, nonce, *, base_sha, target_sha):
         journal = self._owned(nonce, phases=("ready", "recovery_ready", "publish_intent"))
+        _publication_pair(base_sha, target_sha)
         self._live(nonce)
         if journal["active_target_id"] == 1:
             self.hooks.validate_snapshot(copy.deepcopy(journal["snapshot"]))
@@ -540,6 +620,8 @@ class MaintenanceLease:
         attempt = {"attempt_id": len(journal["attempts"]) + 1,
                    "target_id": journal["active_target_id"],
                    "base_sha": _sha(base_sha), "target_sha": _sha(target_sha)}
+        self.hooks.validate_publication(copy.deepcopy(journal), copy.deepcopy(attempt))
+        self._live(nonce)
         journal["attempts"].append(attempt)
         journal["active_attempt_id"] = attempt["attempt_id"]
         journal["phase"] = "publish_intent"
@@ -556,8 +638,11 @@ class MaintenanceLease:
 
     def mark_verified(self, nonce):
         journal = self._owned(nonce, phases=("applying", "verified"))
-        self._live(nonce)
+        # No program writes happen in this method. Pending ordinary timer jobs
+        # need not drain once guards and absence of active writers are proven.
+        self._live(nonce, exit_journal=journal)
         journal["verification"] = _verification(self.hooks.verify_installed(copy.deepcopy(journal)), journal["targets"][-1])
+        self._live(nonce, exit_journal=journal)
         journal["phase"] = "verified"
         return self._save(journal)
 
@@ -572,7 +657,9 @@ class MaintenanceLease:
         """
         journal = self.begin_apply(nonce, attempt_id)
         self.hooks.apply_target(copy.deepcopy(journal))
-        self._live(nonce)
+        # apply_target is synchronous and has returned. A new pending timer job
+        # cannot turn completed writes into an unbounded post-write drain.
+        self._live(nonce, exit_journal=journal)
         return self._owned(nonce, phases=("applying",))
 
     def _resume(self, journal, *, outcome):

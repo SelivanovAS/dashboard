@@ -100,7 +100,7 @@ def test_region_workflow_presence_is_preserved():
 def test_source_branch_has_no_production_data_or_delivery_workflow():
     assert not (ROOT / "data").exists()
     active = list((ROOT / ".github/workflows").glob("*.yml"))
-    assert sorted(path.name for path in active) == ["program-maintenance-fixture.yml", "program-maintenance-reboot.yml", "program-tests.yml"]
+    assert sorted(path.name for path in active) == ["program-maintenance-fixture.yml", "program-maintenance-host-vm.yml", "program-maintenance-reboot.yml", "program-tests.yml"]
     text = (ROOT / '.github/workflows/program-tests.yml').read_text()
     assert "branches: [codex/program]" in text
     assert "contents: read" in text
@@ -136,3 +136,13 @@ def test_reboot_fixture_is_isolated_and_manual_production_launch_is_impossible()
     assert 'restrict=on,hostfwd=tcp:127.0.0.1:' in fixture
     assert 'installer_protocol_tested": False' in fixture
     assert 'gpgv' in fixture and 'Official image SHA256 mismatch' in fixture
+
+
+def test_host_vm_fixture_has_no_production_trigger_or_credentials():
+    text = (ROOT / '.github/workflows/program-maintenance-host-vm.yml').read_text()
+    assert 'branches: [codex/program-maintenance-lease]' in text
+    assert "github.ref == 'refs/heads/codex/program-maintenance-lease'" in text
+    assert 'contents: read' in text
+    assert 'secrets.' not in text
+    assert 'persist-credentials: false' in text
+    assert not re.search(r'^  (schedule|workflow_run|workflow_dispatch|pull_request):', text, re.M)

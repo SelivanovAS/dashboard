@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atomic coordinator locks; source-only, no production CLI or stale adoption.
+"""Atomic coordinator locks; source-only, no production CLI or foreign stale adoption.
 
 Caller must close permanent service admission and drain legacy writers BEFORE
 using this adapter. check_admission repeats that proof before every mutation.
@@ -9,14 +9,15 @@ contract. Their unsafe stale-reclaim behavior is not repaired by this module.
 
 The full owner v1 appears atomically through Linux RENAME_NOREPLACE, never the
 legacy mkdir-to-owner gap. Fresh acquire never reclaims ANY existing lock.
-Durable receipts support future explicit recovery, but this version deliberately
-cannot adopt a previous/dead coordinator. After such a crash admission stays
-closed; do not delete locks or create a new nonce to bypass that boundary.
+Explicit recover() reuses the SAME nonce only after proving the recorded owner
+has died. Every old inode remains in durable generation history; old directories
+are retired, never recursively deleted. Unknown state remains closed.
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
 import ctypes
+import copy
 import errno
 import fcntl
 import json
@@ -113,6 +114,8 @@ class AtomicRunLocks:
         self.state_fd = None
         self.folder_fd = None
         self.records = {}
+        self.history = []
+        self.generation = 1
         self.guard_inodes = {}
         self.receipt_bytes = None
         self.acquired = []
@@ -150,7 +153,7 @@ class AtomicRunLocks:
 
     def _save(self):
         self._state_identity()
-        record = {"schema_version": 1, "strategy": "linux-renameat2-noreplace/1", "nonce": self.nonce,
+        record = {"schema_version": 2, "generation": self.generation, "history": self.history, "strategy": "linux-renameat2-noreplace/1", "nonce": self.nonce,
             "pid": self.pid, "process_start": self.started, "boot_id": self.boot_id,
             "session_id": self.session, "legacy_ps_locale": "C-compatible", "phase": self.phase,
             "locks": self.records, "guard_inodes": self.guard_inodes}
@@ -164,7 +167,9 @@ class AtomicRunLocks:
             _sync(fd)
         finally:
             os.close(fd)
+        self._step("receipt_next", None)
         os.replace("receipt.next", "receipt.json", src_dir_fd=self.folder_fd, dst_dir_fd=self.folder_fd)
+        self._step("receipt_renamed", None)
         _sync(self.folder_fd)
         self.receipt_bytes = raw
 
@@ -217,7 +222,7 @@ class AtomicRunLocks:
             for _, _, fd in reversed(opened):
                 os.close(fd)
 
-    def _open(self):
+    def _open(self, *, existing=False):
         if self.phase != "new":
             raise AtomicLockError("Fresh acquire cannot reuse an existing receipt")
         if sys.platform != "linux":
@@ -244,13 +249,20 @@ class AtomicRunLocks:
                 raise AtomicLockError("Locks and private staging must share a filesystem")
         if len({identity for _, _, identity in self.parents.values()}) != 4:
             raise AtomicLockError("Four distinct regional lock parents required")
-        os.mkdir(self.nonce, 0o700, dir_fd=self.state_fd)
-        _sync(self.state_fd)
+        if not existing:
+            os.mkdir(self.nonce, 0o700, dir_fd=self.state_fd)
+            _sync(self.state_fd)
         self.folder_fd = os.open(self.nonce, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.state_fd)
+        folder_info = os.fstat(self.folder_fd)
+        if folder_info.st_uid != os.geteuid() or stat.S_IMODE(folder_info.st_mode) != 0o700:
+            raise AtomicLockError("Unsafe receipt directory")
         self.phase = "preparing"
 
     def _check_directory(self, region, parent, name):
-        record = self.records[region]
+        self._check_record_directory(self.records[region], parent, name)
+
+    def _check_record_directory(self, record, parent, name):
+        owner_bytes = (json.dumps(record["owner"], sort_keys=True) + "\n").encode()
         info = os.stat(name, dir_fd=parent, follow_symlinks=False)
         if (not stat.S_ISDIR(info.st_mode) or list(_identity(info)) != record["inode"]
                 or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700):
@@ -265,13 +277,359 @@ class AtomicRunLocks:
                 if (list(_identity(owner_info)) != record["owner_inode"]
                         or not stat.S_ISREG(owner_info.st_mode) or owner_info.st_nlink != 1
                         or owner_info.st_uid != os.geteuid() or stat.S_IMODE(owner_info.st_mode) != 0o600
-                        or owner_info.st_size != len(self.owner_bytes)
-                        or os.read(owner_fd, len(self.owner_bytes) + 1) != self.owner_bytes):
+                        or owner_info.st_size != len(owner_bytes)
+                        or os.read(owner_fd, len(owner_bytes) + 1) != owner_bytes):
                     raise AtomicLockError("Lock owner changed")
             finally:
                 os.close(owner_fd)
         finally:
             os.close(fd)
+
+    def _name(self, kind, region):
+        prefix = "" if self.generation == 1 else str(self.generation) + "-"
+        return kind + "-" + prefix + region
+
+    @staticmethod
+    def _prove_dead(epoch, current_boot):
+        if epoch["boot_id"] != current_boot:
+            return  # A process from another kernel boot cannot still own locks.
+        pid = epoch["pid"]
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        except OSError as exc:
+            raise AtomicLockError("Previous coordinator liveness is unknown") from exc
+        try:
+            started = process_start(pid)
+        except (AtomicLockError, OSError, subprocess.SubprocessError) as exc:
+            # Exit between kill(0) and ps is safe ONLY after ESRCH, never on an
+            # empty/failed ps result alone (the old helper's unsafe behavior).
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            except OSError:
+                pass
+            raise AtomicLockError("Previous coordinator start identity is unknown") from exc
+        if started == epoch["process_start"]:
+            raise AtomicLockError("Previous coordinator is still alive")
+        # PID exists with another OS start string: the recorded process is dead.
+
+    def _read_document(self, name, *, optional=False):
+        try:
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.folder_fd)
+        except FileNotFoundError:
+            if optional:
+                return None, None
+            raise
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) != 0o600 or not 0 < info.st_size <= 1024 * 1024):
+                raise AtomicLockError("Unsafe recovery receipt")
+            raw = os.read(fd, info.st_size + 1)
+            if len(raw) != info.st_size:
+                raise AtomicLockError("Recovery receipt changed during read")
+        finally:
+            os.close(fd)
+        def unique(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise AtomicLockError("Duplicate recovery receipt field")
+                value[key] = item
+            return value
+        try:
+            doc = json.loads(raw, object_pairs_hook=unique)
+        except (ValueError, UnicodeError) as exc:
+            raise AtomicLockError("Invalid recovery receipt") from exc
+        self._validate_receipt(doc)
+        return doc, raw
+
+    @staticmethod
+    def _epoch(doc):
+        return copy.deepcopy({key: doc.get(key, 1) for key in
+                ("generation", "pid", "process_start", "boot_id", "session_id", "locks")})
+
+    def _validate_successor(self, previous, candidate):
+        """Recognize exactly one _save transition, never a general journal edit.
+
+        The candidate's record/schema/route validation and inode/liveness proof
+        are separate requirements. Unknown private staging remains an error.
+        """
+        if candidate["schema_version"] != 2:
+            raise AtomicLockError("Recovery candidate is not a current receipt")
+        if previous is None:
+            if (candidate["generation"] != 1 or candidate["history"] or candidate["phase"] != "preparing"
+                    or set(candidate["locks"]) != {REGIONS[0]}
+                    or candidate["locks"][REGIONS[0]]["status"] != "prepared"):
+                raise AtomicLockError("Unknown initial receipt candidate")
+            return
+        if any(previous[key] != candidate[key] for key in ("strategy", "nonce", "legacy_ps_locale", "guard_inodes")):
+            raise AtomicLockError("Recovery candidate changed lease/guard identity")
+        old_generation = previous.get("generation", 1)
+        if candidate["generation"] == old_generation + 1:
+            expected_history = [*previous.get("history", []), self._epoch(previous)]
+            if (candidate["history"] != expected_history or candidate["phase"] != "recovering"
+                    or candidate["locks"] or candidate["session_id"] == previous["session_id"]):
+                raise AtomicLockError("Unknown next-generation receipt candidate")
+            return
+        if (candidate["generation"] != old_generation or previous["schema_version"] != 2
+                or any(previous[key] != candidate[key] for key in
+                       ("pid", "process_start", "boot_id", "session_id"))):
+            raise AtomicLockError("Recovery candidate changed current owner")
+        if candidate == previous:
+            return  # A fully identical durable rewrite adds no new permission.
+        old_locks, new_locks = previous["locks"], candidate["locks"]
+        if candidate["history"] != previous["history"]:
+            # Retiring a visible historical inode changes one status only.
+            old = copy.deepcopy(previous["history"])
+            changes = 0
+            if (candidate["phase"] != previous["phase"] or candidate["phase"] != "recovering"
+                    or old_locks != new_locks):
+                raise AtomicLockError("Unknown historical receipt transition")
+            for left, right in zip(old, candidate["history"]):
+                if set(left["locks"]) != set(right["locks"]):
+                    raise AtomicLockError("Historical receipt records changed")
+                for region, record in left["locks"].items():
+                    after = right["locks"][region]
+                    if record != after:
+                        if record["status"] not in ("prepared", "installed") or after["status"] != "retired":
+                            raise AtomicLockError("Unknown historical retirement")
+                        record["status"] = "retired"
+                        changes += 1
+            if changes != 1 or old != candidate["history"]:
+                raise AtomicLockError("Historical identity changed")
+            return
+        if candidate["phase"] != previous["phase"]:
+            phases = (previous["phase"], candidate["phase"])
+            allowed = {("preparing", "held"), ("preparing", "compensating"),
+                       ("compensating", "acquire_failed"), ("held", "releasing"),
+                       ("releasing", "released"), ("recovering", "held")}
+            if old_locks != new_locks or phases not in allowed:
+                raise AtomicLockError("Unknown receipt phase transition")
+            statuses = [record["status"] for record in new_locks.values()]
+            if candidate["phase"] in ("held", "releasing") and (set(new_locks) != set(REGIONS) or set(statuses) != {"installed"}):
+                raise AtomicLockError("Incomplete held receipt candidate")
+            if candidate["phase"] == "released" and (set(new_locks) != set(REGIONS) or set(statuses) != {"retired"}):
+                raise AtomicLockError("Incomplete released receipt candidate")
+            if candidate["phase"] == "acquire_failed" and "installed" in statuses:
+                raise AtomicLockError("Unreleased acquisition candidate")
+            return
+        if set(old_locks) != set(new_locks):
+            next_region = REGIONS[len(old_locks)] if len(old_locks) < len(REGIONS) else None
+            if (candidate["phase"] not in ("preparing", "recovering")
+                    or set(old_locks) != set(REGIONS[:len(old_locks)])
+                    or set(new_locks) != set(old_locks) | {next_region}
+                    or any(new_locks[region] != record for region, record in old_locks.items())
+                    or new_locks[next_region]["status"] != "prepared"):
+                raise AtomicLockError("Unknown prepared receipt candidate")
+            return
+        updated = copy.deepcopy(old_locks)
+        changes = 0
+        for region, record in updated.items():
+            after = new_locks[region]
+            if record != after:
+                transition = (record["status"], after["status"])
+                allowed = ((candidate["phase"] in ("preparing", "recovering") and transition == ("prepared", "installed"))
+                           or (candidate["phase"] in ("compensating", "releasing")
+                               and transition in (("prepared", "retired"), ("installed", "retired"))))
+                if not allowed:
+                    raise AtomicLockError("Unknown visible lock receipt transition")
+                record["status"] = after["status"]
+                changes += 1
+        if changes != 1 or updated != new_locks:
+            raise AtomicLockError("Lock identity changed in receipt candidate")
+
+    def _validate_receipt(self, doc):
+        base = {"schema_version", "strategy", "nonce", "pid", "process_start", "boot_id", "session_id",
+                "legacy_ps_locale", "phase", "locks", "guard_inodes"}
+        if (not isinstance(doc, dict) or type(doc.get("schema_version")) is not int
+                or doc["schema_version"] not in (1, 2)
+                or set(doc) != base | ({"generation", "history"} if doc["schema_version"] == 2 else set())
+                or doc["nonce"] != self.nonce or doc["strategy"] != "linux-renameat2-noreplace/1"
+                or doc["legacy_ps_locale"] != "C-compatible"
+                or doc["phase"] not in ("preparing", "held", "compensating", "acquire_failed", "releasing", "released", "recovering")):
+            raise AtomicLockError("Unknown/foreign recovery receipt")
+        history = doc.get("history", [])
+        generation = doc.get("generation", 1)
+        if (type(generation) is not int or not 1 <= generation <= 1000 or not isinstance(history, list)
+                or len(history) != generation - 1):
+            raise AtomicLockError("Broken recovery generation history")
+        def inode(value):
+            return isinstance(value, list) and len(value) == 2 and all(type(i) is int and i >= 0 for i in value)
+        if (not isinstance(doc["guard_inodes"], dict) or set(doc["guard_inodes"]) != set(REGIONS)
+                or not all(inode(value) for value in doc["guard_inodes"].values())):
+            raise AtomicLockError("Unknown permanent guard identities")
+        epoch_fields = {"generation", "pid", "process_start", "boot_id", "session_id", "locks"}
+        current = {key: doc.get(key, 1) for key in epoch_fields}
+        for number, epoch in enumerate([*history, current], 1):
+            if (not isinstance(epoch, dict) or set(epoch) != epoch_fields or type(epoch["generation"]) is not int or epoch["generation"] != number
+                    or type(epoch["pid"]) is not int or epoch["pid"] <= 0
+                    or not isinstance(epoch["process_start"], str) or not 0 < len(epoch["process_start"]) <= 256
+                    or not isinstance(epoch["boot_id"], str) or not re.fullmatch(r"[0-9a-f-]{36}", epoch["boot_id"])
+                    or not isinstance(epoch["session_id"], str) or not re.fullmatch(r"[0-9a-f]{32}", epoch["session_id"])
+                    or not isinstance(epoch["locks"], dict) or not set(epoch["locks"]) <= set(REGIONS)):
+                raise AtomicLockError("Invalid previous coordinator identity")
+            prefix = "" if number == 1 else str(number) + "-"
+            for region, record in epoch["locks"].items():
+                if (not isinstance(record, dict) or set(record) != {"target", "inode", "owner", "owner_inode", "prepared", "retired", "parent_inode", "status"}
+                        or record["target"] != str(self.paths[region])
+                        or record["prepared"] != "prepared-" + prefix + region
+                        or record["retired"] != "retired-" + prefix + region
+                        or not isinstance(record["owner"], dict) or type(record["owner"].get("version")) is not int
+                        or record["owner"] != {"version": 1, "pid": epoch["pid"], "process_start": epoch["process_start"]}
+                        or not all(inode(record[key]) for key in ("inode", "owner_inode", "parent_inode"))
+                        or record["parent_inode"] != list(self.parents[region][2])
+                        or record["status"] not in ("prepared", "installed", "retired")):
+                    raise AtomicLockError("Unknown historical lock identity/route")
+
+    def _locations(self, epochs, *, candidate=False):
+        visible = {}
+        allowed_private = {"receipt.json", "receipt.next"} if candidate else {"receipt.json"}
+        for epoch in epochs:
+            for region, record in epoch["locks"].items():
+                found = []
+                for name in (record["prepared"], record["retired"]):
+                    allowed_private.add(name)
+                    try:
+                        os.stat(name, dir_fd=self.folder_fd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue
+                    self._check_record_directory(record, self.folder_fd, name)
+                    found.append((self.folder_fd, name))
+                parent, name = self._parent(region), self.paths[region].name
+                try:
+                    info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                except FileNotFoundError:
+                    info = None
+                if info is not None and list(_identity(info)) == record["inode"]:
+                    self._check_record_directory(record, parent, name)
+                    if region in visible:
+                        raise AtomicLockError("Duplicate historical visible lock")
+                    visible[region] = record
+                    found.append((parent, name))
+                if len(found) != 1:
+                    raise AtomicLockError("Historical lock missing/ambiguous; preserve recovery state")
+        for region in REGIONS:
+            try:
+                os.stat(self.paths[region].name, dir_fd=self._parent(region), follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if region not in visible:
+                raise AtomicLockError("Foreign lock blocks recovery")
+        if set(os.listdir(self.folder_fd)) - allowed_private:
+            raise AtomicLockError("Unexplained private recovery files; preserve for investigation")
+        return visible
+
+    def recover(self):
+        """Reacquire four locks for this nonce after a PROVEN dead predecessor.
+
+        No automatic call from acquire. New owner/generation is durable BEFORE
+        retiring any old visible directory. Every old and new inode remains in
+        the same receipt, making receipt/publish/retire crashes recoverable.
+        A complete receipt.next is reconciled only as an exact valid successor;
+        unexpected files or incomplete private writes fail closed, never cleaned.
+        """
+        self._admission()
+        self._open(existing=True)
+        previous, previous_raw = self._read_document("receipt.json", optional=True)
+        candidate, candidate_raw = self._read_document("receipt.next", optional=True)
+        if previous is None and candidate is None:
+            raise AtomicLockError("No durable recovery receipt")
+        self.receipt_bytes = previous_raw
+        if candidate is not None:
+            self._validate_successor(previous, candidate)
+        selected = candidate if candidate is not None else previous
+        self.guard_inodes = copy.deepcopy(selected["guard_inodes"])
+        epochs = copy.deepcopy([*selected.get("history", []), self._epoch(selected)])
+        with self._guards():
+            self._admission()
+            # Bind both exact byte strings while all permanent guard flocks are
+            # held. A concurrent recovery cannot silently change our predecessor.
+            if (self._read_document("receipt.json", optional=True)[1] != previous_raw
+                    or self._read_document("receipt.next", optional=True)[1] != candidate_raw):
+                raise AtomicLockError("Recovery receipt changed before reconciliation")
+            for epoch in epochs:
+                self._prove_dead(epoch, self.boot_id)
+            self._locations(epochs, candidate=candidate is not None)
+            if candidate is not None:
+                self._state_identity()
+                fd = os.open("receipt.next", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.folder_fd)
+                try:
+                    _sync(fd)
+                finally:
+                    os.close(fd)
+                os.replace("receipt.next", "receipt.json", src_dir_fd=self.folder_fd, dst_dir_fd=self.folder_fd)
+                _sync(self.folder_fd)
+                self.receipt_bytes = candidate_raw
+                self._step("receipt_reconciled", None)
+            self.history = epochs
+            self.generation = len(epochs) + 1
+            if self.generation > 1000:
+                raise AtomicLockError("Recovery history limit reached")
+            self.records, self.acquired, self.phase = {}, [], "recovering"
+            self._save()
+            self._step("recovery_begin", None)
+            visible = self._locations(self.history)
+            for region in reversed(REGIONS):
+                self._admission()
+                record = visible.get(region)
+                if record is None:
+                    continue
+                self._check_record_directory(record, self._parent(region), self.paths[region].name)
+                rename_noreplace(self._parent(region), self.paths[region].name, self.folder_fd, record["retired"])
+                _sync(self._parent(region))
+                _sync(self.folder_fd)
+                self._step("recovery_retired", region)
+                self._check_record_directory(record, self.folder_fd, record["retired"])
+                record["status"] = "retired"
+                self._save()
+            self._prepare_recovery_records()
+            for region in REGIONS:
+                self._admission()
+                record = self.records[region]
+                self._check_directory(region, self.folder_fd, record["prepared"])
+                rename_noreplace(self.folder_fd, record["prepared"], self._parent(region), self.paths[region].name)
+                self.acquired.append(region)
+                _sync(self._parent(region))
+                _sync(self.folder_fd)
+                self._step("recovery_published", region)
+                self._check_directory(region, self._parent(region), self.paths[region].name)
+                record["status"] = "installed"
+                self._save()
+            self.phase = "held"
+            self._save()
+            self._assert_locked()
+        return self.receipt()
+
+    def _prepare_recovery_records(self):
+        for region in REGIONS:
+            self._admission()
+            name = self._name("prepared", region)
+            os.mkdir(name, 0o700, dir_fd=self.folder_fd)
+            fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.folder_fd)
+            try:
+                owner_fd = os.open("owner.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+                try:
+                    with os.fdopen(owner_fd, "wb", closefd=False) as stream:
+                        stream.write(self.owner_bytes)
+                        stream.flush()
+                    _sync(owner_fd)
+                    owner_inode = list(_identity(os.fstat(owner_fd)))
+                finally:
+                    os.close(owner_fd)
+                _sync(fd)
+                inode = list(_identity(os.fstat(fd)))
+            finally:
+                os.close(fd)
+            _sync(self.folder_fd)
+            self.records[region] = {"target": str(self.paths[region]), "inode": inode,
+                "owner": self.owner, "owner_inode": owner_inode, "prepared": name,
+                "retired": self._name("retired", region), "parent_inode": list(self.parents[region][2]), "status": "prepared"}
+            self._save()
+            self._step("recovery_receipt", region)
 
     def acquire(self):
         self._admission()
@@ -280,7 +638,7 @@ class AtomicRunLocks:
             with self._guards():
                 for region in REGIONS:
                     self._admission()
-                    name = "prepared-" + region
+                    name = self._name("prepared", region)
                     os.mkdir(name, 0o700, dir_fd=self.folder_fd)
                     fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.folder_fd)
                     try:
@@ -299,7 +657,7 @@ class AtomicRunLocks:
                         os.close(fd)
                     _sync(self.folder_fd)
                     self.records[region] = {"target": str(self.paths[region]), "inode": inode,
-                        "owner": self.owner, "owner_inode": owner_inode, "prepared": name, "retired": "retired-" + region,
+                        "owner": self.owner, "owner_inode": owner_inode, "prepared": name, "retired": self._name("retired", region),
                         "parent_inode": list(self.parents[region][2]), "status": "prepared"}
                     self._save()  # Durable inode/owner receipt BEFORE the visible name.
                     self._step("receipt", region)

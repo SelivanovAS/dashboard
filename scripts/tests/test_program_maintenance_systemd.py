@@ -154,6 +154,147 @@ def test_systemd_255_empty_job_value_means_no_pending_job(gate):
     assert gate.drain(timeout=0) == {}
 
 
+@pytest.mark.parametrize('job', ['123', '123 /org/freedesktop/systemd1/job/123'])
+def test_finite_exit_allows_pending_only_job_but_strict_drain_still_refuses(gate, job):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    gate.test_properties['Job'] = job
+    with pytest.raises(MaintenanceGateError, match='ещё заняты'):
+        gate.drain(timeout=0)
+    before = len(gate.test_calls)
+    proof = gate.check_exit()
+    assert proof['no_active_workers'] is True
+    assert proof['pending_jobs'] == {'fixture.service': job}
+    assert all(call[0] != 'systemctl' or call[1] == 'show'
+               for call in gate.test_calls[before:])
+    assert gate.marker.exists()
+
+
+@pytest.mark.parametrize(('key', 'value'), [
+    ('ActiveState', 'activating'), ('ActiveState', 'deactivating'),
+    ('ActiveState', 'active'), ('SubState', 'start-pre'),
+    ('MainPID', '34'), ('ControlPID', '35'),
+])
+def test_pending_job_never_hides_active_workers_at_finite_exit(gate, key, value):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    gate.test_properties['Job'] = '123 /org/freedesktop/systemd1/job/123'
+    gate.test_properties[key] = value
+    with pytest.raises(MaintenanceGateError, match='ещё выполняются'):
+        gate.check_exit()
+    assert gate.marker.exists()
+
+
+def test_pending_job_never_hides_populated_or_unreadable_cgroup(gate):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    gate.test_properties['Job'] = '123'
+    folder = gate.cgroup_directory / 'system.slice/fixture.service'
+    folder.mkdir(parents=True)
+    gate.test_properties['ControlGroup'] = '/system.slice/fixture.service'
+    with pytest.raises(MaintenanceGateError, match='дочерние процессы'):
+        gate.check_exit()
+    (folder / 'cgroup.events').write_text('populated 1\nfrozen 0\n')
+    with pytest.raises(MaintenanceGateError, match='ещё выполняются'):
+        gate.check_exit()
+    (folder / 'cgroup.events').write_text('populated 0\nfrozen 0\n')
+    assert gate.check_exit()['pending_jobs'] == {'fixture.service': '123'}
+
+
+@pytest.mark.parametrize('job', ['pending', '0 /wrong', '123 /org/freedesktop/systemd1/job/456',
+                                  '123 /unrelated', '-1', '1\n123'])
+def test_finite_exit_rejects_unknown_pending_job_shape(gate, job):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    gate.test_properties['Job'] = job
+    with pytest.raises(MaintenanceGateError):
+        gate.check_exit()
+
+
+def test_finite_exit_does_not_prove_absence_of_marker_or_lost_effective_guard(gate):
+    gate.bootstrap()
+    with pytest.raises(MaintenanceGateError):
+        gate.check_exit()
+    gate.marker.write_text('blocked')
+    gate.test_conditions.clear()
+    with pytest.raises(MaintenanceGateError, match='Условие'):
+        gate.check_exit()
+
+
+def test_marker_disappearing_during_finite_exit_scan_is_rejected(gate, monkeypatch):
+    gate.bootstrap()
+    gate.marker.write_text('blocked')
+    def disappeared(*, include_pending):
+        gate.marker.unlink()
+        return {}, {}
+    monkeypatch.setattr(gate, '_activity', disappeared)
+    with pytest.raises(MaintenanceGateError):
+        gate.check_exit()
+
+
+def test_real_core_uses_gate_finite_check_after_write_and_recovery(gate):
+    # The manager responses remain a fixture; both production Python components
+    # are connected here. Real timer scheduling is covered by the isolated VM.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('maintenance_core_fixture',
+        Path(__file__).with_name('test_program_maintenance.py'))
+    fixture = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture)
+    Hooks, m, NONCE, advance = fixture.Hooks, fixture.m, fixture.NONCE, fixture.advance
+
+    version = gate.marker.parent / 'fixture-version'
+    gate.marker.parent.chmod(0o700)
+    gate.bootstrap()
+
+    class HostHooks(Hooks):
+        def check_guard(self, marker):
+            super().check_guard(marker)
+            assert marker == gate.marker
+            gate.check_guard()
+
+        def drain(self):
+            self.call('drain')
+            gate.drain(timeout=0)
+
+        def check_exit(self, journal):
+            super().check_exit(journal)
+            gate.check_exit()
+
+        def apply_target(self, journal):
+            super().apply_target(journal)
+            version.write_bytes(b'complete fixture version')
+            gate.test_properties['Job'] = '123 /org/freedesktop/systemd1/job/123'
+
+        def verify_installed(self, journal):
+            if version.read_bytes() != b'complete fixture version':
+                raise m.MaintenanceError('actual fixture tree incomplete')
+            return super().verify_installed(journal)
+
+    with m.MaintenanceLease(gate.marker.parent, HostHooks(),
+                            allow_verified_pending_jobs=True) as lease:
+        advance(lease, 'publish_intent')
+        lease.apply(NONCE, 1)
+        assert lease.inspect()['journal']['phase'] == 'applying'
+    # EOF after successful writes leaves applying durable and marker intact.
+    assert gate.marker.exists() and gate.busy()
+    with m.MaintenanceLease(gate.marker.parent, HostHooks(),
+                            allow_verified_pending_jobs=True) as recovered:
+        recovered.recover(NONCE)
+        version.write_bytes(b'partial fixture version')
+        with pytest.raises(m.MaintenanceError, match='tree incomplete'):
+            recovered.mark_verified(NONCE)
+        with pytest.raises(MaintenanceGateError, match='ещё заняты'):
+            recovered.apply(NONCE, 1)
+        assert gate.marker.exists()
+        version.write_bytes(b'complete fixture version')
+        recovered.mark_verified(NONCE)
+        recovered.finish(NONCE)
+        assert not gate.marker.exists()
+    assert gate.test_properties['Job'] == '123 /org/freedesktop/systemd1/job/123'
+    assert all(call[0] != 'systemctl' or call[1] in ('show', 'daemon-reload')
+               for call in gate.test_calls)
+
+
 def test_invalid_systemd_names_or_expanded_paths_are_rejected(tmp_path):
     for marker in ['/tmp/%N', '/tmp/foo\n[Service]', '/tmp/../etc', '/tmp/with space']:
         with pytest.raises(MaintenanceGateError):
