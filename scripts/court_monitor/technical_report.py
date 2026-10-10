@@ -325,10 +325,10 @@ def render(value, *, compact=True):
                or publication.get('data') not in ('confirmed', 'skipped')
                or push.get('status') not in ('complete', 'no_subscriptions', 'skipped')
                or bool(value.get('warnings')))
-    partial = partial or bool(captcha_audit.action(captcha))
     failed = failed or digest.get('status') != 'ready' or push.get('status') in ('failed', 'failure')
     failed = failed or group.get('status') in ('failed', 'partial', 'not_configured')
     failed = failed or 'failed' in publication.values() or push.get('status') == 'not_configured'
+    partial = partial or bool(captcha_audit.action(captcha))
     icon = '🚨' if failed else '⚠️' if partial or push.get('failed') else '✅'
     region = REGIONS.get(value.get('region'), value.get('region', '?'))
     lines = [f'{icon} <b>{e(region)} · Технический отчёт · {e(value.get("date", "?"))}</b>']
