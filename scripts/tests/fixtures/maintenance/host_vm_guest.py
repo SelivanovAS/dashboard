@@ -170,6 +170,15 @@ def commit(repo, message):
 
 def setup(source_commit):
     check_guest()
+    # Match the observed production manager PATH. The stock cloud image adds
+    # /snap/bin; it is deliberately outside the installer's approved routes.
+    # This changes only the disposable guest, before any court unit exists,
+    # and persists the same environment through the later real reboot.
+    manager_path = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
+    atomic('/etc/systemd/system.conf.d/90-host-vm-path.conf',
+           ('[Manager]\nDefaultEnvironment=PATH=' + manager_path + '\n').encode(), 0o644)
+    run(['systemctl', 'daemon-reexec'])
+    assert 'PATH=' + manager_path in run(['systemctl', 'show-environment']).stdout.splitlines()
     run(['git', '--version'])
     ssh_transport()
     INSTALL.mkdir()
