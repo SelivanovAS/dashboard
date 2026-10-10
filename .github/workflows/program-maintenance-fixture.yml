@@ -12,7 +12,7 @@ jobs:
   systemd-255-4:
     if: github.ref == 'refs/heads/codex/program-maintenance-lease'
     runs-on: ubuntu-24.04
-    timeout-minutes: 7
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -31,6 +31,8 @@ jobs:
             deployment/tests/test_profiles.py \
             scripts/tests/test_program_maintenance.py \
             scripts/tests/test_program_maintenance_protocol.py \
+            scripts/tests/test_program_maintenance_bundle.py \
+            scripts/tests/test_program_maintenance_host.py \
             scripts/tests/test_program_maintenance_git.py \
             scripts/tests/test_program_maintenance_connected.py \
             scripts/tests/test_program_maintenance_reboot.py \

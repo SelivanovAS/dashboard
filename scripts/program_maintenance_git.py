@@ -304,6 +304,8 @@ def begin_install(repo, target_sha, journal_path, expected_lock):
         raise MaintenanceGitError("Region/repository changed")
     old_tree, _ = _tree(repo, old)
     new_tree, new_contents = _tree(repo, target_sha)
+    if any(name in new_tree for name in set(before_lock["files"]) - set(target_lock["files"])):
+        raise MaintenanceGitError("Target retains a previously managed file omitted from its manifest")
     if _index_tree(repo) != _text(repo, "rev-parse", old + "^{tree}"):
         raise MaintenanceGitError("Index has staged changes")
     flags = _git(repo, "ls-files", "-v", "-z").stdout.split(b"\0")

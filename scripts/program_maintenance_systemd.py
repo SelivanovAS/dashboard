@@ -201,8 +201,9 @@ class SystemdMaintenanceGate:
         result = self.check_guard()
         return dict(result, bootstrapped=changed, before=snapshot, after=self.snapshot())
 
-    def busy(self):
+    def _activity(self, *, include_pending):
         busy = {}
+        pending = {}
         for unit in self.services:
             props = self.properties(unit, self.SERVICE_PROPERTIES)
             if props["ActiveState"] not in ("inactive", "failed"):
@@ -211,6 +212,15 @@ class SystemdMaintenanceGate:
             # systemctl 255 prints an empty Job value for D-Bus job ID zero.
             # The property itself is required by properties(); missing != empty.
             if props["Job"] not in ("", "0", "0 /"):
+                if not include_pending:
+                    job = re.fullmatch(r"([1-9][0-9]*)(?: /org/freedesktop/systemd1/job/([1-9][0-9]*))?", props["Job"])
+                    if job is None or (job.group(2) is not None and job.group(1) != job.group(2)):
+                        raise MaintenanceGateError("Неизвестное состояние ожидающего задания")
+                pending[unit] = props["Job"]
+                if include_pending:
+                    busy[unit] = props
+                    continue
+            if props["SubState"] not in ("dead", "failed"):
                 busy[unit] = props
                 continue
             if props["MainPID"] != "0" or props["ControlPID"] != "0":
@@ -230,7 +240,30 @@ class SystemdMaintenanceGate:
                         raise MaintenanceGateError("Не удалось проверить дочерние процессы службы") from exc
                     if events.get("populated") != "0":
                         busy[unit] = props
-        return busy
+        return busy, pending
+
+    def busy(self):
+        """Strict write-admission check, including queued activation jobs."""
+        return self._activity(include_pending=True)[0]
+
+    def check_exit(self):
+        """Read-only post-write/verification proof; queued jobs may remain.
+
+        This grants no permission to write or remove the marker. The coordinator
+        must verify actual files and all late-push fences before opening admission.
+        Inactive/failed services still need zero PIDs and unpopulated cgroups;
+        ignoring Job must never hide a remaining child or ExecStopPost process.
+        The host separately audits installer children and completed transactions.
+        """
+        no_links(self.marker, file=True)
+        self.check_guard()
+        active, pending = self._activity(include_pending=False)
+        if active:
+            raise MaintenanceGateError("Службы ещё выполняются; проверка выхода отклонена")
+        no_links(self.marker, file=True)
+        self.check_guard()
+        return {"no_active_workers": True, "pending_jobs": pending,
+                "services": list(self.services), "marker": str(self.marker)}
 
     def drain(self, timeout=300):
         deadline = time.monotonic() + timeout

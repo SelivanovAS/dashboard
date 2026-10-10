@@ -1,0 +1,37 @@
+name: Общая программа — SSH и восстановление в изолированной VM
+
+# Ephemeral guest, synthetic Git repos/data, no production credentials or jobs.
+on:
+  push:
+    branches: [codex/program-maintenance-lease]
+
+permissions:
+  contents: read
+
+jobs:
+  host-recovery-systemd-255-4:
+    if: github.ref == 'refs/heads/codex/program-maintenance-lease'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Подготовить одноразовую VM
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils ubuntu-cloudimage-keyring
+          if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; fi
+      - name: Проверить SSH, блокировки, Git, перезагрузку и откат
+        env:
+          FIXTURE_OUTPUT: ${{ runner.temp }}/program-maintenance-host-vm
+        run: |
+          python3 scripts/tests/fixtures/maintenance/host_vm_runner.py --output "$FIXTURE_OUTPUT"
+      - name: Сохранить доказательства изолированной репетиции
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-maintenance-host-vm-${{ github.sha }}
+          path: ${{ runner.temp }}/program-maintenance-host-vm/
+          if-no-files-found: error
+          retention-days: 14

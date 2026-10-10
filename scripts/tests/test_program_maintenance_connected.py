@@ -166,6 +166,56 @@ class FixtureHooks:
                 # the closed gate, then chooses a new rollback transaction.
                 git_module.verify_install(self.repo(region), self.tx(journal["active_target_id"] - 1))
 
+    def registration(self, journal, base_sha, target_sha):
+        return self.root / "registrations" / journal["nonce"] / str(journal["active_target_id"]) / (base_sha + "-" + target_sha)
+
+    def register_target(self, journal, *, base_sha, target_sha, bundle_sha256, bundle_bytes):
+        """Actual Git import for this local fixture; no production host claim."""
+        self.assert_run_locks(journal["nonce"])
+        repo = self.repo(journal["region"])
+        manifest = self.target(journal)
+        folder = self.registration(journal, base_sha, target_sha)
+        folder.mkdir(parents=True, exist_ok=True)
+        bundle = folder / "candidate.bundle"
+        if bundle.exists():
+            assert bundle.read_bytes() == bundle_bytes
+        else:
+            with bundle.open("xb") as stream:
+                stream.write(bundle_bytes)
+                stream.flush()
+                os.fsync(stream.fileno())
+        assert release.digest(bundle.read_bytes()) == bundle_sha256
+        git(repo, "fetch", "origin", "main")  # Obtain a newer data-only base, if any.
+        git(repo, "bundle", "verify", str(bundle))
+        heads = git(repo, "bundle", "list-heads", str(bundle)).splitlines()
+        assert len(heads) == 1 and heads[0].split()[0] == target_sha
+        git(repo, "bundle", "unbundle", str(bundle))  # Imports objects, no checkout.
+        assert git(repo, "rev-parse", target_sha + "^") == base_sha
+        assert json.loads(git(repo, "show", target_sha + ":" + release.LOCK)) == manifest
+        baseline = json.loads(git(repo, "show", base_sha + ":" + release.LOCK))
+        allowed = set(baseline["files"]) | set(manifest["files"]) | {release.LOCK}
+        assert set(git(repo, "diff", "--name-only", base_sha, target_sha).splitlines()) <= allowed
+        receipt = {"nonce": journal["nonce"], "target_id": journal["active_target_id"],
+                   "manifest_sha256": journal["manifest_sha256"], "base_sha": base_sha,
+                   "target_sha": target_sha, "bundle_sha256": bundle_sha256}
+        path = folder / "receipt.json"
+        if path.exists():
+            assert json.loads(path.read_text()) == receipt
+        else:
+            durable(path, receipt)
+        return {"evidence_sha256": release.digest(release.canonical(receipt))}
+
+    def validate_publication(self, journal, attempt):
+        self.assert_run_locks(journal["nonce"])
+        folder = self.registration(journal, attempt["base_sha"], attempt["target_sha"])
+        receipt = json.loads((folder / "receipt.json").read_text())
+        assert receipt == {"nonce": journal["nonce"], "target_id": attempt["target_id"],
+            "manifest_sha256": journal["manifest_sha256"], "base_sha": attempt["base_sha"],
+            "target_sha": attempt["target_sha"], "bundle_sha256": release.digest((folder / "candidate.bundle").read_bytes())}
+        repo = self.repo(journal["region"])
+        assert git(repo, "cat-file", "-t", attempt["target_sha"]) == "commit"
+        assert git(repo, "rev-parse", attempt["target_sha"] + "^") == attempt["base_sha"]
+
     def verify_installed(self, journal):
         manifest = self.target(journal)
         proof = git_module.verify_install(self.repo(journal["region"]), self.tx(journal["active_target_id"]))
@@ -204,11 +254,7 @@ class FixtureHooks:
         git(repo, "fetch", "origin", "main")
         remote = git(repo, "rev-parse", "refs/remotes/origin/main")
         assert remote == git(repo, "rev-parse", "HEAD")
-        # v2 lease attempts also bind target_id; the topology primitive accepts
-        # exactly the immutable id/base/target subset, retaining every attempt.
-        attempts = [{key: attempt[key] for key in ("attempt_id", "base_sha", "target_sha")}
-                    for attempt in journal["attempts"]]
-        proof = git_module.publication_fences(repo, remote, attempts)
+        proof = git_module.publication_fences(repo, remote, journal["attempts"])
         return {key: proof[key] for key in ("covered_attempt_ids", "evidence_sha256")}
 
 
@@ -272,16 +318,26 @@ def reserve(client, manifest):
 
 
 def push_after_durable_intent(client, root, author, nonce, base, target):
+    register_candidate(client, root, author, nonce, base, target)
     def push(allowed):
         disk = json.loads((root / "lease/journal.json").read_text())
         assert disk["phase"] == "publish_intent"
         assert disk["attempts"][-1]["target_sha"] == allowed == target
+        assert git(root / "hmao/installed", "cat-file", "-t", target) == "commit"
         assert (root / "lease/blocked").is_file()
         assert all((root / region / "installed/ops/mac-local-run/.run.lock/owner.json").is_file()
                    for region in REGIONS)
         git(author, "push", "origin", allowed + ":refs/heads/main")
         return "accepted"
     return client.publish(nonce=nonce, base_sha=base, target_sha=target, push=push)[0]
+
+
+def register_candidate(client, root, author, nonce, base, target):
+    bundle = root / (target + ".bundle")
+    ref = "refs/fixture-targets/" + target
+    git(author, "update-ref", ref, target)
+    git(author, "bundle", "create", "--version=2", str(bundle), ref, "^" + base)
+    return client.register_target(nonce=nonce, base_sha=base, target_sha=target, bundle=bundle.read_bytes())
 
 
 def assert_preserved(root, records, *, data):
@@ -315,6 +371,51 @@ def test_connected_publish_permit_real_push_install_and_finish(connected):
         assert not client.request("inspect")["blocked"]
     assert_preserved(root, records, data=b'["original"]\n')
     assert (records["hmao"]["installed"] / "script-a.py").read_bytes() == b"new a\n"
+
+
+def test_connected_unregistered_git_target_has_no_publish_permission(connected):
+    root, records = connected
+    target, manifest = prepare_release(root, records)
+    called = []
+    with start_client(root) as client:
+        nonce = reserve(client, manifest)
+        with pytest.raises(protocol.MaintenanceProtocolError):
+            client.publish(nonce=nonce, base_sha=records["hmao"]["base"], target_sha=target,
+                           push=called.append)
+    assert called == [] and (root / "lease/blocked").is_file()
+    assert json.loads((root / "lease/journal.json").read_text())["attempts"] == []
+    assert git(records["hmao"]["author"], "ls-remote", "origin", "refs/heads/main").split()[0] == records["hmao"]["base"]
+
+
+def test_connected_unpushed_target_objects_survive_rebased_second_intent(connected):
+    root, records = connected
+    target, manifest = prepare_release(root, records)
+    author, installed, base = (records["hmao"][key] for key in ("author", "installed", "base"))
+    with start_client(root) as client:
+        nonce = reserve(client, manifest)
+        register_candidate(client, root, author, nonce, base, target)
+        first = client.request("publish_intent", nonce=nonce, base_sha=base, target_sha=target)
+        assert first["attempt_id"] == 1
+        assert git(installed, "cat-file", "-t", target) == "commit"
+        # A data commit won the remote race. The permitted first target was never
+        # published, but its objects must remain available for late-push fencing.
+        git(author, "reset", "--hard", base)
+        write(author, "data/cases.json", b'["original", "newer record"]\n')
+        fresh = commit(author, "data won race before candidate push")
+        git(author, "push", "origin", "main")
+        write(author, "script-a.py", b"new a\n", 0o644)
+        write(author, "script-b.py", b"new b\n", 0o755)
+        write(author, release.LOCK, release.canonical(manifest))
+        rebased = commit(author, "same approved program over newer data")
+        permit = push_after_durable_intent(client, root, author, nonce, fresh, rebased)
+        assert permit["attempt_id"] == 2 and permit["target_id"] == 1
+        client.request("apply", nonce=nonce, attempt_id=2)
+        client.request("mark_verified", nonce=nonce)
+        complete = client.request("finish", nonce=nonce)
+        assert complete["safe_evidence"]["covered_attempt_ids"] == [1, 2]
+        assert complete["attempts"][0]["target_sha"] == target
+        assert git(installed, "cat-file", "-t", target) == "commit"
+    assert_preserved(root, records, data=b'["original", "newer record"]\n')
 
 
 @pytest.mark.parametrize("disconnect_phase", ["after-push", "partial-checkout"])
