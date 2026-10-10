@@ -1,4 +1,5 @@
 """Технический отчёт не приписывает кэшу модель и объясняет реальный резерв."""
+from copy import deepcopy
 import json
 import os
 import sys
@@ -202,3 +203,75 @@ def test_legacy_queue_fallback_is_proven_by_attempts_not_current_config(monkeypa
     summary_audit.reset()
     summary_audit.record('legacy', {'status': 'ready', 'model': 'claude:old'}, cached=True)
     assert summary_audit.snapshot()[0]['fallback'] is None
+
+
+@pytest.mark.parametrize(('status', 'text', 'expected'), [
+    ('pending', ACT, 'retry_pending'),
+    ('timeout', ACT, 'retry_pending'),
+    ('http_503', ACT, 'retry_pending'),
+    ('pending', '', 'waiting_source'),
+    ('pending', '%PDF-1.7 binary document', 'waiting_source'),
+    ('pending', 'Установил: изложение требований без результата. ' * 20, 'waiting_source'),
+    ('source_incomplete', ACT, 'waiting_source'),
+    ('refused', ACT, 'needs_review'),
+    ('provider_refusal', ACT, 'needs_review'),
+    ('case_mismatch', ACT, 'needs_review'),
+    ('recheck_context_exceeded', ACT, 'retry_pending'),
+    ('outcome_conflict', ACT, 'retry_pending'),
+    ('future_unknown_status', ACT, 'needs_review'),
+])
+def test_backlog_category_uses_saved_source_without_model(monkeypatch, status, text, expected):
+    monkeypatch.setattr(llm, 'summarize_act_motivation', lambda *a, **kw: pytest.fail('LLM forbidden'))
+    job = {'status': status, 'text': text, 'meta': dict(META)}
+    before = deepcopy(job)
+    assert summary_audit.classify_job(job) == expected
+    assert job == before
+
+
+def test_old_pending_identity_conflict_is_not_a_model_retry():
+    job = {'status': 'pending', 'text': 'Дело 33-2/2026\n' + ACT, 'meta': dict(META)}
+    assert summary_audit.classify_job(job) == 'needs_review'
+
+
+@pytest.mark.parametrize('job', [None, [], 'broken', {}, {'status': []},
+    {'status': 'pending', 'text': ACT},
+    {'status': 'pending', 'text': [], 'meta': META},
+    {'status': 'pending', 'text': ACT, 'meta': dict(META, source_url=[])},
+    {'status': 'pending', 'text': ACT, 'meta': dict(META, source_url='http://[')},
+    {'status': 'ready', 'text': ACT, 'meta': META, 'summary': ''}])
+def test_malformed_jobs_do_not_disappear_as_success(job):
+    assert summary_audit.classify_job(job) == 'needs_review'
+
+
+def test_backlog_counts_are_disjoint_private_and_do_not_mutate_jobs():
+    jobs = {
+        'private-ready-id': {'status': 'ready', 'text': ACT, 'meta': META, 'summary': SUMMARY},
+        'private-old-id': {'status': 'superseded'},
+        'private-source-id': {'status': 'pending', 'text': '', 'meta': META},
+        'private-review-id': {'status': 'refused', 'text': ACT, 'meta': META},
+        'private-retry-id': {'status': 'timeout', 'text': ACT, 'meta': META},
+    }
+    before = deepcopy(jobs)
+    snapshot = summary_audit.backlog_snapshot(jobs)
+    assert snapshot == {'ready': 1, 'superseded': 1, 'waiting_source': 1,
+                        'needs_review': 1, 'retry_pending': 1}
+    assert sum(snapshot.values()) == len(jobs)
+    assert jobs == before
+    assert 'private' not in json.dumps(snapshot)
+    assert ACT not in json.dumps(snapshot) and META['case_number'] not in json.dumps(snapshot)
+    assert summary_audit.backlog_snapshot(None)['needs_review'] == 1
+    assert sum(summary_audit.backlog_snapshot({}).values()) == 0
+
+
+@pytest.mark.parametrize(('field', 'value'), [('source_hash', []), ('retry_after', None),
+    ('updated_at', 42), ('runs', -1), ('runs', True), ('runs', '1')])
+def test_bad_existing_service_fields_require_review(field, value):
+    job = {'status': 'pending', 'text': ACT, 'meta': META, field: value}
+    assert summary_audit.classify_job(job) == 'needs_review'
+
+
+def test_service_fields_are_optional_but_valid_values_preserve_retry():
+    job = {'status': 'pending', 'text': ACT, 'meta': META, 'source_hash': 'saved-hash',
+           'runs': 1, 'retry_after': '2026-10-11T00:00:00+00:00',
+           'updated_at': '2026-10-10T00:00:00+00:00'}
+    assert summary_audit.classify_job(job) == 'retry_pending'
