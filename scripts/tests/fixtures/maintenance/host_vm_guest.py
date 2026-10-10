@@ -19,6 +19,7 @@ import signal
 import stat
 import struct
 import subprocess
+import sys
 import time
 
 ROOT = Path('/opt/host-vm')
@@ -38,11 +39,32 @@ PROGRAM_COUNT = 64
 
 
 def run(args, *, check=True, timeout=60):
-    return subprocess.run(args, capture_output=True, text=True, check=check, timeout=timeout)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, check=check, timeout=timeout)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        # Only disposable synthetic guest commands reach this helper. Include
+        # bounded captured streams: CalledProcessError's default text omits them.
+        def tail(value, limit):
+            if isinstance(value, bytes):
+                value = value.decode('utf-8', 'replace')
+            return (value or '')[-limit:]
+        detail = {'program': Path(args[0]).name, 'failure': type(exc).__name__,
+                  'returncode': getattr(exc, 'returncode', None),
+                  'stdout_tail': tail(exc.stdout, 2000), 'stderr_tail': tail(exc.stderr, 4000)}
+        print('FIXTURE_COMMAND_FAILURE ' + json.dumps(detail, sort_keys=True), file=sys.stderr, flush=True)
+        raise
 
 
 def git(repo, *args):
     return run(['git', '-C', str(repo), *args]).stdout.strip()
+
+
+def initialize_empty_author(repo):
+    # SSH protocol v0 cannot advertise an unborn remote HEAD. Empty clones may
+    # choose the client's default (master) even when the bare HEAD is main.
+    assert run(['git', '-C', str(repo), 'rev-parse', '--verify', 'HEAD'], check=False).returncode != 0
+    git(repo, 'symbolic-ref', 'HEAD', 'refs/heads/main')
+    assert git(repo, 'symbolic-ref', 'HEAD') == 'refs/heads/main'
 
 
 def canonical(value):
@@ -159,6 +181,7 @@ def setup(source_commit):
         run(['runuser', '-u', 'git', '--', 'git', 'init', '--bare', '--initial-branch=main', str(bare)])
         author = authors / name
         git(authors, 'clone', remote(name), str(author))
+        initialize_empty_author(author)
         git(author, 'config', 'user.name', 'Disposable VM fixture')
         git(author, 'config', 'user.email', 'fixture@example.invalid')
         atomic(author / 'REGION', (region + '\n').encode(), 0o644)

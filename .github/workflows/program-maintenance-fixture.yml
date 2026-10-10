@@ -29,6 +29,7 @@ jobs:
         run: |
           python -m pytest --noconftest -p no:cacheprovider -q \
             deployment/tests/test_profiles.py \
+            scripts/tests/fixtures/maintenance/host_vm_fixture_test.py \
             scripts/tests/test_program_maintenance.py \
             scripts/tests/test_program_maintenance_protocol.py \
             scripts/tests/test_program_maintenance_bundle.py \
