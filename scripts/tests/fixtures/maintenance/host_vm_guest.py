@@ -21,6 +21,7 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 
 ROOT = Path('/opt/host-vm')
 INSTALL = Path('/opt/court-monitor')
@@ -307,6 +308,41 @@ def status():
         'lock_receipt': json.loads(receipt.read_text()) if receipt and receipt.exists() else None}
 
 
+def diagnose_host():
+    """Read-only synthetic audit evidence; never retry a mutation or open a gate."""
+    result = {'fixture_only': True, 'checks': {}}
+    journal_path = STATE / 'journal.json'
+    if not journal_path.exists():
+        return dict(result, unavailable='Coordinator has not written a journal')
+    journal = json.loads(journal_path.read_text())
+    config_path = STATE / 'host/operations' / journal['nonce'] / 'config.json'
+    if not config_path.exists():
+        return dict(result, unavailable='Coordinator has not persisted a host configuration')
+    config = json.loads(config_path.read_text())
+    folder = STATE / 'bundles' / config['capability']['bundle_sha256']
+    sys.path.insert(0, str(folder))
+    from program_maintenance_host import HostHooks, EMPTY_PROPERTIES, validate_capability
+    # Import only the existing pinned bundle; constructor-created artifacts already
+    # exist from the real coordinator. No bootstrap, drain, acquire or apply here.
+    validate_capability(config)
+    hooks = HostHooks(config)
+    for name, check in [('routing', lambda: hooks._audit_routing(allow_reload=True)),
+                        ('systemd_snapshot', hooks.gate.snapshot)]:
+        try:
+            result['checks'][name] = {'ok': True, 'value': check()}
+        except Exception as exc:
+            result['checks'][name] = {'ok': False, 'error': str(exc), 'traceback': traceback.format_exc()[-8000:]}
+    # These exact VM units contain only harmless fixed fixture commands.
+    names = (*EMPTY_PROPERTIES, 'ExecStart', 'Environment', 'LoadState', 'NeedDaemonReload',
+             'User', 'FragmentPath', 'DropInPaths', 'OnSuccess', 'OnFailure')
+    result['fixture_service_properties'] = {name: run(['systemctl', 'show', name + '.service',
+            '--all', '--property=' + ','.join(names)]).stdout for name in LAUNCHERS}
+    result['manager_environment'] = run(['systemctl', 'show-environment']).stdout
+    result['loaded_service_names'] = [line.split()[0] for line in run(['systemctl', 'list-units', '--all',
+            '--type=service', '--plain', '--no-legend', '--no-pager']).stdout.splitlines()]
+    return result
+
+
 def candidate_bundle(value):
     base, target = value.split(':')
     assert re.fullmatch(r'[0-9a-f]{40}', base) and re.fullmatch(r'[0-9a-f]{40}', target)
@@ -382,7 +418,7 @@ def watch_partial():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=('setup', 'worker', 'status', 'publish', 'fresh-rollback', 'watch-partial', 'candidate-bundle'))
+    parser.add_argument('action', choices=('setup', 'worker', 'status', 'publish', 'fresh-rollback', 'watch-partial', 'candidate-bundle', 'diagnose-host'))
     parser.add_argument('value', nargs='?')
     args = parser.parse_args()
     check_guest()
@@ -391,6 +427,7 @@ def main():
     elif args.action == 'status': value = status()
     elif args.action == 'publish': value = publish(args.value)
     elif args.action == 'candidate-bundle': value = candidate_bundle(args.value)
+    elif args.action == 'diagnose-host': value = diagnose_host()
     elif args.action == 'fresh-rollback': value = fresh_rollback()
     else: return watch_partial()
     print(json.dumps(value, sort_keys=True), flush=True)

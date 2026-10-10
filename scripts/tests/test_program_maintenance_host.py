@@ -254,6 +254,63 @@ def test_runtime_exec_metadata_is_not_routing_identity(fixture):
     assert f["hooks"]._audit_routing() == before
 
 
+@pytest.mark.parametrize("flag", ["0", "1"])
+def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, flag):
+    f = fixture
+    key = "fixture-token.only+opaque/value=="
+    path = Path(f["config"]["config_dir"]) / "env.hmao"
+    write(path.parent, path.name, ("REGION='hmao'\nHMAO_APPEAL_CAPTCHA_ENABLED=" + flag +
+                                  "\nexport CLOUDRU_API_KEY='" + key + "'\n").encode(), 0o600)
+    audit = f["hooks"]._audit_routing()
+    encoded = release.canonical(audit)
+    assert key.encode() not in encoded
+    assert audit["config_files"]["env.hmao"]["sha256"] == release.digest(path.read_bytes())
+
+
+@pytest.mark.parametrize("region", ["sverdlovsk_yanao", "bashkortostan", "tyumen"])
+@pytest.mark.parametrize("assignment", ["HMAO_APPEAL_CAPTCHA_ENABLED=1", "CLOUDRU_API_KEY=fixture-credential"])
+def test_hmao_captcha_environment_is_rejected_in_other_territories(fixture, region, assignment):
+    f = fixture
+    path = Path(f["config"]["config_dir"]) / ("env." + region)
+    write(path.parent, path.name, ("REGION=" + region + "\n" + assignment + "\n").encode(), 0o600)
+    with pytest.raises(host.HostError, match="values suppressed") as error:
+        f["hooks"]._audit_routing()
+    assert assignment not in str(error.value)
+
+
+@pytest.mark.parametrize("assignment", [
+    "HMAO_APPEAL_CAPTCHA_ENABLED=true", "HMAO_APPEAL_CAPTCHA_ENABLED=2",
+    "HMAO_APPEAL_CAPTCHA_ENABLED=", "CLOUDRU_API_KEY=", "CLOUDRU_API_KEY=' '",
+    "CLOUDRU_API_KEY='fixture credential'", "CLOUDRU_API_KEY=one two",
+    "CLOUDRU_API_KEY=$(cat /invalid)", "CLOUDRU_API_KEY=`invalid`",
+    "CLOUDRU_API_KEY=one;invalid", "CLOUDRU_API_KEY=first\\ second",
+])
+def test_invalid_captcha_literal_never_leaks_value(fixture, assignment):
+    f = fixture
+    path = Path(f["config"]["config_dir"]) / "env.hmao"
+    write(path.parent, path.name, ("REGION=hmao\n" + assignment + "\n").encode(), 0o600)
+    with pytest.raises(host.HostError, match="values suppressed") as error:
+        f["hooks"]._audit_routing()
+    assert assignment not in str(error.value)
+
+
+def test_captcha_enablement_during_open_lease_remains_forbidden(fixture):
+    f = fixture
+    with core.MaintenanceLease(f["state"], f["hooks"]) as lease:
+        nonce = reserve(lease, f)
+        path = Path(f["config"]["config_dir"]) / "env.hmao"
+        before = path.read_bytes()
+        write(path.parent, path.name, before + b"HMAO_APPEAL_CAPTCHA_ENABLED=1\n", 0o600)
+        try:
+            with pytest.raises(host.HostError, match="Persisted host document"):
+                f["hooks"].check_guard(f["hooks"].marker)
+            assert lease.inspect()["blocked"]
+        finally:
+            # Restore fixture bytes so context-manager lock release remains valid.
+            write(path.parent, path.name, before, 0o600)
+        lease.cancel_before_publish(nonce)
+
+
 @pytest.mark.parametrize("kind", ["queue", "index", "staged", "dirty_data", "transaction", "env", "bundle"])
 def test_unknown_mutations_block_publication(fixture, kind):
     f = fixture

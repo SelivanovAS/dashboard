@@ -42,6 +42,7 @@ BUNDLE_MODULES = {"program_release.py", "program_install_vps.py", "program_maint
 ENV_KEYS = {"DASHBOARD_URL", "BANK_TRACK", "BANK_AUTO_INTAKE", "BANK_INTAKE_DRY_RUN",
             "BANK_INTAKE_MAX_PER_RUN", "BANK_INTAKE_MAX_CARDS_PER_COURT", "BANK_INTAKE_DIGEST_FOLD",
             "BANK_FORCE_DIGEST_FOLD", "DIGEST_PARTIES_MAX_LEN", "DIGEST_PARTIES_KEEP", "REGION"}
+HMAO_ENV_KEYS = {"HMAO_APPEAL_CAPTCHA_ENABLED", "CLOUDRU_API_KEY"}
 
 
 class HostError(RuntimeError):
@@ -313,8 +314,13 @@ class HostHooks:
                 if len(parts) != 1:
                     raise HostError("Ambiguous territory environment; values suppressed")
                 key, sep, value = parts[0].partition("=")
-                if not sep or key not in ENV_KEYS or (key == "REGION" and value != region):
+                allowed_keys = ENV_KEYS | (HMAO_ENV_KEYS if region == "hmao" else set())
+                if not sep or key not in allowed_keys or (key == "REGION" and value != region):
                     raise HostError("Unknown territory environment; values suppressed")
+                if key == "HMAO_APPEAL_CAPTCHA_ENABLED" and value not in ("0", "1"):
+                    raise HostError("Invalid HMAO CAPTCHA flag; values suppressed")
+                if key == "CLOUDRU_API_KEY" and (not value or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)):
+                    raise HostError("Invalid HMAO provider credential; values suppressed")
         config_files = {}
         for path in sorted(self.config_dir.rglob("*")):
             _path(path)
