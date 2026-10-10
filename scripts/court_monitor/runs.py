@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
 from court_monitor import fi_act_watch, writ_watch, technical_report as tech_report
+from court_monitor import appeal_captcha
 from court_monitor.netutil import card_cache_run
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
@@ -2652,6 +2653,10 @@ def main_json():
     log.info("=" * 60)
 
     tech_report.begin('main_json')
+    captcha_pilot = (appeal_captcha.Pilot(load_parse_health().get('appeal_captcha_last_search'))
+                     if any(appeal_captcha.enabled_for(c) for c in APPEAL_COURTS) else None)
+    if captcha_pilot:
+        tech_report.update(appeal_captcha=captcha_pilot.value)
 
     # Smart-skip нерабочих дней РФ (включается при автозапуске через
     # Worker — он передаёт SKIP_NON_WORKING_DAYS=1 / --smart-skip).
@@ -3571,8 +3576,17 @@ def main_json():
     appeal_search_gated_now: set[str] = set()
 
     for _ap_i, _ap_court in enumerate(APPEAL_COURTS, 1):
+        _ap_pilot = captcha_pilot if appeal_captcha.enabled_for(_ap_court) else None
+        if _ap_pilot:
+            # Вспомогательный дослинк не запускает второй поиск за капчей.
+            appeal_search_gated_now.add(_ap_court.domain)
+            if _ap_pilot.used:
+                continue
         if retry_only:
             appeal_search_gated_now.add(_ap_court.domain)
+            if _ap_pilot:
+                _ap_pilot.skip('skipped_retry_only')
+                tech_report.update(appeal_captcha=_ap_pilot.value)
             continue
         _ap_tag = f"[{_ap_i}/{len(APPEAL_COURTS)}] " if len(APPEAL_COURTS) > 1 else ""
         hk = _appeal_health_key(_ap_court)
@@ -3584,14 +3598,18 @@ def main_json():
         # формой, а капча-детект, наполнявший set раньше, теперь не выполняется.
         if _ap_court.search_disabled:
             appeal_search_gated_now.add(_ap_court.domain)
-            log.info(
-                f"Поиск апелляции {_ap_tag}({shorten_court_name(_ap_court.name)}): "
-                f"выключен конфигом — дела заводит дамп выдачи (секция «Импорт» админки)"
-            )
-            continue
+            if not _ap_pilot:
+                log.info(
+                    f"Поиск апелляции {_ap_tag}({shorten_court_name(_ap_court.name)}): "
+                    f"выключен конфигом — дела заводит дамп выдачи (секция «Импорт» админки)"
+                )
+                continue
         # Дочитка поисков: выдача этого апел-суда сегодня уже отдала строки —
         # повторный слот её не запрашивает (health_obs не трогаем, union цел).
         if hk in search_skip_keys:
+            if _ap_pilot:
+                _ap_pilot.skip('skipped_today')
+                tech_report.update(appeal_captcha=_ap_pilot.value)
             log.info(
                 f"Поиск апелляции {_ap_tag}({shorten_court_name(_ap_court.name)}): "
                 f"пропущен — удался ранее сегодня (дочитка слота)"
@@ -3602,10 +3620,21 @@ def main_json():
         _ap_search_context = (
             f"поиск апелляции ({shorten_court_name(_ap_court.name)})"
         )
-        search_html = fetch_page(
-            _ap_search_url,
-            context=_ap_search_context,
-        )
+        if _ap_pilot:
+            search_html = _ap_pilot.search(_ap_court)
+            tech_report.update(appeal_captcha=_ap_pilot.value)
+            health_labels[hk] = f"Апелляция ({_ap_court.name})"
+            log.info("Капча апелляции ХМАО: %s; попыток %s/3",
+                     _ap_pilot.value['status'], len(_ap_pilot.value['attempts']))
+            if not search_html:
+                # Отказ модели/кода не закрывает предохранителем карточки суда.
+                health_obs[hk] = None
+                continue
+        else:
+            search_html = fetch_page(
+                _ap_search_url,
+                context=_ap_search_context,
+            )
         health_labels[hk] = f"Апелляция ({_ap_court.name})"
         if not search_html:
             _ap_fail_kind = str(
@@ -3667,17 +3696,18 @@ def main_json():
             )
         else:
             _ap_marks = {}
-        mark_last_fetch_semantic(
-            _search_semantic_kind(
-                len(search_cases),
-                captcha=_ap_search_captcha,
-                outage=_ap_search_outage,
-            ),
-            _ap_search_url,
-            context=_ap_search_context,
-            rows=len(search_cases),
-            **_ap_marks,
-        )
+        if not _ap_pilot:  # Пилот фиксирует свою HTTP/semantic-телеметрию.
+            mark_last_fetch_semantic(
+                _search_semantic_kind(
+                    len(search_cases),
+                    captcha=_ap_search_captcha,
+                    outage=_ap_search_outage,
+                ),
+                _ap_search_url,
+                context=_ap_search_context,
+                rows=len(search_cases),
+                **_ap_marks,
+            )
         log.info(
             f"Апелляция ({shorten_court_name(_ap_court.name)}): {len(search_cases)} "
             f"{plural_ru(len(search_cases), 'дело', 'дела', 'дел')} на странице"
@@ -6104,6 +6134,8 @@ def main_json():
             "run_deadline_seconds": config.RUN_DEADLINE_SECONDS,
             "run_deadline_reached": run_deadline_reached(),
         }
+        if captcha_pilot:
+            captcha_pilot.save_snapshot(health_state)
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
             health_alerts.append(
