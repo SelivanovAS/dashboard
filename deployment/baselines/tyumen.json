@@ -173,6 +173,7 @@
       "sha256": "f00be89ec015710d531bdf8def299e2033beb5b7f0bf96a67723d8ce21651002"
     },
     "docs/Общая_программа.md": null,
+    "docs/Пилот_капчи_ХМАО.md": null,
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
       "sha256": "92e0317e751d8c7ab0d66e8e80c66f1eb5d06315d6a6c8df32546bebc7e05bcf"
@@ -469,6 +470,7 @@
       "mode": "100644",
       "sha256": "25a65030583bbc345479643de3aa12341c1ea0c7c28d1ed30fb8b57598a994cd"
     },
+    "scripts/court_monitor/appeal_captcha.py": null,
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
       "sha256": "2f254c65ab802b8efdfd3ca737a6a5f4052c26a0a01f73c4e53145623dfd8fd9"
@@ -481,6 +483,7 @@
       "mode": "100644",
       "sha256": "ec1d2eecf9aea19b7b75b8bd217a04b07997e9b4cdba88d650ea2915fde55a65"
     },
+    "scripts/court_monitor/captcha_audit.py": null,
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
       "sha256": "26a652103b9fe2e971566eb03f34f3b37006b7409a609d326c53d5b173383076"
@@ -867,6 +870,7 @@
       "mode": "100644",
       "sha256": "996f7e18367b2f56a4f081091033a51f24a376d184a5271cba15e85f0880e837"
     },
+    "scripts/tests/test_appeal_captcha_pilot.py": null,
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
       "sha256": "2e4d8ba811fed17ed4e5980f0ec95353ca52bea859f26501ba06bc29bdaea150"
