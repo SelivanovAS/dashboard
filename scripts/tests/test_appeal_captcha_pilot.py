@@ -223,6 +223,13 @@ def test_missing_usage_keeps_success_but_cost_is_explicitly_incomplete(env):
     assert 'Стоимость неполная' in '\n'.join(captcha_audit.lines(p.value))
 
 
+def test_invalid_message_with_known_usage_still_has_known_cost(env):
+    env.pending.extend([('GET', response(FORM)), ('POST', model(choices=[]))])
+    p = pilot.Pilot()
+    assert p.search(COURT) is None and p.value['status'] == 'model_response'
+    assert p.value['usage_complete'] and p.value['estimated_rub'] > 0
+
+
 def test_deadline_before_start_and_after_model(env, monkeypatch):
     monkeypatch.setattr(pilot.netutil, 'run_deadline_remaining', lambda: 0)
     p = pilot.Pilot()

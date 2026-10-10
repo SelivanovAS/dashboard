@@ -134,11 +134,13 @@ def _model(image, key, value, remaining):
     if response.status_code != 200:
         value['usage_complete'] = False
         raise _Stop('model_http', response.status_code)
+    usage_known = False
     try:
         body = response.json()
         usage = body.get('usage') or {}
         inp, out = usage.get('prompt_tokens'), usage.get('completion_tokens')
         if type(inp) is int and type(out) is int and inp >= 0 and out >= 0:
+            usage_known = True
             value['prompt_tokens'] += inp
             value['completion_tokens'] += out
             value['estimated_rub'] = round((value['prompt_tokens'] * audit.INPUT_RUB_PER_MILLION
@@ -150,7 +152,8 @@ def _model(image, key, value, remaining):
             raise ValueError()
         return answer.strip()
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
-        value['usage_complete'] = False
+        if not usage_known:
+            value['usage_complete'] = False
         raise _Stop('model_response') from None
 
 
