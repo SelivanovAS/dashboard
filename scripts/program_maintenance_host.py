@@ -204,7 +204,11 @@ class HostHooks:
         for key, manifest in self.manifests.items():
             _immutable(manifests_dir / (key + ".json"), manifest)
         capabilities = _mkdir(self.host_dir / "capabilities")
-        _immutable(capabilities / (config["capability"]["bundle_sha256"] + ".json"), config["capability"])
+        # Identical executable bytes can come from distinct exact source commits
+        # (for example a documentation-only change). Keep both provenances;
+        # content-addressed module files and per-operation config stay immutable.
+        capability = config["capability"]
+        _immutable(capabilities / (capability["bundle_sha256"] + "-" + capability["source_commit"] + ".json"), capability)
 
     def _operation(self, nonce=None):
         nonce = nonce or _read(self.marker).get("nonce")

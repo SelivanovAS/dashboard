@@ -718,3 +718,20 @@ def test_other_service_garbage_collection_requires_complete_fresh_audit(mode):
         with pytest.raises(host.ms.MaintenanceGateError): hooks._audit_other_services()
     else:
         with pytest.raises(host.HostError): hooks._audit_other_services()
+
+
+def test_identical_bundle_bytes_keep_distinct_source_provenances(fixture):
+    f = fixture
+    original = copy.deepcopy(f['config']['capability'])
+    config = copy.deepcopy(f['config'])
+    config['capability']['source_commit'] = '3' * 40
+    hooks = host.HostHooks(config, gate=f['boundary'], runner=f['boundary'].run,
+                          locks_factory=FakeLocks, fetcher=f['hooks'].fetcher)
+    files = list((hooks.host_dir / 'capabilities').glob('*.json'))
+    records = [json.loads(p.read_text()) for p in files]
+    assert original in records and config['capability'] in records
+    assert len(records) == 2
+    nonce = 'a' * 32
+    f['hooks']._operation(nonce)
+    with pytest.raises(host.HostError, match='Persisted host document differs'):
+        hooks._operation(nonce)
