@@ -356,6 +356,26 @@ def _run(operation, spec, config, *, bootstrap=False, rollback_package=None, can
                        error="Операция не завершена. Защита VPS могла остаться закрытой; используйте recover с этим каталогом.")
 
 
+def _verify_no_publication(operation, spec, config, newest=None):
+    # This operation never reserved a lease or issued a publication intent.
+    # Repeating it remains a fresh read-only verification, including recover.
+    if (operation / "remote-journal.json").exists():
+        raise ClientError("Операция уже содержит серверный журнал")
+    clone = _candidate_repo(operation)
+    newest = newest or remote_git(clone, spec["remote"], "fetch")
+    lock = config["manifests"][spec["release_id"]]
+    if release.read_installed(clone, newest, spec["region"]) != lock:
+        raise ClientError("После проверки без публикации установленная программа изменилась")
+    release.verify_git_snapshot(clone, newest, lock)
+    proof = release.verify_vps(lock, spec["vps_host"], spec["ssh_key"])
+    _save(operation / "no-publication.json", {"release_id": spec["release_id"], "nonce": spec["nonce"]}, immutable=True)
+    result = {"status": "installed", "unchanged": True, "published": True, "install_pending": False,
+              "region": spec["region"], "release_id": spec["release_id"], "commit": newest,
+              "operation_dir": str(operation), "checkout_unchanged": True, "vps": proof}
+    _save(operation / "result.json", result)
+    return result
+
+
 def promote(package_dir, repo, region, *, remote, vps_host, ssh_key, maintenance_config,
             coordinator_sha, operation_dir, bootstrap_guard=False, rollback=False, source_repo=None):
     package = release.load_package(package_dir)
@@ -403,13 +423,7 @@ def promote(package_dir, repo, region, *, remote, vps_host, ssh_key, maintenance
     newest = remote_git(clone, remote, "fetch")
     release.check_remote_advance(clone, initial, newest, package)
     if release.read_installed(clone, newest, region) == release.lock_from_package(package):
-        # An already-installed package needs no maintenance window and no push.
-        proof = release.verify_vps(release.lock_from_package(package), vps_host, ssh_key)
-        result = {"status": "installed", "unchanged": True, "published": True, "install_pending": False,
-                  "region": region, "release_id": package["release_id"], "commit": newest,
-                  "operation_dir": str(operation), "checkout_unchanged": True, "vps": proof}
-        _save(operation / "result.json", result)
-        return result
+        return _verify_no_publication(operation, spec, config, newest)
     return _run(operation, spec, config, bootstrap=bootstrap_guard)
 
 
@@ -420,5 +434,11 @@ def recover(operation_dir, *, rollback_package=None, cancel=False):
         raise ClientError("Неизвестный формат сохранённой операции")
     if rollback_package is not None and cancel:
         raise ClientError("Отмена и откат несовместимы")
+    if (operation / "no-publication.json").exists():
+        if _read(operation / "no-publication.json") != {"release_id": spec["release_id"], "nonce": spec["nonce"]}:
+            raise ClientError("Изменилась запись проверки без публикации")
+        if rollback_package is not None or cancel:
+            raise ClientError("Проверка без публикации не создаёт окна для отмены/отката")
+        return _verify_no_publication(operation, spec, config)
     return _run(operation, spec, config, bootstrap=spec["bootstrap_guard"],
                 rollback_package=rollback_package, cancel=cancel)

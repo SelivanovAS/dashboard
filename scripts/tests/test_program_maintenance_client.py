@@ -209,3 +209,26 @@ def test_missing_window_parameters_cannot_fall_back_to_legacy_push(world):
         release.promote_release(f['package'],Path(f['config']['profiles']['hmao']['path']),'hmao',
             push=True,maintenance_config=f['config_path'])
     assert not f['pushes'] and not (f['state']/'blocked').exists()
+
+
+def test_repeated_new_noop_operation_never_reserves_or_pushes(world, monkeypatch):
+    f = world
+    installed = promote(f)
+    assert installed['status'] == 'installed'
+    journal_before = (f['state'] / 'journal.json').read_bytes()
+    f['operation'] = f['root'] / 'unchanged-operation'
+    proofs = []
+    def verify(lock, host_name, key):
+        repo = Path(f['config']['profiles']['hmao']['path'])
+        assert release.read_installed(repo, git(repo, 'rev-parse', 'HEAD'), 'hmao') == lock
+        proofs.append(lock['release_id'])
+        return {'verified': True}
+    monkeypatch.setattr(release, 'verify_vps', verify)
+    def forbidden(*args, **kwargs): raise AssertionError('No-op opened a coordinator')
+    monkeypatch.setattr(client, '_connect', forbidden)
+    assert promote(f)['unchanged']
+    assert promote(f)['unchanged']
+    assert client.recover(f['operation'])['unchanged']
+    assert len(proofs) == 3 and len(f['pushes']) == 1
+    assert (f['state'] / 'journal.json').read_bytes() == journal_before
+    assert not (f['state'] / 'blocked').exists()

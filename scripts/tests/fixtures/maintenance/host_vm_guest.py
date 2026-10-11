@@ -209,6 +209,8 @@ def setup(source_commit):
         git(author, 'config', 'user.name', 'Disposable VM fixture')
         git(author, 'config', 'user.email', 'fixture@example.invalid')
         atomic(author / 'REGION', (region + '\n').encode(), 0o644)
+        atomic(author / 'scripts/court_monitor/config.py',
+               b'from pathlib import Path\nREGION = Path(__file__).resolve().parents[2].joinpath("REGION").read_text().strip()\n', 0o644)
         atomic(author / '.gitignore', b'.runtime/\nops/mac-local-run/.runtime/\n', 0o644)
         atomic(author / 'data/cases.json', b'["original"]\n', 0o644)
         for path in ROUTING:
@@ -474,6 +476,15 @@ def public_cli():
     repeated=invoke(['promote',*common,'--package',str(folders['forward']),'--operation-dir',str(operation)])
     recovered=invoke(['recover','--operation-dir',str(operation)])
     assert forward['commit']==repeated['commit']==recovered['commit']
+    # A fresh operation for the already installed package never reserves a
+    # second lease; repeating/recovering that read-only operation stays inert.
+    journal_before = (STATE/'journal.json').read_bytes()
+    noop_args=['promote',*common,'--package',str(folders['forward']),
+        '--operation-dir',str(ROOT/'public-unchanged-operation')]
+    assert invoke(noop_args)['unchanged']
+    assert invoke(noop_args)['unchanged']
+    assert invoke(['recover','--operation-dir',str(ROOT/'public-unchanged-operation')])['unchanged']
+    assert (STATE/'journal.json').read_bytes() == journal_before
     git(author,'fetch','origin','main')
     git(author,'checkout','--detach','FETCH_HEAD')
     atomic(author/'data/cases.json',b'["original", "fresh during maintenance", "fresh before public rollback"]\n',0o644)
