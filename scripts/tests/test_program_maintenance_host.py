@@ -651,3 +651,46 @@ def test_missing_registered_pin_blocks_publish_ack(fixture):
             lease.publish_intent(nonce, base_sha=f["initial"]["hmao"], target_sha=f["target"])
         assert lease.inspect()["journal"]["attempts"] == []
         lease.cancel_before_publish(nonce)
+
+
+@pytest.mark.parametrize("bad", [False, "missing", "wrong_type", "wrong_data"])
+def test_other_service_multicommand_values_use_typed_bus_data(bad):
+    hooks = object.__new__(host.HostHooks)
+    names = ("ExecStart", "Environment", *host.EMPTY_PROPERTIES)
+    types = {**host.OMITTED_ARRAY_TYPES, "Environment": "as", "PassEnvironment": "as",
+             "UnsetEnvironment": "as", "RootDirectory": "s", "RootImage": "s",
+             "WorkingDirectory": "s", "BindPaths": "a(ssbt)", "BindReadOnlyPaths": "a(ssbt)"}
+    values = [{"type": types[n], "data": "" if types[n] == "s" else []} for n in names]
+    commands = [["/bin/true", ["/bin/true"], False, 0, 0, 0, 0, 0, 0, 0],
+                ["/bin/bash", ["/bin/bash", "/opt/court-monitor/dashboard/unknown.sh"], False, 0, 0, 0, 0, 0, 0, 0]]
+    values[0]["data"] = commands
+    if bad == "missing": values.pop()
+    if bad == "wrong_type": values[0]["type"] = "s"
+    if bad == "wrong_data": values[0]["data"] = "suppressed"
+    def runner(args):
+        assert args[0] == "busctl"
+        if args[3] == "call":
+            return json.dumps({"type": "o", "data": ["/org/freedesktop/systemd1/unit/other_2eservice"]})
+        assert tuple(args[7:]) == names
+        return "\n".join(json.dumps(v) for v in values)
+    hooks.runner = runner
+    if bad:
+        with pytest.raises(host.HostError): hooks._other_service_properties("other.service")
+    else:
+        result = hooks._other_service_properties("other.service")
+        assert result["ExecStart"] == commands
+        assert "/opt/court-monitor/dashboard/unknown.sh" in release.canonical(result).decode()
+
+
+def test_unknown_service_second_command_cannot_escape_routing_audit(fixture):
+    hooks = fixture["hooks"]
+    original = hooks.runner
+    def runner(args):
+        raw = original(args)
+        if args[1] == "list-units": raw += "\nother.service loaded inactive dead fixture"
+        return raw
+    hooks.runner = runner
+    hooks._other_service_properties = lambda unit: {"ExecStart": [
+        ["/bin/true", ["/bin/true"]], ["/bin/bash", ["/bin/bash", str(hooks.repos["hmao"] / "unknown.sh")]]]}
+    with pytest.raises(host.HostError, match="Another service"):
+        hooks._audit_routing()

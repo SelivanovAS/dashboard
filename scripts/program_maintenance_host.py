@@ -220,7 +220,7 @@ class HostHooks:
         for line in raw.splitlines():
             key, sep, value = line.partition("=")
             if not sep or key not in names or key in out:
-                raise HostError("Ambiguous loaded unit configuration")
+                raise HostError("Ambiguous loaded unit configuration: " + unit + "; values suppressed")
             out[key] = value
         missing = set(names) - set(out)
         if missing:
@@ -247,6 +247,34 @@ class HostHooks:
                     raise HostError("Unconfirmed empty systemd property: " + key)
                 out[key] = ""
         return out
+
+    def _other_service_properties(self, unit):
+        # Multi-command oneshot units are printed as repeated property lines by
+        # systemctl. Read structured values so every command/environment entry
+        # participates in the unexpected-writer audit, without logging values.
+        lookup = release.read_json(self.runner(["busctl", "--system", "--json=short", "call",
+            "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
+            "GetUnit", "s", unit]).encode(), "systemd object")
+        if (lookup.get("type") != "o" or not isinstance(lookup.get("data"), list)
+                or len(lookup["data"]) != 1 or not isinstance(lookup["data"][0], str)
+                or not re.fullmatch(r"/org/freedesktop/systemd1/unit/[A-Za-z0-9_]+", lookup["data"][0])):
+            raise HostError("Unknown systemd object")
+        types = {**OMITTED_ARRAY_TYPES, "Environment": "as", "PassEnvironment": "as",
+                 "UnsetEnvironment": "as", "RootDirectory": "s", "RootImage": "s",
+                 "WorkingDirectory": "s", "BindPaths": "a(ssbt)", "BindReadOnlyPaths": "a(ssbt)"}
+        names = ("ExecStart", "Environment", *EMPTY_PROPERTIES)
+        lines = self.runner(["busctl", "--system", "--json=short", "get-property",
+            "org.freedesktop.systemd1", lookup["data"][0], "org.freedesktop.systemd1.Service", *names]).splitlines()
+        if len(lines) != len(names):
+            raise HostError("Incomplete other-service properties: " + unit)
+        result = {}
+        for name, line in zip(names, lines):
+            value = release.read_json(line.encode(), "systemd property")
+            if (set(value) != {"type", "data"} or value["type"] != types[name]
+                    or not isinstance(value["data"], str if types[name] == "s" else list)):
+                raise HostError("Unknown other-service property type: " + unit + ": " + name)
+            result[name] = value["data"]
+        return result
 
     def _approved(self, region):
         return [self.profiles[region]["baseline"], *[v for v in self.manifests.values() if v["region"] == region]]
@@ -313,7 +341,7 @@ class HostHooks:
                 raise HostError("Unknown loaded service name")
             if unit in LAUNCHERS:
                 continue
-            other = self._properties(unit, ("ExecStart", "Environment", *EMPTY_PROPERTIES))
+            other = self._other_service_properties(unit)
             text = release.canonical(other).decode()
             if any(str(repo) in text or REPOSITORIES[region] in text for region, repo in self.repos.items()):
                 raise HostError("Another service references a regional clone")

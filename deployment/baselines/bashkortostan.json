@@ -677,6 +677,14 @@
       "sha256": "1952672d9c70bb9205cc4aa3a4c5a988f7a2f87ec5e9864744f44675adc31e53"
     },
     "scripts/program_install_vps.py": null,
+    "scripts/program_maintenance.py": null,
+    "scripts/program_maintenance_bundle.py": null,
+    "scripts/program_maintenance_client.py": null,
+    "scripts/program_maintenance_git.py": null,
+    "scripts/program_maintenance_host.py": null,
+    "scripts/program_maintenance_locks.py": null,
+    "scripts/program_maintenance_protocol.py": null,
+    "scripts/program_maintenance_systemd.py": null,
     "scripts/program_release.py": null,
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
