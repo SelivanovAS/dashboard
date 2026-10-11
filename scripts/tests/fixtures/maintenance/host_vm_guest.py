@@ -128,7 +128,7 @@ def ssh_transport():
         'PidFile /run/host-vm-git-sshd.pid\nAllowUsers git\nPasswordAuthentication no\n'
         'KbdInteractiveAuthentication no\nUsePAM yes\nAuthorizedKeysFile .ssh/authorized_keys\n')
     atomic(ROOT / 'git-sshd.conf', config.encode())
-    unit = ('[Unit]\nDescription=Disposable local Git SSH transport\nAfter=network.target\n'
+    unit = ('[Unit]\nDescription=Disposable local Git SSH transport\nRequires=ssh.service\nAfter=network.target ssh.service\n'
         '[Service]\nType=simple\nExecStart=/usr/sbin/sshd -D -e -f /opt/host-vm/git-sshd.conf\n'
         '[Install]\nWantedBy=multi-user.target\n')
     atomic('/etc/systemd/system/host-vm-git-ssh.service', unit.encode(), 0o644)
@@ -361,6 +361,17 @@ def diagnose_host():
     result['fixture_service_properties'] = {name: run(['systemctl', 'show', name + '.service',
             '--all', '--property=' + ','.join(names)]).stdout for name in LAUNCHERS}
     result['manager_environment'] = run(['systemctl', 'show-environment']).stdout
+    # Disposable transport only: capture boot dependency errors without retrying
+    # any installer mutation. These repos/keys never exist in production.
+    result['git_ssh_service'] = run(['systemctl', 'show', 'host-vm-git-ssh.service',
+        '--property=ActiveState,SubState,Result,ExecMainStatus'], check=False).stdout
+    result['git_ssh_journal'] = run(['journalctl', '--no-pager', '-b', '-u', 'host-vm-git-ssh.service',
+        '-n', '30'], check=False).stdout[-4000:]
+    result['git_host_resolution'] = run(['getent', 'hosts', 'ssh.github.com'], check=False).stdout
+    transport = run(['git', '-c', 'core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=5',
+        'ls-remote', remote('dashboard'), 'refs/heads/main'], check=False)
+    result['git_readonly_probe'] = {'returncode': transport.returncode, 'stderr': transport.stderr[-2000:]}
+
     result['loaded_service_names'] = [line.split()[0] for line in run(['systemctl', 'list-units', '--all',
             '--type=service', '--plain', '--no-legend', '--no-pager']).stdout.splitlines()]
     return result
