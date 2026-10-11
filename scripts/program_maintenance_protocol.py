@@ -88,6 +88,20 @@ ACTIONS = {
 }
 
 
+def error_sites(exc):
+    """Code locations only: never exception text, locals, command or file values."""
+    allowed = {"program_maintenance.py", "program_maintenance_host.py", "program_maintenance_git.py",
+               "program_maintenance_locks.py", "program_maintenance_systemd.py", "program_maintenance_protocol.py"}
+    sites = []
+    tb = exc.__traceback__
+    while tb is not None:
+        name = Path(tb.tb_frame.f_code.co_filename).name
+        if name in allowed:
+            sites.append(name + ":" + str(tb.tb_lineno))
+        tb = tb.tb_next
+    return sites[-8:]
+
+
 def serve(lease, reader=None, writer=None):
     """Hold global/clone locks across all requests, until EOF or one error.
 
@@ -125,7 +139,7 @@ def serve(lease, reader=None, writer=None):
                 send({"protocol": PROTOCOL, "id": sequence, "ok": True, "result": result})
             except Exception as exc:
                 diagnostic = str(exc) if isinstance(exc, MaintenanceProtocolError) else "Проверка координатора отклонена; требуется чтение состояния окна"
-                send({"protocol": PROTOCOL, "id": sequence, "ok": False, "error": diagnostic})
+                send({"protocol": PROTOCOL, "id": sequence, "ok": False, "error": diagnostic, "sites": error_sites(exc)})
                 return
 
 
@@ -218,7 +232,11 @@ class LeaseClient:
                     or answer.get("id") != self.sequence or type(answer.get("ok")) is not bool):
                 raise MaintenanceProtocolError("Ответ относится к другой операции")
             if not answer["ok"]:
-                raise MaintenanceProtocolError("Координатор отказал; публикация не разрешена")
+                sites = answer.get("sites", [])
+                valid = (isinstance(sites, list) and len(sites) <= 8 and all(isinstance(site, str) and
+                    re.fullmatch(r"program_maintenance(?:_(?:host|git|locks|systemd|protocol))?\.py:[0-9]{1,6}", site) for site in sites))
+                suffix = (" [" + ", ".join(sites) + "]") if valid and sites else ""
+                raise MaintenanceProtocolError("Координатор отказал; публикация не разрешена" + suffix)
             if set(answer) != {"protocol", "id", "ok", "result"}:
                 raise MaintenanceProtocolError("Неизвестный формат ответа")
             return answer["result"]

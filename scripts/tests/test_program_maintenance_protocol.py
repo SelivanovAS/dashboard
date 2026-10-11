@@ -285,3 +285,14 @@ def test_remote_command_contains_no_transferred_source_or_interpolated_host(tmp_
     assert observed['bootstrap'] == b'payload-not-shell'
     with pytest.raises(p.MaintenanceProtocolError):
         p.LeaseClient.ssh(b'x', host='host;false', identity=key)
+
+
+def test_error_sites_contain_only_known_source_names_and_line_numbers():
+    try:
+        exec(compile("raise RuntimeError('secret transport and token')", "/private/secret/program_maintenance_host.py", "exec"))
+    except RuntimeError as exc:
+        assert p.error_sites(exc) == ["program_maintenance_host.py:1"]
+    try:
+        exec(compile("raise RuntimeError('secret')", "/private/secret/foreign.py", "exec"))
+    except RuntimeError as exc:
+        assert p.error_sites(exc) == []
